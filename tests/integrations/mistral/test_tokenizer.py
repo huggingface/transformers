@@ -136,14 +136,14 @@ class TestMistralConverter(unittest.TestCase):
     def setUpClass(cls) -> None:
         cls._tmp_dir = tempfile.TemporaryDirectory()
         cls._tekken_path = _build_fake_tekken_json(Path(cls._tmp_dir.name))
-        cls._converter = MistralConverter.from_tekken_file(str(cls._tekken_path))
+        cls._converter = MistralConverter(str(cls._tekken_path))
         cls._tokenizer = cls._converter.converted()
 
     @classmethod
     def tearDownClass(cls) -> None:
         cls._tmp_dir.cleanup()
 
-    def test_from_tekken_file_sets_precomputed_fields(self):
+    def test_init_sets_precomputed_fields(self):
         self.assertIsNotNone(self._converter._precomputed_vocab)
         self.assertIsNotNone(self._converter._precomputed_merges)
 
@@ -190,7 +190,7 @@ class TestMistralConverter(unittest.TestCase):
             with open(tekken_path, "w", encoding="utf-8") as f:
                 json.dump(tekken_data, f, ensure_ascii=False)
 
-            converter = MistralConverter.from_tekken_file(str(tekken_path))
+            converter = MistralConverter(str(tekken_path))
 
             for entry in _FAKE_TEKKEN_SPECIAL_TOKENS:
                 self.assertEqual(
@@ -213,7 +213,7 @@ class TestMistralConverterVsCommonBackend(unittest.TestCase):
         cls._tmp_dir = tempfile.TemporaryDirectory()
         tekken_path = _build_fake_tekken_json(Path(cls._tmp_dir.name))
 
-        converter = MistralConverter.from_tekken_file(str(tekken_path))
+        converter = MistralConverter(str(tekken_path))
         cls.hf_tokenizer = converter.converted()
         cls.mc_tokenizer = MistralCommonBackend(tokenizer_path=str(tekken_path))
 
@@ -259,7 +259,7 @@ class TestMistralConverterIntegration(unittest.TestCase):
         """Download and build (hf_tokenizer, mc_tokenizer) for a repo, caching per repo."""
         if repo not in cls._tokenizers:
             tekken_path = hf_hub_download(repo, "tekken.json")
-            converter = MistralConverter.from_tekken_file(tekken_path)
+            converter = MistralConverter(tekken_path)
             cls._tokenizers[repo] = (
                 converter.converted(),
                 MistralCommonBackend(tokenizer_path=tekken_path),

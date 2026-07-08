@@ -2061,7 +2061,7 @@ def convert_slow_tokenizer(transformer_tokenizer, from_tiktoken=False) -> Tokeni
 
         transformer_tokenizer.original_tokenizer = transformer_tokenizer
         logger.info("Converting from Mistral tekken.json")
-        return MistralConverter.from_tekken_file(transformer_tokenizer.vocab_file).converted()
+        return MistralConverter(transformer_tokenizer.vocab_file).converted()
     else:
         try:
             logger.info("Converting from Tiktoken")

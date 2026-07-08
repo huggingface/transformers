@@ -22,7 +22,7 @@ from tokenizers import AddedToken, Regex, Tokenizer, decoders, pre_tokenizers, p
 from tokenizers.models import BPE
 
 from ...convert_slow_tokenizer import bytes_to_unicode
-from ...utils import logging
+from ...utils import logging, requires_backends
 
 
 logger = logging.get_logger(__name__)
@@ -38,26 +38,8 @@ _MAP_SPECIALS = {
 class MistralConverter:
     """Converter from Mistral tekken BPE vocab to a HuggingFace `tokenizers.Tokenizer`."""
 
-    def __init__(
-        self,
-        pattern: str = r"""(?i:'s|'t|'re|'ve|'m|'ll|'d)|[^\r\n\p{L}\p{N}]?\p{L}+|\p{N}{1,3}| ?[^\s\p{L}\p{N}]+[\r\n]*|\s*[\r\n]+|\s+(?!\S)|\s+""",
-        add_prefix_space: bool = False,
-        additional_special_tokens: list[AddedToken] | None = None,
-        **kwargs,
-    ):
-        self.pattern = pattern
-        self.add_prefix_space = add_prefix_space
-        self.additional_special_tokens = additional_special_tokens
-        self._precomputed_vocab: dict[str, int] | None = None
-        self._precomputed_merges: list[tuple[str, str]] | None = None
-
-    @classmethod
-    def from_tekken_file(
-        cls,
-        vocab_file: str,
-        add_prefix_space: bool = False,
-    ) -> "MistralConverter":
-        """Parse a raw `tekken.json` file and return a ready-to-use converter.
+    def __init__(self, vocab_file: str, add_prefix_space: bool = False, **kwargs):
+        """Parse a raw `tekken.json` file into a ready-to-use converter.
 
         Matches `mistral_common`'s `Tekkenizer.from_file` vocab and special-token layout.
         """
@@ -75,6 +57,7 @@ class MistralConverter:
         special_tokens_dicts = untyped.get("special_tokens")
         if special_tokens_dicts is None:
             # Old tekken format has no special_tokens key; use mistral-common's defaults.
+            requires_backends(self, ["mistral-common"])
             from mistral_common.tokens.tokenizers.tekken import Tekkenizer
 
             filler_template = getattr(Tekkenizer, "SPECIAL_TOKEN_TEMPLATE", filler_template)
@@ -105,21 +88,17 @@ class MistralConverter:
         bpe_ranks = [base64.b64decode(k["token_bytes"]) for k in bpe_ranks_raw]
         bpe_ranks_dict = {token: rank for rank, token in enumerate(bpe_ranks)}
 
-        vocab, merges = cls._extract_merges(bpe_ranks_dict)
+        vocab, merges = self._extract_merges(bpe_ranks_dict)
 
         vocab = {k: v + num_special_tokens for k, v in vocab.items()}
         for entry in special_tokens_dicts:
             vocab[entry["token_str"]] = entry["rank"]
 
-        instance = cls(
-            pattern=pattern,
-            add_prefix_space=add_prefix_space,
-            additional_special_tokens=additional_special_tokens,
-        )
-        instance._precomputed_vocab = vocab
-        instance._precomputed_merges = merges
-
-        return instance
+        self.pattern = pattern
+        self.add_prefix_space = add_prefix_space
+        self.additional_special_tokens = additional_special_tokens
+        self._precomputed_vocab = vocab
+        self._precomputed_merges = merges
 
     @staticmethod
     def _extract_merges(bpe_ranks: dict[bytes, int]) -> tuple[dict[str, int], list[tuple[str, str]]]:

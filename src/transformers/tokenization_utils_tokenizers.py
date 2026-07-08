@@ -203,7 +203,7 @@ class TokenizersBackend(PreTrainedTokenizerBase):
         if isinstance(vocab_file, str) and vocab_file.endswith("tekken.json") and os.path.isfile(vocab_file):
             from .integrations.mistral.tokenizer import MistralConverter
 
-            converter = MistralConverter.from_tekken_file(vocab_file)
+            converter = MistralConverter(vocab_file)
             local_kwargs["tokenizer_object"] = converter.converted()
             return local_kwargs
 
