@@ -45,6 +45,16 @@ class SonicMoE:
     moe_general_routing_inputs: Callable
 
 
+# sonic-moe's CuteDSL build binds to a narrow nvidia-cutlass-dsl API window: 4.6+ removed
+# `cutlass.cute.core.ThrMma`, while <4.3 lacks `cutlass.base_dsl.tvm_ffi_builder`. 4.5.0 has both,
+# and it also needs `apache-tvm-ffi`. Surfaced on load failure so the fix is one copy-paste away.
+_SONICMOE_DEPS_HINT = (
+    "sonic-moe needs `apache-tvm-ffi` and `nvidia-cutlass-dsl==4.5.0` "
+    "(4.6+ dropped `ThrMma`; <4.3 lacks `tvm_ffi_builder`) — install with "
+    "`pip install apache-tvm-ffi 'nvidia-cutlass-dsl==4.5.0'`."
+)
+
+
 @functools.cache
 def _load_sonicmoe_kernel() -> SonicMoE:
     """
@@ -67,11 +77,16 @@ def _load_sonicmoe_kernel() -> SonicMoE:
             f"has compute capability {major}.x. Use a different `experts_implementation`."
         )
 
-    kernel = lazy_load_kernel("sonic-moe")
+    try:
+        kernel = lazy_load_kernel("sonic-moe")
+    except Exception as e:
+        # The CuteDSL import fails with a version-specific symbol error (e.g. missing `ThrMma` on
+        # 4.6+, or `tvm_ffi_builder` on <4.3) — nudge to the known-good dependency versions.
+        raise ImportError(f"Failed to import the sonic-moe kernel's CuteDSL dependencies. {_SONICMOE_DEPS_HINT}") from e
     if kernel is None:
         raise ImportError(
             "Failed to load the sonic-moe kernel — check that `kernels-community/sonic-moe` "
-            "has a build matching the current torch/CUDA."
+            f"has a build matching the current torch/CUDA. {_SONICMOE_DEPS_HINT}"
         )
 
     activation_type_enum = getattr(getattr(kernel, "enums", None), "ActivationType", None)
@@ -87,8 +102,7 @@ def _load_sonicmoe_kernel() -> SonicMoE:
     ]
     if missing:
         raise ImportError(
-            f"sonic-moe kernel is missing required symbols: {', '.join(missing)}. "
-            "Make sure you have the `kernels` package and `nvidia-cutlass-dsl` installed."
+            f"sonic-moe kernel is missing required symbols: {', '.join(missing)}. {_SONICMOE_DEPS_HINT}"
         )
 
     return SonicMoE(
