@@ -5550,26 +5550,12 @@ class ModelTesterMixin(ExportTesterMixin):
                 model = model_class(copy.deepcopy(config)).to(device=torch_device)
                 model.eval()
 
-                recordable_output_dicts = [
-                    (module._can_record_outputs or {})
+                recordable_outputs = [
+                    (module._can_record_outputs or {}).keys()
                     for module in model.modules()
                     if isinstance(module, PreTrainedModel)
                 ]
-
-                # Check that the values of _can_record_outputs are a correct recorder or a list of them
-                for recordable_output_dict in recordable_output_dicts:
-                    for value in recordable_output_dict.values():
-                        recorders = value if isinstance(value, list) else [value]
-                        for recorder in recorders:
-                            is_valid_recorder = isinstance(recorder, (str, type, OutputRecorder))
-                            self.assertTrue(is_valid_recorder, f"Invalid recorder: {recorder}")
-
-                # Extract the recorders from the recordable_output_dicts
-                recordable_outputs = [
-                    recordable_output_dict.keys() for recordable_output_dict in recordable_output_dicts
-                ]
                 recordable_outputs = set().union(*recordable_outputs)
-
                 # If we don't use the `capture_outputs` decorator, this test has no use
                 if len(recordable_outputs) == 0:
                     self.skipTest("No usage of the `capture_outputs` decorator.")
@@ -5594,6 +5580,36 @@ class ModelTesterMixin(ExportTesterMixin):
                     with patch.object(CompileableContextVar, "reset", new=new_reset):
                         with torch.no_grad():
                             _ = model(**all_inputs)
+
+    def test_format_of_can_record_outputs(self):
+        """Test that that the attribute `_can_record_outputs` is correctly set for a model. It must either be "None" or
+        a dictionnary with output names as keys and a recorder or list of recorders as values. A recorder can be an
+        OutputRecorder instance, a module class we want to record outputs of or the name of this module class (a str).
+        """
+        config = self.model_tester.prepare_config_and_inputs_for_common()[0]
+
+        for model_class in self.all_model_classes:
+            # Each individual model is a subtest
+            with self.subTest(model_class.__name__):
+                model = model_class(copy.deepcopy(config)).to(device=torch_device)
+                model.eval()
+
+                recordable_output_dicts = [
+                    (module._can_record_outputs or {})
+                    for module in model.modules()
+                    if isinstance(module, PreTrainedModel)
+                ]
+
+                # Check that the values of _can_record_outputs are a correct recorder or a list of them
+                for recordable_output_dict in recordable_output_dicts:
+                    for key, value in recordable_output_dict.items():
+                        # Check format of the keys
+                        self.assertIsInstance(key, str, f"_can_record_outputs should have str keys, but got {key = }")
+                        # Check format of the values
+                        recorders = value if isinstance(value, list) else [value]
+                        for recorder in recorders:
+                            is_valid_recorder = isinstance(recorder, (str, type, OutputRecorder))
+                            self.assertTrue(is_valid_recorder, f"Invalid recorder: {recorder}")
 
     @require_kernels
     @require_torch_accelerator
