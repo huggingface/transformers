@@ -25,6 +25,7 @@ from ...test_processing_common import ProcessorTesterMixin
 @require_vision
 class DeepseekOcr2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = DeepseekOcr2Processor
+    tiny_model_id = "hf-internal-testing/tiny-processor-deepseek_ocr2"
 
     @classmethod
     def _setup_image_processor(cls):
@@ -33,12 +34,6 @@ class DeepseekOcr2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         image_processor.size = {"height": 64, "width": 64}
         image_processor.tile_size = 512
         return image_processor
-
-    @classmethod
-    def _setup_tokenizer(cls):
-        tokenizer_class = cls._get_component_class_from_processor("tokenizer")
-        tokenizer = tokenizer_class.from_pretrained("deepseek-community/DeepSeek-OCR-2")
-        return tokenizer
 
     @classmethod
     def _setup_test_attributes(cls, processor):
