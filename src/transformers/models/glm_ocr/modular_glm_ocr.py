@@ -48,7 +48,6 @@ class GlmOcrRMSNorm(Glm4vRMSNorm):
 
 
 class GlmOcrVisionMlp(Glm4VisionMlp):
-
     def __init__(self, config, bias: bool = True):
         super().__init__(config)
         self.intermediate_size = config.intermediate_size
@@ -82,12 +81,12 @@ class GlmOcrTextConfig(Glm4vTextConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
     base_model_fsdp_plan = {
         "embed_tokens": "free_full_weight",
         "layers.*": "free_full_weight",
         "norm": "keep_full_weight",
     }
-
 
     vocab_size: int = 59392
     hidden_size: int = 1024

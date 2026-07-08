@@ -67,7 +67,6 @@ class OlmoeConfig(PreTrainedConfig):
         "norm": "keep_full_weight",
     }
 
-
     vocab_size: int = 50304
     hidden_size: int = 2048
     intermediate_size: int = 2048

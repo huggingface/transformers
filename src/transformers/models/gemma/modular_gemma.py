@@ -85,8 +85,6 @@ class GemmaConfig(PreTrainedConfig):
         "norm": "keep_full_weight",
     }
 
-
-
     vocab_size: int = 256000
     hidden_size: int = 3072
     intermediate_size: int = 24576

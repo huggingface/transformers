@@ -61,7 +61,6 @@ class HeliumConfig(PreTrainedConfig):
         "norm": "keep_full_weight",
     }
 
-
     vocab_size: int = 48000
     hidden_size: int = 2560
     intermediate_size: int = 7040

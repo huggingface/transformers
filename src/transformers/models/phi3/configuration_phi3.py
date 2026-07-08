@@ -64,7 +64,6 @@ class Phi3Config(PreTrainedConfig):
         "norm": "keep_full_weight",
     }
 
-
     vocab_size: int = 32064
     hidden_size: int = 3072
     intermediate_size: int = 8192

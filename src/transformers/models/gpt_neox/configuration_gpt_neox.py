@@ -64,7 +64,6 @@ class GPTNeoXConfig(PreTrainedConfig):
         "norm": "keep_full_weight",
     }
 
-
     vocab_size: int = 50432
     hidden_size: int = 6144
     num_hidden_layers: int = 44

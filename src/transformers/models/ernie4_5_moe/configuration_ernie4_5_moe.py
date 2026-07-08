@@ -95,7 +95,6 @@ class Ernie4_5_MoeConfig(PreTrainedConfig):
         "norm": "keep_full_weight",
     }
 
-
     vocab_size: int = 103424
     pad_token_id: int | None = 0
     bos_token_id: int | None = 1

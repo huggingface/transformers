@@ -279,7 +279,6 @@ class Cohere2MoeModel(Cohere2Model):
 
 
 class Cohere2MoeForCausalLM(Cohere2ForCausalLM):
-
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,

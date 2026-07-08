@@ -64,7 +64,6 @@ class Starcoder2Config(PreTrainedConfig):
         "norm": "keep_full_weight",
     }
 
-
     vocab_size: int = 49152
     hidden_size: int = 3072
     intermediate_size: int = 12288

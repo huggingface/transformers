@@ -43,9 +43,7 @@ class VaultGemmaConfig(Gemma2Config):
     >>> configuration = model.config
     ```"""
 
-
     use_bidirectional_attention = AttributeError()
-
 
 
 class VaultGemmaRMSNorm(Gemma2RMSNorm):

@@ -170,7 +170,6 @@ class T5Gemma2Config(PreTrainedConfig):
         "eoi_token_id": "eoi_token_index",
     }
 
-
     encoder: T5Gemma2EncoderConfig | dict[str, Any] | None = None
     decoder: T5Gemma2DecoderConfig | dict[str, Any] | None = None
     is_encoder_decoder: bool = True

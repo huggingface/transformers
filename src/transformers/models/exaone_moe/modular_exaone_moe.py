@@ -91,8 +91,6 @@ class ExaoneMoeConfig(Exaone4Config):
         "norm": "keep_full_weight",
     }
 
-
-
     vocab_size: int = 102400
     hidden_size: int = 4096
     intermediate_size: int = 16384

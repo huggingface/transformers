@@ -66,7 +66,6 @@ class GlmImageVQVAEConfig(PreTrainedConfig):
     model_type = "glm_image_vqmodel"
     base_config_key = "vq_config"
 
-
     embed_dim: int = 2048
     num_embeddings: int = 16384
     latent_channels: int = 1536
@@ -133,12 +132,12 @@ class GlmImageTextConfig(Glm4vTextConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
     base_model_fsdp_plan = {
         "embed_tokens": "free_full_weight",
         "layers.*": "free_full_weight",
         "norm": "keep_full_weight",
     }
-
 
     vocab_size: int = 168064
     max_position_embeddings: int = 131072

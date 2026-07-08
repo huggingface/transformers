@@ -47,7 +47,6 @@ class GptOssConfig(PreTrainedConfig):
         "norm": "keep_full_weight",
     }
 
-
     num_hidden_layers: int = 36
     num_local_experts: int = 128
     vocab_size: int = 201088

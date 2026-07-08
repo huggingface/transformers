@@ -142,7 +142,6 @@ class DeepseekV4Config(PreTrainedConfig):
         "norm": "keep_full_weight",
     }
 
-
     vocab_size: int = 129280
     hidden_size: int = 4096
     moe_intermediate_size: int = 2048

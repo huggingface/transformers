@@ -98,7 +98,6 @@ class DiffusionGemmaTextConfig(Gemma4TextConfig):
     }
     base_model_fsdp_plan = AttributeError()
 
-
     enable_moe_block = AttributeError()
     attention_k_eq_v = AttributeError()
     use_double_wide_mlp = AttributeError()

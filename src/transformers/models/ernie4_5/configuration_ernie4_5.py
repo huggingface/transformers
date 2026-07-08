@@ -67,7 +67,6 @@ class Ernie4_5Config(PreTrainedConfig):
         "norm": "keep_full_weight",
     }
 
-
     vocab_size: int = 103424
     hidden_size: int = 1024
     intermediate_size: int = 3072

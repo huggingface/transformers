@@ -409,8 +409,6 @@ class Qwen3OmniMoeTalkerTextConfig(Qwen3MoeConfig):
         "layers.*.mlp.experts": "moe_tp_experts",
     }
 
-
-
     vocab_size: int = 3072
     hidden_size: int = 1024
     intermediate_size: int = 2048

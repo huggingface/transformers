@@ -96,7 +96,6 @@ class Qwen3NextConfig(PreTrainedConfig):
         "norm": "keep_full_weight",
     }
 
-
     vocab_size: int = 151936
     hidden_size: int = 2048
     intermediate_size: int = 5632

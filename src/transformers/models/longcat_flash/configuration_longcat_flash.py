@@ -84,7 +84,6 @@ class LongcatFlashConfig(PreTrainedConfig):
         "norm": "keep_full_weight",
     }
 
-
     vocab_size: int = 131072
     hidden_size: int = 6144
     num_hidden_layers: int = 56

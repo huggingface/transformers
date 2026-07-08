@@ -112,7 +112,6 @@ class Gemma4AssistantForCausalLM(Gemma4AssistantPreTrainedModel, GenerationMixin
     _fsdp_plan = {"lm_head": "keep_full_weight"}
     _tp_plan = {"lm_head": "colwise_gather_output"}
     _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
-    _fsdp_plan = {"lm_head": "keep_full_weight"}
 
     def __init__(self, config: Gemma4AssistantConfig):
         super().__init__(config)

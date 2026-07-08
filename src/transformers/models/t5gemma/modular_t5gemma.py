@@ -85,7 +85,6 @@ class T5GemmaModuleConfig(Gemma2Config):
     >>> configuration = model.config
     ```"""
 
-
     is_decoder: bool = False
     use_bidirectional_attention = AttributeError()
 
