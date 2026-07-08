@@ -221,13 +221,6 @@ class GPTQTest(unittest.TestCase):
     def check_quantized_layers_type(self, model, value):
         self.assertEqual(model.transformer.h[0].mlp.dense_4h_to_h.QUANT_TYPE, value)
 
-    def expected_quant_type(self, cpu_quant_type="torch_fused"):
-        if self.device_map == "cpu":
-            return cpu_quant_type
-        if torch_device == "xpu":
-            return "torch_fused"
-        return "exllamav2"
-
     def test_generate_quality(self):
         """
         Simple test to check the quality of the model by comparing the generated tokens with the expected tokens
@@ -248,7 +241,11 @@ class GPTQTest(unittest.TestCase):
             self.quantized_model.save_pretrained(tmpdirname)
             quantized_model_from_saved = AutoModelForCausalLM.from_pretrained(tmpdirname, device_map=self.device_map)
 
-            self.check_quantized_layers_type(quantized_model_from_saved, self.expected_quant_type())
+            if self.device_map == "cpu" or torch_device == "xpu":
+                quant_type = "torch_fused"
+            else:
+                quant_type = "exllamav2"
+            self.check_quantized_layers_type(quantized_model_from_saved, quant_type)
             self.check_inference_correctness(quantized_model_from_saved)
 
     @require_accelerate
@@ -279,7 +276,13 @@ class GPTQTestAccelerator(GPTQTest):
                 device_map=self.device_map,
             )
             self.assertEqual(quantized_model_from_saved.config.quantization_config.bits, self.bits)
-            self.check_quantized_layers_type(quantized_model_from_saved, self.expected_quant_type("torch"))
+            if self.device_map == "cpu":
+                quant_type = "torch"
+            elif torch_device == "xpu":
+                quant_type = "torch_fused"
+            else:
+                quant_type = "exllamav2"
+            self.check_quantized_layers_type(quantized_model_from_saved, quant_type)
             self.check_inference_correctness(quantized_model_from_saved)
 
 
