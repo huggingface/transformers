@@ -18,7 +18,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import math
 from collections.abc import Callable
 
 import torch
@@ -752,139 +751,6 @@ class Glm5NextVLTextLinearAttention(nn.Module):
         return output
 
 
-def apply_rotary_pos_emb_interleave(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
-    r"""
-    Applies interleaved Rotary Position Embedding to the query and key tensors.
-
-    DeepSeek lays the rotary dimensions out in interleaved pairs `(x0, x1), (x2, x3), ...`, each rotated by a
-    single frequency. We compute that rotation directly on the even/odd slices instead of de-interleaving with a
-    `view`/`transpose`/`reshape`; the output is bit-identical to the de-interleaved `rotate_half` formulation while
-    avoiding the extra contiguous copy.
-
-    Args:
-        q (`torch.Tensor`): The query tensor.
-        k (`torch.Tensor`): The key tensor.
-        cos (`torch.Tensor`): The cosine part of the rotary embedding.
-        sin (`torch.Tensor`): The sine part of the rotary embedding.
-        position_ids (`torch.Tensor`):
-            The position indices of the tokens corresponding to the query and key tensors. For example, this can be
-            used to pass offsetted position ids when working with a KV-cache.
-        unsqueeze_dim (`int`, *optional*, defaults to 1):
-            The 'unsqueeze_dim' argument specifies the dimension along which to unsqueeze cos[position_ids] and
-            sin[position_ids] so that they can be properly broadcasted to the dimensions of q and k. For example, note
-            that cos[position_ids] and sin[position_ids] have the shape [batch_size, seq_len, head_dim]. Then, if q and
-            k have the shape [batch_size, heads, seq_len, head_dim], then setting unsqueeze_dim=1 makes
-            cos[position_ids] and sin[position_ids] broadcastable to the shapes of q and k. Similarly, if q and k have
-            the shape [batch_size, seq_len, heads, head_dim], then set unsqueeze_dim=2.
-    Returns:
-        `tuple(torch.Tensor)` comprising of the query and key tensors rotated using the Rotary Position Embedding.
-    """
-    # `cos`/`sin` are `cat(freqs, freqs)`; the first half holds the per-pair angle.
-    cos = cos[..., : cos.shape[-1] // 2].unsqueeze(unsqueeze_dim)
-    sin = sin[..., : sin.shape[-1] // 2].unsqueeze(unsqueeze_dim)
-
-    q1, q2 = q[..., 0::2], q[..., 1::2]
-    k1, k2 = k[..., 0::2], k[..., 1::2]
-
-    q_embed = torch.cat([q1 * cos - q2 * sin, q2 * cos + q1 * sin], dim=-1)
-    k_embed = torch.cat([k1 * cos - k2 * sin, k2 * cos + k1 * sin], dim=-1)
-    return q_embed, k_embed
-
-
-class Glm5NextVLTextIndexer(nn.Module):
-    """
-    DeepSeek Sparse Attention (DSA) indexer for selecting top-k tokens.
-
-    The Indexer has its own lightweight projections (wq_b, wk) separate from the main MLA attention,
-    and returns the additive top-k sparse mask directly (`0` at the selected tokens, `-inf` elsewhere);
-    the raw top-k indices are only ever scattered into that mask, so they are not surfaced.
-
-    **Cache strategy**: the indexer key cache lives on the per-layer `DynamicIndexedLayer` (or the
-    `StaticIndexedLayer` for static caches) inside the shared cache, accessed via
-    `past_key_values.update_indexer()`.
-    """
-
-    def __init__(self, config: "Glm5NextVLTextConfig", layer_idx: int):
-        super().__init__()
-        self.config = config
-        self.layer_idx = layer_idx
-
-        self.hidden_size: int = config.hidden_size
-        self.n_heads: int = config.index_n_heads
-        self.head_dim: int = config.index_head_dim
-        self.qk_rope_head_dim: int = config.qk_rope_head_dim
-        self.index_topk: int = config.index_topk
-        self.q_lora_rank: int = config.q_lora_rank
-
-        self.wq_b = nn.Linear(self.q_lora_rank, self.n_heads * self.head_dim, bias=False)
-        self.wk = nn.Linear(self.hidden_size, self.head_dim, bias=False)
-        self.k_norm = nn.LayerNorm(self.head_dim, eps=1e-6)
-        self.weights_proj = nn.Linear(self.hidden_size, self.n_heads, bias=False)
-        self.softmax_scale = self.head_dim**-0.5
-
-    @torch.no_grad()
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        q_resid: torch.Tensor,
-        position_embeddings: tuple[torch.Tensor, torch.Tensor],
-        attention_mask: torch.Tensor | None,
-        position_ids: torch.Tensor,
-        past_key_values: Cache | None = None,
-    ) -> torch.Tensor:
-        """
-        Selects the top-k tokens per query for DeepSeek Sparse Attention (DSA).
-
-        Same as [`DeepseekV32Indexer.forward`], but the indexer applies **interleaved** RoPE
-        rather than the non-interleaved half-split RoPE used by DeepSeek-V3.2.
-
-        Args:
-            hidden_states: Input hidden states `[B, S, hidden_size]`.
-            q_resid: Query residual from `q_a_layernorm(q_a_proj(x))`, shape `[B, S, q_lora_rank]`.
-            position_embeddings: `(cos, sin)` from RotaryEmbedding.
-            attention_mask: Causal mask, broadcastable to `[B, S, T]`.
-            past_key_values: Cache object containing the indexer key cache for this layer.
-
-        Returns:
-            `torch.Tensor`: the `int32` top-k token indices of shape `[B, S, topk]`. The eager / SDPA paths
-                turn these into an additive sparse mask; the `flash-mla` kernel consumes them directly.
-        """
-        batch_size, seq_len, _ = hidden_states.shape
-        cos, sin = position_embeddings
-        q = self.wq_b(q_resid)  # [B, S, H*D]
-        q = q.view(batch_size, seq_len, self.n_heads, self.head_dim)  # [B, S, H, D]
-        q_rot, q_pass = torch.split(q, [self.qk_rope_head_dim, self.head_dim - self.qk_rope_head_dim], dim=-1)
-
-        k = self.k_norm(self.wk(hidden_states)).unsqueeze(2)  # [B, S, 1, D]
-        k_rot, k_pass = torch.split(k, [self.qk_rope_head_dim, self.head_dim - self.qk_rope_head_dim], dim=-1)
-
-        # GLM-MoE-DSA uses interleaved RoPE in the indexer
-        q_rot, k_rot = apply_rotary_pos_emb_interleave(q_rot, k_rot, cos, sin, unsqueeze_dim=2)
-        q = torch.cat([q_rot, q_pass], dim=-1)  # [B, S, H, D]
-        k = torch.cat([k_rot, k_pass], dim=-1).squeeze(2)  # [B, S, D]
-
-        if past_key_values is not None:
-            k = past_key_values.update_indexer(k, self.layer_idx)
-
-        scores = torch.matmul(q.float(), k.transpose(-1, -2).float().unsqueeze(1)) * self.softmax_scale
-        scores = F.relu(scores)
-
-        # Weight per head and sum across heads: [B, S, 1, H] @ [B, S, H, T] → [B, S, T]
-        weights = self.weights_proj(hidden_states.to(self.weights_proj.weight.dtype)).float() * (self.n_heads**-0.5)
-        index_scores = torch.matmul(weights.unsqueeze(-2), scores).squeeze(-2)
-
-        # Causality needs to be taken into account when computing scores so padding tokens don't affect computation
-        if attention_mask is not None:
-            index_scores = index_scores + attention_mask
-        else:
-            key_positions = torch.arange(index_scores.shape[-1], device=index_scores.device)
-            causal = key_positions[None, None, :] > position_ids[:, :, None]  # [B, S, T]
-            index_scores = index_scores.masked_fill(causal, float("-inf"))
-
-        topk = min(self.index_topk, index_scores.shape[-1])
-        return index_scores.topk(topk, dim=-1).indices.to(torch.int32)  # [B, S, topk]
-
-
 def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
     """
     This is the equivalent of torch.repeat_interleave(x, dim=1, repeats=n_rep). The hidden states go from (batch,
@@ -922,53 +788,40 @@ def eager_attention_forward(
     return attn_output, attn_weights
 
 
-def yarn_get_mscale(scale=1, mscale=1):
-    if scale <= 1:
-        return 1.0
-    return 0.1 * mscale * math.log(scale) + 1.0
-
-
 class Glm5NextVLTextAttention(nn.Module):
-    """
-    DeepSeek-V3 MLA + a DSA indexer, extended with **cross-layer top-k sharing**.
-
-    `config.indexer_types[layer_idx]` decides whether this layer runs its own indexer (`"full"`) or
-    reuses the previous full layer's top-k selection (`"shared"`).
-    `next_skip_topk` signals that the *next* layer will reuse this
-    layer's top-k, so it is propagated upward via `prev_topk_indices`.
-    """
+    """Multi-headed attention from 'Attention Is All You Need' paper"""
 
     def __init__(self, config: Glm5NextVLTextConfig, layer_idx: int):
         super().__init__()
         self.config = config
         self.layer_idx = layer_idx
-        self.num_key_value_groups = config.num_attention_heads // config.num_key_value_heads
         self.attention_dropout = config.attention_dropout
+        self.hidden_size = config.hidden_size
         self.num_heads = config.num_attention_heads
+        self.head_dim = config.head_dim
+        self.max_position_embeddings = config.max_position_embeddings
 
         self.q_lora_rank = config.q_lora_rank
         self.qk_rope_head_dim = config.qk_rope_head_dim
         self.kv_lora_rank = config.kv_lora_rank
         self.v_head_dim = config.v_head_dim
         self.qk_nope_head_dim = config.qk_nope_head_dim
-        self.qk_head_dim = config.qk_head_dim
+        self.qk_head_dim = config.qk_nope_head_dim + config.qk_rope_head_dim
+        self.num_key_value_groups = config.num_attention_heads // config.num_key_value_heads
 
         self.is_causal = True
+
         self.q_proj = (
-            nn.Linear(config.hidden_size, self.num_heads * self.qk_head_dim, bias=False)
+            nn.Linear(self.hidden_size, self.num_heads * self.qk_head_dim, bias=False)
             if self.q_lora_rank is None
             else None
         )
         self.q_a_proj = (
-            nn.Linear(config.hidden_size, config.q_lora_rank, bias=config.attention_bias)
+            nn.Linear(self.hidden_size, config.q_lora_rank, bias=config.attention_bias)
             if self.q_lora_rank is not None
             else None
         )
-        self.q_a_layernorm = (
-            Glm5NextVLTextRMSNorm(config.q_lora_rank, eps=config.rms_norm_eps)
-            if self.q_lora_rank is not None
-            else None
-        )
+        self.q_a_layernorm = Glm5NextVLTextRMSNorm(config.q_lora_rank, eps=config.rms_norm_eps)
         self.q_b_proj = (
             nn.Linear(config.q_lora_rank, self.num_heads * self.qk_head_dim, bias=False)
             if self.q_lora_rank is not None
@@ -976,33 +829,24 @@ class Glm5NextVLTextAttention(nn.Module):
         )
 
         self.kv_a_proj_with_mqa = nn.Linear(
-            config.hidden_size,
-            self.kv_lora_rank + self.qk_rope_head_dim,
+            self.hidden_size,
+            config.kv_lora_rank + config.qk_rope_head_dim,
             bias=config.attention_bias,
         )
         self.kv_a_layernorm = Glm5NextVLTextRMSNorm(self.kv_lora_rank, eps=config.rms_norm_eps)
         self.kv_b_proj = nn.Linear(
-            self.kv_lora_rank,
-            self.num_heads * (self.qk_nope_head_dim + self.v_head_dim),
+            config.kv_lora_rank,
+            self.num_heads * (self.qk_head_dim - self.qk_rope_head_dim + self.v_head_dim),
             bias=False,
         )
 
         self.o_proj = nn.Linear(
             self.num_heads * self.v_head_dim,
-            config.hidden_size,
+            self.hidden_size,
             bias=config.attention_bias,
         )
 
         self.scaling = self.qk_head_dim ** (-0.5)
-        if self.config.rope_parameters.get("rope_type", "default") != "default":
-            mscale_all_dim = self.config.rope_parameters.get("mscale_all_dim", 0)
-            scaling_factor = self.config.rope_parameters["factor"]
-            if mscale_all_dim:
-                mscale = yarn_get_mscale(scaling_factor, mscale_all_dim)
-                self.scaling = self.scaling * mscale * mscale
-        # Refer: https://arxiv.org/abs/2603.12201 for more details.
-        self.skip_topk = config.indexer_types[layer_idx] == "shared"
-        self.indexer = None if self.skip_topk else Glm5NextVLTextIndexer(config, layer_idx)
 
     def forward(
         self,
@@ -1308,10 +1152,7 @@ class Glm5NextVLPreTrainedModel(PreTrainedModel):
     }
 
     _keep_in_fp32_modules_strict = ["e_score_correction_bias"]  # TODO: add conv there
-    _keys_to_ignore_on_load_unexpected = [
-        r"model\.language_model\.layers\.45\.",
-        r"model\.language_model\.layers\.\d+\.shared_head\.",
-    ]
+    _keys_to_ignore_on_load_unexpected = [r"layers\.45\.", r"layers\.\d+\.shared_head\."]
 
 
 @auto_docstring

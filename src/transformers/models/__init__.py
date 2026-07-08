@@ -172,6 +172,7 @@ if TYPE_CHECKING:
     from .glm4v import *
     from .glm4v_moe import *
     from .glm5_next import *
+    from .glm5_next_vl import *
     from .glm46v import *
     from .glm_image import *
     from .glm_moe_dsa import *

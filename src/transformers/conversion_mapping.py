@@ -543,33 +543,6 @@ def _build_checkpoint_conversion_mapping():
             ),
         ],
         "glm5_next": [
-            # TODO: refactor to not rely on \1 as the prefix is the same no need to complicate it
-            #
-            # Older GLM-5-Next checkpoints store HyperConnection parameters as flat
-            # per-layer tensors. The implementation keeps them inside `attn_hc` /
-            # `ffn_hc` submodules so the MHC flow can reuse the DeepSeek-V4 layout.
-            WeightRenaming(source_patterns="hc_attn_fn", target_patterns="attn_hc.fn"),
-            WeightRenaming(source_patterns="hc_attn_base", target_patterns="attn_hc.base"),
-            WeightRenaming(source_patterns="hc_attn_scale", target_patterns="attn_hc.scale"),
-            WeightRenaming(source_patterns="hc_ffn_fn", target_patterns="ffn_hc.fn"),
-            WeightRenaming(source_patterns="hc_ffn_base", target_patterns="ffn_hc.base"),
-            WeightRenaming(source_patterns="hc_ffn_scale", target_patterns="ffn_hc.scale"),
-            WeightRenaming(source_patterns=r"^layers\.(\d+)\.hc_attn_fn$", target_patterns=r"layers.\1.attn_hc.fn"),
-            WeightRenaming(
-                source_patterns=r"^layers\.(\d+)\.hc_attn_base$", target_patterns=r"layers.\1.attn_hc.base"
-            ),
-            WeightRenaming(
-                source_patterns=r"^layers\.(\d+)\.hc_attn_scale$", target_patterns=r"layers.\1.attn_hc.scale"
-            ),
-            WeightRenaming(source_patterns=r"^layers\.(\d+)\.hc_ffn_fn$", target_patterns=r"layers.\1.ffn_hc.fn"),
-            WeightRenaming(source_patterns=r"^layers\.(\d+)\.hc_ffn_base$", target_patterns=r"layers.\1.ffn_hc.base"),
-            WeightRenaming(
-                source_patterns=r"^layers\.(\d+)\.hc_ffn_scale$", target_patterns=r"layers.\1.ffn_hc.scale"
-            ),
-            # Forget-gate params are stored flat under `self_attn.*` in the checkpoint but
-            # live under `self_attn.forget_gate.*` in the model. Patterns are prefix-agnostic
-            # so they fire for both the flat text layout (`model.layers.*`) and the composite
-            # VLM layout (`model.language_model.layers.*`).
             WeightRenaming(
                 source_patterns=r"self_attn\.f_a_proj\.",
                 target_patterns=r"self_attn.forget_gate.f_a_proj.",
@@ -579,11 +552,11 @@ def _build_checkpoint_conversion_mapping():
                 target_patterns=r"self_attn.forget_gate.f_b_proj.",
             ),
             WeightRenaming(
-                source_patterns=r"self_attn\.dt_bias$",
+                source_patterns=r"self_attn\.dt_bias",
                 target_patterns=r"self_attn.forget_gate.dt_bias",
             ),
             WeightRenaming(
-                source_patterns=r"self_attn\.A_log$",
+                source_patterns=r"self_attn\.A_log",
                 target_patterns=r"self_attn.forget_gate.A_log",
             ),
             WeightConverter(
@@ -1782,6 +1755,17 @@ def _build_checkpoint_conversion_mapping():
         WeightRenaming("mlp.experts.e_score_correction_bias", "mlp.gate.e_score_correction_bias"),
         WeightRenaming("mlp.shared_expert.", "mlp.shared_experts."),
     ]
+
+    mapping["glm5_next_vl"] = mapping["glm5_next"].copy()
+    mapping["glm5_next_vl"] += [
+        WeightRenaming(source_patterns="hc_attn_fn", target_patterns="attn_hc.fn"),
+        WeightRenaming(source_patterns="hc_attn_base", target_patterns="attn_hc.base"),
+        WeightRenaming(source_patterns="hc_attn_scale", target_patterns="attn_hc.scale"),
+        WeightRenaming(source_patterns="hc_ffn_fn", target_patterns="ffn_hc.fn"),
+        WeightRenaming(source_patterns="hc_ffn_base", target_patterns="ffn_hc.base"),
+        WeightRenaming(source_patterns="hc_ffn_scale", target_patterns="ffn_hc.scale"),
+    ]
+
     for model_type, base_pattern in _MODEL_TO_CONVERSION_PATTERN.items():
         if model_type in mapping:
             continue

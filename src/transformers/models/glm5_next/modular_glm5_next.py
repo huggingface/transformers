@@ -1004,7 +1004,7 @@ class Glm5NextPreTrainedModel(PreTrainedModel):
         "router_logits": OutputRecorder(Glm5NextTopkRouter, index=0),  # noqa: F821
     }
     _keep_in_fp32_modules_strict = ["e_score_correction_bias"]
-    _keys_to_ignore_on_load_unexpected = [r"model\.layers\.45\.", r"model\.layers\.\d+\.shared_head\."]
+    _keys_to_ignore_on_load_unexpected = [r"layers\.45\.", r"layers\.\d+\.shared_head\."]
     _keep_in_fp32_modules = []
     _compatible_flash_implementations = ["kernels-community/flash-mla"]
 

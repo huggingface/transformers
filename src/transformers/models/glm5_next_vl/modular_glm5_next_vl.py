@@ -29,9 +29,10 @@ from ...utils import TransformersKwargs, auto_docstring, logging
 from ...utils.generic import is_flash_attention_requested
 from ...utils.output_capturing import OutputRecorder
 from ..auto.modeling_auto import AutoModel
+from ..deepseek_v2.modeling_deepseek_v2 import DeepseekV2Attention
 from ..deepseek_v4.modeling_deepseek_v4 import DeepseekV4HyperConnection, DeepseekV4Model
 from ..glm5_next.modeling_glm5_next import Glm5NextLinearAttention, Glm5NextMLP, Glm5NextMoE, Glm5NextRMSNorm
-from ..glm_moe_dsa.modeling_glm_moe_dsa import GlmMoeDsaAttention, GlmMoeDsaDecoderLayer
+from ..glm_moe_dsa.modeling_glm_moe_dsa import GlmMoeDsaDecoderLayer
 from ..llama.modeling_llama import LlamaPreTrainedModel, eager_attention_forward
 from .configuration_glm5_next import Glm5NextVLConfig, Glm5NextVLTextConfig
 
@@ -86,15 +87,10 @@ class Glm5NextVLTextLinearAttention(Glm5NextLinearAttention):
 # =============================================================================
 
 
-# TODO: inherit from dsv2 and refactor to use ternary there
-class Glm5NextVLTextAttention(GlmMoeDsaAttention):
+class Glm5NextVLTextAttention(DeepseekV2Attention):
     def __init__(self, config: Glm5NextVLTextConfig, layer_idx: int):
         super().__init__(config, layer_idx)
-        self.q_a_layernorm = (
-            Glm5NextVLTextRMSNorm(config.q_lora_rank, eps=config.rms_norm_eps)
-            if self.q_lora_rank is not None
-            else None
-        )
+        self.q_a_layernorm = Glm5NextVLTextRMSNorm(config.q_lora_rank, eps=config.rms_norm_eps)
         self.kv_a_layernorm = Glm5NextVLTextRMSNorm(self.kv_lora_rank, eps=config.rms_norm_eps)
 
     def forward(
@@ -226,10 +222,7 @@ class Glm5NextVLPreTrainedModel(LlamaPreTrainedModel):
     _no_split_modules = ["Glm5NextTextDecoderLayer"]
 
     _keep_in_fp32_modules_strict = ["e_score_correction_bias"]  # TODO: add conv there
-    _keys_to_ignore_on_load_unexpected = [
-        r"model\.language_model\.layers\.45\.",
-        r"model\.language_model\.layers\.\d+\.shared_head\.",
-    ]
+    _keys_to_ignore_on_load_unexpected = [r"layers\.45\.", r"layers\.\d+\.shared_head\."]
 
     # @torch.no_grad()
     # def _init_weights(self, module):
