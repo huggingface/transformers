@@ -5136,7 +5136,7 @@ def caching_allocator_warmup(model: PreTrainedModel, expanded_device_map: dict, 
             # NOTE: not tested on intel macs
             continue
         elif device.type == "neuron":
-            # Skip warmup on Neuron (AWS Trainium/Inferentia): it provides no benefit and currently OOMs.
+            # Skip warmup on Neuron (AWS Trainium/Inferentia): it provides no benefit as there is no reusable memory pool
             continue
         # We divide by 2 here as we allocate in fp16
         _ = torch.empty(int(byte_count // 2), dtype=torch.float16, device=device, requires_grad=False)
