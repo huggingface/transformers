@@ -62,5 +62,10 @@ class TmlProcessor(ProcessorMixin):
         num_soft_tokens = audio_inputs["num_audio_tokens"][audio_idx]
         return self.audio_token * num_soft_tokens
 
+    @property
+    def unused_input_names(self) -> list[str]:
+        "Input names returned always by subprocessors but not used in model's `forward`"
+        return ["num_patches", "num_audio_tokens"]
+
 
 __all__ = ["TmlProcessor"]

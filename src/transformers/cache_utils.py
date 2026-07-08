@@ -1512,7 +1512,10 @@ class DynamicCache(Cache):
             sliding_window = getattr(decoder_config, "sliding_window", None) or getattr(
                 decoder_config, "attention_chunk_size", None
             )
-            layer_types = getattr(decoder_config, "layer_types", None)
+            cache_layer_types = getattr(decoder_config, "cache_layer_types", None)
+            layer_types = (
+                cache_layer_types if cache_layer_types is not None else getattr(decoder_config, "layer_types", None)
+            )
             if layer_types is None:
                 layer_types = []
                 for _ in range(decoder_config.num_hidden_layers):

@@ -28,7 +28,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from ...activations import ACT2FN
-from ...cache_utils import Cache, DynamicCache
+from ...cache_utils import Cache, DynamicCache, DynamicLayer, LinearAttentionCacheLayerMixin, LinearAttentionLayer
 from ...generation import GenerationMixin
 from ...integrations import use_experts_implementation, use_kernel_forward_from_hub
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
@@ -49,6 +49,69 @@ else:
     causal_conv1d_update, causal_conv1d_fn = None, None
 
 logger = logging.get_logger(__name__)
+
+
+class TmlConvsAndAttentionLayer(LinearAttentionCacheLayerMixin, DynamicLayer):
+    layer_type = "tml_layer"
+    is_compileable = False
+
+    def __init__(self, config: TmlTextConfig | None = None):
+        DynamicLayer.__init__(self)
+
+        self.conv_caches = {}
+        for conv_idx in range(4):
+            # NOTE: we need 4 conv cache params here without recurrent states though!
+            self.conv_caches[conv_idx] = LinearAttentionLayer(config)
+
+    def update_conv_state(self, conv_states: torch.Tensor, conv_idx: int, **kwargs) -> torch.Tensor:
+        """
+        Update the linear attention cache in-place, and return the necessary conv states.
+
+        Args:
+            conv_states (`torch.Tensor`): The new conv states to cache.
+            conv_idx (`int`): The layer idx of conv layer ot update.
+
+        Returns:
+            `torch.Tensor`: The updated conv states.
+        """
+        if conv_idx is None:
+            raise ValueError("`conv_idx` has to be provided!")
+        if conv_idx not in self.conv_caches:
+            raise ValueError(f"`conv_idx`={conv_idx} is not initialized!")
+        return self.conv_caches[conv_idx].update_conv_state(conv_states)
+
+    def update_recurrent_state(self, *args, **kwargs):
+        raise NotImplementedError("Model does not use any recurrent cache!")
+
+    def lazy_initialization(self, *args, **kwargs) -> None:
+        # When the Attention cache is used with `update`, `lazy_initialization` is called with 2 positional args
+        if len(args) == 2 and len(kwargs) == 0:
+            DynamicLayer.lazy_initialization(self, *args)
+        # Otherwise, for the LinearAttention cache, when it's called in `update_conv_state`. it's
+        # always called with 1 single kwarg (cause it needs to know if it's for the conv or ssm states)
+        if len(args) == 0 and len(kwargs) == 1:
+            self.conv_caches[kwargs.get("conv_idx", 0)].lazy_initialization(self, **kwargs)
+
+    def offload(self):
+        DynamicLayer.offload(self)
+        for linear_cache in self.conv_caches.values():
+            linear_cache.offload(self)
+
+    def prefetch(self):
+        DynamicLayer.prefetch(self)
+        for linear_cache in self.conv_caches.values():
+            linear_cache.prefetch(self)
+
+    def reset(self) -> None:
+        DynamicLayer.reset(self)
+        for linear_cache in self.conv_caches.values():
+            linear_cache.reset(self)
+
+    def reorder_cache(self, beam_idx: torch.LongTensor):
+        """Reorders the cache for beam search, given the selected beam indices."""
+        DynamicLayer.reorder_cache(self, beam_idx)
+        for linear_cache in self.conv_caches.values():
+            linear_cache.reorder_cache(self, beam_idx)
 
 
 @auto_docstring(
@@ -208,10 +271,10 @@ class TmlAttention(nn.Module):
         self.r_proj = nn.Linear(config.hidden_size, self.num_heads * config.d_rel, bias=False)
         self.o_proj = nn.Linear(self.num_heads * self.head_dim, config.hidden_size, bias=False)
         self.k_sconv = TmlShortConvolution(
-            self.num_key_value_heads * self.head_dim, config.sconv_kernel_size, layer_idx
+            self.num_key_value_heads * self.head_dim, config.sconv_kernel_size, layer_idx, conv_idx=0
         )
         self.v_sconv = TmlShortConvolution(
-            self.num_key_value_heads * self.head_dim, config.sconv_kernel_size, layer_idx
+            self.num_key_value_heads * self.head_dim, config.sconv_kernel_size, layer_idx, conv_idx=1
         )
         self.q_norm = TmlRMSNorm(self.head_dim, eps=config.rms_norm_eps)
         self.k_norm = TmlRMSNorm(self.head_dim, eps=config.rms_norm_eps)
@@ -229,8 +292,8 @@ class TmlAttention(nn.Module):
         hidden_shape = (*input_shape, -1, self.head_dim)
 
         query_states = self.q_proj(hidden_states)
-        key_states = self.k_sconv(self.k_proj(hidden_states))
-        value_states = self.v_sconv(self.v_proj(hidden_states))
+        key_states = self.k_sconv(self.k_proj(hidden_states), cache_params=past_key_values)
+        value_states = self.v_sconv(self.v_proj(hidden_states), cache_params=past_key_values)
         relative_states = self.r_proj(hidden_states)
 
         query_states = self.q_norm(query_states.view(hidden_shape)).transpose(1, 2)
@@ -241,9 +304,10 @@ class TmlAttention(nn.Module):
         if past_key_values is not None:
             key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
 
-        kv_length = key_states.shape[-2]
-        cache_position = torch.arange(kv_length, device=hidden_states.device) + past_length
-        key_positions = torch.arange(kv_length, device=cache_position.device) + cache_position[-1] + 1 - kv_length
+        cache_position = torch.arange(input_shape[1], device=hidden_states.device) + past_length
+        key_positions = (
+            torch.arange(input_shape[1], device=cache_position.device) + cache_position[-1] + 1 - input_shape[1]
+        )
         relative_states = relative_states.view(*input_shape, self.num_heads, -1)
         position_bias = self.rel_logits_proj(relative_states, cache_position, key_positions)
 
@@ -445,9 +509,11 @@ def torch_causal_conv1d_update(
 
 
 class TmlShortConvolution(nn.Module):
-    def __init__(self, hidden_size: int, conv_kernel_size: int, layer_idx: int):
+    def __init__(self, hidden_size: int, conv_kernel_size: int, layer_idx: int, conv_idx: int):
         super().__init__()
         self.layer_idx = layer_idx
+        self.conv_idx = conv_idx
+        self.conv_kernel_size = conv_kernel_size
         self.activation = None  # just hardcode for now
 
         self.conv1d = nn.Conv1d(
@@ -488,11 +554,14 @@ class TmlShortConvolution(nn.Module):
         # We have cached `conv_state` to continue from. The two cached modes
         # (single-token decode and chunk-tokens continuation) share the state read here; they only
         # diverge in how the conv input is assembled and which kernel consumes the states below
-        use_precomputed_states = cache_params is not None and cache_params.has_previous_state(self.layer_idx)
+        use_precomputed_states = (
+            cache_params is not None
+            and cache_params.layers[self.layer_idx].conv_caches[self.conv_idx].has_previous_state
+        )
 
         # getting projected states from cache if it exists
         if use_precomputed_states:
-            conv_state = cache_params.layers[self.layer_idx].conv_states
+            conv_state = cache_params.layers[self.layer_idx].conv_caches[self.conv_idx].conv_states
 
         if use_precomputed_states and seq_len == 1:
             # Single-token cached decode: the fused per-step kernel updates the conv state in-place.
@@ -512,7 +581,7 @@ class TmlShortConvolution(nn.Module):
                 hidden_states = torch.cat([conv_state, hidden_states], dim=-1)
             if cache_params is not None:
                 new_conv_state = F.pad(hidden_states, (self.conv_kernel_size - hidden_states.shape[-1], 0))
-                cache_params.update_conv_state(new_conv_state, self.layer_idx)
+                cache_params.update_conv_state(new_conv_state, self.layer_idx, conv_idx=self.conv_idx)
             if self.causal_conv1d_fn is not None:
                 hidden_states = self.causal_conv1d_fn(
                     x=hidden_states,
@@ -546,8 +615,12 @@ class TmlDecoderLayer(GradientCheckpointingLayer):
         self.post_attention_layernorm = TmlRMSNorm(config.hidden_size, config.rms_norm_eps)
         # Maybe use_conv is always `True`, check it!
         self.layer_type = config.layer_types[layer_idx]
-        self.attn_sconv = TmlShortConvolution(config.hidden_size, config.conv_kernel_size, layer_idx=layer_idx)
-        self.mlp_sconv = TmlShortConvolution(config.hidden_size, config.conv_kernel_size, layer_idx=layer_idx)
+        self.attn_sconv = TmlShortConvolution(
+            config.hidden_size, config.conv_kernel_size, layer_idx=layer_idx, conv_idx=2
+        )
+        self.mlp_sconv = TmlShortConvolution(
+            config.hidden_size, config.conv_kernel_size, layer_idx=layer_idx, conv_idx=3
+        )
 
     def forward(
         self,
@@ -559,7 +632,6 @@ class TmlDecoderLayer(GradientCheckpointingLayer):
     ) -> torch.Tensor:
         residual = hidden_states
         hidden_states = self.input_layernorm(hidden_states)
-        hidden_states = self.attn_sconv(hidden_states)
         hidden_states, _ = self.self_attn(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
@@ -570,13 +642,13 @@ class TmlDecoderLayer(GradientCheckpointingLayer):
         # TODO: the short convolutions are stateless for now, so cached decoding is wrong for
         # sequences continued token-by-token; they need their conv context carried in the cache
         # TOFIX as well ig
-        hidden_states = self.attn_sconv(hidden_states)
+        hidden_states = self.attn_sconv(hidden_states, cache_params=past_key_values)
         hidden_states = residual + hidden_states
 
         residual = hidden_states
         hidden_states = self.post_attention_layernorm(hidden_states)
         hidden_states = self.mlp(hidden_states)
-        hidden_states = self.mlp_sconv(hidden_states)
+        hidden_states = self.mlp_sconv(hidden_states, cache_params=past_key_values)
         hidden_states = residual + hidden_states
         return hidden_states
 
