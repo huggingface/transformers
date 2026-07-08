@@ -32,15 +32,15 @@ from ...test_processing_common import MODALITY_INPUT_DATA, ProcessorTesterMixin
 
 class AudioFlamingo3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = AudioFlamingo3Processor
+    tiny_model_id = "hf-internal-testing/tiny-processor-audioflamingo3"
+    checkpoint = "nvidia/audio-flamingo-3-hf"
 
     @classmethod
     @require_torch
     @require_torchaudio
     def setUpClass(cls):
-        cls.checkpoint = "nvidia/audio-flamingo-3-hf"
         cls.tmpdirname = tempfile.mkdtemp()
-
-        processor = AudioFlamingo3Processor.from_pretrained(cls.checkpoint)
+        processor = AudioFlamingo3Processor.from_pretrained(cls.tiny_model_id)
         processor.save_pretrained(cls.tmpdirname)
 
     @require_torch

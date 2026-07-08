@@ -69,7 +69,7 @@ class ShieldGemma2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     @classmethod
     def _setup_image_processor(cls):
         image_processor_class = cls._get_component_class_from_processor("image_processor")
-        return image_processor_class.from_pretrained("google/siglip-so400m-patch14-384")
+        return image_processor_class(size={"height": 64, "width": 64})
 
     @classmethod
     def _setup_tokenizer(cls):
