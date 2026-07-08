@@ -22,7 +22,6 @@ from transformers import AutoTokenizer, GptOssForCausalLM, Mxfp4Config
 from transformers.testing_utils import (
     require_kernels,
     require_torch,
-    require_torch_gpu,
     require_torch_large_accelerator,
     require_triton,
     slow,
@@ -143,10 +142,12 @@ class Mxfp4QuantizerTest(unittest.TestCase):
             # CPU already supported MXFP4
             quantizer.validate_environment()
 
-    @require_torch_gpu
+    @unittest.skipUnless(torch_device in {"cuda", "xpu"}, "test requires CUDA or XPU")
     def test_quantizer_validation_low_compute_capability(self):
-        """Test quantizer validation with CUDA low compute capability"""
-        with patch("torch.cuda.get_device_capability", return_value=(7, 0)):
+        """Test quantizer validation with CUDA low compute capability or supported XPU"""
+        with ExitStack() as stack:
+            if torch_device == "cuda":
+                stack.enter_context(patch("torch.cuda.get_device_capability", return_value=(7, 0)))
             from transformers.quantizers.quantizer_mxfp4 import Mxfp4HfQuantizer
 
             config = Mxfp4Config()
@@ -156,10 +157,12 @@ class Mxfp4QuantizerTest(unittest.TestCase):
             with self.assertRaises(ValueError):
                 quantizer.validate_environment()
 
-    @require_torch_gpu
+    @unittest.skipUnless(torch_device in {"cuda", "xpu"}, "test requires CUDA or XPU")
     def test_quantizer_validation_low_compute_capability_with_prequantized(self):
-        """Test quantizer validation with CUDA low compute capability"""
-        with patch("torch.cuda.get_device_capability", return_value=(7, 0)):
+        """Test pre-quantized validation with CUDA low compute capability or supported XPU"""
+        with ExitStack() as stack:
+            if torch_device == "cuda":
+                stack.enter_context(patch("torch.cuda.get_device_capability", return_value=(7, 0)))
             from transformers.quantizers.quantizer_mxfp4 import Mxfp4HfQuantizer
 
             config = Mxfp4Config()
@@ -169,10 +172,12 @@ class Mxfp4QuantizerTest(unittest.TestCase):
             quantizer.validate_environment()
             self.assertTrue(quantizer.quantization_config.dequantize)
 
-    @require_torch_gpu
+    @unittest.skipUnless(torch_device in {"cuda", "xpu"}, "test requires CUDA or XPU")
     def test_quantizer_validation_low_compute_capability_with_dequantize(self):
-        """Test quantizer validation with CUDA low compute capability but dequantize enabled"""
-        with patch("torch.cuda.get_device_capability", return_value=(7, 0)):
+        """Test quantizer validation with dequantize enabled"""
+        with ExitStack() as stack:
+            if torch_device == "cuda":
+                stack.enter_context(patch("torch.cuda.get_device_capability", return_value=(7, 0)))
             from transformers.quantizers.quantizer_mxfp4 import Mxfp4HfQuantizer
 
             config = Mxfp4Config(dequantize=True)
@@ -251,7 +256,7 @@ class Mxfp4QuantizerTest(unittest.TestCase):
         # MXFP4 is not trainable
         self.assertFalse(quantizer.is_trainable)
 
-    @require_torch_gpu
+    @unittest.skipUnless(torch_device in {"cuda", "xpu"}, "test requires CUDA or XPU")
     def test_warning_distinguishes_triton_from_kernels(self):
         """When only one dependency is missing, warning should mention it specifically."""
         from transformers.quantizers.quantizer_mxfp4 import Mxfp4HfQuantizer
@@ -288,7 +293,7 @@ class Mxfp4QuantizerTest(unittest.TestCase):
         self.assertIn("triton", warning_text.lower())
         self.assertTrue(quantizer.quantization_config.dequantize)
 
-    @require_torch_gpu
+    @unittest.skipUnless(torch_device in {"cuda", "xpu"}, "test requires CUDA or XPU")
     def test_error_distinguishes_triton_from_kernels(self):
         """When quantizing without a dependency, ValueError should mention it specifically."""
         from transformers.quantizers.quantizer_mxfp4 import Mxfp4HfQuantizer
