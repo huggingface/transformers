@@ -108,7 +108,7 @@ class ExaoneMoeIntegrationTest(unittest.TestCase):
         ).get_expectation()
         EXPECTED_SLICE = Expectations(
             {
-                ("xpu", None): torch.tensor(
+                ("xpu", 5): torch.tensor(
                     [-2.3750, -3.0156, 2.6875, -3.0000, 0.5078, -1.4141, -1.8516, -2.6719, -1.7578, -2.0781]
                 ),
                 ("cuda", None): torch.tensor(
