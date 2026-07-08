@@ -157,7 +157,14 @@ def _build_checkpoint_conversion_mapping():
             ),
             WeightRenaming(source_patterns=r"model.layers", target_patterns=r"language_model.layers"),
             # MoE and MLP
-            WeightRenaming(source_patterns=r"shared_w13_weight", target_patterns=r"gate_up_proj"),
+            WeightConverter(
+                source_patterns="shared_w13_weight",
+                target_patterns=[
+                    "gate_proj",
+                    "up_proj",
+                ],
+                operations=[InterleavedSplit(dim=1)],
+            ),
             WeightRenaming(source_patterns=r"shared_w2_weight", target_patterns=r"down_proj"),
             WeightRenaming(source_patterns=r"mlp.experts.w13_weight", target_patterns=r"mlp.experts.gate_up_proj"),
             WeightRenaming(source_patterns=r"mlp.experts.w2_weight", target_patterns=r"mlp.experts.down_proj"),

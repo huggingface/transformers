@@ -329,6 +329,7 @@ class TmlExperts(nn.Module):
             current_hidden_states = hidden_states[token_idx]
             current_hidden_states = nn.functional.linear(current_hidden_states, self.gate_up_proj[expert_idx])
             current_hidden_states = swiglu_interleaved(current_hidden_states)
+            current_hidden_states = nn.functional.linear(current_hidden_states, self.down_proj[expert_idx])
             current_hidden_states = current_hidden_states * top_k_weights[token_idx, top_k_pos, None]
             final_hidden_states.index_add_(0, token_idx, current_hidden_states.to(final_hidden_states.dtype))
         return final_hidden_states
@@ -356,12 +357,14 @@ class TmlTopkRouter(nn.Module):
         return F.linear(flat.type(torch.float32), self.weight.type(torch.float32))
 
 
+# TODO: should we make this as normal MLP with linear layers?
 class TmlSharedExperts(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.n_shared_experts = config.n_shared_experts
         shared_d_mlp = config.moe_intermediate_size
-        self.gate_up_proj = nn.Parameter(torch.empty(config.n_shared_experts, 2 * shared_d_mlp, config.hidden_size))
+        self.gate_proj = nn.Parameter(torch.empty(config.n_shared_experts, shared_d_mlp, config.hidden_size))
+        self.up_proj = nn.Parameter(torch.empty(config.n_shared_experts, shared_d_mlp, config.hidden_size))
         self.down_proj = nn.Parameter(torch.empty(config.n_shared_experts, config.hidden_size, shared_d_mlp))
         self.act_fn = ACT2FN[config.hidden_act]
 
@@ -371,9 +374,10 @@ class TmlSharedExperts(nn.Module):
         gammas = gammas.reshape(-1, self.n_shared_experts).transpose(0, 1)  # (S, T)
 
         expanded = hidden_states.unsqueeze(0).expand(self.n_shared_experts, -1, -1)  # (S, T, D)
-        gate_up = torch.bmm(expanded, self.gate_up_proj.mT)  # (S, T, 2f)
-        activated = swiglu_interleaved(gate_up).float() * gammas.unsqueeze(-1)  # (S, T, f)
-        down = torch.bmm(activated.to(gate_up.dtype), self.down_proj.mT)  # (S, T, D)
+        gate = torch.bmm(expanded, self.gate_proj.mT)  # (S, T, f)
+        up = torch.bmm(expanded, self.up_proj.mT)  # (S, T, f)
+        activated = (self.act_fn(gate) * up).float() * gammas.unsqueeze(-1)  # (S, T, f)
+        down = torch.bmm(activated.to(gate.dtype), self.down_proj.mT)  # (S, T, D)
 
         out = down.float().sum(dim=0).to(hidden_states.dtype)  # (T, D)
         return out.view(input_shape)
