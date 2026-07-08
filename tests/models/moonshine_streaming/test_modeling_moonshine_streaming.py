@@ -472,6 +472,31 @@ class MoonshineStreamingModelTest(ModelTesterMixin, PipelineTesterMixin, unittes
             model(**self._prepare_for_class(inputs_dict, model_class))
 
 
+class MoonshineStreamingSlidingWindowMaskTest(unittest.TestCase):
+    def test_sliding_window_mask_function_right_window(self):
+        from transformers.models.moonshine_streaming.modeling_moonshine_streaming import (
+            sliding_window_mask_function,
+        )
+
+        # left_window_size=16, right_window_size=4
+        mask_fn = sliding_window_mask_function((16, 4))
+        q_idx = 10
+
+        # A query at position 10 should attend to the 4 future frames {11, 12, 13, 14}
+        # (right window includes right_window_size frames, not right_window_size - 1).
+        future = [kv_idx for kv_idx in range(q_idx + 1, 20) if mask_fn(0, 0, q_idx, kv_idx)]
+        self.assertEqual(future, [11, 12, 13, 14])
+
+        # The frame right after the right window (dist = -5) must not be attended to.
+        self.assertFalse(mask_fn(0, 0, q_idx, q_idx + 5))
+
+        # The left window must still be respected: 16 frames back (including the current one),
+        # i.e. positions {0, ..., 10} here, and nothing beyond the window.
+        past = [kv_idx for kv_idx in range(0, q_idx + 1) if mask_fn(0, 0, q_idx, kv_idx)]
+        self.assertEqual(past, list(range(0, q_idx + 1)))
+        self.assertFalse(mask_fn(0, 0, 20, 3))  # dist = 17 >= left_window_size (16)
+
+
 @require_torch
 class MoonshineStreamingModelIntegrationTests(unittest.TestCase):
     def setUp(self):
