@@ -173,7 +173,13 @@ class UnlimitedOcrIntegrationTest(unittest.TestCase):
         )
         inputs = self.processor(images=image, text="<image>document parsing.", return_tensors="pt").to(model.device)
         with torch.autocast(device_type=torch_device, dtype=torch.bfloat16):
-            generate_ids = model.generate(**inputs, do_sample=False, max_new_tokens=20)
+            generate_ids = model.generate(
+                **inputs,
+                do_sample=False,
+                max_new_tokens=20,
+                no_repeat_ngram_size=35,
+                no_repeat_ngram_window_size=128,
+            )
         decoded = self.processor.decode(generate_ids[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True)
         EXPECTED_DECODED_TEXT = Expectations(
             {
@@ -194,7 +200,13 @@ class UnlimitedOcrIntegrationTest(unittest.TestCase):
         )
         inputs = self.processor(images=image, text="<image>document parsing.", return_tensors="pt").to(model.device)
         with torch.autocast(device_type=torch_device, dtype=torch.bfloat16):
-            generate_ids = model.generate(**inputs, do_sample=False, max_new_tokens=20)
+            generate_ids = model.generate(
+                **inputs,
+                do_sample=False,
+                max_new_tokens=20,
+                no_repeat_ngram_size=35,
+                no_repeat_ngram_window_size=128,
+            )
         decoded = self.processor.decode(generate_ids[0, inputs["input_ids"].shape[1] :], skip_special_tokens=False)
         EXPECTED_DECODED_TEXT = Expectations(
             {
@@ -225,7 +237,13 @@ class UnlimitedOcrIntegrationTest(unittest.TestCase):
         ).to(model.device, dtype=torch.bfloat16)
 
         with torch.autocast(device_type=torch_device, dtype=torch.bfloat16):
-            generate_ids = model.generate(**inputs, do_sample=False, max_new_tokens=20)
+            generate_ids = model.generate(
+                **inputs,
+                do_sample=False,
+                max_new_tokens=20,
+                no_repeat_ngram_size=35,
+                no_repeat_ngram_window_size=128,
+            )
         decoded = self.processor.batch_decode(
             generate_ids[:, inputs["input_ids"].shape[1] :], skip_special_tokens=True
         )
@@ -266,7 +284,13 @@ class UnlimitedOcrIntegrationTest(unittest.TestCase):
         ).to(model.device)
 
         with torch.autocast(device_type=torch_device, dtype=torch.bfloat16):
-            generate_ids = model.generate(**inputs, do_sample=False, max_new_tokens=20)
+            generate_ids = model.generate(
+                **inputs,
+                do_sample=False,
+                max_new_tokens=20,
+                no_repeat_ngram_size=35,
+                no_repeat_ngram_window_size=128,
+            )
         decoded = self.processor.decode(generate_ids[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True)
 
         EXPECTED_DECODED_TEXT = Expectations(
