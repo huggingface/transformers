@@ -24,7 +24,7 @@ deps = {
     "kenlm": "kenlm",
     "kernels": "kernels>=0.15.2,<0.16",
     "librosa": "librosa",
-    "mistral-common[image]": "mistral-common[image]>=1.10.0",
+    "mistral-common[image]": "mistral-common[image]>=1.11.5",
     "nltk": "nltk<=3.8.1",
     "num2words": "num2words",
     "numpy": "numpy>=1.17",
