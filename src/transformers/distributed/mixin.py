@@ -13,6 +13,7 @@
 # limitations under the License.
 from __future__ import annotations
 
+import json
 import os
 import re
 import warnings
@@ -23,7 +24,8 @@ from ..integrations.tensor_parallel import (
     gather_state_dict_for_save,
     initialize_tensor_parallelism,
 )
-from ..utils import is_torch_available, is_torch_greater_or_equal
+from ..modeling_utils import _add_variant
+from ..utils import SAFE_WEIGHTS_INDEX_NAME, is_torch_available, is_torch_greater_or_equal, logging
 from ..utils.hub import create_and_tag_model_card
 from .configuration_utils import DistributedConfig
 from .fsdp import is_fsdp_managed_module
@@ -35,6 +37,9 @@ from .utils import (
     initialize_fully_sharded_data_parallelism,
     save_model_checkpoint_distributed,
 )
+
+
+logger = logging.get_logger(__name__)
 
 
 if TYPE_CHECKING:
@@ -209,6 +214,41 @@ class DistributedMixin:
                 commit_message=commit_message,
                 token=token,
                 create_pr=create_pr,
+            )
+
+    def save_gathered_checkpoint_index(
+        self,
+        save_directory: str | os.PathLike,
+        *,
+        state_dict_split,
+        weight_map: dict | None,
+        weights_name: str,
+        variant: str | None,
+        max_shard_size: int | str,
+    ) -> None:
+        """Write sharded safetensors index after a gathered state-dict save."""
+        # Save index if sharded
+        index = None
+        if state_dict_split.is_sharded:
+            index = {
+                "metadata": {"total_parameters": self.num_parameters(), **state_dict_split.metadata},
+                "weight_map": weight_map,
+            }
+
+        if index is None:
+            path_to_weights = os.path.join(save_directory, weights_name)
+            logger.info(f"Model weights saved in {path_to_weights}")
+        else:
+            save_index_file = SAFE_WEIGHTS_INDEX_NAME
+            save_index_file = os.path.join(save_directory, _add_variant(save_index_file, variant))
+            # Save the index as well
+            with open(save_index_file, "w", encoding="utf-8") as f:
+                content = json.dumps(index, indent=2, sort_keys=True) + "\n"
+                f.write(content)
+            logger.info(
+                f"The model is bigger than the maximum size per checkpoint ({max_shard_size}) and is going to be "
+                f"split in {len(state_dict_split.filename_to_tensors)} checkpoint shards. You can find where each parameters has been saved in the "
+                f"index located at {save_index_file}."
             )
 
     def _gather_tp_state_dict_for_save(

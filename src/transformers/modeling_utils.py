@@ -16,7 +16,6 @@ import collections
 import copy
 import functools
 import inspect
-import json
 import os
 import re
 import sys
@@ -3554,53 +3553,38 @@ class PreTrainedModel(
                     # only do contiguous after it's permuted correctly in case of TP
                     shard_state_dict[tensor_name] = tensor.contiguous()
 
-            # As explained above, for offloaded scenarios, weight format could not be reverted before due to meta weights,
-            # so do it now after they were loaded onto cpu. For one-weight-to-many operations, it may be an issue, but usually the shards
-            # contain all the necessary params, except if we are quite unlucky on the sharding. The failure surface is (very few models
-            # with one-weight-to-many + offloading to disk + unlucky sharding), so it will almost never happen
-            if is_offloaded and save_original_format and not _hf_peft_config_loaded:
-                try:
-                    shard_state_dict = revert_weight_conversion(model_to_save, shard_state_dict)
-                    # Save the weight_map, since some names etc may have changed due to conversion compared to initial `state_dict_split`
-                    if state_dict_split.is_sharded:
-                        weight_map.update({k: os.path.basename(shard_file)} for k in shard_state_dict.keys())  # ty: ignore[unresolved-attribute]
-                except Exception:
-                    raise RuntimeError(
-                        "We could not revert some weight conversions because of offlading, and several weights needed for a single "
-                        "conversion operation living in different shard files. Try reducing `max_shard_size` a bit, or worst case "
-                        "set `save_original_format=False`."
-                    )
+                # As explained above, for offloaded scenarios, weight format could not be reverted before due to meta weights,
+                # so do it now after they were loaded onto cpu. For one-weight-to-many operations, it may be an issue, but usually the shards
+                # contain all the necessary params, except if we are quite unlucky on the sharding. The failure surface is (very few models
+                # with one-weight-to-many + offloading to disk + unlucky sharding), so it will almost never happen
+                if is_offloaded and save_original_format and not _hf_peft_config_loaded:
+                    try:
+                        shard_state_dict = revert_weight_conversion(model_to_save, shard_state_dict)
+                        # Save the weight_map, since some names etc may have changed due to conversion compared to initial `state_dict_split`
+                        if state_dict_split.is_sharded:
+                            weight_map.update({k: os.path.basename(shard_file)} for k in shard_state_dict.keys())  # ty: ignore[unresolved-attribute]
+                    except Exception:
+                        raise RuntimeError(
+                            "We could not revert some weight conversions because of offlading, and several weights needed for a single "
+                            "conversion operation living in different shard files. Try reducing `max_shard_size` a bit, or worst case "
+                            "set `save_original_format=False`."
+                        )
 
-            # TODO: it would be very nice to do the writing concurrently, but safetensors never releases the GIL,
-            # so it's not possible for now....
-            # Write the shard to disk
-            safe_save_file(shard_state_dict, filename, metadata=metadata)
-            # Cleanup the data before next loop (important with offloading, so we don't blowup cpu RAM)
-            del shard_state_dict
+                # TODO: it would be very nice to do the writing concurrently, but safetensors never releases the GIL,
+                # so it's not possible for now....
+                # Write the shard to disk
+                safe_save_file(shard_state_dict, filename, metadata=metadata)
+                # Cleanup the data before next loop (important with offloading, so we don't blowup cpu RAM)
+                del shard_state_dict
 
-            # Save index if sharded
-            index = None
-            if state_dict_split.is_sharded:
-                index = {
-                    "metadata": {"total_parameters": self.num_parameters(), **state_dict_split.metadata},
-                    "weight_map": weight_map,
-                }
-
-            if index is None:
-                path_to_weights = os.path.join(save_directory, weights_name)
-                logger.info(f"Model weights saved in {path_to_weights}")
-            else:
-                save_index_file = SAFE_WEIGHTS_INDEX_NAME
-                save_index_file = os.path.join(save_directory, _add_variant(save_index_file, variant))
-                # Save the index as well
-                with open(save_index_file, "w", encoding="utf-8") as f:
-                    content = json.dumps(index, indent=2, sort_keys=True) + "\n"
-                    f.write(content)
-                logger.info(
-                    f"The model is bigger than the maximum size per checkpoint ({max_shard_size}) and is going to be "
-                    f"split in {len(state_dict_split.filename_to_tensors)} checkpoint shards. You can find where each parameters has been saved in the "
-                    f"index located at {save_index_file}."
-                )
+            self.save_gathered_checkpoint_index(
+                save_directory,
+                state_dict_split=state_dict_split,
+                weight_map=weight_map,
+                weights_name=weights_name,
+                variant=variant,
+                max_shard_size=max_shard_size,
+            )
 
         if push_to_hub and save_on_this_rank:
             # Eventually create an empty model card
