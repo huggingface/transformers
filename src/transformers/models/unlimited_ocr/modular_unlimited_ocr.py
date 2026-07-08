@@ -312,10 +312,11 @@ class UnlimitedOcrVisionEncoderConfig(CLIPVisionConfig):
     Example:
 
     ```python
-    >>> from transformers import UnlimitedOcrConfig
+    >>> from transformers import UnlimitedOcrVisionEncoderConfig, UnlimitedOcrVisionEncoder
 
-    >>> config = UnlimitedOcrConfig()
-    >>> encoder_config = config.vision_config.encoder_config
+    >>> configuration = UnlimitedOcrVisionEncoderConfig()
+    >>> model = UnlimitedOcrVisionEncoder(configuration)
+    >>> configuration = model.config
     ```"""
 
     model_type = "unlimited_ocr_vision_encoder"
@@ -331,6 +332,22 @@ class UnlimitedOcrVisionEncoderConfig(CLIPVisionConfig):
 @auto_docstring(checkpoint="baidu/Unlimited-OCR")
 @strict
 class UnlimitedOcrVisionConfig(DeepseekOcr2VisionConfig):
+    r"""
+    sam_config (`dict` or `UnlimitedOcrSamVisionConfig`, *optional*):
+        Configuration for the SAM vision encoder. Defaults to `UnlimitedOcrSamVisionConfig()`.
+    encoder_config (`dict` or `UnlimitedOcrVisionEncoderConfig`, *optional*):
+        Configuration for the vision encoder. Defaults to `UnlimitedOcrVisionEncoderConfig()`.
+
+    Example:
+
+    ```python
+    >>> from transformers import UnlimitedOcrVisionConfig, UnlimitedOcrVisionModel
+
+    >>> configuration = UnlimitedOcrVisionConfig()
+    >>> model = UnlimitedOcrVisionModel(configuration)
+    >>> configuration = model.config
+    ```"""
+
     model_type = "unlimited_ocr_vision"
     base_config_key = "vision_config"
     sub_configs = {
@@ -363,14 +380,22 @@ class UnlimitedOcrTextConfig(DeepseekOcr2TextConfig):
     mlp_layer_types (`list[str]`, *optional*):
         MLP type (`"dense"` or `"sparse"`) for each decoder layer, e.g. `["dense", "sparse", "sparse", ...]`.
     layer_types (`list[str]`, *optional*):
-        Attention type for each decoder layer. Defaults to `"full_attention"` on every layer so the KV cache
-        retains all tokens; the sliding window (`sliding_window`) is applied as a mask over generated tokens
-        only, not by truncating the cache.
+        Attention type for each decoder layer. Defaults to `"reference_sliding_attention"` on every layer.
+    use_sliding_window (`int`, defaults to `True`):
+        Whether to use reference sliding window attention.
     sliding_window (`int`, *optional*, defaults to 128):
-        If set, each token additionally attends only to the last `sliding_window` tokens. The image and prompt
-        tokens processed during prefill stay fully visible (they are never evicted); the window only applies
-        across generated tokens. Set to `None` for full causal attention.
-    """
+        Sliding window size for reference sliding window attention. If set, every token attends to the last
+        `sliding_window` and all image and prompt tokens.
+
+    Example:
+
+    ```python
+    >>> from transformers import UnlimitedOcrTextConfig, UnlimitedOcrTextModel
+
+    >>> configuration = UnlimitedOcrTextConfig()
+    >>> model = UnlimitedOcrTextModel(configuration)
+    >>> configuration = model.config
+    ```"""
 
     model_type = "unlimited_ocr_text"
     base_config_key = "text_config"
@@ -410,6 +435,20 @@ class UnlimitedOcrTextConfig(DeepseekOcr2TextConfig):
 @auto_docstring(checkpoint="baidu/Unlimited-OCR")
 @strict
 class UnlimitedOcrConfig(DeepseekOcr2Config):
+    r"""
+    vision_config (`dict` or `UnlimitedOcrVisionConfig`, *optional*):
+        Configuration for the vision encoders. Defaults to `UnlimitedOcrVisionConfig()`.
+
+    Example:
+
+    ```python
+    >>> from transformers import UnlimitedOcrConfig, UnlimitedOcrModel
+
+    >>> configuration = UnlimitedOcrConfig()
+    >>> model = UnlimitedOcrModel(configuration)
+    >>> configuration = model.config
+    ```"""
+
     model_type = "unlimited_ocr"
     sub_configs = {
         "vision_config": UnlimitedOcrVisionConfig,
