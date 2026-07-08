@@ -598,6 +598,18 @@ class BarkSemanticModel(BarkCausalModel):
             dim=1,
         )
 
+        # When CPU offload is enabled, input_embeds_layer has its own accelerate hook
+        # (installed before semantic's hook so it can be used here, outside forward()).
+        # After its hook fires, input_embeds_layer.weight moves to CUDA while the rest of
+        # semantic stays on CPU. Because input_embeds_layer is the first child of semantic,
+        # next(semantic.parameters()) now returns a CUDA tensor, which fools semantic's
+        # CpuOffload hook into thinking the whole module is already on CUDA — so it skips
+        # moving the remaining submodules (e.g. position_embeds_layer), causing a device
+        # mismatch. Moving input_embeds_layer back to CPU here ensures that semantic's hook
+        # correctly detects it still needs to move everything to CUDA.
+        if hasattr(self, "_hf_hook"):
+            self.input_embeds_layer.to("cpu")
+
         tokens_to_suppress = list(
             range(semantic_generation_config.semantic_vocab_size, semantic_generation_config.semantic_pad_token)
         )
