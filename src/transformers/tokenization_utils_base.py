@@ -35,7 +35,6 @@ import numpy as np
 from huggingface_hub import is_offline_mode
 from packaging import version
 from typing_extensions import TypeVar
-from typing import Dict, Union
 
 from . import __version__
 from .dynamic_module_utils import custom_object_save
@@ -1410,8 +1409,7 @@ class PreTrainedTokenizerBase(PushToHubMixin):
         """
         return self.convert_tokens_to_ids(self.all_special_tokens)
 
-    @property
-    def _set_model_specific_special_tokens(self, special_tokens: Dict[str, Union[str, AddedToken]]) -> None:
+    def _set_model_specific_special_tokens(self, special_tokens: dict[str, str | AddedToken]) -> None:
         """
         Adds new model-specific special tokens (e.g., for multimodal models).
 
