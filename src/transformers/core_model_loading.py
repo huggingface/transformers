@@ -178,6 +178,153 @@ class Concatenate(ConversionOps):
         return Chunk(self.dim)
 
 
+class InterleavedSplit(ConversionOps):
+    """Split a tensor along `dim` into equally sized chunks by deinterleaving."""
+
+    def __init__(self, dim: int = 0):
+        self.dim = dim
+
+    @torch.no_grad
+    def convert(
+        self, input_dict: dict[str, torch.Tensor], source_patterns: list[str], target_patterns: list[str], **kwargs
+    ) -> dict[str, torch.Tensor]:
+        tensors = next(iter(input_dict.values()))
+        tensor = tensors[0] if isinstance(tensors, list) else tensors
+        targets = target_patterns
+        n_splits = len(targets)
+
+        if len(input_dict) > 1 or n_splits == 1:
+            raise ValueError(f"Failed to convert {kwargs.get('full_layer_name')}")
+
+        dim_size = tensor.shape[self.dim]
+        if dim_size % n_splits != 0:
+            raise ValueError(
+                f"Cannot deinterleave dim of size {dim_size} into {n_splits} equal interleaved chunks "
+                f"for {kwargs.get('full_layer_name')}"
+            )
+
+        # Move split dim to front, reshape (n_splits * group, ...) -> (group, n_splits, ...),
+        # then unbind along the n_splits axis to recover each interleaved slice.
+        moved = tensor.movedim(self.dim, 0)
+        reshaped = moved.reshape(dim_size // n_splits, n_splits, *moved.shape[1:])
+        chunks = [reshaped[:, i, ...].movedim(0, self.dim).contiguous() for i in range(n_splits)]
+
+        if len(chunks) != len(target_patterns):
+            raise ValueError(f"Failed to convert {kwargs.get('full_layer_name')}")
+
+        return dict(zip(targets, chunks))
+
+    @property
+    def reverse_op(self) -> ConversionOps:
+        return Interleave(self.dim)
+
+
+class Interleave(ConversionOps):
+    """Concatenate tensors along `dim` by interleaving."""
+
+    def __init__(self, dim: int = 0):
+        self.dim = dim
+
+    @torch.no_grad
+    def convert(
+        self,
+        input_dict: dict[str, list[torch.Tensor]],
+        source_patterns: list[str],
+        target_patterns: list[str],
+        **kwargs,
+    ) -> dict[str, torch.Tensor]:
+        target_pattern = self.get_target_pattern(target_patterns)
+        all_tensors = []
+        # Very important to keep the relative order of the source patterns here, so we iterate over them not the
+        # input directly as it's unordered! Skip patterns that prior ops in the chain (e.g. `Fp8Dequantize`)
+        # have already consumed and dropped from `input_dict`.
+        for source_pattern in source_patterns:
+            if source_pattern not in input_dict:
+                continue
+            # Immediately free the input_dict, so that we do not keep many copies simultaneously - otherwise we have to
+            # wait for this function to return to be able to clean-up, which will not get garbage collected as fast as if
+            # everything is freed right now
+            tensors = input_dict.pop(source_pattern)
+            if isinstance(tensors, list):
+                all_tensors.extend(tensors)
+            else:
+                all_tensors.append(tensors)
+
+        if len(all_tensors) < 2:
+            raise ValueError(
+                f"Interleave requires >=2 tensors, got {len(all_tensors)} for {kwargs.get('full_layer_name')}"
+            )
+
+        shape = all_tensors[0].shape
+        if any(t.shape != shape for t in all_tensors):
+            raise ValueError(f"All tensors must share shape to interleave, got {[t.shape for t in all_tensors]}")
+
+        # Stack along a new axis right after `dim`, then flatten it back into `dim` to weave the tensors
+        # together: result[..., 0::n, ...] == all_tensors[0], result[..., 1::n, ...] == all_tensors[1], etc.
+        stacked = torch.stack(all_tensors, dim=self.dim + 1)
+        new_shape = list(shape)
+        new_shape[self.dim] = shape[self.dim] * len(all_tensors)
+        merged = stacked.reshape(*new_shape).contiguous()
+
+        return {target_pattern: merged}
+
+    def get_target_pattern(self, target_patterns: list[str]) -> str:
+        # Here we always return the target pattern
+        if len(target_patterns) > 1:
+            raise ValueError("Undefined Operation encountered!")
+        return target_patterns[0]
+
+    @property
+    def reverse_op(self) -> ConversionOps:
+        return InterleavedSplit(self.dim)
+
+
+class Squeeze(ConversionOps):
+    """Squeezes a tensor along `dim`."""
+
+    def __init__(self, dim: int = 0):
+        self.dim = dim
+
+    @torch.no_grad
+    def convert(
+        self, input_dict: dict[str, torch.Tensor], source_patterns: list[str], target_patterns: list[str], **kwargs
+    ) -> dict[str, torch.Tensor]:
+        tensors = []
+        for tensor in input_dict.values():
+            tensors.append(torch.squeeze(tensor, dim=self.dim))
+
+        if len(input_dict) != len(target_patterns):
+            raise ValueError(f"Failed to convert {kwargs.get('full_layer_name')}")
+        return dict(zip(target_patterns, tensors))
+
+    @property
+    def reverse_op(self) -> ConversionOps:
+        return Unsqueeze(self.dim)
+
+
+class Unsqueeze(ConversionOps):
+    """Unqueezes a tensor along `dim`."""
+
+    def __init__(self, dim: int = 0):
+        self.dim = dim
+
+    @torch.no_grad
+    def convert(
+        self, input_dict: dict[str, torch.Tensor], source_patterns: list[str], target_patterns: list[str], **kwargs
+    ) -> dict[str, torch.Tensor]:
+        tensors = []
+        for tensor in input_dict.values():
+            tensors.append(torch.unsqueeze(tensor, dim=self.dim))
+
+        if len(input_dict) != len(target_patterns):
+            raise ValueError(f"Failed to convert {kwargs.get('full_layer_name')}")
+        return dict(zip(target_patterns, tensors))
+
+    @property
+    def reverse_op(self) -> ConversionOps:
+        return Squeeze(self.dim)
+
+
 class MergeModulelist(ConversionOps):
     """
     Merge a list of tensors into a single tensor along the first dimension.

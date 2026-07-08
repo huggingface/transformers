@@ -22,6 +22,7 @@ from .core_model_loading import (
     Chunk,
     Concatenate,
     ErnieFuseAndSplitTextVisionExperts,
+    InterleavedSplit,
     MergeModulelist,
     PrefixChange,
     Transpose,
@@ -155,12 +156,19 @@ def _build_checkpoint_conversion_mapping():
                 source_patterns=r"^embed_norm.weight", target_patterns=r"language_model.embed_tokens.embed_norm.weight"
             ),
             WeightRenaming(source_patterns=r"model.layers", target_patterns=r"language_model.layers"),
-            # MoE
-            WeightRenaming(source_patterns=r"shared_w2_weight", target_patterns=r"w2_weight"),
-            WeightRenaming(source_patterns=r"shared_w13_weight", target_patterns=r"w13_weight"),
+            # MoE and MLP
+            WeightRenaming(source_patterns=r"shared_w13_weight", target_patterns=r"gate_up_proj"),
+            WeightRenaming(source_patterns=r"shared_w2_weight", target_patterns=r"down_proj"),
             WeightRenaming(source_patterns=r"mlp.experts.w13_weight", target_patterns=r"mlp.experts.gate_up_proj"),
             WeightRenaming(source_patterns=r"mlp.experts.w2_weight", target_patterns=r"mlp.experts.down_proj"),
-            WeightRenaming(source_patterns=r"mlp.w13_dn.weight", target_patterns=r"mlp.gate_up_proj.weight"),
+            WeightConverter(
+                source_patterns="mlp.w13_dn.weight",
+                target_patterns=[
+                    "mlp.gate_proj.weight",
+                    "mlp.up_proj.weight",
+                ],
+                operations=[InterleavedSplit(dim=0)],
+            ),
             WeightRenaming(source_patterns=r"mlp.w2_md.weight", target_patterns=r"mlp.down_proj.weight"),
             WeightRenaming(source_patterns=r"mlp.gate.bias", target_patterns=r"mlp.gate.e_score_correction_bias"),
             # Attn

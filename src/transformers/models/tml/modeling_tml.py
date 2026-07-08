@@ -270,18 +270,19 @@ class TmlAttention(nn.Module):
 
 
 class TmlMLP(nn.Module):
-    def __init__(self, config: TmlTextConfig):
+    def __init__(self, config: TmlTextConfig, intermediate_size=None):
         super().__init__()
-
         self.config = config
-        self.gate_up_proj = nn.Linear(config.hidden_size, 2 * config.intermediate_size, bias=False)
-        self.down_proj = nn.Linear(config.intermediate_size, config.hidden_size, bias=False)
+        self.intermediate_size = config.intermediate_size if intermediate_size is None else intermediate_size
+        self.gate_proj = nn.Linear(config.hidden_size, self.intermediate_size, bias=False)
+        self.up_proj = nn.Linear(config.hidden_size, self.intermediate_size, bias=False)
+        self.down_proj = nn.Linear(self.intermediate_size, config.hidden_size, bias=False)
         self.activation_fn = ACT2FN[config.hidden_act]
         self.global_scale = nn.Parameter(torch.zeros(1))
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        up_states = self.gate_up_proj(hidden_states)
-        gate, up_states = up_states.chunk(2, dim=-1)
+        gate = self.gate_proj(hidden_states)
+        up_states = self.up_proj(hidden_states)
         up_states = up_states * self.activation_fn(gate)
         return self.down_proj(up_states) * self.global_scale
 
@@ -325,10 +326,9 @@ class TmlExperts(nn.Module):
             if expert_idx == self.num_experts:
                 continue
             top_k_pos, token_idx = torch.where(expert_mask[expert_idx])
-            current_state = hidden_states[token_idx]
-            current_state = nn.functional.linear(current_state, self.gate_up_proj[expert_idx])
-            current_state = swiglu_interleaved(current_state)
-            current_hidden_states = nn.functional.linear(current_hidden_states, self.down_proj[expert_idx])
+            current_hidden_states = hidden_states[token_idx]
+            current_hidden_states = nn.functional.linear(current_hidden_states, self.gate_up_proj[expert_idx])
+            current_hidden_states = swiglu_interleaved(current_hidden_states)
             current_hidden_states = current_hidden_states * top_k_weights[token_idx, top_k_pos, None]
             final_hidden_states.index_add_(0, token_idx, current_hidden_states.to(final_hidden_states.dtype))
         return final_hidden_states
@@ -343,7 +343,7 @@ class TmlTopkRouter(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.n_routed_experts = config.n_routed_experts
-        self.n_shared_experts = config.n_shared_experts if config.shared_expert_sink else 0
+        self.n_shared_experts = config.n_shared_experts
         self.n_total_experts = self.n_routed_experts + self.n_shared_experts
         self.hidden_dim = config.hidden_size
 
@@ -357,31 +357,12 @@ class TmlTopkRouter(nn.Module):
 
 
 class TmlSharedExperts(nn.Module):
-    """Fused dense shared MLP (non-sink path): a single always-on expert block."""
-
-    def __init__(self, config):
-        super().__init__()
-        intermediate_size = config.n_shared_experts * config.moe_intermediate_size
-        self.w13_weight = nn.Parameter(torch.empty(2 * intermediate_size, config.hidden_size))
-        self.w2_weight = nn.Parameter(torch.empty(config.hidden_size, intermediate_size))
-        self.act_fn = ACT2FN[config.hidden_act]
-
-    def forward(self, hidden_states):
-        gate_up = F.linear(hidden_states, self.w13_weight)
-        return F.linear(swiglu_interleaved(gate_up), self.w2_weight)
-
-
-class TmlBatchSharedExperts(nn.Module):
-    """Gated ("sink") shared experts: `n_shared_experts` parallel MLPs batched on
-    dim 0. Each expert's fp32 SwiGLU output is scaled by its per-token gamma
-    before the down-projection, then the experts are summed in fp32."""
-
     def __init__(self, config):
         super().__init__()
         self.n_shared_experts = config.n_shared_experts
         shared_d_mlp = config.moe_intermediate_size
-        self.w13_weight = nn.Parameter(torch.empty(config.n_shared_experts, 2 * shared_d_mlp, config.hidden_size))
-        self.w2_weight = nn.Parameter(torch.empty(config.n_shared_experts, config.hidden_size, shared_d_mlp))
+        self.gate_up_proj = nn.Parameter(torch.empty(config.n_shared_experts, 2 * shared_d_mlp, config.hidden_size))
+        self.down_proj = nn.Parameter(torch.empty(config.n_shared_experts, config.hidden_size, shared_d_mlp))
         self.act_fn = ACT2FN[config.hidden_act]
 
     def forward(self, hidden_states, gammas):
@@ -390,9 +371,9 @@ class TmlBatchSharedExperts(nn.Module):
         gammas = gammas.reshape(-1, self.n_shared_experts).transpose(0, 1)  # (S, T)
 
         expanded = hidden_states.unsqueeze(0).expand(self.n_shared_experts, -1, -1)  # (S, T, D)
-        gate_up = torch.bmm(expanded, self.w13_weight.mT)  # (S, T, 2f)
+        gate_up = torch.bmm(expanded, self.gate_up_proj.mT)  # (S, T, 2f)
         activated = swiglu_interleaved(gate_up).float() * gammas.unsqueeze(-1)  # (S, T, f)
-        down = torch.bmm(activated.to(gate_up.dtype), self.w2_weight.mT)  # (S, T, D)
+        down = torch.bmm(activated.to(gate_up.dtype), self.down_proj.mT)  # (S, T, D)
 
         out = down.float().sum(dim=0).to(hidden_states.dtype)  # (T, D)
         return out.view(input_shape)
@@ -414,11 +395,10 @@ class TmlMoE(nn.Module):
         self.experts = TmlExperts(config)
 
         self.n_shared_experts = config.n_shared_experts
-        self.shared_expert_sink = config.shared_expert_sink
         self.top_k = config.num_experts_per_tok
         self.route_scale = config.route_scale
         self.norm_after_topk = config.norm_after_topk
-        self.shared_experts = TmlBatchSharedExperts(config)
+        self.shared_experts = TmlSharedExperts(config)
 
     def forward(self, hidden_states) -> torch.Tensor:
         residuals = hidden_states
