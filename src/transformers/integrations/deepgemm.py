@@ -74,7 +74,7 @@ class DeepGEMM:
 
 
 @functools.cache
-def _try_loading_deepgemm_kernel(requires_sm100: bool = False) -> DeepGEMM | str:
+def _load_deepgemm_kernel(requires_sm100: bool = False) -> DeepGEMM | str:
     """Load DeepGEMM once or returns an error message if env or any required symbol is missing. This is wrapped in a
     function that will raise an `ImportError` with the error message. The reason we raise in the wrapper rather than
     here is that @functools.cache will only cache a return value, not an exception.
@@ -183,23 +183,22 @@ def _try_loading_deepgemm_kernel(requires_sm100: bool = False) -> DeepGEMM | str
     )
 
 
-def _load_deepgemm_kernel(requires_sm100: bool = False) -> DeepGEMM:
-    deepgemm_or_error = _try_loading_deepgemm_kernel(requires_sm100=requires_sm100)
-    if isinstance(deepgemm_or_error, str):
-        raise ImportError(deepgemm_or_error)
-    return deepgemm_or_error
-
-
 @torch._dynamo.allow_in_graph
 def _populate_deepgemm_kernel(requires_sm100: bool = False) -> None:
-    _ = _load_deepgemm_kernel(requires_sm100=requires_sm100)
+    deepgemm_or_error_msg = _load_deepgemm_kernel(requires_sm100=requires_sm100)
+    if isinstance(deepgemm_or_error_msg, str):
+        raise ImportError(deepgemm_or_error_msg)
     return None
 
 
 def load_deepgemm_kernel(requires_sm100: bool = False) -> DeepGEMM:
     if is_torchdynamo_compiling():
         _populate_deepgemm_kernel(requires_sm100=requires_sm100)
-    return _load_deepgemm_kernel(requires_sm100=requires_sm100)
+
+    deepgemm_or_error = _load_deepgemm_kernel(requires_sm100=requires_sm100)
+    if isinstance(deepgemm_or_error, str):
+        raise ImportError(deepgemm_or_error)
+    return deepgemm_or_error
 
 
 # ── Scale-factor helpers ───────────────────────────────────────────────────────
