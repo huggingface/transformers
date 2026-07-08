@@ -261,12 +261,10 @@ class TestConvertAndLoadStateDict(unittest.TestCase):
                                           |  +-- w1 (2) + w3 (2) concatenated
                                           +-- num_experts
 
-        The conversion (without FSDP) is: load all expert w1/w3 tensors,
-        MergeModulelist(dim=0) stacks experts, Concatenate(dim=1) joins w1+w3.
-
-        With FSDP, Shard(0) splits the expert dim across ranks. Rank 0 owns
-        expert 0, rank 1 owns expert 1. So rank 0 should skip loading expert 1
-        entirely -- not load it then discard it.
+        With FSDP2, params become DTensors and FSDP can shard the same
+        dimension as TP or EP (e.g. expert axis 0). On a 2D (fsdp, tp) mesh
+        the loader must compose both placements either: [Shard(d), Shard(d)] for contiguous double-shard,
+        or [_StridedShard(d), Shard(d)] for fused weights.DtensorShardOperation handles this; the legacy TP path did not.
 
         What the test checks::
 

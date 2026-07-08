@@ -35,8 +35,9 @@ if is_torch_available():
 
 
 class DtensorShardOperation:
-    """Shard-on-read: slice a full checkpoint tensor down to this rank's local
-    DTensor shard, for any combination of placements on a 1-D or n-D mesh.
+    """Shard-on-read: slice a full disk tensor down to this rank's local
+    DTensor shard, for any combination of placements on a 1-D or n-D mesh.  It's on
+    read because instructions are made so the cpu only fetches on disk the parts we want.
 
     Placements primer
     -----------------
@@ -62,26 +63,20 @@ class DtensorShardOperation:
     | TP + FSDP, same tensor dim (fused/interleaved TP) | [_StridedShard(d, sf=tp_size), Shard(d)]     |
     | TP + FSDP, different dims                         | [Shard(d1), Shard(d2)]                       |
 
-    Mesh dimensions are listed outermost-first. For a 2-D (fsdp=F, tp=T) mesh,
-    rank index = fsdp_idx * T + tp_idx.
-
     Loading (this class)
     --------------------
-    During `from_pretrained`, each rank reads the full checkpoint tensors,
-    then calls `shard_tensor(source, tensor_idx=...)` to keep only its local
-    DTensor shard. The class encapsulates the placements + mesh so the
-    slicing logic doesn't have to be repeated at every call site.
+    During from_pretrained, each rank looks up every tensor key, but does not load the weight bytes yet (safetensors get_slice).
+    When a weight is needed, shard_tensor indexes that slice to read only this rank's local shard through Dtensor logic which provides
+    placement logics
 
-    Two checkpoint layouts are supported. Running example: an MoE weight
-    stack of param shape [N_experts, in, out]:
+    Depending on how the checkpoint was saved, the weight loader either gives us one big tensor or many small ones:
 
-    | Checkpoint layout                  | tensor_idx | source.shape  | Returns                     |
-    |------------------------------------|------------|---------------|-----------------------------|
-    | One stacked tensor                 | None       | [N, in, out]  | This rank's slice along     |
-    |                                    |            |               | every sharded dim.          |
-    | N per-expert tensors (called once  | 0..N-1     | [in, out]     | Inner-dim slice if this     |
-    | per expert by the caller)          |            |               | rank owns expert `i`,       |
-    |                                    |            |               | else None (caller drops it).|
+    1. One stacked tensor: the checkpoint has one key with all experts together, shaped [num_experts, in, out].
+       The weight loader passes it straight through; we slice out this rank's piece.
+
+    2. One tensor per expert:  the checkpoint has a separate key for each expert (expert 0, expert 1, …), each shaped [in, out].
+       The weight loader feeds them in one at a time. If this rank doesn't own a given expert,
+       we skip it. Later, `MergeModulelist` will stack the owned expert we kept to create the rank's local shard
     """
 
     def __init__(self, param: DTensor):
@@ -128,18 +123,20 @@ class DtensorShardOperation:
                 dim_idx = self._normalize_param_dim(placement.dim)
                 planned_ops_by_dim[dim_idx].append((placement, rank, world_size))
 
-            # Apply the sharding operations to each tensor dimension.
+            # prepare the slices to fetch on disk for each tensor dimension.
             intervals_by_dim = [[(0, size)] for size in source_shape]
             for dim_idx, planned_ops in enumerate(planned_ops_by_dim):
                 intervals = intervals_by_dim[dim_idx]
                 for placement, rank, world_size in planned_ops:
                     if placement.is_shard():
-                        intervals = self._apply_contiguous_shard(intervals, rank, world_size)
+                        intervals = self._compute_contiguous_slice(intervals, rank, world_size)
                     else:
-                        intervals = self._apply_strided_shard(intervals, rank, world_size, placement.split_factor)
+                        intervals = self._compute_strided_slice(intervals, rank, world_size, placement.split_factor)
                 intervals_by_dim[dim_idx] = intervals
 
             has_strided_shard = any(not placement.is_shard() for _, placement in dim_placements)
+            # finally fetch from the disk only the slices
+            # finally fetch from the disk only the slices
             if has_strided_shard:
                 # Multi-interval dim: read each piece separately, then concatenate.
                 return self._slice_and_cat(source, intervals_by_dim, device, dtype)
@@ -181,7 +178,7 @@ class DtensorShardOperation:
         for source_dim, planned_ops in enumerate(planned_ops_by_source_dim):
             intervals = intervals_by_source_dim[source_dim]
             for rank, world_size in planned_ops:
-                intervals = self._apply_contiguous_shard(intervals, rank, world_size)
+                intervals = self._compute_contiguous_slice(intervals, rank, world_size)
             intervals_by_source_dim[source_dim] = intervals
 
         slice_parts = []
@@ -191,7 +188,7 @@ class DtensorShardOperation:
 
         return source[tuple(slice_parts)].to(device=device, dtype=dtype)
 
-    def _apply_strided_shard(
+    def _compute_strided_slice(
         self, intervals: list[tuple[int, int]], rank: int, world_size: int, split_factor: int
     ) -> list[tuple[int, int]]:
         local_intervals = []
@@ -218,7 +215,7 @@ class DtensorShardOperation:
 
         return local_intervals
 
-    def _apply_contiguous_shard(
+    def _compute_contiguous_slice(
         self, intervals: list[tuple[int, int]], rank: int, world_size: int
     ) -> list[tuple[int, int]]:
         # We apply contiguous sharding to a list of intervals. Two cases:

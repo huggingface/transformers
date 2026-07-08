@@ -387,7 +387,7 @@ class AltRobertaModel(AltCLIPPreTrainedModel):
 class AltCLIPTextModel(AltCLIPPreTrainedModel):
     config: AltCLIPTextConfig
     input_modalities = ("text",)
-    _input_embed_layer = "word_embedding"
+    _input_embed_layer = "word_embeddings"
     base_model_prefix = "roberta"
 
     def __init__(self, config):
