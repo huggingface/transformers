@@ -560,9 +560,9 @@ class Glm5NextDynamicCache(DynamicCache):
         if config is not None:
             for layer_idx, layer_type in enumerate(config.layer_types):
                 if layer_type == "linear_attention":
-                    self.layers[layer_idx] = LinearAttentionLayer(config)
+                    self.layers[layer_idx] = LinearAttentionLayer()
                 else:
-                    self.layers[layer_idx] = Glm5NextAttentionCacheLayer(config)
+                    self.layers[layer_idx] = Glm5NextAttentionCacheLayer()
 
 
 # =============================================================================

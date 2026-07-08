@@ -730,8 +730,7 @@ MODEL_FOR_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
         ("glm4", "Glm4ForCausalLM"),
         ("glm4_moe", "Glm4MoeForCausalLM"),
         ("glm4_moe_lite", "Glm4MoeLiteForCausalLM"),
-        ("glm5_next", "Glm5NextTextForCausalLM"),  # VLM compatibility
-        ("glm5_next_text", "Glm5NextTextForCausalLM"),
+        ("glm5_next", "Glm5NextForCausalLM"),
         ("glm_moe_dsa", "GlmMoeDsaForCausalLM"),
         ("got_ocr2", "GotOcr2ForConditionalGeneration"),
         ("gpt-sw3", "GPT2LMHeadModel"),
