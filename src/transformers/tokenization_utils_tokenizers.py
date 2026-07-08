@@ -319,7 +319,12 @@ class TokenizersBackend(PreTrainedTokenizerBase):
             skip_tokens: set[str] = set()
             for key in special_tokens_keys:
                 if key in local_kwargs:
-                    skip_tokens.update(_iter_special_tokens([local_kwargs[key]]))
+                    value = local_kwargs[key]
+                    # Handle dict (model_specific_special_tokens) or list/tuple
+                    if isinstance(value, dict):
+                        skip_tokens.update(_iter_special_tokens(value.values()))
+                    else:
+                        skip_tokens.update(_iter_special_tokens([value]))
 
             merges = generate_merges(vocab, skip_tokens=skip_tokens)
             local_kwargs["merges"] = merges
