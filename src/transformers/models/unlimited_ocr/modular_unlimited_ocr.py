@@ -28,6 +28,7 @@ from ...cache_utils import (
 )
 from ...configuration_utils import PreTrainedConfig
 from ...feature_extraction_utils import BatchFeature
+from ...generation import GenerationMixin
 from ...image_transforms import group_images_by_shape, reorder_images
 from ...image_utils import PILImageResampling, SizeDict
 from ...masking_utils import and_masks, causal_mask_function, create_causal_mask, create_sliding_window_causal_mask
@@ -70,6 +71,7 @@ from ..deepseek_ocr2.modeling_deepseek_ocr2 import (
 )
 from ..deepseek_ocr2.processing_deepseek_ocr2 import DeepseekOcr2Processor, DeepseekOcr2ProcessorKwargs
 from ..got_ocr2.configuration_got_ocr2 import GotOcr2VisionConfig
+from .generation_unlimited_ocr import UnlimitedOcrSlidingWindowNoRepeatNgramLogitsProcessor
 
 
 class UnlimitedOcrImageProcessorKwargs(DeepseekOcr2ImageProcessorKwargs):
@@ -1197,6 +1199,33 @@ class UnlimitedOcrForConditionalGeneration(DeepseekOcr2ForConditionalGeneration)
             attentions=outputs.attentions,
             image_hidden_states=outputs.image_hidden_states,
         )
+
+    def _get_logits_processor(self, generation_config, logits_processor=None, **kwargs):
+        no_repeat_ngram_size = generation_config.no_repeat_ngram_size
+        no_repeat_ngram_window_size = getattr(generation_config, "no_repeat_ngram_window_size", None)
+
+        use_sliding_window_processor = (
+            no_repeat_ngram_window_size is not None and no_repeat_ngram_size is not None and no_repeat_ngram_size > 0
+        )
+        if use_sliding_window_processor:
+            logits_processor = list(logits_processor or []) + [
+                UnlimitedOcrSlidingWindowNoRepeatNgramLogitsProcessor(
+                    no_repeat_ngram_size=no_repeat_ngram_size,
+                    no_repeat_ngram_window_size=no_repeat_ngram_window_size,
+                )
+            ]
+
+            # Set to None to avoid adding the default NoRepeatNgramLogitsProcessor
+            generation_config.no_repeat_ngram_size = None
+
+        try:
+            processors = GenerationMixin._get_logits_processor(
+                self, generation_config=generation_config, logits_processor=logits_processor, **kwargs
+            )
+        finally:
+            if use_sliding_window_processor:
+                generation_config.no_repeat_ngram_size = no_repeat_ngram_size
+        return processors
 
     def prepare_inputs_for_generation(
         self,

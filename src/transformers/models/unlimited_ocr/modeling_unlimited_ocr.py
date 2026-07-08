@@ -63,6 +63,7 @@ from .configuration_unlimited_ocr import (
     UnlimitedOcrVisionConfig,
     UnlimitedOcrVisionEncoderConfig,
 )
+from .generation_unlimited_ocr import UnlimitedOcrSlidingWindowNoRepeatNgramLogitsProcessor
 
 
 logger = logging.get_logger(__name__)
@@ -2079,6 +2080,33 @@ class UnlimitedOcrForConditionalGeneration(UnlimitedOcrPreTrainedModel, Generati
             model_inputs["patches_grid"] = patches_grid
 
         return model_inputs
+
+    def _get_logits_processor(self, generation_config, logits_processor=None, **kwargs):
+        no_repeat_ngram_size = generation_config.no_repeat_ngram_size
+        no_repeat_ngram_window_size = getattr(generation_config, "no_repeat_ngram_window_size", None)
+
+        use_sliding_window_processor = (
+            no_repeat_ngram_window_size is not None and no_repeat_ngram_size is not None and no_repeat_ngram_size > 0
+        )
+        if use_sliding_window_processor:
+            logits_processor = list(logits_processor or []) + [
+                UnlimitedOcrSlidingWindowNoRepeatNgramLogitsProcessor(
+                    no_repeat_ngram_size=no_repeat_ngram_size,
+                    no_repeat_ngram_window_size=no_repeat_ngram_window_size,
+                )
+            ]
+
+            # Set to None to avoid adding the default NoRepeatNgramLogitsProcessor
+            generation_config.no_repeat_ngram_size = None
+
+        try:
+            processors = super()._get_logits_processor(
+                generation_config=generation_config, logits_processor=logits_processor, **kwargs
+            )
+        finally:
+            if use_sliding_window_processor:
+                generation_config.no_repeat_ngram_size = no_repeat_ngram_size
+        return processors
 
 
 __all__ = [
