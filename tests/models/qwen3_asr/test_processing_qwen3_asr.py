@@ -32,14 +32,14 @@ from ...test_processing_common import ProcessorTesterMixin
 
 class Qwen3ASRProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = Qwen3ASRProcessor
+    tiny_model_id = "hf-internal-testing/tiny-processor-qwen3_asr"
+    checkpoint = "Qwen/Qwen3-ASR-0.6B-hf"
 
     @classmethod
     @require_torch
     def setUpClass(cls):
-        cls.checkpoint = "Qwen/Qwen3-ASR-0.6B-hf"
         cls.tmpdirname = tempfile.mkdtemp()
-
-        processor = Qwen3ASRProcessor.from_pretrained(cls.checkpoint)
+        processor = Qwen3ASRProcessor.from_pretrained(cls.tiny_model_id)
         processor.save_pretrained(cls.tmpdirname)
 
     @require_torch

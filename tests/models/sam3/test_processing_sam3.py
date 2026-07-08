@@ -28,7 +28,9 @@ class Sam3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     @classmethod
     def _setup_tokenizer(cls):
-        return AutoTokenizer.from_pretrained("openai/clip-vit-base-patch32", max_length=32, model_max_length=32)
+        return AutoTokenizer.from_pretrained(
+            "hf-internal-testing/tiny-processor-clip", max_length=32, model_max_length=32
+        )
 
     # Sam3Processor has a custom non-standard __call__ signature (no chat template, extra
     # prompting args like input_boxes). Skip mixin tests that assume a standard VLM interface.

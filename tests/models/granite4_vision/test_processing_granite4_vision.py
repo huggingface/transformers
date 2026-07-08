@@ -26,21 +26,11 @@ from ...test_processing_common import ProcessorTesterMixin
 @require_vision
 class Granite4VisionProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = Granite4VisionProcessor
+    tiny_model_id = "hf-internal-testing/tiny-processor-granite4_vision"
     # Image token expansion with downsample_rate="1/2" produces more tokens than the defaults
     image_text_kwargs_max_length = 300
     image_text_kwargs_override_max_length = 280
     image_unstructured_max_length = 260
-
-    @classmethod
-    def _setup_tokenizer(cls):
-        tokenizer_class = cls._get_component_class_from_processor("tokenizer")
-        tokenizer = tokenizer_class.from_pretrained("huggyllama/llama-7b")
-        tokenizer.add_special_tokens({"additional_special_tokens": ["<image>"]})
-        if not tokenizer.pad_token:
-            tokenizer.pad_token = "[PAD]"
-            if tokenizer.pad_token_id is None:
-                tokenizer.pad_token_id = 0
-        return tokenizer
 
     @classmethod
     def _setup_test_attributes(cls, processor):

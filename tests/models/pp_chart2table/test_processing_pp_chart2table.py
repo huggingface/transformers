@@ -23,12 +23,7 @@ from ...test_processing_common import ProcessorTesterMixin
 @require_vision
 class PPChart2TableProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = PPChart2TableProcessor
-
-    @classmethod
-    def _setup_tokenizer(cls):
-        tokenizer_class = cls._get_component_class_from_processor("tokenizer")
-        tokenizer = tokenizer_class.from_pretrained("PaddlePaddle/PP-Chart2Table_safetensors")
-        return tokenizer
+    tiny_model_id = "hf-internal-testing/tiny-processor-pp_chart2table"
 
     def test_ocr_queries(self):
         processor = self.get_processor()
@@ -40,7 +35,7 @@ class PPChart2TableProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             add_generation_prompt=True,
         )
         inputs = processor(images=image_input, text=inputs, return_tensors="pt")
-        self.assertEqual(inputs["input_ids"].shape, (1, 286))
+        self.assertEqual(inputs["input_ids"].shape, (1, 325))
         self.assertEqual(inputs["pixel_values"].shape, (1, 3, 1024, 1024))
 
     def test_unstructured_kwargs_batched(self):

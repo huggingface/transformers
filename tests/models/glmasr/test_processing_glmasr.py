@@ -31,14 +31,14 @@ from ...test_processing_common import MODALITY_INPUT_DATA, ProcessorTesterMixin
 
 class GlmAsrProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = GlmAsrProcessor
+    tiny_model_id = "hf-internal-testing/tiny-processor-glmasr"
+    checkpoint = "zai-org/GLM-ASR-Nano-2512"
 
     @classmethod
     @require_torch
     def setUpClass(cls):
-        cls.checkpoint = "zai-org/GLM-ASR-Nano-2512"
         cls.tmpdirname = tempfile.mkdtemp()
-
-        processor = GlmAsrProcessor.from_pretrained(cls.checkpoint)
+        processor = GlmAsrProcessor.from_pretrained(cls.tiny_model_id)
         processor.save_pretrained(cls.tmpdirname)
 
     @require_torch

@@ -31,14 +31,14 @@ from ...test_processing_common import ProcessorTesterMixin
 
 class VibeVoiceAsrProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = VibeVoiceAsrProcessor
+    tiny_model_id = "hf-internal-testing/tiny-processor-vibevoice_asr"
+    checkpoint = "microsoft/VibeVoice-ASR-HF"
 
     @classmethod
     @require_torch
     def setUpClass(cls):
-        cls.checkpoint = "microsoft/VibeVoice-ASR-HF"
         cls.tmpdirname = tempfile.mkdtemp()
-
-        processor = VibeVoiceAsrProcessor.from_pretrained(cls.checkpoint)
+        processor = VibeVoiceAsrProcessor.from_pretrained(cls.tiny_model_id)
         processor.save_pretrained(cls.tmpdirname)
 
     @require_torch

@@ -14,7 +14,7 @@
 
 import unittest
 
-from transformers import PaliGemmaProcessor
+from transformers import PaliGemmaProcessor, SiglipImageProcessor
 from transformers.testing_utils import get_tests_dir, require_torch, require_vision
 
 from ...test_processing_common import ProcessorTesterMixin
@@ -29,8 +29,7 @@ class PaliGemmaProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     @classmethod
     def _setup_image_processor(cls):
-        image_processor_class = cls._get_component_class_from_processor("image_processor")
-        image_processor = image_processor_class.from_pretrained("google/siglip-so400m-patch14-384")
+        image_processor = SiglipImageProcessor(size={"height": 64, "width": 64})
         image_processor.image_seq_length = 0
         return image_processor
 
