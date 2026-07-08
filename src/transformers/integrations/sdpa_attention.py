@@ -62,6 +62,9 @@ def sdpa_attention_forward(
         else:
             sdpa_kwargs = {"enable_gqa": True}
 
+    q_length = query.shape[2]
+    kv_length = key.shape[2]
+
     # Instead of relying on the value set in the module directly, we use the is_causal passed in kwargs if it is presented
     is_causal = is_causal if is_causal is not None else getattr(module, "is_causal", True)
 
@@ -75,7 +78,7 @@ def sdpa_attention_forward(
     #   full graph options. Otherwise, dynamic shapes are prevented from compiling.
     # - It is important to check first for the shape, otherwise compile will fail with
     #   `argument 'is_causal' must be bool, not SymBool`.
-    is_causal = query.shape[2] > 1 and attention_mask is None and is_causal
+    is_causal = q_length > 1 and attention_mask is None and is_causal
 
     # Shapes (e.g. query.shape[2]) are tensors during jit tracing, resulting in `is_causal` being a tensor.
     # We convert it to a bool for the SDPA kernel that only accepts bools.
@@ -89,6 +92,16 @@ def sdpa_attention_forward(
         if attention_mask is not None and attention_mask.dtype != torch.bool:
             # Convert to boolean type, making sdpa to force call FlashAttentionScore to improve performance.
             attention_mask = torch.logical_not(attention_mask.bool()).to(query.device)
+
+    # This scenario can only happen during prefill with an empty StaticCache. Technically, since sdpa's `is_causal` mask alignment
+    # is upper-left, `is_causal=True` is enough to correctly compute the attention. However, sdpa will only dispatch to
+    # flash kernel if and only if q_length == kv_length, therefore it is more efficient to slice here and remove the masked tokens
+    # rather than to use the other available kernels for such a case.
+    # Note that we never compile prefill, and even if the user is doing it on its own, prefill and decode are 2 separate graphs
+    # anyway, so altering the shapes is fine here
+    if is_causal and attention_mask is None and q_length > 1 and kv_length > q_length:
+        key = key[:, :, :q_length, :]
+        value = value[:, :, :q_length, :]
 
     attn_output = torch.nn.functional.scaled_dot_product_attention(
         query,
