@@ -18,9 +18,6 @@ from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring
 
 
-AXK1_PRETRAINED_CONFIG_ARCHIVE_MAP = {}
-
-
 @auto_docstring(checkpoint="skt/A.X-K1")
 class AXK1Config(PreTrainedConfig):
     r"""
@@ -30,8 +27,6 @@ class AXK1Config(PreTrainedConfig):
         Number of dense layers in shallow layers (embed->dense->moe->moe...->lm_head).
     moe_layer_freq (`int`, *optional*, defaults to 1):
         The frequency of the MoE layer: one expert layer for every `moe_layer_freq - 1` dense layers.
-    rope_interleave (`bool`, *optional*, defaults to `True`):
-        Whether to interleave the rotary position embeddings.
     Example:
 
     ```python
@@ -101,7 +96,6 @@ class AXK1Config(PreTrainedConfig):
         pretraining_tp: int | None = 1,
         tie_word_embeddings: bool | None = False,
         rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
-        rope_interleave: bool | None = True,
         attention_bias: bool | None = False,
         attention_dropout: float | None = 0.0,
         **kwargs,
@@ -140,7 +134,6 @@ class AXK1Config(PreTrainedConfig):
 
         # RoPE
         self.rope_parameters = rope_parameters
-        self.rope_interleave = rope_interleave
 
         # General
         self.hidden_act = hidden_act
