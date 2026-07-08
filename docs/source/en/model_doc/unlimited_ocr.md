@@ -155,6 +155,10 @@ processor.decode(output[0, inputs["input_ids"].shape[1]:], skip_special_tokens=T
 
 [[autodoc]] UnlimitedOcrSamVisionConfig
 
+## UnlimitedOcrGenerationConfig
+
+[[autodoc]] UnlimitedOcrGenerationConfig
+
 ## UnlimitedOcrImageProcessor
 
 [[autodoc]] UnlimitedOcrImageProcessor
@@ -190,3 +194,7 @@ processor.decode(output[0, inputs["input_ids"].shape[1]:], skip_special_tokens=T
 
 [[autodoc]] UnlimitedOcrForConditionalGeneration
     - forward
+
+## UnlimitedOcrSlidingWindowNoRepeatNgramLogitsProcessor
+
+[[autodoc]] UnlimitedOcrSlidingWindowNoRepeatNgramLogitsProcessor
