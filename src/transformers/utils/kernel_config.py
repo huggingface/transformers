@@ -86,12 +86,10 @@ def add_to_mapping_local(layer_name, device, repo_name, mode, compatible_mapping
         raise ValueError(f"Only cuda, rocm, xpu, npu, neuron and tpu devices supported, got: {device}")
     repo_layer_name = repo_name.split(":")[1]
     repo_path = repo_name.split(":")[0]
-    repo_package_name = repo_path.split("/")[-1]
     compatible_mapping[layer_name] = {
         device: {
             mode: LocalLayerRepository(
                 repo_path=Path(repo_path),
-                package_name=repo_package_name,  # type: ignore[unknown-argument]
                 layer_name=repo_layer_name,
             )
         }
@@ -141,7 +139,7 @@ class KernelConfig(PushToHubMixin):
         5. Each trust remote code key must be a bool.
         6. Each revision or version key must exist mutually exclusive if it has been passed explicitly.
         7. Each repo_name is a valid repository and layer name in the format 'org/repo:layer_name' (i.e., a string containing both a slash and a colon).
-        8. If a local path is detected, it should be in the format '/abs/path:layer_name'. The absolute path must include the `package_name`, like "/home/user/layer_norm".
+        8. If a local path is detected, it should be in the format '/abs/path:layer_name', where the absolute path points to the kernel repository, like "/home/user/layer_norm".
 
         Args:
             model: The model instance whose modules are checked for registered kernel_layer_name attributes.
@@ -286,7 +284,6 @@ class KernelConfig(PushToHubMixin):
                     "cuda": {
                         Mode.INFERENCE: LocalLayerRepository(
                             repo_path=Path("/home/user/liger_kernels"),
-                            package_name="liger_kernels",
                             layer_name="LigerRMSNorm",
                         )
                     }
