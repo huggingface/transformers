@@ -15,31 +15,41 @@
 
 import math
 from collections.abc import Callable
+from dataclasses import dataclass
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from ...cache_utils import Cache, DynamicCache
+from ... import initialization as init
+from ...activations import ACT2FN
+from ...cache_utils import Cache, DynamicCache, LinearAttentionCacheLayerMixin
 from ...configuration_utils import PreTrainedConfig
 from ...generation import GenerationMixin
+from ...integrations import use_experts_implementation, use_kernel_forward_from_hub
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, logging
-from ..deepseek_v3.modeling_deepseek_v3 import DeepseekV3MLP, DeepseekV3MoE
-from ..deepseek_v4.modeling_deepseek_v4 import DeepseekV4Experts, DeepseekV4TopKRouter
-from ..gemma3.modeling_gemma3 import (
-    Gemma3CausalLMOutputWithPast,
-    Gemma3ForConditionalGeneration,
-    Gemma3Model,
-    Gemma3ModelOutputWithPast,
+from ...utils import (
+    ModelOutput,
+    TransformersKwargs,
+    auto_docstring,
+    can_return_tuple,
+    is_torchdynamo_compiling,
+    logging,
+    torch_compilable_check,
 )
-from ..glm4_moe_lite.modeling_glm4_moe_lite import Glm4MoeLiteDecoderLayer
-from ..llama.modeling_llama import LlamaRMSNorm, repeat_kv
-from ..phi3.modeling_phi3 import Phi3MLP
+from ...utils.generic import merge_with_config_defaults
+from ...utils.import_utils import is_causal_conv1d_available
+from ...utils.output_capturing import capture_outputs
 
+
+if is_causal_conv1d_available():
+    from causal_conv1d import causal_conv1d_fn, causal_conv1d_update
+else:
+    causal_conv1d_update, causal_conv1d_fn = None, None
 
 logger = logging.get_logger(__name__)
 
@@ -47,9 +57,33 @@ logger = logging.get_logger(__name__)
 class TmlTextConfig(PreTrainedConfig):
     model_type = "tml_text"
     base_config_key = "text_config"
+    base_model_tp_plan = {
+        "layers.*.mlp.experts.gate_up_proj": "packed_colwise",
+        "layers.*.mlp.experts.down_proj": "rowwise",
+        "layers.*.mlp.experts": "moe_tp_experts",
+        "layers.*.mlp.shared_experts.gate_proj": "colwise",
+        "layers.*.mlp.shared_experts.up_proj": "colwise",
+        "layers.*.mlp.shared_experts.down_proj": "rowwise",
+        "layers.*.mlp.gate_proj": "colwise",
+        "layers.*.mlp.up_proj": "colwise",
+        "layers.*.mlp.down_proj": "rowwise",
+    }
+    base_model_pp_plan = {
+        "embed_tokens": (["input_ids"], ["inputs_embeds"]),
+        "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
+        "norm": (["hidden_states"], ["hidden_states"]),
+    }
+    base_model_ep_plan = {
+        "layers.*.mlp.gate": "ep_router",
+        "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
+        "layers.*.mlp.experts.down_proj": "grouped_gemm",
+        "layers.*.mlp.experts": "moe_tp_experts",
+    }
+
     attribute_map = {
         "embedding_multiplier": "logits_mup_width_multiplier",
         "sliding_window": "sliding_window_size",
+        "num_local_experts": "n_routed_experts",
     }
 
     vocab_size: int = 201024
@@ -62,16 +96,14 @@ class TmlTextConfig(PreTrainedConfig):
     swa_num_key_value_heads: int = 16
     swa_head_dim: int = 128
     sliding_window_size: int = 512
-    # for ref: 16 is the dim of the relative states (so small)
-    # and we clamp beyond 1024
     d_rel: int = 16
     rel_extent: int = 1024
     local_layer_ids: list[int] | None = None
     layer_types: list[str] | None = None
     max_position_embeddings: int = 131072
     rms_norm_eps: float = 1e-6
-    sconv_kernel_size: int = 4
-    mlp_layer_types: list[str] | None = None
+    conv_kernel_size: int = 4
+    mlp_layer_types: list[int] | None = None
     intermediate_size: int = 24576
     hidden_act: str = "silu"
     # MoE
@@ -79,6 +111,8 @@ class TmlTextConfig(PreTrainedConfig):
     n_routed_experts: int = 256
     num_experts_per_tok: int = 6
     n_shared_experts: int = 2
+    shared_expert_sink: bool = True
+    route_scale: float = 8.0
 
     logits_mup_width_multiplier: float = 24.0
     rms_norm_eps_moe_gate: float = 1e-6
@@ -99,7 +133,12 @@ class TmlTextConfig(PreTrainedConfig):
                 for i in range(self.num_hidden_layers)
             ]
         if self.mlp_layer_types is None:
-            self.mlp_layer_types = ["dense"] * self.num_hidden_layers
+            dense_mlp_idx = kwargs.pop("dense_mlp_idx", 0)
+            self.mlp_layer_types = ["dense" if i < dense_mlp_idx else "sparse" for i in range(self.num_hidden_layers)]
+
+        if kwargs.get("dense_intermediate_size") is not None:
+            self.intermediate_size = kwargs.pop("dense_intermediate_size")
+
         super().__post_init__(**kwargs)
 
 
@@ -117,8 +156,8 @@ class TmlAudioConfig(PreTrainedConfig):
 class TmlVisionConfig(PreTrainedConfig):
     model_type = "tml_vision"
     base_config_key = "vision_config"
+    attribute_map = {"num_hidden_layers": "n_layers"}
 
-    vision_encoder_type: str = "hmlp"
     text_hidden_size: int = 6144
     patch_size: int = 14
     num_channels: int = 3
@@ -167,54 +206,136 @@ class TmlConfig(PreTrainedConfig):
         super().__post_init__(**kwargs)
 
 
-class TmlModelOutputWithPast(Gemma3ModelOutputWithPast):
-    pass
+class TmlShortConvolutionsLayer(LinearAttentionCacheLayerMixin):
+    is_compileable = False
+    layer_type = "tml_short_conv"
+
+    def __init__(self, config: TmlTextConfig | None = None):
+        self.conv_states = dict.fromkeys(range(4))
+        self.is_conv_states_initialized = dict.fromkeys(range(4), False)
+        self.has_previous_state = dict.fromkeys(range(4), False)
+
+    def lazy_initialization(self, conv_states: torch.Tensor | None = None, conv_idx: int = 0) -> None:
+        if conv_states is not None:
+            self.dtype, self.device = conv_states.dtype, conv_states.device
+            # Even if prefill is larfer/shorter than the conv_size, the tensor is always either padded or truncated
+            self.batch_size, self.conv_kernel_size = conv_states.shape[0], conv_states.shape[-1]
+            # The shape is always static, so we init as such
+            self.conv_states[conv_idx] = torch.zeros_like(conv_states, dtype=self.dtype, device=self.device)
+            # Mark as static address to be able to use cudagraphs
+            if not is_torchdynamo_compiling():
+                torch._dynamo.mark_static_address(self.conv_states[conv_idx])
+            self.is_conv_states_initialized[conv_idx] = True
+
+    def update_conv_state(self, conv_states: torch.Tensor, conv_idx: int, **kwargs) -> torch.Tensor:
+        """
+        Update the linear attention cache in-place, and return the necessary conv states.
+
+        Args:
+            conv_states (`torch.Tensor`): The new conv states to cache.
+            conv_idx (`int`): The layer idx of conv layer ot update.
+
+        Returns:
+            `torch.Tensor`: The updated conv states.
+        """
+        if conv_idx is None:
+            raise ValueError("`conv_idx` has to be provided!")
+
+        if conv_idx not in self.conv_states:
+            raise ValueError(f"`conv_idx`={conv_idx} is not initialized!")
+
+        # Lazy initialization
+        if not self.is_conv_states_initialized[conv_idx]:
+            self.lazy_initialization(conv_states=conv_states, conv_idx=conv_idx)
+
+        if not self.has_previous_state[conv_idx]:
+            # Note that we copy instead of assigning, to preserve the static address for cudagraphs
+            self.conv_states[conv_idx].copy_(conv_states)
+            self.has_previous_state[conv_idx] = True
+        # Technically, this update is not logically correct if the prefill is smaller than `conv_kernel_size`,
+        # as it will `roll` anyway in the first decoding step, even though it should `roll` ONLY if the cache is already full.
+        # But since `conv_kernel_size=4` in practice, it's almost impossible to have a smaller prefill so it's mostly fine for now
+        else:
+            # Note that we copy instead of assigning, to preserve the static address for cudagraphs
+            num_new_tokens = conv_states.shape[-1]
+            if num_new_tokens >= self.conv_kernel_size:
+                self.conv_states[conv_idx].copy_(conv_states[..., -self.conv_kernel_size :])
+            else:
+                new_conv_states = self.conv_states[conv_idx].roll(shifts=-num_new_tokens, dims=-1)
+                new_conv_states[:, :, -num_new_tokens:] = conv_states
+                self.conv_states[conv_idx].copy_(new_conv_states)
+
+        return self.conv_states[conv_idx]
+
+    def update_recurrent_state(self, *args, **kwargs):
+        raise NotImplementedError("Model does not use any recurrent cache!")
 
 
-class TmlCausalLMOutputWithPast(Gemma3CausalLMOutputWithPast):
-    pass
-
-
-def swiglu_interleaved(gate_up: torch.Tensor) -> torch.Tensor:
-    """SwiGLU over an *interleaved* fused gate/up tensor, computed in fp32.
-
-    `gate_up[..., 0::2]` are gate channels, `gate_up[..., 1::2]` up channels.
+@auto_docstring(
+    custom_intro="""
+    Base class for Tml outputs, with hidden states and attentions.
     """
-    input_dtype = gate_up.dtype
-    gate_up = gate_up.float()
-    return (F.silu(gate_up[..., 0::2]) * gate_up[..., 1::2]).to(input_dtype)
-
-
-def _logsigmoid_normalize(logits: torch.Tensor) -> torch.Tensor:
-    """Softmax in log-probability space over `logsigmoid(logits)`."""
-    log_probs = F.logsigmoid(logits)
-    return torch.exp(log_probs - torch.logsumexp(log_probs, dim=-1, keepdim=True))
-
-
-class TmlRMSNorm(LlamaRMSNorm):
-    pass
-
-
-class TmlShortConvolution(nn.Module):
-    """Causal depthwise short convolution with a residual connection, `y = conv(x) + x`
-    (sglang `ShortConvolution` with `use_residual=True` and no activation).
-
-    NOTE: stateless for now — cached decoding needs the last `kernel_size - 1`
-    pre-convolution inputs carried in the cache.
+)
+@dataclass
+class TmlModelOutputWithPast(BaseModelOutputWithPast):
+    r"""
+    image_hidden_states (`torch.FloatTensor`, *optional*):
+        A `torch.FloatTensor` of size `(batch_size, num_images, sequence_length, hidden_size)`.
+        image_hidden_states of the model produced by the vision encoder and after projecting the last hidden state.
     """
 
-    def __init__(self, hidden_size: int, kernel_size: int):
+    image_hidden_states: torch.FloatTensor | None = None
+
+
+@auto_docstring(
+    custom_intro="""
+    Base class for Tml causal language model (or autoregressive) outputs.
+    """
+)
+@dataclass
+class TmlCausalLMOutputWithPast(ModelOutput):
+    r"""
+    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
+        Language modeling loss (for next-token prediction).
+    logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.text_config.vocab_size)`):
+        Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
+    past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+        It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
+
+        Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
+        `past_key_values` input) to speed up sequential decoding.
+    image_hidden_states (`torch.FloatTensor`, *optional*):
+        A `torch.FloatTensor` of size `(batch_size, num_images, sequence_length, hidden_size)`.
+        image_hidden_states of the model produced by the vision encoder after projecting last hidden state.
+    """
+
+    loss: torch.FloatTensor | None = None
+    logits: torch.FloatTensor | None = None
+    past_key_values: Cache | None = None
+    hidden_states: tuple[torch.FloatTensor] | None = None
+    attentions: tuple[torch.FloatTensor] | None = None
+    image_hidden_states: torch.FloatTensor | None = None
+
+
+@use_kernel_forward_from_hub("RMSNorm")
+class TmlRMSNorm(nn.Module):
+    def __init__(self, hidden_size, eps: float = 1e-6) -> None:
+        """
+        TmlRMSNorm is equivalent to T5LayerNorm
+        """
         super().__init__()
-        self.hidden_size = hidden_size
-        self.kernel_size = kernel_size
-        self.weight = nn.Parameter(torch.empty(hidden_size, 1, kernel_size))
+        self.weight = nn.Parameter(torch.ones(hidden_size))
+        self.variance_epsilon = eps
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        residual = hidden_states
-        hidden_states = hidden_states.transpose(1, 2)
-        hidden_states = F.pad(hidden_states, (self.kernel_size - 1, 0))
-        conv_out = F.conv1d(hidden_states, self.weight, groups=self.hidden_size)
-        return conv_out.transpose(1, 2) + residual
+        input_dtype = hidden_states.dtype
+        hidden_states = hidden_states.to(torch.float32)
+        variance = hidden_states.pow(2).mean(-1, keepdim=True)
+        hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
+        return self.weight * hidden_states.to(input_dtype)
+
+    def extra_repr(self):
+        return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
 
 
 class TmlRelativeLogits(nn.Module):
@@ -236,13 +357,23 @@ class TmlRelativeLogits(nn.Module):
         key_positions: torch.Tensor,
     ) -> torch.Tensor:
         # relative_states: [batch, q_len, num_heads, d_rel] -> bias: [batch, num_heads, q_len, kv_len]
-        # this is the core of the relative states --> bias computation
-        # it is also very naive but should work
         rel_logits = (relative_states @ self.proj).transpose(1, 2)
         distance = (query_positions[:, None] - key_positions[None, :])[None, None, :, :]
         gather_index = distance.clamp(0, self.rel_extent - 1).expand(*rel_logits.shape[:2], -1, -1)
         position_bias = rel_logits.gather(-1, gather_index)
         return position_bias.masked_fill((distance < 0) | (distance >= self.rel_extent), 0.0)
+
+
+def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
+    """
+    This is the equivalent of torch.repeat_interleave(x, dim=1, repeats=n_rep). The hidden states go from (batch,
+    num_key_value_heads, seqlen, head_dim) to (batch, num_attention_heads, seqlen, head_dim)
+    """
+    batch, num_key_value_heads, slen, head_dim = hidden_states.shape
+    if n_rep == 1:
+        return hidden_states
+    hidden_states = hidden_states[:, :, None, :, :].expand(batch, num_key_value_heads, n_rep, slen, head_dim)
+    return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
 
 
 def eager_attention_forward(
@@ -296,8 +427,12 @@ class TmlAttention(nn.Module):
         self.v_proj = nn.Linear(config.hidden_size, self.num_key_value_heads * self.head_dim, bias=False)
         self.r_proj = nn.Linear(config.hidden_size, self.num_heads * config.d_rel, bias=False)
         self.o_proj = nn.Linear(self.num_heads * self.head_dim, config.hidden_size, bias=False)
-        self.k_sconv = TmlShortConvolution(self.num_key_value_heads * self.head_dim, config.sconv_kernel_size)
-        self.v_sconv = TmlShortConvolution(self.num_key_value_heads * self.head_dim, config.sconv_kernel_size)
+        self.k_sconv = TmlShortConvolution(
+            self.num_key_value_heads * self.head_dim, config.sconv_kernel_size, layer_idx, conv_idx=0
+        )
+        self.v_sconv = TmlShortConvolution(
+            self.num_key_value_heads * self.head_dim, config.sconv_kernel_size, layer_idx, conv_idx=1
+        )
         self.q_norm = TmlRMSNorm(self.head_dim, eps=config.rms_norm_eps)
         self.k_norm = TmlRMSNorm(self.head_dim, eps=config.rms_norm_eps)
         self.rel_logits_proj = TmlRelativeLogits(config.d_rel, self.rel_extent)
@@ -307,26 +442,29 @@ class TmlAttention(nn.Module):
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor | None,
         past_key_values: Cache | None = None,
-        cache_position: torch.Tensor | None = None,
+        cache_params: Cache | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
         input_shape = hidden_states.shape[:-1]
         hidden_shape = (*input_shape, -1, self.head_dim)
 
         query_states = self.q_proj(hidden_states)
-        key_states = self.k_sconv(self.k_proj(hidden_states))
-        value_states = self.v_sconv(self.v_proj(hidden_states))
+        key_states = self.k_sconv(self.k_proj(hidden_states), cache_params=cache_params)
+        value_states = self.v_sconv(self.v_proj(hidden_states), cache_params=cache_params)
         relative_states = self.r_proj(hidden_states)
 
         query_states = self.q_norm(query_states.view(hidden_shape)).transpose(1, 2)
         key_states = self.k_norm(key_states.view(hidden_shape)).transpose(1, 2)
         value_states = value_states.view(hidden_shape).transpose(1, 2)
 
+        past_length = 0 if past_key_values is None else past_key_values.get_seq_length(self.layer_idx)
         if past_key_values is not None:
             key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
 
-        kv_length = key_states.shape[-2]
-        key_positions = torch.arange(kv_length, device=cache_position.device) + cache_position[-1] + 1 - kv_length
+        cache_position = torch.arange(input_shape[1], device=hidden_states.device) + past_length
+        key_positions = (
+            torch.arange(input_shape[1], device=cache_position.device) + cache_position[-1] + 1 - input_shape[1]
+        )
         relative_states = relative_states.view(*input_shape, self.num_heads, -1)
         position_bias = self.rel_logits_proj(relative_states, cache_position, key_positions)
 
@@ -352,80 +490,112 @@ class TmlAttention(nn.Module):
         return attn_output, attn_weights
 
 
-class TmlMLP(Phi3MLP):
-    def __init__(self, config: TmlTextConfig):
-        super().__init__(config)
-        self.global_scale = 1.0 / math.sqrt(config.intermediate_size)
+class TmlMLP(nn.Module):
+    def __init__(self, config: TmlTextConfig, intermediate_size=None):
+        super().__init__()
+        self.config = config
+        self.intermediate_size = config.intermediate_size if intermediate_size is None else intermediate_size
+        self.gate_proj = nn.Linear(config.hidden_size, self.intermediate_size, bias=False)
+        self.up_proj = nn.Linear(config.hidden_size, self.intermediate_size, bias=False)
+        self.down_proj = nn.Linear(self.intermediate_size, config.hidden_size, bias=False)
+        self.activation_fn = ACT2FN[config.hidden_act]
+        self.global_scale = nn.Parameter(torch.zeros(1))
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        up_states = self.gate_up_proj(hidden_states)
-        gate, up_states = up_states.chunk(2, dim=-1)
+        gate = self.gate_proj(hidden_states)
+        up_states = self.up_proj(hidden_states)
         up_states = up_states * self.activation_fn(gate)
         return self.down_proj(up_states) * self.global_scale
 
 
-class TmlExperts(DeepseekV4Experts):
-    """Routed experts. Inherits the 3D-parameter dispatch loop and the
-    `gate_up_proj` / `down_proj` parameters verbatim; only the activation differs
-    (interleaved + fp32, and no swiglu clamp)."""
-
-    def _apply_gate(self, gate_up: torch.Tensor) -> torch.Tensor:
-        return swiglu_interleaved(gate_up)
-
-
-class TmlTopkRouter(DeepseekV4TopKRouter):
-    """Flat top-k router. No group-limited selection. Shared experts, in "sink"
-    mode, occupy the *last* `n_shared_experts` columns and are always active; the
-    additive selection bias applies to routed columns only. `forward` returns the
-    raw logits — renormalization happens in the MoE block."""
-
-    def __init__(self, config):
-        nn.Module.__init__(self)
-        self.n_routed_experts = config.n_routed_experts
-        self.n_shared_experts = config.n_shared_experts if config.shared_expert_sink else 0
-        self.n_total_experts = self.n_routed_experts + self.n_shared_experts
+# Same as DeepSeekV3, should copy!
+@use_experts_implementation
+class TmlExperts(nn.Module):
+    def __init__(self, config: TmlConfig):
+        super().__init__()
+        self.num_experts = config.n_routed_experts
         self.hidden_dim = config.hidden_size
+        self.intermediate_dim = config.moe_intermediate_size
+        self.gate_up_proj = nn.Parameter(torch.empty(self.num_experts, 2 * self.intermediate_dim, self.hidden_dim))
+        self.down_proj = nn.Parameter(torch.empty(self.num_experts, self.hidden_dim, self.intermediate_dim))
+        self.act_fn = ACT2FN[config.hidden_act]
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        top_k_index: torch.Tensor,
+        top_k_weights: torch.Tensor,
+    ) -> torch.Tensor:
+        final_hidden_states = torch.zeros_like(hidden_states)
+        with torch.no_grad():
+            expert_mask = torch.nn.functional.one_hot(top_k_index, num_classes=self.num_experts)
+            expert_mask = expert_mask.permute(2, 1, 0)
+            expert_hit = torch.greater(expert_mask.sum(dim=(-1, -2)), 0).nonzero()
+
+        for expert_idx in expert_hit:
+            expert_idx = expert_idx[0]
+            if expert_idx == self.num_experts:
+                continue
+            top_k_pos, token_idx = torch.where(expert_mask[expert_idx])
+            current_state = hidden_states[token_idx]
+            gate, up = nn.functional.linear(current_state, self.gate_up_proj[expert_idx]).chunk(2, dim=-1)
+            current_hidden_states = self.act_fn(gate) * up
+            current_hidden_states = nn.functional.linear(current_hidden_states, self.down_proj[expert_idx])
+            current_hidden_states = current_hidden_states * top_k_weights[token_idx, top_k_pos, None]
+            final_hidden_states.index_add_(0, token_idx, current_hidden_states.to(final_hidden_states.dtype))
+
+        return final_hidden_states
+
+
+class TmlTopkRouter(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.num_experts = config.n_routed_experts
+        self.n_shared_experts = config.n_shared_experts
+        self.n_total_experts = self.num_experts + self.n_shared_experts
+        self.hidden_dim = config.hidden_size
+        self.route_scale = config.route_scale
+        self.top_k = config.num_experts_per_tok
 
         self.weight = nn.Parameter(torch.empty(self.n_total_experts, config.hidden_size))
-        if config.use_global_scale:
-            self.global_scale = nn.Parameter(torch.empty(1, dtype=torch.float32))
-        else:
-            self.register_parameter("global_scale", None)
-        if config.use_gate_bias:
-            self.e_score_correction_bias = nn.Parameter(torch.empty(self.n_routed_experts, dtype=torch.float32))
-        else:
-            self.register_parameter("e_score_correction_bias", None)
+        self.global_scale = nn.Parameter(torch.empty(1, dtype=torch.float32))
+        self.e_score_correction_bias = nn.Parameter(torch.empty(self.num_experts, dtype=torch.float32))
 
-    def forward(self, hidden_states):
+    def forward(self, hidden_states) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         flat = hidden_states.reshape(-1, self.hidden_dim)
-        return F.linear(flat.type(torch.float32), self.weight.type(torch.float32))
+        router_logits = F.linear(flat.type(torch.float32), self.weight.type(torch.float32))
+
+        # same as `self.route_tokens_to_experts` from before, prob same as our MoE and can be copied
+        scores = router_logits.sigmoid()
+        routed_scores = scores[..., : -self.n_shared_experts]
+        scores_for_choice = routed_scores + self.e_score_correction_bias
+        topk_indices = torch.topk(scores_for_choice, self.top_k, dim=-1, sorted=False)[1]
+
+        routed_logits = router_logits[..., : -self.n_shared_experts]
+        shared_logits = router_logits[..., -self.n_shared_experts :]
+        topk_logits = torch.cat([routed_logits.gather(-1, topk_indices), shared_logits], dim=-1)
+        topk_log_probs = F.logsigmoid(topk_logits)
+        topk_weights = torch.exp(topk_log_probs - torch.logsumexp(topk_log_probs, dim=-1, keepdim=True))
+
+        topk_weights = topk_weights * self.route_scale
+        topk_weights = topk_weights * self.global_scale
+
+        shared_gammas = topk_weights[..., -self.n_shared_experts :].contiguous()
+        topk_weights = topk_weights[..., : self.top_k].contiguous()
+
+        return routed_logits, topk_weights, topk_indices, shared_gammas
 
 
-class TmlSharedExperts(DeepseekV3MLP):
-    """Fused dense shared MLP (non-sink path): a single always-on expert block."""
-
-    def __init__(self, config):
-        nn.Module.__init__(self)
-        intermediate_size = config.n_shared_experts * config.shared_experts_size * config.moe_intermediate_size
-        self.w13_weight = nn.Parameter(torch.empty(2 * intermediate_size, config.hidden_size))
-        self.w2_weight = nn.Parameter(torch.empty(config.hidden_size, intermediate_size))
-
-    def forward(self, hidden_states):
-        gate_up = F.linear(hidden_states, self.w13_weight)
-        return F.linear(swiglu_interleaved(gate_up), self.w2_weight)
-
-
-class TmlBatchSharedExperts(nn.Module):
-    """Gated ("sink") shared experts: `n_shared_experts` parallel MLPs batched on
-    dim 0. Each expert's fp32 SwiGLU output is scaled by its per-token gamma
-    before the down-projection, then the experts are summed in fp32."""
-
+# TODO: should we make this as normal MLP with linear layers?
+class TmlSharedExperts(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.n_shared_experts = config.n_shared_experts
-        shared_d_mlp = config.intermediate_size
-        self.w13_weight = nn.Parameter(torch.empty(config.n_shared_experts, 2 * shared_d_mlp, config.hidden_size))
-        self.w2_weight = nn.Parameter(torch.empty(config.n_shared_experts, config.hidden_size, shared_d_mlp))
+        shared_d_mlp = config.moe_intermediate_size
+        self.gate_proj = nn.Parameter(torch.empty(config.n_shared_experts, shared_d_mlp, config.hidden_size))
+        self.up_proj = nn.Parameter(torch.empty(config.n_shared_experts, shared_d_mlp, config.hidden_size))
+        self.down_proj = nn.Parameter(torch.empty(config.n_shared_experts, config.hidden_size, shared_d_mlp))
+        self.act_fn = ACT2FN[config.hidden_act]
 
     def forward(self, hidden_states, gammas):
         input_shape = hidden_states.shape
@@ -433,110 +603,187 @@ class TmlBatchSharedExperts(nn.Module):
         gammas = gammas.reshape(-1, self.n_shared_experts).transpose(0, 1)  # (S, T)
 
         expanded = hidden_states.unsqueeze(0).expand(self.n_shared_experts, -1, -1)  # (S, T, D)
-        gate_up = torch.bmm(expanded, self.w13_weight.mT)  # (S, T, 2f)
-        activated = swiglu_interleaved(gate_up).float() * gammas.unsqueeze(-1)  # (S, T, f)
-        down = torch.bmm(activated.to(gate_up.dtype), self.w2_weight.mT)  # (S, T, D)
+        gate = torch.bmm(expanded, self.gate_proj.mT)  # (S, T, f)
+        up = torch.bmm(expanded, self.up_proj.mT)  # (S, T, f)
+        activated = (self.act_fn(gate) * up).float() * gammas.unsqueeze(-1)  # (S, T, f)
+        down = torch.bmm(activated.to(gate.dtype), self.down_proj.mT)  # (S, T, D)
 
         out = down.float().sum(dim=0).to(hidden_states.dtype)  # (T, D)
         return out.view(input_shape)
 
 
-class TmlMoE(DeepseekV3MoE):
+class TmlMoE(nn.Module):
     """Gate -> routed experts (+ shared experts), TML flavour."""
 
     def __init__(self, config):
-        nn.Module.__init__(self)
+        super().__init__()
         self.config = config
         self.gate = TmlTopkRouter(config)
         self.experts = TmlExperts(config)
+        self.shared_experts = TmlSharedExperts(config)
 
-        self.n_shared_experts = config.n_shared_experts
-        self.shared_expert_sink = config.shared_expert_sink
-        self.top_k = config.num_experts_per_tok
-        self.route_scale = config.route_scale
-        self.norm_after_topk = config.norm_after_topk
-        self.gate_activation = config.gate_activation
-
-        if config.n_shared_experts > 0:
-            if config.shared_expert_sink:
-                self.shared_experts = TmlBatchSharedExperts(config)
-            else:
-                self.shared_experts = TmlSharedExperts(config)
-        else:
-            self.shared_experts = None
-
-    def route_tokens_to_experts(self, router_logits):
-        n_shared = self.gate.n_shared_experts  # nonzero only in sink mode
-        if self.gate_activation == "sigmoid":
-            scores = router_logits.sigmoid()
-        else:
-            scores = router_logits.softmax(dim=-1, dtype=torch.float32)
-
-        routed_scores = scores[..., :-n_shared] if n_shared > 0 else scores
-        if self.gate.e_score_correction_bias is not None:
-            scores_for_choice = routed_scores + self.gate.e_score_correction_bias
-        else:
-            scores_for_choice = routed_scores
-        topk_indices = torch.topk(scores_for_choice, self.top_k, dim=-1, sorted=False)[1]
-
-        if self.norm_after_topk:
-            if n_shared > 0:
-                routed_logits = router_logits[..., :-n_shared]
-                shared_logits = router_logits[..., -n_shared:]
-                topk_logits = torch.cat([routed_logits.gather(-1, topk_indices), shared_logits], dim=-1)
-            else:
-                topk_logits = router_logits.gather(-1, topk_indices)
-            if self.gate_activation == "sigmoid":
-                topk_weights = _logsigmoid_normalize(topk_logits)
-            else:
-                topk_weights = topk_logits.softmax(dim=-1, dtype=torch.float32)
-        else:
-            topk_weights = routed_scores.gather(-1, topk_indices)
-
-        topk_weights = topk_weights * self.route_scale
-        if self.gate.global_scale is not None:
-            topk_weights = topk_weights * self.gate.global_scale
-
-        shared_gammas = None
-        if self.shared_expert_sink and n_shared > 0:
-            shared_gammas = topk_weights[..., -n_shared:].contiguous()
-            topk_weights = topk_weights[..., : self.top_k].contiguous()
-
-        return topk_indices, topk_weights, shared_gammas
-
-    def forward(self, hidden_states):
+    def forward(self, hidden_states) -> torch.Tensor:
         residuals = hidden_states
         orig_shape = hidden_states.shape
-        router_logits = self.gate(hidden_states)
-        topk_indices, topk_weights, shared_gammas = self.route_tokens_to_experts(router_logits)
+        routed_logits, topk_weights, topk_indices, shared_gammas = self.gate(hidden_states)
         hidden_states = hidden_states.view(-1, hidden_states.shape[-1])
         hidden_states = self.experts(hidden_states, topk_indices, topk_weights.type_as(hidden_states)).view(
             *orig_shape
         )
 
-        if self.shared_experts is not None:
-            if self.shared_expert_sink:
-                hidden_states = hidden_states + self.shared_experts(residuals, gammas=shared_gammas)
-            else:
-                hidden_states = hidden_states + self.shared_experts(residuals)
-
+        hidden_states = hidden_states + self.shared_experts(residuals, gammas=shared_gammas)
         return hidden_states
 
 
-class TmlDecoderLayer(Glm4MoeLiteDecoderLayer):
+def apply_mask_to_padding_states(hidden_states, attention_mask):
+    """
+    Tunes out the hidden states for padding tokens, see https://github.com/state-spaces/mamba/issues/66
+    """
+    # NOTE: attention mask is a 2D boolean tensor
+    if attention_mask is not None and attention_mask.shape[1] > 1 and attention_mask.shape[0] > 1:
+        dtype = hidden_states.dtype
+        hidden_states = (hidden_states * attention_mask[:, :, None]).to(dtype)
+
+    return hidden_states
+
+
+def torch_causal_conv1d_update(
+    hidden_states,
+    conv_state,
+    weight,
+    bias=None,
+    activation=None,
+):
+    _, hidden_size, seq_len = hidden_states.shape
+    state_len = conv_state.shape[-1]
+
+    hidden_states_new = torch.cat([conv_state, hidden_states], dim=-1).to(weight.dtype)
+    conv_state.copy_(hidden_states_new[:, :, -state_len:])
+    out = F.conv1d(hidden_states_new, weight.unsqueeze(1), bias, padding=0, groups=hidden_size)
+    out = F.silu(out[:, :, -seq_len:])
+    out = out.to(hidden_states.dtype)
+    return out
+
+
+class TmlShortConvolution(nn.Module):
+    def __init__(self, hidden_size: int, conv_kernel_size: int, layer_idx: int, conv_idx: int):
+        super().__init__()
+        self.layer_idx = layer_idx
+        self.conv_idx = conv_idx
+        self.conv_kernel_size = conv_kernel_size
+        self.activation = None  # just hardcode for now
+
+        self.conv1d = nn.Conv1d(
+            in_channels=hidden_size,
+            out_channels=hidden_size,
+            kernel_size=conv_kernel_size,
+            groups=hidden_size,
+            padding=conv_kernel_size - 1,
+            bias=False,
+        )
+
+        self.causal_conv1d_fn = causal_conv1d_fn
+        self.causal_conv1d_update = causal_conv1d_update or torch_causal_conv1d_update
+
+        if not (causal_conv1d_fn is not None and causal_conv1d_update is not None):
+            logger.warning_once(
+                "The fast path is not available because one of the required library is not installed. Falling back to "
+                "torch implementation. To install follow https://github.com/fla-org/flash-linear-attention#installation and"
+                " https://github.com/Dao-AILab/causal-conv1d"
+            )
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        cache_params: Cache | None = None,
+        attention_mask: torch.Tensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ):
+        # Keep the computation in fp32
+        orig_dtype = hidden_states.dtype
+        hidden_states = hidden_states.float()
+
+        residual = hidden_states
+        hidden_states = apply_mask_to_padding_states(hidden_states, attention_mask)
+        seq_len = hidden_states.shape[1]
+        hidden_states = hidden_states.transpose(1, 2)
+
+        # We have cached `conv_state` to continue from. The two cached modes
+        # (single-token decode and chunk-tokens continuation) share the state read here; they only
+        # diverge in how the conv input is assembled and which kernel consumes the states below
+        use_precomputed_states = (
+            cache_params is not None and cache_params.layers[self.layer_idx].has_previous_state[self.conv_idx]
+        )
+
+        # getting projected states from cache if it exists
+        if use_precomputed_states:
+            conv_state = cache_params.layers[self.layer_idx].conv_states[self.conv_idx]
+
+        if use_precomputed_states and seq_len == 1:
+            # Single-token cached decode: the fused per-step kernel updates the conv state in-place.
+            hidden_states = self.causal_conv1d_update(
+                hidden_states,
+                conv_state,
+                self.conv1d.weight.squeeze(1),
+                self.conv1d.bias,
+                self.activation,
+            )
+        else:
+            # Multi-token forward (prefill, or chunked-tokens decode when the cache has prior state).
+            if use_precomputed_states:
+                # Cached chunked-tokens decode: prepend the cached conv context so the causal conv
+                # sees the correct left-context rather than zero-padding. Dropped from the output
+                # at the end of this branch.
+                hidden_states = torch.cat([conv_state, hidden_states], dim=-1)
+            if cache_params is not None:
+                new_conv_state = F.pad(hidden_states, (self.conv_kernel_size - hidden_states.shape[-1], 0))
+                cache_params.update_conv_state(new_conv_state, self.layer_idx, conv_idx=self.conv_idx)
+            if self.causal_conv1d_fn is not None:
+                hidden_states = self.causal_conv1d_fn(
+                    x=hidden_states,
+                    weight=self.conv1d.weight.squeeze(1),
+                    bias=self.conv1d.bias,
+                    activation=self.activation,
+                    seq_idx=kwargs.get("seq_idx"),
+                )
+            else:
+                hidden_states = self.conv1d(hidden_states)[:, :, : hidden_states.shape[-1]]
+            if use_precomputed_states:
+                hidden_states = hidden_states[:, :, -seq_len:]
+
+        hidden_states = hidden_states.transpose(1, 2)
+        hidden_states = (hidden_states + residual).to(dtype=orig_dtype)
+        return hidden_states
+
+
+class TmlDecoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: TmlTextConfig, layer_idx: int):
-        super().__init__(config, layer_idx)
+        super().__init__()
+        self.hidden_size = config.hidden_size
+        self.self_attn = TmlAttention(config, layer_idx)
+
+        if config.mlp_layer_types[layer_idx] == "sparse":
+            self.mlp = TmlMoE(config)
+        else:
+            self.mlp = TmlMLP(config)
+
+        self.input_layernorm = TmlRMSNorm(config.hidden_size, config.rms_norm_eps)
+        self.post_attention_layernorm = TmlRMSNorm(config.hidden_size, config.rms_norm_eps)
         # Maybe use_conv is always `True`, check it!
         self.layer_type = config.layer_types[layer_idx]
-        self.attn_sconv = TmlShortConvolution(config.hidden_size, config.sconv_kernel_size)
-        self.mlp_sconv = TmlShortConvolution(config.hidden_size, config.sconv_kernel_size)
+        self.attn_sconv = TmlShortConvolution(
+            config.hidden_size, config.conv_kernel_size, layer_idx=layer_idx, conv_idx=2
+        )
+        self.mlp_sconv = TmlShortConvolution(
+            config.hidden_size, config.conv_kernel_size, layer_idx=layer_idx, conv_idx=3
+        )
 
     def forward(
         self,
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor | None = None,
         past_key_values: Cache | None = None,
-        cache_position: torch.Tensor | None = None,
+        cache_params: Cache | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
         residual = hidden_states
@@ -545,19 +792,19 @@ class TmlDecoderLayer(Glm4MoeLiteDecoderLayer):
             hidden_states=hidden_states,
             attention_mask=attention_mask,
             past_key_values=past_key_values,
-            cache_position=cache_position,
+            cache_params=cache_params,
             **kwargs,
         )
         # TODO: the short convolutions are stateless for now, so cached decoding is wrong for
         # sequences continued token-by-token; they need their conv context carried in the cache
         # TOFIX as well ig
-        hidden_states = self.attn_sconv(hidden_states)
+        hidden_states = self.attn_sconv(hidden_states, cache_params=cache_params)
         hidden_states = residual + hidden_states
 
         residual = hidden_states
         hidden_states = self.post_attention_layernorm(hidden_states)
         hidden_states = self.mlp(hidden_states)
-        hidden_states = self.mlp_sconv(hidden_states)
+        hidden_states = self.mlp_sconv(hidden_states, cache_params=cache_params)
         hidden_states = residual + hidden_states
         return hidden_states
 
@@ -577,25 +824,30 @@ class TmlPreTrainedModel(PreTrainedModel):
     _can_compile_fullgraph = False
     _supports_attention_backend = False
     _keys_to_ignore_on_load_unexpected = [r"model\.mtp\..*"]
+    _keep_in_fp32_modules_strict = ["attn_sconv", "mlp_sconv", "k_sconv", "v_sconv"]
 
+    @torch.no_grad()
     def _init_weights(self, module):
+        super()._init_weights(module)
         std = self.config.get_text_config().initializer_range
-        if isinstance(module, nn.Linear):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
-        elif isinstance(module, TmlRMSNorm):
-            module.weight.data.fill_(1.0)
-        elif isinstance(module, TmlShortConvolution):
-            module.weight.data.normal_(mean=0.0, std=std)
-        elif isinstance(module, TmlRelativeLogits):
-            module.proj.data.normal_(mean=0.0, std=std)
+        if isinstance(module, TmlRelativeLogits):
+            init.normal_(module.proj, mean=0.0, std=std)
+        elif isinstance(module, TmlMLP):
+            init.zeros_(module.global_scale)
+        elif isinstance(module, TmlExperts):
+            init.normal_(module.gate_up_proj, mean=0.0, std=std)
+            init.normal_(module.down_proj, mean=0.0, std=std)
+        elif isinstance(module, TmlTopkRouter):
+            init.normal_(module.weight, mean=0.0, std=std)
+            init.zeros_(module.global_scale)
+            init.zeros_(module.e_score_correction_bias)
+        elif isinstance(module, TmlSharedExperts):
+            init.normal_(module.gate_proj, mean=0.0, std=std)
+            init.normal_(module.up_proj, mean=0.0, std=std)
+            init.normal_(module.down_proj, mean=0.0, std=std)
 
 
+@auto_docstring
 class TmlTextModel(TmlPreTrainedModel):
     config: TmlTextConfig
 
@@ -603,6 +855,7 @@ class TmlTextModel(TmlPreTrainedModel):
         super().__init__(config)
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
+
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
         self.layers = nn.ModuleList(
             [TmlDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
@@ -610,14 +863,20 @@ class TmlTextModel(TmlPreTrainedModel):
         self.norm = TmlRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.embed_norm = TmlRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.gradient_checkpointing = False
+
+        # Initialize weights and apply final processing
         self.post_init()
 
+    @merge_with_config_defaults
+    @capture_outputs
+    @auto_docstring
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
+        cache_params: Cache | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
@@ -626,21 +885,22 @@ class TmlTextModel(TmlPreTrainedModel):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
         if inputs_embeds is None:
-            inputs_embeds = self.embed_tokens(input_ids)
+            inputs_embeds = self.embed_norm(self.embed_tokens(input_ids))
 
-        if self.embed_norm is not None:
-            inputs_embeds = self.embed_norm(inputs_embeds)
+        if use_cache:
+            if past_key_values is None:
+                past_key_values = DynamicCache(config=self.config)
+            if cache_params is None:
+                layers = [TmlShortConvolutionsLayer(config=self.config) for I in range(self.config.num_hidden_layers)]
+                cache_params = Cache(layers=layers, offloading=False)  # hardcode for now
 
-        if use_cache and past_key_values is None:
-            past_key_values = DynamicCache(config=self.config)
-
-        past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
-        cache_position = torch.arange(
-            past_seen_tokens, past_seen_tokens + inputs_embeds.shape[1], device=inputs_embeds.device
-        )
         if position_ids is None:
-            position_ids = cache_position.unsqueeze(0)
+            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+            position_ids = torch.arange(
+                past_seen_tokens, past_seen_tokens + inputs_embeds.shape[1], device=inputs_embeds.device
+            ).unsqueeze(0)
 
+        # It may already have been prepared by e.g. `generate`
         if not isinstance(causal_mask_mapping := attention_mask, dict):
             mask_kwargs = {
                 "config": self.config,
@@ -660,7 +920,7 @@ class TmlTextModel(TmlPreTrainedModel):
                 hidden_states,
                 attention_mask=causal_mask_mapping[decoder_layer.layer_type],
                 past_key_values=past_key_values,
-                cache_position=cache_position,
+                cache_params=cache_params,
                 **kwargs,
             )
 
@@ -700,6 +960,43 @@ class TmlAudioModel(TmlPreTrainedModel):
             last_hidden_state=hidden_states,
             pooler_output=hidden_states,
         )
+
+
+class TmlVisionEncoderLayer(nn.Module):
+    def __init__(self, input_dim: int, output_dim: int, t_fold: int, hw_fold: int, add_norm: bool):
+        super().__init__()
+        self.projection = nn.Linear(input_dim, output_dim, bias=False)
+        if add_norm:
+            self.layer_norm = TmlRMSNorm(output_dim)
+        self.hw_fold = hw_fold
+        self.t_fold = t_fold
+        self.add_norm = add_norm
+
+    def fold_timespace_to_depth(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        """
+        Convert a tensor of shape (B, T, H, W, C) to a tensor of shape (B, T // t, H // hw, W //  hw, C * (t * hw**2))
+        """
+        B, T, H, W, C = hidden_states.shape
+
+        t_new = T // self.t_fold
+        h_new = H // self.hw_fold
+        w_new = W // self.hw_fold
+
+        hidden_states = hidden_states.reshape(B, t_new, self.t_fold, h_new, self.hw_fold, w_new, self.hw_fold, C)
+
+        hidden_states = hidden_states.permute(0, 1, 3, 5, 2, 4, 6, 7)
+        hidden_states = hidden_states.reshape(B, t_new, h_new, w_new, self.t_fold * self.hw_fold * self.hw_fold * C)
+        return hidden_states
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        if self.hw_fold > 1 or self.t_fold > 1:
+            hidden_states = self.fold_timespace_to_depth(hidden_states)
+
+        hidden_states = self.projection(hidden_states)
+        if self.add_norm:
+            hidden_states = self.layer_norm(hidden_states)
+            hidden_states = F.gelu(hidden_states)
+        return hidden_states
 
 
 def prime_factors(number: int) -> list[int]:
@@ -751,8 +1048,8 @@ def plan_out_scales(
     h = torch.cumprod(torch.tensor(prime_factors(patch_size)[::-1], device=device), dim=0)
     t = torch.cumprod(torch.tensor(prime_factors(temporal_patch_size)[::-1], device=device), dim=0)
 
-    h_ch = torch.ceil(h**2 / 64).int() * 64 * n_channels
-    t_ch = (h_ch[-1] if len(h_ch) else 64 * n_channels) * t
+    h_ch = torch.ceil(h**2 * n_channels / 64).int() * 64
+    t_ch = torch.ceil(h[-1] ** 2 * n_channels * t).int() * 64
 
     base = torch.tensor([[1, 1, 1, n_channels]], device=device)
     spatial = torch.stack([torch.ones_like(h), h, h, h_ch], dim=1)
@@ -781,40 +1078,6 @@ def plan_out_scales(
     return scales[idxs]
 
 
-class TmlVisionEncoderLayer(nn.Module):
-    def __init__(self, input_dim: int, output_dim: int, t_fold: int, hw_fold: int):
-        super().__init__()
-        self.projection = nn.Linear(input_dim, output_dim, bias=False)
-        self.layer_norm = TmlRMSNorm(output_dim)
-        self.hw_fold = hw_fold
-        self.t_fold = t_fold
-
-    def fold_timespace_to_depth(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        """
-        Convert a tensor of shape (B, T, H, W, C) to a tensor of shape (B, T // t, H // hw, W //  hw, C * (t * hw**2))
-        """
-        B, T, H, W, C = hidden_states.shape
-
-        t_new = T // self.t_fold
-        h_new = H // self.hw_fold
-        w_new = W // self.hw_fold
-
-        hidden_states = hidden_states.reshape(B, t_new, self.t_fold, h_new, self.hw_fold, w_new, self.hw_fold, C)
-
-        hidden_states = hidden_states.permute(0, 1, 3, 5, 2, 4, 6, 7)
-        hidden_states = hidden_states.reshape(B, t_new, h_new, w_new, self.t_fold * self.hw_fold * self.hw_fold * C)
-        return hidden_states
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        if self.hw_fold > 1 or self.t_fold > 1:
-            hidden_states = self.fold_timespace_to_depth(hidden_states)
-
-        hidden_states = self.projection(hidden_states)
-        hidden_states = self.layer_norm(hidden_states)
-        hidden_states = F.gelu(hidden_states)
-        return hidden_states
-
-
 class TmlVisionModel(TmlPreTrainedModel):
     def __init__(self, config: TmlVisionConfig):
         super().__init__(config)
@@ -836,16 +1099,24 @@ class TmlVisionModel(TmlPreTrainedModel):
             t_fold = end_scale[0] // start_scale[0]
             self.encoder_layers.append(
                 TmlVisionEncoderLayer(
-                    input_dim=start_scale[3] * shuffle_mult, output_dim=output_dim, hw_fold=hw_fold, t_fold=t_fold
+                    input_dim=start_scale[3] * shuffle_mult,
+                    output_dim=output_dim,
+                    hw_fold=hw_fold,
+                    t_fold=t_fold,
+                    add_norm=i != config.num_hidden_layers - 1,
                 )
             )
 
-    def forward(self, pixel_values: torch.Tensor) -> torch.Tensor:
+        self.final_norm = TmlRMSNorm(config.text_hidden_size)
+        self.post_init()
+
+    def forward(self, pixel_values: torch.Tensor, **kwargs: Unpack[TransformersKwargs]) -> torch.Tensor:
         num_patches = pixel_values.shape[0]
         hidden_states = pixel_values
         for layer in self.encoder_layers:
             hidden_states = layer(hidden_states=hidden_states)
 
+        hidden_states = self.final_norm(hidden_states)
         hidden_states = hidden_states.reshape(num_patches, -1)
         return BaseModelOutputWithPooling(
             last_hidden_state=hidden_states,
@@ -853,20 +1124,56 @@ class TmlVisionModel(TmlPreTrainedModel):
         )
 
 
-class TmlModel(Gemma3Model, TmlPreTrainedModel):
+@auto_docstring(
+    custom_intro="""
+    The Base Tml model which consists of a vision backbone and a language model without language modeling head.,
+    """
+)
+class TmlModel(TmlPreTrainedModel):
+    # we are filtering the logits/labels so we shouldn't divide the loss based on num_items_in_batch
+    accepts_loss_kwargs = False
+
     def __init__(self, config: TmlConfig):
-        TmlPreTrainedModel.__init__(self, config)
+        super().__init__(config)
         self.vocab_size = config.text_config.vocab_size
         self.language_model = TmlTextModel(config.text_config)
         self.audio_tower = TmlAudioModel(config.audio_config)
         self.vision_tower = TmlVisionModel(config.vision_config)
         self.post_init()
 
+    @can_return_tuple
+    @auto_docstring(custom_intro="Projects the last hidden state from the vision model into language model space.")
     def get_image_features(
         self, pixel_values: torch.FloatTensor, **kwargs: Unpack[TransformersKwargs]
     ) -> tuple | BaseModelOutputWithPooling:
         return self.vision_tower(pixel_values=pixel_values, **kwargs)
 
+    def get_placeholder_mask(
+        self, input_ids: torch.LongTensor, inputs_embeds: torch.FloatTensor, image_features: torch.FloatTensor
+    ):
+        """
+        Obtains multimodal placeholder mask from `input_ids` or `inputs_embeds`, and checks that the placeholder token count is
+        equal to the length of multimodal features. If the lengths are different, an error is raised.
+        """
+        if input_ids is None:
+            special_image_mask = inputs_embeds == self.get_input_embeddings()(
+                torch.tensor(self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
+            )
+            special_image_mask = special_image_mask.all(-1)
+        else:
+            special_image_mask = input_ids == self.config.image_token_id
+
+        n_image_tokens = special_image_mask.sum()
+        n_image_features = image_features.shape[0] * image_features.shape[1]
+        special_image_mask = special_image_mask.unsqueeze(-1).to(inputs_embeds.device)
+        torch_compilable_check(
+            n_image_tokens * inputs_embeds.shape[-1] == image_features.numel(),
+            f"Image features and image tokens do not match, tokens: {n_image_tokens}, features: {n_image_features}",
+        )
+        return special_image_mask
+
+    @can_return_tuple
+    @auto_docstring
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -874,6 +1181,7 @@ class TmlModel(Gemma3Model, TmlPreTrainedModel):
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
+        cache_params: Cache | None = None,
         token_type_ids: torch.LongTensor | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         labels: torch.LongTensor | None = None,
@@ -913,7 +1221,7 @@ class TmlModel(Gemma3Model, TmlPreTrainedModel):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
         if inputs_embeds is None:
-            inputs_embeds = self.get_input_embeddings()(input_ids)
+            inputs_embeds = self.language_model.embed_norm(self.get_input_embeddings()(input_ids))
 
         # Merge text and images
         if pixel_values is not None:
@@ -943,6 +1251,7 @@ class TmlModel(Gemma3Model, TmlPreTrainedModel):
             attention_mask=causal_mask_mapping,
             position_ids=position_ids,
             past_key_values=past_key_values,
+            cache_params=cache_params,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
             **lm_kwargs,
@@ -957,7 +1266,30 @@ class TmlModel(Gemma3Model, TmlPreTrainedModel):
         )
 
 
-class TmlForConditionalGeneration(Gemma3ForConditionalGeneration, GenerationMixin):
+@auto_docstring(
+    custom_intro="""
+    The Base Tml model which consists of a vision backbone and a language model without language modeling head.,
+    """
+)
+class TmlForConditionalGeneration(TmlPreTrainedModel, GenerationMixin):
+    # `embed` and `unembed` are separate tensors in the checkpoints, never tied
+    _tied_weights_keys = {}
+    # we are filtering the logits/labels so we shouldn't divide the loss based on num_items_in_batch
+    # Fix: https://github.com/huggingface/transformers/issues/40564
+    accepts_loss_kwargs = False
+
+    def __init__(self, config: TmlConfig):
+        super().__init__(config)
+        self.model = TmlModel(config)
+        self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
+        self.post_init()
+
+    @auto_docstring
+    def get_image_features(self, pixel_values: torch.FloatTensor, **kwargs: Unpack[TransformersKwargs]):
+        return self.model.get_image_features(pixel_values, **kwargs)
+
+    @can_return_tuple
+    @auto_docstring
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -965,6 +1297,7 @@ class TmlForConditionalGeneration(Gemma3ForConditionalGeneration, GenerationMixi
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
+        cache_params: Cache | None = None,
         input_features: torch.LongTensor | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         labels: torch.LongTensor | None = None,
@@ -1024,6 +1357,7 @@ class TmlForConditionalGeneration(Gemma3ForConditionalGeneration, GenerationMixi
             attention_mask=attention_mask,
             position_ids=position_ids,
             past_key_values=past_key_values,
+            cache_params=cache_params,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
             labels=labels,
@@ -1084,8 +1418,26 @@ class TmlForConditionalGeneration(Gemma3ForConditionalGeneration, GenerationMixi
 
         return model_inputs
 
-    def create_masks_for_generate(self, **super_kwargs):
-        raise AttributeError("Don't need to override for TML")
+    def _prepare_cache_for_generation(
+        self,
+        generation_config,
+        model_kwargs,
+        generation_mode,
+        batch_size,
+        max_cache_length,
+        **kwargs,
+    ):
+        super()._prepare_cache_for_generation(
+            generation_config=generation_config,
+            model_kwargs=model_kwargs,
+            generation_mode=generation_mode,
+            batch_size=batch_size,
+            max_cache_length=max_cache_length,
+            **kwargs,
+        )
+        text_config = self.config.get_text_config(decoder=True)
+        layers = [TmlShortConvolutionsLayer(config=text_config) for I in range(text_config.num_hidden_layers)]
+        model_kwargs["cache_params"] = Cache(layers=layers, offloading=False)  # hardcode for now
 
 
 __all__ = [
