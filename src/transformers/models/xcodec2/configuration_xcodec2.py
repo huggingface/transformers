@@ -58,7 +58,6 @@ class Xcodec2Config(PreTrainedConfig):
 
     model_type = "xcodec2"
     keys_to_ignore_at_inference = ["past_key_values"]
-
     base_model_fsdp_plan = {
         "embed_tokens": "free_full_weight",
         "layers.*": "free_full_weight",

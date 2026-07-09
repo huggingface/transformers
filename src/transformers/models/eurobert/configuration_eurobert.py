@@ -64,7 +64,6 @@ class EuroBertConfig(PreTrainedConfig):
         "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
         "norm": (["hidden_states"], ["hidden_states"]),
     }
-
     base_model_fsdp_plan = {
         "embed_tokens": "free_full_weight",
         "layers.*": "free_full_weight",
