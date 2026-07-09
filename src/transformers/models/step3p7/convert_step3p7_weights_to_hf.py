@@ -28,9 +28,9 @@ import os
 from huggingface_hub import snapshot_download
 
 from transformers import AutoTokenizer
-from transformers.models.step_3_7_flash.configuration_step3p7 import Step3p7Config
-from transformers.models.step_3_7_flash.modeling_step3p7 import Step3p7ForConditionalGeneration
-from transformers.models.step_3_7_flash.processing_step3p7 import Step3p7Processor
+from transformers.models.step3p7.configuration_step3p7 import Step3p7Config
+from transformers.models.step3p7.modeling_step3p7 import Step3p7ForConditionalGeneration
+from transformers.models.step3p7.processing_step3p7 import Step3p7Processor
 
 
 def _is_hub_repo(path: str) -> bool:
