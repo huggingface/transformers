@@ -20,7 +20,7 @@ rendered properly in your Markdown viewer.
 
 Accelerate wraps the model in the appropriate distributed wrapper, moves it to the correct device, and creates a compatible optimizer. During training, Accelerate uses its own [`~accelerate.Accelerator.backward`] method to handle gradient scaling for mixed precision. [`Trainer`] calls the appropriate Accelerate APIs and delegates all distributed mechanics to Accelerate.
 
-Configure Accelerate for [`Trainer`] with either an Accelerate config file or [`TrainingArguments`].
+Configure Accelerate for [`Trainer`] with either an Accelerate config file or [`TrainingArguments`]. To shard a model at load time for a custom training loop or inference instead, use [DistributedConfig](./distributed_config).
 
 ## Accelerate config file
 
