@@ -75,14 +75,9 @@ if is_executorch_available():
     from executorch.exir.passes.executorch_prim_ops_registry import _PYTHON_SYM_OPS_TO_EXECUTORCH_SYM_OPS
     from executorch.exir.program import EdgeProgramManager, ExecutorchProgramManager, to_edge_transform_and_lower
 
-    # The ExecuTorch CUDA backend pulls in `triton`, which CPU-only torch builds don't ship. Import it
-    # lazily so the xnnpack (CPU) export path still works on CPU-only images; the `cuda` backend raises
-    # a clear error below if it is requested without these available.
-    try:
+    if torch.cuda.is_available():
         from executorch.backends.cuda.cuda_backend import CudaBackend
         from executorch.backends.cuda.cuda_partitioner import CudaPartitioner
-    except ImportError:
-        CudaBackend = CudaPartitioner = None
 
 
 logger = logging.get_logger(__name__)
@@ -197,12 +192,9 @@ def prepare_for_cuda(model: PreTrainedModel, sample_inputs: dict[str, Any]):
 
     Moves the model to CUDA and upcasts to bfloat16 — required by the CUDA backend.
     """
-    if CudaBackend is None:
-        raise ImportError(
-            "The ExecuTorch `cuda` backend requires `executorch.backends.cuda` (which pulls in `triton`). "
-            "It is unavailable in this environment (e.g. a CPU-only torch build). Use `backend='xnnpack'` "
-            "for CPU export."
-        )
+    if not torch.cuda.is_available():
+        raise RuntimeError("CUDA is not available in this environment; cannot export to the ExecuTorch CUDA backend.")
+
     model.requires_grad_(False)
     dtype = module_dtype(model)
     device = module_device(model)
