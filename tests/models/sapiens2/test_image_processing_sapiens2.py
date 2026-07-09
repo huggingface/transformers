@@ -274,10 +274,11 @@ class Sapiens2ImageProcessingTest(
 
     def test_pose_estimation_keypoint_preprocessing(self):
         image_processor = Sapiens2ImageProcessor()
-        
+
         import numpy as np
+
         image = np.random.randint(0, 255, (800, 800, 3)).astype(np.uint8)
-        
+
         boxes = [[[50.0, 50.0, 200.0, 400.0]]]
         keypoints = [[[[60.0, 70.0, 1.0], [80.0, 90.0, 0.0]]]]
 
