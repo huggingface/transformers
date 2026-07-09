@@ -94,6 +94,9 @@ def get_constant_schedule_with_warmup(optimizer: Optimizer, num_warmup_steps: in
         `torch.optim.lr_scheduler.LambdaLR` with the appropriate schedule.
     """
 
+    if num_warmup_steps < 0:
+        raise ValueError(f"`num_warmup_steps` must be non-negative, got {num_warmup_steps}.")
+
     lr_lambda = partial(_get_constant_schedule_with_warmup_lr_lambda, num_warmup_steps=num_warmup_steps)
     return LambdaLR(optimizer, lr_lambda, last_epoch=last_epoch)
 
@@ -122,6 +125,11 @@ def get_linear_schedule_with_warmup(optimizer, num_warmup_steps, num_training_st
     Return:
         `torch.optim.lr_scheduler.LambdaLR` with the appropriate schedule.
     """
+
+    if num_warmup_steps < 0:
+        raise ValueError(f"`num_warmup_steps` must be non-negative, got {num_warmup_steps}.")
+    if num_training_steps <= 0:
+        raise ValueError(f"`num_training_steps` must be positive, got {num_training_steps}.")
 
     lr_lambda = partial(
         _get_linear_schedule_with_warmup_lr_lambda,
@@ -164,6 +172,11 @@ def get_cosine_schedule_with_warmup(
     Return:
         `torch.optim.lr_scheduler.LambdaLR` with the appropriate schedule.
     """
+
+    if num_warmup_steps < 0:
+        raise ValueError(f"`num_warmup_steps` must be non-negative, got {num_warmup_steps}.")
+    if num_training_steps <= 0:
+        raise ValueError(f"`num_training_steps` must be positive, got {num_training_steps}.")
 
     lr_lambda = partial(
         _get_cosine_schedule_with_warmup_lr_lambda,
