@@ -38,7 +38,7 @@ from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
 from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import maybe_autocast, merge_with_config_defaults
-from ...utils.output_capturing import OutputRecorder, capture_outputs
+from ...utils.output_capturing import capture_outputs
 from .configuration_mllama import MllamaConfig, MllamaTextConfig, MllamaVisionConfig
 
 
@@ -788,11 +788,11 @@ class MllamaPreTrainedModel(PreTrainedModel):
     _supports_attention_backend = True
     _can_record_outputs = {
         "hidden_states": [MllamaSelfAttentionDecoderLayer, MllamaCrossAttentionDecoderLayer],
-        "attentions": [
-            OutputRecorder(MllamaTextSelfAttention, index=1, layer_name="self_attn"),
-            OutputRecorder(MllamaTextSelfAttention, index=1, layer_name="cross_attn"),
-            OutputRecorder(MllamaTextCrossAttention, index=1, layer_name="cross_attn"),
-        ],
+        # Cross-attention is a layer type here, not a second attention inside each layer (unlike in BigBird, etc.). So
+        # layers listed in `config.cross_attention_layers` attend to vision instead of self-attending, and `attentions`
+        # holds one tensor per layer, self or cross depending on the layer type (matching `hidden_states` above).
+        # Mllama captures everything under the `attentions` key for BC reasons.
+        "attentions": [MllamaTextSelfAttention, MllamaTextCrossAttention],
     }
 
     @torch.no_grad()
