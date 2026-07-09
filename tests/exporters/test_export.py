@@ -104,6 +104,11 @@ EXPORT_SKIPS: dict[str, dict[str, str]] = {
     "executorch": {
         "GroundingDinoModel": ("Lowering exceeds the test timeout under dynamic shapes."),
         "GroundingDinoForObjectDetection": "Same `timeout` failure as `GroundingDinoModel`.",
+        "Kimi_K25Model": (
+            "ExecuTorch `to_edge` spec failure in the DeepseekV3 language model; the vision encoder "
+            "exports fine."
+        ),
+        "Kimi_K25ForConditionalGeneration": "Same ExecuTorch `spec` failure as `Kimi_K25Model` (DeepseekV3 LM).",
         "MMGroundingDinoModel": "Same `timeout` failure as `GroundingDinoModel`.",
         "MMGroundingDinoForObjectDetection": "Same `timeout` failure as `GroundingDinoModel`.",
     },
