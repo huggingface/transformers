@@ -675,4 +675,12 @@ class GPTNeoXForQuestionAnswering(GPTNeoXPreTrainedModel):
         )
 
 
-__all__ = ["GPTNeoXForCausalLM", "GPTNeoXForQuestionAnswering", "GPTNeoXForSequenceClassification", "GPTNeoXForTokenClassification", "GPTNeoXLayer", "GPTNeoXModel", "GPTNeoXPreTrainedModel"]
+__all__ = [
+    "GPTNeoXForCausalLM",
+    "GPTNeoXForQuestionAnswering",
+    "GPTNeoXForSequenceClassification",
+    "GPTNeoXForTokenClassification",
+    "GPTNeoXLayer",
+    "GPTNeoXModel",
+    "GPTNeoXPreTrainedModel",
+]
