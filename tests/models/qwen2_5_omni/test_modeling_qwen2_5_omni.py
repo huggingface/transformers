@@ -956,3 +956,25 @@ class Qwen2_5OmniToken2WavMaxPositionEmbeddingsTest(unittest.TestCase):
         self.assertEqual(output.shape[0], batch_size)
         self.assertEqual(output.shape[1], self.config.mel_dim)
         self.assertEqual(output.shape[2], 100)  # 50 tokens * 2 repeats
+
+    def test_batched_sample_with_classifier_free_guidance(self):
+        """Verify batched Token2Wav sampling works with classifier-free guidance enabled."""
+        batch_size = 2
+        num_speech_tokens = 4
+
+        conditioning_vector = torch.randn(batch_size, self.config.enc_emb_dim, device=torch_device)
+        reference_mel = torch.randn(batch_size, 200, self.config.mel_dim, device=torch_device)
+        quantized_code = torch.randint(0, self.config.num_embeds, (batch_size, num_speech_tokens), device=torch_device)
+
+        output = self.model.sample(
+            conditioning_vector=conditioning_vector,
+            reference_mel_spectrogram=reference_mel,
+            quantized_code=quantized_code,
+            num_steps=2,
+            guidance_scale=0.5,
+        )
+
+        self.assertEqual(len(output.shape), 3)
+        self.assertEqual(output.shape[0], batch_size)
+        self.assertEqual(output.shape[1], self.config.mel_dim)
+        self.assertEqual(output.shape[2], num_speech_tokens * self.config.repeats)
