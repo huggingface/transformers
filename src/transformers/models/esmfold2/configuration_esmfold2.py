@@ -23,199 +23,6 @@ from ..esmc.configuration_esmc import ESMCConfig
 logger = logging.get_logger(__name__)
 
 
-@strict
-class MSAEncoderConfig(PreTrainedConfig):
-    """Config for the optional MSA encoder module (Large MSA models only)."""
-
-    attribute_map = {
-        "n_layers": "num_hidden_layers",
-        "n_heads_msa": "num_attention_heads",
-        # TODO(temporary): checkpoint-config aliases for the pre-rename field names;
-        # drop once the merged ESMFold2+ESMC checkpoint is regenerated with the new keys.
-        "d_msa": "hidden_size",
-        "d_hidden": "outer_hidden_size",
-        "msa_head_width": "head_width",
-    }
-
-    enabled: bool | None = False
-    hidden_size: int | None = 128
-    outer_hidden_size: int | None = 32
-    num_hidden_layers: int | None = 4
-    num_attention_heads: int | None = 8
-    head_width: int | None = 32
-    # SwiGLU transition intermediate size; ESMFold2Config fills it as
-    # transition_expansion_ratio * hidden_size when not set.
-    transition_intermediate_size: int | None = None
-
-
-@strict
-class ParcaeConfig(PreTrainedConfig):
-    """Release-only config for the parcae diffusion-loop scheduler."""
-
-    # TODO(temporary): checkpoint-config alias; drop at checkpoint regen.
-    attribute_map = {"coda_n_layers": "num_coda_layers"}
-
-    enabled: bool | None = True
-    num_coda_layers: int | None = 2
-
-
-@strict
-class LMEncoderConfig(PreTrainedConfig):
-    """Release-only config for the LM-side pair encoder."""
-
-    attribute_map = {"n_layers": "num_hidden_layers"}
-
-    enabled: bool | None = True
-    num_hidden_layers: int | None = 4
-    lm_dropout: float | None = 0.25
-    per_loop_lm_dropout: bool | None = True
-
-
-@strict
-class AtomAttentionConfig(PreTrainedConfig):
-    """Config for the SWA atom encoder/decoder with 3D RoPE."""
-
-    attribute_map = {
-        "n_blocks": "num_hidden_layers",
-        "n_heads": "num_attention_heads",
-        # TODO(temporary): checkpoint-config aliases; drop at checkpoint regen.
-        "d_atom": "atom_hidden_size",
-        "d_token": "token_hidden_size",
-    }
-
-    atom_hidden_size: int | None = 128
-    token_hidden_size: int | None = 768
-    num_hidden_layers: int | None = 3
-    num_attention_heads: int | None = 4
-    swa_window_size: int | None = 128
-    expansion_ratio: int | None = 2
-    spatial_rope_base_frequency: float | None = 20.0
-    n_spatial_rope_pairs_per_axis: int | None = 2
-    n_uid_rope_pairs: int | None = 10
-    uid_rope_base_frequency: float | None = 10000.0
-    # SwiGLU FFN intermediate size; if not set, expansion_ratio * (atom_hidden_size // 3) * 2
-    # rounded up to a multiple of 256 (hardware-aligned width).
-    ffn_intermediate_size: int | None = None
-
-    def __post_init__(self, **kwargs):
-        if self.ffn_intermediate_size is None:
-            self.ffn_intermediate_size = (self.expansion_ratio * (self.atom_hidden_size // 3) * 2 + 255) // 256 * 256
-        super().__post_init__(**kwargs)
-
-
-@strict
-class FoldingTrunkConfig(PreTrainedConfig):
-    """Config for a pairwise folding trunk stack (only ``num_hidden_layers`` is read;
-    pair dim comes from the parent's ``d_pair``)."""
-
-    attribute_map = {
-        "n_layers": "num_hidden_layers",
-    }
-
-    num_hidden_layers: int | None = 24
-
-
-@strict
-class InputsEmbedderConfig(PreTrainedConfig):
-    """Config for the inputs embedder (wraps the atom encoder)."""
-
-    # TODO(temporary): checkpoint-config alias; drop at checkpoint regen.
-    attribute_map = {"d_inputs": "single_inputs_size"}
-    sub_configs = {"atom_encoder": AtomAttentionConfig}
-
-    single_inputs_size: int | None = 451
-    atom_encoder: dict | AtomAttentionConfig | None = None
-
-    def __post_init__(self, **kwargs):
-        if self.atom_encoder is None:
-            self.atom_encoder = AtomAttentionConfig()
-        elif isinstance(self.atom_encoder, dict):
-            self.atom_encoder = AtomAttentionConfig(**self.atom_encoder)
-        super().__post_init__(**kwargs)
-
-
-@strict
-class DiffusionModuleConfig(PreTrainedConfig):
-    """Config for the DiffusionModule."""
-
-    # TODO(temporary): checkpoint-config aliases; drop at checkpoint regen.
-    attribute_map = {"c_atom": "atom_hidden_size", "c_token": "token_hidden_size"}
-
-    sigma_data: float | None = 16.0
-    atom_hidden_size: int | None = 128
-    token_hidden_size: int | None = 768
-    fourier_dim: int | None = 256
-    atom_num_blocks: int | None = 3
-    atom_num_heads: int | None = 4
-    token_num_blocks: int | None = 12
-    token_num_heads: int | None = 16
-    transition_multiplier: int | None = 2
-    atom_expansion_ratio: int | None = 2
-    # SwiGLU intermediate sizes; if not set, atom_ffn = atom_expansion_ratio * (atom_hidden_size // 3) * 2
-    # rounded up to a multiple of 256, and token_transition = transition_multiplier * token_hidden_size.
-    atom_ffn_intermediate_size: int | None = None
-    token_transition_intermediate_size: int | None = None
-
-    def __post_init__(self, **kwargs):
-        if self.atom_ffn_intermediate_size is None:
-            self.atom_ffn_intermediate_size = (
-                (self.atom_expansion_ratio * (self.atom_hidden_size // 3) * 2 + 255) // 256 * 256
-            )
-        if self.token_transition_intermediate_size is None:
-            self.token_transition_intermediate_size = self.transition_multiplier * self.token_hidden_size
-        super().__post_init__(**kwargs)
-
-
-@strict
-class DiffusionStructureHeadConfig(PreTrainedConfig):
-    """Config for the diffusion-based structure prediction head."""
-
-    sub_configs = {"diffusion_module": DiffusionModuleConfig}
-
-    diffusion_module: dict | DiffusionModuleConfig | None = None
-    distogram_bins: int | None = 128
-    # Sampling defaults (ODE)
-    gamma_0: float | None = 0.605
-    gamma_min: float | None = 1.107
-    noise_scale: float | None = 0.0
-    step_scale: float | None = 1.0
-    # Inference schedule defaults
-    inference_s_max: float | None = 160.0
-    inference_s_min: float | None = 4e-4
-    inference_p: float | None = 8.0
-    inference_num_steps: int | None = 68
-
-    def __post_init__(self, **kwargs):
-        if self.diffusion_module is None:
-            self.diffusion_module = DiffusionModuleConfig()
-        elif isinstance(self.diffusion_module, dict):
-            self.diffusion_module = DiffusionModuleConfig(**self.diffusion_module)
-        super().__post_init__(**kwargs)
-
-
-@strict
-class ConfidenceHeadConfig(PreTrainedConfig):
-    """Config for the confidence prediction head."""
-
-    sub_configs = {"folding_trunk": FoldingTrunkConfig}
-
-    enabled: bool | None = True
-    num_plddt_bins: int | None = 50
-    num_pde_bins: int | None = 64
-    num_pae_bins: int | None = 64
-    min_dist: float | None = 2.0
-    max_dist: float | None = 52.0
-    distogram_bins: int | None = 128
-    folding_trunk: dict | FoldingTrunkConfig | None = None
-
-    def __post_init__(self, **kwargs):
-        if self.folding_trunk is None:
-            self.folding_trunk = FoldingTrunkConfig(num_hidden_layers=4)
-        elif isinstance(self.folding_trunk, dict):
-            self.folding_trunk = FoldingTrunkConfig(**self.folding_trunk)
-        super().__post_init__(**kwargs)
-
-
 @auto_docstring(checkpoint="biohub/ESMFold2")
 @strict
 class ESMFold2Config(PreTrainedConfig):
@@ -227,12 +34,17 @@ class ESMFold2Config(PreTrainedConfig):
         Dimensionality of single (per-residue) representations.
     pairwise_hidden_size (`int`, *optional*, defaults to 256):
         Dimensionality of pair (residue-residue) representations.
+    single_inputs_size (`int`, *optional*, defaults to 451):
+        Width of the single-inputs tensor produced by the inputs embedder (consumed by the
+        diffusion conditioning, confidence head and MSA encoder).
     transition_expansion_ratio (`int`, *optional*, defaults to 4):
         Expansion ratio for the pair- and MSA-stream SwiGLU transition FFNs (matches the
         reference ESMFold2 feed-forward blocks).
     pair_transition_intermediate_size (`int`, *optional*):
         Hidden size of the pair-stream SwiGLU transitions (folding trunk, LM encoder, parcae
         coda and MSA encoder). Derived as `transition_expansion_ratio * pairwise_hidden_size` if not set.
+    sliding_window (`int`, *optional*, defaults to 128):
+        Sliding-window size (in valid tokens) for the atom-encoder SWA attention.
     n_relative_residx_bins (`int`, *optional*, defaults to 32):
         Number of bins for relative residue index encoding.
     n_relative_chain_bins (`int`, *optional*, defaults to 2):
@@ -249,27 +61,118 @@ class ESMFold2Config(PreTrainedConfig):
         Vocabulary size for the per-character atom-name encoding.
     max_chars (`int`, *optional*, defaults to 4):
         Maximum number of characters per atom name.
+    msa_encoder_overwrite (`bool`, *optional*, defaults to `True`):
+        If `True`, MSA encoder output replaces the pair stream; if `False`, it is added.
+    folding_trunk_num_hidden_layers (`int`, *optional*, defaults to 24):
+        Number of pairformer layers in the main folding trunk.
+    atom_encoder_hidden_size (`int`, *optional*, defaults to 128):
+        Atom-level width of the SWA atom encoder.
+    atom_encoder_token_hidden_size (`int`, *optional*, defaults to 768):
+        Token-level width of the SWA atom encoder.
+    atom_encoder_num_hidden_layers (`int`, *optional*, defaults to 3):
+        Number of blocks in the SWA atom encoder.
+    atom_encoder_num_attention_heads (`int`, *optional*, defaults to 4):
+        Number of attention heads in the SWA atom encoder.
+    atom_encoder_expansion_ratio (`int`, *optional*, defaults to 2):
+        Expansion ratio for the atom-encoder SwiGLU FFN.
+    atom_encoder_ffn_intermediate_size (`int`, *optional*):
+        SwiGLU FFN width for the atom encoder. Derived as
+        `(expansion_ratio * (atom_encoder_hidden_size // 3) * 2)` rounded up to a multiple of 256 if not set.
+    atom_encoder_spatial_rope_base_frequency (`float`, *optional*, defaults to 20.0):
+        Base frequency of the 3D spatial RoPE in the atom encoder.
+    atom_encoder_n_spatial_rope_pairs_per_axis (`int`, *optional*, defaults to 2):
+        Number of spatial RoPE frequency pairs per spatial axis.
+    atom_encoder_n_uid_rope_pairs (`int`, *optional*, defaults to 10):
+        Number of RoPE frequency pairs used for the atom unique-id encoding.
+    atom_encoder_uid_rope_base_frequency (`float`, *optional*, defaults to 10000.0):
+        Base frequency of the atom unique-id RoPE.
+    diffusion_sigma_data (`float`, *optional*, defaults to 16.0):
+        EDM `sigma_data` for the diffusion module.
+    diffusion_atom_hidden_size (`int`, *optional*, defaults to 128):
+        Atom-level width of the diffusion module's atom encoder/decoder.
+    diffusion_token_hidden_size (`int`, *optional*, defaults to 768):
+        Token-level width of the diffusion module.
+    diffusion_fourier_dim (`int`, *optional*, defaults to 256):
+        Dimensionality of the Fourier noise embedding.
+    diffusion_atom_num_blocks (`int`, *optional*, defaults to 3):
+        Number of blocks in the diffusion atom encoder/decoder.
+    diffusion_atom_num_heads (`int`, *optional*, defaults to 4):
+        Number of attention heads in the diffusion atom encoder/decoder.
+    diffusion_token_num_blocks (`int`, *optional*, defaults to 12):
+        Number of blocks in the diffusion token transformer.
+    diffusion_token_num_heads (`int`, *optional*, defaults to 16):
+        Number of attention heads in the diffusion token transformer.
+    diffusion_transition_multiplier (`int`, *optional*, defaults to 2):
+        Multiplier for the diffusion transition FFN widths.
+    diffusion_atom_expansion_ratio (`int`, *optional*, defaults to 2):
+        Expansion ratio for the diffusion atom-encoder SwiGLU FFN.
+    diffusion_atom_ffn_intermediate_size (`int`, *optional*):
+        SwiGLU FFN width for the diffusion atom encoder. Derived as
+        `(atom_expansion_ratio * (diffusion_atom_hidden_size // 3) * 2)` rounded up to a multiple of 256 if not set.
+    diffusion_token_transition_intermediate_size (`int`, *optional*):
+        Diffusion token transition FFN width. Derived as
+        `diffusion_transition_multiplier * diffusion_token_hidden_size` if not set.
+    structure_head_distogram_bins (`int`, *optional*, defaults to 128):
+        Number of distogram bins predicted by the structure head.
+    structure_head_gamma_0 (`float`, *optional*, defaults to 0.605):
+        Sampling churn parameter `gamma_0`.
+    structure_head_gamma_min (`float`, *optional*, defaults to 1.107):
+        Minimum sigma below which no churn is applied.
+    structure_head_noise_scale (`float`, *optional*, defaults to 0.0):
+        Scale of the churn noise added during sampling.
+    structure_head_step_scale (`float`, *optional*, defaults to 1.0):
+        Scale applied to each denoising update step.
+    structure_head_inference_s_max (`float`, *optional*, defaults to 160.0):
+        Maximum sigma of the inference noise schedule.
+    structure_head_inference_s_min (`float`, *optional*, defaults to 4e-4):
+        Minimum sigma of the inference noise schedule.
+    structure_head_inference_p (`float`, *optional*, defaults to 8.0):
+        Power-law exponent of the inference noise schedule.
+    structure_head_inference_num_steps (`int`, *optional*, defaults to 68):
+        Default number of sampling steps.
+    confidence_head_num_hidden_layers (`int`, *optional*, defaults to 4):
+        Number of pairformer layers in the confidence head's folding trunk.
+    confidence_head_num_plddt_bins (`int`, *optional*, defaults to 50):
+        Number of pLDDT bins.
+    confidence_head_num_pde_bins (`int`, *optional*, defaults to 64):
+        Number of PDE bins.
+    confidence_head_num_pae_bins (`int`, *optional*, defaults to 64):
+        Number of PAE bins.
+    confidence_head_min_dist (`float`, *optional*, defaults to 2.0):
+        Minimum distance of the confidence-head distance binning.
+    confidence_head_max_dist (`float`, *optional*, defaults to 52.0):
+        Maximum distance of the confidence-head distance binning.
+    confidence_head_distogram_bins (`int`, *optional*, defaults to 128):
+        Number of distogram bins consumed by the confidence head.
+    msa_encoder_enabled (`bool`, *optional*, defaults to `False`):
+        Whether to build and run the optional MSA encoder (Large MSA models only).
+    msa_encoder_hidden_size (`int`, *optional*, defaults to 128):
+        MSA-stream width of the MSA encoder.
+    msa_encoder_outer_hidden_size (`int`, *optional*, defaults to 32):
+        Hidden size of the MSA encoder outer-product-mean projection.
+    msa_encoder_num_hidden_layers (`int`, *optional*, defaults to 4):
+        Number of MSA encoder blocks.
+    msa_encoder_num_attention_heads (`int`, *optional*, defaults to 8):
+        Number of MSA pair-weighted-averaging heads.
+    msa_encoder_head_width (`int`, *optional*, defaults to 32):
+        Per-head width of the MSA pair-weighted averaging.
+    msa_encoder_transition_intermediate_size (`int`, *optional*):
+        SwiGLU FFN width of the MSA-stream transition. Derived as
+        `transition_expansion_ratio * msa_encoder_hidden_size` if not set.
+    lm_encoder_enabled (`bool`, *optional*, defaults to `True`):
+        Whether to build and run the LM-side pair encoder.
+    lm_encoder_num_hidden_layers (`int`, *optional*, defaults to 4):
+        Number of pairformer layers in the LM-side pair encoder.
+    lm_encoder_lm_dropout (`float`, *optional*, defaults to 0.25):
+        Dropout probability applied to the LM pair stream.
+    lm_encoder_per_loop_lm_dropout (`bool`, *optional*, defaults to `True`):
+        If `True`, LM dropout is resampled on every trunk loop (applied even at inference).
+    parcae_num_coda_layers (`int`, *optional*, defaults to 2):
+        Number of pairformer layers in the parcae coda.
     esmc_config (`ESMCConfig`, *optional*):
         Configuration of the bundled ESMC language-model backbone. Defaults to the
         ESMC-6B configuration. The backbone weights are part of the ESMFold2
         checkpoint (built with `AutoModel.from_config(esmc_config)`).
-    msa_encoder_overwrite (`bool`, *optional*, defaults to `True`):
-        If `True`, MSA encoder output replaces the pair stream; if `False`, it
-        is added.
-    inputs (`InputsEmbedderConfig`, *optional*):
-        Configuration for the inputs embedder module.
-    folding_trunk (`FoldingTrunkConfig`, *optional*):
-        Configuration for the folding trunk.
-    structure_head (`DiffusionStructureHeadConfig`, *optional*):
-        Configuration for the diffusion-based structure prediction head.
-    confidence_head (`ConfidenceHeadConfig`, *optional*):
-        Configuration for the confidence prediction head.
-    msa_encoder (`MSAEncoderConfig`, *optional*):
-        Configuration for the optional MSA encoder.
-    parcae (`ParcaeConfig`, *optional*):
-        Configuration for the parcae diffusion-loop scheduler.
-    lm_encoder (`LMEncoderConfig`, *optional*):
-        Configuration for the LM-side pair encoder.
 
     Examples:
 
@@ -288,25 +191,17 @@ class ESMFold2Config(PreTrainedConfig):
     """
 
     model_type = "esmfold2"
-    # TODO(temporary): checkpoint-config aliases for the pre-rename field names;
-    # drop once the merged ESMFold2+ESMC checkpoint is regenerated with the new keys.
-    attribute_map = {"d_single": "hidden_size", "d_pair": "pairwise_hidden_size"}
-    sub_configs = {
-        "inputs": InputsEmbedderConfig,
-        "folding_trunk": FoldingTrunkConfig,
-        "structure_head": DiffusionStructureHeadConfig,
-        "confidence_head": ConfidenceHeadConfig,
-        "msa_encoder": MSAEncoderConfig,
-        "parcae": ParcaeConfig,
-        "lm_encoder": LMEncoderConfig,
-        "esmc_config": ESMCConfig,
-    }
+    sub_configs = {"esmc_config": ESMCConfig}
 
     type: str | None = "release"
+
+    # Shared / top-level dims
     hidden_size: int | None = 384
     pairwise_hidden_size: int | None = 256
+    single_inputs_size: int | None = 451
     transition_expansion_ratio: int | None = 4
     pair_transition_intermediate_size: int | None = None
+    sliding_window: int | None = 128
     n_relative_residx_bins: int | None = 32
     n_relative_chain_bins: int | None = 2
     num_loops: int | None = 10
@@ -315,15 +210,77 @@ class ESMFold2Config(PreTrainedConfig):
     max_atomic_number: int | None = 128
     char_vocab_size: int | None = 64
     max_chars: int | None = 4
-    esmc_config: dict | ESMCConfig | None = None
     msa_encoder_overwrite: bool | None = True
-    inputs: dict | InputsEmbedderConfig | None = None
-    folding_trunk: dict | FoldingTrunkConfig | None = None
-    structure_head: dict | DiffusionStructureHeadConfig | None = None
-    confidence_head: dict | ConfidenceHeadConfig | None = None
-    msa_encoder: dict | MSAEncoderConfig | None = None
-    parcae: dict | ParcaeConfig | None = None
-    lm_encoder: dict | LMEncoderConfig | None = None
+
+    # Folding trunk
+    folding_trunk_num_hidden_layers: int | None = 24
+
+    # SWA atom encoder (inputs embedder)
+    atom_encoder_hidden_size: int | None = 128
+    atom_encoder_token_hidden_size: int | None = 768
+    atom_encoder_num_hidden_layers: int | None = 3
+    atom_encoder_num_attention_heads: int | None = 4
+    atom_encoder_expansion_ratio: int | None = 2
+    atom_encoder_ffn_intermediate_size: int | None = None
+    atom_encoder_spatial_rope_base_frequency: float | None = 20.0
+    atom_encoder_n_spatial_rope_pairs_per_axis: int | None = 2
+    atom_encoder_n_uid_rope_pairs: int | None = 10
+    atom_encoder_uid_rope_base_frequency: float | None = 10000.0
+
+    # Diffusion module
+    diffusion_sigma_data: float | None = 16.0
+    diffusion_atom_hidden_size: int | None = 128
+    diffusion_token_hidden_size: int | None = 768
+    diffusion_fourier_dim: int | None = 256
+    diffusion_atom_num_blocks: int | None = 3
+    diffusion_atom_num_heads: int | None = 4
+    diffusion_token_num_blocks: int | None = 12
+    diffusion_token_num_heads: int | None = 16
+    diffusion_transition_multiplier: int | None = 2
+    diffusion_atom_expansion_ratio: int | None = 2
+    diffusion_atom_ffn_intermediate_size: int | None = None
+    diffusion_token_transition_intermediate_size: int | None = None
+
+    # Diffusion structure head (sampling)
+    structure_head_distogram_bins: int | None = 128
+    structure_head_gamma_0: float | None = 0.605
+    structure_head_gamma_min: float | None = 1.107
+    structure_head_noise_scale: float | None = 0.0
+    structure_head_step_scale: float | None = 1.0
+    structure_head_inference_s_max: float | None = 160.0
+    structure_head_inference_s_min: float | None = 4e-4
+    structure_head_inference_p: float | None = 8.0
+    structure_head_inference_num_steps: int | None = 68
+
+    # Confidence head
+    confidence_head_num_hidden_layers: int | None = 4
+    confidence_head_num_plddt_bins: int | None = 50
+    confidence_head_num_pde_bins: int | None = 64
+    confidence_head_num_pae_bins: int | None = 64
+    confidence_head_min_dist: float | None = 2.0
+    confidence_head_max_dist: float | None = 52.0
+    confidence_head_distogram_bins: int | None = 128
+
+    # MSA encoder
+    msa_encoder_enabled: bool | None = False
+    msa_encoder_hidden_size: int | None = 128
+    msa_encoder_outer_hidden_size: int | None = 32
+    msa_encoder_num_hidden_layers: int | None = 4
+    msa_encoder_num_attention_heads: int | None = 8
+    msa_encoder_head_width: int | None = 32
+    msa_encoder_transition_intermediate_size: int | None = None
+
+    # LM-side pair encoder
+    lm_encoder_enabled: bool | None = True
+    lm_encoder_num_hidden_layers: int | None = 4
+    lm_encoder_lm_dropout: float | None = 0.25
+    lm_encoder_per_loop_lm_dropout: bool | None = True
+
+    # Parcae diffusion-loop scheduler
+    parcae_num_coda_layers: int | None = 2
+
+    # Bundled ESMC language-model backbone
+    esmc_config: dict | ESMCConfig | None = None
 
     def __post_init__(self, **kwargs):
         if self.type != "release":
@@ -332,29 +289,31 @@ class ESMFold2Config(PreTrainedConfig):
                 f"is not included in this release), got {self.type!r}"
             )
 
-        def _init_nested(cls, val):
-            if val is None:
-                return cls()
-            if isinstance(val, dict):
-                return cls(**val)
-            return val
+        if self.esmc_config is None:
+            self.esmc_config = ESMCConfig()
+        elif isinstance(self.esmc_config, dict):
+            self.esmc_config = ESMCConfig(**self.esmc_config)
 
-        self.inputs = _init_nested(InputsEmbedderConfig, self.inputs)
-        self.folding_trunk = _init_nested(FoldingTrunkConfig, self.folding_trunk)
-        self.structure_head = _init_nested(DiffusionStructureHeadConfig, self.structure_head)
-        self.confidence_head = _init_nested(ConfidenceHeadConfig, self.confidence_head)
-        self.msa_encoder = _init_nested(MSAEncoderConfig, self.msa_encoder)
-        self.parcae = _init_nested(ParcaeConfig, self.parcae)
-        self.lm_encoder = _init_nested(LMEncoderConfig, self.lm_encoder)
-        self.esmc_config = _init_nested(ESMCConfig, self.esmc_config)
-
-        # Pair- and MSA-stream SwiGLU transitions size their FFN as transition_expansion_ratio times
-        # the respective stream width (matches the reference ESMFold2 feed-forward blocks).
+        # SwiGLU FFN widths that are derived from the stream widths when not set explicitly
+        # (matches the reference ESMFold2 feed-forward blocks). The atom-stack FFNs are rounded
+        # up to a multiple of 256 (hardware-aligned width).
         if self.pair_transition_intermediate_size is None:
             self.pair_transition_intermediate_size = self.transition_expansion_ratio * self.pairwise_hidden_size
-        if self.msa_encoder.transition_intermediate_size is None:
-            self.msa_encoder.transition_intermediate_size = (
-                self.transition_expansion_ratio * self.msa_encoder.hidden_size
+        if self.atom_encoder_ffn_intermediate_size is None:
+            self.atom_encoder_ffn_intermediate_size = (
+                (self.atom_encoder_expansion_ratio * (self.atom_encoder_hidden_size // 3) * 2 + 255) // 256 * 256
+            )
+        if self.diffusion_atom_ffn_intermediate_size is None:
+            self.diffusion_atom_ffn_intermediate_size = (
+                (self.diffusion_atom_expansion_ratio * (self.diffusion_atom_hidden_size // 3) * 2 + 255) // 256 * 256
+            )
+        if self.diffusion_token_transition_intermediate_size is None:
+            self.diffusion_token_transition_intermediate_size = (
+                self.diffusion_transition_multiplier * self.diffusion_token_hidden_size
+            )
+        if self.msa_encoder_transition_intermediate_size is None:
+            self.msa_encoder_transition_intermediate_size = (
+                self.transition_expansion_ratio * self.msa_encoder_hidden_size
             )
 
         super().__post_init__(**kwargs)
