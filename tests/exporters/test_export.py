@@ -71,6 +71,13 @@ EXPORT_SKIPS: dict[str, dict[str, str]] = {
             "× 3 Q-pool stage transitions on symbolic H/W. Static exports fine."
         ),
         "Sam2VisionModel": "Same Hiera-backbone dynamic-shape `timeout` as `Sam2Model`.",
+        "HieraModel": (
+            "Hiera mask-unit window `reroll` produces nested symbolic floordivs that `torch.export` "
+            "can't guard under dynamic shapes (same backbone family as `Sam2Model`). Static exports fine."
+        ),
+        "HieraBackbone": "Same Hiera `reroll` dynamic-shape failure as `HieraModel`.",
+        "HieraForImageClassification": "Same Hiera `reroll` dynamic-shape failure as `HieraModel`.",
+        "HieraForPreTraining": "Same Hiera `reroll` dynamic-shape failure as `HieraModel`.",
     },
     # Every backend, generate path only.
     "generate": {},
@@ -105,8 +112,7 @@ EXPORT_SKIPS: dict[str, dict[str, str]] = {
         "GroundingDinoModel": ("Lowering exceeds the test timeout under dynamic shapes."),
         "GroundingDinoForObjectDetection": "Same `timeout` failure as `GroundingDinoModel`.",
         "Kimi_K25Model": (
-            "ExecuTorch `to_edge` spec failure in the DeepseekV3 language model; the vision encoder "
-            "exports fine."
+            "ExecuTorch `to_edge` spec failure in the DeepseekV3 language model; the vision encoder exports fine."
         ),
         "Kimi_K25ForConditionalGeneration": "Same ExecuTorch `spec` failure as `Kimi_K25Model` (DeepseekV3 LM).",
         "MMGroundingDinoModel": "Same `timeout` failure as `GroundingDinoModel`.",
@@ -386,7 +392,7 @@ class ExportTesterMixin:
         config = DynamoConfig(dynamic=dynamic)
 
         for model_class in self.all_model_classes:
-            if self._should_skip(model_class):
+            if self._should_skip(model_class, dynamic=dynamic):
                 continue
 
             components = self._prepare_export_model_and_inputs(model_class)
