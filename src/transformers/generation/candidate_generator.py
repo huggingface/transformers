@@ -1099,7 +1099,8 @@ class PromptLookupCandidateGenerator(CandidateGenerator):
             for idx in match_indices:
                 start_idx = idx + ngram_size
                 end_idx = start_idx + self.num_output_tokens
-                end_idx = min(end_idx, input_length, self.max_length)
+                # Offset the output-length cap by the current length so candidates respect the remaining budget.
+                end_idx = min(end_idx, input_length, start_idx + self.max_length - input_length - 1)
 
                 if start_idx < end_idx:
                     chosen_ids = input_ids[0, start_idx:end_idx]
