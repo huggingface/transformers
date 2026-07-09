@@ -68,8 +68,8 @@ class DeepseekOcr2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         processor.image_processor.size = {"height": 1024, "width": 1024}
         processor.image_processor.tile_size = 768
 
-        # Large image: max(2448, 3264) > 768 → local patches
-        image = torch.randint(0, 256, (3, 3264, 2448), dtype=torch.uint8)
+        # Large image: max(769, 577) > 768 → local patches; same 2×3 grid as 3264×2448 (ar≈0.75)
+        image = torch.randint(0, 256, (3, 769, 577), dtype=torch.uint8)
         prompt = "<image>\nFree OCR."
 
         inputs = processor(images=image, text=prompt, return_tensors="pt")

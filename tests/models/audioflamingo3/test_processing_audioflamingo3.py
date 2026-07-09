@@ -146,9 +146,9 @@ class AudioFlamingo3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     @require_torch
     def test_apply_transcription_request_single(self):
-        processor = AutoProcessor.from_pretrained(self.checkpoint)
+        processor = self.get_processor()
 
-        audio_url = "https://huggingface.co/datasets/nvidia/AudioSkills/resolve/main/assets/t_837b89f2-26aa-4ee2-bdf6-f73f0dd59b26.wav"
+        audio_url = "https://huggingface.co/datasets/raushan-testing-hf/audio-test/resolve/main/f2641_0_throatclearing.wav"
         helper_outputs = processor.apply_transcription_request(audio=audio_url)
 
         conversation = [
