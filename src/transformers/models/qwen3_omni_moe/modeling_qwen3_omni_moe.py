@@ -3871,6 +3871,58 @@ class Qwen3OmniMoeForConditionalGeneration(Qwen3OmniMoePreTrainedModel, Generati
         if return_audio is None:
             return_audio = self.has_talker
 
+        if return_audio and input_ids.shape[0] != 1:
+            generated_sequences = []
+            generated_wavs = []
+            batch_size = input_ids.shape[0]
+
+            for batch_idx in range(batch_size):
+                sample_kwargs = {
+                    key: value[batch_idx : batch_idx + 1]
+                    if torch.is_tensor(value) and value.shape[0] == batch_size
+                    else value
+                    for key, value in kwargs.items()
+                }
+                sample_sequences, sample_wavs = self.generate(
+                    input_ids=input_ids[batch_idx : batch_idx + 1],
+                    speaker=speaker,
+                    use_audio_in_video=use_audio_in_video,
+                    return_audio=return_audio,
+                    thinker_max_new_tokens=thinker_max_new_tokens,
+                    thinker_eos_token_id=thinker_eos_token_id,
+                    talker_max_new_tokens=talker_max_new_tokens,
+                    talker_do_sample=talker_do_sample,
+                    talker_top_k=talker_top_k,
+                    talker_top_p=talker_top_p,
+                    talker_temperature=talker_temperature,
+                    talker_repetition_penalty=talker_repetition_penalty,
+                    **sample_kwargs,
+                )
+                generated_sequences.append(sample_sequences)
+                generated_wavs.append(sample_wavs)
+
+            pad_token_id = self.generation_config.pad_token_id
+            if pad_token_id is None:
+                pad_token_id = self.config.thinker_config.pad_token_id
+            if pad_token_id is None:
+                pad_token_id = self.config.im_end_token_id
+
+            max_sequence_length = max(sequence.shape[-1] for sequence in generated_sequences)
+            generated_sequences = torch.cat(
+                [
+                    F.pad(sequence, (0, max_sequence_length - sequence.shape[-1]), value=pad_token_id)
+                    for sequence in generated_sequences
+                ],
+                dim=0,
+            )
+
+            max_wav_length = max(wav.shape[-1] for wav in generated_wavs)
+            generated_wavs = torch.cat(
+                [F.pad(wav, (0, max_wav_length - wav.shape[-1])) for wav in generated_wavs],
+                dim=0,
+            )
+            return generated_sequences, generated_wavs.float()
+
         shared_kwargs = {"use_audio_in_video": use_audio_in_video}
         thinker_kwargs = {
             "max_new_tokens": thinker_max_new_tokens,
@@ -3883,8 +3935,6 @@ class Qwen3OmniMoeForConditionalGeneration(Qwen3OmniMoePreTrainedModel, Generati
             speaker_id = self.config.talker_config.speaker_id.get(speaker.lower())
             if speaker_id is None:
                 raise NotImplementedError(f"Speaker {speaker} not implemented")
-            if input_ids.shape[0] != 1:
-                raise NotImplementedError("Qwen3-Omni currently does not support batched inference with audio output")
             talker_suppressed_tokens = [
                 i
                 for i in range(
