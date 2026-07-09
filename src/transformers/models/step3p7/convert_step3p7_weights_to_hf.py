@@ -1,4 +1,4 @@
-# Copyright 2025 The HuggingFace Inc. team. All rights reserved.
+# Copyright 2026 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -19,6 +19,11 @@ Weight conversion is handled automatically via the ``step3p7`` entry in
   1. Key renaming via ``WeightRenaming`` (prefix changes, vision internals, MoE).
   2. Vision ``in_proj_weight/bias`` → split q/k/v (``Chunk dim=0``).
   3. MoE ``gate_proj`` + ``up_proj`` → fused ``gate_up_proj`` (``Concatenate dim=1``).
+
+Works entirely from local files by default (``--input_dir``/``--output_dir`` are local paths;
+``--push_to_hub`` is off unless explicitly passed). ``--input_dir`` also accepts a Hub repo id
+(local or remote original-format checkpoint) if you want to convert a real release instead of
+the local mini checkpoint from ``build_mini_model.py``.
 """
 
 import argparse
@@ -141,6 +146,13 @@ def convert_processor(
 ):
     """Copy processor/tokenizer from input_dir to output_dir (and optionally push)."""
     input_dir = resolve_input_dir(input_dir, cache_dir=cache_dir)
+    tokenizer_files = ("tokenizer.json", "tokenizer.model", "vocab.json", "tokenizer_config.json")
+    if not any(os.path.isfile(os.path.join(input_dir, f)) for f in tokenizer_files):
+        # build_mini_model.py only produces weights + config.json, no tokenizer; that's expected for
+        # the local mini-checkpoint dev flow, so skip instead of letting AutoTokenizer raise.
+        print(f"No tokenizer files found in {input_dir}, skipping processor conversion.")
+        return
+
     try:
         processor = Step3p7Processor.from_pretrained(input_dir)
         print("Loaded Step3p7Processor.")
@@ -159,9 +171,9 @@ def main():
     parser = argparse.ArgumentParser(description="Convert Step3p7 (Step-3.7-Flash) checkpoint to HuggingFace format.")
     parser.add_argument(
         "--input_dir",
-        default="itazap/Step-3.7-Flash-Mini-Original",
-        help="Path to the original checkpoint directory (safetensors shards + config.json). "
-        "Defaults to the mini Hub checkpoint used for development.",
+        default="./mini-step-3-7-flash",
+        help="Local path OR Hub repo id of the original checkpoint directory (safetensors/pytorch shards + "
+        "config.json). Defaults to ./mini-step-3-7-flash, the local output of build_mini_model.py.",
     )
     parser.add_argument(
         "--output_dir",
@@ -171,13 +183,14 @@ def main():
     parser.add_argument(
         "--push_to_hub",
         action="store_true",
-        help="Push the converted model and processor to the HuggingFace Hub.",
+        help="Push the converted model and processor to the HuggingFace Hub. Off by default: conversion "
+        "and validation (see demo.py) both work entirely from local files.",
     )
     parser.add_argument(
         "--hub_model_id",
         type=str,
-        default="itazap/Step-3.7-Flash-Mini-HF",
-        help="Hub repository id, e.g. 'itazap/Step-3.7-Flash'. Required with --push_to_hub.",
+        default=None,
+        help="Hub repository id, e.g. 'my-namespace/Step-3.7-Flash'. Required with --push_to_hub.",
     )
     parser.add_argument(
         "--cache_dir",

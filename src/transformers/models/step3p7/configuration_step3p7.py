@@ -112,6 +112,38 @@ class Step3p7TextConfig(PreTrainedConfig):
     partial_rotary_factors (`list[float]`, *optional*):
         Legacy hub-config kwarg, one value per decoder layer; collapsed into one value per layer type
         the same way as `rope_theta`.
+    max_seq_len (`int`, *optional*, defaults to 128000):
+        Legacy hub-config kwarg mirroring `max_position_embeddings` (real checkpoints ship both); not
+        currently read by the modeling code.
+    norm_expert_weight (`bool`, *optional*, defaults to `True`):
+        Legacy hub-config kwarg from the original checkpoint; not currently read by the modeling code
+        (`Step3p7TopKRouter` always normalizes top-k expert weights to sum to 1).
+    num_sliding_attention_heads (`int`, *optional*):
+        Number of attention heads for `"sliding_attention"` layers, when different from
+        `num_attention_heads`. Derived from `attention_other_setting` if not provided.
+    attention_other_setting (`dict`, *optional*):
+        Legacy hub-config dict overriding `num_attention_heads`/`num_key_value_heads`/`head_dim` for
+        `"sliding_attention"` layers (real checkpoints use a different head count per attention type).
+    use_head_wise_attn_gate (`bool`, *optional*, defaults to `False`):
+        Legacy hub-config kwarg from the original checkpoint; not currently read by the modeling code.
+    use_moe_router_bias (`bool`, *optional*, defaults to `False`):
+        Legacy hub-config kwarg from the original checkpoint; not currently read by the modeling code.
+    moe_router_activation (`str`, *optional*, defaults to `"softmax"`):
+        Legacy hub-config kwarg from the original checkpoint; not currently read by the modeling code
+        (`Step3p7TopKRouter` always applies a sigmoid).
+    moe_router_scaling_factor (`float`, *optional*, defaults to 1.0):
+        Scaling factor applied to the MoE block's routed-expert output (`routed_scaling_factor` in
+        `Step3p7SparseMoeBlock`).
+    need_fp32_gate (`bool`, *optional*, defaults to `False`):
+        Legacy hub-config kwarg from the original checkpoint; not currently read by the modeling code.
+    swiglu_limits_shared (`list[float | int | None]`, *optional*):
+        Per-layer gate/up clamping bound for the always-active shared expert; `None` means no clamping.
+    use_rope_layers (`list[bool]`, *optional*):
+        Legacy hub-config kwarg from the original checkpoint; not currently read by the modeling code.
+    yarn_only_types (`list[str]`, *optional*):
+        Legacy hub-config kwarg from the original checkpoint; not currently read by the modeling code.
+    use_bidirectional_attention (`bool`, *optional*, defaults to `False`):
+        Legacy hub-config kwarg from the original checkpoint; not currently read by the modeling code.
     """
 
     model_type = "step3p5"
@@ -122,6 +154,29 @@ class Step3p7TextConfig(PreTrainedConfig):
         "moe_num_experts": "n_routed_experts",
         "moe_top_k": "num_experts_per_tok",
         "share_expert_dims": "share_expert_dim",
+    }
+    # Copied (not inherited) from `MiniMaxM3VLTextConfig`: `Step3p7Attention`/`Step3p7SparseMoeBlock`
+    # reuse its `q_proj`/`k_proj`/`v_proj`/`o_proj` and `experts.gate_up_proj`/`down_proj`/`gate`
+    # submodule naming verbatim, so the same TP/PP/EP plans apply unchanged.
+    base_model_tp_plan = {
+        "layers.*.self_attn.q_proj": "colwise_gather_output",
+        "layers.*.self_attn.k_proj": "colwise_gather_output",
+        "layers.*.self_attn.v_proj": "colwise_gather_output",
+        "layers.*.self_attn.o_proj": "rowwise_split_input",
+        "layers.*.mlp.experts.gate_up_proj": "packed_colwise",
+        "layers.*.mlp.experts.down_proj": "rowwise",
+        "layers.*.mlp.experts": "moe_tp_experts",
+    }
+    base_model_pp_plan = {
+        "embed_tokens": (["input_ids"], ["inputs_embeds"]),
+        "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
+        "norm": (["hidden_states"], ["hidden_states"]),
+    }
+    base_model_ep_plan = {
+        "layers.*.mlp.gate": "ep_router",
+        "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
+        "layers.*.mlp.experts.down_proj": "grouped_gemm",
+        "layers.*.mlp.experts": "moe_tp_experts",
     }
 
     hidden_size: int = 4096
@@ -261,7 +316,6 @@ class Step3p7Config(PreTrainedConfig):
 
     vision_config: dict | PreTrainedConfig | None = None
     text_config: dict | PreTrainedConfig | None = None
-    understand_projector_stride: int = 2
     projector_bias: bool = False
     image_token_id: int = 151679
     max_position_embeddings: int | None = None
@@ -270,12 +324,19 @@ class Step3p7Config(PreTrainedConfig):
         if self.vision_config is None:
             self.vision_config = Step3p7VisionConfig()
         elif isinstance(self.vision_config, dict):
-            self.vision_config = Step3p7VisionConfig(**self.vision_config)
+            # Drop a stray `model_type` from the incoming dict (e.g. from a checkpoint built off
+            # the original vendor config, whose vision sub-config class has its own `model_type`)
+            # before constructing — otherwise it overrides `Step3p7VisionConfig`'s own model_type
+            # as a plain instance attribute, breaking the "step3p5_vision"-scoped conversion mapping
+            # lookup used when loading real checkpoints.
+            self.vision_config = Step3p7VisionConfig(
+                **{k: v for k, v in self.vision_config.items() if k != "model_type"}
+            )
 
         if self.text_config is None:
             self.text_config = Step3p7TextConfig()
         elif isinstance(self.text_config, dict):
-            self.text_config = Step3p7TextConfig(**self.text_config)
+            self.text_config = Step3p7TextConfig(**{k: v for k, v in self.text_config.items() if k != "model_type"})
 
         self.max_position_embeddings = self.text_config.max_position_embeddings
         super().__post_init__(**kwargs)
