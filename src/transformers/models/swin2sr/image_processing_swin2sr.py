@@ -72,8 +72,8 @@ class Swin2SRImageProcessor(TorchvisionBackend):
     ) -> "torch.Tensor":
         """Pad images to make height and width divisible by size_divisor using symmetric padding."""
         height, width = images.shape[-2:]
-        pad_height = (height // size_divisor + 1) * size_divisor - height
-        pad_width = (width // size_divisor + 1) * size_divisor - width
+        pad_height = (size_divisor - height % size_divisor) % size_divisor
+        pad_width = (size_divisor - width % size_divisor) % size_divisor
         return tvF.pad(images, (0, 0, pad_width, pad_height), padding_mode="symmetric")
 
     def _preprocess(

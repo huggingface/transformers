@@ -75,8 +75,8 @@ class Swin2SRImageProcessingTester:
         else:
             input_height, input_width = img.shape[-2:]
 
-        pad_height = (input_height // self.size_divisor + 1) * self.size_divisor - input_height
-        pad_width = (input_width // self.size_divisor + 1) * self.size_divisor - input_width
+        pad_height = (self.size_divisor - input_height % self.size_divisor) % self.size_divisor
+        pad_width = (self.size_divisor - input_width % self.size_divisor) % self.size_divisor
 
         return self.num_channels, input_height + pad_height, input_width + pad_width
 
@@ -115,8 +115,8 @@ class Swin2SRImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         old_height, old_width = get_image_size(image)
         size = self.image_processor_tester.size_divisor
 
-        pad_height = (old_height // size + 1) * size - old_height
-        pad_width = (old_width // size + 1) * size - old_width
+        pad_height = (size - old_height % size) % size
+        pad_width = (size - old_width % size) % size
         return old_height + pad_height, old_width + pad_width
 
     # Swin2SRImageProcessor does not support batched input
@@ -179,6 +179,17 @@ class Swin2SRImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             encoded_images = image_processing(image_inputs[0], return_tensors="pt").pixel_values
             expected_output_image_shape = self.image_processor_tester.expected_output_image_shape([image_inputs[0]])
             self.assertEqual(tuple(encoded_images.shape), (1, *expected_output_image_shape))
+
+    def test_pad_divisible_size(self):
+        """An image whose dimensions are already divisible by size_divisor should not be padded."""
+        for image_processing_class in self.image_processing_classes.values():
+            image_processing = image_processing_class(**self.image_processor_dict)
+            # 64 is divisible by the default size_divisor of 8
+            img = Image.new("RGB", (64, 64))
+            encoded = image_processing(img, return_tensors="pt").pixel_values
+            _, _, h, w = encoded.shape
+            self.assertEqual(h, 64)
+            self.assertEqual(w, 64)
 
     def test_backends_equivalence_batched(self):
         """Swin2SR requires equal-resolution images for batched processing (returns stacked tensor)."""
