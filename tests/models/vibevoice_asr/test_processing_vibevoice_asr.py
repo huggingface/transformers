@@ -118,32 +118,30 @@ class VibeVoiceAsrProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     @require_torch
     def test_decode_output_formats(self):
         import torch
+        from unittest.mock import patch
 
         processor = self.get_processor()
 
-        # fmt: off
-        # reproducer: https://gist.github.com/ebezzam/e1200bcecdc29e87dadd9d8423ae7ecb#file-reproducer_generated_ids-py
-        generated_ids = torch.tensor([[151644,  77091,    198,     58,   4913,   3479,    788,     15,   1335,
-           3727,    788,     22,     13,     20,     21,   1335,  82036,    788,
-             15,   1335,   2762,   3252,    693,    586,  40683,    374,    264,
-          11514,  12626,   6188,    369,  23163,  77123,     11,   1293,   8460,
-             11,   7299,  52975,   4407,   7517,   1663,   7699,   1189,  25439,
-         151645,    198, 151643]]
-        )
-        # fmt: on
+        # Token IDs are Qwen-specific; tiny tokenizer won't decode them correctly.
+        # Mock batch_decode to return the expected format so we test parsing logic only.
+        generated_ids = torch.tensor([[0]])
+        mock_decoded = [
+            'assistant\n[{"Start": 0, "End": 5.61, "Speaker": 0, "Content": "VibeVoice is a neural transcription service."}]\n'
+        ]
 
-        # test parsed output
-        dicts = processor.decode(generated_ids, return_format="parsed")
-        self.assertIsInstance(dicts, list)
-        self.assertIsInstance(dicts[0], list)
-        self.assertIsInstance(dicts[0][0], dict)
-        self.assertIn("Content", dicts[0][0])
-        self.assertIn("Start", dicts[0][0])
-        self.assertIn("End", dicts[0][0])
-        self.assertIsInstance(dicts[0][0]["Start"], float)
-        self.assertIsInstance(dicts[0][0]["End"], float)
+        with patch.object(processor.tokenizer, "batch_decode", return_value=mock_decoded):
+            # test parsed output
+            dicts = processor.decode(generated_ids, return_format="parsed")
+            self.assertIsInstance(dicts, list)
+            self.assertIsInstance(dicts[0], list)
+            self.assertIsInstance(dicts[0][0], dict)
+            self.assertIn("Content", dicts[0][0])
+            self.assertIn("Start", dicts[0][0])
+            self.assertIn("End", dicts[0][0])
+            self.assertIsInstance(dicts[0][0]["Start"], float)
+            self.assertIsInstance(dicts[0][0]["End"], float)
 
-        # test transcript only
-        transcript = processor.decode(generated_ids, return_format="transcription_only")
-        self.assertIsInstance(transcript, list)
-        self.assertIsInstance(transcript[0], str)
+            # test transcript only
+            transcript = processor.decode(generated_ids, return_format="transcription_only")
+            self.assertIsInstance(transcript, list)
+            self.assertIsInstance(transcript[0], str)
