@@ -694,6 +694,9 @@ class UnlimitedOcrDynamicReferenceSlidingWindowLayer(DynamicSlidingWindowLayer):
         full_value_states = torch.cat([self.values, value_states], dim=-2)
 
         # Prefill
+        # We assume kv_length > 1 during prefill and that the first decode step
+        # has kv_length == 1. This is required to differentiate between prefill
+        # and decode phases. Later decode steps can have any kv_length.
         if self.prefill_length is None and kv_length > 1:
             self.keys = full_key_states
             self.values = full_value_states
@@ -816,6 +819,9 @@ class UnlimitedOcrStaticReferenceSlidingWindowLayer(StaticSlidingWindowLayer):
         kv_length = key_states.shape[-2]
 
         # Prefill
+        # We assume kv_length > 1 during prefill and that the first decode step
+        # has kv_length == 1. This is required to differentiate between prefill
+        # and decode phases. Later decode steps can have any kv_length.
         if self.prefill_length is None and kv_length > 1:
             # Chunked prefill: the buffer was sized for the first chunk only, so grow it to hold all prefill seen so far plus this chunk plus the reserved window.
             required_length = min(self.max_cache_len, self.cumulative_length_int + kv_length + self.sliding_window)
