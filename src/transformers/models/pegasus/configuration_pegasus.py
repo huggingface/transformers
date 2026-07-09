@@ -20,7 +20,7 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="google/pegasus-large")
-@strict(accept_kwargs=True)
+@strict
 class PegasusConfig(PreTrainedConfig):
     r"""
     Example:

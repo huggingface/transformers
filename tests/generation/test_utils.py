@@ -81,6 +81,8 @@ if is_torch_available():
         Cache,
         DynamicCache,
         EncoderDecoderCache,
+        LinearAttentionAndFullAttentionLayer,
+        LinearAttentionLayer,
         QuantoQuantizedLayer,
         StaticCache,
     )
@@ -109,12 +111,14 @@ if is_torch_available():
 
 from unittest.mock import patch
 
+from tests.exporters.test_export import ExportGenerateTesterMixin
+
 
 def is_moe_model(config):
     return getattr(config, "_experts_implementation", None) is not None
 
 
-class GenerationTesterMixin:
+class GenerationTesterMixin(ExportGenerateTesterMixin):
     input_name = "input_ids"
     model_tester = None
     max_new_tokens = 3
@@ -179,6 +183,8 @@ class GenerationTesterMixin:
                 "audio_start_token_id",
                 "audio_end_token_id",
                 "vision_end_token_id",
+                "image_start_token_id",
+                "image_end_token_id",
             ]:
                 token_index = getattr(config, key, None)
                 if token_index is None and hasattr(self, "model_tester"):
@@ -549,6 +555,8 @@ class GenerationTesterMixin:
             with tempfile.TemporaryDirectory() as tmp_dir:
                 model.cpu().save_pretrained(tmp_dir)
                 new_model = model_class.from_pretrained(tmp_dir, device_map="auto")
+                if not hasattr(new_model, "hf_device_map") or len(set(new_model.hf_device_map.values())) == 1:
+                    self.skipTest(reason="Model is not distributed across multiple devices")
 
                 new_model.generate(
                     max_new_tokens=self.max_new_tokens,
@@ -719,9 +727,10 @@ class GenerationTesterMixin:
             generation_kwargs.update({"assistant_model": assistant_model})
             output_assisted = model.generate(**generation_kwargs, **inputs_dict, **logits_processor_kwargs)
 
-            # `gpt_oss` seems to have larger differences on CPU every other generated tokens, sth. like
-            # 1e-9, 1e-5, 1e-9, 1e-5. While on GPU, they are all very small 1e-9.
-            if is_moe_model(config):
+            # some models requires larger tolerance
+            if model.config.model_type in ["vibevoice_asr"]:
+                atol = rtol = 5e-3
+            elif is_moe_model(config):
                 atol = rtol = 1e-3
             else:
                 atol = rtol = 1e-5
@@ -995,32 +1004,35 @@ class GenerationTesterMixin:
             # Prepare padding on common inputs (pad length 32)
             input_ids = inputs_dict["input_ids"]
             attention_mask = inputs_dict["attention_mask"]
-            token_type_ids = inputs_dict.get("token_type_ids", None)
             pad_token_id = getattr(config.get_text_config(decoder=True), "pad_token_id", None) or 0
             pad_size = (input_ids.shape[0], 32, *input_ids.shape[2:])
             padding = torch.ones(pad_size, dtype=input_ids.dtype, device=torch_device) * pad_token_id
-            padded_input_ids = torch.cat((padding, input_ids), dim=1)
-            padded_attention_mask = torch.cat(
+
+            padded_inputs_dict = copy.deepcopy(inputs_dict)
+            padded_inputs_dict["input_ids"] = torch.cat((padding, input_ids), dim=1)
+            padded_inputs_dict["attention_mask"] = torch.cat(
                 (torch.zeros(pad_size[:2], dtype=input_ids.dtype, device=torch_device), attention_mask), dim=1
             )
-            if token_type_ids is not None:
-                padded_token_type_ids = torch.cat(
+            if inputs_dict.get("token_type_ids") is not None:
+                padded_inputs_dict["token_type_ids"] = torch.cat(
                     (
                         # Assumption: `0` is a good default value for padding token type ids
                         torch.zeros(pad_size[:2], dtype=input_ids.dtype, device=torch_device),
-                        token_type_ids,
+                        inputs_dict["token_type_ids"],
                     ),
                     dim=1,
                 )
-            else:
-                padded_token_type_ids = None
 
-            # Get output logits from inputs with left-padding (pad length 32)
-            padded_inputs_dict = copy.deepcopy(inputs_dict)
-            padded_inputs_dict["input_ids"] = padded_input_ids
-            padded_inputs_dict["attention_mask"] = padded_attention_mask
-            if padded_token_type_ids is not None:
-                padded_inputs_dict["token_type_ids"] = padded_token_type_ids
+            if inputs_dict.get("mm_token_type_ids") is not None:
+                padded_inputs_dict["mm_token_type_ids"] = torch.cat(
+                    (
+                        # `0` is a default value of text-modality type ids
+                        torch.zeros(pad_size[:2], dtype=input_ids.dtype, device=torch_device),
+                        inputs_dict["mm_token_type_ids"],
+                    ),
+                    dim=1,
+                )
+
             padded_inputs_dict.update(padded_custom_inputs)
 
             model_kwargs_with_padding = _prepare_model_kwargs(padded_inputs_dict, signature)
@@ -1479,6 +1491,8 @@ class GenerationTesterMixin:
                 # Check 2: The outputs must be similar to the case with dynamic cache
                 dynamic_cache_generation = model.generate(**generation_kwargs, **inputs_dict)
                 if is_moe_model(config):
+                    # MoE routing accumulates FP noise across experts (different routing decisions
+                    # at the margin between static and dynamic cache → different expert matmuls).
                     atol = rtol = 1e-3
                 else:
                     atol = rtol = 1e-5
@@ -1596,9 +1610,13 @@ class GenerationTesterMixin:
                             else gen_out.past_key_values
                         )
                         self.assertTrue(isinstance(decoder_cache, DynamicCache))
-                        self.assertFalse(decoder_cache.is_compileable)
-                        # our auto compile should NOT have been called
-                        self.assertFalse(hasattr(model_to_be_compiled, "_compiled_call"))
+                        # Recurrent / hybrid SSM models (mamba2, lfm2, ...) populate the default DynamicCache
+                        # with statically-shaped recurrent layers, so the cache is compileable by default and
+                        # auto-compile kicks in. Skip the "default cache is non-compileable" sanity check for
+                        # those models — they're tested under their compileable path further down.
+                        if not decoder_cache.is_compileable:
+                            # our auto compile should NOT have been called
+                            self.assertFalse(hasattr(model_to_be_compiled, "_compiled_call"))
 
             # 5. get compiled results -- relies on the automatic compilation triggered by specific compilable caches
             if not has_defined_cache_implementation:
@@ -1689,7 +1707,7 @@ class GenerationTesterMixin:
                 num_beams=1,
                 max_new_tokens=self.max_new_tokens,
                 min_new_tokens=self.max_new_tokens,
-                output_attentions=True,
+                output_attentions=self.has_attentions,
                 output_hidden_states=True,
                 output_scores=True,
                 output_logits=True,
@@ -2475,11 +2493,20 @@ class GenerationTesterMixin:
                 model_input_length = 1
             else:
                 model_input_length = prompt_length + generated_length
-            query_length = (
-                prompt_length + generated_length
-                if not has_static_cache
-                else decoder_past_key_values.get_max_cache_shape()
-            )
+            if has_static_cache:
+                # Hybrid caches (e.g. Bamba: full_attention + linear_attention) have layers with no fixed
+                # max — `get_max_length(i)` returns -1 on those. Pick the first layer that reports a
+                # real length; that's the one whose attention shape we're checking against.
+                query_length = next(
+                    (
+                        decoder_past_key_values.get_max_length(i)
+                        for i in range(len(decoder_past_key_values))
+                        if decoder_past_key_values.get_max_length(i) != -1
+                    ),
+                    prompt_length + generated_length,
+                )
+            else:
+                query_length = prompt_length + generated_length
 
             expected_shape = (
                 batch_size,
@@ -2535,6 +2562,24 @@ class GenerationTesterMixin:
             [encoder_expected_shape] * len(hidden_states),
         )
 
+    def _get_conv_state_shape(self, batch_size: int, config):
+        # Default conv state shape, for linear attention models - can vary based on models so this function is convenient
+        # to easily check caches
+        # Note that non-mamba models will NOT have the config fields - it does not matter as they will only use attention
+        # cache layers, so the None default values will not be used
+        intermediate_size = getattr(config, "intermediate_size", None)
+        conv_kernel = getattr(config, "conv_kernel", None)
+        return (batch_size, intermediate_size, conv_kernel)
+
+    def _get_recurrent_state_shape(self, batch_size: int, config):
+        # Default recurrent state shape, for linear attention models - can vary based on models so this function is convenient
+        # to easily check caches
+        # Note that non-mamba models will NOT have the config fields - it does not matter as they will only use attention
+        # cache layers, so the None default values will not be used
+        intermediate_size = getattr(config, "intermediate_size", None)
+        state_size = getattr(config, "state_size", None)
+        return (batch_size, intermediate_size, state_size)
+
     def _check_past_key_values_for_generate(self, batch_size, past_key_values, seq_length, config):
         # Raise a useful error, asking to explicitly override the method
         if not isinstance(past_key_values, Cache):
@@ -2553,16 +2598,22 @@ class GenerationTesterMixin:
         config = config.get_text_config(decoder=True)
 
         # (batch, kv heads, seq_length, head_dim)
-        num_heads = getattr(config, "num_key_value_heads", config.num_attention_heads)
+        # Only pure mamba models do not have num_attention_heads defined in config, so it can never be 1 in practice for attention models
+        num_attention_heads = getattr(config, "num_attention_heads", 1)
+        num_kv_heads = getattr(config, "num_key_value_heads", num_attention_heads)
         hidden_size = getattr(config, "d_model", config.hidden_size)
-        head_dim = getattr(config, "head_dim", hidden_size // config.num_attention_heads)
+        head_dim = getattr(config, "head_dim", hidden_size // num_attention_heads)
 
         # For cross attention cache, the seq_length depends on the model, so we remove that dim
-        expected_shape = (
-            (batch_size, num_heads, seq_length, head_dim)
+        attention_shape = (
+            (batch_size, num_kv_heads, seq_length, head_dim)
             if seq_length is not None
-            else (batch_size, num_heads, head_dim)
+            else (batch_size, num_kv_heads, head_dim)
         )
+
+        # For mamba layers
+        conv_shape = self._get_conv_state_shape(batch_size, config)
+        recurrent_shape = self._get_recurrent_state_shape(batch_size, config)
 
         # Check the size is coherent
         num_hidden_layers = config.num_hidden_layers
@@ -2572,11 +2623,30 @@ class GenerationTesterMixin:
 
         # Check each layer has the correct shape
         for layer in past_key_values.layers:
-            # Remove the seq_length dim for cross-attention cache (it changes based on the model)
-            keys = layer.keys if seq_length is not None else layer.keys[:, :, 0, :]
-            values = layer.values if seq_length is not None else layer.values[:, :, 0, :]
-            self.assertEqual(keys.shape, expected_shape)
-            self.assertEqual(values.shape, expected_shape)
+            # Mamba + Attention layer cache
+            if type(layer) is LinearAttentionAndFullAttentionLayer:
+                # Remove the seq_length dim for cross-attention cache (it changes based on the model)
+                keys = layer.keys if seq_length is not None else layer.keys[:, :, 0, :]
+                values = layer.values if seq_length is not None else layer.values[:, :, 0, :]
+                self.assertEqual(keys.shape, attention_shape)
+                self.assertEqual(values.shape, attention_shape)
+                self.assertEqual(layer.conv_states.shape, conv_shape)
+                # May not be used (e.g. lfm2)
+                if layer.is_recurrent_states_initialized:
+                    self.assertEqual(layer.recurrent_states.shape, recurrent_shape)
+            # Mamba only layer cache
+            elif type(layer) is LinearAttentionLayer:
+                self.assertEqual(layer.conv_states.shape, conv_shape)
+                # May not be used (e.g. lfm2)
+                if layer.is_recurrent_states_initialized:
+                    self.assertEqual(layer.recurrent_states.shape, recurrent_shape)
+            # Attention only layer type
+            else:
+                # Remove the seq_length dim for cross-attention cache (it changes based on the model)
+                keys = layer.keys if seq_length is not None else layer.keys[:, :, 0, :]
+                values = layer.values if seq_length is not None else layer.values[:, :, 0, :]
+                self.assertEqual(keys.shape, attention_shape)
+                self.assertEqual(values.shape, attention_shape)
 
     def _check_sequence_inside_sequence(self, tensor_1, tensor_2):
         # check if tensor_1 inside tensor_2 or tensor_2 inside tensor_1.
@@ -2616,8 +2686,30 @@ class GenerationTesterMixin:
 
         num_layers = len(cache1)
         for idx in range(num_layers):
-            torch.testing.assert_close(cache1.layers[idx].keys, cache2.layers[idx].keys)
-            torch.testing.assert_close(cache1.layers[idx].values, cache2.layers[idx].values)
+            self.assertEqual(type(cache1.layers[idx]), type(cache2.layers[idx]))
+
+            # Mamba + Attention layer
+            if type(cache1.layers[idx]) is LinearAttentionAndFullAttentionLayer:
+                torch.testing.assert_close(cache1.layers[idx].keys, cache2.layers[idx].keys)
+                torch.testing.assert_close(cache1.layers[idx].values, cache2.layers[idx].values)
+                torch.testing.assert_close(cache1.layers[idx].conv_states, cache2.layers[idx].conv_states)
+                # May not be used (e.g. lfm2)
+                if cache1.layers[idx].is_recurrent_states_initialized:
+                    torch.testing.assert_close(
+                        cache1.layers[idx].recurrent_states, cache2.layers[idx].recurrent_states
+                    )
+            # Mamba layer
+            elif type(cache1.layers[idx]) is LinearAttentionLayer:
+                torch.testing.assert_close(cache1.layers[idx].conv_states, cache2.layers[idx].conv_states)
+                # May not be used (e.g. lfm2)
+                if cache1.layers[idx].is_recurrent_states_initialized:
+                    torch.testing.assert_close(
+                        cache1.layers[idx].recurrent_states, cache2.layers[idx].recurrent_states
+                    )
+            # Attention layer
+            else:
+                torch.testing.assert_close(cache1.layers[idx].keys, cache2.layers[idx].keys)
+                torch.testing.assert_close(cache1.layers[idx].values, cache2.layers[idx].values)
 
 
 @require_torch
@@ -2709,6 +2801,155 @@ class UtilsFunctionsTest(unittest.TestCase):
         self.assertTrue(last_token_counts[1] > last_token_counts[3] > last_token_counts[7] > 0)
         self.assertTrue(last_token_counts[8] > last_token_counts[3])
 
+    def test_speculative_sampling_ensemble_weight_none_equals_standard(self):
+        """With `assistant_ensemble_weight=None`, behaviour must be identical to standard speculative sampling."""
+        candidate_input_ids = torch.tensor([[8, 0, 3, 9, 8, 1, 4, 5]])
+        candidate_logits = torch.tensor(
+            [
+                [
+                    [-10.0, 10.0, -10.0, -10.0, -10.0, -10.0, -10.0, -10.0, -10.0, -10.0],
+                    [-10.0, -10.0, -10.0, -10.0, 10.0, -10.0, -10.0, -10.0, -10.0, -10.0],
+                    [-10.0, -10.0, -10.0, -10.0, -10.0, 10.0, -10.0, -10.0, -10.0, -10.0],
+                ]
+            ]
+        )
+        candidate_length = 3
+        inf = float("inf")
+        new_logits = torch.tensor(
+            [
+                [
+                    [-10.0, 10.0, -10.0, -10.0, -10.0, -10.0, -10.0, -10.0, -10.0, -10.0],
+                    [-10.0, -10.0, -10.0, -10.0, 10.0, -10.0, -10.0, -10.0, -10.0, -10.0],
+                    [-inf, -inf, -inf, -inf, -inf, -inf, -inf, -inf, 10.0, -inf],
+                    [-10.0, -10.0, -10.0, -10.0, -10.0, -10.0, -10.0, -10.0, -10.0, -10.0],
+                ]
+            ]
+        )
+        validated_none, n_none = _speculative_sampling(
+            candidate_input_ids,
+            candidate_logits,
+            candidate_length,
+            new_logits,
+            False,
+            assistant_ensemble_weight=None,
+        )
+        # Matches the parent test exactly (i.e. backward compatible with w=None)
+        self.assertEqual(n_none.item(), 2)
+        self.assertEqual(validated_none.tolist()[0], [1, 4, 8])
+
+    def test_speculative_sampling_ensemble_weight_increases_acceptance(self):
+        """Deterministic check: a candidate that vanilla SD rejects is accepted under ensemble weighting.
+
+        With `q_i=0.80, p_i=0.40, r=0.60`:
+        - Standard ratio: `p_i/q_i = 0.50 < 0.60 = r` -> REJECT
+        - Ensemble (w=0.7): `1 - w + w*(p_i/q_i) = 0.65 > 0.60 = r` -> ACCEPT
+        """
+        candidate_length = 1
+        # Draft: token 0 has prob 0.80
+        q_probs = torch.tensor([[[0.80, 0.10, 0.05, 0.05]]])
+        # Target: token 0 has prob 0.40 (+ a second position for the bonus-token slot)
+        p_probs = torch.tensor([[[0.40, 0.30, 0.20, 0.10], [0.25, 0.25, 0.25, 0.25]]])
+
+        candidate_logits = q_probs.log()
+        new_logits = p_probs.log()
+        prefix = torch.zeros(1, 5, dtype=torch.long)
+        candidate_input_ids = torch.cat([prefix, torch.tensor([[0]])], dim=-1)
+
+        fixed_rand = torch.tensor([0.60])
+        with patch("transformers.generation.utils.torch.rand_like", return_value=fixed_rand):
+            _, n_standard = _speculative_sampling(
+                candidate_input_ids,
+                candidate_logits,
+                candidate_length,
+                new_logits,
+                False,
+                assistant_ensemble_weight=None,
+            )
+        with patch("transformers.generation.utils.torch.rand_like", return_value=fixed_rand):
+            _, n_ensemble = _speculative_sampling(
+                candidate_input_ids,
+                candidate_logits,
+                candidate_length,
+                new_logits,
+                False,
+                assistant_ensemble_weight=0.7,
+            )
+
+        self.assertEqual(n_standard.item(), 0)
+        self.assertEqual(n_ensemble.item(), 1)
+
+    def test_speculative_sampling_ensemble_fallback_distribution_finite_and_normalized(self):
+        """The fallback distribution under ensemble weighting must be finite, normalized, and match the
+        standard SD fallback `[p-q]_+/sum([p-q]_+)` (the ensemble residual normalises to the same distribution)."""
+        candidate_length = 1
+        q_probs = torch.tensor([[[0.70, 0.20, 0.05, 0.05]]])
+        p_probs = torch.tensor([[[0.30, 0.40, 0.20, 0.10], [0.25, 0.25, 0.25, 0.25]]])
+
+        candidate_logits = q_probs.log()
+        new_logits = p_probs.log()
+        prefix = torch.zeros(1, 5, dtype=torch.long)
+        candidate_input_ids = torch.cat([prefix, torch.tensor([[0]])], dim=-1)
+
+        fixed_rand = torch.tensor([0.99])  # force rejection
+        captured = []
+
+        def capture_multinomial(input, num_samples, **kwargs):
+            captured.append(input.clone())
+            return torch.zeros(input.shape[0], num_samples, dtype=torch.long)
+
+        with patch("transformers.generation.utils.torch.rand_like", return_value=fixed_rand):
+            with patch("transformers.generation.utils.torch.multinomial", side_effect=capture_multinomial):
+                _speculative_sampling(
+                    candidate_input_ids,
+                    candidate_logits,
+                    candidate_length,
+                    new_logits,
+                    False,
+                    assistant_ensemble_weight=0.7,
+                )
+
+        self.assertEqual(len(captured), 1)
+        p_prime = captured[0]
+        self.assertTrue(torch.isfinite(p_prime).all())
+        self.assertAlmostEqual(p_prime.sum().item(), 1.0, places=5)
+        expected = torch.clamp(p_probs[0, 0, :] - q_probs[0, 0, :], min=0)
+        expected = expected / expected.sum()
+        torch.testing.assert_close(p_prime.squeeze(), expected, atol=1e-5, rtol=1e-5)
+
+    def test_speculative_sampling_ensemble_numerical_stability_near_zero_residual(self):
+        """When `p ≈ q`, the residual `[p-q]_+` is near zero; the fallback must remain finite."""
+        candidate_length = 1
+        q_probs = torch.tensor([[[0.25, 0.25, 0.25, 0.25]]])
+        p_probs = torch.tensor([[[0.25, 0.25, 0.25, 0.25], [0.25, 0.25, 0.25, 0.25]]])
+
+        candidate_logits = q_probs.log()
+        new_logits = p_probs.log()
+        prefix = torch.zeros(1, 5, dtype=torch.long)
+        candidate_input_ids = torch.cat([prefix, torch.tensor([[0]])], dim=-1)
+
+        fixed_rand = torch.tensor([0.99])
+        captured = []
+
+        def capture_multinomial(input, num_samples, **kwargs):
+            captured.append(input.clone())
+            return torch.zeros(input.shape[0], num_samples, dtype=torch.long)
+
+        with patch("transformers.generation.utils.torch.rand_like", return_value=fixed_rand):
+            with patch("transformers.generation.utils.torch.multinomial", side_effect=capture_multinomial):
+                _speculative_sampling(
+                    candidate_input_ids,
+                    candidate_logits,
+                    candidate_length,
+                    new_logits,
+                    False,
+                    assistant_ensemble_weight=0.5,
+                )
+
+        self.assertEqual(len(captured), 1)
+        p_prime = captured[0]
+        self.assertTrue(torch.isfinite(p_prime).all())
+        self.assertAlmostEqual(p_prime.sum().item(), 1.0, places=5)
+
 
 global_rng = random.Random()
 
@@ -2783,6 +3024,37 @@ class GenerationIntegrationTests(unittest.TestCase):
             model.generation_config.use_cache = None
             model.save_pretrained(tmpdirname)
 
+    @require_torch_accelerator
+    def test_generate_with_inputs_on_cpu(self):
+        """
+        Inputs deliberately kept on CPU must be moved onto the model device by `prepare_inputs_for_generation`
+        right before the forward, so generation works and matches passing on-device inputs. This lets callers keep
+        the loop's growing-tensor bookkeeping off-device (e.g. Neuron/TPU). Regression test for #44742.
+        """
+        model = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-gpt2").to(torch_device)
+        tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-gpt2")
+        encoded = tokenizer("Hello", return_tensors="pt")
+        generation_kwargs = {"max_new_tokens": 5, "do_sample": False}
+
+        # Reference run with inputs already on the model device.
+        on_device = model.generate(
+            input_ids=encoded.input_ids.to(torch_device),
+            attention_mask=encoded.attention_mask.to(torch_device),
+            **generation_kwargs,
+        )
+
+        # Inputs left on CPU; generate must move them before the forward and produce the same tokens.
+        on_cpu = model.generate(
+            input_ids=encoded.input_ids.to("cpu"),
+            attention_mask=encoded.attention_mask.to("cpu"),
+            **generation_kwargs,
+        )
+
+        # The growing-tensor bookkeeping stays on CPU (only the forward's inputs are moved to the model device),
+        # so the output is on CPU; the generated tokens must still match the on-device run.
+        self.assertEqual(on_cpu.device.type, "cpu")
+        self.assertTrue(torch.equal(on_cpu, on_device.cpu()))
+
     def test_generation_config_deprecation(self):
         import logging as pylogging
 
@@ -2822,6 +3094,45 @@ class GenerationIntegrationTests(unittest.TestCase):
             self.assertTrue(len(warningHandler.warnings) == 1)
         finally:
             logger.removeHandler(warningHandler)
+
+    def test_inputs_embeds_warn_without_ids_for_token_based_logit_processors(self):
+        model = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-gpt2", device_map=torch_device)
+        tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-gpt2")
+        inputs = tokenizer("Hello world", return_tensors="pt").to(torch_device)
+        ids = inputs["input_ids"]
+        embeds = model.get_input_embeddings()(ids)
+
+        # Check that it raises with only embeds
+        with self.assertWarnsRegex(UserWarning, "apply the penalty only to newly generated tokens, not to the prompt"):
+            _ = model.generate(inputs_embeds=embeds, max_new_tokens=5, repetition_penalty=1.1)
+
+        # Check that it does NOT raise with both ids and embeds
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            _ = model.generate(input_ids=ids, inputs_embeds=embeds, max_new_tokens=5, repetition_penalty=1.1)
+            self.assertFalse(
+                any(
+                    "apply the penalty only to newly generated tokens, not to the prompt" in str(warn.message)
+                    for warn in w
+                )
+            )
+
+        # Check that it raises with only embeds
+        with self.assertWarnsRegex(
+            UserWarning, "n-gram constraints only to newly generated tokens, not to the prompt"
+        ):
+            _ = model.generate(inputs_embeds=embeds, max_new_tokens=5, no_repeat_ngram_size=2)
+
+        # Check that it does NOT raise with both ids and embeds
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            _ = model.generate(input_ids=ids, inputs_embeds=embeds, max_new_tokens=5, no_repeat_ngram_size=2)
+            self.assertFalse(
+                any(
+                    "n-gram constraints only to newly generated tokens, not to the prompt" in str(warn.message)
+                    for warn in w
+                )
+            )
 
     @slow
     def test_beam_search_early_stop_heuristic(self):
@@ -3688,6 +3999,24 @@ class GenerationIntegrationTests(unittest.TestCase):
         self.assertTrue(model.generation_config.bos_token_id == gen_output[0, 0])
         self.assertTrue(test_bos_id == gen_output[0, 0])
         self.assertTrue(generation_config.bos_token_id is None)
+
+    def test_prompt_lookup_decoding_no_eos_token(self):
+        # Same setup as test_prompt_lookup_decoding_stops_at_eos, but with no EOS in effect
+        # (eos_token_id=None, e.g. open-ended generation). The EOS-cropping branch must be skipped
+        # rather than running torch.isin(chosen_ids, None), which raises a TypeError.
+
+        input_ids = torch.randint(1, 50, (1, 10), device=torch_device)  # generate inputs in range from 1-50
+        arbitrary_ngram = 51  # arbitrary OOV unigram, as in test_prompt_lookup_decoding_stops_at_eos
+        input_ids[:, 3] = arbitrary_ngram  # earlier occurrence; its continuation is what gets proposed
+        input_ids[:, -1] = arbitrary_ngram  # put arbitrary_ngram in the end for the necessary match to happen
+
+        candidate_generator = PromptLookupCandidateGenerator(
+            eos_token_id=None, num_output_tokens=4, max_matching_ngram_size=1
+        )
+        output_prompt_lookup = candidate_generator.get_candidates(input_ids)[0]
+
+        # With no EOS to stop at, PLD proposes all num_output_tokens continuation tokens (10 + 4)
+        self.assertTrue(output_prompt_lookup.shape[-1] == 14)
 
     def test_speculative_decoding_equals_regular_decoding(self):
         draft_name = "double7/vicuna-68m"
@@ -4557,6 +4886,28 @@ class GenerationIntegrationTests(unittest.TestCase):
                 trust_remote_code=True,
             )
             assert value == "success"
+
+    def test_custom_generate_local_directory_requires_trust_remote_code(self):
+        """Tests that `trust_remote_code` is required for a local-directory `custom_generate` too (not
+        just for Hub repos): otherwise a repository's `custom_generate/generate.py` would execute on
+        load without any opt-in."""
+        model = AutoModelForCausalLM.from_pretrained(
+            "hf-internal-testing/tiny-random-MistralForCausalLM", device_map="auto"
+        )
+        tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-MistralForCausalLM")
+        model_inputs = tokenizer("Hello, world!", return_tensors="pt").to(model.device)
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            custom_generate_dir = Path(tmp_dir) / "custom_generate"
+            custom_generate_dir.mkdir()
+            with open(custom_generate_dir / "generate.py", "w") as f:
+                f.write("def generate(*args, **kwargs):\n    return 'should_not_run'\n")
+            with self.assertRaises(ValueError):
+                model.generate(
+                    **model_inputs,
+                    max_new_tokens=10,
+                    trust_remote_code=False,
+                    custom_generate=str(tmp_dir),
+                )
 
     def test_custom_generate_callable(self):
         """Tests that passing a callable to `custom_generate` executes the callable decoding loop"""

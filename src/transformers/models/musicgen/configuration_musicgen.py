@@ -23,14 +23,8 @@ from ..auto.configuration_auto import AutoConfig
 
 
 @auto_docstring(checkpoint="facebook/musicgen-small")
-@strict(accept_kwargs=True)
+@strict
 class MusicgenDecoderConfig(PreTrainedConfig):
-    r"""
-    audio_channels (`int`, *optional*, defaults to 1
-        Number of channels in the audio data. Either 1 for mono or 2 for stereo. Stereo models generate a separate
-        audio stream for the left/right output channels. Mono models generate a single audio stream output.
-    """
-
     model_type = "musicgen_decoder"
     base_config_key = "decoder_config"
     keys_to_ignore_at_inference = ["past_key_values"]
@@ -66,7 +60,7 @@ class MusicgenDecoderConfig(PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="facebook/musicgen-small")
-@strict(accept_kwargs=True)
+@strict
 class MusicgenConfig(PreTrainedConfig):
     r"""
     text_encoder (`Union[dict, `PretrainedConfig`]`):

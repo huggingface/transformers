@@ -20,7 +20,7 @@ from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring
 
 
-@strict(accept_kwargs=True)
+@strict
 @auto_docstring(
     custom_intro="""
     AFMoE is an Adaptive Feedforward MoE (Mixture of Experts) model with token-choice routing, shared experts, and a
@@ -30,8 +30,6 @@ from ...utils import auto_docstring
 )
 class AfmoeConfig(PreTrainedConfig):
     r"""
-    rope_theta (`float`, *optional*, defaults to 10000.0):
-        The base period of the RoPE embeddings.
     global_attn_every_n_layers (`int`, *optional*, defaults to 4):
         The frequency of full attention layers. Every Nth layer will use full attention, while others use sliding
         window attention.
@@ -62,6 +60,12 @@ class AfmoeConfig(PreTrainedConfig):
         "embed_tokens": (["input_ids"], ["inputs_embeds"]),
         "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
         "norm": (["hidden_states"], ["hidden_states"]),
+    }
+    base_model_ep_plan = {
+        "layers.*.mlp.router": "ep_router",
+        "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
+        "layers.*.mlp.experts.down_proj": "grouped_gemm",
+        "layers.*.mlp.experts": "moe_tp_experts",
     }
 
     vocab_size: int = 200192

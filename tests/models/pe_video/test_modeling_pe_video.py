@@ -149,6 +149,10 @@ class PeVideoEncoderTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
+    @unittest.skip(reason="The model has TimmWrapper backbone but doesn't apply any conversion")
+    def test_reverse_loading_mapping(self, check_keys_were_modified=True):
+        pass
+
     @unittest.skip(reason="Timm Eva (PE) weights cannot be fully constructed in _init_weights")
     def test_can_init_all_missing_weights(self):
         pass
@@ -179,10 +183,6 @@ class PeVideoEncoderTest(ModelTesterMixin, unittest.TestCase):
 
     @unittest.skip(reason="PeAudioModel uses some timm stuff not compatible")
     def test_save_load(self):
-        pass
-
-    @unittest.skip(reason="TimmWrapperModel does not support model parallelism")
-    def test_model_parallelism(self):
         pass
 
     @unittest.skip(reason="@eustlb this is not really expected")
@@ -327,6 +327,10 @@ class PeVideoModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
+    @unittest.skip(reason="The model has TimmWrapper backbone but doesn't apply any conversion")
+    def test_reverse_loading_mapping(self, check_keys_were_modified=True):
+        pass
+
     @unittest.skip(reason="PeVideoModel does not have usual input embeddings")
     def test_model_get_set_embeddings(self):
         pass
@@ -359,10 +363,6 @@ class PeVideoModelTest(ModelTesterMixin, unittest.TestCase):
 
     @unittest.skip(reason="@eustlb this is not really expected")
     def test_can_init_all_missing_weights(self):
-        pass
-
-    @unittest.skip(reason="TimmWrapperModel does not support model parallelism")
-    def test_model_parallelism(self):
         pass
 
     @require_torch_gpu  # pe-video contains triton code which cannot run on CPU, so we only test on GPU

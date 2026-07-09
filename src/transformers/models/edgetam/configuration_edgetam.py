@@ -25,7 +25,7 @@ from ..auto import CONFIG_MAPPING, AutoConfig
 
 
 @auto_docstring(checkpoint="yonigozlan/EdgeTAM-hf")
-@strict(accept_kwargs=True)
+@strict
 class EdgeTamVisionConfig(PreTrainedConfig):
     r"""
     backbone_channel_list (`List[int]`, *optional*, defaults to `[384, 192, 96, 48]`):
@@ -86,7 +86,7 @@ class EdgeTamVisionConfig(PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="yonigozlan/EdgeTAM-hf")
-@strict(accept_kwargs=True)
+@strict
 class EdgeTamPromptEncoderConfig(PreTrainedConfig):
     r"""
     mask_input_channels (`int`, *optional*, defaults to 16):
@@ -110,7 +110,7 @@ class EdgeTamPromptEncoderConfig(PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="yonigozlan/EdgeTAM-hf")
-@strict(accept_kwargs=True)
+@strict
 class EdgeTamMaskDecoderConfig(PreTrainedConfig):
     r"""
     mlp_dim (`int`, *optional*, defaults to 2048):
@@ -148,11 +148,11 @@ class EdgeTamMaskDecoderConfig(PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="yonigozlan/EdgeTAM-hf")
-@strict(accept_kwargs=True)
+@strict
 class EdgeTamConfig(PreTrainedConfig):
     r"""
     prompt_encoder_config (Union[`dict`, `EdgeTamPromptEncoderConfig`], *optional*):
-         Dictionary of configuration options used to initialize [`EdgeTamPromptEncoderConfig`].
+        Dictionary of configuration options used to initialize [`EdgeTamPromptEncoderConfig`].
     mask_decoder_config (Union[`dict`, `EdgeTamMaskDecoderConfig`], *optional*):
         Dictionary of configuration options used to initialize [`EdgeTamMaskDecoderConfig`].
 

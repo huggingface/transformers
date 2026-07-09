@@ -20,7 +20,7 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="facebook/sam-vit-huge")
-@strict(accept_kwargs=True)
+@strict
 class SamPromptEncoderConfig(PreTrainedConfig):
     r"""
     mask_input_channels (`int`, *optional*, defaults to 16):
@@ -45,7 +45,7 @@ class SamPromptEncoderConfig(PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="facebook/sam-vit-huge")
-@strict(accept_kwargs=True)
+@strict
 class SamMaskDecoderConfig(PreTrainedConfig):
     r"""
     mlp_dim (`int`, *optional*, defaults to 2048):
@@ -75,7 +75,7 @@ class SamMaskDecoderConfig(PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="facebook/sam-vit-huge")
-@strict(accept_kwargs=True)
+@strict
 class SamVisionConfig(PreTrainedConfig):
     r"""
     output_channels (`int`, *optional*, defaults to 256):
@@ -140,7 +140,7 @@ class SamVisionConfig(PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="facebook/sam-vit-huge")
-@strict(accept_kwargs=True)
+@strict
 class SamConfig(PreTrainedConfig):
     r"""
     prompt_encoder_config (Union[`dict`, `SamPromptEncoderConfig`], *optional*):

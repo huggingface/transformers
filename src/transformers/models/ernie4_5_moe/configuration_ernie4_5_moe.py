@@ -21,7 +21,7 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="baidu/ERNIE-4.5-21B-A3B-PT")
-@strict(accept_kwargs=True)
+@strict
 class Ernie4_5_MoeConfig(PreTrainedConfig):
     r"""
     use_bias (`bool`, *optional*, defaults to `False`):
@@ -82,6 +82,12 @@ class Ernie4_5_MoeConfig(PreTrainedConfig):
         "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
         "norm": (["hidden_states"], ["hidden_states"]),
     }
+    base_model_ep_plan = {
+        "layers.*.mlp.gate": "ep_router",
+        "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
+        "layers.*.mlp.experts.down_proj": "grouped_gemm",
+        "layers.*.mlp.experts": "moe_tp_experts",
+    }
 
     vocab_size: int = 103424
     pad_token_id: int | None = 0
@@ -99,7 +105,7 @@ class Ernie4_5_MoeConfig(PreTrainedConfig):
     use_cache: bool = True
     tie_word_embeddings: bool = True
     rope_parameters: RopeParameters | dict | None = None
-    use_bias: int | None = False
+    use_bias: bool | None = False
     moe_intermediate_size: int = 1536
     moe_k: int | None = 6
     moe_num_experts: int | None = 64

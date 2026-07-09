@@ -15,7 +15,7 @@ limitations under the License.
 ⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be rendered properly in your Markdown viewer.
 
 -->
-*This model was released on {release_date} and added to Hugging Face Transformers on 2025-10-07.*
+*This model was contributed to Hugging Face Transformers on 2025-10-07.*
 
 # Lfm2Moe
 
@@ -31,6 +31,7 @@ The following example shows how to generate an answer using the `AutoModelForCau
 
 ```python
 from transformers import AutoModelForCausalLM, AutoTokenizer
+
 
 # Load model and tokenizer
 model_id = "LiquidAI/LFM2-8B-A1B"

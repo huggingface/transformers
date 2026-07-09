@@ -26,7 +26,7 @@ logger = logging.get_logger(__name__)
 
 
 @auto_docstring(checkpoint="apple/DepthPro")
-@strict(accept_kwargs=True)
+@strict
 class DepthProConfig(PreTrainedConfig):
     r"""
     fusion_hidden_size (`int`, *optional*, defaults to 256):

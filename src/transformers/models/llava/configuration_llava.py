@@ -22,7 +22,7 @@ from ..auto import CONFIG_MAPPING, AutoConfig
 
 
 @auto_docstring(checkpoint="llava-hf/llava-1.5-7b-hf")
-@strict(accept_kwargs=True)
+@strict
 class LlavaConfig(PreTrainedConfig):
     r"""
     Example:

@@ -26,7 +26,7 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="google/timesfm-2.5-200m-transformers")
-@strict(accept_kwargs=True)
+@strict
 class TimesFm2_5Config(PreTrainedConfig):
     r"""
     patch_length (`int`, *optional*, defaults to 32):

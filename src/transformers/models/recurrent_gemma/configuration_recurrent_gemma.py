@@ -21,7 +21,7 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="google/recurrentgemma-2b")
-@strict(accept_kwargs=True)
+@strict
 class RecurrentGemmaConfig(PreTrainedConfig):
     r"""
     lru_width (`int` or `None`, *optional*):
@@ -50,7 +50,8 @@ class RecurrentGemmaConfig(PreTrainedConfig):
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
-    ```"""
+    ```
+    """
 
     model_type = "recurrent_gemma"
     attribute_map = {"sliding_window": "attention_window_size"}

@@ -37,8 +37,8 @@ from .configuration_timesfm import TimesFmConfig
 logger = logging.get_logger(__name__)
 
 
-@dataclass
 @auto_docstring
+@dataclass
 class TimesFmOutput(BaseModelOutput):
     r"""
     loc (`torch.Tensor` of shape `(batch_size, )`):
@@ -51,8 +51,8 @@ class TimesFmOutput(BaseModelOutput):
     scale: torch.Tensor | None = None
 
 
-@dataclass
 @auto_docstring
+@dataclass
 class TimesFmOutputForPrediction(BaseModelOutput):
     r"""
     mean_predictions (`torch.Tensor` of shape `(batch_size, sequence_length)`):
@@ -731,9 +731,11 @@ class TimesFmModelForPrediction(TimesFmPreTrainedModel):
         if window_size is not None:
             mean_outputs = mean_outputs[0::2, ...] + mean_outputs[1::2, ...]
             full_outputs = full_outputs[0::2, ...] + full_outputs[1::2, ...]
-        if inp_min >= 0 and truncate_negative:
-            mean_outputs = torch.maximum(mean_outputs, 0.0)
-            full_outputs = torch.maximum(full_outputs, 0.0)
+        if truncate_negative:
+            # Clamp outputs to >= 0 only when the (single-scalar) input minimum is non-negative.
+            clamp = inp_min >= 0
+            mean_outputs = torch.where(clamp, mean_outputs.clamp_min(0.0), mean_outputs)
+            full_outputs = torch.where(clamp, full_outputs.clamp_min(0.0), full_outputs)
 
         loss = None
         if future_values is not None:

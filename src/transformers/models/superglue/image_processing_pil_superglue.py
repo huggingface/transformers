@@ -16,45 +16,38 @@
 from typing import TYPE_CHECKING
 
 import numpy as np
+from PIL import Image, ImageDraw
 
 from ...image_processing_backends import PilBackend
 from ...image_processing_utils import BatchFeature
 from ...image_utils import (
     ImageInput,
+    ImageType,
     PILImageResampling,
     SizeDict,
+    get_image_type,
+    is_pil_image,
+    is_valid_image,
     to_numpy_array,
 )
 from ...processing_utils import ImagesKwargs, Unpack
-from ...utils import TensorType, auto_docstring, is_torch_available, is_torchvision_available, is_vision_available
-from .image_processing_superglue import validate_and_format_image_pairs
+from ...utils import TensorType, auto_docstring
+from ...utils.import_utils import requires
 
 
 if TYPE_CHECKING:
-    from .modeling_superglue import SuperGlueKeypointMatchingOutput
-
-if is_vision_available():
-    import PIL
-    from PIL import Image, ImageDraw
-
-if is_torch_available():
     import torch
 
-if is_torchvision_available():
-    from torchvision.transforms.v2 import functional as tvF
+    from .modeling_superglue import SuperGlueKeypointMatchingOutput
 
 
-def is_grayscale(
-    image: np.ndarray,
-):
+def is_grayscale(image: np.ndarray):
     if image.shape[0] == 1:
         return True
     return np.all(image[0, ...] == image[1, ...]) and np.all(image[1, ...] == image[2, ...])
 
 
-def convert_to_grayscale(
-    image: ImageInput,
-) -> ImageInput:
+def convert_to_grayscale(image: ImageInput) -> ImageInput:
     """
     Converts an image to grayscale format using the NTSC formula. Only support numpy and PIL Image.
 
@@ -75,11 +68,40 @@ def convert_to_grayscale(
         gray_image = np.stack([gray_image] * 3, axis=0)
         return gray_image
 
-    if not isinstance(image, PIL.Image.Image):
+    if not isinstance(image, Image.Image):
         return image
 
     image = image.convert("L")
     return image
+
+
+# Adapted from transformers.models.superglue.image_processing_superglue.validate_and_format_image_pairs
+def validate_and_format_image_pairs(images: ImageInput):
+    error_message = (
+        "Input images must be a one of the following :",
+        " - A pair of PIL images.",
+        " - A pair of 3D arrays.",
+        " - A list of pairs of PIL images.",
+        " - A list of pairs of 3D arrays.",
+    )
+
+    def _is_valid_image(image):
+        """images is a PIL Image or a 3D array."""
+        return is_pil_image(image) or (
+            is_valid_image(image) and get_image_type(image) != ImageType.PIL and len(image.shape) == 3
+        )
+
+    if isinstance(images, list):
+        if len(images) == 2 and all((_is_valid_image(image)) for image in images):
+            return images
+        if all(
+            isinstance(image_pair, list)
+            and len(image_pair) == 2
+            and all(_is_valid_image(image) for image in image_pair)
+            for image_pair in images
+        ):
+            return [image for image_pair in images for image in image_pair]
+    raise ValueError(error_message)
 
 
 class SuperGlueImageProcessorKwargs(ImagesKwargs, total=False):
@@ -110,11 +132,7 @@ class SuperGlueImageProcessorPil(PilBackend):
     def preprocess(self, images: ImageInput, **kwargs: Unpack[SuperGlueImageProcessorKwargs]) -> BatchFeature:
         return super().preprocess(images, **kwargs)
 
-    def _prepare_images_structure(
-        self,
-        images: ImageInput,
-        **kwargs,
-    ) -> ImageInput:
+    def _prepare_images_structure(self, images: ImageInput, **kwargs) -> ImageInput:
         # we need to handle image pairs validation and flattening
         images = self.fetch_images(images)
         return validate_and_format_image_pairs(images)
@@ -124,7 +142,7 @@ class SuperGlueImageProcessorPil(PilBackend):
         images: list[np.ndarray],
         do_resize: bool,
         size: SizeDict,
-        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
+        resample: PILImageResampling | None,
         do_rescale: bool,
         rescale_factor: float,
         return_tensors: str | TensorType | None,
@@ -151,12 +169,13 @@ class SuperGlueImageProcessorPil(PilBackend):
 
         return BatchFeature(data=data, tensor_type=return_tensors)
 
+    @requires(backends=("torch",))
     def post_process_keypoint_matching(
         self,
         outputs: "SuperGlueKeypointMatchingOutput",
         target_sizes: TensorType | list[tuple],
         threshold: float = 0.0,
-    ) -> list[dict[str, torch.Tensor]]:
+    ) -> list[dict[str, "torch.Tensor"]]:
         """
         Converts the raw output of [`SuperGlueKeypointMatchingOutput`] into lists of keypoints, scores and descriptors
         with coordinates absolute to the original image sizes.
@@ -173,6 +192,8 @@ class SuperGlueImageProcessorPil(PilBackend):
             `list[Dict]`: A list of dictionaries, each dictionary containing the keypoints in the first and second image
             of the pair, the matching scores and the matching indices.
         """
+        import torch
+
         if outputs.mask.shape[0] != len(target_sizes):
             raise ValueError("Make sure that you pass in as many target sizes as the batch dimension of the mask")
         if not all(len(target_size) == 2 for target_size in target_sizes):
@@ -220,9 +241,7 @@ class SuperGlueImageProcessorPil(PilBackend):
         return results
 
     def visualize_keypoint_matching(
-        self,
-        images: ImageInput,
-        keypoint_matching_output: list[dict[str, torch.Tensor]],
+        self, images: ImageInput, keypoint_matching_output: list[dict[str, "torch.Tensor"]]
     ) -> list["Image.Image"]:
         """
         Plots the image pairs side by side with the detected keypoints as well as the matching between them.
@@ -259,11 +278,7 @@ class SuperGlueImageProcessorPil(PilBackend):
                 keypoints0_x, keypoints0_y, keypoints1_x, keypoints1_y, pair_output["matching_scores"]
             ):
                 color = self._get_color(matching_score)
-                draw.line(
-                    (keypoint0_x, keypoint0_y, keypoint1_x + width0, keypoint1_y),
-                    fill=color,
-                    width=3,
-                )
+                draw.line((keypoint0_x, keypoint0_y, keypoint1_x + width0, keypoint1_y), fill=color, width=3)
                 draw.ellipse((keypoint0_x - 2, keypoint0_y - 2, keypoint0_x + 2, keypoint0_y + 2), fill="black")
                 draw.ellipse(
                     (keypoint1_x + width0 - 2, keypoint1_y - 2, keypoint1_x + width0 + 2, keypoint1_y + 2),

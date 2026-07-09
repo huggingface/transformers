@@ -346,6 +346,9 @@ class BaseImageProcessor(ImageProcessingMixin):
 
         return kwargs
 
+    # Backwards compatibility for method that was renamed
+    _further_process_kwargs = _standardize_kwargs
+
     def _validate_preprocess_kwargs(
         self,
         do_rescale: bool | None = None,
@@ -448,7 +451,7 @@ class BaseImageProcessor(ImageProcessingMixin):
         """
         return rescale(image, scale=scale, data_format=data_format, input_data_format=input_data_format, **kwargs)
 
-    # The next methods are kept for backwards compatibility with remote code, but are overriden by backends.
+    # The next methods are kept for backwards compatibility with remote code, but are overridden by backends.
     def normalize(
         self,
         image: np.ndarray,

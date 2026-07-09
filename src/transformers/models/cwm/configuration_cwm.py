@@ -26,7 +26,7 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="facebook/cwm")
-@strict(accept_kwargs=True)
+@strict
 class CwmConfig(PreTrainedConfig):
     r"""
     ```python

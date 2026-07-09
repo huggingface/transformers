@@ -40,7 +40,7 @@ logger = logging.get_logger(__name__)
 
 
 @auto_docstring(checkpoint="bosonai/higgs-audio-v2-generation-3B-base")
-@strict(accept_kwargs=True)
+@strict
 class HiggsAudioV2Config(LlamaConfig):
     r"""
     audio_bos_token_id (`int`, *optional*, defaults to 128013):
@@ -326,7 +326,7 @@ class HiggsAudioV2Model(LlamaModel):
                 else audio_embeds
             )
             inputs_embeds = inputs_embeds.masked_scatter(
-                audio_token_mask[..., None].expand_as(inputs_embeds), audio_embeds.to(inputs_embeds.device)
+                audio_token_mask[..., None], audio_embeds.to(inputs_embeds.device)
             )
         elif audio_input_ids is not None:
             inputs_embeds = audio_embeds

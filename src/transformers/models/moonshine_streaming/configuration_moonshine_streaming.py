@@ -22,7 +22,7 @@ from ..auto import CONFIG_MAPPING
 
 
 @auto_docstring(checkpoint="UsefulSensors/moonshine-streaming-tiny")
-@strict(accept_kwargs=True)
+@strict
 class MoonshineStreamingEncoderConfig(PreTrainedConfig):
     r"""
     sample_rate (`int`, *optional*, defaults to 16000):
@@ -31,7 +31,6 @@ class MoonshineStreamingEncoderConfig(PreTrainedConfig):
         The frame duration in milliseconds for audio processing.
     sliding_windows (`list[tuple[int, int]]`, *optional*, defaults to `[(16, 4), (16, 4), (16, 0), (16, 0), (16, 4), (16, 4)]`):
         List of sliding window configurations for each encoder layer. Each tuple contains (window_size, shift).
-
 
     ```python
     >>> from transformers import MoonshineStreamingEncoder, MoonshineStreamingEncoderConfig
@@ -44,7 +43,8 @@ class MoonshineStreamingEncoderConfig(PreTrainedConfig):
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
-    ```"""
+    ```
+    """
 
     model_type = "moonshine_streaming_encoder"
 
@@ -77,7 +77,7 @@ class MoonshineStreamingEncoderConfig(PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="UsefulSensors/moonshine-streaming-tiny")
-@strict(accept_kwargs=True)
+@strict
 class MoonshineStreamingConfig(PreTrainedConfig):
     r"""
     pad_head_dim_to_multiple_of (`int`, *optional*):
@@ -94,7 +94,8 @@ class MoonshineStreamingConfig(PreTrainedConfig):
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
-    ```"""
+    ```
+    """
 
     model_type = "moonshine_streaming"
     sub_configs = {"encoder_config": MoonshineStreamingEncoderConfig}

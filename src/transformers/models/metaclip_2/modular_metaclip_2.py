@@ -32,7 +32,6 @@ from ..clip.modeling_clip import (
     CLIPTextEmbeddings,
     CLIPTextModel,
     CLIPTextModelWithProjection,
-    CLIPTextTransformer,
     CLIPVisionEmbeddings,
     CLIPVisionModel,
     CLIPVisionModelWithProjection,
@@ -47,7 +46,7 @@ _CONFIG_FOR_DOC = "MetaClip2Config"
 
 
 @auto_docstring(checkpoint="facebook/metaclip-2-worldwide-huge-quickgelu")
-@strict(accept_kwargs=True)
+@strict
 class MetaClip2TextConfig(CLIPTextConfig):
     r"""
     Example:
@@ -67,7 +66,7 @@ class MetaClip2TextConfig(CLIPTextConfig):
 
 
 @auto_docstring(checkpoint="facebook/metaclip-2-worldwide-huge-quickgelu")
-@strict(accept_kwargs=True)
+@strict
 class MetaClip2VisionConfig(CLIPVisionConfig):
     r"""
     Example:
@@ -87,7 +86,7 @@ class MetaClip2VisionConfig(CLIPVisionConfig):
 
 
 @auto_docstring(checkpoint="facebook/metaclip-2-worldwide-huge-quickgelu")
-@strict(accept_kwargs=True)
+@strict
 class MetaClip2Config(CLIPConfig):
     r"""
     Example:
@@ -138,108 +137,9 @@ class MetaClip2PreTrainedModel(CLIPPreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
-        factor = self.config.initializer_factor
-        if isinstance(module, MetaClip2TextEmbeddings):
-            init.normal_(module.token_embedding.weight, mean=0.0, std=factor * 0.02)
-            init.normal_(module.position_embedding.weight, mean=0.0, std=factor * 0.02)
-            init.copy_(module.position_ids, torch.arange(module.position_ids.shape[-1]).expand((1, -1)))
-        elif isinstance(module, MetaClip2VisionEmbeddings):
-            factor = self.config.initializer_factor
-            init.normal_(module.class_embedding, mean=0.0, std=module.embed_dim**-0.5 * factor)
-            init.normal_(module.patch_embedding.weight, std=module.config.initializer_range * factor)
-            init.normal_(module.position_embedding.weight, std=module.config.initializer_range * factor)
-            init.copy_(module.position_ids, torch.arange(module.position_ids.shape[-1]).expand((1, -1)))
-        elif isinstance(module, MetaClip2Attention):
-            factor = self.config.initializer_factor
-            in_proj_std = (module.embed_dim**-0.5) * ((2 * module.config.num_hidden_layers) ** -0.5) * factor
-            out_proj_std = (module.embed_dim**-0.5) * factor
-            init.normal_(module.q_proj.weight, std=in_proj_std)
-            init.normal_(module.k_proj.weight, std=in_proj_std)
-            init.normal_(module.v_proj.weight, std=in_proj_std)
-            init.normal_(module.out_proj.weight, std=out_proj_std)
-        elif isinstance(module, MetaClip2MLP):
-            factor = self.config.initializer_factor
-            in_proj_std = (module.config.hidden_size**-0.5) * ((2 * module.config.num_hidden_layers) ** -0.5) * factor
-            fc_std = (2 * module.config.hidden_size) ** -0.5 * factor
-            init.normal_(module.fc1.weight, std=fc_std)
-            init.normal_(module.fc2.weight, std=in_proj_std)
-        elif isinstance(module, MetaClip2Model):
-            init.normal_(
-                module.text_projection.weight,
-                std=module.text_embed_dim**-0.5 * self.config.initializer_factor,
-            )
-            init.normal_(
-                module.visual_projection.weight,
-                std=module.vision_embed_dim**-0.5 * self.config.initializer_factor,
-            )
-        elif isinstance(module, MetaClip2VisionModelWithProjection):
-            init.normal_(
-                module.visual_projection.weight,
-                std=self.config.hidden_size**-0.5 * self.config.initializer_factor,
-            )
-        elif isinstance(module, MetaClip2TextModelWithProjection):
-            init.normal_(
-                module.text_projection.weight,
-                std=self.config.hidden_size**-0.5 * self.config.initializer_factor,
-            )
-        elif isinstance(module, MetaClip2ForImageClassification):
-            init.normal_(
-                module.classifier.weight,
-                std=self.config.vision_config.hidden_size**-0.5 * self.config.initializer_factor,
-            )
-
-        if isinstance(module, nn.LayerNorm):
-            init.zeros_(module.bias)
-            init.ones_(module.weight)
-        if isinstance(module, nn.Linear) and module.bias is not None:
-            init.zeros_(module.bias)
+        super()._init_weights(module)
         if hasattr(module, "logit_scale"):
             init.constant_(module.logit_scale, self.config.logit_scale_init_value)
-
-
-class MetaClip2TextTransformer(CLIPTextTransformer):
-    def forward(
-        self,
-        input_ids,
-        attention_mask: torch.Tensor | None = None,
-        position_ids: torch.Tensor | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> BaseModelOutputWithPooling:
-        input_shape = input_ids.size()
-        input_ids = input_ids.view(-1, input_shape[-1])
-
-        hidden_states = self.embeddings(input_ids=input_ids, position_ids=position_ids)
-
-        attention_mask = create_causal_mask(
-            config=self.config,
-            inputs_embeds=hidden_states,
-            attention_mask=attention_mask,
-            past_key_values=None,
-        )
-
-        kwargs.pop("is_causal", None)
-        encoder_outputs: BaseModelOutput = self.encoder(
-            inputs_embeds=hidden_states,
-            attention_mask=attention_mask,
-            is_causal=True,
-            **kwargs,
-        )
-
-        last_hidden_state = encoder_outputs.last_hidden_state
-        last_hidden_state = self.final_layer_norm(last_hidden_state)
-
-        # Use robust pooling like CLIP - finds the first EOS token position per sequence
-        pooled_output = last_hidden_state[
-            torch.arange(last_hidden_state.shape[0], device=last_hidden_state.device),
-            (input_ids.to(dtype=torch.int, device=last_hidden_state.device) == self.eos_token_id).int().argmax(dim=-1),
-        ]
-
-        return BaseModelOutputWithPooling(
-            last_hidden_state=last_hidden_state,
-            pooler_output=pooled_output,
-            hidden_states=encoder_outputs.hidden_states,
-            attentions=encoder_outputs.attentions,
-        )
 
 
 class MetaClip2TextModel(CLIPTextModel):
@@ -295,11 +195,42 @@ class MetaClip2TextModel(CLIPTextModel):
         >>> last_hidden_state = outputs.last_hidden_state
         >>> pooled_output = outputs.pooler_output  # pooled (EOS token) states
         ```"""
-        return super().forward(
-            input_ids=input_ids,
+        # Unlike CLIP, this model doesn't handle bc for `self.eos_token_id`, even if the EOS
+        # token is 2 (it is set to 2 in released weights)
+        input_shape = input_ids.size()
+        input_ids = input_ids.view(-1, input_shape[-1])
+
+        hidden_states = self.embeddings(input_ids=input_ids, position_ids=position_ids)
+
+        attention_mask = create_causal_mask(
+            config=self.config,
+            inputs_embeds=hidden_states,
             attention_mask=attention_mask,
-            position_ids=position_ids,
+            past_key_values=None,
+        )
+
+        kwargs.pop("is_causal", None)
+        encoder_outputs: BaseModelOutput = self.encoder(
+            inputs_embeds=hidden_states,
+            attention_mask=attention_mask,
+            is_causal=True,
             **kwargs,
+        )
+
+        last_hidden_state = encoder_outputs.last_hidden_state
+        last_hidden_state = self.final_layer_norm(last_hidden_state)
+
+        # Use robust pooling like CLIP - finds the first EOS token position per sequence
+        pooled_output = last_hidden_state[
+            torch.arange(last_hidden_state.shape[0], device=last_hidden_state.device),
+            (input_ids.to(dtype=torch.int, device=last_hidden_state.device) == self.eos_token_id).int().argmax(dim=-1),
+        ]
+
+        return BaseModelOutputWithPooling(
+            last_hidden_state=last_hidden_state,
+            pooler_output=pooled_output,
+            hidden_states=encoder_outputs.hidden_states,
+            attentions=encoder_outputs.attentions,
         )
 
 
@@ -412,11 +343,8 @@ class MetaClip2Model(CLIPModel):
         self.text_embed_dim = text_config.hidden_size
         self.vision_embed_dim = vision_config.hidden_size
 
-        text_model = MetaClip2TextModel._from_config(text_config)
-        self.text_model = text_model.text_model
-
-        vision_model = MetaClip2VisionModel._from_config(vision_config)
-        self.vision_model = vision_model.vision_model
+        self.text_model = MetaClip2TextModel._from_config(text_config)
+        self.vision_model = MetaClip2VisionModel._from_config(vision_config)
 
         self.visual_projection = nn.Linear(self.vision_embed_dim, self.projection_dim, bias=False)
         self.text_projection = nn.Linear(self.text_embed_dim, self.projection_dim, bias=False)

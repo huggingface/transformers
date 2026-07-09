@@ -26,7 +26,7 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="allenai/OLMo-7B-hf")
-@strict(accept_kwargs=True)
+@strict
 class OlmoConfig(PreTrainedConfig):
     r"""
     clip_qkv (`float`, *optional*):
@@ -44,7 +44,8 @@ class OlmoConfig(PreTrainedConfig):
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
-    ```"""
+    ```
+    """
 
     model_type = "olmo"
     keys_to_ignore_at_inference = ["past_key_values"]
@@ -76,7 +77,7 @@ class OlmoConfig(PreTrainedConfig):
     pad_token_id: int | None = 1
     bos_token_id: int | None = None
     eos_token_id: int | list[int] | None = 50279
-    tie_word_embeddings: int = False
+    tie_word_embeddings: bool = False
     rope_parameters: RopeParameters | dict | None = None
     attention_bias: bool = False
     attention_dropout: float | int = 0.0

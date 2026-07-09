@@ -34,7 +34,6 @@ from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import (
     TensorType,
     auto_docstring,
-    is_torchvision_available,
     is_vision_available,
 )
 
@@ -45,8 +44,7 @@ if TYPE_CHECKING:
 if is_vision_available():
     from PIL import Image, ImageDraw
 
-if is_torchvision_available():
-    from torchvision.transforms.v2 import functional as tvF
+from torchvision.transforms.v2 import functional as tvF
 
 
 def _is_valid_image(image):

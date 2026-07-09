@@ -31,7 +31,6 @@ from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import (
     TensorType,
     auto_docstring,
-    is_torchvision_available,
     requires_backends,
 )
 
@@ -39,9 +38,8 @@ from ...utils import (
 if TYPE_CHECKING:
     from ...modeling_outputs import DepthEstimatorOutput
 
-if is_torchvision_available():
-    import torch
-    from torchvision.transforms.v2 import functional as tvF
+import torch
+from torchvision.transforms.v2 import functional as tvF
 
 
 class PromptDepthAnythingImageProcessorKwargs(ImagesKwargs, total=False):

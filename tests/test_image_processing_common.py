@@ -16,12 +16,10 @@ import io
 import json
 import os
 import pathlib
-import subprocess
 import sys
 import tempfile
 import warnings
 from copy import deepcopy
-from datetime import datetime
 
 import httpx
 import numpy as np
@@ -99,7 +97,7 @@ def prepare_video(num_frames, num_channels, width=10, height=10, numpify=False, 
     """This function prepares a video as a list of PIL images/NumPy arrays/PyTorch tensors."""
 
     video = []
-    for i in range(num_frames):
+    for frame_idx in range(num_frames):
         video.append(np.random.randint(255, size=(num_channels, width, height), dtype=np.uint8))
 
     if not numpify and not torchify:
@@ -571,8 +569,9 @@ class ImageProcessingTestMixin:
 
         image_processor = torch.compile(image_processor, mode="reduce-overhead")
         output_compiled = image_processor(input_image, device=torch_device, return_tensors="pt")
+        # torch.compile can introduce 1-level rounding differences in uint8 resize; after normalization this can reach 2 / 255.
         self._assert_tensors_equivalence(
-            output_eager.pixel_values, output_compiled.pixel_values, atol=1e-4, rtol=1e-4, mean_atol=1e-5
+            output_eager.pixel_values, output_compiled.pixel_values, atol=1e-2, rtol=1e-4, mean_atol=1e-5
         )
 
     def test_new_models_require_torchvision_backend(self):
@@ -587,41 +586,30 @@ class ImageProcessingTestMixin:
         if not self.image_processing_classes:
             self.skipTest("No image processing class defined")
 
-        def _is_old_model_by_commit_date(model_type, date_cutoff=(2025, 9, 1)):
-            try:
-                # Convert model_type to directory name and construct file path
-                model_dir = model_type.replace("-", "_")
-                slow_processor_file = f"src/transformers/models/{model_dir}/image_processing_{model_dir}.py"
-                # Check if the file exists otherwise skip the test
-                if not os.path.exists(slow_processor_file):
-                    return None
-                # Get the first commit date of the slow processor file
-                result = subprocess.run(
-                    ["git", "log", "--reverse", "--pretty=format:%ad", "--date=iso", slow_processor_file],
-                    capture_output=True,
-                    text=True,
-                    cwd=os.getcwd(),
-                )
-                if result.returncode != 0 or not result.stdout.strip():
-                    return None
-                # Parse the first line (earliest commit)
-                first_line = result.stdout.strip().split("\n")[0]
-                date_part = first_line.split(" ")[0]  # Extract just the date part
-                commit_date = datetime.strptime(date_part, "%Y-%m-%d")
-                # Check if committed before the cutoff date
-                cutoff_date = datetime(*date_cutoff)
-                return commit_date <= cutoff_date
-
-            except Exception:
-                # If any error occurs, skip the test
-                return None
+        # Old models are those whose image processing file was first committed before 2025-09-01.
+        # fmt: off
+        _OLD_MODELS = {
+            "aria", "beit", "bit", "blip", "bridgetower", "chameleon", "chinese_clip",
+            "clip", "cohere2_vision", "conditional_detr", "convnext", "deepseek_vl",
+            "deepseek_vl_hybrid", "deformable_detr", "deit", "depth_pro", "detr",
+            "dinov3_vit", "donut", "dpt", "efficientloftr", "efficientnet", "eomt",
+            "flava", "fuyu", "gemma3", "glm4v", "glpn", "got_ocr2", "grounding_dino",
+            "idefics", "idefics2", "idefics3", "imagegpt", "janus", "kosmos2_5",
+            "layoutlmv2", "layoutlmv3", "levit", "superglue", "lightglue", "llama4",
+            "llava", "llava_next", "llava_onevision", "mask2former", "maskformer",
+            "mllama", "mobilenet_v1", "mobilenet_v2", "mobilevit", "nougat",
+            "oneformer", "ovis2", "owlv2", "owlvit", "perceiver", "perception_lm",
+            "phi4_multimodal", "pix2struct", "pixtral", "poolformer",
+            "prompt_depth_anything", "pvt", "qwen2_vl", "rt_detr", "sam", "sam2",
+            "segformer", "seggpt", "siglip", "siglip2", "smolvlm", "superpoint",
+            "swin2sr", "textnet", "tvp", "videomae", "vilt", "vit", "vitmatte",
+            "vitpose", "vivit", "yolos", "zoedepth",
+        }
+        # fmt: on
 
         test_file_path = pathlib.Path(sys.modules[self.__class__.__module__].__file__).resolve()
         model_type = test_file_path.parent.name
-        # Check if this is a new model (added after 2024-01-01) based on git history
-        is_old_model = _is_old_model_by_commit_date(model_type)
-        if is_old_model is None:
-            self.skipTest(f"Could not determine if {model_type} is new based on git history")
+        is_old_model = model_type in _OLD_MODELS
         # New models must support torchvision backend
         self.assertTrue(
             is_old_model,
@@ -660,6 +648,96 @@ class ImageProcessingTestMixin:
             reloaded = self.image_processing_classes["torchvision"].from_pretrained(tmpdirname)
 
         self.assertIsNone(getattr(reloaded, test_attr), f"Explicit None for {test_attr} was lost after reload")
+
+    def test_post_process_test_mixin_inheritance(self):
+        """
+        Ensures that we have the post-process tester mixin if the processor implements the corresponding method.
+        The test will fail otherwise, forcing the mixin to be added -- and ensuring proper test coverage.
+        """
+        METHOD_TO_MIXIN = {
+            "post_process_semantic_segmentation": PostProcessSemanticSegmentationTestMixin,
+        }
+        for method_name, mixin_class in METHOD_TO_MIXIN.items():
+            implements_method = any(
+                hasattr(image_processing_class, method_name)
+                for image_processing_class in self.image_processing_classes.values()
+            )
+            if implements_method:
+                self.assertTrue(
+                    issubclass(self.__class__, mixin_class),
+                    msg=(
+                        f"This processor implements `{method_name}`, so the tester must inherit from "
+                        f"`{mixin_class.__name__}` to run the corresponding tests. Either add the inheritance "
+                        f"or, if the processor only partially supports `{method_name}`, overwrite the test."
+                    ),
+                )
+            else:
+                self.assertFalse(
+                    issubclass(self.__class__, mixin_class),
+                    msg=(
+                        f"This processor does not implement `{method_name}`, so the tester must not inherit from "
+                        f"`{mixin_class.__name__}`. If the processor was recently updated to support "
+                        f"`{method_name}`, add the `{mixin_class.__name__}` inheritance instead."
+                    ),
+                )
+
+
+class PostProcessSemanticSegmentationTestMixin:
+    @require_torch
+    def test_post_process_semantic_segmentation(self):
+        for image_processing_class in self.image_processing_classes.values():
+            with self.subTest(image_processing_class):
+                image_processor = image_processing_class(**self.image_processor_dict)
+                inputs, expected_shape = (
+                    self.image_processor_tester.prepare_post_process_semantic_segmentation_inputs()
+                )
+
+                segmentation = image_processor.post_process_semantic_segmentation(**inputs)
+
+                self.assertEqual(len(segmentation), self.image_processor_tester.batch_size)
+                self.assertEqual(segmentation[0].shape, (expected_shape["height"], expected_shape["width"]))
+
+                # return_segmentation_scores=True: returns list of SemanticSegmentationPostProcessorOutput
+                segmentation_output = image_processor.post_process_semantic_segmentation(
+                    **inputs, return_segmentation_scores=True
+                )
+                self.assertEqual(len(segmentation_output), self.image_processor_tester.batch_size)
+                self.assertTrue(torch.equal(segmentation_output[0].segmentation, segmentation[0]))
+                self.assertEqual(
+                    segmentation_output[0].segmentation_scores.shape,
+                    (expected_shape["num_labels"], expected_shape["height"], expected_shape["width"]),
+                )
+
+    @require_torch
+    def test_post_process_semantic_segmentation_target_sizes(self):
+        inputs, expected_shape = self.image_processor_tester.prepare_post_process_semantic_segmentation_inputs()
+
+        if "target_sizes" in inputs:
+            self.skipTest(reason="target_sizes already in required inputs")
+
+        for image_processing_class in self.image_processing_classes.values():
+            with self.subTest(image_processing_class):
+                image_processor = image_processing_class(**self.image_processor_dict)
+
+                target_sizes = [(1, 4) for _ in range(self.image_processor_tester.batch_size)]
+                segmentation_resized = image_processor.post_process_semantic_segmentation(
+                    **inputs, target_sizes=target_sizes
+                )
+                self.assertEqual(segmentation_resized[0].shape, target_sizes[0])
+
+                # return_segmentation_scores=True with target_sizes
+                segmentation_output_resized = image_processor.post_process_semantic_segmentation(
+                    **inputs, target_sizes=target_sizes, return_segmentation_scores=True
+                )
+                self.assertTrue(torch.equal(segmentation_output_resized[0].segmentation, segmentation_resized[0]))
+                self.assertEqual(
+                    segmentation_output_resized[0].segmentation_scores.shape,
+                    (expected_shape["num_labels"],) + target_sizes[0],
+                )
+
+                # raise ValueError if target_sizes has wrong length
+                with pytest.raises(ValueError):
+                    image_processor.post_process_semantic_segmentation(**inputs, target_sizes=target_sizes + [(1, 4)])
 
 
 class AnnotationFormatTestMixin:

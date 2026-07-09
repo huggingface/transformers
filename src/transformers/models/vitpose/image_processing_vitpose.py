@@ -18,6 +18,8 @@ import math
 from typing import TYPE_CHECKING, Union
 
 import numpy as np
+import torch
+from torchvision.transforms.v2 import functional as tvF
 
 from ...image_processing_backends import TorchvisionBackend
 from ...image_processing_utils import BatchFeature
@@ -35,18 +37,10 @@ from ...utils import (
     TensorType,
     auto_docstring,
     is_scipy_available,
-    is_torch_available,
-    is_torchvision_available,
     logging,
     requires_backends,
 )
 
-
-if is_torch_available():
-    import torch
-
-if is_torchvision_available():
-    from torchvision.transforms.v2 import functional as tvF
 
 if is_scipy_available():
     from scipy.linalg import inv
@@ -212,7 +206,7 @@ def get_keypoint_predictions(heatmaps: np.ndarray) -> tuple[np.ndarray, np.ndarr
 
 
 def post_dark_unbiased_data_processing(coords: np.ndarray, batch_heatmaps: np.ndarray, kernel: int = 3) -> np.ndarray:
-    """DARK post-pocessing. Implemented by unbiased_data_processing.
+    """DARK post-processing. Implemented by unbiased_data_processing.
 
     Paper references:
     - Huang et al. The Devil is in the Details: Delving into Unbiased Data Processing for Human Pose Estimation (CVPR 2020).

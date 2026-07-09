@@ -20,7 +20,7 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="microsoft/bitnet-b1.58-2B-4T")
-@strict(accept_kwargs=True)
+@strict
 class BitNetConfig(PreTrainedConfig):
     r"""
     ```python
@@ -34,7 +34,8 @@ class BitNetConfig(PreTrainedConfig):
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
-    ```"""
+    ```
+    """
 
     model_type = "bitnet"
     keys_to_ignore_at_inference = ["past_key_values"]

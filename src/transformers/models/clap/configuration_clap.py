@@ -23,10 +23,9 @@ logger = logging.get_logger(__name__)
 
 
 @auto_docstring(checkpoint="laion/clap-htsat-fused")
-@strict(accept_kwargs=True)
+@strict
 class ClapTextConfig(PreTrainedConfig):
     r"""
-
     Examples:
 
     ```python
@@ -51,8 +50,8 @@ class ClapTextConfig(PreTrainedConfig):
     num_attention_heads: int = 12
     intermediate_size: int = 3072
     hidden_act: str = "gelu"
-    hidden_dropout_prob: float = 0.1
-    attention_probs_dropout_prob: float = 0.1
+    hidden_dropout_prob: float | int = 0.1
+    attention_probs_dropout_prob: float | int = 0.1
     max_position_embeddings: int = 514
     type_vocab_size: int = 1
     initializer_factor: float = 1.0
@@ -65,7 +64,7 @@ class ClapTextConfig(PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="laion/clap-htsat-fused")
-@strict(accept_kwargs=True)
+@strict
 class ClapAudioConfig(PreTrainedConfig):
     r"""
     window_size (`int`, *optional*, defaults to 8):
@@ -124,14 +123,14 @@ class ClapAudioConfig(PreTrainedConfig):
     depths: list[int] | tuple[int, ...] = (2, 2, 6, 2)
     num_attention_heads: list[int] | tuple[int, ...] = (4, 8, 16, 32)
     enable_fusion: bool = False
-    hidden_dropout_prob: float = 0.1
+    hidden_dropout_prob: float | int = 0.1
     fusion_type: str | None = None
     patch_embed_input_channels: int = 1
     flatten_patch_embeds: bool = True
     patch_embeds_hidden_size: int = 96
     enable_patch_layer_norm: bool = True
-    drop_path_rate: float = 0.0
-    attention_probs_dropout_prob: float = 0.0
+    drop_path_rate: float | int = 0.0
+    attention_probs_dropout_prob: float | int = 0.0
     qkv_bias: bool = True
     mlp_ratio: float = 4.0
     aff_block_r: int = 4
@@ -142,7 +141,7 @@ class ClapAudioConfig(PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="laion/clap-htsat-fused")
-@strict(accept_kwargs=True)
+@strict
 class ClapConfig(PreTrainedConfig):
     r"""
     Example:

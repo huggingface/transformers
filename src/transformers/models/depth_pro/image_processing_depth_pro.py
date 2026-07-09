@@ -15,6 +15,9 @@
 
 from typing import TYPE_CHECKING
 
+import torch
+from torchvision.transforms.v2 import functional as tvF
+
 from ...image_processing_backends import TorchvisionBackend
 from ...image_processing_utils import BatchFeature
 from ...image_transforms import group_images_by_shape, reorder_images
@@ -23,12 +26,11 @@ from ...image_utils import (
     IMAGENET_STANDARD_STD,
     PILImageResampling,
     SizeDict,
+    pil_torch_interpolation_mapping,
 )
 from ...utils import (
     TensorType,
     auto_docstring,
-    is_torch_available,
-    is_torchvision_available,
     logging,
     requires_backends,
 )
@@ -36,14 +38,6 @@ from ...utils import (
 
 if TYPE_CHECKING:
     from .modeling_depth_pro import DepthProDepthEstimatorOutput
-
-if is_torch_available():
-    import torch
-
-if is_torchvision_available():
-    from torchvision.transforms.v2 import functional as tvF
-
-    from ...image_utils import pil_torch_interpolation_mapping
 
 logger = logging.get_logger(__name__)
 

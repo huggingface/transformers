@@ -25,7 +25,7 @@ logger = logging.get_logger(__name__)
 
 
 @auto_docstring(checkpoint="susnato/clvp_dev")
-@strict(accept_kwargs=True)
+@strict
 class ClvpEncoderConfig(PreTrainedConfig):
     r"""
     use_rotary_embedding (`bool`, *optional*, defaults to `True`):
@@ -35,6 +35,7 @@ class ClvpEncoderConfig(PreTrainedConfig):
     summary_type (`str`, *optional*, defaults to `"mean"`):
         What strategy to use to get pooler_output from the last_hidden_state. `"last"`, `"first"`, `"mean"` and
         `"cls_index"` are supported.
+
     Example:
 
     ```python
@@ -98,13 +99,16 @@ class ClvpEncoderConfig(PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="susnato/clvp_dev")
-@strict(accept_kwargs=True)
+@strict
 class ClvpDecoderConfig(PreTrainedConfig):
     r"""
-    resid_pdrop (`float`, *optional*, defaults to 0.1):
-        The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
-    embd_pdrop (`float`, *optional*, defaults to 0.1):
-        The dropout ratio for the embeddings.
+    max_text_tokens (`int`, *optional*, defaults to 404):
+        The maximum sequence length of text tokens that this model might ever be used with. Similar to
+        `n_positions` in `GPT2Config`.
+    n_inner (`int`, *optional*):
+        Dimensionality of the inner feed-forward layers. `None` will set it to 4 times `hidden_size`.
+    num_mel_attn_blocks (`int`, *optional*, defaults to 6):
+        Denotes the number of self attention layers in [`ClvpConditioningEncoder`].
     summary_type (`string`, *optional*, defaults to `"cls_index"`):
         Argument used when doing sequence summary.
         Has to be one of the following options:
@@ -127,13 +131,6 @@ class ClvpDecoderConfig(PreTrainedConfig):
         Whether to use bias in Query, Key and Value layers during self attention.
     decoder_fixing_codes (`list`, *optional*, defaults to `[83, 45, 45, 248]`):
         These values are used in the method `fix_speech_decoder_output` to fix decoder generated outputs.
-    n_inner (`int`, *optional*):
-        Dimensionality of the inner feed-forward layers. `None` will set it to 4 times `hidden_size`.
-    num_mel_attn_blocks (`int`, *optional*, defaults to 6):
-        Denotes the number of self attention layers in [`ClvpConditioningEncoder`].
-    max_text_tokens (`int`, *optional*, defaults to 404):
-        The maximum sequence length of text tokens that this model might ever be used with. Similar to
-        `n_positions` in `GPT2Config`.
 
     Example:
 
@@ -162,8 +159,8 @@ class ClvpDecoderConfig(PreTrainedConfig):
     n_inner: int | None = None
     num_mel_attn_blocks: int = 6
     activation_function: str = "gelu_new"
-    resid_pdrop: float = 0.1
-    embd_pdrop: float = 0.1
+    resid_pdrop: float | int = 0.1
+    embd_pdrop: float | int = 0.1
     attention_dropout: float | int = 0.1
     layer_norm_epsilon: float = 1e-5
     initializer_range: float = 0.02
@@ -184,7 +181,7 @@ class ClvpDecoderConfig(PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="susnato/clvp_dev")
-@strict(accept_kwargs=True)
+@strict
 class ClvpConfig(PreTrainedConfig):
     r"""
     speech_config (`dict`, *optional*):

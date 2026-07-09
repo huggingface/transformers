@@ -28,7 +28,7 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="microsoft/Phi-4-multimodal-instruct")
-@strict(accept_kwargs=True)
+@strict
 class Phi4MultimodalVisionConfig(PreTrainedConfig):
     r"""
     crop_size (`int`, *optional*, defaults to 448):
@@ -64,13 +64,11 @@ class Phi4MultimodalVisionConfig(PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="microsoft/Phi-4-multimodal-instruct")
-@strict(accept_kwargs=True)
+@strict
 class Phi4MultimodalAudioConfig(PreTrainedConfig):
     r"""
     num_blocks (`int`, *optional*, defaults to 24):
         Number of hidden layers in the Transformer encoder.
-    downsample_rate (`int`, *optional*, defaults to 1):
-        Downsample rate for the audio feature extractor.
     activation (`str`, *optional*, defaults to `"swish"`):
         The non-linear activation function in the MLPs.
     chunk_size (`int`, *optional*, defaults to -1):
@@ -103,6 +101,8 @@ class Phi4MultimodalAudioConfig(PreTrainedConfig):
         The non-linear activation function in the nemo conv modules.
     nemo_conv_channels (`int`, *optional*, defaults to 1024):
         Number of channels in the nemo conv modules.
+    downsample_rate (`int`, *optional*, defaults to 1):
+        Downsample rate for the audio feature extractor.
     feature_layer (`int`, *optional*, defaults to -2):
         The index of the layer of the encoder from which to extract audio features.
 
@@ -124,7 +124,7 @@ class Phi4MultimodalAudioConfig(PreTrainedConfig):
     activation: str = "swish"
     chunk_size: int = -1
     left_chunk: int = 18
-    dropout_rate: float = 0.0
+    dropout_rate: float | int = 0.0
     ext_pw_out_channel: int = 1024
     depthwise_separable_out_channel: int = 1024
     depthwise_multiplier: int = 1
@@ -156,7 +156,7 @@ class Phi4MultimodalAudioConfig(PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="microsoft/Phi-4-multimodal-instruct")
-@strict(accept_kwargs=True)
+@strict
 class Phi4MultimodalConfig(PreTrainedConfig):
     r"""
     original_max_position_embeddings (`int`, *optional*, defaults to 4096):
@@ -198,8 +198,8 @@ class Phi4MultimodalConfig(PreTrainedConfig):
     num_hidden_layers: int = 32
     num_attention_heads: int = 32
     num_key_value_heads: int | None = 8
-    resid_pdrop: float = 0.0
-    embd_pdrop: float = 0.0
+    resid_pdrop: float | int = 0.0
+    embd_pdrop: float | int = 0.0
     attention_dropout: float | int = 0.0
     hidden_act: str = "silu"
     max_position_embeddings: int = 131072

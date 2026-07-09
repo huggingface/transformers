@@ -20,7 +20,7 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="microsoft/prophetnet-large-uncased")
-@strict(accept_kwargs=True)
+@strict
 class ProphetNetConfig(PreTrainedConfig):
     r"""
     ngram (`int`, *optional*, defaults to 2):

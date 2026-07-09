@@ -26,14 +26,9 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="ibm-granite/granite-3.0-8b-base")
-@strict(accept_kwargs=True)
+@strict
 class GraniteConfig(PreTrainedConfig):
     r"""
-        embedding_multiplier (`float`, *optional*, defaults to 1.0): embedding multiplier
-        logits_scaling (`float`, *optional*, defaults to 1.0): divisor for output logits
-        residual_multiplier (`float`, *optional*, defaults to 1.0): residual multiplier
-        attention_multiplier (`float`, *optional*, defaults to 1.0): attention multiplier
-
     ```python
     >>> from transformers import GraniteModel, GraniteConfig
 
@@ -45,7 +40,8 @@ class GraniteConfig(PreTrainedConfig):
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
-    ```"""
+    ```
+    """
 
     model_type = "granite"
     keys_to_ignore_at_inference = ["past_key_values"]
@@ -84,10 +80,10 @@ class GraniteConfig(PreTrainedConfig):
     attention_bias: bool = False
     attention_dropout: float | int = 0.0
     mlp_bias: bool = False
-    embedding_multiplier: float = 1.0
-    logits_scaling: float = 1.0
-    residual_multiplier: float = 1.0
-    attention_multiplier: float = 1.0
+    embedding_multiplier: float | int = 1.0
+    logits_scaling: float | int = 1.0
+    residual_multiplier: float | int = 1.0
+    attention_multiplier: float | int = 1.0
 
     def __post_init__(self, **kwargs):
         if self.num_key_value_heads is None:

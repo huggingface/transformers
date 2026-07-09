@@ -25,7 +25,7 @@ from ..auto import CONFIG_MAPPING, AutoConfig
 
 
 @auto_docstring(checkpoint="lerobot/pi0_base")
-@strict(accept_kwargs=True)
+@strict
 class PI0Config(PreTrainedConfig):
     r"""
     vlm_config (`dict`, *optional*):
@@ -52,8 +52,6 @@ class PI0Config(PreTrainedConfig):
         Minimum period for sinusoidal time embedding.
     max_period (`float`, *optional*, defaults to 4.0):
         Maximum period for sinusoidal time embedding.
-    vlm_projection_dim (`int`, *optional*, defaults to 2048):
-        The projection dimension for VLM's multimodal projection layer.
     loss_reduction (`str`, *optional*, defaults to `"mean"`):
         The reduction to use on MSE loss.
 
@@ -127,8 +125,8 @@ class PI0Config(PreTrainedConfig):
                 vocab_size=self.vlm_config.text_config.vocab_size,
             )
 
-        # Force bidirectional attention
-        self.dit_config.is_causal = False
+        # Force bidirectional attention for images in Paligemma
+        self.dit_config.is_causal = True
         self.dit_config.use_bidirectional_attention = True
         self.vlm_config.text_config.use_bidirectional_attention = True
         super().__post_init__(**kwargs)

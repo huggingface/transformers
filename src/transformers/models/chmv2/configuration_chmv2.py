@@ -29,15 +29,13 @@ from ..auto import AutoConfig
 
 
 @auto_docstring(checkpoint="facebook/dinov3-vitl16-chmv2-dpt-head")
-@strict(accept_kwargs=True)
+@strict
 class CHMv2Config(PreTrainedConfig):
     r"""
     backbone_config (`Union[dict, "PreTrainedConfig"]`, *optional*):
         The configuration of the backbone model. Only DINOv3ViTConfig is currently supported.
     patch_size (`int`, *optional*, defaults to 16):
         The patch size used by the backbone vision transformer.
-    initializer_range (`float`, *optional*, defaults to 0.02):
-        The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
     reassemble_factors (`list[float]`, *optional*, defaults to `[4, 2, 1, 0.5]`):
         The up/downsampling factors of the reassemble layers.
     post_process_channels (`list[int]`, *optional*, defaults to `[128, 256, 512, 1024]`):

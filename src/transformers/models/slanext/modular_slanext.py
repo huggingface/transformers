@@ -48,7 +48,7 @@ logger = logging.get_logger(__name__)
 
 
 @auto_docstring(checkpoint="PaddlePaddle/SLANeXt_wired_safetensors")
-@strict(accept_kwargs=True)
+@strict
 class SLANeXtVisionConfig(GotOcr2VisionConfig):
     image_size: int = 512
 
@@ -58,23 +58,22 @@ class SLANeXtVisionAttention(GotOcr2VisionAttention):
 
 
 @auto_docstring(checkpoint="PaddlePaddle/SLANeXt_wired_safetensors")
-@strict(accept_kwargs=True)
+@strict
 class SLANeXtConfig(PreTrainedConfig):
-    """
-    Args:
-        vision_config (`dict` or [`SLANeXtVisionConfig`], *optional*):
-            Configuration for the vision encoder. If `None`, a default [`SLANeXtVisionConfig`] is used.
-        post_conv_in_channels (`int`, *optional*, defaults to 256):
-            Number of input channels for the post-encoder convolution layer.
-        post_conv_out_channels (`int`, *optional*, defaults to 512):
-            Number of output channels for the post-encoder convolution layer.
-        out_channels (`int`, *optional*, defaults to 50):
-            Vocabulary size for the table structure token prediction head, i.e., the number of distinct structure
-            tokens the model can predict.
-        hidden_size (`int`, *optional*, defaults to 512):
-            Dimensionality of the hidden states in the attention GRU cell and the structure/location prediction heads.
-        max_text_length (`int`, *optional*, defaults to 500):
-            Maximum number of autoregressive decoding steps (tokens) for the structure and location decoder.
+    r"""
+    vision_config (`dict` or [`SLANeXtVisionConfig`], *optional*):
+        Configuration for the vision encoder. If `None`, a default [`SLANeXtVisionConfig`] is used.
+    post_conv_in_channels (`int`, *optional*, defaults to 256):
+        Number of input channels for the post-encoder convolution layer.
+    post_conv_out_channels (`int`, *optional*, defaults to 512):
+        Number of output channels for the post-encoder convolution layer.
+    out_channels (`int`, *optional*, defaults to 50):
+        Vocabulary size for the table structure token prediction head, i.e., the number of distinct structure
+        tokens the model can predict.
+    hidden_size (`int`, *optional*, defaults to 512):
+        Dimensionality of the hidden states in the attention GRU cell and the structure/location prediction heads.
+    max_text_length (`int`, *optional*, defaults to 500):
+        Maximum number of autoregressive decoding steps (tokens) for the structure and location decoder.
     """
 
     model_type = "slanext"
@@ -268,8 +267,8 @@ class SLANeXtSLAHead(SLANeXtPreTrainedModel):
         return BaseModelOutput(last_hidden_state=structure_preds, hidden_states=structure_preds_list)
 
 
-@dataclass
 @auto_docstring
+@dataclass
 class SLANeXtForTableRecognitionOutput(BaseModelOutput):
     r"""
     head_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):

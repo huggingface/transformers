@@ -27,7 +27,7 @@ logger = logging.get_logger(__name__)
 
 
 @auto_docstring(checkpoint="PaddlePaddle/PP-Chart2Table_safetensors")
-@strict(accept_kwargs=True)
+@strict
 class PPChart2TableConfig(GotOcr2Config):
     model_type = "pp_chart2table"
 

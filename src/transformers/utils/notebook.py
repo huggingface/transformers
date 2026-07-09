@@ -351,7 +351,9 @@ class NotebookProgressCallback(TrainerCallback):
             tt.write_line(values)
 
     def on_evaluate(self, args, state, control, metrics=None, **kwargs):
-        tt = _require(self.training_tracker, "on_train_begin must be called before on_evaluate")
+        # Recompute first_column here since on_evaluate can be called before on_train_begin,
+        # where it is normally initialized.
+        self.first_column = "Epoch" if args.eval_strategy == IntervalStrategy.EPOCH else "Step"
 
         values = {"Training Loss": "No log", "Validation Loss": "No log"}
         for log in reversed(state.log_history):
@@ -374,6 +376,8 @@ class NotebookProgressCallback(TrainerCallback):
         _ = metrics.pop(f"{metric_key_prefix}_runtime", None)
         _ = metrics.pop(f"{metric_key_prefix}_samples_per_second", None)
         _ = metrics.pop(f"{metric_key_prefix}_steps_per_second", None)
+        _ = metrics.pop(f"{metric_key_prefix}_model_preparation_time", None)
+
         for k, v in metrics.items():
             splits = k.split("_")
             name = " ".join([part.capitalize() for part in splits[1:]])
@@ -381,11 +385,18 @@ class NotebookProgressCallback(TrainerCallback):
                 # Single dataset
                 name = "Validation Loss"
             values[name] = v
-        tt.write_line(values)
-        tt.remove_child()
+
+        if self.training_tracker is not None:
+            tt = self.training_tracker
+            tt.write_line(values)
+            tt.remove_child()
+            # Evaluation takes a long time so we should force the next update.
+            self._force_next_update = True
+        else:
+            # No training tracker, but still show the metrics
+            disp.display(disp.HTML(text_to_html_table([list(values.keys()), list(values.values())])))
+
         self.prediction_bar = None
-        # Evaluation takes a long time so we should force the next update.
-        self._force_next_update = True
 
     def on_train_end(self, args, state, control, **kwargs):
         tt = _require(self.training_tracker, "on_train_begin must be called before on_train_end")

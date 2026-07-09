@@ -22,16 +22,18 @@ from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput, make_nested_list_of_images
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import BatchEncoding, TextInput
-from ...utils import auto_docstring, is_num2words_available, is_vision_available, logging
+from ...utils import auto_docstring, is_num2words_available, logging
 from ...video_utils import VideoInput
 
 
-if is_vision_available():
-    from .video_processing_smolvlm import (
-        DEFAULT_MEDIA_OUTTRO,
-        DEFAULT_VIDEO_INTRO,
-        FRAME_TIMESTAMP_MESSAGE,
-    )
+# Adapted from transformers.models.smolvlm.video_processing_smolvlm.DEFAULT_VIDEO_INTRO
+DEFAULT_VIDEO_INTRO = (
+    "You are provided the following series of {frame_count} frames from a {video_duration} [H:MM:SS] video.\n"
+)
+# Adapted from transformers.models.smolvlm.video_processing_smolvlm.DEFAULT_MEDIA_OUTTRO
+DEFAULT_MEDIA_OUTTRO = "\n\n"
+# Adapted from transformers.models.smolvlm.video_processing_smolvlm.FRAME_TIMESTAMP_MESSAGE
+FRAME_TIMESTAMP_MESSAGE = "\nFrame from {timestamp}:"
 
 if TYPE_CHECKING:
     from ...tokenization_utils_base import PreTokenizedInput
@@ -331,7 +333,7 @@ class SmolVLMProcessor(ProcessorMixin):
             (isinstance(content, dict) and content["type"] == "video")
             for conversation in conversations
             for message in conversation
-            for content in message["content"]
+            for content in (message.get("content") or [])
         )
         if chat_template is None and has_video:
             # re-assign to the correct default template for BC, if user is not requesting their own template

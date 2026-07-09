@@ -21,13 +21,13 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="albert/albert-xxlarge-v2")
-@strict(accept_kwargs=True)
+@strict
 class AlbertConfig(PreTrainedConfig):
     r"""
-    inner_group_num (`int`, *optional*, defaults to 1):
-        The number of inner repetition of attention and ffn.
     num_hidden_groups (`int`, *optional*, defaults to 1):
         Number of groups for the hidden layers, parameters in the same group are shared.
+    inner_group_num (`int`, *optional*, defaults to 1):
+        The number of inner repetition of attention and ffn.
 
     Examples:
 

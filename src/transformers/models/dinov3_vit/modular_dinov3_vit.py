@@ -23,7 +23,6 @@ from torch import nn
 
 from transformers.models.arcee.modeling_arcee import ArceeMLP
 from transformers.models.dinov2.modeling_dinov2 import (
-    Dinov2DropPath,
     Dinov2LayerScale,
     Dinov2PreTrainedModel,
     eager_attention_forward,
@@ -35,25 +34,26 @@ from ... import initialization as init
 from ...backbone_utils import BackboneMixin, filter_output_hidden_states
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BackboneOutput, BaseModelOutput, BaseModelOutputWithPooling
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...pytorch_utils import compile_compatible_method_lru_cache
 from ...utils import TransformersKwargs, auto_docstring, logging
 from ...utils.generic import can_return_tuple, maybe_autocast, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
+from ..swin.modeling_swin import SwinDropPath
 from .configuration_dinov3_vit import DINOv3ViTConfig
 
 
 logger = logging.get_logger(__name__)
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Output type of [`DINOv3ViTBackbone`], extending [`BackboneOutput`] with optional CLS tokens from
     each selected feature stage (used when `config.return_class_token=True`).
     """
 )
+@dataclass
 class DINOv3ViTBackboneOutput(BackboneOutput):
     r"""
     cls_tokens (`tuple(torch.FloatTensor)`, *optional*):
@@ -296,15 +296,15 @@ class DINOv3ViTLayerScale(Dinov2LayerScale):
     pass
 
 
-class DINOv3ViTDropPath(Dinov2DropPath):
-    pass
-
-
 class DINOv3ViTMLP(ArceeMLP):
     pass
 
 
 class DINOv3ViTGatedMLP(LlamaMLP):
+    pass
+
+
+class Dinov3ViTDropPath(SwinDropPath):
     pass
 
 
@@ -317,7 +317,7 @@ class DINOv3ViTLayer(GradientCheckpointingLayer):
         self.norm1 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.attention = DINOv3ViTAttention(config)
         self.layer_scale1 = DINOv3ViTLayerScale(config)
-        self.drop_path = DINOv3ViTDropPath(config.drop_path_rate) if config.drop_path_rate > 0.0 else nn.Identity()
+        self.drop_path = Dinov3ViTDropPath(config.drop_path_rate) if config.drop_path_rate > 0.0 else nn.Identity()
 
         self.norm2 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
@@ -367,13 +367,11 @@ class DINOv3ViTPreTrainedModel(Dinov2PreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module) -> None:
         """Initialize the weights"""
+        PreTrainedModel._init_weights(self, module)
         if isinstance(module, (nn.Linear, nn.Conv2d)):
             init.trunc_normal_(module.weight, mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
                 init.zeros_(module.bias)
-        elif isinstance(module, nn.LayerNorm):
-            init.zeros_(module.bias)
-            init.ones_(module.weight)
         elif isinstance(module, DINOv3ViTEmbeddings):
             init.trunc_normal_(module.cls_token, mean=0.0, std=self.config.initializer_range)
             if module.config.num_register_tokens > 0:

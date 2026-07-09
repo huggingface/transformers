@@ -16,6 +16,7 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from typing import Union
 
+import numpy as np
 import torch
 import torch.nn as nn
 from huggingface_hub.dataclasses import strict
@@ -34,6 +35,7 @@ from ...image_utils import (
     SizeDict,
 )
 from ...modeling_outputs import BaseModelOutputWithPooling
+from ...modeling_utils import PreTrainedModel
 from ...processing_utils import ImagesKwargs, Unpack
 from ...tokenization_utils_base import (
     PreTokenizedInput,
@@ -44,7 +46,6 @@ from ...utils import (
     TransformersKwargs,
     auto_docstring,
     can_return_tuple,
-    is_torchvision_available,
     logging,
 )
 from ..auto import CONFIG_MAPPING, AutoConfig, AutoModel
@@ -61,9 +62,6 @@ from ..idefics.modeling_idefics import IdeficsBaseModelOutputWithPast, IdeficsCa
 from ..sam.modeling_sam import SamLayerNorm, SamVisionNeck
 
 
-if is_torchvision_available():
-    import torchvision.transforms.v2.functional as tvF
-
 logger = logging.get_logger(__name__)
 
 
@@ -75,7 +73,7 @@ DEEPSEEK_VL_COMMON_CUSTOM_ARGS = r"""
 
 
 @auto_docstring(checkpoint="deepseek-community/deepseek-vl-7b-chat")
-@strict(accept_kwargs=True)
+@strict
 class DeepseekVLHybridConfig(DeepseekVLConfig):
     r"""
     high_res_vision_config (`Union[AutoConfig, dict]`,  *optional*, defaults to `SamVisionConfig`):
@@ -117,8 +115,8 @@ class DeepseekVLHybridConfig(DeepseekVLConfig):
         super().__post_init__(**kwargs)
 
 
-@dataclass
 @auto_docstring
+@dataclass
 class BaseModelOutputWithHighResVisionEncodings(BaseModelOutputWithPooling):
     r"""
     high_res_vision_last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
@@ -217,17 +215,11 @@ class DeepseekVLHybridPreTrainedModel(DeepseekVLPreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
-        if isinstance(module, nn.Linear):
-            init.normal_(module.weight, mean=0.0, std=self.config.text_config.initializer_range)
-            if module.bias is not None:
-                init.zeros_(module.bias)
-        elif isinstance(module, nn.Conv2d):
+        PreTrainedModel._init_weights(self, module)
+        if isinstance(module, nn.Conv2d):
             init.kaiming_normal_(module.weight, mode="fan_out", nonlinearity="relu")
             if module.bias is not None:
                 init.zeros_(module.bias)
-        elif isinstance(module, DeepseekVLHybridLayerNorm):
-            init.ones_(module.weight)
-            init.zeros_(module.bias)
         elif isinstance(module, DeepseekVLHybridModel):
             init.zeros_(module.high_res_vision_alpha)
 
@@ -335,7 +327,7 @@ class DeepseekVLHybridModel(DeepseekVLModel):
             else:
                 image_attention_mask = input_ids == self.config.image_token_id
 
-            image_attention_mask = image_attention_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
+            image_attention_mask = image_attention_mask.unsqueeze(-1).to(inputs_embeds.device)
             image_embeds = self.get_image_features(pixel_values, high_res_pixel_values, return_dict=True).pooler_output
             image_features = image_embeds.reshape(-1, inputs_embeds.shape[-1])
             image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
@@ -534,13 +526,13 @@ class DeepseekVLHybridImageProcessorPil(DeepseekVLImageProcessorPil):
 
     def _preprocess(
         self,
-        images: list["torch.Tensor"],
+        images: list[np.ndarray],
         do_resize: bool,
         size: SizeDict,
         high_res_size: SizeDict,
         min_size: int,
-        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
-        high_res_resample: "PILImageResampling | tvF.InterpolationMode | int | None",
+        resample: "PILImageResampling | None",
+        high_res_resample: "PILImageResampling | None",
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,
@@ -650,8 +642,8 @@ class DeepseekVLHybridImageProcessor(DeepseekVLImageProcessor):
         size: SizeDict,
         high_res_size: SizeDict,
         min_size: int,
-        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
-        high_res_resample: "PILImageResampling | tvF.InterpolationMode | int | None",
+        resample: "PILImageResampling | None",
+        high_res_resample: "PILImageResampling | None",
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,

@@ -28,7 +28,7 @@ from ...utils.type_validators import interval
 
 
 @auto_docstring(checkpoint="inceptionai/Jais-2-8B-Chat")
-@strict(accept_kwargs=True)
+@strict
 class Jais2Config(PreTrainedConfig):
     r"""
     ```python

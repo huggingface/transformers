@@ -20,15 +20,11 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="Salesforce/ctrl")
-@strict(accept_kwargs=True)
+@strict
 class CTRLConfig(PreTrainedConfig):
     r"""
     dff (`int`, *optional*, defaults to 8192):
         Dimensionality of the inner dimension of the feed forward networks (FFN).
-    resid_pdrop (`float`, *optional*, defaults to 0.1):
-        The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
-    embd_pdrop (`int`, *optional*, defaults to 0.1):
-        The dropout ratio for the embeddings.
 
     Examples:
 
@@ -60,8 +56,8 @@ class CTRLConfig(PreTrainedConfig):
     dff: int = 8192
     n_layer: int = 48
     n_head: int = 16
-    resid_pdrop: float = 0.1
-    embd_pdrop: float = 0.1
+    resid_pdrop: float | int = 0.1
+    embd_pdrop: float | int = 0.1
     layer_norm_epsilon: float = 1e-6
     initializer_range: float = 0.02
     use_cache: bool = True

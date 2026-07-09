@@ -26,17 +26,17 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="PaddlePaddle/SLANeXt_wired_safetensors")
-@strict(accept_kwargs=True)
+@strict
 class SLANeXtVisionConfig(PreTrainedConfig):
     r"""
     output_channels (`int`, *optional*, defaults to 256):
         Dimensionality of the output channels in the Patch Encoder.
-    window_size (`int`, *optional*, defaults to 14):
-        Window size for relative position.
     use_abs_pos (`bool`, *optional*, defaults to `True`):
         Whether to use absolute position embedding.
     use_rel_pos (`bool`, *optional*, defaults to `True`):
         Whether to use relative position embedding.
+    window_size (`int`, *optional*, defaults to 14):
+        Window size for relative position.
     global_attn_indexes (`list[int]`, *optional*, defaults to `[2, 5, 8, 11]`):
         The indexes of the global attention layers.
     mlp_dim (`int`, *optional*, defaults to 3072):
@@ -64,23 +64,22 @@ class SLANeXtVisionConfig(PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="PaddlePaddle/SLANeXt_wired_safetensors")
-@strict(accept_kwargs=True)
+@strict
 class SLANeXtConfig(PreTrainedConfig):
-    """
-    Args:
-        vision_config (`dict` or [`SLANeXtVisionConfig`], *optional*):
-            Configuration for the vision encoder. If `None`, a default [`SLANeXtVisionConfig`] is used.
-        post_conv_in_channels (`int`, *optional*, defaults to 256):
-            Number of input channels for the post-encoder convolution layer.
-        post_conv_out_channels (`int`, *optional*, defaults to 512):
-            Number of output channels for the post-encoder convolution layer.
-        out_channels (`int`, *optional*, defaults to 50):
-            Vocabulary size for the table structure token prediction head, i.e., the number of distinct structure
-            tokens the model can predict.
-        hidden_size (`int`, *optional*, defaults to 512):
-            Dimensionality of the hidden states in the attention GRU cell and the structure/location prediction heads.
-        max_text_length (`int`, *optional*, defaults to 500):
-            Maximum number of autoregressive decoding steps (tokens) for the structure and location decoder.
+    r"""
+    vision_config (`dict` or [`SLANeXtVisionConfig`], *optional*):
+        Configuration for the vision encoder. If `None`, a default [`SLANeXtVisionConfig`] is used.
+    post_conv_in_channels (`int`, *optional*, defaults to 256):
+        Number of input channels for the post-encoder convolution layer.
+    post_conv_out_channels (`int`, *optional*, defaults to 512):
+        Number of output channels for the post-encoder convolution layer.
+    out_channels (`int`, *optional*, defaults to 50):
+        Vocabulary size for the table structure token prediction head, i.e., the number of distinct structure
+        tokens the model can predict.
+    hidden_size (`int`, *optional*, defaults to 512):
+        Dimensionality of the hidden states in the attention GRU cell and the structure/location prediction heads.
+    max_text_length (`int`, *optional*, defaults to 500):
+        Maximum number of autoregressive decoding steps (tokens) for the structure and location decoder.
     """
 
     model_type = "slanext"

@@ -20,10 +20,11 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="naver-clova-ix/donut-base")
-@strict(accept_kwargs=True)
+@strict
 class DonutSwinConfig(PreTrainedConfig):
     r"""
-    window_size (`int`, *optional*, defaults to 7): Size of windows.
+    window_size (`int`, *optional*, defaults to 7):
+        Size of windows.
 
     Example:
 
@@ -56,9 +57,9 @@ class DonutSwinConfig(PreTrainedConfig):
     window_size: int = 7
     mlp_ratio: float = 4.0
     qkv_bias: bool = True
-    hidden_dropout_prob: float = 0.0
-    attention_probs_dropout_prob: float = 0.0
-    drop_path_rate: float = 0.1
+    hidden_dropout_prob: float | int = 0.0
+    attention_probs_dropout_prob: float | int = 0.0
+    drop_path_rate: float | int = 0.1
     hidden_act: str = "gelu"
     use_absolute_embeddings: bool = False
     initializer_range: float = 0.02

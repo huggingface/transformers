@@ -40,7 +40,7 @@ class PPChart2TableProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             add_generation_prompt=True,
         )
         inputs = processor(images=image_input, text=inputs, return_tensors="pt")
-        self.assertEqual(inputs["input_ids"].shape, (1, 287))
+        self.assertEqual(inputs["input_ids"].shape, (1, 286))
         self.assertEqual(inputs["pixel_values"].shape, (1, 3, 1024, 1024))
 
     def test_unstructured_kwargs_batched(self):

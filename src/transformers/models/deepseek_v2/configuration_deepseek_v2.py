@@ -26,7 +26,7 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="deepseek-ai/DeepSeek-V2-Lite")
-@strict(accept_kwargs=True)
+@strict
 class DeepseekV2Config(PreTrainedConfig):
     r"""
     first_k_dense_replace (`int`, *optional*, defaults to 0):
@@ -94,6 +94,15 @@ class DeepseekV2Config(PreTrainedConfig):
     attention_dropout: float | None = 0.0
     mlp_bias: bool = False
     head_dim: int | None = None
+    base_model_ep_plan = {
+        "layers.*.mlp.gate": "ep_router",
+        "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
+        "layers.*.mlp.experts.down_proj": "grouped_gemm",
+        "layers.*.mlp.experts": "moe_tp_experts",
+    }
+    attribute_map = {
+        "num_experts": "n_routed_experts",
+    }
     first_k_dense_replace: int = 0
     kv_lora_rank: int = 512
     q_lora_rank: int | None = 1536

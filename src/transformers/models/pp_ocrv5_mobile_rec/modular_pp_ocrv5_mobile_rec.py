@@ -33,7 +33,7 @@ logger = logging.get_logger(__name__)
 
 
 @auto_docstring(checkpoint="PaddlePaddle/PP-OCRv5_mobile_rec_safetensors")
-@strict(accept_kwargs=True)
+@strict
 class PPOCRV5MobileRecConfig(PPOCRV5ServerRecConfig):
     def __post_init__(self, **kwargs):
         if self.conv_kernel_size is None:

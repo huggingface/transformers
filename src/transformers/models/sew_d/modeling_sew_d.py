@@ -202,19 +202,16 @@ def build_relative_position(query_size, key_size, bucket_size=-1, max_position=-
 
 
 @torch.jit.script
-# Copied from transformers.models.deberta.modeling_deberta.c2p_dynamic_expand
 def c2p_dynamic_expand(c2p_pos, query_layer, relative_pos):
     return c2p_pos.expand([query_layer.size(0), query_layer.size(1), query_layer.size(2), relative_pos.size(-1)])
 
 
 @torch.jit.script
-# Copied from transformers.models.deberta.modeling_deberta.p2c_dynamic_expand
 def p2c_dynamic_expand(c2p_pos, query_layer, key_layer):
     return c2p_pos.expand([query_layer.size(0), query_layer.size(1), key_layer.size(-2), key_layer.size(-2)])
 
 
 @torch.jit.script
-# Copied from transformers.models.deberta.modeling_deberta.pos_dynamic_expand
 def pos_dynamic_expand(pos_index, p2c_att, key_layer):
     return pos_index.expand(p2c_att.size()[:2] + (pos_index.size(-2), key_layer.size(-2)))
 
@@ -1017,8 +1014,10 @@ class SEWDTransformerEncoder(nn.Module):
 
     def get_attention_mask(self, attention_mask):
         if attention_mask.dim() <= 2:
-            extended_attention_mask = attention_mask.unsqueeze(1).unsqueeze(2)
-            attention_mask = extended_attention_mask * extended_attention_mask.squeeze(-2).unsqueeze(-1)
+            # Shape: {batch, 1, 1, seq} — broadcasts with attention scores {batch, heads, seq, seq}.
+            # Avoids building a full {batch, 1, seq, seq} outer product whose seq dimension gets baked
+            # as a constant during ONNX export and breaks inference with different sequence lengths.
+            attention_mask = attention_mask.unsqueeze(1).unsqueeze(2)
         elif attention_mask.dim() == 3:
             attention_mask = attention_mask.unsqueeze(1)
 
@@ -1129,23 +1128,27 @@ class SEWDEncoder(nn.Module):
             expand_attention_mask = attention_mask.unsqueeze(-1).repeat(1, 1, hidden_states.shape[2])
             hidden_states[~expand_attention_mask.bool()] = 0.0
 
-            input_lengths = (attention_mask.long()).sum(-1)
-            # apply pooling formula to get real output_lengths
-            output_lengths = input_lengths // self.config.squeeze_factor
-            attention_ids = (
-                torch.arange(0, max_encoder_length, device=output_lengths.device)
-                .view(1, -1)
-                .expand(output_lengths.shape[0], -1)
+            # Pool the attention mask to match the pooled hidden_states shape.
+            # max_pool1d avoids torch.arange(max_encoder_length) which bakes
+            # the sequence length as a constant during ONNX export.
+            attention_mask = (
+                nn.functional.max_pool1d(
+                    attention_mask.float().unsqueeze(1),
+                    kernel_size=self.config.squeeze_factor,
+                    stride=self.config.squeeze_factor,
+                )
+                .squeeze(1)
+                .long()
             )
-            attention_mask = (attention_ids < output_lengths.view(-1, 1)).long()
 
         n_input_timesteps = hidden_states.shape[1]
 
         hidden_states = hidden_states.transpose(1, 2)
         position_embeddings = self.pos_conv_embed(hidden_states)
         pooled_hidden_states = self.pool(hidden_states)
-        min_length = min(position_embeddings.size(-1), pooled_hidden_states.size(-1))
-        hidden_states = pooled_hidden_states[..., :min_length] + position_embeddings[..., :min_length]
+        # pos_conv_embed (stride=squeeze_factor, ceil padding) always produces >= pooled length;
+        # trim to the pooled length to align shapes without a data-dependent min() guard.
+        hidden_states = pooled_hidden_states + position_embeddings[..., : pooled_hidden_states.size(-1)]
         hidden_states = hidden_states.transpose(1, 2)
 
         encoder_outputs = self.encoder(hidden_states, attention_mask, output_hidden_states, output_attentions)
@@ -1176,6 +1179,7 @@ class SEWDPreTrainedModel(PreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
+        super()._init_weights(module)
         if isinstance(module, SEWDPositionalConvEmbedding):
             init.normal_(
                 module.conv.weight,
@@ -1183,11 +1187,6 @@ class SEWDPreTrainedModel(PreTrainedModel):
                 std=2 * math.sqrt(1 / (module.conv.kernel_size[0] * module.conv.in_channels)),
             )
             init.constant_(module.conv.bias, 0)
-        elif isinstance(module, nn.Linear):
-            init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
-        elif isinstance(module, (nn.LayerNorm, nn.GroupNorm)):
-            init.zeros_(module.bias)
-            init.ones_(module.weight)
         elif isinstance(module, nn.Conv1d):
             if is_deepspeed_zero3_enabled():
                 import deepspeed
@@ -1200,14 +1199,6 @@ class SEWDPreTrainedModel(PreTrainedModel):
                         init.kaiming_normal_(module.weight)
             else:
                 init.kaiming_normal_(module.weight)
-        elif isinstance(module, nn.Embedding):
-            init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
-            # Here we need the check explicitly, as we slice the weight in the `zeros_` call, so it looses the flag
-            if module.padding_idx is not None and not getattr(module.weight, "_is_hf_initialized", False):
-                init.zeros_(module.weight[module.padding_idx])
-
-        if isinstance(module, (nn.Linear, nn.Conv1d)) and module.bias is not None:
-            init.zeros_(module.bias)
 
     def _get_feat_extract_output_lengths(self, input_lengths: torch.LongTensor | int):
         """
@@ -1226,15 +1217,11 @@ class SEWDPreTrainedModel(PreTrainedModel):
 
     def _get_feature_vector_attention_mask(self, feature_vector_length: int, attention_mask: torch.LongTensor):
         output_lengths = self._get_feat_extract_output_lengths(attention_mask.sum(-1)).to(torch.long)
-        batch_size = attention_mask.shape[0]
-
-        attention_mask = torch.zeros(
-            (batch_size, feature_vector_length), dtype=attention_mask.dtype, device=attention_mask.device
-        )
-        # these two operations makes sure that all values before the output lengths idxs are attended to
-        attention_mask[(torch.arange(attention_mask.shape[0], device=attention_mask.device), output_lengths - 1)] = 1
-        attention_mask = attention_mask.flip([-1]).cumsum(-1).flip([-1]).bool()
-        return attention_mask
+        # Build the feature mask via arange broadcast comparison.  This keeps feature_vector_length
+        # as a symbolic SymInt in torch.export / torch.onnx.export (ONNX Range op), avoiding the
+        # data-dependent scatter + cumsum pattern that bakes the length as a constant.
+        attention_ids = torch.arange(feature_vector_length, device=attention_mask.device)
+        return attention_ids.unsqueeze(0) < output_lengths.unsqueeze(1)
 
 
 @auto_docstring

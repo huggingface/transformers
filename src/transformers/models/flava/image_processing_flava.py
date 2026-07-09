@@ -20,6 +20,7 @@ from functools import lru_cache
 from typing import Any
 
 import torch
+from torchvision.transforms.v2 import functional as tvF
 
 from ...image_processing_backends import TorchvisionBackend
 from ...image_processing_utils import BatchFeature, get_size_dict
@@ -36,12 +37,7 @@ from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import (
     TensorType,
     auto_docstring,
-    is_torchvision_available,
 )
-
-
-if is_torchvision_available():
-    from torchvision.transforms.v2 import functional as tvF
 
 
 # These values are taken from CLIP
@@ -82,10 +78,9 @@ class FlavaImageProcessorKwargs(ImagesKwargs, total=False):
     codebook_size (`dict[str, int]`, *optional*, defaults to `{"height": 224, "width": 224}`):
         Resize the input for codebook to the given size. Can be overridden by the `codebook_size` parameter in
         `preprocess`.
-    codebook_resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.LANCZOS` for PIL backend,
-        `PILImageResampling.BICUBIC` for torchvision backend):
-        Resampling filter to use if resizing the codebook image. LANCZOS is not supported for torch Tensors;
-        BICUBIC is used as the closest alternative for the torchvision backend. Can be overridden by the
+    codebook_resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.LANCZOS`):
+        Resampling filter to use if resizing the codebook image. With torchvision < 0.27, LANCZOS is not
+        supported for torch Tensors and BICUBIC is used as the closest alternative. Can be overridden by the
         `codebook_resample` parameter in `preprocess`.
     codebook_do_center_crop (`bool`, *optional*, defaults to `True`):
         Whether to crop the input for codebook at the center. If the input size is smaller than
@@ -239,9 +234,7 @@ class FlavaImageProcessor(TorchvisionBackend):
     return_codebook_pixels = False
     codebook_do_resize = True
     codebook_size = {"height": 112, "width": 112}
-    # LANCZOS resampling is not supported for torch Tensors; BICUBIC is the closest alternative.
-    # Note: the PIL backend defaults to LANCZOS for this parameter.
-    codebook_resample = PILImageResampling.BICUBIC
+    codebook_resample = PILImageResampling.LANCZOS
     codebook_do_center_crop = True
     codebook_crop_size = {"height": 112, "width": 112}
     codebook_do_rescale = True

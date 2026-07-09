@@ -16,6 +16,7 @@
 import numpy as np
 
 from ...image_processing_backends import PilBackend
+from ...image_processing_outputs import SemanticSegmentationPostProcessorOutput
 from ...image_processing_utils import BatchFeature
 from ...image_utils import (
     IMAGENET_DEFAULT_MEAN,
@@ -25,16 +26,49 @@ from ...image_utils import (
     PILImageResampling,
     SizeDict,
 )
-from ...processing_utils import Unpack
-from ...utils import TensorType, auto_docstring, is_torch_available, is_torchvision_available, requires_backends
-from .image_processing_seggpt import SegGptImageProcessorKwargs, build_palette
+from ...processing_utils import ImagesKwargs, Unpack
+from ...utils import TensorType, auto_docstring, is_torch_available
+from ...utils.import_utils import requires
 
 
 if is_torch_available():
     import torch
 
-if is_torchvision_available():
-    from torchvision.transforms.v2 import functional as tvF
+
+# Adapted from transformers.models.seggpt.image_processing_seggpt.SegGptImageProcessorKwargs
+class SegGptImageProcessorKwargs(ImagesKwargs, total=False):
+    r"""
+    num_labels (`int`, *optional*):
+        Number of classes in the segmentation task (excluding the background). If specified, a palette will be
+        built, assuming that class_idx 0 is the background, to map the prompt mask from a plain segmentation map
+        to a 3-channel RGB image. Not specifying this will result in the prompt mask being duplicated across the
+        channel dimension when `do_convert_rgb` is `True`.
+    """
+
+    num_labels: int
+
+
+# Adapted from transformers.models.seggpt.image_processing_seggpt.build_palette
+# See https://huggingface.co/papers/2212.02499 at 3.1 Redefining Output Spaces as "Images" - Semantic Segmentation
+# Taken from https://github.com/Abdullah-Meda/Painter/blob/main/Painter/data/coco_semseg/gen_color_coco_panoptic_segm.py#L31
+def build_palette(num_labels: int) -> list[tuple[int, int, int]]:
+    base = int(num_labels ** (1 / 3)) + 1
+    margin = 256 // base
+
+    # class_idx 0 is the background which is mapped to black
+    color_list = [(0, 0, 0)]
+    for location in range(num_labels):
+        num_seq_r = location // base**2
+        num_seq_g = (location % base**2) // base
+        num_seq_b = location % base
+
+        R = 255 - num_seq_r * margin
+        G = 255 - num_seq_g * margin
+        B = 255 - num_seq_b * margin
+
+        color_list.append((R, G, B))
+
+    return color_list
 
 
 @auto_docstring
@@ -181,7 +215,7 @@ class SegGptImageProcessorPil(PilBackend):
         images: list[np.ndarray],
         do_resize: bool,
         size: SizeDict,
-        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
+        resample: PILImageResampling | None,
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,
@@ -201,9 +235,14 @@ class SegGptImageProcessorPil(PilBackend):
 
         return processed_images
 
+    @requires(backends=("torch",))
     def post_process_semantic_segmentation(
-        self, outputs, target_sizes: list[tuple[int, int]] | None = None, num_labels: int | None = None
-    ):
+        self,
+        outputs,
+        target_sizes: list[tuple[int, int]] | None = None,
+        num_labels: int | None = None,
+        return_segmentation_scores: bool = False,
+    ) -> "list[torch.Tensor] | list[SemanticSegmentationPostProcessorOutput]":
         """
         Converts the output of [`SegGptImageSegmentationOutput`] into segmentation maps. Only supports PyTorch.
 
@@ -217,15 +256,25 @@ class SegGptImageProcessorPil(PilBackend):
                 Number of classes in the segmentation task (excluding the background). If specified, a palette will be
                 built to map prediction masks from RGB values back to class indices. Should match the value used during
                 preprocessing.
+            return_segmentation_scores (`bool`, *optional*, defaults to `False`):
+                Whether to return segmentation scores alongside the segmentation map. When `True`, each element of
+                the returned list is a [`SemanticSegmentationPostProcessorOutput`] with fields `segmentation`
+                (class IDs, shape `(height, width)`) and `segmentation_scores` (shape `(num_labels+1, height, width)`
+                of negative squared L2 distances to each palette color, or `None` when `num_labels` is not provided).
 
         Returns:
-            `list[torch.Tensor]` of length `batch_size`, where each item is a semantic segmentation map of shape
-            `(height, width)`. Each entry corresponds to a semantic class id.
+            `list[torch.Tensor]` or `list[SemanticSegmentationPostProcessorOutput]`: When
+            `return_segmentation_scores=False` (default), a list of length `batch_size` where each item is a
+            segmentation map of shape `(height, width)` with class IDs. When `return_segmentation_scores=True`,
+            a list of [`SemanticSegmentationPostProcessorOutput`] with fields `segmentation` (class IDs, shape
+            `(height, width)`) and `segmentation_scores` (shape `(num_labels+1, height, width)`). In both cases,
+            `(height, width)` corresponds to the target size (if `target_sizes` is specified).
         """
-
-        requires_backends(self, ["torch"])
-
         masks = outputs.pred_masks
+
+        if target_sizes is not None and len(masks) != len(target_sizes):
+            raise ValueError("Make sure that you pass in as many target sizes as the batch dimension of the logits")
+
         masks = masks[:, :, masks.shape[2] // 2 :, :]
 
         std = torch.tensor(self.image_std).to(masks.device)
@@ -245,11 +294,7 @@ class SegGptImageProcessorPil(PilBackend):
 
         for idx, mask in enumerate(masks):
             if target_sizes is not None:
-                mask = torch.nn.functional.interpolate(
-                    mask.unsqueeze(0),
-                    size=target_sizes[idx],
-                    mode="nearest",
-                )[0]
+                mask = torch.nn.functional.interpolate(mask.unsqueeze(0), size=target_sizes[idx], mode="nearest")[0]
 
             if num_labels is not None:
                 channels, height, width = mask.shape
@@ -258,10 +303,19 @@ class SegGptImageProcessorPil(PilBackend):
                 dist = torch.pow(dist, 2)
                 dist = torch.sum(dist, dim=-1)
                 pred = dist.argmin(dim=-1)
+                segmentation_scores = -dist.permute(2, 0, 1)
             else:
                 pred = mask.mean(dim=0).int()
+                segmentation_scores = None
 
-            semantic_segmentation.append(pred)
+            semantic_segmentation.append(
+                SemanticSegmentationPostProcessorOutput(
+                    data={"segmentation": pred, "segmentation_scores": segmentation_scores}
+                )
+            )
+
+        if not return_segmentation_scores:
+            semantic_segmentation = [item.segmentation for item in semantic_segmentation]
 
         return semantic_segmentation
 

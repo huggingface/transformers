@@ -21,6 +21,7 @@
 
 import numpy as np
 import torch
+from torchvision.transforms.v2 import functional as tvF
 
 from ...image_processing_utils import BatchFeature
 from ...image_utils import (
@@ -32,14 +33,10 @@ from ...image_utils import (
     get_image_size,
 )
 from ...processing_utils import Unpack, VideosKwargs
-from ...utils import TensorType, add_start_docstrings, is_torchvision_available
+from ...utils import TensorType, add_start_docstrings
 from ...video_processing_utils import BASE_VIDEO_PROCESSOR_DOCSTRING, BaseVideoProcessor
 from ...video_utils import VideoMetadata, group_videos_by_shape, reorder_videos
 from .image_processing_glm46v import smart_resize
-
-
-if is_torchvision_available():
-    import torchvision.transforms.v2.functional as tvF
 
 
 class Glm46VVideoProcessorInitKwargs(VideosKwargs, total=False):
@@ -195,6 +192,8 @@ class Glm46VVideoProcessor(BaseVideoProcessor):
         resized_videos_grouped = {}
 
         for shape, stacked_videos in grouped_videos.items():
+            if do_convert_rgb:
+                stacked_videos = self.convert_to_rgb(stacked_videos)
             B, T, C, H, W = stacked_videos.shape
             num_frames, height, width = T, H, W
             if do_resize:

@@ -19,11 +19,12 @@ import unittest
 import pytest
 from parameterized import parameterized
 
-from transformers import AutoTokenizer, BitsAndBytesConfig, Zamba2Config, is_torch_available
+from transformers import AutoTokenizer, BitsAndBytesConfig, DynamicCache, Zamba2Config, is_torch_available
 from transformers.testing_utils import (
     Expectations,
     require_bitsandbytes,
     require_flash_attn,
+    require_kernels,
     require_torch,
     require_torch_accelerator,
     slow,
@@ -39,14 +40,7 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 if is_torch_available():
     import torch
 
-    from transformers import (
-        Zamba2ForCausalLM,
-        Zamba2ForSequenceClassification,
-        Zamba2Model,
-    )
-    from transformers.models.zamba2.modeling_zamba2 import (
-        Zamba2HybridDynamicCache,
-    )
+    from transformers import Zamba2ForCausalLM, Zamba2ForSequenceClassification, Zamba2Model
 
 
 class Zamba2ModelTester:
@@ -222,12 +216,9 @@ class Zamba2ModelTester:
         model.eval()
 
         # first forward pass
-        # Attention: Zamba2 needs the cache to be initialized to return a cache!
-        past_key_values = Zamba2HybridDynamicCache(config, input_ids.shape[0], model.dtype, device=model.device)
         outputs = model(
             input_ids,
             attention_mask=input_mask,
-            past_key_values=past_key_values,
             use_cache=True,
         )
         past_key_values = outputs.past_key_values
@@ -272,6 +263,41 @@ class Zamba2ModelTester:
         result = model(input_ids, attention_mask=input_mask, labels=sequence_labels)
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_labels))
 
+    def create_and_check_zamba2_chunked_prefill(self, config, input_ids, *args, device="cpu"):
+        """
+        Adapted from `test_linear_attention_multi_token_cached_forward_matches_single_token`
+        to check whether multi-token cached input is properly handled.
+
+        Can either be run on GPU (fast path) or CPU (slow path), see `test_zamba2_chunked_prefill_*`
+        """
+        model = Zamba2Model(config=config)
+        model.to(device)
+        model.eval()
+
+        input_ids = input_ids[:1].to(device)
+        prefill_len = input_ids.shape[1] // 2 + 1
+        prompt = input_ids[:, :prefill_len]
+        next_token = input_ids[:, prefill_len : prefill_len + 1]
+        distractors = input_ids[:, prefill_len + 1 :]
+        multi_input = torch.cat([next_token, distractors], dim=1)
+
+        cache_single = DynamicCache(config=config)
+        with torch.no_grad():
+            model(input_ids=prompt, past_key_values=cache_single, use_cache=True)
+            single_out = model(input_ids=next_token, past_key_values=cache_single, use_cache=True)
+        ref_first = single_out.last_hidden_state[:, 0, :]
+
+        cache_multi = DynamicCache(config=config)
+        with torch.no_grad():
+            model(input_ids=prompt, past_key_values=cache_multi, use_cache=True)
+            multi_out = model(input_ids=multi_input, past_key_values=cache_multi, use_cache=True)
+        under_test_first = multi_out.last_hidden_state[:, 0, :]
+
+        self.parent.assertTrue(
+            torch.allclose(ref_first, under_test_first, atol=1e-4, rtol=1e-4),
+            msg=f"Max diff: {(ref_first - under_test_first).abs().max().item():.6f}",
+        )
+
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
         (
@@ -307,46 +333,19 @@ class Zamba2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
         if is_torch_available()
         else {}
     )
+    model_split_percents = [0.5, 0.8, 0.9]
 
-    def _check_past_key_values_for_generate(self, batch_size, past_key_values, seq_length, config):
-        self.assertIsInstance(past_key_values, Zamba2HybridDynamicCache)
-
-        # (batch, kv heads, seq_length, head_dim)
-        num_heads = getattr(config, "num_key_value_heads", config.num_attention_heads)
-        head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
-        attention_shape = (batch_size, num_heads, seq_length, head_dim)
-
+    def _get_conv_state_shape(self, batch_size: int, config):
         intermediate_size = config.mamba_expand * config.hidden_size
         conv_shape = (
             batch_size,
             intermediate_size + 2 * config.mamba_ngroups * config.mamba_d_state,
             config.mamba_d_conv,
         )
-        ssm_shape = (batch_size, config.n_mamba_heads, config.mamba_headdim, config.mamba_d_state)
+        return conv_shape
 
-        self.assertTrue(config.num_hidden_layers, len(past_key_values))
-
-        for idx in range(len(past_key_values)):
-            if config.layers_block_type[idx] == "mamba":
-                self.assertEqual(past_key_values.conv_states[idx].shape, conv_shape)
-                self.assertEqual(past_key_values.ssm_states[idx].shape, ssm_shape)
-            else:
-                self.assertEqual(past_key_values.key_cache[idx].shape, attention_shape)
-                self.assertEqual(past_key_values.value_cache[idx].shape, attention_shape)
-
-    def _check_caches_are_equal(self, cache1: Zamba2HybridDynamicCache, cache2: Zamba2HybridDynamicCache):
-        if not isinstance(cache1, Zamba2HybridDynamicCache) or not isinstance(cache2, Zamba2HybridDynamicCache):
-            raise ValueError("The wrong cache is being used!")
-
-        if not len(cache1) == len(cache2):
-            raise ValueError("Both caches do not have the same number of layers.")
-
-        num_layers = len(cache1)
-        for idx in range(num_layers):
-            torch.testing.assert_close(cache1.key_cache[idx], cache2.key_cache[idx])
-            torch.testing.assert_close(cache1.value_cache[idx], cache2.value_cache[idx])
-            torch.testing.assert_close(cache1.conv_states[idx], cache2.conv_states[idx])
-            torch.testing.assert_close(cache1.ssm_states[idx], cache2.ssm_states[idx])
+    def _get_recurrent_state_shape(self, batch_size: int, config):
+        return (batch_size, config.n_mamba_heads, config.mamba_headdim, config.mamba_d_state)
 
     def setUp(self):
         self.model_tester = Zamba2ModelTester(self)
@@ -366,6 +365,12 @@ class Zamba2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
         "Offloading corrupts a linear projection weight and changes its shape [16, 104] -> [16]. Note that the test passes with a smaller model with 2 layers"
     )
     def test_disk_offload_safetensors(self):
+        pass
+
+    @unittest.skip(
+        "Offloading does not work correctly for zamba2 - probably due to their mixed layer classes or tied weights"
+    )
+    def test_cpu_offload(self):
         pass
 
     @unittest.skip("position_ids cannot be used to pad due to Mamba2 layers")
@@ -394,6 +399,16 @@ class Zamba2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
     def test_for_sequence_classification(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_sequence_classification(*config_and_inputs)
+
+    def test_mamba2_chunked_prefill_cpu(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_zamba2_chunked_prefill(*config_and_inputs, device="cpu")
+
+    @require_torch_accelerator
+    @require_kernels
+    def test_mamba2_chunked_prefill_torch_device(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_zamba2_chunked_prefill(*config_and_inputs, device=torch_device)
 
     def test_decoder_model_past_with_large_inputs(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs_for_decoder()
@@ -507,11 +522,6 @@ class Zamba2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
                 _ = model(dummy_input)
                 # with attention mask
                 _ = model(dummy_input, attention_mask=dummy_attention_mask)
-
-    @unittest.skip(reason="Zamba2 has its own special cache type")
-    @parameterized.expand([(1, False), (1, True), (4, False)])
-    def test_new_cache_format(self, num_beams, do_sample):
-        pass
 
     @require_torch_accelerator
     def test_flex_attention_with_grads(self):

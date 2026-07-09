@@ -13,11 +13,16 @@
 # limitations under the License.
 """Image processor class for MobileViT."""
 
-from typing import Union
+from typing import TYPE_CHECKING
 
 import numpy as np
 
+
+if TYPE_CHECKING:
+    pass
+
 from ...image_processing_backends import PilBackend
+from ...image_processing_outputs import SemanticSegmentationPostProcessorOutput
 from ...image_processing_utils import BatchFeature
 from ...image_transforms import flip_channel_order as np_flip_channel_order
 from ...image_utils import (
@@ -28,25 +33,31 @@ from ...image_utils import (
     PILImageResampling,
     SizeDict,
 )
-from ...processing_utils import Unpack
-from ...utils import (
-    TensorType,
-    auto_docstring,
-    is_torch_available,
-    is_torchvision_available,
-    logging,
-    requires_backends,
-)
-from .image_processing_mobilevit import MobileVitImageProcessorKwargs
+from ...processing_utils import ImagesKwargs, Unpack
+from ...utils import TensorType, auto_docstring, is_torch_available, logging
+from ...utils.import_utils import requires
 
 
 if is_torch_available():
     import torch
 
-if is_torchvision_available():
-    from torchvision.transforms.v2 import functional as tvF
 
 logger = logging.get_logger(__name__)
+
+
+# Adapted from transformers.models.mobilevit.image_processing_mobilevit.MobileVitImageProcessorKwargs
+class MobileVitImageProcessorKwargs(ImagesKwargs, total=False):
+    """
+    do_flip_channel_order (`bool`, *optional*, defaults to `self.do_flip_channel_order`):
+        Whether to flip the color channels from RGB to BGR or vice versa.
+    do_reduce_labels (`bool`, *optional*, defaults to `self.do_reduce_labels`):
+        Whether or not to reduce all label values of segmentation maps by 1. Usually used for datasets where 0
+        is used for background, and background itself is not included in all classes of a dataset (e.g.
+        ADE20k). The background label will be replaced by 255.
+    """
+
+    do_flip_channel_order: bool
+    do_reduce_labels: bool
 
 
 @auto_docstring
@@ -92,7 +103,7 @@ class MobileViTImageProcessorPil(PilBackend):
         do_convert_rgb: bool,
         input_data_format: ChannelDimension,
         return_tensors: str | TensorType | None,
-        device: Union[str, "torch.device"] | None = None,
+        device: str | None = None,
         **kwargs,
     ) -> BatchFeature:
         """Handle extra inputs beyond images."""
@@ -152,7 +163,7 @@ class MobileViTImageProcessorPil(PilBackend):
         images: list[np.ndarray],
         do_resize: bool,
         size: SizeDict,
-        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
+        resample: PILImageResampling | None,
         do_center_crop: bool,
         crop_size: SizeDict,
         do_rescale: bool,
@@ -177,27 +188,67 @@ class MobileViTImageProcessorPil(PilBackend):
             processed_images.append(image)
         return processed_images
 
-    def post_process_semantic_segmentation(self, outputs, target_sizes: list[tuple] | None = None):
-        """Converts the output of [`MobileViTForSemanticSegmentation`] into semantic segmentation maps."""
-        requires_backends(self, "torch")
+    @requires(backends=("torch",))
+    def post_process_semantic_segmentation(
+        self,
+        outputs,
+        target_sizes: list[tuple[int, int]] | None = None,
+        return_segmentation_scores: bool = False,
+    ) -> "list[torch.Tensor] | list[SemanticSegmentationPostProcessorOutput]":
+        """
+        Converts the output of [`MobileViTForSemanticSegmentation`] into semantic segmentation maps.
+
+        Args:
+            outputs ([`MobileViTForSemanticSegmentation`]):
+                Raw outputs of the model.
+            target_sizes (`list[tuple[int, int]]`, *optional*):
+                List of tuples corresponding to the requested final size (height, width) of each prediction.
+            return_segmentation_scores (`bool`, *optional*, defaults to `False`):
+                Whether to return segmentation scores alongside the segmentation map. When `True`, each element of
+                the returned list is a [`SemanticSegmentationPostProcessorOutput`] with fields `segmentation`
+                (class IDs, shape `(height, width)`) and `segmentation_scores` (shape `(num_classes, height, width)`).
+
+        Returns:
+            `list[torch.Tensor]` or `list[SemanticSegmentationPostProcessorOutput]`: When
+            `return_segmentation_scores=False` (default), a list of length `batch_size` where each item is a
+            segmentation map of shape `(height, width)` with class IDs. When `return_segmentation_scores=True`,
+            a list of [`SemanticSegmentationPostProcessorOutput`] with fields `segmentation` (class IDs, shape
+            `(height, width)`) and `segmentation_scores` (shape `(num_classes, height, width)`). In both cases,
+            `(height, width)` corresponds to the target size (if `target_sizes` is specified).
+        """
         logits = outputs.logits
+        batch_size = len(logits)
         if target_sizes is not None:
             if len(logits) != len(target_sizes):
                 raise ValueError(
                     "Make sure that you pass in as many target sizes as the batch dimension of the logits"
                 )
             if isinstance(target_sizes, torch.Tensor):
-                target_sizes = target_sizes.numpy()
+                target_sizes = target_sizes.tolist()
             semantic_segmentation = []
-            for idx in range(len(logits)):
+            for idx in range(batch_size):
                 resized_logits = torch.nn.functional.interpolate(
                     logits[idx].unsqueeze(dim=0), size=target_sizes[idx], mode="bilinear", align_corners=False
                 )
-                semantic_map = resized_logits[0].argmax(dim=0)
-                semantic_segmentation.append(semantic_map)
+                semantic_segmentation.append(
+                    SemanticSegmentationPostProcessorOutput(
+                        data={
+                            "segmentation": resized_logits[0].argmax(dim=0),
+                            "segmentation_scores": resized_logits[0],
+                        }
+                    )
+                )
         else:
-            semantic_segmentation = logits.argmax(dim=1)
-            semantic_segmentation = [semantic_segmentation[i] for i in range(semantic_segmentation.shape[0])]
+            semantic_segmentation = [
+                SemanticSegmentationPostProcessorOutput(
+                    data={"segmentation": logits[i].argmax(dim=0), "segmentation_scores": logits[i]}
+                )
+                for i in range(batch_size)
+            ]
+
+        if not return_segmentation_scores:
+            semantic_segmentation = [item.segmentation for item in semantic_segmentation]
+
         return semantic_segmentation
 
 

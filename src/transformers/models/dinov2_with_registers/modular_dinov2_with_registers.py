@@ -30,6 +30,7 @@ from ... import initialization as init
 from ...backbone_utils import BackboneConfigMixin
 from ...configuration_utils import PreTrainedConfig
 from ...modeling_outputs import BackboneOutput, BaseModelOutput, BaseModelOutputWithPooling, ImageClassifierOutput
+from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging, torch_int
 
@@ -38,11 +39,11 @@ logger = logging.get_logger(__name__)
 
 
 @auto_docstring(checkpoint="facebook/dinov2-with-registers-base")
-@strict(accept_kwargs=True)
+@strict
 class Dinov2WithRegistersConfig(BackboneConfigMixin, PreTrainedConfig):
     r"""
     layerscale_value (`float`, *optional*, defaults to 1.0):
-       Initial value to use for layer scale.
+        Initial value to use for layer scale.
     use_swiglu_ffn (`bool`, *optional*, defaults to `False`):
         Whether to use the SwiGLU feedforward neural network.
     num_register_tokens (`int`, *optional*, defaults to 4):
@@ -76,8 +77,8 @@ class Dinov2WithRegistersConfig(BackboneConfigMixin, PreTrainedConfig):
     num_attention_heads: int = 12
     mlp_ratio: int = 4
     hidden_act: str = "gelu"
-    hidden_dropout_prob: float = 0.0
-    attention_probs_dropout_prob: float = 0.0
+    hidden_dropout_prob: float | int = 0.0
+    attention_probs_dropout_prob: float | int = 0.0
     initializer_range: float = 0.02
     layer_norm_eps: float = 1e-6
     image_size: int | list[int] | tuple[int, int] = 224
@@ -85,7 +86,7 @@ class Dinov2WithRegistersConfig(BackboneConfigMixin, PreTrainedConfig):
     num_channels: int = 3
     qkv_bias: bool = True
     layerscale_value: float = 1.0
-    drop_path_rate: float = 0.0
+    drop_path_rate: float | int = 0.0
     use_swiglu_ffn: bool = False
     num_register_tokens: int = 4
     _out_features: list[str] | None = None
@@ -208,13 +209,11 @@ class Dinov2WithRegistersPreTrainedModel(Dinov2PreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module: nn.Linear | nn.Conv2d | nn.LayerNorm) -> None:
         """Initialize the weights"""
+        PreTrainedModel._init_weights(self, module)
         if isinstance(module, (nn.Linear, nn.Conv2d)):
             init.trunc_normal_(module.weight, mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
                 init.zeros_(module.bias)
-        elif isinstance(module, nn.LayerNorm):
-            init.zeros_(module.bias)
-            init.ones_(module.weight)
         elif isinstance(module, Dinov2WithRegistersEmbeddings):
             init.trunc_normal_(module.position_embeddings, mean=0.0, std=self.config.initializer_range)
             init.trunc_normal_(module.cls_token, mean=0.0, std=self.config.initializer_range)

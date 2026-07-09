@@ -42,7 +42,7 @@ logger = logging.get_logger(__name__)
 
 
 @auto_docstring(checkpoint="PaddlePaddle/PP-OCRv5_mobile_det_safetensors")
-@strict(accept_kwargs=True)
+@strict
 class PPOCRV5MobileDetConfig(PreTrainedConfig):
     r"""
     reduction (`int`, *optional*, defaults to 4):
@@ -84,6 +84,9 @@ class PPOCRV5MobileDetConfig(PreTrainedConfig):
             },
             **kwargs,
         )
+
+        # For object detection pipeline compatibility: single class "text"
+        self.id2label = {0: "text"} if self.id2label is None else self.id2label
         super().__post_init__(**kwargs)
 
 

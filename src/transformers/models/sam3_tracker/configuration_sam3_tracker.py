@@ -27,7 +27,7 @@ from ..auto import CONFIG_MAPPING, AutoConfig
 
 
 @auto_docstring(checkpoint="facebook/sam3")
-@strict(accept_kwargs=True)
+@strict
 class Sam3TrackerPromptEncoderConfig(PreTrainedConfig):
     r"""
     mask_input_channels (`int`, *optional*, defaults to 16):
@@ -52,7 +52,7 @@ class Sam3TrackerPromptEncoderConfig(PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="facebook/sam3")
-@strict(accept_kwargs=True)
+@strict
 class Sam3TrackerMaskDecoderConfig(PreTrainedConfig):
     r"""
     mlp_dim (`int`, *optional*, defaults to 2048):
@@ -90,7 +90,7 @@ class Sam3TrackerMaskDecoderConfig(PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="facebook/sam3")
-@strict(accept_kwargs=True)
+@strict
 class Sam3TrackerConfig(PreTrainedConfig):
     r"""
     prompt_encoder_config (Union[`dict`, `Sam3TrackerPromptEncoderConfig`], *optional*):

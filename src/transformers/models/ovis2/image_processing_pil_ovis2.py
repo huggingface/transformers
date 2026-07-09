@@ -13,6 +13,8 @@
 # limitations under the License.
 """PIL Image processor class for OVIS2."""
 
+from functools import lru_cache
+
 import numpy as np
 
 from ...image_processing_backends import PilBackend
@@ -27,17 +29,128 @@ from ...image_utils import (
     SizeDict,
     infer_channel_dimension_format,
 )
-from ...processing_utils import Unpack
-from ...utils import TensorType, auto_docstring, is_torchvision_available
-from .image_processing_ovis2 import (
-    Ovis2ImageProcessorKwargs,
-    get_min_tile_covering_grid,
-    get_optimal_tiled_canvas,
-)
+from ...processing_utils import ImagesKwargs, Unpack
+from ...utils import TensorType, auto_docstring
 
 
-if is_torchvision_available():
-    from torchvision.transforms.v2 import functional as tvF
+# Adapted from transformers.models.ovis2.image_processing_ovis2.Ovis2ImageProcessorKwargs
+class Ovis2ImageProcessorKwargs(ImagesKwargs, total=False):
+    """
+    crop_to_patches (`bool`, *optional*, defaults to `False`):
+        Whether to crop the image to patches. Can be overridden by the `crop_to_patches` parameter in the
+        `preprocess` method.
+    min_patches (`int`, *optional*, defaults to 1):
+        The minimum number of patches to be extracted from the image. Only has an effect if `crop_to_patches` is
+        set to `True`. Can be overridden by the `min_patches` parameter in the `preprocess` method.
+    max_patches (`int`, *optional*, defaults to 12):
+        The maximum number of patches to be extracted from the image. Only has an effect if `crop_to_patches` is
+        set to `True`. Can be overridden by the `max_patches` parameter in the `preprocess` method.
+    use_covering_area_grid (`bool`, *optional*, defaults to `True`):
+        Whether to use the covering area grid to determine the number of patches. Only has an effect if
+        `crop_to_patches` is set to `True`. Can be overridden by the `use_covering_area_grid` parameter in the
+        `preprocess` method.
+    """
+
+    crop_to_patches: bool
+    min_patches: int
+    max_patches: int
+    use_covering_area_grid: bool
+
+
+# Adapted from transformers.models.ovis2.image_processing_ovis2.get_all_supported_aspect_ratios
+@lru_cache(maxsize=10)
+def get_all_supported_aspect_ratios(min_image_tiles: int, max_image_tiles: int) -> list[tuple[int, int]]:
+    """Computes all allowed aspect ratios for a given minimum and maximum number of input tiles."""
+    aspect_ratios = []
+    for width in range(1, max_image_tiles + 1):
+        for height in range(1, max_image_tiles + 1):
+            if width * height <= max_image_tiles and width * height >= min_image_tiles:
+                aspect_ratios.append((width, height))
+    return sorted(aspect_ratios, key=lambda x: x[0] * x[1])
+
+
+# Adapted from transformers.models.ovis2.image_processing_ovis2.compute_patch_covering_area
+def compute_patch_covering_area(left: int, upper: int, right: int, lower: int, side: int) -> float:
+    w = right - left
+    h = lower - upper
+    w, h = max(w, h), min(w, h)
+    if w > side:
+        h = h / w * side
+        w = side
+    return w * h
+
+
+# Adapted from transformers.models.ovis2.image_processing_ovis2.split_image_into_grid
+def split_image_into_grid(h: int, w: int, grid: tuple[int, int]) -> list[tuple[int, int, int, int]]:
+    row_height = h // grid[0]
+    col_width = w // grid[1]
+    return [
+        (
+            col * col_width,
+            row * row_height,
+            w if col == grid[1] - 1 else (col + 1) * col_width,
+            h if row == grid[0] - 1 else (row + 1) * row_height,
+        )
+        for row in range(grid[0])
+        for col in range(grid[1])
+    ]
+
+
+# Adapted from transformers.models.ovis2.image_processing_ovis2.get_min_tile_covering_grid
+@lru_cache(maxsize=100)
+def get_min_tile_covering_grid(
+    image_size: tuple[int, int],
+    target_patch_size: int,
+    max_image_tiles: int,
+    covering_threshold: float = 0.9,
+) -> tuple[int, int]:
+    image_height, image_width = image_size
+    image_area = image_width * image_height
+    candidate_tile_grids = get_all_supported_aspect_ratios(1, max_image_tiles)
+    evaluated_grids = []
+    sufficient_covering_grids = []
+
+    for tile_grid in candidate_tile_grids:
+        tile_regions = split_image_into_grid(image_height, image_width, tile_grid)
+        tile_covering_ratio = (
+            sum(compute_patch_covering_area(*region, target_patch_size) for region in tile_regions) / image_area
+        )
+        evaluated_grids.append((tile_grid, tile_covering_ratio))
+        if tile_covering_ratio > covering_threshold:
+            sufficient_covering_grids.append((tile_grid, tile_covering_ratio))
+
+    if sufficient_covering_grids:
+        return min(sufficient_covering_grids, key=lambda x: (x[0][0] * x[0][1], -x[1]))[0]
+    return min(evaluated_grids, key=lambda x: (-x[1], x[0][0] * x[0][1]))[0]
+
+
+# Adapted from transformers.models.ovis2.image_processing_ovis2.get_optimal_tiled_canvas
+@lru_cache(maxsize=100)
+def get_optimal_tiled_canvas(
+    original_image_size: tuple[int, int],
+    target_tile_size: tuple[int, int],
+    min_image_tiles: int,
+    max_image_tiles: int,
+) -> tuple[int, int]:
+    """Find the canvas with the closest aspect ratio to the original image aspect ratio."""
+    possible_tile_arrangements = get_all_supported_aspect_ratios(min_image_tiles, max_image_tiles)
+    original_height, original_width = original_image_size
+    target_tile_height, target_tile_width = target_tile_size
+    aspect_ratio = original_width / original_height
+    area = original_width * original_height
+
+    best_ratio_diff = float("inf")
+    best_grid = (1, 1)
+    for grid in possible_tile_arrangements:
+        grid_aspect_ratio = grid[0] / grid[1]
+        ratio_diff = abs(aspect_ratio - grid_aspect_ratio)
+        if ratio_diff < best_ratio_diff:
+            best_ratio_diff = ratio_diff
+            best_grid = grid
+        elif ratio_diff == best_ratio_diff:
+            if area > 0.5 * target_tile_height * target_tile_width * grid[0] * grid[1]:
+                best_grid = grid
+    return best_grid
 
 
 @auto_docstring
@@ -72,7 +185,7 @@ class Ovis2ImageProcessorPil(PilBackend):
         use_covering_area_grid: bool = True,
         covering_threshold: float = 0.9,
         patch_size: SizeDict | None = None,
-        resample: "PILImageResampling | tvF.InterpolationMode | int | None" = None,
+        resample: "PILImageResampling | None" = None,
     ):
         """
         Crop the image to patches and return a list of cropped images.
@@ -131,7 +244,7 @@ class Ovis2ImageProcessorPil(PilBackend):
         images: list[np.ndarray],
         do_resize: bool,
         size: SizeDict,
-        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
+        resample: "PILImageResampling | None",
         do_center_crop: bool,
         crop_size: SizeDict,
         do_rescale: bool,

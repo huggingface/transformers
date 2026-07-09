@@ -13,9 +13,10 @@
 # limitations under the License.
 import numpy as np
 import torch
+import torch.distributed as dist
 import torch.nn as nn
 
-from ..utils import is_accelerate_available, is_scipy_available, is_vision_available
+from ..utils import is_scipy_available, is_vision_available
 from .loss_for_object_detection import (
     HungarianMatcher,
     _set_aux_loss,
@@ -33,10 +34,6 @@ if is_vision_available():
 
 if is_scipy_available():
     from scipy.optimize import linear_sum_assignment
-
-if is_accelerate_available():
-    from accelerate import PartialState
-    from accelerate.utils import reduce
 
 
 class LwDetrHungarianMatcher(HungarianMatcher):
@@ -112,6 +109,7 @@ class LwDetrImageLoss(nn.Module):
         if "logits" not in outputs:
             raise KeyError("No logits were found in the outputs")
         source_logits = outputs["logits"]
+        dtype = source_logits.dtype
 
         idx = self._get_source_permutation_idx(indices)
         target_classes_o = torch.cat([t["class_labels"][J] for t, (_, J) in zip(targets, indices)])
@@ -123,21 +121,20 @@ class LwDetrImageLoss(nn.Module):
             box_iou(center_to_corners_format(src_boxes.detach()), center_to_corners_format(target_boxes))[0]
         )
         # Convert to the same dtype as the source logits as box_iou upcasts to float32
-        iou_targets = iou_targets.to(source_logits.dtype)
+        iou_targets = iou_targets.to(dtype)
         pos_ious = iou_targets.clone().detach()
         prob = source_logits.sigmoid()
         # init positive weights and negative weights
         pos_weights = torch.zeros_like(source_logits)
-        neg_weights = prob**gamma
+        # pow promotes to float32 under float16 CUDA autocast; cast back to preserve original dtype
+        neg_weights = prob.pow(gamma).to(dtype)
+        pos_ind = idx + (target_classes_o,)
 
-        pos_ind = list(idx)
-        pos_ind.append(target_classes_o)
+        pos_quality = prob[pos_ind].pow(alpha) * pos_ious.pow(1 - alpha)
+        pos_quality = torch.clamp(pos_quality, 0.01).detach().to(dtype)
 
-        t = prob[pos_ind].pow(alpha) * pos_ious.pow(1 - alpha)
-        t = torch.clamp(t, 0.01).detach()
-
-        pos_weights[pos_ind] = t
-        neg_weights[pos_ind] = 1 - t
+        pos_weights[pos_ind] = pos_quality
+        neg_weights[pos_ind] = 1 - pos_quality
         loss_ce = -pos_weights * prob.log() - neg_weights * (1 - prob).log()
         loss_ce = loss_ce.sum() / num_boxes
         losses = {"loss_ce": loss_ce}
@@ -268,10 +265,9 @@ class LwDetrImageLoss(nn.Module):
         num_boxes = num_boxes * group_detr
         num_boxes = torch.as_tensor([num_boxes], dtype=torch.float, device=next(iter(outputs.values())).device)
         world_size = 1
-        if is_accelerate_available():
-            if PartialState._shared_state != {}:
-                num_boxes = reduce(num_boxes)
-                world_size = PartialState().num_processes
+        if dist.is_available() and dist.is_initialized():
+            dist.all_reduce(num_boxes, op=dist.ReduceOp.SUM)
+            world_size = dist.get_world_size()
         num_boxes = torch.clamp(num_boxes / world_size, min=1).item()
 
         # Compute all the requested losses
@@ -342,7 +338,7 @@ def LwDetrForObjectDetectionLoss(
         outputs_loss["auxiliary_outputs"] = auxiliary_outputs
     loss_dict = criterion(outputs_loss, labels)
     # Fourth: compute total loss, as a weighted sum of the various losses
-    weight_dict = {"loss_ce": 1, "loss_bbox": config.bbox_loss_coefficient}
+    weight_dict = {"loss_ce": config.class_loss_coefficient, "loss_bbox": config.bbox_loss_coefficient}
     weight_dict["loss_giou"] = config.giou_loss_coefficient
     if config.auxiliary_loss:
         aux_weight_dict = {}

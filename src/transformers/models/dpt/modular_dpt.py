@@ -29,15 +29,14 @@ from ...image_utils import (
     SizeDict,
 )
 from ...processing_utils import ImagesKwargs
-from ...utils import TensorType, auto_docstring, is_torchvision_available, requires_backends
+from ...utils import TensorType, auto_docstring, requires_backends
 from ..beit.image_processing_beit import BeitImageProcessor
 
 
 if TYPE_CHECKING:
     from ...modeling_outputs import DepthEstimatorOutput
 
-if is_torchvision_available():
-    import torchvision.transforms.v2.functional as tvF
+from torchvision.transforms.v2 import functional as tvF
 
 
 def get_resize_output_image_size(

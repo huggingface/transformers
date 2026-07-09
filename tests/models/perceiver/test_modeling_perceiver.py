@@ -242,6 +242,18 @@ class PerceiverModelTester:
         result = model(inputs, attention_mask=input_mask, labels=sequence_labels)
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_labels))
 
+    def create_and_check_for_learned_image_interpolate_pos(
+        self, config, inputs, input_mask, sequence_labels, token_labels
+    ):
+        model = PerceiverForImageClassificationLearned(config=config)
+        model.to(torch_device)
+        model.eval()
+        higher_res_inputs = floats_tensor(
+            [self.batch_size, self.num_channels, self.image_size * 2, self.image_size * 2]
+        )
+        result = model(higher_res_inputs, attention_mask=input_mask, interpolate_pos_encoding=True)
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_labels))
+
     def create_and_check_for_image_classification_fourier(
         self, config, inputs, input_mask, sequence_labels, token_labels
     ):
@@ -359,6 +371,12 @@ class PerceiverModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
             model_class=PerceiverForImageClassificationLearned
         )
         self.model_tester.create_and_check_for_image_classification_learned(*config_and_inputs)
+
+    def test_for_learned_image_interpolate_pos(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs(
+            model_class=PerceiverForImageClassificationLearned
+        )
+        self.model_tester.create_and_check_for_learned_image_interpolate_pos(*config_and_inputs)
 
     def test_for_image_classification_fourier(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs(

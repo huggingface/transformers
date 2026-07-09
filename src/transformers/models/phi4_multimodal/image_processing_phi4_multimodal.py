@@ -16,16 +16,13 @@
 import math
 
 import torch
+from torchvision.transforms.v2 import functional as tvF
 
 from ...image_processing_backends import TorchvisionBackend
 from ...image_processing_utils import BatchFeature
 from ...image_utils import ImageInput, PILImageResampling, SizeDict
 from ...processing_utils import ImagesKwargs, Unpack
-from ...utils import TensorType, auto_docstring, is_torchvision_available, logging
-
-
-if is_torchvision_available():
-    import torchvision.transforms.v2.functional as tvF
+from ...utils import TensorType, auto_docstring, logging
 
 
 logger = logging.get_logger(__name__)
@@ -51,7 +48,6 @@ class Phi4MultimodalImageProcessor(TorchvisionBackend):
     dynamic_hd = 36
     image_mean = [0.5, 0.5, 0.5]
     image_std = [0.5, 0.5, 0.5]
-    do_resize = True
     do_rescale = True
     do_normalize = True
     do_convert_rgb = True

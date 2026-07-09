@@ -289,6 +289,10 @@ class PerceptionLMForConditionalGenerationModelTest(ModelTesterMixin, Generation
         self.all_model_classes = (PerceptionLMForConditionalGeneration,) if is_torch_available() else ()
         super().test_training_gradient_checkpointing_use_reentrant_true()
 
+    @unittest.skip(reason="The model has TimmWrapper backbone but doesn't apply any conversion")
+    def test_reverse_loading_mapping(self, check_keys_were_modified=True):
+        pass
+
     @unittest.skip(
         reason="PE/TIMM's attention implementation is self configured and won't raise ValueError on global attention implementation."
     )

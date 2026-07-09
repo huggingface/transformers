@@ -20,7 +20,7 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="google/bert_for_seq_generation_L-24_bbc_encoder")
-@strict(accept_kwargs=True)
+@strict
 class BertGenerationConfig(PreTrainedConfig):
     r"""
     Examples:
@@ -46,8 +46,8 @@ class BertGenerationConfig(PreTrainedConfig):
     num_attention_heads: int = 16
     intermediate_size: int = 4096
     hidden_act: str = "gelu"
-    hidden_dropout_prob: float = 0.1
-    attention_probs_dropout_prob: float = 0.1
+    hidden_dropout_prob: float | int = 0.1
+    attention_probs_dropout_prob: float | int = 0.1
     max_position_embeddings: int = 512
     initializer_range: float = 0.02
     layer_norm_eps: float = 1e-12

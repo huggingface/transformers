@@ -14,36 +14,65 @@
 """Image processor class for Fuyu."""
 
 import math
+from typing import TYPE_CHECKING
 
 import numpy as np
 
 from ...image_processing_backends import PilBackend
-from ...image_processing_utils import get_size_dict
+from ...image_processing_utils import BatchFeature, get_size_dict
 from ...image_utils import (
     ImageInput,
     PILImageResampling,
     SizeDict,
     get_image_size,
+    is_valid_image,
+    make_list_of_images,
 )
-from ...processing_utils import Unpack
-from ...utils import (
-    TensorType,
-    auto_docstring,
-    is_torch_available,
-    is_torchvision_available,
-    requires_backends,
-)
-from .image_processing_fuyu import FuyuBatchFeature, FuyuImagesKwargs, make_list_of_list_of_images
+from ...processing_utils import ImagesKwargs, Unpack
+from ...utils import TensorType, auto_docstring, is_torch_available, requires_backends
+from ...utils.import_utils import requires
 
+
+if TYPE_CHECKING:
+    import torch
 
 if is_torch_available():
     import torch
 
-if is_torchvision_available():
-    from torchvision.transforms.v2 import functional as tvF
+
+class FuyuImagesKwargs(ImagesKwargs, total=False):
+    r"""
+    patch_size (`dict[str, int]`, *optional*, defaults to `{"height": 30, "width": 30}`):
+        Dictionary in the format `{"height": int, "width": int}` specifying the size of the patches.
+    padding_value (`float`, *optional*, defaults to 1.0):
+        The value to pad the image with.
+    padding_mode (`str`, *optional*, defaults to "constant"):
+        The padding mode to use when padding the image.
+    """
+
+    patch_size: SizeDict | None
+    padding_value: float
+    padding_mode: str
+
+
+# Adapted from transformers.models.fuyu.image_processing_fuyu.make_list_of_list_of_images
+def make_list_of_list_of_images(
+    images: list[list[ImageInput]] | list[ImageInput] | ImageInput,
+) -> list[list[ImageInput]]:
+    if is_valid_image(images):
+        return [[images]]
+
+    if isinstance(images, list) and all(isinstance(image, list) for image in images):
+        return images
+
+    if isinstance(images, list):
+        return [make_list_of_images(image) for image in images]
+
+    raise ValueError("images must be a list of list of images or a list of images or an image.")
 
 
 @auto_docstring
+@requires(backends=("torch",))
 class FuyuImageProcessorPil(PilBackend):
     do_resize = True
     size = {"height": 1080, "width": 1920}
@@ -69,11 +98,7 @@ class FuyuImageProcessorPil(PilBackend):
     def __init__(self, **kwargs: Unpack[FuyuImagesKwargs]):
         super().__init__(**kwargs)
 
-    def _prepare_images_structure(
-        self,
-        images: ImageInput,
-        expected_ndims: int = 3,
-    ) -> ImageInput:
+    def _prepare_images_structure(self, images: ImageInput, expected_ndims: int = 3) -> ImageInput:
         images = self.fetch_images(images)
         return make_list_of_list_of_images(images)
 
@@ -81,7 +106,7 @@ class FuyuImageProcessorPil(PilBackend):
         self,
         image: np.ndarray,
         size: SizeDict,
-        resample: "PILImageResampling | tvF.InterpolationMode | int | None" = None,
+        resample: PILImageResampling | None = None,
         **kwargs,
     ) -> np.ndarray:
         """
@@ -116,7 +141,7 @@ class FuyuImageProcessorPil(PilBackend):
         images: list[list[np.ndarray]],
         do_resize: bool,
         size: SizeDict,
-        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
+        resample: PILImageResampling | None,
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,
@@ -127,7 +152,7 @@ class FuyuImageProcessorPil(PilBackend):
         padding_mode: str | None,
         return_tensors: str | TensorType | None,
         **kwargs,
-    ) -> FuyuBatchFeature:
+    ) -> BatchFeature:
         # Process nested images one by one
         original_image_sizes = []
         processed_images = []
@@ -178,7 +203,7 @@ class FuyuImageProcessorPil(PilBackend):
                     image = self.normalize(image, image_mean, image_std)
                 processed_images[batch_idx][img_idx] = image
 
-        return FuyuBatchFeature(
+        return BatchFeature(
             data={
                 "images": processed_images,
                 "image_unpadded_heights": image_unpadded_heights,
@@ -186,6 +211,7 @@ class FuyuImageProcessorPil(PilBackend):
                 "image_scale_factors": image_scale_factors,
             },
             tensor_type=return_tensors,
+            skip_tensor_conversion=["overflowing_values"],
         )
 
     def get_num_patches(self, image_height: int, image_width: int, patch_size: SizeDict | None = None) -> int:
@@ -300,7 +326,7 @@ class FuyuImageProcessorPil(PilBackend):
         image_newline_id: int,
         variable_sized: bool,
         patch_size: dict[str, int] | None = None,
-    ) -> FuyuBatchFeature:
+    ) -> BatchFeature:
         """
         Process images for model input. In particular, variable-sized images are handled here.
         This method uses PyTorch operations as it operates on model inputs which are tensors.
@@ -418,7 +444,7 @@ class FuyuImageProcessorPil(PilBackend):
 
             image_patch_indices_per_batch.append(per_batch_indices)
             image_patch_indices_per_subsequence.append(per_subsequence_indices)
-        return FuyuBatchFeature(
+        return BatchFeature(
             data={
                 "images": images,
                 "image_input_ids": batch_image_input_ids,
@@ -428,11 +454,7 @@ class FuyuImageProcessorPil(PilBackend):
             }
         )
 
-    def _standardize_kwargs(
-        self,
-        patch_size: dict[str, int] | SizeDict | None = None,
-        **kwargs,
-    ) -> dict:
+    def _standardize_kwargs(self, patch_size: dict[str, int] | SizeDict | None = None, **kwargs) -> dict:
         """
         Process Fuyu-specific kwargs before validation.
         """

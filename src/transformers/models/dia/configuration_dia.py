@@ -24,7 +24,7 @@ logger = logging.get_logger(__name__)
 
 
 @auto_docstring(checkpoint="nari-labs/Dia-1.6B")
-@strict(accept_kwargs=True)
+@strict
 class DiaEncoderConfig(PreTrainedConfig):
     model_type = "dia_encoder"
 
@@ -43,7 +43,7 @@ class DiaEncoderConfig(PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="nari-labs/Dia-1.6B")
-@strict(accept_kwargs=True)
+@strict
 class DiaDecoderConfig(PreTrainedConfig):
     r"""
     cross_num_attention_heads (`int`, *optional*, defaults to 16):
@@ -83,7 +83,7 @@ class DiaDecoderConfig(PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="nari-labs/Dia-1.6B")
-@strict(accept_kwargs=True)
+@strict
 class DiaConfig(PreTrainedConfig):
     r"""
     delay_pattern (`list[int]`, *optional*, defaults to `[0, 8, 9, 10, 11, 12, 13, 14, 15]`):

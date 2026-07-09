@@ -143,7 +143,7 @@ class CLIPSegVisionModelTest(ModelTesterMixin, unittest.TestCase):
     def setUp(self):
         self.model_tester = CLIPSegVisionModelTester(self)
         self.config_tester = ConfigTester(
-            self, config_class=CLIPSegVisionConfig, has_text_modality=False, hidden_size=32
+            self, config_class=CLIPSegVisionConfig, has_text_modality=False, hidden_size=36
         )
 
     def test_config(self):
@@ -414,6 +414,7 @@ class CLIPSegModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
 
     test_resize_embeddings = False
     test_attention_outputs = False
+    additional_model_inputs = ["pixel_values"]
 
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
         # CLIPSegForImageSegmentation requires special treatment
@@ -443,6 +444,10 @@ class CLIPSegModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
     def test_model_for_image_segmentation(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model_for_image_segmentation(*config_and_inputs)
+
+    @unittest.skip(reason="ClipSeg can;t compile due to the decoder module")
+    def test_sdpa_can_compile_dynamic(self):
+        pass
 
     @unittest.skip(reason="Hidden_states is tested in individual model tests")
     def test_hidden_states_output(self):

@@ -47,7 +47,7 @@ logger = logging.get_logger(__name__)
 
 
 @auto_docstring(checkpoint="CohereForAI/c4ai-command-r-v01")
-@strict(accept_kwargs=True)
+@strict
 class Cohere2Config(PreTrainedConfig):
     r"""
     logit_scale (`float`, *optional*, defaults to 0.0625):
@@ -95,7 +95,7 @@ class Cohere2Config(PreTrainedConfig):
     max_position_embeddings: int = 8192
     initializer_range: float = 0.02
     layer_norm_eps: float = 1e-5
-    use_cache: int = True
+    use_cache: bool = True
     pad_token_id: int | None = 0
     bos_token_id: int | None = 5
     eos_token_id: int | list[int] | None = 255001
@@ -158,8 +158,7 @@ class Cohere2Attention(CohereAttention):
         self.scaling = self.head_dim**-0.5
         self.attention_dropout = config.attention_dropout
         self.is_causal = True
-        layer_type = config.layer_types[layer_idx] if hasattr(config, "layer_types") else None
-        self.sliding_window = config.sliding_window if layer_type == "sliding_attention" else None
+        self.sliding_window = config.sliding_window if config.layer_types[layer_idx] == "sliding_attention" else None
 
         self.q_proj = nn.Linear(
             config.hidden_size, config.num_attention_heads * self.head_dim, bias=config.attention_bias

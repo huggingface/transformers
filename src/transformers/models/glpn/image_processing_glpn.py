@@ -24,15 +24,15 @@ from ...image_utils import (
     SizeDict,
 )
 from ...processing_utils import ImagesKwargs, Unpack
-from ...utils import TensorType, auto_docstring, is_torchvision_available, logging, requires_backends
+from ...utils import TensorType, auto_docstring, logging, requires_backends
 
 
 if TYPE_CHECKING:
     from ...modeling_outputs import DepthEstimatorOutput
 
-if is_torchvision_available():
-    import torch
-    from torchvision.transforms.v2 import functional as tvF
+import torch
+from torchvision.transforms.v2 import functional as tvF
+
 
 logger = logging.get_logger(__name__)
 

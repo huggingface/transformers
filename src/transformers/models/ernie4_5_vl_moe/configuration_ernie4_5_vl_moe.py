@@ -28,7 +28,7 @@ logger = logging.get_logger(__name__)
 
 
 @auto_docstring(checkpoint="baidu/ERNIE-4.5-VL-28B-A3B-PT")
-@strict(accept_kwargs=True)
+@strict
 class Ernie4_5_VLMoeVisionConfig(PreTrainedConfig):
     r"""
     temporal_merge_size (`int`, *optional*, defaults to 2):
@@ -60,13 +60,11 @@ class Ernie4_5_VLMoeVisionConfig(PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="baidu/ERNIE-4.5-VL-28B-A3B-PT")
-@strict(accept_kwargs=True)
+@strict
 class Ernie4_5_VLMoeTextConfig(PreTrainedConfig):
     r"""
     use_bias (`bool`, *optional*, defaults to `False`):
         Whether to use a bias in any of the projections including mlp and attention for example
-    mlp_layer_types (`list`, *optional*):
-        MLP (Moe vs Dense) pattern for each layer.
     moe_k (`int`, *optional*, defaults to 6):
         Number of selected experts.
     moe_num_experts (`int`, *optional*, defaults to 64):
@@ -75,6 +73,8 @@ class Ernie4_5_VLMoeTextConfig(PreTrainedConfig):
         The number of experts that are shared for all MoE forwards.
     moe_norm_min (`float`, *optional*, defaults to 1e-12):
         Minimum division value during routing normalization.
+    mlp_layer_types (`list`, *optional*):
+        MLP (Moe vs Dense) pattern for each layer.
     """
 
     model_type = "ernie4_5_vl_moe_text"
@@ -99,6 +99,12 @@ class Ernie4_5_VLMoeTextConfig(PreTrainedConfig):
         "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
         "norm": (["hidden_states"], ["hidden_states"]),
     }
+    base_model_ep_plan = {
+        "layers.*.mlp.gate": "ep_router",
+        "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
+        "layers.*.mlp.experts.down_proj": "grouped_gemm",
+        "layers.*.mlp.experts": "moe_tp_experts",
+    }
 
     vocab_size: int = 103424
     pad_token_id: int | None = None
@@ -116,7 +122,7 @@ class Ernie4_5_VLMoeTextConfig(PreTrainedConfig):
     use_cache: bool = True
     tie_word_embeddings: bool = True
     rope_parameters: RopeParameters | dict | None = None
-    use_bias: int | None = False
+    use_bias: bool | None = False
     moe_intermediate_size: list[int] | None = None
     moe_k: int | None = 6
     moe_num_experts: int | None = 64
@@ -140,7 +146,7 @@ class Ernie4_5_VLMoeTextConfig(PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="baidu/ERNIE-4.5-VL-28B-A3B-PT")
-@strict(accept_kwargs=True)
+@strict
 class Ernie4_5_VLMoeConfig(PreTrainedConfig):
     r"""
     image_start_token_id (`int`, *optional*, defaults to 101304):

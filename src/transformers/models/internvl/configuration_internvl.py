@@ -21,7 +21,7 @@ from ..auto import CONFIG_MAPPING, AutoConfig
 
 
 @auto_docstring(checkpoint="OpenGVLab/InternVL3-1B-hf")
-@strict(accept_kwargs=True)
+@strict
 class InternVLVisionConfig(PreTrainedConfig):
     r"""
     projection_dropout (`float`, *optional*, defaults to 0.0):
@@ -59,7 +59,7 @@ class InternVLVisionConfig(PreTrainedConfig):
     use_qk_norm: bool = False
     intermediate_size: int = 4096
     hidden_act: str = "gelu"
-    hidden_dropout_prob: float = 0.0
+    hidden_dropout_prob: float | int = 0.0
     attention_dropout: float | int = 0.0
     projection_dropout: float | int = 0.0
     initializer_range: float = 0.02
@@ -84,7 +84,7 @@ class InternVLVisionConfig(PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="OpenGVLab/InternVL3-1B-hf")
-@strict(accept_kwargs=True)
+@strict
 class InternVLConfig(PreTrainedConfig):
     r"""
     downsample_ratio (`float`, *optional*, defaults to 0.5):

@@ -16,21 +16,27 @@
 
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, remap_legacy_layer_types
 from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="ibm-granite/granite-speech-3.2-8b")
-@strict(accept_kwargs=True)
+@strict
 class GraniteMoeHybridConfig(PreTrainedConfig):
     r"""
-    embedding_multiplier (`float`, *optional*, defaults to 1.0): embedding multiplier.
-    logits_scaling (`float`, *optional*, defaults to 1.0): divisor for output logits.
-    residual_multiplier (`float`, *optional*, defaults to 1.0): residual multiplier.
-    attention_multiplier (`float`, *optional*, defaults to 1.0): attention multiplier.
-    position_embedding_type (`str`, *optional*): Positional embedding type to be used; defaults to None. Allowed options: `[None, "rope"]`
-    shared_intermediate_size (`int`, *optional*, defaults to 1024): intermediate size for shared experts.
+    embedding_multiplier (`float`, *optional*, defaults to 1.0):
+        embedding multiplier.
+    logits_scaling (`float`, *optional*, defaults to 1.0):
+        divisor for output logits.
+    residual_multiplier (`float`, *optional*, defaults to 1.0):
+        residual multiplier.
+    attention_multiplier (`float`, *optional*, defaults to 1.0):
+        attention multiplier.
+    shared_intermediate_size (`int`, *optional*, defaults to 1024):
+        intermediate size for shared experts.
+    position_embedding_type (`str`, *optional*):
+        Positional embedding type to be used; defaults to None. Allowed options: `[None, "rope"]`
 
     Example:
 
@@ -45,9 +51,7 @@ class GraniteMoeHybridConfig(PreTrainedConfig):
     ```"""
 
     model_type = "granitemoehybrid"
-    attribute_map = {
-        "layers_block_type": "layer_types",
-    }
+    attribute_map = {"layers_block_type": "layer_types"}
     keys_to_ignore_at_inference = ["past_key_values"]
 
     vocab_size: int = 32000
@@ -102,7 +106,9 @@ class GraniteMoeHybridConfig(PreTrainedConfig):
 
         self.time_step_limit = tuple(self.time_step_limit) if self.time_step_limit is not None else None
         if self.layer_types is None:
-            self.layer_types = ["mamba"] * self.num_hidden_layers
+            self.layer_types = ["linear_attention"] * self.num_hidden_layers
+        else:
+            self.layer_types = remap_legacy_layer_types(self.layer_types)
 
         super().__post_init__(**kwargs)
 
@@ -115,11 +121,6 @@ class GraniteMoeHybridConfig(PreTrainedConfig):
 
         if self.mamba_d_head * self.mamba_n_heads != mamba_intermediate:
             raise ValueError("The dimensions for the Mamba head state do not match the model intermediate_size")
-
-    # overwrite the function to use in `HybridMambaAttentionDynamicCache`
-    @property
-    def layers_block_type(self):
-        return self.layer_types
 
 
 __all__ = ["GraniteMoeHybridConfig"]

@@ -20,7 +20,7 @@ from ..auto import CONFIG_MAPPING, AutoConfig
 
 
 @auto_docstring(checkpoint="Qwen/Qwen2-Audio-7B")
-@strict(accept_kwargs=True)
+@strict
 class Qwen2AudioEncoderConfig(PreTrainedConfig):
     r"""
     max_source_positions (`int`, *optional*, defaults to 1500):
@@ -42,7 +42,12 @@ class Qwen2AudioEncoderConfig(PreTrainedConfig):
     ```"""
 
     model_type = "qwen2_audio_encoder"
-    attribute_map = {"num_hidden_layers": "encoder_layers"}
+    attribute_map = {
+        "num_hidden_layers": "encoder_layers",
+        "hidden_size": "d_model",
+        "num_attention_heads": "encoder_attention_heads",
+        "intermediate_size": "encoder_ffn_dim",
+    }
 
     num_mel_bins: int = 128
     encoder_layers: int = 32
@@ -60,7 +65,7 @@ class Qwen2AudioEncoderConfig(PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="Qwen/Qwen2-Audio-7B")
-@strict(accept_kwargs=True)
+@strict
 class Qwen2AudioConfig(PreTrainedConfig):
     r"""
     Example:

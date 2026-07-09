@@ -22,11 +22,11 @@ from ...utils import auto_docstring
 from ..deepseek_v3.modeling_deepseek_v3 import DeepseekV3Attention
 from ..glm4_moe.modeling_glm4_moe import (
     Glm4MoeDecoderLayer,
+    Glm4MoeExperts,
     Glm4MoeForCausalLM,
     Glm4MoeMLP,
     Glm4MoeModel,
     Glm4MoeMoE,
-    Glm4MoeNaiveMoe,
     Glm4MoePreTrainedModel,
     Glm4MoeRMSNorm,
     Glm4MoeRotaryEmbedding,
@@ -35,15 +35,15 @@ from ..glm4_moe.modeling_glm4_moe import (
 
 
 @auto_docstring(checkpoint="zai-org/GLM-4.5")
-@strict(accept_kwargs=True)
+@strict
 class Glm4MoeLiteConfig(PreTrainedConfig):
     r"""
+    n_group (`int`, *optional*, defaults to 1):
+        Number of groups for routed experts.
     rope_interleave (`bool`, *optional*, defaults to `True`):
         Whether to interleave the rotary position embeddings.
     mlp_layer_types (`list`, *optional*):
         MLP (Moe vs Dense) pattern for each layer.
-    n_group (`int`, *optional*, defaults to 1):
-        Number of groups for routed experts.
 
     Example:
 
@@ -75,6 +75,12 @@ class Glm4MoeLiteConfig(PreTrainedConfig):
         "embed_tokens": (["input_ids"], ["inputs_embeds"]),
         "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
         "norm": (["hidden_states"], ["hidden_states"]),
+    }
+    base_model_ep_plan = {
+        "layers.*.mlp.gate": "ep_router",
+        "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
+        "layers.*.mlp.experts.down_proj": "grouped_gemm",
+        "layers.*.mlp.experts": "moe_tp_experts",
     }
     attribute_map = {
         "num_local_experts": "n_routed_experts",
@@ -144,7 +150,7 @@ class Glm4MoeLiteRMSNorm(Glm4MoeRMSNorm):
     pass
 
 
-class Glm4MoeLiteNaiveMoe(Glm4MoeNaiveMoe):
+class Glm4MoeLiteExperts(Glm4MoeExperts):
     pass
 
 

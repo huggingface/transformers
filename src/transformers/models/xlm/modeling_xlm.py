@@ -79,12 +79,12 @@ def get_masks(slen, lengths, causal, padding_mask=None):
     return mask, attn_mask
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for outputs of question answering models using a [`~modeling_utils.XLMSQuADHead`].
     """
 )
+@dataclass
 class XLMSquadHeadOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned if both `start_positions` and `end_positions` are provided):
@@ -611,20 +611,13 @@ class XLMPreTrainedModel(PreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights."""
+        super()._init_weights(module)
         if isinstance(module, nn.Embedding):
             if self.config is not None and self.config.embed_init_std is not None:
                 init.normal_(module.weight, mean=0, std=self.config.embed_init_std)
             # Here we need the check explicitly, as we slice the weight in the `zeros_` call, so it looses the flag
             if module.padding_idx is not None and not getattr(module.weight, "_is_hf_initialized", False):
                 init.zeros_(module.weight[module.padding_idx])
-        if isinstance(module, nn.Linear):
-            if self.config is not None and self.config.init_std is not None:
-                init.normal_(module.weight, mean=0, std=self.config.init_std)
-                if module.bias is not None:
-                    init.constant_(module.bias, 0.0)
-        if isinstance(module, nn.LayerNorm):
-            init.zeros_(module.bias)
-            init.ones_(module.weight)
         if isinstance(module, XLMModel):
             if self.config.sinusoidal_embeddings:
                 init.copy_(
@@ -638,12 +631,12 @@ class XLMPreTrainedModel(PreTrainedModel):
             init.copy_(module.position_ids, torch.arange(module.position_ids.shape[-1]).expand((1, -1)))
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for outputs of question answering models using a `XLMSQuADHead`.
     """
 )
+@dataclass
 class XLMForQuestionAnsweringOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned if both `start_positions` and `end_positions` are provided):

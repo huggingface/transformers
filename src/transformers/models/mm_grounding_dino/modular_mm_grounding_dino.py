@@ -41,7 +41,7 @@ logger = logging.get_logger(__name__)
 
 
 @auto_docstring(checkpoint="openmmlab-community/mm_grounding_dino_tiny_o365v1_goldg_v3det")
-@strict(accept_kwargs=True)
+@strict
 class MMGroundingDinoConfig(PreTrainedConfig):
     r"""
     num_queries (`int`, *optional*, defaults to 900):
@@ -130,7 +130,7 @@ class MMGroundingDinoConfig(PreTrainedConfig):
     disable_custom_kernels: bool = False
     max_text_len: int = 256
     text_enhancer_dropout: float | int = 0.0
-    fusion_droppath: float = 0.1
+    fusion_droppath: float | int = 0.1
     fusion_dropout: float | int = 0.0
     embedding_init_target: bool = True
     query_dim: int = 4

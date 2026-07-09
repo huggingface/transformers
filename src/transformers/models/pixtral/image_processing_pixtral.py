@@ -16,17 +16,14 @@
 import math
 
 import torch
+from torchvision.transforms.v2 import functional as tvF
 
 from ...image_processing_backends import TorchvisionBackend
 from ...image_processing_utils import BatchFeature, get_size_dict
 from ...image_transforms import group_images_by_shape, reorder_images
 from ...image_utils import ChannelDimension, ImageInput, PILImageResampling, SizeDict, get_image_size
 from ...processing_utils import ImagesKwargs, Unpack
-from ...utils import TensorType, auto_docstring, is_torchvision_available
-
-
-if is_torchvision_available():
-    from torchvision.transforms.v2 import functional as tvF
+from ...utils import TensorType, auto_docstring
 
 
 def _num_image_tokens(image_size: tuple[int, int], patch_size: tuple[int, int]) -> int:
