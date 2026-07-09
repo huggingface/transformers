@@ -226,13 +226,21 @@ def is_cuda_platform() -> bool:
 
 @lru_cache
 def get_cuda_runtime_version() -> tuple[int, int]:
-    """Return the CUDA runtime version as (major, minor).
+    """Deprecated. Return the CUDA runtime version as (major, minor).
+
+    Deprecated in favor of ``torch.version.cuda`` for the CUDA runtime version.
 
     Prefers a direct query of ``cudaRuntimeGetVersion`` via ``libcudart.so``. If that's
     not on the system loader path (common with pip-installed torch that bundles its own
     CUDA runtime), falls back to ``torch.version.cuda`` — which equals the bundled
     runtime's version for pip wheels. Returns ``(0, 0)`` for CPU-only torch.
     """
+    warnings.warn(
+        "`get_cuda_runtime_version` is deprecated and will be removed in v5.16. "
+        "Use `torch.version.cuda` for the CUDA runtime version.",
+        FutureWarning,
+        stacklevel=2,
+    )
     import ctypes
 
     try:
