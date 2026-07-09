@@ -33,6 +33,7 @@ from transformers.testing_utils import (
 )
 from transformers.utils.import_utils import is_vision_available
 
+from ...test_processing_common import load_test_image
 from ...causal_lm_tester import CausalLMModelTester
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -210,9 +211,7 @@ class Lfm2VlForConditionalGenerationIntegrationTest(unittest.TestCase):
     def setUp(self):
         self.processor = AutoProcessor.from_pretrained("LiquidAI/LFM2-VL-1.6B")
         self.processor.tokenizer.padding_side = "left"
-        self.image = Image.open(
-            requests.get("http://images.cocodataset.org/val2017/000000039769.jpg", stream=True).raw
-        )
+        self.image = load_test_image("https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg")
         self.image2 = Image.open(
             BytesIO(
                 requests.get(
@@ -296,9 +295,7 @@ class Lfm2_5VlForConditionalGenerationIntegrationTest(unittest.TestCase):
     def setUp(self):
         self.processor = AutoProcessor.from_pretrained("LiquidAI/LFM2.5-VL-1.6B")
         self.processor.tokenizer.padding_side = "left"
-        self.image = Image.open(
-            requests.get("http://images.cocodataset.org/val2017/000000039769.jpg", stream=True).raw
-        )
+        self.image = load_test_image("https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg")
         self.image2 = Image.open(
             BytesIO(
                 requests.get(

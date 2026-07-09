@@ -24,6 +24,7 @@ from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
+from ...test_processing_common import load_test_image
 
 
 if is_torch_available():
@@ -404,11 +405,7 @@ class FlavaImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         if len(self.image_processing_classes) < 2:
             self.skipTest(reason="Skipping backends equivalence test as there are less than 2 backends")
 
-        dummy_image = Image.open(
-            io.BytesIO(
-                httpx.get("http://images.cocodataset.org/val2017/000000039769.jpg", follow_redirects=True).content
-            )
-        )
+        dummy_image = load_test_image("https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg")
 
         # Create processors for each backend
         encodings = {}

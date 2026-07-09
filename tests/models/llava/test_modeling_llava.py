@@ -45,6 +45,7 @@ from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
+from ...test_processing_common import load_test_image
 
 
 if is_torch_available():
@@ -367,7 +368,7 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
             "USER: <image>\nWhat is this? ASSISTANT:",
         ]
         image1 = Image.open(requests.get("https://llava-vl.github.io/static/images/view.jpg", stream=True).raw)
-        image2 = Image.open(requests.get("http://images.cocodataset.org/val2017/000000039769.jpg", stream=True).raw)
+        image2 = load_test_image("https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg")
 
         inputs = processor(images=[image1, image2], text=prompts, return_tensors="pt", padding=True).to(torch_device)
 
@@ -418,7 +419,7 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
             "USER: <image>\nWhat is this?\nASSISTANT:",
         ]
         image1 = Image.open(requests.get("https://llava-vl.github.io/static/images/view.jpg", stream=True).raw)
-        image2 = Image.open(requests.get("http://images.cocodataset.org/val2017/000000039769.jpg", stream=True).raw)
+        image2 = load_test_image("https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg")
 
         inputs = self.processor(images=[image1, image2], text=prompts, return_tensors="pt", padding=True).to(
             torch_device, torch.float16
@@ -471,7 +472,7 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
             "USER: <image>\nWhat is this?\nASSISTANT: Two cats lying on a bed!\nUSER: <image>\nAnd this?\nASSISTANT:",
         ]
         image1 = Image.open(requests.get("https://llava-vl.github.io/static/images/view.jpg", stream=True).raw)
-        image2 = Image.open(requests.get("http://images.cocodataset.org/val2017/000000039769.jpg", stream=True).raw)
+        image2 = load_test_image("https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg")
 
         inputs = processor(images=[image1, image2, image1], text=prompts, return_tensors="pt", padding=True).to(
             torch_device
