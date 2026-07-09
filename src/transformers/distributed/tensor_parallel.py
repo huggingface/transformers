@@ -738,17 +738,19 @@ def select_parallel_plan(model) -> dict[str, str]:
     return dict(plan)
 
 
-def apply_tensor_parallel(model, tp_mesh):
-    """Apply tensor parallelism by looking each style up by string name.
+def _supports_dtensor_path(model, resolved_plan, distributed_config) -> bool:
+    """Return True when every plan style is registered in the new DTensor registry and EP is off."""
+    if distributed_config is None:
+        distributed_config = getattr(model.config, "distributed_config", None)
+    if distributed_config is None:
+        return False
+    if getattr(distributed_config, "enable_expert_parallel", False):
+        return False
+    return all(style in ALL_PARALLEL_STYLES for style in resolved_plan.values())
 
-    A single named_modules() walk shards each module's direct params (param-keyed plan entries →
-    shard_param, producing DTensor placeholders for shard-on-read loading) and installs its
-    mode-aware forward (module-keyed entries → install_forward). Plus tie-weights handling.
 
-    The installed styles are mode-aware: training runs the DTensor redistribute path, inference
-    (``model.eval()``) unwraps to plain tensors + raw collectives. The plan is a single
-    ``base_model_tp_plan``; sequence- and expert-parallel plans are out of scope here.
-    """
+def _apply_dtensor_tp(model, tp_mesh):
+    """DTensor backend: shard params as placeholders and install mode-aware forwards."""
     model.tp_plan = dict(select_parallel_plan(model))
     logger.info(f"TP plan has been resolved: {model.tp_plan}")
 
@@ -774,6 +776,36 @@ def apply_tensor_parallel(model, tp_mesh):
             ALL_PARALLEL_STYLES[style_name].install_forward(module, tp_mesh)
 
     return model
+
+
+def apply_tensor_parallel(model, tp_mesh, *, distributed_config=None, device_mesh=None):
+    """Apply tensor parallelism — single entry point dispatching to DTensor or legacy backend.
+
+    Dense / MoE tensor parallelism uses the DTensor path when every style in the resolved plan is
+    registered in ``ALL_PARALLEL_STYLES`` and expert parallelism is disabled. Expert parallelism and
+    models with legacy style names fall back to the plain-tensor path in
+    ``integrations.tensor_parallel``.
+    """
+    if distributed_config is None:
+        distributed_config = getattr(model.config, "distributed_config", None)
+    if device_mesh is None:
+        device_mesh = getattr(model, "_device_mesh", None)
+
+    resolved_plan = select_parallel_plan(model)
+    use_dtensor = _supports_dtensor_path(model, resolved_plan, distributed_config)
+
+    if use_dtensor:
+        return _apply_dtensor_tp(model, tp_mesh)
+    else:
+        # Expert parallelism / unmigrated plan styles → plain-tensor backend.
+        if distributed_config is None or device_mesh is None:
+            raise ValueError(
+                "Legacy tensor parallelism requires `distributed_config` and `device_mesh` on the model "
+                "(set them before calling `apply_tensor_parallel`, or pass explicitly)."
+            )
+        from ..integrations.tensor_parallel import apply_tensor_parallelism
+
+        return apply_tensor_parallelism(model, distributed_config.tp_plan, distributed_config, device_mesh)
 
 
 # =============================================================================

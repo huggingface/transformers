@@ -14,6 +14,7 @@
 
 """End-to-end tests for the unified tensor-parallel path with a mode-aware runtime.
 
+Uses ``Cohere2Moe`` as the reference model (same pattern as FSDP: one model carries the plan).
 A single ``base_model_tp_plan`` drives both regimes over DTensor-sharded parameters:
 - ``model.eval()`` (inference): the styles unwrap to plain tensors and run raw collectives
   (all-reduce / all-gather), skipping DTensor redistribute.
@@ -41,7 +42,7 @@ if is_torch_available():
     import torch.distributed as dist
     import torch.multiprocessing as mp
 
-    from transformers import LlamaConfig, LlamaForCausalLM, MixtralConfig, MixtralForCausalLM
+    from transformers import Cohere2MoeConfig, Cohere2MoeForCausalLM
     from transformers.distributed import DistributedConfig
 
 
@@ -59,29 +60,22 @@ def _free_port() -> int:
         return s.getsockname()[1]
 
 
-def _tiny_llama() -> "LlamaConfig":
-    return LlamaConfig(
+def _tiny_cohere2_moe(*, all_dense: bool = False) -> "Cohere2MoeConfig":
+    return Cohere2MoeConfig(
         vocab_size=320,
         hidden_size=128,
         intermediate_size=256,
         num_hidden_layers=2,
         num_attention_heads=8,
         num_key_value_heads=8,
-        tie_word_embeddings=False,
-    )
-
-
-def _tiny_mixtral() -> "MixtralConfig":
-    return MixtralConfig(
-        vocab_size=320,
-        hidden_size=128,
-        intermediate_size=256,
-        num_hidden_layers=2,
-        num_attention_heads=8,
-        num_key_value_heads=4,
-        num_local_experts=4,
+        head_dim=16,
+        num_experts=4,
         num_experts_per_tok=2,
+        layer_types=["full_attention", "sliding_attention"],
+        mlp_layer_types=["dense", "dense"] if all_dense else ["dense", "sparse"],
         tie_word_embeddings=False,
+        logit_scale=1.0,
+        rms_norm_eps=1e-5,
     )
 
 
@@ -123,14 +117,14 @@ def _impl_dense_inference(rank, world_size, save_dir):
     device = f"cuda:{rank}"
     input_ids = torch.arange(1, 9, device=device).unsqueeze(0)
 
-    ref = LlamaForCausalLM.from_pretrained(save_dir, dtype=torch.bfloat16).to(device).eval()
+    ref = Cohere2MoeForCausalLM.from_pretrained(save_dir, dtype=torch.bfloat16).to(device).eval()
     with torch.no_grad():
         ref_logits = ref(input_ids).logits
     del ref
     torch.cuda.empty_cache()
 
     # from_pretrained leaves the model in eval() → inference (plain-collective) path.
-    model = LlamaForCausalLM.from_pretrained(
+    model = Cohere2MoeForCausalLM.from_pretrained(
         save_dir, dtype=torch.bfloat16, distributed_config=DistributedConfig(tp_size=world_size)
     )
     assert _has_dtensor_params(model), "TP params should be DTensors (mode-aware runtime)"
@@ -149,13 +143,13 @@ def _impl_moe_inference(rank, world_size, save_dir):
     device = f"cuda:{rank}"
     input_ids = torch.arange(1, 9, device=device).unsqueeze(0)
 
-    ref = MixtralForCausalLM.from_pretrained(save_dir, dtype=torch.bfloat16).to(device).eval()
+    ref = Cohere2MoeForCausalLM.from_pretrained(save_dir, dtype=torch.bfloat16).to(device).eval()
     with torch.no_grad():
         ref_logits = ref(input_ids).logits
     del ref
     torch.cuda.empty_cache()
 
-    model = MixtralForCausalLM.from_pretrained(
+    model = Cohere2MoeForCausalLM.from_pretrained(
         save_dir, dtype=torch.bfloat16, distributed_config=DistributedConfig(tp_size=world_size)
     )
     assert _has_dtensor_params(model)
@@ -166,7 +160,7 @@ def _impl_moe_inference(rank, world_size, save_dir):
 
 def _impl_dense_training(rank, world_size, save_dir):
     device = f"cuda:{rank}"
-    model = LlamaForCausalLM.from_pretrained(
+    model = Cohere2MoeForCausalLM.from_pretrained(
         save_dir, dtype=torch.bfloat16, distributed_config=DistributedConfig(tp_size=world_size)
     )
     assert _has_dtensor_params(model), "TP params should be DTensors for training"
@@ -206,13 +200,13 @@ class TPTrainingInferenceTest(unittest.TestCase):
             self.assertIsNone(error, msg=error)
 
     def test_dense_tp_inference_matches_reference(self):
-        self._spawn("_impl_dense_inference", _tiny_llama, LlamaForCausalLM)
+        self._spawn("_impl_dense_inference", lambda: _tiny_cohere2_moe(all_dense=True), Cohere2MoeForCausalLM)
 
     def test_moe_tp_inference_matches_reference(self):
-        self._spawn("_impl_moe_inference", _tiny_mixtral, MixtralForCausalLM)
+        self._spawn("_impl_moe_inference", _tiny_cohere2_moe, Cohere2MoeForCausalLM)
 
     def test_dense_tp_training_backward(self):
-        self._spawn("_impl_dense_training", _tiny_llama, LlamaForCausalLM)
+        self._spawn("_impl_dense_training", lambda: _tiny_cohere2_moe(all_dense=True), Cohere2MoeForCausalLM)
 
 
 if __name__ == "__main__":

@@ -16,10 +16,9 @@ from __future__ import annotations
 import os
 from typing import TYPE_CHECKING
 
-from ..integrations.tensor_parallel import apply_tensor_parallelism
 from ..utils import is_torch_available, is_torch_greater_or_equal
 from .fsdp import apply_fully_sharded_data_parallelism
-from .tensor_parallel import ALL_PARALLEL_STYLES, apply_tensor_parallel, select_parallel_plan
+from .tensor_parallel import apply_tensor_parallel
 
 
 if TYPE_CHECKING:
@@ -184,10 +183,10 @@ def distribute_model(
 ) -> nn.Module:
     """Apply TP or FSDP2 to `model` based on ``distributed_config`` (mutually exclusive for now).
 
-    Loading always goes through DTensor placeholders (shard-on-read). For dense / MoE tensor
-    parallelism, ``apply_tensor_parallel`` shards the weights as DTensors and installs mode-aware
-    forwards: the DTensor redistribute path when training, plain collectives (all-reduce /
-    all-gather) when in eval. Expert parallelism stays on the legacy plain-tensor path.
+    Loading always goes through DTensor placeholders (shard-on-read). ``apply_tensor_parallel``
+    dispatches to the DTensor backend (mode-aware forwards: redistribute when training, plain
+    collectives when in eval) or the legacy plain-tensor backend for expert parallelism and
+    unmigrated model plans.
     """
     model.config.distributed_config = distributed_config
     model._device_mesh = device_mesh
@@ -195,20 +194,9 @@ def distribute_model(
     if distributed_config.tp_size > 1:
         model._tp_size = distributed_config.tp_size
         tp_mesh = device_mesh["tp"] if device_mesh.ndim > 1 else device_mesh
-        resolved_plan = select_parallel_plan(model)
-        # Only models migrated to the new-style plan (all styles registered in the new
-        # `ALL_PARALLEL_STYLES`) go through the unified DTensor path. Expert parallelism and any
-        # not-yet-migrated model (legacy style names) stay on the legacy plain-tensor path, so this
-        # is a strict superset of prior behavior — no model regresses.
-        is_new_style = not distributed_config.enable_expert_parallel and all(
-            style in ALL_PARALLEL_STYLES for style in resolved_plan.values()
+        model = apply_tensor_parallel(
+            model, tp_mesh, distributed_config=distributed_config, device_mesh=device_mesh
         )
-        if is_new_style:
-            # Dense / MoE tensor parallelism via the unified DTensor path. The installed styles are
-            # mode-aware: DTensor redistribute for training, plain collectives for inference.
-            model = apply_tensor_parallel(model, tp_mesh)
-        else:
-            model = apply_tensor_parallelism(model, distributed_config.tp_plan, distributed_config, device_mesh)
     elif distributed_config.fsdp_size > 1:
         fsdp_mesh = device_mesh["fsdp"] if device_mesh.ndim > 1 else device_mesh
         model = apply_fully_sharded_data_parallelism(model, fsdp_mesh)

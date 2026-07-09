@@ -42,35 +42,20 @@ class MixtralConfig(PreTrainedConfig):
     model_type = "mixtral"
     keys_to_ignore_at_inference = ["past_key_values"]
     default_theta = 1000000.0
-    # TP plan (inference): experts sharded on the hidden dim; the experts module all-reduces.
     base_model_tp_plan = {
         "layers.*.self_attn.q_proj": "colwise",
         "layers.*.self_attn.k_proj": "colwise",
         "layers.*.self_attn.v_proj": "colwise",
-        "layers.*.self_attn.o_proj": "rowwise_allreduce",
-        "layers.*.mlp.experts.gate_up_proj": "moe_tp_gate_up_colwise",
-        "layers.*.mlp.experts.down_proj": "moe_tp_down_rowwise",
-        "layers.*.mlp.experts": "moe_experts_allreduce",
+        "layers.*.self_attn.o_proj": "rowwise",
+        "layers.*.mlp.experts.gate_up_proj": "packed_colwise",
+        "layers.*.mlp.experts.down_proj": "rowwise",
+        "layers.*.mlp.experts": "moe_tp_experts",
     }
     base_model_pp_plan = {
         "embed_tokens": (["input_ids"], ["inputs_embeds"]),
         "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
         "norm": (["hidden_states"], ["hidden_states"]),
     }
-    # Expert-only EP plan (legacy path): shards MoE experts along the expert axis; gate stays replicated.
-    base_model_ep_plan = {
-        "layers.*.mlp.gate": "ep_router",
-        "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
-        "layers.*.mlp.experts.down_proj": "grouped_gemm",
-        "layers.*.mlp.experts": "moe_tp_experts",
-    }
-
-    base_model_fsdp_plan = {
-        "embed_tokens": "free_full_weight",
-        "layers.*": "free_full_weight",
-        "norm": "keep_full_weight",
-    }
-
     attribute_map = {"num_experts": "num_local_experts"}
 
     vocab_size: int = 32000
