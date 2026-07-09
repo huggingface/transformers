@@ -319,12 +319,15 @@ class TmlAttention(nn.Module):
         if past_key_values is not None:
             key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
 
-        cache_position = torch.arange(input_shape[1], device=hidden_states.device) + past_length
+        query_positions = torch.arange(input_shape[1], device=hidden_states.device) + past_length
+        # The bias must cover the full key length (cache + new tokens); the offset accounts for
+        # sliding layers whose cache may retain only the last `sliding_window` keys
+        kv_length = key_states.shape[-2]
         key_positions = (
-            torch.arange(input_shape[1], device=cache_position.device) + cache_position[-1] + 1 - input_shape[1]
+            torch.arange(kv_length, device=hidden_states.device) + past_length + input_shape[1] - kv_length
         )
         relative_states = relative_states.view(*input_shape, self.num_heads, -1)
-        position_bias = self.rel_logits_proj(relative_states, cache_position, key_positions)
+        position_bias = self.rel_logits_proj(relative_states, query_positions, key_positions)
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
@@ -518,7 +521,13 @@ def torch_causal_conv1d_update(
     hidden_states_new = torch.cat([conv_state, hidden_states], dim=-1).to(weight.dtype)
     conv_state.copy_(hidden_states_new[:, :, -state_len:])
     out = F.conv1d(hidden_states_new, weight.unsqueeze(1), bias, padding=0, groups=hidden_size)
-    out = F.silu(out[:, :, -seq_len:])
+    out = out[:, :, -seq_len:]
+    # super hacky: mimics the `causal_conv1d_update` kernel contract (string arg, silu-only) instead
+    # of ACT2FN; tml passes activation=None so this never fires
+    if activation not in (None, "silu", "swish"):
+        raise NotImplementedError(f"activation `{activation}` is not supported, only None/silu/swish")
+    if activation is not None:
+        out = F.silu(out)
     out = out.to(hidden_states.dtype)
     return out
 
@@ -1139,8 +1148,14 @@ class TmlForConditionalGeneration(TmlPreTrainedModel, GenerationMixin):
     def __init__(self, config: TmlConfig):
         super().__init__(config)
         self.model = TmlModel(config)
+        # checkpoints store `unembed` padded to vocab_size; logits are sliced to
+        # unpadded_vocab_size in forward, like sglang
         self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
         self.post_init()
+        # post_init wipes class-level _tp_plan, so register lm_head here; rowwise (input dim
+        # 6144 splits evenly) because the unpadded 200058 breaks colwise_gather_output's
+        # equal-shard all_gather
+        self._tp_plan["lm_head"] = "rowwise_split_input"
 
     @auto_docstring
     def get_image_features(self, pixel_values: torch.FloatTensor, **kwargs: Unpack[TransformersKwargs]):
@@ -1226,12 +1241,13 @@ class TmlForConditionalGeneration(TmlPreTrainedModel, GenerationMixin):
         # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
         slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
         logits = self.lm_head(hidden_states[:, slice_indices, :])
+        unpadded_vocab_size = self.config.text_config.unpadded_vocab_size
+        if unpadded_vocab_size is not None and unpadded_vocab_size < logits.shape[-1]:
+            logits = logits[..., :unpadded_vocab_size]
 
         loss = None
         if labels is not None:
-            loss = self.loss_function(
-                logits=logits, labels=labels, vocab_size=self.config.text_config.vocab_size, **kwargs
-            )
+            loss = self.loss_function(logits=logits, labels=labels, vocab_size=logits.shape[-1], **kwargs)
 
         return TmlCausalLMOutputWithPast(
             loss=loss,

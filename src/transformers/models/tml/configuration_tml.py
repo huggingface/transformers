@@ -26,12 +26,22 @@ class TmlTextConfig(PreTrainedConfig):
     model_type = "tml_text"
     base_config_key = "text_config"
     base_model_tp_plan = {
-        "layers.*.mlp.experts.gate_up_proj": "packed_colwise",
+        "embed_tokens": "embedding_rowwise",
+        # NOT packed_colwise: sharding happens on the RAW ckpt tensor before the Interleave
+        # conversion, and w13 is interleaved (g0,u0,g1,u1...), not [G|U] halves. A contiguous
+        # colwise slice keeps gate/up pairs together, and the per-shard de-interleave then yields
+        # exactly the contiguous channel block the rowwise down_proj shard consumes.
+        "layers.*.mlp.experts.gate_up_proj": "colwise",
         "layers.*.mlp.experts.down_proj": "rowwise",
         "layers.*.mlp.experts": "moe_tp_experts",
+        # param entries must stay listed before the module entry: the loader's alternation regex
+        # takes the first matching branch for weight sharding, while the module entry only
+        # attaches the output all-reduce hook (TmlSharedExperts holds raw nn.Parameters, so
+        # rowwise alone would shard the weights without ever reducing the partial output)
         "layers.*.mlp.shared_experts.gate_proj": "colwise",
         "layers.*.mlp.shared_experts.up_proj": "colwise",
         "layers.*.mlp.shared_experts.down_proj": "rowwise",
+        "layers.*.mlp.shared_experts": "all_reduce",
         "layers.*.mlp.gate_proj": "colwise",
         "layers.*.mlp.up_proj": "colwise",
         "layers.*.mlp.down_proj": "rowwise",
@@ -55,6 +65,8 @@ class TmlTextConfig(PreTrainedConfig):
     }
 
     vocab_size: int = 201024
+    # `unembed` row count when the checkpoint head is not padded to `vocab_size` (big model: 200058)
+    unpadded_vocab_size: int | None = None
     hidden_size: int = 6144
     num_hidden_layers: int = 66
     num_attention_heads: int = 64
