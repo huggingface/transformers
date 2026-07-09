@@ -161,9 +161,9 @@ class UnlimitedOcrModelTest(VLMModelTest, unittest.TestCase):
             out_reference = model.generate(**inputs_dict, max_new_tokens=10, do_sample=False)
 
             # Prefill the cache. We need at least max_new_tokens=2 to make the cache mark prefill
-            # as complete. Prefill is only marked as complete once single token is added to
-            # the cache (kv_length == 1). As the last decoded token isn't added to the cache
-            # we have to decode at least two tokens.
+            # as complete. Prefill is only marked as complete once a single token is added to
+            # the cache (kv_length == 1). As the last decoded token from a .generate call isn't
+            # added to the cache we have to set max_new_tokens=2.
             out_prefill = model.generate(
                 **inputs_dict,
                 max_new_tokens=2,
