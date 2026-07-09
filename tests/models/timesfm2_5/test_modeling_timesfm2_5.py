@@ -120,6 +120,19 @@ class TimesFm2_5ModelTest(ModelTesterMixin, unittest.TestCase):
         results = model(**inputs_dict)
         assert results.mean_predictions is not None
 
+    def test_window_size_parameter(self):
+        """Test that window_size argument is properly supported."""
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        model = TimesFm2_5ModelForPrediction(config)
+        model.to(torch_device)
+        model.eval()
+
+        # Test with window_size parameter
+        results_with_window = model(**inputs_dict, window_size=4)
+        assert results_with_window.mean_predictions is not None
+        # With window_size, we get trend + residual, so 2x the batch size
+        self.assertEqual(results_with_window.mean_predictions.shape[0], 4)
+
     @unittest.skip(reason="FA backend not yet supported because of forced masks")
     def test_sdpa_can_dispatch_on_flash(self):
         pass
@@ -316,3 +329,22 @@ class TimesFm2_5ModelIntegrationTests(unittest.TestCase):
             device=torch_device)
         # fmt: on
         self.assertTrue(torch.allclose(mean_predictions[0, :64], expected_slice, atol=1e-4))
+
+    def test_inference_with_window_size(self):
+        """Test that window_size argument works without AttributeError."""
+        model = TimesFm2_5ModelForPrediction.from_pretrained(
+            "google/timesfm-2.5-200m-transformers", revision="refs/pr/3"
+        ).to(torch_device)
+        forecast_input = [
+            np.sin(np.linspace(0, 20, 100)),
+            np.sin(np.linspace(0, 20, 100)),
+        ]
+        forecast_input_tensor = [torch.tensor(ts, dtype=torch.float32, device=torch_device) for ts in forecast_input]
+
+        with torch.no_grad():
+            output = model(past_values=forecast_input_tensor, window_size=10)
+
+        mean_predictions = output.mean_predictions
+        # With window_size, we get trend + residual decomposition, so 2x the input count
+        self.assertEqual(mean_predictions.shape[0], 2)  # 2 input series after decomposition
+        self.assertEqual(mean_predictions.shape[1], model.config.horizon_length)

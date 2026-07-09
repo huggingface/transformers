@@ -101,13 +101,6 @@ class TimesFm2_5Config(TimesFmConfig):
     max_position_embeddings: int = 16384
     rope_parameters: RopeParameters | dict | None = None
 
-    freq_size = AttributeError()
-    pad_val = AttributeError()
-    tolerance = AttributeError()
-    use_positional_embedding = AttributeError()
-    min_timescale = AttributeError()
-    max_timescale = AttributeError()
-
 
 @auto_docstring
 @dataclass
