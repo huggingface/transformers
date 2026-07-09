@@ -70,7 +70,6 @@ class Cohere2MoeConfig(PreTrainedConfig):
 
     model_type = "cohere2_moe"
     keys_to_ignore_at_inference = ["past_key_values"]
-    # TP plan (inference): dense prefix layers + MoE experts sharded on the hidden dim.
     base_model_tp_plan = {
         "layers.*.self_attn.q_proj": "colwise",
         "layers.*.self_attn.k_proj": "colwise",
@@ -88,7 +87,6 @@ class Cohere2MoeConfig(PreTrainedConfig):
         "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
         "norm": (["hidden_states"], ["hidden_states"]),
     }
-    # Expert-only EP plan (legacy path): shards MoE experts along the expert axis; gate stays replicated.
     base_model_ep_plan = {
         "layers.*.mlp.gate": "ep_router",
         "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
