@@ -22,8 +22,7 @@ import torch
 import torch.nn.functional as F
 from torchvision.transforms.v2 import functional as tvF
 
-from transformers.image_processing_backends import TorchvisionBackend
-
+from ...image_processing_backends import TorchvisionBackend
 from ...image_processing_outputs import SemanticSegmentationPostProcessorOutput
 from ...image_processing_utils import BatchFeature
 from ...image_transforms import group_images_by_shape, reorder_images
@@ -50,6 +49,8 @@ class Sapiens2ImageProcessorKwargs(ImagesKwargs, total=False):
     """
 
     do_reduce_labels: bool
+    keypoints: list[list[list[list[float]]]] | None
+    boxes: list[list[list[float]]] | None
 
 
 def box_xywh_to_xyxy(x):
@@ -320,6 +321,7 @@ class Sapiens2ImageProcessor(TorchvisionBackend):
         images: ImageInput,
         segmentation_maps: ImageInput | None = None,
         boxes: list[list[list[float]]] | None = None,
+        keypoints: list[list[list[list[float]]]] | None = None,
         **kwargs: Unpack[Sapiens2ImageProcessorKwargs],
     ) -> BatchFeature:
         r"""
@@ -330,22 +332,32 @@ class Sapiens2ImageProcessor(TorchvisionBackend):
             representing the bounding box coordinates in COCO format
             (top_left_x, top_left_y, width, height). When provided, each person crop is
             affine-warped to the model input size instead of resizing the full image.
+        keypoints (`list[list[list[list[float]]]]`, *optional*):
+            List of keypoints for each person in each image. Expected format is
+            `[images -> persons -> keypoints -> [x, y, visibility]]`. Used to generate
+            ground-truth heatmaps and visibility weights for pose estimation fine-tuning.
         """
-        return super().preprocess(images, segmentation_maps, boxes, **kwargs)
+        if keypoints is not None:
+            kwargs["keypoints"] = keypoints
+        if boxes is not None:
+            kwargs["boxes"] = boxes
+        return super().preprocess(images, segmentation_maps, **kwargs)
 
     def _preprocess_image_like_inputs(
         self,
         images: ImageInput,
         segmentation_maps: ImageInput | None,
         boxes: list[list[list[float]]] | None,
-        do_convert_rgb: bool,
-        input_data_format: ChannelDimension,
-        return_tensors: str | TensorType | None,
+        keypoints: list[list[list[list[float]]]] | None = None,
+        do_convert_rgb: bool = True,
+        input_data_format: ChannelDimension | None = None,
+        return_tensors: str | TensorType | None = None,
         device: Union[str, "torch.device"] | None = None,
         **kwargs,
     ) -> BatchFeature:
         """Handle extra inputs beyond images."""
         kwargs["boxes"] = boxes  # modular trick
+
         images = self._prepare_image_like_inputs(
             images=images, do_convert_rgb=do_convert_rgb, input_data_format=input_data_format, device=device
         )
@@ -376,6 +388,72 @@ class Sapiens2ImageProcessor(TorchvisionBackend):
                 for processed_segmentation_map in processed_segmentation_maps
             ]
             data["labels"] = processed_segmentation_maps
+
+        # Prepare pose estimation keypoints if provided
+        if keypoints is not None:
+            if boxes is None:
+                raise ValueError("Bounding `boxes` must be provided when passing `keypoints` for pose estimation.")
+
+            heatmap_h = self.size["height"] // 4
+            heatmap_w = self.size["width"] // 4
+            sigma = 2.0
+
+            heatmaps_list = []
+            weights_list = []
+
+            grid_y, grid_x = torch.meshgrid(
+                torch.arange(heatmap_h, dtype=torch.float32),
+                torch.arange(heatmap_w, dtype=torch.float32),
+                indexing="ij",
+            )
+            heatmap_size = torch.tensor([heatmap_w - 1, heatmap_h - 1], dtype=torch.float32)
+
+            for image_boxes, image_keypoints in zip(boxes, keypoints):
+                boxes_tensor = box_xywh_to_cxcywh(torch.tensor(image_boxes, dtype=torch.float32))
+
+                centers, scales = boxes_to_crop_params(
+                    boxes_tensor, output_size=(self.size["height"], self.size["width"])
+                )
+
+                for person_idx in range(len(image_boxes)):
+                    person_kps = image_keypoints[person_idx]
+
+                    if len(person_kps) == 0:
+                        heatmaps_list.append(torch.zeros((0, heatmap_h, heatmap_w), dtype=torch.float32))
+                        weights_list.append(torch.zeros((0, heatmap_h, heatmap_w), dtype=torch.float32))
+                        continue
+
+                    person_kps_tensor = torch.tensor(person_kps, dtype=torch.float32)
+                    raw_coords = person_kps_tensor[:, :2]
+
+                    center = centers[person_idx]
+                    scale = scales[person_idx]
+
+                    hm_coords = (raw_coords - center + 0.5 * scale) / scale * heatmap_size
+
+                    xs = hm_coords[:, 0].view(-1, 1, 1)
+                    ys = hm_coords[:, 1].view(-1, 1, 1)
+
+                    dist_sq = (grid_x.unsqueeze(0) - xs) ** 2 + (grid_y.unsqueeze(0) - ys) ** 2
+                    person_heatmaps = torch.exp(-dist_sq / (2 * (sigma**2)))
+
+                    if person_kps_tensor.shape[1] > 2:
+                        visibilities = person_kps_tensor[:, 2].view(-1, 1, 1)
+                        mask = (visibilities > 0).float()
+                    else:
+                        mask = torch.ones((person_kps_tensor.shape[0], 1, 1), dtype=torch.float32)
+
+                    out_of_bounds = (xs < 0) | (xs >= heatmap_w) | (ys < 0) | (ys >= heatmap_h)
+
+                    valid_mask = mask * (~out_of_bounds).float()
+                    person_heatmaps = person_heatmaps * valid_mask
+                    person_weights = valid_mask.expand_as(person_heatmaps)
+
+                    heatmaps_list.append(person_heatmaps)
+                    weights_list.append(person_weights)
+
+            data["labels"] = heatmaps_list
+            data["label_weights"] = weights_list
 
         return BatchFeature(data=data, tensor_type=return_tensors)
 

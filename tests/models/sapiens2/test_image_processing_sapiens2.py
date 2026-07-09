@@ -271,3 +271,23 @@ class Sapiens2ImageProcessingTest(
         # mismatched batch size raises ValueError
         with self.assertRaises(ValueError):
             image_processor.post_process_image_matting(outputs, target_sizes=[(100, 100)])
+
+    def test_pose_estimation_keypoint_preprocessing(self):
+        image_processor = Sapiens2ImageProcessor()
+        
+        import numpy as np
+        image = np.random.randint(0, 255, (800, 800, 3)).astype(np.uint8)
+        
+        boxes = [[[50.0, 50.0, 200.0, 400.0]]]
+        keypoints = [[[[60.0, 70.0, 1.0], [80.0, 90.0, 0.0]]]]
+
+        inputs = image_processor(images=image, boxes=boxes, keypoints=keypoints, return_tensors="pt")
+
+        self.assertEqual(inputs["pixel_values"].shape, (1, 3, 1024, 768))
+        self.assertEqual(inputs["labels"].shape, (1, 2, 256, 192))
+        self.assertEqual(inputs["label_weights"].shape, (1, 2, 256, 192))
+
+        self.assertEqual(inputs["label_weights"][0, 1].max().item(), 0.0)
+
+        with self.assertRaises(ValueError):
+            image_processor(images=image, keypoints=keypoints, return_tensors="pt")
