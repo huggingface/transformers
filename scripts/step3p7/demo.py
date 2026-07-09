@@ -1,16 +1,19 @@
 """Demo: run forward passes on Step-3.7-Flash and check correctness.
 
-Workflow
---------
-1. Build mini hub-format weights and push to HF Hub (once, or after changing architecture):
-     PYTHONPATH=src python scripts/step3p7/build_mini_model.py --push-to-hub
+Workflow (fully local — no Hub push required)
+-----------------------------------------------
+1. Build mini hub-format weights, once or after changing the architecture:
+     PYTHONPATH=src python scripts/step3p7/build_mini_model.py   # -> ./mini-step-3-7-flash
 
-2. Validate — downloads from Hub, converts keys, compares original code vs new code logits:
-     PYTHONPATH=src python scripts/step3p7/demo.py --hub-dir itazap/Step-3.7-Flash-Mini-Original
+2. Validate — converts keys, compares original code vs new code logits:
+     PYTHONPATH=src python scripts/step3p7/demo.py --hub-dir ./mini-step-3-7-flash
 
-3. Regression check — iterate on modular changes without rebuilding hub weights:
+3. Regression check — iterate on modular changes without rebuilding the mini checkpoint:
      PYTHONPATH=src python scripts/step3p7/demo.py            # first run creates baseline
      PYTHONPATH=src python scripts/step3p7/demo.py            # subsequent runs compare
+
+``--hub-dir`` also accepts a Hub repo id (e.g. to validate against a real released checkpoint
+in original format) — it's resolved locally first and only downloaded if the path doesn't exist.
 """
 
 from __future__ import annotations

@@ -952,27 +952,12 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(source_patterns=r"^vit_large_projector\.", target_patterns="model.multi_modal_projector."),
             # model.{embed_tokens,layers,norm}.* → model.language_model.* (explicit to avoid
             # negative lookaheads that break process_target_pattern during reverse mapping)
-            WeightRenaming(source_patterns=r"^model\.embed_tokens\.", target_patterns="model.language_model.embed_tokens."),
+            WeightRenaming(
+                source_patterns=r"^model\.embed_tokens\.", target_patterns="model.language_model.embed_tokens."
+            ),
             WeightRenaming(source_patterns=r"^model\.layers\.", target_patterns="model.language_model.layers."),
             WeightRenaming(source_patterns=r"^model\.norm\.", target_patterns="model.language_model.norm."),
-            # ---- Pass 2: vision encoder internal renames ----
-            WeightRenaming(source_patterns=r"\.conv1\.weight$", target_patterns=".embeddings.patch_embedding.weight"),
-            WeightRenaming(
-                source_patterns=r"\.positional_embedding$",
-                target_patterns=".embeddings.position_embedding.weight",
-            ),
-            WeightRenaming(source_patterns=r"\.transformer\.resblocks\.", target_patterns=".layers."),
-            WeightRenaming(source_patterns=r"\.ln_pre\.", target_patterns=".pre_layernorm."),
-            WeightRenaming(source_patterns=r"\.ls_1\.gamma$", target_patterns=".lambda_1"),
-            WeightRenaming(source_patterns=r"\.ls_2\.gamma$", target_patterns=".lambda_2"),
-            WeightRenaming(source_patterns=r"\.mlp\.c_fc\.", target_patterns=".mlp.fc1."),
-            WeightRenaming(source_patterns=r"\.mlp\.c_proj\.", target_patterns=".mlp.fc2."),
-            WeightRenaming(source_patterns=r"\.attn\.", target_patterns=".self_attn."),
-            WeightRenaming(source_patterns=r"\.ln_1\.", target_patterns=".layernorm_before."),
-            WeightRenaming(source_patterns=r"\.ln_2\.", target_patterns=".layernorm_after."),
-            WeightRenaming(source_patterns=r"\.vit_downsampler1\.", target_patterns=".downsampler1."),
-            WeightRenaming(source_patterns=r"\.vit_downsampler2\.", target_patterns=".downsampler2."),
-            # ---- Pass 3: MoE renames ----
+            # ---- Pass 2: MoE renames ----
             WeightRenaming(source_patterns=r"\.moe\.gate\.weight$", target_patterns=".mlp.gate.weight"),
             WeightRenaming(
                 source_patterns=r"\.moe\.router_bias$",
@@ -1008,6 +993,36 @@ def _build_checkpoint_conversion_mapping():
                 target_patterns=r"mlp.experts.gate_up_proj",
                 operations=[Concatenate(dim=1)],
             ),
+        ],
+        # Scoped to `Step3p7VisionModel` (config.model_type == "step3p5_vision") by
+        # `get_model_conversion_mapping`, which anchors every rule here to keys under the
+        # `vision_model.` prefix. These used to live unscoped in the "step3p7" entry above,
+        # where bare substring patterns like `\.attn\.` -> `.self_attn.` and
+        # `\.transformer\.resblocks\.` -> `.layers.` also matched (and corrupted, on reverse/
+        # save) the text decoder's `language_model.layers.*.self_attn.*` keys.
+        "step3p5_vision": [
+            # `^`-anchored: these attach directly to the (now-stripped-by-scoping) `vision_model.`
+            # prefix boundary, so the leading `.` that a bare substring pattern would expect — and
+            # that a target pattern would normally supply as a connector — is already part of the
+            # stripped prefix itself; a leading `.` on either side here would produce a double dot.
+            WeightRenaming(source_patterns=r"^conv1\.weight$", target_patterns="embeddings.patch_embedding.weight"),
+            WeightRenaming(
+                source_patterns=r"^positional_embedding$",
+                target_patterns="embeddings.position_embedding.weight",
+            ),
+            WeightRenaming(source_patterns=r"^transformer\.resblocks\.", target_patterns="layers."),
+            WeightRenaming(source_patterns=r"^ln_pre\.", target_patterns="pre_layernorm."),
+            WeightRenaming(source_patterns=r"^vit_downsampler1\.", target_patterns="downsampler1."),
+            WeightRenaming(source_patterns=r"^vit_downsampler2\.", target_patterns="downsampler2."),
+            # Not anchored: these are nested under `.transformer.resblocks.N.`, so a preceding `.`
+            # from that segment is still present in the (post-scoping) key being matched against.
+            WeightRenaming(source_patterns=r"\.ls_1\.gamma$", target_patterns=".lambda_1"),
+            WeightRenaming(source_patterns=r"\.ls_2\.gamma$", target_patterns=".lambda_2"),
+            WeightRenaming(source_patterns=r"\.mlp\.c_fc\.", target_patterns=".mlp.fc1."),
+            WeightRenaming(source_patterns=r"\.mlp\.c_proj\.", target_patterns=".mlp.fc2."),
+            WeightRenaming(source_patterns=r"\.attn\.", target_patterns=".self_attn."),
+            WeightRenaming(source_patterns=r"\.ln_1\.", target_patterns=".layernorm_before."),
+            WeightRenaming(source_patterns=r"\.ln_2\.", target_patterns=".layernorm_after."),
         ],
         "colqwen2": [PrefixChange(prefix_to_remove="model", model_prefix="vlm")],
         "shieldgemma2": [PrefixChange(prefix_to_add="model", model_prefix="model")],

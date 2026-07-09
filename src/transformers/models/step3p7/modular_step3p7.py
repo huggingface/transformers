@@ -45,7 +45,6 @@ from ..deepseek_ocr2.modeling_deepseek_ocr2 import DeepseekOcr2ForConditionalGen
 from ..deepseek_v4.modeling_deepseek_v4 import DeepseekV4Experts, DeepseekV4MLP
 from ..gemma3.modeling_gemma3 import Gemma3TextModel
 from ..gemma4.modeling_gemma4 import Gemma4VisionRotaryEmbedding
-from ..internvl.modeling_internvl import InternVLVisionLayer
 from ..laguna.modeling_laguna import LagunaRotaryEmbedding
 from ..minimax_m3_vl.modeling_minimax_m3_vl import (
     MiniMaxM3VLAttention,
@@ -159,6 +158,38 @@ class Step3p7TextConfig(PreTrainedConfig):
     partial_rotary_factors (`list[float]`, *optional*):
         Legacy hub-config kwarg, one value per decoder layer; collapsed into one value per layer type
         the same way as `rope_theta`.
+    max_seq_len (`int`, *optional*, defaults to 128000):
+        Legacy hub-config kwarg mirroring `max_position_embeddings` (real checkpoints ship both); not
+        currently read by the modeling code.
+    norm_expert_weight (`bool`, *optional*, defaults to `True`):
+        Legacy hub-config kwarg from the original checkpoint; not currently read by the modeling code
+        (`Step3p7TopKRouter` always normalizes top-k expert weights to sum to 1).
+    num_sliding_attention_heads (`int`, *optional*):
+        Number of attention heads for `"sliding_attention"` layers, when different from
+        `num_attention_heads`. Derived from `attention_other_setting` if not provided.
+    attention_other_setting (`dict`, *optional*):
+        Legacy hub-config dict overriding `num_attention_heads`/`num_key_value_heads`/`head_dim` for
+        `"sliding_attention"` layers (real checkpoints use a different head count per attention type).
+    use_head_wise_attn_gate (`bool`, *optional*, defaults to `False`):
+        Legacy hub-config kwarg from the original checkpoint; not currently read by the modeling code.
+    use_moe_router_bias (`bool`, *optional*, defaults to `False`):
+        Legacy hub-config kwarg from the original checkpoint; not currently read by the modeling code.
+    moe_router_activation (`str`, *optional*, defaults to `"softmax"`):
+        Legacy hub-config kwarg from the original checkpoint; not currently read by the modeling code
+        (`Step3p7TopKRouter` always applies a sigmoid).
+    moe_router_scaling_factor (`float`, *optional*, defaults to 1.0):
+        Scaling factor applied to the MoE block's routed-expert output (`routed_scaling_factor` in
+        `Step3p7SparseMoeBlock`).
+    need_fp32_gate (`bool`, *optional*, defaults to `False`):
+        Legacy hub-config kwarg from the original checkpoint; not currently read by the modeling code.
+    swiglu_limits_shared (`list[float | int | None]`, *optional*):
+        Per-layer gate/up clamping bound for the always-active shared expert; `None` means no clamping.
+    use_rope_layers (`list[bool]`, *optional*):
+        Legacy hub-config kwarg from the original checkpoint; not currently read by the modeling code.
+    yarn_only_types (`list[str]`, *optional*):
+        Legacy hub-config kwarg from the original checkpoint; not currently read by the modeling code.
+    use_bidirectional_attention (`bool`, *optional*, defaults to `False`):
+        Legacy hub-config kwarg from the original checkpoint; not currently read by the modeling code.
     """
 
     model_type = "step3p5"
@@ -169,6 +200,29 @@ class Step3p7TextConfig(PreTrainedConfig):
         "moe_num_experts": "n_routed_experts",
         "moe_top_k": "num_experts_per_tok",
         "share_expert_dims": "share_expert_dim",
+    }
+    # Copied (not inherited) from `MiniMaxM3VLTextConfig`: `Step3p7Attention`/`Step3p7SparseMoeBlock`
+    # reuse its `q_proj`/`k_proj`/`v_proj`/`o_proj` and `experts.gate_up_proj`/`down_proj`/`gate`
+    # submodule naming verbatim, so the same TP/PP/EP plans apply unchanged.
+    base_model_tp_plan = {
+        "layers.*.self_attn.q_proj": "colwise_gather_output",
+        "layers.*.self_attn.k_proj": "colwise_gather_output",
+        "layers.*.self_attn.v_proj": "colwise_gather_output",
+        "layers.*.self_attn.o_proj": "rowwise_split_input",
+        "layers.*.mlp.experts.gate_up_proj": "packed_colwise",
+        "layers.*.mlp.experts.down_proj": "rowwise",
+        "layers.*.mlp.experts": "moe_tp_experts",
+    }
+    base_model_pp_plan = {
+        "embed_tokens": (["input_ids"], ["inputs_embeds"]),
+        "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
+        "norm": (["hidden_states"], ["hidden_states"]),
+    }
+    base_model_ep_plan = {
+        "layers.*.mlp.gate": "ep_router",
+        "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
+        "layers.*.mlp.experts.down_proj": "grouped_gemm",
+        "layers.*.mlp.experts": "moe_tp_experts",
     }
 
     hidden_size: int = 4096
@@ -308,7 +362,6 @@ class Step3p7Config(PreTrainedConfig):
 
     vision_config: dict | PreTrainedConfig | None = None
     text_config: dict | PreTrainedConfig | None = None
-    understand_projector_stride: int = 2
     projector_bias: bool = False
     image_token_id: int = 151679
     max_position_embeddings: int | None = None
@@ -317,12 +370,14 @@ class Step3p7Config(PreTrainedConfig):
         if self.vision_config is None:
             self.vision_config = Step3p7VisionConfig()
         elif isinstance(self.vision_config, dict):
-            self.vision_config = Step3p7VisionConfig(**self.vision_config)
+            self.vision_config = Step3p7VisionConfig(
+                **{k: v for k, v in self.vision_config.items() if k != "model_type"}
+            )
 
         if self.text_config is None:
             self.text_config = Step3p7TextConfig()
         elif isinstance(self.text_config, dict):
-            self.text_config = Step3p7TextConfig(**self.text_config)
+            self.text_config = Step3p7TextConfig(**{k: v for k, v in self.text_config.items() if k != "model_type"})
 
         self.max_position_embeddings = self.text_config.max_position_embeddings
         super().__post_init__(**kwargs)
@@ -415,8 +470,8 @@ class Step3p7ImageProcessor(TorchvisionBackend):
           (snap up when the remainder exceeds 20 % of the window size).
 
         Returns:
-            global_wh: ``(width, height)`` to resize the global view to before squaring
-            crop_wh: ``(crop_width, crop_height)`` snapped dimensions for patch extraction
+            global_width_height: ``(width, height)`` to resize the global view to before squaring
+            crop_width_height: ``(crop_width, crop_height)`` snapped dimensions for patch extraction
             window_size: tile side length (``0`` → no local patches)
             num_patches_x: number of patches along the width
             num_patches_y: number of patches along the height
@@ -481,9 +536,9 @@ class Step3p7ImageProcessor(TorchvisionBackend):
         `window_size`, not yet resized to `patch_size`), and the patch grid dimensions.
         """
         _, height, width = img.shape
-        (global_w, global_h), (crop_w, crop_h), window_size, num_patches_x, num_patches_y, needs_square_pad = (
-            self._plan_patches(width, height, image_size, patch_size)
-        )
+        plan = self._plan_patches(width, height, image_size, patch_size)
+        (global_width, global_height), (crop_width, crop_height), window_size, num_patches_x, num_patches_y = plan[:5]
+        needs_square_pad = plan[5]
 
         # Pad extreme-aspect-ratio images to square (original at top-left, zeros elsewhere)
         if needs_square_pad:
@@ -492,8 +547,8 @@ class Step3p7ImageProcessor(TorchvisionBackend):
 
         img_batch = img.unsqueeze(0)
 
-        # Global view: resize to (global_w, global_h) then square to image_size × image_size
-        global_img = self.resize(img_batch, SizeDict(height=global_h, width=global_w), resample=resample)
+        # Global view: resize to (global_width, global_height) then square to image_size × image_size
+        global_img = self.resize(img_batch, SizeDict(height=global_height, width=global_width), resample=resample)
         global_img = self.resize(global_img, SizeDict(height=image_size, width=image_size), resample=resample).squeeze(
             0
         )
@@ -501,7 +556,9 @@ class Step3p7ImageProcessor(TorchvisionBackend):
         if window_size == 0:
             return global_img, [], num_patches_x, num_patches_y
 
-        img_for_crop = self.resize(img_batch, SizeDict(height=crop_h, width=crop_w), resample=resample).squeeze(0)
+        img_for_crop = self.resize(
+            img_batch, SizeDict(height=crop_height, width=crop_width), resample=resample
+        ).squeeze(0)
         patches = divide_to_patches(img_for_crop, patch_size=window_size)
         return global_img, patches, num_patches_x, num_patches_y
 
@@ -654,16 +711,14 @@ class Step3p7VisionAttention(MiniMaxM3VLVisionAttention):
     pass
 
 
-class Step3p7VisionEncoderLayer(InternVLVisionLayer):
-    """Vision encoder layer with layer scale.
-
-    Inherits ``lambda_1``/``lambda_2`` naming from
-    :class:`~transformers.models.internvl.modeling_internvl.InternVLVisionLayer`
-    and adds RoPE-aware 2-D attention via ``position_embeddings`` forwarding.
+class Step3p7VisionEncoderLayer(nn.Module):
+    """Vision encoder layer with layer scale (``lambda_1``/``lambda_2``, naming convention shared with
+    :class:`~transformers.models.internvl.modeling_internvl.InternVLVisionLayer`) and RoPE-aware 2-D
+    attention via ``position_embeddings`` forwarding.
     """
 
     def __init__(self, config: Step3p7VisionConfig):
-        nn.Module.__init__(self)
+        super().__init__()
         self.config = config
         self.self_attn = Step3p7VisionAttention(config)
         self.mlp = Step3p7VisionMLP(config)
@@ -750,6 +805,21 @@ class Step3p7PreTrainedModel(PreTrainedModel):
                 curr_inv_freq, _ = rope_init_fn(module.config, layer_type=layer_type)
                 init.copy_(getattr(module, f"{layer_type}_inv_freq"), curr_inv_freq)
                 init.copy_(getattr(module, f"{layer_type}_original_inv_freq"), curr_inv_freq)
+        elif isinstance(module, Step3p7Experts):
+            # `gate_up_proj`/`down_proj` are raw `nn.Parameter(torch.empty(...))` (DeepseekV4Experts);
+            # unlike `DeepseekV4PreTrainedModel`/`MiniMaxM3VLPreTrainedModel`, Step3p7 doesn't inherit
+            # either parent's `_init_weights`, so without this they stay uninitialized memory forever.
+            std = getattr(self.config, "initializer_range", 0.02)
+            init.normal_(module.gate_up_proj, mean=0.0, std=std)
+            init.normal_(module.down_proj, mean=0.0, std=std)
+        elif isinstance(module, Step3p7TopKRouter):
+            std = getattr(self.config, "initializer_range", 0.02)
+            init.normal_(module.weight, mean=0.0, std=std)
+            init.zeros_(module.e_score_correction_bias)
+        elif isinstance(module, Step3p7RMSNorm):
+            # `Step3p7RMSNorm` computes `normed * (weight + 1)`, so zero (not the default all-ones
+            # from `torch.ones(hidden_size)`) is the identity-scale initialization.
+            init.zeros_(module.weight)
 
 
 class Step3p7VisionModel(Step3p7PreTrainedModel):
@@ -865,10 +935,21 @@ class Step3p7SparseMoeBlock(MiniMaxM3VLSparseMoeBlock):
 class Step3p7Attention(MiniMaxM3VLAttention):
     def __init__(self, config: Step3p7TextConfig, layer_idx: int):
         super().__init__(config, layer_idx)
-        self.num_attention_heads = config.num_attention_heads
         layer_type = config.layer_types[layer_idx]
         self.sliding_window = config.sliding_window if layer_type == "sliding_attention" else None
-        self.g_proj = nn.Linear(config.hidden_size, config.num_attention_heads, bias=False)
+        self.num_attention_heads = (
+            config.num_sliding_attention_heads if layer_type == "sliding_attention" else config.num_attention_heads
+        )
+        if self.num_attention_heads != config.num_attention_heads:
+            # Sliding-attention layers can use a different (larger) head count than full-attention
+            # layers in the real checkpoint (e.g. 96 vs 64 heads, same 8 KV heads/head_dim), so
+            # q_proj/o_proj/num_key_value_groups from `super().__init__` (sized off
+            # `config.num_attention_heads` alone) must be rebuilt to match.
+            q_size = self.num_attention_heads * self.head_dim
+            self.q_proj = nn.Linear(config.hidden_size, q_size, bias=False)
+            self.o_proj = nn.Linear(q_size, config.hidden_size, bias=False)
+            self.num_key_value_groups = self.num_attention_heads // config.num_key_value_heads
+        self.g_proj = nn.Linear(config.hidden_size, self.num_attention_heads, bias=False)
 
     def forward(
         self,
@@ -915,7 +996,7 @@ class Step3p7Attention(MiniMaxM3VLAttention):
         return attn_output, attn_weights
 
 
-class Step3p7DecoderLayer(MiniMaxM3VLDecoderLayer):  # TODO: switch to llama
+class Step3p7DecoderLayer(MiniMaxM3VLDecoderLayer):
     def __init__(self, config, layer_idx):
         nn.Module.__init__(self)
         self.hidden_size = config.hidden_size
@@ -1017,7 +1098,7 @@ class Step3p7Processor(ProcessorMixin):
     that ``get_text_with_replacements`` substitutes into the text.
     """
 
-    def __init__(self, image_processor=None, tokenizer=None, chat_template=None, **kwargs) -> None:
+    def __init__(self, image_processor, tokenizer=None, chat_template=None, **kwargs) -> None:
         self.image_token = "<im_patch>"
         self.image_token_id = tokenizer.convert_tokens_to_ids(self.image_token) if tokenizer is not None else None
         self.num_image_feature_size = image_processor.num_image_features

@@ -276,15 +276,13 @@ class Step3p7VisionAttention(nn.Module):
         return self.out_proj(attn_output), attn_weights
 
 
-class Step3p7VisionEncoderLayer(GradientCheckpointingLayer):
-    """Vision encoder layer with layer scale.
-
-    Inherits ``lambda_1``/``lambda_2`` naming from
-    :class:`~transformers.models.internvl.modeling_internvl.InternVLVisionLayer`
-    and adds RoPE-aware 2-D attention via ``position_embeddings`` forwarding.
+class Step3p7VisionEncoderLayer(nn.Module):
+    """Vision encoder layer with layer scale (``lambda_1``/``lambda_2``, naming convention shared with
+    :class:`~transformers.models.internvl.modeling_internvl.InternVLVisionLayer`) and RoPE-aware 2-D
+    attention via ``position_embeddings`` forwarding.
     """
 
-    def __init__(self, config: Step3p7VisionConfig) -> None:
+    def __init__(self, config: Step3p7VisionConfig):
         super().__init__()
         self.config = config
         self.self_attn = Step3p7VisionAttention(config)
@@ -401,6 +399,21 @@ class Step3p7PreTrainedModel(PreTrainedModel):
                 curr_inv_freq, _ = rope_init_fn(module.config, layer_type=layer_type)
                 init.copy_(getattr(module, f"{layer_type}_inv_freq"), curr_inv_freq)
                 init.copy_(getattr(module, f"{layer_type}_original_inv_freq"), curr_inv_freq)
+        elif isinstance(module, Step3p7Experts):
+            # `gate_up_proj`/`down_proj` are raw `nn.Parameter(torch.empty(...))` (DeepseekV4Experts);
+            # unlike `DeepseekV4PreTrainedModel`/`MiniMaxM3VLPreTrainedModel`, Step3p7 doesn't inherit
+            # either parent's `_init_weights`, so without this they stay uninitialized memory forever.
+            std = getattr(self.config, "initializer_range", 0.02)
+            init.normal_(module.gate_up_proj, mean=0.0, std=std)
+            init.normal_(module.down_proj, mean=0.0, std=std)
+        elif isinstance(module, Step3p7TopKRouter):
+            std = getattr(self.config, "initializer_range", 0.02)
+            init.normal_(module.weight, mean=0.0, std=std)
+            init.zeros_(module.e_score_correction_bias)
+        elif isinstance(module, Step3p7RMSNorm):
+            # `Step3p7RMSNorm` computes `normed * (weight + 1)`, so zero (not the default all-ones
+            # from `torch.ones(hidden_size)`) is the identity-scale initialization.
+            init.zeros_(module.weight)
 
 
 class Step3p7VisionModel(Step3p7PreTrainedModel):
@@ -870,10 +883,21 @@ class Step3p7Attention(nn.Module):
         self.indexer = (
             Step3p7Indexer(config, layer_idx) if config.layer_types[layer_idx] == "minimax_m3_sparse" else None
         )
-        self.num_attention_heads = config.num_attention_heads
         layer_type = config.layer_types[layer_idx]
         self.sliding_window = config.sliding_window if layer_type == "sliding_attention" else None
-        self.g_proj = nn.Linear(config.hidden_size, config.num_attention_heads, bias=False)
+        self.num_attention_heads = (
+            config.num_sliding_attention_heads if layer_type == "sliding_attention" else config.num_attention_heads
+        )
+        if self.num_attention_heads != config.num_attention_heads:
+            # Sliding-attention layers can use a different (larger) head count than full-attention
+            # layers in the real checkpoint (e.g. 96 vs 64 heads, same 8 KV heads/head_dim), so
+            # q_proj/o_proj/num_key_value_groups from `super().__init__` (sized off
+            # `config.num_attention_heads` alone) must be rebuilt to match.
+            q_size = self.num_attention_heads * self.head_dim
+            self.q_proj = nn.Linear(config.hidden_size, q_size, bias=False)
+            self.o_proj = nn.Linear(q_size, config.hidden_size, bias=False)
+            self.num_key_value_groups = self.num_attention_heads // config.num_key_value_heads
+        self.g_proj = nn.Linear(config.hidden_size, self.num_attention_heads, bias=False)
 
     def forward(
         self,

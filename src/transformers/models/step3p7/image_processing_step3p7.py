@@ -116,8 +116,8 @@ class Step3p7ImageProcessor(TorchvisionBackend):
           (snap up when the remainder exceeds 20 % of the window size).
 
         Returns:
-            global_wh: ``(width, height)`` to resize the global view to before squaring
-            crop_wh: ``(crop_width, crop_height)`` snapped dimensions for patch extraction
+            global_width_height: ``(width, height)`` to resize the global view to before squaring
+            crop_width_height: ``(crop_width, crop_height)`` snapped dimensions for patch extraction
             window_size: tile side length (``0`` → no local patches)
             num_patches_x: number of patches along the width
             num_patches_y: number of patches along the height
@@ -182,9 +182,9 @@ class Step3p7ImageProcessor(TorchvisionBackend):
         `window_size`, not yet resized to `patch_size`), and the patch grid dimensions.
         """
         _, height, width = img.shape
-        (global_w, global_h), (crop_w, crop_h), window_size, num_patches_x, num_patches_y, needs_square_pad = (
-            self._plan_patches(width, height, image_size, patch_size)
-        )
+        plan = self._plan_patches(width, height, image_size, patch_size)
+        (global_width, global_height), (crop_width, crop_height), window_size, num_patches_x, num_patches_y = plan[:5]
+        needs_square_pad = plan[5]
 
         # Pad extreme-aspect-ratio images to square (original at top-left, zeros elsewhere)
         if needs_square_pad:
@@ -193,8 +193,8 @@ class Step3p7ImageProcessor(TorchvisionBackend):
 
         img_batch = img.unsqueeze(0)
 
-        # Global view: resize to (global_w, global_h) then square to image_size × image_size
-        global_img = self.resize(img_batch, SizeDict(height=global_h, width=global_w), resample=resample)
+        # Global view: resize to (global_width, global_height) then square to image_size × image_size
+        global_img = self.resize(img_batch, SizeDict(height=global_height, width=global_width), resample=resample)
         global_img = self.resize(global_img, SizeDict(height=image_size, width=image_size), resample=resample).squeeze(
             0
         )
@@ -202,7 +202,9 @@ class Step3p7ImageProcessor(TorchvisionBackend):
         if window_size == 0:
             return global_img, [], num_patches_x, num_patches_y
 
-        img_for_crop = self.resize(img_batch, SizeDict(height=crop_h, width=crop_w), resample=resample).squeeze(0)
+        img_for_crop = self.resize(
+            img_batch, SizeDict(height=crop_height, width=crop_width), resample=resample
+        ).squeeze(0)
         patches = divide_to_patches(img_for_crop, patch_size=window_size)
         return global_img, patches, num_patches_x, num_patches_y
 
