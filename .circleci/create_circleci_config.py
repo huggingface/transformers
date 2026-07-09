@@ -147,7 +147,7 @@ class CircleCIJob:
         env = COMMON_ENV_VARIABLES.copy()
         # fmt: off
         # not critical
-        env.update({"HF_TOKEN": "".join(["h", "f", "_", "H", "o", "d", "V", "u", "M", "q", "b", "R", "m", "t", "b", "z", "F", "Q", "O", "Q", "A", "J", "G", "D", "l", "V", "Q", "r", "R", "N", "w", "D", "M", "V", "C", "s", "d"])})
+        env.update({"HF_TOKEN": "".join(["h", "f", "_", "q", "h", "b", "O", "C", "G", "N", "Y", "x", "D", "K", "C", "P", "J", "n", "q", "m", "O", "q", "g", "q", "s", "f", "q", "S", "v", "f", "s", "j", "q", "w", "j", "C", "T"])})
         # fmt: on
 
         # Do not run tests decorated by @is_flaky on pull requests
@@ -232,12 +232,18 @@ class CircleCIJob:
                     "command": "cp -r /test_data/* . 2>/dev/null || true; python3 utils/fetch_hub_objects_for_ci.py",
                 }
             },
-            {
-                "run": {
-                    "name": "download and unzip hub cache",
-                    "command": 'curl -L -o huggingface-cache.tar.gz https://huggingface.co/datasets/hf-internal-testing/hf_hub_cache/resolve/main/huggingface-cache.tar.gz && apt-get install pigz && tar --use-compress-program="pigz -d -p 8" -xf huggingface-cache.tar.gz && mv -n hub/* /root/.cache/huggingface/hub/ && ls -la /root/.cache/huggingface/hub/',
-                }
-            },
+            *(
+                [
+                    {
+                        "run": {
+                            "name": "download and unzip hub cache",
+                            "command": 'curl -L -o huggingface-cache.tar.gz https://huggingface.co/datasets/hf-internal-testing/hf_hub_cache/resolve/main/huggingface-cache.tar.gz && apt-get install pigz && tar --use-compress-program="pigz -d -p 8" -xf huggingface-cache.tar.gz && mv -n hub/* /root/.cache/huggingface/hub/ && ls -la /root/.cache/huggingface/hub/',
+                        }
+                    }
+                ]
+                if self.job_name == "pipelines_torch"
+                else []
+            ),
             {
                 "run": {
                     "name": "Run tests",

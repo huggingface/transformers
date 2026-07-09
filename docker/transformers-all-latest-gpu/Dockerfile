@@ -36,9 +36,11 @@ RUN set -e; \
     # Determine torch version
     if [ ${#PYTORCH} -gt 0 ] && [ "$PYTORCH" != "pre" ]; then \
         VERSION="torch==${PYTORCH}.*"; \
+        TORCHAUDIO_VERSION="torchaudio==${PYTORCH}.*"; \
         TORCHCODEC_VERSION="torchcodec==${TORCHCODEC}.*"; \
     else \
         VERSION="torch"; \
+        TORCHAUDIO_VERSION="torchaudio"; \
         TORCHCODEC_VERSION="torchcodec"; \
     fi; \
     \
@@ -50,7 +52,7 @@ RUN set -e; \
         python3 -m pip install --no-cache-dir -U \
             $VERSION \
             torchvision \
-            torchaudio \
+            $TORCHAUDIO_VERSION \
             --extra-index-url https://download.pytorch.org/whl/$CUDA; \
         # We need to specify the version if the torch version is not the latest stable one.
         python3 -m pip install --no-cache-dir -U \
@@ -81,6 +83,12 @@ RUN python3 -m pip install --no-cache-dir git+https://github.com/huggingface/pef
 RUN python3 -m pip install --no-cache-dir git+https://github.com/huggingface/optimum@main#egg=optimum
 # For kernels
 RUN python3 -m pip install --no-cache-dir kernels
+
+# For ONNX export tests (onnxscript pulls in onnx + onnx_ir; onnxruntime validates the exported graph)
+RUN python3 -m pip install --no-cache-dir onnxscript onnxruntime
+
+# For ExecuTorch export tests
+RUN python3 -m pip install --no-cache-dir executorch
 
 # For video model testing
 RUN python3 -m pip install --no-cache-dir av

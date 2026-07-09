@@ -107,7 +107,7 @@ def dynamic_rope_update(rope_forward):
             )
             # TODO joao: may break with compilation
             self.register_buffer(f"{prefix}inv_freq", inv_freq, persistent=False)
-            setattr(self, f"{layer_type}_max_seq_len_cached", seq_len)
+            setattr(self, f"{prefix}max_seq_len_cached", seq_len)
 
         if seq_len < self.original_max_seq_len and max_seq_len_cached > self.original_max_seq_len:  # reset
             # This .to() is needed if the model has been moved to a device after being initialized (because
@@ -115,7 +115,7 @@ def dynamic_rope_update(rope_forward):
             original_inv_freq = original_inv_freq.to(device)
             self.register_buffer(f"{prefix}inv_freq", original_inv_freq, persistent=False)
             setattr(self, f"{prefix}original_inv_freq", original_inv_freq)
-            setattr(self, f"{layer_type}_max_seq_len_cached", self.original_max_seq_len)
+            setattr(self, f"{prefix}max_seq_len_cached", self.original_max_seq_len)
 
     @wraps(rope_forward)
     def wrapper(self, x, position_ids, layer_type=None):
@@ -353,7 +353,7 @@ def _compute_yarn_parameters(
                     (only) in the linear ramp function.
                 *   `factor` (`float`, *optional*): The scaling factor applied when interpolating the position IDs to
                     extend the possible context length. Additionally, if `attention_factor` is None, the log of this
-                    value is used to compute a value for `attention_factor`, possibly in conjunciton with `mscale` and
+                    value is used to compute a value for `attention_factor`, possibly in conjunction with `mscale` and
                     `mscale_all_dim`, if provided.
                 *   `mscale` (`float`, *optional*): If `attention_factor` is None and both `mscale` and
                     `mscale_all_dim` are provided, `mscale` acts scalar augmenting `log(factor)` when computing the
@@ -719,7 +719,9 @@ class RotaryEmbeddingConfigMixin:
         partial_rotary_factor = kwargs.get("partial_rotary_factor", getattr(self, "partial_rotary_factor", None))
         if partial_rotary_factor is not None:
             self.rope_parameters.setdefault("partial_rotary_factor", partial_rotary_factor)
-            self.ignore_keys_at_rope_validation = self.ignore_keys_at_rope_validation | {"partial_rotary_factor"}
+            self.ignore_keys_at_rope_validation = set(self.ignore_keys_at_rope_validation or []) | {
+                "partial_rotary_factor"
+            }
 
         self.standardize_rope_params()
         return kwargs
@@ -820,8 +822,8 @@ class RotaryEmbeddingConfigMixin:
         )
 
         factor = rope_parameters["factor"]
-        if factor is None or not isinstance(factor, float) or factor < 1.0:
-            logger.warning(f"`rope_parameters`'s factor field must be a float >= 1, got {factor}")
+        if factor is None or not isinstance(factor, (float, int)) or factor < 1.0:
+            logger.warning(f"`rope_parameters`'s factor field must be a float or int >= 1, got {factor}")
 
     def _validate_dynamic_rope_parameters(self, rope_parameters: dict, ignore_keys: set | None = None):
         required_keys = {"rope_type", "factor"}
@@ -833,8 +835,8 @@ class RotaryEmbeddingConfigMixin:
         )
 
         factor = rope_parameters["factor"]
-        if factor is None or not isinstance(factor, float) or factor < 1.0:
-            logger.warning(f"`rope_parameters`'s factor field must be a float >= 1, got {factor}")
+        if factor is None or not isinstance(factor, (float, int)) or factor < 1.0:
+            logger.warning(f"`rope_parameters`'s factor field must be a float or int >= 1, got {factor}")
 
     def _validate_yarn_rope_parameters(self, rope_parameters: dict, ignore_keys: set | None = None):
         required_keys = {"rope_type", "factor", "original_max_position_embeddings"}
@@ -852,8 +854,8 @@ class RotaryEmbeddingConfigMixin:
         self._check_received_keys(rope_type, received_keys, required_keys, optional_keys, ignore_keys=ignore_keys)
 
         factor = rope_parameters["factor"]
-        if factor is None or not isinstance(factor, float) or factor < 1.0:
-            logger.warning(f"`rope_parameters`'s factor field must be a float >= 1, got {factor}")
+        if factor is None or not isinstance(factor, (float, int)) or factor < 1.0:
+            logger.warning(f"`rope_parameters`'s factor field must be a float or int >= 1, got {factor}")
 
         attention_factor = rope_parameters.get("attention_factor")
         if attention_factor is not None and (not isinstance(attention_factor, float) or attention_factor < 0):
@@ -861,11 +863,11 @@ class RotaryEmbeddingConfigMixin:
                 f"`rope_parameters`'s attention_factor field must be a float greater than 0, got {attention_factor}"
             )
         beta_fast = rope_parameters.get("beta_fast")
-        if beta_fast is not None and not isinstance(beta_fast, float):
-            logger.warning(f"`rope_parameters`'s beta_fast field must be a float, got {beta_fast}")
+        if beta_fast is not None and not isinstance(beta_fast, (float, int)):
+            logger.warning(f"`rope_parameters`'s beta_fast field must be a float or int, got {beta_fast}")
         beta_slow = rope_parameters.get("beta_slow")
-        if beta_slow is not None and not isinstance(beta_slow, float):
-            logger.warning(f"`rope_parameters`'s beta_slow field must be a float, got {beta_slow}")
+        if beta_slow is not None and not isinstance(beta_slow, (float, int)):
+            logger.warning(f"`rope_parameters`'s beta_slow field must be a float or int, got {beta_slow}")
 
         if (beta_fast or 32) < (beta_slow or 1):
             logger.warning(
@@ -876,7 +878,7 @@ class RotaryEmbeddingConfigMixin:
         # Double-check: `factor` should be the ratio between the pre-yarn and post-yarn context lengths.
         # NOTE: we might get `implicit_factor == 1` if config's `original_max_position_embeddings` was
         # inferred from `max_position_embeddings` during standardization
-        original_max_position_embeddings = self.rope_parameters["original_max_position_embeddings"]
+        original_max_position_embeddings = rope_parameters["original_max_position_embeddings"]
         implicit_factor = self.max_position_embeddings / original_max_position_embeddings
         if implicit_factor != factor and implicit_factor != 1:
             logger.warning_once(
@@ -900,7 +902,7 @@ class RotaryEmbeddingConfigMixin:
         dim = int(head_dim * partial_rotary_factor)
 
         short_factor = rope_parameters.get("short_factor")
-        if not isinstance(short_factor, list) and all(isinstance(x, (int, float)) for x in short_factor):
+        if not (isinstance(short_factor, list) and all(isinstance(x, (int, float)) for x in short_factor)):
             logger.warning(f"`rope_parameters`'s short_factor field must be a list of numbers, got {short_factor}")
         if len(short_factor) != dim // 2:
             logger.warning(
@@ -908,7 +910,7 @@ class RotaryEmbeddingConfigMixin:
             )
 
         long_factor = rope_parameters.get("long_factor")
-        if not isinstance(long_factor, list) and all(isinstance(x, (int, float)) for x in long_factor):
+        if not (isinstance(long_factor, list) and all(isinstance(x, (int, float)) for x in long_factor)):
             logger.warning(f"`rope_parameters`'s long_factor field must be a list of numbers, got {long_factor}")
         if len(long_factor) != dim // 2:
             logger.warning(
@@ -929,13 +931,13 @@ class RotaryEmbeddingConfigMixin:
             )
         elif factor is None and original_max_position_embeddings is None:
             logger.warning("Missing required keys in `rope_parameters`: 'factor'")
-        elif not isinstance(factor, float) or factor < 1.0:
-            logger.warning(f"`rope_parameters`'s factor field must be a float >= 1, got {factor}")
+        elif not isinstance(factor, (float, int)) or factor < 1.0:
+            logger.warning(f"`rope_parameters`'s factor field must be a float or int >= 1, got {factor}")
 
         attention_factor = rope_parameters.get("attention_factor")
-        if attention_factor is not None and (not isinstance(attention_factor, float) or attention_factor < 0.0):
+        if attention_factor is not None and (not isinstance(attention_factor, (float, int)) or attention_factor < 0.0):
             logger.warning(
-                f"`rope_parameters`'s attention_factor field must be a float greater than 0, got {attention_factor}"
+                f"`rope_parameters`'s attention_factor field must be a float or int greater than 0, got {attention_factor}"
             )
 
     def _validate_llama3_rope_parameters(self, rope_parameters: dict, ignore_keys: set | None = None):
@@ -952,15 +954,17 @@ class RotaryEmbeddingConfigMixin:
         self._check_received_keys(rope_type, received_keys, required_keys, ignore_keys=ignore_keys)
 
         factor = rope_parameters["factor"]
-        if factor is None or not isinstance(factor, float) or factor < 1.0:
-            logger.warning(f"`rope_parameters`'s factor field must be a float >= 1, got {factor}")
+        if factor is None or not isinstance(factor, (float, int)) or factor < 1.0:
+            logger.warning(f"`rope_parameters`'s factor field must be a float or int >= 1, got {factor}")
 
         low_freq_factor = rope_parameters["low_freq_factor"]
         high_freq_factor = rope_parameters["high_freq_factor"]
-        if low_freq_factor is None or not isinstance(low_freq_factor, float):
-            logger.warning(f"`rope_parameters`'s low_freq_factor field must be a float, got {low_freq_factor}")
-        if high_freq_factor is None or not isinstance(high_freq_factor, float):
-            logger.warning(f"`rope_parameters`'s high_freq_factor field must be a float, got {high_freq_factor}")
+        if low_freq_factor is None or not isinstance(low_freq_factor, (float, int)):
+            logger.warning(f"`rope_parameters`'s low_freq_factor field must be a float, or int got {low_freq_factor}")
+        if high_freq_factor is None or not isinstance(high_freq_factor, (float, int)):
+            logger.warning(
+                f"`rope_parameters`'s high_freq_factor field must be a float or int, got {high_freq_factor}"
+            )
         if high_freq_factor <= low_freq_factor:
             logger.warning(
                 "`rope_parameters`'s high_freq_factor field must be greater than low_freq_factor, got high_freq_factor="
@@ -990,7 +994,7 @@ class RotaryEmbeddingConfigMixin:
             logger.warning(
                 "`rope_parameters`'s partial_rotary_factor is None. This will default to 1.0 in the computation, "
                 "making this equivalent to the linear_scaling RoPE type. Provide a value in the range [0.0, 1.0) to "
-                "make use of the proportional RoPE funcitonality."
+                "make use of the proportional RoPE functionality."
             )
 
     @staticmethod

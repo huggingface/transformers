@@ -3,6 +3,9 @@ name: Benchmark v2 Scheduled Runner - MI325 Single-GPU
 on:
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
   benchmark-v2-default:
     name: Benchmark v2 - Default Models

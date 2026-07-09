@@ -35,6 +35,7 @@ from ..olmo.modeling_olmo import (
     OlmoAttention,
     OlmoDecoderLayer,
     OlmoForCausalLM,
+    OlmoForSequenceClassification,
     OlmoModel,
     OlmoRotaryEmbedding,
     apply_rotary_pos_emb,
@@ -222,9 +223,14 @@ class Olmo2ForCausalLM(OlmoForCausalLM):
     pass
 
 
+class Olmo2ForSequenceClassification(OlmoForSequenceClassification):
+    pass
+
+
 __all__ = [
     "Olmo2Config",
     "Olmo2ForCausalLM",
+    "Olmo2ForSequenceClassification",
     "Olmo2Model",
     "Olmo2PreTrainedModel",
 ]

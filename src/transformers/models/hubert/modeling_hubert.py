@@ -54,7 +54,7 @@ class HubertPositionalConvEmbedding(nn.Module):
         )
 
         self.batch_norm = None
-        if config.conv_pos_batch_norm:
+        if getattr(config, "conv_pos_batch_norm", False):
             self.batch_norm = nn.BatchNorm1d(config.hidden_size)
         else:
             weight_norm = nn.utils.weight_norm
@@ -638,18 +638,8 @@ class HubertPreTrainedModel(PreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
-        if isinstance(module, nn.Linear):
-            init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
-            if module.bias is not None:
-                init.zeros_(module.bias)
-        elif isinstance(module, (nn.LayerNorm, nn.GroupNorm, nn.BatchNorm1d)):
-            init.zeros_(module.bias)
-            init.ones_(module.weight)
-            if getattr(module, "running_mean", None) is not None:
-                init.zeros_(module.running_mean)
-                init.ones_(module.running_var)
-                init.zeros_(module.num_batches_tracked)
-        elif isinstance(module, nn.Conv1d):
+        super()._init_weights(module)
+        if isinstance(module, nn.Conv1d):
             if is_deepspeed_zero3_enabled():
                 import deepspeed
 

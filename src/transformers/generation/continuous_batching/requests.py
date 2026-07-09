@@ -20,13 +20,13 @@ import torch
 
 from ...utils import is_psutil_available, is_torch_xpu_available
 from ...utils.logging import logging
-from ...utils.metrics import traced
 
 
 if is_psutil_available():
     import psutil
 
 # This is a temporary token ID used to represent a token that is not yet generated
+# TODO: update this to 0 and check it breaks nothing + simplify carry over and time new logic
 TMP_TOKEN_ID = -1
 
 
@@ -45,9 +45,11 @@ def get_device_and_memory_breakdown() -> tuple[torch.device, int, int, int]:
         device = torch.device("cuda")
         torch.cuda.empty_cache()
         torch.cuda.synchronize()
-        total_memory = torch.cuda.get_device_properties(device).total_memory
+        # Use mem_get_info to get actual free memory: device_properties().total_memory returns the physical device
+        # total which ignores CUDA context and driver overhead (~0.5 GiB), leading to overcommit.
+        free_memory, total_memory = torch.cuda.mem_get_info(device)
         reserved_memory = torch.cuda.memory_reserved(device)
-        allocated_memory = torch.cuda.memory_allocated(device)
+        allocated_memory = total_memory - free_memory
     elif is_torch_xpu_available():
         device = torch.device("xpu")
         torch.xpu.empty_cache()
@@ -57,10 +59,9 @@ def get_device_and_memory_breakdown() -> tuple[torch.device, int, int, int]:
         allocated_memory = torch.xpu.memory_allocated(device)
     elif torch.backends.mps.is_available() and torch.backends.mps.is_built():
         device = torch.device("mps")
-        # MPS memory reporting (PyTorch 2.0+)
-        total_memory = torch.mps.driver_allocated_memory()
-        allocated_memory = total_memory - getattr(torch.mps, "recommended_max_memory")()
-        reserved_memory = 0  # MPS does not track reserved separately
+        total_memory = torch.mps.recommended_max_memory()
+        allocated_memory = torch.mps.current_allocated_memory()
+        reserved_memory = torch.mps.driver_allocated_memory()
     else:
         device = torch.device("cpu")
         if is_psutil_available():
@@ -177,6 +178,7 @@ class RequestState:
     # Fields overwritten in __post_init__
     _new_tokens_limit: int = 2147483647  # An int to check the max number of new tokens w/out always comparing w/ None
     remaining_prefill_tokens: list[int] = field(default_factory=list)  # Initial tokens left to process
+    is_cpu_offloaded: bool = False  # True when the request's KV cache is in the CPU swap pool
 
     def __post_init__(self):
         # If no max length is set, we set an absurdly high value which will never be reached
@@ -206,7 +208,8 @@ class RequestState:
             self.lifespan = (time.perf_counter(), -1)
         elif value == RequestStatus.FINISHED:
             self.lifespan = (self.lifespan[0], time.perf_counter())
-            self.log_end_of_request()
+            if logger.isEnabledFor(logging.DEBUG):
+                self.log_end_of_request()
         self._status = value
 
     @property
@@ -218,7 +221,7 @@ class RequestState:
         decode_len = self.generated_len()
         start_time = self.lifespan[0] - self.created_time
         end_time = self.lifespan[1] - self.created_time
-        logger.info(
+        logger.debug(
             f"Request {self.request_id} finished: {prefill_len = } {decode_len = } {start_time = } {end_time = }"
         )
 
@@ -231,7 +234,6 @@ class RequestState:
         return len(self.generated_tokens)
 
     # TODO: this logic seems one token off, check it out
-    @traced
     def update_and_check_completion(self, token_id: int, logprob: float | None) -> bool:
         """Update the request with a newly generated token (and optional log probability of the token) and check for
         completion. Returns True if the request is now complete, False otherwise."""
@@ -281,18 +283,21 @@ class RequestState:
     def to_generation_output(self):
         """Convert the request state to a GenerationOutput object."""
         if self._true_initial_tokens:
-            self.generated_tokens = self.initial_tokens[self._true_initial_tokens :] + self.generated_tokens
-            self.initial_tokens = self.initial_tokens[: self._true_initial_tokens]
+            generated_tokens = self.initial_tokens[self._true_initial_tokens :] + self.generated_tokens
+            prompt_ids = self.initial_tokens[: self._true_initial_tokens]
+        else:
+            generated_tokens = self.generated_tokens[:]
+            prompt_ids = self.initial_tokens
         return GenerationOutput(
             request_id=self.request_id,
-            prompt_ids=self.initial_tokens,
-            generated_tokens=self.generated_tokens,
-            logprobs=self.logprobs,
+            prompt_ids=prompt_ids,
+            generated_tokens=generated_tokens,
+            logprobs=self.logprobs[:],
             error=self.error,
             status=self.status,
             created_time=self.created_time,
             lifespan=self.lifespan,
-            timestamps=self.timestamps,
+            timestamps=self.timestamps[:] if self.timestamps is not None else None,
         )
 
     def fork(self, new_request_id: str) -> "RequestState":

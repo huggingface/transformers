@@ -102,9 +102,6 @@ class YoutuConfig(DeepseekV3Config):
         self.embedding_initializer_range = self.embedding_initializer_range or 2.0 * self.initializer_range
         super().__post_init__(**kwargs)
 
-    def convert_rope_params_to_dict(self, **kwargs):
-        raise AttributeError("Not overwritten for the Youtu model!")
-
 
 class YoutuRMSNorm(LlamaRMSNorm):
     pass

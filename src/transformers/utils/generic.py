@@ -30,7 +30,7 @@ from contextlib import AbstractContextManager, ExitStack, nullcontext
 from dataclasses import fields, is_dataclass
 from enum import Enum
 from functools import partial, wraps
-from typing import TYPE_CHECKING, Any, TypedDict
+from typing import TYPE_CHECKING, Any, TypedDict, TypeVar
 
 import numpy as np
 
@@ -41,6 +41,10 @@ from .import_utils import is_mlx_available, is_torch_available, is_torch_fx_prox
 if TYPE_CHECKING:
     import torch
     from torch import nn
+
+
+# Generic class or function
+T = TypeVar("T")
 
 
 logger = logging.get_logger(__name__)
@@ -54,7 +58,16 @@ _registered_model_output_types: set[type[Any]] = set()
 
 
 def _register_model_output_pytree_node(output_type: type[ModelOutput]) -> None:
-    if not _is_torch_available or output_type in _registered_model_output_types:
+    if not _is_torch_available:
+        return
+    import torch
+
+    # AMD CI runs PyTorch 2.8.0+rocm which does not support tracing `set.__contains__`
+    # through TorchDynamo. Skip registration during compilation since the pytree node
+    # is already registered from the preceding eager run.
+    if torch.compiler.is_compiling():
+        return
+    if output_type in _registered_model_output_types:
         return
 
     import torch.utils._pytree as torch_pytree
@@ -64,6 +77,7 @@ def _register_model_output_pytree_node(output_type: type[ModelOutput]) -> None:
         _model_output_flatten,
         partial(_model_output_unflatten, output_type=output_type),
         serialized_type_name=f"{output_type.__module__}.{output_type.__name__}",
+        flatten_with_keys_fn=torch_pytree._dict_flatten_with_keys,
     )
     _registered_model_output_types.add(output_type)
 
@@ -250,10 +264,10 @@ def is_mlx_array(x) -> bool:
 
 
 def is_flash_attention_requested(
-    config=None, requested_attention_implementation: str | None = None, version: int | None = None
+    config=None, requested_attention_implementation: str | None = None, version: int | list[int] | None = None
 ) -> bool:
     """
-    Checks whether some flavor of flash attention is requested or not. Optionally, checks for a specific version of
+    Checks whether some flavor of flash attention is requested or not. Optionally, checks for specific versions of
     flash attention.
 
     This is checked against one of the two arguments, i.e. either the `config` or the directly passed value
@@ -280,9 +294,25 @@ def is_flash_attention_requested(
 
     # If a specific version is requested, look for a pattern of type "flash...{version}"
     if version is not None:
-        return re.match(r".*flash.*" + str(version), checked_attention_implementation) is not None
+        if isinstance(version, int):
+            version = [version]
+        return any(re.match(r".*flash.*" + str(v), checked_attention_implementation) is not None for v in version)
+
     # Otherwise, just check "flash" is in the attention implementation
     return "flash" in checked_attention_implementation
+
+
+def split_attention_implementation(implementation: str | None) -> tuple[bool, str | None]:
+    """
+    Split the optional `paged|` prefix from an attention implementation string.
+
+    Note that `None` means using the default attention implementation, which is either torch's native `sdpa` or `eager` (if `sdpa` is not implemented for that model).
+    """
+    if implementation is None:
+        return False, None
+
+    is_paged = implementation.startswith("paged|")
+    return is_paged, implementation.removeprefix("paged|")
 
 
 def to_py_obj(obj):
@@ -407,7 +437,7 @@ class ModelOutput(OrderedDict):
             raise ValueError(f"{self.__class__.__name__} should not have more than one required field.")
 
         first_field = getattr(self, class_fields[0].name)
-        other_fields_are_none = all(getattr(self, field.name) is None for field in class_fields[1:])
+        other_fields_are_none = all(self.__dict__.get(field.name) is None for field in class_fields[1:])
 
         if other_fields_are_none and not is_tensor(first_field):
             if isinstance(first_field, dict):
@@ -444,7 +474,7 @@ class ModelOutput(OrderedDict):
                 self[class_fields[0].name] = first_field
         else:
             for field in class_fields:
-                v = getattr(self, field.name)
+                v = self.__dict__.get(field.name)
                 if v is not None:
                     self[field.name] = v
 
@@ -792,6 +822,8 @@ class TransformersKwargs(TypedDict, total=False):
             Indices of positions of each input sequence tokens.
         is_causal (`bool`, *optional*)
             Can be set to False to enable bi-directional attention, i.e. use decoder Attention modules as encoders.
+        seq_idx (`torch.IntTensor`, *optional*):
+            Sequence index for each token in a flattened packed batch.
     """
 
     num_items_in_batch: torch.Tensor | None
@@ -804,6 +836,7 @@ class TransformersKwargs(TypedDict, total=False):
     max_length_k: int | None
     position_ids: torch.LongTensor | None
     is_causal: bool | None
+    seq_idx: torch.IntTensor | None
 
 
 def is_timm_config_dict(config_dict: dict[str, Any]) -> bool:
@@ -881,6 +914,59 @@ def can_return_tuple(func):
         return output
 
     return wrapper
+
+
+_KNOWN_MODALITIES = ("image", "video", "audio")
+
+
+def accepts_precomputed_kwargs(modality: str):
+    """
+    Decorator for `get_<modality>_features` methods that:
+      - strips the modality prefix from incoming kwargs whose stripped name isn't an existing
+        parameter (e.g. `image_cu_seqlens` → `cu_seqlens`, forwarded via `**kwargs`);
+      - drops kwargs prefixed with another known modality (e.g. `video_*` passed to an
+        image method), so an outer `forward()` can blindly forward `**kwargs` to each
+        modality method without leaking the wrong tensors into the wrong encoder;
+      - leaves everything else untouched (including kwargs that match a named parameter).
+
+    Used so multimodal models can accept arbitrary precomputed tensors (`image_cu_seqlens`,
+    `video_position_ids`, …) without enumerating each one in every signature.
+
+    NOTE: Apply this decorator **only once per modality**, on the innermost base model's
+    `get_<modality>_features` (i.e. on `Model.get_image_features`, not on the outer
+    `ForConditionalGeneration.get_image_features` wrapper). Stacking it at multiple layers
+    causes premature prefix-stripping: the outer layer rewrites `image_foo` → `foo` based
+    on its own (narrower) signature, hiding kwargs that the inner method declares as named
+    parameters. Outer wrappers should just forward `**kwargs` through.
+
+    TODO: these modality-prefixed kwargs (`image_cu_seqlens`, `video_position_ids`, …) are
+    currently power-feature-only — they have no visible declaration in any public signature,
+    so users have to discover them from helper functions or docs. We should find a way to
+    surface them properly (e.g. in `TransformersKwargs`, in a dedicated `MultimodalKwargs`
+    typed dict, or returned grouped from the processor as `BatchFeature.images_data={...}`)
+    so the supported set is discoverable in one place.
+    """
+    prefix = f"{modality}_"
+    other_prefixes = tuple(f"{m}_" for m in _KNOWN_MODALITIES if m != modality)
+
+    def decorator(func):
+        existing_params = set(inspect.signature(func).parameters)
+
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            translated = {}
+            for k, v in kwargs.items():
+                if k.startswith(other_prefixes):
+                    continue
+                if k.startswith(prefix) and k not in existing_params:
+                    translated[k.removeprefix(prefix)] = v
+                else:
+                    translated[k] = v
+            return func(*args, **translated)
+
+        return wrapper
+
+    return decorator
 
 
 def merge_with_config_defaults(func):
@@ -971,6 +1057,13 @@ def merge_with_config_defaults(func):
 def check_model_inputs(func):
     logger.warning_once("The `check_model_inputs` decorator is deprecated in favor of `merge_with_config_defaults`.")
     return merge_with_config_defaults(func)
+
+
+def no_inherit_decorator(obj: T) -> T:
+    """
+    Identity decorator that prevents the modular converter from propagating its decorators to specific files.
+    """
+    return obj
 
 
 class GeneralInterface(MutableMapping):

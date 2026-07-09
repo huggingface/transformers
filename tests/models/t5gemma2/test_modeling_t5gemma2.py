@@ -28,6 +28,7 @@ from transformers import (
     is_torch_available,
     is_vision_available,
 )
+from transformers.cache_utils import DynamicLayer, DynamicSlidingWindowLayer, EncoderDecoderCache
 from transformers.testing_utils import (
     Expectations,
     cleanup,
@@ -610,6 +611,48 @@ class T5Gemma2ModelTester:
         )
         self.parent.assertTrue(torch.all(output_with_past_cache == output_without_past_cache))
 
+    def create_and_check_cross_attention_cache_is_not_sliding(
+        self,
+        config,
+        input_ids,
+        decoder_input_ids,
+        attention_mask,
+        decoder_attention_mask,
+        lm_labels,
+        pixel_values,
+    ):
+        """
+        Regression test for #45521. Checks whether the cross attention cache is correctly handled, i.e. not a SWA cache.
+        This would previously fail on instances where the sliding window < encoder len.
+        """
+        config.decoder.sliding_window = self.encoder_seq_length // 2
+        self.parent.assertGreater(self.encoder_seq_length, config.decoder.sliding_window)
+        model = self.causal_lm_class(config=config).to(torch_device).eval()
+        output = model.generate(
+            input_ids,
+            pixel_values=pixel_values,
+            max_new_tokens=2,
+            do_sample=False,
+            use_cache=True,
+            return_dict_in_generate=True,
+        )
+        self.parent.assertIsInstance(output.past_key_values, EncoderDecoderCache)
+        cross_cache = output.past_key_values.cross_attention_cache
+        for layer_idx, layer in enumerate(cross_cache.layers):
+            self.parent.assertNotIsInstance(
+                layer,
+                DynamicSlidingWindowLayer,
+                msg=(
+                    f"Cross-attention layer {layer_idx} must not be a sliding-window layer "
+                    f"(got {type(layer).__name__}); cross-attention attends to all encoder tokens."
+                ),
+            )
+            self.parent.assertIs(
+                type(layer),
+                DynamicLayer,
+                msg=(f"Cross-attention layer {layer_idx} must be DynamicLayer (got {type(layer).__name__})."),
+            )
+
     def create_and_check_model_fp16_forward(
         self,
         config,
@@ -772,6 +815,10 @@ class T5Gemma2ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCa
     def test_generate_with_past_key_values(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_generate_with_past_key_values(*config_and_inputs)
+
+    def test_cross_attention_cache_is_not_sliding(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_cross_attention_cache_is_not_sliding(*config_and_inputs)
 
     @unittest.skipIf(torch_device == "cpu", "Can't do half precision")
     def test_model_fp16_forward(self):

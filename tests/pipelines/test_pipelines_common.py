@@ -140,6 +140,17 @@ class CommonPipelineTest(unittest.TestCase):
 
         self.assertIsInstance(text_classifier, MyPipeline)
 
+    @require_torch
+    def test_pipeline_tokenizer_tuple_respects_use_fast_override(self):
+        text_classifier = pipeline(
+            task="text-classification",
+            model="hf-internal-testing/tiny-random-bert",
+            tokenizer=("hf-internal-testing/tiny-random-bert", {"use_fast": False}),
+        )
+
+        self.assertIsInstance(text_classifier, TextClassificationPipeline)
+        self.assertEqual(type(text_classifier.tokenizer).__name__, "BertTokenizer")
+
     def test_check_task(self):
         task = get_task("openai-community/gpt2")
         self.assertEqual(task, "text-generation")

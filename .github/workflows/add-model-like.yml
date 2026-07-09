@@ -11,19 +11,24 @@ on:
   #    - ".github/**"
   #  types: [opened, synchronize, reopened]
 
+permissions:
+  contents: read
+
 jobs:
   run_tests_templates_like:
     name: "Add new model like template tests"
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        with:
+          persist-credentials: false
 
       - name: Install dependencies
         run: |
           sudo apt -y update && sudo apt install -y libsndfile1-dev
 
       - name: Load cached virtual environment
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830  # v4
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae  # v5.0.5
         id: cache
         with:
           path: ~/venv/
@@ -74,7 +79,7 @@ jobs:
 
       - name: Test suite reports artifacts
         if: ${{ always() }}
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
         with:
           name: run_all_tests_new_models_test_reports
           path: reports/tests_new_models

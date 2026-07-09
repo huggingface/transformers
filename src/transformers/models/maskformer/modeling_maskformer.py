@@ -58,7 +58,6 @@ if is_scipy_available():
     from scipy.optimize import linear_sum_assignment
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for outputs of the MASK_FORMER_DETR decoder. This class adds one attribute to BaseModelOutputWithCrossAttentions,
@@ -66,12 +65,9 @@ if is_scipy_available():
     gone through a layernorm. This is useful when training the model with auxiliary decoding losses.
     """
 )
+@dataclass
 class DetrDecoderOutput(BaseModelOutputWithCrossAttentions):
     r"""
-    cross_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` and `config.add_cross_attention=True` is passed or when `config.output_attentions=True`):
-        Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-        sequence_length)`. Attentions weights of the decoder's cross-attention layer, after the attention softmax,
-        used to compute the weighted average in the cross-attention heads.
     intermediate_hidden_states (`torch.FloatTensor` of shape `(config.decoder_layers, batch_size, num_queries, hidden_size)`, *optional*, returned when `config.auxiliary_loss=True`):
         Intermediate decoder activations, i.e. the output of each decoder layer, each of them gone through a
         layernorm.
@@ -80,7 +76,6 @@ class DetrDecoderOutput(BaseModelOutputWithCrossAttentions):
     intermediate_hidden_states: torch.FloatTensor | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     MaskFormer's pixel level module output. It returns both the last and (optionally) the hidden states from the
@@ -91,6 +86,7 @@ class DetrDecoderOutput(BaseModelOutputWithCrossAttentions):
     as **pixel embeddings**
     """
 )
+@dataclass
 class MaskFormerPixelLevelModuleOutput(ModelOutput):
     r"""
     encoder_last_hidden_state (`torch.FloatTensor` of shape`(batch_size, num_channels, height, width)`):
@@ -113,13 +109,13 @@ class MaskFormerPixelLevelModuleOutput(ModelOutput):
     decoder_hidden_states: tuple[torch.FloatTensor] | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     MaskFormer's pixel decoder module output, practically a Feature Pyramid Network. It returns the last hidden state
     and (optionally) the hidden states.
     """
 )
+@dataclass
 class MaskFormerPixelDecoderOutput(ModelOutput):
     r"""
     last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
@@ -131,12 +127,12 @@ class MaskFormerPixelDecoderOutput(ModelOutput):
     attentions: tuple[torch.FloatTensor] | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Class for outputs of [`MaskFormerModel`]. This class returns all the needed hidden states to compute the logits.
     """
 )
+@dataclass
 class MaskFormerModelOutput(ModelOutput):
     r"""
     encoder_last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
@@ -172,7 +168,6 @@ class MaskFormerModelOutput(ModelOutput):
     attentions: tuple[torch.FloatTensor] | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Class for outputs of [`MaskFormerForInstanceSegmentation`].
@@ -183,6 +178,7 @@ class MaskFormerModelOutput(ModelOutput):
     [`~MaskFormerImageProcessor] for details regarding usage.
     """
 )
+@dataclass
 class MaskFormerForInstanceSegmentationOutput(ModelOutput):
     r"""
     loss (`torch.Tensor`, *optional*):
@@ -232,7 +228,6 @@ class MaskFormerForInstanceSegmentationOutput(ModelOutput):
     attentions: tuple[torch.FloatTensor] | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for outputs of the MASK_FORMER_DETR decoder. This class adds one attribute to BaseModelOutputWithCrossAttentions,
@@ -240,12 +235,9 @@ class MaskFormerForInstanceSegmentationOutput(ModelOutput):
     gone through a layernorm. This is useful when training the model with auxiliary decoding losses.
     """
 )
+@dataclass
 class MaskFormerDetrDecoderOutput(BaseModelOutputWithCrossAttentions):
     r"""
-    cross_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` and `config.add_cross_attention=True` is passed or when `config.output_attentions=True`):
-        Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-        sequence_length)`. Attentions weights of the decoder's cross-attention layer, after the attention softmax,
-        used to compute the weighted average in the cross-attention heads.
     intermediate_hidden_states (`torch.FloatTensor` of shape `(config.decoder_layers, batch_size, num_queries, hidden_size)`, *optional*, returned when `config.auxiliary_loss=True`):
         Intermediate decoder activations, i.e. the output of each decoder layer, each of them gone through a
         layernorm.
@@ -281,9 +273,6 @@ class MaskFormerDetrLearnedPositionEmbedding(nn.Module):
         pos = pos.permute(2, 0, 1)
         pos = pos.unsqueeze(0)
         pos = pos.repeat(shape[0], 1, 1, 1)
-        # Flatten spatial dimensions and permute to (batch_size, sequence_length, hidden_size) format
-        # expected by the encoder
-        pos = pos.flatten(2).permute(0, 2, 1)
         return pos
 
 
@@ -743,7 +732,7 @@ class MaskFormerDetrPreTrainedModel(PreTrainedModel):
 
     @torch.no_grad()
     def _init_weights(self, module):
-        std = self.config.init_std
+        super()._init_weights(module)
         xavier_std = self.config.init_xavier_std
 
         if isinstance(module, MaskFormerDetrMaskHeadSmallConv):
@@ -761,18 +750,6 @@ class MaskFormerDetrPreTrainedModel(PreTrainedModel):
         elif isinstance(module, MaskFormerDetrLearnedPositionEmbedding):
             init.uniform_(module.row_embeddings.weight)
             init.uniform_(module.column_embeddings.weight)
-        elif isinstance(module, (nn.Linear, nn.Conv2d)):
-            init.normal_(module.weight, mean=0.0, std=std)
-            if module.bias is not None:
-                init.zeros_(module.bias)
-        elif isinstance(module, nn.Embedding):
-            init.normal_(module.weight, mean=0.0, std=std)
-            # Here we need the check explicitly, as we slice the weight in the `zeros_` call, so it looses the flag
-            if module.padding_idx is not None and not getattr(module.weight, "_is_hf_initialized", False):
-                init.zeros_(module.weight[module.padding_idx])
-        elif isinstance(module, (nn.LayerNorm, nn.GroupNorm)):
-            init.ones_(module.weight)
-            init.zeros_(module.bias)
 
 
 class MaskFormerDetrDecoder(MaskFormerDetrPreTrainedModel):
@@ -1471,7 +1448,6 @@ class MaskFormerPixelDecoder(nn.Module):
         )
 
 
-# copied and adapted from original implementation, also practically equal to DetrSinePositionEmbedding
 class MaskFormerSinePositionEmbedding(nn.Module):
     """
     This is a more standard version of the position embedding, very similar to the one used by the Attention is all you
@@ -1479,36 +1455,43 @@ class MaskFormerSinePositionEmbedding(nn.Module):
     """
 
     def __init__(
-        self, num_pos_feats: int = 64, temperature: int = 10000, normalize: bool = False, scale: float | None = None
+        self,
+        num_position_features: int = 64,
+        temperature: int = 10000,
+        normalize: bool = False,
+        scale: float | None = None,
     ):
         super().__init__()
         if scale is not None and normalize is False:
             raise ValueError("normalize should be True if scale is passed")
-        self.num_pos_feats = num_pos_feats
+        self.num_position_features = num_position_features
         self.temperature = temperature
         self.normalize = normalize
         self.scale = 2 * math.pi if scale is None else scale
 
+    @staticmethod
     @compile_compatible_method_lru_cache(maxsize=1)
-    def forward(
-        self,
+    def build_sine_position_embedding(
         shape: torch.Size,
         device: torch.device | str,
         dtype: torch.dtype,
-        mask: Tensor | None = None,
-    ) -> Tensor:
+        num_position_features: int,
+        normalize: bool = False,
+        scale: float | None = None,
+        temperature: int = 10000,
+        mask: torch.Tensor | None = None,
+    ) -> torch.Tensor:
         if mask is None:
-            mask = torch.zeros((shape[0], shape[2], shape[3]), device=device, dtype=torch.bool)
-        not_mask = (~mask).to(dtype)
-        y_embed = not_mask.cumsum(1)
-        x_embed = not_mask.cumsum(2)
-        if self.normalize:
+            mask = torch.ones((shape[0], shape[2], shape[3]), device=device, dtype=torch.bool)
+        y_embed = mask.cumsum(1, dtype=dtype)
+        x_embed = mask.cumsum(2, dtype=dtype)
+        if normalize:
             eps = 1e-6
-            y_embed = y_embed / (y_embed[:, -1:, :] + eps) * self.scale
-            x_embed = x_embed / (x_embed[:, :, -1:] + eps) * self.scale
+            y_embed = y_embed / (y_embed[:, -1:, :] + eps) * scale
+            x_embed = x_embed / (x_embed[:, :, -1:] + eps) * scale
 
-        dim_t = torch.arange(self.num_pos_feats, dtype=torch.int64, device=device).to(dtype)
-        dim_t = self.temperature ** (2 * torch.div(dim_t, 2, rounding_mode="floor") / self.num_pos_feats)
+        dim_t = torch.arange(num_position_features, dtype=torch.int64, device=device).to(dtype)
+        dim_t = temperature ** (2 * torch.div(dim_t, 2, rounding_mode="floor") / num_position_features)
 
         pos_x = x_embed[:, :, :, None] / dim_t
         pos_y = y_embed[:, :, :, None] / dim_t
@@ -1516,6 +1499,17 @@ class MaskFormerSinePositionEmbedding(nn.Module):
         pos_y = torch.stack((pos_y[:, :, :, 0::2].sin(), pos_y[:, :, :, 1::2].cos()), dim=4).flatten(3)
         pos = torch.cat((pos_y, pos_x), dim=3).permute(0, 3, 1, 2)
         return pos
+
+    def forward(
+        self,
+        shape: torch.Size,
+        device: torch.device | str,
+        dtype: torch.dtype,
+        mask: torch.Tensor | None = None,
+    ) -> torch.Tensor:
+        return self.build_sine_position_embedding(
+            shape, device, dtype, self.num_position_features, self.normalize, self.scale, self.temperature, mask
+        )
 
 
 class PredictionBlock(nn.Module):
@@ -1632,7 +1626,9 @@ class MaskFormerTransformerModule(nn.Module):
         super().__init__()
         hidden_size = config.decoder_config.hidden_size
         should_project = in_features != hidden_size
-        self.position_embedder = MaskFormerSinePositionEmbedding(num_pos_feats=hidden_size // 2, normalize=True)
+        self.position_embedder = MaskFormerSinePositionEmbedding(
+            num_position_features=hidden_size // 2, normalize=True
+        )
         self.queries_embedder = nn.Embedding(config.decoder_config.num_queries, hidden_size)
         self.input_projection = nn.Conv2d(in_features, hidden_size, kernel_size=1) if should_project else None
         self.decoder = MaskFormerDetrDecoder(config=config.decoder_config)
@@ -1646,7 +1642,6 @@ class MaskFormerTransformerModule(nn.Module):
     ) -> DetrDecoderOutput:
         if self.input_projection is not None:
             image_features = self.input_projection(image_features)
-        object_queries = self.position_embedder(image_features.shape, image_features.device, image_features.dtype)
         # repeat the queries "q c -> b q c"
         batch_size = image_features.shape[0]
         queries_embeddings = self.queries_embedder.weight.unsqueeze(0).repeat(batch_size, 1, 1)
@@ -1658,8 +1653,12 @@ class MaskFormerTransformerModule(nn.Module):
 
         batch_size, num_channels, height, width = image_features.shape
         # rearrange both image_features and object_queries "b c h w -> b (h w) c"
-        image_features = image_features.view(batch_size, num_channels, height * width).permute(0, 2, 1)
-        object_queries = object_queries.view(batch_size, num_channels, height * width).permute(0, 2, 1)
+        object_queries = (
+            self.position_embedder(image_features.shape, image_features.device, image_features.dtype)
+            .view(batch_size, num_channels, height * width)
+            .transpose(1, 2)
+        )
+        image_features = image_features.view(batch_size, num_channels, height * width).transpose(1, 2)
 
         decoder_output: DetrDecoderOutput = self.decoder(
             inputs_embeds=inputs_embeds,
@@ -1684,8 +1683,8 @@ class MaskFormerPreTrainedModel(PreTrainedModel):
 
     @torch.no_grad()
     def _init_weights(self, module: nn.Module):
+        super()._init_weights(module)
         xavier_std = self.config.init_xavier_std
-        std = self.config.init_std
         if isinstance(module, MaskFormerTransformerModule):
             if module.input_projection is not None:
                 init.xavier_uniform_(module.input_projection.weight, gain=xavier_std)
@@ -1707,23 +1706,16 @@ class MaskFormerPreTrainedModel(PreTrainedModel):
                 if isinstance(submodule, nn.Linear):
                     init.xavier_uniform_(submodule.weight, gain=xavier_std)
                     init.constant_(submodule.bias, 0)
-        elif isinstance(module, nn.LayerNorm):
-            init.zeros_(module.bias)
-            init.ones_(module.weight)
-        # copied from DETR
-        if isinstance(module, (nn.Linear, nn.Conv2d, nn.BatchNorm2d)):
-            init.normal_(module.weight, mean=0.0, std=std)
+        # The base class treats BatchNorm as a norm (weight=ones_); MaskFormer instead applies a
+        # normal_ init to the weight and resets the running stats, so this branch must be kept.
+        elif isinstance(module, nn.BatchNorm2d):
+            init.normal_(module.weight, mean=0.0, std=self.config.init_std)
             if module.bias is not None:
                 init.zeros_(module.bias)
             if getattr(module, "running_mean", None) is not None:
                 init.zeros_(module.running_mean)
                 init.ones_(module.running_var)
                 init.zeros_(module.num_batches_tracked)
-        elif isinstance(module, nn.Embedding):
-            init.normal_(module.weight, mean=0.0, std=std)
-            # Here we need the check explicitly, as we slice the weight in the `zeros_` call, so it looses the flag
-            if module.padding_idx is not None and not getattr(module.weight, "_is_hf_initialized", False):
-                init.zeros_(module.weight[module.padding_idx])
         elif isinstance(module, MaskFormerLoss):
             empty_weight = torch.ones(module.num_labels + 1)
             empty_weight[-1] = module.eos_coef

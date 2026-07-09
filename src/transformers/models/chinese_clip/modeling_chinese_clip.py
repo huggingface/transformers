@@ -39,8 +39,8 @@ from ...utils.output_capturing import capture_outputs
 from .configuration_chinese_clip import ChineseCLIPConfig, ChineseCLIPTextConfig, ChineseCLIPVisionConfig
 
 
-@dataclass
 @auto_docstring
+@dataclass
 class ChineseCLIPOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `return_loss` is `True`):
@@ -517,7 +517,12 @@ class ChineseCLIPPreTrainedModel(PreTrainedModel):
     config: ChineseCLIPConfig
     base_model_prefix = "chinese_clip"
     input_modalities = ("image", "text")
-    _no_split_modules = ["ChineseCLIPVisionEmbeddings", "ChineseCLIPTextEmbeddings", "ChineseCLIPVisionAttention"]
+    _no_split_modules = [
+        "ChineseCLIPVisionEmbeddings",
+        "ChineseCLIPTextEmbeddings",
+        "ChineseCLIPTextLayer",
+        "ChineseCLIPVisionLayer",
+    ]
 
     supports_gradient_checkpointing = True
     _supports_sdpa = True
@@ -532,6 +537,7 @@ class ChineseCLIPPreTrainedModel(PreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
+        super()._init_weights(module)
         factor = self.config.initializer_factor
         if isinstance(module, ChineseCLIPVisionEmbeddings):
             init.normal_(module.class_embedding, mean=0.0, std=module.embed_dim**-0.5 * factor)
@@ -568,14 +574,6 @@ class ChineseCLIPPreTrainedModel(PreTrainedModel):
                 module.visual_projection.weight,
                 std=module.vision_embed_dim**-0.5 * factor,
             )
-
-        if isinstance(module, nn.LayerNorm):
-            init.zeros_(module.bias)
-            init.ones_(module.weight)
-        if isinstance(module, nn.Linear):
-            init.normal_(module.weight, mean=0.0, std=factor)
-            if module.bias is not None:
-                init.zeros_(module.bias)
 
 
 class ChineseCLIPTextEncoder(nn.Module):

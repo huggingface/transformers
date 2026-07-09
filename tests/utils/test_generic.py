@@ -14,13 +14,14 @@
 
 import unittest
 import warnings
+from dataclasses import dataclass
 from unittest.mock import patch
 
 import numpy as np
 import pytest
 
 from transformers.configuration_utils import PreTrainedConfig
-from transformers.modeling_outputs import BaseModelOutput, CausalLMOutputWithPast
+from transformers.modeling_outputs import BaseModelOutput, CausalLMOutputWithPast, ModelOutput
 from transformers.testing_utils import require_torch
 from transformers.utils import (
     can_return_tuple,
@@ -33,7 +34,7 @@ from transformers.utils import (
     to_py_obj,
     transpose,
 )
-from transformers.utils.generic import retry
+from transformers.utils.generic import retry, split_attention_implementation
 
 
 if is_torch_available():
@@ -129,6 +130,15 @@ class GenericTester(unittest.TestCase):
 
         self.assertTrue(to_py_obj([t1, t2]) == [x1, x2])
 
+    def test_split_attention_implementation(self):
+        self.assertEqual(split_attention_implementation(None), (False, None))
+        self.assertEqual(split_attention_implementation("sdpa"), (False, "sdpa"))
+        self.assertEqual(split_attention_implementation("paged|flash_attention_2"), (True, "flash_attention_2"))
+        self.assertEqual(
+            split_attention_implementation("paged|kernels-community/flash-attn3"),
+            (True, "kernels-community/flash-attn3"),
+        )
+
     @require_torch
     def test_to_py_obj_torch(self):
         x1 = [[1, 2, 3], [4, 5, 6]]
@@ -165,6 +175,24 @@ class GenericTester(unittest.TestCase):
         out["loss"] = torch.tensor(0.5)
         self.assertEqual(out.loss, torch.tensor(0.5))
         self.assertEqual(len(out.to_tuple()), 2)
+
+    @require_torch
+    def test_register_model_output_pytree_node_skipped_during_compile(self):
+        # Regression test: on AMD CI (PyTorch 2.8.0+rocm), `set.__contains__` is not
+        # traceable by TorchDynamo. `_register_model_output_pytree_node` must return
+        # early when called inside a compiled context, before touching the set.
+        from transformers.utils.generic import _register_model_output_pytree_node
+
+        @dataclass
+        class DummyOutput(ModelOutput):
+            last_hidden_state: "torch.Tensor" = None
+
+        # Eager registration works normally
+        _register_model_output_pytree_node(DummyOutput)
+
+        # Simulate being inside torch.compile — must not raise
+        with patch("torch.compiler.is_compiling", return_value=True):
+            _register_model_output_pytree_node(DummyOutput)
 
 
 class ValidationDecoratorTester(unittest.TestCase):

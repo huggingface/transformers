@@ -99,7 +99,9 @@ class GetFromCacheTests(unittest.TestCase):
             assert not has_file(TINY_BERT_PT_ONLY, WEIGHTS_NAME, local_files_only=True, cache_dir=tmp_dir)
 
             # Populate cache dir
-            hf_hub_download(TINY_BERT_PT_ONLY, WEIGHTS_NAME, cache_dir=tmp_dir)
+            # TODO: only necessary for read-only cache systems; replace with a shared helper
+            with unittest.mock.patch.dict(os.environ, {"HF_XET_CACHE": tmp_dir}):
+                hf_hub_download(TINY_BERT_PT_ONLY, WEIGHTS_NAME, cache_dir=tmp_dir)
 
             # Cache dir + offline mode => return True
             assert has_file(TINY_BERT_PT_ONLY, WEIGHTS_NAME, local_files_only=True, cache_dir=tmp_dir)
@@ -197,8 +199,9 @@ class GetFromCacheTests(unittest.TestCase):
 
 class OfflineModeTests(unittest.TestCase):
     def test_list_repo_templates_w_offline(self):
-        with mock.patch("transformers.utils.hub.list_repo_tree", side_effect=OfflineModeIsEnabled()):
+        with mock.patch("transformers.utils.hub.HfApi.list_repo_tree", side_effect=OfflineModeIsEnabled()):
             with mock.patch(
-                "transformers.utils.hub.snapshot_download", side_effect=LocalEntryNotFoundError("no snapshot found")
+                "transformers.utils.hub.HfApi.snapshot_download",
+                side_effect=LocalEntryNotFoundError("no snapshot found"),
             ):
                 self.assertEqual(list_repo_templates(RANDOM_BERT, local_files_only=False), [])

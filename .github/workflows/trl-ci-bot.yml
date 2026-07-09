@@ -41,22 +41,23 @@ jobs:
         id: pr
         env:
           GH_TOKEN: ${{ github.token }}
+          PR_URL: ${{ github.event.issue.pull_request.url }}
         run: |
-          PR_URL="${{ github.event.issue.pull_request.url }}"
           sha=$(gh api "$PR_URL" --jq .head.sha)
           number=$(gh api "$PR_URL" --jq .number)
-          echo "sha=$sha" >> $GITHUB_OUTPUT
-          echo "number=$number" >> $GITHUB_OUTPUT
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          echo "number=$number" >> "$GITHUB_OUTPUT"
 
       - name: Dispatch TRL workflow
         if: steps.trust.outputs.trusted == 'true'
         id: dispatch
         env:
           GH_TOKEN: ${{ secrets.TRL_CI_DISPATCH_TOKEN }}
+          STEPS_PR_OUTPUTS_SHA: ${{ steps.pr.outputs.sha }}
         run: |
           gh workflow run "Tests against Transformers branch" \
             -R huggingface/trl \
-            -f transformers_ref=${{ steps.pr.outputs.sha }}
+            -f transformers_ref=${STEPS_PR_OUTPUTS_SHA}
 
       - name: Find TRL workflow run URL
         if: steps.trust.outputs.trusted == 'true'
@@ -88,7 +89,9 @@ jobs:
         if: steps.trust.outputs.trusted == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
+          STEPS_PR_OUTPUTS_SHA: ${{ steps.pr.outputs.sha }}
+          STEPS_FIND_RUN_OUTPUTS_URL: ${{ steps.find_run.outputs.url }}
         run: |
           gh api -X POST \
             /repos/${{ github.repository }}/issues/${{ github.event.issue.number }}/comments \
-            -f body="🚀 **TRL CI triggered** against transformers commit \`${{ steps.pr.outputs.sha }}\`\n\n🔗 **Run:** ${{ steps.find_run.outputs.url }}"
+            -f body="🚀 **TRL CI triggered** against transformers commit \`${STEPS_PR_OUTPUTS_SHA}\`\n\n🔗 **Run:** ${STEPS_FIND_RUN_OUTPUTS_URL}"

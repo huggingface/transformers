@@ -25,8 +25,6 @@ from transformers.models.detr.image_processing_detr import DetrImageProcessor
 from transformers.models.detr.image_processing_pil_detr import DetrImageProcessorPil
 
 from ...image_transforms import center_to_corners_format
-from ...image_utils import AnnotationFormat
-from ...processing_utils import ImagesKwargs
 from ...utils import (
     TensorType,
     logging,
@@ -68,20 +66,6 @@ def _scale_boxes(boxes, target_sizes):
     scale_factor = scale_factor.unsqueeze(1).to(boxes.device)
     boxes = boxes * scale_factor
     return boxes
-
-
-class GroundingDinoImageProcessorKwargs(ImagesKwargs, total=False):
-    r"""
-    format (`str`, *optional*, defaults to `AnnotationFormat.COCO_DETECTION`):
-        Data format of the annotations. One of "coco_detection" or "coco_panoptic".
-    do_convert_annotations (`bool`, *optional*, defaults to `True`):
-        Controls whether to convert the annotations to the format expected by the GROUNDING_DINO model. Converts the
-        bounding boxes to the format `(center_x, center_y, width, height)` and in the range `[0, 1]`.
-        Can be overridden by the `do_convert_annotations` parameter in the `preprocess` method.
-    """
-
-    format: str | AnnotationFormat
-    do_convert_annotations: bool
 
 
 class GroundingDinoImageProcessor(DetrImageProcessor):

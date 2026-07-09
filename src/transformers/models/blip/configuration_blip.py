@@ -68,6 +68,7 @@ class BlipTextConfig(PreTrainedConfig):
     sep_token_id: int | None = 102
     is_decoder: bool = True
     use_cache: bool = True
+    tie_word_embeddings: bool = True
     label_smoothing: float = 0.0
 
 

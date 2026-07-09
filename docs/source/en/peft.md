@@ -15,7 +15,7 @@ rendered properly in your Markdown viewer.
 
 Transformers integrates directly with the PEFT library through [`~integrations.PeftAdapterMixin`], added to all [`PreTrainedModel`] classes. You can load, add, train, switch, and delete adapters without wrapping your model in a separate [`~peft.PeftModel`]. All non-prompt-learning PEFT methods are supported (LoRA, IA3, AdaLoRA). Prompt-based methods like prompt tuning and prefix tuning require using the [PEFT library](https://huggingface.co/docs/peft/index) directly.
 
-Install PEFT to get started. The integration requires `peft >= 0.18.0`.
+Install PEFT to get started. The integration requires `peft >= 0.19.1`.
 
 ```shell
 pip install -U peft

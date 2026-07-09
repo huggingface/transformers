@@ -902,11 +902,6 @@ class TestMistralCommonBackend(unittest.TestCase):
             expected_tokenized.tokens,
         )
 
-        with self.assertRaises(
-            ValueError, msg="Kwargs [unk_args] are not supported by `MistralCommonBackend.apply_chat_template`."
-        ):
-            self.tokenizer.apply_chat_template(conversation, tokenize=True, unk_args="")
-
     def test_apply_chat_template_continue_final_message(self):
         conversation = [
             {"role": "system", "content": "You are a helpful assistant."},
@@ -1267,12 +1262,6 @@ class TestMistralCommonBackend(unittest.TestCase):
         for text, token, expected in zip(text_outputs, token_outputs, expected_tokenized):
             self.assertEqual(text, expected.text)
             self.assertEqual(token, expected.tokens)
-
-        with self.assertRaises(
-            ValueError,
-            msg="Kwargs [unk_args] are not supported by `MistralCommonBackend.batch_apply_chat_template`.",
-        ):
-            self.tokenizer.apply_chat_template(conversations, tools=tools, tokenize=True, unk_args="")
 
     def test_batch_apply_chat_template_images(self):
         conversations = [
@@ -2140,10 +2129,12 @@ class TestMistralCommonBackend(unittest.TestCase):
             (ValidationMode.test, ValidationMode.test),
             ("finetuning", ValidationMode.finetuning),
             (ValidationMode.finetuning, ValidationMode.finetuning),
+            ("serving", ValidationMode.serving),
+            (ValidationMode.serving, ValidationMode.serving),
         ]:
             self.assertEqual(MistralCommonBackend._get_validation_mode(mode), expected)
 
-        for invalid_mode in [("serving", ValidationMode.serving, "invalid", 1)]:
+        for invalid_mode in ["invalid", 1]:
             with self.assertRaises(ValueError):
                 MistralCommonBackend._get_validation_mode(invalid_mode)
 

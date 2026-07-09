@@ -30,7 +30,6 @@ from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import TensorType, auto_docstring
 
 
-# Adapted from transformers.models.glm_image.image_processing_glm_image.GlmImageImageProcessorKwargs
 class GlmImageImageProcessorKwargs(ImagesKwargs, total=False):
     r"""
     min_pixels (`int`, *optional*, defaults to `56 * 56`):

@@ -19,7 +19,6 @@ import inspect
 import tempfile
 import unittest
 
-import requests
 from parameterized import parameterized
 
 from transformers import (
@@ -28,8 +27,8 @@ from transformers import (
     SLANeXtConfig,
     SLANeXtForTableRecognition,
     is_torch_available,
-    is_vision_available,
 )
+from transformers.image_utils import load_image
 from transformers.testing_utils import (
     require_torch,
     require_torch_accelerator,
@@ -41,13 +40,11 @@ from transformers.testing_utils import (
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
+from ...test_processing_common import url_to_local_path
 
 
 if is_torch_available():
     import torch
-
-if is_vision_available():
-    from PIL import Image
 
 
 class SLANeXtModelTester:
@@ -63,7 +60,7 @@ class SLANeXtModelTester:
         self.parent = parent
         if vision_config is None:
             vision_config = {
-                "hidden_size": 1,
+                "hidden_size": 2,
                 "num_hidden_layers": 1,
                 "num_attention_heads": 1,
                 "global_attn_indexes": [1, 1, 1, 1],
@@ -90,8 +87,8 @@ class SLANeXtModelTester:
     def get_config(self) -> SLANeXtConfig:
         config = SLANeXtConfig(
             vision_config=self.vision_config,
-            out_channels=1,
-            hidden_size=1,
+            out_channels=2,
+            hidden_size=2,
             max_text_length=1,
         )
 
@@ -104,7 +101,6 @@ class SLANeXtModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
     pipeline_model_mapping = {"image-feature-extraction": SLANeXtForTableRecognition} if is_torch_available() else {}
 
     test_resize_embeddings = False
-    test_torch_exportable = False
 
     def setUp(self):
         self.model_tester = SLANeXtModelTester(
@@ -295,8 +291,10 @@ class SLANeXtModelIntegrationTest(unittest.TestCase):
         model_path = "PaddlePaddle/SLANeXt_wired_safetensors"
         self.model = AutoModelForTableRecognition.from_pretrained(model_path, dtype=torch.float32).to(torch_device)
         self.image_processor = AutoImageProcessor.from_pretrained(model_path)
-        url = "https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/table_recognition.jpg"
-        self.image = Image.open(requests.get(url, stream=True).raw)
+        img_url = url_to_local_path(
+            "https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/table_recognition.jpg"
+        )
+        self.image = load_image(img_url)
 
     def test_inference_table_recognition_head(self):
         inputs = self.image_processor(images=self.image, return_tensors="pt").to(torch_device)

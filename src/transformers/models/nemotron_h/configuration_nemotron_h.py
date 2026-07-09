@@ -15,7 +15,7 @@
 
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, remap_legacy_layer_types
 from ...utils import auto_docstring, logging
 
 
@@ -27,7 +27,7 @@ logger = logging.get_logger(__name__)
 class NemotronHConfig(PreTrainedConfig):
     r"""
     layers_block_type (`list`, *optional*):
-        Explicit list of layer types for each layer. Each element must be one of: "mamba", "attention", or "moe".
+        Explicit list of layer types for each layer. Each element must be one of: "mlp", "linear_attention", "full_attention", or "moe".
         The number of layers is determined by the length of this list.
     num_logits_to_keep (`int`, *optional*, defaults to 1):
         Number of prompt logits to calculate during generation. If `None`, all logits will be calculated.
@@ -57,7 +57,7 @@ class NemotronHConfig(PreTrainedConfig):
         Number of groups for expert routing.
     num_nextn_predict_layers (`int`, *optional*, defaults to 0):
         Number of additional layers for multi-token prediction. If 0, multi-token prediction is disabled.
-    mtp_layers_block_type (`list`, *optional*, defaults to `['attention', 'moe']`):
+    mtp_layers_block_type (`list`, *optional*, defaults to `['full_attention', 'moe']`):
         Explicit list of layer types for multi-token prediction layers when `num_nextn_predict_layers` > 0.
     use_bias (`bool`, *optional*, defaults to `False`):
         Whether to use bias in the model.
@@ -81,7 +81,7 @@ class NemotronHConfig(PreTrainedConfig):
     """
 
     model_type = "nemotron_h"
-    attribute_map = {"layer_types": "layers_block_type"}
+    attribute_map = {"layer_types": "layers_block_type", "num_local_experts": "n_routed_experts"}
     keys_to_ignore_at_inference = ["past_key_values"]
 
     vocab_size: int = 131072
@@ -158,30 +158,35 @@ class NemotronHConfig(PreTrainedConfig):
         # Always pop hybrid_override_pattern from kwargs to prevent it from being set as an attribute
         if "hybrid_override_pattern" in kwargs:
             pattern = kwargs.pop("hybrid_override_pattern")
-            if self.layers_block_type is None:
-                self.layers_block_type = self._pattern_to_list(pattern)
-        elif self.layers_block_type is None:
+            if self.layer_types is None:
+                self.layer_types = self._pattern_to_list(pattern)
+        elif self.layer_types is None:
             # Default layers_block_type if not provided
-            self.layers_block_type = ["mamba", "moe", "attention", "moe"]
+            self.layer_types = ["linear_attention", "moe", "full_attention", "mlp"]
+        else:
+            # Migrate legacy names from configs stored on the Hub.
+            self.layer_types = remap_legacy_layer_types(self.layer_types)
 
         # Note: num_hidden_layers is deprecated and ignored if layers_block_type is explicitly provided
         # It's only kept for backward compatibility when loading old configs
         if self.num_hidden_layers is not None:
             # Warn if num_hidden_layers is provided but doesn't match layers_block_type
-            if len(self.layers_block_type) != self.num_hidden_layers:
+            if len(self.layer_types) != self.num_hidden_layers:
                 logger.warning(
                     f"num_hidden_layers ({self.num_hidden_layers}) is deprecated and doesn't match "
-                    f"layers_block_type length ({len(self.layers_block_type)}). Using layers_block_type length."
+                    f"layer_types length ({len(self.layer_types)}). Using layers_block_type length."
                 )
 
         # Backward compatibility: convert mtp_hybrid_override_pattern to mtp_layers_block_type
         # Always pop mtp_hybrid_override_pattern from kwargs to prevent it from being set as an attribute
         if self.mtp_layers_block_type is None:
-            self.mtp_layers_block_type = ["attention", "moe"]
+            self.mtp_layers_block_type = ["full_attention", "moe"]
+        else:
+            self.mtp_layers_block_type = remap_legacy_layer_types(self.mtp_layers_block_type)
 
         if "mtp_hybrid_override_pattern" in kwargs:
             pattern = kwargs.pop("mtp_hybrid_override_pattern")
-            if self.mtp_layers_block_type == ["attention", "moe"]:
+            if self.mtp_layers_block_type == ["full_attention", "moe"]:
                 self.mtp_layers_block_type = self._pattern_to_list(pattern)
 
         # for backward compatibility
@@ -191,18 +196,16 @@ class NemotronHConfig(PreTrainedConfig):
         super().__post_init__(**kwargs)
 
     @staticmethod
-    def validate_layers_block_type(self):
+    def validate_layer_type(self):
         """
         Validate layers_block_type list.
         """
-        if not isinstance(self.layers_block_type, list):
-            raise ValueError(
-                f"`layers_block_type` must be a list of strings. Got type: {type(self.layers_block_type)}"
-            )
+        if not isinstance(self.layer_types, list):
+            raise ValueError(f"`layers_block_type` must be a list of strings. Got type: {type(self.layer_types)}")
 
-        valid_types = {"mamba", "attention", "moe"}
-        if not all(block_type in valid_types for block_type in self.layers_block_type):
-            invalid = set(self.layers_block_type) - valid_types
+        valid_types = {"full_attention", "linear_attention", "moe", "mlp"}
+        if not all(block_type in valid_types for block_type in self.layer_types):
+            invalid = set(self.layer_types) - valid_types
             raise ValueError(f"`layers_block_type` contains invalid types: {invalid}. Must be one of: {valid_types}")
 
         if self.num_nextn_predict_layers > 0:
@@ -218,7 +221,6 @@ class NemotronHConfig(PreTrainedConfig):
                     f"`mtp_layers_block_type` must be a list of strings. Got type: {type(self.mtp_layers_block_type)}"
                 )
 
-            valid_types = {"mamba", "attention", "moe"}
             if not all(block_type in valid_types for block_type in self.mtp_layers_block_type):
                 invalid = set(self.mtp_layers_block_type) - valid_types
                 raise ValueError(
@@ -261,13 +263,13 @@ class NemotronHConfig(PreTrainedConfig):
     @staticmethod
     def _list_to_pattern(layers_list: list) -> str:
         """Convert list of layer types back to pattern string (for backward compatibility)."""
-        reverse_mapping = {"mamba": "M", "moe": "E", "attention": "*"}
+        reverse_mapping = {"linear_attention": "M", "moe": "E", "full_attention": "*", "mlp": "-"}
         return "".join(reverse_mapping[layer_type] for layer_type in layers_list)
 
     @staticmethod
     def _pattern_to_list(pattern: str) -> list:
         """Convert pattern string to list of layer types (for backward compatibility)."""
-        pattern_mapping = {"M": "mamba", "E": "moe", "*": "attention"}
+        pattern_mapping = {"M": "linear_attention", "E": "moe", "*": "full_attention", "-": "mlp"}
         return [pattern_mapping[char] for char in pattern]
 
 
