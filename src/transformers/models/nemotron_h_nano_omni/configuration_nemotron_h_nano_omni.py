@@ -11,8 +11,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from ...configuration_utils import PretrainedConfig
-from ...utils import logging
+from ...configuration_utils import PreTrainedConfig, PretrainedConfig
+from ...utils import auto_docstring, logging
 from ..nemotron_h import NemotronHConfig
 from ..radio.configuration_radio import RadioConfig
 
@@ -57,8 +57,9 @@ class SoundConfig(PretrainedConfig):
         self.sampling_rate = sampling_rate
 
 
-class NemotronH_Nano_Omni_Reasoning_V3_Config(PretrainedConfig):
-    model_type = "NemotronH_Nano_Omni_Reasoning_V3"
+@auto_docstring(checkpoint="nvidia/Nemotron-3-Nano-Omni-30B-A3B-Reasoning-BF16")
+class NemotronH_Nano_Omni_Reasoning_V3_Config(PreTrainedConfig):
+    model_type = "nemotron_h_nano_omni"
     is_composition = True
 
     def __init__(
@@ -87,6 +88,48 @@ class NemotronH_Nano_Omni_Reasoning_V3_Config(PretrainedConfig):
         sound_context_token: str = "<audio>",
         **kwargs,
     ):
+        r"""
+        vision_config (`dict` or `RadioConfig`, *optional*):
+            Configuration for the RADIO vision encoder. Defaults to a default [`RadioConfig`].
+        llm_config (`dict` or `NemotronHConfig`, *optional*):
+            Configuration for the NemotronH language model. Defaults to a default [`NemotronHConfig`].
+        sound_config (`dict` or `SoundConfig`, *optional*):
+            Configuration for the optional Parakeet sound encoder. `None` disables the audio branch.
+        force_image_size (`int`, *optional*):
+            Fixed input image resolution (in pixels) the vision tower expects.
+        downsample_ratio (`float`, *optional*, defaults to 0.5):
+            Pixel-shuffle spatial downsample ratio applied to the vision features.
+        template (`str`, *optional*):
+            Conversation template name (legacy; the chat template is carried by the processor).
+        ps_version (`str`, *optional*, defaults to `"v1"`):
+            Pixel-shuffle implementation version.
+        image_tag_type (`str`, *optional*, defaults to `"internvl"`):
+            Image-tag convention used when expanding image placeholders.
+        projector_hidden_size (`int`, *optional*, defaults to 4096):
+            Hidden size of the vision-to-LLM MLP projector.
+        vit_hidden_size (`int`, *optional*, defaults to 1280):
+            Hidden size of the RADIO vision features.
+        attn_implementation (`str`, *optional*, defaults to `"flash_attention_2"`):
+            Attention implementation to use across the model and its sub-models.
+        video_pruning_rate (`float`, *optional*, defaults to 0.0):
+            Efficient-Video-Sampling token pruning rate; `0.0` disables pruning.
+        video_temporal_patch_size (`int`, *optional*, defaults to 2):
+            Number of frames collapsed into a single temporal patch by the video embedder.
+        patch_size (`int`, *optional*, defaults to 16):
+            Vision patch size in pixels.
+        img_context_token_id (`int`, *optional*):
+            Token id used as the image-context placeholder in `input_ids`.
+        img_context_token (`str`, *optional*, defaults to `"<image>"`):
+            Textual image-context placeholder token.
+        video_context_token_id (`int`, *optional*):
+            Token id used as the video-context placeholder in `input_ids`.
+        video_context_token (`str`, *optional*, defaults to `"<video>"`):
+            Textual video-context placeholder token.
+        sound_context_token_id (`int`, *optional*):
+            Token id used as the audio-context placeholder in `input_ids`.
+        sound_context_token (`str`, *optional*, defaults to `"<audio>"`):
+            Textual audio-context placeholder token.
+        """
         super().__init__(**kwargs)
 
         if vision_config is not None:

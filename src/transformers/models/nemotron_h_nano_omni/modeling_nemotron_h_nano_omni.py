@@ -293,6 +293,7 @@ class NemotronH_Nano_Omni_Reasoning_V3(PreTrainedModel):
         output_attentions: bool | None = None,
         output_hidden_states: bool | None = None,
         return_dict: bool | None = None,
+        **kwargs,
     ) -> tuple | CausalLMOutputWithPast:
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
