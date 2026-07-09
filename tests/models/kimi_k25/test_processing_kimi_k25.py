@@ -36,7 +36,6 @@ if is_torch_available():
 @require_torchvision
 class Kimi_K25ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = Kimi_K25Processor
-    model_id = "RaushanTurganbay/kimi2.7-processor"  # official repo has no fast tokenizer
     tiny_model_id = "hf-internal-testing/tiny-processor-kimi_k25"
 
     @classmethod
@@ -204,7 +203,7 @@ class Kimi_K25ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             ),
         }
         num_frames = 3
-        out_dict_with_video = processor.apply_chat_template(
+        out_dict_num_frames = processor.apply_chat_template(
             messages,
             add_generation_prompt=True,
             tokenize=True,
@@ -212,20 +211,24 @@ class Kimi_K25ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             num_frames=num_frames,
             fps=None,
         )
-        self.assertTrue(self.videos_input_name in out_dict_with_video)
-        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 1344)
+        self.assertTrue(self.videos_input_name in out_dict_num_frames)
+        expected_num_frames_len = sum(thw[0] * thw[1] * thw[2] for thw in out_dict_num_frames["video_grid_thw"])
+        self.assertEqual(len(out_dict_num_frames[self.videos_input_name]), expected_num_frames_len)
 
         # Load with `fps` arg
         fps = 3
-        out_dict_with_video = processor.apply_chat_template(
+        out_dict_fps = processor.apply_chat_template(
             messages,
             add_generation_prompt=True,
             tokenize=True,
             return_dict=True,
             fps=fps,
         )
-        self.assertTrue(self.videos_input_name in out_dict_with_video)
-        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 448)
+        self.assertTrue(self.videos_input_name in out_dict_fps)
+        expected_fps_len = sum(thw[0] * thw[1] * thw[2] for thw in out_dict_fps["video_grid_thw"])
+        self.assertEqual(len(out_dict_fps[self.videos_input_name]), expected_fps_len)
+        # num_frames and fps sampling should produce different token counts
+        self.assertNotEqual(expected_num_frames_len, expected_fps_len)
 
         # Load with `fps` and `num_frames` args, should raise an error
         with self.assertRaises(ValueError):
