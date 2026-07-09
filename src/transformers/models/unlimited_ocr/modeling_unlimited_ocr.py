@@ -1592,7 +1592,7 @@ class UnlimitedOcrStaticReferenceSlidingWindowLayer(StaticSlidingWindowLayer):
         """Return the maximum cache shape of the cache"""
         if self.prefill_length is None:
             return self.max_cache_len
-        return self.prefill_length + self.sliding_window
+        return min(self.max_cache_len, self.prefill_length + self.sliding_window)
 
     def reset(self) -> None:
         super().reset()
