@@ -699,20 +699,6 @@ class TmlPreTrainedModel(PreTrainedModel):
             module.proj.data.normal_(mean=0.0, std=std)
 
 
-class TmlTextNormedWordEmbedding(nn.Embedding):
-    """
-    This module overrides nn.Embeddings' forward by applying norm on text input ids.
-    """
-
-    def __init__(self, num_embeddings: int, embedding_dim: int, padding_idx: int, eps: float = 1e-06):
-        super().__init__(num_embeddings, embedding_dim, padding_idx)
-        self.embed_norm = TmlRMSNorm(embedding_dim, eps=eps)
-
-    def forward(self, input_ids: torch.Tensor):
-        embeds = super().forward(input_ids)
-        return self.embed_norm(embeds)
-
-
 @auto_docstring
 class TmlTextModel(TmlPreTrainedModel):
     config: TmlTextConfig
@@ -722,15 +708,13 @@ class TmlTextModel(TmlPreTrainedModel):
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
 
-        self.embed_tokens = TmlTextNormedWordEmbedding(
-            config.vocab_size, config.hidden_size, self.padding_idx, eps=config.rms_norm_eps
-        )
+        self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
         self.layers = nn.ModuleList(
             [TmlDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
         self.norm = TmlRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.embed_norm = TmlRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.gradient_checkpointing = False
-        self.embedding_multiplier = config.embedding_multiplier
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -753,7 +737,7 @@ class TmlTextModel(TmlPreTrainedModel):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
         if inputs_embeds is None:
-            inputs_embeds = self.embed_tokens(input_ids) / self.embedding_multiplier
+            inputs_embeds = self.embed_norm(self.embed_tokens(input_ids))
 
         if use_cache:
             if past_key_values is None:
@@ -1089,7 +1073,7 @@ class TmlModel(TmlPreTrainedModel):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
         if inputs_embeds is None:
-            inputs_embeds = self.get_input_embeddings()(input_ids)
+            inputs_embeds = self.language_model.embed_norm(self.get_input_embeddings()(input_ids))
 
         # Merge text and images
         if pixel_values is not None:
@@ -1231,7 +1215,7 @@ class TmlForConditionalGeneration(TmlPreTrainedModel, GenerationMixin):
             **kwargs,
         )
 
-        hidden_states = outputs[0]
+        hidden_states = outputs[0] / self.config.text_config.logits_mup_width_multiplier
         # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
         slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
         logits = self.lm_head(hidden_states[:, slice_indices, :])
