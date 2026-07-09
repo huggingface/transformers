@@ -8,8 +8,8 @@ Saves to --out (default ./mini-step-3-7-flash):
   config.json       — in original hub-checkpoint format (moe_layers_enum, not mlp_layer_types)
   pytorch_model.bin — weights in hub key format (model.embed_tokens.*, vision_model.*, ...)
 
-Run:
-    PYTHONPATH=src python scripts/step3p7/build_mini_model.py [--push-to-hub]
+Run (fully local; --push-to-hub is optional and off by default):
+    PYTHONPATH=src python scripts/step3p7/build_mini_model.py
 """
 
 from __future__ import annotations
@@ -92,7 +92,10 @@ def main() -> None:
         partial_rotary_factors=[0.5, 1.0, 1.0, 1.0],
         max_position_embeddings=512,
         max_seq_len=512,
-        attention_other_setting={"num_attention_heads": 4, "num_attention_groups": 2, "head_dim": 32},
+        # Real checkpoints use a *different* head count for sliding vs. full-attention layers
+        # (e.g. 96 vs 64) — mismatched here too (6 vs 4) so a regression that ignores this and
+        # reuses `num_attention_heads` for every layer produces a detectable shape/logits mismatch.
+        attention_other_setting={"num_attention_heads": 6, "num_attention_groups": 2, "head_dim": 32},
         pad_token_id=1,
         use_rope_layers=[True, True, True, True],
         yarn_only_types=["full_attention"],

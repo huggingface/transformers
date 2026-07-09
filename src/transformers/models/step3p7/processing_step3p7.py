@@ -33,7 +33,7 @@ class Step3p7Processor(ProcessorMixin):
     that ``get_text_with_replacements`` substitutes into the text.
     """
 
-    def __init__(self, image_processor=None, tokenizer=None, chat_template=None, **kwargs) -> None:
+    def __init__(self, image_processor, tokenizer=None, chat_template=None, **kwargs) -> None:
         self.image_token = "<im_patch>"
         self.image_token_id = tokenizer.convert_tokens_to_ids(self.image_token) if tokenizer is not None else None
         self.num_image_feature_size = image_processor.num_image_features
