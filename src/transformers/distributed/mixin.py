@@ -19,21 +19,18 @@ import re
 import warnings
 from typing import TYPE_CHECKING
 
-from ..integrations.tensor_parallel import (
-    ALL_PARALLEL_STYLES,
-    gather_state_dict_for_save,
-    initialize_tensor_parallelism,
-)
 from ..utils import SAFE_WEIGHTS_INDEX_NAME, is_torch_available, is_torch_greater_or_equal, logging
 from ..utils.hub import create_and_tag_model_card
 from .configuration_utils import DistributedConfig
 from .fsdp import is_fsdp_managed_module
+from .tensor_parallel import ALL_PARALLEL_STYLES, gather_tp_state_dict
 from .utils import (
     _get_torch_distributed_rank,
     _is_torch_distributed_initialized,
     distribute_model,
     gather_full_state_dict,
     initialize_fully_sharded_data_parallelism,
+    initialize_tensor_parallelism,
     save_model_checkpoint_distributed,
 )
 
@@ -67,8 +64,15 @@ class DistributedMixin:
 
     @property
     def tp_plan(self) -> dict[str, str]:
-        """The full tp plan for the model's modules."""
-        if hasattr(self.config, "distributed_config") and self.config.distributed_config.enable_expert_parallel:
+        """The tp plan for the model's modules.
+
+        For dense / MoE tensor parallelism this is ``base_model_tp_plan`` (written by
+        ``apply_tensor_parallel`` at load time). Expert parallelism (``enable_expert_parallel=True``)
+        still uses the legacy ``base_model_ep_plan`` path.
+        """
+        if hasattr(self.config, "distributed_config") and getattr(
+            self.config.distributed_config, "enable_expert_parallel", False
+        ):
             if not self._ep_plan:
                 raise ValueError(
                     f"Expert parallelism was requested (`enable_expert_parallel=True`), but "
@@ -143,14 +147,9 @@ class DistributedMixin:
             distributed_config = DistributedConfig.from_dict(distributed_config)
 
         if distributed_config.tp_size > 1:
-            if distributed_config.tp_plan is None:
-                distributed_config.tp_plan = "auto"
-            device_map, device_mesh = initialize_tensor_parallelism(
-                distributed_config.tp_plan,
-                tp_size=distributed_config.tp_size,
-                device_mesh=device_mesh,
-                device_map=device_map,
-            )
+            # `tp_plan=None` lets `select_parallel_plan` pick the model's tp/sp/tp_ep/sp_ep plan from
+            # the DistributedConfig flags; set it explicitly to override.
+            device_map, device_mesh = initialize_tensor_parallelism(distributed_config)
         elif distributed_config.fsdp_size > 1:
             device_map, device_mesh = initialize_fully_sharded_data_parallelism(distributed_config)
 
@@ -258,8 +257,9 @@ class DistributedMixin:
         *,
         is_checkpoint_writer: bool = True,
     ) -> tuple[dict, bool]:
-        """All-gather TP-sharded weights for checkpoint writing."""
-        full_state_dict = gather_state_dict_for_save(local_state_dict, self._tp_plan, self._device_mesh, self._tp_size)
+        """Reconstruct full (unsharded) TP weights for checkpoint writing by replicating the
+        DTensor-sharded parameters to full local tensors. See ``gather_tp_state_dict``."""
+        full_state_dict = gather_tp_state_dict(self)
         if not is_checkpoint_writer:
             full_state_dict = {}
         return full_state_dict, True

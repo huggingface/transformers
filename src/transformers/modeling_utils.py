@@ -53,6 +53,8 @@ from .core_model_loading import (
 from .distributed import DistributedConfig
 from .distributed.fsdp import is_fsdp_managed_module
 from .distributed.mixin import DistributedMixin
+from .distributed.sharding_utils import _dtensor_from_local_like
+from .distributed.tensor_parallel import _get_parameter_tp_plan, verify_tp_plan
 from .distributed.utils import (
     _distributed_barrier,
     _get_torch_distributed_world_size,
@@ -83,9 +85,7 @@ from .integrations.peft import maybe_load_adapters
 from .integrations.sdpa_attention import sdpa_attention_forward
 from .integrations.sdpa_paged import sdpa_attention_paged_forward
 from .integrations.tensor_parallel import (
-    _get_parameter_tp_plan,
     shard_and_distribute_module,
-    verify_tp_plan,
 )
 from .loss.loss_utils import LOSS_MAPPING
 from .modeling_flash_attention_utils import (
@@ -151,6 +151,14 @@ if TYPE_CHECKING:
 
 
 _torch_distributed_available = torch.distributed.is_available()
+if _torch_distributed_available:
+    from torch.distributed.tensor import DTensor
+
+
+def _is_dtensor(x) -> bool:
+    """Whether `x` is a DTensor (safe when torch.distributed is unavailable)."""
+    return _torch_distributed_available and isinstance(x, DTensor)
+
 
 if is_sagemaker_mp_enabled():
     import smdistributed.modelparallel.torch as smp
@@ -1371,8 +1379,15 @@ class PreTrainedModel(
         """
         # Attach the different parallel plans and tied weight keys to the top-most model, so that everything is
         # easily available.
-        self._tp_plan, self._ep_plan, self._pp_plan, self._fsdp_plan = {}, {}, {}, {}
-        # If current model is a base model, attach `base_model_tp_plan` and `base_model_pp_plan` from config
+        # Seed with the class-level plans (e.g. `*ForCausalLM._tp_plan = {"lm_head": ...}`) before the instance
+        # attribute shadows them — task-head plans live on the head class, not in the base model config.
+        cls_tp_plan = getattr(self, "_tp_plan", None) or {}
+        cls_fsdp_plan = getattr(self, "_fsdp_plan", None) or {}
+        self._tp_plan = dict(cls_tp_plan)
+        self._ep_plan = {}
+        self._pp_plan = {}
+        self._fsdp_plan = dict(cls_fsdp_plan)
+        # If current model is a base model, attach `base_model_*_plan` from config
         if self.base_model is self:
             self._pp_plan = self.config.base_model_pp_plan.copy() if self.config.base_model_pp_plan is not None else {}
             self._tp_plan = self.config.base_model_tp_plan.copy() if self.config.base_model_tp_plan is not None else {}
@@ -1397,10 +1412,10 @@ class PreTrainedModel(
         # This works because the way the `__init__` and `post_init` are called on all submodules is depth-first in the graph
         for name, module in self.named_children():
             # Parallel plans
-            if plan := getattr(module, "_ep_plan", None):
-                self._ep_plan.update({f"{name}.{k}": v for k, v in plan.copy().items()})
             if plan := getattr(module, "_tp_plan", None):
                 self._tp_plan.update({f"{name}.{k}": v for k, v in plan.copy().items()})
+            if plan := getattr(module, "_ep_plan", None):
+                self._ep_plan.update({f"{name}.{k}": v for k, v in plan.copy().items()})
             if plan := getattr(module, "_pp_plan", None):
                 self._pp_plan.update({f"{name}.{k}": v for k, v in plan.copy().items()})
             if plan := getattr(module, "_fsdp_plan", None):
@@ -4747,9 +4762,23 @@ class PreTrainedModel(
         # will be re-initialized for nothing (which can be quite long)
         for key in missing_keys - self.all_tied_weights_keys.keys():
             param = self.get_parameter_or_buffer(key)
+            # New distributed path: the param is already a DTensor placeholder (from
+            # `apply_tensor_parallel`). Materialize its local shard on the real device and re-wrap
+            # as a DTensor mirroring the placeholder's mesh/placements.
+            if _is_dtensor(param):
+                local_value = torch.empty(
+                    param._local_tensor.shape,
+                    dtype=param.dtype,
+                    device=torch.device(param.device_mesh.device_type, torch.cuda.current_device()),
+                )
+                new_dtensor = _dtensor_from_local_like(local_value, param)
+                with torch.no_grad():
+                    new_param = torch.nn.Parameter(new_dtensor, requires_grad=param.requires_grad)
+                    torch.utils.swap_tensors(param, new_param)
+                continue
             param_device = get_device(device_map, key, valid_torch_device=True)
             value = torch.empty_like(param, device=param_device)
-            # For TP, we may need to shard the param
+            # Legacy plain-tensor TP path: shard the param via `device_mesh`.
             if device_mesh is not None:
                 shard_and_distribute_module(
                     self, value, param, key, None, False, device_mesh.get_local_rank(), device_mesh
