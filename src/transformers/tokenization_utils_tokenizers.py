@@ -71,8 +71,8 @@ def _check_tokenizer_thread_safety():
     borrow check is still in place, so a Python-side lock is required.
     """
     try:
-        from tokenizers import __version__ as _tok_version
         from packaging.version import Version as _Version
+        from tokenizers import __version__ as _tok_version
 
         _tok_ver = _Version(_tok_version)
     except Exception:
