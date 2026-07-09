@@ -270,7 +270,7 @@ def fp8_linear(
             # Forward the original reason so the user knows whether DeepGEMM is unavailable
             # (env/build issue) or refused this specific input (e.g. multi-device on SM100).
             logger.warning_once(
-                f"DeepGEMM unavailable for this call, falling back to Triton. Reason: {e}. "
+                f"DeepGEMM unavailable for this call, falling back to Triton. Reason: {e} "
                 "Set `TRANSFORMERS_DISABLE_DEEPGEMM_LINEAR=1` to skip DeepGEMM for FP8 linear entirely."
             )
 
