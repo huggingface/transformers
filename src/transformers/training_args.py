@@ -1831,6 +1831,11 @@ class TrainingArguments:
             self.distributed_state = PartialState(**accelerator_state_kwargs)
             if use_deepspeed:
                 del os.environ["ACCELERATE_USE_DEEPSPEED"]
+        if self.adam_epsilon <= 0:
+            raise ValueError(
+                f"`adam_epsilon` must be greater than 0, got {self.adam_epsilon}."
+            )
+
         if not is_sagemaker_mp_enabled():
             device = self.distributed_state.device
         if dist.is_available() and dist.is_initialized() and self.parallel_mode != ParallelMode.DISTRIBUTED:
