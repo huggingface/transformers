@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import inspect
-import io
 import json
 import os
 import pathlib
@@ -21,7 +20,6 @@ import tempfile
 import warnings
 from copy import deepcopy
 
-import httpx
 import numpy as np
 import pytest
 
@@ -47,6 +45,25 @@ if is_torch_available():
 
 if is_vision_available():
     from PIL import Image
+
+
+_parent_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+sys.path.append(os.path.join(_parent_dir, "utils"))
+from fetch_hub_objects_for_ci import url_to_local_path  # noqa: E402
+
+
+COCO_CATS_IMAGE_URL = "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg"
+
+
+def load_test_image(url: str):
+    """Load a test image using the url_to_local_path fallback.
+
+    In CI, where fetch_hub_objects_for_ci.py has pre-downloaded files, this resolves
+    to a local path. Outside CI it falls back to fetching the URL directly via load_image.
+    """
+    from transformers.image_utils import load_image
+
+    return load_image(url_to_local_path(url))
 
 
 def prepare_image_inputs(
@@ -175,11 +192,7 @@ class ImageProcessingTestMixin:
         if len(self.image_processing_classes) < 2:
             self.skipTest(reason="Skipping backends equivalence test as there are less than 2 backends")
 
-        dummy_image = Image.open(
-            io.BytesIO(
-                httpx.get("http://images.cocodataset.org/val2017/000000039769.jpg", follow_redirects=True).content
-            )
-        )
+        dummy_image = load_test_image(COCO_CATS_IMAGE_URL)
 
         # Create processors for each backend
         encodings = {}
