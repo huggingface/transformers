@@ -24,6 +24,7 @@ from unittest.mock import patch
 import torch
 from parameterized import parameterized
 
+import transformers.utils as transformers_utils
 from transformers import (
     AutoConfig,
     AutoModelForCausalLM,
@@ -584,7 +585,7 @@ class ContinuousBatchingNoAcceleratorTest(unittest.TestCase):
         ):
             # Verify patches work
             self.assertFalse(torch.cuda.is_available())
-            self.assertFalse(is_torch_xpu_available())
+            self.assertFalse(transformers_utils.is_torch_xpu_available())
             self.assertFalse(torch.backends.mps.is_available())
 
             tokenizer, model = get_tokenizer_and_model(model_id, "sdpa", "cpu")

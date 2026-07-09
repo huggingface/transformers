@@ -18,7 +18,8 @@ from enum import IntEnum
 
 import torch
 
-from ...utils import is_psutil_available, is_torch_xpu_available
+from ... import utils
+from ...utils import is_psutil_available
 from ...utils.logging import logging
 
 
@@ -50,7 +51,7 @@ def get_device_and_memory_breakdown() -> tuple[torch.device, int, int, int]:
         free_memory, total_memory = torch.cuda.mem_get_info(device)
         reserved_memory = torch.cuda.memory_reserved(device)
         allocated_memory = total_memory - free_memory
-    elif is_torch_xpu_available():
+    elif utils.is_torch_xpu_available():
         device = torch.device("xpu")
         torch.xpu.empty_cache()
         torch.xpu.synchronize()
