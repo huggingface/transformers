@@ -3,7 +3,7 @@ name: Build docker images (scheduled)
 on:
   push:
     branches:
-      - exporter-tests-cpu-only
+      - build_ci_docker_image*
   repository_dispatch:
   workflow_dispatch:
   workflow_call:
