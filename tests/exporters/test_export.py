@@ -524,7 +524,6 @@ class ExportTesterMixin:
     # ──────────────────── ExecuTorch tests ───────────────────────
 
     @DYNAMIC_EXPORT_PARAMS
-    @slow
     @require_non_gpu
     @require_executorch
     @pytest.mark.executorch_export_test
@@ -650,7 +649,6 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
     # ──────────────────── ExecuTorch tests ───────────────────────
 
     @DYNAMIC_EXPORT_PARAMS
-    @slow
     @require_non_gpu
     @require_executorch
     @pytest.mark.executorch_export_test
