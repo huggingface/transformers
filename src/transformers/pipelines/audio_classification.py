@@ -185,9 +185,12 @@ class AudioClassificationPipeline(Pipeline):
 
         if is_torchcodec_available():
             import torch
-            import torchcodec
+            try:
+                import torchcodec
+            except (ImportError, OSError):
+                torchcodec = None
 
-            if isinstance(inputs, torchcodec.decoders.AudioDecoder):
+            if torchcodec is not None and isinstance(inputs, torchcodec.decoders.AudioDecoder):
                 _audio_samples = inputs.get_all_samples()
                 _array = _audio_samples.data
                 inputs = {"array": _array, "sampling_rate": _audio_samples.sample_rate}

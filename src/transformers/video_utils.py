@@ -590,7 +590,13 @@ def read_video_torchcodec(
     """
     # Lazy import torchcodec
     requires_backends(read_video_torchcodec, ["torchcodec"])
-    from torchcodec.decoders import VideoDecoder
+    try:
+        from torchcodec.decoders import VideoDecoder
+    except (ImportError, OSError) as e:
+        raise ImportError(
+            "torchcodec is installed but cannot be imported. This may be due to missing native dependencies. "
+            f"Original error: {e}"
+        ) from e
 
     # VideoDecoder expects a string for device, default to "cpu" if None
 
