@@ -609,7 +609,6 @@ class TmlTextModel(TmlPreTrainedModel):
         )
         self.norm = TmlRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.embed_norm = TmlRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.embedding_multiplier = config.embedding_multiplier
         self.gradient_checkpointing = False
         self.post_init()
 
@@ -627,7 +626,7 @@ class TmlTextModel(TmlPreTrainedModel):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
         if inputs_embeds is None:
-            inputs_embeds = self.embed_tokens(input_ids) / self.embedding_multiplier
+            inputs_embeds = self.embed_tokens(input_ids)
 
         if self.embed_norm is not None:
             inputs_embeds = self.embed_norm(inputs_embeds)
@@ -1031,7 +1030,7 @@ class TmlForConditionalGeneration(Gemma3ForConditionalGeneration, GenerationMixi
             **kwargs,
         )
 
-        hidden_states = outputs[0]
+        hidden_states = outputs[0] / self.config.text_config.logits_mup_width_multiplier
         # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
         slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
         logits = self.lm_head(hidden_states[:, slice_indices, :])

@@ -152,9 +152,7 @@ def _build_checkpoint_conversion_mapping():
             # LM
             WeightRenaming(source_patterns=r"^norm.weight", target_patterns=r"language_model.norm.weight"),
             WeightRenaming(source_patterns=r"^embed.weight", target_patterns=r"language_model.embed_tokens.weight"),
-            WeightRenaming(
-                source_patterns=r"^embed_norm.weight", target_patterns=r"language_model.embed_tokens.embed_norm.weight"
-            ),
+            WeightRenaming(source_patterns=r"^embed_norm.weight", target_patterns=r"language_model.embed_norm.weight"),
             WeightRenaming(source_patterns=r"model.layers", target_patterns=r"language_model.layers"),
             # MoE and MLP
             WeightConverter(
