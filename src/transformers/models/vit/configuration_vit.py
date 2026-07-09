@@ -66,6 +66,14 @@ class ViTConfig(PreTrainedConfig):
 
     def __post_init__(self, **kwargs):
         self.pooler_output_size = self.pooler_output_size if self.pooler_output_size else self.hidden_size
+        if not 0 <= self.hidden_dropout_prob <= 1:
+            raise ValueError(
+                f"`hidden_dropout_prob` must be in the range [0, 1], got {self.hidden_dropout_prob}."
+            )
+        if not 0 <= self.attention_probs_dropout_prob <= 1:
+            raise ValueError(
+                f"`attention_probs_dropout_prob` must be in the range [0, 1], got {self.attention_probs_dropout_prob}."
+            )
         super().__post_init__(**kwargs)
 
 
