@@ -337,6 +337,34 @@ GGUF_CONFIG_MAPPING = {
         "vocab_size": "vocab_size",
         "expert_gating_func": "scoring_func",
     },
+    "deepseek2": {
+        "context_length": "max_position_embeddings",
+        "block_count": "num_hidden_layers",
+        "feed_forward_length": "intermediate_size",
+        "embedding_length": "hidden_size",
+        "rope.dimension_count": "qk_rope_head_dim",
+        "rope.freq_base": "rope_theta",
+        "attention.head_count": "num_attention_heads",
+        # NOTE: `attention.head_count_kv` is intentionally not mapped. llama.cpp stores it as 1 for
+        # DeepSeek's MLA (multi-head latent attention, converted to MQA), while the transformers model
+        # expects `num_key_value_heads == num_attention_heads`. This is fixed up in `load_gguf_checkpoint`.
+        # NOTE: `attention.value_length_mla`/`attention.key_length_mla` carry the MLA head dims, while
+        # `attention.key_length`/`attention.value_length` encode `kv_lora_rank (+ qk_rope)` and are not used.
+        "attention.value_length_mla": "v_head_dim",
+        "attention.layer_norm_rms_epsilon": "rms_norm_eps",
+        "attention.q_lora_rank": "q_lora_rank",
+        "attention.kv_lora_rank": "kv_lora_rank",
+        "vocab_size": "vocab_size",
+        "expert_count": "n_routed_experts",
+        "expert_used_count": "num_experts_per_tok",
+        "expert_shared_count": "n_shared_experts",
+        "expert_feed_forward_length": "moe_intermediate_size",
+        "expert_weights_scale": "routed_scaling_factor",
+        "expert_weights_norm": "norm_topk_prob",
+        "expert_group_count": "n_group",
+        "expert_group_used_count": "topk_group",
+        "leading_dense_block_count": "first_k_dense_replace",
+    },
 }
 
 GGUF_TOKENIZER_MAPPING = {
@@ -824,6 +852,7 @@ GGUF_TO_FAST_CONVERTERS = {
     "deci": GGUFLlamaConverter,
     "decilm": GGUFLlamaConverter,
     "minimax_m2": GGUFQwen2Converter,
+    "deepseek_v3": GGUFGPTConverter,
 }
 
 
