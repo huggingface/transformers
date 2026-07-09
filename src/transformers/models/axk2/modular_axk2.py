@@ -60,7 +60,7 @@ from ..llama.modeling_llama import (
     LlamaRotaryEmbedding,
     eager_attention_forward,
 )
-from .configuration_AXK2 import AXK2Config
+from .configuration_axk2 import AXK2Config
 
 
 logger = logging.get_logger(__name__)

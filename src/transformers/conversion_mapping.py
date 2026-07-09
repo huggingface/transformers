@@ -41,6 +41,8 @@ if TYPE_CHECKING:
 
 
 _MODEL_TO_CONVERSION_PATTERN = {
+    # Checkpoints exported before the snake_case rename ship `model_type: "AXK2"`.
+    "AXK2": "axk2",
     # Mixtral-style MoE
     "minimax": "mixtral",
     "minimax_m2": "mixtral",
@@ -234,7 +236,7 @@ def _build_checkpoint_conversion_mapping():
         "GPTNeoXForCausalLM": [
             WeightRenaming(source_patterns=r"^embed_out\.", target_patterns="lm_head."),
         ],
-        "AXK2": [
+        "axk2": [
             # The released A.X-K2 checkpoint fuses the attention output gate into `q_b_proj` (vLLM layout):
             # a block-diagonal `[num_heads * (qk_head_dim + v_head_dim), 2 * q_lora_rank]` matrix. Split it
             # back into the canonical `q_b_proj` (post-norm -> query) + `linear_gate` (pre-norm -> gate) at

@@ -18,7 +18,6 @@ from ..utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .AXK2 import *
     from .afmoe import *
     from .aimv2 import *
     from .albert import *
@@ -31,6 +30,7 @@ if TYPE_CHECKING:
     from .audioflamingo3 import *
     from .auto import *
     from .autoformer import *
+    from .axk2 import *
     from .aya_vision import *
     from .bamba import *
     from .bark import *

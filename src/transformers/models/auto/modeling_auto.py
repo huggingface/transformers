@@ -41,7 +41,6 @@ logger = logging.get_logger(__name__)
 MODEL_MAPPING_NAMES = OrderedDict(
     [
         # Base model mapping
-        ("AXK2", "AXK2Model"),
         ("afmoe", "AfmoeModel"),
         ("aimv2", "Aimv2Model"),
         ("aimv2_vision_model", "Aimv2VisionModel"),
@@ -56,6 +55,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("audioflamingo3", "AudioFlamingo3Model"),
         ("audioflamingo3_encoder", "AudioFlamingo3Encoder"),
         ("autoformer", "AutoformerModel"),
+        ("axk2", "AXK2Model"),
         ("aya_vision", "AyaVisionModel"),
         ("bamba", "BambaModel"),
         ("bark", "BarkModel"),
@@ -671,11 +671,11 @@ MODEL_FOR_PRETRAINING_MAPPING_NAMES = OrderedDict(
 MODEL_FOR_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
     [
         # Model for Causal LM mapping
-        ("AXK2", "AXK2ForCausalLM"),
         ("afmoe", "AfmoeForCausalLM"),
         ("apertus", "ApertusForCausalLM"),
         ("arcee", "ArceeForCausalLM"),
         ("aria_text", "AriaTextForCausalLM"),
+        ("axk2", "AXK2ForCausalLM"),
         ("bamba", "BambaForCausalLM"),
         ("bart", "BartForCausalLM"),
         ("bert", "BertLMHeadModel"),
@@ -1344,9 +1344,9 @@ MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING_NAMES = OrderedDict(
 MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
     [
         # Model for Sequence Classification mapping
-        ("AXK2", "AXK2ForSequenceClassification"),
         ("albert", "AlbertForSequenceClassification"),
         ("arcee", "ArceeForSequenceClassification"),
+        ("axk2", "AXK2ForSequenceClassification"),
         ("bart", "BartForSequenceClassification"),
         ("bert", "BertForSequenceClassification"),
         ("big_bird", "BigBirdForSequenceClassification"),
@@ -1577,10 +1577,10 @@ MODEL_FOR_DOCUMENT_QUESTION_ANSWERING_MAPPING_NAMES = OrderedDict(
 MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
     [
         # Model for Token Classification mapping
-        ("AXK2", "AXK2ForTokenClassification"),
         ("albert", "AlbertForTokenClassification"),
         ("apertus", "ApertusForTokenClassification"),
         ("arcee", "ArceeForTokenClassification"),
+        ("axk2", "AXK2ForTokenClassification"),
         ("bert", "BertForTokenClassification"),
         ("big_bird", "BigBirdForTokenClassification"),
         ("biogpt", "BioGptForTokenClassification"),

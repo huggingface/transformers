@@ -134,7 +134,7 @@ class AXK2Config(PreTrainedConfig):
     >>> configuration = model.config
     ```"""
 
-    model_type = "AXK2"
+    model_type = "axk2"
     keys_to_ignore_at_inference = ["past_key_values"]
 
     base_model_tp_plan = {
