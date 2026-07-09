@@ -30,7 +30,7 @@ if TYPE_CHECKING:
     from .audioflamingo3 import *
     from .auto import *
     from .autoformer import *
-    from .AXK1 import *
+    from .axk1 import *
     from .aya_vision import *
     from .bamba import *
     from .bark import *

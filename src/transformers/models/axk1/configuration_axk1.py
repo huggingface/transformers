@@ -39,7 +39,7 @@ class AXK1Config(PreTrainedConfig):
     >>> configuration = model.config
     ```"""
 
-    model_type = "AXK1"
+    model_type = "axk1"
     keys_to_ignore_at_inference = ["past_key_values"]
 
     base_model_tp_plan = {

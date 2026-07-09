@@ -18,8 +18,8 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_AXK1 import *
-    from .modeling_AXK1 import *
+    from .configuration_axk1 import *
+    from .modeling_axk1 import *
 else:
     import sys
 
