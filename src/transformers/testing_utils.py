@@ -1061,6 +1061,14 @@ def require_non_xpu(test_case):
     return unittest.skipUnless(torch_device != "xpu", "test requires a non-XPU")(test_case)
 
 
+def require_non_gpu(test_case):
+    """
+    Decorator marking a test that should be skipped when a CUDA GPU is used (e.g. tests that are meant to run on CPU
+    runners only).
+    """
+    return unittest.skipUnless(torch_device != "cuda", "test requires a non-GPU (CPU) device")(test_case)
+
+
 def require_torch_multi_xpu(test_case):
     """
     Decorator marking a test that requires a multi-XPU setup (in PyTorch). These tests are skipped on a machine without
