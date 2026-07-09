@@ -15,6 +15,7 @@
 import unittest
 
 from transformers import PPChart2TableProcessor
+from transformers.models.pp_chart2table import PPChart2TableImageProcessor
 from transformers.testing_utils import require_vision
 
 from ...test_processing_common import ProcessorTesterMixin
@@ -24,6 +25,11 @@ from ...test_processing_common import ProcessorTesterMixin
 class PPChart2TableProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = PPChart2TableProcessor
     tiny_model_id = "hf-internal-testing/tiny-processor-pp_chart2table"
+
+    @classmethod
+    def _setup_image_processor(cls):
+        # Default image processor has model_input_names=['pixel_values'] (no original_image_size)
+        return PPChart2TableImageProcessor()
 
     def test_ocr_queries(self):
         processor = self.get_processor()
@@ -59,12 +65,6 @@ class PPChart2TableProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         )
 
         self.assertLessEqual(inputs[self.images_input_name][0][0].mean(), 0)
-
-    @unittest.skip(
-        reason="PPChart2TableImageProcessor declares 'original_image_size' in model_input_names but does not return it"
-    )
-    def test_model_input_names(self):
-        pass
 
     @unittest.skip(
         reason="PPChart2Table relies on a heavily predetermined input format; chat template usage is not intended as expected"
