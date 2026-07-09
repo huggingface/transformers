@@ -52,7 +52,9 @@ sys.path.append(os.path.join(_parent_dir, "utils"))
 from fetch_hub_objects_for_ci import url_to_local_path  # noqa: E402
 
 
-COCO_CATS_IMAGE_URL = "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg"
+COCO_CATS_IMAGE_URL = (
+    "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg"
+)
 
 
 def load_test_image(url: str):
