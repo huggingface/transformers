@@ -1,0 +1,735 @@
+# =============================================================================
+# .github/workflows/pr-ci_dynamic_caller_example.yml
+#
+# Caller workflow — equivalent of create_circleci_config.py's
+# create_circleci_config() function + the CircleCI continuation trigger.
+#
+# Structure:
+#   1. test-preparation  →  runs tests_fetcher, uploads {job_name}_test_list
+#                           artifacts (replaces CircleCI workspace + pipeline
+#                           parameters).
+#   2. Per-job calls     →  one `uses:` block per CircleCIJob instance,
+#                           each mapping its fields to reusable_test_job inputs.
+#                           Each job is gated on whether its test-list artifact
+#                           is non-empty (mirrors the
+#                           `os.path.isfile(f"{job_name}_test_list.txt")` check
+#                           in create_circleci_config()).
+#   3. collection        →  waits for all test jobs, aggregates reports
+#                           (replaces EmptyJob / collection_job).
+# =============================================================================
+
+name: CI — Dynamic Test Suite
+
+on:
+  push:
+    branches:
+      - main
+  workflow_call:
+
+jobs:
+  # ===========================================================================
+  # Stage 1 — Test preparation
+  # Equivalent of the CircleCI "setup" workflow that calls the continuation API.
+  # Runs tests_fetcher to produce per-job test list files, then uploads each
+  # as a named artifact consumed by the reusable workflow.
+  # ===========================================================================
+  test-preparation:
+    name: "Test preparation (fetcher)"
+    runs-on:
+      group: aws-m8i-l-cache
+
+    container:
+      image: huggingface/transformers-quality
+    env:
+      TRANSFORMERSCI_OTEL_DEBUG: "1"
+      TRANSFORMERS_TEST_OTEL_PR: ${{ github.event.pull_request.number }}
+    outputs:
+      # Expose which jobs have a non-empty test list (mirrors the
+      # `os.path.isfile(f"{job_name}_test_list.txt")` gate in create_circleci_config)
+      run_tests_torch:           ${{ steps.check.outputs.run_tests_torch }}
+      run_tests_generate:        ${{ steps.check.outputs.run_tests_generate }}
+      run_tests_tokenization:    ${{ steps.check.outputs.run_tests_tokenization }}
+      run_tests_processors:      ${{ steps.check.outputs.run_tests_processors }}
+      run_pipelines_torch:       ${{ steps.check.outputs.run_pipelines_torch }}
+      run_tests_custom_tokenizers: ${{ steps.check.outputs.run_tests_custom_tokenizers }}
+      run_examples_torch:        ${{ steps.check.outputs.run_examples_torch }}
+      run_tests_exotic_models:   ${{ steps.check.outputs.run_tests_exotic_models }}
+      run_tests_repo_utils:      ${{ steps.check.outputs.run_tests_repo_utils }}
+      run_tests_non_model:       ${{ steps.check.outputs.run_tests_non_model }}
+      run_tests_training_ci:     ${{ steps.check.outputs.run_tests_training_ci }}
+      run_tests_tensor_parallel_ci:     ${{ steps.check.outputs.run_tests_tensor_parallel_ci }}
+      run_tests_fsdp_ci:         ${{ steps.check.outputs.run_tests_fsdp_ci }}
+      run_tests_peft_integration:   ${{ steps.check.outputs.run_tests_peft_integration }}
+      # Mirrors CircleCIJob.__post_init__: appends ':dev' when the commit
+      # message contains "[build-ci-image]" or equals "dev-ci".
+      use_dev_image:             ${{ steps.dev_image.outputs.use_dev_image }}
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        with:
+          # full clone - very slow! But we need this to compute the set of files to run.
+          # TODO: Check if CircleCI is doing the same.
+          fetch-depth: 0
+
+      - name: Resolve PR number for merge_group events
+        if: github.event_name == 'merge_group'
+        run: |
+          echo "Branch: $GITHUB_REF"
+          PR_NUM=$(echo "$GITHUB_REF" | grep -oP '(?<=pr-)\d+' || echo "")
+          echo "Extracted PR number: $PR_NUM"
+          echo "TRANSFORMERS_TEST_OTEL_PR=$PR_NUM" >> "$GITHUB_ENV"
+
+      - name: Debug
+        run: |
+          uv pip install --prerelease=allow -U -e .
+          uv pip install --prerelease=allow 'transformers-ci[otel] @ git+https://github.com/huggingface/transformers-ci@main'
+          echo $(pwd)
+          ls -la
+          # We need this, otherwise `tests_fetcher.py` below will fail with `SHA could not be resolved, git returned: b''` when access ``repo.head.commit`.
+          # (even git log -n X will fail without this command)
+          git config --global --add safe.directory '*'
+          git log -n 5
+
+      - name: Ping OTEL collector
+        run: |
+          configure-ci-otel \
+            --protocol http \
+            --service-name "pytest-observability" \
+            --otlp-endpoint "$OTEL_EXPORTER_OTLP_ENDPOINT" \
+            --staging-endpoint 10.90.52.50:5317 \
+            --staging-protocol grpc \
+            --ping-server || echo "OTEL PING WARNING configure-ci-otel --ping-server is unavailable in this environment"
+
+      # tests_fetcher.py computes which tests to run by diffing the current
+      # branch against main, so main must exist locally as a git ref.
+      - name: Fetch main branch ref
+        if: github.ref != 'refs/heads/main'
+        run: git fetch origin main:main
+
+#      # TODO: A better way to handle (some) python scripts
+#      # Discard the entire local utils/ first so that any file a contributor may
+#      # have added (but that does not exist upstream) cannot survive into CI.
+#      # Then repopulate exclusively from the upstream HuggingFace transformers
+#      # main branch, guaranteeing only canonical tooling is executed.
+#      - name: Sync utils/ from upstream HuggingFace transformers (main)
+#        run: |
+#          rm -rf utils/
+#          git fetch https://github.com/huggingface/transformers.git main
+#          git checkout FETCH_HEAD -- utils/
+
+      # Mirrors CircleCIJob.__post_init__ in create_circleci_config.py:
+      #   if "[build-ci-image]" in GIT_COMMIT_MESSAGE or GIT_COMMIT_MESSAGE == "dev-ci":
+      #       docker_image += ":dev"
+      # In CircleCI this was set via $BASH_ENV; here we emit a job output
+      # consumed by each per-job `uses:` block as the `use_dev_image` input.
+      - name: Detect dev image flag from commit message
+        id: dev_image
+        env:
+          COMMIT_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          MSG=$(git show -s --format=%s "$COMMIT_SHA")
+          echo "Commit message subject: $MSG"
+          if echo "$MSG" | grep -qF "[build-ci-image]" || [ "$MSG" = "dev-ci" ]; then
+            echo "use_dev_image=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "use_dev_image=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Run tests fetcher
+        run: |
+          uv pip install --prerelease=allow -U -e .
+          mkdir -p test_preparation
+          python utils/tests_fetcher.py | tee tests_fetched_summary.txt || true
+          python utils/tests_fetcher.py --filter_tests || true
+
+      - name: Check which jobs have tests to run
+        id: check
+        run: |
+          for job in tests_torch tests_generate tests_tokenization tests_processors \
+                     pipelines_torch tests_custom_tokenizers examples_torch \
+                     tests_exotic_models tests_repo_utils tests_non_model \
+                     tests_training_ci tests_tensor_parallel_ci tests_fsdp_ci tests_peft_integration; do
+            FILE="test_preparation/${job}_test_list.txt"
+            if [ -f "$FILE" ] && [ -s "$FILE" ]; then
+              echo "run_${job}=true" >> $GITHUB_OUTPUT
+            else
+              echo "run_${job}=false" >> $GITHUB_OUTPUT
+            fi
+          done
+
+      - name: Debug — print test list file sizes
+        run: |
+          for job in tests_torch tests_generate tests_tokenization tests_processors \
+                     pipelines_torch tests_custom_tokenizers examples_torch \
+                     tests_exotic_models tests_repo_utils tests_non_model \
+                     tests_training_ci tests_tensor_parallel_ci tests_fsdp_ci tests_peft_integration; do
+            FILE="test_preparation/${job}_test_list.txt"
+            if [ -f "$FILE" ]; then
+              echo "$FILE: $(grep -c '' "$FILE") lines"
+            else
+              echo "$FILE: not found"
+            fi
+          done
+
+      # Upload a single artifact containing all {job_name}_test_list.txt files
+      # (replaces CircleCI pipeline parameters + workspace). Each reusable job
+      # downloads this artifact and reads its own file by job_name.
+      - name: Upload test list artifacts
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+        with:
+          name: test-preparation
+          path: test_preparation/
+          retention-days: 3
+
+  # ===========================================================================
+  # Stage 1b — Quality checks
+  # Translated from check_code_quality / check_repository_consistency in
+  # .circleci/config.yml. Run in parallel with test-preparation (no dependency).
+  # ===========================================================================
+
+  check_code_quality:
+    name: "Check code quality"
+    # Self-hosted so the runner injects OTEL_EXPORTER_OTLP_ENDPOINT / OTEL_TOKEN,
+    # same as the pytest jobs and test-preparation. On GitHub-hosted runners
+    # those are absent and configure-ci-otel now fails (no silent no-op export).
+    runs-on:
+      group: aws-m8i-l-cache
+    container:
+      image: huggingface/transformers-quality
+    env:
+      TRANSFORMERS_IS_CI: "true"
+      PYTEST_TIMEOUT: 120
+      TRANSFORMERSCI_OTEL_DEBUG: "1"
+      TRANSFORMERS_TEST_OTEL_PR: ${{ github.event.pull_request.number }}
+      # Job grouping for the dashboards (the YAML job key, e.g. check_code_quality).
+      TRANSFORMERS_TEST_OTEL_SUITE: ${{ github.job }}
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+
+      - name: Resolve PR number for merge_group events
+        if: github.event_name == 'merge_group'
+        run: |
+          echo "Branch: $GITHUB_REF"
+          PR_NUM=$(echo "$GITHUB_REF" | grep -oP '(?<=pr-)\d+' || echo "")
+          echo "Extracted PR number: $PR_NUM"
+          echo "TRANSFORMERS_TEST_OTEL_PR=$PR_NUM" >> "$GITHUB_ENV"
+
+      - name: Fix git safe directory
+        run: git config --global --add safe.directory '*'
+
+#      # TODO: A better way to handle (some) python scripts
+#      # Discard the entire local utils/ first so that any file a contributor may
+#      # have added (but that does not exist upstream) cannot survive into CI.
+#      # Then repopulate exclusively from the upstream HuggingFace transformers
+#      # main branch, guaranteeing only canonical tooling is executed.
+#      - name: Sync utils/ from upstream HuggingFace transformers (main)
+#        run: |
+#          rm -rf utils/
+#          git fetch https://github.com/huggingface/transformers.git main
+#          git checkout FETCH_HEAD -- utils/
+
+      - name: Install quality dependencies
+        run: uv pip install --prerelease=allow -e ".[quality]"
+
+      - name: Install observability wrapper
+        run: uv pip install --prerelease=allow 'transformers-ci[otel] @ git+https://github.com/huggingface/transformers-ci@main'
+
+      - name: Show installed libraries and their versions
+        run: pip freeze | tee installed.txt
+
+      - name: Upload installed list
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+        with:
+          name: quality-installed
+          path: installed.txt
+          retention-days: 3
+
+      # configure-ci-otel sets up OTEL env + a TRACEPARENT, then runs the command.
+      # checkers.py (invoked by make) self-instruments via transformersci.otel.instrument,
+      # emitting one span per checker grouped under --suite. No --export-traces here
+      # (that flag is pytest-only); the spans come from the in-process tracer.
+      - name: Check code quality
+        run: |
+          # Mark the job started so it shows on the live dashboards before the
+          # first checker span arrives. report-ci-start emits only a run-start
+          # span (no checker span), so it is discoverable yet counts zero checks.
+          configure-ci-otel \
+            --suite ${{ github.job }} \
+            --service-name "pytest-observability" \
+            --protocol http \
+            --otlp-endpoint "$OTEL_EXPORTER_OTLP_ENDPOINT" \
+            --token "$OTEL_TOKEN" \
+            --staging-endpoint 10.90.52.50:5317 \
+            --staging-protocol grpc \
+            -- report-ci-start || echo "OTEL START WARNING report-ci-start is unavailable in this environment"
+
+          configure-ci-otel \
+            --suite ${{ github.job }} \
+            --service-name "pytest-observability" \
+            --protocol http \
+            --otlp-endpoint "$OTEL_EXPORTER_OTLP_ENDPOINT" \
+            --token "$OTEL_TOKEN" \
+            --staging-endpoint 10.90.52.50:5317 \
+            --staging-protocol grpc \
+            -- make check-code-quality
+
+
+  check_repository_consistency:
+    name: "Check repository consistency"
+    # Self-hosted so the runner injects OTEL_EXPORTER_OTLP_ENDPOINT / OTEL_TOKEN,
+    # same as the pytest jobs and test-preparation. On GitHub-hosted runners
+    # those are absent and configure-ci-otel now fails (no silent no-op export).
+    runs-on:
+      group: aws-m8i-l-cache
+    container:
+      image: huggingface/transformers-consistency
+    env:
+      TRANSFORMERS_IS_CI: "true"
+      PYTEST_TIMEOUT: 120
+      TRANSFORMERSCI_OTEL_DEBUG: "1"
+      TRANSFORMERS_TEST_OTEL_PR: ${{ github.event.pull_request.number }}
+      # Job grouping for the dashboards (the YAML job key, e.g. check_repository_consistency).
+      TRANSFORMERS_TEST_OTEL_SUITE: ${{ github.job }}
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        with:
+          # check_modular_conversion.py calls `git merge-base main HEAD`,
+          # which needs full history to find a common ancestor.
+          fetch-depth: 0
+
+      - name: Resolve PR number for merge_group events
+        if: github.event_name == 'merge_group'
+        run: |
+          echo "Branch: $GITHUB_REF"
+          PR_NUM=$(echo "$GITHUB_REF" | grep -oP '(?<=pr-)\d+' || echo "")
+          echo "Extracted PR number: $PR_NUM"
+          echo "TRANSFORMERS_TEST_OTEL_PR=$PR_NUM" >> "$GITHUB_ENV"
+
+      # Same fix as test-preparation: git tools called by check_modular_conversion.py
+      # fail with "dubious ownership" when the workspace dir is owned by a different UID.
+      - name: Fix git safe directory
+        run: git config --global --add safe.directory '*'
+
+      # check_modular_conversion.py calls `git merge-base main HEAD`, which requires
+      # the main ref to exist locally — same reason test-preparation fetches it.
+      - name: Fetch main branch ref
+        if: github.ref != 'refs/heads/main'
+        run: git fetch origin main:main
+
+#      # TODO: A better way to handle (some) python scripts
+#      # Discard the entire local utils/ first so that any file a contributor may
+#      # have added (but that does not exist upstream) cannot survive into CI.
+#      # Then repopulate exclusively from the upstream HuggingFace transformers
+#      # main branch, guaranteeing only canonical tooling is executed.
+#      - name: Sync utils/ from upstream HuggingFace transformers (main)
+#        run: |
+#          rm -rf utils/
+#          git fetch https://github.com/huggingface/transformers.git main
+#          git checkout FETCH_HEAD -- utils/
+
+      - name: Install system dependencies
+        run: apt-get update && apt-get install -y make
+
+      - name: Install quality dependencies
+        run: uv pip install --prerelease=allow -e ".[quality]"
+
+      - name: Install observability wrapper
+        run: uv pip install --prerelease=allow 'transformers-ci[otel] @ git+https://github.com/huggingface/transformers-ci@main'
+
+      - name: Show installed libraries and their versions
+        run: pip freeze | tee installed.txt
+
+      - name: Upload installed list
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+        with:
+          name: consistency-installed
+          path: installed.txt
+          retention-days: 3
+
+      # See check_code_quality: checkers.py self-instruments; spans are grouped
+      # under --suite and land on the same dashboards as the pytest jobs.
+      - name: Check repository consistency
+        run: |
+          # Mark the job started so it shows on the live dashboards before the
+          # first checker span arrives. report-ci-start emits only a run-start
+          # span (no checker span), so it is discoverable yet counts zero checks.
+          configure-ci-otel \
+            --suite ${{ github.job }} \
+            --service-name "pytest-observability" \
+            --protocol http \
+            --otlp-endpoint "$OTEL_EXPORTER_OTLP_ENDPOINT" \
+            --token "$OTEL_TOKEN" \
+            --staging-endpoint 10.90.52.50:5317 \
+            --staging-protocol grpc \
+            -- report-ci-start || echo "OTEL START WARNING report-ci-start is unavailable in this environment"
+
+          configure-ci-otel \
+            --suite ${{ github.job }} \
+            --service-name "pytest-observability" \
+            --protocol http \
+            --otlp-endpoint "$OTEL_EXPORTER_OTLP_ENDPOINT" \
+            --token "$OTEL_TOKEN" \
+            --staging-endpoint 10.90.52.50:5317 \
+            --staging-protocol grpc \
+            -- make check-repository-consistency
+
+      - name: "Test import with all backends (torch + PIL + torchvision)"
+        run: python -c "from transformers import *" || (echo 'import failed with all backends. Fix unprotected imports!!'; exit 1)
+
+      - name: "Test import with torch only (no PIL, no torchvision)"
+        run: |
+          uv pip uninstall Pillow torchvision -q
+          python -c "from transformers import *" || (echo 'import failed with torch only (no PIL). Fix unprotected imports!!'; exit 1)
+          uv pip install --prerelease=allow -e ".[quality]" -q
+
+      - name: "Test import with PIL only (no torch, no torchvision)"
+        run: |
+          uv pip uninstall torch torchvision torchaudio -q
+          python -c "from transformers import *" || (echo 'import failed with PIL only (no torch). Fix unprotected imports!!'; exit 1)
+          uv pip install --prerelease=allow -e ".[quality]" -q
+
+      - name: "Test import with torch + PIL, no torchvision"
+        run: |
+          uv pip uninstall torchvision -q
+          python -c "from transformers import *" || (echo 'import failed with torch+PIL but no torchvision. Fix unprotected imports!!'; exit 1)
+          uv pip install --prerelease=allow -e ".[quality]" -q
+
+  # ===========================================================================
+  # Stage 2 — Test jobs
+  # One `uses:` block per CircleCIJob instance.
+  # Each block is a 1:1 mapping of CircleCIJob constructor arguments.
+  # ===========================================================================
+
+  # Origin: torch_job in .circleci/create_circleci_config.py
+  tests_torch:
+    needs: [test-preparation, check_code_quality]
+    if: needs.test-preparation.outputs.run_tests_torch == 'true'
+    uses: ./.github/workflows/pr-ci_reusable_test_job.yml
+    with:
+      job_name:          "tests_torch"
+      docker_image:      "huggingface/transformers-torch-light"
+      parallelism:       8
+      marker:            "not (generate or is_training_test or is_tensor_parallel_test or is_fsdp_test)"
+      use_dev_image:     ${{ needs.test-preparation.outputs.use_dev_image == 'true' }}
+    secrets: inherit
+      # install_steps, pytest_num_workers, etc. → all defaults
+
+  # Origin: generate_job in .circleci/create_circleci_config.py
+  tests_generate:
+    needs: [test-preparation, check_code_quality]
+    if: needs.test-preparation.outputs.run_tests_generate == 'true'
+    uses: ./.github/workflows/pr-ci_reusable_test_job.yml
+    with:
+      job_name:          "tests_generate"
+      docker_image:      "huggingface/transformers-torch-light"
+      parallelism:       8
+      marker:            "generate"
+      install_steps:     "uv pip install --prerelease=allow -e ."
+      use_dev_image:     ${{ needs.test-preparation.outputs.use_dev_image == 'true' }}
+    secrets: inherit
+
+  # Origin: tokenization_job in .circleci/create_circleci_config.py
+  tests_tokenization:
+    needs: [test-preparation, check_code_quality]
+    if: needs.test-preparation.outputs.run_tests_tokenization == 'true'
+    uses: ./.github/workflows/pr-ci_reusable_test_job.yml
+    with:
+      job_name:          "tests_tokenization"
+      docker_image:      "huggingface/transformers-torch-light"
+      parallelism:       8
+      use_dev_image:     ${{ needs.test-preparation.outputs.use_dev_image == 'true' }}
+    secrets: inherit
+
+  # Origin: processor_job in .circleci/create_circleci_config.py
+  tests_processors:
+    needs: [test-preparation, check_code_quality]
+    if: needs.test-preparation.outputs.run_tests_processors == 'true'
+    uses: ./.github/workflows/pr-ci_reusable_test_job.yml
+    with:
+      job_name:          "tests_processors"
+      docker_image:      "huggingface/transformers-torch-light"
+      parallelism:       8
+      use_dev_image:     ${{ needs.test-preparation.outputs.use_dev_image == 'true' }}
+    secrets: inherit
+
+  # Origin: pipelines_torch_job in .circleci/create_circleci_config.py
+  # NOTE: job_name has no "tests_" prefix; report_name must be set explicitly
+  #       → "tests_pipelines_torch" (mirrors --make-reports=tests_{self.name}).
+  pipelines_torch:
+    needs: [test-preparation, check_code_quality]
+    if: needs.test-preparation.outputs.run_pipelines_torch == 'true'
+    uses: ./.github/workflows/pr-ci_reusable_test_job.yml
+    with:
+      job_name:            "pipelines_torch"
+      report_name:         "tests_pipelines_torch"
+      docker_image:        "huggingface/transformers-torch-light"
+      parallelism:         8
+      marker:              "is_pipeline_test"
+      run_pipeline_tests:  true
+      use_dev_image:       ${{ needs.test-preparation.outputs.use_dev_image == 'true' }}
+    secrets: inherit
+
+  # Origin: custom_tokenizers_job in .circleci/create_circleci_config.py
+  tests_custom_tokenizers:
+    needs: [test-preparation, check_code_quality]
+    if: needs.test-preparation.outputs.run_tests_custom_tokenizers == 'true'
+    uses: ./.github/workflows/pr-ci_reusable_test_job.yml
+    with:
+      job_name:               "tests_custom_tokenizers"
+      docker_image:           "huggingface/transformers-custom-tokenizers"
+      run_custom_tokenizers:  true
+      use_dev_image:          ${{ needs.test-preparation.outputs.use_dev_image == 'true' }}
+    secrets: inherit
+
+  # Origin: examples_torch_job in .circleci/create_circleci_config.py
+  # NOTE: job_name has no "tests_" prefix ("examples" in name).
+  examples_torch:
+    needs: [test-preparation, check_code_quality]
+    if: needs.test-preparation.outputs.run_examples_torch == 'true'
+    uses: ./.github/workflows/pr-ci_reusable_test_job.yml
+    with:
+      job_name:           "examples_torch"
+      docker_image:       "huggingface/transformers-examples-torch"
+      install_steps:      "uv pip install --prerelease=allow -e . && uv pip install --prerelease=allow -r examples/pytorch/_tests_requirements.txt"
+      pytest_num_workers: 4
+      omp_num_threads:    8
+      use_dev_image:      ${{ needs.test-preparation.outputs.use_dev_image == 'true' }}
+    secrets: inherit
+
+  # Origin: exotic_models_job in .circleci/create_circleci_config.py
+  tests_exotic_models:
+    needs: [test-preparation, check_code_quality]
+    if: needs.test-preparation.outputs.run_tests_exotic_models == 'true'
+    uses: ./.github/workflows/pr-ci_reusable_test_job.yml
+    with:
+      job_name:              "tests_exotic_models"
+      docker_image:          "huggingface/transformers-exotic-models"
+      parallelism:           8
+      pytest_extra_options:  "--durations=100"
+      use_dev_image:         ${{ needs.test-preparation.outputs.use_dev_image == 'true' }}
+    secrets: inherit
+
+  # Origin: repo_utils_job in .circleci/create_circleci_config.py
+  tests_repo_utils:
+    needs: [test-preparation, check_code_quality]
+    if: needs.test-preparation.outputs.run_tests_repo_utils == 'true'
+    uses: ./.github/workflows/pr-ci_reusable_test_job.yml
+    with:
+      job_name:           "tests_repo_utils"
+      docker_image:       "huggingface/transformers-consistency"
+      pytest_num_workers: 4
+      use_dev_image:      ${{ needs.test-preparation.outputs.use_dev_image == 'true' }}
+    secrets: inherit
+
+  # Origin: non_model_job in .circleci/create_circleci_config.py
+  tests_non_model:
+    needs: [test-preparation, check_code_quality]
+    if: needs.test-preparation.outputs.run_tests_non_model == 'true'
+    uses: ./.github/workflows/pr-ci_reusable_test_job.yml
+    with:
+      job_name:          "tests_non_model"
+      docker_image:      "huggingface/transformers-torch-light"
+      parallelism:       8
+      install_steps:     "uv pip install --prerelease=allow -e .[serving]"
+      marker:            "not generate"
+      use_dev_image:     ${{ needs.test-preparation.outputs.use_dev_image == 'true' }}
+    secrets: inherit
+
+  # Origin: training_ci_job in .circleci/create_circleci_config.py
+  tests_training_ci:
+    needs: [test-preparation, check_code_quality]
+    if: needs.test-preparation.outputs.run_tests_training_ci == 'true'
+    uses: ./.github/workflows/pr-ci_reusable_test_job.yml
+    with:
+      job_name:            "tests_training_ci"
+      docker_image:        "huggingface/transformers-torch-light"
+      parallelism:         8
+      install_steps:       "uv pip install --prerelease=allow -e ."
+      marker:              "is_training_test"
+      run_training_tests:  true
+      use_dev_image:       ${{ needs.test-preparation.outputs.use_dev_image == 'true' }}
+    secrets: inherit
+
+  # Origin: tensor_parallel_ci_job in .circleci/create_circleci_config.py
+  tests_tensor_parallel_ci:
+    needs: [test-preparation, check_code_quality]
+    if: needs.test-preparation.outputs.run_tests_tensor_parallel_ci == 'true'
+    uses: ./.github/workflows/pr-ci_reusable_test_job.yml
+    with:
+      job_name:            "tests_tensor_parallel_ci"
+      docker_image:        "huggingface/transformers-torch-light"
+      parallelism:         8
+      pytest_num_workers:  8
+      install_steps:       "uv pip install --prerelease=allow -e . && uv pip install --prerelease=allow torchao"
+      marker:              "is_tensor_parallel_test"
+      run_tensor_parallel_tests:  true
+      use_dev_image:       ${{ needs.test-preparation.outputs.use_dev_image == 'true' }}
+    secrets: inherit
+
+  # Origin: fsdp_ci_job in .circleci/create_circleci_config.py
+  tests_fsdp_ci:
+    needs: [test-preparation, check_code_quality]
+    if: needs.test-preparation.outputs.run_tests_fsdp_ci == 'true'
+    uses: ./.github/workflows/pr-ci_reusable_test_job.yml
+    with:
+      job_name:            "tests_fsdp_ci"
+      docker_image:        "huggingface/transformers-torch-light"
+      parallelism:         8
+      install_steps:       "uv pip install --prerelease=allow -e ."
+      marker:              "is_fsdp_test"
+      run_fsdp_tests:      true
+      use_dev_image:       ${{ needs.test-preparation.outputs.use_dev_image == 'true' }}
+    secrets: inherit
+
+  # New: PEFT integration tests
+  tests_peft_integration:
+    needs: [test-preparation, check_code_quality]
+    if: needs.test-preparation.outputs.run_tests_peft_integration == 'true'
+    uses: ./.github/workflows/pr-ci_reusable_test_job.yml
+    with:
+      job_name:            "tests_peft_integration"
+      docker_image:        "huggingface/transformers-torch-light"
+      parallelism:         8
+      install_steps:       "uv pip install --prerelease=allow . && uv pip install --prerelease=allow peft"
+      use_dev_image:       ${{ needs.test-preparation.outputs.use_dev_image == 'true' }}
+    secrets: inherit
+
+  # ---------------------------------------------------------------------------
+  # ===========================================================================
+  # Stage 3 — Collection (equivalent of EmptyJob with job_name="collection_job")
+  # Waits for all test jobs, aggregates test reports.
+  # Mirrors: poll CircleCI workflow API + process_circleci_workflow_test_reports.py
+  # ===========================================================================
+  collection:
+    name: "Collect and aggregate test results"
+    runs-on: ubuntu-22.04
+    # Wait for all test jobs regardless of their outcome.
+    needs:
+      - tests_torch
+      - tests_generate
+      - tests_tokenization
+      - tests_processors
+      - pipelines_torch
+      - tests_custom_tokenizers
+      - examples_torch
+      - tests_exotic_models
+      - tests_repo_utils
+      - tests_non_model
+      - tests_training_ci
+      - tests_tensor_parallel_ci
+      - tests_fsdp_ci
+      - tests_peft_integration
+    if: always()
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+
+      - name: Download all test artifacts
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c  # v8.0.1
+        with:
+          path: outputs/
+
+#      # TODO: A better way to handle (some) python scripts
+#      # Discard the entire local utils/ first so that any file a contributor may
+#      # have added (but that does not exist upstream) cannot survive into CI.
+#      # Then repopulate exclusively from the upstream HuggingFace transformers
+#      # main branch, guaranteeing only canonical tooling is executed.
+#      - name: Sync utils/ from upstream HuggingFace transformers (main)
+#        run: |
+#          rm -rf utils/
+#          git fetch https://github.com/huggingface/transformers.git main
+#          git checkout FETCH_HEAD -- utils/
+
+      - name: Aggregate test reports
+        # Equivalent of process_circleci_workflow_test_reports.py
+        # Script path updated: .circleci/ → utils/ (or wherever it lives in GHA)
+        run: python3 utils/process_circleci_workflow_test_reports.py || true
+
+      - name: Upload aggregated results
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+        with:
+          name: aggregated-test-results
+          path: outputs/
+          retention-days: 30
+
+  # ===========================================================================
+  # Stage 4 — Sentinel (single required check for branch protection)
+  #
+  # This is the ONLY job you need to add to your branch protection rules:
+  #   "pr-ci / PR CI status"
+  #
+  # Why a separate job instead of reusing `collection`:
+  #   - `collection` always succeeds (it just aggregates artefacts).
+  #   - This job explicitly fails when any upstream job failed or was cancelled,
+  #     and passes when all jobs either succeeded or were intentionally skipped
+  #     (skipped = the test-list was empty for that job, which is expected and OK).
+  #
+  # Coverage:
+  #   - test-preparation, check_code_quality, check_repository_consistency  (Stage 1)
+  #   - all 14 conditional test jobs                                         (Stage 2)
+  #   - collection                                                            (Stage 3)
+  # ===========================================================================
+  ci_passed:
+    name: "PR CI status"
+    runs-on: ubuntu-22.04
+    needs:
+      # Stage 1
+      - test-preparation
+      - check_code_quality
+      - check_repository_consistency
+      # Stage 2 — test jobs (may be skipped when test list is empty; that is OK)
+      - tests_torch
+      - tests_generate
+      - tests_tokenization
+      - tests_processors
+      - pipelines_torch
+      - tests_custom_tokenizers
+      - examples_torch
+      - tests_exotic_models
+      - tests_repo_utils
+      - tests_non_model
+      - tests_training_ci
+      - tests_tensor_parallel_ci
+      - tests_fsdp_ci
+      - tests_peft_integration
+      # Stage 3
+      - collection
+    # Run even when upstream jobs fail so the check is always reported to GitHub.
+    # Without `if: always()` this job would be skipped on upstream failure, and
+    # GitHub treats a missing/skipped required check as "passing" — defeating the
+    # whole purpose.
+    if: always()
+    steps:
+      - name: Decide pass or fail
+        env:
+          # Pass the expression result through an env var instead of interpolating
+          # it directly into the shell script, which would be a script-injection risk.
+          # Acceptable values: success, skipped.
+          # Unacceptable values: failure, cancelled.
+          # Collects each job's result into one space-separated string, e.g. "success skipped failure success".
+          NEEDS_RESULTS: ${{ join(needs.*.result, ' ') }}
+        run: |
+          echo "Upstream job results: $NEEDS_RESULTS"
+
+          failed=false
+          # Unquoted — intentional: bash splits on spaces, iterating one result word at a time.
+          for result in $NEEDS_RESULTS; do
+            case "$result" in
+              success|skipped)
+                # Both are fine — skipped means the test list was empty for that job.
+                ;;
+              failure|cancelled)
+                echo "  ✗ at least one job reported: $result"
+                failed=true
+                ;;
+              *)
+                echo "  ? unexpected result value: $result"
+                failed=true
+                ;;
+            esac
+          done
+
+          if [[ "$failed" == "true" ]]; then
+            echo "CI failed — see the jobs above for details."
+            exit 1
+          fi
+
+          echo "All jobs passed or were intentionally skipped. CI is green."

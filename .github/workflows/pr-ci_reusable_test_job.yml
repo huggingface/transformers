@@ -1,0 +1,743 @@
+# =============================================================================
+# .github/workflows/pr-ci_reusable_test_job.yml
+#
+# Reusable workflow: runs a single Transformers test-suite job.
+# Translated from CircleCIJob / create_circleci_config.py.
+#
+# Structural mapping summary:
+#
+#  CircleCI concept                  │ GitHub Actions equivalent
+#  ──────────────────────────────────┼──────────────────────────────────────────
+#  CircleCIJob.docker_image          │ jobs.run.container.image
+#  CircleCIJob.resource_class        │ jobs.run.runs-on (self-hosted label)
+#  CircleCIJob.parallelism           │ jobs.setup → matrix.shard_index
+#  circleci tests split --timings    │ Python-based deterministic chunk split
+#  CircleCIJob.install_steps         │ "Install dependencies" step
+#  CircleCIJob.marker                │ -m flag in pytest command
+#  CircleCIJob.pytest_num_workers    │ -n flag in pytest command (xdist)
+#  CircleCIJob.pytest_options        │ inputs.pytest_extra_options (pre-serialized)
+#  CircleCIJob.command_timeout       │ `timeout` wrapper around pytest
+#  CircleCIJob.additional_env        │ per-field typed inputs (see section below)
+#  pipeline.parameters.*_test_list   │ actions/download-artifact
+#  attach_workspace                  │ actions/download-artifact
+#  store_test_results / artifacts    │ actions/upload-artifact
+#  CIRCLE_PULL_REQUEST check         │ github.event.pull_request.number
+#  [build-ci-image] commit hack      │ inputs.use_dev_image (boolean)
+#
+# NOT covered here (separate workflow):
+#  EmptyJob / collection_job         → dedicated aggregation workflow
+#  CircleCI continuation API         → caller workflow orchestration
+# =============================================================================
+
+name: "[Reusable] Run Test Suite Job"
+
+on:
+  workflow_call:
+
+    # =========================================================================
+    # INPUTS
+    # Each input maps to one or more fields on CircleCIJob.
+    # =========================================================================
+    inputs:
+
+      # ── Job identity ────────────────────────────────────────────────────────
+      # Maps to: CircleCIJob.job_name (property)
+      #
+      # Convention (mirrors the job_name @property):
+      #   - "tests_{name}"   for standard jobs (torch, tokenization, …)
+      #   - "{name}"         for jobs whose name contains "examples",
+      #                      "pipeline", or "pr_documentation"
+      # The caller is responsible for computing and passing the correct value.
+      job_name:
+        description: >
+          Unique job identifier used for artifact names, test-list lookup, and
+          report naming. Must follow the same naming convention as the CircleCI
+          job_name property (e.g. "tests_torch", "examples_torch",
+          "pipelines_torch", "pr_documentation_tests").
+        required: true
+        type: string
+
+      # Maps to: CircleCIJob.name (only needed to derive --make-reports).
+      # See note in to_dict(): examples jobs use self.name, all others use
+      # "tests_{self.name}". This diverges from job_name for pipeline and
+      # pr_documentation jobs.
+      report_name:
+        description: >
+          Name passed to --make-reports=<name>. Defaults to job_name.
+          Must be set explicitly for "pipelines_torch" (→ "tests_pipelines_torch")
+          and "pr_documentation_tests" (→ "tests_pr_documentation_tests") because
+          their job_name has no "tests_" prefix while --make-reports does.
+        required: false
+        type: string
+        default: ""    # empty → falls back to job_name in the run step
+
+      # ── Container / runner ──────────────────────────────────────────────────
+      # Maps to: CircleCIJob.docker_image
+      docker_image:
+        description: >
+          Docker image for the job container. e.g.:
+            "huggingface/transformers-torch-light"
+            "huggingface/transformers-custom-tokenizers"
+            "huggingface/transformers-examples-torch"
+            "huggingface/transformers-exotic-models"
+            "huggingface/transformers-consistency"
+        required: true
+        type: string
+
+      # ── Parallelism (sharding) ───────────────────────────────────────────────
+      # Maps to: CircleCIJob.parallelism
+      # 0 or 1 → single shard (no splitting, awk join). >1 → N shards.
+      parallelism:
+        description: >
+          Number of parallel test shards. 0 or 1 = single runner (no split).
+          >1 triggers a matrix of shard_index=[0..N-1] and splits the test list
+          evenly across shards (replaces circleci tests split --split-by=timings).
+        required: false
+        type: number
+        default: 1
+
+      # ── pytest execution ─────────────────────────────────────────────────────
+      # Maps to: CircleCIJob.pytest_num_workers
+      pytest_num_workers:
+        description: >
+          Number of workers for pytest-xdist (-n flag).
+          Typical values: 8 (default), 4 (examples, repo_utils), 2 (hub), 1 (doc tests).
+        required: false
+        type: number
+        default: 8
+
+      # Maps to: CircleCIJob.marker
+      marker:
+        description: >
+          pytest marker expression (-m flag). Empty string = no marker filter.
+          Examples: "not generate", "generate", "is_pipeline_test",
+          "is_staging_test", "is_training_test".
+        required: false
+        type: string
+        default: ""
+
+      # Maps to: CircleCIJob.install_steps (joined with " && ")
+      # The two implicit appends from __post_init__ are always added by this
+      # workflow (custom pytest fork + pytest-random-order) — callers must NOT
+      # include them here.
+      install_steps:
+        description: >
+          Shell command(s) to install the package. Separate multiple commands
+          with " && " (single-line) or use a multiline string. The workflow
+          always appends the custom pytest fork and pytest-random-order
+          installations automatically (mirrors CircleCIJob.__post_init__).
+          Default: "uv pip install --prerelease=allow -e ."
+        required: false
+        type: string
+        default: "uv pip install --prerelease=allow -e ."
+
+      # Maps to: CircleCIJob.pytest_options (pre-serialized as CLI flags)
+      pytest_extra_options:
+        description: >
+          Additional pytest CLI flags appended after the common options.
+          Pre-serialize as a single string, e.g.:
+            "--durations=100"               (exotic_models)
+            "--doctest-modules --doctest-glob=*.md --dist=loadfile -rvsA"
+                                            (doc_test)
+        required: false
+        type: string
+        default: ""
+
+      # Maps to: CircleCIJob.command_timeout
+      command_timeout:
+        description: >
+          Timeout in seconds for the entire pytest invocation.
+          0 = no timeout. The doc test job sets this to 1200.
+        required: false
+        type: number
+        default: 0
+
+      # ── additional_env knobs ─────────────────────────────────────────────────
+      # Each input below maps to exactly one key from CircleCIJob.additional_env,
+      # decomposed into typed inputs for safety and clarity.
+
+      # pipelines_torch_job: additional_env={"RUN_PIPELINE_TESTS": True}
+      run_pipeline_tests:
+        description: "Set RUN_PIPELINE_TESTS=true. Used by pipelines_torch job."
+        required: false
+        type: boolean
+        default: false
+
+      # custom_tokenizers_job: additional_env={"RUN_CUSTOM_TOKENIZERS": True}
+      run_custom_tokenizers:
+        description: "Set RUN_CUSTOM_TOKENIZERS=true. Used by custom_tokenizers job."
+        required: false
+        type: boolean
+        default: false
+
+      # training_ci_job: additional_env={"RUN_TRAINING_TESTS": True}
+      run_training_tests:
+        description: "Set RUN_TRAINING_TESTS=true. Used by training_ci job."
+        required: false
+        type: boolean
+        default: false
+
+      # tensor_parallel_ci_job: additional_env={"RUN_TENSOR_PARALLEL_TESTS": True}
+      run_tensor_parallel_tests:
+        description: "Set RUN_TENSOR_PARALLEL_TESTS=true. Used by tensor_parallel_ci job."
+        required: false
+        type: boolean
+        default: false
+
+      # fsdp_ci_job: additional_env={"RUN_FSDP_TESTS": True}
+      run_fsdp_tests:
+        description: "Set RUN_FSDP_TESTS=true. Used by fsdp_ci job."
+        required: false
+        type: boolean
+        default: false
+
+      # examples_torch_job: additional_env={"OMP_NUM_THREADS": 8}
+      # Overrides the COMMON_ENV_VARIABLES default of 1.
+      omp_num_threads:
+        description: "OMP_NUM_THREADS value. Default 1 (COMMON_ENV_VARIABLES). Set to 8 for examples_torch."
+        required: false
+        type: number
+        default: 1
+
+      # doc_test_job: additional_env={"TRANSFORMERS_VERBOSITY": "error", ...}
+      transformers_verbosity:
+        description: "TRANSFORMERS_VERBOSITY override (e.g. 'error' for doc test job). Empty = not set."
+        required: false
+        type: string
+        default: ""
+
+      datasets_verbosity:
+        description: "DATASETS_VERBOSITY override (e.g. 'error' for doc test job). Empty = not set."
+        required: false
+        type: string
+        default: ""
+
+      skip_cuda_doctest:
+        description: "Set SKIP_CUDA_DOCTEST=1. Used by doc test job."
+        required: false
+        type: boolean
+        default: false
+
+      # ── Context flags ────────────────────────────────────────────────────────
+      # Maps to: pipeline.parameters.nightly
+      is_nightly:
+        description: "Whether this is a nightly/scheduled run (informational, passed to env)."
+        required: false
+        type: boolean
+        default: false
+
+      # Maps to: the "[build-ci-image]" commit message hack in __post_init__
+      use_dev_image:
+        description: >
+          Append ':dev' to the docker_image tag.
+          Replicates the "[build-ci-image]" commit message hack.
+        required: false
+        type: boolean
+        default: false
+
+# =============================================================================
+# JOBS
+# =============================================================================
+jobs:
+
+  # ---------------------------------------------------------------------------
+  # Job 1 — setup
+  # Generates the shard index array for the matrix.
+  # In CircleCI, parallelism is a first-class job attribute. In GHA we must
+  # materialise the array in a prior job so the matrix can reference it.
+  # ---------------------------------------------------------------------------
+  setup:
+    name: "Setup — generate shard matrix (${{ inputs.job_name }})"
+    runs-on: ubuntu-22.04
+    outputs:
+      shard_count: ${{ steps.generate_matrix.outputs.count }}
+      shard_matrix: ${{ steps.generate_matrix.outputs.matrix }}
+      effective_image: ${{ steps.resolve_image.outputs.image }}
+    steps:
+
+      - name: Resolve effective Docker image
+        id: resolve_image
+        run: |
+          IMAGE="$DOCKER_IMAGE"
+          if [[ "$USE_DEV_IMAGE" == "true" ]]; then
+            IMAGE="${IMAGE}:dev"
+          fi
+          echo "image=$IMAGE" >> $GITHUB_OUTPUT
+          echo "Using image: $IMAGE"
+        env:
+          DOCKER_IMAGE: ${{ inputs.docker_image }}
+          USE_DEV_IMAGE: ${{ inputs.use_dev_image }}
+
+      - name: Download test-preparation artifact
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c  # v8.0.1
+        with:
+          name: test-preparation
+          path: test_preparation/
+        continue-on-error: true
+
+      - name: Generate shard index array
+        id: generate_matrix
+        # inputs.parallelism is treated as a MAX CAP, not the exact count.
+        # Actual shard count = min(computed_from_file, inputs.parallelism),
+        # using the same logic as compute_parallel_nodes() in the Python script:
+        #   AVERAGE_TESTS_PER_NODE = 5
+        #   num_nodes = ceil(line_count / AVERAGE_TESTS_PER_NODE)
+        #   if line_count < 4: return 1
+        #   return min(MAX_CAP, num_nodes)
+        run: |
+          COUNT=$(python3 - <<'EOF'
+          import math, os, sys
+ 
+          AVERAGE_TESTS_PER_NODE = 2
+          max_cap = int(os.environ["MAX_CAP"])
+          test_list = os.environ["TEST_LIST"]
+ 
+          try:
+              with open(test_list) as f:
+                  lines = [l.strip() for l in f if l.strip()]
+              line_count = len(lines)
+          except FileNotFoundError:
+              line_count = 0
+ 
+          print(f"Test file count: {line_count}", file=sys.stderr)
+ 
+          if max_cap <= 1 or line_count < 4:
+              print(1)
+          else:
+              num_nodes = math.ceil(line_count / AVERAGE_TESTS_PER_NODE)
+              print(min(max_cap, num_nodes))
+          EOF
+          )
+ 
+          echo "Computed shard count: $COUNT (max cap: $MAX_CAP)"
+          INDICES=$(python3 -c "import json; print(json.dumps(list(range($COUNT))))")
+          echo "count=$COUNT" >> $GITHUB_OUTPUT
+          echo "matrix=$INDICES" >> $GITHUB_OUTPUT
+        env:
+          MAX_CAP: ${{ inputs.parallelism }}
+          TEST_LIST: test_preparation/${{ inputs.job_name }}_test_list.txt
+
+  # ---------------------------------------------------------------------------
+  # Job 2 — run
+  # The actual test runner, fanned out across N shards via matrix.
+  # Mirrors CircleCIJob.to_dict() step-by-step.
+  # ---------------------------------------------------------------------------
+  run:
+    name: "${{ inputs.job_name }} [shard ${{ matrix.shard_index }}/${{ needs.setup.outputs.shard_count }}]"
+    needs: setup
+
+    # ── Runner selection ──────────────────────────────────────────────────────
+    # Maps CircleCIJob.resource_class → self-hosted runner label.
+    # NOTE: Adjust label names to match your actual runner fleet configuration.
+    runs-on:
+      group: aws-m8i-l-cache
+
+    # ── Container ─────────────────────────────────────────────────────────────
+    # Maps CircleCIJob.docker_image (+ use_dev_image hack).
+    # --shm-size needed for PyTorch multiprocessing workers.
+    container:
+      image: ${{ needs.setup.outputs.effective_image }}
+      options: "--shm-size=16gb -v /mnt/cache/.cache/huggingface:/mnt/cache/"
+
+    # ── Shard matrix ──────────────────────────────────────────────────────────
+    strategy:
+      fail-fast: false    # mirror CircleCI: don't cancel siblings on failure
+      matrix:
+        shard_index: ${{ fromJson(needs.setup.outputs.shard_matrix) }}
+
+    # ── Environment ───────────────────────────────────────────────────────────
+    # Mirrors COMMON_ENV_VARIABLES + per-job additional_env + to_dict() logic.
+    env:
+      # --- COMMON_ENV_VARIABLES ---
+      OMP_NUM_THREADS: ${{ inputs.omp_num_threads }}
+      TRANSFORMERS_IS_CI: "true"
+      PYTEST_TIMEOUT: 120
+      RUN_PIPELINE_TESTS: ${{ inputs.run_pipeline_tests }}
+      # RUN_FLAKY: true on push/nightly, false on PRs.
+      # Mirrors: env['RUN_FLAKY'] = os.environ.get("CIRCLE_PULL_REQUEST", "") == ""
+      # github context is inherited from the caller, so this works whether triggered
+      # directly or via workflow_call from another repo (e.g. public transformers).
+      RUN_FLAKY: ${{ github.event.pull_request.number == '' }}
+      DISABLE_SAFETENSORS_CONVERSION: "true"
+
+      # --- additional_env fields (per-job knobs) ---
+      RUN_CUSTOM_TOKENIZERS: ${{ inputs.run_custom_tokenizers }}
+      RUN_TRAINING_TESTS: ${{ inputs.run_training_tests }}
+      RUN_TENSOR_PARALLEL_TESTS: ${{ inputs.run_tensor_parallel_tests }}
+      RUN_FSDP_TESTS: ${{ inputs.run_fsdp_tests }}
+
+      # Conditionally set verbosity overrides (empty string = not set)
+      TRANSFORMERS_VERBOSITY: ${{ inputs.transformers_verbosity }}
+      DATASETS_VERBOSITY: ${{ inputs.datasets_verbosity }}
+      SKIP_CUDA_DOCTEST: ${{ inputs.skip_cuda_doctest && '1' || '0' }}
+      TRANSFORMERSCI_OTEL_DEBUG: "1"
+      TRANSFORMERS_TEST_OTEL_PR: ${{ github.event.pull_request.number }}
+      TRANSFORMERS_TEST_OTEL_SUITE: ${{ inputs.job_name }}
+
+      # Use the shared cache (read-only) from our infra
+      HF_HOME: /mnt/cache
+      HF_DATASETS_CACHE: /tmp/hf_datasets_cache
+      HF_MODULES_CACHE: /tmp/hf_modules_cache
+      HF_XET_LOG_DEST: /tmp/xet_logs/
+      HF_METRICS_CACHE: /tmp/hf_metrics_cache
+
+    steps:
+
+      # ── 0a. Resolve PR number for merge_group events ────────────────────────
+      # For merge_group, github.event.pull_request.number is empty, but the PR
+      # number is encoded in the ref: refs/heads/gh-readonly-queue/main/pr-{number}-{sha}.
+      # We extract it and override the job-level env vars for subsequent steps.
+      - name: Resolve PR number for merge_group events
+        if: github.event_name == 'merge_group'
+        run: |
+          echo "Branch: $GITHUB_REF"
+          PR_NUM=$(echo "$GITHUB_REF" | grep -oP '(?<=pr-)\d+' || echo "")
+          echo "Extracted PR number: $PR_NUM"
+          echo "TRANSFORMERS_TEST_OTEL_PR=$PR_NUM" >> "$GITHUB_ENV"
+          echo "RUN_FLAKY=false" >> "$GITHUB_ENV"
+
+      # ── 0. Debug — print job-level env vars ─────────────────────────────────
+      - name: Print environment variables
+        run: |
+          echo "OMP_NUM_THREADS=$OMP_NUM_THREADS"
+          echo "TRANSFORMERS_IS_CI=$TRANSFORMERS_IS_CI"
+          echo "PYTEST_TIMEOUT=$PYTEST_TIMEOUT"
+          echo "RUN_PIPELINE_TESTS=$RUN_PIPELINE_TESTS"
+          echo "RUN_FLAKY=$RUN_FLAKY"
+          echo "DISABLE_SAFETENSORS_CONVERSION=$DISABLE_SAFETENSORS_CONVERSION"
+          echo "RUN_CUSTOM_TOKENIZERS=$RUN_CUSTOM_TOKENIZERS"
+          echo "RUN_TRAINING_TESTS=$RUN_TRAINING_TESTS"
+          echo "RUN_TENSOR_PARALLEL_TESTS=$RUN_TENSOR_PARALLEL_TESTS"
+          echo "RUN_FSDP_TESTS=$RUN_FSDP_TESTS"
+          echo "TRANSFORMERS_VERBOSITY=$TRANSFORMERS_VERBOSITY"
+          echo "DATASETS_VERBOSITY=$DATASETS_VERBOSITY"
+          echo "SKIP_CUDA_DOCTEST=$SKIP_CUDA_DOCTEST"
+          if [ -n "$OTEL_EXPORTER_OTLP_ENDPOINT" ]; then
+            echo "OTEL_EXPORTER_OTLP_ENDPOINT is set"
+          else
+            echo "OTEL_EXPORTER_OTLP_ENDPOINT is not set"
+          fi
+          if [ -n "$OTEL_TOKEN" ]; then
+            echo "OTEL_TOKEN is set"
+          else
+            echo "OTEL_TOKEN is not set"
+          fi
+          # Staging mirror is hardcoded to the staging box (10.90.52.50:5317,
+          # grpc, unauthenticated ingest) in the test run step below.
+
+      # ── 1. Checkout ─────────────────────────────────────────────────────────
+      # Maps: "checkout" step in CircleCI.
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+
+      # actions/checkout leaves the workspace owned by the runner UID, but this
+      # job runs as root inside a container. Without this, any git call from
+      # within the container (e.g. the pytest-opentelemetry plugin probing the
+      # repo for VCS metadata) fails with "fatal: detected dubious ownership".
+      - name: Fix git safe directory
+        run: git config --global --add safe.directory '*'
+
+      # ── 2. Download test preparation artifacts ───────────────────────────────
+      # Maps: attach_workspace (at "test_preparation").
+      # Downloads the single test-preparation artifact uploaded by the caller,
+      # which contains all {job_name}_test_list.txt files. Each job then reads
+      # its own file from the test_preparation/ directory.
+      - name: Download test-list artifact
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c  # v8.0.1
+        with:
+          name: test-preparation
+          path: test_preparation/
+        continue-on-error: true
+
+      # ── 3. System dependencies ──────────────────────────────────────────────
+      # Maps: run "apt-get update && apt-get install -y curl"
+      - name: Install system dependencies
+        run: apt-get update && apt-get install -y curl
+
+      # ── 4. Package installation ──────────────────────────────────────────────
+      # Maps: CircleCIJob.__post_init__ install_steps list, which always
+      # appends two extra installs after the caller-supplied steps:
+      #   - custom pytest fork (ydshieh/pytest@8.4.1-ydshieh)
+      #   - pytest-random-order
+      - name: Install dependencies
+      # Common dependencies should be installed during docker image build time, e.g. transformers-ci[otel].
+      # For transformers-ci[otel], since any problem in transformers-ci highly impacts the CI flow and we might need to
+      # quickly fix it, let's repeat the installation here.
+        run: |
+          eval "$INSTALL_STEPS"
+          uv pip install --prerelease=allow 'transformers-ci[otel] @ git+https://github.com/huggingface/transformers-ci@main'
+        env:
+          INSTALL_STEPS: ${{ inputs.install_steps }}
+
+      # ── 6. NLTK data (examples jobs only) ───────────────────────────────────
+      # Maps: {"run": {"name": "Download NLTK files", ...}} with condition
+      #   `if "example" in self.name` (CircleCI uses singular; GHA uses
+      #   'examples' — both match the same job names in practice).
+      # Avoids concurrency issues when multiple workers download simultaneously.
+      - name: Download NLTK files
+        if: contains(inputs.job_name, 'examples')
+        run: python -c "import nltk; nltk.download('punkt', quiet=True)"
+
+      # ── 7-9. Diagnostics (installed libraries) ───────────────────────────────
+      # Maps: three consecutive "show installed" steps in to_dict().
+      - name: Show installed library sizes
+        run: |
+          du -h -d 1 "$(pip -V | cut -d ' ' -f 4 | sed 's/pip//g')" \
+            | grep -vE "dist-info|_distutils_hack|__pycache__" \
+            | sort -h | tee installed.txt || true
+
+      - name: Show installed library versions
+        run: pip list --format=freeze | tee installed.txt || true
+
+      - name: Show biggest system packages
+        run: |
+          dpkg-query --show --showformat='${Installed-Size}\t${Package}\n' \
+            | sort -rh | head -25 | sort -h \
+            | awk '{ package=$2; sub(".*/", "", package);
+                     printf("%.5f GB %s\n", $1/1024/1024, package) }' \
+            || true
+
+      # ── 10. Create test-results directory ────────────────────────────────────
+      # Maps: {"run": {"name": "Create `test-results` directory", ...}}
+      - name: Create test-results directory
+        run: mkdir -p test-results
+
+      # ── 11. Split tests across shards ────────────────────────────────────────
+      # Maps: "Split tests across parallel nodes" step in to_dict().
+      #
+      # CircleCI:  `circleci tests split --split-by=timings {job}_test_list.txt`
+      # GHA:       deterministic chunk split via Python (no timing data needed;
+      #            extend to pytest-split + stored durations.json for timing parity)
+      #
+      # When parallelism=0/1 → awk join (single shard, mirrors the else branch).
+      - name: Split test files across shards
+        id: split
+        run: |
+          # Print inputs for log diagnostics.
+          cat "$TEST_LIST"
+          echo $TEST_LIST
+          echo $TOTAL_SHARDS
+          echo $SHARD_IDX
+
+          if [ ! -f "$TEST_LIST" ] || [ ! -s "$TEST_LIST" ]; then
+            echo "WARNING: test list file not found or empty: $TEST_LIST"
+            echo "tests=" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          if [ "$TOTAL_SHARDS" -le 1 ]; then
+            # Mirrors: awk '{printf "%s ", $0}' {job}_test_list.txt > splitted_tests.txt
+            TESTS=$(awk '{printf "%s ", $0}' "$TEST_LIST")
+          else
+            # Deterministic even chunk split — extends circleci tests split behavior.
+            # Replace with pytest-split + durations.json for timing-based parity.
+            TESTS=$(python3 - <<'EOF'
+          import os, sys
+          test_list = os.environ["TEST_LIST"]
+          total_shards = int(os.environ["TOTAL_SHARDS"])
+          shard_idx = int(os.environ["SHARD_IDX"])
+          with open(test_list) as f:
+              files = [l.strip() for l in f if l.strip()]
+          base, remainder = divmod(len(files), total_shards)
+          sizes = [base + (1 if i < remainder else 0) for i in range(total_shards)]
+          start = sum(sizes[:shard_idx])
+          chunk = files[start:start + sizes[shard_idx]]
+          print(" ".join(chunk))
+          EOF
+            )
+          fi
+
+          echo "tests=$TESTS" >> $GITHUB_OUTPUT
+          # Preview for log readability
+          echo "$TESTS" | tr ' ' '\n' | head -30
+        env:
+          TEST_LIST: test_preparation/${{ inputs.job_name }}_test_list.txt
+          TOTAL_SHARDS: ${{ needs.setup.outputs.shard_count }}
+          SHARD_IDX: ${{ matrix.shard_index }}
+
+      # ── 12. Pre-fetch hub objects ─────────────────────────────────────────────
+      # Maps: "fetch hub objects before pytest" step.
+      # After the migration from CircleCI to GitHub Actions, we no longer need to run the script
+      # `utils/fetch_hub_objects_for_ci.py`, as long as we make sure it is run during CI docker image build time.
+      # However, the files are downloaded to the folder /test_data/ in the Docker image during its build, and we need to
+      # copy its files to . during CI time.
+      - name: Fetch hub objects for CI
+        run: |
+          cp -r /test_data/* . 2>/dev/null || true
+
+      # ── 14. Run tests ──────────────────────────────────────────────────────────
+      # Maps: the "Run tests" step in to_dict().
+      # Full flag reconstruction:
+      #   COMMON_PYTEST_OPTIONS  → --max-worker-restart=0 -vvv -rsfE
+      #                            --random-order-bucket=module --random-order-seed
+      #   marker_cmd             → -m '...'  (when marker is set)
+      #   junit_flags            → -p no:warning -o junit_family=xunit1 --junitxml
+      #   repeat_on_failure_flags→ --reruns 5 --reruns-delay 2 --only-rerun '...'
+      #   make-reports           → --make-reports=<report_name>
+      #   timeout_cmd            → timeout <N>  (when command_timeout > 0)
+      - name: Run tests
+        id: run_tests
+        run: |
+          if [ -z "$TESTS" ]; then
+            echo "No tests assigned to this shard. Exiting cleanly."
+            exit 0
+          fi
+
+          # ── Marker flag ─────────────────────────────────────────────────────
+          MARKER_CMD=""
+          if [ -n "$MARKER" ]; then
+            MARKER_CMD="-m '$MARKER'"
+          fi
+
+          # ── COMMON_PYTEST_OPTIONS ────────────────────────────────────────────
+          # --random-order-seed mirrors ${CIRCLE_BUILD_NUM:-0} → use run number
+          COMMON_FLAGS="--max-worker-restart=0 -vvv -rsfE \
+            --random-order-bucket=module \
+            --random-order-seed=${GITHUB_RUN_NUMBER:-0}"
+
+          # ── JUnit flags ──────────────────────────────────────────────────────
+          JUNIT_FLAGS="-p no:warning -o junit_family=xunit1 \
+            --junitxml=test-results/junit.xml"
+
+          # ── Flaky test rerun patterns ────────────────────────────────────────
+          # Mirrors FLAKY_TEST_FAILURE_PATTERNS + --reruns flags.
+          FLAKY_PATTERNS="OSError|Timeout|ConnectionError|FileNotFoundError|\
+          PIL.UnidentifiedImageError|HTTPError|\
+          AssertionError: Tensor-likes are not close!|\
+          TypeError: expected str, bytes or os.PathLike object, not NoneType|\
+          TypeError: stat: path should be string, bytes, os.PathLike or integer, not NoneType|\
+          Converting from Tiktoken failed|\
+          KeyError: <class |\
+          TypeError: not a string"
+          RERUN_FLAGS="--reruns 5 --reruns-delay 2 --only-rerun '($FLAKY_PATTERNS)'"
+
+          # ── --make-reports name ──────────────────────────────────────────────
+          # Falls back to job_name when report_name input is empty.
+          if [ -z "$REPORT_NAME" ]; then
+            REPORT_NAME="$JOB_NAME"
+          fi
+          MAKE_REPORTS="--make-reports=${REPORT_NAME}"
+
+          # ── Timeout wrapper ──────────────────────────────────────────────────
+          TIMEOUT_CMD=""
+          if [ "$COMMAND_TIMEOUT" -gt 0 ]; then
+            TIMEOUT_CMD="timeout $COMMAND_TIMEOUT"
+          fi
+
+          # ── HF_TOKEN ─────────────────────────────────────────────────────────
+          # We no longer need the token anymore after the migration - as we have shared cache.
+
+          # ── Execute ──────────────────────────────────────────────────────────
+          set -o pipefail
+          configure-ci-otel \
+            --protocol http \
+            --service-name "pytest-observability" \
+            --otlp-endpoint "$OTEL_EXPORTER_OTLP_ENDPOINT" \
+            --staging-endpoint 10.90.52.50:5317 \
+            --staging-protocol grpc \
+            --ping-server || echo "OTEL PING WARNING configure-ci-otel --ping-server is unavailable in this environment"
+
+          # Emit a run-start span BEFORE pytest so the run/job is visible on the
+          # live dashboards immediately, instead of only once the first test span
+          # arrives. It carries the same OTEL resource attributes as the pytest
+          # run but no test span, so it is discoverable yet counts zero tests.
+          # report-ci-start is a no-op when OTEL is unconfigured; never fail here.
+          configure-ci-otel \
+            --suite "$JOB_NAME" \
+            --service-name "pytest-observability" \
+            --protocol http \
+            --otlp-endpoint "$OTEL_EXPORTER_OTLP_ENDPOINT" \
+            --token "$OTEL_TOKEN" \
+            --staging-endpoint 10.90.52.50:5317 \
+            --staging-protocol grpc \
+            -- report-ci-start || echo "OTEL START WARNING report-ci-start is unavailable in this environment"
+
+          eval "$TIMEOUT_CMD configure-ci-otel \
+            --suite $JOB_NAME \
+            --service-name "pytest-observability" \
+            --protocol http \
+            --otlp-endpoint \"$OTEL_EXPORTER_OTLP_ENDPOINT\" \
+            --token \"$OTEL_TOKEN\" \
+            --staging-endpoint 10.90.52.50:5317 \
+            --staging-protocol grpc \
+            -- python3 -m pytest \
+            $MARKER_CMD \
+            -n $PYTEST_NUM_WORKERS \
+            $JUNIT_FLAGS \
+            $RERUN_FLAGS \
+            $COMMON_FLAGS \
+            $PYTEST_EXTRA_OPTIONS \
+            $MAKE_REPORTS \
+            $TESTS" | tee tests_output.txt
+        env:
+          TESTS: ${{ steps.split.outputs.tests }}
+          MARKER: ${{ inputs.marker }}
+          REPORT_NAME: ${{ inputs.report_name }}
+          JOB_NAME: ${{ inputs.job_name }}
+          COMMAND_TIMEOUT: ${{ inputs.command_timeout }}
+          PYTEST_NUM_WORKERS: ${{ inputs.pytest_num_workers }}
+          PYTEST_EXTRA_OPTIONS: ${{ inputs.pytest_extra_options }}
+
+      # ── 15. Check for worker crashes ──────────────────────────────────────────
+      # Maps: "Check for test crashes" step with `when: always`.
+      # GHA equivalent: `if: always()`.
+      - name: Check for test worker crashes
+        if: always()
+        run: |
+          if [ ! -f tests_output.txt ]; then
+            echo "ERROR: tests_output.txt does not exist — tests may not have run"
+            exit 1
+          elif grep -q "crashed and worker restarting disabled" tests_output.txt; then
+            echo "ERROR: Worker crash detected in test output"
+            exit 1
+          else
+            echo "No worker crashes detected."
+          fi
+
+      # ── 16-18. Parse test output (always) ────────────────────────────────────
+      # Maps: three parse_test_outputs.py invocations with `when: always`.
+      # Script intentionally kept at .circleci/ — no reason to move it.
+      - name: Show skipped tests
+        if: always()
+        run: python3 .circleci/parse_test_outputs.py --file tests_output.txt --skip
+
+      - name: Show failed tests with reasons
+        if: always()
+        run: python3 .circleci/parse_test_outputs.py --file tests_output.txt --fail
+
+      - name: Show errors
+        if: always()
+        run: python3 .circleci/parse_test_outputs.py --file tests_output.txt --errors
+
+      # ── 19-20. Upload artifacts ──────────────────────────────────────────────
+      # Maps: store_test_results + store_artifacts steps.
+      # Artifact names are scoped with job_name + shard_index to avoid collisions
+      # when N shards upload concurrently.
+      - name: Upload JUnit results
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+        with:
+          name: "${{ inputs.job_name }}_shard${{ matrix.shard_index }}_junit"
+          path: test-results/junit.xml
+          retention-days: 14
+          if-no-files-found: warn
+
+      - name: Upload test reports
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+        with:
+          name: "${{ inputs.job_name }}_shard${{ matrix.shard_index }}_reports"
+          path: reports/
+          retention-days: 14
+          if-no-files-found: ignore
+
+      - name: Upload test artifacts
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+        with:
+          name: "${{ inputs.job_name }}_shard${{ matrix.shard_index }}_artifacts"
+          path: |
+            tests_output.txt
+            installed.txt
+          retention-days: 14
+          if-no-files-found: ignore
