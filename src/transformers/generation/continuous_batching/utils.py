@@ -203,25 +203,23 @@ def build_attention_mask(
 def check_modality_support(input_modalities: str | list[str]) -> str | None:
     """Check if CB supports the given input modalities and returns the extra modality if there is one."""
     input_modalities = [input_modalities] if isinstance(input_modalities, str) else input_modalities
+    input_modalities = set(input_modalities)
 
-    # We only support text and image or text and audio for now
-    supported_modalities = set(input_modalities).intersection({"text", "image", "audio"})
-    if len(supported_modalities) not in {1, 2} or "text" not in supported_modalities:
-        raise ValueError(f"This model supports {input_modalities = } but CB only supports text+image or text+audio.")
-
-    # Throw a warning if the model supports modalities that are not in CB's supported set
-    unsupported_modalities = set(input_modalities) - supported_modalities
-    if len(unsupported_modalities) > 0:
+    # Supported cases
+    if input_modalities == {"text"}:
+        return None
+    if input_modalities == {"text", "image"}:
+        return "image"
+    if input_modalities == {"text", "audio"}:
+        return "audio"
+    if input_modalities == {"text", "image", "audio"}:
         logger.warning(
-            f"This model supports {input_modalities = } but CB only supports text+image or text+audio. "
-            f"The following modalities will be ignored: {unsupported_modalities = }"
+            "This model supports bith image and audio but CB currently only supports text+image or text+audio. Chosing"
+            "\"image\" as the extra modality."
         )
+        return "image"
 
-    # Return the non-textual modality if there is one
-    if len(supported_modalities) == 2:
-        supported_modalities.remove("text")
-        return supported_modalities.pop()
-    return None
+    raise ValueError(f"This model supports {input_modalities = } but CB only supports text+image or text+audio.")
 
 
 def create_warmup_future_states(
