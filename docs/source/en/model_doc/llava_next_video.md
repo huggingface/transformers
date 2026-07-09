@@ -201,7 +201,7 @@ We value your feedback to help identify bugs before the full release! Check out 
 
 </Tip>
 
-Then simply load the quantized model by adding [`BitsAndBytesConfig`](../main_classes/quantization#transformers.BitsAndBytesConfig) as shown below:
+Then simply load the quantized model by adding [`BitsAndBytesConfig`] as shown below:
 
 ```python
 from transformers import LlavaNextVideoForConditionalGeneration
