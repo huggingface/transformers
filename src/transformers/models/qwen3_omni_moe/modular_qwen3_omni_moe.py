@@ -2613,6 +2613,22 @@ class Qwen3OmniMoeProcessorKwargs(Qwen2_5OmniProcessorKwargs):
 
 
 class Qwen3OmniMoeProcessor(Qwen2_5OmniProcessor, ProcessorMixin):
+    def post_process_multimodal_output(
+        self, generated_outputs, skip_special_tokens=True, generation_mode=None, **kwargs
+    ):
+        if generation_mode == "audio":
+            audio_outputs = generated_outputs[1].detach().cpu()
+            if audio_outputs.ndim == 1:
+                return [audio_outputs.numpy()]
+            return [audio.reshape(-1).numpy() for audio in audio_outputs]
+
+        return super().post_process_multimodal_output(
+            generated_outputs,
+            skip_special_tokens=skip_special_tokens,
+            generation_mode=generation_mode,
+            **kwargs,
+        )
+
     def replace_multimodal_special_tokens(
         self,
         text,

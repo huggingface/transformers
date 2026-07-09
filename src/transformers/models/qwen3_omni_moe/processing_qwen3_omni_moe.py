@@ -360,16 +360,20 @@ class Qwen3OmniMoeProcessor(ProcessorMixin):
         Returns:
             `list[Inion[str, np.ndarray]]`: The decoded text or generated audio.
         """
+        if generation_mode == "audio":
+            audio_outputs = generated_outputs[1].detach().cpu()
+            if audio_outputs.ndim == 1:
+                return [audio_outputs.numpy()]
+            return [audio.reshape(-1).numpy() for audio in audio_outputs]
         if generation_mode is None or generation_mode == "text":
             return self.post_process_image_text_to_text(
                 generated_outputs, skip_special_tokens=skip_special_tokens, **kwargs
             )
 
         elif generation_mode == "audio":
-            audio_outputs = generated_outputs[1].detach().cpu()
-            if audio_outputs.ndim == 1:
-                return [audio_outputs.numpy()]
-            return [audio.reshape(-1).numpy() for audio in audio_outputs]
+            # model supports only bs=1, so we will never get several audio outputs
+            audio = generated_outputs[1].reshape(-1).detach().cpu().numpy()
+            return [audio]
 
         else:
             raise ValueError(
