@@ -147,7 +147,6 @@ class ESMFold2SwiGLU(nn.Module):
         return self.w3(hidden)
 
 
-# Copied from transformers.models.llama.modeling_llama.rotate_half
 def rotate_half(x):
     """Rotates half the hidden dims of the input."""
     x1 = x[..., : x.shape[-1] // 2]
@@ -155,7 +154,6 @@ def rotate_half(x):
     return torch.cat((-x2, x1), dim=-1)
 
 
-# Copied from transformers.models.llama.modeling_llama.repeat_kv
 def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
     """
     This is the equivalent of torch.repeat_interleave(x, dim=1, repeats=n_rep). The hidden states go from (batch,
@@ -168,7 +166,6 @@ def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
     return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
 
 
-# Copied from transformers.models.llama.modeling_llama.eager_attention_forward
 def eager_attention_forward(
     module: nn.Module,
     query: torch.Tensor,
@@ -280,7 +277,6 @@ class ESMFold2SWA3DRoPEAttention(nn.Module):
         self.n_heads = n_heads
         self.head_dim = d_model // n_heads
         self.scale = self.head_dim**-0.5
-        self.half_window = config.sliding_window // 2
         # No grouped-query attention; identity repeat keeps the interface happy.
         self.num_key_value_groups = 1
         # Bidirectional encoder: never let the sdpa/flash interface default to
@@ -312,25 +308,15 @@ class ESMFold2SWA3DRoPEAttention(nn.Module):
 
         attn_impl = self.config._attn_implementation
 
-        if len(attention_params) > 2:
-            valid = torch.zeros(B * N, dtype=torch.bool, device=q.device)
-            valid[attention_params[2]] = True
-            valid = valid.view(B, N)
-        else:
-            valid = torch.ones(B, N, dtype=torch.bool, device=q.device)
-        # Sliding window over the valid-token rank, built through the masking framework as a
-        # backend-appropriate mask (bit-identical to a hand-built additive bias).
-        rank = torch.cumsum(valid, dim=1) - 1
-        attn_mask = create_bidirectional_mask(
-            config=self.config,
-            inputs_embeds=q.reshape(B, N, -1),
-            attention_mask=None,
-            and_mask_function=_swa_window_mask_function(rank, valid, self.half_window),
-        )
+        # Sliding-window mask is built once per fold in ESMFold2AtomEncoder._compute_step_invariants
+        # (it is identical across all atom-stack layers); reuse it here. ``valid`` is still needed to
+        # zero out padded-token outputs below.
+        valid = torch.zeros(B * N, dtype=torch.bool, device=q.device)
+        valid[attention_params[2]] = True
+        valid = valid.view(B, N)
+        attn_mask = attention_params[3]
 
-        attention_interface: Callable = eager_attention_forward
-        if attn_impl != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS.get_interface(attn_impl, eager_attention_forward)
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(attn_impl, eager_attention_forward)
         out, _ = attention_interface(
             self,
             q.transpose(1, 2),
@@ -481,6 +467,7 @@ class ESMFold2AtomEncoder(nn.Module):
         if structure_prediction:
             self.coords_linear = nn.Linear(6, d_atom, bias=False)
 
+        self.config = config
         self.rotary_emb = ESMFold2RotaryEmbedding3D(config, structure_prediction)
         self.layers = nn.ModuleList([ESMFold2SWAAtomLayer(config, structure_prediction) for _ in range(n_blocks)])
 
@@ -492,9 +479,11 @@ class ESMFold2AtomEncoder(nn.Module):
         self,
         atom_inputs: ESMFold2AtomInputs,
         num_diffusion_samples: int,
-    ) -> tuple[Tensor, tuple[Tensor, Tensor, Tensor], Tensor, int]:
+    ) -> tuple[Tensor, tuple, Tensor, int]:
         """Tensors that don't change across diffusion steps (cached per fold): the atom base
-        embedding ``c_base``, 3D-RoPE ``(cos, sin, indices)``, the expanded atom mask, and n_tokens."""
+        embedding ``c_base``, the attention params ``(cos, sin, indices, swa_mask)`` (3D-RoPE plus the
+        sliding-window mask, which is identical across all atom-stack layers), the expanded atom mask,
+        and n_tokens."""
         ref_pos = atom_inputs.ref_pos
         B, N = ref_pos.shape[:2]
         atom_feats = torch.cat(
@@ -515,7 +504,18 @@ class ESMFold2AtomEncoder(nn.Module):
         sin = sin.repeat_interleave(num_diffusion_samples, 0)
         mask_exp = atom_inputs.atom_attention_mask.repeat_interleave(num_diffusion_samples, 0)
         indices = torch.nonzero(mask_exp.flatten(), as_tuple=False).flatten()
-        attention_params = (cos, sin, indices)
+        # The SWA mask depends only on the (step- and layer-invariant) valid-token rank and window,
+        # so build it once here rather than in every atom-stack layer's forward. ``cos`` (bf16, same
+        # batch/seq as the attention queries) supplies the mask metadata (dtype/device/shape).
+        valid = mask_exp.bool()
+        rank = torch.cumsum(valid, dim=1) - 1
+        swa_mask = create_bidirectional_mask(
+            config=self.config,
+            inputs_embeds=cos,
+            attention_mask=None,
+            and_mask_function=_swa_window_mask_function(rank, valid, self.config.sliding_window // 2),
+        )
+        attention_params = (cos, sin, indices, swa_mask)
         n_tokens = int(atom_inputs.atom_to_token.max().item()) + 1
         return c_base, attention_params, mask_exp, n_tokens
 
@@ -631,20 +631,24 @@ class ESMFold2AttentionPairBias(nn.Module):
 
     def __init__(
         self,
+        config: ESMFold2Config,
         d_model: int,
         d_pair: int,
         num_heads: int,
         d_cond: int | None = None,
     ) -> None:
         super().__init__()
+        self.config = config
         self.d_model = d_model
         self.num_heads = num_heads
         self.head_dim = d_model // num_heads
         self.scale = self.head_dim**-0.5
+        # No grouped-query attention; identity repeat keeps the attention interface happy.
+        self.num_key_value_groups = 1
+        self.is_causal = False
         d_cond = d_cond or d_model
 
         self.adaln = ESMFold2AdaptiveLayerNorm(d_model, d_cond)
-        # adaln-Zero gate (weight 0, bias -2); init in ESMFold2PreTrainedModel._init_weights.
         self.out_gate = nn.Linear(d_cond, d_model, bias=True)
 
         self.q_proj = nn.Linear(d_model, d_model, bias=True)
@@ -706,8 +710,11 @@ class ESMFold2AttentionPairBias(nn.Module):
             mask_bias = torch.where(attention_mask.bool()[:, None, None, :], 0.0, min_val)
             attn_bias = attn_bias + mask_bias
         qh, kh, vh = (t.transpose(1, 2) for t in (q, k, v))  # [B,H,Q,D]
-        context = F.scaled_dot_product_attention(qh, kh, vh, attn_mask=attn_bias.to(qh.dtype), scale=self.scale)
-        context = context.transpose(1, 2)  # [B,H,Q,D]->[B,Q,H,D]
+        # Route through the attention interface (respects config._attn_implementation) with the
+        # per-head pair bias as the additive attention mask. Returns [B, Q, H, D].
+        attn_impl = self.config._attn_implementation
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(attn_impl, eager_attention_forward)
+        context, _ = attention_interface(self, qh, kh, vh, attn_bias.to(qh.dtype), dropout=0.0, scaling=self.scale)
 
         context = gate * context
         out = self.out_proj(context.reshape(bsz, n_queries, d_model).to(v.dtype))
@@ -728,7 +735,6 @@ class ESMFold2ConditionedTransitionBlock(nn.Module):
         d_cond = d_cond or d_model
 
         self.adaln = ESMFold2AdaptiveLayerNorm(d_model, d_cond)
-        # adaln-Zero gate (weight 0, bias -2); init in ESMFold2PreTrainedModel._init_weights.
         self.output_gate = nn.Linear(d_cond, d_model, bias=True)
 
         self.ffn = ESMFold2SwiGLU(d_model, intermediate_size, d_model, bias=False)
@@ -754,6 +760,7 @@ class ESMFold2DiffusionTransformer(nn.Module):
         self.attn_blocks = nn.ModuleList(
             [
                 ESMFold2AttentionPairBias(
+                    config=config,
                     d_model=d_model,
                     d_pair=d_pair,
                     num_heads=num_heads,
@@ -902,19 +909,10 @@ class ESMFold2DiffusionModule(nn.Module):
         self.sigma_data = float(config.diffusion_sigma_data)
 
         self.conditioning = ESMFold2DiffusionConditioning(config)
-
-        # Atom encoder (structure_prediction=True, with coords_linear)
         self.atom_encoder = ESMFold2AtomEncoder(config, structure_prediction=True)
-
-        # Atom decoder
         self.atom_decoder = ESMFold2AtomDecoder(config)
-
-        # zero-init lives in ESMFold2PreTrainedModel._init_weights.
         self.s_to_token = nn.Linear(c_token, c_token, bias=False)
-
-        # Token transformer (ESMFold2DiffusionTransformer with pair bias)
         self.token_transformer = ESMFold2DiffusionTransformer(config)
-
         self.s_step_norm = ESMFold2LayerNorm(c_token)
         self.token_norm = ESMFold2LayerNorm(c_token)
 
@@ -1013,10 +1011,6 @@ class ESMFold2DiffusionStructureHead(nn.Module):
         self.inference_p = config.structure_head_inference_p
         self.inference_num_steps = config.structure_head_inference_num_steps
 
-    # ------------------------------------------------------------------
-    # Helpers
-    # ------------------------------------------------------------------
-
     def inference_noise_schedule(self, num_steps: int | None = None, device: torch.device | None = None) -> Tensor:
         """Karras power-law noise schedule."""
         steps = self.inference_num_steps if num_steps is None else int(num_steps)
@@ -1097,10 +1091,6 @@ class ESMFold2DiffusionStructureHead(nn.Module):
         ones = torch.ones_like(determinant)
         R = (U @ torch.diag_embed(torch.stack([ones, ones, determinant], dim=-1)) @ Vh).to(H.dtype)
         return x_centered @ R.transpose(-1, -2) + centroid_gt
-
-    # ------------------------------------------------------------------
-    # Sampling
-    # ------------------------------------------------------------------
 
     @torch.inference_mode()
     def _build_noise_schedule(
@@ -1982,6 +1972,90 @@ def _inverse_softplus(value: float) -> float:
     return value + math.log(-math.expm1(-value))
 
 
+class ESMFold2MSAEncoderBlock(nn.Module):
+    """One MSA encoder block: OPM into pair, MSA pair-weighted averaging, triangle update."""
+
+    def __init__(self, config: ESMFold2Config, is_final_block: bool = False) -> None:
+        super().__init__()
+        d_msa = config.msa_encoder_hidden_size
+        d_pair = config.pairwise_hidden_size
+        d_hidden = config.msa_encoder_outer_hidden_size
+        n_heads_msa = config.msa_encoder_num_attention_heads
+        msa_head_width = config.msa_encoder_head_width
+        self.is_final_block = is_final_block
+        self.outer_product_mean = ESMFold2OuterProductMean(d_msa, d_hidden, d_pair)
+        if not is_final_block:
+            self.msa_pair_weighted_averaging = ESMFold2MSAPairWeightedAveraging(
+                d_msa, d_pair, n_heads_msa, msa_head_width
+            )
+            self.msa_transition = ESMFold2Transition(d_msa, config.msa_encoder_transition_intermediate_size)
+        self.tri_mul_out = ESMFold2TriangleMultiplicativeUpdate(dim=d_pair, outgoing=True)
+        self.tri_mul_in = ESMFold2TriangleMultiplicativeUpdate(dim=d_pair, outgoing=False)
+        self.pair_transition = ESMFold2Transition(d_pair, config.pair_transition_intermediate_size)
+
+    def set_chunk_size(self, chunk_size: int | None) -> None:
+        self.outer_product_mean.set_chunk_size(chunk_size)
+        self.tri_mul_out.set_chunk_size(chunk_size)
+        self.tri_mul_in.set_chunk_size(chunk_size)
+        if not self.is_final_block:
+            self.msa_transition.set_chunk_size(chunk_size)
+        self.pair_transition.set_chunk_size(chunk_size)
+
+    def forward(
+        self,
+        msa_repr: Tensor,
+        pair: Tensor,
+        msa_attention_mask: Tensor,
+        pair_attention_mask: Tensor,
+    ) -> tuple[Tensor, Tensor]:
+        pair = pair + self.outer_product_mean(msa_repr, msa_attention_mask)
+        if not self.is_final_block:
+            msa_repr = msa_repr + self.msa_pair_weighted_averaging(msa_repr, pair, pair_attention_mask)
+            msa_repr = self.msa_transition(msa_repr)
+        pair = pair + self.tri_mul_out(pair, visibility=pair_attention_mask)
+        pair = pair + self.tri_mul_in(pair, visibility=pair_attention_mask)
+        pair = self.pair_transition(pair)
+        return msa_repr, pair
+
+
+class ESMFold2MSAEncoder(nn.Module):
+    """Stack of [`ESMFold2MSAEncoderBlock`] layers that conditions the pair on an MSA."""
+
+    def __init__(self, config: ESMFold2Config) -> None:
+        super().__init__()
+        d_msa = config.msa_encoder_hidden_size
+        d_inputs = config.single_inputs_size
+        n_layers = config.msa_encoder_num_hidden_layers
+        # num_res_types one-hot + has_deletion + deletion_value.
+        self.embed = nn.Linear(config.num_res_types + 2, d_msa, bias=False)
+        self.project_inputs = nn.Linear(d_inputs, d_msa, bias=False)
+        self.layers = nn.ModuleList(
+            [ESMFold2MSAEncoderBlock(config, is_final_block=(i == n_layers - 1)) for i in range(n_layers)]
+        )
+
+    def set_chunk_size(self, chunk_size: int | None) -> None:
+        for layer in self.layers:
+            layer.set_chunk_size(chunk_size)
+
+    def forward(
+        self,
+        x_pair: Tensor,
+        single_inputs: Tensor,
+        msa_oh: Tensor,
+        has_deletion: Tensor,
+        deletion_value: Tensor,
+        msa_attention_mask: Tensor,
+    ) -> Tensor:
+        # All inputs are pre-transposed to [B, L, M, ...] before calling.
+        msa_feat = torch.cat([msa_oh, has_deletion.unsqueeze(-1), deletion_value.unsqueeze(-1)], dim=-1)
+        msa_repr = self.embed(msa_feat.to(self.embed.weight.dtype)) + self.project_inputs(single_inputs).unsqueeze(2)
+        tok_mask = msa_attention_mask[:, :, 0].bool()
+        pair_attention_mask = tok_mask.unsqueeze(2) & tok_mask.unsqueeze(1)
+        for layer in self.layers:
+            msa_repr, x_pair = layer(msa_repr, x_pair, msa_attention_mask, pair_attention_mask)
+        return x_pair
+
+
 class ESMFold2PreTrainedModel(PreTrainedModel):
     """Base class for ESMFold2 — declares the loading and weight-initialization behaviour."""
 
@@ -2003,9 +2077,10 @@ class ESMFold2PreTrainedModel(PreTrainedModel):
     _supports_attention_backend = True
 
     def _init_weights(self, module):
-        # Re-apply the few non-default inits (adaLN-Zero gates, parcae identity/recurrence,
-        # zeroed projections). Kept here (not in submodule __init__s) so they survive
-        # post_init(); the load-flag-aware init.* helpers no-op on loaded weights.
+        # The non-default weight inits (adaLN-Zero gates, the parcae recurrence, zeroed output
+        # projections). They live here rather than in each submodule's __init__ so post_init()
+        # applies them; on a from_pretrained load the init.* helpers below no-op, leaving the
+        # checkpoint weights untouched.
         super()._init_weights(module)
         if isinstance(module, ESMFold2Model):
             init.eye_(module.parcae_readout.weight)
@@ -2573,90 +2648,6 @@ class ESMFold2Model(ESMFold2PreTrainedModel):
         from .protein_utils import output_to_pdb as _output_to_pdb
 
         return _output_to_pdb(output, features)
-
-
-class ESMFold2MSAEncoderBlock(nn.Module):
-    """One MSA encoder block: OPM into pair, MSA pair-weighted averaging, triangle update."""
-
-    def __init__(self, config: ESMFold2Config, is_final_block: bool = False) -> None:
-        super().__init__()
-        d_msa = config.msa_encoder_hidden_size
-        d_pair = config.pairwise_hidden_size
-        d_hidden = config.msa_encoder_outer_hidden_size
-        n_heads_msa = config.msa_encoder_num_attention_heads
-        msa_head_width = config.msa_encoder_head_width
-        self.is_final_block = is_final_block
-        self.outer_product_mean = ESMFold2OuterProductMean(d_msa, d_hidden, d_pair)
-        if not is_final_block:
-            self.msa_pair_weighted_averaging = ESMFold2MSAPairWeightedAveraging(
-                d_msa, d_pair, n_heads_msa, msa_head_width
-            )
-            self.msa_transition = ESMFold2Transition(d_msa, config.msa_encoder_transition_intermediate_size)
-        self.tri_mul_out = ESMFold2TriangleMultiplicativeUpdate(dim=d_pair, outgoing=True)
-        self.tri_mul_in = ESMFold2TriangleMultiplicativeUpdate(dim=d_pair, outgoing=False)
-        self.pair_transition = ESMFold2Transition(d_pair, config.pair_transition_intermediate_size)
-
-    def set_chunk_size(self, chunk_size: int | None) -> None:
-        self.outer_product_mean.set_chunk_size(chunk_size)
-        self.tri_mul_out.set_chunk_size(chunk_size)
-        self.tri_mul_in.set_chunk_size(chunk_size)
-        if not self.is_final_block:
-            self.msa_transition.set_chunk_size(chunk_size)
-        self.pair_transition.set_chunk_size(chunk_size)
-
-    def forward(
-        self,
-        msa_repr: Tensor,
-        pair: Tensor,
-        msa_attention_mask: Tensor,
-        pair_attention_mask: Tensor,
-    ) -> tuple[Tensor, Tensor]:
-        pair = pair + self.outer_product_mean(msa_repr, msa_attention_mask)
-        if not self.is_final_block:
-            msa_repr = msa_repr + self.msa_pair_weighted_averaging(msa_repr, pair, pair_attention_mask)
-            msa_repr = self.msa_transition(msa_repr)
-        pair = pair + self.tri_mul_out(pair, visibility=pair_attention_mask)
-        pair = pair + self.tri_mul_in(pair, visibility=pair_attention_mask)
-        pair = self.pair_transition(pair)
-        return msa_repr, pair
-
-
-class ESMFold2MSAEncoder(nn.Module):
-    """Stack of [`ESMFold2MSAEncoderBlock`] layers that conditions the pair on an MSA."""
-
-    def __init__(self, config: ESMFold2Config) -> None:
-        super().__init__()
-        d_msa = config.msa_encoder_hidden_size
-        d_inputs = config.single_inputs_size
-        n_layers = config.msa_encoder_num_hidden_layers
-        # num_res_types one-hot + has_deletion + deletion_value.
-        self.embed = nn.Linear(config.num_res_types + 2, d_msa, bias=False)
-        self.project_inputs = nn.Linear(d_inputs, d_msa, bias=False)
-        self.layers = nn.ModuleList(
-            [ESMFold2MSAEncoderBlock(config, is_final_block=(i == n_layers - 1)) for i in range(n_layers)]
-        )
-
-    def set_chunk_size(self, chunk_size: int | None) -> None:
-        for layer in self.layers:
-            layer.set_chunk_size(chunk_size)
-
-    def forward(
-        self,
-        x_pair: Tensor,
-        single_inputs: Tensor,
-        msa_oh: Tensor,
-        has_deletion: Tensor,
-        deletion_value: Tensor,
-        msa_attention_mask: Tensor,
-    ) -> Tensor:
-        # All inputs are pre-transposed to [B, L, M, ...] before calling.
-        msa_feat = torch.cat([msa_oh, has_deletion.unsqueeze(-1), deletion_value.unsqueeze(-1)], dim=-1)
-        msa_repr = self.embed(msa_feat.to(self.embed.weight.dtype)) + self.project_inputs(single_inputs).unsqueeze(2)
-        tok_mask = msa_attention_mask[:, :, 0].bool()
-        pair_attention_mask = tok_mask.unsqueeze(2) & tok_mask.unsqueeze(1)
-        for layer in self.layers:
-            msa_repr, x_pair = layer(msa_repr, x_pair, msa_attention_mask, pair_attention_mask)
-        return x_pair
 
 
 __all__ = ["ESMFold2Model", "ESMFold2PreTrainedModel"]
