@@ -873,21 +873,27 @@ class UnlimitedOcrStaticReferenceSlidingWindowLayer(StaticSlidingWindowLayer):
             # Already full but using more than 1 new token (e.g. chat continuation, etc...)
             else:
                 full_key_states = torch.cat(
-                    (self.keys[:, :, window_start + 1 : window_start + self.sliding_window, :], key_states), dim=-2
+                    (
+                        self.keys[:, :, :window_start, :],
+                        self.keys[:, :, window_start + 1 : window_start + self.sliding_window, :],
+                        key_states,
+                    ),
+                    dim=-2,
                 )
                 full_value_states = torch.cat(
-                    (self.values[:, :, window_start + 1 : window_start + self.sliding_window, :], value_states), dim=-2
+                    (
+                        self.values[:, :, :window_start, :],
+                        self.values[:, :, window_start + 1 : window_start + self.sliding_window, :],
+                        value_states,
+                    ),
+                    dim=-2,
                 )
         # Not yet full, but becoming full on this update
         elif current_length + kv_length > self.sliding_window:
-            # Fast path, no need to cat() in this case, as the window is currently empty
-            if current_length == 0:
-                full_key_states = key_states
-                full_value_states = value_states
-            else:
-                window = slice(window_start, window_start + current_length)
-                full_key_states = torch.cat((self.keys[:, :, window, :], key_states), dim=-2)
-                full_value_states = torch.cat((self.values[:, :, window, :], value_states), dim=-2)
+            full_key_states = torch.cat((self.keys[:, :, : window_start + current_length, :], key_states), dim=-2)
+            full_value_states = torch.cat(
+                (self.values[:, :, : window_start + current_length, :], value_states), dim=-2
+            )
         else:
             # Note: very important to use the tensor version of the cumulative length here, as otherwise cudagraphs
             # (triggered by mode="reduced_overhead") will lead to random crashes, as the int would be overwritten.

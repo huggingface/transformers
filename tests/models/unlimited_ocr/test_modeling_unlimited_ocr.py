@@ -133,13 +133,62 @@ class UnlimitedOcrModelTest(VLMModelTest, unittest.TestCase):
         pass
 
     def _image_features_prepare_config_and_inputs(self):
-        # `test_get_image_features_output` requires `vision_config.hidden` size to be set.
+        # `test_get_image_features_output` requires `vision_config.hidden` size to be set.
         # This is not the case by default as the vision model is a combination of two submodels (SAM + CLIP vision encoder).
         config, inputs_dict = super()._image_features_prepare_config_and_inputs()
         config.vision_config.hidden_size = (
             config.vision_config.sam_config.downsample_channels[-1] + config.vision_config.encoder_config.hidden_size
         )
         return config, inputs_dict
+
+    def _check_past_key_values_for_generate(self, batch_size, past_key_values, seq_length, config):
+        # max cache length can be smaller than sequence length
+        max_length = past_key_values.get_max_length()
+        seq_length = min(seq_length, max_length) if max_length >= 0 else seq_length
+        super()._check_past_key_values_for_generate(batch_size, past_key_values, seq_length, config)
+
+    def _check_generate_cache_sliding_window_too_small(self, cache_implementation):
+        """Test that reference sliding window cache works correctly when decoding more than sliding_window tokens at once."""
+        for model_class in self.all_generative_model_classes:
+            config, inputs_dict = self.prepare_config_and_inputs_for_generate()
+            self.assertEqual(config.text_config.sliding_window, 4)
+
+            model = model_class(config).to(torch_device).eval()
+
+            # Resume from cache doesn't work with random attention mask.
+            inputs_dict["attention_mask"] = torch.ones_like(inputs_dict["attention_mask"])
+
+            out_reference = model.generate(**inputs_dict, max_new_tokens=10, do_sample=False)
+
+            # Prefill the cache. We need at least max_new_tokens=2 to make the cache mark prefill
+            # as complete. Prefill is only marked as complete once single token is added to
+            # the cache (kv_length == 1). As the last decoded token isn't added to the cache
+            # we have to decode at least two tokens.
+            out_prefill = model.generate(
+                **inputs_dict,
+                max_new_tokens=2,
+                max_cache_len=100,
+                do_sample=False,
+                return_dict_in_generate=True,
+                use_cache=True,
+                cache_implementation=cache_implementation,
+            )
+
+            # Decode from cache by passing more than sliding_window unseen input ids.
+            out = model.generate(
+                input_ids=out_reference[:, :-3],
+                past_key_values=out_prefill.past_key_values,
+                max_new_tokens=3,
+                do_sample=False,
+                use_cache=True,
+            )
+            self.assertEqual(out.tolist(), out_reference.tolist())
+
+    def test_generate_dynamic_cache_sliding_window_too_small(self):
+        self._check_generate_cache_sliding_window_too_small("dynamic")
+
+    def test_generate_static_cache_sliding_window_too_small(self):
+        self._check_generate_cache_sliding_window_too_small("static")
 
 
 @require_torch
