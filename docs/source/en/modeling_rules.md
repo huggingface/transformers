@@ -277,10 +277,13 @@ Checks classes decorated with both @auto_docstring and @dataclass for source ord
 Checks that every PreTrainedModel subclass that overrides `_init_weights(self, module, ...)` chains the call up via `super()._init_weights(...)`. In modular files, `PreTrainedModel._init_weights(self, module)` and `raise AttributeError(...)` are accepted because they are modularization sentinels. If a model intentionally fully overrides initialization, suppress with `# trf-ignore: TRF018` on the line above the method. The base `_init_weights` covers standard module types (Linear, Embedding, LayerNorm, RotaryEmbedding, ...). Skipping `super()._init_weights(...)` silently leaves submodules unhandled by the override uninitialized, which can pass tests and surface much later as subtle weight-init bugs (cf. https://github.com/huggingface/transformers/pull/45597).
 
 ```diff
-def _init_weights(self, module):
+from ... import initialization as init
+
+ def _init_weights(self, module):
 +    super()._init_weights(module)
      if isinstance(module, AcmeCustomLayer):
-         module.gate.data.zero_()
+-        module.gate.data.zero_()
++        init.zeros_(module.gate)
 ```
 
 ### TRF019
