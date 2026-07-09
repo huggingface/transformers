@@ -16,13 +16,16 @@
 import math
 
 import torch
+from huggingface_hub.dataclasses import strict
 from torch import nn
 
 from ... import initialization as init
 from ...cache_utils import DynamicCache, EncoderDecoderCache
+from ...configuration_utils import PreTrainedConfig
 from ...generation import GenerationMixin
 from ...masking_utils import create_bidirectional_mask, create_causal_mask
 from ...modeling_outputs import (
+    BaseModelOutput,
     BaseModelOutputWithPastAndCrossAttentions,
     Seq2SeqLMOutput,
     Seq2SeqModelOutput,
@@ -31,13 +34,124 @@ from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
 from ...utils.generic import merge_with_config_defaults
-from ...utils.output_capturing import OutputRecorder, capture_outputs
+from ...utils.output_capturing import capture_outputs
 from ..auto import AutoModel
-from ..whisper.modeling_whisper import WhisperAttention, WhisperDecoderLayer
-from .configuration_canary import CanaryConfig
+from ..parakeet import ParakeetEncoderConfig
+from ..whisper.modeling_whisper import (
+    WhisperAttention,
+    WhisperDecoder,
+    WhisperDecoderLayer,
+    WhisperModel,
+    WhisperPreTrainedModel,
+)
 
 
 logger = logging.get_logger(__name__)
+
+
+@auto_docstring(checkpoint="harshaljanjani/canary-1b-v2-hf")
+@strict
+class CanaryConfig(PreTrainedConfig):
+    r"""
+    encoder_config (`Union[dict, ParakeetEncoderConfig]`, *optional*):
+        The config object or dictionary of the FastConformer encoder ([`ParakeetEncoderConfig`]).
+    vocab_size (`int`, *optional*, defaults to 16384):
+        Vocabulary size of the Canary decoder.
+    d_model (`int`, *optional*, defaults to 1024):
+        Dimensionality of the decoder layers and the pooler layer.
+    decoder_layers (`int`, *optional*, defaults to 8):
+        Number of decoder layers.
+    decoder_attention_heads (`int`, *optional*, defaults to 8):
+        Number of attention heads for each attention layer in the decoder.
+    decoder_ffn_dim (`int`, *optional*, defaults to 4096):
+        Dimensionality of the "intermediate" (often named feed-forward) layer in the decoder.
+    decoder_layerdrop (`float`, *optional*, defaults to 0.0):
+        The LayerDrop probability for the decoder. See the [LayerDrop paper](https://huggingface.co/papers/1909.11556)
+        for more details.
+    activation_function (`str`, *optional*, defaults to `"relu"`):
+        The non-linear activation function in the decoder feed-forward layers.
+    max_target_positions (`int`, *optional*, defaults to 1024):
+        The maximum sequence length that the decoder might ever be used with.
+    dropout (`float`, *optional*, defaults to 0.1):
+        The dropout probability for the decoder embeddings, attention output, and feed-forward layers.
+    activation_dropout (`float`, *optional*, defaults to 0.1):
+        The dropout ratio for activations inside the decoder feed-forward layer.
+    scale_embedding (`bool`, *optional*, defaults to `False`):
+        Whether to scale the decoder token embeddings by `sqrt(d_model)`.
+    use_cache (`bool`, *optional*, defaults to `True`):
+        Whether the model should return the last key/values attentions.
+    is_encoder_decoder (`bool`, *optional*, defaults to `True`):
+        Whether the model is used as an encoder/decoder model.
+    tie_word_embeddings (`bool`, *optional*, defaults to `True`):
+        Whether to tie the decoder input embeddings and the language modeling head.
+    pad_token_id (`int`, *optional*, defaults to 2):
+        Padding token id.
+    bos_token_id (`int`, *optional*, defaults to 4):
+        Beginning of stream token id (`<|startoftranscript|>`).
+    eos_token_id (`int`, *optional*, defaults to 3):
+        End of stream token id (`<|endoftext|>`).
+    decoder_start_token_id (`int`, *optional*, defaults to 7):
+        The token id that starts decoding (`<|startofcontext|>`, the first token of the multitask prompt).
+
+    Example:
+
+    ```python
+    >>> from transformers import CanaryForConditionalGeneration, CanaryConfig
+
+    >>> # Initializing a Canary configuration
+    >>> configuration = CanaryConfig()
+
+    >>> # Initializing a model from the configuration
+    >>> model = CanaryForConditionalGeneration(configuration)
+
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
+    ```
+    """
+
+    model_type = "canary"
+    keys_to_ignore_at_inference = ["past_key_values"]
+    sub_configs = {"encoder_config": ParakeetEncoderConfig}
+    attribute_map = {
+        "hidden_size": "d_model",
+        "num_attention_heads": "decoder_attention_heads",
+        "num_hidden_layers": "decoder_layers",
+    }
+
+    encoder_config: dict | PreTrainedConfig | None = None
+    vocab_size: int = 16384
+    d_model: int = 1024
+    decoder_layers: int = 8
+    decoder_attention_heads: int = 8
+    decoder_ffn_dim: int = 4096
+    decoder_layerdrop: float | int = 0.0
+    activation_function: str = "relu"
+    max_target_positions: int = 1024
+    dropout: float | int = 0.1
+    attention_dropout: float | int = 0.1
+    activation_dropout: float | int = 0.1
+    scale_embedding: bool = False
+    use_cache: bool = True
+    is_encoder_decoder: bool = True
+    tie_word_embeddings: bool = True
+    pad_token_id: int | None = 2
+    bos_token_id: int | None = 4
+    eos_token_id: int | None = 3
+    decoder_start_token_id: int | None = 7
+    initializer_range: float = 0.02
+
+    def __post_init__(self, **kwargs):
+        if isinstance(self.encoder_config, dict):
+            self.encoder_config = ParakeetEncoderConfig(**self.encoder_config)
+        elif self.encoder_config is None:
+            self.encoder_config = ParakeetEncoderConfig(
+                num_hidden_layers=32,
+                num_mel_bins=128,
+                scale_input=False,
+                layerdrop=0.0,
+                dropout_positions=0.0,
+            )
+        super().__post_init__(**kwargs)
 
 
 class CanaryAttention(WhisperAttention):
@@ -47,28 +161,9 @@ class CanaryAttention(WhisperAttention):
     is a biased linear layer.
     """
 
-    def __init__(
-        self,
-        embed_dim: int,
-        num_heads: int,
-        dropout: float = 0.0,
-        is_decoder: bool = False,
-        bias: bool = True,
-        is_causal: bool = False,
-        layer_idx: int | None = None,
-        config: CanaryConfig | None = None,
-    ):
-        super().__init__(
-            embed_dim=embed_dim,
-            num_heads=num_heads,
-            dropout=dropout,
-            is_decoder=is_decoder,
-            bias=bias,
-            is_causal=is_causal,
-            layer_idx=layer_idx,
-            config=config,
-        )
-        self.k_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
+    def __init__(self, **super_kwargs):
+        super().__init__(**super_kwargs)
+        self.k_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=True)
 
 
 class CanaryDecoderLayer(WhisperDecoderLayer):
@@ -105,57 +200,31 @@ class CanarySinusoidalPositionalEmbedding(nn.Module):
 
 
 @auto_docstring
-class CanaryPreTrainedModel(PreTrainedModel):
+class CanaryPreTrainedModel(WhisperPreTrainedModel):
     config: CanaryConfig
-    base_model_prefix = "model"
-    main_input_name = "input_features"
-    input_modalities = ("audio", "text")
-    supports_gradient_checkpointing = True
     _no_split_modules = ["ParakeetEncoderBlock", "CanaryDecoderLayer"]
-    _supports_flash_attn = True
-    _supports_sdpa = True
-    _supports_flex_attn = True
-    _can_compile_fullgraph = True
+
+    def _get_feat_extract_output_lengths(self):
+        raise AttributeError("Not needed for Canary")
 
     @torch.no_grad()
     def _init_weights(self, module):
-        super()._init_weights(module)
+        PreTrainedModel._init_weights(self, module)
         if isinstance(module, CanarySinusoidalPositionalEmbedding):
             init.copy_(module.positional_embeddings, module._build_table())
 
 
-class CanaryDecoder(CanaryPreTrainedModel):
+class CanaryDecoder(WhisperDecoder):
     """
     Transformer decoder consisting of *config.decoder_layers* [`CanaryDecoderLayer`] layers with fixed sinusoidal
     positional embeddings, an embedding layer norm and cross-attention to the FastConformer encoder outputs.
     """
 
-    main_input_name = "input_ids"
-    input_modalities = ("text",)
-    _can_record_outputs = {
-        "hidden_states": CanaryDecoderLayer,
-        "attentions": OutputRecorder(CanaryAttention, index=1, layer_name="self_attn"),
-        "cross_attentions": OutputRecorder(CanaryAttention, index=1, layer_name="encoder_attn"),
-    }
-
     def __init__(self, config: CanaryConfig):
         super().__init__(config)
-        self.dropout = config.dropout
-        self.layerdrop = config.decoder_layerdrop
-        self.padding_idx = config.pad_token_id
-        self.max_target_positions = config.max_target_positions
-        self.embed_scale = math.sqrt(config.d_model) if config.scale_embedding else 1.0
-
-        self.embed_tokens = nn.Embedding(config.vocab_size, config.d_model, self.padding_idx)
+        self.max_source_positions = None
         self.embed_positions = CanarySinusoidalPositionalEmbedding(self.max_target_positions, config.d_model)
         self.layernorm_embedding = nn.LayerNorm(config.d_model)
-
-        self.layers = nn.ModuleList(
-            [CanaryDecoderLayer(config, layer_idx) for layer_idx in range(config.decoder_layers)]
-        )
-        self.layer_norm = nn.LayerNorm(config.d_model)
-
-        self.gradient_checkpointing = False
         self.post_init()
 
     @merge_with_config_defaults
@@ -177,8 +246,9 @@ class CanaryDecoder(CanaryPreTrainedModel):
             Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention of
             the decoder.
         encoder_attention_mask (`torch.Tensor` of shape `(batch_size, encoder_sequence_length)`, *optional*):
-            Mask to avoid performing cross-attention on padding indices of `encoder_hidden_states`. Mask values
-            selected in `[0, 1]`: 1 for tokens that are **not masked**, 0 for tokens that are **masked**.
+            Mask to avoid performing attention on padding indices in `encoder_hidden_states`. Mask values selected in `[0, 1]`:
+            - 1 for tokens that are **not masked**,
+            - 0 for tokens that are **masked**.
         """
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
@@ -244,24 +314,35 @@ class CanaryDecoder(CanaryPreTrainedModel):
     specific head on top.
     """
 )
-class CanaryModel(CanaryPreTrainedModel):
+class CanaryModel(WhisperModel):
     def __init__(self, config: CanaryConfig):
         super().__init__(config)
         self.encoder = AutoModel.from_config(config.encoder_config)
-        self.decoder = CanaryDecoder(config)
         self.post_init()
 
-    def get_input_embeddings(self):
-        return self.decoder.embed_tokens
+    def _mask_input_features(self):
+        raise AttributeError("Not needed for Canary")
 
-    def set_input_embeddings(self, value):
-        self.decoder.embed_tokens = value
+    def freeze_encoder(self):
+        self.encoder.requires_grad_(False)
 
     def get_encoder(self):
         return self.encoder
 
     def get_decoder(self):
         return self.decoder
+
+    @can_return_tuple
+    def get_audio_features(
+        self,
+        input_features: torch.FloatTensor,
+        attention_mask: torch.LongTensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutput:
+        for output_flag in ("output_attentions", "output_hidden_states"):
+            if kwargs.get(output_flag) is None:
+                kwargs[output_flag] = getattr(self.config, output_flag, False)
+        return self.encoder(input_features=input_features, attention_mask=attention_mask, **kwargs)
 
     @can_return_tuple
     @auto_docstring
@@ -286,17 +367,8 @@ class CanaryModel(CanaryPreTrainedModel):
         decoder_position_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
             Indices of positions of each decoder input sequence token in the sinusoidal positional embeddings.
         """
-        # The encoder is a separate sub-model with its own config, so forward these output flags to it explicitly.
-        for output_flag in ("output_attentions", "output_hidden_states"):
-            if kwargs.get(output_flag) is None:
-                kwargs[output_flag] = getattr(self.config, output_flag, False)
-
         if encoder_outputs is None:
-            encoder_outputs = self.encoder(
-                input_features=input_features,
-                attention_mask=attention_mask,
-                **kwargs,
-            )
+            encoder_outputs = self.get_audio_features(input_features, attention_mask, **kwargs)
 
         encoder_attention_mask = getattr(encoder_outputs, "attention_mask", None)
         decoder_outputs = self.decoder(
@@ -395,7 +467,7 @@ class CanaryForConditionalGeneration(CanaryPreTrainedModel, GenerationMixin):
         >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
         >>> ds = ds.cast_column("audio", Audio(sampling_rate=processor.feature_extractor.sampling_rate))
 
-        >>> inputs = processor(ds[0]["audio"]["array"], source_lang="en", target_lang="en", return_tensors="pt")
+        >>> inputs = processor.apply_transcription_request(audio=ds[0]["audio"]["array"], source_language="en")
         >>> generated_ids = model.generate(**inputs)
         >>> transcription = processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
         ```"""
@@ -430,4 +502,4 @@ class CanaryForConditionalGeneration(CanaryPreTrainedModel, GenerationMixin):
         )
 
 
-__all__ = ["CanaryForConditionalGeneration", "CanaryModel", "CanaryPreTrainedModel"]
+__all__ = ["CanaryConfig", "CanaryForConditionalGeneration", "CanaryModel", "CanaryPreTrainedModel"]

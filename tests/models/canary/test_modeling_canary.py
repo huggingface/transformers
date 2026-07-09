@@ -14,8 +14,10 @@
 """Testing suite for the PyTorch Canary model."""
 
 import copy
+import json
 import math
 import unittest
+from pathlib import Path
 
 from transformers import CanaryConfig, ParakeetEncoderConfig, is_torch_available
 from transformers.testing_utils import is_flaky, require_torch, slow, torch_device
@@ -24,6 +26,9 @@ from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
+
+
+FIXTURES_DIR = Path(__file__).parent.parent.parent / "fixtures/canary"
 
 
 if is_torch_available():
@@ -404,35 +409,56 @@ class CanaryIntegrationTest(unittest.TestCase):
         model = CanaryForConditionalGeneration.from_pretrained(self.checkpoint).to(torch_device).eval()
         return processor, model
 
-    def _sample(self, processor):
+    def _load_datasamples(self, processor, num_samples):
         from datasets import Audio, load_dataset
 
         ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
         ds = ds.cast_column("audio", Audio(sampling_rate=processor.feature_extractor.sampling_rate))
-        return ds[0]["audio"]["array"]
+        speech_samples = ds.sort("id")[:num_samples]["audio"]
+        return [x["array"] for x in speech_samples]
 
     def test_transcription_en(self):
+        """
+        reproducer: https://gist.github.com/harshaljanjani/ff11260652a115da61037ecfc288c74f#file-reproducer_transcription-py
+        """
+        with open(FIXTURES_DIR / "expected_results_transcription.json") as f:
+            expected_transcriptions = json.load(f)["transcriptions"]
+
         processor, model = self._load()
-        inputs = self._sample(processor)
-        features = processor(inputs, source_lang="en", target_lang="en", pnc=True, return_tensors="pt").to(
-            torch_device
-        )
+        inputs = self._load_datasamples(processor, 1)
+        features = processor.apply_transcription_request(audio=inputs, source_language="en").to(torch_device)
         generated = model.generate(**features, max_new_tokens=128)
-        text = processor.batch_decode(generated, skip_special_tokens=True)[0]
-        self.assertEqual(
-            text.strip(),
-            "mister Quilter is the apostle of the middle classes, and we are glad to welcome his gospel.",
-        )
+        transcriptions = [text.strip() for text in processor.batch_decode(generated, skip_special_tokens=True)]
+        self.assertListEqual(transcriptions, expected_transcriptions)
+
+    def test_transcription_en_batched(self):
+        """
+        reproducer: https://gist.github.com/harshaljanjani/d93abd784d09a7f25291080ebcdf805d#file-reproducer_batch-py
+        """
+        with open(FIXTURES_DIR / "expected_results_batch.json") as f:
+            expected_transcriptions = json.load(f)["transcriptions"]
+
+        processor, model = self._load()
+        inputs = self._load_datasamples(processor, 2)
+        features = processor.apply_transcription_request(
+            audio=inputs, source_language="en", target_language=["en", "de"]
+        ).to(torch_device)
+        generated = model.generate(**features, max_new_tokens=128)
+        transcriptions = [text.strip() for text in processor.batch_decode(generated, skip_special_tokens=True)]
+        self.assertListEqual(transcriptions, expected_transcriptions)
 
     def test_translation_en_to_de(self):
+        """
+        reproducer: https://gist.github.com/harshaljanjani/5b093d7fc25507694b7b6ada08fa7988#file-reproducer_translation-py
+        """
+        with open(FIXTURES_DIR / "expected_results_translation.json") as f:
+            expected_transcriptions = json.load(f)["transcriptions"]
+
         processor, model = self._load()
-        inputs = self._sample(processor)
-        features = processor(inputs, source_lang="en", target_lang="de", pnc=True, return_tensors="pt").to(
+        inputs = self._load_datasamples(processor, 1)
+        features = processor.apply_transcription_request(audio=inputs, source_language="en", target_language="de").to(
             torch_device
         )
         generated = model.generate(**features, max_new_tokens=128)
-        text = processor.batch_decode(generated, skip_special_tokens=True)[0]
-        self.assertEqual(
-            text.strip(),
-            "Mister Quilter ist der Apostel der Mittelschicht, und wir freuen uns, sein Evangelium willkommen zu heißen.",
-        )
+        transcriptions = [text.strip() for text in processor.batch_decode(generated, skip_special_tokens=True)]
+        self.assertListEqual(transcriptions, expected_transcriptions)

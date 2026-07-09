@@ -32,6 +32,25 @@ from transformers.models.parakeet.convert_nemo_to_hf import convert_encoder_conf
 from transformers.utils.hub import cached_file
 
 
+CANARY_CHAT_TEMPLATE = (
+    "{{- '<|startofcontext|><|startoftranscript|><|emo:undefined|>' -}}"
+    "{%- for message in messages -%}"
+    "{%- if message['role'] == 'user' -%}"
+    "{%- for content in message['content'] if content['type'] == 'text' -%}"
+    "{{- '<|' ~ content['source_language'] ~ '|>' -}}"
+    "{{- '<|' ~ content['target_language'] ~ '|>' -}}"
+    "{{- '<|pnc|>' if content['punctuation'] else '<|nopnc|>' -}}"
+    "{{- '<|noitn|>' -}}"
+    "{{- '<|timestamp|>' if content['timestamps'] else '<|notimestamp|>' -}}"
+    "{{- '<|nodiarize|>' -}}"
+    "{%- endfor -%}"
+    "{%- elif message['role'] == 'assistant' -%}"
+    "{{- message['content'] ~ '<|endoftext|>' -}}"
+    "{%- endif -%}"
+    "{%- endfor -%}"
+)
+
+
 NEMO_TO_HF_ENCODER_MAPPING = {
     r"^encoder\.pre_encode\.conv\.": r"encoder.subsampling.layers.",
     r"^encoder\.pre_encode\.out\.": r"encoder.subsampling.linear.",
@@ -132,7 +151,9 @@ def write_processor(nemo_config, model_files, output_dir, push_to_repo_id=None):
         n_fft=preprocessor["n_fft"],
     )
 
-    processor = CanaryProcessor(feature_extractor=feature_extractor, tokenizer=tokenizer)
+    processor = CanaryProcessor(
+        feature_extractor=feature_extractor, tokenizer=tokenizer, chat_template=CANARY_CHAT_TEMPLATE
+    )
     processor.save_pretrained(output_dir)
     if push_to_repo_id:
         processor.push_to_hub(push_to_repo_id)

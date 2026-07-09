@@ -31,7 +31,12 @@ from ...generation import GenerationMixin
 from ...masking_utils import create_bidirectional_mask, create_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import BaseModelOutputWithPastAndCrossAttentions, Seq2SeqLMOutput, Seq2SeqModelOutput
+from ...modeling_outputs import (
+    BaseModelOutput,
+    BaseModelOutputWithPastAndCrossAttentions,
+    Seq2SeqLMOutput,
+    Seq2SeqModelOutput,
+)
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
@@ -111,7 +116,7 @@ class CanaryAttention(nn.Module):
                 "when creating this class."
             )
         self.layer_idx = layer_idx
-        self.k_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
+        self.k_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=True)
         self.v_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
         self.q_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
         self.out_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
@@ -323,6 +328,7 @@ class CanaryPreTrainedModel(PreTrainedModel):
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True
+
     _can_compile_fullgraph = True
 
     @torch.no_grad()
@@ -338,13 +344,14 @@ class CanaryDecoder(CanaryPreTrainedModel):
     positional embeddings, an embedding layer norm and cross-attention to the FastConformer encoder outputs.
     """
 
-    main_input_name = "input_ids"
-    input_modalities = ("text",)
     _can_record_outputs = {
         "hidden_states": CanaryDecoderLayer,
         "attentions": OutputRecorder(CanaryAttention, index=1, layer_name="self_attn"),
         "cross_attentions": OutputRecorder(CanaryAttention, index=1, layer_name="encoder_attn"),
     }
+
+    main_input_name = "input_ids"
+    input_modalities = ("text",)
 
     def __init__(self, config: CanaryConfig):
         super().__init__(config)
@@ -352,18 +359,21 @@ class CanaryDecoder(CanaryPreTrainedModel):
         self.layerdrop = config.decoder_layerdrop
         self.padding_idx = config.pad_token_id
         self.max_target_positions = config.max_target_positions
+        self.max_source_positions = None
         self.embed_scale = math.sqrt(config.d_model) if config.scale_embedding else 1.0
 
         self.embed_tokens = nn.Embedding(config.vocab_size, config.d_model, self.padding_idx)
         self.embed_positions = CanarySinusoidalPositionalEmbedding(self.max_target_positions, config.d_model)
-        self.layernorm_embedding = nn.LayerNorm(config.d_model)
 
         self.layers = nn.ModuleList(
             [CanaryDecoderLayer(config, layer_idx) for layer_idx in range(config.decoder_layers)]
         )
+
         self.layer_norm = nn.LayerNorm(config.d_model)
 
         self.gradient_checkpointing = False
+        self.layernorm_embedding = nn.LayerNorm(config.d_model)
+        # Initialize weights and apply final processing
         self.post_init()
 
     @merge_with_config_defaults
@@ -385,8 +395,9 @@ class CanaryDecoder(CanaryPreTrainedModel):
             Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention of
             the decoder.
         encoder_attention_mask (`torch.Tensor` of shape `(batch_size, encoder_sequence_length)`, *optional*):
-            Mask to avoid performing cross-attention on padding indices of `encoder_hidden_states`. Mask values
-            selected in `[0, 1]`: 1 for tokens that are **not masked**, 0 for tokens that are **masked**.
+            Mask to avoid performing attention on padding indices in `encoder_hidden_states`. Mask values selected in `[0, 1]`:
+            - 1 for tokens that are **not masked**,
+            - 0 for tokens that are **masked**.
         """
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
@@ -457,6 +468,7 @@ class CanaryModel(CanaryPreTrainedModel):
         super().__init__(config)
         self.encoder = AutoModel.from_config(config.encoder_config)
         self.decoder = CanaryDecoder(config)
+        # Initialize weights and apply final processing
         self.post_init()
 
     def get_input_embeddings(self):
@@ -465,11 +477,12 @@ class CanaryModel(CanaryPreTrainedModel):
     def set_input_embeddings(self, value):
         self.decoder.embed_tokens = value
 
-    def get_encoder(self):
-        return self.encoder
-
-    def get_decoder(self):
-        return self.decoder
+    def freeze_encoder(self):
+        """
+        Calling this function will disable the gradient computation for the Canary encoder so that its parameters will
+        not be updated during training.
+        """
+        self.encoder.requires_grad_(False)
 
     @can_return_tuple
     @auto_docstring
@@ -494,17 +507,8 @@ class CanaryModel(CanaryPreTrainedModel):
         decoder_position_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
             Indices of positions of each decoder input sequence token in the sinusoidal positional embeddings.
         """
-        # The encoder is a separate sub-model with its own config, so forward these output flags to it explicitly.
-        for output_flag in ("output_attentions", "output_hidden_states"):
-            if kwargs.get(output_flag) is None:
-                kwargs[output_flag] = getattr(self.config, output_flag, False)
-
         if encoder_outputs is None:
-            encoder_outputs = self.encoder(
-                input_features=input_features,
-                attention_mask=attention_mask,
-                **kwargs,
-            )
+            encoder_outputs = self.get_audio_features(input_features, attention_mask, **kwargs)
 
         encoder_attention_mask = getattr(encoder_outputs, "attention_mask", None)
         decoder_outputs = self.decoder(
@@ -529,6 +533,24 @@ class CanaryModel(CanaryPreTrainedModel):
             encoder_hidden_states=encoder_outputs.hidden_states,
             encoder_attentions=encoder_outputs.attentions,
         )
+
+    def get_encoder(self):
+        return self.encoder
+
+    def get_decoder(self):
+        return self.decoder
+
+    @can_return_tuple
+    def get_audio_features(
+        self,
+        input_features: torch.FloatTensor,
+        attention_mask: torch.LongTensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutput:
+        for output_flag in ("output_attentions", "output_hidden_states"):
+            if kwargs.get(output_flag) is None:
+                kwargs[output_flag] = getattr(self.config, output_flag, False)
+        return self.encoder(input_features=input_features, attention_mask=attention_mask, **kwargs)
 
 
 @auto_docstring(
@@ -603,7 +625,7 @@ class CanaryForConditionalGeneration(CanaryPreTrainedModel, GenerationMixin):
         >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
         >>> ds = ds.cast_column("audio", Audio(sampling_rate=processor.feature_extractor.sampling_rate))
 
-        >>> inputs = processor(ds[0]["audio"]["array"], source_lang="en", target_lang="en", return_tensors="pt")
+        >>> inputs = processor.apply_transcription_request(audio=ds[0]["audio"]["array"], source_language="en")
         >>> generated_ids = model.generate(**inputs)
         >>> transcription = processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
         ```"""
