@@ -1156,3 +1156,53 @@ def retry(
         return wrapper
 
     return decorator
+
+
+def safe_extract_tar(tarfile_obj, extract_dir, filter=None):
+    """
+    Safely extract a tar archive, preventing path traversal attacks (tar-slip).
+
+    Validates that all member paths resolve within the target directory before extraction.
+
+    Args:
+        tarfile_obj: An open tarfile.TarFile object.
+        extract_dir: The target directory to extract into.
+        filter: Optional filter function for tar members (Python 3.12+ data_filter is recommended).
+    """
+    extract_dir = os.path.realpath(extract_dir)
+    members = tarfile_obj.getmembers()
+
+    for member in members:
+        member_path = os.path.join(extract_dir, member.name)
+        resolved_path = os.path.realpath(member_path)
+        if not (resolved_path + os.sep).startswith(extract_dir + os.sep) and resolved_path != extract_dir:
+            raise ValueError(
+                f"Refusing to extract tar member '{member.name}' as it would write outside the target "
+                f"directory '{extract_dir}' (resolved to '{resolved_path}'). This could be a path traversal attack."
+            )
+
+    tarfile_obj.extractall(extract_dir, filter=filter)
+
+
+def safe_extract_zip(zipfile_obj, extract_dir):
+    """
+    Safely extract a zip archive, preventing path traversal attacks (zip-slip).
+
+    Validates that all member paths resolve within the target directory before extraction.
+
+    Args:
+        zipfile_obj: An open zipfile.ZipFile object.
+        extract_dir: The target directory to extract into.
+    """
+    extract_dir = os.path.realpath(extract_dir)
+
+    for info in zipfile_obj.infolist():
+        member_path = os.path.join(extract_dir, info.filename)
+        resolved_path = os.path.realpath(member_path)
+        if not (resolved_path + os.sep).startswith(extract_dir + os.sep) and resolved_path != extract_dir:
+            raise ValueError(
+                f"Refusing to extract zip member '{info.filename}' as it would write outside the target "
+                f"directory '{extract_dir}' (resolved to '{resolved_path}'). This could be a path traversal attack."
+            )
+
+    zipfile_obj.extractall(extract_dir)

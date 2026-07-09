@@ -28,6 +28,7 @@ from torch import nn
 from tqdm import tqdm
 
 from transformers import MarianConfig, MarianMTModel, MarianTokenizer
+from transformers.utils.generic import safe_extract_zip
 
 
 def remove_suffix(text: str, suffix: str):
@@ -691,7 +692,7 @@ def save_json(content: dict | list, path: str) -> None:
 
 def unzip(zip_path: str, dest_dir: str) -> None:
     with ZipFile(zip_path, "r") as zipObj:
-        zipObj.extractall(dest_dir)
+        safe_extract_zip(zipObj, dest_dir)
 
 
 if __name__ == "__main__":

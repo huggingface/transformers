@@ -45,6 +45,7 @@ from transformers import (
     ParakeetTokenizer,
 )
 from transformers.convert_slow_tokenizer import ParakeetConverter
+from transformers.utils.generic import safe_extract_tar
 from transformers.utils.hub import cached_file
 
 
@@ -94,7 +95,7 @@ def extract_nemo_archive(nemo_file_path: str, extract_dir: str) -> dict[str, str
     print(f"Extracting NeMo archive: {nemo_file_path}")
 
     with tarfile.open(nemo_file_path, "r", encoding="utf-8") as tar:
-        tar.extractall(extract_dir)
+        safe_extract_tar(tar, extract_dir)
 
     all_files = []
     for root, dirs, files in os.walk(extract_dir):

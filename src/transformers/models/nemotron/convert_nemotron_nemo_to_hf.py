@@ -307,6 +307,14 @@ def extract_nemotron_tokenizer(nemo_file, model_config, output_hf_path, nemo_tok
 
             archive = tarfile.open(nemo_file, "r")
             tokenizer_filename = "./" + tokenizer_fn  # exclude 'nemo:' prefix
+            # Validate the member path to prevent path traversal attacks
+            resolved = os.path.realpath(os.path.join(output_hf_path, tokenizer_fn))
+            target_dir = os.path.realpath(output_hf_path)
+            if not (resolved + os.sep).startswith(target_dir + os.sep) and resolved != target_dir:
+                raise ValueError(
+                    f"Refusing to extract tokenizer file '{tokenizer_filename}' as it would write outside "
+                    f"the target directory. This could be a path traversal attack."
+                )
             archive.extract(tokenizer_filename, output_hf_path)
             archive.close()
             os.rename(f"{output_hf_path}/{tokenizer_fn}", output_tokenizer)
