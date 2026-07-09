@@ -1199,6 +1199,8 @@
         title: SAM2 Video
       - local: model_doc/sam3_tracker_video
         title: Sam3TrackerVideo
+      - local: model_doc/sam3_1_tracker_video
+        title: SAM 3.1 Tracker Video
       - local: model_doc/timesformer
         title: TimeSformer
       - local: model_doc/vjepa2
@@ -1457,6 +1459,8 @@
         title: SAM3
       - local: model_doc/sam3_video
         title: SAM3 Video
+      - local: model_doc/sam3_1_video
+        title: SAM 3.1 Video
       - local: model_doc/sam3_lite_text
         title: SAM3-LiteText
       - local: model_doc/shieldgemma2

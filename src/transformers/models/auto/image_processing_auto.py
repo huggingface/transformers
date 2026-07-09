@@ -140,6 +140,7 @@ else:
             ("sam2_video", {"torchvision": "Sam2ImageProcessor"}),
             ("sam3_lite_text", {"torchvision": "Sam3ImageProcessor"}),
             ("sam3_tracker", {"torchvision": "Sam3ImageProcessor"}),
+            ("sam3_1_tracker_video", {"torchvision": "Sam3ImageProcessor"}),
             ("sam3_tracker_video", {"torchvision": "Sam3ImageProcessor"}),
             ("sam3_video", {"torchvision": "Sam3ImageProcessor"}),
             ("sam_hq", {"torchvision": "SamImageProcessor", "pil": "SamImageProcessorPil"}),
