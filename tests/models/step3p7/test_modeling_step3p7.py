@@ -16,7 +16,7 @@
 import unittest
 
 from transformers import is_torch_available
-from transformers.models.step_3_7_flash.configuration_step3p7 import (
+from transformers.models.step3p7.configuration_step3p7 import (
     Step3p7Config,
     Step3p7TextConfig,
     Step3p7VisionConfig,
@@ -82,7 +82,6 @@ class Step3p7VisionText2TextModelTester(VLMModelTester):
             image_size=self.image_size,
             patch_size=self.patch_size,
             mlp_ratio=1.0,
-            use_rope2d=True,
         )
 
     def get_text_config(self):

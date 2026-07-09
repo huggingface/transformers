@@ -16,10 +16,10 @@ format (text-config under "text_config", model_type "step3p7").
 
 Usage:
     # in-place update
-    python scripts/step_3_7_flash/convert_config.py --config-dir /path/to/model
+    python scripts/step3p7/convert_config.py --config-dir /path/to/model
 
     # write to a separate directory
-    python scripts/step_3_7_flash/convert_config.py \\
+    python scripts/step3p7/convert_config.py \\
         --config-dir /path/to/model --output-dir /path/to/output
 """
 
