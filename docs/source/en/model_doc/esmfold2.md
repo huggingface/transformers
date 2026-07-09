@@ -36,11 +36,10 @@ from transformers import ESMFold2Model
 
 # The ESMC backbone is bundled in the checkpoint and loaded with the model.
 # bf16 is the recommended inference precision.
-model = ESMFold2Model.from_pretrained("biohub/ESMFold2", dtype=torch.bfloat16).cuda().eval()
+model = ESMFold2Model.from_pretrained("biohub/ESMFold2", dtype=torch.bfloat16, device_map=0)
 
 pdb_string = model.infer_protein_as_pdb("MKTAYIAKQRQISFVKSHFSRQLEERLGLIEVQ")
-with open("prediction.pdb", "w") as f:
-    f.write(pdb_string)
+print(pdb_string)
 ```
 
 `infer_protein` returns the raw outputs (atom coordinates, distogram logits and confidence metrics) as an
@@ -63,7 +62,7 @@ from transformers import ESMFold2Model
 
 model = ESMFold2Model.from_pretrained(
     "biohub/ESMFold2", dtype=torch.bfloat16, device_map="cuda", use_kernels=True
-).eval()
+)
 
 pdb_string = model.infer_protein_as_pdb("MKTAYIAKQRQISFVKSHFSRQLEERLGLIEVQ")
 ```

@@ -13,13 +13,13 @@
 # limitations under the License.
 from typing import TYPE_CHECKING
 
-from ...utils import _LazyModule  # type: ignore[import]
-from ...utils.import_utils import define_import_structure  # type: ignore[import]
+from ...utils import _LazyModule
+from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_esmfold2 import *  # noqa: F403
-    from .modeling_esmfold2 import *  # noqa: F403
+    from .configuration_esmfold2 import *
+    from .modeling_esmfold2 import *
 else:
     import sys
 
