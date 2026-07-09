@@ -32,7 +32,6 @@ from transformers.exporters.utils import (
 )
 from transformers.testing_utils import (
     require_executorch,
-    require_non_gpu,
     require_onnxruntime,
     require_onnxscript,
     require_torch_greater_or_equal,
@@ -524,7 +523,7 @@ class ExportTesterMixin:
     # ──────────────────── ExecuTorch tests ───────────────────────
 
     @DYNAMIC_EXPORT_PARAMS
-    @require_non_gpu
+    @slow
     @require_executorch
     @pytest.mark.executorch_export_test
     @pytest.mark.timeout(EXPORT_TEST_TIMEOUT)
@@ -533,9 +532,8 @@ class ExportTesterMixin:
         """Export each model class to ExecuTorch (xnnpack on CPU, cuda on GPU) and verify no errors."""
 
         self._skip_if_not_exportable()
-        backend = "cuda" if torch_device == "cuda" else "xnnpack"
         exporter = ExecutorchExporter()
-        config = ExecutorchConfig(backend=backend, dynamic=dynamic)
+        config = ExecutorchConfig(dynamic=dynamic)
 
         for model_class in self.all_model_classes:
             if self._should_skip(model_class, dynamic=dynamic, backend="executorch"):
@@ -649,7 +647,7 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
     # ──────────────────── ExecuTorch tests ───────────────────────
 
     @DYNAMIC_EXPORT_PARAMS
-    @require_non_gpu
+    @slow
     @require_executorch
     @pytest.mark.executorch_export_test
     @pytest.mark.timeout(EXPORT_TEST_TIMEOUT)
@@ -658,9 +656,8 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
         """Export prefill and decode stages to ExecuTorch and verify no errors."""
 
         self._skip_if_not_exportable()
-        backend = "cuda" if torch_device == "cuda" else "xnnpack"
         exporter = ExecutorchExporter()
-        config = ExecutorchConfig(backend=backend, dynamic=dynamic)
+        config = ExecutorchConfig(dynamic=dynamic)
 
         for model_class in self.all_generative_model_classes:
             if self._should_skip(model_class, generate=True, dynamic=dynamic, backend="executorch"):
