@@ -100,7 +100,9 @@ class ModelRunner:
         """Runs the encoder on the given set of kwargs and stores the new embeddings in the embeddings cache."""
         if self.cache.embeddings_cache is None:
             raise ValueError("Cannot run encoder because there is no embeddings cache.")
-        with self.compute_stream_ctx():
+        # The encoder never runs at the same time as the model (because it runs on the compute stream) so we can use the
+        # same memory pool as the model and avoid new tensor allocations
+        with self.compute_stream_ctx(), mem_pool_ctx(self.mem_pool):
             for encoder_kw in encoder_kwargs:
                 request_id = encoder_kw.pop(self.cache.embeddings_cache.REQUEST_ID_KEY)
 
