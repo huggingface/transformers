@@ -16,7 +16,6 @@ import asyncio
 import gc
 import queue
 import threading
-from abc import abstractmethod
 from collections.abc import Callable, Generator
 from contextlib import contextmanager, nullcontext
 from time import perf_counter
@@ -27,10 +26,8 @@ from torch import nn
 from tqdm import tqdm
 from tqdm.contrib.logging import logging_redirect_tqdm
 
-from ...configuration_utils import PretrainedConfig
 from ...generation.configuration_utils import ContinuousBatchingConfig, GenerationConfig
 from ...utils.logging import logging
-from ..logits_process import LogitsProcessorList
 from .cache import PagedAttentionCache
 from .cb_logits_processors import ContinuousBatchingLogitsProcessorList
 from .distributed import DistributedHelper
@@ -40,7 +37,7 @@ from .model_runner import ModelRunner
 from .offloading_manager import OffloadingManager
 from .requests import GenerationOutput, RequestState, RequestStatus, logger
 from .scheduler import SCHEDULER_MAPPING, FIFOScheduler, Scheduler
-from .utils import WorkloadHints, drain_queue
+from .utils import ProtoPretrainedModel, WorkloadHints, check_modality_support, drain_queue
 
 
 """
@@ -62,21 +59,6 @@ memory and time to create, we use an LRU cache with a fixed size to limit memory
 
 All defaults are stored in ContinuousBatchingConfig.resolve_sentinel_values().
 """
-
-
-# We cannot use `PreTrainedModel` for circular import reasons, so this helps keep track of the basic types
-class ProtoPretrainedModel(nn.Module):
-    config: PretrainedConfig
-    dtype: torch.dtype
-    device: torch.device
-
-    @abstractmethod
-    def set_attn_implementation(self, attn_implementation: str) -> None:
-        pass
-
-    @abstractmethod
-    def _get_logits_processor(self, generation_config: GenerationConfig) -> LogitsProcessorList:
-        pass
 
 
 class OutputRouter:
@@ -191,8 +173,8 @@ class ContinuousBatchProcessor:
 
     def __init__(
         self,
+        model: ProtoPretrainedModel,
         cache: PagedAttentionCache,
-        config: PretrainedConfig,
         generation_config: GenerationConfig,
         continuous_batching_config: ContinuousBatchingConfig,
         logit_processor: ContinuousBatchingLogitsProcessorList,
@@ -200,16 +182,14 @@ class ContinuousBatchProcessor:
         cancel_queue: queue.Queue | None,
         output_router: OutputRouter,
         background_thread_status: BackgroundThreadStatus,
-        model_device: torch.device,
-        model_dtype: torch.dtype,
         scheduler: Scheduler,
         distributed_helper: DistributedHelper,
     ) -> None:
         """Initialize the continuous batch processor.
 
         Args:
+            model: The model that will be used for the generation, NOT saved as an attribute, but used to infer others
             cache: A [`PagedAttentionCache`] object
-            config: The model configuration
             generation_config: The generation configuration
             continuous_batching_config: The continuous batching configuration
             logit_processor: The [`ContinuousBatchingLogitsProcessorList`] object used to process the logits.
@@ -217,43 +197,35 @@ class ContinuousBatchProcessor:
             cancel_queue: Queue for cancellation request_ids. Is None if this process is not a TP driver.
             output_router: An [`OutputRouter`] object that routes outputs to handlers or the output queue.
             background_thread_status: A [`BackgroundThreadStatus`] object to track the background thread status.
-            model_device: Device for model inputs/outputs
-            model_dtype: Data type for model inputs/outputs
             scheduler: The [`Scheduler`] to use
             distributed_helper: The [`DistributedHelper`] to use
         """
         self.cache = cache
-        self.config = config
+        self.config = model.config
         self.cb_config = continuous_batching_config
         self.logit_processor = logit_processor
         self.input_queue = input_queue
         self.cancel_queue = cancel_queue
         self.output_router = output_router
         self.background_thread_status = background_thread_status
-        self.model_device = model_device
-        self.model_dtype = model_dtype
+        self.model_device = model.device
+        self.model_dtype = model.dtype
         self.scheduler = scheduler
         self.distributed_helper = distributed_helper
 
-        # Generation-related attributes
-        self.do_sample = getattr(generation_config, "do_sample", True)
-        self.return_logprobs = continuous_batching_config.return_logprobs
-
         # Get an integer seed for the TP group. Also work for no TP.
-        self.distributed_helper.set_tp_seed(continuous_batching_config.seed, model_device)
+        self.distributed_helper.set_tp_seed(continuous_batching_config.seed, self.model_device)
 
         # Retrieve the size of the sliding window if there is one
-        self.sliding_window = 1 if getattr(config, "sliding_window", None) is None else config.sliding_window
-
+        self.sliding_window = 1 if getattr(self.config, "sliding_window", None) is None else self.config.sliding_window
         self.max_batch_tokens = cache.max_batch_tokens
 
         # Setup inputs and outputs
         io_kwargs = {
+            "model": model,
             "cache": cache,
-            "config": config,
             "continuous_batching_config": continuous_batching_config,
-            "device": model_device,
-            "model_dtype": model_dtype,
+            "device": self.model_device,
             "logit_processor": self.logit_processor,
         }
         self.use_async_batching = self.cb_config.use_async_batching
@@ -279,8 +251,8 @@ class ContinuousBatchProcessor:
             cb_config=self.cb_config,
             cache=self.cache,
             inputs_and_outputs=self.inputs_and_outputs,
-            do_sample=self.do_sample,
-            return_logprobs=self.return_logprobs,
+            do_sample=bool(generation_config.do_sample),  # do_sample: bool | None, this resolves None to False
+            return_logprobs=continuous_batching_config.return_logprobs,
         )
 
     def __repr__(self) -> str:
@@ -371,7 +343,7 @@ class ContinuousBatchProcessor:
         if not self.scheduler.has_pending_requests():
             return False
 
-        # Schedule the next batch of requests
+        # Schedule the next batch of requests # TODO: maybe this should be an object + have the MM info
         requests_in_batch, use_decode_fast_path, num_q_tokens, max_kv_read = self.scheduler.schedule_batch(
             self.max_batch_tokens, self.cache.num_pages
         )
@@ -421,10 +393,10 @@ class ContinuousBatchProcessor:
 
     def update_batch(self) -> None:
         """Update request states based on generated tokens."""
-        requests_in_batch, new_tokens, logprobs = self.inputs_and_outputs.prepare_batch_update()
+        future_states, new_tokens, logprobs, embeddings_cache_to_free = self.inputs_and_outputs.prepare_batch_update()
         current_logits_index = 0
         pending_outputs = []
-        for future_state in requests_in_batch:
+        for future_state in future_states:
             state = future_state.state
             # Early return if the request was finished or offloaded between scheduling and update (async mode)
             if state.status in (RequestStatus.FINISHED, RequestStatus.PENDING):
@@ -459,6 +431,10 @@ class ContinuousBatchProcessor:
 
         if pending_outputs:
             self.output_router.deliver_batch(pending_outputs)
+
+        # If there are requests in the embeddings cache with cache to free, we release them now
+        if self.cache.embeddings_cache is not None:
+            self.cache.embeddings_cache.release_cache_for_requests(embeddings_cache_to_free)
 
         # If some requests need to be forked, we do it now
         copy_source, copy_destination = [], []
@@ -531,6 +507,14 @@ class ContinuousBatchProcessor:
         # device. Hence, to make the limit clear, this is left out of the model runner scope.
         batch_data = self.inputs_and_outputs.get_model_kwargs(use_padding=self.model_runner.pad_inputs)
 
+        # If there are multimodal inputs to embed, we do it here
+        # TODO: add a bin of cuda graphs for the encoder
+        # TODO: add a compiled version of the encoder
+        # TODO: better integration of the encoder in async mode (side stream? profile and see)
+        encoder_kwargs = self.inputs_and_outputs.encoder_kwargs
+        if encoder_kwargs:
+            self.model_runner.run_encoder(model, encoder_kwargs)
+
         # This takes care of the forward pass, logits processing, and sampling. After this returns, the compute is
         # scheduled on the device's compute stream, but may not have finished yet.
         self.model_runner.compute_batch(model, batch_data)
@@ -590,7 +574,7 @@ class ContinuousBatchingManager:
         self.warmed_up = False  # Set to True after warmup is completed. Useful for persistent managers.
 
         # Model-related attributes
-        self._original_attn_impl = None  # needs to be set before the model is switched to paged attention
+        self._original_attn_impl: str | dict[str, str] | None = None  # needs to be set before the model is switched to paged attention
         self.switch_to_paged_attn(model)
         self.model = model.eval()
 
@@ -627,10 +611,28 @@ class ContinuousBatchingManager:
         self._use_prefix_sharing = self.continuous_batching_config.allow_block_sharing
 
     def switch_to_paged_attn(self, model: ProtoPretrainedModel) -> None:
-        """Switch to the paged version of the attention implementation. If the attn is already paged, does nothing."""
-        if "paged|" not in model.config._attn_implementation:
-            self._original_attn_impl = model.config._attn_implementation
-            model.set_attn_implementation(f"paged|{model.config._attn_implementation}")
+        """Switch the decoder's attention to its paged version (if not already paged). Encoders such as a vision tower
+        or audio encoder keep their own attention, as they do not use the paged KV cache."""
+        # Early exit if the decoder is already paged
+        decoder_config = model.config.get_text_config(decoder=True)
+        if "paged|" in decoder_config._attn_implementation:
+            return None
+        # Save the orignal attn and perform the swap
+        self._original_attn_impl = model.config._attn_implementation
+        self._swap_decoder_attn(model, f"paged|{model.config._attn_implementation}")
+
+    def _swap_decoder_attn(self, model: ProtoPretrainedModel, new_attn_impl: str) -> None:
+        decoder_config = model.config.get_text_config(decoder=True)
+        # Save the attention implementation of all non-decoder models
+        encoder_attn = {}
+        for key in model.config.sub_configs:
+            subconfig = getattr(model.config, key, None)
+            if subconfig is not None and subconfig is not decoder_config:
+                encoder_attn[key] = subconfig._attn_implementation
+        # Page the whole model with a string and then restore the encoders (if any) so only the decoder is paged
+        model.set_attn_implementation(new_attn_impl)
+        if encoder_attn:
+            model.set_attn_implementation(encoder_attn)
 
     def warmup(self) -> None:
         """Pre-capture CUDA graphs for varlen and decode paths by running dummy batches. Initializes the batch
@@ -698,7 +700,7 @@ class ContinuousBatchingManager:
 
         # Restore the original attention implementation
         if self._original_attn_impl is not None:
-            self.model.set_attn_implementation(self._original_attn_impl)
+            self._swap_decoder_attn(self.model, self._original_attn_impl)
             self._original_attn_impl = None
 
         # In all cases, a little cleanup is good
@@ -733,6 +735,7 @@ class ContinuousBatchingManager:
     def add_request(
         self,
         input_ids: list[int],
+        multimodal_inputs: dict[str, Any] | None = None,
         request_id: str | None = None,
         max_new_tokens: int | None = None,
         streaming: bool = False,
@@ -744,6 +747,7 @@ class ContinuousBatchingManager:
 
         Args:
             input_ids: Input token IDs to use as prompt
+            multimodal_inputs: Multimodal inputs returned by the processor. Tensors are assumed to be device-side.
             request_id: Optional custom request ID (auto-generated if None)
             max_new_tokens: Maximum number of new tokens to generate
             streaming: Whether to stream tokens as they're generated
@@ -770,10 +774,14 @@ class ContinuousBatchingManager:
         max_new_tokens = self.generation_config.max_new_tokens if max_new_tokens is None else max_new_tokens
         eos_token_id = self.generation_config.eos_token_id if eos_token_id is None else eos_token_id
 
-        # NOTE: do we want to handle a case when the user wants token ids returned instead of decoded text?
+        # Safeguard against adding ambiguous "multimodal" request that have in fact no multimodal inputs
+        if multimodal_inputs is not None and len(multimodal_inputs) == 0:
+            multimodal_inputs = None
+
         state = RequestState(
             request_id=request_id,
             initial_tokens=list(input_ids),
+            multimodal_inputs=multimodal_inputs,
             num_children=self.num_return_sequences - 1,
             record_timestamps=record_timestamps,
             max_new_tokens=max_new_tokens,
@@ -790,6 +798,7 @@ class ContinuousBatchingManager:
     def add_requests(
         self,
         inputs: list[list[int]],
+        multimodal_inputs: list[dict[str, Any] | None] | None = None,
         max_new_tokens: int | None = None,
         streaming: bool = False,
         record_timestamps: bool = False,
@@ -801,8 +810,11 @@ class ContinuousBatchingManager:
         with self._request_lock:
             request_ids = [f"req_{i}" for i in range(self._request_counter, self._request_counter + num_requests)]
             self._request_counter += num_requests
+        # Broadcast the multimodal inputs if they are set to None
+        if multimodal_inputs is None:
+            multimodal_inputs = [None] * num_requests
         # If there is prefix sharing, we sort the inputs to maximize cache hits but keep the order of the requests
-        ids_and_inputs = list(zip(request_ids, inputs))
+        ids_and_inputs = list(zip(request_ids, inputs, multimodal_inputs))
         if self._use_prefix_sharing:
             ids_and_inputs = sorted(ids_and_inputs, key=lambda x: x[1], reverse=True)
         # EOS determination order: generation config -> model config -> -1 (no EOS)
@@ -810,9 +822,10 @@ class ContinuousBatchingManager:
         eos_token_id = self.model.config.eos_token_id if eos_token_id is None else eos_token_id
         eos_token_id = -1 if eos_token_id is None else eos_token_id
         # Add requests in order
-        for request_id, input_ids in ids_and_inputs:
+        for request_id, input_ids, multimodal_input in ids_and_inputs:
             self.add_request(
                 input_ids=input_ids,
+                multimodal_inputs=multimodal_input,
                 request_id=request_id,
                 max_new_tokens=max_new_tokens,
                 streaming=streaming,
@@ -967,14 +980,17 @@ class ContinuousBatchingManager:
             batch_processor.reset()
             return batch_processor
 
-        # Create the PagedAttentionCache
+        # Create the paged attention cache (for KV) and maybe an embeddings cache (for multimodal embeddings)
+        mm_modality = check_modality_support(self.model.input_modalities)
+        # The KV cache is dimensionned to take the embeddings cache into account if there is one
         paged_attention_cache = PagedAttentionCache(
             config=self.model.config,
             continuous_batching_config=self.continuous_batching_config,
+            mm_modality=mm_modality,
             device=self.model.device,
+            dtype=self.model.dtype,
             distributed_helper=self.distributed_helper,
             tp_plan=getattr(self.model, "tp_plan", {}),
-            dtype=self.model.dtype,
         )
         # Update the approximation now that we know if there is prefix sharing
         self._use_prefix_sharing = paged_attention_cache.use_prefix_sharing
@@ -1005,8 +1021,8 @@ class ContinuousBatchingManager:
 
         # Create the batch processor
         batch_processor = ContinuousBatchProcessor(
+            model=self.model,
             cache=paged_attention_cache,
-            config=self.model.config,
             generation_config=self.generation_config,
             continuous_batching_config=self.continuous_batching_config,
             logit_processor=self.logit_processor,
@@ -1014,8 +1030,6 @@ class ContinuousBatchingManager:
             cancel_queue=self.cancel_queue if self.is_tp_driver else None,
             output_router=self.output_router,
             background_thread_status=self.background_thread_status,
-            model_device=self.model.device,
-            model_dtype=self.model.dtype,
             scheduler=scheduler,
             distributed_helper=self.distributed_helper,
         )
@@ -1168,6 +1182,7 @@ class ContinuousMixin:
     def generate_batch(
         self,
         inputs: list[list[int]],
+        multimodal_inputs: list[dict[str, Any] | None] | None = None,
         generation_config: GenerationConfig | None = None,
         continuous_batching_config: ContinuousBatchingConfig | None = None,
         record_timestamps: bool = False,
@@ -1180,6 +1195,7 @@ class ContinuousMixin:
 
         Args:
             inputs: List of input token sequences (prompts)
+            multimodal_inputs: List of multimodal inputs returned by the processor. Tensors are assumed to be device-side.
             generation_config: Optional generation configuration
             continuous_batching_config: Optional continuous batching configuration
             record_timestamps: If set to true, the requests will have a timestamp for each token generated
@@ -1244,7 +1260,10 @@ class ContinuousMixin:
         with manager_cm as manager, logging_cm, pbar_cm as pbar:
             try:
                 request_ids = manager.add_requests(
-                    inputs=inputs, max_new_tokens=max_new_tokens, record_timestamps=record_timestamps
+                    inputs=inputs,
+                    multimodal_inputs=multimodal_inputs,
+                    max_new_tokens=max_new_tokens,
+                    record_timestamps=record_timestamps,
                 )
                 while finished_count < num_requests:
                     result = manager.get_result(timeout=1)
