@@ -33,36 +33,19 @@ class Florence2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     tiny_model_id = "hf-internal-testing/tiny-processor-florence2"
 
     @classmethod
+    def _setup_image_processor(cls):
+        image_processor_class = cls._get_component_class_from_processor("image_processor")
+        image_processor = image_processor_class.from_pretrained(cls.tiny_model_id)
+        image_processor.image_seq_length = 2
+        return image_processor
+
+    @classmethod
     def _setup_test_attributes(cls, processor):
         # override: Florence shouldn't have any image-token in input text
         pass
 
     @unittest.skip("Florence2Processor adds prefix and suffix tokens to the text")
     def test_tokenizer_defaults(self):
-        pass
-
-    @unittest.skip("Florence2Processor always produces many tokens (256 image tokens + task prompt); max_length/padding kwargs are not forwarded to the tokenizer")
-    def test_tokenizer_defaults_preserved_by_kwargs(self):
-        pass
-
-    @unittest.skip("Florence2Processor always produces many tokens (256 image tokens + task prompt); max_length/padding kwargs are not forwarded to the tokenizer")
-    def test_kwargs_overrides_default_tokenizer_kwargs(self):
-        pass
-
-    @unittest.skip("Florence2Processor always produces many tokens (256 image tokens + task prompt); max_length/padding kwargs are not forwarded to the tokenizer")
-    def test_unstructured_kwargs(self):
-        pass
-
-    @unittest.skip("Florence2Processor always produces many tokens (256 image tokens + task prompt); max_length/padding kwargs are not forwarded to the tokenizer")
-    def test_unstructured_kwargs_batched(self):
-        pass
-
-    @unittest.skip("Florence2Processor always produces many tokens (256 image tokens + task prompt); max_length/padding kwargs are not forwarded to the tokenizer")
-    def test_structured_kwargs_nested(self):
-        pass
-
-    @unittest.skip("Florence2Processor always produces many tokens (256 image tokens + task prompt); max_length/padding kwargs are not forwarded to the tokenizer")
-    def test_structured_kwargs_nested_from_dict(self):
         pass
 
     @staticmethod
