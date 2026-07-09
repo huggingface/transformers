@@ -33,11 +33,11 @@ from transformers.testing_utils import (
 )
 from transformers.utils.import_utils import is_vision_available
 
-from ...test_processing_common import load_test_image
 from ...causal_lm_tester import CausalLMModelTester
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
+from ...test_processing_common import load_test_image
 
 
 if is_vision_available():

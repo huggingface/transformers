@@ -15,8 +15,6 @@
 
 import unittest
 
-import requests
-
 from transformers import AutoImageProcessor, EomtConfig, EomtForUniversalSegmentation, pipeline
 from transformers.testing_utils import require_torch, require_torch_accelerator, require_torch_fp16, slow, torch_device
 from transformers.utils import is_torch_available, is_vision_available
@@ -32,7 +30,7 @@ if is_torch_available():
 
 
 if is_vision_available():
-    from PIL import Image
+    pass
 
 
 class EomtForUniversalSegmentationTester:

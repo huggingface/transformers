@@ -18,7 +18,6 @@ import tempfile
 import unittest
 
 import numpy as np
-import requests
 
 from transformers.image_utils import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD
 from transformers.models.video_llama_3.image_processing_video_llama_3 import smart_resize

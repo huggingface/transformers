@@ -15,8 +15,6 @@
 
 import unittest
 
-import requests
-
 from transformers import AutoImageProcessor, EomtDinov3Config, EomtDinov3ForUniversalSegmentation, pipeline
 from transformers.testing_utils import (
     Expectations,
@@ -39,7 +37,7 @@ if is_torch_available():
 
 
 if is_vision_available():
-    from PIL import Image
+    pass
 
 
 class EomtDinov3ForUniversalSegmentationTester:

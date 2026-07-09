@@ -18,7 +18,6 @@ import tempfile
 import unittest
 
 import numpy as np
-import requests
 from parameterized import parameterized
 
 from transformers import Aimv2Config, Aimv2TextConfig, Aimv2VisionConfig
@@ -34,7 +33,6 @@ from transformers.utils import (
     is_vision_available,
 )
 
-from ...test_processing_common import load_test_image
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
     TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION,
@@ -45,6 +43,7 @@ from ...test_modeling_common import (
     random_attention_mask,
 )
 from ...test_pipeline_mixin import PipelineTesterMixin
+from ...test_processing_common import load_test_image
 
 
 if is_torch_available():
@@ -59,7 +58,6 @@ if is_torch_available():
 
 
 if is_vision_available():
-    from PIL import Image
 
     from transformers import AutoImageProcessor, AutoProcessor
 

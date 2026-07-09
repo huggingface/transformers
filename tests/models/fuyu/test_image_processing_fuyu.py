@@ -1,7 +1,5 @@
-import io
 import unittest
 
-import httpx
 import numpy as np
 import pytest
 

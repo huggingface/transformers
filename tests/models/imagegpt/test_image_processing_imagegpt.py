@@ -20,7 +20,6 @@ import unittest
 
 import numpy as np
 import pytest
-import requests
 from datasets import load_dataset
 
 from transformers import AutoImageProcessor

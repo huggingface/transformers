@@ -15,7 +15,6 @@
 import unittest
 
 import pytest
-import requests
 
 from transformers.testing_utils import (
     require_pytesseract,
@@ -38,7 +37,7 @@ if is_torch_available():
     import torch
 
 if is_pytesseract_available():
-    from PIL import Image
+    pass
 
 
 class LayoutLMv2ImageProcessingTester:

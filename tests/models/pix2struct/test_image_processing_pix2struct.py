@@ -22,7 +22,7 @@ from transformers.testing_utils import require_torch, require_torch_accelerator,
 from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
-from ...test_processing_common import url_to_local_path, load_test_image
+from ...test_processing_common import load_test_image, url_to_local_path
 
 
 if is_torch_available():
@@ -99,10 +99,7 @@ class Pix2StructImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase)
         if len(self.image_processing_classes) < 2:
             self.skipTest(reason="Skipping backends equivalence test as there are less than 2 backends")
 
-        import io
 
-        import httpx
-        from PIL import Image
 
         dummy_image = load_test_image("https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg")
 

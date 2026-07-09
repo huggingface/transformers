@@ -12,10 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import io
 import unittest
 
-import httpx
 import numpy as np
 
 from transformers.image_utils import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD

@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import inspect
-import io
 import json
 import os
 import pathlib
@@ -21,9 +20,9 @@ import tempfile
 import warnings
 from copy import deepcopy
 
-import httpx
 import numpy as np
 import pytest
+from test_processing_common import load_test_image
 
 from transformers import AutoImageProcessor, BatchFeature
 from transformers.image_utils import AnnotationFormat
@@ -40,7 +39,6 @@ from transformers.testing_utils import (
     torch_device,
 )
 from transformers.utils import is_torch_available, is_vision_available
-from test_processing_common import load_test_image
 
 
 if is_torch_available():
