@@ -1924,6 +1924,8 @@ class Trainer:
                 and self.state.global_step % self.args.torch_empty_cache_steps == 0
             ):
                 clear_device_cache()
+                if torch.backends.mps.is_available() and hasattr(torch.mps, "clear_graph_cache"):
+                    torch.mps.clear_graph_cache()
 
             kwargs = {}
 
