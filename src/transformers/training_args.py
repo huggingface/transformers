@@ -200,7 +200,9 @@ class TrainingArguments:
         max_steps (`int`, *optional*, defaults to -1):
             Overrides `num_train_epochs`. If set to a positive number, the total number of training steps to perform.
             For a finite dataset, training is reiterated through the dataset (if all data is exhausted) until
-            `max_steps` is reached.
+            `max_steps` is reached. It must be set to a positive value when the training dataset does not implement
+            `__len__` (e.g. a streaming dataset), since the total number of steps cannot then be inferred and is
+            required to bound the training loop and configure the learning rate scheduler.
 
         > Learning Rate & Scheduler
 
@@ -756,7 +758,7 @@ class TrainingArguments:
     max_steps: int = field(
         default=-1,
         metadata={
-            "help": "Overrides `num_train_epochs`. If set to a positive number, the total number of training steps to perform."
+            "help": "Overrides `num_train_epochs`. If set to a positive number, the total number of training steps to perform. Must be set when the training dataset does not implement `__len__` (e.g. a streaming dataset)."
         },
     )
 
@@ -2186,7 +2188,9 @@ class TrainingArguments:
             max_steps (`int`, *optional*, defaults to -1):
                 If set to a positive number, the total number of training steps to perform. Overrides `num_train_epochs`.
                 For a finite dataset, training is reiterated through the dataset (if all data is exhausted) until
-                `max_steps` is reached.
+                `max_steps` is reached. It must be set to a positive value when the training dataset does not
+                implement `__len__` (e.g. a streaming dataset), since the total number of steps cannot then be
+                inferred and is required to bound the training loop and configure the learning rate scheduler.
             gradient_accumulation_steps (`int`, *optional*, defaults to 1):
                 Number of updates steps to accumulate the gradients for, before performing a backward/update pass.
 
@@ -2587,7 +2591,9 @@ class TrainingArguments:
             max_steps (`int`, *optional*, defaults to -1):
                 If set to a positive number, the total number of training steps to perform. Overrides `num_train_epochs`.
                 For a finite dataset, training is reiterated through the dataset (if all data is exhausted) until
-                `max_steps` is reached.
+                `max_steps` is reached. It must be set to a positive value when the training dataset does not
+                implement `__len__` (e.g. a streaming dataset), since the total number of steps cannot then be
+                inferred and is required to bound the training loop and configure the learning rate scheduler.
             warmup_steps (`float`, *optional*, defaults to 0):
                 Number of steps used for a linear warmup from 0 to `learning_rate`.  Should be an integer or a float in range `[0,1)`.
                 If smaller than 1, will be interpreted as ratio of steps used for a linear warmup from 0 to `learning_rate`.
