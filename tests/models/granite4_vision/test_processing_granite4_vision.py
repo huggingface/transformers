@@ -17,7 +17,7 @@ import unittest
 
 import torch
 
-from transformers import Granite4VisionProcessor
+from transformers import Granite4VisionProcessor, LlavaNextImageProcessor
 from transformers.testing_utils import require_vision
 
 from ...test_processing_common import ProcessorTesterMixin
@@ -33,6 +33,14 @@ class Granite4VisionProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     image_unstructured_max_length = 260
 
     @classmethod
+    def _setup_image_processor(cls):
+        return LlavaNextImageProcessor(
+            size={"shortest_edge": 64},
+            crop_size={"height": 64, "width": 64},
+            image_grid_pinpoints=[[64, 64]],
+        )
+
+    @classmethod
     def _setup_test_attributes(cls, processor):
         cls.image_token = processor.image_token
 
@@ -42,6 +50,7 @@ class Granite4VisionProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             "chat_template": "{% for message in messages %}{% if message['role'] != 'system' %}{{ message['role'].upper() + ': '}}{% endif %}{# Render all images first #}{% for content in message['content'] | selectattr('type', 'equalto', 'image') %}{{ '<image>\n' }}{% endfor %}{# Render all text next #}{% if message['role'] != 'assistant' %}{% for content in message['content'] | selectattr('type', 'equalto', 'text') %}{{ content['text'] + ' '}}{% endfor %}{% else %}{% for content in message['content'] | selectattr('type', 'equalto', 'text') %}{% generation %}{{ content['text'] + ' '}}{% endgeneration %}{% endfor %}{% endif %}{% endfor %}{% if add_generation_prompt %}{{ 'ASSISTANT:' }}{% endif %}",
             "patch_size": 14,
             "vision_feature_select_strategy": "default",
+            "num_additional_image_tokens": 1,
             "downsample_rate": "1/2",
         }  # fmt: skip
 

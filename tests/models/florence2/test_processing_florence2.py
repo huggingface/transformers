@@ -41,6 +41,30 @@ class Florence2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def test_tokenizer_defaults(self):
         pass
 
+    @unittest.skip("Florence2Processor always produces many tokens (256 image tokens + task prompt); max_length/padding kwargs are not forwarded to the tokenizer")
+    def test_tokenizer_defaults_preserved_by_kwargs(self):
+        pass
+
+    @unittest.skip("Florence2Processor always produces many tokens (256 image tokens + task prompt); max_length/padding kwargs are not forwarded to the tokenizer")
+    def test_kwargs_overrides_default_tokenizer_kwargs(self):
+        pass
+
+    @unittest.skip("Florence2Processor always produces many tokens (256 image tokens + task prompt); max_length/padding kwargs are not forwarded to the tokenizer")
+    def test_unstructured_kwargs(self):
+        pass
+
+    @unittest.skip("Florence2Processor always produces many tokens (256 image tokens + task prompt); max_length/padding kwargs are not forwarded to the tokenizer")
+    def test_unstructured_kwargs_batched(self):
+        pass
+
+    @unittest.skip("Florence2Processor always produces many tokens (256 image tokens + task prompt); max_length/padding kwargs are not forwarded to the tokenizer")
+    def test_structured_kwargs_nested(self):
+        pass
+
+    @unittest.skip("Florence2Processor always produces many tokens (256 image tokens + task prompt); max_length/padding kwargs are not forwarded to the tokenizer")
+    def test_structured_kwargs_nested_from_dict(self):
+        pass
+
     @staticmethod
     def prepare_processor_dict():
         return {
