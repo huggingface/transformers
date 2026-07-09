@@ -32,6 +32,13 @@ class Sam3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             "hf-internal-testing/tiny-processor-clip", max_length=32, model_max_length=32
         )
 
+    @classmethod
+    def _setup_image_processor(cls):
+        from transformers.models.sam3.image_processing_sam3 import Sam3ImageProcessor
+
+        # Default size=1008×1008 allocates large tensors; use tiny sizes for tests
+        return Sam3ImageProcessor(size={"height": 64, "width": 64}, mask_size={"height": 16, "width": 16})
+
     # Sam3Processor has a custom non-standard __call__ signature (no chat template, extra
     # prompting args like input_boxes). Skip mixin tests that assume a standard VLM interface.
     def test_chat_template_save_loading(self):

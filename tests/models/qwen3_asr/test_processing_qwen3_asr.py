@@ -60,14 +60,14 @@ class Qwen3ASRProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     @require_torch
     def test_can_load_various_tokenizers(self):
-        processor = Qwen3ASRProcessor.from_pretrained(self.checkpoint)
-        tokenizer = AutoTokenizer.from_pretrained(self.checkpoint)
+        processor = Qwen3ASRProcessor.from_pretrained(self.tiny_model_id)
+        tokenizer = AutoTokenizer.from_pretrained(self.tiny_model_id)
         self.assertEqual(processor.tokenizer.__class__, tokenizer.__class__)
 
     @require_torch
     def test_save_load_pretrained_default(self):
-        tokenizer = AutoTokenizer.from_pretrained(self.checkpoint)
-        processor = Qwen3ASRProcessor.from_pretrained(self.checkpoint)
+        tokenizer = AutoTokenizer.from_pretrained(self.tiny_model_id)
+        processor = Qwen3ASRProcessor.from_pretrained(self.tiny_model_id)
         feature_extractor = processor.feature_extractor
 
         processor = Qwen3ASRProcessor(tokenizer=tokenizer, feature_extractor=feature_extractor)
@@ -83,7 +83,7 @@ class Qwen3ASRProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     @require_torch
     def test_chat_template(self):
-        processor = AutoProcessor.from_pretrained(self.checkpoint)
+        processor = self.get_processor()
         expected_prompt = (
             "<|im_start|>system\n"
             "<|im_end|>\n"
@@ -107,9 +107,9 @@ class Qwen3ASRProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     @require_torch
     def test_apply_transcription_request_with_language(self):
-        processor = AutoProcessor.from_pretrained(self.checkpoint)
+        processor = self.get_processor()
 
-        audio_url = "https://huggingface.co/datasets/bezzam/audio_samples/resolve/main/librispeech_mr_quilter.wav"
+        audio_url = "https://huggingface.co/datasets/raushan-testing-hf/audio-test/resolve/main/f2641_0_throatclearing.wav"
         outputs = processor.apply_transcription_request(audio=audio_url, language="English")
 
         for key in ("input_ids", "attention_mask", "input_features", "input_features_mask"):
@@ -117,7 +117,7 @@ class Qwen3ASRProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     @require_torch
     def test_decode_formats(self):
-        processor = AutoProcessor.from_pretrained(self.checkpoint)
+        processor = self.get_processor()
 
         raw_text = "language English<asr_text>Mr. Quilter is the apostle of the middle classes."
 

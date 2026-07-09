@@ -59,14 +59,14 @@ class VibeVoiceAsrProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     @require_torch
     def test_can_load_various_tokenizers(self):
-        processor = VibeVoiceAsrProcessor.from_pretrained(self.checkpoint)
-        tokenizer = AutoTokenizer.from_pretrained(self.checkpoint)
+        processor = VibeVoiceAsrProcessor.from_pretrained(self.tiny_model_id)
+        tokenizer = AutoTokenizer.from_pretrained(self.tiny_model_id)
         self.assertEqual(processor.tokenizer.__class__, tokenizer.__class__)
 
     @require_torch
     def test_save_load_pretrained_default(self):
-        tokenizer = AutoTokenizer.from_pretrained(self.checkpoint)
-        processor = VibeVoiceAsrProcessor.from_pretrained(self.checkpoint)
+        tokenizer = AutoTokenizer.from_pretrained(self.tiny_model_id)
+        processor = VibeVoiceAsrProcessor.from_pretrained(self.tiny_model_id)
         feature_extractor = processor.feature_extractor
 
         processor = VibeVoiceAsrProcessor(tokenizer=tokenizer, feature_extractor=feature_extractor)
@@ -81,9 +81,9 @@ class VibeVoiceAsrProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     @require_torch
     def test_apply_transcription_request_single(self):
-        processor = AutoProcessor.from_pretrained(self.checkpoint)
+        processor = self.get_processor()
 
-        audio_url = "https://huggingface.co/datasets/bezzam/vibevoice_samples/resolve/main/realtime_model/vibevoice_tts_german.wav"
+        audio_url = "https://huggingface.co/datasets/raushan-testing-hf/audio-test/resolve/main/f2641_0_throatclearing.wav"
         helper_outputs = processor.apply_transcription_request(audio=audio_url, prompt="About VibeVoice")
 
         conversation = [
@@ -93,7 +93,7 @@ class VibeVoiceAsrProcessorTest(ProcessorTesterMixin, unittest.TestCase):
                     {"type": "text", "text": "About VibeVoice"},
                     {
                         "type": "audio",
-                        "path": "https://huggingface.co/datasets/bezzam/vibevoice_samples/resolve/main/realtime_model/vibevoice_tts_german.wav",
+                        "path": audio_url,
                     },
                 ],
             }
@@ -119,7 +119,7 @@ class VibeVoiceAsrProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def test_decode_output_formats(self):
         import torch
 
-        processor = VibeVoiceAsrProcessor.from_pretrained(self.checkpoint)
+        processor = self.get_processor()
 
         # fmt: off
         # reproducer: https://gist.github.com/ebezzam/e1200bcecdc29e87dadd9d8423ae7ecb#file-reproducer_generated_ids-py
