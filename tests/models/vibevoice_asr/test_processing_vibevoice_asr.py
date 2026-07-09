@@ -122,8 +122,11 @@ class VibeVoiceAsrProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         processor = self.get_processor()
 
-        # Token IDs are Qwen-specific; tiny tokenizer won't decode them correctly.
-        # Mock batch_decode to return the expected format so we test parsing logic only.
+        # The original test used hardcoded Qwen token IDs that decode to JSON-formatted output
+        # with the full tokenizer. Here we mock batch_decode so the test focuses on the
+        # processor's parsing logic (return_format="parsed" / "transcription_only") rather than
+        # tokenizer vocabulary — the tiny tokenizer would decode those IDs to garbage, causing
+        # json.loads() to fail. End-to-end tokenizer correctness belongs in model integration tests.
         generated_ids = torch.tensor([[0]])
         mock_decoded = [
             'assistant\n[{"Start": 0, "End": 5.61, "Speaker": 0, "Content": "VibeVoice is a neural transcription service."}]\n'
