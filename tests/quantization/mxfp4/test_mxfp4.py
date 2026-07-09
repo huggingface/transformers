@@ -145,9 +145,7 @@ class Mxfp4QuantizerTest(unittest.TestCase):
     @unittest.skipUnless(torch_device in {"cuda", "xpu"}, "test requires CUDA or XPU")
     def test_quantizer_validation_low_compute_capability(self):
         """Test quantizer validation with CUDA low compute capability or supported XPU"""
-        with ExitStack() as stack:
-            if torch_device == "cuda":
-                stack.enter_context(patch("torch.cuda.get_device_capability", return_value=(7, 0)))
+        with patch("torch.cuda.get_device_capability", return_value=(7, 0)):
             from transformers.quantizers.quantizer_mxfp4 import Mxfp4HfQuantizer
 
             config = Mxfp4Config()
@@ -160,9 +158,7 @@ class Mxfp4QuantizerTest(unittest.TestCase):
     @unittest.skipUnless(torch_device in {"cuda", "xpu"}, "test requires CUDA or XPU")
     def test_quantizer_validation_low_compute_capability_with_prequantized(self):
         """Test pre-quantized validation with CUDA low compute capability or supported XPU"""
-        with ExitStack() as stack:
-            if torch_device == "cuda":
-                stack.enter_context(patch("torch.cuda.get_device_capability", return_value=(7, 0)))
+        with patch("torch.cuda.get_device_capability", return_value=(7, 0)):
             from transformers.quantizers.quantizer_mxfp4 import Mxfp4HfQuantizer
 
             config = Mxfp4Config()
@@ -175,9 +171,7 @@ class Mxfp4QuantizerTest(unittest.TestCase):
     @unittest.skipUnless(torch_device in {"cuda", "xpu"}, "test requires CUDA or XPU")
     def test_quantizer_validation_low_compute_capability_with_dequantize(self):
         """Test quantizer validation with dequantize enabled"""
-        with ExitStack() as stack:
-            if torch_device == "cuda":
-                stack.enter_context(patch("torch.cuda.get_device_capability", return_value=(7, 0)))
+        with patch("torch.cuda.get_device_capability", return_value=(7, 0)):
             from transformers.quantizers.quantizer_mxfp4 import Mxfp4HfQuantizer
 
             config = Mxfp4Config(dequantize=True)
