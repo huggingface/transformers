@@ -96,10 +96,10 @@ class Granite4VisionProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         #   aspect: 316/503 = 0.628, 12/24 = 0.5 -> orig > current -> new_height = round(503*(12/316)) = 19
         #   padding = (24-19)//2 = 2, current_height = 24 - 4 = 20
         #   unpadded = 20*12 = 240, newline = 20
-        #   base = 12*12 + 0 = 144
-        #   total = 240 + 20 + 144 = 404
-        #   with "default" strategy: 404 - 1 = 403
-        expected_image_tokens = 403
+        #   base = 12*12 + num_additional_image_tokens(1) = 145
+        #   total = 240 + 20 + 145 = 405
+        #   with "default" strategy: 405 - 1 = 404
+        expected_image_tokens = 404
 
         messages = [
             {
