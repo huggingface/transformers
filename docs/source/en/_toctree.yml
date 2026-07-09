@@ -227,8 +227,6 @@
       title: Accelerator selection
     - local: accelerate
       title: Accelerate
-    - local: distributed_config
-      title: DistributedConfig
     - local: ddp
       title: DDP
     - local: fsdp
@@ -243,6 +241,8 @@
       title: Debugging
     - local: perf_train_gpu_many
       title: N-D parallelism
+    - local: distributed_config
+      title: DistributedConfig
     title: Distributed training
   - isExpanded: false
     sections:

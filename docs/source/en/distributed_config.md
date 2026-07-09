@@ -18,6 +18,8 @@ rendered properly in your Markdown viewer.
 
 [`DistributedConfig`] shards a model across GPUs directly through [`~PreTrainedModel.from_pretrained`]. It supports [FSDP2](./fsdp), [tensor parallelism](./tensor_parallelism), and [N-D parallelism](./perf_train_gpu_many).
 
+Use this for a custom training loop or inference, where you shard the model at load time instead of through [`Trainer`]. If you're training with [`Trainer`], configure FSDP2 through [Accelerate](./accelerate) instead.
+
 Pass a [`DistributedConfig`] to [`~PreTrainedModel.from_pretrained`] and Transformers builds the device mesh and shards the supported layers for you.
 
 The fields below control how the model is sharded.
@@ -36,7 +38,7 @@ The product of `tp_size` and `fsdp_size` must equal the number of devices you la
 
 ## FSDP2
 
-[FSDP2](./fsdp) shards parameters, gradients, and optimizer states across GPUs. Set `fsdp_size` to the number of devices to shard across.
+[FSDP2](./fsdp) shards parameters, gradients, and optimizer states across GPUs. Set `fsdp_size` to the number of devices to shard across. Requires torch>=2.6.
 
 ```py
 import torch
