@@ -666,6 +666,16 @@ def enable_tf32(enable: bool) -> None:
         precision_mode = "tf32" if enable else "ieee"
         if hasattr(torch.backends, "fp32_precision"):
             torch.backends.fp32_precision = precision_mode
+        if not is_torch_greater_or_equal("2.13.0"):
+            # In PyTorch < 2.13, torch.backends.fp32_precision does not cascade to
+            # torch.backends.cudnn.conv.fp32_precision / torch.backends.cudnn.rnn.fp32_precision.
+            # The fix landed in https://github.com/pytorch/pytorch/pull/179750 (PyTorch 2.13).
+            # We also need to set the legacy allow_tf32 flag first; mixing legacy and new APIs
+            # without doing so causes a RuntimeError about inconsistent TF32 flags.
+            if hasattr(torch.backends.cudnn, "allow_tf32"):
+                torch.backends.cudnn.allow_tf32 = enable
+            if hasattr(torch.backends.cudnn, "conv") and hasattr(torch.backends.cudnn.conv, "fp32_precision"):
+                torch.backends.cudnn.conv.fp32_precision = precision_mode
     else:
         if is_torch_musa_available():
             if hasattr(torch.backends, "mudnn"):
