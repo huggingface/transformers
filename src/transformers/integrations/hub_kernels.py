@@ -378,6 +378,7 @@ else:
 
         def load(self):
             raise NotImplementedError("LayerRepository requires `kernels` to be installed. Run `pip install kernels.")
+
     class LocalLayerRepository:
         def __init__(self, *args, **kwargs):
             raise RuntimeError("LocalLayerRepository requires `kernels` to be installed. Run `pip install kernels`.")
