@@ -59,8 +59,8 @@ MODALITY_INPUT_DATA = {
         "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/coco_sample.png",
     ],
     "videos": [
-        "https://huggingface.co/datasets/raushan-testing-hf/videos-test/resolve/main/Big_Buck_Bunny_720_10s_10MB.mp4",
-        "https://huggingface.co/datasets/raushan-testing-hf/videos-test/resolve/main/sample_demo_1.mp4",
+        "https://huggingface.co/datasets/hf-internal-testing/test-videos/resolve/main/big_buck_bunny_320x240_10s.mp4",
+        "https://huggingface.co/datasets/hf-internal-testing/test-videos/resolve/main/sample_demo_1_320x240.mp4",
     ],
     "audio": [
         "https://huggingface.co/datasets/raushan-testing-hf/audio-test/resolve/main/glass-breaking-151256.mp3",
@@ -1799,7 +1799,7 @@ class ProcessorTesterMixin:
                         {
                             "type": "video",
                             "url": url_to_local_path(
-                                "https://huggingface.co/datasets/raushan-testing-hf/videos-test/resolve/main/tiny_video.mp4"
+                                "https://huggingface.co/datasets/hf-internal-testing/test-videos/resolve/main/tiny_video_320x240.mp4"
                             ),
                         },
                         {"type": "text", "text": "What is shown in this video?"},
@@ -1929,7 +1929,7 @@ class ProcessorTesterMixin:
             self.skipTest(f"feature_extractor attribute not present in {self.processor_class}")
 
         video_file_path = hf_hub_download(
-            repo_id="raushan-testing-hf/videos-test", filename="sample_demo_1.mp4", repo_type="dataset"
+            repo_id="hf-internal-testing/test-videos", filename="sample_demo_1_320x240.mp4", repo_type="dataset"
         )
         messages = [
             {
