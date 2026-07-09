@@ -246,6 +246,28 @@ class GenerationConfigTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             generation_config.validate(strict=True)
 
+    def test_validate_assistant_ensemble_weight(self):
+        """`assistant_ensemble_weight` must be `None` or strictly inside `(0.0, 1.0)`."""
+        # `None` (default) is valid
+        GenerationConfig().validate()
+        # Strictly inside the open interval is valid
+        GenerationConfig(assistant_ensemble_weight=0.5).validate()
+        GenerationConfig(assistant_ensemble_weight=0.7).validate()
+        # Boundary and out-of-range values must raise
+        for invalid in (0.0, 1.0, 1.5, -0.1):
+            with self.assertRaises(ValueError):
+                GenerationConfig(assistant_ensemble_weight=invalid).validate()
+
+    def test_assistant_ensemble_weight_default_and_round_trip(self):
+        """Default is `None`; values round-trip through `to_dict`/`from_dict`."""
+        self.assertIsNone(GenerationConfig().assistant_ensemble_weight)
+
+        config = GenerationConfig(assistant_ensemble_weight=0.7)
+        self.assertEqual(config.assistant_ensemble_weight, 0.7)
+        config_dict = config.to_dict()
+        self.assertEqual(config_dict["assistant_ensemble_weight"], 0.7)
+        self.assertEqual(GenerationConfig.from_dict(config_dict).assistant_ensemble_weight, 0.7)
+
     def test_validate_sampling_flag_provenance(self):
         """
         Dedicated coverage for the provenance-aware warning rule on sampling-only flags:
