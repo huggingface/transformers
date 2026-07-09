@@ -41,7 +41,7 @@ Examples of heterogeneous checkpoints include:
 | [`nvidia/Llama-3_3-Nemotron-Super-49B-v1_5`](https://huggingface.co/nvidia/Llama-3_3-Nemotron-Super-49B-v1_5) | [`meta-llama/Llama-3.3-70B-Instruct`](https://huggingface.co/meta-llama/Llama-3.3-70B-Instruct) |
 | [`nvidia/Llama-3_1-Nemotron-Ultra-253B-v1`](https://huggingface.co/nvidia/Llama-3_1-Nemotron-Ultra-253B-v1) | [`meta-llama/Llama-3.1-405B-Instruct`](https://huggingface.co/meta-llama/Llama-3.1-405B-Instruct) |
 | [`nvidia/gpt-oss-puzzle-88B`](https://huggingface.co/nvidia/gpt-oss-puzzle-88B) | [`openai/gpt-oss-120b`](https://huggingface.co/openai/gpt-oss-120b) |
-| [`nvidia/NVIDIA-Nemotron-Labs-3-Puzzle-75B-A9B-NVFP4`](https://huggingface.co/nvidia/NVIDIA-Nemotron-Labs-3-Puzzle-75B-A9B-NVFP4) | [`nvidia/NVIDIA-Nemotron-Labs-3-75B-A9B-NVFP4`](https://huggingface.co/nvidia/NVIDIA-Nemotron-Labs-3-75B-A9B-NVFP4) |
+| [`nvidia/NVIDIA-Nemotron-Labs-3-Puzzle-75B-A9B-BF16`](https://huggingface.co/nvidia/NVIDIA-Nemotron-Labs-3-Puzzle-75B-A9B-BF16) | [`nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-BF16`](https://huggingface.co/nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-BF16) |
 
 ## Define per-layer overrides
 
