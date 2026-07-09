@@ -88,6 +88,11 @@ RUN python3 -m pip install --no-cache-dir kernels
 # graph on GPU for faster export testing)
 RUN python3 -m pip install --no-cache-dir onnxscript onnxruntime-gpu
 
+# For ExecuTorch export tests (CPU-only, xnnpack backend). Pin to 1.2.0: transformers' exporter code
+# targets the executorch >= 1.2.0 API (e.g. `executorch.exir.emit._emitter.dim_order_from_stride`),
+# and executorch 1.2.0 requires torch>=2.11.0 (matched by the torch<=2.11.0 pin above).
+RUN uv pip install --no-cache-dir executorch==1.2.0
+
 # For video model testing
 RUN python3 -m pip install --no-cache-dir av
 
