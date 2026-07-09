@@ -9,6 +9,14 @@ RUN uv pip install --no-cache-dir 'torch<=2.11.0' 'torchaudio' 'torchvision' 'to
 RUN uv pip install --no-deps timm accelerate --extra-index-url https://download.pytorch.org/whl/cpu
 RUN uv pip install --no-cache-dir librosa "git+https://github.com/huggingface/transformers.git@${REF}#egg=transformers[sklearn,sentencepiece,vision,testing,tiktoken,num2words,video]"
 
+# For ONNX export tests (onnxscript pulls in onnx + onnx_ir; onnxruntime validates the exported graph).
+RUN uv pip install --no-cache-dir onnxscript onnxruntime
+
+# For ExecuTorch export tests (CPU-only, xnnpack backend). Pin to 1.2.0: transformers' exporter code
+# targets the executorch >= 1.2.0 API (e.g. `executorch.exir.emit._emitter.dim_order_from_stride`),
+# and executorch 1.2.0 requires torch>=2.11.0 (matched by the torch<=2.11.0 pin above).
+RUN uv pip install --no-cache-dir executorch==1.2.0
+
 # Use a custom patched pytest to force exit the process at the end, to avoid `Too long with no output (exceeded 10m0s): context deadline exceeded` (#40201)
 RUN uv pip install --no-cache-dir git+https://github.com/ydshieh/pytest.git@8.4.1-ydshieh
 RUN uv pip install --no-cache-dir pytest-random-order
