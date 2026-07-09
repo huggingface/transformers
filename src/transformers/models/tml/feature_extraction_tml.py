@@ -11,16 +11,13 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Feature extractor class for TML audio models."""
-
 import math
-from collections.abc import Sequence
-from typing import Any
 
 import numpy as np
 import torch
 import torch.nn.functional as F
 
+from ...audio_utils import mel_filter_bank
 from ...feature_extraction_sequence_utils import SequenceFeatureExtractor
 from ...feature_extraction_utils import BatchFeature
 from ...utils import PaddingStrategy, TensorType, logging
@@ -36,65 +33,11 @@ def _to_exact_int(value: float, name: str, tolerance: float = 1e-6) -> int:
     return int(rounded)
 
 
-def _resample(samples: np.ndarray, src_sample_rate: int, sample_rate: int) -> np.ndarray:
-    audio = torch.from_numpy(np.ascontiguousarray(samples, dtype=np.float32))
-    resampled = F.resample(audio, orig_freq=src_sample_rate, new_freq=sample_rate)
-    return resampled.detach().cpu().numpy().astype(np.float32, copy=False)
-
-
-def _hz_to_mel(frequencies: np.ndarray) -> np.ndarray:
-    """Slaney mel scale, matching the librosa/torchaudio convention."""
-    frequencies = np.asarray(frequencies, dtype=np.float64)
-    f_sp = 200.0 / 3.0
-    min_log_hz = 1000.0
-    min_log_mel = min_log_hz / f_sp
-    logstep = np.log(6.4) / 27.0
-    linear = frequencies / f_sp
-    log = min_log_mel + np.log(np.maximum(frequencies, min_log_hz) / min_log_hz) / logstep
-    return np.where(frequencies >= min_log_hz, log, linear)
-
-
-def _mel_to_hz(mels: np.ndarray) -> np.ndarray:
-    mels = np.asarray(mels, dtype=np.float64)
-    f_sp = 200.0 / 3.0
-    min_log_hz = 1000.0
-    min_log_mel = min_log_hz / f_sp
-    logstep = np.log(6.4) / 27.0
-    linear = mels * f_sp
-    log = min_log_hz * np.exp(logstep * (mels - min_log_mel))
-    return np.where(mels >= min_log_mel, log, linear)
-
-
-def _mel_filter_bank(sampling_rate: int, n_fft: int, n_mels: int) -> torch.Tensor:
-    fft_bins = n_fft // 2 + 1
-    fft_freqs = np.arange(fft_bins, dtype=np.float64) * sampling_rate / n_fft
-    mel_edges = _mel_to_hz(
-        np.linspace(
-            _hz_to_mel(np.array([0.0]))[0],
-            _hz_to_mel(np.array([sampling_rate / 2.0]))[0],
-            n_mels + 2,
-            dtype=np.float64,
-        )
-    )
-    mel_widths = np.diff(mel_edges)
-    lower = (fft_freqs[None, :] - mel_edges[:-2, None]) / mel_widths[:-1, None]
-    upper = (mel_edges[2:, None] - fft_freqs[None, :]) / mel_widths[1:, None]
-    weights = np.maximum(0.0, np.minimum(lower, upper))
-
-    # Slaney area normalization.
-    weights *= (2.0 / (mel_edges[2:] - mel_edges[:-2]))[:, None]
-    return torch.from_numpy(weights.astype(np.float32, copy=False)).contiguous()
-
-
-# ---------------------------------------------------------------------------
-# Feature extractor
-# ---------------------------------------------------------------------------
-
-
 class TmlFeatureExtractor(SequenceFeatureExtractor):
     r"""
-    Constructs a TML audio feature extractor, which converts raw audio waveforms into discretized dMel
-    bins: a log-mel spectrogram whose values are quantized into `num_dmel_bins` equal-width bins.
+    Constructs a TML audio feature extractor, which converts raw audio waveforms into log-mel spectrogram
+    features (mel filterbank energies in log10 space). The quantization of these features into discrete
+    dMel bins is performed downstream by [`TmlProcessor`].
 
     This feature extractor inherits from [`~feature_extraction_sequence_utils.SequenceFeatureExtractor`]
     which contains most of the main methods. Users should refer to this superclass for more information
@@ -106,13 +49,7 @@ class TmlFeatureExtractor(SequenceFeatureExtractor):
         sampling_rate (`int`, *optional*, defaults to 16000):
             The sampling rate at which the audio files should be digitized, expressed in hertz (Hz).
         padding_value (`float`, *optional*, defaults to 0.0):
-            The value used to pad the dMel bin sequences to the same length in a batch.
-        num_dmel_bins (`int`, *optional*, defaults to 16):
-            Number of discrete bins each (clamped) log-mel value is quantized into.
-        dmel_min_value (`float`, *optional*, defaults to -7.0):
-            Lower clamp bound, in log10 space, used for dMel quantization.
-        dmel_max_value (`float`, *optional*, defaults to 2.0):
-            Upper clamp bound, in log10 space, used for dMel quantization.
+            The value used to pad the log-mel spectrograms to the same length in a batch.
         audio_token_duration_s (`float`, *optional*, defaults to 0.05):
             Duration, in seconds, represented by a single audio token, i.e. the STFT hop length.
         window_size_multiplier (`float`, *optional*, defaults to 2.0):
@@ -122,16 +59,13 @@ class TmlFeatureExtractor(SequenceFeatureExtractor):
             sampling_rate`) when not provided.
     """
 
-    model_input_names = ["dmel_bins", "attention_mask"]
+    model_input_names = ["input_features", "input_features_mask"]
 
     def __init__(
         self,
         feature_size: int = 80,
         sampling_rate: int = 16_000,
         padding_value: float = 0.0,
-        num_dmel_bins: int = 16,
-        dmel_min_value: float = -7.0,
-        dmel_max_value: float = 2.0,
         audio_token_duration_s: float = 0.05,
         window_size_multiplier: float = 2.0,
         n_fft: int | None = None,
@@ -143,9 +77,6 @@ class TmlFeatureExtractor(SequenceFeatureExtractor):
             padding_value=padding_value,
             **kwargs,
         )
-        self.num_dmel_bins = num_dmel_bins
-        self.dmel_min_value = dmel_min_value
-        self.dmel_max_value = dmel_max_value
         self.audio_token_duration_s = audio_token_duration_s
         self.window_size_multiplier = window_size_multiplier
 
@@ -162,63 +93,46 @@ class TmlFeatureExtractor(SequenceFeatureExtractor):
 
         # Precomputed once at init, mirrors e.g. WhisperFeatureExtractor.mel_filters.
         self.window = torch.hann_window(self.window_size, periodic=True, dtype=torch.float32)
-        self.mel_filters = _mel_filter_bank(sampling_rate, self.n_fft, feature_size)
-        self.bin_centers = torch.linspace(dmel_min_value, dmel_max_value, num_dmel_bins, dtype=torch.float64)
+        # `mel_filter_bank` returns `(num_frequency_bins, feature_size)`; transpose to
+        # `(feature_size, num_frequency_bins)` so it left-multiplies the magnitude spectrogram.
+        mel_filters = mel_filter_bank(
+            num_frequency_bins=self.n_fft // 2 + 1,
+            num_mel_filters=feature_size,
+            min_frequency=0.0,
+            max_frequency=sampling_rate / 2.0,
+            sampling_rate=sampling_rate,
+            norm="slaney",
+            mel_scale="slaney",
+        )
+        self.mel_filters = torch.from_numpy(np.ascontiguousarray(mel_filters.T, dtype=np.float32))
 
-    def to_dict(self) -> dict[str, Any]:
-        # Keep tensors out of preprocessor_config.json; they're cheaply recomputed from the
-        # scalar config fields on load, same pattern as Whisper's `mel_filters`.
-        output = super().to_dict()
-        for key in ("window", "mel_filters", "bin_centers"):
-            output.pop(key, None)
-        return output
-
-    def _extract_dmel_bins(self, waveform: torch.Tensor) -> torch.Tensor:
-        if waveform.numel() == 0:
-            return torch.empty((0, self.feature_size), dtype=torch.float32)
-
-        hop_length, window_size, n_fft = self.hop_length, self.window_size, self.n_fft
-        right_pad = math.ceil(waveform.numel() / hop_length) * hop_length - waveform.numel()
-        left_pad = max(n_fft - hop_length, 0)
+    def _torch_extract_fbank_features(self, waveform: torch.Tensor, device: str = "cpu") -> torch.Tensor:
+        right_pad = math.ceil(waveform.shape[-1] / self.hop_length) * self.hop_length - waveform.shape[-1]
+        left_pad = max(self.n_fft - self.hop_length, 0)
         waveform = F.pad(waveform, (left_pad, right_pad))
 
-        spec = torch.stft(
-            waveform.unsqueeze(0),
-            n_fft=n_fft,
-            hop_length=hop_length,
-            win_length=window_size,
-            window=self.window,
+        stft = torch.stft(
+            waveform,
+            self.n_fft,
+            hop_length=self.hop_length,
+            win_length=self.window_size,
+            window=self.window.to(device),
             center=False,
-            normalized=False,
-            onesided=True,
             return_complex=True,
         )
-        spec_ri = torch.view_as_real(spec)
-        magnitude = (spec_ri[..., 0].square() + spec_ri[..., 1].square()).clamp_min(1e-10).sqrt().squeeze(0)
+        magnitudes = torch.view_as_real(stft)
+        magnitudes = magnitudes.pow(2).sum(-1).clamp_min(1e-10).sqrt()
 
-        mel = self.mel_filters.matmul(magnitude).clamp_min(1e-10).log10()
-        mel = mel.to(torch.float64).clamp(min=self.dmel_min_value, max=self.dmel_max_value)
+        mel_filters = self.mel_filters.to(device)
+        mel_spec = mel_filters @ magnitudes
+        mel_spec = mel_spec.clamp_min(1e-10).log10()
 
-        dmel_bins = (mel.unsqueeze(-1) - self.bin_centers).abs().argmin(dim=-1)
-        return dmel_bins.to(torch.float32).T.contiguous()  # (T, feature_size)
-
-    def _normalize_input(self, raw_speech) -> list[torch.Tensor]:
-        """Coerce `raw_speech` into a list of 1-D float32 waveform tensors at `self.sampling_rate`."""
-        decoded_audio = []
-        for item in raw_speech:
-            decoded_audio.append(self.fetch_audio(item, sampling_rate=self.sampling_rate))
-
-        if isinstance(decoded_audio, np.ndarray) and decoded_audio.ndim == 1:
-            decoded_audio = [decoded_audio]
-        elif isinstance(decoded_audio, np.ndarray) and decoded_audio.ndim == 2:
-            decoded_audio = list(raw_speech)
-        elif not isinstance(decoded_audio, (list, tuple)):
-            decoded_audio = [decoded_audio]
-        return decoded_audio
+        # (batch_size, feature_size, num_frames) -> (batch_size, num_frames, feature_size)
+        return mel_spec.transpose(1, 2)
 
     def __call__(
         self,
-        raw_speech: np.ndarray | list[float] | list[np.ndarray] | list[list[float]] | bytes | str | Sequence,
+        raw_speech: np.ndarray | list[float] | list[np.ndarray] | list[list[float]],
         sampling_rate: int | None = None,
         padding: bool | str | PaddingStrategy = True,
         max_length: int | None = None,
@@ -226,20 +140,23 @@ class TmlFeatureExtractor(SequenceFeatureExtractor):
         pad_to_multiple_of: int | None = None,
         return_attention_mask: bool | None = True,
         return_tensors: str | TensorType | None = None,
+        device: str | None = "cpu",
         **kwargs,
     ) -> BatchFeature:
         """
-        Extract dMel bin features from one or several audio clip(s).
+        Extract log-mel spectrogram features from one or several audio clip(s).
 
         Args:
-            raw_speech:
-                A single waveform (`np.ndarray`/`List[float]`), a batch of waveforms, or raw audio
-                bytes / a local path / `file://` URI / file-like object (or a list thereof). Waveforms
-                are assumed to already be at `self.sampling_rate`; bytes/paths are decoded and resampled
-                internally.
+            raw_speech (`np.ndarray`, `list[float]`, `list[np.ndarray]`, `list[list[float]]`):
+                The sequence or batch of sequences to be padded. Each sequence can be a numpy array, a list
+                of float values, a list of numpy arrays or a list of list of float values. Must be mono
+                channel audio at `self.sampling_rate`, not stereo, i.e. single float per timestep. Decoding
+                and resampling of raw audio (bytes / paths / URLs) is handled upstream by the processor's
+                `apply_chat_template`, not here.
             sampling_rate (`int`, *optional*):
-                The sampling rate of `raw_speech`, used only to validate against `self.sampling_rate`
-                when `raw_speech` is passed as already-decoded array(s).
+                The sampling rate of `raw_speech`, used only to validate against `self.sampling_rate`.
+            device (`str`, *optional*, defaults to `"cpu"`):
+                The device on which the log-mel spectrogram is computed in `_torch_extract_fbank_features`.
         """
         if sampling_rate is not None:
             if sampling_rate != self.sampling_rate:
@@ -254,22 +171,65 @@ class TmlFeatureExtractor(SequenceFeatureExtractor):
                 "Failing to do so can result in silent errors that might be hard to debug."
             )
 
-        waveforms = self._normalize_input(raw_speech)
-        dmel_bins = [self._extract_dmel_bins(w) for w in waveforms]
-        num_audio_tokens = [bins.shape[0] for bins in dmel_bins]
+        # Convert to torch tensor
+        if isinstance(raw_speech, np.ndarray):
+            raw_speech = torch.tensor(raw_speech)
+        elif isinstance(raw_speech, (list, tuple)) and isinstance(raw_speech[0], np.ndarray):
+            raw_speech = [torch.tensor(speech) for speech in raw_speech]
 
-        batch_input = BatchFeature(data={"dmel_bins": [bins.numpy() for bins in dmel_bins]})
-        batch_input = self.pad(
-            batch_input,
+        is_batched_torch = isinstance(raw_speech, torch.Tensor) and len(raw_speech.shape) > 1
+        if is_batched_torch and len(raw_speech.shape) > 2:
+            logger.warning(
+                f"Only mono-channel audio is supported for input to {self.__class__.__name__}. "
+                "We will take the mean of the channels to convert to mono."
+            )
+            raw_speech = raw_speech.mean(-1)
+
+        is_batched_sequence = isinstance(raw_speech, (list, tuple))
+        if is_batched_sequence:
+            for speech in raw_speech:
+                if len(speech.shape) > 1:
+                    logger.warning(
+                        f"Only mono-channel audio is supported for input to {self.__class__.__name__}. "
+                        "We will take the mean of the channels to convert to mono."
+                    )
+                    speech = speech.mean(-1)
+
+        if is_batched_torch or is_batched_sequence:
+            raw_speech = [speech[:, None].to(torch.float32) for speech in raw_speech]
+        else:
+            raw_speech = [raw_speech[:, None].to(torch.float32)]
+
+        # Stack and pad the raw waveforms to the longest clip in the batch, then extract the log-mel
+        # spectrogram on the batched audio in a single `torch.stft` pass (mirrors Parakeet).
+        audio_lengths = [len(speech) for speech in raw_speech]
+        batched_speech = BatchFeature({"input_features": raw_speech, "audio_lengths": audio_lengths})
+        padded_inputs = self.pad(
+            batched_speech,
             padding=padding,
             max_length=max_length,
             truncation=truncation,
             pad_to_multiple_of=pad_to_multiple_of,
-            return_attention_mask=return_attention_mask,
-            return_tensors=return_tensors,
+            return_tensors="pt",
         )
-        batch_input["num_audio_tokens"] = num_audio_tokens
-        return batch_input
+        input_waveforms = padded_inputs.input_features.squeeze(-1)  # (batch_size, num_samples)
+
+        input_features = self._torch_extract_fbank_features(input_waveforms, device)  # (batch_size, T, feature_size)
+
+        # Number of valid frames per clip == ceil(audio_length / hop_length); everything beyond it is
+        # padding, which we zero out so it carries `padding_value`.
+        num_frames = torch.div(
+            padded_inputs.audio_lengths + self.hop_length - 1, self.hop_length, rounding_mode="floor"
+        )
+        input_features_mask = torch.arange(input_features.shape[1], device=device)[None, :] < num_frames[:, None]
+        input_features = input_features * input_features_mask.unsqueeze(-1)
+
+        data = {"input_features": input_features}
+        if return_attention_mask:
+            # Named `input_features_mask` (not `attention_mask`) so it does not collide with the text
+            # `attention_mask` when the processor merges audio and text inputs.
+            data["input_features_mask"] = input_features_mask
+        return BatchFeature(data=data, tensor_type=return_tensors)
 
 
 __all__ = ["TmlFeatureExtractor"]

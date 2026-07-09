@@ -149,6 +149,16 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(source_patterns=r"vision_tower.layers", target_patterns=r"vision_tower.encoder_layers"),
             WeightRenaming(source_patterns=r"unembed.weight", target_patterns=r"lm_head.weight"),
             WeightRenaming(source_patterns=r"audio.", target_patterns=r"audio_tower."),
+            # Renames are applied cumulatively, so these run AFTER the generic `audio.` -> `audio_tower.`
+            # above and match its output. The audio dMel embedding moved from `audio.encoder` to a
+            # `TmlAudioModelEmbeddings` submodule, and `final_norm` was renamed to `norm`.
+            WeightRenaming(
+                source_patterns=r"audio_tower.encoder.weight",
+                target_patterns=r"audio_tower.embed_audio_tokens.embed_audio_tokens.weight",
+            ),
+            WeightRenaming(
+                source_patterns=r"audio_tower.final_norm.weight", target_patterns=r"audio_tower.norm.weight"
+            ),
             # LM
             WeightRenaming(source_patterns=r"^norm.weight", target_patterns=r"language_model.norm.weight"),
             WeightRenaming(source_patterns=r"^embed.weight", target_patterns=r"language_model.embed_tokens.weight"),
