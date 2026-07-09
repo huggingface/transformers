@@ -77,6 +77,8 @@ class UnlimitedOcrVisionText2TextModelTester(VLMModelTester):
         kwargs.setdefault("mlp_layer_types", ["dense", "sparse"])
         kwargs.setdefault("moe_intermediate_size", 64)
         kwargs.setdefault("num_experts_per_tok", 2)
+        kwargs.setdefault("sliding_window", 4)
+        kwargs.setdefault("use_sliding_window", True)
         super().__init__(parent, **kwargs)
 
         self.sam_config = {
@@ -124,16 +126,6 @@ class UnlimitedOcrModelTest(VLMModelTest, unittest.TestCase):
     model_tester_class = UnlimitedOcrVisionText2TextModelTester
     test_all_params_have_gradient = False
 
-    def prepare_config_and_inputs_for_generate(self, batch_size=2):
-        config, inputs_dict = super().prepare_config_and_inputs_for_generate(batch_size=batch_size)
-        # `is_moe_model` (used by generation tests to pick a looser tolerance for MoE routing noise) checks
-        # `config._experts_implementation`, which is only populated when a model is instantiated. Some tests
-        # (e.g. `test_generate_with_static_cache`) check it on the bare config, so mark the model's default
-        # experts implementation here to get the MoE tolerance. The ring-buffer vs. static sliding cache
-        # differ by ~1e-3 once amplified through the sparse expert routing, which is well within that bound.
-        config._experts_implementation = "grouped_mm"
-        return config, inputs_dict
-
     @unittest.skip(
         reason="UnlimitedOcrVisionModel builds a hybrid bidirectional+causal mask internally, so SDPA is always called with a non-null `attn_mask`."
     )
@@ -141,10 +133,9 @@ class UnlimitedOcrModelTest(VLMModelTest, unittest.TestCase):
         pass
 
     def _image_features_prepare_config_and_inputs(self):
+        # `test_get_image_features_output` requires `vision_config.hidden` size to be set.
+        # This is not the case by default as the vision model is a combination of two submodels (SAM + CLIP vision encoder).
         config, inputs_dict = super()._image_features_prepare_config_and_inputs()
-        # `get_image_features` returns the concatenation of the SAM feature map and the CLIP encoder output as
-        # `last_hidden_state`, so its hidden size is the sum of the two. `vision_config` has no `hidden_size` of
-        # its own, so set it here for `test_get_image_features_output`.
         config.vision_config.hidden_size = (
             config.vision_config.sam_config.downsample_channels[-1] + config.vision_config.encoder_config.hidden_size
         )
