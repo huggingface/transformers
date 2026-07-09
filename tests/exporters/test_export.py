@@ -465,7 +465,6 @@ class ExportTesterMixin:
     @pytest.mark.torch_export_test
     @pytest.mark.timeout(EXPORT_TEST_TIMEOUT)
     @require_torch_greater_or_equal(MIN_EXPORT_TORCH_VERSION)
-    @require_non_gpu
     def test_torch_export(self, dynamic, atol=1e-4, rtol=1e-4):
         """Export each model class with ``torch.export`` and verify outputs match eager within tolerance."""
         self._skip_if_not_exportable()
@@ -500,7 +499,6 @@ class ExportTesterMixin:
     @pytest.mark.onnx_export_test
     @pytest.mark.timeout(EXPORT_TEST_TIMEOUT)
     @require_torch_greater_or_equal(MIN_EXPORT_TORCH_VERSION)
-    @require_non_gpu
     def test_onnx_export(self, dynamic):
         """Export each model class to ONNX and verify output names match eager."""
         self._skip_if_not_exportable()
@@ -527,11 +525,11 @@ class ExportTesterMixin:
 
     @DYNAMIC_EXPORT_PARAMS
     @slow
+    @require_non_gpu
     @require_executorch
     @pytest.mark.executorch_export_test
     @pytest.mark.timeout(EXPORT_TEST_TIMEOUT)
     @require_torch_greater_or_equal(MIN_EXPORT_TORCH_VERSION)
-    @require_non_gpu
     def test_executorch_export(self, dynamic):
         """Export each model class to ExecuTorch (xnnpack on CPU, cuda on GPU) and verify no errors."""
 
@@ -653,6 +651,7 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
 
     @DYNAMIC_EXPORT_PARAMS
     @slow
+    @require_non_gpu
     @require_executorch
     @pytest.mark.executorch_export_test
     @pytest.mark.timeout(EXPORT_TEST_TIMEOUT)
