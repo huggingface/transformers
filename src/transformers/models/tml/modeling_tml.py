@@ -27,6 +27,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import (
     Cache,
@@ -683,20 +684,25 @@ class TmlPreTrainedModel(PreTrainedModel):
     _keys_to_ignore_on_load_unexpected = [r"model\.mtp\..*"]
     _keep_in_fp32_modules_strict = ["attn_sconv", "mlp_sconv", "k_sconv", "v_sconv"]
 
+    @torch.no_grad()
     def _init_weights(self, module):
+        super()._init_weights(module)
         std = self.config.get_text_config().initializer_range
-        if isinstance(module, nn.Linear):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
-        elif isinstance(module, TmlRMSNorm):
-            module.weight.data.fill_(1.0)
-        elif isinstance(module, TmlRelativeLogits):
-            module.proj.data.normal_(mean=0.0, std=std)
+        if isinstance(module, TmlRelativeLogits):
+            init.normal_(module.proj, mean=0.0, std=std)
+        elif isinstance(module, TmlMLP):
+            init.zeros_(module.global_scale)
+        elif isinstance(module, TmlExperts):
+            init.normal_(module.gate_up_proj, mean=0.0, std=std)
+            init.normal_(module.down_proj, mean=0.0, std=std)
+        elif isinstance(module, TmlTopkRouter):
+            init.normal_(module.weight, mean=0.0, std=std)
+            init.zeros_(module.global_scale)
+            init.zeros_(module.e_score_correction_bias)
+        elif isinstance(module, TmlSharedExperts):
+            init.normal_(module.gate_proj, mean=0.0, std=std)
+            init.normal_(module.up_proj, mean=0.0, std=std)
+            init.normal_(module.down_proj, mean=0.0, std=std)
 
 
 @auto_docstring
@@ -1124,7 +1130,8 @@ class TmlModel(TmlPreTrainedModel):
     """
 )
 class TmlForConditionalGeneration(TmlPreTrainedModel, GenerationMixin):
-    _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
+    # `embed` and `unembed` are separate tensors in the checkpoints, never tied
+    _tied_weights_keys = {}
     # we are filtering the logits/labels so we shouldn't divide the loss based on num_items_in_batch
     # Fix: https://github.com/huggingface/transformers/issues/40564
     accepts_loss_kwargs = False
