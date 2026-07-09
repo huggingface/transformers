@@ -9,7 +9,7 @@ Saves to --out (default ./mini-step-3-7-flash):
   pytorch_model.bin — weights in hub key format (model.embed_tokens.*, vision_model.*, ...)
 
 Run:
-    PYTHONPATH=src python scripts/step_3_7_flash/build_mini_model.py [--push-to-hub]
+    PYTHONPATH=src python scripts/step3p7/build_mini_model.py [--push-to-hub]
 """
 
 from __future__ import annotations
@@ -45,8 +45,8 @@ def _remote_sd_to_hub_format(state_dict: dict) -> dict:
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--out",  type=Path, default=Path("./mini-step-3-7-flash"))
-    parser.add_argument("--seed", type=int,  default=0)
+    parser.add_argument("--out", type=Path, default=Path("./mini-step-3-7-flash"))
+    parser.add_argument("--seed", type=int, default=0)
     parser.add_argument(
         "--push-to-hub",
         metavar="REPO_ID",
@@ -85,7 +85,11 @@ def main() -> None:
         use_head_wise_attn_gate=True,
         need_fp32_gate=True,
         layer_types=["full_attention", "sliding_attention", "sliding_attention", "sliding_attention"],
-        rope_theta=10000.0,
+        # Real checkpoints give one rope_theta/partial_rotary_factor *per decoder layer* (indexed by
+        # layer_idx in the original code), not one value for the whole model — distinct per-type
+        # values here so a regression that collapses/misreads them is numerically detectable.
+        rope_theta=[5000000.0, 10000.0, 10000.0, 10000.0],
+        partial_rotary_factors=[0.5, 1.0, 1.0, 1.0],
         max_position_embeddings=512,
         max_seq_len=512,
         attention_other_setting={"num_attention_heads": 4, "num_attention_groups": 2, "head_dim": 32},
@@ -96,11 +100,17 @@ def main() -> None:
         swiglu_limits_shared=[None, None, 1.0, 1.0],
     )
     vis_cfg = StepRoboticsVisionEncoderConfig(
-        width=64, layers=2, heads=4,
-        image_size=56, patch_size=14, mlp_ratio=4.0,
+        width=64,
+        layers=2,
+        heads=4,
+        image_size=56,
+        patch_size=14,
+        mlp_ratio=4.0,
         hidden_act="quick_gelu",
-        use_cls_token=False, use_rope2d=True,
-        use_abs_posemb=True, ls_init_value=0.1,
+        use_cls_token=False,
+        use_rope2d=True,
+        use_abs_posemb=True,
+        ls_init_value=0.1,
     )
     cfg = Step3p7Config(
         text_config=text_cfg.to_dict(),
@@ -128,6 +138,7 @@ def main() -> None:
     # expanded mlp_layer_types list back to moe_layers_enum (the raw form that
     # real checkpoints ship with, before convert_config.py normalises it).
     import json
+
     cfg.save_pretrained(args.out)
     config_path = args.out / "config.json"
     saved = json.loads(config_path.read_text())
@@ -141,6 +152,7 @@ def main() -> None:
 
     if args.push_to_hub:
         from huggingface_hub import HfApi
+
         api = HfApi()
         api.create_repo(repo_id=args.push_to_hub, exist_ok=True)
         api.upload_folder(folder_path=str(args.out), repo_id=args.push_to_hub)

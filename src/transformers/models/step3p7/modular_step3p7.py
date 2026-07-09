@@ -1,4 +1,4 @@
-# Copyright 2025 The StepFun and HuggingFace Inc. team. All rights reserved.
+# Copyright 2026 The StepFun and HuggingFace Inc. team. All rights reserved.
 #
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -12,7 +12,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import copy
 from collections.abc import Callable
 
 import torch
@@ -41,11 +40,13 @@ from ...utils import (
 )
 from ...utils.generic import maybe_autocast, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
+from ...vision_utils import get_vision_position_ids
 from ..deepseek_ocr2.modeling_deepseek_ocr2 import DeepseekOcr2ForConditionalGeneration, DeepseekOcr2Model
 from ..deepseek_v4.modeling_deepseek_v4 import DeepseekV4Experts, DeepseekV4MLP
-from ..gemma3.modeling_gemma3 import Gemma3RotaryEmbedding, Gemma3TextModel
+from ..gemma3.modeling_gemma3 import Gemma3TextModel
 from ..gemma4.modeling_gemma4 import Gemma4VisionRotaryEmbedding
 from ..internvl.modeling_internvl import InternVLVisionLayer
+from ..laguna.modeling_laguna import LagunaRotaryEmbedding
 from ..minimax_m3_vl.modeling_minimax_m3_vl import (
     MiniMaxM3VLAttention,
     MiniMaxM3VLDecoderLayer,
@@ -86,10 +87,6 @@ class Step3p7VisionConfig(SiglipVisionConfig):
         `int(hidden_size * mlp_ratio)`.
     layer_scale_init_value (`float`, *optional*, defaults to 0.1):
         Initial value for per-channel residual-scale parameters.
-    use_cls_token (`bool`, *optional*, defaults to `False`):
-        Whether to prepend a CLS token to the patch sequence.
-    use_rope2d (`bool`, *optional*, defaults to `True`):
-        Whether to use 2-D rotary position embeddings.
     """
 
     model_type = "step3p5_vision"
@@ -100,7 +97,6 @@ class Step3p7VisionConfig(SiglipVisionConfig):
         "layers": "num_hidden_layers",
         "heads": "num_attention_heads",
         "ls_init_value": "layer_scale_init_value",
-        "ues_cls_token": "use_cls_token",
     }
 
     # SiGLIP field overrides
@@ -114,23 +110,15 @@ class Step3p7VisionConfig(SiglipVisionConfig):
     # New fields
     mlp_ratio: float = 8960 / 1536
     layer_scale_init_value: float = 0.1
-    use_cls_token: bool = False
-    use_ln_pre: bool = True
-    use_ln_post: bool = False
-    use_abs_posemb: bool = True
-    use_rope2d: bool = True
     # RoPE config (compatible with Gemma4VisionRotaryEmbedding)
     rope_parameters: dict | None = None
     max_position_embeddings: int = 2704  # (image_size // patch_size)^2 = (728//14)^2
 
     def __post_init__(self, **kwargs):
-        if self.rope_parameters is None:
-            self.rope_parameters = {"rope_type": "default", "rope_theta": 10000}
-        # Apply attribute_map aliases (e.g. width → hidden_size) before computing
-        # intermediate_size so legacy configs with `width` are handled correctly.
-        # NOTE: calling `PreTrainedConfig.__post_init__` directly rather than `super()` since
-        # `SiglipVisionConfig` (our parent) doesn't define its own `__post_init__`, and the modular
-        # converter can only splice a `super().func()` call when the immediate parent defines `func`.
+        # Call `PreTrainedConfig.__post_init__` directly (not `super()`): `SiglipVisionConfig` has no
+        # `__post_init__` for the modular converter to splice a `super().func()` into. This also applies
+        # attribute_map aliases (e.g. width -> hidden_size) before `intermediate_size` is computed below.
+        # `rope_parameters` defaults come from `RotaryEmbeddingConfigMixin` automatically; no need to seed them.
         PreTrainedConfig.__post_init__(self, **kwargs)
         self.intermediate_size = int(self.hidden_size * self.mlp_ratio)
 
@@ -149,9 +137,28 @@ class Step3p7TextConfig(PreTrainedConfig):
         Per-layer attention type; `"full_attention"` or `"sliding_attention"`. Defaults to all
         `"full_attention"` if not provided.
     mlp_layer_types (`list[str]`, *optional*):
-        Per-layer MLP type; `"sparse"` for MoE layers, `"dense"` otherwise.
+        Per-layer MLP type; `"sparse"` for MoE layers, `"dense"` otherwise. If not provided, derived
+        from the legacy `moe_layers_enum` hub-config kwarg (a comma-separated string or list of MoE
+        layer indices), defaulting to all layers from index 3 onward being MoE.
     swiglu_limits (`list[float | None]`, *optional*):
         Per-layer gate/up clamping bound; `None` means no clamping.
+    num_nextn_predict_layers (`int`, *optional*):
+        Legacy hub-config kwarg: number of trailing speculative-decoding ("MTP") layers this
+        implementation doesn't model. When set, every per-layer list above (plus `rope_theta` and
+        `partial_rotary_factors` below) is trimmed from `num_hidden_layers + num_nextn_predict_layers`
+        back down to `num_hidden_layers` entries. Example: with `num_hidden_layers=4` and
+        `num_nextn_predict_layers=1`, an incoming
+        `layer_types=["full_attention", "sliding_attention", "sliding_attention", "sliding_attention", "full_attention"]`
+        (5 entries: 4 real layers + 1 MTP layer) is trimmed to
+        `["full_attention", "sliding_attention", "sliding_attention", "sliding_attention"]` (the
+        trailing MTP entry is dropped).
+    rope_theta (`float | list[float]`, *optional*, defaults to 10000.0):
+        Legacy hub-config kwarg. Real checkpoints give one value *per decoder layer* rather than one
+        value for the whole model; since it only ever varies by `layer_types[layer_idx]`, this is
+        collapsed into one theta per layer type. Superseded by `rope_parameters` once set.
+    partial_rotary_factors (`list[float]`, *optional*):
+        Legacy hub-config kwarg, one value per decoder layer; collapsed into one value per layer type
+        the same way as `rope_theta`.
     """
 
     model_type = "step3p5"
@@ -176,15 +183,12 @@ class Step3p7TextConfig(PreTrainedConfig):
     moe_intermediate_size: int = 1280
     n_routed_experts: int = 288
     num_experts_per_tok: int = 8
-    rope_theta: float = 10000.0
-    rope_scaling: dict | None = None
     rope_parameters: RopeParameters | dict | None = None
     share_expert_dim: int = 1280
     head_dim: int = 128
     norm_expert_weight: bool = True
     layer_types: list[str] | None = None
     mlp_layer_types: list[str] | None = None
-    moe_layers_enum: list | str | None = None
     sliding_window: int | None = None
     num_sliding_attention_heads: int | None = None
     attention_other_setting: dict | None = None
@@ -198,21 +202,53 @@ class Step3p7TextConfig(PreTrainedConfig):
     need_fp32_gate: bool = False
     hidden_act: str = "silu"
     mlp_bias: bool = False
-    swiglu_limits: list[float | None] | None = None
-    swiglu_limits_shared: list[float | None] | None = None
+    swiglu_limits: list[float | int | None] | None = None
+    swiglu_limits_shared: list[float | int | None] | None = None
     use_rope_layers: list[bool] | None = None
     yarn_only_types: list[str] | None = None
     use_bidirectional_attention: bool | None = False
 
     def __post_init__(self, **kwargs):
+        # Legacy hub configs pad every per-layer list below with `num_nextn_predict_layers` trailing
+        # speculative-decoding ("MTP") entries this implementation doesn't model; trim back down to
+        # `num_hidden_layers`. E.g. `num_hidden_layers=4, num_nextn_predict_layers=1`: an incoming
+        # 5-entry `layer_types` (4 real layers + 1 MTP) is trimmed to just the 4 real layers.
+        num_nextn_predict_layers = kwargs.pop("num_nextn_predict_layers", 0)
+        if num_nextn_predict_layers:
+            n, padded = self.num_hidden_layers, self.num_hidden_layers + num_nextn_predict_layers
+            trimmed_fields = []
+            for field in (
+                "layer_types",
+                "mlp_layer_types",
+                "swiglu_limits",
+                "swiglu_limits_shared",
+                "use_rope_layers",
+            ):
+                value = getattr(self, field)
+                if isinstance(value, list) and len(value) == padded:
+                    setattr(self, field, value[:n])
+                    trimmed_fields.append(field)
+            for key in ("rope_theta", "partial_rotary_factors"):
+                value = kwargs.get(key)
+                if isinstance(value, list) and len(value) == padded:
+                    kwargs[key] = value[:n]
+                    trimmed_fields.append(key)
+            if trimmed_fields:
+                logger.info(
+                    f"Trimmed {trimmed_fields} from {padded} to {n} entries "
+                    f"(num_nextn_predict_layers={num_nextn_predict_layers} speculative-decoding "
+                    "layers this implementation doesn't model)."
+                )
+
         if self.layer_types is None:
             self.layer_types = ["full_attention"] * self.num_hidden_layers
 
         if self.mlp_layer_types is None:
-            if self.moe_layers_enum is not None:
-                items = (
-                    self.moe_layers_enum.split(",") if isinstance(self.moe_layers_enum, str) else self.moe_layers_enum
-                )
+            # `moe_layers_enum` is a legacy hub-config alias for `mlp_layer_types` (a comma-separated
+            # or list of layer indices that are MoE); it's only ever read here, never persisted.
+            moe_layers_enum = kwargs.pop("moe_layers_enum", None)
+            if moe_layers_enum is not None:
+                items = moe_layers_enum.split(",") if isinstance(moe_layers_enum, str) else moe_layers_enum
                 moe_set = {int(i) for i in items if str(i).strip()}
             else:
                 moe_set = set(range(3, self.num_hidden_layers))
@@ -229,14 +265,24 @@ class Step3p7TextConfig(PreTrainedConfig):
         super().__post_init__(**kwargs)
 
     def convert_rope_params_to_dict(self, **kwargs):
-        # Overridden because the generic `PreTrainedConfig` version unconditionally does
-        # `self.rope_parameters.setdefault("rope_theta", ...)` on the outer dict, which corrupts a
-        # layer-type-keyed dict. Seed an empty per-layer-type dict (one entry per type actually present
-        # in `layer_types`, gemma3 convention) and let `standardize_rope_params` fill in the defaults;
-        # `rope_scaling` (e.g. YaRN/NTK) only applies to full-attention layers.
+        # Overridden: the generic version's `setdefault("rope_theta", ...)` on the outer dict would
+        # corrupt our layer-type-keyed `rope_parameters`. `rope_theta`/`partial_rotary_factors` are
+        # popped from kwargs (not fields, so not redundantly persisted); checkpoints give one value per
+        # decoder layer, so zipping against `layer_types` collapses that to one value per type.
         rope_scaling = kwargs.pop("rope_scaling", None) or self.rope_scaling
+        rope_theta = kwargs.pop("rope_theta", self.default_theta)
+        partial_rotary_factors = kwargs.pop("partial_rotary_factors", None)
         if self.rope_parameters is None:
-            self.rope_parameters = {layer_type: {} for layer_type in set(self.layer_types)}
+            if isinstance(rope_theta, list):
+                theta_by_type = dict(zip(self.layer_types, rope_theta))
+            else:
+                theta_by_type = dict.fromkeys(set(self.layer_types), rope_theta)
+            factor_by_type = dict(zip(self.layer_types, partial_rotary_factors)) if partial_rotary_factors else {}
+            self.rope_parameters = {
+                layer_type: {"rope_theta": theta_by_type[layer_type]}
+                | ({"partial_rotary_factor": factor_by_type[layer_type]} if layer_type in factor_by_type else {})
+                for layer_type in set(self.layer_types)
+            }
             if rope_scaling and "full_attention" in self.rope_parameters:
                 self.rope_parameters["full_attention"].update(rope_scaling)
         self.standardize_rope_params()
@@ -265,7 +311,6 @@ class Step3p7Config(PreTrainedConfig):
     understand_projector_stride: int = 2
     projector_bias: bool = False
     image_token_id: int = 151679
-    hidden_size: int | None = None
     max_position_embeddings: int | None = None
 
     def __post_init__(self, **kwargs):
@@ -279,7 +324,6 @@ class Step3p7Config(PreTrainedConfig):
         elif isinstance(self.text_config, dict):
             self.text_config = Step3p7TextConfig(**self.text_config)
 
-        self.hidden_size = self.text_config.hidden_size
         self.max_position_embeddings = self.text_config.max_position_embeddings
         super().__post_init__(**kwargs)
 
@@ -289,14 +333,20 @@ class Step3p7Config(PreTrainedConfig):
 
 class Step3p7ImageProcessorKwargs(ImagesKwargs, total=False):
     r"""
-    image_size (`int`, *optional*, defaults to 728):
-        Target size (height = width) for the global image view.
-    patch_crop_size (`int`, *optional*, defaults to 504):
+    patch_size (`int`, *optional*, defaults to 504):
         Target size (height = width) for each local patch crop.
+    num_image_features (`int`, *optional*, defaults to 169):
+        Number of placeholder tokens the processor expands the global-view image into. Must match
+        `(size["height"] // vision_patch_size // downsampler_stride) ** 2` for the paired vision
+        encoder, so only override this alongside a matching `size` change.
+    num_patch_features (`int`, *optional*, defaults to 81):
+        Number of placeholder tokens the processor expands each local patch crop into; the
+        `patch_size` analogue of `num_image_features`.
     """
 
-    image_size: int
-    patch_crop_size: int
+    patch_size: int
+    num_image_features: int
+    num_patch_features: int
 
 
 @auto_docstring
@@ -309,9 +359,9 @@ class Step3p7ImageProcessor(TorchvisionBackend):
     resized and normalised independently.
 
     Args:
-        image_size (`int`, *optional*, defaults to 728):
-            Target size (height = width) for the global image.
-        patch_crop_size (`int`, *optional*, defaults to 504):
+        size (`dict[str, int]`, *optional*, defaults to `{"height": 728, "width": 728}`):
+            Target size for the global image view.
+        patch_size (`int`, *optional*, defaults to 504):
             Target size (height = width) for each local patch crop.
         image_mean (`list[float]`, *optional*):
             Per-channel mean for normalisation; defaults to ``OPENAI_CLIP_MEAN``.
@@ -320,8 +370,9 @@ class Step3p7ImageProcessor(TorchvisionBackend):
     """
 
     resample = PILImageResampling.BILINEAR
-    image_size: int = 728
-    patch_crop_size: int = 504
+    size = {"height": 728, "width": 728}
+    default_to_square = True
+    patch_size: int = 504
     do_rescale = True
     rescale_factor: float = 1 / 255
     do_normalize = True
@@ -342,7 +393,7 @@ class Step3p7ImageProcessor(TorchvisionBackend):
         return min(width, height) < 32 and max(width / height, height / width) > 4
 
     def _plan_patches(
-        self, width: int, height: int, image_size: int, patch_crop_size: int
+        self, width: int, height: int, image_size: int, patch_size: int
     ) -> tuple[tuple[int, int], tuple[int, int], int, int, int, bool]:
         """Compute the sliding-window patch layout for one image.
 
@@ -357,42 +408,40 @@ class Step3p7ImageProcessor(TorchvisionBackend):
         Step 2 — choose window size from the normalised aspect ratio:
           - fits in global view (long_side ≤ image_size): tile only if elongated
             (long_side / short_side > 1.5), using short_side as the window
-          - very elongated (ratio > 4): ``min(short_side, patch_crop_size)``
-          - standard case: ``patch_crop_size``
+          - very elongated (ratio > 4): ``min(short_side, patch_size)``
+          - standard case: ``patch_size``
 
         Step 3 — snap each dimension to the nearest window multiple
           (snap up when the remainder exceeds 20 % of the window size).
 
         Returns:
-            global_wh: ``(w, h)`` to resize the global view to before squaring
-            crop_wh: ``(crop_w, crop_h)`` snapped dimensions for patch extraction
+            global_wh: ``(width, height)`` to resize the global view to before squaring
+            crop_wh: ``(crop_width, crop_height)`` snapped dimensions for patch extraction
             window_size: tile side length (``0`` → no local patches)
             num_patches_x: number of patches along the width
             num_patches_y: number of patches along the height
             needs_square_pad: whether the raw image must be zero-padded to a square before resizing
         """
-        w, h = width, height
-
         # Step 1 — normalise
-        needs_square_pad = self._is_extreme_aspect(w, h)
+        needs_square_pad = self._is_extreme_aspect(width, height)
         if needs_square_pad:
-            w = h = max(w, h)
-        if max(h, w) > self.MAX_IMAGE_SIZE:
-            scale = self.MAX_IMAGE_SIZE / max(h, w)
-            w, h = int(w * scale), int(h * scale)
+            width = height = max(width, height)
+        if max(height, width) > self.MAX_IMAGE_SIZE:
+            scale = self.MAX_IMAGE_SIZE / max(height, width)
+            width, height = int(width * scale), int(height * scale)
 
-        short_side, long_side = min(h, w), max(h, w)
+        short_side, long_side = min(height, width), max(height, width)
 
         # Step 2 — choose window size
         if long_side <= image_size:
             window_size = short_side if long_side / short_side > 1.5 else 0
         elif long_side / short_side > 4:
-            window_size = min(short_side, patch_crop_size)
+            window_size = min(short_side, patch_size)
         else:
-            window_size = patch_crop_size
+            window_size = patch_size
 
         if window_size == 0:
-            return (w, h), (w, h), 0, 0, 0, needs_square_pad
+            return (width, height), (width, height), 0, 0, 0, needs_square_pad
 
         # Step 3 — snap to window-size multiples
         def _snap(dim: int) -> int:
@@ -402,17 +451,18 @@ class Step3p7ImageProcessor(TorchvisionBackend):
                 else dim
             )
 
-        crop_w, crop_h = _snap(w), _snap(h)
-        num_patches_x = max(1, crop_w // window_size)
-        num_patches_y = max(1, crop_h // window_size)
-        return (w, h), (crop_w, crop_h), window_size, num_patches_x, num_patches_y, needs_square_pad
+        crop_width, crop_height = _snap(width), _snap(height)
+        num_patches_x = max(1, crop_width // window_size)
+        num_patches_y = max(1, crop_height // window_size)
+        return (width, height), (crop_width, crop_height), window_size, num_patches_x, num_patches_y, needs_square_pad
 
     def get_number_of_image_patches(self, height: int, width: int, images_kwargs=None) -> tuple[int, int]:
         """Return ``(num_patches, num_newline_tokens)`` for an image of the given size."""
         images_kwargs = images_kwargs or {}
-        image_size = images_kwargs.get("image_size", self.image_size)
-        patch_crop_size = images_kwargs.get("patch_crop_size", self.patch_crop_size)
-        *_, num_patches_x, num_patches_y, _ = self._plan_patches(width, height, image_size, patch_crop_size)
+        size = images_kwargs.get("size", self.size)
+        image_size = size["height"]
+        patch_size = images_kwargs.get("patch_size", self.patch_size)
+        *_, num_patches_x, num_patches_y, _ = self._plan_patches(width, height, image_size, patch_size)
         num_patches = num_patches_x * num_patches_y
         num_newlines = num_patches_y - 1 if num_patches > 0 else 0
         return num_patches, num_newlines
@@ -421,18 +471,18 @@ class Step3p7ImageProcessor(TorchvisionBackend):
         self,
         img: torch.Tensor,
         image_size: int,
-        patch_crop_size: int,
+        patch_size: int,
         resample: "PILImageResampling",
     ) -> tuple[torch.Tensor, list[torch.Tensor], int, int]:
         """Step3p7-specific cropping: square-pad extreme aspect ratios, resize the global view,
         and slice out raw (pre-final-resize) local-patch tiles per `_plan_patches`'s layout.
 
         Returns the resized global view, the list of raw local-patch tensors (still at
-        `window_size`, not yet resized to `patch_crop_size`), and the patch grid dimensions.
+        `window_size`, not yet resized to `patch_size`), and the patch grid dimensions.
         """
         _, height, width = img.shape
         (global_w, global_h), (crop_w, crop_h), window_size, num_patches_x, num_patches_y, needs_square_pad = (
-            self._plan_patches(width, height, image_size, patch_crop_size)
+            self._plan_patches(width, height, image_size, patch_size)
         )
 
         # Pad extreme-aspect-ratio images to square (original at top-left, zeros elsewhere)
@@ -464,20 +514,22 @@ class Step3p7ImageProcessor(TorchvisionBackend):
         image_mean: float | list[float] | None,
         image_std: float | list[float] | None,
         resample: "PILImageResampling",
-        image_size: int,
-        patch_crop_size: int,
+        size: SizeDict,
+        patch_size: int,
         disable_grouping: bool | None,
         return_tensors: "str | TensorType | None",
         **kwargs,
     ) -> BatchFeature:
-        global_images, raw_patches, num_local_patches, patch_newline_masks = [], [], [], []
+        image_size = size.height
+        global_images, nested_patches, num_local_patches, patch_newline_masks = [], [], [], []
 
         for img in images:
             global_img, patches, num_patches_x, num_patches_y = self._get_image_patches(
-                img, image_size, patch_crop_size, resample
+                img, image_size, patch_size, resample
             )
             global_images.append(global_img)
             num_local_patches.append(len(patches))
+            nested_patches.append(patches)
             # Newline after the last patch in each row except the final row
             patch_newline_masks.append(
                 [
@@ -485,38 +537,45 @@ class Step3p7ImageProcessor(TorchvisionBackend):
                     for row in range(num_patches_y)
                     for col in range(num_patches_x)
                 ]
-                if patches
-                else None
             )
-            raw_patches.extend(patches)
 
         # Global views already share a uniform (image_size × image_size) shape, so batch directly.
         global_stack = self.rescale_and_normalize(
             torch.stack(global_images), do_rescale, rescale_factor, do_normalize, image_mean, image_std
         )
 
-        # Local patches: resize + rescale/normalize in shape-grouped batches.
-        pixel_values_local_list = []
-        if raw_patches:
-            grouped_patches, grouped_index = group_images_by_shape(raw_patches, disable_grouping=disable_grouping)
-            for shape, stacked_patches in grouped_patches.items():
-                resized = self.resize(
-                    stacked_patches, SizeDict(height=patch_crop_size, width=patch_crop_size), resample=resample
-                )
-                grouped_patches[shape] = self.rescale_and_normalize(
-                    resized, do_rescale, rescale_factor, do_normalize, image_mean, image_std
-                )
-            pixel_values_local_list = reorder_images(grouped_patches, grouped_index)
-
         data = {
             "pixel_values": global_stack,
             "num_local_patches": num_local_patches,
         }
-        if pixel_values_local_list:
-            data["pixel_values_local"] = torch.stack(pixel_values_local_list)
+        max_patches = max(num_local_patches, default=0)
+        if max_patches:
+            # Group by shape while keeping each image's patches nested (`is_nested=True`, the same
+            # convention Idefics3/Maskformer use for a variable number of sub-images per sample)
+            # instead of flattening every image's patches into one list and tracking counts by hand.
+            grouped_patches, grouped_index = group_images_by_shape(
+                nested_patches, is_nested=True, disable_grouping=disable_grouping
+            )
+            for shape, stacked_patches in grouped_patches.items():
+                resized = self.resize(
+                    stacked_patches, SizeDict(height=patch_size, width=patch_size), resample=resample
+                )
+                grouped_patches[shape] = self.rescale_and_normalize(
+                    resized, do_rescale, rescale_factor, do_normalize, image_mean, image_std
+                )
+            nested_pixel_values_local = reorder_images(grouped_patches, grouped_index, is_nested=True)
+            # Flatten back to (total_patches, C, H, W): `Step3p7Model.get_image_features` slices this
+            # flat tensor per image using `num_local_patches`.
+            data["pixel_values_local"] = torch.stack(
+                [patch for per_image_patches in nested_pixel_values_local for patch in per_image_patches]
+            )
+
         result = BatchFeature(data=data, tensor_type=return_tensors)
-        # patch_newline_masks is ragged (list[list[bool] | None]) and cannot be tensorized
-        result["patch_newline_masks"] = patch_newline_masks
+        if max_patches:
+            # Pad every image's mask to `max_patches` so the output is a uniform (batch, max_patches)
+            result["patch_newline_masks"] = [
+                mask + [False] * (max_patches - len(mask)) for mask in patch_newline_masks
+            ]
         return result
 
     @auto_docstring
@@ -663,7 +722,7 @@ class Step3p7VisionEmbeddings(SiglipVisionEmbeddings):
 
 
 class Step3p7PreTrainedModel(PreTrainedModel):
-    config_class = Step3p7Config
+    config: Step3p7Config
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _skip_keys_device_placement = ["past_key_values"]
@@ -701,7 +760,6 @@ class Step3p7VisionModel(Step3p7PreTrainedModel):
     them in a separate ``Encoder`` submodule.
     """
 
-    config_class = Step3p7VisionConfig
     config: Step3p7VisionConfig
     _can_record_outputs = {
         "hidden_states": Step3p7VisionEncoderLayer,
@@ -729,22 +787,26 @@ class Step3p7VisionModel(Step3p7PreTrainedModel):
         grid_w = width // self.embeddings.patch_size
         hidden_state = self.embeddings(pixel_values, interpolate_pos_encoding=True)
         hidden_state = self.pre_layernorm(hidden_state)
-        # Build (h, w) position_ids for 2-D RoPE: shape (1, grid_h * grid_w, 2)
-        rows = torch.arange(grid_h, device=hidden_state.device).view(-1, 1).expand(grid_h, grid_w)
-        cols = torch.arange(grid_w, device=hidden_state.device).view(1, -1).expand(grid_h, grid_w)
-        position_ids = torch.stack([rows, cols], dim=-1).reshape(1, -1, 2)
+        # (1, grid_h * grid_w, 2) (row, col) position ids for 2-D RoPE. A single grid entry (no
+        # temporal/merge dims: t=1, spatial_merge_size=1) broadcasts across the whole batch, since
+        # every image in `pixel_values` shares the same (grid_h, grid_w).
+        grid_thw = torch.tensor([[1, grid_h, grid_w]], device=hidden_state.device)
+        position_ids = get_vision_position_ids(grid_thw, spatial_merge_size=1).unsqueeze(0)
         position_embeddings = self.rotary_emb(hidden_state, position_ids)
         for layer in self.layers:
             hidden_state = layer(hidden_state, position_embeddings=position_embeddings, **kwargs)
         batch_size, num_patches, channels = hidden_state.shape
-        grid_size = int(num_patches**0.5)
-        hidden_state = hidden_state.permute(0, 2, 1).view(batch_size, channels, grid_size, grid_size)
+        # `num_patches == grid_h * grid_w` (no CLS token is ever prepended), so reuse the grid
+        # dimensions already computed above instead of assuming a square grid via `num_patches**0.5`.
+        hidden_state = hidden_state.permute(0, 2, 1).view(batch_size, channels, grid_h, grid_w)
         hidden_state = self.downsampler1(hidden_state)
         hidden_state = self.downsampler2(hidden_state)
         return BaseModelOutput(last_hidden_state=hidden_state.flatten(2).permute(0, 2, 1))
 
 
-class Step3p7RotaryEmbedding(Gemma3RotaryEmbedding):
+class Step3p7RotaryEmbedding(LagunaRotaryEmbedding):
+    # `LagunaRotaryEmbedding` is `Gemma3RotaryEmbedding` plus `partial_rotary_factor` support
+    # (Gemma3 itself never needs partial rotation; Step3p7's full-attention layers do).
     pass
 
 
@@ -753,10 +815,10 @@ class Step3p7RMSNorm(MiniMaxM3VLRMSNorm):
 
 
 class Step3p7MLP(DeepseekV4MLP):
-    def __init__(self, config, swiglu_limit=None):
-        config = copy.copy(config)
-        config.swiglu_limit = float("inf") if swiglu_limit is None else swiglu_limit
+    def __init__(self, config, intermediate_size=None, swiglu_limit=None):
         super().__init__(config)
+        self.intermediate_size = config.intermediate_size if intermediate_size is None else intermediate_size
+        self.limit = float("inf") if swiglu_limit is None else swiglu_limit
 
     def forward(self, x):
         # silu-then-clamp (Step3p7 order); DeepseekV4MLP clamps before act_fn
@@ -767,18 +829,15 @@ class Step3p7MLP(DeepseekV4MLP):
 
 class Step3p7SharedExpert(Step3p7MLP):
     def __init__(self, config, swiglu_limit=None):
-        config = copy.copy(config)
-        config.intermediate_size = config.share_expert_dim
-        super().__init__(config, swiglu_limit=swiglu_limit)
+        super().__init__(config, intermediate_size=config.share_expert_dim, swiglu_limit=swiglu_limit)
 
 
 @no_inherit_decorator
 class Step3p7Experts(DeepseekV4Experts):
     def __init__(self, config, swiglu_limit=None):
-        config = copy.copy(config)
-        config.intermediate_size = config.moe_intermediate_size
-        config.swiglu_limit = float("inf") if swiglu_limit is None else swiglu_limit
         super().__init__(config)
+        self.intermediate_dim = config.moe_intermediate_size
+        self.limit = float("inf") if swiglu_limit is None else swiglu_limit
 
     def _apply_gate(self, gate_up: torch.Tensor) -> torch.Tensor:
         # silu-then-clamp (Step3p7 order); DeepseekV4 clamps before act_fn
@@ -877,7 +936,6 @@ class Step3p7DecoderLayer(MiniMaxM3VLDecoderLayer):  # TODO: switch to llama
 
 class Step3p7TextModel(Gemma3TextModel):
     _no_split_modules = ["Step3p7DecoderLayer"]
-    config_class = Step3p7TextConfig
     config: Step3p7TextConfig
     _can_record_outputs = {"hidden_states": Step3p7DecoderLayer}
 
@@ -911,25 +969,13 @@ class Step3p7Model(DeepseekOcr2Model):
         pixel_values: torch.Tensor,
         pixel_values_local: torch.Tensor | None = None,
         num_local_patches: list[int] | None = None,
-        output_hidden_states: bool | None = None,
         **kwargs,
     ) -> tuple | BaseModelOutputWithPooling:
-        output_hidden_states = (
-            output_hidden_states
-            if output_hidden_states is not None
-            else getattr(self.config.vision_config, "output_hidden_states", False)
-        )
-        vision_output = self.vision_model(
-            pixel_values.to(self.dtype).to(self.device),
-            output_hidden_states=output_hidden_states,
-        )
+        vision_output = self.vision_model(pixel_values, **kwargs)
         image_features = self.multi_modal_projector(vision_output.last_hidden_state)
         patch_image_features = (
             self.multi_modal_projector(
-                self.vision_model(
-                    pixel_values_local.to(self.dtype).to(self.device),
-                    output_hidden_states=False,
-                ).last_hidden_state
+                self.vision_model(pixel_values_local, **{**kwargs, "output_hidden_states": False}).last_hidden_state
             )
             if pixel_values_local is not None
             else None
@@ -971,15 +1017,11 @@ class Step3p7Processor(ProcessorMixin):
     that ``get_text_with_replacements`` substitutes into the text.
     """
 
-    attributes = ["image_processor", "tokenizer"]
-    image_processor_class = "Step3p7ImageProcessor"
-    tokenizer_class = "AutoTokenizer"
-
     def __init__(self, image_processor=None, tokenizer=None, chat_template=None, **kwargs) -> None:
         self.image_token = "<im_patch>"
         self.image_token_id = tokenizer.convert_tokens_to_ids(self.image_token) if tokenizer is not None else None
-        self.num_image_feature_size = image_processor.num_image_features if image_processor is not None else 169
-        self.num_patch_feature_size = image_processor.num_patch_features if image_processor is not None else 81
+        self.num_image_feature_size = image_processor.num_image_features
+        self.num_patch_feature_size = image_processor.num_patch_features
         self.image_feature_placeholder = self.image_token * self.num_image_feature_size
         self.patch_feature_placeholder = self.image_token * self.num_patch_feature_size
         super().__init__(image_processor=image_processor, tokenizer=tokenizer, chat_template=chat_template, **kwargs)

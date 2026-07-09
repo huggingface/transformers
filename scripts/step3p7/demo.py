@@ -3,14 +3,14 @@
 Workflow
 --------
 1. Build mini hub-format weights and push to HF Hub (once, or after changing architecture):
-     PYTHONPATH=src python scripts/step_3_7_flash/build_mini_model.py --push-to-hub
+     PYTHONPATH=src python scripts/step3p7/build_mini_model.py --push-to-hub
 
 2. Validate — downloads from Hub, converts keys, compares original code vs new code logits:
-     PYTHONPATH=src python scripts/step_3_7_flash/demo.py --hub-dir itazap/Step-3.7-Flash-Mini-Original
+     PYTHONPATH=src python scripts/step3p7/demo.py --hub-dir itazap/Step-3.7-Flash-Mini-Original
 
 3. Regression check — iterate on modular changes without rebuilding hub weights:
-     PYTHONPATH=src python scripts/step_3_7_flash/demo.py            # first run creates baseline
-     PYTHONPATH=src python scripts/step_3_7_flash/demo.py            # subsequent runs compare
+     PYTHONPATH=src python scripts/step3p7/demo.py            # first run creates baseline
+     PYTHONPATH=src python scripts/step3p7/demo.py            # subsequent runs compare
 """
 
 from __future__ import annotations
@@ -27,6 +27,7 @@ def _resolve_model_dir(model_dir: str | Path) -> Path:
     if path.exists():
         return path
     from huggingface_hub import snapshot_download
+
     return Path(snapshot_download(repo_id=str(model_dir)))
 
 
@@ -36,7 +37,7 @@ def _convert_hub_checkpoint(hub_dir: Path, out_dir: Path) -> Path:
     Weight renaming is applied automatically by `from_pretrained` via the
     `step3p7` entry in `conversion_mapping.py` — see `convert_checkpoint`.
     """
-    from transformers.models.step_3_7_flash.convert_step3p7_weights_to_hf import convert_checkpoint
+    from transformers.models.step3p7.convert_step3p7_weights_to_hf import convert_checkpoint
 
     convert_checkpoint(input_dir=str(hub_dir), output_dir=str(out_dir))
     return out_dir
@@ -49,14 +50,13 @@ def _load_raw_state_dict(hub_dir: Path) -> dict[str, torch.Tensor]:
         if src.exists():
             if weight_file.endswith(".safetensors"):
                 from safetensors.torch import load_file
+
                 return load_file(src)
             return torch.load(src, map_location="cpu", weights_only=True)
     raise FileNotFoundError(f"No weight file found in {hub_dir}")
 
 
-def _apply_key_mapping(
-    state_dict: dict[str, torch.Tensor], key_mapping: dict[str, str]
-) -> dict[str, torch.Tensor]:
+def _apply_key_mapping(state_dict: dict[str, torch.Tensor], key_mapping: dict[str, str]) -> dict[str, torch.Tensor]:
     """Rename `state_dict` keys via ordered regex (pattern -> replacement); first match wins per key."""
     import re
 
@@ -110,6 +110,7 @@ def _run_original_forward(
     # uses a meta-device init path.  Recompute them by re-running __init__
     # on every EncoderRope2D submodule.
     from transformers.models.step_3_7_flash_original.modeling_step3p7 import EncoderRope2D
+
     for module in orig_model.modules():
         if isinstance(module, EncoderRope2D):
             cache = module._compute_2d_freqs()
@@ -150,11 +151,13 @@ def _compare(label: str, ref: dict[str, torch.Tensor], got: dict[str, torch.Tens
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        "--model-dir", default=str(Path(__file__).parent / "debug_output" / "converted"),
+        "--model-dir",
+        default=str(Path(__file__).parent / "debug_output" / "converted"),
         help="Local path or HF repo ID (transformers format). Defaults to the converted/ dir produced by --hub-dir.",
     )
     parser.add_argument(
-        "--hub-dir", default=None,
+        "--hub-dir",
+        default=None,
         help="Hub-format checkpoint dir. Converts keys and compares orig vs new code.",
     )
     parser.add_argument("--debug-path", default=str(Path(__file__).parent / "debug_output"))
@@ -172,8 +175,8 @@ def main() -> None:
         hub_dir = None
         model_dir = _resolve_model_dir(args.model_dir)
 
-    from transformers.models.step_3_7_flash.configuration_step3p7 import Step3p7Config
-    from transformers.models.step_3_7_flash.modeling_step3p7 import Step3p7ForConditionalGeneration
+    from transformers.models.step3p7.configuration_step3p7 import Step3p7Config
+    from transformers.models.step3p7.modeling_step3p7 import Step3p7ForConditionalGeneration
 
     print(f"Loading model from {model_dir} ...")
     cfg = Step3p7Config.from_pretrained(model_dir)
@@ -184,11 +187,15 @@ def main() -> None:
     ids_with_image = torch.randint(0, cfg.text_config.vocab_size, (1, 16))
     ids_with_image[0, 8] = cfg.image_token_id
     torch.manual_seed(args.seed + 1)
-    pixel_values = torch.randn(1, cfg.vision_config.num_channels, cfg.vision_config.image_size, cfg.vision_config.image_size)
+    pixel_values = torch.randn(
+        1, cfg.vision_config.num_channels, cfg.vision_config.image_size, cfg.vision_config.image_size
+    )
 
     with torch.no_grad():
         new_text = model(input_ids=input_ids, use_cache=False).logits
-        new_pv   = model(input_ids=ids_with_image, pixel_values=pixel_values, num_local_patches=[0], use_cache=False).logits
+        new_pv = model(
+            input_ids=ids_with_image, pixel_values=pixel_values, num_local_patches=[0], use_cache=False
+        ).logits
 
     current = {"text_logits": new_text, "pv_logits": new_pv}
     torch.save(current, debug_path / "logits.pt")
@@ -219,6 +226,7 @@ def main() -> None:
         sys.exit(1)
 
     from transformers.model_debugging_utils import model_addition_debugger_context
+
     print(f"\nWriting debug trace → {debug_path}")
     with model_addition_debugger_context(model, debug_path=str(debug_path), do_prune_layers=False):
         model(input_ids=input_ids, use_cache=False)
