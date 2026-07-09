@@ -426,39 +426,6 @@ def make_list_of_audio_chat_template(
     return make_list_of_audio(audio)
 
 
-def prepare_prompt_input(
-    inputs: str | list[str] | None,
-    batch_size: int,
-    input_name: str = "inputs",
-) -> list[str | None]:
-    """
-    Normalize a string, list of strings, or ``None`` into a list of length ``batch_size``.
-
-    Args:
-        inputs (`str`, `list[str]`, or `None`):
-            The input to normalize. A single string is broadcast to all batch items; a list must
-            match ``batch_size`` exactly; ``None`` produces a list of ``None`` values.
-        batch_size (`int`):
-            Expected length of the output list.
-        input_name (`str`, *optional*, defaults to `"inputs"`):
-            Name used in error messages to identify the argument.
-
-    Returns:
-        `list[str | None]`: A list of length ``batch_size``.
-    """
-    if inputs is None:
-        return [None] * batch_size
-    if isinstance(inputs, str):
-        return [inputs] * batch_size
-    if isinstance(inputs, (list, tuple)):
-        if len(inputs) != batch_size:
-            raise ValueError(
-                f"Received {len(inputs)} {input_name} for {batch_size} audio sample(s); counts must match."
-            )
-        return list(inputs)
-    raise TypeError(f"`{input_name}` must be a string, a sequence of strings, or `None`.")
-
-
 def hertz_to_mel(freq: float | np.ndarray, mel_scale: str = "htk") -> float | np.ndarray:
     """
     Convert frequency from hertz to mels.

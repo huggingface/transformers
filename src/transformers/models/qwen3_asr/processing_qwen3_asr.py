@@ -16,9 +16,9 @@ import unicodedata
 
 import numpy as np
 
-from ...audio_utils import AudioInput, make_list_of_audio_chat_template, prepare_prompt_input
+from ...audio_utils import AudioInput, make_list_of_audio_chat_template
 from ...feature_extraction_utils import BatchFeature
-from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
+from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack, prepare_prompt_input
 from ...tokenization_utils_base import TextInput
 from ...utils import auto_docstring
 from ...utils.import_utils import is_nagisa_available, is_soynlp_available
