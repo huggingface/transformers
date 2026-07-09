@@ -141,7 +141,6 @@ _MODEL_TO_CONVERSION_PATTERN = {
 def _build_checkpoint_conversion_mapping():
     mapping = {
         "gpt_neox": [
-            # The LM head was renamed from `embed_out` to the standard `lm_head`
             WeightRenaming(source_patterns=r"^embed_out\.", target_patterns="lm_head."),
         ],
         "gemma4_unified": [
