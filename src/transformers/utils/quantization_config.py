@@ -1174,7 +1174,6 @@ class CompressedTensorsConfig(QuantizationConfigMixin):
             # FP8 checkpoints are excluded: even when not stored in COMPRESSED status (e.g. FROZEN
             # per-tensor static FP8), the weights are already FP8 and run through the FP8 kernels.
             self.dequantize = True
-            self.run_compressed = False
 
     @classmethod
     def from_dict(cls, config_dict, return_unused_kwargs=False, **kwargs):
