@@ -30,6 +30,7 @@ from transformers.processing_utils import (
     MODALITY_TO_AUTOPROCESSOR_MAPPING,
     Unpack,
 )
+from transformers.image_utils import load_image
 from transformers.testing_utils import (
     check_json_file_has_correct_format,
     require_av,
@@ -70,6 +71,10 @@ MODALITY_INPUT_DATA = {
 
 for modality, urls in MODALITY_INPUT_DATA.items():
     MODALITY_INPUT_DATA[modality] = [url_to_local_path(url) for url in urls]
+
+
+def load_test_image(url):
+    return load_image(url_to_local_path(url))
 
 
 def prepare_image_inputs():
