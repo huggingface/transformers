@@ -920,7 +920,7 @@ class OlmoHybridPreTrainedModel(PreTrainedModel):
     _supports_sdpa = True
     _keys_to_ignore_on_load_unexpected = [r"^mtp.*"]
     _can_record_outputs = {
-        "hidden_states": (OlmoHybridAttentionDecoderLayer, OlmoHybridLinearAttentionDecoderLayer),
+        "hidden_states": [OlmoHybridAttentionDecoderLayer, OlmoHybridLinearAttentionDecoderLayer],
         "attentions": OlmoHybridAttention,
     }
     _is_stateful = True
