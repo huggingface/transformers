@@ -102,5 +102,14 @@ class GPT2Config(PreTrainedConfig):
     add_cross_attention: bool = False
     tie_word_embeddings: bool = True
 
+    def __post_init__(self, **kwargs):
+        for attr_name in ("resid_pdrop", "embd_pdrop", "attn_pdrop", "summary_first_dropout"):
+            value = getattr(self, attr_name)
+            if not 0 <= value <= 1:
+                raise ValueError(
+                    f"`{attr_name}` must be in the range [0, 1], got {value}."
+                )
+        super().__post_init__(**kwargs)
+
 
 __all__ = ["GPT2Config"]
