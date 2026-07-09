@@ -110,7 +110,6 @@ class CanaryProcessor(ProcessorMixin):
         source_language: str | list[str] = "en",
         target_language: str | list[str] | None = None,
         punctuation: bool = True,
-        timestamps: bool = False,
         **kwargs: Unpack[CanaryProcessorKwargs],
     ) -> BatchFeature:
         r"""
@@ -126,8 +125,6 @@ class CanaryProcessor(ProcessorMixin):
                 different language for speech-to-text translation.
             punctuation (`bool`, *optional*, defaults to `True`):
                 Whether to request punctuation and capitalization in the output.
-            timestamps (`bool`, *optional*, defaults to `False`):
-                Whether to request segment-level timestamp tokens in the output.
             **kwargs:
                 Additional keyword arguments forwarded to [`~CanaryProcessor.apply_chat_template`].
 
@@ -155,7 +152,6 @@ class CanaryProcessor(ProcessorMixin):
                     "source_language": source,
                     "target_language": target,
                     "punctuation": punctuation,
-                    "timestamps": timestamps,
                 },
             ]
             conversations.append([{"role": "user", "content": content}])

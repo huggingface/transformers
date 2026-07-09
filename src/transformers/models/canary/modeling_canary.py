@@ -534,12 +534,6 @@ class CanaryModel(CanaryPreTrainedModel):
             encoder_attentions=encoder_outputs.attentions,
         )
 
-    def get_encoder(self):
-        return self.encoder
-
-    def get_decoder(self):
-        return self.decoder
-
     @can_return_tuple
     def get_audio_features(
         self,
@@ -568,12 +562,6 @@ class CanaryForConditionalGeneration(CanaryPreTrainedModel, GenerationMixin):
         self.model = CanaryModel(config)
         self.proj_out = nn.Linear(config.d_model, config.vocab_size, bias=True)
         self.post_init()
-
-    def get_encoder(self):
-        return self.model.get_encoder()
-
-    def get_decoder(self):
-        return self.model.get_decoder()
 
     def get_input_embeddings(self) -> nn.Module:
         return self.model.get_input_embeddings()

@@ -22,12 +22,11 @@ from transformers import AutoProcessor, CanaryProcessor
 from transformers.testing_utils import require_torch
 
 
-def _get_prompt(source: str, target: str, pnc: bool = True, timestamps: bool = False) -> str:
+def _get_prompt(source: str, target: str, pnc: bool = True) -> str:
     return (
         "<|startofcontext|><|startoftranscript|><|emo:undefined|>"
         f"<|{source}|><|{target}|>"
-        f"{'<|pnc|>' if pnc else '<|nopnc|>'}<|noitn|>"
-        f"{'<|timestamp|>' if timestamps else '<|notimestamp|>'}<|nodiarize|>"
+        f"{'<|pnc|>' if pnc else '<|nopnc|>'}<|noitn|><|notimestamp|><|nodiarize|>"
     )
 
 
@@ -66,12 +65,10 @@ class CanaryProcessorTest(unittest.TestCase):
         inputs = processor.apply_transcription_request(audio=self._audio(), source_language="en", target_language="de")
         self.assertEqual(self._decode_prompt(processor, inputs), _get_prompt("en", "de"))
 
-    def test_punctuation_and_timestamps_flags(self):
+    def test_punctuation_flag(self):
         processor = self.get_processor()
-        inputs = processor.apply_transcription_request(
-            audio=self._audio(), source_language="en", punctuation=False, timestamps=True
-        )
-        self.assertEqual(self._decode_prompt(processor, inputs), _get_prompt("en", "en", pnc=False, timestamps=True))
+        inputs = processor.apply_transcription_request(audio=self._audio(), source_language="en", punctuation=False)
+        self.assertEqual(self._decode_prompt(processor, inputs), _get_prompt("en", "en", pnc=False))
 
     def test_batch_broadcast_and_per_sample(self):
         processor = self.get_processor()
