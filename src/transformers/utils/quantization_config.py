@@ -1169,7 +1169,7 @@ class CompressedTensorsConfig(QuantizationConfigMixin):
         self.quant_method = QuantizationMethod.COMPRESSED_TENSORS
 
     def post_init(self):
-        if not self.dequantize and not self.is_quantization_compressed and not self.is_fp8:
+        if not self.dequantize and not self.is_quantization_compressed and not self.has_fp8_modules:
             # Compressed execution only applies to compressed checkpoints; dequantize otherwise.
             # FP8 checkpoints are excluded: even when not stored in COMPRESSED status (e.g. FROZEN
             # per-tensor static FP8), the weights are already FP8 and run through the FP8 kernels.
@@ -1241,8 +1241,11 @@ class CompressedTensorsConfig(QuantizationConfigMixin):
         return {"run_compressed": self.run_compressed, "dequantize": self.dequantize}
 
     @property
-    def is_fp8(self):
-        """Whether this config describes FP8 quantization (float weights with 8 bits)."""
+    def has_fp8_modules(self):
+        """Whether any config group quantizes weights to FP8 (float, 8 bits). Quantization
+        may only cover part of the model: each group scopes its scheme with `targets`, and
+        mixed configs (e.g. Kimi: FP8 attention + INT4 experts) combine FP8 with other
+        schemes."""
         ct_qconfig = self.quantization_config
         if ct_qconfig is None:
             return False
@@ -1251,14 +1254,6 @@ class CompressedTensorsConfig(QuantizationConfigMixin):
             if weights is not None and weights.type == "float" and weights.num_bits == 8:
                 return True
         return False
-
-    @property
-    def use_fp8_kernel(self):
-        """Whether to run this FP8 checkpoint through the accelerated FP8 kernels.
-
-        True only for FP8 checkpoints that are kept quantized (i.e. not `dequantize`).
-        """
-        return self.is_fp8 and not self.dequantize
 
     @property
     def is_quantized(self):

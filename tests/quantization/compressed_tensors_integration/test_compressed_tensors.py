@@ -52,37 +52,39 @@ class CompressedTensorsTest(unittest.TestCase):
         self.assertIsInstance(config_from_dict.quantization_config, QuantizationConfig)
 
     def test_tinyllama_w4a16(self):
-        self._test_quantized_model(self.tinyllama_w4a16, 20.0)
+        # Non-FP8 schemes have no kernels and are dequantized at load time.
+        self._test_quantized_model(self.tinyllama_w4a16, 20.0, expect_quantized=False)
 
     def test_tinyllama_int8(self):
-        self._test_quantized_model(self.tinyllama_int8, 30.0)
+        self._test_quantized_model(self.tinyllama_int8, 30.0, expect_quantized=False)
 
     def test_tinyllama_fp8(self):
         self._test_quantized_model(self.tinyllama_fp8, 20.0)
 
     def test_tinyllama_w8a16(self):
-        self._test_quantized_model(self.tinyllama_w8a16, 20.0)
+        self._test_quantized_model(self.tinyllama_w8a16, 20.0, expect_quantized=False)
 
-    def _test_quantized_model(self, model_name: str, expected_perplexity: float):
+    def _test_quantized_model(self, model_name: str, expected_perplexity: float, expect_quantized: bool = True):
         # load model
         quantized_model = AutoModelForCausalLM.from_pretrained(model_name, device_map="auto")
         tokenizer = AutoTokenizer.from_pretrained(model_name)
         device = quantized_model.device
 
-        # check config
-        self.assertIsNotNone(
-            quantized_model.config.quantization_config,
-            "quantization_config should not be None",
-        )
-        # check scales
-        self.assertTrue(
-            any(
-                key
-                for key, tensor in quantized_model.state_dict().items()
-                if "scale" in key and not torch.all(tensor == 1.0)
-            ),
-            "quantized model should load a non-trivial scale into the state dict",
-        )
+        if expect_quantized:
+            # check config
+            self.assertIsNotNone(
+                quantized_model.config.quantization_config,
+                "quantization_config should not be None",
+            )
+            # check scales
+            self.assertTrue(
+                any(
+                    key
+                    for key, tensor in quantized_model.state_dict().items()
+                    if "scale" in key and not torch.all(tensor == 1.0)
+                ),
+                "quantized model should load a non-trivial scale into the state dict",
+            )
 
         # compute outputs with loss
         inputs = tokenizer(self.prompt, return_tensors="pt").to(device)
@@ -97,7 +99,7 @@ class CompressedTensorsTest(unittest.TestCase):
     @require_torch_accelerator
     def test_tinyllama_fp8_uses_fp8_kernel(self):
         """Verify FP8 model uses CompressedTensorsFP8Linear on GPU/XPU."""
-        from transformers.integrations.compressed_tensors_fp8 import CompressedTensorsFP8Linear
+        from transformers.integrations.compressed_tensors import CompressedTensorsFP8Linear
 
         model = AutoModelForCausalLM.from_pretrained(self.tinyllama_fp8, device_map="auto")
 
@@ -112,7 +114,7 @@ class CompressedTensorsTest(unittest.TestCase):
 
     def test_tinyllama_fp8_dequantize(self):
         """With `dequantize=True` the FP8 kernel path is disabled and weights are dequantized."""
-        from transformers.integrations.compressed_tensors_fp8 import CompressedTensorsFP8Linear
+        from transformers.integrations.compressed_tensors import CompressedTensorsFP8Linear
 
         quantization_config = CompressedTensorsConfig(dequantize=True)
         model = AutoModelForCausalLM.from_pretrained(
@@ -149,7 +151,7 @@ class CompressedTensorsTest(unittest.TestCase):
 
     def test_non_fp8_model_unaffected(self):
         """Verify non-FP8 models (e.g. INT8) do not use the FP8 kernel path."""
-        from transformers.integrations.compressed_tensors_fp8 import CompressedTensorsFP8Linear
+        from transformers.integrations.compressed_tensors import CompressedTensorsFP8Linear
 
         int8_model = "nm-testing/tinyllama-w8a8-compressed"
         model = AutoModelForCausalLM.from_pretrained(int8_model, device_map="auto")

@@ -114,7 +114,6 @@ See the [AWQ documentation](./awq) for more details.
 |--------------------------------------------------------------|-------------------------------------------------------------|
 | Supports flexible formats like FP8.        | Primarily for loading pre-quantized models.                 |
 | FP8 kernel acceleration on NVIDIA (SM89+) and Intel XPU.    |                                                             |
-| On-the-fly FP8 quantization (BF16 → FP8) during loading.    |                                                             |
 
 See the [compressed-tensors documentation](./compressed_tensors) for more details.
 

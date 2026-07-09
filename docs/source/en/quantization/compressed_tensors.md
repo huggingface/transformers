@@ -71,7 +71,7 @@ Transformers automatically uses hardware-accelerated FP8 matmul kernels (`torch.
 |--------|--------|-------|
 | Intel XPU | `torch._scaled_mm` | All XPU devices with FP8 support |
 | NVIDIA CUDA (SM89+) | `torch._scaled_mm` | Ada Lovelace (L4, L40), Hopper (H100), Blackwell and newer |
-| CPU / CUDA SM80 (A100) | Fallback | Dequantizes to BF16, uses standard matmul |
+| CPU / CUDA SM80 (A100) | Fallback | Model is dequantized to the original dtype at load time |
 
 The FP8 kernel path supports these quantization layouts.
 
