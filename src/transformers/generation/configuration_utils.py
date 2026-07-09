@@ -173,6 +173,12 @@ class GenerationConfig(PushToHubMixin):
             our [cache documentation](https://huggingface.co/docs/transformers/en/kv_cache) for further information.
         cache_config (`dict`, *optional*, default to `None`):
             Arguments used in the key-value cache class can be passed in `cache_config`.
+        max_cache_len (`int`, *optional*):
+            Only used with static caches (`cache_implementation` set to `"static"` or `"offloaded_static"`).
+            Pre-sizes the cache to this length instead of the current call's `max_length`. Set it once to the
+            largest call you expect so that repeated `generate()` calls with a longer prompt or a larger
+            `max_new_tokens` (up to this ceiling) reuse the same cache instead of triggering a reallocation and a
+            `torch.compile` recompilation.
 
         > Parameters for manipulation of the model output logits
 
@@ -342,6 +348,12 @@ class GenerationConfig(PushToHubMixin):
             If set to a positive integer, the re-encodeing process will additionally consider the last `target_lookbehind` target tokens
             to correctly align tokens. Can only be used with different tokenizers in speculative decoding.
             See this [blog](https://huggingface.co/blog/universal_assisted_generation) for more details.
+        assistant_ensemble_weight (`float`, *optional*):
+            Enables static ensemble verification in speculative decoding. If set to a value in `(0.0, 1.0)`,
+            the verifier accepts tokens against the mixture `w * p_target + (1 - w) * q_draft` instead of
+            `p_target`, trading a controlled distributional bias for a higher acceptance rate. Defaults
+            to `None`, which keeps decoding lossless. Requires the assistant model to return logits, so it
+            is not compatible with prompt lookup decoding.
 
         > Parameters related to performances and compilation
 
@@ -388,6 +400,7 @@ class GenerationConfig(PushToHubMixin):
         self.use_cache = kwargs.pop("use_cache", None)
         self.cache_implementation = kwargs.pop("cache_implementation", None)
         self.cache_config = kwargs.pop("cache_config", None)
+        self.max_cache_len = kwargs.pop("max_cache_len", None)
 
         # Parameters for manipulation of the model output logits
         self.temperature = kwargs.pop("temperature", None)
@@ -445,6 +458,7 @@ class GenerationConfig(PushToHubMixin):
         self.assistant_early_exit = kwargs.pop("assistant_early_exit", None)
         self.assistant_lookbehind = kwargs.pop("assistant_lookbehind", None)
         self.target_lookbehind = kwargs.pop("target_lookbehind", None)
+        self.assistant_ensemble_weight = kwargs.pop("assistant_ensemble_weight", None)
 
         # Performance
         self.compile_config = kwargs.pop("compile_config", None)
@@ -572,7 +586,7 @@ class GenerationConfig(PushToHubMixin):
     def _get_default_generation_params() -> dict[str, Any]:
         """
         Defaults to be applied when unset by the model OR by the user, such that `model.generate()` works with minimal
-        paremeterization.
+        parameterization.
 
         Pretrained checkpoints should set these as appropriate in their `generation_config.json`, to establish
         a better default baseline. Be mindful that tests will often use these values.
@@ -639,6 +653,11 @@ class GenerationConfig(PushToHubMixin):
             raise ValueError(f"`early_stopping` must be a boolean or 'never', but is {self.early_stopping}.")
         if self.max_new_tokens is not None and self.max_new_tokens <= 0:
             raise ValueError(f"`max_new_tokens` must be greater than 0, but is {self.max_new_tokens}.")
+        if self.assistant_ensemble_weight is not None and not (0.0 < self.assistant_ensemble_weight < 1.0):
+            raise ValueError(
+                f"`assistant_ensemble_weight` must be in the open interval `(0.0, 1.0)`, "
+                f"but is {self.assistant_ensemble_weight}. Use `None` for standard (lossless) speculative decoding."
+            )
         if self.pad_token_id is not None and self.pad_token_id < 0:
             minor_issues["pad_token_id"] = (
                 f"`pad_token_id` should be positive but got {self.pad_token_id}. This will cause errors when batch "
@@ -653,6 +672,11 @@ class GenerationConfig(PushToHubMixin):
             raise ValueError(
                 f"Invalid `cache_implementation` ({self.cache_implementation}). Choose one of: "
                 f"{valid_cache_implementations}"
+            )
+        if self.max_cache_len is not None and self.cache_implementation not in ALL_STATIC_CACHE_IMPLEMENTATIONS:
+            logger.warning_once(
+                f"`max_cache_len` is only used with static caches ({STATIC_CACHE_IMPLEMENTATIONS}); it will be "
+                f"ignored with `cache_implementation={self.cache_implementation!r}`."
             )
         # 1.3. Performance attributes
         if self.compile_config is not None and not isinstance(self.compile_config, CompileConfig):
@@ -1649,8 +1673,6 @@ class ContinuousBatchingConfig:
         kv_padding_interval_size (`int`, *optional*, defaults to 0):
             KV padding granularity in tokens for CUDA graphs. Uses a preset from `continuous_api.py` when
             set to 0.
-        max_cached_graphs (`int`, *optional*, defaults to 0):
-            Maximum number of cached CUDA graphs. Uses a preset from `continuous_api.py` when set to 0.
         varlen_compile_config (`CompileConfig`, *optional*):
             CompileConfig for varlen (prefill) path. Default is None (uses generation_config fallback)
             The varlen path handles batches with varying query and KV lengths, often benefiting from dynamic=True.
@@ -1688,9 +1710,11 @@ class ContinuousBatchingConfig:
             for no timeout. Default is 300 seconds.
         use_default_compile_configs (`bool | None`, *optional*):
             Deprecated in 5.11: please use default_compile_level instead.
+        max_cached_graphs (`int`, *optional*):
+            Deprecated in 5.13: maximum number of graph is no longer an issue.
     """
 
-    # Size of each KV cache block
+    # Size of each KV cache block. Must be at least 4 (and for an efficient cache, it should be well above that).
     block_size: int = 256
 
     # The number of blocks used in the KV cache and the maximum number of tokens in a batch. Once the block size is set,
@@ -1728,7 +1752,6 @@ class ContinuousBatchingConfig:
     # top of the continuous_batching/continuous_api.py file.
     q_padding_interval_size: int = 0
     kv_padding_interval_size: int = 0
-    max_cached_graphs: int = 0
 
     # Compile configs for the two execution paths. If None, uses the compile_config from generation_config as fallback.
     varlen_compile_config: CompileConfig | None = None
@@ -1784,6 +1807,7 @@ class ContinuousBatchingConfig:
 
     # Deprecated arguments
     use_default_compile_configs: bool | None = None
+    max_cached_graphs: int | None = None
 
     def __post_init__(self):
         # Only turn off graph mixing support if TP is on
@@ -1805,6 +1829,10 @@ class ContinuousBatchingConfig:
             logger.warning(
                 "use_default_compile_configs is deprecated: please use default_compile_level instead. For backwards "
                 f"compatibility, {level_msg}"
+            )
+        if self.max_cached_graphs is not None:  # Deprecated in 5.13
+            logger.warning(
+                "max_cached_graphs is deprecated: maximum number of graph is no longer an issue. Deprecated in 5.13."
             )
 
     @property
