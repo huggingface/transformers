@@ -59,14 +59,14 @@ class GlmAsrProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     @require_torch
     def test_can_load_various_tokenizers(self):
-        processor = GlmAsrProcessor.from_pretrained(self.checkpoint)
-        tokenizer = AutoTokenizer.from_pretrained(self.checkpoint)
+        processor = GlmAsrProcessor.from_pretrained(self.tiny_model_id)
+        tokenizer = AutoTokenizer.from_pretrained(self.tiny_model_id)
         self.assertEqual(processor.tokenizer.__class__, tokenizer.__class__)
 
     @require_torch
     def test_save_load_pretrained_default(self):
-        tokenizer = AutoTokenizer.from_pretrained(self.checkpoint)
-        processor = GlmAsrProcessor.from_pretrained(self.checkpoint)
+        tokenizer = AutoTokenizer.from_pretrained(self.tiny_model_id)
+        processor = GlmAsrProcessor.from_pretrained(self.tiny_model_id)
         feature_extractor = processor.feature_extractor
 
         processor = GlmAsrProcessor(tokenizer=tokenizer, feature_extractor=feature_extractor)
