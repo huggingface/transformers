@@ -1991,7 +1991,7 @@ class MistralConverter:
         self.pattern = pattern
         self.add_prefix_space = add_prefix_space
         self.additional_special_tokens = (
-            additional_special_tokens.keys()
+            list(additional_special_tokens.values())
             if isinstance(additional_special_tokens, dict)
             else additional_special_tokens
         )
