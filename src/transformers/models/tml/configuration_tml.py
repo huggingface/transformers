@@ -26,22 +26,12 @@ class TmlTextConfig(PreTrainedConfig):
     model_type = "tml_text"
     base_config_key = "text_config"
     base_model_tp_plan = {
-        "embed_tokens": "embedding_rowwise",
-        # NOT packed_colwise: sharding happens on the RAW ckpt tensor before the Interleave
-        # conversion, and w13 is interleaved (g0,u0,g1,u1...), not [G|U] halves. A contiguous
-        # colwise slice keeps gate/up pairs together, and the per-shard de-interleave then yields
-        # exactly the contiguous channel block the rowwise down_proj shard consumes.
-        "layers.*.mlp.experts.gate_up_proj": "colwise",
+        "layers.*.mlp.experts.gate_up_proj": "packed_colwise",
         "layers.*.mlp.experts.down_proj": "rowwise",
         "layers.*.mlp.experts": "moe_tp_experts",
-        # param entries must stay listed before the module entry: the loader's alternation regex
-        # takes the first matching branch for weight sharding, while the module entry only
-        # attaches the output all-reduce hook (TmlSharedExperts holds raw nn.Parameters, so
-        # rowwise alone would shard the weights without ever reducing the partial output)
         "layers.*.mlp.shared_experts.gate_proj": "colwise",
         "layers.*.mlp.shared_experts.up_proj": "colwise",
         "layers.*.mlp.shared_experts.down_proj": "rowwise",
-        "layers.*.mlp.shared_experts": "all_reduce",
         "layers.*.mlp.gate_proj": "colwise",
         "layers.*.mlp.up_proj": "colwise",
         "layers.*.mlp.down_proj": "rowwise",
@@ -65,8 +55,6 @@ class TmlTextConfig(PreTrainedConfig):
     }
 
     vocab_size: int = 201024
-    # `unembed` row count when the checkpoint head is not padded to `vocab_size` (big model: 200058)
-    unpadded_vocab_size: int | None = None
     hidden_size: int = 6144
     num_hidden_layers: int = 66
     num_attention_heads: int = 64
@@ -109,8 +97,7 @@ class TmlTextConfig(PreTrainedConfig):
             else:
                 local_layer_ids = {i for i in range(self.num_hidden_layers) if (i + 1) % 6}
             self.layer_types = [
-                "sliding_attention" if i in local_layer_ids else "full_attention"
-                for i in range(self.num_hidden_layers)
+                "hybrid_sliding" if i in local_layer_ids else "hybrid" for i in range(self.num_hidden_layers)
             ]
         if self.mlp_layer_types is None:
             dense_mlp_idx = kwargs.pop("dense_mlp_idx", 0)
@@ -118,6 +105,9 @@ class TmlTextConfig(PreTrainedConfig):
 
         if kwargs.get("dense_intermediate_size") is not None:
             self.intermediate_size = kwargs.pop("dense_intermediate_size")
+
+        # The architecture contains 4 conv modules per layer, each needing a different conv cache
+        self.number_of_conv_states = 4
 
         super().__post_init__(**kwargs)
 

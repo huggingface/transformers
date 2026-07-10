@@ -31,8 +31,11 @@ The [`ExpertsInterface`] provides optimized experts backends. It decouples the e
 
 The `"batched_mm"` and `"grouped_mm"` backends also run FP8 and FP4 (`int8`-packed) quantized experts through the Triton finegrained-fp8 kernel, reading either `float32` or UE8M0 scales. They act as the fallback for quantized checkpoints when the `"deepgemm"` backend is unavailable.
 
-> [!NOTE]
-> When using `experts_implementation="grouped_mm"` on GPU, the model automatically switches to `"batched_mm"` during the decode stage of generation (after prefill). This is because `batched_mm` is significantly faster on lower token count during autoregressive decoding on GPU. On CPU, `grouped_mm` remains active throughout generation as it is more efficient for all input sizes.
+## Decode-stage switching
+
+On GPU, a model loaded with `experts_implementation="grouped_mm"` automatically switches to `"batched_mm"` for the decode stage of generation, which is significantly faster on lower token counts. The original backend is restored once generation finishes. On CPU, `grouped_mm` stays active throughout generation because it's more efficient at every input size.
+
+The switch reaches MoE layers in the top-level model and in any sub-config backbone, such as the `text_config` of a vision-language model. Only `grouped_mm` entries switch to `batched_mm`. Experts running any other backend keep it.
 
 ## Set an experts backend
 
@@ -52,6 +55,13 @@ Switch between experts backends at runtime without reloading the model using [`~
 
 ```py
 model.set_experts_implementation("eager")
+```
+
+Read the backend that's currently running with [`~PreTrainedModel.get_experts_implementation`]. It returns a `dict` with one entry for the model, and one entry per sub-config.
+
+```py
+model.get_experts_implementation()
+# {"": "grouped_mm", "text_config": "grouped_mm", "vision_config": "eager"}
 ```
 
 ## Backbone-specific experts backend
@@ -120,6 +130,9 @@ model = AutoModelForCausalLM.from_pretrained(
 ```
 
 For FP4-packed expert weights (DeepSeek V4-style), the GPU must be SM100+ (Blackwell). The checkpoint config typically sets `expert_dtype="fp4"` and `scale_fmt="ue8m0"`.
+
+> [!NOTE]
+> On Blackwell (SM100+), the `"deepgemm"` and `"deepgemm_megamoe"` experts kernels require power-of-two UE8M0 expert scales. A checkpoint quantized with plain `float32` scales (`scale_fmt="float"`) raises a `ValueError` on the first forward instead of silently corrupting the output. Load a checkpoint quantized with `scale_fmt="ue8m0"`, or switch to `grouped_mm` or `batched_mm`, which consume `float32` block scales directly. Hopper (SM90+) consumes `float32` scales on the DeepGEMM path without conversion.
 
 The main reason to pass a [`FineGrainedFP8Config`] for a pre-quantized checkpoint is to dequantize it back to `bfloat16`, in which case the experts run in `bfloat16` rather than on the FP8/FP4 DeepGEMM path.
 

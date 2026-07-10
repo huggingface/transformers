@@ -111,12 +111,14 @@ if is_torch_available():
 
 from unittest.mock import patch
 
+from tests.exporters.test_export import ExportGenerateTesterMixin
+
 
 def is_moe_model(config):
     return getattr(config, "_experts_implementation", None) is not None
 
 
-class GenerationTesterMixin:
+class GenerationTesterMixin(ExportGenerateTesterMixin):
     input_name = "input_ids"
     model_tester = None
     max_new_tokens = 3
@@ -1489,6 +1491,8 @@ class GenerationTesterMixin:
                 # Check 2: The outputs must be similar to the case with dynamic cache
                 dynamic_cache_generation = model.generate(**generation_kwargs, **inputs_dict)
                 if is_moe_model(config):
+                    # MoE routing accumulates FP noise across experts (different routing decisions
+                    # at the margin between static and dynamic cache → different expert matmuls).
                     atol = rtol = 1e-3
                 else:
                     atol = rtol = 1e-5
@@ -1606,9 +1610,13 @@ class GenerationTesterMixin:
                             else gen_out.past_key_values
                         )
                         self.assertTrue(isinstance(decoder_cache, DynamicCache))
-                        self.assertFalse(decoder_cache.is_compileable)
-                        # our auto compile should NOT have been called
-                        self.assertFalse(hasattr(model_to_be_compiled, "_compiled_call"))
+                        # Recurrent / hybrid SSM models (mamba2, lfm2, ...) populate the default DynamicCache
+                        # with statically-shaped recurrent layers, so the cache is compileable by default and
+                        # auto-compile kicks in. Skip the "default cache is non-compileable" sanity check for
+                        # those models — they're tested under their compileable path further down.
+                        if not decoder_cache.is_compileable:
+                            # our auto compile should NOT have been called
+                            self.assertFalse(hasattr(model_to_be_compiled, "_compiled_call"))
 
             # 5. get compiled results -- relies on the automatic compilation triggered by specific compilable caches
             if not has_defined_cache_implementation:
@@ -1699,7 +1707,7 @@ class GenerationTesterMixin:
                 num_beams=1,
                 max_new_tokens=self.max_new_tokens,
                 min_new_tokens=self.max_new_tokens,
-                output_attentions=True,
+                output_attentions=self.has_attentions,
                 output_hidden_states=True,
                 output_scores=True,
                 output_logits=True,
@@ -2485,9 +2493,20 @@ class GenerationTesterMixin:
                 model_input_length = 1
             else:
                 model_input_length = prompt_length + generated_length
-            query_length = (
-                prompt_length + generated_length if not has_static_cache else decoder_past_key_values.get_max_length()
-            )
+            if has_static_cache:
+                # Hybrid caches (e.g. Bamba: full_attention + linear_attention) have layers with no fixed
+                # max — `get_max_length(i)` returns -1 on those. Pick the first layer that reports a
+                # real length; that's the one whose attention shape we're checking against.
+                query_length = next(
+                    (
+                        decoder_past_key_values.get_max_length(i)
+                        for i in range(len(decoder_past_key_values))
+                        if decoder_past_key_values.get_max_length(i) != -1
+                    ),
+                    prompt_length + generated_length,
+                )
+            else:
+                query_length = prompt_length + generated_length
 
             expected_shape = (
                 batch_size,
@@ -2781,6 +2800,155 @@ class UtilsFunctionsTest(unittest.TestCase):
         last_token_counts = collections.Counter(last_validated_token)
         self.assertTrue(last_token_counts[1] > last_token_counts[3] > last_token_counts[7] > 0)
         self.assertTrue(last_token_counts[8] > last_token_counts[3])
+
+    def test_speculative_sampling_ensemble_weight_none_equals_standard(self):
+        """With `assistant_ensemble_weight=None`, behaviour must be identical to standard speculative sampling."""
+        candidate_input_ids = torch.tensor([[8, 0, 3, 9, 8, 1, 4, 5]])
+        candidate_logits = torch.tensor(
+            [
+                [
+                    [-10.0, 10.0, -10.0, -10.0, -10.0, -10.0, -10.0, -10.0, -10.0, -10.0],
+                    [-10.0, -10.0, -10.0, -10.0, 10.0, -10.0, -10.0, -10.0, -10.0, -10.0],
+                    [-10.0, -10.0, -10.0, -10.0, -10.0, 10.0, -10.0, -10.0, -10.0, -10.0],
+                ]
+            ]
+        )
+        candidate_length = 3
+        inf = float("inf")
+        new_logits = torch.tensor(
+            [
+                [
+                    [-10.0, 10.0, -10.0, -10.0, -10.0, -10.0, -10.0, -10.0, -10.0, -10.0],
+                    [-10.0, -10.0, -10.0, -10.0, 10.0, -10.0, -10.0, -10.0, -10.0, -10.0],
+                    [-inf, -inf, -inf, -inf, -inf, -inf, -inf, -inf, 10.0, -inf],
+                    [-10.0, -10.0, -10.0, -10.0, -10.0, -10.0, -10.0, -10.0, -10.0, -10.0],
+                ]
+            ]
+        )
+        validated_none, n_none = _speculative_sampling(
+            candidate_input_ids,
+            candidate_logits,
+            candidate_length,
+            new_logits,
+            False,
+            assistant_ensemble_weight=None,
+        )
+        # Matches the parent test exactly (i.e. backward compatible with w=None)
+        self.assertEqual(n_none.item(), 2)
+        self.assertEqual(validated_none.tolist()[0], [1, 4, 8])
+
+    def test_speculative_sampling_ensemble_weight_increases_acceptance(self):
+        """Deterministic check: a candidate that vanilla SD rejects is accepted under ensemble weighting.
+
+        With `q_i=0.80, p_i=0.40, r=0.60`:
+        - Standard ratio: `p_i/q_i = 0.50 < 0.60 = r` -> REJECT
+        - Ensemble (w=0.7): `1 - w + w*(p_i/q_i) = 0.65 > 0.60 = r` -> ACCEPT
+        """
+        candidate_length = 1
+        # Draft: token 0 has prob 0.80
+        q_probs = torch.tensor([[[0.80, 0.10, 0.05, 0.05]]])
+        # Target: token 0 has prob 0.40 (+ a second position for the bonus-token slot)
+        p_probs = torch.tensor([[[0.40, 0.30, 0.20, 0.10], [0.25, 0.25, 0.25, 0.25]]])
+
+        candidate_logits = q_probs.log()
+        new_logits = p_probs.log()
+        prefix = torch.zeros(1, 5, dtype=torch.long)
+        candidate_input_ids = torch.cat([prefix, torch.tensor([[0]])], dim=-1)
+
+        fixed_rand = torch.tensor([0.60])
+        with patch("transformers.generation.utils.torch.rand_like", return_value=fixed_rand):
+            _, n_standard = _speculative_sampling(
+                candidate_input_ids,
+                candidate_logits,
+                candidate_length,
+                new_logits,
+                False,
+                assistant_ensemble_weight=None,
+            )
+        with patch("transformers.generation.utils.torch.rand_like", return_value=fixed_rand):
+            _, n_ensemble = _speculative_sampling(
+                candidate_input_ids,
+                candidate_logits,
+                candidate_length,
+                new_logits,
+                False,
+                assistant_ensemble_weight=0.7,
+            )
+
+        self.assertEqual(n_standard.item(), 0)
+        self.assertEqual(n_ensemble.item(), 1)
+
+    def test_speculative_sampling_ensemble_fallback_distribution_finite_and_normalized(self):
+        """The fallback distribution under ensemble weighting must be finite, normalized, and match the
+        standard SD fallback `[p-q]_+/sum([p-q]_+)` (the ensemble residual normalises to the same distribution)."""
+        candidate_length = 1
+        q_probs = torch.tensor([[[0.70, 0.20, 0.05, 0.05]]])
+        p_probs = torch.tensor([[[0.30, 0.40, 0.20, 0.10], [0.25, 0.25, 0.25, 0.25]]])
+
+        candidate_logits = q_probs.log()
+        new_logits = p_probs.log()
+        prefix = torch.zeros(1, 5, dtype=torch.long)
+        candidate_input_ids = torch.cat([prefix, torch.tensor([[0]])], dim=-1)
+
+        fixed_rand = torch.tensor([0.99])  # force rejection
+        captured = []
+
+        def capture_multinomial(input, num_samples, **kwargs):
+            captured.append(input.clone())
+            return torch.zeros(input.shape[0], num_samples, dtype=torch.long)
+
+        with patch("transformers.generation.utils.torch.rand_like", return_value=fixed_rand):
+            with patch("transformers.generation.utils.torch.multinomial", side_effect=capture_multinomial):
+                _speculative_sampling(
+                    candidate_input_ids,
+                    candidate_logits,
+                    candidate_length,
+                    new_logits,
+                    False,
+                    assistant_ensemble_weight=0.7,
+                )
+
+        self.assertEqual(len(captured), 1)
+        p_prime = captured[0]
+        self.assertTrue(torch.isfinite(p_prime).all())
+        self.assertAlmostEqual(p_prime.sum().item(), 1.0, places=5)
+        expected = torch.clamp(p_probs[0, 0, :] - q_probs[0, 0, :], min=0)
+        expected = expected / expected.sum()
+        torch.testing.assert_close(p_prime.squeeze(), expected, atol=1e-5, rtol=1e-5)
+
+    def test_speculative_sampling_ensemble_numerical_stability_near_zero_residual(self):
+        """When `p ≈ q`, the residual `[p-q]_+` is near zero; the fallback must remain finite."""
+        candidate_length = 1
+        q_probs = torch.tensor([[[0.25, 0.25, 0.25, 0.25]]])
+        p_probs = torch.tensor([[[0.25, 0.25, 0.25, 0.25], [0.25, 0.25, 0.25, 0.25]]])
+
+        candidate_logits = q_probs.log()
+        new_logits = p_probs.log()
+        prefix = torch.zeros(1, 5, dtype=torch.long)
+        candidate_input_ids = torch.cat([prefix, torch.tensor([[0]])], dim=-1)
+
+        fixed_rand = torch.tensor([0.99])
+        captured = []
+
+        def capture_multinomial(input, num_samples, **kwargs):
+            captured.append(input.clone())
+            return torch.zeros(input.shape[0], num_samples, dtype=torch.long)
+
+        with patch("transformers.generation.utils.torch.rand_like", return_value=fixed_rand):
+            with patch("transformers.generation.utils.torch.multinomial", side_effect=capture_multinomial):
+                _speculative_sampling(
+                    candidate_input_ids,
+                    candidate_logits,
+                    candidate_length,
+                    new_logits,
+                    False,
+                    assistant_ensemble_weight=0.5,
+                )
+
+        self.assertEqual(len(captured), 1)
+        p_prime = captured[0]
+        self.assertTrue(torch.isfinite(p_prime).all())
+        self.assertAlmostEqual(p_prime.sum().item(), 1.0, places=5)
 
 
 global_rng = random.Random()
