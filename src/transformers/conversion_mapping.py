@@ -161,14 +161,14 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(source_patterns=r"^embed_norm.weight", target_patterns=r"language_model.embed_norm.weight"),
             WeightRenaming(source_patterns=r"model.layers", target_patterns=r"language_model.layers"),
             # MoE and MLP
+            # no Transpose ops here: the TP loader shards the raw tensor but validates the shard
+            # shape on the target param, so dim-permuting conversions break sharded loads cc @cyril
             WeightConverter(
                 source_patterns="shared_w13_weight",
                 target_patterns=["gate_proj", "up_proj"],
-                operations=[Interleave(dim=1), Transpose(1, 2), Chunk(dim=2)],
+                operations=[Interleave(dim=1), Chunk(dim=1)],
             ),
-            WeightConverter(
-                source_patterns=r"shared_w2_weight", target_patterns=r"down_proj", operations=[Transpose(1, 2)]
-            ),
+            WeightRenaming(source_patterns=r"shared_w2_weight", target_patterns=r"down_proj"),
             WeightConverter(
                 source_patterns="mlp.experts.w13_weight",
                 target_patterns=["mlp.experts.gate_up_proj"],

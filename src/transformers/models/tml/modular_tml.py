@@ -432,10 +432,14 @@ class TmlSharedExperts(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.n_shared_experts = config.n_shared_experts
-        shared_d_mlp = config.moe_intermediate_size
-        self.gate_proj = nn.Parameter(torch.empty(config.n_shared_experts, config.hidden_size, shared_d_mlp))
-        self.up_proj = nn.Parameter(torch.empty(config.n_shared_experts, config.hidden_size, shared_d_mlp))
-        self.down_proj = nn.Parameter(torch.empty(config.n_shared_experts, shared_d_mlp, config.hidden_size))
+        intermediate_dim = config.moe_intermediate_size
+        # TP loader cuts shards on the raw tensor but validates shapes on the target, so a Transpose
+        # conversion op breaks sharded loads. The runtime transpose(1, 2) is not a per-forward
+        # cost: it is a stride-metadata view, so the same
+        # matmul layout every nn.Linear runs
+        self.gate_proj = nn.Parameter(torch.empty(config.n_shared_experts, intermediate_dim, config.hidden_size))
+        self.up_proj = nn.Parameter(torch.empty(config.n_shared_experts, intermediate_dim, config.hidden_size))
+        self.down_proj = nn.Parameter(torch.empty(config.n_shared_experts, config.hidden_size, intermediate_dim))
         self.act_fn = ACT2FN[config.hidden_act]
 
     def forward(self, hidden_states, gammas):
@@ -443,10 +447,10 @@ class TmlSharedExperts(nn.Module):
         hidden_states = hidden_states.reshape(1, -1, input_shape[-1]).expand(self.n_shared_experts, -1, -1)
         gammas = gammas.reshape(-1, self.n_shared_experts, 1).transpose(0, 1)
 
-        gate = torch.bmm(hidden_states, self.gate_proj)
-        up = torch.bmm(hidden_states, self.up_proj)
+        gate = torch.bmm(hidden_states, self.gate_proj.transpose(1, 2))
+        up = torch.bmm(hidden_states, self.up_proj.transpose(1, 2))
         activated = self.act_fn(gate) * up * gammas
-        down = torch.bmm(activated, self.down_proj)
+        down = torch.bmm(activated, self.down_proj.transpose(1, 2))
 
         out = down.float().sum(dim=0).to(hidden_states.dtype)
         return out.view(input_shape)
