@@ -529,7 +529,7 @@ class TmlShortConvolution(nn.Module):
         self.layer_idx = layer_idx
         self.conv_idx = conv_idx
         self.conv_kernel_size = conv_kernel_size
-        self.activation = None  # just hardcode for now
+        self.activation = None
 
         self.conv1d = nn.Conv1d(
             in_channels=hidden_size,
@@ -566,9 +566,6 @@ class TmlShortConvolution(nn.Module):
         seq_len = hidden_states.shape[1]
         hidden_states = hidden_states.transpose(1, 2)
 
-        # We have cached `conv_state` to continue from. The two cached modes
-        # (single-token decode and chunk-tokens continuation) share the state read here; they only
-        # diverge in how the conv input is assembled and which kernel consumes the states below
         use_precomputed_states = (
             cache_params is not None and cache_params.layers[self.layer_idx].has_previous_state[self.conv_idx]
         )
@@ -587,15 +584,15 @@ class TmlShortConvolution(nn.Module):
                 self.activation,
             )
         else:
-            # Multi-token forward (prefill, or chunked-tokens decode when the cache has prior state).
+            # Multi-token forward with non empty cache (chunked prefill, continuation,...). We prepend the cached conv context so the
+            # causal conv sees the correct left-context rather than zero-padding, then we drop it from the output at the end of this branch
             if use_precomputed_states:
-                # Cached chunked-tokens decode: prepend the cached conv context so the causal conv
-                # sees the correct left-context rather than zero-padding. Dropped from the output
-                # at the end of this branch.
                 hidden_states = torch.cat([conv_state, hidden_states], dim=-1)
+
             if cache_params is not None:
                 new_conv_state = F.pad(hidden_states, (self.conv_kernel_size - hidden_states.shape[-1], 0))
                 cache_params.update_conv_state(new_conv_state, self.layer_idx, conv_idx=self.conv_idx)
+
             if self.causal_conv1d_fn is not None:
                 hidden_states = self.causal_conv1d_fn(
                     x=hidden_states,
@@ -606,6 +603,8 @@ class TmlShortConvolution(nn.Module):
                 )
             else:
                 hidden_states = self.conv1d(hidden_states)[:, :, : hidden_states.shape[-1]]
+
+            # Drop the additional previous states
             if use_precomputed_states:
                 hidden_states = hidden_states[:, :, -seq_len:]
 
@@ -1293,7 +1292,7 @@ class TmlForConditionalGeneration(TmlPreTrainedModel, GenerationMixin):
             **kwargs,
         )
         text_config = self.config.get_text_config(decoder=True)
-        layers = [TmlShortConvolutionsLayer(config=text_config) for _ in range(text_config.num_hidden_layers)]
+        layers = [TmlShortConvolutionsLayer() for _ in range(text_config.num_hidden_layers)]
         model_kwargs["cache_params"] = Cache(layers=layers, offloading=False)  # hardcode for now
 
 
