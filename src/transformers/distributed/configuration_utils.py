@@ -32,7 +32,7 @@ class DistributedConfig:
         tp_size (`int`, *optional*):
             Number of devices for tensor parallelism. If `None` and `fsdp_size` is set, defaults to 1.
         tp_plan (`dict`, *optional*):
-            Tensor parallel sharding plan. Leave as `None` to use the model's ``base_model_tp_plan``.
+            Tensor parallel sharding plan. Leave as `None` to use the model's `base_model_tp_plan`.
             Set explicitly to override.
         enable_sequence_parallel (`bool`, *optional*, defaults to `False`):
             Reserved for sequence parallelism. Not wired up yet.
