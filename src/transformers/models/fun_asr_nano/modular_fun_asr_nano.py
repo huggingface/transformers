@@ -706,7 +706,7 @@ class FunAsrNanoEncoder(PreTrainedModel):
         return_dict: bool = True,
         **kwargs,
     ) -> BaseModelOutput | tuple:
-        hidden_states = input_features.to(dtype=next(self.parameters()).dtype)
+        hidden_states = input_features.to(dtype=self.after_norm.weight.dtype)
         batch_size, max_len, _ = hidden_states.shape
 
         if feature_lengths is not None:
