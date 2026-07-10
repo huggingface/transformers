@@ -3897,21 +3897,6 @@ class Qwen2_5OmniForConditionalGeneration(Qwen2_5OmniPreTrainedModel, Generation
                 token2wav_kwargs[key] = value
         speaker_params = self.speaker_map[speaker]
 
-        def _make_batched_token(token_id):
-            if torch.is_tensor(token_id):
-                token_id = token_id.item()
-            return torch.full((batch_size, 1), token_id, dtype=torch.long, device=input_ids.device)
-
-        def _expand_speaker_parameter(parameter, name):
-            parameter = parameter.to(input_ids.device).float()
-            if parameter.shape[0] == batch_size:
-                return parameter
-            if parameter.shape[0] == 1:
-                return parameter.expand(batch_size, *parameter.shape[1:])
-            raise ValueError(
-                f"Speaker parameter `{name}` has batch size {parameter.shape[0]}, but expected 1 or {batch_size}."
-            )
-
         # 1. Generate from thinker module
         generate_audio = return_audio and self.has_talker
         if generate_audio:
@@ -3968,7 +3953,7 @@ class Qwen2_5OmniForConditionalGeneration(Qwen2_5OmniPreTrainedModel, Generation
         talker_input_text_ids = torch.cat(
             [
                 input_ids,
-                _make_batched_token(talker_text_bos_token),
+                torch.full((batch_size, 1), talker_text_bos_token, dtype=torch.long, device=input_ids.device),
                 thinker_generate_ids[:, :1],
             ],
             dim=-1,
@@ -3977,8 +3962,8 @@ class Qwen2_5OmniForConditionalGeneration(Qwen2_5OmniPreTrainedModel, Generation
         talker_input_ids = torch.cat(
             [
                 torch.full_like(input_ids, fill_value=self.talker.codec_mask_token),
-                _make_batched_token(self.talker.codec_pad_token),
-                _make_batched_token(self.talker.codec_bos_token),
+                torch.full((batch_size, 1), self.talker.codec_pad_token, dtype=torch.long, device=input_ids.device),
+                torch.full((batch_size, 1), self.talker.codec_bos_token, dtype=torch.long, device=input_ids.device),
             ],
             dim=1,
         )
@@ -3986,7 +3971,9 @@ class Qwen2_5OmniForConditionalGeneration(Qwen2_5OmniPreTrainedModel, Generation
         thinker_embed_tokens = self.thinker.get_input_embeddings()
         thinker_reply_part = torch.cat(thinker_hidden_states[1:], dim=1) + torch.cat(thinker_token_embeds[1:], dim=1)
         talker_inputs_embeds = thinker_hidden_states[0] + thinker_token_embeds[0]
-        talker_text_bos_token = _make_batched_token(talker_text_bos_token)
+        talker_text_bos_token = torch.full(
+            (batch_size, 1), talker_text_bos_token, dtype=torch.long, device=input_ids.device
+        )
         talker_text_bos_embed = thinker_embed_tokens(talker_text_bos_token).to(input_ids.device)
         talker_inputs_embeds = torch.cat(
             [
@@ -3997,10 +3984,10 @@ class Qwen2_5OmniForConditionalGeneration(Qwen2_5OmniPreTrainedModel, Generation
             dim=1,
         )
 
-        eos_token = _make_batched_token(self.talker.text_eos_token)
+        eos_token = torch.full((batch_size, 1), self.talker.text_eos_token, dtype=torch.long, device=input_ids.device)
         eos_embedding = thinker_embed_tokens(eos_token).to(input_ids.device)
 
-        pad_token = _make_batched_token(self.talker.text_pad_token)
+        pad_token = torch.full((batch_size, 1), self.talker.text_pad_token, dtype=torch.long, device=input_ids.device)
         pad_embedding = thinker_embed_tokens(pad_token).to(input_ids.device)
 
         thinker_reply_part = torch.cat(
@@ -4035,8 +4022,8 @@ class Qwen2_5OmniForConditionalGeneration(Qwen2_5OmniPreTrainedModel, Generation
 
         wav = self.token2wav(
             talker_generate_codes.to(input_ids.device),
-            conditioning=_expand_speaker_parameter(speaker_params["cond"], "cond"),
-            reference_mel=_expand_speaker_parameter(speaker_params["ref_mel"], "ref_mel"),
+            conditioning=speaker_params["cond"].to(input_ids.device).float().expand(batch_size, -1),
+            reference_mel=speaker_params["ref_mel"].to(input_ids.device).float().expand(batch_size, -1, -1),
             **token2wav_kwargs,
         )
 

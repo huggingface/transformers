@@ -2276,8 +2276,9 @@ class Qwen3OmniMoeForConditionalGeneration(Qwen3OmniMoePreTrainedModel, Generati
     def _get_talker_user_parts(
         self, im_start_index, segment_end_index, multimodal_mask, thinker_hidden, thinker_embed
     ):
+        batch_size = thinker_hidden.shape[0]
         user_talker_part = torch.empty(
-            (1, segment_end_index - im_start_index, self.config.talker_config.text_config.hidden_size),
+            (batch_size, segment_end_index - im_start_index, self.config.talker_config.text_config.hidden_size),
             device=thinker_hidden.device,
             dtype=self.talker.dtype,
         )
@@ -2297,14 +2298,15 @@ class Qwen3OmniMoeForConditionalGeneration(Qwen3OmniMoePreTrainedModel, Generati
     def _get_talker_assistant_parts(
         self, im_start_index, segment_end_index, speaker_id, thinker_embed, tts_pad_embed, tts_bos_embed, tts_eos_embed
     ):
+        batch_size = thinker_embed.shape[0]
         assistant_hidden = self.talker.text_projection(thinker_embed[:, im_start_index:segment_end_index]).to(
             tts_pad_embed.device
-        )  # [1 t d]
+        )  # [batch_size, sequence_length, hidden_size]
         assistant_text_hidden = torch.cat(
             (
                 assistant_hidden[:, :3],
-                tts_pad_embed.expand(-1, 4, -1),
-                tts_bos_embed,
+                tts_pad_embed.expand(batch_size, 4, -1),
+                tts_bos_embed.expand(batch_size, -1, -1),
                 assistant_hidden[:, 3:4],  # First text
             ),
             dim=1,
@@ -2322,11 +2324,11 @@ class Qwen3OmniMoeForConditionalGeneration(Qwen3OmniMoePreTrainedModel, Generati
             ],
             device=tts_pad_embed.device,
             dtype=torch.long,
-        )
+        ).expand(batch_size, -1)
         assistant_codec_hidden = torch.cat(
             (
                 torch.zeros(
-                    (1, 3, self.config.talker_config.text_config.hidden_size),
+                    (batch_size, 3, self.config.talker_config.text_config.hidden_size),
                     device=tts_pad_embed.device,
                     dtype=self.talker.dtype,
                 ),
@@ -2337,14 +2339,14 @@ class Qwen3OmniMoeForConditionalGeneration(Qwen3OmniMoePreTrainedModel, Generati
         trailing_text_hidden = torch.cat(
             (
                 assistant_hidden[:, 4:],
-                tts_eos_embed,
+                tts_eos_embed.expand(batch_size, -1, -1),
             ),
             dim=1,
         )
 
         inputs_embeds = assistant_text_hidden + assistant_codec_hidden
         input_ids = torch.full(
-            (1, assistant_text_hidden.shape[1]),
+            (batch_size, assistant_text_hidden.shape[1]),
             fill_value=self.config.tts_pad_token_id,
             dtype=torch.long,
             device=assistant_text_hidden.device,
@@ -2374,58 +2376,6 @@ class Qwen3OmniMoeForConditionalGeneration(Qwen3OmniMoePreTrainedModel, Generati
             )
         if return_audio is None:
             return_audio = self.has_talker
-
-        if return_audio and input_ids.shape[0] != 1:
-            generated_sequences = []
-            generated_wavs = []
-            batch_size = input_ids.shape[0]
-
-            for batch_idx in range(batch_size):
-                sample_kwargs = {
-                    key: value[batch_idx : batch_idx + 1]
-                    if torch.is_tensor(value) and value.shape[0] == batch_size
-                    else value
-                    for key, value in kwargs.items()
-                }
-                sample_sequences, sample_wavs = self.generate(
-                    input_ids=input_ids[batch_idx : batch_idx + 1],
-                    speaker=speaker,
-                    use_audio_in_video=use_audio_in_video,
-                    return_audio=return_audio,
-                    thinker_max_new_tokens=thinker_max_new_tokens,
-                    thinker_eos_token_id=thinker_eos_token_id,
-                    talker_max_new_tokens=talker_max_new_tokens,
-                    talker_do_sample=talker_do_sample,
-                    talker_top_k=talker_top_k,
-                    talker_top_p=talker_top_p,
-                    talker_temperature=talker_temperature,
-                    talker_repetition_penalty=talker_repetition_penalty,
-                    **sample_kwargs,
-                )
-                generated_sequences.append(sample_sequences)
-                generated_wavs.append(sample_wavs)
-
-            pad_token_id = self.generation_config.pad_token_id
-            if pad_token_id is None:
-                pad_token_id = self.config.thinker_config.pad_token_id
-            if pad_token_id is None:
-                pad_token_id = self.config.im_end_token_id
-
-            max_sequence_length = max(sequence.shape[-1] for sequence in generated_sequences)
-            generated_sequences = torch.cat(
-                [
-                    F.pad(sequence, (0, max_sequence_length - sequence.shape[-1]), value=pad_token_id)
-                    for sequence in generated_sequences
-                ],
-                dim=0,
-            )
-
-            max_wav_length = max(wav.shape[-1] for wav in generated_wavs)
-            generated_wavs = torch.cat(
-                [F.pad(wav, (0, max_wav_length - wav.shape[-1])) for wav in generated_wavs],
-                dim=0,
-            )
-            return generated_sequences, generated_wavs.float()
 
         shared_kwargs = {"use_audio_in_video": use_audio_in_video}
         thinker_kwargs = {
@@ -2501,21 +2451,21 @@ class Qwen3OmniMoeForConditionalGeneration(Qwen3OmniMoePreTrainedModel, Generati
         # 2. Prepare talker input
         thinker_embed = torch.cat([hidden_states[0] for hidden_states in thinker_result.hidden_states], dim=1).to(
             input_ids.device
-        )  # [1 t d]
+        )  # [batch_size, sequence_length, hidden_size]
         thinker_hidden = torch.cat(
             [
                 hidden_states[self.config.talker_config.accept_hidden_layer]
                 for hidden_states in thinker_result.hidden_states
             ],
             dim=1,
-        ).to(input_ids.device)  # [1 t d]
+        ).to(input_ids.device)  # [batch_size, sequence_length, hidden_size]
         im_start_indexes = torch.cat(
             (
                 torch.nonzero(input_ids[0] == self.config.im_start_token_id).squeeze(),
                 torch.tensor([thinker_result.sequences.shape[-1]], device=input_ids.device, dtype=input_ids.dtype),
             ),
             dim=-1,
-        )  # Shape [n_starts + 1]; Take batch 0 since batched inference is not supported here.
+        )  # Shape [n_starts + 1]; processor-created batched prompts share the same chat segment layout.
         multimodal_mask = (
             (thinker_result.sequences == self.config.thinker_config.audio_token_id) |
             (thinker_result.sequences == self.config.thinker_config.image_token_id) |
@@ -2573,7 +2523,7 @@ class Qwen3OmniMoeForConditionalGeneration(Qwen3OmniMoePreTrainedModel, Generati
         talker_result = self.talker.generate(
             inputs_embeds=talker_input_embed,
             trailing_text_hidden=trailing_text_hidden,
-            tts_pad_embed=tts_pad_embed,
+            tts_pad_embed=tts_pad_embed.expand(input_ids.shape[0], -1, -1),
             talker_input_ids=talker_input_id,  # Not use input_ids to prevent repetition penalty out of bound
             **talker_kwargs,
         )
