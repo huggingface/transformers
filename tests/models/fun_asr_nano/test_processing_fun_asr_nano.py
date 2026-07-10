@@ -14,7 +14,6 @@
 
 import inspect
 import os
-import subprocess
 import sys
 import unittest
 from types import SimpleNamespace
@@ -25,7 +24,7 @@ from transformers.feature_extraction_utils import BatchFeature
 from transformers.models.audioflamingo3.processing_audioflamingo3 import AudioFlamingo3Processor
 from transformers.models.auto.auto_mappings import FEATURE_EXTRACTOR_MAPPING_NAMES, PROCESSOR_MAPPING_NAMES
 from transformers.processing_utils import ProcessorMixin
-from transformers.testing_utils import require_torch
+from transformers.testing_utils import execute_subprocess_async, require_torch
 from transformers.utils import is_torch_available
 
 
@@ -43,11 +42,11 @@ class FunAsrNanoProcessorImportTest(unittest.TestCase):
 import sys
 sys.modules["torch"] = None
 from transformers.models.fun_asr_nano.processing_fun_asr_nano import FunAsrNanoProcessor
+print(FunAsrNanoProcessor.__name__)
 """
         env = os.environ.copy()
         env["USE_TORCH"] = "0"
-        result = subprocess.run([sys.executable, "-c", code], env=env, capture_output=True, text=True)
-        self.assertEqual(result.returncode, 0, result.stderr)
+        execute_subprocess_async([sys.executable, "-c", code], env=env, quiet=True)
 
 
 @require_torch
