@@ -79,12 +79,12 @@ from omnilingual_asr.models.wav2vec2_llama.config import ModelType, Wav2Vec2Llam
 from transformers import (
     LasrTokenizer,
     LlamaConfig,
+    OmniASRConfig,
     OmniASRCTCConfig,
     OmniASREncoderConfig,
     OmniASRFeatureExtractor,
     OmniASRForConditionalGeneration,
     OmniASRForCTC,
-    OmniASRLLMConfig,
     OmniASRSpeechEncoder,
     logging,
 )
@@ -464,7 +464,7 @@ def convert_omniasr_checkpoint(model_card, repo_id=None, bfloat16=False):
         # see https://github.com/facebookresearch/omnilingual-asr/blob/main/src/omnilingual_asr/models/wav2vec2_llama/factory.py#L212-L218
         # https://github.com/facebookresearch/omnilingual-asr/blob/81f51e224ce9e74b02cc2a3eaf21b2d91d743455/src/omnilingual_asr/models/wav2vec2_llama/config.py#L28
 
-        config = OmniASRLLMConfig(
+        config = OmniASRConfig(
             audio_config=encoder_config,
             text_config=llama_config,
             encoder_stacking=original_config_llm.encoder_stacking,

@@ -349,7 +349,7 @@ class OmniASRCTCConfig(PreTrainedConfig):
 
 @auto_docstring(checkpoint="bezzam/omniasr-llm-300m-v2")
 @strict
-class OmniASRLLMConfig(PreTrainedConfig):
+class OmniASRConfig(PreTrainedConfig):
     r"""
     encoder_stacking (`int`, *optional*, defaults to 1):
         Number of consecutive encoder frames stacked together before being projected to the text decoder. Used by
@@ -382,7 +382,7 @@ class OmniASRLLMConfig(PreTrainedConfig):
     ```
     """
 
-    model_type = "omniasr_llm"
+    model_type = "omniasr"
     sub_configs = {"audio_config": OmniASREncoderConfig, "text_config": AutoConfig}
 
     _default_text_config_kwargs = {
@@ -425,4 +425,4 @@ class OmniASRLLMConfig(PreTrainedConfig):
         super().__post_init__(**kwargs)
 
 
-__all__ = ["OmniASRCTCConfig", "OmniASREncoderConfig", "OmniASRLLMConfig"]
+__all__ = ["OmniASRCTCConfig", "OmniASREncoderConfig", "OmniASRConfig"]

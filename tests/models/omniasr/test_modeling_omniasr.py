@@ -73,19 +73,12 @@ class OmniASRForCTCIntegrationTest(unittest.TestCase):
 
         samples = self._load_datasamples(1)
         model = OmniASRForCTC.from_pretrained(self.checkpoint_name, torch_dtype=self.dtype, device_map="auto")
-        model.eval()
-        model.to(torch_device)
 
-        inputs = self.processor(
-            samples, return_tensors="pt", sampling_rate=self.processor.feature_extractor.sampling_rate
-        )
-        inputs.to(torch_device, dtype=self.dtype)
-        with torch.no_grad():
-            logits = model(**inputs).logits
-        predicted_ids = torch.argmax(logits, dim=-1)
-
+        inputs = self.processor(samples)
+        inputs.to(model.device, dtype=self.dtype)
+        predicted_ids = model.generate(**inputs)
         torch.testing.assert_close(predicted_ids.cpu(), EXPECTED_TOKEN_IDS)
-        predicted_transcripts = self.processor.batch_decode(predicted_ids, skip_special_tokens=True)
+        predicted_transcripts = self.processor.decode(predicted_ids, skip_special_tokens=True)
         self.assertListEqual(predicted_transcripts, EXPECTED_TRANSCRIPTIONS)
 
     @slow
@@ -101,18 +94,11 @@ class OmniASRForCTCIntegrationTest(unittest.TestCase):
 
         samples = self._load_datasamples(3)
         model = OmniASRForCTC.from_pretrained(self.checkpoint_name, torch_dtype=self.dtype, device_map="auto")
-        model.eval()
-        model.to(torch_device)
 
-        inputs = self.processor(
-            samples, return_tensors="pt", sampling_rate=self.processor.feature_extractor.sampling_rate, padding=True
-        )
-        inputs.to(torch_device, dtype=self.dtype)
-        with torch.no_grad():
-            logits = model(**inputs).logits
-        predicted_ids = torch.argmax(logits, dim=-1)
-
-        predicted_transcripts = self.processor.batch_decode(predicted_ids, skip_special_tokens=True)
+        inputs = self.processor(samples)
+        inputs.to(model.device, dtype=self.dtype)
+        predicted_ids = model.generate(**inputs)
+        predicted_transcripts = self.processor.decode(predicted_ids, skip_special_tokens=True)
         self.assertListEqual(predicted_transcripts, EXPECTED_TRANSCRIPTIONS)
 
 
@@ -158,8 +144,6 @@ class OmniASRForConditionalGenerationIntegrationTest(unittest.TestCase):
         model = OmniASRForConditionalGeneration.from_pretrained(
             self.checkpoint_name, torch_dtype=self.dtype, device_map="auto"
         )
-        model.eval()
-        model.to(torch_device)
 
         inputs = self.processor(
             samples,
@@ -167,7 +151,7 @@ class OmniASRForConditionalGenerationIntegrationTest(unittest.TestCase):
             sampling_rate=self.processor.feature_extractor.sampling_rate,
             language=["eng_Latn"],
         )
-        inputs.to(torch_device, dtype=self.dtype)
+        inputs.to(model.device, dtype=self.dtype)
         with torch.no_grad():
             generated_ids = model.generate(
                 **inputs,
@@ -175,7 +159,7 @@ class OmniASRForConditionalGenerationIntegrationTest(unittest.TestCase):
             )
 
         torch.testing.assert_close(generated_ids.cpu(), EXPECTED_TOKEN_IDS)
-        predicted_transcripts = self.processor.batch_decode(generated_ids, skip_special_tokens=True)
+        predicted_transcripts = self.processor.decode(generated_ids, skip_special_tokens=True)
         self.assertListEqual(predicted_transcripts, EXPECTED_TRANSCRIPTIONS)
 
     @slow
@@ -192,8 +176,6 @@ class OmniASRForConditionalGenerationIntegrationTest(unittest.TestCase):
         model = OmniASRForConditionalGeneration.from_pretrained(
             self.checkpoint_name, torch_dtype=self.dtype, device_map="auto"
         )
-        model.eval()
-        model.to(torch_device)
 
         inputs = self.processor(
             samples,
@@ -202,12 +184,12 @@ class OmniASRForConditionalGenerationIntegrationTest(unittest.TestCase):
             padding=True,
             language=["eng_Latn"] * len(samples),
         )
-        inputs.to(torch_device, dtype=self.dtype)
+        inputs.to(model.device, dtype=self.dtype)
         with torch.no_grad():
             generated_ids = model.generate(
                 **inputs,
                 max_new_tokens=256,
             )
 
-        predicted_transcripts = self.processor.batch_decode(generated_ids, skip_special_tokens=True)
+        predicted_transcripts = self.processor.decode(generated_ids, skip_special_tokens=True)
         self.assertListEqual(predicted_transcripts, EXPECTED_TRANSCRIPTIONS)

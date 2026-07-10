@@ -11,14 +11,17 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Processor class for OmniASR."""
 
 import torch
 
-from ...feature_extraction_utils import BatchFeature
+from ...audio_utils import AudioInput, make_list_of_audio
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
-from ...utils import logging
+from ...utils import auto_docstring, is_torch_available, logging
+
+
+if is_torch_available():
+    import torch
 
 
 logger = logging.get_logger(__name__)
@@ -32,40 +35,29 @@ class OmniASRProcessorKwargs(ProcessingKwargs, total=False):
     _defaults = {
         "audio_kwargs": {
             "sampling_rate": 16000,
-            "padding": False,
+            "padding": True,
             "return_attention_mask": True,
+        },
+        "text_kwargs": {
+            "padding": True,
+            "padding_side": "right",
+            "add_special_tokens": False,
         },
         "common_kwargs": {"return_tensors": "pt"},
     }
 
 
 class OmniASRProcessor(ProcessorMixin):
-    r"""
-    Constructs an OmniASR processor which wraps an OmniASR feature extractor and a tokenizer into a single processor.
-
-    [`OmniASRProcessor`] offers all the functionalities of [`OmniASRFeatureExtractor`] and [`PreTrainedTokenizer`].
-    See the docstring of [`~OmniASRProcessor.__call__`] and [`~OmniASRProcessor.decode`] for more information.
-
-    Args:
-        feature_extractor (`OmniASRFeatureExtractor`):
-            An instance of [`OmniASRFeatureExtractor`]. The feature extractor is a required input.
-        tokenizer ([`PreTrainedTokenizer`]):
-            An instance of [`PreTrainedTokenizer`]. The tokenizer is a required input.
-        language_mapping (`dict`, *optional*):
-            A dictionary mapping language codes (e.g., `"eng_latn"`) to integer language IDs used by the
-            LLM variant of OmniASR. This is stored in the model config as `language_mapping`.
-    """
-
-    feature_extractor_class = "OmniASRFeatureExtractor"
-    tokenizer_class = "AutoTokenizer"
+    valid_processor_kwargs = OmniASRProcessorKwargs
 
     def __init__(self, feature_extractor, tokenizer, language_mapping=None):
         super().__init__(feature_extractor, tokenizer)
         self.language_mapping = language_mapping
 
+    @auto_docstring
     def __call__(
         self,
-        audio=None,
+        audio: AudioInput,
         text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] | None = None,
         language: str | list[str] | None = None,
         sampling_rate: int | None = None,
@@ -84,9 +76,10 @@ class OmniASRProcessor(ProcessorMixin):
                 Text input, passed to the tokenizer (used for training labels).
             language (`str` or `list[str]`, *optional*):
                 Language code(s) for the LLM variant (e.g., `"eng_Latn"` or `["eng_Latn", "fra_Latn"]`).
-                Converted to integer `language_ids` using `language_mapping`. When not provided,
-                the model defaults to a language-agnostic mode (language ID 0). Providing language
-                codes is recommended for better transcription quality.
+                A list must either contain a single code (broadcast to all audio samples) or match the
+                number of audio samples. Converted to integer `language_ids` using `language_mapping`.
+                When not provided, the model defaults to a language-agnostic mode (language ID 0).
+                Providing language codes is recommended for better transcription quality.
             sampling_rate (`int`, *optional*):
                 The sampling rate of the audio input. Will warn if not provided.
 
@@ -94,8 +87,7 @@ class OmniASRProcessor(ProcessorMixin):
             [`BatchFeature`]: A dictionary-like object with `input_values` and optionally
             `attention_mask`, `language_ids`, and `labels`.
         """
-        if audio is None and text is None:
-            raise ValueError("You need to specify either an `audio` or `text` input to process.")
+        audio = make_list_of_audio(audio)
 
         output_kwargs = self._merge_kwargs(
             OmniASRProcessorKwargs,
@@ -103,17 +95,23 @@ class OmniASRProcessor(ProcessorMixin):
             **kwargs,
         )
 
-        if sampling_rate is not None and sampling_rate != self.feature_extractor.sampling_rate:
+        if sampling_rate is None:
+            logger.warning_once(
+                f"You've provided audio without specifying the sampling rate. It will be assumed to be {output_kwargs['audio_kwargs']['sampling_rate']}, which can result in silent errors."
+            )
+        elif sampling_rate != output_kwargs["audio_kwargs"]["sampling_rate"]:
             raise ValueError(
-                f"The sampling rate of the audio ({sampling_rate}) does not match the expected sampling rate "
-                f"({self.feature_extractor.sampling_rate}). Please resample the audio."
+                f"The sampling rate of the audio ({sampling_rate}) does not match the sampling rate of the processor ({output_kwargs['audio_kwargs']['sampling_rate']}). Please provide resampled the audio to the expected sampling rate."
             )
 
-        inputs = BatchFeature()
-        if audio is not None:
-            inputs = self.feature_extractor(audio, **output_kwargs["audio_kwargs"])
+        inputs = self.feature_extractor(audio, **output_kwargs["audio_kwargs"])
 
+        # TODO: cleanup and create common utility that can be shared with Qwen3 ASR
         if language is not None:
+            if not is_torch_available():
+                raise ImportError(
+                    "Cannot convert language codes to IDs: PyTorch is not available. Please install PyTorch to use the LLM variant of OmniASR."
+                )
             if self.language_mapping is None:
                 raise ValueError(
                     "Cannot convert language codes to IDs: `language_mapping` was not provided to the processor. "
@@ -121,6 +119,11 @@ class OmniASRProcessor(ProcessorMixin):
                 )
             if isinstance(language, str):
                 language = [language]
+            if len(language) != 1 and len(language) != len(audio):
+                raise ValueError(
+                    f"Got {len(language)} language(s) for {len(audio)} audio sample(s); counts must match "
+                    "(or a single language can be provided to broadcast to all samples)."
+                )
             language_ids = []
             for lang in language:
                 lang_lower = lang.lower()
@@ -132,19 +135,21 @@ class OmniASRProcessor(ProcessorMixin):
                         f"Available languages: {list(self.language_mapping.keys())[:10]}... "
                         f"({len(self.language_mapping)} total)"
                     )
+            # Broadcast a single language code to all audio samples in the batch.
+            if len(language_ids) == 1 and len(audio) > 1:
+                language_ids = language_ids * len(audio)
             inputs["language_ids"] = torch.tensor(language_ids, dtype=torch.long)
 
         if text is not None:
             encodings = self.tokenizer(text, **output_kwargs["text_kwargs"])
-            inputs["labels"] = encodings["input_ids"]
+            labels = encodings["input_ids"]
+            # Mask padding positions with -100 so the CTC loss ignores them.
+            # (pad_token_id=0 satisfies labels >= 0, which would otherwise inflate target_lengths.)
+            if "attention_mask" in encodings:
+                labels[encodings["attention_mask"] == 0] = -100
+            inputs["labels"] = labels
 
         return inputs
-
-    def batch_decode(self, *args, **kwargs):
-        if self.language_mapping is not None:
-            # for LLM variant, ensure that `group_tokens=False` is set to preserve repeated tokens
-            kwargs.setdefault("group_tokens", False)
-        return self.tokenizer.batch_decode(*args, **kwargs)
 
     def decode(self, *args, **kwargs):
         if self.language_mapping is not None:
