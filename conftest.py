@@ -64,7 +64,10 @@ def _with_tmpdir_cache_fallback(fn):
                 _ci_fallback_cache_dir = tempfile.mkdtemp(prefix="ci_fallback_tmpdir_cache_dir_")
             import huggingface_hub.constants as hf_constants
 
-            with mock.patch.object(hf_constants, "HF_XET_CACHE", _ci_fallback_cache_dir):
+            with (
+                mock.patch.object(hf_constants, "HF_XET_CACHE", _ci_fallback_cache_dir),
+                mock.patch.dict(os.environ, {"HF_XET_CACHE": _ci_fallback_cache_dir}),
+            ):
                 return fn(*args, **{**kwargs, "cache_dir": _ci_fallback_cache_dir})
 
     return wrapper
