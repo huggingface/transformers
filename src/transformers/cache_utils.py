@@ -50,6 +50,7 @@ class KVCacheSharingStorage:
     def asdict(self) -> dict[str, tuple[torch.Tensor, ...]]:
         return self._storage
 
+
 class CacheLayerMixin(ABC):
     """Base, abstract class for a single layer's cache."""
 

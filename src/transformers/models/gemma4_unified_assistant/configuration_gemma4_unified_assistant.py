@@ -76,6 +76,7 @@ class Gemma4UnifiedAssistantConfig(PreTrainedConfig):
         # I.e. it acts as cache shared across the layers
         if self.text_config is not None and not self.text_config.num_kv_shared_layers:
             self.text_config.num_kv_shared_layers = self.text_config.num_hidden_layers
+            self.text_config.kv_sharing_roles = self.text_config.infer_kv_sharing_roles()
 
         super().__post_init__(**kwargs)
 
