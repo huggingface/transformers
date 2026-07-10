@@ -384,7 +384,7 @@ class TmlSharedExperts(nn.Module):
     def forward(self, hidden_states, gammas):
         input_shape = hidden_states.shape
         hidden_states = hidden_states.reshape(1, -1, input_shape[-1]).expand(self.n_shared_experts, -1, -1)
-        gammas = gammas.reshape(1, -1, self.n_shared_experts).transpose(1, 2)
+        gammas = gammas.reshape(-1, self.n_shared_experts, 1).transpose(0, 1)
 
         gate = torch.bmm(hidden_states, self.gate_proj)
         up = torch.bmm(hidden_states, self.up_proj)
