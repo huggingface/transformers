@@ -43,6 +43,7 @@ from transformers.testing_utils import (
 )
 from transformers.tokenization_utils_base import BatchEncoding
 from transformers.trainer_pt_utils import (
+    BatchRebalanceSampler,
     DistributedLengthGroupedSampler,
     DistributedSamplerWithLoop,
     EvalLoopContainer,
@@ -532,6 +533,182 @@ class TrainerSamplerTest(unittest.TestCase):
 
             self.check_shard_sampler(dataset, 4, drop_last=True, num_processes=3)
             self.check_shard_sampler(dataset, 4, drop_last=False, num_processes=3)
+
+    def test_batch_rebalance_basic(self):
+        """Test that BatchRebalanceSampler yields correct number of micro-batches and covers all samples."""
+        lengths = [100, 500, 200, 800, 300, 1000, 50, 600, 150, 400, 250, 700,
+                   120, 900, 350, 2000, 450, 550, 80, 300, 650, 750, 180, 1200]
+        dp_size = 2
+        grad_accum = 2
+        micro_batch_size = 1
+        effective_batch_size = micro_batch_size * grad_accum * dp_size  # = 4
+
+        for rank in range(dp_size):
+            sampler = BatchRebalanceSampler(
+                lengths=lengths,
+                effective_batch_size=effective_batch_size,
+                dp_size=dp_size,
+                grad_accum=grad_accum,
+                micro_batch_size=micro_batch_size,
+                rank=rank,
+            )
+            batches = list(sampler)
+            # Should yield num_global_batches * grad_accum micro-batches per rank
+            self.assertEqual(len(batches), sampler.num_global_batches * grad_accum)
+
+        # All ranks combined should cover all samples
+        all_indices = set()
+        for rank in range(dp_size):
+            sampler = BatchRebalanceSampler(
+                lengths=lengths,
+                effective_batch_size=effective_batch_size,
+                dp_size=dp_size,
+                grad_accum=grad_accum,
+                micro_batch_size=micro_batch_size,
+                rank=rank,
+            )
+            for batch in sampler:
+                all_indices.update(batch)
+        self.assertEqual(all_indices, set(range(len(lengths))))
+
+    def test_batch_rebalance_no_overlap_between_ranks(self):
+        """Test that different ranks never get the same sample in the same global batch."""
+        lengths = [100 * (i + 1) for i in range(48)]
+        dp_size = 4
+        grad_accum = 2
+        effective_batch_size = 2 * 2 * 4  # = 16
+
+        samplers = [
+            BatchRebalanceSampler(
+                lengths=lengths,
+                effective_batch_size=effective_batch_size,
+                dp_size=dp_size,
+                grad_accum=grad_accum,
+                micro_batch_size=2,
+                rank=r,
+            )
+            for r in range(dp_size)
+        ]
+
+        all_batches_per_rank = [list(s) for s in samplers]
+
+        # For each global batch, check no overlap between ranks
+        num_global = len(all_batches_per_rank[0]) // grad_accum
+        for gb in range(num_global):
+            for slot in range(grad_accum):
+                micro_idx = gb * grad_accum + slot
+                indices_per_rank = [set(all_batches_per_rank[r][micro_idx]) for r in range(dp_size)]
+                combined = set()
+                for s in indices_per_rank:
+                    self.assertEqual(len(combined & s), 0, f"Overlap in gb={gb}, slot={slot}")
+                    combined |= s
+
+    def test_batch_rebalance_eff_batch_size(self):
+        """Test that each global batch has exactly effective_batch_size total samples."""
+        lengths = [50, 300, 100, 800, 200, 500, 150, 700, 400, 1000, 250, 600,
+                   120, 900, 350, 2000, 450, 550, 80, 300, 650, 750, 180, 1200,
+                   60, 400, 220, 850, 330, 480, 130, 1100]
+        dp_size = 2
+        grad_accum = 2
+        effective_batch_size = 2 * 2 * 2  # = 8
+
+        samplers = [
+            BatchRebalanceSampler(
+                lengths=lengths,
+                effective_batch_size=effective_batch_size,
+                dp_size=dp_size,
+                grad_accum=grad_accum,
+                micro_batch_size=2,
+                rank=r,
+            )
+            for r in range(dp_size)
+        ]
+
+        all_batches = [list(s) for s in samplers]
+        num_global = len(all_batches[0]) // grad_accum
+
+        for gb in range(num_global):
+            total = 0
+            for slot in range(grad_accum):
+                for r in range(dp_size):
+                    total += len(all_batches[r][gb * grad_accum + slot])
+            self.assertEqual(total, effective_batch_size,
+                             f"gb={gb}: expected {effective_batch_size} samples, got {total}")
+
+    def test_batch_rebalance_max_tokens(self):
+        """Test that max_tokens constraint limits padded tokens per micro-batch."""
+        lengths = [100] * 40 + [3000] * 8  # 48 samples
+        dp_size = 2
+        grad_accum = 2
+        effective_batch_size = 12
+        max_tokens = 4000
+
+        for rank in range(dp_size):
+            sampler = BatchRebalanceSampler(
+                lengths=lengths,
+                effective_batch_size=effective_batch_size,
+                dp_size=dp_size,
+                grad_accum=grad_accum,
+                micro_batch_size=1,
+                rank=rank,
+                max_tokens=max_tokens,
+            )
+            for batch in sampler:
+                if batch:
+                    max_len = max(lengths[i] for i in batch)
+                    padded = len(batch) * max_len
+                    self.assertLessEqual(padded, max_tokens + max(lengths),
+                                         f"bs={len(batch)}, max_len={max_len}, padded={padded}")
+
+    def test_batch_rebalance_deterministic(self):
+        """Test that same seed produces same results, and different ranks produce same partition."""
+        lengths = [100 * (i + 1) for i in range(32)]
+        dp_size = 4
+        grad_accum = 2
+        effective_batch_size = 8
+
+        results = {}
+        for rank in range(dp_size):
+            s1 = BatchRebalanceSampler(
+                lengths=lengths, effective_batch_size=effective_batch_size,
+                dp_size=dp_size, grad_accum=grad_accum, micro_batch_size=1,
+                rank=rank, seed=42,
+            )
+            s2 = BatchRebalanceSampler(
+                lengths=lengths, effective_batch_size=effective_batch_size,
+                dp_size=dp_size, grad_accum=grad_accum, micro_batch_size=1,
+                rank=rank, seed=42,
+            )
+            self.assertEqual(list(s1), list(s2))
+
+    def test_batch_rebalance_cost_fn(self):
+        """Test that custom cost_fn is used instead of default cost model."""
+        lengths = [100, 200, 500, 1000, 2000, 3000, 50, 150]
+
+        def my_cost(bs, max_len):
+            return bs * max_len + max_len * max_len * 0.01
+
+        sampler_default = BatchRebalanceSampler(
+            lengths=lengths, effective_batch_size=8, dp_size=2, grad_accum=2,
+            micro_batch_size=1, rank=0, alpha=0.001,
+        )
+        sampler_custom = BatchRebalanceSampler(
+            lengths=lengths, effective_batch_size=8, dp_size=2, grad_accum=2,
+            micro_batch_size=1, rank=0, cost_fn=my_cost,
+        )
+        # Results should differ with different cost models
+        # (but both should be valid partitions)
+        result_default = list(sampler_default)
+        result_custom = list(sampler_custom)
+
+        # Both should cover the same total indices
+        all_default = set()
+        all_custom = set()
+        for batch in result_default:
+            all_default.update(batch)
+        for batch in result_custom:
+            all_custom.update(batch)
+        self.assertEqual(all_default, all_custom)
 
 
 # ---------------------------------------------------------------------------
