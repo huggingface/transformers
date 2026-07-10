@@ -65,7 +65,11 @@ output = model.generate(
 )
 processor.decode(output[0, inputs["input_ids"].shape[1]:], skip_special_tokens=True)
 # image [383, 87, 497, 171]\ntext [333, 201, 558, 230]R&D QUALITY IMPROVEMENT\nSUGGESTION/SOLUTION FORM...
+
+# All bounding boxes are in (x1, y1, x2, y2) format with coordinates normalized to [0, 999]
 ```
+
+### Batch processing
 
 For batch processing, pass multiple images and prompts at once. Set `padding=True` for the processor
 if images have different sizes.
@@ -93,12 +97,58 @@ output = model.generate(
 )
 processor.decode(output[0, inputs["input_ids"].shape[1]:], skip_special_tokens=True)
 # image [383, 87, 497, 171]\ntext [333, 201, 558, 230]R&D QUALITY IMPROVEMENT\nSUGGESTION/SOLUTION FORM...
+
+# All bounding boxes are in (x1, y1, x2, y2) format with coordinates normalized to [0, 999]
 ```
 
-Set `skip_special_tokens=False` to wrap all detections and region types in `<|det|>...<|/det|>` markers. This if useful for further post-processing of the output which will look like this:
+### Region detections
+
+Set `skip_special_tokens=False` to wrap all detections and region types in `<|det|>...<|/det|>` markers. This is useful for further post-processing of the output, for example to plot the detected bounding boxes on the image. Each detection is wrapped as `<|det|>region_type [x1, y1, x2, y2]<|/det|>` with coordinates normalized to a `[0, 999]` range. Parse the markers with a regular expression and rescale the coordinates to the image size to plot the bounding boxes.
+
+```python
+import re
+from transformers import AutoProcessor, AutoModelForImageTextToText
+
+model = AutoModelForImageTextToText.from_pretrained("baidu/Unlimited-OCR", device_map="auto")
+processor = AutoProcessor.from_pretrained("baidu/Unlimited-OCR")
+
+image = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/ocr_suggestion_form.jpg"
+inputs = processor(images=image, text="<image>document parsing.", return_tensors="pt").to(model.device)
+
+output = model.generate(
+    **inputs,
+    max_new_tokens=4096,
+    no_repeat_ngram_size=35,
+    no_repeat_ngram_window_size=128,
+)
+decoded = processor.decode(output[0, inputs["input_ids"].shape[1]:], skip_special_tokens=False)
+# <|det|>image [383, 87, 497, 171]<|/det|>\n<|det|>text [333, 201, 558, 230]<|/det|>R&D QUALITY IMPROVEMENT\nSUGGESTION/SOLUTION FORM...
+
+detections = re.findall(r"<\|det\|>(\S+) \[(\d+), (\d+), (\d+), (\d+)\]<\|/det\|>", decoded)
+
+# Visualization
+import random
+import matplotlib.pyplot as plt
+import matplotlib.patches as patches
+from transformers.image_utils import load_image
+
+image = load_image("https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/ocr_suggestion_form.jpg")
+width, height = image.size
+
+figure, axis = plt.subplots(figsize=(10, 12))
+axis.imshow(image)
+for region_type, x1, y1, x2, y2 in detections:
+    x1, y1, x2, y2 = int(x1) / 999 * width, int(y1) / 999 * height, int(x2) / 999 * width, int(y2) / 999 * height
+    color = (random.random(), random.random(), random.random())
+    rectangle = patches.Rectangle((x1, y1), x2 - x1, y2 - y1, linewidth=1.5, edgecolor=color, facecolor="none")
+    axis.add_patch(rectangle)
+    axis.text(x1, y1, region_type, color="white", fontsize=8, backgroundcolor=color, verticalalignment="top")
+axis.axis("off")
+plt.show()
 ```
-<|det|>image [383, 87, 497, 171]<|/det|>\n<|det|>text [333, 201, 558, 230]<|/det|>R&D QUALITY IMPROVEMENT\nSUGGESTION/SOLUTION FORM...
-```
+
+<img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/unlimited_ocr_suggestion_form_boxes.jpg" width="600">
+
 
 <hfoption id="Multi-page OCR">
 
@@ -130,6 +180,8 @@ output = model.generate(
 )
 processor.decode(output[0, inputs["input_ids"].shape[1]:], skip_special_tokens=True)
 # <PAGE>image [382, 87, 489, 174]\ntitle [333, 201, 556, 230]R&D QUALITY IMPROVEMENT\nSUGGESTION/SCLUTION FORM...
+
+# All bounding boxes are in (x1, y1, x2, y2) format with coordinates normalized to [0, 999]
 ```
 
 </hfoption>
