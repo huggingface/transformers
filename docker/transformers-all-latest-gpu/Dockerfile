@@ -104,15 +104,15 @@ RUN python3 -m pip install --no-cache-dir quanto
 #   22.04 system wheel still imports pkg_resources, so --no-build-isolation builds fail. wheel>=0.43
 #   (Feb 2024) uses importlib.metadata instead and is not affected.
 # - if/else instead of `... || echo`: the old pattern silently swallowed real install failures;
-#   now only the two expected skip conditions (nightly torch, FLASH_ATTN=false) are handled
-#   gracefully, and any actual install error will correctly fail the Docker build.
+#   now only FLASH_ATTN=false skips gracefully, and any actual install error will correctly
+#   fail the Docker build.
 RUN if [ "$FLASH_ATTN" != "false" ]; then \
         python3 -m pip uninstall -y ninja && \
         python3 -m pip install --no-cache-dir ninja && \
         python3 -m pip install --no-cache-dir -U wheel && \
         python3 -m pip install flash-attn --no-cache-dir --no-build-isolation; \
     else \
-        echo "Skipping FA2 install (FLASH_ATTN=${FLASH_ATTN}, PYTORCH=${PYTORCH})"; \
+        echo "Skipping FA2 install (FLASH_ATTN=${FLASH_ATTN})"; \
     fi
 
 # TODO (ydshieh): check this again
