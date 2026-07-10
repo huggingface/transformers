@@ -97,8 +97,8 @@ class MusicFlamingoProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     @slow
     @require_torch
     def test_tokenizer_full_integration(self):
-        slow_tokenizer = AutoTokenizer.from_pretrained("nvidia/music-flamingo-2601-hf", use_fast=False)
-        fast_tokenizer = AutoTokenizer.from_pretrained("nvidia/music-flamingo-2601-hf", from_slow=True, legacy=False)
+        slow_tokenizer = AutoTokenizer.from_pretrained(self.checkpoint, use_fast=False)
+        fast_tokenizer = AutoTokenizer.from_pretrained(self.checkpoint, from_slow=True, legacy=False)
 
         prompt = (
             "<|im_start|>system\nAnswer the questions.<|im_end|>"
