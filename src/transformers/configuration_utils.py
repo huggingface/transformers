@@ -496,7 +496,11 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
             layers = getattr(self, layer_types, None)
             if not (layers is not None and hasattr(self, "num_hidden_layers")):
                 return
-            elif not all(layer_type in ALLOWED_LAYER_TYPES for layer_type in layers):
+            if self.is_custom_code():
+                # Custom code may have legacy layer types that need to be remapped
+                layers = remap_legacy_layer_types(layers)
+                setattr(self, layer_types, layers)
+            if not all(layer_type in ALLOWED_LAYER_TYPES for layer_type in layers):
                 raise ValueError(f"The `{layer_types}` entries must be in {ALLOWED_LAYER_TYPES} but got {layers}")
             elif self.num_hidden_layers is not None and self.num_hidden_layers != len(layers):
                 raise ValueError(
@@ -1221,6 +1225,18 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
             raise ValueError(f"{auto_class} is not a valid auto class.")
 
         cls._auto_class = auto_class
+
+    @classmethod
+    def is_remote_code(cls) -> bool:
+        """Return whether the current config is custom code, i.e. code loaded from the hub, or class that we just
+        registered via `register_for_auto_class`."""
+        return cls._auto_class is not None
+
+    @classmethod
+    def is_custom_code(cls) -> bool:
+        """Return whether the current config is custom code, i.e. either code loaded from the hub, or defined in any
+        user-specific module/session."""
+        return cls.is_remote_code() or not cls.__module__.startswith("transformers.")
 
     def _get_generation_parameters(self) -> dict[str, Any]:
         """

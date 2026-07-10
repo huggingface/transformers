@@ -376,9 +376,17 @@ else:
         def __init__(self, *args, **kwargs):
             raise RuntimeError("LayerRepository requires `kernels` to be installed. Run `pip install kernels`.")
 
+        def load(self):
+            raise NotImplementedError("LayerRepository requires `kernels` to be installed. Run `pip install kernels.")
+
     class LocalLayerRepository:
         def __init__(self, *args, **kwargs):
             raise RuntimeError("LocalLayerRepository requires `kernels` to be installed. Run `pip install kernels`.")
+
+        def load(self):
+            raise NotImplementedError(
+                "LocalLayerRepository requires `kernels` to be installed. Run `pip install kernels."
+            )
 
     class FuncRepository:
         def __init__(self, *args, **kwargs):
@@ -745,10 +753,8 @@ def register_kernel_replacements_and_fusions(
             raise ValueError(f"Invalid kernel repo string {repo_str!r} for layer {layer_name!r}")
 
         if kernel_config.use_local_kernel:
-            package_name = repo_id.rstrip("/").split("/")[-1]
             repo = LocalLayerRepository(
                 repo_path=Path(repo_id),
-                package_name=package_name,
                 layer_name=layer_name_in_repo,
             )
         else:
