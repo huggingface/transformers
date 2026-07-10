@@ -27,7 +27,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from ...activations import ACT2FN
-from ...cache_utils import Cache, DynamicCache, DynamicLayer, LinearAttentionLayer
+from ...cache_utils import Cache, DynamicCache, DynamicIndexedLayer, DynamicLayer, LinearAttentionLayer
 from ...generation import GenerationMixin
 from ...integrations import (
     use_experts_implementation,
@@ -46,6 +46,7 @@ from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
 from ...utils.generic import is_flash_attention_requested, maybe_autocast, merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
+from ..glm_moe_dsa.modeling_glm_moe_dsa import GlmMoeDsaIndexer
 from .configuration_glm5_next import Glm5NextConfig
 
 
@@ -736,7 +737,7 @@ class Glm5NextDynamicCache(DynamicCache):
                 if layer_type == "linear_attention":
                     self.layers[layer_idx] = LinearAttentionLayer()
                 else:
-                    self.layers[layer_idx] = Glm5NextAttentionCacheLayer()
+                    self.layers[layer_idx] = DynamicIndexedLayer()
 
 
 def rotate_half(x):
@@ -789,6 +790,342 @@ def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
 # =============================================================================
 # MLA (Multi-head Latent Attention) with optional DSA indexer scaffold
 # =============================================================================
+
+
+class GlmMoeDsaRecomputeKPoolIndexer(GlmMoeDsaIndexer):
+    """
+    Recompute k-pool indexer.
+
+    The stock indexed cache only gives us one tensor, so we pack everything the
+    indexer needs into it:
+
+        [indexer_key, compression_gate, valid_bit]
+
+    The output is fixed-width topk_indices. A real key is represented by its raw
+    KV-cache index. An unused, padded, or invisible slot is represented by -1.
+    """
+
+    def __init__(self, config, layer_idx: int):
+        super().__init__(config, layer_idx)
+
+        self.index_kpool = config.index_kpool
+        self.index_kpool_always_select_tail = config.index_kpool_always_select_tail
+
+        self.index_kpool_compress_ape = nn.Parameter(torch.zeros(self.index_kpool, self.head_dim))
+        self.index_kpool_compress_gate = nn.Parameter(torch.zeros(self.head_dim, self.hidden_size))
+
+    def get_token_visible(
+        self,
+        key_valid: torch.BoolTensor,
+        local_valid: torch.BoolTensor,
+        current_length,
+    ) -> torch.BoolTensor:
+        """
+        Decide which cached key slots each current query is allowed to route to.
+
+        The local mask only says whether the current query token is real or
+        padding. It does not carry causal information, so we rebuild causality
+        here from the cache positions.
+
+        A key is visible only if:
+            - the key slot contains a real token
+            - the query slot contains a real token
+            - the key position is not in the query's future
+        """
+        seq_len = local_valid.shape[-1]
+        total_len = key_valid.shape[-1]
+        device = key_valid.device
+
+        key_pos = torch.arange(total_len, device=device)
+        query_pos = current_length - seq_len + torch.arange(seq_len, device=device)
+
+        causal = key_pos[None, None, :] <= query_pos[None, :, None]
+
+        return causal & key_valid[:, None, :] & local_valid[:, :, None]
+
+    def get_pooled_states(
+        self,
+        packed_states: torch.Tensor,
+        key_valid: torch.BoolTensor,
+    ) -> tuple[torch.Tensor, torch.LongTensor, torch.BoolTensor]:
+        """
+        Rebuild compressed k-pool candidates from the indexed cache.
+
+        Each cached row stores:
+            [indexer_key, compression_gate, valid_bit]
+
+        We group real tokens into fixed-size pools and compress every complete
+        pool into one candidate key.
+
+        Pooling starts at the first real token, not raw slot 0. This makes left
+        padding behave like no padding instead of shifting the whole pool layout.
+        """
+        keys, gate_scores, _ = torch.split(
+            packed_states,
+            [self.head_dim, self.head_dim, 1],
+            dim=-1,
+        )
+
+        batch_size, total_len = keys.shape[:2]
+        device = keys.device
+        rate = self.index_kpool
+
+        # For all-padding rows, use total_len so every generated pool lands out
+        # of range and becomes invalid.
+        first_key = torch.where(
+            key_valid.any(-1),
+            key_valid.long().argmax(-1),
+            torch.full((batch_size,), total_len, dtype=torch.long, device=device),
+        )
+
+        n_pools = (total_len + rate - 1) // rate
+
+        pool_offsets = torch.arange(n_pools, device=device) * rate
+        slot_offsets = torch.arange(rate, device=device)
+
+        # Raw cache indices for each pool:
+        #   pool 0: first_key + [0, 1, ..., rate - 1]
+        #   pool 1: first_key + rate + [0, 1, ..., rate - 1]
+        #   ...
+        #
+        # Shape: [B, P, rate]
+        pool_indices = first_key[:, None, None] + pool_offsets[None, :, None] + slot_offsets[None, None, :]
+
+        slot_in_range = pool_indices < total_len
+        safe_indices = pool_indices.clamp(0, total_len - 1)
+
+        batch_idx = torch.arange(batch_size, device=device)[:, None, None]
+
+        grouped_keys = keys[batch_idx, safe_indices]
+        grouped_gate_scores = gate_scores[batch_idx, safe_indices]
+        slot_valid = key_valid[batch_idx, safe_indices]
+
+        # A compressed pool represents a full block. If any slot is padding or
+        # outside the cache, the pool is incomplete and should not be selected as
+        # a compressed candidate.
+        slot_valid = slot_valid & slot_in_range
+        pool_valid = slot_valid.all(-1)
+
+        # Learn a weighted average over the tokens inside each pool.
+        logits = grouped_gate_scores.float() + self.index_kpool_compress_ape.float()[None, None]
+        logits = logits.masked_fill(~slot_valid[..., None], float("-inf"))
+
+        weights = torch.nan_to_num(logits.softmax(2)).to(grouped_keys.dtype)
+        pool_keys = (weights * grouped_keys).sum(2)
+
+        pool_indices = pool_indices.masked_fill(~slot_valid, -1)
+
+        # Static cache may contain many empty future pools. Drop columns that are
+        # invalid for every batch row.
+        keep = pool_valid.any(0)
+
+        return pool_keys[:, keep], pool_indices[:, keep], pool_valid[:, keep]
+
+    def append_visible_tail(
+        self,
+        topk_indices: torch.Tensor,
+        token_visible: torch.BoolTensor,
+        key_valid: torch.BoolTensor,
+    ) -> torch.Tensor:
+        """
+        Append the current incomplete pool as raw token indices.
+
+        Full pools are selected by score. The last partial pool is different:
+        it is always appended so the most recent uncompressed tokens stay
+        directly visible.
+
+        Example with index_kpool=4:
+            visible keys: A B C D E F
+            full pools:   [A B C D]
+            tail:                 E F
+        """
+        rate = self.index_kpool
+        tail_width = rate - 1
+
+        if tail_width == 0:
+            return topk_indices
+
+        batch_size, seq_len, total_len = token_visible.shape
+        device = token_visible.device
+
+        first_key = torch.where(
+            key_valid.any(-1),
+            key_valid.long().argmax(-1),
+            torch.full((batch_size,), total_len, dtype=torch.long, device=device),
+        )
+
+        # Count how many real, causal-visible keys each query can see. The
+        # remainder tells us how many tokens are in the query's current partial
+        # pool.
+        visible_count = token_visible.long().sum(-1)
+        tail_count = visible_count.remainder(rate)
+
+        # The tail starts right after the last complete visible pool.
+        tail_start = first_key[:, None] + visible_count - tail_count
+
+        offsets = torch.arange(tail_width, device=device)
+        tail_indices = tail_start[..., None] + offsets
+
+        tail_valid = offsets[None, None, :] < tail_count[..., None]
+        tail_valid = tail_valid & tail_indices.lt(total_len)
+
+        safe_tail = tail_indices.clamp(0, total_len - 1)
+
+        batch_idx = torch.arange(batch_size, device=device)[:, None, None]
+        query_idx = torch.arange(seq_len, device=device)[None, :, None]
+
+        # Even tail tokens still have to pass the same per-query visibility
+        # check. This keeps padding and causality in one place.
+        tail_visible = token_visible[batch_idx, query_idx, safe_tail]
+        tail_indices = tail_indices.masked_fill(~(tail_valid & tail_visible), -1)
+
+        return torch.cat([topk_indices, tail_indices], dim=-1)
+
+    @torch.no_grad()
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        q_resid: torch.Tensor,
+        position_embeddings: tuple[torch.Tensor, torch.Tensor] | None,
+        attention_mask: torch.BoolTensor,
+        past_key_values: Cache,
+    ) -> torch.LongTensor:
+        batch_size, seq_len = hidden_states.shape[:2]
+        cache_layer = past_key_values.layers[self.layer_idx]
+
+        q = self.wq_b(q_resid).view(batch_size, seq_len, self.n_heads, self.head_dim)
+        k = self.k_norm(self.wk(hidden_states)).view(batch_size, seq_len, -1, self.head_dim)
+
+        if position_embeddings is not None:
+            cos, sin = position_embeddings
+            q, k = apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=2)
+
+        k = k.squeeze(2)
+
+        gate_scores = F.linear(hidden_states, self.index_kpool_compress_gate)
+        valid_channel = attention_mask.to(k.dtype).unsqueeze(-1)
+
+        # Store everything the indexer needs in the standard indexed cache. This
+        # avoids custom cache fields while still letting us recompute pools after
+        # the cache grows.
+        #
+        # Dynamic cache:
+        #   packed_states -> [B, current_len, 2D + 1]
+        #
+        # Static cache:
+        #   packed_states -> [B, max_cache_len, 2D + 1]
+        packed_states = torch.cat([k, gate_scores, valid_channel], dim=-1)
+        packed_states = past_key_values.update_indexer(packed_states, self.layer_idx)
+
+        # Mask width follows the raw attention KV cache. For static cache this is
+        # max_cache_len, not just the logical sequence length.
+        kv_len = cache_layer.keys.shape[-2]
+
+        # Logical sequence length after the current KV update.
+        current_length = cache_layer.get_seq_length()
+
+        # The valid bit is cached with the keys. During decode the incoming mask
+        # may only describe the new token, but old padding is still remembered.
+        key_valid = packed_states[..., -1].gt(0)
+
+        token_visible = self.get_token_visible(
+            key_valid=key_valid,
+            local_valid=attention_mask,
+            current_length=current_length,
+        )
+
+        pool_keys, pool_indices, pool_valid = self.get_pooled_states(
+            packed_states=packed_states,
+            key_valid=key_valid,
+        )
+
+        # Score compressed pool candidates.
+        #
+        # q:         [B, S, H, D]
+        # pool_keys: [B, P, D]
+        # scores:    [B, S, H, P]
+        scores = torch.matmul(q.float(), pool_keys.transpose(-1, -2).float().unsqueeze(1))
+        scores = F.relu(scores) * self.softmax_scale
+
+        weights = self.weights_proj(hidden_states.to(self.weights_proj.weight.dtype)).float()
+        pool_scores = torch.einsum("bshp,bsh->bsp", scores, weights * (self.n_heads**-0.5))
+
+        if pool_keys.shape[1] != 0:
+            # A pool becomes usable for a query only when the query can see the
+            # pool's final raw token. This keeps the whole compressed block
+            # causal.
+            pool_end = pool_indices[..., -1].clamp(0, kv_len - 1)
+
+            batch_idx = torch.arange(batch_size, device=hidden_states.device)[:, None, None]
+            query_idx = torch.arange(seq_len, device=hidden_states.device)[None, :, None]
+
+            pool_visible = token_visible[batch_idx, query_idx, pool_end[:, None, :]]
+
+            # This is query-specific. Early queries may not be allowed to use a
+            # pool that later queries can already see.
+            candidate_valid = pool_visible & pool_valid[:, None]
+
+            pool_scores = pool_scores.masked_fill(
+                ~candidate_valid,
+                torch.finfo(pool_scores.dtype).min,
+            )
+        else:
+            candidate_valid = pool_valid[:, None].expand(batch_size, seq_len, -1)
+
+        # Match the original budget: index_topk counts history tokens from
+        # complete pools. If tail selection is enabled, the tail is appended on
+        # top of that.
+        group_budget = self.index_topk // self.index_kpool
+        select_k = min(group_budget, pool_scores.shape[-1])
+
+        if select_k == 0:
+            topk_indices = torch.empty(
+                batch_size,
+                seq_len,
+                0,
+                dtype=torch.long,
+                device=hidden_states.device,
+            )
+        else:
+            selected = pool_scores.topk(select_k, dim=-1).indices
+
+            batch_pool_idx = torch.arange(batch_size, device=hidden_states.device)[:, None, None]
+
+            # Gather the query-specific validity, not just the global pool
+            # validity. If topk picks from an all-masked row, the result still
+            # turns into -1 instead of leaking a future pool.
+            selected_valid = candidate_valid.gather(-1, selected)
+            selected_indices = pool_indices[batch_pool_idx, selected]
+
+            # Expand selected compressed pools back into raw token ids.
+            #
+            # selected_indices: [B, S, K, rate]
+            # topk_indices:     [B, S, K * rate]
+            topk_indices = selected_indices.flatten(-2)
+            topk_indices = topk_indices.masked_fill(
+                ~selected_valid[..., None].expand_as(selected_indices).flatten(-2),
+                -1,
+            )
+
+        if self.index_kpool_always_select_tail:
+            topk_indices = self.append_visible_tail(topk_indices, token_visible, key_valid)
+
+            # With tail enabled, output can be wider than index_topk by up to
+            # rate - 1. This matches the original k-pool behavior.
+            output_width = self.index_topk + self.index_kpool - 1
+        else:
+            output_width = self.index_topk
+
+        # Fixed-width output. Unused slots stay -1, and padded query rows are
+        # forced to all -1 so the attention mask builder can treat topk_indices
+        # as the source of truth.
+        if topk_indices.shape[-1] < output_width:
+            topk_indices = F.pad(topk_indices, (0, output_width - topk_indices.shape[-1]), value=-1)
+
+        topk_indices = topk_indices[..., :output_width]
+        topk_indices = topk_indices.masked_fill(~attention_mask[..., None], -1)
+
+        return topk_indices.long()
 
 
 class Glm5NextIndexer(nn.Module):
@@ -1173,7 +1510,7 @@ class Glm5NextAttention(nn.Module):
         # Refer: https://arxiv.org/abs/2603.12201 for more details.
         self.skip_topk = config.indexer_types[layer_idx] == "shared"
         # TODO: Always kpool index
-        self.indexer = None if self.skip_topk else Glm5NextIndexer(config, layer_idx)
+        self.indexer = None if self.skip_topk else GlmMoeDsaRecomputeKPoolIndexer(config, layer_idx) # Glm5NextIndexer(config, layer_idx)
         self.next_skip_topk = (
             not self.skip_topk and config.indexer_types[min(layer_idx + 1, len(config.indexer_types) - 1)] == "shared"
         )
@@ -1208,23 +1545,24 @@ class Glm5NextAttention(nn.Module):
         if past_key_values is not None:
             key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
 
-        topk_indices = None
         if self.indexer is not None:
-            reused_topk_indices = prev_topk_indices if self.skip_topk else None
-            topk_indices, attention_mask = self.indexer(
-                hidden_states,
-                q_resid,
-                position_embeddings,
-                attention_mask,
+            topk_indices = self.indexer(
+                hidden_states=hidden_states,
+                q_resid=q_resid,
+                position_embeddings=position_embeddings,
+                attention_mask=attention_mask,
                 past_key_values=past_key_values,
-                mask_dtype=query_states.dtype,
-                total_len=key_states.shape[2],
-                topk_indices=reused_topk_indices,
             )
+        else:
+            if prev_topk_indices is None:
+                raise ValueError("Shared DSA layers require top-k indices from a previous full indexer layer.")
+            topk_indices = prev_topk_indices
 
-        # Flash attention head_dim padding
-        if is_flash_attention_requested(self.config) and self.qk_head_dim != self.v_head_dim:
-            value_states = F.pad(value_states, [0, self.qk_head_dim - self.v_head_dim])
+        attention_mask = self.build_attention_mask_from_topk(
+            topk_indices=topk_indices,
+            query_states=query_states,
+            kv_length=key_states.shape[2],
+        )
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
@@ -1241,12 +1579,49 @@ class Glm5NextAttention(nn.Module):
             **kwargs,
         )
 
-        if is_flash_attention_requested(self.config) and self.qk_head_dim != self.v_head_dim:
-            attn_output = attn_output[:, :, :, : self.v_head_dim]
-
         attn_output = attn_output.reshape(batch_size, seq_length, -1).contiguous()
         attn_output = self.o_proj(attn_output)
         return attn_output, attn_weights, topk_indices if self.next_skip_topk else None
+
+    def build_attention_mask_from_topk(
+        self,
+        topk_indices: torch.Tensor,
+        query_states: torch.Tensor,
+        kv_length: int,
+    ) -> torch.Tensor | None:
+        """
+        Convert topk_indices into the mask expected by the active backend.
+
+        Only supporting SDPA and Eager as we have a 3D dependency which cannot be mapped to FA
+        without a custom kernel that can select on a per indices bases per row (query -> topk keys).
+        """
+        # -1 is invalid as per convention in the indexer
+        # NOTE: The indexer already took care of also excluding padding tokens and causality
+        topk_valid = topk_indices.ge(0) & topk_indices.lt(kv_length)
+
+        # Clamp only so scatter has a legal index
+        safe_indices = topk_indices.clamp(0, kv_length - 1)
+        selected_counts = torch.zeros(
+            topk_indices.shape[0],  # batch size
+            topk_indices.shape[1],  # q_length
+            kv_length,              # kv_length
+            dtype=torch.int32,
+            device=topk_indices.device,
+        )
+        selected_counts.scatter_add_(-1, safe_indices, topk_valid.to(torch.int32))
+
+        # Final mask 0 == False (not visible), 1 == True (visible)
+        mask = selected_counts.ne(0).unsqueeze(1)
+
+        # SDPA
+        if self.config._attn_implementation == "sdpa":
+            return mask
+
+        # Eager
+        min_dtype = torch.finfo(query_states.dtype).min
+        # we need 0s where the tokens should be taken into account, and -inf otherwise (mask is already of boolean type)
+        mask = torch.where(mask, torch.tensor(0.0, device=query_states.device, dtype=query_states.dtype), min_dtype)
+        return mask
 
 
 class Glm5NextDecoderLayer(GradientCheckpointingLayer):
@@ -1334,8 +1709,6 @@ class Glm5NextPreTrainedModel(PreTrainedModel):
     }
     _keep_in_fp32_modules_strict = ["e_score_correction_bias"]
     _keys_to_ignore_on_load_unexpected = [r"layers\.45\.", r"layers\.\d+\.shared_head\."]
-    _keep_in_fp32_modules = []
-    _compatible_flash_implementations = ["kernels-community/flash-mla"]
 
     @torch.no_grad()
     def _init_weights(self, module):
@@ -1399,30 +1772,31 @@ class Glm5NextModel(Glm5NextPreTrainedModel):
             position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
             position_ids = position_ids.unsqueeze(0)
 
-        if not isinstance(causal_mask_mapping := attention_mask, dict):
-            # Prepare mask arguments
-            mask_kwargs = {
-                "config": self.config,
-                "inputs_embeds": inputs_embeds,
-                "attention_mask": attention_mask,
-                "past_key_values": past_key_values,
-                "position_ids": position_ids,
-            }
-            # Create the masks
-            # TODO: we will need a custom layer type here anyways
-            causal_mask_mapping = {
-                "full_attention": create_causal_mask(**mask_kwargs),
-                "linear_attention": create_recurrent_attention_mask(**mask_kwargs),
-            }
-
         hidden_states = inputs_embeds
         position_embeddings = self.rotary_emb(hidden_states, position_ids=position_ids)
 
+        # TODO: in the generate functions override prepare masks as we only need the lin attn mask
+        # The model creates its mask based on the topk indices so we only need to know where the padding is
+        attention_mask = create_recurrent_attention_mask(
+            config=self.config,
+            inputs_embeds=inputs_embeds,
+            attention_mask=attention_mask,
+            past_key_values=past_key_values,
+        )
+        # Guarantee the mask to exist for the indexer
+        if attention_mask is None:
+            attention_mask = torch.ones(
+                inputs_embeds.shape[0],
+                inputs_embeds.shape[1],
+                dtype=torch.bool,
+                device=inputs_embeds.device,
+            )
+
         topk_indices = None
-        for i, decoder_layer in enumerate(self.layers[: self.config.num_hidden_layers]):
+        for decoder_layer in self.layers[: self.config.num_hidden_layers]:
             hidden_states, topk_indices = decoder_layer(
                 hidden_states,
-                attention_mask=causal_mask_mapping[self.config.layer_types[i]],
+                attention_mask=attention_mask,
                 position_embeddings=position_embeddings,
                 position_ids=position_ids,
                 past_key_values=past_key_values,

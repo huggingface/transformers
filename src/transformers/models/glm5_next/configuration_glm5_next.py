@@ -206,6 +206,11 @@ class Glm5NextConfig(PreTrainedConfig):
         # TODO: Proper alias and checking/validating
         self.head_dim = self.qk_rope_head_dim
         self.qk_head_dim = self.qk_rope_head_dim + self.qk_nope_head_dim
+        # Remap for cache layer type matching
+        self.layer_types = [
+            "deepseek_sparse_attention" if layer_type == "full_attention" else layer_type
+            for layer_type in self.layer_types
+        ]
 
     def validate_architecture(self):
         """Part of `@strict`-powered validation. Validates the architecture of the config."""
