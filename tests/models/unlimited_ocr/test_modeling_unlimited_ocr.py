@@ -147,7 +147,7 @@ class UnlimitedOcrModelTest(VLMModelTest, unittest.TestCase):
         seq_length = min(seq_length, max_length) if max_length >= 0 else seq_length
         super()._check_past_key_values_for_generate(batch_size, past_key_values, seq_length, config)
 
-    def _check_generate_cache_sliding_window_too_small(self, cache_implementation):
+    def _check_generate_cache_sliding_window_too_small(self, cache_implementation: str, prefill_max_new_tokens: int):
         """Test that reference sliding window cache works correctly when decoding more than sliding_window tokens at once."""
         for model_class in self.all_generative_model_classes:
             config, inputs_dict = self.prepare_config_and_inputs_for_generate()
@@ -158,15 +158,15 @@ class UnlimitedOcrModelTest(VLMModelTest, unittest.TestCase):
             # Resume from cache doesn't work with random attention mask.
             inputs_dict["attention_mask"] = torch.ones_like(inputs_dict["attention_mask"])
 
-            out_reference = model.generate(**inputs_dict, max_new_tokens=10, do_sample=False)
+            out_reference = model.generate(**inputs_dict, max_new_tokens=15, do_sample=False)
 
-            # Prefill the cache. We need at least max_new_tokens=2 to make the cache mark prefill
-            # as complete. Prefill is only marked as complete once a single token is added to
-            # the cache (kv_length == 1). As the last decoded token from a .generate call isn't
-            # added to the cache we have to decode at least 2.
+            # Prefill the cache.
+            # As the last decoded token from a .generate call isn't added to the cache we have to
+            # decode at least 2 tokens for the cache update call to mark the prefill as complete.
+            # Prefill is only marked as complete once a single decoded token is added to the cache (kv_length == 1).
             out_prefill = model.generate(
                 **inputs_dict,
-                max_new_tokens=2,
+                max_new_tokens=prefill_max_new_tokens,
                 max_cache_len=100,
                 do_sample=False,
                 return_dict_in_generate=True,
@@ -189,10 +189,18 @@ class UnlimitedOcrModelTest(VLMModelTest, unittest.TestCase):
             self.assertEqual(out.tolist(), out_reference.tolist())
 
     def test_generate_dynamic_cache_sliding_window_too_small(self):
-        self._check_generate_cache_sliding_window_too_small("dynamic")
+        self._check_generate_cache_sliding_window_too_small(cache_implementation="dynamic", prefill_max_new_tokens=2)
 
     def test_generate_static_cache_sliding_window_too_small(self):
-        self._check_generate_cache_sliding_window_too_small("static")
+        self._check_generate_cache_sliding_window_too_small(cache_implementation="static", prefill_max_new_tokens=2)
+
+    def test_generate_dynamic_cache_sliding_window_too_small_cache_full(self):
+        """Continue from full cache"""
+        self._check_generate_cache_sliding_window_too_small(cache_implementation="dynamic", prefill_max_new_tokens=6)
+
+    def test_generate_static_cache_sliding_window_too_small_cache_full(self):
+        """Continue from full cache"""
+        self._check_generate_cache_sliding_window_too_small(cache_implementation="static", prefill_max_new_tokens=6)
 
 
 @require_torch
