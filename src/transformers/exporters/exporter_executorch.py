@@ -139,7 +139,7 @@ class ExecutorchExporter(DynamoExporter):
 
         model, sample_inputs, partitioner = prepare_for_backend(model, sample_inputs)
 
-        with apply_patches("executorch"), apply_patches(f"executorch.{config.backend}"):
+        with apply_patches("executorch"):
             exported_program: ExportedProgram = super().export(model, sample_inputs, config=config)
             apply_fx_program_fixes("executorch", exported_program)
             apply_fx_node_fixes("executorch", exported_program.graph_module)
@@ -189,16 +189,16 @@ def _get_edge_compile_config() -> EdgeCompileConfig:
 
 
 def prepare_for_xnnpack(model: PreTrainedModel, sample_inputs: dict[str, Any]):
-    """CPU inference via XNNPACK, decoupled from the model's device.
+    """CPU inference via XNNPACK.
 
-    XNNPACK is a CPU *runtime*, but export doesn't require a CPU-resident model: the graph is
-    traced on whatever device the model is on (tracing a large model on CUDA is much faster than
-    round-tripping it to host first), and constants are gathered to host only at serialization
-    time — see the ``@register_patch("executorch.xnnpack", ...)`` fixups applied via ``apply_patches`` in
-    ``export``. (Inputs are cast to the model's device/dtype by ``prepare_for_export`` during the
-    trace, so no device handling is needed here.)"""
+    Moves the model to CPU: XNNPACK's partitioner/serializer and the edge-lowering passes all
+    require a CPU-typed graph, and tracing on CPU also sidesteps per-model device bugs — models
+    create in-``forward`` tensors (``arange``/``zeros``/sinusoids) without ``device=``, which
+    default to CPU and would mismatch a CUDA model (``FakeTensor Device Propagation ... cuda, cpu``).
+    ``prepare_for_export`` then casts the inputs to CPU during the trace."""
 
     model.requires_grad_(False)
+    model = model.to(device="cpu")
     # XNNPACK has no `_grouped_mm.out` kernel — force MoE experts to `batched_mm`.
     if isinstance(model, PreTrainedModel) and model._can_set_experts_implementation():
         model.set_experts_implementation("batched_mm")
@@ -1198,61 +1198,6 @@ def _patch_squeeze_node_visitors(original):
         cls = original[key]
         new[key] = type(cls.__name__, (cls,), {"define_node": _make_squeeze_define_node(cls.define_node)})
     return new
-
-
-# The three below are registered under the "executorch.xnnpack" scope and installed by
-# `apply_patches("executorch.xnnpack")`, so they only affect xnnpack exports. They decouple device
-# from the backend: the graph traces on-device (CUDA tracing is faster for large models) and
-# constants are gathered to host at serialization, so a CUDA-resident model still lowers to a CPU
-# `.pte`. The `cuda` backend registers nothing under its key and is untouched.
-
-
-@register_patch("executorch.xnnpack", "executorch.backends.xnnpack.operators.node_visitor.get_param_tensor")
-def _patch_xnnpack_weights_to_host(original):
-    """Gather each XNNPACK-serialized constant to host.
-
-    The weight serializer reads a constant's storage as raw host bytes
-    (``ctypes.cast(storage.data_ptr(), ...)``); a CUDA storage there is a device pointer read as
-    host memory → segfault. Moving each constant to host lets a CUDA-traced model serialize to a
-    CPU ``.pte`` identical to a CPU-traced one."""
-
-    def patch(*args, **kwargs):
-        tensor = original(*args, **kwargs)
-        if isinstance(tensor, torch.Tensor) and tensor.device.type != "cpu":
-            tensor = tensor.cpu()
-        return tensor
-
-    return patch
-
-
-@register_patch("executorch.xnnpack", "executorch.exir.emit._emitter._Emitter._tensor_spec_to_evalue")
-def _patch_emitter_constants_to_host(original):
-    """Gather each emitted constant/buffer to host — the same host-byte read as the weight
-    serializer, but in ExecuTorch's core program emitter (``_Emitter._tensor_spec_to_evalue``)."""
-
-    def patch(self, spec, constant_tag=None):
-        storage = getattr(spec, "storage", None)
-        if storage is not None and storage.device.type != "cpu":
-            spec.storage = storage.cpu()
-        return original(self, spec, constant_tag)
-
-    return patch
-
-
-@register_patch("executorch.xnnpack", "transformers.exporters.exporter_executorch.to_edge_transform_and_lower")
-def _patch_force_core_aten_sdpa(original):
-    """Force the core-ATen (MATH) SDPA decomposition during ``to_edge``.
-
-    ``to_edge``'s ``run_decompositions`` lowers ``scaled_dot_product_attention`` to
-    ``_scaled_dot_product_efficient_attention`` on CUDA, which the edge verifier rejects (not
-    core-ATen). Wrapping the lowering in ``sdpa_kernel(MATH)`` keeps the decomposition XNNPACK
-    expects — a no-op for a CPU-traced model."""
-
-    def patch(*args, **kwargs):
-        with sdpa_kernel(SDPBackend.MATH):
-            return original(*args, **kwargs)
-
-    return patch
 
 
 # ── Stage 4: FX program fixes ─────────────────────────────────────────────────

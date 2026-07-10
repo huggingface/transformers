@@ -504,7 +504,12 @@ class ExportTesterMixin:
             if self._should_skip(model_class, dynamic=dynamic, backend="executorch"):
                 continue
 
-            components = self._prepare_export_model_and_inputs(model_class)
+            # Trace on CPU: XNNPACK targets CPU, and CPU tracing yields device-consistent graphs.
+            # Tracing on CUDA surfaces per-model device bugs — models create in-`forward` tensors
+            # (arange/zeros/sinusoids) without `device=`, which default to CPU and then mismatch a
+            # CUDA model (`FakeTensor Device Propagation ... cuda:0, cpu`). The exporter *can* take a
+            # CUDA model, but the suite exercises the canonical CPU-traced path.
+            components = self._prepare_export_model_and_inputs(model_class, device="cpu")
 
             for name, (model, inputs) in components.items():
                 with self.subTest(f"{model_class.__name__}/{name}"):
