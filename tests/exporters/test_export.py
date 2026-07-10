@@ -150,7 +150,25 @@ EXPORT_SKIPS: dict[str, dict[str, str]] = {
         "MMGroundingDinoModel": "Same `timeout` failure as `GroundingDinoModel`.",
         "MMGroundingDinoForObjectDetection": "Same `timeout` failure as `GroundingDinoModel`.",
     },
-    "executorch.generate": {},
+    "executorch.generate": {
+        "Idefics2ForConditionalGeneration": (
+            "`generate()` merges image features into embeds with `masked_scatter` (image-token "
+            "count vs image-feature count); the mismatch is a benign CPU exception but a "
+            "CUDA device-side assert on GPU, which poisons the worker's context. Plain export works."
+        ),
+        "Glm4vForConditionalGeneration": "Same generate `masked_scatter` image-merge failure as `Idefics2ForConditionalGeneration`.",
+        "Glm4vMoeForConditionalGeneration": "Same generate `masked_scatter` image-merge failure as `Idefics2ForConditionalGeneration`.",
+        "Glm46VForConditionalGeneration": "Same generate `masked_scatter` image-merge failure as `Idefics2ForConditionalGeneration`.",
+        "GlmImageForConditionalGeneration": "Same generate `masked_scatter` image-merge failure as `Idefics2ForConditionalGeneration`.",
+        "GlmOcrForConditionalGeneration": "Same generate `masked_scatter` image-merge failure as `Idefics2ForConditionalGeneration`.",
+        "Ernie4_5_VLMoeForConditionalGeneration": "Same generate `masked_scatter` image-merge failure as `Idefics2ForConditionalGeneration`.",
+        "PaddleOCRVLForConditionalGeneration": "Same generate `masked_scatter` image-merge failure as `Idefics2ForConditionalGeneration`.",
+        "PerceptionLMForConditionalGeneration": "Same generate `masked_scatter` image-merge failure as `Idefics2ForConditionalGeneration`.",
+        "Qwen2VLForConditionalGeneration": "Same generate `masked_scatter` image-merge failure as `Idefics2ForConditionalGeneration`.",
+        "Qwen2_5_VLForConditionalGeneration": "Same generate `masked_scatter` image-merge failure as `Idefics2ForConditionalGeneration`.",
+        "Qwen2_5OmniThinkerForConditionalGeneration": "Same generate `masked_scatter` image-merge failure as `Idefics2ForConditionalGeneration`.",
+        "Qwen3OmniMoeThinkerForConditionalGeneration": "Same generate `masked_scatter` image-merge failure as `Idefics2ForConditionalGeneration`.",
+    },
     "executorch.dynamic": {
         "BigBirdModel": ("Lowering exceeds the test timeout under dynamic shapes."),
         "BigBirdForPreTraining": "Same `timeout` failure as `BigBirdModel`.",
@@ -343,8 +361,12 @@ class ExportTesterMixin:
                 scopes.append(f"{backend}.dynamic")
         return any(name in EXPORT_SKIPS.get(scope, {}) for scope in scopes)
 
-    def _prepare_export_model_and_inputs(self, model_class):
+    def _prepare_export_model_and_inputs(self, model_class, device=torch_device):
         """Create model and forward inputs ready for export.
+
+        ``device`` defaults to ``torch_device``; the ExecuTorch tests pass ``"cpu"`` since that
+        backend targets CPU anyway, keeping any pre-trace forward off the GPU (a device-side
+        assert during tracing would otherwise poison the whole xdist worker's CUDA context).
 
         Returns:
             Dict of `{name: (model, inputs)}` — one entry per component.
@@ -357,7 +379,7 @@ class ExportTesterMixin:
         inputs_dict = _clean_inputs_for_export(inputs_dict, config)
 
         set_config_for_less_flaky_test(config)
-        model = model_class(config).eval().to(torch_device)
+        model = model_class(config).eval().to(device)
         set_model_for_less_flaky_test(model)
 
         # Cast inputs to model device/dtype
@@ -478,7 +500,7 @@ class ExportTesterMixin:
             if self._should_skip(model_class, dynamic=dynamic, backend="executorch"):
                 continue
 
-            components = self._prepare_export_model_and_inputs(model_class)
+            components = self._prepare_export_model_and_inputs(model_class, device="cpu")
 
             for name, (model, inputs) in components.items():
                 with self.subTest(f"{model_class.__name__}/{name}"):
@@ -501,11 +523,16 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
     stage into individual submodules via :func:`decompose_multimodal`.
     """
 
-    def _prepare_export_generate_model_and_inputs(self, model_class):
+    def _prepare_export_generate_model_and_inputs(self, model_class, device=torch_device):
         """Decompose a generative model into exportable components.
 
         For multi-modal models: decomposes the prefill stage into individual submodules plus the decode stage.
         For decoder-only models: returns prefill and decode components.
+
+        ``device`` defaults to ``torch_device``; the ExecuTorch tests pass ``"cpu"`` so the
+        ``generate()`` call inside :func:`decompose_for_generation` runs on CPU — a device-side
+        assert there (e.g. a VLM ``masked_scatter`` size mismatch) would otherwise poison the
+        xdist worker's CUDA context and cascade to every later test on it.
 
         Returns:
             Dict of `{name: (model, inputs)}` — one entry per component.
@@ -514,7 +541,7 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
         inputs_dict = _clean_inputs_for_export(inputs_dict, config)
 
         set_config_for_less_flaky_test(config)
-        model = model_class(config).eval().to(torch_device)
+        model = model_class(config).eval().to(device)
         set_model_for_less_flaky_test(model)
 
         return decompose_for_generation(model, inputs_dict)
@@ -605,7 +632,7 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
             if self._should_skip(model_class, generate=True, dynamic=dynamic, backend="executorch"):
                 continue
 
-            components = self._prepare_export_generate_model_and_inputs(model_class)
+            components = self._prepare_export_generate_model_and_inputs(model_class, device="cpu")
 
             for name, (model, inputs) in components.items():
                 with self.subTest(f"{model_class.__name__}/{name}"):
