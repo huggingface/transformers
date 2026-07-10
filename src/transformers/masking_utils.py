@@ -688,7 +688,7 @@ def flex_attention_mask(
             An optional device to create the mask on.
     """
     # Potentially add the padding 2D mask
-    if attention_mask is not None:
+    if attention_mask is not None and not fast_all(attention_mask):
         # Older torch (2.5.x) cannot handle sequences not in multiples of 128 (default block size)
         # Hence we pad to multiples of this as a minimum to ensure this
         pad_len = ((attention_mask.shape[1] // flex_default_block_size) + 1) * flex_default_block_size
