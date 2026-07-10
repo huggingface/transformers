@@ -31,14 +31,14 @@ from ...test_processing_common import ProcessorTesterMixin
 
 class VibeVoiceAsrProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = VibeVoiceAsrProcessor
+    # Tiny processor created with make_tiny_processor.py from "microsoft/VibeVoice-ASR-HF"
+    tiny_model_id = "hf-internal-testing/tiny-processor-vibevoice_asr"
 
     @classmethod
     @require_torch
     def setUpClass(cls):
-        cls.checkpoint = "microsoft/VibeVoice-ASR-HF"
         cls.tmpdirname = tempfile.mkdtemp()
-
-        processor = VibeVoiceAsrProcessor.from_pretrained(cls.checkpoint)
+        processor = VibeVoiceAsrProcessor.from_pretrained(cls.tiny_model_id)
         processor.save_pretrained(cls.tmpdirname)
 
     @require_torch
@@ -59,14 +59,14 @@ class VibeVoiceAsrProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     @require_torch
     def test_can_load_various_tokenizers(self):
-        processor = VibeVoiceAsrProcessor.from_pretrained(self.checkpoint)
-        tokenizer = AutoTokenizer.from_pretrained(self.checkpoint)
+        processor = VibeVoiceAsrProcessor.from_pretrained(self.tiny_model_id)
+        tokenizer = AutoTokenizer.from_pretrained(self.tiny_model_id)
         self.assertEqual(processor.tokenizer.__class__, tokenizer.__class__)
 
     @require_torch
     def test_save_load_pretrained_default(self):
-        tokenizer = AutoTokenizer.from_pretrained(self.checkpoint)
-        processor = VibeVoiceAsrProcessor.from_pretrained(self.checkpoint)
+        tokenizer = AutoTokenizer.from_pretrained(self.tiny_model_id)
+        processor = VibeVoiceAsrProcessor.from_pretrained(self.tiny_model_id)
         feature_extractor = processor.feature_extractor
 
         processor = VibeVoiceAsrProcessor(tokenizer=tokenizer, feature_extractor=feature_extractor)
@@ -81,9 +81,11 @@ class VibeVoiceAsrProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     @require_torch
     def test_apply_transcription_request_single(self):
-        processor = AutoProcessor.from_pretrained(self.checkpoint)
+        processor = self.get_processor()
 
-        audio_url = "https://huggingface.co/datasets/bezzam/vibevoice_samples/resolve/main/realtime_model/vibevoice_tts_german.wav"
+        audio_url = (
+            "https://huggingface.co/datasets/raushan-testing-hf/audio-test/resolve/main/f2641_0_throatclearing.wav"
+        )
         helper_outputs = processor.apply_transcription_request(audio=audio_url, prompt="About VibeVoice")
 
         conversation = [
@@ -93,7 +95,7 @@ class VibeVoiceAsrProcessorTest(ProcessorTesterMixin, unittest.TestCase):
                     {"type": "text", "text": "About VibeVoice"},
                     {
                         "type": "audio",
-                        "path": "https://huggingface.co/datasets/bezzam/vibevoice_samples/resolve/main/realtime_model/vibevoice_tts_german.wav",
+                        "path": audio_url,
                     },
                 ],
             }
@@ -117,33 +119,40 @@ class VibeVoiceAsrProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     @require_torch
     def test_decode_output_formats(self):
+        from unittest.mock import patch
+
         import torch
 
-        processor = VibeVoiceAsrProcessor.from_pretrained(self.checkpoint)
+        processor = self.get_processor()
 
-        # fmt: off
-        # reproducer: https://gist.github.com/ebezzam/e1200bcecdc29e87dadd9d8423ae7ecb#file-reproducer_generated_ids-py
-        generated_ids = torch.tensor([[151644,  77091,    198,     58,   4913,   3479,    788,     15,   1335,
-           3727,    788,     22,     13,     20,     21,   1335,  82036,    788,
-             15,   1335,   2762,   3252,    693,    586,  40683,    374,    264,
-          11514,  12626,   6188,    369,  23163,  77123,     11,   1293,   8460,
-             11,   7299,  52975,   4407,   7517,   1663,   7699,   1189,  25439,
-         151645,    198, 151643]]
-        )
-        # fmt: on
+        # This test is about the processor's ability to parse the model output into structured
+        # dicts (return_format="parsed") or plain transcriptions (return_format="transcription_only").
+        # We are NOT testing tokenizer decoding here, so it is fine to mock batch_decode.
+        # The mock string below is the exact output obtained by decoding the original generated_ids
+        # with the full processor (microsoft/VibeVoice-ASR-HF) prior to PR #47213, which switched
+        # to a tiny tokenizer that would decode those IDs to garbage and break json.loads().
+        generated_ids = torch.tensor([[0]])
+        # The decode method calls tokenizer.decode (singular) with skip_special_tokens=True.
+        # When called with a 2D tensor (batch), the tokenizer returns a list of strings.
+        # extract_speaker_dict then returns list[list[dict]] for a list input.
+        # The mock string has special tokens already stripped (skip_special_tokens=True).
+        mock_decoded = [
+            'assistant\n[{"Start":0,"End":7.56,"Speaker":0,"Content":"Revevoices is a novel framework designed for generating expressive, long-form, multi-speaker conversational audio."}]\n'
+        ]
 
-        # test parsed output
-        dicts = processor.decode(generated_ids, return_format="parsed")
-        self.assertIsInstance(dicts, list)
-        self.assertIsInstance(dicts[0], list)
-        self.assertIsInstance(dicts[0][0], dict)
-        self.assertIn("Content", dicts[0][0])
-        self.assertIn("Start", dicts[0][0])
-        self.assertIn("End", dicts[0][0])
-        self.assertIsInstance(dicts[0][0]["Start"], float)
-        self.assertIsInstance(dicts[0][0]["End"], float)
+        with patch.object(processor.tokenizer, "decode", return_value=mock_decoded):
+            # test parsed output
+            dicts = processor.decode(generated_ids, return_format="parsed")
+            self.assertIsInstance(dicts, list)
+            self.assertIsInstance(dicts[0], list)
+            self.assertIsInstance(dicts[0][0], dict)
+            self.assertIn("Content", dicts[0][0])
+            self.assertIn("Start", dicts[0][0])
+            self.assertIn("End", dicts[0][0])
+            self.assertIsInstance(dicts[0][0]["Start"], float)
+            self.assertIsInstance(dicts[0][0]["End"], float)
 
-        # test transcript only
-        transcript = processor.decode(generated_ids, return_format="transcription_only")
-        self.assertIsInstance(transcript, list)
-        self.assertIsInstance(transcript[0], str)
+            # test transcript only
+            transcript = processor.decode(generated_ids, return_format="transcription_only")
+            self.assertIsInstance(transcript, list)
+            self.assertIsInstance(transcript[0], str)

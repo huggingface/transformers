@@ -31,14 +31,14 @@ from ...test_processing_common import MODALITY_INPUT_DATA, ProcessorTesterMixin
 
 class GlmAsrProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = GlmAsrProcessor
+    # Tiny processor created with make_tiny_processor.py from "zai-org/GLM-ASR-Nano-2512"
+    tiny_model_id = "hf-internal-testing/tiny-processor-glmasr"
 
     @classmethod
     @require_torch
     def setUpClass(cls):
-        cls.checkpoint = "zai-org/GLM-ASR-Nano-2512"
         cls.tmpdirname = tempfile.mkdtemp()
-
-        processor = GlmAsrProcessor.from_pretrained(cls.checkpoint)
+        processor = GlmAsrProcessor.from_pretrained(cls.tiny_model_id)
         processor.save_pretrained(cls.tmpdirname)
 
     @require_torch
@@ -59,14 +59,14 @@ class GlmAsrProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     @require_torch
     def test_can_load_various_tokenizers(self):
-        processor = GlmAsrProcessor.from_pretrained(self.checkpoint)
-        tokenizer = AutoTokenizer.from_pretrained(self.checkpoint)
+        processor = GlmAsrProcessor.from_pretrained(self.tiny_model_id)
+        tokenizer = AutoTokenizer.from_pretrained(self.tiny_model_id)
         self.assertEqual(processor.tokenizer.__class__, tokenizer.__class__)
 
     @require_torch
     def test_save_load_pretrained_default(self):
-        tokenizer = AutoTokenizer.from_pretrained(self.checkpoint)
-        processor = GlmAsrProcessor.from_pretrained(self.checkpoint)
+        tokenizer = AutoTokenizer.from_pretrained(self.tiny_model_id)
+        processor = GlmAsrProcessor.from_pretrained(self.tiny_model_id)
         feature_extractor = processor.feature_extractor
 
         processor = GlmAsrProcessor(tokenizer=tokenizer, feature_extractor=feature_extractor)
