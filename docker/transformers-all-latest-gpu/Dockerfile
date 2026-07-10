@@ -84,11 +84,15 @@ RUN python3 -m pip install --no-cache-dir git+https://github.com/huggingface/opt
 # For kernels
 RUN python3 -m pip install --no-cache-dir kernels
 
-# For ONNX export tests (onnxscript pulls in onnx + onnx_ir; onnxruntime validates the exported graph)
-RUN python3 -m pip install --no-cache-dir onnxscript onnxruntime
+# For ONNX export tests (onnxscript pulls in onnx + onnx_ir; onnxruntime-gpu validates the exported
+# graph on GPU for faster export testing)
+RUN python3 -m pip install --no-cache-dir onnxscript onnxruntime-gpu
 
-# For ExecuTorch export tests
-RUN python3 -m pip install --no-cache-dir executorch
+# For ExecuTorch export tests (CPU-only, xnnpack backend). Pin to 1.2.0: transformers' exporter code
+# targets the executorch >= 1.2.0 API (e.g. `executorch.exir.emit._emitter.dim_order_from_stride`),
+# and executorch 1.2.0 requires torch>=2.11.0 (matched by the torch<=2.11.0 pin above).
+# Skip when FLASH_ATTN is enabled: flash-attn and executorch have incompatible build dependencies.
+RUN [ "$FLASH_ATTN" = "false" ] && python3 -m pip install --no-cache-dir executorch==1.2.0 || echo "Skipping executorch (FLASH_ATTN build)"
 
 # For video model testing
 RUN python3 -m pip install --no-cache-dir av
@@ -128,3 +132,16 @@ RUN python3 -m pip uninstall -y kernels
 # When installing in editable mode, `transformers` is not recognized as a package.
 # this line must be added in order for python to be aware of transformers.
 RUN cd transformers && python3 setup.py develop
+
+# Smoke test: fail the image build immediately if a later `pip install` replaced or broke the pinned
+# CUDA torch stack (e.g. a dep that drags in a different torch/CUDA/NCCL — which surfaces as
+# `undefined symbol: ncclCommResume` at `import torch`; see run 28991812987). We import torch (which
+# eagerly loads `libtorch_cuda.so`) AND assert the version still matches the `${PYTORCH}` pin, since
+# transformers only requires `torch>=2.4` — a silent swap to a newer torch otherwise passes every
+# version check and reaches the GPU test jobs. No GPU is present at build time, so we only exercise
+# the import + CUDA runtime load, not device availability.
+RUN set -e; \
+    python3 -c "import torch; print('torch version:', torch.__version__); torch.cuda.is_available()"; \
+    if [ "$PYTORCH" != "pre" ]; then \
+        python3 -c "import torch, sys; v = torch.__version__.split('+')[0]; sys.exit(0 if v.startswith('${PYTORCH}') else 'ERROR: torch is ' + torch.__version__ + ', expected ${PYTORCH}.* - the pinned CUDA build was clobbered')"; \
+    fi

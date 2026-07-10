@@ -3173,6 +3173,10 @@ class TestAttentionImplementation(unittest.TestCase):
         # Simulate the "module cleared from sys.modules" case (test cleanup, REPL).
         from transformers.models.llama.modeling_llama import LlamaModel
 
+        # The method _can_set_attn_implementation caches the result on a succesful call, so we need to clear the cache
+        if hasattr(LlamaModel, "_can_set_attn_implementation_cached_value"):
+            delattr(LlamaModel, "_can_set_attn_implementation_cached_value")
+
         original = sys.modules.pop(LlamaModel.__module__)
         try:
             self.assertFalse(LlamaModel._can_set_attn_implementation())
