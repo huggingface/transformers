@@ -15,7 +15,6 @@
 
 import math
 from collections.abc import Callable
-from dataclasses import dataclass
 
 import torch
 import torch.nn as nn
@@ -26,14 +25,12 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, LinearAttentionCacheLayerMixin
 from ...configuration_utils import PreTrainedConfig
 from ...generation import GenerationMixin
-from ...integrations import use_experts_implementation, use_kernel_forward_from_hub
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import (
-    ModelOutput,
     TransformersKwargs,
     auto_docstring,
     can_return_tuple,
@@ -44,8 +41,9 @@ from ...utils import (
 from ...utils.generic import merge_with_config_defaults
 from ...utils.import_utils import is_causal_conv1d_available
 from ...utils.output_capturing import capture_outputs
-from ..gemma3.modeling_gemma3 import Gemma3ModelOutputWithPast, Gemma3CausalLMOutputWithPast
+from ..gemma3.modeling_gemma3 import Gemma3CausalLMOutputWithPast, Gemma3MLP, Gemma3ModelOutputWithPast
 from ..llama.modeling_llama import LlamaRMSNorm, repeat_kv
+from ..mixtral.modeling_mixtral import MixtralExperts
 
 
 if is_causal_conv1d_available():
@@ -429,61 +427,22 @@ class TmlAttention(nn.Module):
         return attn_output, attn_weights
 
 
-class TmlMLP(nn.Module):
-    def __init__(self, config: TmlTextConfig, intermediate_size=None):
-        super().__init__()
-        self.config = config
-        self.intermediate_size = config.intermediate_size if intermediate_size is None else intermediate_size
-        self.gate_proj = nn.Linear(config.hidden_size, self.intermediate_size, bias=False)
-        self.up_proj = nn.Linear(config.hidden_size, self.intermediate_size, bias=False)
-        self.down_proj = nn.Linear(self.intermediate_size, config.hidden_size, bias=False)
-        self.activation_fn = ACT2FN[config.hidden_act]
-        self.global_scale = nn.Parameter(torch.zeros(1))
+class TmlMLP(Gemma3MLP):
+    def __init__(self, config: TmlTextConfig):
+        super().__init__(config)
+        self.act_fn = ACT2FN[config.hidden_act]
+        self.global_scale = nn.Parameter(torch.ones(1))
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        gate = self.gate_proj(hidden_states)
-        up_states = self.up_proj(hidden_states)
-        up_states = up_states * self.activation_fn(gate)
-        return self.down_proj(up_states) * self.global_scale
+        hidden_states = self.down_proj(self.act_fn(self.gate_proj(hidden_states)) * self.up_proj(hidden_states))
+        return hidden_states * self.global_scale
 
 
-# Same as DeepSeekV3, should copy!
-@use_experts_implementation
-class TmlExperts(nn.Module):
-    def __init__(self, config: TmlConfig):
-        super().__init__()
+class TmlExperts(MixtralExperts):
+    def __init__(self, config: TmlTextConfig):
+        super().__init__(config)
         self.num_experts = config.n_routed_experts
-        self.hidden_dim = config.hidden_size
         self.intermediate_dim = config.moe_intermediate_size
-        self.gate_up_proj = nn.Parameter(torch.empty(self.num_experts, 2 * self.intermediate_dim, self.hidden_dim))
-        self.down_proj = nn.Parameter(torch.empty(self.num_experts, self.hidden_dim, self.intermediate_dim))
-        self.act_fn = ACT2FN[config.hidden_act]
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        top_k_index: torch.Tensor,
-        top_k_weights: torch.Tensor,
-    ) -> torch.Tensor:
-        final_hidden_states = torch.zeros_like(hidden_states)
-        with torch.no_grad():
-            expert_mask = torch.nn.functional.one_hot(top_k_index, num_classes=self.num_experts)
-            expert_mask = expert_mask.permute(2, 1, 0)
-            expert_hit = torch.greater(expert_mask.sum(dim=(-1, -2)), 0).nonzero()
-
-        for expert_idx in expert_hit:
-            expert_idx = expert_idx[0]
-            if expert_idx == self.num_experts:
-                continue
-            top_k_pos, token_idx = torch.where(expert_mask[expert_idx])
-            current_state = hidden_states[token_idx]
-            gate, up = nn.functional.linear(current_state, self.gate_up_proj[expert_idx]).chunk(2, dim=-1)
-            current_hidden_states = self.act_fn(gate) * up
-            current_hidden_states = nn.functional.linear(current_hidden_states, self.down_proj[expert_idx])
-            current_hidden_states = current_hidden_states * top_k_weights[token_idx, top_k_pos, None]
-            final_hidden_states.index_add_(0, token_idx, current_hidden_states.to(final_hidden_states.dtype))
-
-        return final_hidden_states
 
 
 class TmlTopkRouter(nn.Module):
@@ -497,7 +456,7 @@ class TmlTopkRouter(nn.Module):
         self.top_k = config.num_experts_per_tok
 
         self.weight = nn.Parameter(torch.empty(self.n_total_experts, config.hidden_size))
-        self.global_scale = nn.Parameter(torch.empty(1, dtype=torch.float32))
+        self.global_scale = nn.Parameter(torch.ones(1, dtype=torch.float32))
         self.e_score_correction_bias = nn.Parameter(torch.empty(self.num_experts, dtype=torch.float32))
 
     def forward(self, hidden_states) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
@@ -539,15 +498,15 @@ class TmlSharedExperts(nn.Module):
     def forward(self, hidden_states, gammas):
         input_shape = hidden_states.shape
         hidden_states = hidden_states.reshape(-1, input_shape[-1])
-        gammas = gammas.reshape(-1, self.n_shared_experts).transpose(0, 1)  # (S, T)
+        gammas = gammas.reshape(-1, self.n_shared_experts).transpose(0, 1)
 
-        expanded = hidden_states.unsqueeze(0).expand(self.n_shared_experts, -1, -1)  # (S, T, D)
-        gate = torch.bmm(expanded, self.gate_proj.mT)  # (S, T, f)
-        up = torch.bmm(expanded, self.up_proj.mT)  # (S, T, f)
-        activated = (self.act_fn(gate) * up).float() * gammas.unsqueeze(-1)  # (S, T, f)
-        down = torch.bmm(activated.to(gate.dtype), self.down_proj.mT)  # (S, T, D)
+        expanded = hidden_states.unsqueeze(0).expand(self.n_shared_experts, -1, -1)
+        gate = torch.bmm(expanded, self.gate_proj.mT)
+        up = torch.bmm(expanded, self.up_proj.mT)
+        activated = (self.act_fn(gate) * up).float() * gammas.unsqueeze(-1)
+        down = torch.bmm(activated.to(gate.dtype), self.down_proj.mT)
 
-        out = down.float().sum(dim=0).to(hidden_states.dtype)  # (T, D)
+        out = down.float().sum(dim=0).to(hidden_states.dtype)
         return out.view(input_shape)
 
 
@@ -564,7 +523,7 @@ class TmlMoE(nn.Module):
     def forward(self, hidden_states) -> torch.Tensor:
         residuals = hidden_states
         orig_shape = hidden_states.shape
-        routed_logits, topk_weights, topk_indices, shared_gammas = self.gate(hidden_states)
+        _, topk_weights, topk_indices, shared_gammas = self.gate(hidden_states)
         hidden_states = hidden_states.view(-1, hidden_states.shape[-1])
         hidden_states = self.experts(hidden_states, topk_indices, topk_weights.type_as(hidden_states)).view(
             *orig_shape
@@ -1374,7 +1333,7 @@ class TmlForConditionalGeneration(TmlPreTrainedModel, GenerationMixin):
             **kwargs,
         )
         text_config = self.config.get_text_config(decoder=True)
-        layers = [TmlShortConvolutionsLayer(config=text_config) for I in range(text_config.num_hidden_layers)]
+        layers = [TmlShortConvolutionsLayer(config=text_config) for _ in range(text_config.num_hidden_layers)]
         model_kwargs["cache_params"] = Cache(layers=layers, offloading=False)  # hardcode for now
 
 
