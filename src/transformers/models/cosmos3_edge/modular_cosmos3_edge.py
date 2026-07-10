@@ -287,6 +287,8 @@ class Cosmos3EdgeTextDecoderLayer(LlamaDecoderLayer):
 
 
 _COSMOS3_EDGE_DROPPED_GENERATOR_KEYS = [
+    r"^action_modality_embed$",
+    r"^action_proj_(?:in|out)\.(?:bias|fc)\.weight$",
     r"^time_embedder\.",
     r"^proj_(?:in|out)\.",
     r"^norm_moe_gen\.",
