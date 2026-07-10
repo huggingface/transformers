@@ -495,11 +495,16 @@ def _patch_reshape(original):
     ``.contiguous()`` gets folded away by functionalization, but a ``.clone()`` survives. Eager
     ``reshape`` already copies a non-contiguous tensor, so this adds no extra work — it just moves
     the copy where ExecuTorch's lowering needs it.
+
+    The clone must force ``contiguous_format``: a bare ``.clone()`` defaults to
+    ``preserve_format``, keeping a transposed dim-order (e.g. ``[0, 2, 1]``) that ExecuTorch's
+    clone lowering can't map to a ``torch.memory_format`` (``Failed to map a given dim_order`` —
+    hit by xcodec2's ISTFT head).
     """
 
     def patch(input, *shape, **kwargs):
         if not input.is_contiguous():
-            input = input.clone()
+            input = input.clone(memory_format=torch.contiguous_format)
         return original(input, *shape, **kwargs)
 
     return patch

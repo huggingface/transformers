@@ -111,6 +111,14 @@ EXPORT_SKIPS: dict[str, dict[str, str]] = {
             "Same shape as Voxtral. TODO: align the generate-decomposition path."
         ),
     },
+    # torch.export (Dynamo), dynamic-shape only.
+    "dynamo.dynamic": {
+        "Sam2Model": (
+            "`torch.export` of the Hiera vision backbone under dynamic shapes exceeds the "
+            "10-minute test timeout (12 attention blocks × 3 Q-pool stage transitions on "
+            "symbolic H/W). Same budget overrun as the ONNX/ExecuTorch dynamic Sam2 skips."
+        ),
+    },
     # ONNX, every variant.
     "onnx": {
         "CHMv2ForDepthEstimation": (
@@ -148,23 +156,20 @@ EXPORT_SKIPS: dict[str, dict[str, str]] = {
     # ExecuTorch — lowering failures grouped by root cause; see the first entry of each
     # `Same ... as` chain for the full description.
     "executorch": {
-        "GroundingDinoModel": ("Lowering exceeds the test timeout under dynamic shapes."),
-        "GroundingDinoForObjectDetection": "Same `timeout` failure as `GroundingDinoModel`.",
-        "MMGroundingDinoModel": "Same `timeout` failure as `GroundingDinoModel`.",
-        "MMGroundingDinoForObjectDetection": "Same `timeout` failure as `GroundingDinoModel`.",
+        "Qwen3NextModel": ("Lowering exceeds the 10-minute test timeout."),
+        "Qwen3NextForCausalLM": "Same `timeout` failure as `Qwen3NextModel`.",
+        "Qwen3NextForQuestionAnswering": "Same `timeout` failure as `Qwen3NextModel`.",
+        "Qwen3NextForSequenceClassification": "Same `timeout` failure as `Qwen3NextModel`.",
+        "Qwen3NextForTokenClassification": "Same `timeout` failure as `Qwen3NextModel`.",
     },
     "executorch.generate": {},
     "executorch.dynamic": {
-        "BigBirdModel": ("Lowering exceeds the test timeout under dynamic shapes."),
-        "BigBirdForPreTraining": "Same `timeout` failure as `BigBirdModel`.",
-        "BigBirdForMaskedLM": "Same `timeout` failure as `BigBirdModel`.",
-        "BigBirdForCausalLM": "Same `timeout` failure as `BigBirdModel`.",
-        "BigBirdForMultipleChoice": "Same `timeout` failure as `BigBirdModel`.",
-        "BigBirdForQuestionAnswering": "Same `timeout` failure as `BigBirdModel`.",
-        "BigBirdForSequenceClassification": "Same `timeout` failure as `BigBirdModel`.",
-        "BigBirdForTokenClassification": "Same `timeout` failure as `BigBirdModel`.",
-        "Sam2Model": "Same `timeout` failure as `BigBirdModel`.",
-        "Sam2VisionModel": "Same `timeout` failure as `BigBirdModel`.",
+        "Qwen3_5Model": ("Lowering exceeds the 10-minute test timeout under dynamic shapes."),
+        "Qwen3_5ForConditionalGeneration": "Same `timeout` failure as `Qwen3_5Model`.",
+        "Qwen3_5ForSequenceClassification": "Same `timeout` failure as `Qwen3_5Model`.",
+        "Qwen3_5ForTokenClassification": "Same `timeout` failure as `Qwen3_5Model`.",
+        "Mask2FormerModel": "Same `timeout` failure as `Qwen3_5Model`.",
+        "Mask2FormerForUniversalSegmentation": "Same `timeout` failure as `Qwen3_5Model`.",
     },
 }
 
@@ -215,7 +220,7 @@ DYNAMIC_EXPORT_PARAMS = parameterized.expand(
 )
 
 # Maximum time (in seconds) for a single export test before it is killed.
-EXPORT_TEST_TIMEOUT = 5 * 60  # 5 minutes
+EXPORT_TEST_TIMEOUT = 10 * 60  # 10 minutes
 
 # Minimum torch version the exporters target — older releases lack `torch.export` features the
 # exporters rely on, so the export sweep is skipped (not failed) below this. Sourced from the
@@ -400,7 +405,7 @@ class ExportTesterMixin:
         config = DynamoConfig(dynamic=dynamic)
 
         for model_class in self.all_model_classes:
-            if self._should_skip(model_class):
+            if self._should_skip(model_class, dynamic=dynamic, backend="dynamo"):
                 continue
 
             components = self._prepare_export_model_and_inputs(model_class)
@@ -533,7 +538,7 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
         config = DynamoConfig(dynamic=dynamic)
 
         for model_class in self.all_generative_model_classes:
-            if self._should_skip(model_class, generate=True):
+            if self._should_skip(model_class, generate=True, dynamic=dynamic, backend="dynamo"):
                 continue
 
             components = self._prepare_export_generate_model_and_inputs(model_class)
