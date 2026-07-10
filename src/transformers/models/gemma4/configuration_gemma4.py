@@ -207,12 +207,30 @@ class Gemma4TextConfig(PreTrainedConfig):
             )
             self.layer_types[-1] = "full_attention"
 
-        default_rope_params: dict[Literal["full_attention", "sliding_attention"] : dict[str, Any]] = {
+        default_rope_params: dict[Literal["full_attention", "sliding_attention"], dict[str, Any]] = {
             "sliding_attention": {"rope_type": "default", "rope_theta": 10_000.0},
             "full_attention": {"rope_type": "proportional", "partial_rotary_factor": 0.25, "rope_theta": 1_000_000.0},
         }
         if self.rope_parameters is None:
             self.rope_parameters = default_rope_params
+
+        # Gemma4 shares KV cache between its layers: some layers produce cache for other layers to consume.
+        # Some layers don't participate in cache sharing, we call them "independent"
+        self.kv_sharing_roles = ["independent"] * self.num_hidden_layers
+
+        # Determine the KV sharing roles for each layer (KV sharing is done between layers with the same layer_type)
+        first_shared_layer = self.num_hidden_layers - self.num_kv_shared_layers
+        for layer_type in ["full_attention", "sliding_attention"]:
+            filtered_idx = [i for i, lt in enumerate(self.layer_types) if lt == layer_type]
+            consumer_idx = [i for i in filtered_idx if i >= first_shared_layer]
+            # If there are no consumers, then there is no cache sharing for this attention type
+            if not consumer_idx:
+                continue
+            # Otherwise, the producer is the last non-shared layer for this attention type
+            producer_idx = max([i for i in filtered_idx if i < first_shared_layer])  # will raise on an empty list
+            self.kv_sharing_roles[producer_idx] = "producer"
+            for i in consumer_idx:
+                self.kv_sharing_roles[i] = "consumer"
 
         super().__post_init__(**kwargs)
 
