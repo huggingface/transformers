@@ -1056,6 +1056,67 @@ class LinearAttentionAndSlidingWindowAttentionLayer(LinearAttentionLayer, Dynami
         DynamicSlidingWindowLayer.reorder_cache(self, beam_idx)
 
 
+class LinearAttentionAndStaticFullAttentionLayer(LinearAttentionLayer, StaticLayer):
+    is_compileable = True
+
+    def __init__(self, max_cache_len: int, number_of_states: int = 1, **kwargs):
+        StaticLayer.__init__(self, max_cache_len)
+        LinearAttentionLayer.__init__(self, number_of_states=number_of_states)
+
+    def lazy_initialization(self, *args, **kwargs) -> None:
+        # When the Attention cache is used with `update`, `lazy_initialization` is called with 2 positional args
+        if len(args) == 2 and len(kwargs) == 0:
+            StaticLayer.lazy_initialization(self, *args)
+        # Otherwise, for the LinearAttention cache, when it's called in `update_conv_state` or `update_recurrent_state`, it's
+        # always called with 1 or 2 kwarg(s) (cause it needs to know if it's for the conv or ssm states)
+        if len(args) == 0 and len(kwargs) in (1, 2):
+            LinearAttentionLayer.lazy_initialization(self, **kwargs)
+
+    def offload(self):
+        StaticLayer.offload(self)
+        LinearAttentionLayer.offload(self)
+
+    def prefetch(self):
+        StaticLayer.prefetch(self)
+        LinearAttentionLayer.prefetch(self)
+
+    def reset(self) -> None:
+        LinearAttentionLayer.reset(self)
+        StaticLayer.reset(self)
+
+    def reorder_cache(self, beam_idx: torch.LongTensor):
+        """Reorders the cache for beam search, given the selected beam indices."""
+        LinearAttentionLayer.reorder_cache(self, beam_idx)
+        StaticLayer.reorder_cache(self, beam_idx)
+
+
+class LinearAttentionAndStaticSlidingWindowAttentionLayer(LinearAttentionLayer, StaticSlidingWindowLayer):
+    # The dynamic sliding attention part makes it non-compileable
+    is_compileable = False
+
+    def __init__(self, max_cache_len: int, sliding_window: int, number_of_states: int = 1, **kwargs):
+        StaticSlidingWindowLayer.__init__(self, max_cache_len=max_cache_len, sliding_window=sliding_window)
+        LinearAttentionLayer.__init__(self, number_of_states=number_of_states)
+
+    def lazy_initialization(self, *args, **kwargs) -> None:
+        # When the Attention cache is used with `update`, `lazy_initialization` is called with 2 positional args
+        if len(args) == 2 and len(kwargs) == 0:
+            StaticSlidingWindowLayer.lazy_initialization(self, *args)
+        # Otherwise, for the LinearAttention cache, when it's called in `update_conv_state` or `update_recurrent_state`, it's
+        # always called with 1 or 2 kwarg(s) (cause it needs to know if it's for the conv or ssm states)
+        if len(args) == 0 and len(kwargs) in (1, 2):
+            LinearAttentionLayer.lazy_initialization(self, **kwargs)
+
+    def reset(self) -> None:
+        LinearAttentionLayer.reset(self)
+        StaticSlidingWindowLayer.reset(self)
+
+    def reorder_cache(self, beam_idx: torch.LongTensor):
+        """Reorders the cache for beam search, given the selected beam indices."""
+        LinearAttentionLayer.reorder_cache(self, beam_idx)
+        StaticSlidingWindowLayer.reorder_cache(self, beam_idx)
+
+
 # Mappings from layer_type to layer cache class
 DYNAMIC_LAYER_TYPE_MAPPING = {
     "full_attention": DynamicLayer,
@@ -1083,6 +1144,9 @@ STATIC_LAYER_TYPE_MAPPING = {
     "conv": LinearAttentionLayer,
     "moe": LinearAttentionLayer,
     "linear_attention": LinearAttentionLayer,
+    # Hybrid layers carry both a linear-attention state and a dynamic-attention state.
+    "hybrid": LinearAttentionAndStaticFullAttentionLayer,
+    "hybrid_sliding": LinearAttentionAndStaticSlidingWindowAttentionLayer,
     # More exotic implementations
     "deepseek_sparse_attention": StaticIndexedLayer,
 }

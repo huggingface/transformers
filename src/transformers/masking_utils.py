@@ -1465,6 +1465,8 @@ LAYER_PATTERN_TO_MASK_FUNCTION_MAPPING = {
     "deepseek_sparse_attention": create_causal_mask,
     "linear_attention": create_recurrent_attention_mask,
     "conv": create_recurrent_attention_mask,
+    "hybrid": {"full_attention": create_causal_mask, "linear_attention": create_recurrent_attention_mask},
+    "hybrid_sliding": {"sliding_attention": create_causal_mask, "linear_attention": create_recurrent_attention_mask},
 }
 
 
@@ -1529,7 +1531,15 @@ def create_masks_for_generate(
             return attention_mask
         causal_masks = {}
         for layer_pattern in layer_patterns:
-            causal_masks[layer_pattern] = LAYER_PATTERN_TO_MASK_FUNCTION_MAPPING[layer_pattern](**mask_kwargs)
+            mask_function = LAYER_PATTERN_TO_MASK_FUNCTION_MAPPING[layer_pattern]
+            # Some layer_pattern may point to several needed mask, e.g. `hybrid`
+            if isinstance(mask_function, dict):
+                for actual_pattern, actual_function in mask_function.items():
+                    # It may already be present depending on the layer_types configuration
+                    if actual_pattern not in causal_masks:
+                        causal_masks[actual_pattern] = actual_function(**mask_kwargs)
+            else:
+                causal_masks[layer_pattern] = mask_function(**mask_kwargs)
         return causal_masks
     # In this case, all layers are sliding
     elif getattr(effective_config, "sliding_window", None) is not None:
