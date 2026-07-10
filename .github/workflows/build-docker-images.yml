@@ -3,7 +3,7 @@ name: Build docker images (scheduled)
 on:
   push:
     branches:
-      - fix_flash_attn_wheel222
+      - fix_flash_attn_wheel
   repository_dispatch:
   workflow_dispatch:
   workflow_call:
