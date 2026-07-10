@@ -19,16 +19,17 @@ All attention implementations perform the same computation. Every token is compa
 
 The [`AttentionInterface`] provides optimized attention implementations. It decouples the attention implementation from the model implementation to simplify experimentation with different functions. Add new backends easily with this consistent interface.
 
-| attention backend | description |
-|---|---|
-| `"flash_attention_3"` | improves FlashAttention-2 by also overlapping operations and fusing forward and backward passes more tightly |
-| `"flash_attention_2"` | tiles computations into smaller blocks and uses fast on-chip memory |
-| `"flex_attention"` | framework for specifying custom attention patterns (sparse, block-local, sliding window) without writing low-level kernels by hand |
-| `"sdpa"` | built-in PyTorch implementation of [scaled dot product attention](https://docs.pytorch.org/docs/stable/generated/torch.nn.functional.scaled_dot_product_attention.html) |
-| <code>"paged&#124;flash_attention_3"</code> | Paged version of FlashAttention-3 |
-| <code>"paged&#124;flash_attention_2"</code> | Paged version of FlashAttention-2 |
-| <code>"paged&#124;sdpa"</code> | Paged version of SDPA |
-| <code>"paged&#124;eager"</code> | Paged version of eager |
+<table>
+<tr><th>Attention backend</th><th>Description</th></tr>
+<tr><td><code>"flash_attention_3"</code></td><td>improves FlashAttention-2 by also overlapping operations and fusing forward and backward passes more tightly</td></tr>
+<tr><td><code>"flash_attention_2"</code></td><td>tiles computations into smaller blocks and uses fast on-chip memory</td></tr>
+<tr><td><code>"flex_attention"</code></td><td>framework for specifying custom attention patterns (sparse, block-local, sliding window) without writing low-level kernels by hand</td></tr>
+<tr><td><code>"sdpa"</code></td><td>built-in PyTorch implementation of <a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.functional.scaled_dot_product_attention.html">scaled dot product attention</a></td></tr>
+<tr><td><code>"paged&#124;flash_attention_3"</code></td><td>Paged version of FlashAttention-3</td></tr>
+<tr><td><code>"paged&#124;flash_attention_2"</code></td><td>Paged version of FlashAttention-2</td></tr>
+<tr><td><code>"paged&#124;sdpa"</code></td><td>Paged version of SDPA</td></tr>
+<tr><td><code>"paged&#124;eager"</code></td><td>Paged version of eager</td></tr>
+</table>
 
 ## Set an attention backend
 
