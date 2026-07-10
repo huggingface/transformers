@@ -242,10 +242,7 @@ class TmlAttention(nn.Module):
         if past_key_values is not None:
             # Important to get those values before updating the cache to be correct
             kv_length, kv_offset = past_key_values.get_mask_sizes(q_length, self.layer_idx)
-            # get_seq_length() won't work, it reads layer 0, which is already updated with the current
-            # tokens by the time later layers run so the queries are the last q_length key positions
-            # maybe with `create_position_bias_mask` it'd be more idiomatic?
-            q_offset = kv_offset + kv_length - q_length
+            q_offset = past_key_values.get_seq_length(self.layer_idx)
             # Update the cache
             key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
         else:
@@ -592,7 +589,7 @@ class TmlPreTrainedModel(PreTrainedModel):
     # kwarg that only the eager path consumes; other backends need a score_mod/kernel
     _supports_flash_attn = False
     _supports_sdpa = True
-    _supports_flex_attn = False
+    _supports_flex_attn = True
     _can_compile_fullgraph = False
     _supports_attention_backend = False
     _keys_to_ignore_on_load_unexpected = [r"model\.mtp\..*"]
