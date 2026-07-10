@@ -16,7 +16,7 @@
 import unittest
 from functools import cached_property
 
-from transformers import ViTConfig
+from transformers import AutoModel, ViTConfig
 from transformers.testing_utils import (
     require_accelerate,
     require_torch,
@@ -248,6 +248,12 @@ class ViTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     def test_model_from_pretrained(self):
         model_name = "google/vit-base-patch16-224"
         model = ViTModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
+
+    def test_model_from_pretrained_tiny(self):
+        model = ViTModel.from_pretrained("hf-internal-testing/tiny-random-vit-for-testing")
+        self.assertIsNotNone(model)
+        model = AutoModel.from_pretrained("hf-internal-testing/tiny-random-vit-for-testing")
         self.assertIsNotNone(model)
 
 
