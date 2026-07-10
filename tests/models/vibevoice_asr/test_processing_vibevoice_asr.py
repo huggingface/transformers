@@ -129,11 +129,15 @@ class VibeVoiceAsrProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         # with the full processor (microsoft/VibeVoice-ASR-HF) prior to PR #47213, which switched
         # to a tiny tokenizer that would decode those IDs to garbage and break json.loads().
         generated_ids = torch.tensor([[0]])
+        # The decode method calls tokenizer.decode (singular) with skip_special_tokens=True.
+        # When called with a 2D tensor (batch), the tokenizer returns a list of strings.
+        # extract_speaker_dict then returns list[list[dict]] for a list input.
+        # The mock string has special tokens already stripped (skip_special_tokens=True).
         mock_decoded = [
-            '<|im_start|>assistant\n[{"Start":0,"End":7.56,"Speaker":0,"Content":"Revevoices is a novel framework designed for generating expressive, long-form, multi-speaker conversational audio."}]<|im_end|>\n<|endoftext|>'
+            'assistant\n[{"Start":0,"End":7.56,"Speaker":0,"Content":"Revevoices is a novel framework designed for generating expressive, long-form, multi-speaker conversational audio."}]\n'
         ]
 
-        with patch.object(processor.tokenizer, "batch_decode", return_value=mock_decoded):
+        with patch.object(processor.tokenizer, "decode", return_value=mock_decoded):
             # test parsed output
             dicts = processor.decode(generated_ids, return_format="parsed")
             self.assertIsInstance(dicts, list)
