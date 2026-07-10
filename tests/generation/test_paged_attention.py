@@ -47,7 +47,6 @@ _EXPECTED_OUTPUTS = Expectations(
                 "get started with our services.\nWe will be in touch with you shortly to discuss your project and provide a quote.\n\n**Project Details**\n\n* Project Name",
             ),
             (
-                "track. The train is stopped because of a mechanical failure. The train is stopped because of a mechanical failure. The train is stopped because of a mechanical",
                 "track. The train is stopped for 30 minutes. The train is moving at a speed of 60 km/h. How many kilometers does the train",
                 "track. The train is a long, narrow, cylindrical object with a diameter of 3.5 meters and a length of 100 meters. The",
             ),
