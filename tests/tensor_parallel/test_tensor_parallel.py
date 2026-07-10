@@ -166,6 +166,17 @@ class TestTensorParallelProperties(TestCasePlus):
         model.tp_plan = {"model.layers.*.self_attn.q_proj": "colwise"}
         self.assertEqual(model.tp_plan, {"model.layers.*.self_attn.q_proj": "colwise"})
 
+    def test_post_init_keeps_class_level_plans(self):
+        """Class-level plans (e.g. `lm_head` on ForCausalLM classes) must survive post_init alongside the base model plan."""
+        model_id = "hf-internal-testing/tiny-random-LlamaForCausalLM"
+        model = AutoModelForCausalLM.from_pretrained(model_id, dtype="auto")
+
+        self.assertIn("lm_head", model._tp_plan)
+        self.assertIn("model.layers.*.self_attn.q_proj", model._tp_plan)
+        self.assertIn("lm_head", model._pp_plan)
+        # The merge must not have mutated the class attribute shared by all instances
+        self.assertEqual(set(type(model)._tp_plan), {"lm_head"})
+
 
 @is_tensor_parallel_test
 class TestTensorParallelLayer(TestCasePlus):

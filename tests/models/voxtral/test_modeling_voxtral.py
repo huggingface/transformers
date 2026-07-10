@@ -15,6 +15,8 @@
 
 import unittest
 
+import numpy as np
+
 from transformers import (
     AutoProcessor,
     LlamaConfig,
@@ -27,10 +29,12 @@ from transformers import (
 from transformers.testing_utils import (
     Expectations,
     cleanup,
+    require_mistral_common,
     require_torch,
     slow,
     torch_device,
 )
+from transformers.utils import is_soundfile_available
 
 from ...alm_tester import ALMModelTest, ALMModelTester
 
@@ -379,6 +383,20 @@ class VoxtralForConditionalGenerationIntegrationTest(unittest.TestCase):
             'Describe briefly what you can hear.The audio begins with the speaker delivering a farewell address in Chicago, reflecting on his eight years as president and expressing gratitude to the American people. The audio then transitions to a weather report, stating that it was 35 degrees in Barcelona the previous day, but the temperature would drop to minus 20 degrees the following day.Ok, now compare this new audio with the previous one.The new audio is a humorous conversation between two friends, one of whom has a tattoo. The speaker is excited to see the tattoo and asks what it says. The other friend repeatedly says "sweet" in response, leading to a playful exchange. The speaker then realizes the joke and says "your tattoo says dude, your tattoo says sweet, got it?" The previous audio was a political speech by a president, reflecting on his time in office and expressing gratitude to the American people. The new audio is a casual, light-hearted conversation with no political context.'
         ]
         self.assertEqual(decoded_outputs, EXPECTED_OUTPUT)
+
+    @slow
+    @require_mistral_common
+    @unittest.skipUnless(is_soundfile_available(), "test requires soundfile")
+    def test_transcription_request_accepts_single_format_for_array_audio(self):
+        processor = AutoProcessor.from_pretrained(self.checkpoint_name)
+        audio = np.zeros(16000, dtype=np.float32)
+
+        inputs = processor.apply_transcription_request(
+            audio=audio, model_id=self.checkpoint_name, sampling_rate=16000, format="wav"
+        )
+
+        self.assertIn("input_features", inputs)
+        self.assertEqual(inputs["input_features"].shape[0], 1)
 
     @slow
     def test_transcribe_mode_audio_input(self):

@@ -1096,9 +1096,11 @@ JOB_TO_TEST_FILE = {
     "tests_custom_tokenizers": r"tests/models/.*/test_tokenization_(?=bert_japanese|openai|clip).*",
     "tests_repo_utils": r"tests/repo_utils/test_.*\.py",
     "pipelines_torch": r"tests/models/.*/test_modeling_.*",
-    "tests_non_model": r"tests/[^/]*?/test_.*\.py",
+    # don't include peft tests for non_model
+    "tests_non_model": r"tests/(?!peft_integration/)[^/]*?/test_.*\.py",
     "tests_training_ci": r"tests/models/.*/test_modeling_.*",
     "tests_tensor_parallel_ci": r"(tests/models/.*/test_modeling_.*|tests/tensor_parallel(?:/test_tensor_parallel\.py)?)",
+    "tests_peft_integration": r"tests/peft_integration/test_.*\.py",
 }
 
 
