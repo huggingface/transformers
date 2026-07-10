@@ -26,10 +26,13 @@ from transformers.exporters.exporter_dynamo import DynamoConfig, DynamoExporter
 from transformers.exporters.exporter_executorch import ExecutorchConfig, ExecutorchExporter
 from transformers.exporters.exporter_onnx import OnnxConfig, OnnxExporter
 from transformers.exporters.utils import (
+    cast_leaf_tensors,
     decompose_for_generation,
     decompose_multimodal,
     get_leaf_tensors,
     is_multimodal,
+    modeul_device,
+    module_dtype,
 )
 from transformers.testing_utils import (
     require_executorch,
@@ -150,25 +153,7 @@ EXPORT_SKIPS: dict[str, dict[str, str]] = {
         "MMGroundingDinoModel": "Same `timeout` failure as `GroundingDinoModel`.",
         "MMGroundingDinoForObjectDetection": "Same `timeout` failure as `GroundingDinoModel`.",
     },
-    "executorch.generate": {
-        "Idefics2ForConditionalGeneration": (
-            "`generate()` merges image features into embeds with `masked_scatter` (image-token "
-            "count vs image-feature count); the mismatch is a benign CPU exception but a "
-            "CUDA device-side assert on GPU, which poisons the worker's context. Plain export works."
-        ),
-        "Glm4vForConditionalGeneration": "Same generate `masked_scatter` image-merge failure as `Idefics2ForConditionalGeneration`.",
-        "Glm4vMoeForConditionalGeneration": "Same generate `masked_scatter` image-merge failure as `Idefics2ForConditionalGeneration`.",
-        "Glm46VForConditionalGeneration": "Same generate `masked_scatter` image-merge failure as `Idefics2ForConditionalGeneration`.",
-        "GlmImageForConditionalGeneration": "Same generate `masked_scatter` image-merge failure as `Idefics2ForConditionalGeneration`.",
-        "GlmOcrForConditionalGeneration": "Same generate `masked_scatter` image-merge failure as `Idefics2ForConditionalGeneration`.",
-        "Ernie4_5_VLMoeForConditionalGeneration": "Same generate `masked_scatter` image-merge failure as `Idefics2ForConditionalGeneration`.",
-        "PaddleOCRVLForConditionalGeneration": "Same generate `masked_scatter` image-merge failure as `Idefics2ForConditionalGeneration`.",
-        "PerceptionLMForConditionalGeneration": "Same generate `masked_scatter` image-merge failure as `Idefics2ForConditionalGeneration`.",
-        "Qwen2VLForConditionalGeneration": "Same generate `masked_scatter` image-merge failure as `Idefics2ForConditionalGeneration`.",
-        "Qwen2_5_VLForConditionalGeneration": "Same generate `masked_scatter` image-merge failure as `Idefics2ForConditionalGeneration`.",
-        "Qwen2_5OmniThinkerForConditionalGeneration": "Same generate `masked_scatter` image-merge failure as `Idefics2ForConditionalGeneration`.",
-        "Qwen3OmniMoeThinkerForConditionalGeneration": "Same generate `masked_scatter` image-merge failure as `Idefics2ForConditionalGeneration`.",
-    },
+    "executorch.generate": {},
     "executorch.dynamic": {
         "BigBirdModel": ("Lowering exceeds the test timeout under dynamic shapes."),
         "BigBirdForPreTraining": "Same `timeout` failure as `BigBirdModel`.",
@@ -267,17 +252,6 @@ def disable_hub_kernels(test_fn):
                 setattr(obj, name, original)
 
     return wrapper
-
-
-def _cast_inputs(obj, device, dtype):
-    """Recursively move tensors to `device`, casting floating-point tensors to `dtype`."""
-    if isinstance(obj, torch.Tensor):
-        return obj.to(device=device, dtype=dtype) if obj.is_floating_point() else obj.to(device=device)
-    if isinstance(obj, dict):
-        return {k: _cast_inputs(v, device, dtype) for k, v in obj.items()}
-    if isinstance(obj, (list, tuple)):
-        return type(obj)(_cast_inputs(v, device, dtype) for v in obj)
-    return obj
 
 
 def _clean_inputs_for_export(inputs_dict, config):
@@ -382,12 +356,7 @@ class ExportTesterMixin:
         model = model_class(config).eval().to(device)
         set_model_for_less_flaky_test(model)
 
-        # Cast inputs to model device/dtype
-        try:
-            model_param = next(iter(model.parameters()))
-            inputs_dict = _cast_inputs(inputs_dict, model_param.device, model_param.dtype)
-        except StopIteration:
-            pass
+        inputs_dict = cast_leaf_tensors(inputs_dict, dtype=module_dtype(model), device=modeul_device(model))
 
         if is_multimodal(model):
             return decompose_multimodal(model, inputs_dict)
@@ -543,6 +512,8 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
         set_config_for_less_flaky_test(config)
         model = model_class(config).eval().to(device)
         set_model_for_less_flaky_test(model)
+
+        inputs_dict = cast_leaf_tensors(inputs_dict, dtype=module_dtype(model), device=modeul_device(model))
 
         return decompose_for_generation(model, inputs_dict)
 
