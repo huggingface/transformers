@@ -22,8 +22,8 @@ import os
 import sys
 import tempfile
 import warnings
-from unittest import mock
 from os.path import abspath, dirname, join
+from unittest import mock
 
 import _pytest
 import pytest
