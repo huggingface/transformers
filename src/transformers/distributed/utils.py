@@ -20,8 +20,6 @@ from ..utils import is_torch_available, is_torch_greater_or_equal
 
 
 if TYPE_CHECKING:
-    import torch.nn as nn
-
     from .configuration_utils import DistributedConfig
 
 if is_torch_available():

@@ -25,9 +25,9 @@ from .configuration_utils import DistributedConfig
 from .fsdp import apply_fully_sharded_data_parallelism, is_fsdp_managed_module
 from .tensor_parallel import (
     ALL_PARALLEL_STYLES,
-    apply_tensor_parallelism_dtensor,
     _supports_dtensor_path,
-    gather_tp_state_dict
+    apply_tensor_parallelism_dtensor,
+    gather_tp_state_dict,
 )
 from .utils import (
     _ensure_torch_distributed,
@@ -189,7 +189,7 @@ class DistributedMixin:
 
         if distributed_config.tp_size > 1:
             tp_mesh = device_mesh["tp"] if device_mesh.ndim > 1 else device_mesh
-            
+
             if distributed_config.tp_plan is not None:
                 model.tp_plan = distributed_config.tp_plan
 
@@ -197,6 +197,7 @@ class DistributedMixin:
                 return apply_tensor_parallelism_dtensor(model, tp_mesh)
             else:
                 from ..integrations.tensor_parallel import apply_tensor_parallelism
+
                 return apply_tensor_parallelism(model, distributed_config.tp_plan, distributed_config, device_mesh)
 
         if distributed_config.fsdp_size > 1:

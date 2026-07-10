@@ -752,10 +752,11 @@ def apply_tensor_parallelism_dtensor(model, tp_mesh):
 
     return model
 
+
 # =============================================================================
 # Inference helpers (plain-tensor collectives)
 # =============================================================================
-#TODO(3outeille): Double check
+# TODO(3outeille): Double check
 # The TP styles above are mode-aware: in training they run the DTensor `redistribute` path
 # (autograd-aware collectives); in inference (`module.training is False`) they unwrap to plain
 # tensors and run these raw collectives instead, skipping DTensor's per-op redistribute machinery
