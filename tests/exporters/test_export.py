@@ -31,7 +31,7 @@ from transformers.exporters.utils import (
     decompose_multimodal,
     get_leaf_tensors,
     is_multimodal,
-    modeul_device,
+    module_device,
     module_dtype,
 )
 from transformers.testing_utils import (
@@ -356,7 +356,7 @@ class ExportTesterMixin:
         model = model_class(config).eval().to(device)
         set_model_for_less_flaky_test(model)
 
-        inputs_dict = cast_leaf_tensors(inputs_dict, dtype=module_dtype(model), device=modeul_device(model))
+        inputs_dict = cast_leaf_tensors(inputs_dict, dtype=module_dtype(model), device=module_device(model))
 
         if is_multimodal(model):
             return decompose_multimodal(model, inputs_dict)
@@ -513,7 +513,7 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
         model = model_class(config).eval().to(device)
         set_model_for_less_flaky_test(model)
 
-        inputs_dict = cast_leaf_tensors(inputs_dict, dtype=module_dtype(model), device=modeul_device(model))
+        inputs_dict = cast_leaf_tensors(inputs_dict, dtype=module_dtype(model), device=module_device(model))
 
         return decompose_for_generation(model, inputs_dict)
 
