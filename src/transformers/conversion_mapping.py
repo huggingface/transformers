@@ -1634,49 +1634,46 @@ def _build_checkpoint_conversion_mapping():
     ]
 
     # Cosmos3 Edge's composite checkpoint stores its dense reasoner text tower as
-    # 28 physical Diffusers blocks. Each block becomes two native modules: an
-    # attention layer followed by an MLP layer. The visual/projector tensors
-    # already use their native module names and intentionally need no mapping.
+    # 28 conventional attention + MLP blocks. The visual/projector tensors already
+    # use their native module names and intentionally need no mapping.
     mapping["cosmos3_edge"] = [
-        WeightRenaming(r"^embed_tokens\.weight$", "model.language_model.embeddings.weight"),
-        WeightRenaming(r"^norm\.weight$", "model.language_model.norm_f.weight"),
+        WeightRenaming(r"^embed_tokens\.weight$", "model.language_model.embed_tokens.weight"),
+        WeightRenaming(r"^norm\.weight$", "model.language_model.norm.weight"),
     ]
-    for physical_layer_idx in range(28):
-        attention_layer_idx = 2 * physical_layer_idx
-        mlp_layer_idx = attention_layer_idx + 1
+    for layer_idx in range(28):
         mapping["cosmos3_edge"].extend(
             [
                 WeightRenaming(
-                    rf"^layers\.{physical_layer_idx}\.input_layernorm\.weight$",
-                    f"model.language_model.layers.{attention_layer_idx}.norm.weight",
+                    rf"^layers\.{layer_idx}\.input_layernorm\.weight$",
+                    f"model.language_model.layers.{layer_idx}.input_layernorm.weight",
                 ),
                 WeightRenaming(
-                    rf"^layers\.{physical_layer_idx}\.self_attn\.to_q\.weight$",
-                    f"model.language_model.layers.{attention_layer_idx}.mixer.q_proj.weight",
+                    rf"^layers\.{layer_idx}\.self_attn\.to_q\.weight$",
+                    f"model.language_model.layers.{layer_idx}.self_attn.q_proj.weight",
                 ),
                 WeightRenaming(
-                    rf"^layers\.{physical_layer_idx}\.self_attn\.to_k\.weight$",
-                    f"model.language_model.layers.{attention_layer_idx}.mixer.k_proj.weight",
+                    rf"^layers\.{layer_idx}\.self_attn\.to_k\.weight$",
+                    f"model.language_model.layers.{layer_idx}.self_attn.k_proj.weight",
                 ),
                 WeightRenaming(
-                    rf"^layers\.{physical_layer_idx}\.self_attn\.to_v\.weight$",
-                    f"model.language_model.layers.{attention_layer_idx}.mixer.v_proj.weight",
+                    rf"^layers\.{layer_idx}\.self_attn\.to_v\.weight$",
+                    f"model.language_model.layers.{layer_idx}.self_attn.v_proj.weight",
                 ),
                 WeightRenaming(
-                    rf"^layers\.{physical_layer_idx}\.self_attn\.to_out\.weight$",
-                    f"model.language_model.layers.{attention_layer_idx}.mixer.o_proj.weight",
+                    rf"^layers\.{layer_idx}\.self_attn\.to_out\.weight$",
+                    f"model.language_model.layers.{layer_idx}.self_attn.o_proj.weight",
                 ),
                 WeightRenaming(
-                    rf"^layers\.{physical_layer_idx}\.post_attention_layernorm\.weight$",
-                    f"model.language_model.layers.{mlp_layer_idx}.norm.weight",
+                    rf"^layers\.{layer_idx}\.post_attention_layernorm\.weight$",
+                    f"model.language_model.layers.{layer_idx}.post_attention_layernorm.weight",
                 ),
                 WeightRenaming(
-                    rf"^layers\.{physical_layer_idx}\.mlp\.up_proj\.weight$",
-                    f"model.language_model.layers.{mlp_layer_idx}.mixer.up_proj.weight",
+                    rf"^layers\.{layer_idx}\.mlp\.up_proj\.weight$",
+                    f"model.language_model.layers.{layer_idx}.mlp.up_proj.weight",
                 ),
                 WeightRenaming(
-                    rf"^layers\.{physical_layer_idx}\.mlp\.down_proj\.weight$",
-                    f"model.language_model.layers.{mlp_layer_idx}.mixer.down_proj.weight",
+                    rf"^layers\.{layer_idx}\.mlp\.down_proj\.weight$",
+                    f"model.language_model.layers.{layer_idx}.mlp.down_proj.weight",
                 ),
             ]
         )

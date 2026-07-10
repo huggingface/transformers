@@ -213,8 +213,16 @@ class Cosmos3EdgeImageProcessorPil(PilBackend):
 
             channels = image.shape[0]
             grid_height, grid_width = resized_height // patch_size, resized_width // patch_size
-            patches = image.reshape(channels, grid_height, patch_size, grid_width, patch_size)
-            patches = patches.transpose(1, 3, 2, 4, 0).reshape(grid_height * grid_width, -1)
+            patches = image.reshape(
+                channels,
+                grid_height // merge_size,
+                merge_size,
+                patch_size,
+                grid_width // merge_size,
+                merge_size,
+                patch_size,
+            )
+            patches = patches.transpose(1, 4, 2, 5, 0, 3, 6).reshape(grid_height * grid_width, -1)
 
             pixel_values.append(patches)
             image_grids.append((1, grid_height, grid_width))

@@ -19,6 +19,7 @@ from types import SimpleNamespace
 import numpy as np
 
 from transformers import Cosmos3EdgeImageProcessor, Cosmos3EdgeProcessor, Cosmos3EdgeVideoProcessor
+from transformers.models.cosmos3_edge.processing_cosmos3_edge import Cosmos3EdgeProcessorKwargs
 from transformers.testing_utils import require_torch, require_torchvision, require_vision
 
 
@@ -42,6 +43,26 @@ class Cosmos3EdgeVisionProcessorTest(unittest.TestCase):
         self.assertEqual(tuple(processed["pixel_values"].shape), (8, 12))
         self.assertEqual(processed["image_grid_thw"].tolist(), [[1, 2, 4]])
 
+    def test_image_processor_uses_projector_block_major_patch_order(self):
+        processor = Cosmos3EdgeImageProcessor(
+            do_resize=False,
+            do_rescale=False,
+            do_normalize=False,
+            patch_size=2,
+            merge_size=2,
+        )
+        image = np.zeros((4, 8, 3), dtype=np.uint8)
+        for height_index in range(2):
+            for width_index in range(4):
+                patch_index = height_index * 4 + width_index
+                image[height_index * 2 : (height_index + 1) * 2, width_index * 2 : (width_index + 1) * 2] = patch_index
+
+        processed = processor(image, return_tensors="pt")
+
+        # The 2×2 groups must be contiguous for the checkpoint projector: the
+        # first group is (0, 0), (0, 1), (1, 0), (1, 1), followed by the next group.
+        self.assertEqual(processed["pixel_values"][:, 0].tolist(), [0, 1, 4, 5, 2, 3, 6, 7])
+
     def test_video_processor_emits_packed_patches_and_thw_grid(self):
         processor = Cosmos3EdgeVideoProcessor(
             do_resize=False,
@@ -61,8 +82,42 @@ class Cosmos3EdgeVisionProcessorTest(unittest.TestCase):
         self.assertEqual(tuple(processed["pixel_values_videos"].shape), (16, 12))
         self.assertEqual(processed["video_grid_thw"].tolist(), [[2, 2, 4]])
 
+    def test_video_processor_uses_projector_block_major_patch_order_per_frame(self):
+        processor = Cosmos3EdgeVideoProcessor(
+            do_resize=False,
+            do_rescale=False,
+            do_normalize=False,
+            patch_size=2,
+            merge_size=2,
+            temporal_patch_size=1,
+        )
+        video = np.zeros((2, 4, 8, 3), dtype=np.uint8)
+        for frame_index in range(2):
+            for height_index in range(2):
+                for width_index in range(4):
+                    patch_index = frame_index * 10 + height_index * 4 + width_index
+                    video[
+                        frame_index,
+                        height_index * 2 : (height_index + 1) * 2,
+                        width_index * 2 : (width_index + 1) * 2,
+                    ] = patch_index
+
+        processed = processor(
+            video,
+            video_metadata=[{"fps": 2, "total_num_frames": 2, "duration": 1.0}],
+            return_tensors="pt",
+        )
+
+        self.assertEqual(
+            processed["pixel_values_videos"][:, 0].tolist(),
+            [0, 1, 4, 5, 2, 3, 6, 7, 10, 11, 14, 15, 12, 13, 16, 17],
+        )
+
     def test_public_processor_name_is_cosmos_specific(self):
         self.assertEqual(Cosmos3EdgeProcessor.__name__, "Cosmos3EdgeProcessor")
+
+    def test_processor_returns_multimodal_token_types_by_default(self):
+        self.assertTrue(Cosmos3EdgeProcessorKwargs._defaults["text_kwargs"]["return_mm_token_type_ids"])
 
     def test_video_placeholder_uses_one_timestamped_vision_span_per_frame(self):
         # This isolates placeholder expansion from tokenizer loading. The checkpoint

@@ -13,7 +13,7 @@ specific language governing permissions and limitations under the License.
 be rendered properly in your Markdown viewer.
 
 -->
-*This model was contributed to Hugging Face Transformers on 2026-07-08.*
+*This model was contributed to Hugging Face Transformers on 2026-07-10.*
 
 # Cosmos3 Edge
 
@@ -21,10 +21,11 @@ be rendered properly in your Markdown viewer.
 family. Transformers integrates the **Reasoner** tower only; the checkpoint's diffusion Generator, VAE, scheduler,
 and other generation components remain Diffusers components.
 
-The reasoner uses a dense Nemotron-derived language tower with 56 alternating residual modules: 28 attention modules
-and 28 MLP modules. Its SigLIP2 vision encoder accepts packed variable-resolution patches, groups them spatially in
-2×2 blocks, and projects them into the language model. Image and video inputs use multimodal rotary position IDs;
-video prompts are expanded into one timestamped vision span per sampled frame.
+The reasoner uses a dense, Llama-compatible language tower with 28 decoder blocks, each containing attention and an
+MLP. Its SigLIP2 vision encoder accepts packed variable-resolution patches, uses sequence boundaries to keep images
+and video frames independent during vision attention, groups patches spatially in 2×2 blocks, and projects them into
+the language model. Image and video inputs use multimodal rotary position IDs; video prompts are expanded into one
+timestamped vision span per sampled frame.
 
 ## Usage
 
@@ -108,6 +109,11 @@ print(processor.batch_decode(generated_ids, skip_special_tokens=True))
 ## Cosmos3EdgeTextModel
 
 [[autodoc]] Cosmos3EdgeTextModel
+    - forward
+
+## Cosmos3EdgeVisionModel
+
+[[autodoc]] Cosmos3EdgeVisionModel
     - forward
 
 ## Cosmos3EdgeForConditionalGeneration

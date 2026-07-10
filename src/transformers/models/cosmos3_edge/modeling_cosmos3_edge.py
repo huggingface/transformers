@@ -18,26 +18,27 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import itertools
 from collections.abc import Callable
-from dataclasses import dataclass
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch.nn.utils.rnn import pad_sequence
 
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
-from ...integrations import use_kernel_forward_from_hub, use_kernel_func_from_hub
-from ...masking_utils import create_bidirectional_mask, create_causal_mask
+from ...integrations import use_kernel_forward_from_hub, use_kernel_func_from_hub, use_kernelized_func
+from ...masking_utils import create_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPast, CausalLMOutputWithPast
+from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, torch_compilable_check
-from ...utils.generic import maybe_autocast
+from ...utils.generic import is_flash_attention_requested, maybe_autocast, merge_with_config_defaults
+from ...utils.output_capturing import capture_outputs
+from ...vision_utils import get_vision_cu_seqlens
 from .configuration_cosmos3_edge import (
     Cosmos3EdgeConfig,
     Cosmos3EdgeProjectorConfig,
@@ -53,8 +54,6 @@ class Cosmos3EdgeTextRotaryEmbedding(nn.Module):
 
     def __init__(self, config: Cosmos3EdgeTextConfig, device=None):
         super().__init__()
-        if config.rope_parameters is None:
-            raise ValueError("`rope_parameters` must be set for Cosmos3 Edge M-RoPE.")
         self.max_seq_len_cached = config.max_position_embeddings
         self.original_max_seq_len = config.max_position_embeddings
 
@@ -68,7 +67,7 @@ class Cosmos3EdgeTextRotaryEmbedding(nn.Module):
 
         self.register_buffer("inv_freq", inv_freq, persistent=False)
         self.register_buffer("original_inv_freq", inv_freq.clone(), persistent=False)
-        self.mrope_section = config.rope_parameters.get("mrope_section", [24, 20, 20])
+        self.mrope_section = config.rope_parameters["mrope_section"]
 
     @staticmethod
     def compute_default_rope_parameters(
@@ -89,11 +88,8 @@ class Cosmos3EdgeTextRotaryEmbedding(nn.Module):
             Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
             post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
         """
-        if config is None or config.rope_parameters is None:
-            raise ValueError("`config.rope_parameters` must be set to initialize M-RoPE.")
-
         base = config.rope_parameters["rope_theta"]
-        dim = config.head_dim or config.hidden_size // config.num_attention_heads
+        dim = config.head_dim
         inv_freq = 1.0 / (
             base ** (torch.arange(0, dim, 2, dtype=torch.int64).to(device=device, dtype=torch.float) / dim)
         )
@@ -159,18 +155,6 @@ def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
     return q_embed, k_embed
 
 
-def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
-    """
-    This is the equivalent of torch.repeat_interleave(x, dim=1, repeats=n_rep). The hidden states go from (batch,
-    num_key_value_heads, seqlen, head_dim) to (batch, num_attention_heads, seqlen, head_dim)
-    """
-    batch, num_key_value_heads, slen, head_dim = hidden_states.shape
-    if n_rep == 1:
-        return hidden_states
-    hidden_states = hidden_states[:, :, None, :, :].expand(batch, num_key_value_heads, n_rep, slen, head_dim)
-    return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
-
-
 def eager_attention_forward(
     module: nn.Module,
     query: torch.Tensor,
@@ -179,23 +163,22 @@ def eager_attention_forward(
     attention_mask: torch.Tensor | None,
     scaling: float,
     dropout: float = 0.0,
-    **kwargs: Unpack[TransformersKwargs],
+    **kwargs,
 ):
-    key_states = repeat_kv(key, module.num_key_value_groups)
-    value_states = repeat_kv(value, module.num_key_value_groups)
-
-    attn_weights = torch.matmul(query, key_states.transpose(2, 3)) * scaling
+    attn_weights = torch.matmul(query, key.transpose(-1, -2)) * scaling
     if attention_mask is not None:
         attn_weights = attn_weights + attention_mask
 
     attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
     attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
-    attn_output = torch.matmul(attn_weights, value_states)
+
+    attn_output = torch.matmul(attn_weights, value)
     attn_output = attn_output.transpose(1, 2).contiguous()
 
     return attn_output, attn_weights
 
 
+@use_kernelized_func(apply_rotary_pos_emb)
 class Cosmos3EdgeTextAttention(nn.Module):
     """Dense GQA attention with Cosmos3 Edge M-RoPE."""
 
@@ -203,11 +186,12 @@ class Cosmos3EdgeTextAttention(nn.Module):
         super().__init__()
         self.config = config
         self.layer_idx = layer_idx
-        self.head_dim = config.head_dim
+        self.head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
         self.num_key_value_groups = config.num_attention_heads // config.num_key_value_heads
         self.scaling = self.head_dim**-0.5
         self.attention_dropout = config.attention_dropout
         self.is_causal = True
+
         self.q_proj = nn.Linear(
             config.hidden_size, config.num_attention_heads * self.head_dim, bias=config.attention_bias
         )
@@ -224,11 +208,11 @@ class Cosmos3EdgeTextAttention(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        position_embeddings: tuple[torch.Tensor, torch.Tensor],
+        position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         attention_mask: torch.Tensor | None = None,
         past_key_values: Cache | None = None,
-        **kwargs,
-    ) -> tuple[torch.Tensor, torch.Tensor | None]:
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         input_shape = hidden_states.shape[:-1]
         hidden_shape = (*input_shape, -1, self.head_dim)
 
@@ -242,9 +226,10 @@ class Cosmos3EdgeTextAttention(nn.Module):
         if past_key_values is not None:
             key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
 
-        attention_interface = ALL_ATTENTION_FUNCTIONS.get_interface(
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
         )
+
         attn_output, attn_weights = attention_interface(
             self,
             query_states,
@@ -255,22 +240,23 @@ class Cosmos3EdgeTextAttention(nn.Module):
             scaling=self.scaling,
             **kwargs,
         )
+
         attn_output = attn_output.reshape(*input_shape, -1).contiguous()
-        return self.o_proj(attn_output), attn_weights
+        attn_output = self.o_proj(attn_output)
+        return attn_output, attn_weights
 
 
 class Cosmos3EdgeTextMLP(nn.Module):
-    def __init__(self, config, intermediate_size=None, **kwargs):
-        super().__init__()
-        self.config = config
-        self.hidden_size = config.hidden_size
-        self.intermediate_size = intermediate_size or config.intermediate_size
-        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=config.mlp_bias)
-        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=config.mlp_bias)
-        self.act_fn = ACT2FN[config.mlp_hidden_act]
+    """The dense two-projection ReLU-squared MLP used by Cosmos3 Edge."""
 
-    def forward(self, x):
-        return self.down_proj(self.act_fn(self.up_proj(x)))
+    def __init__(self, config: Cosmos3EdgeTextConfig):
+        super().__init__()
+        self.up_proj = nn.Linear(config.hidden_size, config.intermediate_size, bias=config.mlp_bias)
+        self.down_proj = nn.Linear(config.intermediate_size, config.hidden_size, bias=config.mlp_bias)
+        self.act_fn = ACT2FN[config.hidden_act]
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        return self.down_proj(self.act_fn(self.up_proj(hidden_states)))
 
 
 @use_kernel_forward_from_hub("RMSNorm")
@@ -294,115 +280,152 @@ class Cosmos3EdgeTextRMSNorm(nn.Module):
         return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
 
 
-class Cosmos3EdgeTextLayer(nn.Module):
+class Cosmos3EdgeTextDecoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: Cosmos3EdgeTextConfig, layer_idx: int):
         super().__init__()
-        self.norm = Cosmos3EdgeTextRMSNorm(config.hidden_size, eps=config.layer_norm_epsilon)
-        self.block_type = config.layers_block_type[layer_idx]
-        if self.block_type == "full_attention":
-            self.mixer = Cosmos3EdgeTextAttention(config, layer_idx)
-        else:
-            self.mixer = Cosmos3EdgeTextMLP(config)
+        self.hidden_size = config.hidden_size
+        self.self_attn = Cosmos3EdgeTextAttention(config, layer_idx)
+        self.mlp = Cosmos3EdgeTextMLP(config)
+        self.input_layernorm = Cosmos3EdgeTextRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_attention_layernorm = Cosmos3EdgeTextRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
     def forward(
         self,
         hidden_states: torch.Tensor,
-        position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
-        **kwargs,
+        use_cache: bool | None = False,
+        position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
         residual = hidden_states
-        hidden_states = self.norm(hidden_states.to(dtype=self.norm.weight.dtype))
-        if self.block_type == "full_attention":
-            hidden_states, _ = self.mixer(
-                hidden_states,
-                position_embeddings=position_embeddings,
-                attention_mask=attention_mask,
-                past_key_values=past_key_values,
-                **kwargs,
-            )
-        else:
-            hidden_states = self.mixer(hidden_states)
-        return residual + hidden_states
+        hidden_states = self.input_layernorm(hidden_states)
+        # Self Attention
+        hidden_states, _ = self.self_attn(
+            hidden_states=hidden_states,
+            attention_mask=attention_mask,
+            position_ids=position_ids,
+            past_key_values=past_key_values,
+            use_cache=use_cache,
+            position_embeddings=position_embeddings,
+            **kwargs,
+        )
+        hidden_states = residual + hidden_states
+
+        # Fully Connected
+        residual = hidden_states
+        hidden_states = self.post_attention_layernorm(hidden_states)
+        hidden_states = self.mlp(hidden_states)
+        hidden_states = residual + hidden_states
+        return hidden_states
 
 
-class Cosmos3EdgeTextModel(PreTrainedModel):
+_COSMOS3_EDGE_DROPPED_GENERATOR_KEYS = [
+    r"^time_embedder\.",
+    r"^proj_(?:in|out)\.",
+    r"^norm_moe_gen\.",
+    r"^layers\.\d+\.input_layernorm_moe_gen\.",
+    r"^layers\.\d+\.post_attention_layernorm_moe_gen\.",
+    r"^layers\.\d+\.mlp_moe_gen\.",
+    r"^layers\.\d+\.self_attn\.(?:add_[qkv]_proj|to_add_out|norm_added_[qk])\.",
+]
+
+
+@auto_docstring
+class Cosmos3EdgePreTrainedModel(PreTrainedModel):
+    config: Cosmos3EdgeTextConfig
+    base_model_prefix = "model"
+    supports_gradient_checkpointing = True
+    _no_split_modules = ["Cosmos3EdgeTextDecoderLayer"]
+    _skip_keys_device_placement = ["past_key_values"]
+    _supports_flash_attn = True
+    _supports_sdpa = True
+    _supports_flex_attn = True
+
+    _can_compile_fullgraph = True
+    _supports_attention_backend = True
+    _can_record_outputs = {
+        "hidden_states": Cosmos3EdgeTextDecoderLayer,
+        "attentions": Cosmos3EdgeTextAttention,
+    }
+    config_class = Cosmos3EdgeConfig
+    input_modalities = ("image", "video", "text")
+    _keys_to_ignore_on_load_unexpected = _COSMOS3_EDGE_DROPPED_GENERATOR_KEYS
+
+
+class Cosmos3EdgeTextModel(Cosmos3EdgePreTrainedModel):
     config_class = Cosmos3EdgeTextConfig
     base_model_prefix = "language_model"
-    _no_split_modules = ["Cosmos3EdgeTextLayer"]
-    _skip_keys_device_placement = ["past_key_values"]
-    _supports_sdpa = True
-    _supports_flash_attn = True
 
     def __init__(self, config: Cosmos3EdgeTextConfig):
         super().__init__(config)
-        self.embeddings = nn.Embedding(config.vocab_size, config.hidden_size)
+        self.padding_idx = config.pad_token_id
+        self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
         self.layers = nn.ModuleList(
-            [Cosmos3EdgeTextLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+            [Cosmos3EdgeTextDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
-        self.norm_f = Cosmos3EdgeTextRMSNorm(config.hidden_size, eps=config.layer_norm_epsilon)
+        self.norm = Cosmos3EdgeTextRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.rotary_emb = Cosmos3EdgeTextRotaryEmbedding(config)
+        self.gradient_checkpointing = False
         self.post_init()
 
     def get_input_embeddings(self):
-        return self.embeddings
+        return self.embed_tokens
 
     def set_input_embeddings(self, value):
-        self.embeddings = value
+        self.embed_tokens = value
 
+    @merge_with_config_defaults
+    @capture_outputs
     @can_return_tuple
+    @auto_docstring
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
-        attention_mask: torch.Tensor | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
         use_cache: bool | None = None,
         **kwargs,
     ) -> tuple | BaseModelOutputWithPast:
         if (input_ids is None) == (inputs_embeds is None):
             raise ValueError("You must specify exactly one of `input_ids` or `inputs_embeds`.")
         if inputs_embeds is None:
-            if input_ids is None:
-                raise ValueError("`input_ids` must be set when `inputs_embeds` is not provided.")
-            inputs_embeds = self.embeddings(input_ids)
+            inputs_embeds = self.embed_tokens(input_ids)
 
         use_cache = self.config.use_cache if use_cache is None else use_cache
         if use_cache and past_key_values is None:
             past_key_values = DynamicCache(config=self.config)
 
-        batch_size, sequence_length = inputs_embeds.shape[:2]
-        past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
         if position_ids is None:
-            position_ids = (
-                torch.arange(past_seen_tokens, past_seen_tokens + sequence_length, device=inputs_embeds.device)
-                .view(1, 1, -1)
-                .expand(3, batch_size, -1)
-            )
+            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+            position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
+            position_ids = position_ids.view(1, 1, -1).expand(3, inputs_embeds.shape[0], -1)
         elif position_ids.ndim == 2:
             position_ids = position_ids.unsqueeze(0).expand(3, -1, -1)
 
-        position_embeddings = self.rotary_emb(inputs_embeds, position_ids)
-        mask_position_ids = position_ids[0]
         causal_mask = create_causal_mask(
             config=self.config,
             inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
             past_key_values=past_key_values,
-            position_ids=mask_position_ids,
+            position_ids=position_ids[0],
         )
+        position_embeddings = self.rotary_emb(inputs_embeds, position_ids)
         hidden_states = inputs_embeds
-        for layer in self.layers:
+        for layer in self.layers[: self.config.num_hidden_layers]:
             hidden_states = layer(
                 hidden_states,
-                position_embeddings=position_embeddings,
                 attention_mask=causal_mask,
+                position_embeddings=position_embeddings,
+                position_ids=position_ids[0],
                 past_key_values=past_key_values,
+                use_cache=use_cache,
                 **kwargs,
             )
-        hidden_states = self.norm_f(hidden_states)
+        hidden_states = self.norm(hidden_states)
         return BaseModelOutputWithPast(
             last_hidden_state=hidden_states,
             past_key_values=past_key_values if use_cache else None,
@@ -410,6 +433,8 @@ class Cosmos3EdgeTextModel(PreTrainedModel):
 
 
 class Cosmos3EdgeVisionEmbeddings(nn.Module):
+    """SigLIP2 patch and learned-position embeddings for packed Edge vision inputs."""
+
     def __init__(self, config: Cosmos3EdgeVisionConfig):
         super().__init__()
         self.config = config
@@ -487,7 +512,7 @@ class Cosmos3EdgeVisionEmbeddings(nn.Module):
 
         return resulted_positional_embeddings
 
-    def forward(self, pixel_values: torch.FloatTensor, spatial_shapes: torch.LongTensor) -> torch.Tensor:
+    def forward(self, pixel_values: torch.FloatTensor, grid_thw: torch.LongTensor) -> torch.Tensor:
         """
         Args:
             pixel_values (`torch.FloatTensor`):
@@ -495,26 +520,48 @@ class Cosmos3EdgeVisionEmbeddings(nn.Module):
             spatial_shapes (`list[tuple[int, int]]`):
                 Spatial shapes of shape (batch_size, 2) to resize the positional embeddings to
         """
-
-        # Apply patch embeddings to already patchified pixel values
         target_dtype = self.patch_embedding.weight.dtype
         patch_embeds = self.patch_embedding(pixel_values.to(dtype=target_dtype))
-
-        # Get positional resized and padded positional embeddings
         positional_embeddings = self.position_embedding.weight.reshape(
             self.position_embedding_size, self.position_embedding_size, -1
         )
-        resized_positional_embeddings = self.resize_positional_embeddings(
-            positional_embeddings, spatial_shapes, max_length=pixel_values.shape[1]
-        )
+        positional_embeddings = positional_embeddings.permute(2, 0, 1).unsqueeze(0)
+        source_dtype = positional_embeddings.dtype
+        if positional_embeddings.device.type == "cpu":
+            positional_embeddings = positional_embeddings.float()
 
-        # Add positional embeddings to patch embeddings
-        embeddings = patch_embeds + resized_positional_embeddings
-        return embeddings
+        position_chunks = []
+        merge_size = self.config.spatial_merge_size
+        for temporal, height, width in grid_thw.tolist():
+            resized_embeddings = F.interpolate(
+                positional_embeddings,
+                size=(height, width),
+                mode="bilinear",
+                align_corners=False,
+                antialias=True,
+            )
+            resized_embeddings = resized_embeddings.squeeze(0).permute(1, 2, 0).to(source_dtype)
+            resized_embeddings = resized_embeddings.reshape(
+                height // merge_size,
+                merge_size,
+                width // merge_size,
+                merge_size,
+                -1,
+            )
+            resized_embeddings = resized_embeddings.permute(0, 2, 1, 3, 4).reshape(height * width, -1)
+            position_chunks.append(resized_embeddings.repeat(temporal, 1))
+
+        position_embeddings = torch.cat(position_chunks, dim=0)
+        if patch_embeds.shape[0] != position_embeddings.shape[0]:
+            raise ValueError(
+                "The packed visual patch count does not match `grid_thw`: "
+                f"got {patch_embeds.shape[0]} patches for {position_embeddings.shape[0]} expected patches."
+            )
+        return patch_embeds + position_embeddings
 
 
-class Cosmos3EdgeAttention(nn.Module):
-    """Multi-headed attention from 'Attention Is All You Need' paper"""
+class Cosmos3EdgeVisionAttention(nn.Module):
+    """Packed non-causal SigLIP2 attention with one sequence per image or video frame."""
 
     def __init__(self, config):
         super().__init__()
@@ -536,40 +583,61 @@ class Cosmos3EdgeAttention(nn.Module):
         self.q_proj = nn.Linear(self.embed_dim, self.embed_dim)
         self.out_proj = nn.Linear(self.embed_dim, self.embed_dim)
 
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        attention_mask: torch.Tensor | None = None,
-        **kwargs,
-    ) -> tuple[torch.Tensor, torch.Tensor | None]:
+    def forward(self, hidden_states: torch.Tensor, cu_seqlens: torch.Tensor, **kwargs) -> torch.Tensor:
         """Input shape: Batch x Time x Channel"""
+        sequence_length = hidden_states.shape[0]
+        query_states = self.q_proj(hidden_states).reshape(sequence_length, self.num_heads, self.head_dim)
+        key_states = self.k_proj(hidden_states).reshape(sequence_length, self.num_heads, self.head_dim)
+        value_states = self.v_proj(hidden_states).reshape(sequence_length, self.num_heads, self.head_dim)
 
-        input_shape = hidden_states.shape[:-1]
-
-        hidden_shape = (*input_shape, -1, self.head_dim)
-        queries = self.q_proj(hidden_states).view(hidden_shape).transpose(1, 2)
-        keys = self.k_proj(hidden_states).view(hidden_shape).transpose(1, 2)
-        values = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
-
-        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+        query_states = query_states.transpose(0, 1).unsqueeze(0)
+        key_states = key_states.transpose(0, 1).unsqueeze(0)
+        value_states = value_states.transpose(0, 1).unsqueeze(0)
+        attention_interface = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
         )
 
-        attn_output, attn_weights = attention_interface(
-            self,
-            queries,
-            keys,
-            values,
-            attention_mask,
-            is_causal=self.is_causal,
-            scaling=self.scale,
-            dropout=0.0 if not self.training else self.dropout,
-        )
+        if is_flash_attention_requested(self.config):
+            max_sequence_length = (cu_seqlens[1:] - cu_seqlens[:-1]).max()
+            attn_output, _ = attention_interface(
+                self,
+                query_states,
+                key_states,
+                value_states,
+                attention_mask=None,
+                scaling=self.scale,
+                dropout=0.0 if not self.training else self.dropout,
+                cu_seq_lens_q=cu_seqlens,
+                cu_seq_lens_k=cu_seqlens,
+                max_length_q=max_sequence_length,
+                max_length_k=max_sequence_length,
+                is_causal=False,
+                **kwargs,
+            )
+        else:
+            lengths = cu_seqlens[1:] - cu_seqlens[:-1]
+            splits = [
+                torch.split(tensor, lengths.tolist(), dim=2) for tensor in (query_states, key_states, value_states)
+            ]
+            attn_output = torch.cat(
+                [
+                    attention_interface(
+                        self,
+                        query,
+                        key,
+                        value,
+                        attention_mask=None,
+                        scaling=self.scale,
+                        dropout=0.0 if not self.training else self.dropout,
+                        is_causal=False,
+                        **kwargs,
+                    )[0]
+                    for query, key, value in zip(*splits)
+                ],
+                dim=1,
+            )
 
-        attn_output = attn_output.reshape(*input_shape, -1).contiguous()
-        attn_output = self.out_proj(attn_output)
-
-        return attn_output, attn_weights
+        return self.out_proj(attn_output.reshape(sequence_length, -1).contiguous())
 
 
 class Cosmos3EdgeMLP(nn.Module):
@@ -587,38 +655,25 @@ class Cosmos3EdgeMLP(nn.Module):
         return hidden_states
 
 
-class Cosmos3EdgeEncoderLayer(GradientCheckpointingLayer):
-    def __init__(self, config: Cosmos3EdgeVisionConfig | Cosmos3EdgeTextConfig):
+class Cosmos3EdgeVisionEncoderLayer(GradientCheckpointingLayer):
+    def __init__(self, config: Cosmos3EdgeVisionConfig):
         super().__init__()
         self.embed_dim = config.hidden_size
         self.layer_norm1 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
-        self.self_attn = Cosmos3EdgeAttention(config)
+        self.self_attn = Cosmos3EdgeVisionAttention(config)
         self.layer_norm2 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
         self.mlp = Cosmos3EdgeMLP(config)
 
     @auto_docstring
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        attention_mask: torch.Tensor,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> torch.FloatTensor:
-        residual = hidden_states
-
-        hidden_states = self.layer_norm1(hidden_states)
-        hidden_states, _ = self.self_attn(
-            hidden_states=hidden_states,
-            attention_mask=attention_mask,
-            **kwargs,
+    def forward(self, hidden_states: torch.Tensor, cu_seqlens: torch.Tensor, **kwargs) -> torch.Tensor:
+        r"""
+        cu_seqlens (`torch.IntTensor` of shape `(num_sequences + 1,)`):
+            Cumulative patch counts that delimit each image or video frame in the packed sequence.
+        """
+        hidden_states = hidden_states + self.self_attn(
+            self.layer_norm1(hidden_states), cu_seqlens=cu_seqlens, **kwargs
         )
-        hidden_states = residual + hidden_states
-
-        residual = hidden_states
-        hidden_states = self.layer_norm2(hidden_states)
-        hidden_states = self.mlp(hidden_states)
-        hidden_states = residual + hidden_states
-
-        return hidden_states
+        return hidden_states + self.mlp(self.layer_norm2(hidden_states))
 
 
 class Cosmos3EdgeEncoder(nn.Module):
@@ -630,81 +685,51 @@ class Cosmos3EdgeEncoder(nn.Module):
         config: Cosmos3EdgeConfig
     """
 
-    def __init__(self, config: Cosmos3EdgeConfig):
+    def __init__(self, config: Cosmos3EdgeVisionConfig):
         super().__init__()
         self.config = config
-        self.layers = nn.ModuleList([Cosmos3EdgeEncoderLayer(config) for _ in range(config.num_hidden_layers)])
+        self.layers = nn.ModuleList([Cosmos3EdgeVisionEncoderLayer(config) for _ in range(config.num_hidden_layers)])
         self.gradient_checkpointing = False
 
     # Ignore copy
     @auto_docstring
-    def forward(
-        self,
-        inputs_embeds,
-        attention_mask: torch.Tensor | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> BaseModelOutput:
+    def forward(self, inputs_embeds: torch.Tensor, cu_seqlens: torch.Tensor, **kwargs) -> torch.Tensor:
+        r"""
+        cu_seqlens (`torch.IntTensor` of shape `(num_sequences + 1,)`):
+            Cumulative patch counts that delimit each image or video frame in the packed sequence.
+        """
         hidden_states = inputs_embeds
         for encoder_layer in self.layers:
-            hidden_states = encoder_layer(
-                hidden_states,
-                attention_mask,
-                **kwargs,
-            )
-
-        return BaseModelOutput(last_hidden_state=hidden_states)
+            hidden_states = encoder_layer(hidden_states, cu_seqlens=cu_seqlens, **kwargs)
+        return hidden_states
 
 
-class Cosmos3EdgeVisionModel(nn.Module):
-    """SigLIP2 vision tower accepting the packed patches emitted by the Edge processor."""
+class Cosmos3EdgeVisionModel(Cosmos3EdgePreTrainedModel):
+    """Packed variable-resolution SigLIP2 vision tower used by Cosmos3 Edge."""
+
+    config_class = Cosmos3EdgeVisionConfig
+    base_model_prefix = "visual"
+    main_input_name = "pixel_values"
+    input_modalities = ("image",)
+    _no_split_modules = ["Cosmos3EdgeVisionEncoderLayer"]
 
     def __init__(self, config: Cosmos3EdgeVisionConfig):
-        super().__init__()
-        self.config = config
+        super().__init__(config)
         self.embeddings = Cosmos3EdgeVisionEmbeddings(config)
         self.encoder = Cosmos3EdgeEncoder(config)
         self.post_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.post_init()
 
+    @auto_docstring
     def forward(self, pixel_values: torch.FloatTensor, grid_thw: torch.LongTensor, **kwargs) -> torch.Tensor:
-        if grid_thw is None:
-            raise ValueError("`grid_thw` is required for Cosmos3 Edge visual inputs.")
-        frame_spatial_shapes = torch.repeat_interleave(grid_thw[:, 1:], grid_thw[:, 0], dim=0)
-        frame_lengths = frame_spatial_shapes.prod(dim=-1)
-        if int(frame_lengths.sum()) != pixel_values.shape[0]:
-            raise ValueError(
-                "The packed visual patch count does not match `grid_thw`: "
-                f"got {pixel_values.shape[0]} patches for {int(frame_lengths.sum())} expected patches."
-            )
-
-        max_length = int(frame_lengths.max())
-        padded_pixel_values = pixel_values.new_zeros(
-            (frame_spatial_shapes.shape[0], max_length, pixel_values.shape[-1])
-        )
-        pixel_attention_mask = torch.zeros(
-            (frame_spatial_shapes.shape[0], max_length), dtype=torch.long, device=pixel_values.device
-        )
-        offset = 0
-        for frame_idx, frame_length in enumerate(frame_lengths.tolist()):
-            padded_pixel_values[frame_idx, :frame_length] = pixel_values[offset : offset + frame_length]
-            pixel_attention_mask[frame_idx, :frame_length] = 1
-            offset += frame_length
-
-        hidden_states = self.embeddings(padded_pixel_values, frame_spatial_shapes)
-        attention_mask = create_bidirectional_mask(
-            config=self.config,
-            inputs_embeds=hidden_states,
-            attention_mask=pixel_attention_mask,
-        )
-        outputs = self.encoder(
-            inputs_embeds=hidden_states,
-            attention_mask=attention_mask,
-            **kwargs,
-        )
-        hidden_states = self.post_layernorm(outputs.last_hidden_state)
-        return torch.cat(
-            [hidden_states[idx, :frame_length] for idx, frame_length in enumerate(frame_lengths.tolist())],
-            dim=0,
-        )
+        r"""
+        grid_thw (`torch.LongTensor` of shape `(num_images_or_videos, 3)`):
+            The temporal, height, and width patch-grid dimensions for each packed image or video.
+        """
+        cu_seqlens = get_vision_cu_seqlens(grid_thw, kwargs=kwargs)
+        hidden_states = self.embeddings(pixel_values, grid_thw)
+        hidden_states = self.encoder(hidden_states, cu_seqlens=cu_seqlens, **kwargs)
+        return self.post_layernorm(hidden_states)
 
 
 class Cosmos3EdgePatchMerger(nn.Module):
@@ -730,37 +755,6 @@ class Cosmos3EdgePatchMerger(nn.Module):
         return self.linear_fc2(self.act_fn(self.linear_fc1(hidden_states)))
 
 
-@dataclass
-class Cosmos3EdgeModelOutputWithPast(BaseModelOutputWithPast):
-    rope_deltas: torch.LongTensor | None = None
-
-
-_COSMOS3_EDGE_DROPPED_GENERATOR_KEYS = [
-    # The unified Diffusers shards also contain Generator-only modules. The
-    # reasoner text weights share the same physical blocks and are remapped by
-    # `conversion_mapping.py`; only these disjoint Generator parameters are
-    # intentionally ignored by the Transformers reasoner.
-    r"^time_embedder\.",
-    r"^proj_(?:in|out)\.",
-    r"^norm_moe_gen\.",
-    r"^layers\.\d+\.input_layernorm_moe_gen\.",
-    r"^layers\.\d+\.post_attention_layernorm_moe_gen\.",
-    r"^layers\.\d+\.mlp_moe_gen\.",
-    r"^layers\.\d+\.self_attn\.(?:add_[qkv]_proj|to_add_out|norm_added_[qk])\.",
-]
-
-
-class Cosmos3EdgePreTrainedModel(PreTrainedModel):
-    config_class = Cosmos3EdgeConfig
-    base_model_prefix = "model"
-    input_modalities = ("image", "video", "text")
-    _no_split_modules = ["Cosmos3EdgeTextLayer", "Cosmos3EdgeEncoderLayer"]
-    _skip_keys_device_placement = ["past_key_values"]
-    _supports_sdpa = True
-    _supports_flash_attn = True
-    _keys_to_ignore_on_load_unexpected = _COSMOS3_EDGE_DROPPED_GENERATOR_KEYS
-
-
 class Cosmos3EdgeModel(Cosmos3EdgePreTrainedModel):
     accepts_loss_kwargs = False
 
@@ -769,17 +763,7 @@ class Cosmos3EdgeModel(Cosmos3EdgePreTrainedModel):
         text_config = config.text_config
         vision_config = config.vision_config
         projector_config = config.projector_config
-        if not isinstance(text_config, Cosmos3EdgeTextConfig):
-            raise TypeError("`text_config` must be a `Cosmos3EdgeTextConfig`.")
-        if not isinstance(vision_config, Cosmos3EdgeVisionConfig):
-            raise TypeError("`vision_config` must be a `Cosmos3EdgeVisionConfig`.")
-        if not isinstance(projector_config, Cosmos3EdgeProjectorConfig):
-            raise TypeError("`projector_config` must be a `Cosmos3EdgeProjectorConfig`.")
-        # The packed vision tower is intentionally a lightweight `nn.Module`
-        # rather than a standalone `PreTrainedModel`, so propagate the root
-        # attention backend that `_from_config` would normally initialize.
-        vision_config._attn_implementation = config._attn_implementation
-        self.visual = Cosmos3EdgeVisionModel(vision_config)
+        self.visual = Cosmos3EdgeVisionModel._from_config(vision_config)
         self.projector = Cosmos3EdgePatchMerger(projector_config)
         self.language_model = Cosmos3EdgeTextModel._from_config(text_config)
         self.rope_deltas = None
@@ -797,46 +781,13 @@ class Cosmos3EdgeModel(Cosmos3EdgePreTrainedModel):
     def set_decoder(self, decoder):
         self.language_model = decoder
 
-    def _patch_merge(self, image_embeds: torch.Tensor, grid_thw: torch.LongTensor):
-        merge_size = self.projector.spatial_merge_size
-        hidden_size = image_embeds.shape[-1]
-        merged_embeds = []
-        merged_grid = []
-        offset = 0
-        for temporal, height, width in grid_thw.tolist():
-            if height % merge_size or width % merge_size:
-                raise ValueError(
-                    f"Visual grid ({height}, {width}) must be divisible by spatial merge size {merge_size}."
-                )
-            num_patches = temporal * height * width
-            media_embeds = image_embeds[offset : offset + num_patches]
-            offset += num_patches
-            media_embeds = media_embeds.reshape(temporal, height, width, hidden_size)
-            media_embeds = media_embeds.reshape(
-                temporal,
-                height // merge_size,
-                merge_size,
-                width // merge_size,
-                merge_size,
-                hidden_size,
-            )
-            media_embeds = media_embeds.permute(0, 1, 3, 2, 4, 5).reshape(-1, merge_size**2 * hidden_size)
-            merged_embeds.append(media_embeds)
-            merged_grid.append((temporal, height // merge_size, width // merge_size))
-        if offset != image_embeds.shape[0]:
-            raise ValueError("`grid_thw` does not account for every visual patch.")
-        return torch.cat(merged_embeds, dim=0), torch.tensor(merged_grid, device=grid_thw.device, dtype=grid_thw.dtype)
-
     def _get_visual_features(self, pixel_values: torch.FloatTensor, grid_thw: torch.LongTensor):
-        vision_hidden_states = self.visual(
-            pixel_values.to(dtype=self.visual.embeddings.patch_embedding.weight.dtype), grid_thw=grid_thw
-        )
-        merged_hidden_states, merged_grid_thw = self._patch_merge(vision_hidden_states, grid_thw)
-        projector_input = merged_hidden_states.reshape(
+        vision_hidden_states = self.visual(pixel_values, grid_thw=grid_thw)
+        projector_input = vision_hidden_states.reshape(
             -1, self.projector.spatial_merge_size**2, self.projector.input_hidden_size
         )
         projected_hidden_states = self.projector(projector_input)
-        split_sizes = merged_grid_thw.prod(dim=-1).tolist()
+        split_sizes = (grid_thw.prod(dim=-1) // self.projector.spatial_merge_size**2).tolist()
         return torch.split(projected_hidden_states, split_sizes)
 
     def get_image_features(self, pixel_values: torch.FloatTensor, image_grid_thw: torch.LongTensor, **kwargs):
@@ -871,6 +822,7 @@ class Cosmos3EdgeModel(Cosmos3EdgePreTrainedModel):
     def get_rope_index(
         self,
         input_ids: torch.LongTensor,
+        mm_token_type_ids: torch.IntTensor,
         image_grid_thw: torch.LongTensor | None = None,
         video_grid_thw: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
@@ -879,96 +831,71 @@ class Cosmos3EdgeModel(Cosmos3EdgePreTrainedModel):
             video_grid_thw = torch.repeat_interleave(video_grid_thw, video_grid_thw[:, 0], dim=0).clone()
             video_grid_thw[:, 0] = 1
 
-        image_index = 0
-        video_index = 0
-        all_position_ids = []
-        rope_deltas = []
         merge_size = self.projector.spatial_merge_size
-
-        for batch_index in range(input_ids.shape[0]):
-            ids = input_ids[batch_index]
-            if attention_mask is not None:
-                ids = ids[attention_mask[batch_index].to(dtype=torch.bool)]
-            ids_list = ids.tolist()
-            vision_starts = (ids == self.config.vision_start_token_id).nonzero(as_tuple=False).flatten()
-            vision_tokens = ids[vision_starts + 1] if len(vision_starts) else ids.new_empty(0)
-            remaining_images = int((vision_tokens == self.config.image_token_id).sum())
-            remaining_videos = int((vision_tokens == self.config.video_token_id).sum())
-
-            position_chunks = []
-            start = 0
-            for _ in range(remaining_images + remaining_videos):
-                image_end = (
-                    ids_list.index(self.config.image_token_id, start)
-                    if remaining_images and self.config.image_token_id in ids_list[start:]
-                    else len(ids_list) + 1
-                )
-                video_end = (
-                    ids_list.index(self.config.video_token_id, start)
-                    if remaining_videos and self.config.video_token_id in ids_list[start:]
-                    else len(ids_list) + 1
-                )
-                if image_end < video_end:
-                    if image_grid_thw is None:
-                        raise ValueError("Image tokens were supplied without `image_grid_thw`.")
-                    temporal, height, width = image_grid_thw[image_index].tolist()
-                    image_index += 1
-                    remaining_images -= 1
-                    end = image_end
-                else:
-                    if video_grid_thw is None:
-                        raise ValueError("Video tokens were supplied without `video_grid_thw`.")
-                    temporal, height, width = video_grid_thw[video_index].tolist()
-                    video_index += 1
-                    remaining_videos -= 1
-                    end = video_end
-
-                base = int(position_chunks[-1].max()) + 1 if position_chunks else 0
-                text_length = end - start
-                if text_length:
-                    position_chunks.append(
-                        torch.arange(text_length, device=ids.device).view(1, -1).expand(3, -1) + base
-                    )
-                visual_base = base + text_length
-                grid_height = height // merge_size
-                grid_width = width // merge_size
-                temporal_ids = (
-                    torch.arange(temporal, device=ids.device)
-                    .view(-1, 1)
-                    .expand(-1, grid_height * grid_width)
-                    .flatten()
-                )
-                height_ids = (
-                    torch.arange(grid_height, device=ids.device)
-                    .view(1, -1, 1)
-                    .expand(temporal, -1, grid_width)
-                    .flatten()
-                )
-                width_ids = (
-                    torch.arange(grid_width, device=ids.device)
-                    .view(1, 1, -1)
-                    .expand(temporal, grid_height, -1)
-                    .flatten()
-                )
-                position_chunks.append(torch.stack((temporal_ids, height_ids, width_ids)) + visual_base)
-                start = end + temporal * grid_height * grid_width
-
-            if start < len(ids_list):
-                base = int(position_chunks[-1].max()) + 1 if position_chunks else 0
-                position_chunks.append(
-                    torch.arange(len(ids_list) - start, device=ids.device).view(1, -1).expand(3, -1) + base
-                )
-
-            position_ids = torch.cat(position_chunks, dim=1) if position_chunks else ids.new_empty((3, 0))
-            if position_ids.shape[-1] != len(ids_list):
-                raise ValueError("Visual token counts do not match the supplied image/video grids.")
-            all_position_ids.append(position_ids)
-            rope_deltas.append(position_ids.max() + 1 - len(ids_list) if len(ids_list) else 0)
-
-        return (
-            pad_sequence(all_position_ids, batch_first=False, padding_value=1),
-            torch.as_tensor(rope_deltas, dtype=torch.long, device=input_ids.device).unsqueeze(1),
+        rope_deltas = []
+        position_ids = torch.zeros(
+            3,
+            input_ids.shape[0],
+            input_ids.shape[1],
+            dtype=input_ids.dtype,
+            device=input_ids.device,
         )
+        grid_iters = {
+            1: iter(image_grid_thw) if image_grid_thw is not None else None,
+            2: iter(video_grid_thw) if video_grid_thw is not None else None,
+        }
+        modality_groups = {1: 0, 2: 0}
+
+        for batch_index, token_types in enumerate(mm_token_type_ids):
+            if attention_mask is not None:
+                token_types = token_types[attention_mask[batch_index].bool()]
+
+            current_position = 0
+            position_chunks = []
+            for modality_type, group in itertools.groupby(token_types.tolist()):
+                group_length = len(list(group))
+                if modality_type == 0:
+                    positions = torch.arange(group_length, device=input_ids.device).view(1, -1).expand(3, -1)
+                elif modality_type in grid_iters:
+                    modality_groups[modality_type] += 1
+                    if grid_iters[modality_type] is None:
+                        modality = "image" if modality_type == 1 else "video"
+                        raise ValueError(f"{modality.capitalize()} tokens were supplied without a matching grid.")
+                    try:
+                        temporal, height, width = next(grid_iters[modality_type]).tolist()
+                    except StopIteration as error:
+                        modality = "image" if modality_type == 1 else "video"
+                        raise ValueError(f"More {modality} token groups were supplied than matching grids.") from error
+
+                    grid_height, grid_width = height // merge_size, width // merge_size
+                    temporal_ids = torch.arange(temporal, device=input_ids.device).view(-1, 1, 1)
+                    height_ids = torch.arange(grid_height, device=input_ids.device).view(1, -1, 1)
+                    width_ids = torch.arange(grid_width, device=input_ids.device).view(1, 1, -1)
+                    positions = torch.stack(
+                        torch.broadcast_tensors(temporal_ids, height_ids, width_ids), dim=0
+                    ).reshape(3, -1)
+                    if positions.shape[-1] != group_length:
+                        raise ValueError("Visual token counts do not match the supplied image/video grids.")
+                else:
+                    raise ValueError(f"Unsupported multimodal token type: {modality_type}.")
+
+                position_chunks.append(positions + current_position)
+                current_position = int(position_chunks[-1].max()) + 1
+
+            sample_position_ids = torch.cat(position_chunks, dim=1) if position_chunks else input_ids.new_empty((3, 0))
+            if sample_position_ids.shape[-1] != token_types.shape[-1]:
+                raise ValueError("Visual token counts do not match the supplied image/video grids.")
+            if attention_mask is None:
+                position_ids[:, batch_index] = sample_position_ids
+            else:
+                position_ids[:, batch_index, attention_mask[batch_index].bool()] = sample_position_ids
+            rope_deltas.append(current_position - token_types.shape[-1] if token_types.shape[-1] else 0)
+
+        if image_grid_thw is not None and modality_groups[1] != len(image_grid_thw):
+            raise ValueError("The number of image grids does not match the number of image token groups.")
+        if video_grid_thw is not None and modality_groups[2] != len(video_grid_thw):
+            raise ValueError("The number of video grids does not match the number of video token groups.")
+        return position_ids, torch.tensor(rope_deltas, dtype=torch.long, device=input_ids.device).unsqueeze(1)
 
     def compute_3d_position_ids(
         self,
@@ -978,15 +905,25 @@ class Cosmos3EdgeModel(Cosmos3EdgePreTrainedModel):
         video_grid_thw: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         past_key_values: Cache | None = None,
+        mm_token_type_ids: torch.IntTensor | None = None,
     ) -> torch.LongTensor:
         past_length = 0 if past_key_values is None else past_key_values.get_seq_length()
+        has_multimodal = image_grid_thw is not None or video_grid_thw is not None
+        if has_multimodal and mm_token_type_ids is None and input_ids is not None:
+            raise ValueError(
+                "Multimodal data was passed (via `image_grid_thw` or `video_grid_thw`) but `mm_token_type_ids` is "
+                "missing. Please pass `mm_token_type_ids` to the model so that multimodal RoPE (M-RoPE) can be "
+                "computed correctly. `mm_token_type_ids` is returned by the processor alongside `input_ids`."
+            )
         if (
             input_ids is not None
-            and (image_grid_thw is not None or video_grid_thw is not None)
+            and mm_token_type_ids is not None
+            and has_multimodal
             and (self.rope_deltas is None or past_length == 0)
         ):
             position_ids, self.rope_deltas = self.get_rope_index(
                 input_ids,
+                mm_token_type_ids=mm_token_type_ids,
                 image_grid_thw=image_grid_thw,
                 video_grid_thw=video_grid_thw,
                 attention_mask=attention_mask,
@@ -1002,12 +939,11 @@ class Cosmos3EdgeModel(Cosmos3EdgePreTrainedModel):
             text_position_ids = torch.arange(past_length, past_length + sequence_length, device=inputs_embeds.device)
             text_position_ids = text_position_ids.unsqueeze(0).expand(batch_size, -1)
         position_ids = text_position_ids.unsqueeze(0).expand(3, -1, -1)
-        if self.rope_deltas is None:
-            self.rope_deltas = torch.zeros(batch_size, 1, dtype=torch.long, device=inputs_embeds.device)
-        elif past_length:
+        if self.rope_deltas is not None and (past_length or input_ids is None):
             position_ids = position_ids + self.rope_deltas.to(device=inputs_embeds.device).unsqueeze(0)
         return position_ids
 
+    @auto_docstring
     @can_return_tuple
     def forward(
         self,
@@ -1020,17 +956,22 @@ class Cosmos3EdgeModel(Cosmos3EdgePreTrainedModel):
         pixel_values_videos: torch.FloatTensor | None = None,
         image_grid_thw: torch.LongTensor | None = None,
         video_grid_thw: torch.LongTensor | None = None,
+        mm_token_type_ids: torch.IntTensor | None = None,
         use_cache: bool | None = None,
         **kwargs,
-    ) -> tuple | Cosmos3EdgeModelOutputWithPast:
+    ) -> tuple | BaseModelOutputWithPast:
+        r"""
+        image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
+            The temporal, height, and width patch-grid dimensions for each image.
+        video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
+            The temporal, height, and width patch-grid dimensions for each video.
+        """
         if (input_ids is None) == (inputs_embeds is None):
             raise ValueError("You must specify exactly one of `input_ids` or `inputs_embeds`.")
         if inputs_embeds is None:
             if input_ids is None:
                 raise ValueError("`input_ids` must be set when `inputs_embeds` is not provided.")
             inputs_embeds = self.get_input_embeddings()(input_ids)
-        assert inputs_embeds is not None
-
         if pixel_values is not None:
             if input_ids is None or image_grid_thw is None:
                 raise ValueError("`input_ids` and `image_grid_thw` are required when `pixel_values` is provided.")
@@ -1039,7 +980,6 @@ class Cosmos3EdgeModel(Cosmos3EdgePreTrainedModel):
             )
             image_mask, _ = self.get_placeholder_mask(input_ids, inputs_embeds, image_features=image_features)
             inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_features)
-            assert inputs_embeds is not None
         if pixel_values_videos is not None:
             if input_ids is None or video_grid_thw is None:
                 raise ValueError(
@@ -1050,7 +990,6 @@ class Cosmos3EdgeModel(Cosmos3EdgePreTrainedModel):
             )
             _, video_mask = self.get_placeholder_mask(input_ids, inputs_embeds, video_features=video_features)
             inputs_embeds = inputs_embeds.masked_scatter(video_mask, video_features)
-            assert inputs_embeds is not None
 
         if position_ids is None:
             position_ids = self.compute_3d_position_ids(
@@ -1060,6 +999,7 @@ class Cosmos3EdgeModel(Cosmos3EdgePreTrainedModel):
                 video_grid_thw=video_grid_thw,
                 attention_mask=attention_mask,
                 past_key_values=past_key_values,
+                mm_token_type_ids=mm_token_type_ids,
             )
         outputs = self.language_model(
             input_ids=None,
@@ -1070,18 +1010,12 @@ class Cosmos3EdgeModel(Cosmos3EdgePreTrainedModel):
             use_cache=use_cache,
             **kwargs,
         )
-        return Cosmos3EdgeModelOutputWithPast(
+        return BaseModelOutputWithPast(
             last_hidden_state=outputs.last_hidden_state,
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            rope_deltas=self.rope_deltas,
         )
-
-
-@dataclass
-class Cosmos3EdgeCausalLMOutputWithPast(CausalLMOutputWithPast):
-    rope_deltas: torch.LongTensor | None = None
 
 
 class Cosmos3EdgeForConditionalGeneration(Cosmos3EdgePreTrainedModel, GenerationMixin):
@@ -1121,6 +1055,7 @@ class Cosmos3EdgeForConditionalGeneration(Cosmos3EdgePreTrainedModel, Generation
     def get_video_features(self, *args, **kwargs):
         return self.model.get_video_features(*args, **kwargs)
 
+    @auto_docstring
     @can_return_tuple
     def forward(
         self,
@@ -1134,10 +1069,17 @@ class Cosmos3EdgeForConditionalGeneration(Cosmos3EdgePreTrainedModel, Generation
         pixel_values_videos: torch.FloatTensor | None = None,
         image_grid_thw: torch.LongTensor | None = None,
         video_grid_thw: torch.LongTensor | None = None,
+        mm_token_type_ids: torch.IntTensor | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         use_cache: bool | None = None,
         **kwargs,
-    ) -> tuple | Cosmos3EdgeCausalLMOutputWithPast:
+    ) -> tuple | CausalLMOutputWithPast:
+        r"""
+        image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
+            The temporal, height, and width patch-grid dimensions for each image.
+        video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
+            The temporal, height, and width patch-grid dimensions for each video.
+        """
         outputs = self.model(
             input_ids=input_ids,
             attention_mask=attention_mask,
@@ -1148,6 +1090,7 @@ class Cosmos3EdgeForConditionalGeneration(Cosmos3EdgePreTrainedModel, Generation
             pixel_values_videos=pixel_values_videos,
             image_grid_thw=image_grid_thw,
             video_grid_thw=video_grid_thw,
+            mm_token_type_ids=mm_token_type_ids,
             use_cache=use_cache,
             **kwargs,
         )
@@ -1164,13 +1107,12 @@ class Cosmos3EdgeForConditionalGeneration(Cosmos3EdgePreTrainedModel, Generation
                 **kwargs,
             )
 
-        return Cosmos3EdgeCausalLMOutputWithPast(
+        return CausalLMOutputWithPast(
             loss=loss,
             logits=logits,
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            rope_deltas=outputs.rope_deltas,
         )
 
     def prepare_inputs_for_generation(
@@ -1185,10 +1127,10 @@ class Cosmos3EdgeForConditionalGeneration(Cosmos3EdgePreTrainedModel, Generation
         pixel_values_videos=None,
         image_grid_thw=None,
         video_grid_thw=None,
+        mm_token_type_ids=None,
         is_first_iteration=False,
         **kwargs,
     ):
-        kwargs["logits_to_keep"] = self.config.text_config.num_logits_to_keep
         model_inputs = super().prepare_inputs_for_generation(
             input_ids,
             past_key_values=past_key_values,
@@ -1200,6 +1142,7 @@ class Cosmos3EdgeForConditionalGeneration(Cosmos3EdgePreTrainedModel, Generation
             pixel_values_videos=pixel_values_videos,
             image_grid_thw=image_grid_thw,
             video_grid_thw=video_grid_thw,
+            mm_token_type_ids=mm_token_type_ids,
             is_first_iteration=is_first_iteration,
             **kwargs,
         )
@@ -1215,11 +1158,19 @@ class Cosmos3EdgeForConditionalGeneration(Cosmos3EdgePreTrainedModel, Generation
             return text_positions.unsqueeze(0).expand(3, -1, -1) + self.model.rope_deltas.unsqueeze(0)
 
         input_ids = model_kwargs.get("input_ids", inputs_tensor)
-        if input_ids is not None and (
+        has_multimodal = (
             model_kwargs.get("image_grid_thw") is not None or model_kwargs.get("video_grid_thw") is not None
-        ):
+        )
+        if input_ids is not None and has_multimodal:
+            if model_kwargs.get("mm_token_type_ids") is None:
+                raise ValueError(
+                    "Multimodal data was passed (via `image_grid_thw` or `video_grid_thw`) but `mm_token_type_ids` is "
+                    "missing. Please pass `mm_token_type_ids` to the model so that multimodal RoPE (M-RoPE) can be "
+                    "computed correctly. `mm_token_type_ids` is returned by the processor alongside `input_ids`."
+                )
             position_ids, rope_deltas = self.model.get_rope_index(
                 input_ids,
+                mm_token_type_ids=model_kwargs["mm_token_type_ids"],
                 image_grid_thw=model_kwargs.get("image_grid_thw"),
                 video_grid_thw=model_kwargs.get("video_grid_thw"),
                 attention_mask=model_kwargs.get("attention_mask"),
@@ -1234,6 +1185,7 @@ class Cosmos3EdgeForConditionalGeneration(Cosmos3EdgePreTrainedModel, Generation
 __all__ = [
     "Cosmos3EdgeModel",
     "Cosmos3EdgeTextModel",
+    "Cosmos3EdgeVisionModel",
     "Cosmos3EdgeForConditionalGeneration",
     "Cosmos3EdgePreTrainedModel",
 ]

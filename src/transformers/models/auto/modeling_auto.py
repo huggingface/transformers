@@ -99,6 +99,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("convnextv2", "ConvNextV2Model"),
         ("cosmos3_edge", "Cosmos3EdgeModel"),
         ("cosmos3_edge_text", "Cosmos3EdgeTextModel"),
+        ("cosmos3_edge_vision", "Cosmos3EdgeVisionModel"),
         ("cosmos3_omni", "Cosmos3OmniModel"),
         ("cpmant", "CpmAntModel"),
         ("csm", "CsmForConditionalGeneration"),

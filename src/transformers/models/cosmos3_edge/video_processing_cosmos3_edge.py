@@ -229,12 +229,14 @@ class Cosmos3EdgeVideoProcessor(BaseVideoProcessor):
                 batch_size,
                 grid_t,
                 channels,
-                grid_height,
+                grid_height // merge_size,
+                merge_size,
                 patch_size,
-                grid_width,
+                grid_width // merge_size,
+                merge_size,
                 patch_size,
             )
-            patches = patches.permute(0, 1, 3, 5, 4, 6, 2)
+            patches = patches.permute(0, 1, 3, 6, 4, 7, 2, 5, 8)
             processed_videos_grouped[shape] = patches.reshape(
                 batch_size, grid_t * grid_height * grid_width, channels * patch_size * patch_size
             )

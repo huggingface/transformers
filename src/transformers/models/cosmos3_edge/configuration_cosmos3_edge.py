@@ -27,79 +27,87 @@ from ...utils import auto_docstring
 @strict
 class Cosmos3EdgeTextConfig(PreTrainedConfig):
     r"""
-    num_logits_to_keep (`int`, *optional*, defaults to 1):
-        Number of final token logits to compute. Set to `None` to compute logits for every token.
-    rope_theta (`float` or `int`, *optional*, defaults to 100000000.0):
-        Base period used by rotary position embeddings.
-    """
+    ```python
+    >>> from transformers import Cosmos3EdgeTextModel, Cosmos3EdgeTextConfig
+
+    >>> # Initializing a Cosmos3EdgeText cosmos3_edge_text-7b style configuration
+    >>> configuration = Cosmos3EdgeTextConfig()
+
+    >>> # Initializing a model from the cosmos3_edge_text-7b style configuration
+    >>> model = Cosmos3EdgeTextModel(configuration)
+
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
+    ```"""
 
     model_type = "cosmos3_edge_text"
-    ignore_keys_at_rope_validation = {"mrope_section"}
+    keys_to_ignore_at_inference = ["past_key_values"]
+    base_model_tp_plan = {
+        "layers.*.self_attn.q_proj": "colwise",
+        "layers.*.self_attn.k_proj": "colwise",
+        "layers.*.self_attn.v_proj": "colwise",
+        "layers.*.self_attn.o_proj": "rowwise",
+        "layers.*.mlp.up_proj": "colwise",
+        "layers.*.mlp.down_proj": "rowwise",
+    }
+    base_model_pp_plan = {
+        "embed_tokens": (["input_ids"], ["inputs_embeds"]),
+        "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
+        "norm": (["hidden_states"], ["hidden_states"]),
+    }
 
     vocab_size: int = 131072
     hidden_size: int = 2048
     intermediate_size: int = 9216
-    num_hidden_layers: int = 56
-    layers_block_type: list[str] | None = None
+    num_hidden_layers: int = 28
     num_attention_heads: int = 16
     num_key_value_heads: int | None = 8
-    head_dim: int = 128
+    hidden_act: str = "relu2"
     max_position_embeddings: int = 131072
-    attention_bias: bool = False
-    attention_dropout: float | int = 0.0
-    mlp_bias: bool = False
-    mlp_hidden_act: str = "relu2"
-    layer_norm_epsilon: float = 1e-5
     initializer_range: float = 0.02
+    rms_norm_eps: float = 1e-5
     use_cache: bool = True
-    num_logits_to_keep: int = 1
-    rope_theta: float | int = 100000000.0
-    rope_parameters: dict | None = None
     pad_token_id: int | None = 0
     bos_token_id: int | None = 1
     eos_token_id: int | list[int] | None = 11
+    pretraining_tp: int | None = 1
+    tie_word_embeddings: bool = False
+    rope_parameters: dict | None = None
+    attention_bias: bool = False
+    attention_dropout: float | int = 0.0
+    mlp_bias: bool = False
+    head_dim: int = 128
+    base_config_key = "text_config"
+    default_theta = 100_000_000.0
+    ignore_keys_at_rope_validation = {"mrope_section"}
 
     def __post_init__(self, **kwargs):
-        legacy_pattern = kwargs.pop("hybrid_override_pattern", None)
-        legacy_mrope_section = kwargs.pop("mrope_section", None)
-        kwargs.pop("hidden_dropout", None)
-        if self.layers_block_type is None:
-            if legacy_pattern is not None:
-                mapping = {"*": "full_attention", "-": "mlp"}
-                self.layers_block_type = [mapping[layer] for layer in legacy_pattern]
-            else:
-                self.layers_block_type = ["full_attention", "mlp"] * 28
-
-        invalid_layer_types = set(self.layers_block_type) - {"full_attention", "mlp"}
-        if invalid_layer_types:
-            raise ValueError(
-                f"Cosmos3 Edge only supports `full_attention` and `mlp` layers, got {sorted(invalid_layer_types)}."
-            )
-        self.num_hidden_layers = len(self.layers_block_type)
-        self.rope_theta = float(self.rope_theta)
-
-        self.rope_parameters = dict(self.rope_parameters or {})
-        self.rope_parameters.setdefault("rope_type", "default")
-        self.rope_parameters.setdefault("rope_theta", self.rope_theta)
-        self.rope_parameters.setdefault(
-            "mrope_section", list(legacy_mrope_section) if legacy_mrope_section is not None else [24, 20, 20]
-        )
-
+        if self.head_dim is None:
+            self.head_dim = self.hidden_size // self.num_attention_heads
         if self.num_key_value_heads is None:
             self.num_key_value_heads = self.num_attention_heads
+
         super().__post_init__(**kwargs)
 
-    def validate_layer_type(self):
-        """Validate Edge's alternating attention and dense MLP physical layers."""
-        if not isinstance(self.layers_block_type, list):
-            raise ValueError("`layers_block_type` must be a list of strings.")
-        if len(self.layers_block_type) != self.num_hidden_layers:
-            raise ValueError("`num_hidden_layers` must equal the number of `layers_block_type` entries.")
-        invalid_layer_types = set(self.layers_block_type) - {"full_attention", "mlp"}
-        if invalid_layer_types:
+    def validate_architecture(self):
+        """Part of `@strict`-powered validation. Validates the architecture of the config."""
+        if self.hidden_size % self.num_attention_heads != 0:
             raise ValueError(
-                f"Cosmos3 Edge only supports `full_attention` and `mlp` layers, got {sorted(invalid_layer_types)}."
+                f"The hidden size ({self.hidden_size}) is not a multiple of the number of attention "
+                f"heads ({self.num_attention_heads})."
             )
+        mrope_section = self.rope_parameters["mrope_section"]
+        if len(mrope_section) != 3 or sum(mrope_section) != self.head_dim // 2:
+            raise ValueError(
+                "`rope_parameters.mrope_section` must contain three sections whose sum equals half of `head_dim`, "
+                f"got {mrope_section} for head_dim={self.head_dim}."
+            )
+
+    def convert_rope_params_to_dict(self, **kwargs):
+        mrope_section = kwargs.pop("mrope_section", None)
+        kwargs = super().convert_rope_params_to_dict(**kwargs)
+        self.rope_parameters.setdefault("mrope_section", mrope_section or [24, 20, 20])
+        return kwargs
 
 
 @auto_docstring(checkpoint="nvidia/Cosmos3-Edge-Reasoner")
@@ -147,12 +155,6 @@ class Cosmos3EdgeProjectorConfig(PreTrainedConfig):
     spatial_merge_size: int = 2
     use_postshuffle_norm: bool = False
 
-    def __post_init__(self, **kwargs):
-        legacy_intermediate_size = kwargs.pop("merger_intermedia", None)
-        if legacy_intermediate_size is not None:
-            self.merger_intermediate_size = legacy_intermediate_size
-        super().__post_init__(**kwargs)
-
 
 @auto_docstring(checkpoint="nvidia/Cosmos3-Edge-Reasoner")
 @strict
@@ -192,16 +194,12 @@ class Cosmos3EdgeConfig(PreTrainedConfig):
         if self.text_config is None:
             self.text_config = Cosmos3EdgeTextConfig()
         elif isinstance(self.text_config, dict):
-            text_config = dict(self.text_config)
-            text_config.pop("model_type", None)
-            self.text_config = Cosmos3EdgeTextConfig(**text_config)
+            self.text_config = Cosmos3EdgeTextConfig(**self.text_config)
 
         if self.vision_config is None:
             self.vision_config = Cosmos3EdgeVisionConfig()
         elif isinstance(self.vision_config, dict):
-            vision_config = dict(self.vision_config)
-            vision_config.pop("model_type", None)
-            self.vision_config = Cosmos3EdgeVisionConfig(**vision_config)
+            self.vision_config = Cosmos3EdgeVisionConfig(**self.vision_config)
 
         if self.projector_config is None:
             self.projector_config = Cosmos3EdgeProjectorConfig(
@@ -210,9 +208,7 @@ class Cosmos3EdgeConfig(PreTrainedConfig):
                 spatial_merge_size=self.vision_config.spatial_merge_size,
             )
         elif isinstance(self.projector_config, dict):
-            projector_config = dict(self.projector_config)
-            projector_config.pop("model_type", None)
-            self.projector_config = Cosmos3EdgeProjectorConfig(**projector_config)
+            self.projector_config = Cosmos3EdgeProjectorConfig(**self.projector_config)
 
         if not isinstance(self.text_config, Cosmos3EdgeTextConfig):
             raise TypeError("`text_config` must be a `Cosmos3EdgeTextConfig` or a dictionary.")

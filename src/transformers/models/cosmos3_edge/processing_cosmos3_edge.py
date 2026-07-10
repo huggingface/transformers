@@ -29,7 +29,7 @@ class Cosmos3EdgeProcessorKwargs(ProcessingKwargs, total=False):
         "text_kwargs": {
             "padding": False,
             "return_token_type_ids": False,
-            "return_mm_token_type_ids": False,
+            "return_mm_token_type_ids": True,
         },
         # Video placeholders contain timestamps, so metadata is needed while the processor expands them.
         "videos_kwargs": {"return_metadata": True},
@@ -273,6 +273,10 @@ class Cosmos3EdgeProcessor(ProcessorMixin):
             clean_up_tokenization_spaces=clean_up_tokenization_spaces,
             **kwargs,
         )
+
+    @property
+    def model_input_names(self):
+        return super().model_input_names + ["mm_token_type_ids"]
 
 
 __all__ = ["Cosmos3EdgeProcessor"]
