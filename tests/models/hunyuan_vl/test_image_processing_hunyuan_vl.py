@@ -17,7 +17,7 @@ import unittest
 
 import numpy as np
 
-from transformers.image_utils import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD
+from transformers.image_utils import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD, PILImageResampling
 from transformers.testing_utils import require_torch, require_torchvision, require_vision
 from transformers.utils import is_torch_available, is_torchvision_available, is_vision_available
 
@@ -242,3 +242,22 @@ class HunYuanVLImageProcessorPilTest(unittest.TestCase):
         self.assertSetEqual(set(inputs.keys()), {"pixel_values", "image_grid_thw"})
         self.assertEqual(inputs["image_grid_thw"].shape, (1, 3))
         self.assertGreater(inputs["pixel_values"].shape[0], 0)
+
+    def test_pil_image_processor_defaults_to_reference_bicubic_resize(self):
+        processor = HunYuanVLImageProcessorPil(
+            min_pixels=32 * 32,
+            max_pixels=32 * 32,
+            patch_size=16,
+            temporal_patch_size=1,
+            merge_size=1,
+            do_rescale=False,
+            do_normalize=False,
+        )
+        image = (np.arange(3 * 17 * 19, dtype=np.uint16) % 256).astype(np.uint8).reshape(3, 17, 19)
+
+        default_outputs = processor(image, return_tensors="np")
+        bicubic_outputs = processor(image, return_tensors="np", resample=PILImageResampling.BICUBIC)
+        bilinear_outputs = processor(image, return_tensors="np", resample=PILImageResampling.BILINEAR)
+
+        self.assertTrue(np.array_equal(default_outputs.pixel_values, bicubic_outputs.pixel_values))
+        self.assertFalse(np.array_equal(default_outputs.pixel_values, bilinear_outputs.pixel_values))

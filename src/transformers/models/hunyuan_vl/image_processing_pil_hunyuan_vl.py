@@ -23,7 +23,6 @@ import math
 from collections.abc import Iterable
 
 import numpy as np
-from PIL import Image
 
 from ...image_processing_backends import PilBackend
 from ...image_processing_utils import BatchFeature
@@ -165,13 +164,6 @@ class HunYuanVLImageProcessorPil(PilBackend):
 
         for image in images:
             height, width = image.shape[-2:]
-            # Match the original HunyuanOCR preprocessing with PIL.Image.resize
-            # FIXME: raushan, investiagte why the quality degrafes with our np-based transforms
-            if image.ndim == 3:
-                pil_image = Image.fromarray(np.transpose(image, (1, 2, 0)).astype(np.uint8))
-            else:
-                pil_image = Image.fromarray(image.astype(np.uint8))
-
             if do_resize:
                 resized_height, resized_width = smart_resize(
                     height,
@@ -180,15 +172,13 @@ class HunYuanVLImageProcessorPil(PilBackend):
                     min_pixels=size.shortest_edge,
                     max_pixels=size.longest_edge,
                 )
-                # Intentionally do not pass `resample`: the baseline implementation
-                # calls `image.resize((width, height))` directly. FIXME raushan
-                pil_image = pil_image.resize((resized_width, resized_height))
+                image = self.resize(
+                    image,
+                    size=SizeDict(height=resized_height, width=resized_width),
+                    resample=resample if resample is not None else PILImageResampling.BICUBIC,
+                )
             else:
                 resized_height, resized_width = height, width
-
-            image = np.array(pil_image)
-            if image.ndim == 3:
-                image = np.transpose(image, (2, 0, 1))
 
             image = image.astype(np.float32)
             if do_rescale:
