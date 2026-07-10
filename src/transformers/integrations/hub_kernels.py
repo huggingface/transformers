@@ -224,20 +224,17 @@ if is_kernels_available():
                     ),
                 },
             },
-            # TODO: only used locally or via AntonV/fla but locally modified as per the PR for FLA
             "RMSNormGated": {
                 "cuda": {
                     Mode.TRAINING: LayerRepository(
-                        repo_id="AntonV/fla",
+                        repo_id="kernels-community/fla",
                         layer_name="FusedRMSNormGated",
                         version=1,
-                        trust_remote_code=True,
                     ),
                     Mode.INFERENCE: LayerRepository(
-                        repo_id="AntonV/fla",
+                        repo_id="kernels-community/fla",
                         layer_name="FusedRMSNormGated",
                         version=1,
-                        trust_remote_code=True,
                     ),
                 },
             },
@@ -329,69 +326,59 @@ if is_kernels_available():
                     )
                 }
             },
-            # TODO: only used locally or via AntonV/fla but locally modified as per the PR for FLA
             "chunk_kimi_delta_attention": {
                 "cuda": {
                     Mode.TRAINING: LayerRepository(
-                        repo_id="AntonV/fla",
+                        repo_id="kernels-community/fla",
                         layer_name="chunk_kimi_delta_attention",
                         version=1,
-                        trust_remote_code=True,
                     ),
                     Mode.INFERENCE: LayerRepository(
-                        repo_id="AntonV/fla",
+                        repo_id="kernels-community/fla",
                         layer_name="chunk_kimi_delta_attention",
                         version=1,
-                        trust_remote_code=True,
                     ),
                 },
             },
             "recurrent_kimi_delta_attention": {
                 "cuda": {
                     Mode.TRAINING: LayerRepository(
-                        repo_id="AntonV/fla",
+                        repo_id="kernels-community/fla",
                         layer_name="recurrent_kimi_delta_attention",
                         version=1,
-                        trust_remote_code=True,
                     ),
                     Mode.INFERENCE: LayerRepository(
-                        repo_id="AntonV/fla",
+                        repo_id="kernels-community/fla",
                         layer_name="recurrent_kimi_delta_attention",
                         version=1,
-                        trust_remote_code=True,
                     ),
                 },
             },
-            # TODO: merge and update path
             "causal_conv1d_fn": {
                 "cuda": {
                     Mode.TRAINING: LayerRepository(
-                        repo_id="kernels-staging/mamba-ssm",
+                        repo_id="kernels-community/mamba-ssm",
                         layer_name="causal_conv1d_fn",
-                        revision="pr-994",
-                        trust_remote_code=True,
+                        version=1,
                     ),
                     Mode.INFERENCE: LayerRepository(
-                        repo_id="kernels-staging/mamba-ssm",
+                        repo_id="kernels-community/mamba-ssm",
                         layer_name="causal_conv1d_fn",
-                        revision="pr-994",
-                        trust_remote_code=True,
+                        version=1,
                     ),
                 },
             },
             "causal_conv1d_update": {
                 "cuda": {
                     Mode.TRAINING: LayerRepository(
-                        repo_id="kernels-staging/mamba-ssm",
+                        repo_id="kernels-community/mamba-ssm",
                         layer_name="causal_conv1d_update",
-                        revision="pr-994",
-                        trust_remote_code=True,
+                        version=1,
                     ),
                     Mode.INFERENCE: LayerRepository(
-                        repo_id="kernels-staging/mamba-ssm",
+                        repo_id="kernels-community/mamba-ssm",
                         layer_name="causal_conv1d_update",
-                        revision="pr-994",
-                        trust_remote_code=True,
+                        version=1,
                     ),
                 },
             },
