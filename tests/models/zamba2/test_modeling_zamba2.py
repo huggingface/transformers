@@ -30,6 +30,7 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
+from transformers.utils.import_utils import is_causal_conv1d_available, is_mamba_ssm_available
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -298,6 +299,34 @@ class Zamba2ModelTester:
             msg=f"Max diff: {(ref_first - under_test_first).abs().max().item():.6f}",
         )
 
+    def create_and_check_zamba2_slow_vs_fast_forward(self, config, input_ids, *args):
+        """
+        Test that cuda_kernels_forward and torch_forward produce consistent outputs for the
+        Mamba2 mixer, i.e. that the optimized CUDA kernel path and the pure PyTorch path are
+        equivalent. Guarded by the availability of the fast-path kernels and a CUDA device.
+        """
+        if not (is_mamba_ssm_available() and is_causal_conv1d_available()):
+            self.parent.skipTest(
+                "This test needs the Mamba2 fast path. Skipping as the necessary packages have not been found."
+            )
+        if torch_device != "cuda":
+            self.parent.skipTest("This test needs the Mamba2 fast path. Skipping as we need a cuda capable device.")
+
+        model = Zamba2Model(config)
+        model.eval()
+        model.to(torch_device)
+
+        # Find the first Mamba mixer in the model
+        mamba_mixer = next((layer.mamba for layer in model.layers if hasattr(layer, "mamba")), None)
+        if mamba_mixer is None:
+            self.parent.skipTest("No mamba layer found in the model configuration.")
+
+        hidden_states = model.embed_tokens(input_ids.to(torch_device))
+
+        outputs_fast = mamba_mixer.cuda_kernels_forward(hidden_states)
+        outputs_slow = mamba_mixer.torch_forward(hidden_states)
+        self.parent.assertTrue(torch.allclose(outputs_fast, outputs_slow, atol=1e-3, rtol=1e-3))
+
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
         (
@@ -350,6 +379,55 @@ class Zamba2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
     def setUp(self):
         self.model_tester = Zamba2ModelTester(self)
         self.config_tester = ConfigTester(self, config_class=Zamba2Config, hidden_size=32)
+
+    def test_mamba2_slow_vs_fast_forward(self):
+        """
+        Test that cuda_kernels_forward and torch_forward produce consistent outputs.
+        """
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_zamba2_slow_vs_fast_forward(*config_and_inputs)
+
+    def test_mamba2_slow_path_multi_chunk(self):
+        """
+        Regression test for the inter-chunk recurrence in the Mamba2 slow (torch) path.
+
+        A single chunked forward over a multi-chunk sequence must match a token-by-token
+        recurrent decode. The input is deliberately large-magnitude so the SSM state is
+        O(1) and the inter-chunk contribution is not numerically negligible; with the
+        previous `.sum(dim=2)` reduction the two disagree by orders of magnitude. Runs on
+        CPU without the fast-path kernels.
+        """
+        config = Zamba2Config(
+            vocab_size=99,
+            hidden_size=32,
+            mamba_d_state=16,
+            num_hidden_layers=1,
+            num_attention_heads=2,
+            n_mamba_heads=8,
+            intermediate_size=8,
+            chunk_size=8,
+            mamba_ngroups=1,
+            use_mamba_kernels=False,
+            layers_block_type=["mamba"],
+            num_mem_blocks=1,
+            use_mem_rope=True,
+        )
+        torch.manual_seed(0)
+        mixer = Zamba2Model(config).eval().to(torch_device).layers[0].mamba
+
+        seq_len = 5 * config.chunk_size + 3
+        hidden_states = 50.0 * torch.randn(1, seq_len, config.hidden_size, device=torch_device)
+
+        with torch.no_grad():
+            chunked = mixer.torch_forward(hidden_states)
+            cache = DynamicCache(config=config)
+            recurrent = torch.cat(
+                [mixer.torch_forward(hidden_states[:, t : t + 1], cache_params=cache) for t in range(seq_len)],
+                dim=1,
+            )
+
+        max_diff = (chunked - recurrent).abs().max().item()
+        self.assertLess(max_diff, 1e-3, f"slow-path chunked forward disagrees with recurrent decode: {max_diff}")
 
     @unittest.skip("We need at leat 3 layers to test weight tying!")
     def test_num_layers_is_small(self):

@@ -520,6 +520,48 @@ class NemotronHModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_mamba2_slow_vs_fast_forward(*config_and_inputs)
 
+    def test_mamba2_slow_path_multi_chunk(self):
+        """
+        Regression test for the inter-chunk recurrence in the Mamba2 slow (torch) path.
+
+        A single chunked forward over a multi-chunk sequence must match a token-by-token
+        recurrent decode. The input is deliberately large-magnitude so the SSM state is
+        O(1) and the inter-chunk contribution is not numerically negligible; with the
+        previous `.sum(dim=2)` reduction the two disagree by orders of magnitude. Runs on
+        CPU without the fast-path kernels.
+        """
+        config = NemotronHConfig(
+            vocab_size=99,
+            hidden_size=32,
+            mamba_num_heads=8,
+            mamba_head_dim=8,
+            ssm_state_size=16,
+            n_groups=1,
+            mamba_chunk_size=8,
+            num_attention_heads=2,
+            num_key_value_heads=2,
+            head_dim=8,
+            intermediate_size=32,
+            use_mamba_kernels=False,
+            layers_block_type=["mamba"],
+        )
+        torch.manual_seed(0)
+        mixer = NemotronHModel(config).eval().to(torch_device).layers[0].mixer
+
+        seq_len = 5 * config.chunk_size + 3
+        hidden_states = 50.0 * torch.randn(1, seq_len, config.hidden_size, device=torch_device)
+
+        with torch.no_grad():
+            chunked = mixer.torch_forward(hidden_states)
+            cache = DynamicCache(config=config)
+            recurrent = torch.cat(
+                [mixer.torch_forward(hidden_states[:, t : t + 1], cache_params=cache) for t in range(seq_len)],
+                dim=1,
+            )
+
+        max_diff = (chunked - recurrent).abs().max().item()
+        self.assertLess(max_diff, 1e-3, f"slow-path chunked forward disagrees with recurrent decode: {max_diff}")
+
     def test_attention_outputs(self):
         r"""
         Overriding the test_attention_outputs test as the NemotronH model outputs attention only for its attention layers
