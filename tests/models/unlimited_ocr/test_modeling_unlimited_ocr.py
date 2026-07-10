@@ -163,7 +163,7 @@ class UnlimitedOcrModelTest(VLMModelTest, unittest.TestCase):
             # Prefill the cache. We need at least max_new_tokens=2 to make the cache mark prefill
             # as complete. Prefill is only marked as complete once a single token is added to
             # the cache (kv_length == 1). As the last decoded token from a .generate call isn't
-            # added to the cache we have to set max_new_tokens=2.
+            # added to the cache we have to decode at least 2.
             out_prefill = model.generate(
                 **inputs_dict,
                 max_new_tokens=2,
@@ -174,9 +174,13 @@ class UnlimitedOcrModelTest(VLMModelTest, unittest.TestCase):
                 cache_implementation=cache_implementation,
             )
 
-            # Decode from cache by passing more than sliding_window unseen input ids.
+            # Decode from cache and pass more than sliding_window unseen input ids.
+            input_ids_reference = out_reference[:, :-3]
             out = model.generate(
-                input_ids=out_reference[:, :-3],
+                input_ids=input_ids_reference,
+                # Pass attention mask explicitly as input_ids_reference sometimes contains randomly generated
+                # pad tokens which trips up the automatic attention mask generation.
+                attention_mask=torch.ones_like(input_ids_reference),
                 past_key_values=out_prefill.past_key_values,
                 max_new_tokens=3,
                 do_sample=False,
