@@ -157,6 +157,8 @@ class Gemma3nTextConfig(PreTrainedConfig):
                 f"Expected {self.num_hidden_layers} values but got {len_asp}."
             )
 
+        self.kv_sharing_roles = self.infer_kv_sharing_roles()
+
         super().__post_init__(**kwargs)
 
     def validate_architecture(self):
@@ -195,6 +197,30 @@ class Gemma3nTextConfig(PreTrainedConfig):
         # Standardize and validate the correctness of rotary position embeddings parameters
         self.standardize_rope_params()
         return kwargs
+
+    def infer_kv_sharing_roles(self) -> list[str]:
+        # Gemma3n shares KV cache between its layers: some layers produce cache for other layers to consume.
+        # Some layers don't participate in cache sharing, we call them "independent"
+        kv_sharing_roles = ["independent"] * self.num_hidden_layers
+
+        # Determine the KV sharing roles for each layer (KV sharing is done between layers with the same layer_type)
+        first_shared_layer = self.num_hidden_layers - self.num_kv_shared_layers
+        for layer_type in ["full_attention", "sliding_attention"]:
+            filtered_idx = [i for i, lt in enumerate(self.layer_types) if lt == layer_type]
+            consumer_idx = [i for i in filtered_idx if i >= first_shared_layer]
+            # If there are no consumers, then there is no cache sharing for this attention type
+            if not consumer_idx:
+                continue
+            else:
+                for i in consumer_idx:
+                    kv_sharing_roles[i] = "consumer"
+            # Determine the index of the producer layer. There can be no producer (assistant models for instance)
+            non_consumer_idx = [i for i in filtered_idx if i < first_shared_layer]
+            if non_consumer_idx:
+                producer_idx = max([i for i in filtered_idx if i < first_shared_layer])
+                kv_sharing_roles[producer_idx] = "producer"
+
+        return kv_sharing_roles
 
 
 @auto_docstring(checkpoint="google/gemma-3n-E4B")

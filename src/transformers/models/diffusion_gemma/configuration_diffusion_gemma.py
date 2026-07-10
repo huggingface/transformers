@@ -134,9 +134,16 @@ class DiffusionGemmaTextConfig(PreTrainedConfig):
         if self.rope_parameters is None:
             self.rope_parameters = default_rope_params
 
+        # Infer the KV sharing roles for each layer, done in a separate method that will be reused if something updates
+        # num_kv_shared_layers, eg. an assistant model config
+        self.kv_sharing_roles = self.infer_kv_sharing_roles()
+
+        super().__post_init__(**kwargs)
+
+    def infer_kv_sharing_roles(self) -> list[str]:
         # DiffusionGemma shares KV cache between its layers: some layers produce cache for other layers to consume.
         # Some layers don't participate in cache sharing, we call them "independent"
-        self.kv_sharing_roles = ["independent"] * self.num_hidden_layers
+        kv_sharing_roles = ["independent"] * self.num_hidden_layers
 
         # Determine the KV sharing roles for each layer (KV sharing is done between layers with the same layer_type)
         first_shared_layer = self.num_hidden_layers - self.num_kv_shared_layers
@@ -146,13 +153,15 @@ class DiffusionGemmaTextConfig(PreTrainedConfig):
             # If there are no consumers, then there is no cache sharing for this attention type
             if not consumer_idx:
                 continue
-            # Otherwise, the producer is the last non-shared layer for this attention type
-            producer_idx = max([i for i in filtered_idx if i < first_shared_layer])  # will raise on an empty list
-            self.kv_sharing_roles[producer_idx] = "producer"
-            for i in consumer_idx:
-                self.kv_sharing_roles[i] = "consumer"
-
-        super().__post_init__(**kwargs)
+            else:
+                for i in consumer_idx:
+                    kv_sharing_roles[i] = "consumer"
+            # Determine the index of the producer layer. There can be no producer (assistant models for instance)
+            non_consumer_idx = [i for i in filtered_idx if i < first_shared_layer]
+            if non_consumer_idx:
+                producer_idx = max([i for i in filtered_idx if i < first_shared_layer])
+                kv_sharing_roles[producer_idx] = "producer"
+        return kv_sharing_roles
 
     def convert_rope_params_to_dict(self, **kwargs):
         # No need to handle BC for new models, because they have no old-format `rope_scaling`

@@ -13,7 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import math
-from collections import UserDict
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from typing import Any
@@ -25,7 +24,7 @@ from huggingface_hub.dataclasses import strict
 
 from ... import initialization as init
 from ...activations import ACT2FN
-from ...cache_utils import Cache, DynamicCache
+from ...cache_utils import Cache, DynamicCache, KVCacheSharingStorage
 from ...configuration_utils import PreTrainedConfig
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling
@@ -180,7 +179,33 @@ class Gemma3nTextConfig(Gemma3TextConfig):
                 f"Expected {self.num_hidden_layers} values but got {len_asp}."
             )
 
+        self.kv_sharing_roles = self.infer_kv_sharing_roles()
+
         PreTrainedConfig.__post_init__(**kwargs)
+
+    def infer_kv_sharing_roles(self) -> list[str]:
+        # Gemma3n shares KV cache between its layers: some layers produce cache for other layers to consume.
+        # Some layers don't participate in cache sharing, we call them "independent"
+        kv_sharing_roles = ["independent"] * self.num_hidden_layers
+
+        # Determine the KV sharing roles for each layer (KV sharing is done between layers with the same layer_type)
+        first_shared_layer = self.num_hidden_layers - self.num_kv_shared_layers
+        for layer_type in ["full_attention", "sliding_attention"]:
+            filtered_idx = [i for i, lt in enumerate(self.layer_types) if lt == layer_type]
+            consumer_idx = [i for i in filtered_idx if i >= first_shared_layer]
+            # If there are no consumers, then there is no cache sharing for this attention type
+            if not consumer_idx:
+                continue
+            else:
+                for i in consumer_idx:
+                    kv_sharing_roles[i] = "consumer"
+            # Determine the index of the producer layer. There can be no producer (assistant models for instance)
+            non_consumer_idx = [i for i in filtered_idx if i < first_shared_layer]
+            if non_consumer_idx:
+                producer_idx = max([i for i in filtered_idx if i < first_shared_layer])
+                kv_sharing_roles[producer_idx] = "producer"
+
+        return kv_sharing_roles
 
     def convert_rope_params_to_dict(self, **kwargs):
         rope_scaling = kwargs.pop("rope_scaling", None)
@@ -1479,19 +1504,8 @@ class Gemma3nTextAttention(nn.Module):
         self.attention_dropout = self.config.attention_dropout
         self.is_causal = True
 
-        first_kv_shared_layer_idx = self.config.num_hidden_layers - self.config.num_kv_shared_layers
-        self.is_kv_shared_layer = layer_idx >= first_kv_shared_layer_idx > 0
-        prev_layers = config.layer_types[:first_kv_shared_layer_idx]
-        if self.is_kv_shared_layer:
-            # For shared layers, find the last non-shared layer of the same type before sharing starts
-            self.kv_shared_layer_index = len(prev_layers) - 1 - prev_layers[::-1].index(config.layer_types[layer_idx])
-            self.store_full_length_kv = False
-        else:
-            self.kv_shared_layer_index = None
-            # For non-shared layers, store full-length kv if this is the last non-shared layer of its type
-            self.store_full_length_kv = layer_idx == len(prev_layers) - 1 - prev_layers[::-1].index(
-                config.layer_types[layer_idx]
-            )
+        self.is_kv_shared_layer = config.kv_sharing_roles[layer_idx] == "consumer"
+        self.kv_sharing_role = config.kv_sharing_roles[layer_idx] == "producer"
 
         self.q_proj = nn.Linear(
             config.hidden_size, config.num_attention_heads * self.head_dim, bias=config.attention_bias
@@ -1519,7 +1533,7 @@ class Gemma3nTextAttention(nn.Module):
         position_embeddings: torch.Tensor,
         attention_mask: torch.Tensor | None,
         past_key_values: Cache | None = None,
-        shared_kv_states: dict[int, tuple[torch.Tensor, torch.Tensor]] | None = None,
+        shared_kv_states: KVCacheSharingStorage | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
         input_shape = hidden_states.shape[:-1]
@@ -1536,9 +1550,6 @@ class Gemma3nTextAttention(nn.Module):
         # once we are past the sliding window - so we always use `shared_kv_states` instead, even when past_key_values is not None
         if self.is_kv_shared_layer:
             key_states, value_states = shared_kv_states[self.kv_shared_layer_index]
-            # Device of past layer may be different from current one
-            key_states = key_states.to(query_states.device)
-            value_states = value_states.to(query_states.device)
         else:
             key_states = self.k_proj(hidden_states).view(hidden_shape)
             key_states = self.k_norm(key_states)
@@ -1593,9 +1604,9 @@ class Gemma3nTextDecoderLayer(Gemma3DecoderLayer):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        position_embeddings: torch.Tensor = None,
-        per_layer_input: torch.Tensor = None,
-        shared_kv_states: dict[int, tuple[torch.Tensor, torch.Tensor]] | None = None,
+        position_embeddings: torch.Tensor | None = None,
+        per_layer_input: torch.Tensor | None = None,
+        shared_kv_states: KVCacheSharingStorage | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
@@ -1647,7 +1658,7 @@ class Gemma3nTextDecoderLayer(Gemma3DecoderLayer):
 class Gemma3nPreTrainedModel(Gemma2PreTrainedModel):
     config: Gemma3nConfig
     input_modalities = ("image", "text", "audio")
-    _skip_keys_device_placement = ["past_key_values", "shared_kv_states"]
+    _skip_keys_device_placement = ["past_key_values"]
     _no_split_modules = ["Gemma3nTextDecoderLayer"]
     _can_record_outputs = {
         "hidden_states": Gemma3nTextDecoderLayer,
@@ -1975,10 +1986,8 @@ class Gemma3nTextModel(Gemma3TextModel):
         for layer_type in set(self.config.layer_types):
             position_embeddings[layer_type] = self.rotary_emb(hidden_states, position_ids, layer_type)
 
-        # Initialize as empty dict - it will be filled in the right layers. We use a UserDict instead of built-in dict (it behaves
-        # the same) for fsdp2 support (otherwise, `_apply_to_tensors` rebuilds every dict it recurses into, and `shared_kv_states`
-        # is not correctly shared, see https://github.com/pytorch/pytorch/blob/v2.10.0/torch/distributed/utils.py#L223-L255)
-        shared_kv_states = UserDict()
+        # Initialize as empty storage and it will be filled in the right layers.
+        shared_kv_states = KVCacheSharingStorage()
 
         for i, decoder_layer in enumerate(self.layers[: self.config.num_hidden_layers]):
             causal_mask = causal_mask_mapping[self.config.layer_types[i]]
