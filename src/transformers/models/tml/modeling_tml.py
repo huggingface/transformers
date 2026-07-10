@@ -32,6 +32,7 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, LinearAttentionCacheLayerMixin
 from ...generation import GenerationMixin
 from ...integrations import use_experts_implementation, use_kernel_forward_from_hub
+from ...integrations.accelerate import force_accelerate_hooks
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling
@@ -550,6 +551,7 @@ class TmlShortConvolution(nn.Module):
                 " https://github.com/Dao-AILab/causal-conv1d"
             )
 
+    @force_accelerate_hooks("conv1d")
     def forward(
         self,
         hidden_states: torch.Tensor,
