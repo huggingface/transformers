@@ -417,7 +417,7 @@ class DynamicIndexedLayer(DynamicLayer):
 
 class StaticLayer(CacheLayerMixin):
     """
-    A static cache layer that stores the key and value states as static tensors of shape `[batch_size, num_heads, max_cache_len), head_dim]`.
+    A static cache layer that stores the key and value states as static tensors of shape `[batch_size, num_heads, max_cache_len, head_dim]`.
     It lazily allocates its full backing tensors, and then mutates them in-place. Built for `torch.compile` support.
 
     Args:
@@ -427,6 +427,7 @@ class StaticLayer(CacheLayerMixin):
 
     is_compileable = True
     is_sliding = False
+    cumulative_length: torch.Tensor
 
     def __init__(self, max_cache_len: int, **kwargs):
         super().__init__()
