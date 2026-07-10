@@ -106,7 +106,7 @@ RUN python3 -m pip install --no-cache-dir quanto
 # - if/else instead of `... || echo`: the old pattern silently swallowed real install failures;
 #   now only the two expected skip conditions (nightly torch, FLASH_ATTN=false) are handled
 #   gracefully, and any actual install error will correctly fail the Docker build.
-RUN if [ "$FLASH_ATTN" != "false" ] && [ "$PYTORCH" != "pre" ]; then \
+RUN if [ "$FLASH_ATTN" != "false" ]; then \
         python3 -m pip uninstall -y ninja && \
         python3 -m pip install --no-cache-dir ninja && \
         python3 -m pip install --no-cache-dir -U wheel && \
