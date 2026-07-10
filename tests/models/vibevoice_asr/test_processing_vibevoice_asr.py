@@ -122,11 +122,12 @@ class VibeVoiceAsrProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         processor = self.get_processor()
 
-        # The original test used hardcoded Qwen token IDs that decode to JSON-formatted output
-        # with the full tokenizer. Here we mock batch_decode so the test focuses on the
-        # processor's parsing logic (return_format="parsed" / "transcription_only") rather than
-        # tokenizer vocabulary — the tiny tokenizer would decode those IDs to garbage, causing
-        # json.loads() to fail. End-to-end tokenizer correctness belongs in model integration tests.
+        # This test is about the processor's ability to parse the model output into structured
+        # dicts (return_format="parsed") or plain transcriptions (return_format="transcription_only").
+        # We are NOT testing tokenizer decoding here, so it is fine to mock batch_decode.
+        # The mock string below is the exact output obtained by decoding the original generated_ids
+        # with the full processor (microsoft/VibeVoice-ASR-HF) prior to PR #47213, which switched
+        # to a tiny tokenizer that would decode those IDs to garbage and break json.loads().
         generated_ids = torch.tensor([[0]])
         mock_decoded = [
             '<|im_start|>assistant\n[{"Start":0,"End":7.56,"Speaker":0,"Content":"Revevoices is a novel framework designed for generating expressive, long-form, multi-speaker conversational audio."}]<|im_end|>\n<|endoftext|>'
