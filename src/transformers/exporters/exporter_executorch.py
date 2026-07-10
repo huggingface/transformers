@@ -497,10 +497,10 @@ def _patch_reshape(original):
     the copy where ExecuTorch's lowering needs it.
     """
 
-    def patch(input, *shape):
+    def patch(input, *shape, **kwargs):
         if not input.is_contiguous():
             input = input.clone()
-        return original(input, *shape)
+        return original(input, *shape, **kwargs)
 
     return patch
 
