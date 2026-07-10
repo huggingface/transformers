@@ -129,7 +129,7 @@ class VibeVoiceAsrProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         # json.loads() to fail. End-to-end tokenizer correctness belongs in model integration tests.
         generated_ids = torch.tensor([[0]])
         mock_decoded = [
-            'assistant\n[{"Start": 0, "End": 5.61, "Speaker": 0, "Content": "VibeVoice is a neural transcription service."}]\n'
+            '<|im_start|>assistant\n[{"Start":0,"End":7.56,"Speaker":0,"Content":"Revevoices is a novel framework designed for generating expressive, long-form, multi-speaker conversational audio."}]<|im_end|>\n<|endoftext|>'
         ]
 
         with patch.object(processor.tokenizer, "batch_decode", return_value=mock_decoded):
