@@ -525,6 +525,19 @@ class AutoModelTest(unittest.TestCase):
         _MODEL_MAPPING = _LazyAutoMapping(_CONFIG_MAPPING_NAMES, _MODEL_MAPPING_NAMES)
         self.assertEqual(_MODEL_MAPPING[BertConfig], GPT2Model)
 
+    def test_register_with_string_key(self):
+        from transformers.models.auto.auto_factory import _LazyAutoMapping
+
+        _CONFIG_MAPPING_NAMES = OrderedDict([("bert", "BertConfig")])
+        _MODEL_MAPPING_NAMES = OrderedDict([("bert", "BertModel")])
+        _MODEL_MAPPING = _LazyAutoMapping(_CONFIG_MAPPING_NAMES, _MODEL_MAPPING_NAMES)
+
+        # Downstream libraries sometimes register with a plain string instead of a config class
+        # (e.g. `AutoImageProcessor.register(config_class="SomeConfigName", ...)`). A string has
+        # no `__module__`, so it must not raise and must land in `_extra_content`.
+        _MODEL_MAPPING.register("custom-string-key", GPT2Model)
+        self.assertEqual(_MODEL_MAPPING._extra_content["custom-string-key"], GPT2Model)
+
     def test_custom_model_patched_generation_inheritance(self):
         """
         Tests that our inheritance patching for generate-compatible models works as expected. Without this feature,
