@@ -283,7 +283,9 @@ class FastVlmForConditionalGenerationIntegrationTest(unittest.TestCase):
             "user\n<image>\nWhat is this?\nassistant",
         ]
         image1 = Image.open(requests.get("https://llava-vl.github.io/static/images/view.jpg", stream=True).raw)
-        image2 = load_test_image("https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg")
+        image2 = load_test_image(
+            "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg"
+        )
 
         self.processor.tokenizer.padding_side = "left"
         inputs = self.processor(images=[image1, image2], text=prompts, return_tensors="pt", padding=True).to(

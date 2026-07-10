@@ -322,7 +322,9 @@ class AriaForConditionalGenerationIntegrationTest(unittest.TestCase):
             "USER: <|img|>\nWhat is this? ASSISTANT:",
         ]
         image1 = Image.open(requests.get(IMAGE_OF_VIEW_URL, stream=True).raw)
-        image2 = load_test_image("https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg")
+        image2 = load_test_image(
+            "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg"
+        )
 
         inputs = processor(images=[image1, image2], text=prompts, return_tensors="pt", padding=True).to(
             model.device, model.dtype
@@ -360,7 +362,9 @@ class AriaForConditionalGenerationIntegrationTest(unittest.TestCase):
             "USER: <|img|>\nWhat is this?\nASSISTANT:",
         ]
         image1 = Image.open(requests.get(IMAGE_OF_VIEW_URL, stream=True).raw)
-        image2 = load_test_image("https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg")
+        image2 = load_test_image(
+            "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg"
+        )
 
         inputs = self.processor(images=[image1, image2], text=prompts, return_tensors="pt", padding=True).to(
             model.device, model.dtype
@@ -400,7 +404,9 @@ class AriaForConditionalGenerationIntegrationTest(unittest.TestCase):
             "USER: <|img|>\nWhat is this?\nASSISTANT: Two cats lying on a bed!\nUSER: <|img|>\nAnd this?\nASSISTANT:",
         ]
         image1 = Image.open(requests.get(IMAGE_OF_VIEW_URL, stream=True).raw)
-        image2 = load_test_image("https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg")
+        image2 = load_test_image(
+            "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg"
+        )
 
         inputs = processor(images=[image1, image2, image1], text=prompts, return_tensors="pt", padding=True)
         inputs = inputs.to(model.device, model.dtype)

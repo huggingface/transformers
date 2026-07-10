@@ -58,7 +58,6 @@ if is_torch_available():
 
 
 if is_vision_available():
-
     from transformers import AutoImageProcessor, AutoProcessor
 
 
@@ -478,7 +477,9 @@ class Aimv2ModelIntegrationTest(unittest.TestCase):
         model = Aimv2Model.from_pretrained(model_name, device_map=torch_device)
         processor = AutoProcessor.from_pretrained(model_name)
 
-        image = load_test_image("https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg")
+        image = load_test_image(
+            "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg"
+        )
         inputs = processor(
             text=["a photo of a cat", "a photo of a dog"], images=image, padding=True, return_tensors="pt"
         ).to(model.device)
@@ -512,7 +513,9 @@ class Aimv2VisionModelIntegrationTests(unittest.TestCase):
         model = Aimv2VisionModel.from_pretrained(model_name, device_map=torch_device)
         processor = AutoImageProcessor.from_pretrained(model_name)
 
-        image = load_test_image("https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg")
+        image = load_test_image(
+            "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg"
+        )
         inputs = processor(image, return_tensors="pt").to(model.device)
 
         with torch.no_grad():
@@ -543,7 +546,9 @@ class Aimv2VisionModelIntegrationTests(unittest.TestCase):
         model = Aimv2VisionModel.from_pretrained(model_name, device_map="auto")
         processor = AutoImageProcessor.from_pretrained(model_name)
 
-        image = load_test_image("https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg")
+        image = load_test_image(
+            "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg"
+        )
         inputs = processor(image, return_tensors="pt").to(model.device)
 
         with torch.no_grad():
