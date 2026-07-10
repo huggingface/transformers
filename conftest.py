@@ -16,10 +16,14 @@
 # by pytest before any tests are run
 
 import doctest
+import errno
+import functools
 import os
 import sys
+import tempfile
 import warnings
 from os.path import abspath, dirname, join
+from unittest import mock
 
 import _pytest
 import pytest
@@ -33,6 +37,41 @@ from transformers.testing_utils import (
 )
 from transformers.utils import enable_tf32
 from transformers.utils.network_logging import register_network_debug_plugin
+
+
+_ci_fallback_cache_dir = None
+
+
+def _with_tmpdir_cache_fallback(fn):
+    """Decorator that retries `fn` with a writable tmp cache dir if it raises EROFS.
+
+    In CI, the shared HF cache is read-only. Most models are pre-populated there and
+    work fine. Only downloads of new or updated files fail with EROFS. On such failure,
+    a session-scoped tmp dir is created once (via `tempfile.mkdtemp`, which is atomic
+    and process-safe) and the call is retried with `cache_dir` set to the tmp dir.
+    `HF_XET_CACHE` is also redirected (via both the Python constant and `os.environ`) to
+    cover the Xet storage path used by the `hf_xet` Rust library.
+    """
+
+    @functools.wraps(fn)
+    def wrapper(*args, **kwargs):
+        try:
+            return fn(*args, **kwargs)
+        except OSError as e:
+            if e.errno != errno.EROFS:
+                raise
+            global _ci_fallback_cache_dir
+            if _ci_fallback_cache_dir is None:
+                _ci_fallback_cache_dir = tempfile.mkdtemp(prefix="ci_fallback_tmpdir_cache_dir_")
+            import huggingface_hub.constants as hf_constants
+
+            with (
+                mock.patch.object(hf_constants, "HF_XET_CACHE", _ci_fallback_cache_dir),
+                mock.patch.dict(os.environ, {"HF_XET_CACHE": _ci_fallback_cache_dir}),
+            ):
+                return fn(*args, **{**kwargs, "cache_dir": _ci_fallback_cache_dir})
+
+    return wrapper
 
 
 NOT_DEVICE_TESTS = {
@@ -83,6 +122,10 @@ warnings.simplefilter(action="ignore", category=FutureWarning)
 
 
 def pytest_configure(config):
+    import transformers.utils.hub as _hub
+
+    _hub.cached_files = _with_tmpdir_cache_fallback(_hub.cached_files)
+
     config.addinivalue_line("markers", "is_pipeline_test: mark test to run only when pipelines are tested")
     config.addinivalue_line("markers", "is_staging_test: mark test to run only in the staging environment")
     config.addinivalue_line("markers", "accelerate_tests: mark test that require accelerate")
