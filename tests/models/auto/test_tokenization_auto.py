@@ -891,6 +891,9 @@ class NopConfig(PreTrainedConfig):
         "deepseek-ai/DeepSeek-R1-Distill-Llama-8B",
     ]
 
+    @slow
+    @require_tokenizers
+    @parameterized.expand(TOKENIZERS_BACKEND_AUTO_MAPPING_CHECKPOINTS)
     def test_tokenizers_auto_agreements_models_without_tokenizer_class(self, repo_id):
         # PR #45936: v5 tokenizer auto mapping changes to use TokenizersBackend
         TOKENIZERS_BACKEND_AUTO_MAPPING_SHARED_TEXT = "foo_bar\n\n123 "

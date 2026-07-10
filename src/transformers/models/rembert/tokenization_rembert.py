@@ -37,7 +37,7 @@ class RemBertTokenizer(TokenizersBackend):
             Whether or not to lowercase the input when tokenizing.
         remove_space (`bool`, *optional*, defaults to `True`):
             Whether or not to strip the text when tokenizing (removing excess spaces before and after the string).
-        keep_accents (`bool`, *optional*, defaults to `False`):
+        keep_accents (`bool`, *optional*, defaults to `True`):
             Whether or not to keep accents when tokenizing.
         bos_token (`str`, *optional*, defaults to `"[CLS]"`):
             The beginning of sequence token that was used during pretraining. Can be used a sequence classifier token.
@@ -77,7 +77,7 @@ class RemBertTokenizer(TokenizersBackend):
         self,
         vocab: str | list[tuple[str, float]] | None = None,
         do_lower_case: bool = False,
-        keep_accents: bool = False,
+        keep_accents: bool = True,
         bos_token: str = "[CLS]",
         eos_token: str = "[SEP]",
         unk_token: str = "<unk>",
