@@ -6,7 +6,7 @@ on:
     - cron: "17 2 * * *"
   push:
     branches:
-      - run_nvidia_ci_flash_attn*
+      - fix_flash_attn_wheel
   workflow_dispatch:
     inputs:
       prev_workflow_run_id:
@@ -56,7 +56,7 @@ jobs:
     uses: ./.github/workflows/self-scheduled.yml
     with:
       job: run_models_gpu
-      slack_report_channel: "#transformers-ci-flash-attn"
+      slack_report_channel: "#transformers-ci-dummy"
       docker: huggingface/transformers-all-latest-gpu:flash-attn
       ci_event: Daily CI
       runner_type: "a10"
