@@ -66,16 +66,30 @@ ALLOWED_LAYER_TYPES = (
     "compressed_sparse_attention",  # CSA, used in deepseek_v4
     "heavily_compressed_attention",  # HCA, used in deepseek_v4
     "minimax_m3_sparse",  # lightning-index sparse attention, used in minimax_m3_vl
-    "linear_attention",  # used in minimax
     "conv",  # used in LFMv2
-    "mamba",
-    "attention",
     "sparse",
     "dense",
-    "hybrid",  # for layers that have both mamba and attention in zamba and zamba2
+    "hybrid",  # layers that combine attention + mamba/linear-attention-shaped states (zamba2, falcon_h1, zaya1)
+    "hybrid_sliding",  # layers that combine sliding attention + linear-attention-shaped states (zaya1)
     "moe",  # for nemotron_h, which uses either attention, mamba or moe
     "deepseek_sparse_attention",  # for models with DSA indexer (GLM MoE DSA, DeepSeek V32)
+    # Recurrent layers (mamba / mamba2 / GDN / minimax-lightning)
+    "linear_attention",
 )
+
+
+# Legacy ``layer_types`` strings → current ``linear_attention`` / ``full_attention`` convention.
+# Configs call ``remap_legacy_layer_types`` in their ``__post_init__`` so checkpoints stored on
+# the Hub with the old names (``mamba``, ``attention``) load transparently.
+_LEGACY_LAYER_TYPE_REMAP = {
+    "mamba": "linear_attention",
+    "attention": "full_attention",
+}
+
+
+def remap_legacy_layer_types(layer_types: list[str]) -> list[str]:
+    """Apply legacy → current layer-type name mapping."""
+    return [_LEGACY_LAYER_TYPE_REMAP.get(t, t) for t in layer_types]
 
 
 # copied from huggingface_hub.dataclasses.strict when `accept_kwargs=True`
@@ -481,7 +495,11 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
             layers = getattr(self, layer_types, None)
             if not (layers is not None and hasattr(self, "num_hidden_layers")):
                 return
-            elif not all(layer_type in ALLOWED_LAYER_TYPES for layer_type in layers):
+            if self.is_custom_code():
+                # Custom code may have legacy layer types that need to be remapped
+                layers = remap_legacy_layer_types(layers)
+                setattr(self, layer_types, layers)
+            if not all(layer_type in ALLOWED_LAYER_TYPES for layer_type in layers):
                 raise ValueError(f"The `{layer_types}` entries must be in {ALLOWED_LAYER_TYPES} but got {layers}")
             elif self.num_hidden_layers is not None and self.num_hidden_layers != len(layers):
                 raise ValueError(
@@ -1206,6 +1224,18 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
             raise ValueError(f"{auto_class} is not a valid auto class.")
 
         cls._auto_class = auto_class
+
+    @classmethod
+    def is_remote_code(cls) -> bool:
+        """Return whether the current config is custom code, i.e. code loaded from the hub, or class that we just
+        registered via `register_for_auto_class`."""
+        return cls._auto_class is not None
+
+    @classmethod
+    def is_custom_code(cls) -> bool:
+        """Return whether the current config is custom code, i.e. either code loaded from the hub, or defined in any
+        user-specific module/session."""
+        return cls.is_remote_code() or not cls.__module__.startswith("transformers.")
 
     def _get_generation_parameters(self) -> dict[str, Any]:
         """

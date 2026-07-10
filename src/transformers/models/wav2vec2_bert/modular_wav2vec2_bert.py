@@ -602,6 +602,12 @@ class Wav2Vec2BertPreTrainedModel(PreTrainedModel):
             k = math.sqrt(1 / module.projection.in_features)
             init.uniform_(module.projection.weight, a=-k, b=k)
             init.uniform_(module.projection.bias, a=-k, b=k)
+        elif isinstance(module, nn.Conv1d):
+            init.kaiming_normal_(module.weight)
+
+            if module.bias is not None:
+                k = math.sqrt(module.groups / (module.in_channels * module.kernel_size[0]))
+                init.uniform_(module.bias, a=-k, b=k)
         elif isinstance(module, Wav2Vec2BertModel):
             if hasattr(module, "masked_spec_embed"):
                 init.uniform_(module.masked_spec_embed)
