@@ -22,8 +22,8 @@ import os
 import sys
 import tempfile
 import warnings
-from os.path import abspath, dirname, join
 from unittest import mock
+from os.path import abspath, dirname, join
 
 import _pytest
 import pytest
@@ -64,11 +64,8 @@ def _with_tmpdir_cache_fallback(fn):
                 _ci_fallback_cache_dir = tempfile.mkdtemp(prefix="ci_fallback_tmpdir_cache_dir_")
             import huggingface_hub.constants as hf_constants
 
-            with (
-                mock.patch.object(hf_constants, "HF_HUB_CACHE", _ci_fallback_cache_dir),
-                mock.patch.object(hf_constants, "HF_XET_CACHE", _ci_fallback_cache_dir),
-            ):
-                return fn(*args, **kwargs)
+            with mock.patch.object(hf_constants, "HF_XET_CACHE", _ci_fallback_cache_dir):
+                return fn(*args, **{**kwargs, "cache_dir": _ci_fallback_cache_dir})
 
     return wrapper
 
