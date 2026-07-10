@@ -161,6 +161,12 @@ EXPORT_SKIPS: dict[str, dict[str, str]] = {
         "Qwen3NextForQuestionAnswering": "Same `timeout` failure as `Qwen3NextModel`.",
         "Qwen3NextForSequenceClassification": "Same `timeout` failure as `Qwen3NextModel`.",
         "Qwen3NextForTokenClassification": "Same `timeout` failure as `Qwen3NextModel`.",
+        "Qwen3ASRForConditionalGeneration": (
+            "Audio encoder packs valid frames with a data-dependent `.nonzero()`; the unbacked "
+            "packed length can't be sized by ExecuTorch's ahead-of-time memory planner "
+            "(`GuardOnDataDependentSymNode`). Exports fine on torch.export/ONNX, which carry the "
+            "dynamic dim at runtime."
+        ),
     },
     "executorch.generate": {},
     "executorch.dynamic": {
