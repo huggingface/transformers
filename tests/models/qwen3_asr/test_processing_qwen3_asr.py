@@ -109,7 +109,9 @@ class Qwen3ASRProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def test_apply_transcription_request_with_language(self):
         processor = self.get_processor()
 
-        audio_url = "https://huggingface.co/datasets/raushan-testing-hf/audio-test/resolve/main/f2641_0_throatclearing.wav"
+        audio_url = (
+            "https://huggingface.co/datasets/raushan-testing-hf/audio-test/resolve/main/f2641_0_throatclearing.wav"
+        )
         outputs = processor.apply_transcription_request(audio=audio_url, language="English")
 
         for key in ("input_ids", "attention_mask", "input_features", "input_features_mask"):

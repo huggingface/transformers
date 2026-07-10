@@ -232,7 +232,7 @@ class Kimi_K25ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         # Load with `fps` and `num_frames` args, should raise an error
         with self.assertRaises(ValueError):
-            out_dict_with_video = processor.apply_chat_template(
+            processor.apply_chat_template(
                 messages,
                 add_generation_prompt=True,
                 tokenize=True,
