@@ -460,10 +460,10 @@ def _patch_expand(original):
     the broadcast so the captured tensor has standard strides downstream.
     """
 
-    def patch(self, *sizes):
-        if len(sizes) == 1 and isinstance(sizes[0], (list, tuple, torch.Size)):
-            sizes = tuple(sizes[0])
-        result = original(self, *sizes)
+    def patch(self, *sizes, **kwargs):
+        # Forward whatever form the caller used — positional ``expand(*sizes)``, a single
+        # list/tuple, or the keyword form ``expand(size=...)`` — straight to the original.
+        result = original(self, *sizes, **kwargs)
         # Only materialise when ``expand`` actually introduced a stride-0 (broadcast) dim; a
         # no-broadcast expand is a plain view ExecuTorch's memory planner accepts as-is.
         if 0 in result.stride():

@@ -82,7 +82,13 @@ EXPORT_SKIPS: dict[str, dict[str, str]] = {
     # Every backend, generate path only.
     "generate": {},
     # ONNX, every variant.
-    "onnx": {},
+    "onnx": {
+        "HunYuanVLModel": (
+            "ONNX export trips an int32-overflow `GuardOnDataDependentSymNode` (`64*h*w`) in the vision "
+            "patch-merger conv on symbolic spatial dims. Plain `torch.export` (dynamo) exports fine."
+        ),
+        "HunYuanVLForConditionalGeneration": "Same ONNX vision-conv int32 guard as `HunYuanVLModel`.",
+    },
     # ONNX, generate path only.
     "onnx.generate": {},
     # ONNX, dynamic-shape only.
@@ -106,11 +112,33 @@ EXPORT_SKIPS: dict[str, dict[str, str]] = {
             "Deformable-attention pixel decoder exceeds the 1000s test timeout under dynamic shapes."
         ),
         "Mask2FormerForUniversalSegmentation": "Same `timeout` as `Mask2FormerModel`.",
+        "FunnelModel": (
+            "onnxscript's constant-folding optimizer raises `Bitwidth not available for ONNX data type: "
+            "STRING` on funnel's dynamic-shape graph. `torch.export`/OpenVINO and static ONNX all export fine."
+        ),
+        "FunnelForMaskedLM": "Same onnxscript optimizer `STRING` failure as `FunnelModel`.",
+        "FunnelForPreTraining": "Same onnxscript optimizer `STRING` failure as `FunnelModel`.",
+        "FunnelForQuestionAnswering": "Same onnxscript optimizer `STRING` failure as `FunnelModel`.",
+        "FunnelForTokenClassification": "Same onnxscript optimizer `STRING` failure as `FunnelModel`.",
+        "FunnelBaseModel": "Same onnxscript optimizer `STRING` failure as `FunnelModel`.",
+        "FunnelForMultipleChoice": "Same onnxscript optimizer `STRING` failure as `FunnelModel`.",
+        "FunnelForSequenceClassification": "Same onnxscript optimizer `STRING` failure as `FunnelModel`.",
     },
     # ExecuTorch, every variant.
     "executorch": {
         "GroundingDinoModel": ("Lowering exceeds the test timeout under dynamic shapes."),
         "GroundingDinoForObjectDetection": "Same `timeout` failure as `GroundingDinoModel`.",
+        # These export fine via `torch.export` (dynamo) but hit ExecuTorch edge-lowering limits.
+        "FunnelModel": "ExecuTorch edge lowering rejects a broadcast in the relative-position attention.",
+        "FunnelForMaskedLM": "Same ExecuTorch broadcast limit as `FunnelModel`.",
+        "FunnelForPreTraining": "Same ExecuTorch broadcast limit as `FunnelModel`.",
+        "FunnelForQuestionAnswering": "Same ExecuTorch broadcast limit as `FunnelModel`.",
+        "FunnelForTokenClassification": "Same ExecuTorch broadcast limit as `FunnelModel`.",
+        "FunnelBaseModel": "Same ExecuTorch broadcast limit as `FunnelModel`.",
+        "FunnelForMultipleChoice": "Same ExecuTorch broadcast limit as `FunnelModel`.",
+        "FunnelForSequenceClassification": "Same ExecuTorch broadcast limit as `FunnelModel`.",
+        "HunYuanVLModel": "ExecuTorch edge lowering fails on the vision stack (same family as the ONNX/OpenVINO gaps).",
+        "HunYuanVLForConditionalGeneration": "Same ExecuTorch limit as `HunYuanVLModel`.",
         "Kimi_K25Model": (
             "ExecuTorch `to_edge` spec failure in the DeepseekV3 language model; the vision encoder exports fine."
         ),
@@ -136,7 +164,14 @@ EXPORT_SKIPS: dict[str, dict[str, str]] = {
         "DiffusionGemmaForBlockDiffusion": "Same `timeout` failure as `DiffusionGemmaModel`.",
     },
     # OpenVINO, every variant.
-    "openvino": {},
+    "openvino": {
+        "TapasModel": "OpenVINO has no conversion rule for `aten.scatter_reduce.two` (tapas segment reduction).",
+        "TapasForMaskedLM": "Same OpenVINO `scatter_reduce` gap as `TapasModel`.",
+        "TapasForQuestionAnswering": "Same OpenVINO `scatter_reduce` gap as `TapasModel`.",
+        "TapasForSequenceClassification": "Same OpenVINO `scatter_reduce` gap as `TapasModel`.",
+        "HunYuanVLModel": "OpenVINO conversion of the vision stack fails (same family as the ONNX/ExecuTorch gaps).",
+        "HunYuanVLForConditionalGeneration": "Same OpenVINO gap as `HunYuanVLModel`.",
+    },
     # OpenVINO, generate path only.
     "openvino.generate": {},
     # OpenVINO, dynamic-shape only.

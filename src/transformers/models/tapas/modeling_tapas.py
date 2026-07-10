@@ -1009,7 +1009,7 @@ class TapasForQuestionAnswering(TapasPreTrainedModel):
             if self.config.average_logits_per_cell:
                 logits_per_cell, _ = reduce_mean(logits, cell_index)
                 logits = gather(logits_per_cell, cell_index)
-            dist_per_token = torch.distributions.Bernoulli(logits=logits)
+            dist_per_token = torch.distributions.Bernoulli(logits=logits, validate_args=False)
 
             # Compute cell selection loss per example.
             selection_loss_per_example = None
@@ -1027,7 +1027,7 @@ class TapasForQuestionAnswering(TapasPreTrainedModel):
                 selection_loss_per_example, logits = _single_column_cell_selection_loss(
                     logits, column_logits, labels, cell_index, col_index, cell_mask
                 )
-                dist_per_token = torch.distributions.Bernoulli(logits=logits)
+                dist_per_token = torch.distributions.Bernoulli(logits=logits, validate_args=False)
 
             # Supervised cell selection
             if self.config.disable_per_token_loss:
@@ -1275,7 +1275,7 @@ class IndexMap:
                 index.
         """
         self.indices = torch.as_tensor(indices, device=indices.device)
-        self.num_segments = torch.as_tensor(num_segments, device=indices.device)
+        self.num_segments = num_segments
         self.batch_dims = batch_dims
 
     def batch_shape(self):
@@ -1376,11 +1376,11 @@ def flatten(index, name="segmented_flatten"):
     Returns:
         (`IndexMap`): The flattened IndexMap.
     """
-    # first, get batch_size as scalar tensor
-    batch_size = torch.prod(torch.tensor(list(index.batch_shape())))
+    # first, get batch_size as a python int (static, derived from the batch dimensions)
+    batch_size = math.prod(index.batch_shape())
     # next, create offset as 1-D tensor of length batch_size,
     # and multiply element-wise by num segments (to offset different elements in the batch) e.g. if batch size is 2: [0, 64]
-    offset = torch.arange(start=0, end=batch_size, device=index.num_segments.device) * index.num_segments
+    offset = torch.arange(start=0, end=batch_size, device=index.indices.device) * index.num_segments
     offset = offset.view(index.batch_shape())
     for _ in range(index.batch_dims, len(index.indices.size())):  # typically range(1,2)
         offset = offset.unsqueeze(-1)
@@ -1389,7 +1389,7 @@ def flatten(index, name="segmented_flatten"):
     return IndexMap(indices=indices.view(-1), num_segments=index.num_segments * batch_size, batch_dims=0)
 
 
-def range_index_map(batch_shape, num_segments, name="range_index_map"):
+def range_index_map(batch_shape, num_segments, device=None, name="range_index_map"):
     """
     Constructs an index map equal to range(num_segments).
 
@@ -1398,39 +1398,23 @@ def range_index_map(batch_shape, num_segments, name="range_index_map"):
             Batch shape
         num_segments (`int`):
             Number of segments
+        device (`torch.device`, *optional*):
+            Device on which to place the resulting indices.
         name (`str`, *optional*, defaults to 'range_index_map'):
             Name for the operation. Currently not used
 
     Returns:
         (`IndexMap`): IndexMap of shape batch_shape with elements equal to range(num_segments).
     """
-    device = num_segments.device if torch.is_tensor(num_segments) else "cpu"
-    batch_shape = torch.as_tensor(
-        batch_shape, dtype=torch.long, device=device
-    )  # create a rank 1 tensor vector containing batch_shape (e.g. [2])
-    assert len(batch_shape.size()) == 1
-    num_segments = torch.as_tensor(
-        num_segments, device=device
-    )  # create a rank 0 tensor (scalar) containing num_segments (e.g. 64)
-    assert len(num_segments.size()) == 0
+    batch_shape = tuple(batch_shape)  # e.g. (2,) for a single batch dimension
+    num_segments = int(num_segments)
 
-    indices = torch.arange(
-        start=0, end=num_segments, device=num_segments.device
-    )  # create a rank 1 vector with num_segments elements
-    new_tensor = torch.cat(
-        [torch.ones_like(batch_shape, dtype=torch.long, device=num_segments.device), num_segments.unsqueeze(dim=0)],
-        dim=0,
-    )
-    # new_tensor is just a vector of [1 64] for example (assuming only 1 batch dimension)
-    new_shape = [int(x) for x in new_tensor.tolist()]
-    indices = indices.view(new_shape)
+    # create a rank 1 vector with num_segments elements, then broadcast it over the batch dimensions
+    indices = torch.arange(start=0, end=num_segments, device=device)
+    indices = indices.view([1] * len(batch_shape) + [num_segments])
+    indices = indices.repeat(list(batch_shape) + [1])
 
-    multiples = torch.cat([batch_shape, torch.as_tensor([1], device=device)], dim=0)
-    indices = indices.repeat(multiples.tolist())
-    # equivalent (in Numpy:)
-    # indices = torch.as_tensor(np.tile(indices.numpy(), multiples.tolist()))
-
-    return IndexMap(indices=indices, num_segments=num_segments, batch_dims=list(batch_shape.size())[0])
+    return IndexMap(indices=indices, num_segments=num_segments, batch_dims=len(batch_shape))
 
 
 def _segment_reduce(values, index, segment_reduce_fn, name):
@@ -1455,30 +1439,20 @@ def _segment_reduce(values, index, segment_reduce_fn, name):
     # unflattened. Segmented ops support vector-valued operations.
     flat_index = flatten(index)
     vector_shape = values.size()[len(index.indices.size()) :]  # torch.Size object
-    flattened_shape = torch.cat(
-        [torch.as_tensor([-1], dtype=torch.long), torch.as_tensor(vector_shape, dtype=torch.long)], dim=0
-    )
+    flattened_shape = [-1] + list(vector_shape)
     # changed "view" by "reshape" in the following line
-    flat_values = values.reshape(flattened_shape.tolist())
+    flat_values = values.reshape(flattened_shape)
 
-    out = torch.zeros(int(flat_index.num_segments), dtype=torch.float, device=flat_values.device)
+    out = torch.zeros(flat_index.num_segments, dtype=torch.float, device=flat_values.device)
     segment_means = out.scatter_reduce(
         dim=0, index=flat_index.indices.long(), src=flat_values.float(), reduce=segment_reduce_fn, include_self=False
     )
 
-    device = index.num_segments.device
     # Unflatten the values.
-    new_shape = torch.cat(
-        [
-            torch.as_tensor(index.batch_shape(), dtype=torch.long, device=device),
-            torch.as_tensor(index.num_segments, dtype=torch.long, device=device).unsqueeze(dim=0),
-            torch.as_tensor(vector_shape, dtype=torch.long, device=device),
-        ],
-        dim=0,
-    )
+    new_shape = list(index.batch_shape()) + [index.num_segments] + list(vector_shape)
 
-    output_values = segment_means.clone().view(new_shape.tolist()).to(values.dtype)
-    output_index = range_index_map(index.batch_shape(), index.num_segments)
+    output_values = segment_means.clone().view(new_shape).to(values.dtype)
+    output_index = range_index_map(index.batch_shape(), index.num_segments, device=index.indices.device)
     return output_values, output_index
 
 
@@ -1689,7 +1663,9 @@ def _single_column_cell_selection_loss(token_logits, column_logits, labels, cell
         no_cell_selected.view(column_label.size()), torch.zeros_like(column_label), column_label
     )
 
-    column_dist = torch.distributions.Categorical(logits=column_logits)  # shape (batch_size, max_num_cols)
+    column_dist = torch.distributions.Categorical(
+        logits=column_logits, validate_args=False
+    )  # shape (batch_size, max_num_cols)
     column_loss_per_example = -column_dist.log_prob(column_label)
 
     # Part 2: cell loss
@@ -1713,7 +1689,7 @@ def _single_column_cell_selection_loss(token_logits, column_logits, labels, cell
     )
 
     # Compute the log-likelihood for cells, but only for the selected column.
-    cell_dist = torch.distributions.Bernoulli(logits=logits_per_cell)  # shape (batch_size, 64*32)
+    cell_dist = torch.distributions.Bernoulli(logits=logits_per_cell, validate_args=False)  # shape (batch_size, 64*32)
     cell_log_prob = cell_dist.log_prob(labels_per_cell.type(torch.float32))  # shape(batch_size, 64*32)
 
     cell_loss = -torch.sum(cell_log_prob * column_mask * cell_mask, dim=1)
@@ -1804,7 +1780,7 @@ def _calculate_aggregate_mask(answer, pooled_output, cell_selection_preference, 
     # torch.FloatTensor(batch_size,)
     aggregate_mask_init = torch.logical_not(torch.isnan(answer)).type(torch.FloatTensor).to(answer.device)
     logits_aggregation = aggregation_classifier(pooled_output)
-    dist_aggregation = torch.distributions.categorical.Categorical(logits=logits_aggregation)
+    dist_aggregation = torch.distributions.categorical.Categorical(logits=logits_aggregation, validate_args=False)
     # Index 0 corresponds to "no aggregation".
     aggregation_ops_total_mass = torch.sum(dist_aggregation.probs[:, 1:], dim=1)
 
@@ -1885,7 +1861,7 @@ def _calculate_aggregation_loss_unknown(logits_aggregation, aggregate_mask):
         aggregation_loss_unknown (`torch.FloatTensor` of shape `(batch_size,)`): Aggregation loss (in case of answer
         supervision) per example.
     """
-    dist_aggregation = torch.distributions.categorical.Categorical(logits=logits_aggregation)
+    dist_aggregation = torch.distributions.categorical.Categorical(logits=logits_aggregation, validate_args=False)
     # Index 0 corresponds to "no aggregation".
     aggregation_ops_total_mass = torch.sum(dist_aggregation.probs[:, 1:], dim=1)
     # Predict some aggregation in case of an answer that needs aggregation.
