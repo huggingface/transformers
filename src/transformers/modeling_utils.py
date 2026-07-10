@@ -58,6 +58,7 @@ from .distributed.tensor_parallel import _get_parameter_tp_plan, verify_tp_plan
 from .distributed.utils import (
     _distributed_barrier,
     _get_torch_distributed_world_size,
+    _is_dtensor,
     _is_torch_distributed_initialized,
     is_local_dist_rank_0,
 )
@@ -148,16 +149,6 @@ if TYPE_CHECKING:
     from kernels.layer.mode import Mode
 
     from ._typing import DeviceMeshLike
-
-
-_torch_distributed_available = torch.distributed.is_available()
-if _torch_distributed_available:
-    from torch.distributed.tensor import DTensor
-
-
-def _is_dtensor(x) -> bool:
-    """Whether `x` is a DTensor (safe when torch.distributed is unavailable)."""
-    return _torch_distributed_available and isinstance(x, DTensor)
 
 
 if is_sagemaker_mp_enabled():
@@ -4746,10 +4737,9 @@ class PreTrainedModel(
         # will be re-initialized for nothing (which can be quite long)
         for key in missing_keys - self.all_tied_weights_keys.keys():
             param = self.get_parameter_or_buffer(key)
-            # New distributed path: the param is already a DTensor placeholder (from
-            # `apply_tensor_parallel`). Materialize its local shard on the real device and re-wrap
-            # as a DTensor mirroring the placeholder's mesh/placements.
             if _is_dtensor(param):
+                # DTensor param still on meta (from TP/FSDP sharding): materialize its local shard on the real device
+                # and re-wrap with the same mesh/placements.
                 local_value = torch.empty(
                     param._local_tensor.shape,
                     dtype=param.dtype,
@@ -4759,17 +4749,16 @@ class PreTrainedModel(
                 with torch.no_grad():
                     new_param = torch.nn.Parameter(new_dtensor, requires_grad=param.requires_grad)
                     torch.utils.swap_tensors(param, new_param)
-                continue
-            param_device = get_device(device_map, key, valid_torch_device=True)
-            value = torch.empty_like(param, device=param_device)
-            # Legacy plain-tensor TP path: shard the param via `device_mesh`.
-            if device_mesh is not None:
-                shard_and_distribute_module(
-                    self, value, param, key, None, False, device_mesh.get_local_rank(), device_mesh
-                )
-            # Otherwise, just move it to device
             else:
-                _load_parameter_into_model(self, key, value)
+                param_device = get_device(device_map, key, valid_torch_device=True)
+                value = torch.empty_like(param, device=param_device)
+                if device_mesh is not None:
+                    # Legacy plain-tensor TP path: shard the param via `device_mesh`.
+                    shard_and_distribute_module(
+                        self, value, param, key, None, False, device_mesh.get_local_rank(), device_mesh
+                    )
+                else:
+                    _load_parameter_into_model(self, key, value)
         # We need to move back non-persistent buffers as well, as they are not part of loaded weights anyway
         for key, buffer in self.named_non_persistent_buffers():
             buffer_device = get_device(device_map, key, valid_torch_device=True)

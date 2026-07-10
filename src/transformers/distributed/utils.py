@@ -29,6 +29,15 @@ if is_torch_available():
 else:
     _torch_distributed_available = False
 
+if _torch_distributed_available:
+    from torch.distributed.tensor import DTensor
+
+
+def _is_dtensor(x) -> bool:
+    """Whether `x` is a DTensor (safe when torch.distributed is unavailable)."""
+    return _torch_distributed_available and isinstance(x, DTensor)
+
+
 if is_torch_available() and is_torch_greater_or_equal("2.7"):
     import torch.distributed.checkpoint as dcp
     from torch.distributed.checkpoint.hf_storage import HuggingFaceStorageWriter
