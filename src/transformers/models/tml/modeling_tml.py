@@ -691,13 +691,13 @@ class TmlPreTrainedModel(PreTrainedModel):
         if isinstance(module, TmlRelativeLogits):
             init.normal_(module.proj, mean=0.0, std=std)
         elif isinstance(module, TmlMLP):
-            init.zeros_(module.global_scale)
+            init.ones_(module.global_scale)
         elif isinstance(module, TmlExperts):
             init.normal_(module.gate_up_proj, mean=0.0, std=std)
             init.normal_(module.down_proj, mean=0.0, std=std)
         elif isinstance(module, TmlTopkRouter):
             init.normal_(module.weight, mean=0.0, std=std)
-            init.zeros_(module.global_scale)
+            init.ones_(module.global_scale)
             init.zeros_(module.e_score_correction_bias)
         elif isinstance(module, TmlSharedExperts):
             init.normal_(module.gate_proj, mean=0.0, std=std)
