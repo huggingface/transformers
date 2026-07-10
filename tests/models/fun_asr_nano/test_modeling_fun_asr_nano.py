@@ -101,6 +101,7 @@ class FunAsrNanoForConditionalGenerationModelTest(ALMModelTest, unittest.TestCas
 
     model_tester_class = FunAsrNanoModelTester
     pipeline_model_mapping = {}
+    model_split_percents = [0.5, 0.8, 0.9]
 
     # The adaptor pools/flattens the audio embeddings, so `get_audio_features().pooler_output` is not the standard
     # `(batch, seq, hidden)` shape the common test expects.
@@ -112,6 +113,10 @@ class FunAsrNanoForConditionalGenerationModelTest(ALMModelTest, unittest.TestCas
 
     @unittest.skip(reason="FunAsrNanoForConditionalGeneration has no separate base model without a generation head.")
     def test_model_base_model_prefix(self):
+        pass
+
+    @unittest.skip(reason="The tiny Fun-ASR-Nano test config is not split across two GPUs by auto device-map.")
+    def test_model_parallelism(self):
         pass
 
     @unittest.skip(
