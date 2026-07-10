@@ -104,9 +104,8 @@ class Cosmos3EdgeTextConfig(PreTrainedConfig):
             )
 
     def convert_rope_params_to_dict(self, **kwargs):
-        mrope_section = kwargs.pop("mrope_section", None)
         kwargs = super().convert_rope_params_to_dict(**kwargs)
-        self.rope_parameters.setdefault("mrope_section", mrope_section or [24, 20, 20])
+        self.rope_parameters.setdefault("mrope_section", [24, 20, 20])
         return kwargs
 
 

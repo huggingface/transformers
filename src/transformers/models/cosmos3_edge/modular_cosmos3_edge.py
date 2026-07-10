@@ -90,9 +90,8 @@ class Cosmos3EdgeTextConfig(LlamaConfig):
     eos_token_id: int | list[int] | None = 11
 
     def convert_rope_params_to_dict(self, **kwargs):
-        mrope_section = kwargs.pop("mrope_section", None)
         kwargs = super().convert_rope_params_to_dict(**kwargs)
-        self.rope_parameters.setdefault("mrope_section", mrope_section or [24, 20, 20])
+        self.rope_parameters.setdefault("mrope_section", [24, 20, 20])
         return kwargs
 
     def validate_architecture(self):
@@ -222,6 +221,21 @@ class Cosmos3EdgeTextRotaryEmbedding(LlamaRotaryEmbedding):
         device: torch.device | None = None,
         seq_len: int | None = None,
     ) -> tuple[torch.Tensor, float]:
+        """
+        Computes the inverse frequencies according to the original RoPE implementation.
+
+        Args:
+            config ([`~transformers.PreTrainedConfig`]):
+                The model configuration.
+            device (`torch.device`):
+                The device to use for initialization of the inverse frequencies.
+            seq_len (`int`, *optional*):
+                The current sequence length. Unused for this type of RoPE.
+
+        Returns:
+            Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
+            post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
+        """
         base = config.rope_parameters["rope_theta"]
         dim = config.head_dim
         inv_freq = 1.0 / (
@@ -240,8 +254,6 @@ class Cosmos3EdgeTextRotaryEmbedding(LlamaRotaryEmbedding):
     @torch.no_grad()
     @dynamic_rope_update
     def forward(self, x, position_ids):
-        if position_ids.ndim == 2:
-            position_ids = position_ids[None, ...].expand(3, position_ids.shape[0], -1)
         inv_freq_expanded = (
             self.inv_freq[None, None, :, None].float().expand(3, position_ids.shape[1], -1, 1).to(x.device)
         )

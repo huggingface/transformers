@@ -76,7 +76,8 @@ class Cosmos3EdgeTextRotaryEmbedding(nn.Module):
         seq_len: int | None = None,
     ) -> tuple[torch.Tensor, float]:
         """
-        Computes the inverse frequencies according to the original RoPE implementation
+        Computes the inverse frequencies according to the original RoPE implementation.
+
         Args:
             config ([`~transformers.PreTrainedConfig`]):
                 The model configuration.
@@ -84,6 +85,7 @@ class Cosmos3EdgeTextRotaryEmbedding(nn.Module):
                 The device to use for initialization of the inverse frequencies.
             seq_len (`int`, *optional*):
                 The current sequence length. Unused for this type of RoPE.
+
         Returns:
             Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
             post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
@@ -98,8 +100,6 @@ class Cosmos3EdgeTextRotaryEmbedding(nn.Module):
     @torch.no_grad()
     @dynamic_rope_update
     def forward(self, x, position_ids):
-        if position_ids.ndim == 2:
-            position_ids = position_ids[None, ...].expand(3, position_ids.shape[0], -1)
         inv_freq_expanded = (
             self.inv_freq[None, None, :, None].float().expand(3, position_ids.shape[1], -1, 1).to(x.device)
         )
