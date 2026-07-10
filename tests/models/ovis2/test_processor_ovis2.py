@@ -33,11 +33,18 @@ class Ovis2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = Ovis2Processor
     tiny_model_id = "hf-internal-testing/tiny-processor-ovis2"
 
+    @classmethod
+    def _setup_image_processor(cls):
+        image_processor_class = cls._get_component_class_from_processor("image_processor")
+        # max_patches=1 ensures each image produces exactly 1 tile, so len(pixel_values)==batch_size
+        return image_processor_class(max_patches=1)
+
     @staticmethod
     def prepare_processor_dict():
         return {
             "chat_template": "<|im_start|>system\nYou are a helpful assistant.<|im_end|>\n{% for message in messages %}{{'<|im_start|>' + message['role'] + '\n'}}{% if message['content'] is string %}{{ message['content'] }}{% else %}{% for content in message['content'] %}{% if content['type'] == 'image' %}{{ '<image>\n' }}{% elif content['type'] == 'text' %}{{ content['text'] }}{% endif %}{% endfor %}{% endif %}{{'<|im_end|>\n'}}{% endfor %}{% if add_generation_prompt %}{{'<|im_start|>assistant\n' }}{% endif %}",
             "image_seq_length": 4,
+            "image_token": "<IMG_ATOM>",
         }  # fmt: skip
 
     def test_processor_to_json_string(self):
