@@ -98,13 +98,22 @@ RUN python3 -m pip install --no-cache-dir bitsandbytes
 RUN python3 -m pip install --no-cache-dir quanto
 
 # After using A10 as CI runner, let's run FA2 tests
-# Upgrade wheel before building flash-attn (see https://github.com/huggingface/transformers/pull/47251):
-# torch 2.13.0 added an unconditional `setuptools>=77.0.3` requirement, which pip resolves to
-# setuptools 83.0.0. setuptools 83.0.0 removed `pkg_resources`. The Ubuntu 22.04 system wheel
-# (`/usr/lib/python3/dist-packages/wheel/bdist_wheel.py`) still imports `pkg_resources`, so
-# `--no-build-isolation` builds that use the system wheel fail. wheel>=0.43 (Feb 2024) replaced
-# `pkg_resources` with `importlib.metadata`, fixing the issue.
-RUN [ "$FLASH_ATTN" != "false" ] && python3 -m pip uninstall -y ninja && python3 -m pip install --no-cache-dir ninja && python3 -m pip install --no-cache-dir -U wheel && python3 -m pip install flash-attn --no-cache-dir --no-build-isolation || echo "Don't install FA2 with nightly torch"
+# Notes on the install command below (see https://github.com/huggingface/transformers/pull/47251):
+# - wheel is upgraded before flash-attn: torch 2.13.0 added an unconditional setuptools>=77.0.3
+#   requirement, which pip resolves to setuptools 83.0.0 (which removed pkg_resources). The Ubuntu
+#   22.04 system wheel still imports pkg_resources, so --no-build-isolation builds fail. wheel>=0.43
+#   (Feb 2024) uses importlib.metadata instead and is not affected.
+# - if/else instead of `... || echo`: the old pattern silently swallowed real install failures;
+#   now only the two expected skip conditions (nightly torch, FLASH_ATTN=false) are handled
+#   gracefully, and any actual install error will correctly fail the Docker build.
+RUN if [ "$FLASH_ATTN" != "false" ] && [ "$PYTORCH" != "pre" ]; then \
+        python3 -m pip uninstall -y ninja && \
+        python3 -m pip install --no-cache-dir ninja && \
+        python3 -m pip install --no-cache-dir -U wheel && \
+        python3 -m pip install flash-attn --no-cache-dir --no-build-isolation; \
+    else \
+        echo "Skipping FA2 install (FLASH_ATTN=${FLASH_ATTN}, PYTORCH=${PYTORCH})"; \
+    fi
 
 # TODO (ydshieh): check this again
 # `quanto` will install `ninja` which leads to many `CUDA error: an illegal memory access ...` in some model tests
