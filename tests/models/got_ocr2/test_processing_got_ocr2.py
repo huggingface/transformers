@@ -23,10 +23,12 @@ from ...test_processing_common import ProcessorTesterMixin
 @require_vision
 class GotOcr2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = GotOcr2Processor
+    # Tiny processor created with make_tiny_processor.py from "stepfun-ai/GOT-OCR-2.0-hf"
     tiny_model_id = "hf-internal-testing/tiny-processor-got_ocr2"
 
     @classmethod
     def _setup_image_processor(cls):
+        # Instantiate directly to avoid loading the full 384×384 image processor from Hub.
         image_processor_class = cls._get_component_class_from_processor("image_processor")
         return image_processor_class()
 

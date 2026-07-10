@@ -24,6 +24,7 @@ from ...test_processing_common import ProcessorTesterMixin
 @require_vision
 class PPChart2TableProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = PPChart2TableProcessor
+    # Tiny processor created with make_tiny_processor.py from "PaddlePaddle/PP-Chart2Table_safetensors"
     tiny_model_id = "hf-internal-testing/tiny-processor-pp_chart2table"
 
     @classmethod

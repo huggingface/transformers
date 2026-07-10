@@ -31,8 +31,8 @@ from ...test_processing_common import MODALITY_INPUT_DATA, ProcessorTesterMixin
 
 class GlmAsrProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = GlmAsrProcessor
+    # Tiny processor created with make_tiny_processor.py from "zai-org/GLM-ASR-Nano-2512"
     tiny_model_id = "hf-internal-testing/tiny-processor-glmasr"
-    checkpoint = "zai-org/GLM-ASR-Nano-2512"
 
     @classmethod
     @require_torch

@@ -35,10 +35,13 @@ if is_vision_available():
 @require_vision
 class Lfm2VlProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = Lfm2VlProcessor
+    # Tiny processor created with make_tiny_processor.py from "LiquidAI/LFM2-VL-1.6B"
     tiny_model_id = "hf-internal-testing/tiny-processor-lfm2_vl"
 
     @classmethod
     def _setup_image_processor(cls):
+        # Small tile_size and token limits keep tensor allocations minimal.
+        # do_image_splitting=False prevents splitting images into many tiles.
         image_processor_class = cls._get_component_class_from_processor("image_processor")
         return image_processor_class(
             tile_size=14,

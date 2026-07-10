@@ -40,6 +40,8 @@ class ColPaliProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     @classmethod
     def _setup_image_processor(cls):
+        # Use 64×64 instead of the default 384×384 from google/siglip-so400m-patch14-384 to avoid
+        # large tensors. image_seq_length=0 matches the processor attribute so token-count tests pass.
         image_processor = SiglipImageProcessor(size={"height": 64, "width": 64})
         image_processor.image_seq_length = 0
         return image_processor

@@ -31,6 +31,8 @@ if is_vision_available():
 @require_vision
 class Phi4MultimodalProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = Phi4MultimodalProcessor
+    # Tiny processor created with make_tiny_processor.py from "microsoft/Phi-4-multimodal-instruct"
+    # revision "refs/pr/70" (main branch adds auto_map requiring trust_remote_code).
     tiny_model_id = "hf-internal-testing/tiny-processor-phi4_multimodal"
     checkpoint_path = "microsoft/Phi-4-multimodal-instruct"
     revision = "refs/pr/70"

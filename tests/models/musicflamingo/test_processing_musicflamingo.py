@@ -32,6 +32,7 @@ from ...test_processing_common import MODALITY_INPUT_DATA, ProcessorTesterMixin
 
 class MusicFlamingoProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = MusicFlamingoProcessor
+    # Tiny processor created with make_tiny_processor.py from "nvidia/music-flamingo-2601-hf"
     tiny_model_id = "hf-internal-testing/tiny-processor-musicflamingo"
     checkpoint = "nvidia/music-flamingo-2601-hf"
 

@@ -26,6 +26,7 @@ from ...test_processing_common import ProcessorTesterMixin
 @require_vision
 class Granite4VisionProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = Granite4VisionProcessor
+    # Tiny processor created with make_tiny_processor.py from "ibm-granite/granite-vision-4.1-4b"
     tiny_model_id = "hf-internal-testing/tiny-processor-granite4_vision"
     # Image token expansion with downsample_rate="1/2" produces more tokens than the defaults
     image_text_kwargs_max_length = 300
@@ -34,6 +35,10 @@ class Granite4VisionProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     @classmethod
     def _setup_image_processor(cls):
+        # Must use LlavaNextImageProcessor (not CLIPImageProcessor from the tiny repo) because
+        # processing_granite4_vision.py calls iter(image_inputs["image_sizes"]), which requires
+        # the image_sizes key that only LlavaNextImageProcessor produces. Small sizes keep
+        # tensor allocations minimal.
         return LlavaNextImageProcessor(
             size={"shortest_edge": 64},
             crop_size={"height": 64, "width": 64},

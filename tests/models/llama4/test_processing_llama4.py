@@ -23,10 +23,13 @@ from ...test_processing_common import ProcessorTesterMixin
 @require_vision
 class Llama4ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = Llama4Processor
+    # Tiny processor created with make_tiny_processor.py from "meta-llama/Llama-4-Scout-17B-16E-Instruct"
     tiny_model_id = "hf-internal-testing/tiny-processor-llama4"
 
     @classmethod
     def _setup_image_processor(cls):
+        # max_patches=1 ensures each image produces exactly 1 tile, so len(pixel_values)==batch_size.
+        # Small size (20×20) keeps tensor allocations minimal.
         image_processor_class = cls._get_component_class_from_processor("image_processor")
         return image_processor_class(max_patches=1, size={"height": 20, "width": 20})
 

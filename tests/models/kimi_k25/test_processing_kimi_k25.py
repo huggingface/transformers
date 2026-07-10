@@ -36,6 +36,7 @@ if is_torch_available():
 @require_torchvision
 class Kimi_K25ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = Kimi_K25Processor
+    # Tiny processor created with make_tiny_processor.py from "RaushanTurganbay/kimi2.7-processor"
     tiny_model_id = "hf-internal-testing/tiny-processor-kimi_k25"
 
     @classmethod
@@ -44,6 +45,7 @@ class Kimi_K25ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     @classmethod
     def _setup_video_processor(cls):
+        # Small spatial size (28×28) and patch sizes keep video tensor allocations minimal.
         video_processor_class = cls._get_component_class_from_processor("video_processor")
         video_processor_kwargs = {
             "size": {"max_height": 28, "max_width": 28},
@@ -54,6 +56,7 @@ class Kimi_K25ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     @classmethod
     def _setup_image_processor(cls):
+        # Small spatial size (28×28) and patch size keep image tensor allocations minimal.
         image_processor_class = cls._get_component_class_from_processor("image_processor")
         image_processor_kwargs = {
             "size": {"max_height": 28, "max_width": 28},

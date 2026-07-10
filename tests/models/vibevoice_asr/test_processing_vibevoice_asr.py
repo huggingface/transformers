@@ -31,8 +31,8 @@ from ...test_processing_common import ProcessorTesterMixin
 
 class VibeVoiceAsrProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = VibeVoiceAsrProcessor
+    # Tiny processor created with make_tiny_processor.py from "microsoft/VibeVoice-ASR-HF"
     tiny_model_id = "hf-internal-testing/tiny-processor-vibevoice_asr"
-    checkpoint = "microsoft/VibeVoice-ASR-HF"
 
     @classmethod
     @require_torch
