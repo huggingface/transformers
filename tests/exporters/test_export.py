@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import copy
+import functools
 import inspect
 import re
 
@@ -315,6 +316,34 @@ MIN_EXPORT_TORCH_VERSION = DynamoExporter.min_versions["torch"]
 # ──────────────────────────── helpers ────────────────────────────
 
 
+def disable_hub_kernels(test_fn):
+    """Force `is_kernels_available()` to `False` for the duration of an export test.
+
+    Export must trace the pure-PyTorch path, never a Hub kernel (`mamba-ssm`, `causal-conv1d`, …): those
+    need optional deps (`einops`, triton, …) and aren't exportable anyway. Kernels load lazily on the first
+    (eager) forward — outside the exporter's own trace-time patch — so the whole test is wrapped. With
+    `is_kernels_available()` False, `lazy_load_kernel` short-circuits to `None` and the fallback runs.
+    """
+
+    @functools.wraps(test_fn)
+    def wrapper(*args, **kwargs):
+        from transformers.integrations import hub_kernels
+        from transformers.utils import import_utils
+
+        # `lazy_load_kernel` gates on `hub_kernels`'s own binding; patch the canonical def too.
+        targets = [(hub_kernels, "is_kernels_available"), (import_utils, "is_kernels_available")]
+        saved = [(obj, name, getattr(obj, name)) for obj, name in targets]
+        for obj, name in targets:
+            setattr(obj, name, lambda *args, **kwargs: False)
+        try:
+            return test_fn(*args, **kwargs)
+        finally:
+            for obj, name, original in saved:
+                setattr(obj, name, original)
+
+    return wrapper
+
+
 def _cast_inputs(obj, device, dtype):
     """Recursively move tensors to `device`, casting floating-point tensors to `dtype`."""
     if isinstance(obj, torch.Tensor):
@@ -464,6 +493,7 @@ class ExportTesterMixin:
     @pytest.mark.torch_export_test
     @pytest.mark.timeout(EXPORT_TEST_TIMEOUT)
     @require_torch_greater_or_equal(MIN_EXPORT_TORCH_VERSION)
+    @disable_hub_kernels
     def test_torch_export(self, dynamic, atol=1e-4, rtol=1e-4):
         """Export each model class with ``torch.export`` and verify outputs match eager within tolerance."""
         self._skip_if_not_exportable()
@@ -498,6 +528,7 @@ class ExportTesterMixin:
     @pytest.mark.onnx_export_test
     @pytest.mark.timeout(EXPORT_TEST_TIMEOUT)
     @require_torch_greater_or_equal(MIN_EXPORT_TORCH_VERSION)
+    @disable_hub_kernels
     def test_onnx_export(self, dynamic):
         """Export each model class to ONNX and verify output names match eager."""
         self._skip_if_not_exportable()
@@ -528,6 +559,7 @@ class ExportTesterMixin:
     @pytest.mark.executorch_export_test
     @pytest.mark.timeout(EXPORT_TEST_TIMEOUT)
     @require_torch_greater_or_equal(MIN_EXPORT_TORCH_VERSION)
+    @disable_hub_kernels
     def test_executorch_export(self, dynamic):
         """Export each model class to ExecuTorch (xnnpack on CPU, cuda on GPU) and verify no errors."""
 
@@ -587,6 +619,7 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
     @pytest.mark.torch_export_test
     @pytest.mark.timeout(EXPORT_TEST_TIMEOUT)
     @require_torch_greater_or_equal(MIN_EXPORT_TORCH_VERSION)
+    @disable_hub_kernels
     def test_torch_export_generate(self, dynamic, atol=1e-4, rtol=1e-4):
         """Export prefill and decode stages with ``torch.export`` and verify outputs match eager."""
         self._skip_if_not_exportable()
@@ -621,6 +654,7 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
     @pytest.mark.onnx_export_test
     @pytest.mark.timeout(EXPORT_TEST_TIMEOUT)
     @require_torch_greater_or_equal(MIN_EXPORT_TORCH_VERSION)
+    @disable_hub_kernels
     def test_onnx_export_generate(self, dynamic):
         """Export prefill and decode stages to ONNX and verify output names match eager."""
         self._skip_if_not_exportable()
@@ -652,6 +686,7 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
     @pytest.mark.executorch_export_test
     @pytest.mark.timeout(EXPORT_TEST_TIMEOUT)
     @require_torch_greater_or_equal(MIN_EXPORT_TORCH_VERSION)
+    @disable_hub_kernels
     def test_executorch_export_generate(self, dynamic):
         """Export prefill and decode stages to ExecuTorch and verify no errors."""
 

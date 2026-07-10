@@ -49,6 +49,7 @@ from .utils import (
     apply_fx_node_fixes,
     apply_fx_program_fixes,
     apply_patches,
+    cast_leaf_tensors,
     module_device,
     module_dtype,
     register_fx_node_fix,
@@ -181,9 +182,12 @@ def prepare_for_xnnpack(model: PreTrainedModel, sample_inputs: dict[str, Any]):
     expose cleanly."""
 
     model.requires_grad_(False)
-    device = module_device(model)
-    if device is not None and device.type != "cpu":
-        model = model.to(device="cpu")
+    # Move to CPU unconditionally. A `module_device`-guarded move keyed on parameters/`model.device`
+    # skips components whose params read as CPU (or have none) but that still hold CUDA *buffers* —
+    # e.g. the sinusoidal position-embedding `weights` buffer — leaving a stray CUDA tensor that then
+    # mismatches the CPU inputs during tracing. `.to("cpu")` is a no-op when already on CPU.
+    model = model.to(device="cpu")
+    sample_inputs = cast_leaf_tensors(sample_inputs, dtype=module_dtype(model), device=torch.device("cpu"))
     # XNNPACK has no `_grouped_mm.out` kernel — force MoE experts to `batched_mm`.
     if isinstance(model, PreTrainedModel) and model._can_set_experts_implementation():
         model.set_experts_implementation("batched_mm")
