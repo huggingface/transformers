@@ -25,7 +25,7 @@ from transformers import (
     MusicFlamingoProcessor,
     WhisperFeatureExtractor,
 )
-from transformers.testing_utils import require_librosa, require_torch
+from transformers.testing_utils import require_librosa, require_torch, slow
 
 from ...test_processing_common import MODALITY_INPUT_DATA, ProcessorTesterMixin
 
@@ -93,6 +93,43 @@ class MusicFlamingoProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         # Verify slow and fast tokenizers produce the same output (parity test)
         self.assertEqual(slow_tokenizer.tokenize(prompt), fast_tokenizer.tokenize(prompt))
+
+    @slow
+    @require_torch
+    def test_tokenizer_full_integration(self):
+        slow_tokenizer = AutoTokenizer.from_pretrained("nvidia/music-flamingo-2601-hf", use_fast=False)
+        fast_tokenizer = AutoTokenizer.from_pretrained("nvidia/music-flamingo-2601-hf", from_slow=True, legacy=False)
+
+        prompt = (
+            "<|im_start|>system\nAnswer the questions.<|im_end|>"
+            "<|im_start|>user\n<sound>What is it?<|im_end|>"
+            "<|im_start|>assistant\n"
+        )
+        EXPECTED_OUTPUT = [
+            "<|im_start|>",
+            "system",
+            "Ċ",
+            "Answer",
+            "Ġthe",
+            "Ġquestions",
+            ".",
+            "<|im_end|>",
+            "<|im_start|>",
+            "user",
+            "Ċ",
+            "<sound>",
+            "What",
+            "Ġis",
+            "Ġit",
+            "?",
+            "<|im_end|>",
+            "<|im_start|>",
+            "assistant",
+            "Ċ",
+        ]
+
+        self.assertEqual(slow_tokenizer.tokenize(prompt), EXPECTED_OUTPUT)
+        self.assertEqual(fast_tokenizer.tokenize(prompt), EXPECTED_OUTPUT)
 
     @require_torch
     def test_chat_template(self):
