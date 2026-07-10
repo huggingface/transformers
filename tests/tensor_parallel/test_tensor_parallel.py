@@ -25,6 +25,7 @@ from transformers.integrations.tensor_parallel import (
     PackedColwiseParallel,
     PackedRowwiseParallel,
     RowwiseParallel,
+    add_tensor_parallel_hooks_to_module,
     get_packed_weights,
     repack_weights,
 )
@@ -191,6 +192,21 @@ class TestTensorParallelLayer(TestCasePlus):
 
         def get_local_rank(self):
             return self.rank
+
+    def test_colwise_gather_output_rejects_indivisible_out_features(self):
+        device_mesh = self.MockDeviceMesh(world_size=2, rank=0)
+
+        with self.assertRaises(ValueError) as context:
+            add_tensor_parallel_hooks_to_module(
+                model=SimpleNamespace(config=None),
+                module=torch.nn.Linear(8, 99),
+                current_module_plan="colwise_gather_output",
+                layer_name="lm_head",
+                device_mesh=device_mesh,
+            )
+
+        self.assertIn("lm_head", str(context.exception))
+        self.assertIn("divisible", str(context.exception))
 
     def test_colwise_get_expected_sharded_shape(self):
         world_size = 3
