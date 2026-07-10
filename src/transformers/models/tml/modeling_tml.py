@@ -427,20 +427,15 @@ def apply_mask_to_padding_states(hidden_states, attention_mask):
     return hidden_states
 
 
-def torch_causal_conv1d_update(
-    hidden_states,
-    conv_state,
-    weight,
-    bias=None,
-    activation=None,
-):
+# tml sconvs have no activation, so unlike the qwen3_next fallback this applies none
+def torch_causal_conv1d_update(hidden_states, conv_state, weight, bias=None):
     _, hidden_size, seq_len = hidden_states.shape
     state_len = conv_state.shape[-1]
 
     hidden_states_new = torch.cat([conv_state, hidden_states], dim=-1).to(weight.dtype)
     conv_state.copy_(hidden_states_new[:, :, -state_len:])
     out = F.conv1d(hidden_states_new, weight.unsqueeze(1), bias, padding=0, groups=hidden_size)
-    out = F.silu(out[:, :, -seq_len:])
+    out = out[:, :, -seq_len:]
     out = out.to(hidden_states.dtype)
     return out
 
@@ -451,7 +446,6 @@ class TmlShortConvolution(nn.Module):
         self.layer_idx = layer_idx
         self.conv_idx = conv_idx
         self.conv_kernel_size = conv_kernel_size
-        self.activation = None
 
         self.conv1d = nn.Conv1d(
             in_channels=hidden_size,
@@ -504,7 +498,6 @@ class TmlShortConvolution(nn.Module):
                 conv_state,
                 self.conv1d.weight.squeeze(1),
                 self.conv1d.bias,
-                self.activation,
             )
         else:
             # Multi-token forward with non empty cache (chunked prefill, continuation,...). We prepend the cached conv context so the
@@ -521,7 +514,6 @@ class TmlShortConvolution(nn.Module):
                     x=hidden_states,
                     weight=self.conv1d.weight.squeeze(1),
                     bias=self.conv1d.bias,
-                    activation=self.activation,
                     seq_idx=kwargs.get("seq_idx"),
                 )
             else:
@@ -1045,6 +1037,7 @@ class TmlModel(TmlPreTrainedModel):
 class TmlForConditionalGeneration(TmlPreTrainedModel, GenerationMixin):
     # `embed` and `unembed` are separate tensors in the checkpoints, never tied
     _tied_weights_keys = {}
+    _tp_plan = {"lm_head": "rowwise_split_input"}
     # we are filtering the logits/labels so we shouldn't divide the loss based on num_items_in_batch
     # Fix: https://github.com/huggingface/transformers/issues/40564
     accepts_loss_kwargs = False
@@ -1052,6 +1045,8 @@ class TmlForConditionalGeneration(TmlPreTrainedModel, GenerationMixin):
     def __init__(self, config: TmlConfig):
         super().__init__(config)
         self.model = TmlModel(config)
+        # checkpoints store `unembed` padded to vocab_size; logits are sliced to
+        # unpadded_vocab_size in forward, like sglang
         self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
         self.post_init()
 
@@ -1137,12 +1132,13 @@ class TmlForConditionalGeneration(TmlPreTrainedModel, GenerationMixin):
         # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
         slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
         logits = self.lm_head(hidden_states[:, slice_indices, :])
+        unpadded_vocab_size = self.config.text_config.unpadded_vocab_size
+        if unpadded_vocab_size is not None and unpadded_vocab_size < logits.shape[-1]:
+            logits = logits[..., :unpadded_vocab_size]
 
         loss = None
         if labels is not None:
-            loss = self.loss_function(
-                logits=logits, labels=labels, vocab_size=self.config.text_config.vocab_size, **kwargs
-            )
+            loss = self.loss_function(logits=logits, labels=labels, vocab_size=logits.shape[-1], **kwargs)
 
         return TmlCausalLMOutputWithPast(
             loss=loss,
