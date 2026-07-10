@@ -210,7 +210,7 @@ class TmlShortConvolutionsLayer(LinearAttentionCacheLayerMixin):
     is_compileable = False
     layer_type = "tml_short_conv"
 
-    def __init__(self, config: TmlTextConfig | None = None):
+    def __init__(self, **kwargs):
         self.conv_states = dict.fromkeys(range(4))
         self.is_conv_states_initialized = dict.fromkeys(range(4), False)
         self.has_previous_state = dict.fromkeys(range(4), False)
@@ -895,14 +895,13 @@ class TmlTextModel(TmlPreTrainedModel):
             if past_key_values is None:
                 past_key_values = DynamicCache(config=self.config)
             if cache_params is None:
-                layers = [TmlShortConvolutionsLayer(config=self.config) for I in range(self.config.num_hidden_layers)]
+                layers = [TmlShortConvolutionsLayer() for _ in range(self.config.num_hidden_layers)]
                 cache_params = Cache(layers=layers, offloading=False)  # hardcode for now
 
         if position_ids is None:
             past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
-            position_ids = torch.arange(
-                past_seen_tokens, past_seen_tokens + inputs_embeds.shape[1], device=inputs_embeds.device
-            ).unsqueeze(0)
+            position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
+            position_ids = position_ids.unsqueeze(0)
 
         # It may already have been prepared by e.g. `generate`
         if not isinstance(causal_mask_mapping := attention_mask, dict):
