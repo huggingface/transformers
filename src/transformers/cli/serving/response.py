@@ -774,6 +774,9 @@ def compute_usage(input_tokens: int, output_tokens: int) -> ResponseUsage:
         input_tokens=input_tokens,
         output_tokens=output_tokens,
         total_tokens=input_tokens + output_tokens,
-        input_tokens_details=InputTokensDetails(cached_tokens=0),
+        input_tokens_details=InputTokensDetails(
+            cached_tokens=0,
+            **{"cache_write_tokens": 0} if "cache_write_tokens" in InputTokensDetails.model_fields else {},
+        ),
         output_tokens_details=OutputTokensDetails(reasoning_tokens=0),
     )
