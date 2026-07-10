@@ -97,8 +97,7 @@ class TmlTextConfig(PreTrainedConfig):
             else:
                 local_layer_ids = {i for i in range(self.num_hidden_layers) if (i + 1) % 6}
             self.layer_types = [
-                "sliding_attention" if i in local_layer_ids else "full_attention"
-                for i in range(self.num_hidden_layers)
+                "hybrid_sliding" if i in local_layer_ids else "hybrid" for i in range(self.num_hidden_layers)
             ]
         if self.mlp_layer_types is None:
             dense_mlp_idx = kwargs.pop("dense_mlp_idx", 0)
@@ -106,6 +105,9 @@ class TmlTextConfig(PreTrainedConfig):
 
         if kwargs.get("dense_intermediate_size") is not None:
             self.intermediate_size = kwargs.pop("dense_intermediate_size")
+
+        # The architecture contains 4 conv modules per layer, each needing a different conv cache
+        self.number_of_conv_states = 4
 
         super().__post_init__(**kwargs)
 
