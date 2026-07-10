@@ -98,8 +98,12 @@ RUN python3 -m pip install --no-cache-dir bitsandbytes
 RUN python3 -m pip install --no-cache-dir quanto
 
 # After using A10 as CI runner, let's run FA2 tests
-# Upgrade wheel before building flash-attn: setuptools>=83 removed pkg_resources, and the Ubuntu
-# system wheel still imports it. wheel>=0.43 uses importlib.metadata instead.
+# Upgrade wheel before building flash-attn (see https://github.com/huggingface/transformers/pull/47251):
+# torch 2.13.0 added an unconditional `setuptools>=77.0.3` requirement, which pip resolves to
+# setuptools 83.0.0. setuptools 83.0.0 removed `pkg_resources`. The Ubuntu 22.04 system wheel
+# (`/usr/lib/python3/dist-packages/wheel/bdist_wheel.py`) still imports `pkg_resources`, so
+# `--no-build-isolation` builds that use the system wheel fail. wheel>=0.43 (Feb 2024) replaced
+# `pkg_resources` with `importlib.metadata`, fixing the issue.
 RUN [ "$FLASH_ATTN" != "false" ] && python3 -m pip uninstall -y ninja && python3 -m pip install --no-cache-dir ninja && python3 -m pip install --no-cache-dir -U wheel && python3 -m pip install flash-attn --no-cache-dir --no-build-isolation || echo "Don't install FA2 with nightly torch"
 
 # TODO (ydshieh): check this again
