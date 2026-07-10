@@ -2388,8 +2388,12 @@ class OneFormerSinePositionEmbedding(nn.Module):
     ) -> torch.Tensor:
         if mask is None:
             mask = torch.ones((shape[0], shape[2], shape[3]), device=device, dtype=torch.bool)
-        y_embed = mask.cumsum(1, dtype=dtype)
-        x_embed = mask.cumsum(2, dtype=dtype)
+        # Cast before the cumsum instead of passing dtype= to it: cumsum(ones(bool), dtype=...)
+        # matches an inductor rewrite pattern that drops the dtype argument, breaking
+        # float16/bfloat16 under torch.compile (https://github.com/huggingface/transformers/issues/47228)
+        embed_mask = mask.to(dtype)
+        y_embed = embed_mask.cumsum(1)
+        x_embed = embed_mask.cumsum(2)
         if normalize:
             eps = 1e-6
             y_embed = y_embed / (y_embed[:, -1:, :] + eps) * scale
