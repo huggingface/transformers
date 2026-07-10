@@ -55,9 +55,8 @@ Apart from that each tokenizer can be a "multimodal" tokenizer which means that 
 as part of tokenizer attributes for easier access. For example, if the tokenizer is loaded from a vision-language model like LLaVA, you will
 be able to access `tokenizer.image_token_id` to obtain the special image token used as a placeholder.
 
-To enable extra special tokens for any type of tokenizer, you have to add the following lines and save the tokenizer. Extra special tokens do not
-have to be modality related and can be anything that the model often needs access to. In the below code, tokenizer at `output_dir` will have direct access
-to three more special tokens.  
+To enable extra special tokens for any type of tokenizer, specify them using the `extra_special_tokens` keyword argument. Extra special tokens do not
+have to be modality related and can be anything that the model often needs access to. In the below code, the tokenizer will have direct access to three additional special tokens.  
 
 ```python
 vision_tokenizer = AutoTokenizer.from_pretrained(
