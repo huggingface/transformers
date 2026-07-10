@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Fast image processor for the NemotronH Nano Omni model."""
+"""Fast image processor for the NemotronH Omni model."""
 
 import math
 
@@ -27,9 +27,9 @@ if is_torch_available():
     import torch
 
 
-class NemotronH_Nano_Omni_Reasoning_V3ImageProcessor(TorchvisionBackend):
+class NemotronH_Omni_Reasoning_V3ImageProcessor(TorchvisionBackend):
     """
-    Dynamic-resolution image processor for the NemotronH Nano Omni model.
+    Dynamic-resolution image processor for the NemotronH Omni model.
 
     Each image is resized to a single tile whose patch-grid `(h_patches, w_patches)` is chosen to
     land between `min_num_patches` and `max_num_patches` (on a `patch_size` grid), respecting the
@@ -214,4 +214,4 @@ class NemotronH_Nano_Omni_Reasoning_V3ImageProcessor(TorchvisionBackend):
         return pw, ph
 
 
-__all__ = ["NemotronH_Nano_Omni_Reasoning_V3ImageProcessor"]
+__all__ = ["NemotronH_Omni_Reasoning_V3ImageProcessor"]

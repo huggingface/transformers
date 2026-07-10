@@ -17,7 +17,7 @@ from ..nemotron_h import NemotronHConfig
 from ..radio.configuration_radio import RadioConfig
 
 
-__all__ = ["NemotronH_Nano_Omni_Reasoning_V3_Config", "SoundConfig"]
+__all__ = ["NemotronH_Omni_Reasoning_V3_Config", "SoundConfig"]
 
 logger = logging.get_logger(__name__)
 
@@ -58,8 +58,8 @@ class SoundConfig(PretrainedConfig):
 
 
 @auto_docstring(checkpoint="nvidia/Nemotron-3-Nano-Omni-30B-A3B-Reasoning-BF16")
-class NemotronH_Nano_Omni_Reasoning_V3_Config(PreTrainedConfig):
-    model_type = "nemotron_h_nano_omni"
+class NemotronH_Omni_Reasoning_V3_Config(PreTrainedConfig):
+    model_type = "nemotron_h_omni"
     is_composition = True
 
     def __init__(
@@ -74,7 +74,6 @@ class NemotronH_Nano_Omni_Reasoning_V3_Config(PreTrainedConfig):
         image_tag_type="internvl",
         projector_hidden_size=4096,
         vit_hidden_size=1280,
-        attn_implementation="flash_attention_2",
         video_pruning_rate: float = 0.0,
         video_temporal_patch_size: int = 2,
         # Vision token settings
@@ -109,8 +108,6 @@ class NemotronH_Nano_Omni_Reasoning_V3_Config(PreTrainedConfig):
             Hidden size of the vision-to-LLM MLP projector.
         vit_hidden_size (`int`, *optional*, defaults to 1280):
             Hidden size of the RADIO vision features.
-        attn_implementation (`str`, *optional*, defaults to `"flash_attention_2"`):
-            Attention implementation to use across the model and its sub-models.
         video_pruning_rate (`float`, *optional*, defaults to 0.0):
             Efficient-Video-Sampling token pruning rate; `0.0` disables pruning.
         video_temporal_patch_size (`int`, *optional*, defaults to 2):
@@ -171,10 +168,8 @@ class NemotronH_Nano_Omni_Reasoning_V3_Config(PreTrainedConfig):
         self.sound_context_token_id = sound_context_token_id
         self.sound_context_token = sound_context_token
 
-        self._attn_implementation = attn_implementation
-        self.vision_config.use_flash_attn = (
-            self._attn_implementation is not None and "flash_attention" in self._attn_implementation
-        )
+        # `attn_implementation` flows in through `**kwargs` (the base `PreTrainedConfig` stores it as
+        # `self._attn_implementation`, as for every other model); propagate it to the language model.
         self.llm_config._attn_implementation = self._attn_implementation
 
     # vLLM's `NemotronH_Nano_VL_V2` implementation reads the language-model sub-config as

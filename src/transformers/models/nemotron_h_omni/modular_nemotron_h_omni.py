@@ -27,16 +27,16 @@ from ...utils import logging
 from ..nemotron_h import NemotronHForCausalLM
 from ..nemotron_h.modeling_nemotron_h import NemotronHRMSNorm
 from ..radio import RadioModel
-from .configuration_nemotron_h_nano_omni import NemotronH_Nano_Omni_Reasoning_V3_Config
+from .configuration_nemotron_h_omni import NemotronH_Omni_Reasoning_V3_Config
 
 
 logger = logging.get_logger(__name__)
 
 
-__all__ = ["NemotronH_Nano_Omni_Reasoning_V3"]
+__all__ = ["NemotronH_Omni_Reasoning_V3"]
 
 
-class NemotronH_Nano_Omni_RMSNorm(NemotronHRMSNorm):
+class NemotronH_Omni_RMSNorm(NemotronHRMSNorm):
     pass
 
 
@@ -109,7 +109,7 @@ class SoundProjection(nn.Module):
         eps: float = 1e-5,
     ):
         super().__init__()
-        self.norm = NemotronH_Nano_Omni_RMSNorm(sound_hidden_size, eps=eps)
+        self.norm = NemotronH_Omni_RMSNorm(sound_hidden_size, eps=eps)
         self.linear1 = nn.Linear(sound_hidden_size, projection_hidden_size, bias=bias)
         self.activation = ACT2FN["relu2"]
         self.linear2 = nn.Linear(projection_hidden_size, llm_hidden_size, bias=bias)
@@ -167,14 +167,14 @@ class SoundEncoder(nn.Module):
         return self.config.hidden_size
 
 
-class NemotronH_Nano_Omni_Reasoning_V3(PreTrainedModel):
-    config_class = NemotronH_Nano_Omni_Reasoning_V3_Config
+class NemotronH_Omni_Reasoning_V3(PreTrainedModel):
+    config_class = NemotronH_Omni_Reasoning_V3_Config
     main_input_name = "pixel_values"
     _supports_flash_attn_2 = True
     _supports_flash_attn = True
     _no_split_modules = ["NemotronHBlock"]
 
-    def __init__(self, config: NemotronH_Nano_Omni_Reasoning_V3_Config):
+    def __init__(self, config: NemotronH_Omni_Reasoning_V3_Config):
         super().__init__(config)
 
         image_size = config.force_image_size
@@ -217,7 +217,7 @@ class NemotronH_Nano_Omni_Reasoning_V3(PreTrainedModel):
         self.video_pruning_rate = config.video_pruning_rate
 
         self.mlp1 = nn.Sequential(
-            NemotronH_Nano_Omni_RMSNorm(vit_hidden_size * int(1 / self.downsample_ratio) ** 2, eps=1e-5),
+            NemotronH_Omni_RMSNorm(vit_hidden_size * int(1 / self.downsample_ratio) ** 2, eps=1e-5),
             nn.Linear(
                 vit_hidden_size * int(1 / self.downsample_ratio) ** 2,
                 vision_projection_hidden_size,

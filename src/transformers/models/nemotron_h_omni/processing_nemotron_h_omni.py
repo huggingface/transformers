@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Processor for the NemotronH Nano Omni model (image + video + audio + text)."""
+"""Processor for the NemotronH Omni model (image + video + audio + text)."""
 
 import math
 from typing import Union
@@ -34,7 +34,7 @@ if is_torch_available():
 AudioInput = Union[str, "np.ndarray", "torch.Tensor", list]
 
 
-class NemotronH_Nano_Omni_Reasoning_V3ImagesKwargs(ImagesKwargs):
+class NemotronH_Omni_Reasoning_V3ImagesKwargs(ImagesKwargs):
     min_pixels: int | None
     max_pixels: int | None
     patch_size: int | None
@@ -42,8 +42,8 @@ class NemotronH_Nano_Omni_Reasoning_V3ImagesKwargs(ImagesKwargs):
     merge_size: int | None
 
 
-class NemotronH_Nano_Omni_Reasoning_V3ProcessorKwargs(ProcessingKwargs, total=False):
-    images_kwargs: NemotronH_Nano_Omni_Reasoning_V3ImagesKwargs
+class NemotronH_Omni_Reasoning_V3ProcessorKwargs(ProcessingKwargs, total=False):
+    images_kwargs: NemotronH_Omni_Reasoning_V3ImagesKwargs
     videos_kwargs: VideosKwargs
     _defaults = {
         "text_kwargs": {
@@ -52,17 +52,17 @@ class NemotronH_Nano_Omni_Reasoning_V3ProcessorKwargs(ProcessingKwargs, total=Fa
     }
 
 
-class NemotronH_Nano_Omni_Reasoning_V3Processor(ProcessorMixin):
+class NemotronH_Omni_Reasoning_V3Processor(ProcessorMixin):
     r"""
-    Constructs a NemotronH Nano Omni processor which wraps an image processor and a tokenizer into a
+    Constructs a NemotronH Omni processor which wraps an image processor and a tokenizer into a
     single processor.
 
-    [`NemotronH_Nano_Omni_Reasoning_V3Processor`] offers all the functionalities of the image
-    processor and tokenizer. See [`~NemotronH_Nano_Omni_Reasoning_V3Processor.__call__`] and
-    [`~NemotronH_Nano_Omni_Reasoning_V3Processor.decode`] for more information.
+    [`NemotronH_Omni_Reasoning_V3Processor`] offers all the functionalities of the image
+    processor and tokenizer. See [`~NemotronH_Omni_Reasoning_V3Processor.__call__`] and
+    [`~NemotronH_Omni_Reasoning_V3Processor.decode`] for more information.
 
     Args:
-        image_processor ([`NemotronH_Nano_Omni_Reasoning_V3ImageProcessor`], *optional*):
+        image_processor ([`NemotronH_Omni_Reasoning_V3ImageProcessor`], *optional*):
             The image processor.
         tokenizer ([`AutoTokenizer`], *optional*):
             The tokenizer.
@@ -130,7 +130,7 @@ class NemotronH_Nano_Omni_Reasoning_V3Processor(ProcessorMixin):
         text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]] = None,
         videos: VideoInput = None,
         audio: AudioInput = None,
-        **kwargs: Unpack[NemotronH_Nano_Omni_Reasoning_V3ProcessorKwargs],
+        **kwargs: Unpack[NemotronH_Omni_Reasoning_V3ProcessorKwargs],
     ) -> BatchFeature:
         """
         Prepare multimodal inputs (text, images, videos, audio) for the model.
@@ -142,7 +142,7 @@ class NemotronH_Nano_Omni_Reasoning_V3Processor(ProcessorMixin):
         `pixel_values_videos`, and `sound_clips`.
         """
         output_kwargs = self._merge_kwargs(
-            NemotronH_Nano_Omni_Reasoning_V3ProcessorKwargs,
+            NemotronH_Omni_Reasoning_V3ProcessorKwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )
@@ -358,4 +358,4 @@ class NemotronH_Nano_Omni_Reasoning_V3Processor(ProcessorMixin):
         return list(dict.fromkeys(tokenizer_input_names + image_processor_input_names))
 
 
-__all__ = ["NemotronH_Nano_Omni_Reasoning_V3Processor"]
+__all__ = ["NemotronH_Omni_Reasoning_V3Processor"]
