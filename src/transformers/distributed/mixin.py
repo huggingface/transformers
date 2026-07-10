@@ -190,7 +190,10 @@ class DistributedMixin:
         if distributed_config.tp_size > 1:
             tp_mesh = device_mesh["tp"] if device_mesh.ndim > 1 else device_mesh
             
-            if _supports_dtensor_path(model, distributed_config):
+            if distributed_config.tp_plan is not None:
+                model.tp_plan = distributed_config.tp_plan
+
+            if _supports_dtensor_path(model, model.tp_plan, distributed_config):
                 return apply_tensor_parallelism_dtensor(model, tp_mesh)
             else:
                 from ..integrations.tensor_parallel import apply_tensor_parallelism
