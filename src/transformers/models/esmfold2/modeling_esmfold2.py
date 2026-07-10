@@ -1328,6 +1328,7 @@ class ESMFold2LanguageModelShim(nn.Module):
         Returns:
             [B, L, L, d_pair] pair representation.
         """
+        hidden_states = hidden_states.to(self.base_z_proj.weight.dtype)
         # base_z_input_norm is an fp32-pinned LayerNorm; upcast in, downcast out.
         normed = self.base_z_input_norm(hidden_states)
         lm_z = self.base_z_proj(normed)  # [B, L, 81, d_z]
