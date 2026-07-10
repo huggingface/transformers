@@ -75,6 +75,7 @@ def _with_tmpdir_cache_fallback(fn):
 
     return wrapper
 
+
 NOT_DEVICE_TESTS = {
     "test_tokenization",
     "test_tokenization_mistral_common",
