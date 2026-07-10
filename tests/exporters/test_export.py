@@ -504,7 +504,7 @@ class ExportTesterMixin:
             if self._should_skip(model_class, dynamic=dynamic, backend="executorch"):
                 continue
 
-            components = self._prepare_export_model_and_inputs(model_class, device="cpu")
+            components = self._prepare_export_model_and_inputs(model_class)
 
             for name, (model, inputs) in components.items():
                 with self.subTest(f"{model_class.__name__}/{name}"):

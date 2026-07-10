@@ -50,7 +50,6 @@ from .utils import (
     apply_fx_node_fixes,
     apply_fx_program_fixes,
     apply_patches,
-    module_device,
     module_dtype,
     register_fx_node_fix,
     register_fx_program_fix,
@@ -208,18 +207,17 @@ def prepare_for_xnnpack(model: PreTrainedModel, sample_inputs: dict[str, Any]):
 
 
 def prepare_for_cuda(model: PreTrainedModel, sample_inputs: dict[str, Any]):
-    """GPU inference via the ExecuTorch CUDA backend.
+    """GPU inference via the ExecuTorch CUDA backend, decoupled from the model's device.
 
-    Moves the model to CUDA and upcasts to bfloat16 — required by the CUDA backend.
-    """
+    The backend requires bfloat16 (upcast here) and a visible GPU — it delegates ops to Triton
+    kernels compiled by AOTInductor, which needs a GPU to compile/autotune. The model itself can
+    stay on any device (e.g. CPU): AOTInductor targets the machine's GPU regardless of where the
+    traced tensors live, so no `.to("cuda")` is needed."""
     if not torch.cuda.is_available():
         raise RuntimeError("CUDA is not available in this environment; cannot export to the ExecuTorch CUDA backend.")
 
     model.requires_grad_(False)
     dtype = module_dtype(model)
-    device = module_device(model)
-    if device is not None and device.type != "cuda":
-        model = model.to(device="cuda")
     if dtype is not None and dtype != torch.bfloat16:
         logger.warning(f"ExecuTorch CUDA backend requires bfloat16; upcasting model from {dtype}.")
         model = model.to(dtype=torch.bfloat16)
