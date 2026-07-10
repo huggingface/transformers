@@ -48,8 +48,9 @@ def _with_tmpdir_cache_fallback(fn):
     In CI, the shared HF cache is read-only. Most models are pre-populated there and
     work fine. Only downloads of new or updated files fail with EROFS. On such failure,
     a session-scoped tmp dir is created once (via `tempfile.mkdtemp`, which is atomic
-    and process-safe) and both `HF_HUB_CACHE` and `HF_XET_CACHE` are temporarily
-    redirected to it for the retry, keeping all internal huggingface_hub logic consistent.
+    and process-safe) and the call is retried with `cache_dir` set to the tmp dir.
+    `HF_XET_CACHE` is also redirected (via both the Python constant and `os.environ`) to
+    cover the Xet storage path used by the `hf_xet` Rust library.
     """
 
     @functools.wraps(fn)
