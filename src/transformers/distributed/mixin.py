@@ -22,13 +22,17 @@ from typing import TYPE_CHECKING
 from ..utils import SAFE_WEIGHTS_INDEX_NAME, is_torch_available, is_torch_greater_or_equal, logging
 from ..utils.hub import create_and_tag_model_card
 from .configuration_utils import DistributedConfig
-from .fsdp import is_fsdp_managed_module
-from .tensor_parallel import ALL_PARALLEL_STYLES, gather_tp_state_dict
+from .fsdp import apply_fully_sharded_data_parallelism, is_fsdp_managed_module
+from .tensor_parallel import (
+    ALL_PARALLEL_STYLES,
+    apply_tensor_parallelism_dtensor,
+    _supports_dtensor_path,
+    gather_tp_state_dict
+)
 from .utils import (
     _ensure_torch_distributed,
     _get_torch_distributed_rank,
     _is_torch_distributed_initialized,
-    distribute_model,
     gather_full_state_dict,
     initialize_fully_sharded_data_parallelism,
     initialize_tensor_parallelism,
@@ -67,7 +71,7 @@ class DistributedMixin:
         """The tp plan for the model's modules.
 
         For dense / MoE tensor parallelism this is ``base_model_tp_plan`` (written by
-        ``apply_tensor_parallel`` at load time). Expert parallelism (``enable_expert_parallel=True``)
+        ``maybe_distribute_model`` at load time). Expert parallelism (``enable_expert_parallel=True``)
         still uses the legacy ``base_model_ep_plan`` path.
         """
         if hasattr(self.config, "distributed_config") and getattr(
@@ -178,8 +182,24 @@ class DistributedMixin:
         device_mesh,
     ):
         """Apply TP or FSDP2 after model init, before weight loading."""
-        if _torch_distributed_available and device_mesh is not None:
-            return distribute_model(model, distributed_config, device_mesh)
+        if not _torch_distributed_available or device_mesh is None or distributed_config is None:
+            return model
+
+        model._device_mesh = device_mesh
+
+        if distributed_config.tp_size > 1:
+            tp_mesh = device_mesh["tp"] if device_mesh.ndim > 1 else device_mesh
+            
+            if _supports_dtensor_path(model, distributed_config):
+                return apply_tensor_parallelism_dtensor(model, tp_mesh)
+            else:
+                from ..integrations.tensor_parallel import apply_tensor_parallelism
+                return apply_tensor_parallelism(model, distributed_config.tp_plan, distributed_config, device_mesh)
+
+        if distributed_config.fsdp_size > 1:
+            fsdp_mesh = device_mesh["fsdp"] if device_mesh.ndim > 1 else device_mesh
+            return apply_fully_sharded_data_parallelism(model, fsdp_mesh)
+
         return model
 
     def should_save_on_this_rank(self, is_main_process: bool) -> bool:

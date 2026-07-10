@@ -660,7 +660,7 @@ class ParallelInterface(GeneralInterface):
     Naming convention: {kind}[_{comm}][_{extra}]. The _{comm} suffix is dropped only when
     comm is "none" (no collective). All entries are eager instances, so the dicts live behind a
     torch-availability guard and are empty when torch is unavailable (this module stays
-    importable; styles are only ever looked up inside apply_tensor_parallel, which needs torch).
+    importable; styles are only ever looked up inside maybe_distribute_model / apply_tensor_parallel).
     """
 
     if is_torch_available() and is_torch_greater_or_equal("2.5") and _torch_distributed_available:
@@ -716,28 +716,6 @@ class ParallelInterface(GeneralInterface):
 ALL_PARALLEL_STYLES: ParallelInterface = ParallelInterface()
 
 
-def select_parallel_plan(model) -> dict[str, str]:
-    """
-    Select the tensor-parallel plan to apply: an explicit ``DistributedConfig.tp_plan`` override if
-    set, else the model's ``base_model_tp_plan`` (``model._tp_plan``). The single plan drives both
-    training and inference — the mode-aware styles pick the collective at runtime from
-    ``module.training``.
-    """
-    distributed_config = model.config.distributed_config
-    user_tp_plan = distributed_config.tp_plan
-    if user_tp_plan is not None:
-        return dict(user_tp_plan)
-
-    plan = getattr(model, "_tp_plan", None) or {}
-    if not plan:
-        raise ValueError(
-            f"Model {model.config.model_type!r} has no base_model_tp_plan (model._tp_plan is empty) but "
-            f"tensor parallelism was requested. Add base_model_tp_plan to the model config or set "
-            f"DistributedConfig.tp_plan explicitly."
-        )
-    return dict(plan)
-
-
 def _supports_dtensor_path(model, resolved_plan, distributed_config) -> bool:
     """Return True when every plan style is registered in the new DTensor registry and EP is off."""
     if distributed_config is None:
@@ -749,11 +727,8 @@ def _supports_dtensor_path(model, resolved_plan, distributed_config) -> bool:
     return all(style in ALL_PARALLEL_STYLES for style in resolved_plan.values())
 
 
-def _apply_dtensor_tp(model, tp_mesh):
+def apply_tensor_parallelism_dtensor(model, tp_mesh):
     """DTensor backend: shard params as placeholders and install mode-aware forwards."""
-    model.tp_plan = dict(select_parallel_plan(model))
-    logger.info(f"TP plan has been resolved: {model.tp_plan}")
-
     # tie_weights() replaces lm_head.weight with embed_tokens.weight after TP is applied.
     # If embed_tokens isn't in the plan, sharding lm_head as a DTensor causes tie to
     # clobber it with a plain tensor (and forward then mixes DTensor/Tensor). Skip
@@ -777,40 +752,10 @@ def _apply_dtensor_tp(model, tp_mesh):
 
     return model
 
-
-def apply_tensor_parallel(model, tp_mesh, *, distributed_config=None, device_mesh=None):
-    """Apply tensor parallelism — single entry point dispatching to DTensor or legacy backend.
-
-    Dense / MoE tensor parallelism uses the DTensor path when every style in the resolved plan is
-    registered in ``ALL_PARALLEL_STYLES`` and expert parallelism is disabled. Expert parallelism and
-    models with legacy style names fall back to the plain-tensor path in
-    ``integrations.tensor_parallel``.
-    """
-    if distributed_config is None:
-        distributed_config = getattr(model.config, "distributed_config", None)
-    if device_mesh is None:
-        device_mesh = getattr(model, "_device_mesh", None)
-
-    resolved_plan = select_parallel_plan(model)
-    use_dtensor = _supports_dtensor_path(model, resolved_plan, distributed_config)
-
-    if use_dtensor:
-        return _apply_dtensor_tp(model, tp_mesh)
-    else:
-        # Expert parallelism / unmigrated plan styles → plain-tensor backend.
-        if distributed_config is None or device_mesh is None:
-            raise ValueError(
-                "Legacy tensor parallelism requires `distributed_config` and `device_mesh` on the model "
-                "(set them before calling `apply_tensor_parallel`, or pass explicitly)."
-            )
-        from ..integrations.tensor_parallel import apply_tensor_parallelism
-
-        return apply_tensor_parallelism(model, distributed_config.tp_plan, distributed_config, device_mesh)
-
-
 # =============================================================================
 # Inference helpers (plain-tensor collectives)
 # =============================================================================
+#TODO(3outeille): Double check
 # The TP styles above are mode-aware: in training they run the DTensor `redistribute` path
 # (autograd-aware collectives); in inference (`module.training is False`) they unwrap to plain
 # tensors and run these raw collectives instead, skipping DTensor's per-op redistribute machinery

@@ -17,8 +17,6 @@ import os
 from typing import TYPE_CHECKING
 
 from ..utils import is_torch_available, is_torch_greater_or_equal
-from .fsdp import apply_fully_sharded_data_parallelism
-from .tensor_parallel import apply_tensor_parallel
 
 
 if TYPE_CHECKING:
@@ -165,31 +163,6 @@ def initialize_tensor_parallelism(distributed_config: DistributedConfig):
 
     mesh = torch.distributed.init_device_mesh(device_type, (tp_size,), mesh_dim_names=("tp",))
     return device_map, mesh
-
-
-def distribute_model(
-    model,
-    distributed_config: DistributedConfig,
-    device_mesh,
-) -> nn.Module:
-    """Apply TP or FSDP2 to `model` based on ``distributed_config`` (mutually exclusive for now).
-
-    Loading always goes through DTensor placeholders (shard-on-read). ``apply_tensor_parallel``
-    dispatches to the DTensor backend (mode-aware forwards: redistribute when training, plain
-    collectives when in eval) or the legacy plain-tensor backend for expert parallelism and
-    unmigrated model plans.
-    """
-    model.config.distributed_config = distributed_config
-    model._device_mesh = device_mesh
-
-    if distributed_config.tp_size > 1:
-        tp_mesh = device_mesh["tp"] if device_mesh.ndim > 1 else device_mesh
-        model = apply_tensor_parallel(model, tp_mesh)
-    elif distributed_config.fsdp_size > 1:
-        fsdp_mesh = device_mesh["fsdp"] if device_mesh.ndim > 1 else device_mesh
-        model = apply_fully_sharded_data_parallelism(model, fsdp_mesh)
-
-    return model
 
 
 def gather_full_state_dict(model) -> dict[str, torch.Tensor]:

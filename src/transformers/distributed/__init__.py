@@ -23,13 +23,11 @@ _import_structure = {
     "mixin": ["DistributedMixin"],
     "tensor_parallel": [
         "ALL_PARALLEL_STYLES",
-        "apply_tensor_parallel",
+        "apply_tensor_parallelism_dtensor",
         "gather_tp_state_dict",
-        "select_parallel_plan",
         "verify_tp_plan",
     ],
     "utils": [
-        "distribute_model",
         "gather_full_state_dict",
         "initialize_fully_sharded_data_parallelism",
         "initialize_tensor_parallelism",
@@ -48,13 +46,11 @@ if TYPE_CHECKING:
     from .mixin import DistributedMixin
     from .tensor_parallel import (
         ALL_PARALLEL_STYLES,
-        apply_tensor_parallel,
+        apply_tensor_parallelism_dtensor,
         gather_tp_state_dict,
-        select_parallel_plan,
         verify_tp_plan,
     )
     from .utils import (
-        distribute_model,
         gather_full_state_dict,
         initialize_fully_sharded_data_parallelism,
         initialize_tensor_parallelism,
