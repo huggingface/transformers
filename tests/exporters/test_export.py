@@ -126,6 +126,8 @@ EXPORT_SKIPS: dict[str, dict[str, str]] = {
             "pair the functional-graph assertion rejects (independent of any source `.detach()` — "
             "verified). Torch export works. TODO: file upstream `torch.export` issue."
         ),
+        "PixioModel": ("Lowering exceeds the 10-minute test timeout."),
+        "PixioBackbone": "Same `timeout` failure as `PixioModel`.",
     },
     # ONNX, generate path only.
     "onnx.generate": {
@@ -152,6 +154,28 @@ EXPORT_SKIPS: dict[str, dict[str, str]] = {
             "× 3 Q-pool stage transitions on symbolic H/W). ONNX + ORT push past 1000s timeout."
         ),
         "Sam2Model": "Same Hiera-backbone dynamic-shape budget overrun as `Sam2VisionModel`.",
+        "BigBirdModel": ("Lowering exceeds the 10-minute test timeout under dynamic shapes."),
+        "BigBirdForCausalLM": "Same `timeout` failure as `BigBirdModel`.",
+        "BigBirdForMaskedLM": "Same `timeout` failure as `BigBirdModel`.",
+        "BigBirdForMultipleChoice": "Same `timeout` failure as `BigBirdModel`.",
+        "BigBirdForPreTraining": "Same `timeout` failure as `BigBirdModel`.",
+        "BigBirdForQuestionAnswering": "Same `timeout` failure as `BigBirdModel`.",
+        "BigBirdForSequenceClassification": "Same `timeout` failure as `BigBirdModel`.",
+        "BigBirdForTokenClassification": "Same `timeout` failure as `BigBirdModel`.",
+        "DonutSwinModel": "Same `timeout` failure as `BigBirdModel`.",
+        "DonutSwinForImageClassification": "Same `timeout` failure as `BigBirdModel`.",
+        "MaskFormerSwinModel": "Same `timeout` failure as `BigBirdModel`.",
+        "MaskFormerSwinBackbone": "Same `timeout` failure as `BigBirdModel`.",
+        "Mask2FormerModel": "Same `timeout` failure as `BigBirdModel`.",
+        "Mask2FormerForUniversalSegmentation": "Same `timeout` failure as `BigBirdModel`.",
+        "SwinModel": "Same `timeout` failure as `BigBirdModel`.",
+        "SwinBackbone": "Same `timeout` failure as `BigBirdModel`.",
+        "SwinForImageClassification": "Same `timeout` failure as `BigBirdModel`.",
+        "SwinForMaskedImageModeling": "Same `timeout` failure as `BigBirdModel`.",
+        "Swinv2Model": "Same `timeout` failure as `BigBirdModel`.",
+        "Swinv2Backbone": "Same `timeout` failure as `BigBirdModel`.",
+        "Swinv2ForImageClassification": "Same `timeout` failure as `BigBirdModel`.",
+        "Swinv2ForMaskedImageModeling": "Same `timeout` failure as `BigBirdModel`.",
     },
     # ExecuTorch — lowering failures grouped by root cause; see the first entry of each
     # `Same ... as` chain for the full description.
