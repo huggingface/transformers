@@ -184,9 +184,7 @@ class NemotronHOmniModelTest(unittest.TestCase):
             # attn_implementation isn't persisted in the saved config (defaults back to flash,
             # which is unavailable on CPU), so request eager explicitly on reload.
             reloaded = (
-                NemotronH_Omni_Reasoning_V3.from_pretrained(
-                    tmp, attn_implementation="eager", dtype=torch.bfloat16
-                )
+                NemotronH_Omni_Reasoning_V3.from_pretrained(tmp, attn_implementation="eager", dtype=torch.bfloat16)
                 .to(torch_device)
                 .eval()
             )

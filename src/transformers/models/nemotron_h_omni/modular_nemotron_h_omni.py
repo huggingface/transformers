@@ -24,9 +24,8 @@ from ...generation import GenerationConfig
 from ...modeling_outputs import CausalLMOutputWithPast
 from ...modeling_utils import PreTrainedModel
 from ...utils import logging
-from ..nemotron_h import NemotronHForCausalLM
+from ..auto import CONFIG_MAPPING, FEATURE_EXTRACTOR_MAPPING, AutoConfig, AutoModel, AutoModelForCausalLM
 from ..nemotron_h.modeling_nemotron_h import NemotronHRMSNorm
-from ..radio import RadioModel
 from .configuration_nemotron_h_omni import NemotronH_Omni_Reasoning_V3_Config
 
 
@@ -127,7 +126,6 @@ class SoundEncoder(nn.Module):
 
     def __init__(self, config=None):
         super().__init__()
-        from ..parakeet import ParakeetEncoder, ParakeetEncoderConfig
 
         if config is None:
             raise ValueError("config must be provided, and ParakeetEncoder must be available in transformers.")
@@ -154,9 +152,9 @@ class SoundEncoder(nn.Module):
         else:
             config_dict = {}
 
-        parakeet_config = ParakeetEncoderConfig(**config_dict)
+        parakeet_config = AutoConfig.for_model("parakeet_encoder", **config_dict)
         self.config = parakeet_config
-        self.encoder = ParakeetEncoder(parakeet_config)
+        self.encoder = AutoModel.from_config(parakeet_config)
 
     def forward(self, input_features: torch.Tensor, attention_mask: torch.Tensor | None = None) -> torch.Tensor:
         outputs = self.encoder(input_features=input_features, attention_mask=attention_mask)
@@ -191,8 +189,8 @@ class NemotronH_Omni_Reasoning_V3(PreTrainedModel):
         logger.info(f"num_image_token: {self.num_image_token}")
         logger.info(f"ps_version: {self.ps_version}")
 
-        self.language_model = NemotronHForCausalLM(config.llm_config)
-        self.vision_model = RadioModel(config.vision_config)
+        self.language_model = AutoModelForCausalLM.from_config(config.llm_config)
+        self.vision_model = AutoModel.from_config(config.vision_config)
         self.vision_model.make_preprocessor_external()
 
         # 3D video patch projection. The native RADIO patch embedder is a 2D
@@ -234,11 +232,12 @@ class NemotronH_Omni_Reasoning_V3(PreTrainedModel):
             sound_hidden_size = sound_config.hidden_size
             sound_projection_hidden_size = sound_config.projection_hidden_size
 
-            from ..parakeet import ParakeetFeatureExtractor
-
+            # Resolve the Parakeet feature extractor through the auto mapping (keep audio
+            # preprocessing decoupled from a direct cross-model import).
+            feature_extractor_class = FEATURE_EXTRACTOR_MAPPING[CONFIG_MAPPING["parakeet_encoder"]]
             sampling_rate = getattr(sound_config, "sampling_rate", 16000)
             feature_size = getattr(sound_config, "num_mel_bins", 128)
-            self.sound_feature_extractor = ParakeetFeatureExtractor(
+            self.sound_feature_extractor = feature_extractor_class(
                 sampling_rate=sampling_rate,
                 feature_size=feature_size,
             )
@@ -259,6 +258,8 @@ class NemotronH_Omni_Reasoning_V3(PreTrainedModel):
             self.sound_feature_extractor = None
 
         self.all_tied_weights_keys = {}
+
+        self.post_init()
 
     def forward(
         self,

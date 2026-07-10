@@ -100,7 +100,9 @@ class NemotronH_Omni_Reasoning_V3Processor(ProcessorMixin):
         self.audio_token = "<so_embedding>" if not hasattr(tokenizer, "audio_token") else tokenizer.audio_token
         self.audio_start_token = "<so_start>"
         self.audio_end_token = "<so_end>"
-        self.image_start_token = "<img>" if not hasattr(tokenizer, "image_start_token") else tokenizer.image_start_token
+        self.image_start_token = (
+            "<img>" if not hasattr(tokenizer, "image_start_token") else tokenizer.image_start_token
+        )
         self.image_end_token = "</img>" if not hasattr(tokenizer, "image_end_token") else tokenizer.image_end_token
         self.image_token_id = (
             tokenizer.image_token_id
@@ -127,7 +129,7 @@ class NemotronH_Omni_Reasoning_V3Processor(ProcessorMixin):
     def __call__(
         self,
         images: ImageInput = None,
-        text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]] = None,
+        text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] = None,
         videos: VideoInput = None,
         audio: AudioInput = None,
         **kwargs: Unpack[NemotronH_Omni_Reasoning_V3ProcessorKwargs],

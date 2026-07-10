@@ -20,7 +20,7 @@ import numpy as np
 from ...image_processing_backends import TorchvisionBackend
 from ...image_processing_base import BatchFeature
 from ...image_utils import ImageInput, ImageType, get_image_type, make_list_of_images
-from ...utils import TensorType, is_torch_available
+from ...utils import is_torch_available
 
 
 if is_torch_available():
