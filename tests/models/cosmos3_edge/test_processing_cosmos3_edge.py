@@ -19,7 +19,6 @@ from types import SimpleNamespace
 import numpy as np
 
 from transformers import Cosmos3EdgeImageProcessor, Cosmos3EdgeProcessor, Cosmos3EdgeVideoProcessor
-from transformers.models.cosmos3_edge.processing_cosmos3_edge import Cosmos3EdgeProcessorKwargs
 from transformers.testing_utils import require_torch, require_torchvision, require_vision
 
 
@@ -71,6 +70,7 @@ class Cosmos3EdgeVisionProcessorTest(unittest.TestCase):
             patch_size=2,
             merge_size=2,
             temporal_patch_size=1,
+            return_metadata=True,
         )
         video = np.zeros((2, 4, 8, 3), dtype=np.uint8)
         metadata = [{"fps": 2, "total_num_frames": 2, "duration": 1.0}]
@@ -81,6 +81,7 @@ class Cosmos3EdgeVisionProcessorTest(unittest.TestCase):
         # unmerged because Edge encodes one timestamped vision span per frame.
         self.assertEqual(tuple(processed["pixel_values_videos"].shape), (16, 12))
         self.assertEqual(processed["video_grid_thw"].tolist(), [[2, 2, 4]])
+        self.assertIn("video_metadata", processed)
 
     def test_video_processor_uses_projector_block_major_patch_order_per_frame(self):
         processor = Cosmos3EdgeVideoProcessor(
@@ -117,7 +118,20 @@ class Cosmos3EdgeVisionProcessorTest(unittest.TestCase):
         self.assertEqual(Cosmos3EdgeProcessor.__name__, "Cosmos3EdgeProcessor")
 
     def test_processor_returns_multimodal_token_types_by_default(self):
-        self.assertTrue(Cosmos3EdgeProcessorKwargs._defaults["text_kwargs"]["return_mm_token_type_ids"])
+        processor = object.__new__(Cosmos3EdgeProcessor)
+        processor.tokenizer = SimpleNamespace()
+        merged_kwargs = processor._merge_kwargs(
+            Cosmos3EdgeProcessor.valid_processor_kwargs,
+            tokenizer_init_kwargs={"return_mm_token_type_ids": True},
+        )
+        overridden_kwargs = processor._merge_kwargs(
+            Cosmos3EdgeProcessor.valid_processor_kwargs,
+            tokenizer_init_kwargs={"return_mm_token_type_ids": True},
+            text_kwargs={"return_mm_token_type_ids": False},
+        )
+
+        self.assertTrue(merged_kwargs["text_kwargs"]["return_mm_token_type_ids"])
+        self.assertFalse(overridden_kwargs["text_kwargs"]["return_mm_token_type_ids"])
 
     def test_video_placeholder_uses_one_timestamped_vision_span_per_frame(self):
         # This isolates placeholder expansion from tokenizer loading. The checkpoint

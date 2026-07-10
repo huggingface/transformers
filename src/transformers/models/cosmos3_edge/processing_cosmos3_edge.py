@@ -24,25 +24,20 @@ from ...utils import auto_docstring, logging
 logger = logging.get_logger(__name__)
 
 
-class Cosmos3EdgeProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {
-        "text_kwargs": {
-            "padding": False,
-            "return_token_type_ids": False,
-            "return_mm_token_type_ids": True,
-        },
-        # Video placeholders contain timestamps, so metadata is needed while the processor expands them.
-        "videos_kwargs": {"return_metadata": True},
-    }
-
-
 @auto_docstring
 class Cosmos3EdgeProcessor(ProcessorMixin):
     """Construct a Cosmos3 Edge multimodal prompt from image, video, and text inputs."""
 
-    valid_processor_kwargs = Cosmos3EdgeProcessorKwargs
+    valid_processor_kwargs = ProcessingKwargs
 
-    def __init__(self, image_processor=None, tokenizer=None, video_processor=None, chat_template=None, **kwargs):
+    def __init__(
+        self,
+        image_processor=None,
+        tokenizer=None,
+        video_processor=None,
+        chat_template=None,
+        **kwargs,
+    ):
         self.image_token = "<|image_pad|>" if not hasattr(tokenizer, "image_token") else tokenizer.image_token
         self.video_token = "<|video_pad|>" if not hasattr(tokenizer, "video_token") else tokenizer.video_token
         self.vision_start_token = (
@@ -239,10 +234,8 @@ class Cosmos3EdgeProcessor(ProcessorMixin):
     def _get_num_multimodal_tokens(self, image_sizes=None, video_sizes=None, **kwargs):
         """Compute placeholder counts for serving frameworks without materializing pixels."""
         vision_data = {}
-        images_kwargs = dict(self.valid_processor_kwargs._defaults.get("images_kwargs", {}))
-        videos_kwargs = dict(self.valid_processor_kwargs._defaults.get("videos_kwargs", {}))
-        images_kwargs.update(kwargs.get("images_kwargs", kwargs))
-        videos_kwargs.update(kwargs.get("videos_kwargs", kwargs))
+        images_kwargs = dict(kwargs.get("images_kwargs", kwargs))
+        videos_kwargs = dict(kwargs.get("videos_kwargs", kwargs))
 
         if image_sizes is not None:
             merge_size = images_kwargs.get("merge_size", self.image_processor.merge_size)
