@@ -16,6 +16,8 @@
       title: Loading models
     - local: custom_models
       title: Customizing models
+    - local: heterogeneous_configurations
+      title: Heterogeneous configurations
     - local: monkey_patching
       title: Monkey patching
     - local: fusion_mapping
