@@ -708,19 +708,17 @@ class TmlTextModel(TmlPreTrainedModel):
 
 
 class TmlAudioModelEmbeddings(nn.Module):
-    """Each mel bin indexes its own contiguous block of `mel_vocab_size` embeddings; the per-bin offsets
-    are added to `audio_input_ids` before lookup and the resulting per-bin embeddings summed."""
-
-    def __init__(self, config: TmlAudioConfig):
+    def __init__(self, config):
         super().__init__()
-        self.embed_audio_tokens = nn.Embedding(config.n_mel_bins * config.mel_vocab_size, config.text_hidden_size)
+        self.embed_audio_tokens = nn.Embedding((config.num_codebooks * config.codebook_size), config.hidden_size)
         self.register_buffer(
-            "audio_tokens_offsets", torch.arange(config.n_mel_bins) * config.mel_vocab_size, persistent=False
+            "audio_tokens_offsets", torch.arange(config.num_codebooks) * config.codebook_size, persistent=False
         )
 
-    def forward(self, audio_input_ids: torch.Tensor) -> torch.Tensor:
-        inputs_embeds = self.embed_audio_tokens(audio_input_ids + self.audio_tokens_offsets)
-        return inputs_embeds.sum(dim=-2)
+    def forward(self, input_ids):
+        inputs_embeds = self.embed_audio_tokens(input_ids + self.audio_tokens_offsets)
+        inputs_embeds = inputs_embeds.sum(dim=-2)
+        return inputs_embeds
 
 
 class TmlAudioModel(TmlPreTrainedModel):

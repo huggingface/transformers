@@ -122,6 +122,11 @@ class TmlTextConfig(PreTrainedConfig):
 class TmlAudioConfig(PreTrainedConfig):
     model_type = "tml_audio"
     base_config_key = "audio_config"
+    attribute_map = {
+        "num_codebooks": "n_mel_bins",
+        "codebook_size": "mel_vocab_size",
+        "hidden_size": "text_hidden_size",
+    }
 
     n_mel_bins: int = 80
     mel_vocab_size: int = 256

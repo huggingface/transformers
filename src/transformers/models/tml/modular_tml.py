@@ -42,6 +42,7 @@ from ...utils.generic import merge_with_config_defaults
 from ...utils.import_utils import is_causal_conv1d_available
 from ...utils.output_capturing import capture_outputs
 from ..gemma3.modeling_gemma3 import Gemma3CausalLMOutputWithPast, Gemma3MLP, Gemma3ModelOutputWithPast
+from ..higgs_audio_v2.modeling_higgs_audio_v2 import HiggsAudioV2Embeddings
 from ..llama.modeling_llama import LlamaRMSNorm, repeat_kv
 from ..mixtral.modeling_mixtral import MixtralExperts
 from ..qwen3_next.modeling_qwen3_next import apply_mask_to_padding_states
@@ -155,6 +156,11 @@ class TmlTextConfig(PreTrainedConfig):
 class TmlAudioConfig(PreTrainedConfig):
     model_type = "tml_audio"
     base_config_key = "audio_config"
+    attribute_map = {
+        "num_codebooks": "n_mel_bins",
+        "codebook_size": "mel_vocab_size",
+        "hidden_size": "text_hidden_size",
+    }
 
     n_mel_bins: int = 80
     mel_vocab_size: int = 256
@@ -752,20 +758,7 @@ class TmlTextModel(TmlPreTrainedModel):
         )
 
 
-class TmlAudioModelEmbeddings(nn.Module):
-    """Each mel bin indexes its own contiguous block of `mel_vocab_size` embeddings; the per-bin offsets
-    are added to `audio_input_ids` before lookup and the resulting per-bin embeddings summed."""
-
-    def __init__(self, config: TmlAudioConfig):
-        super().__init__()
-        self.embed_audio_tokens = nn.Embedding(config.n_mel_bins * config.mel_vocab_size, config.text_hidden_size)
-        self.register_buffer(
-            "audio_tokens_offsets", torch.arange(config.n_mel_bins) * config.mel_vocab_size, persistent=False
-        )
-
-    def forward(self, audio_input_ids: torch.Tensor) -> torch.Tensor:
-        inputs_embeds = self.embed_audio_tokens(audio_input_ids + self.audio_tokens_offsets)
-        return inputs_embeds.sum(dim=-2)
+class TmlAudioModelEmbeddings(HiggsAudioV2Embeddings): ...
 
 
 class TmlAudioModel(TmlPreTrainedModel):
