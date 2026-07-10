@@ -18,7 +18,6 @@ from dataclasses import dataclass
 import torch
 import torch.nn as nn
 from huggingface_hub.dataclasses import strict
-from torch.nn import CrossEntropyLoss
 
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
@@ -773,8 +772,13 @@ class MoonshineForConditionalGeneration(MoonshinePreTrainedModel, GenerationMixi
 
         loss = None
         if labels is not None:
-            loss_fct = CrossEntropyLoss()
-            loss = loss_fct(logits.reshape(-1, self.config.vocab_size), labels.reshape(-1))
+            # labels were already right-shifted into decoder_input_ids above (whisper legacy
+            # convention), so logits[i] lines up with labels[i]. Pass them as shift_labels so
+            # ForCausalLMLoss skips its internal shift but keeps num_items_in_batch handling
+            # (proper loss reduction under gradient accumulation).
+            loss = self.loss_function(
+                logits=logits, labels=None, shift_labels=labels, vocab_size=self.config.vocab_size, **kwargs
+            )
 
         return Seq2SeqLMOutput(
             loss=loss,

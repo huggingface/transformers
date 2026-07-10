@@ -210,8 +210,10 @@ class CohereAsrModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
             self.assertFalse(torch.allclose(out.loss, double_shift_ce(out.logits, lbl)))
 
         # with num_items_in_batch (as passed by Trainer under gradient accumulation), the loss
-        # must be summed over tokens and divided by the global count, not mean-reduced per step
-        num_items = (padded != -100).sum()
+        # must be summed over tokens and divided by the global count, not mean-reduced per step.
+        # Use a global count different from this batch's valid-token count (as with 2 accumulation
+        # steps) so the summed path is distinguishable from the mean.
+        num_items = 2 * (padded != -100).sum()
         with torch.no_grad():
             out = model(input_features=input_features, labels=padded, use_cache=False, num_items_in_batch=num_items)
         summed_ce = CrossEntropyLoss(reduction="sum")(out.logits.reshape(-1, vocab_size), padded.reshape(-1))
