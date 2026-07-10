@@ -597,7 +597,7 @@ class TmlPreTrainedModel(PreTrainedModel):
     # kwarg that only the eager path consumes; other backends need a score_mod/kernel
     _supports_flash_attn = False
     _supports_sdpa = True
-    _supports_flex_attn = False
+    _supports_flex_attn = True
     _can_compile_fullgraph = False
     _supports_attention_backend = False
     _keys_to_ignore_on_load_unexpected = [r"model\.mtp\..*"]
