@@ -1609,7 +1609,6 @@ def verify_tp_plan(expected_keys: list[str], tp_plan: dict[str, str] | None):
 
 def apply_tensor_parallelism(model, tp_plan, distributed_config, device_mesh):
     """Apply tensor parallelism to a model according to the TP plan."""
-    model._tp_size = distributed_config.tp_size
     model._device_mesh = device_mesh
     if distributed_config is not None:
         if isinstance(distributed_config, dict):

@@ -1793,7 +1793,7 @@ class GenerationMixin(ContinuousMixin):
             # The model layers are on different devices
             return None
         text_config = self.config.get_text_config(decoder=True)
-        tp_size = getattr(self, "_tp_size", None) or 1
+        tp_size = getattr(self, "tp_size", None) or 1
         num_key_value_heads = getattr(text_config, "num_key_value_heads", None) or text_config.num_attention_heads
         if num_key_value_heads % tp_size != 0:
             # The model cannot be evenly sharded by head

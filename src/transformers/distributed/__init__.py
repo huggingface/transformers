@@ -21,10 +21,16 @@ _import_structure = {
     "configuration_utils": ["DistributedConfig"],
     "fsdp": ["is_fsdp_enabled", "is_fsdp_managed_module", "verify_fsdp_plan"],
     "mixin": ["DistributedMixin"],
+    "tensor_parallel": [
+        "ALL_PARALLEL_STYLES",
+        "apply_tensor_parallelism_dtensor",
+        "gather_tp_state_dict",
+        "verify_tp_plan",
+    ],
     "utils": [
-        "distribute_model",
         "gather_full_state_dict",
         "initialize_fully_sharded_data_parallelism",
+        "initialize_tensor_parallelism",
         "load_optimizer_distributed",
         "save_model_checkpoint_distributed",
         "save_optimizer_distributed",
@@ -38,10 +44,16 @@ if TYPE_CHECKING:
     )
     from .fsdp import is_fsdp_enabled, is_fsdp_managed_module, verify_fsdp_plan
     from .mixin import DistributedMixin
+    from .tensor_parallel import (
+        ALL_PARALLEL_STYLES,
+        apply_tensor_parallelism_dtensor,
+        gather_tp_state_dict,
+        verify_tp_plan,
+    )
     from .utils import (
-        distribute_model,
         gather_full_state_dict,
         initialize_fully_sharded_data_parallelism,
+        initialize_tensor_parallelism,
         load_optimizer_distributed,
         save_model_checkpoint_distributed,
         save_optimizer_distributed,

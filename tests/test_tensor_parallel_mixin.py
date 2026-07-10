@@ -10,6 +10,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import math
 import os
 import socket
 import tempfile
@@ -461,6 +462,12 @@ class TensorParallelTesterMixin(ABC):
             return self.model_tester.causal_lm_class
         return self.all_model_classes[0]
 
+    def _get_tp_config(self):
+        """Config for TP tests with vocab_size divisible by tensor_parallel_size."""
+        config = self.model_tester.get_config()
+        config.vocab_size = math.lcm(config.vocab_size, self.tensor_parallel_size)
+        return config
+
     def _skip_if_not_supported(self, expert_parallel: bool = False):
         """Check and skip the test if tensor/expert parallel is not supported for this model/environment."""
         parallelism = "Expert" if expert_parallel else "Tensor"
@@ -498,7 +505,7 @@ class TensorParallelTesterMixin(ABC):
     def test_tp_forward(self):
         self._skip_if_not_supported()
 
-        config = self.model_tester.get_config()
+        config = self._get_tp_config()
         model_class = self._get_tp_model_class()
         atol = self.tensor_parallel_atol
         rtol = self.tensor_parallel_rtol
@@ -514,7 +521,7 @@ class TensorParallelTesterMixin(ABC):
     def test_tp_backward(self):
         self._skip_if_not_supported()
 
-        config = self.model_tester.get_config()
+        config = self._get_tp_config()
         model_class = self._get_tp_model_class()
         atol = self.tensor_parallel_atol
         rtol = self.tensor_parallel_rtol
@@ -531,7 +538,7 @@ class TensorParallelTesterMixin(ABC):
         # Test TP generation: unfused checkpoint → conversion mapping (if needed) → TP sharding → model → generate
         self._skip_if_not_supported()
 
-        config = self.model_tester.get_config()
+        config = self._get_tp_config()
 
         model_class = self._get_tp_model_class()
         atol = self.tensor_parallel_atol
@@ -553,7 +560,7 @@ class TensorParallelTesterMixin(ABC):
         if not is_torchao_available():
             self.skipTest("Test requires torchao")
 
-        config = self.model_tester.get_config()
+        config = self._get_tp_config()
         model_class = self._get_tp_model_class()
         max_new_tokens = 25
 
@@ -570,7 +577,7 @@ class TensorParallelTesterMixin(ABC):
     def test_ep_forward(self):
         self._skip_if_not_supported(expert_parallel=True)
 
-        config = self.model_tester.get_config()
+        config = self._get_tp_config()
         model_class = self._get_tp_model_class()
         atol = self.tensor_parallel_atol
         rtol = self.tensor_parallel_rtol
@@ -586,7 +593,7 @@ class TensorParallelTesterMixin(ABC):
     def test_ep_backward(self):
         self._skip_if_not_supported(expert_parallel=True)
 
-        config = self.model_tester.get_config()
+        config = self._get_tp_config()
         model_class = self._get_tp_model_class()
         atol = self.tensor_parallel_atol
         rtol = self.tensor_parallel_rtol

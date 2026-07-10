@@ -279,6 +279,8 @@ class Cohere2MoeModel(Cohere2Model):
 
 
 class Cohere2MoeForCausalLM(Cohere2ForCausalLM):
+    _tp_plan = {"lm_head": "colwise_allgather"}
+
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,

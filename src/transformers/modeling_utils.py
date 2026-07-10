@@ -53,9 +53,12 @@ from .core_model_loading import (
 from .distributed import DistributedConfig
 from .distributed.fsdp import is_fsdp_managed_module
 from .distributed.mixin import DistributedMixin
+from .distributed.sharding_utils import _dtensor_from_local_like
+from .distributed.tensor_parallel import _get_parameter_tp_plan, verify_tp_plan
 from .distributed.utils import (
     _distributed_barrier,
     _get_torch_distributed_world_size,
+    _is_dtensor,
     _is_torch_distributed_initialized,
     is_local_dist_rank_0,
 )
@@ -83,9 +86,7 @@ from .integrations.peft import maybe_load_adapters
 from .integrations.sdpa_attention import sdpa_attention_forward
 from .integrations.sdpa_paged import sdpa_attention_paged_forward
 from .integrations.tensor_parallel import (
-    _get_parameter_tp_plan,
     shard_and_distribute_module,
-    verify_tp_plan,
 )
 from .loss.loss_utils import LOSS_MAPPING
 from .modeling_flash_attention_utils import (
@@ -149,8 +150,6 @@ if TYPE_CHECKING:
 
     from ._typing import DeviceMeshLike
 
-
-_torch_distributed_available = torch.distributed.is_available()
 
 if is_sagemaker_mp_enabled():
     import smdistributed.modelparallel.torch as smp
@@ -1371,8 +1370,11 @@ class PreTrainedModel(
         """
         # Attach the different parallel plans and tied weight keys to the top-most model, so that everything is
         # easily available.
-        self._tp_plan, self._ep_plan, self._pp_plan, self._fsdp_plan = {}, {}, {}, {}
-        # If current model is a base model, attach `base_model_tp_plan` and `base_model_pp_plan` from config
+        self._tp_plan = getattr(self, "_tp_plan", None) or {}
+        self._ep_plan = {}
+        self._pp_plan = {}
+        self._fsdp_plan = getattr(self, "_fsdp_plan", None) or {}
+        # If current model is a base model, attach `base_model_*_plan` from config
         if self.base_model is self:
             self._pp_plan = self.config.base_model_pp_plan.copy() if self.config.base_model_pp_plan is not None else {}
             self._tp_plan = self.config.base_model_tp_plan.copy() if self.config.base_model_tp_plan is not None else {}
@@ -1397,10 +1399,10 @@ class PreTrainedModel(
         # This works because the way the `__init__` and `post_init` are called on all submodules is depth-first in the graph
         for name, module in self.named_children():
             # Parallel plans
-            if plan := getattr(module, "_ep_plan", None):
-                self._ep_plan.update({f"{name}.{k}": v for k, v in plan.copy().items()})
             if plan := getattr(module, "_tp_plan", None):
                 self._tp_plan.update({f"{name}.{k}": v for k, v in plan.copy().items()})
+            if plan := getattr(module, "_ep_plan", None):
+                self._ep_plan.update({f"{name}.{k}": v for k, v in plan.copy().items()})
             if plan := getattr(module, "_pp_plan", None):
                 self._pp_plan.update({f"{name}.{k}": v for k, v in plan.copy().items()})
             if plan := getattr(module, "_fsdp_plan", None):
@@ -3349,8 +3351,8 @@ class PreTrainedModel(
                 " the logger on the traceback to understand the reason why the quantized model is not serializable."
             )
 
-        # we need to check against tp_size, not tp_plan, as tp_plan is substituted to the class one
-        if self._tp_size is not None and not is_huggingface_hub_greater_or_equal("0.31.4"):
+        # Check tp_size (from device mesh), not tp_plan — tp_plan is always present on TP-capable models
+        if self.tp_size is not None and not is_huggingface_hub_greater_or_equal("0.31.4"):
             raise ImportError(
                 "Saving a model with tensor parallelism requires `huggingface_hub` version 0.31.4 or higher."
             )
@@ -3449,7 +3451,7 @@ class PreTrainedModel(
         if state_dict is None:
             state_dict = model_to_save.state_dict()
 
-        if self._tp_size is not None:
+        if self.tp_size is not None:
             state_dict, needs_dist_barrier = self._gather_tp_state_dict_for_save(
                 state_dict, is_checkpoint_writer=save_on_this_rank
             )
@@ -4008,18 +4010,14 @@ class PreTrainedModel(
             distributed_config ([`~transformers.distributed.configuration_utils.DistributedConfig`], *optional*):
                 Configuration for native distributed loading with tensor parallelism or FSDP2. Pass
                 `DistributedConfig(tp_size=N)` for tensor parallelism, or
-                `DistributedConfig(fsdp_size=N)` for FSDP2. Requires `torchrun` and an initialized
-                process group when `tp_size > 1` or `fsdp_size > 1`. Mutually exclusive with `device_map`.
-            tp_plan (`Optional[Union[dict, str]]`, *optional*):
-                A torch tensor parallel plan, see [here](https://pytorch.org/tutorials/intermediate/TP_tutorial.html). Use `tp_plan="auto"` to
-                use the predefined plan based on the model. If it's a dict, then it should match between module names and desired layout.
-                Note that if you use it, you should launch your script accordingly with `torchrun [args] script.py`. This will be much
-                faster than using a `device_map`, but has limitations.
-            tp_size (`str`, *optional*):
-                A torch tensor parallel degree. If not provided would default to world size.
+                `DistributedConfig(fsdp_size=N)` for FSDP2. Optionally set `tp_plan` on the config to
+                override the model's default plan; leave it as `None` to use `base_model_tp_plan`.
+                Requires `torchrun` and an initialized process group when `tp_size > 1` or
+                `fsdp_size > 1`. Mutually exclusive with `device_map`.
             device_mesh (`torch.distributed.DeviceMesh`, *optional*):
-                A torch device mesh. If not provided would default to world size. Used only for tensor parallel for now.
-                If provided, it has to contain dimension named `"tp"` in case it's > 1 dimensional, this dimension will be used for tensor parallelism
+                A torch device mesh. If not provided, one is built from `distributed_config`. Used for
+                tensor parallelism (and FSDP2). If provided and multi-dimensional, it must contain a
+                dimension named `"tp"` (resp. `"fsdp"`) for that parallelism style.
             offload_folder (`str` or `os.PathLike`, *optional*):
                 If the `device_map` contains any value `"disk"`, the folder where we will offload weights.
             offload_buffers (`bool`, *optional*):
@@ -4623,14 +4621,6 @@ class PreTrainedModel(
         return False
 
     @property
-    def tp_size(self):
-        """
-        Returns the model's tensor parallelism degree.
-        """
-        # if None, the model didn't undergo tensor parallel sharding
-        return self._tp_size
-
-    @property
     def supports_pp_plan(self):
         # Check if model has a PP plan
         if self._pp_plan:
@@ -4747,16 +4737,28 @@ class PreTrainedModel(
         # will be re-initialized for nothing (which can be quite long)
         for key in missing_keys - self.all_tied_weights_keys.keys():
             param = self.get_parameter_or_buffer(key)
-            param_device = get_device(device_map, key, valid_torch_device=True)
-            value = torch.empty_like(param, device=param_device)
-            # For TP, we may need to shard the param
-            if device_mesh is not None:
-                shard_and_distribute_module(
-                    self, value, param, key, None, False, device_mesh.get_local_rank(), device_mesh
+            if _is_dtensor(param):
+                # DTensor param still on meta (from TP/FSDP sharding): materialize its local shard on the real device
+                # and re-wrap with the same mesh/placements.
+                local_value = torch.empty(
+                    param._local_tensor.shape,
+                    dtype=param.dtype,
+                    device=torch.device(param.device_mesh.device_type, torch.cuda.current_device()),
                 )
-            # Otherwise, just move it to device
+                new_dtensor = _dtensor_from_local_like(local_value, param)
+                with torch.no_grad():
+                    new_param = torch.nn.Parameter(new_dtensor, requires_grad=param.requires_grad)
+                    torch.utils.swap_tensors(param, new_param)
             else:
-                _load_parameter_into_model(self, key, value)
+                param_device = get_device(device_map, key, valid_torch_device=True)
+                value = torch.empty_like(param, device=param_device)
+                if device_mesh is not None:
+                    # Legacy plain-tensor TP path: shard the param via `device_mesh`.
+                    shard_and_distribute_module(
+                        self, value, param, key, None, False, device_mesh.get_local_rank(), device_mesh
+                    )
+                else:
+                    _load_parameter_into_model(self, key, value)
         # We need to move back non-persistent buffers as well, as they are not part of loaded weights anyway
         for key, buffer in self.named_non_persistent_buffers():
             buffer_device = get_device(device_map, key, valid_torch_device=True)

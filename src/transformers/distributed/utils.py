@@ -16,14 +16,10 @@ from __future__ import annotations
 import os
 from typing import TYPE_CHECKING
 
-from ..integrations.tensor_parallel import apply_tensor_parallelism
 from ..utils import is_torch_available, is_torch_greater_or_equal
-from .fsdp import apply_fully_sharded_data_parallelism
 
 
 if TYPE_CHECKING:
-    import torch.nn as nn
-
     from .configuration_utils import DistributedConfig
 
 if is_torch_available():
@@ -32,6 +28,15 @@ if is_torch_available():
     _torch_distributed_available = torch.distributed.is_available()
 else:
     _torch_distributed_available = False
+
+if _torch_distributed_available:
+    from torch.distributed.tensor import DTensor
+
+
+def _is_dtensor(x) -> bool:
+    """Whether `x` is a DTensor (safe when torch.distributed is unavailable)."""
+    return _torch_distributed_available and isinstance(x, DTensor)
+
 
 if is_torch_available() and is_torch_greater_or_equal("2.7"):
     import torch.distributed.checkpoint as dcp
@@ -118,12 +123,6 @@ def _distributed_barrier():
 
 
 def initialize_fully_sharded_data_parallelism(distributed_config: DistributedConfig):
-    if not is_torch_greater_or_equal("2.5"):
-        raise OSError("Distributed training with DistributedConfig requires `torch>=2.5`.")
-
-    if distributed_config.fsdp_size > 1 and not is_torch_greater_or_equal("2.7"):
-        raise OSError("FSDP2 requires `torch>=2.7`.")
-
     device_type = torch._C._get_accelerator().type
     _ensure_torch_distributed(device_type)
 
@@ -153,27 +152,24 @@ def initialize_fully_sharded_data_parallelism(distributed_config: DistributedCon
     return device_map, mesh
 
 
-def distribute_model(
-    model,
-    distributed_config: DistributedConfig,
-    device_mesh,
-) -> nn.Module:
-    """Apply TP or FSDP2 to `model` based on ``distributed_config`` (mutually exclusive for now)."""
-    model.config.distributed_config = distributed_config
-    model._device_mesh = device_mesh
+def initialize_tensor_parallelism(distributed_config: DistributedConfig):
+    """Init the process group + a 1-D ``(tp,)`` device mesh for tensor parallelism."""
+    device_type = torch._C._get_accelerator().type
+    _ensure_torch_distributed(device_type)
 
-    if distributed_config.tp_size > 1:
-        model = apply_tensor_parallelism(
-            model,
-            distributed_config.tp_plan,
-            distributed_config,
-            device_mesh,
-        )
-    elif distributed_config.fsdp_size > 1:
-        fsdp_mesh = device_mesh["fsdp"] if device_mesh.ndim > 1 else device_mesh
-        model = apply_fully_sharded_data_parallelism(model, fsdp_mesh)
+    world_size = torch.distributed.get_world_size()
+    if device_type != "cpu":
+        local_rank = int(os.environ.get("LOCAL_RANK", 0))
+        getattr(torch, device_type).set_device(local_rank)
+        device_map = torch.device(device_type, local_rank)
+    else:
+        device_map = torch.device(device_type)
 
-    return model
+    tp_size = distributed_config.tp_size
+    assert world_size == tp_size, f"world_size ({world_size}) must be equal to tp_size ({tp_size})"
+
+    mesh = torch.distributed.init_device_mesh(device_type, (tp_size,), mesh_dim_names=("tp",))
+    return device_map, mesh
 
 
 def gather_full_state_dict(model) -> dict[str, torch.Tensor]:

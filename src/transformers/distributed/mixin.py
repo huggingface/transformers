@@ -19,21 +19,23 @@ import re
 import warnings
 from typing import TYPE_CHECKING
 
-from ..integrations.tensor_parallel import (
-    ALL_PARALLEL_STYLES,
-    gather_state_dict_for_save,
-    initialize_tensor_parallelism,
-)
 from ..utils import SAFE_WEIGHTS_INDEX_NAME, is_torch_available, is_torch_greater_or_equal, logging
 from ..utils.hub import create_and_tag_model_card
 from .configuration_utils import DistributedConfig
-from .fsdp import is_fsdp_managed_module
+from .fsdp import apply_fully_sharded_data_parallelism, is_fsdp_managed_module
+from .tensor_parallel import (
+    ALL_PARALLEL_STYLES,
+    _supports_dtensor_path,
+    apply_tensor_parallelism_dtensor,
+    gather_tp_state_dict,
+)
 from .utils import (
+    _ensure_torch_distributed,
     _get_torch_distributed_rank,
     _is_torch_distributed_initialized,
-    distribute_model,
     gather_full_state_dict,
     initialize_fully_sharded_data_parallelism,
+    initialize_tensor_parallelism,
     save_model_checkpoint_distributed,
 )
 
@@ -61,14 +63,20 @@ class DistributedMixin:
 
     _device_mesh = None
     _tp_plan: dict[str, str] | None = None
-    _tp_size = None
     _pp_plan: dict[str, tuple[str, str]] = None
     _fsdp_plan: dict[str, str] | None = None
 
     @property
     def tp_plan(self) -> dict[str, str]:
-        """The full tp plan for the model's modules."""
-        if hasattr(self.config, "distributed_config") and self.config.distributed_config.enable_expert_parallel:
+        """The tp plan for the model's modules.
+
+        For dense / MoE tensor parallelism this is ``base_model_tp_plan`` (written by
+        ``maybe_distribute_model`` at load time). Expert parallelism (``enable_expert_parallel=True``)
+        still uses the legacy ``base_model_ep_plan`` path.
+        """
+        if hasattr(self.config, "distributed_config") and getattr(
+            self.config.distributed_config, "enable_expert_parallel", False
+        ):
             if not self._ep_plan:
                 raise ValueError(
                     f"Expert parallelism was requested (`enable_expert_parallel=True`), but "
@@ -77,6 +85,17 @@ class DistributedMixin:
                 )
             return self._ep_plan
         return self._tp_plan
+
+    @property
+    def tp_size(self) -> int | None:
+        mesh = getattr(self, "_device_mesh", None)
+        if mesh is None:
+            return None
+        names = mesh.mesh_dim_names
+        if names is not None and "tp" not in names:
+            return None
+        size = mesh["tp"].size() if names and "tp" in names else mesh.size()
+        return size if size > 1 else None
 
     @property
     def fsdp_plan(self) -> dict[str, str]:
@@ -135,26 +154,24 @@ class DistributedMixin:
         device_mesh=None,
         device_map=None,
     ) -> tuple[DistributedConfig | None, object, object]:
-        """Parse ``distributed_config``, init TP/FSDP mesh, and validate."""
+        """Parse distributed_config, validate prerequisites, and init TP/FSDP mesh."""
         if distributed_config is None:
             return None, device_map, device_mesh
 
         if isinstance(distributed_config, dict):
             distributed_config = DistributedConfig.from_dict(distributed_config)
 
+        if distributed_config.tp_size > 1 or distributed_config.fsdp_size > 1:
+            device_type = torch._C._get_accelerator().type
+            _ensure_torch_distributed(device_type)
+
+        distributed_config.validate()
+
         if distributed_config.tp_size > 1:
-            if distributed_config.tp_plan is None:
-                distributed_config.tp_plan = "auto"
-            device_map, device_mesh = initialize_tensor_parallelism(
-                distributed_config.tp_plan,
-                tp_size=distributed_config.tp_size,
-                device_mesh=device_mesh,
-                device_map=device_map,
-            )
+            device_map, device_mesh = initialize_tensor_parallelism(distributed_config)
         elif distributed_config.fsdp_size > 1:
             device_map, device_mesh = initialize_fully_sharded_data_parallelism(distributed_config)
 
-        distributed_config.validate()
         return distributed_config, device_map, device_mesh
 
     @classmethod
@@ -165,8 +182,28 @@ class DistributedMixin:
         device_mesh,
     ):
         """Apply TP or FSDP2 after model init, before weight loading."""
-        if _torch_distributed_available and device_mesh is not None:
-            return distribute_model(model, distributed_config, device_mesh)
+        if not _torch_distributed_available or device_mesh is None or distributed_config is None:
+            return model
+
+        model._device_mesh = device_mesh
+
+        if distributed_config.tp_size > 1:
+            tp_mesh = device_mesh["tp"] if device_mesh.ndim > 1 else device_mesh
+
+            if distributed_config.tp_plan is not None:
+                model.tp_plan = distributed_config.tp_plan
+
+            if _supports_dtensor_path(model, model.tp_plan, distributed_config):
+                return apply_tensor_parallelism_dtensor(model, tp_mesh)
+            else:
+                from ..integrations.tensor_parallel import apply_tensor_parallelism
+
+                return apply_tensor_parallelism(model, distributed_config.tp_plan, distributed_config, device_mesh)
+
+        if distributed_config.fsdp_size > 1:
+            fsdp_mesh = device_mesh["fsdp"] if device_mesh.ndim > 1 else device_mesh
+            return apply_fully_sharded_data_parallelism(model, fsdp_mesh)
+
         return model
 
     def should_save_on_this_rank(self, is_main_process: bool) -> bool:
@@ -258,8 +295,9 @@ class DistributedMixin:
         *,
         is_checkpoint_writer: bool = True,
     ) -> tuple[dict, bool]:
-        """All-gather TP-sharded weights for checkpoint writing."""
-        full_state_dict = gather_state_dict_for_save(local_state_dict, self._tp_plan, self._device_mesh, self._tp_size)
+        """Reconstruct full (unsharded) TP weights for checkpoint writing by replicating the
+        DTensor-sharded parameters to full local tensors. See ``gather_tp_state_dict``."""
+        full_state_dict = gather_tp_state_dict(self)
         if not is_checkpoint_writer:
             full_state_dict = {}
         return full_state_dict, True
