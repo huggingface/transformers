@@ -590,8 +590,7 @@ class TmlShortConvolution(nn.Module):
                 hidden_states = torch.cat([conv_state, hidden_states], dim=-1)
 
             if cache_params is not None:
-                new_conv_state = F.pad(hidden_states, (self.conv_kernel_size - hidden_states.shape[-1], 0))
-                cache_params.update_conv_state(new_conv_state, self.layer_idx, conv_idx=self.conv_idx)
+                cache_params.update_conv_state(hidden_states, self.layer_idx, conv_idx=self.conv_idx)
 
             if self.causal_conv1d_fn is not None:
                 hidden_states = self.causal_conv1d_fn(
