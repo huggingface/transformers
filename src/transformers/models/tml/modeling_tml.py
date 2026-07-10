@@ -311,16 +311,21 @@ class TmlAttention(nn.Module):
         key_states = self.k_norm(key_states.view(hidden_shape)).transpose(1, 2)
         value_states = value_states.view(hidden_shape).transpose(1, 2)
 
-        past_length = 0 if past_key_values is None else past_key_values.get_seq_length(self.layer_idx)
+        q_length = query_states.shape[2]
         if past_key_values is not None:
+            # Important to get those values before updating the cache to be correct
+            kv_length, kv_offset = past_key_values.get_mask_sizes(q_length, self.layer_idx)
+            q_offset = past_key_values.get_seq_length()
+            # Update the cache
             key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
+        else:
+            kv_length = key_states.shape[2]
+            q_offset, kv_offset = 0, 0
 
-        cache_position = torch.arange(input_shape[1], device=hidden_states.device) + past_length
-        key_positions = (
-            torch.arange(input_shape[1], device=cache_position.device) + cache_position[-1] + 1 - input_shape[1]
-        )
+        kv_positions = torch.arange(kv_length, device=hidden_states.device) + kv_offset
+        q_positions = torch.arange(q_length, device=hidden_states.device) + q_offset
         relative_states = relative_states.view(*input_shape, self.num_heads, -1)
-        position_bias = self.rel_logits_proj(relative_states, cache_position, key_positions)
+        position_bias = self.rel_logits_proj(relative_states, q_positions, kv_positions)
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
