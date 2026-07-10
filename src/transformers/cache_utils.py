@@ -1057,8 +1057,6 @@ class LinearAttentionAndSlidingWindowAttentionLayer(LinearAttentionLayer, Dynami
 
 
 class LinearAttentionAndStaticFullAttentionLayer(LinearAttentionLayer, StaticLayer):
-    is_compileable = True
-
     def __init__(self, max_cache_len: int, number_of_states: int = 1, **kwargs):
         StaticLayer.__init__(self, max_cache_len)
         LinearAttentionLayer.__init__(self, number_of_states=number_of_states)
@@ -1091,9 +1089,6 @@ class LinearAttentionAndStaticFullAttentionLayer(LinearAttentionLayer, StaticLay
 
 
 class LinearAttentionAndStaticSlidingWindowAttentionLayer(LinearAttentionLayer, StaticSlidingWindowLayer):
-    # The dynamic sliding attention part makes it non-compileable
-    is_compileable = False
-
     def __init__(self, max_cache_len: int, sliding_window: int, number_of_states: int = 1, **kwargs):
         StaticSlidingWindowLayer.__init__(self, max_cache_len=max_cache_len, sliding_window=sliding_window)
         LinearAttentionLayer.__init__(self, number_of_states=number_of_states)
