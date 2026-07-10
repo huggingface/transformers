@@ -11,6 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import functools
 import os
 import re
 import sys
@@ -375,9 +376,17 @@ else:
         def __init__(self, *args, **kwargs):
             raise RuntimeError("LayerRepository requires `kernels` to be installed. Run `pip install kernels`.")
 
+        def load(self):
+            raise NotImplementedError("LayerRepository requires `kernels` to be installed. Run `pip install kernels.")
+
     class LocalLayerRepository:
         def __init__(self, *args, **kwargs):
             raise RuntimeError("LocalLayerRepository requires `kernels` to be installed. Run `pip install kernels`.")
+
+        def load(self):
+            raise NotImplementedError(
+                "LocalLayerRepository requires `kernels` to be installed. Run `pip install kernels."
+            )
 
     class FuncRepository:
         def __init__(self, *args, **kwargs):
@@ -427,7 +436,7 @@ def load_and_register_attn_kernel(
         attn_implementation: A string, usually a kernel repo like "kernels-community/flash-mla".
         attn_wrapper: a callable for the wrapper around the attention implementation. In `transformers` we
             have a wrapper around the `flash_attn_var_len` call, and the same goes for `sdpa` and `eager`.
-            They just prepare the arguments properly. This is mostly used for continious batching, where we
+            They just prepare the arguments properly. This is mostly used for continuous batching, where we
             want the `paged` wrapper, which calls the paged cache.
         allow_all_kernels (`bool`, optional):
             Whether to load kernels from unverified hub repos, if it is a custom kernel outside of the `kernels-community`
@@ -744,10 +753,8 @@ def register_kernel_replacements_and_fusions(
             raise ValueError(f"Invalid kernel repo string {repo_str!r} for layer {layer_name!r}")
 
         if kernel_config.use_local_kernel:
-            package_name = repo_id.rstrip("/").split("/")[-1]
             repo = LocalLayerRepository(
                 repo_path=Path(repo_id),
-                package_name=package_name,
                 layer_name=layer_name_in_repo,
             )
         else:
@@ -764,6 +771,14 @@ def register_kernel_replacements_and_fusions(
 
         kernel_mod = sys.modules.get(kernel_cls.__module__)
         layout_cls = getattr(kernel_mod, f"{kernel_cls.__name__}Layout", None) if kernel_mod else None
+
+        if layout_cls is not None and "forward" not in layout_cls.__dict__:
+
+            @functools.wraps(kernel_cls.forward)
+            def _noop_forward(self, *args, **kwargs):
+                pass
+
+            layout_cls.forward = _noop_forward
 
         # Case 1: no fusion.
         if isinstance(layer_name, str):

@@ -491,18 +491,16 @@ class TensorParallelTesterMixin(ABC):
             return self.model_tester.causal_lm_class
         return self.all_model_classes[0]
 
-    def _skip_if_not_supported(self):
-        """Check and skip test if TP is not supported for this model/environment."""
-        if not is_torch_greater_or_equal("2.9"):
-            self.skipTest("Tensor parallel tests require torch >= 2.9")
-
-        if torch.cuda.is_available() or torch.xpu.is_available():
-            self.skipTest("Tensor parallel mixin tests are CPU-only and should not run on GPU or XPU machines")
-
-        if os.cpu_count() < self.tensor_parallel_size:
-            self.skipTest(
-                f"Tensor parallel tests require at least {self.tensor_parallel_size} CPUs, "
-                f"but only {os.cpu_count()} available"
+    def _skip_if_not_supported(self, expert_parallel: bool = False):
+        """Check and skip the test if tensor/expert parallel is not supported for this model/environment."""
+        parallelism = "Expert" if expert_parallel else "Tensor"
+        # An EP-capable MoE (@use_experts_implementation) must ship an ep_plan; assert before any
+        # skip so a plan-less model fails even where the parallel test can't run (GPU, old torch).
+        if expert_parallel and self._get_tp_model_class()._can_set_experts_implementation():
+            self.assertTrue(
+                self._has_ep_plan(),
+                "Model supports a switchable experts implementation (@use_experts_implementation) but defines no "
+                "base_model_ep_plan; add an expert-parallel plan to its config so the EP path is covered.",
             )
 
         if not hasattr(self.model_tester, "causal_lm_class") or self.model_tester.causal_lm_class is None:
@@ -525,22 +523,25 @@ class TensorParallelTesterMixin(ABC):
     def _skip_if_ep_not_supported(self):
         """Check and skip test if EP is not supported for this model/environment."""
         if not is_torch_greater_or_equal("2.9"):
-            self.skipTest("Expert parallel tests require torch >= 2.9")
+            self.skipTest(f"{parallelism} parallel tests require torch >= 2.9")
 
         if torch.cuda.is_available() or torch.xpu.is_available():
-            self.skipTest("Expert parallel mixin tests are CPU-only and should not run on GPU or XPU machines")
+            self.skipTest(f"{parallelism} parallel mixin tests are CPU-only and should not run on GPU or XPU machines")
 
         if os.cpu_count() < self.tensor_parallel_size:
             self.skipTest(
-                f"Expert parallel tests require at least {self.tensor_parallel_size} CPUs, "
+                f"{parallelism} parallel tests require at least {self.tensor_parallel_size} CPUs, "
                 f"but only {os.cpu_count()} available"
             )
 
         if not hasattr(self.model_tester, "causal_lm_class") or self.model_tester.causal_lm_class is None:
             self.skipTest("Model tester does not have causal_lm_class (not using CausalLMModelTester)")
 
-        if not self._has_ep_plan():
-            self.skipTest("Model does not have an expert parallel plan (base_model_ep_plan)")
+        if expert_parallel:
+            if not self._has_ep_plan():
+                self.skipTest("Model does not have an expert parallel plan (base_model_ep_plan)")
+        elif not self._has_tp_plan():
+            self.skipTest("Model does not have a tensor parallel plan (base_model_tp_plan)")
 
         self._skip_if_tp_distributed_not_enabled()
 
@@ -618,7 +619,7 @@ class TensorParallelTesterMixin(ABC):
 
     @is_tensor_parallel_test
     def test_ep_forward(self):
-        self._skip_if_ep_not_supported()
+        self._skip_if_not_supported(expert_parallel=True)
 
         config = self.model_tester.get_config()
         model_class = self._get_tp_model_class()
@@ -634,7 +635,7 @@ class TensorParallelTesterMixin(ABC):
 
     @is_tensor_parallel_test
     def test_ep_backward(self):
-        self._skip_if_ep_not_supported()
+        self._skip_if_not_supported(expert_parallel=True)
 
         config = self.model_tester.get_config()
         model_class = self._get_tp_model_class()

@@ -529,6 +529,7 @@ class AssistedCandidateGeneratorDifferentTokenizers(AssistedCandidateGenerator):
         self._update_past_and_masks(assistant_input_ids, remove_from_pkv)
         generation_args = self._prepare_generation_args(assistant_input_ids, min_new_tokens, max_new_tokens)
         self.assistant_kwargs.pop("attention_mask", None)
+        self.assistant_kwargs.pop("position_ids", None)
 
         assistant_output = self.assistant_model.generate(**generation_args, **self.assistant_kwargs)
         new_target_ids = self._process_assistant_outputs(input_ids, assistant_output.sequences)
@@ -1355,7 +1356,7 @@ class SinglePositionMultiTokenCandidateGenerator(AssistedCandidateGenerator):
             or not hasattr(model_outputs, "shared_kv_states")
         ):
             raise ValueError(
-                "`model_outputs` cannot be None, and they need to contain `hiden_states` and `shared_kv_states`"
+                "`model_outputs` cannot be None, and they need to contain `hidden_states` and `shared_kv_states`"
             )
 
         last_hidden_state: torch.Tensor = model_outputs.hidden_states[-1]
