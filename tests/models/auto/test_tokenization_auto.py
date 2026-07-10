@@ -821,7 +821,6 @@ class NopConfig(PreTrainedConfig):
 
         fake_config = mock.MagicMock()
         fake_config.model_type = "m2m_100"
-        fake_config._name_or_path = ""
         mock_tokenizer = mock.MagicMock(spec=NllbTokenizer)
 
         with (
@@ -852,15 +851,10 @@ class NopConfig(PreTrainedConfig):
                 tokenizer_auto = AutoTokenizer.from_pretrained(repo_id, cache_dir=tmpdir)
         self.assertEqual(tokenizer_auto.decode(tokenizer_auto.encode(text, add_special_tokens=False)), text)
 
-    TOKENIZERS_BACKEND_AUTO_MAPPING_CHECKPOINTS = [
-        "rhymes-ai/Aria",
-        "Salesforce/blip2-flan-t5-xl",
-        "google/bigbird-pegasus-large-pubmed",
-        "microsoft/kosmos-2-patch14-224",
-        "allenai/OLMo-2-0425-1B",
-        "stabilityai/tiny-random-stablelm-2",
-        "deepseek-ai/DeepSeek-R1-Distill-Llama-8B",
+    TOKENIZERS_TEST_SPM_COMPILED_CHECKPOINTS = [
+        "albert/albert-base-v1",
         "almanach/camembert-base",
+        "microsoft/mpnet-base",
         "google/rembert",
         "facebook/xglm-564M",
         "xlnet/xlnet-base-cased",
@@ -868,7 +862,7 @@ class NopConfig(PreTrainedConfig):
 
     @slow
     @require_tokenizers
-    @parameterized.expand(TOKENIZERS_BACKEND_AUTO_MAPPING_CHECKPOINTS)
+    @parameterized.expand(TOKENIZERS_TEST_SPM_COMPILED_CHECKPOINTS)
     def test_right_to_left_mark(self, repo_id):
         # PR #45936: v5 tokenizer auto mapping changes to use TokenizersBackend.
         # Text contains U+200F (RIGHT-TO-LEFT MARK) which exposes ‏ handling
@@ -877,6 +871,26 @@ class NopConfig(PreTrainedConfig):
 
         tokenizer_auto = AutoTokenizer.from_pretrained(repo_id)
         tokenizer_tok = TokenizersBackend.from_pretrained(repo_id)
+
+        auto_ids = tokenizer_auto.encode(TOKENIZERS_BACKEND_AUTO_MAPPING_SHARED_TEXT)
+        tok_ids = tokenizer_tok.encode(TOKENIZERS_BACKEND_AUTO_MAPPING_SHARED_TEXT)
+
+        self.assertEqual(auto_ids, tok_ids)
+        self.assertEqual(
+            tokenizer_auto.decode(auto_ids),
+            tokenizer_tok.decode(tok_ids),
+        )
+
+    TOKENIZERS_BACKEND_AUTO_MAPPING_CHECKPOINTS = [
+        "rhymes-ai/Aria",
+        "Salesforce/blip2-flan-t5-xl",
+        "google/bigbird-pegasus-large-pubmed",
+        "microsoft/kosmos-2-patch14-224",
+        "allenai/OLMo-2-0425-1B",
+        "stabilityai/tiny-random-stablelm-2",
+        "deepseek-ai/DeepSeek-R1-Distill-Llama-8B",
+    ]
+
     def test_tokenizers_auto_agreements_models_without_tokenizer_class(self, repo_id):
         # PR #45936: v5 tokenizer auto mapping changes to use TokenizersBackend
         TOKENIZERS_BACKEND_AUTO_MAPPING_SHARED_TEXT = "foo_bar\n\n123 "
