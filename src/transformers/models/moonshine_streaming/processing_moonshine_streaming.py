@@ -18,9 +18,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import warnings
+from contextlib import contextmanager
+
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import AudioInput, PreTokenizedInput, TextInput
-from ...utils import auto_docstring
+from .feature_extraction_moonshine_streaming import MoonshineStreamingFeatureExtractor
+from .tokenization_moonshine_streaming import MoonshineStreamingCTCTokenizer
 
 
 class MoonshineStreamingProcessorKwargs(ProcessingKwargs, total=False):
@@ -33,22 +37,76 @@ class MoonshineStreamingProcessorKwargs(ProcessingKwargs, total=False):
     }
 
 
-@auto_docstring
 class MoonshineStreamingProcessor(ProcessorMixin):
+    r"""
+    Constructs a MoonshineStreaming processor which wraps a MoonshineStreaming feature extractor and a MoonshineStreaming CTC tokenizer into a single
+    processor.
+
+    [`MoonshineStreamingProcessor`] offers all the functionalities of [`MoonshineStreamingFeatureExtractor`] and [`PreTrainedTokenizer`].
+    See the docstring of [`~MoonshineStreamingProcessor.__call__`] and [`~MoonshineStreamingProcessor.decode`] for more information.
+
+    Args:
+        feature_extractor (`MoonshineStreamingFeatureExtractor`):
+            An instance of [`MoonshineStreamingFeatureExtractor`]. The feature extractor is a required input.
+        tokenizer ([`PreTrainedTokenizer`]):
+            An instance of [`PreTrainedTokenizer`]. The tokenizer is a required input.
+    """
+
+    feature_extractor_class = "MoonshineStreamingFeatureExtractor"
+    tokenizer_class = "AutoTokenizer"
+
     def __init__(self, feature_extractor, tokenizer):
         super().__init__(feature_extractor, tokenizer)
+        self.current_processor = self.feature_extractor
+        self._in_target_context_manager = False
 
-    @auto_docstring
+    @classmethod
+    def from_pretrained(cls, pretrained_model_name_or_path, **kwargs):
+        try:
+            return super().from_pretrained(pretrained_model_name_or_path, **kwargs)
+        except (OSError, ValueError):
+            warnings.warn(
+                f"Loading a tokenizer inside {cls.__name__} from a config that does not"
+                " include a `tokenizer_class` attribute is deprecated and will be "
+                "removed in v5. Please add `'tokenizer_class': 'MoonshineStreamingCTCTokenizer'`"
+                " attribute to either your `config.json` or `tokenizer_config.json` "
+                "file to suppress this warning: ",
+                FutureWarning,
+            )
+
+            feature_extractor = MoonshineStreamingFeatureExtractor.from_pretrained(
+                pretrained_model_name_or_path, **kwargs
+            )
+            tokenizer = MoonshineStreamingCTCTokenizer.from_pretrained(pretrained_model_name_or_path, **kwargs)
+
+            return cls(feature_extractor=feature_extractor, tokenizer=tokenizer)
+
     def __call__(
         self,
         audio: AudioInput | None = None,
         text: str | list[str] | TextInput | PreTokenizedInput | None = None,
+        images=None,
+        videos=None,
         **kwargs: Unpack[MoonshineStreamingProcessorKwargs],
     ):
-        r"""
+        """
+        This method forwards all arguments to [`MoonshineStreamingFeatureExtractor.__call__`] and/or
+        [`PreTrainedTokenizer.__call__`] depending on the input modality and returns their outputs. If both modalities are passed, [`MoonshineStreamingFeatureExtractor.__call__`] and [`PreTrainedTokenizer.__call__`] are called.
+
+        Args:
+            audio (`np.ndarray`, `torch.Tensor`, `List[np.ndarray]`, `List[torch.Tensor]`, *optional*):
+                An audio input is passed to [`MoonshineStreamingFeatureExtractor.__call__`].
+            text (`str`, `List[str]`, *optional*):
+                A text input is passed to [`PreTrainedTokenizer.__call__`].
+
+
         Returns:
             This method returns the results of each `call` method. If both are used, the output is a dictionary containing the results of both.
         """
+        if "raw_speech" in kwargs:
+            warnings.warn("Using `raw_speech` as a keyword argument is deprecated. Use `audio` instead.")
+            audio = kwargs.pop("raw_speech")
+
         if audio is None and text is None:
             raise ValueError("You need to specify either an `audio` or `text` input to process.")
 
@@ -57,6 +115,14 @@ class MoonshineStreamingProcessor(ProcessorMixin):
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )
+        # For backward compatibility
+        if self._in_target_context_manager:
+            return self.current_processor(
+                audio,
+                **output_kwargs["audio_kwargs"],
+                **output_kwargs["text_kwargs"],
+                **output_kwargs["common_kwargs"],
+            )
 
         if audio is not None:
             inputs = self.feature_extractor(audio, **output_kwargs["audio_kwargs"])
@@ -85,6 +151,10 @@ class MoonshineStreamingProcessor(ProcessorMixin):
         Returns:
             This method returns the results of each `pad` method. If both are used, the output is a dictionary containing the results of both.
         """
+        # For backward compatibility
+        if self._in_target_context_manager:
+            return self.current_processor.pad(*args, **kwargs)
+
         input_features = kwargs.pop("input_features", None)
         labels = kwargs.pop("labels", None)
         if len(args) > 0:
@@ -109,6 +179,23 @@ class MoonshineStreamingProcessor(ProcessorMixin):
         # The processor doesn't return text ids and the model seems to not need them
         feature_extractor_input_names = self.feature_extractor.model_input_names
         return feature_extractor_input_names + ["labels"]
+
+    @contextmanager
+    def as_target_processor(self):
+        """
+        Temporarily sets the tokenizer for processing the input. Useful for encoding the labels when fine-tuning
+        MoonshineStreaming.
+        """
+        warnings.warn(
+            "`as_target_processor` is deprecated and will be removed in v5 of Transformers. You can process your "
+            "labels by using the argument `text` of the regular `__call__` method (either in the same call as "
+            "your audio inputs, or in a separate call."
+        )
+        self._in_target_context_manager = True
+        self.current_processor = self.tokenizer
+        yield
+        self.current_processor = self.feature_extractor
+        self._in_target_context_manager = False
 
 
 __all__ = ["MoonshineStreamingProcessor"]
