@@ -394,12 +394,12 @@ class TmlTopkRouter(nn.Module):
         self.top_k = config.num_experts_per_tok
 
         self.weight = nn.Parameter(torch.empty(self.n_total_experts, config.hidden_size))
-        self.global_scale = nn.Parameter(torch.ones(1, dtype=torch.float32))
-        self.e_score_correction_bias = nn.Parameter(torch.empty(self.num_experts, dtype=torch.float32))
+        self.global_scale = nn.Parameter(torch.ones(1))
+        self.e_score_correction_bias = nn.Parameter(torch.empty(self.num_experts))
 
     def forward(self, hidden_states) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         flat = hidden_states.reshape(-1, self.hidden_dim)
-        router_logits = F.linear(flat.type(torch.float32), self.weight.type(torch.float32))
+        router_logits = F.linear(flat, self.weight)
 
         # same as `self.route_tokens_to_experts` from before, prob same as our MoE and can be copied
         scores = router_logits.sigmoid()
@@ -413,8 +413,7 @@ class TmlTopkRouter(nn.Module):
         topk_log_probs = F.logsigmoid(topk_logits)
         topk_weights = torch.exp(topk_log_probs - torch.logsumexp(topk_log_probs, dim=-1, keepdim=True))
 
-        topk_weights = topk_weights * self.route_scale
-        topk_weights = topk_weights * self.global_scale
+        topk_weights = topk_weights * self.route_scale * self.global_scale
 
         shared_gammas = topk_weights[..., -self.n_shared_experts :].contiguous()
         topk_weights = topk_weights[..., : self.top_k].contiguous()
@@ -441,8 +440,8 @@ class TmlSharedExperts(nn.Module):
         expanded = hidden_states.unsqueeze(0).expand(self.n_shared_experts, -1, -1)
         gate = torch.bmm(expanded, self.gate_proj)
         up = torch.bmm(expanded, self.up_proj)
-        activated = (self.act_fn(gate) * up).float() * gammas.unsqueeze(-1)
-        down = torch.bmm(activated.to(gate.dtype), self.down_proj)
+        activated = self.act_fn(gate) * up * gammas.unsqueeze(-1)
+        down = torch.bmm(activated, self.down_proj)
 
         out = down.float().sum(dim=0).to(hidden_states.dtype)
         return out.view(input_shape)
@@ -460,12 +459,10 @@ class TmlMoE(nn.Module):
 
     def forward(self, hidden_states) -> torch.Tensor:
         residuals = hidden_states
-        orig_shape = hidden_states.shape
+        input_shape = hidden_states.shape
         _, topk_weights, topk_indices, shared_gammas = self.gate(hidden_states)
         hidden_states = hidden_states.view(-1, hidden_states.shape[-1])
-        hidden_states = self.experts(hidden_states, topk_indices, topk_weights.type_as(hidden_states)).view(
-            *orig_shape
-        )
+        hidden_states = self.experts(hidden_states, topk_indices, topk_weights).view(*input_shape)
 
         hidden_states = hidden_states + self.shared_experts(residuals, gammas=shared_gammas)
         return hidden_states

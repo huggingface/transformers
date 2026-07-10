@@ -163,10 +163,7 @@ def _build_checkpoint_conversion_mapping():
             # MoE and MLP
             WeightConverter(
                 source_patterns="shared_w13_weight",
-                target_patterns=[
-                    "gate_proj",
-                    "up_proj",
-                ],
+                target_patterns=["gate_proj", "up_proj"],
                 operations=[Interleave(dim=1), Transpose(1, 2), Chunk(dim=2)],
             ),
             WeightConverter(
@@ -180,10 +177,7 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(source_patterns=r"mlp.experts.w2_weight", target_patterns=r"mlp.experts.down_proj"),
             WeightConverter(
                 source_patterns="mlp.w13_dn.weight",
-                target_patterns=[
-                    "mlp.gate_proj.weight",
-                    "mlp.up_proj.weight",
-                ],
+                target_patterns=["mlp.gate_proj.weight", "mlp.up_proj.weight"],
                 operations=[Interleave(dim=0), Chunk(dim=0)],
             ),
             WeightRenaming(source_patterns=r"mlp.w2_md.weight", target_patterns=r"mlp.down_proj.weight"),
