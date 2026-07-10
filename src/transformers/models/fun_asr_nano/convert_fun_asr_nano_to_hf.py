@@ -19,7 +19,7 @@ Usage:
 1) Download the original Fun-ASR-Nano checkpoint:
 
 ```bash
-huggingface-cli download FunAudioLLM/Fun-ASR-Nano-2512 \
+hf download FunAudioLLM/Fun-ASR-Nano-2512 \
     --local-dir /path/to/Fun-ASR-Nano-2512
 ```
 
@@ -76,8 +76,14 @@ from .modeling_fun_asr_nano import FunAsrNanoForConditionalGeneration
 
 # fmt: off
 STATE_DICT_MAPPING = {
-    r"^audio_encoder\.": r"model.audio_encoder.",
-    r"^audio_adaptor\.": r"model.audio_adaptor.",
+    r"^audio_encoder\.(.*\.feed_forward)\.w_1\.": r"model.audio_tower.\1.linear1.",
+    r"^audio_encoder\.(.*\.feed_forward)\.w_2\.": r"model.audio_tower.\1.linear2.",
+    r"^audio_adaptor\.(.*\.feed_forward)\.w_1\.": r"model.multi_modal_projector.\1.linear1.",
+    r"^audio_adaptor\.(.*\.feed_forward)\.w_2\.": r"model.multi_modal_projector.\1.linear2.",
+    r"^audio_adaptor\.linear1\.": r"model.multi_modal_projector.linear_1.",
+    r"^audio_adaptor\.linear2\.": r"model.multi_modal_projector.linear_2.",
+    r"^audio_encoder\.": r"model.audio_tower.",
+    r"^audio_adaptor\.": r"model.multi_modal_projector.",
     # Keep lm_head.weight explicitly. Although tie_word_embeddings=True, this model load path
     # does not retie lm_head from the embeddings, and the source already stores lm_head == embeddings.
     # safetensors deduplicates the shared storage, so this adds no extra disk over the embeddings.
@@ -133,8 +139,11 @@ def convert_key(key: str) -> str | None:
     The HF model is split into a base [`FunAsrNanoModel`] (holding the audio encoder, adaptor and the *headless*
     language model) plus a separate `lm_head`, mirroring AudioFlamingo3 / Voxtral. The mapping is therefore:
 
-        audio_encoder.*       -> model.audio_encoder.*
-        audio_adaptor.*       -> model.audio_adaptor.*
+        audio_encoder.*       -> model.audio_tower.*
+        audio_adaptor.*       -> model.multi_modal_projector.*
+        *.feed_forward.w_1.*  -> *.feed_forward.linear1.*
+        *.feed_forward.w_2.*  -> *.feed_forward.linear2.*
+        audio_adaptor.linear{1,2}.* -> model.multi_modal_projector.linear_{1,2}.*
         llm.model.*           -> model.language_model.*
         llm.lm_head.weight    -> lm_head.weight
 

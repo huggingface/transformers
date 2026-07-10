@@ -122,6 +122,7 @@ class FunAsrNanoConfig(PreTrainedConfig):
 
     model_type = "fun_asr_nano"
     attribute_map = {
+        "audio_config": "audio_encoder_config",
         "audio_token_id": "audio_token_index",
         "adaptor_ffn_dim": "adaptor_intermediate_size",
         "adaptor_num_layers": "adaptor_num_hidden_layers",
