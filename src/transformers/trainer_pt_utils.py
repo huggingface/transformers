@@ -737,7 +737,6 @@ class BatchRebalanceSampler(Sampler):
         intercept: float = 0.0,
         cost_fn=None,
     ):
-        super().__init__(data_source=None)  # type: ignore[call-arg]
         assert dp_size >= 1
         assert grad_accum >= 1
         assert effective_batch_size >= dp_size * grad_accum
