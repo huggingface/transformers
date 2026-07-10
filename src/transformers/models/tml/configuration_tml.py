@@ -26,12 +26,14 @@ class TmlTextConfig(PreTrainedConfig):
     model_type = "tml_text"
     base_config_key = "text_config"
     base_model_tp_plan = {
-        "layers.*.mlp.experts.gate_up_proj": "packed_colwise",
+        "embed_tokens": "embedding_rowwise",
+        "layers.*.mlp.experts.gate_up_proj": "colwise",
         "layers.*.mlp.experts.down_proj": "rowwise",
         "layers.*.mlp.experts": "moe_tp_experts",
         "layers.*.mlp.shared_experts.gate_proj": "colwise",
         "layers.*.mlp.shared_experts.up_proj": "colwise",
         "layers.*.mlp.shared_experts.down_proj": "rowwise",
+        "layers.*.mlp.shared_experts": "all_reduce",
         "layers.*.mlp.gate_proj": "colwise",
         "layers.*.mlp.up_proj": "colwise",
         "layers.*.mlp.down_proj": "rowwise",
@@ -52,9 +54,14 @@ class TmlTextConfig(PreTrainedConfig):
         "embedding_multiplier": "logits_mup_width_multiplier",
         "sliding_window": "sliding_window_size",
         "num_local_experts": "n_routed_experts",
+        # checkpoints store `sconv_kernel_size`; without the mapping a fresh config has no such
+        # attribute (TmlAttention reads it) and a checkpoint value would bypass `conv_kernel_size`
+        "sconv_kernel_size": "conv_kernel_size",
     }
 
     vocab_size: int = 201024
+    # `unembed` row count when the checkpoint head is not padded to `vocab_size` (big model: 200058)
+    unpadded_vocab_size: int | None = None
     hidden_size: int = 6144
     num_hidden_layers: int = 66
     num_attention_heads: int = 64
