@@ -184,6 +184,21 @@ def _build_checkpoint_conversion_mapping():
                 ],
                 operations=[Interleave(dim=0), Chunk(dim=0)],
             ),
+            WeightConverter(
+                source_patterns=".shared_experts.gate_proj",
+                target_patterns=".shared_experts.gate_proj",
+                operations=[Transpose(1, 2)],
+            ),
+            WeightConverter(
+                source_patterns=".shared_experts.up_proj",
+                target_patterns=".shared_experts.up_proj",
+                operations=[Transpose(1, 2)],
+            ),
+            WeightConverter(
+                source_patterns=".shared_experts.down_proj",
+                target_patterns=".shared_experts.down_proj",
+                operations=[Transpose(1, 2)],
+            ),
             WeightRenaming(source_patterns=r"mlp.w2_md.weight", target_patterns=r"mlp.down_proj.weight"),
             WeightRenaming(source_patterns=r"mlp.gate.bias", target_patterns=r"mlp.gate.e_score_correction_bias"),
             # Attn

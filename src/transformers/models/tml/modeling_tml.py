@@ -378,9 +378,9 @@ class TmlSharedExperts(nn.Module):
         super().__init__()
         self.n_shared_experts = config.n_shared_experts
         shared_d_mlp = config.moe_intermediate_size
-        self.gate_proj = nn.Parameter(torch.empty(config.n_shared_experts, shared_d_mlp, config.hidden_size))
-        self.up_proj = nn.Parameter(torch.empty(config.n_shared_experts, shared_d_mlp, config.hidden_size))
-        self.down_proj = nn.Parameter(torch.empty(config.n_shared_experts, config.hidden_size, shared_d_mlp))
+        self.gate_proj = nn.Parameter(torch.empty(config.n_shared_experts, config.hidden_size, shared_d_mlp))
+        self.up_proj = nn.Parameter(torch.empty(config.n_shared_experts, config.hidden_size, shared_d_mlp))
+        self.down_proj = nn.Parameter(torch.empty(config.n_shared_experts, shared_d_mlp, config.hidden_size))
         self.act_fn = ACT2FN[config.hidden_act]
 
     def forward(self, hidden_states, gammas):
@@ -389,10 +389,10 @@ class TmlSharedExperts(nn.Module):
         gammas = gammas.reshape(-1, self.n_shared_experts).transpose(0, 1)
 
         expanded = hidden_states.unsqueeze(0).expand(self.n_shared_experts, -1, -1)
-        gate = torch.bmm(expanded, self.gate_proj.mT)
-        up = torch.bmm(expanded, self.up_proj.mT)
+        gate = torch.bmm(expanded, self.gate_proj)
+        up = torch.bmm(expanded, self.up_proj)
         activated = (self.act_fn(gate) * up).float() * gammas.unsqueeze(-1)
-        down = torch.bmm(activated.to(gate.dtype), self.down_proj.mT)
+        down = torch.bmm(activated.to(gate.dtype), self.down_proj)
 
         out = down.float().sum(dim=0).to(hidden_states.dtype)
         return out.view(input_shape)
