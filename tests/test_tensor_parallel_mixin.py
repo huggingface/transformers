@@ -503,25 +503,6 @@ class TensorParallelTesterMixin(ABC):
                 "base_model_ep_plan; add an expert-parallel plan to its config so the EP path is covered.",
             )
 
-        if not hasattr(self.model_tester, "causal_lm_class") or self.model_tester.causal_lm_class is None:
-            self.skipTest("Model tester does not have causal_lm_class (not using CausalLMModelTester)")
-
-        if not self._has_tp_plan():
-            self.skipTest("Model does not have a tensor parallel plan (base_model_tp_plan)")
-
-        self._skip_if_tp_distributed_not_enabled()
-
-        # # Skip encoder-decoder models (TP not supported)
-        # if getattr(self, "is_encoder_decoder", False):
-        #     self.skipTest("TP tests not supported for encoder-decoder models")
-
-        # # Skip VLM models for now
-        # config = self.model_tester.get_config()
-        # if hasattr(config, "vision_config") and config.vision_config is not None:
-        #     self.skipTest("VLM models are not yet supported in TP tests")
-
-    def _skip_if_ep_not_supported(self):
-        """Check and skip test if EP is not supported for this model/environment."""
         if not is_torch_greater_or_equal("2.9"):
             self.skipTest(f"{parallelism} parallel tests require torch >= 2.9")
 
@@ -544,6 +525,15 @@ class TensorParallelTesterMixin(ABC):
             self.skipTest("Model does not have a tensor parallel plan (base_model_tp_plan)")
 
         self._skip_if_tp_distributed_not_enabled()
+
+        # # Skip encoder-decoder models (TP not supported)
+        # if getattr(self, "is_encoder_decoder", False):
+        #     self.skipTest("TP tests not supported for encoder-decoder models")
+
+        # # Skip VLM models for now
+        # config = self.model_tester.get_config()
+        # if hasattr(config, "vision_config") and config.vision_config is not None:
+        #     self.skipTest("VLM models are not yet supported in TP tests")
 
     @is_tensor_parallel_test
     def test_tp_forward(self):
