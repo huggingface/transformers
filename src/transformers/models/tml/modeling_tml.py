@@ -191,7 +191,7 @@ class TmlAttention(nn.Module):
         super().__init__()
         self.config = config
         self.layer_idx = layer_idx
-        self.is_local_attn = config.layer_types[self.layer_idx] == "sliding_attention"
+        self.is_local_attn = config.layer_types[self.layer_idx] == "hybrid_sliding"
         self.head_dim = config.swa_head_dim if self.is_local_attn else config.head_dim
         self.num_heads = config.swa_num_attention_heads if self.is_local_attn else config.num_attention_heads
         self.num_key_value_heads = config.swa_num_key_value_heads if self.is_local_attn else config.num_key_value_heads
@@ -555,8 +555,8 @@ class TmlDecoderLayer(GradientCheckpointingLayer):
 
         self.input_layernorm = TmlRMSNorm(config.hidden_size, config.rms_norm_eps)
         self.post_attention_layernorm = TmlRMSNorm(config.hidden_size, config.rms_norm_eps)
-        # Maybe use_conv is always `True`, check it!
         self.layer_type = config.layer_types[layer_idx]
+        self.attention_type = "full_attention" if self.layer_type == "hybrid" else "sliding_attention"
         self.attn_sconv = TmlShortConvolution(
             config.hidden_size, config.conv_kernel_size, layer_idx=layer_idx, conv_idx=2
         )
@@ -696,7 +696,7 @@ class TmlTextModel(TmlPreTrainedModel):
         for decoder_layer in self.layers:
             hidden_states = decoder_layer(
                 hidden_states,
-                attention_mask=causal_mask_mapping[decoder_layer.layer_type],
+                attention_mask=causal_mask_mapping[decoder_layer.attention_type],
                 conv_mask=causal_mask_mapping["linear_attention"],
                 past_key_values=past_key_values,
                 **kwargs,

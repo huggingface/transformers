@@ -840,12 +840,12 @@ class LinearAttentionCacheLayerMixin(ABC):
     def __init__(self, number_of_states: int = 1, **kwargs):
         self.number_of_states = number_of_states
         # We allow to have an arbitrary number of cached states inside a single layer
-        self.conv_states: dict[int, torch.Tensor | None] = {i: None for i in range(number_of_states)}
-        self.recurrent_states: dict[int, torch.Tensor | None] = {i: None for i in range(number_of_states)}
-        self.is_conv_states_initialized = {i: False for i in range(number_of_states)}
-        self.is_recurrent_states_initialized = {i: False for i in range(number_of_states)}
-        self.has_previous_state = {i: False for i in range(number_of_states)}
-        self.conv_kernel_size = {i: None for i in range(number_of_states)}
+        self.conv_states: dict[int, torch.Tensor | None] = dict.fromkeys(range(number_of_states))
+        self.recurrent_states: dict[int, torch.Tensor | None] = dict.fromkeys(range(number_of_states))
+        self.is_conv_states_initialized = dict.fromkeys(range(number_of_states), False)
+        self.is_recurrent_states_initialized = dict.fromkeys(range(number_of_states), False)
+        self.has_previous_state = dict.fromkeys(range(number_of_states), False)
+        self.conv_kernel_size = dict.fromkeys(range(number_of_states))
         self.device = None
         self.dtype = None
         self.batch_size = None
@@ -861,7 +861,10 @@ class LinearAttentionCacheLayerMixin(ABC):
 
     @abstractmethod
     def lazy_initialization(
-        self, conv_states: torch.Tensor | None = None, recurrent_states: torch.Tensor | None = None, state_idx: int = 0,
+        self,
+        conv_states: torch.Tensor | None = None,
+        recurrent_states: torch.Tensor | None = None,
+        state_idx: int = 0,
     ) -> None: ...
 
     @abstractmethod
@@ -915,7 +918,10 @@ class LinearAttentionCacheLayerMixin(ABC):
 
 class LinearAttentionLayer(LinearAttentionCacheLayerMixin):
     def lazy_initialization(
-        self, conv_states: torch.Tensor | None = None, recurrent_states: torch.Tensor | None = None, state_idx: int = 0,
+        self,
+        conv_states: torch.Tensor | None = None,
+        recurrent_states: torch.Tensor | None = None,
+        state_idx: int = 0,
     ) -> None:
         if conv_states is not None:
             if self.device is None:
@@ -1203,7 +1209,9 @@ class Cache:
 
         return keys, values
 
-    def update_conv_state(self, conv_states: torch.Tensor, layer_idx: int, state_idx: int = 0, **kwargs) -> torch.Tensor:
+    def update_conv_state(
+        self, conv_states: torch.Tensor, layer_idx: int, state_idx: int = 0, **kwargs
+    ) -> torch.Tensor:
         """
         Updates the cache with the new `conv_states` for the layer `layer_idx`.
 
@@ -1223,7 +1231,9 @@ class Cache:
         conv_states = self.layers[layer_idx].update_conv_state(conv_states, state_idx, **kwargs)
         return conv_states
 
-    def update_recurrent_state(self, recurrent_states: torch.Tensor, layer_idx: int, state_idx: int = 0, **kwargs) -> torch.Tensor:
+    def update_recurrent_state(
+        self, recurrent_states: torch.Tensor, layer_idx: int, state_idx: int = 0, **kwargs
+    ) -> torch.Tensor:
         """
         Updates the cache with the new `recurrent_states` for the layer `layer_idx`.
 
