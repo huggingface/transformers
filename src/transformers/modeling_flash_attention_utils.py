@@ -33,7 +33,7 @@ from .utils import (
     logging,
 )
 from .utils.generic import split_attention_implementation
-from .utils.import_utils import PACKAGE_DISTRIBUTION_MAPPING, is_tracing
+from .utils.import_utils import PACKAGE_DISTRIBUTION_MAPPING, is_torchdynamo_compiling
 
 
 logger = logging.get_logger(__name__)
@@ -317,6 +317,8 @@ def _unpad_input(hidden_states, attention_mask, unused_mask=None):
     used_seqlens_in_batch = attention_mask.sum(dim=-1, dtype=torch.int32)
     indices = torch.nonzero(all_masks.flatten(), as_tuple=False).flatten()
     max_seqlen_in_batch = seqlens_in_batch.max()
+    if not is_torchdynamo_compiling():
+        max_seqlen_in_batch = max_seqlen_in_batch.item()
     cu_seqlens = F.pad(torch.cumsum(seqlens_in_batch, dim=0, dtype=torch.int32), (1, 0))
 
     return (
@@ -366,6 +368,8 @@ def _get_unpad_data(attention_mask: torch.Tensor) -> tuple[torch.Tensor, torch.T
     seqlens_in_batch = attention_mask.sum(dim=-1, dtype=torch.int32)
     indices = torch.nonzero(attention_mask.flatten(), as_tuple=False).flatten()
     max_seqlen_in_batch = seqlens_in_batch.max()
+    if not is_torchdynamo_compiling():
+        max_seqlen_in_batch = max_seqlen_in_batch.item()
     cu_seqlens = F.pad(torch.cumsum(seqlens_in_batch, dim=0, dtype=torch.int32), (1, 0))
     return (
         indices,
@@ -487,6 +491,9 @@ def prepare_fa_kwargs_from_position_ids(position_ids):
     # for some models (e.g. qwen2-vl).
     max_length_q = cu_seq_lens_q.diff().max()
     max_length_k = max_length_q
+    if not is_torchdynamo_compiling():
+        max_length_q = max_length_q.item()
+        max_length_k = max_length_k.item()
 
     return (cu_seq_lens_q, cu_seq_lens_k), (max_length_q, max_length_k)
 
@@ -673,15 +680,23 @@ def _process_flash_attention_kwargs(
     # to allow torch compile to handle scalar outputs in those cases.
     same_max_seqlen = max_seqlen_q is max_seqlen_k  # to avoid 2x device syncs
     if supports_mapping["max_seqlen_q"] and max_seqlen_q is not None:
-        if not isinstance(max_seqlen_q, int) and is_tracing(max_seqlen_q):
-            max_seqlen_q = max_seqlen_q.item()
+        if not isinstance(max_seqlen_q, int):
+            if is_torchdynamo_compiling():
+                # Under compile, keep as tensor to avoid graph break
+                pass
+            else:
+                max_seqlen_q = max_seqlen_q.item()
         flash_kwargs["max_seqlen_q"] = max_seqlen_q
 
     if supports_mapping["max_seqlen_k"] and max_seqlen_k is not None:
         if same_max_seqlen and flash_kwargs["max_seqlen_q"] is not None:
             max_seqlen_k = flash_kwargs["max_seqlen_q"]
-        elif not isinstance(max_seqlen_k, int) and is_tracing(max_seqlen_k):
-            max_seqlen_k = max_seqlen_k.item()
+        elif not isinstance(max_seqlen_k, int):
+            if is_torchdynamo_compiling():
+                # Under compile, keep as tensor to avoid graph break
+                pass
+            else:
+                max_seqlen_k = max_seqlen_k.item()
         flash_kwargs["max_seqlen_k"] = max_seqlen_k
 
     return flash_kwargs

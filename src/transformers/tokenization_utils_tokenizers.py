@@ -19,6 +19,8 @@ see tokenization_utils.py
 import copy
 import json
 import os
+import sys
+import threading
 from collections import defaultdict
 from collections.abc import Iterable
 from shutil import copyfile
@@ -51,6 +53,61 @@ from .utils import PaddingStrategy, add_end_docstrings, logging
 
 
 logger = logging.get_logger(__name__)
+
+
+def _is_freethreaded_python():
+    """Detect free-threaded Python (3.14t, PEP 703) where the GIL is disabled."""
+    return hasattr(sys, "_is_gil_enabled") and not sys._is_gil_enabled()
+
+
+def _check_tokenizer_thread_safety():
+    """
+    Determine whether the installed *tokenizers* library provides its own
+    thread-safety guarantees.
+
+    tokenizers >= 0.23.1 wraps the inner Rust ``Tokenizer`` in
+    ``Arc<std::sync::RwLock<>>`` on **free-threaded Python 3.14t** only
+    (PR huggingface/tokenizers#2041).  On regular CPython the per-PyO3-class
+    borrow check is still in place, so a Python-side lock is required.
+    """
+    try:
+        from packaging.version import Version as _Version
+        from tokenizers import __version__ as _tok_version
+
+        _tok_ver = _Version(_tok_version)
+    except Exception:
+        _tok_ver = None
+
+    if _tok_ver is not None and _tok_ver >= _Version("0.23.1") and _is_freethreaded_python():
+        logger.info(
+            "tokenizers %s detected on free-threaded Python – relying on the upstream "
+            "Arc<RwLock<>> for thread safety (no Python-side lock).",
+            _tok_ver,
+        )
+        return False
+    return True
+
+
+_TOKENIZER_NEEDS_LOCK = _check_tokenizer_thread_safety()
+
+
+class _NullLock:
+    """A no-op lock that matches the ``threading.Lock`` / ``RLock`` interface."""
+
+    __slots__ = ()
+
+    def acquire(self, blocking=True, timeout=-1):
+        return True
+
+    def release(self):
+        pass
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        pass
+
 
 # Fast tokenizers (provided by HuggingFace tokenizer's library) can be saved in a single file
 TOKENIZER_FILE = "tokenizer.json"
@@ -390,6 +447,14 @@ class TokenizersBackend(PreTrainedTokenizerBase):
 
         if self._tokenizer is None:
             raise ValueError("The backend tokenizer is not correctly initialized.")
+
+        # Per-instance reentrant lock for thread-safe access to the underlying
+        # Rust ``tokenizers.Tokenizer`` object.  The Rust/PyO3 borrow checker
+        # panics with ``RuntimeError: Already borrowed`` when ``&mut self`` and
+        # ``&self`` calls overlap across threads (notably
+        # ``set_truncation_and_padding`` + ``encode_batch``).
+        # See https://github.com/huggingface/transformers/issues/47085
+        self._lock = threading.RLock() if _TOKENIZER_NEEDS_LOCK else _NullLock()
 
         _truncation = kwargs.pop("tokenizer_truncation", None) or self._tokenizer.truncation or _json_truncation
         if _truncation is not None:
@@ -796,6 +861,12 @@ class TokenizersBackend(PreTrainedTokenizerBase):
         padding / truncation strategy before, then it will be reset to no padding / truncation when exiting the managed
         section.
 
+        .. note::
+
+            This method acquires a per-instance reentrant lock to serialize mutations
+            to the underlying Rust ``tokenizers.Tokenizer``.  See
+            :ref:`Thread safety of fast tokenizers <thread_safety>` for details.
+
         Args:
             padding_strategy ([`~utils.PaddingStrategy`]):
                 The kind of padding that will be applied to the input
@@ -812,47 +883,46 @@ class TokenizersBackend(PreTrainedTokenizerBase):
                 The side on which the model should have padding applied. Should be selected between ['right', 'left'].
                 Default value is picked from the class attribute of the same name.
         """
-        _truncation = self._tokenizer.truncation
-        _padding = self._tokenizer.padding
-        # Set truncation and padding on the backend tokenizer
-        if truncation_strategy == TruncationStrategy.DO_NOT_TRUNCATE:
-            if _truncation is not None:
-                self._tokenizer.no_truncation()
-        else:
-            target = {
-                "max_length": max_length,
-                "stride": stride,
-                "strategy": truncation_strategy.value,
-                "direction": self.truncation_side,
-            }
-
-            # _truncation might contain more keys that the target `transformers`
-            # supports. Use only the target keys to trigger `enable_truncation`.
-            # This should enable this code to works on various `tokenizers`
-            # targets.
-            if _truncation is None:
-                current = None
+        with self._lock:
+            _truncation = self._tokenizer.truncation
+            _padding = self._tokenizer.padding
+            # Set truncation and padding on the backend tokenizer
+            if truncation_strategy == TruncationStrategy.DO_NOT_TRUNCATE:
+                if _truncation is not None:
+                    self._tokenizer.no_truncation()
             else:
-                current = {k: _truncation.get(k, None) for k in target}
+                target = {
+                    "max_length": max_length,
+                    "stride": stride,
+                    "strategy": truncation_strategy.value,
+                    "direction": self.truncation_side,
+                }
 
-            if current != target:
-                self._tokenizer.enable_truncation(**target)
+                # _truncation might contain more keys than `transformers` supports.
+                # Use only the target keys to trigger `enable_truncation`.
+                if _truncation is None:
+                    current = None
+                else:
+                    current = {k: _truncation.get(k, None) for k in target}
 
-        if padding_strategy == PaddingStrategy.DO_NOT_PAD:
-            if _padding is not None:
-                self._tokenizer.no_padding()
-        else:
-            length = max_length if padding_strategy == PaddingStrategy.MAX_LENGTH else None
-            target = {
-                "length": length,
-                "direction": padding_side if padding_side is not None else self.padding_side,
-                "pad_id": self.pad_token_id,
-                "pad_token": self.pad_token,
-                "pad_type_id": self.pad_token_type_id,
-                "pad_to_multiple_of": pad_to_multiple_of,
-            }
-            if _padding != target:
-                self._tokenizer.enable_padding(**target)
+                if current != target:
+                    self._tokenizer.enable_truncation(**target)
+
+            if padding_strategy == PaddingStrategy.DO_NOT_PAD:
+                if _padding is not None:
+                    self._tokenizer.no_padding()
+            else:
+                length = max_length if padding_strategy == PaddingStrategy.MAX_LENGTH else None
+                target = {
+                    "length": length,
+                    "direction": padding_side if padding_side is not None else self.padding_side,
+                    "pad_id": self.pad_token_id,
+                    "pad_token": self.pad_token,
+                    "pad_type_id": self.pad_token_type_id,
+                    "pad_to_multiple_of": pad_to_multiple_of,
+                }
+                if _padding != target:
+                    self._tokenizer.enable_padding(**target)
 
     def _encode_plus(
         self,
@@ -939,28 +1009,29 @@ class TokenizersBackend(PreTrainedTokenizerBase):
                 f"batch_text_or_text_pairs has to be a list or a tuple (got {type(batch_text_or_text_pairs)})"
             )
 
-        self.set_truncation_and_padding(
-            padding_strategy=padding_strategy,
-            truncation_strategy=truncation_strategy,
-            max_length=max_length,
-            stride=stride,
-            pad_to_multiple_of=pad_to_multiple_of,
-            padding_side=padding_side,
-        )
+        with self._lock:
+            self.set_truncation_and_padding(
+                padding_strategy=padding_strategy,
+                truncation_strategy=truncation_strategy,
+                max_length=max_length,
+                stride=stride,
+                pad_to_multiple_of=pad_to_multiple_of,
+                padding_side=padding_side,
+            )
 
-        # Use self.split_special_tokens as default if not explicitly provided
-        if split_special_tokens is None:
-            split_special_tokens = self.split_special_tokens
+            # Use self.split_special_tokens as default if not explicitly provided
+            if split_special_tokens is None:
+                split_special_tokens = self.split_special_tokens
 
-        if self._tokenizer.encode_special_tokens != split_special_tokens:
-            self._tokenizer.encode_special_tokens = split_special_tokens
+            if self._tokenizer.encode_special_tokens != split_special_tokens:
+                self._tokenizer.encode_special_tokens = split_special_tokens
 
-        # Direct rust backend call
-        encodings = self._tokenizer.encode_batch(
-            batch_text_or_text_pairs,
-            add_special_tokens=add_special_tokens,
-            is_pretokenized=is_split_into_words,
-        )
+            # Direct rust backend call
+            encodings = self._tokenizer.encode_batch(
+                batch_text_or_text_pairs,
+                add_special_tokens=add_special_tokens,
+                is_pretokenized=is_split_into_words,
+            )
 
         # Convert encodings to BatchEncoding format
         tokens_and_encodings = [
@@ -1029,7 +1100,8 @@ class TokenizersBackend(PreTrainedTokenizerBase):
             token_ids = [token_ids]
         if isinstance(token_ids, dict):
             token_ids = token_ids["input_ids"]
-        text = self._tokenizer.decode(token_ids, skip_special_tokens=skip_special_tokens)
+        with self._lock:
+            text = self._tokenizer.decode(token_ids, skip_special_tokens=skip_special_tokens)
 
         clean_up_tokenization_spaces = (
             clean_up_tokenization_spaces
