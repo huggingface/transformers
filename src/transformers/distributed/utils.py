@@ -118,12 +118,6 @@ def _distributed_barrier():
 
 
 def initialize_fully_sharded_data_parallelism(distributed_config: DistributedConfig):
-    if not is_torch_greater_or_equal("2.5"):
-        raise OSError("Distributed training with DistributedConfig requires `torch>=2.5`.")
-
-    if distributed_config.fsdp_size > 1 and not is_torch_greater_or_equal("2.7"):
-        raise OSError("FSDP2 requires `torch>=2.7`.")
-
     device_type = torch._C._get_accelerator().type
     _ensure_torch_distributed(device_type)
 
@@ -155,9 +149,6 @@ def initialize_fully_sharded_data_parallelism(distributed_config: DistributedCon
 
 def initialize_tensor_parallelism(distributed_config: DistributedConfig):
     """Init the process group + a 1-D ``(tp,)`` device mesh for tensor parallelism."""
-    if not is_torch_greater_or_equal("2.5"):
-        raise OSError("Tensor parallelism with DistributedConfig requires `torch>=2.5`.")
-
     device_type = torch._C._get_accelerator().type
     _ensure_torch_distributed(device_type)
 
@@ -192,11 +183,8 @@ def distribute_model(
     model._device_mesh = device_mesh
 
     if distributed_config.tp_size > 1:
-        model._tp_size = distributed_config.tp_size
         tp_mesh = device_mesh["tp"] if device_mesh.ndim > 1 else device_mesh
-        model = apply_tensor_parallel(
-            model, tp_mesh, distributed_config=distributed_config, device_mesh=device_mesh
-        )
+        model = apply_tensor_parallel(model, tp_mesh)
     elif distributed_config.fsdp_size > 1:
         fsdp_mesh = device_mesh["fsdp"] if device_mesh.ndim > 1 else device_mesh
         model = apply_fully_sharded_data_parallelism(model, fsdp_mesh)

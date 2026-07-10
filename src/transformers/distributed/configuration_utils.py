@@ -16,7 +16,7 @@ import json
 import os
 from dataclasses import asdict, dataclass
 
-from ..utils import is_torch_available
+from ..utils import is_torch_available, is_torch_greater_or_equal
 
 
 if is_torch_available():
@@ -72,7 +72,7 @@ class DistributedConfig:
             )
 
     def validate(self) -> None:
-        """Validate against the live process group. Call before distributed load/train."""
+        """Validate torch/distributed prerequisites. Call before mesh init and load/train."""
         if self.tp_size is None and self.fsdp_size is None:
             return
 
@@ -81,6 +81,11 @@ class DistributedConfig:
 
         if not is_torch_available():
             raise RuntimeError("PyTorch is required to use DistributedConfig.")
+
+        if not is_torch_greater_or_equal("2.5"):
+            raise OSError("DistributedConfig requires `torch>=2.5`.")
+        if self.fsdp_size > 1 and not is_torch_greater_or_equal("2.7"):
+            raise OSError("FSDP2 requires `torch>=2.7`.")
 
         if not torch.distributed.is_available() or not torch.distributed.is_initialized():
             raise RuntimeError(

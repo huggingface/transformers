@@ -1379,14 +1379,10 @@ class PreTrainedModel(
         """
         # Attach the different parallel plans and tied weight keys to the top-most model, so that everything is
         # easily available.
-        # Seed with the class-level plans (e.g. `*ForCausalLM._tp_plan = {"lm_head": ...}`) before the instance
-        # attribute shadows them — task-head plans live on the head class, not in the base model config.
-        cls_tp_plan = getattr(self, "_tp_plan", None) or {}
-        cls_fsdp_plan = getattr(self, "_fsdp_plan", None) or {}
-        self._tp_plan = dict(cls_tp_plan)
+        self._tp_plan = getattr(self, "_tp_plan", None) or {}
         self._ep_plan = {}
         self._pp_plan = {}
-        self._fsdp_plan = dict(cls_fsdp_plan)
+        self._fsdp_plan = getattr(self, "_fsdp_plan", None) or {}
         # If current model is a base model, attach `base_model_*_plan` from config
         if self.base_model is self:
             self._pp_plan = self.config.base_model_pp_plan.copy() if self.config.base_model_pp_plan is not None else {}
@@ -3364,8 +3360,8 @@ class PreTrainedModel(
                 " the logger on the traceback to understand the reason why the quantized model is not serializable."
             )
 
-        # we need to check against tp_size, not tp_plan, as tp_plan is substituted to the class one
-        if self._tp_size is not None and not is_huggingface_hub_greater_or_equal("0.31.4"):
+        # Check tp_size (from device mesh), not tp_plan — tp_plan is always present on TP-capable models
+        if self.tp_size is not None and not is_huggingface_hub_greater_or_equal("0.31.4"):
             raise ImportError(
                 "Saving a model with tensor parallelism requires `huggingface_hub` version 0.31.4 or higher."
             )
@@ -3464,7 +3460,7 @@ class PreTrainedModel(
         if state_dict is None:
             state_dict = model_to_save.state_dict()
 
-        if self._tp_size is not None:
+        if self.tp_size is not None:
             state_dict, needs_dist_barrier = self._gather_tp_state_dict_for_save(
                 state_dict, is_checkpoint_writer=save_on_this_rank
             )
@@ -4023,18 +4019,14 @@ class PreTrainedModel(
             distributed_config ([`~transformers.distributed.configuration_utils.DistributedConfig`], *optional*):
                 Configuration for native distributed loading with tensor parallelism or FSDP2. Pass
                 `DistributedConfig(tp_size=N)` for tensor parallelism, or
-                `DistributedConfig(fsdp_size=N)` for FSDP2. Requires `torchrun` and an initialized
-                process group when `tp_size > 1` or `fsdp_size > 1`. Mutually exclusive with `device_map`.
-            tp_plan (`Optional[Union[dict, str]]`, *optional*):
-                A torch tensor parallel plan, see [here](https://pytorch.org/tutorials/intermediate/TP_tutorial.html). Use `tp_plan="auto"` to
-                use the predefined plan based on the model. If it's a dict, then it should match between module names and desired layout.
-                Note that if you use it, you should launch your script accordingly with `torchrun [args] script.py`. This will be much
-                faster than using a `device_map`, but has limitations.
-            tp_size (`str`, *optional*):
-                A torch tensor parallel degree. If not provided would default to world size.
+                `DistributedConfig(fsdp_size=N)` for FSDP2. Optionally set `tp_plan` on the config to
+                override the model's default plan; leave it as `None` to use `base_model_tp_plan`.
+                Requires `torchrun` and an initialized process group when `tp_size > 1` or
+                `fsdp_size > 1`. Mutually exclusive with `device_map`.
             device_mesh (`torch.distributed.DeviceMesh`, *optional*):
-                A torch device mesh. If not provided would default to world size. Used only for tensor parallel for now.
-                If provided, it has to contain dimension named `"tp"` in case it's > 1 dimensional, this dimension will be used for tensor parallelism
+                A torch device mesh. If not provided, one is built from `distributed_config`. Used for
+                tensor parallelism (and FSDP2). If provided and multi-dimensional, it must contain a
+                dimension named `"tp"` (resp. `"fsdp"`) for that parallelism style.
             offload_folder (`str` or `os.PathLike`, *optional*):
                 If the `device_map` contains any value `"disk"`, the folder where we will offload weights.
             offload_buffers (`bool`, *optional*):
@@ -4636,14 +4628,6 @@ class PreTrainedModel(
         if self.config.base_model_tp_plan:
             return True
         return False
-
-    @property
-    def tp_size(self):
-        """
-        Returns the model's tensor parallelism degree.
-        """
-        # if None, the model didn't undergo tensor parallel sharding
-        return self._tp_size
 
     @property
     def supports_pp_plan(self):

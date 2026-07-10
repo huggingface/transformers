@@ -14,7 +14,7 @@
 
 import copy
 import unittest
-from unittest.mock import patch
+from unittest.mock import PropertyMock, patch
 
 import pytest
 from packaging import version
@@ -614,16 +614,17 @@ class CacheHardIntegrationTest(unittest.TestCase):
             model.generate(**inputs, **generation_kwargs, prefill_chunk_size=prefill_chunk_size)
         init.assert_called_once()
 
-        # Under TP, eager init is still used but the head count is sharded by `_tp_size` (one device per rank).
+        # Under TP, eager init is still used but the head count is sharded by `tp_size`.
         tc = model.config.get_text_config(decoder=True)
         num_kv_heads = getattr(tc, "num_key_value_heads", None) or tc.num_attention_heads
         model._cache = None
-        model._tp_size = num_kv_heads  # divides evenly -> 1 head per rank
-        with patch.object(Cache, "early_initialization", autospec=True) as tp_init:
+        with (
+            patch.object(type(model), "tp_size", new_callable=PropertyMock, return_value=num_kv_heads),
+            patch.object(Cache, "early_initialization", autospec=True) as tp_init,
+        ):
             model.generate(**inputs, **generation_kwargs, prefill_chunk_size=prefill_chunk_size)
         tp_init.assert_called_once()
         self.assertEqual(tp_init.call_args.kwargs["num_heads"], 1)
-        model._tp_size = None
 
         # A multi-device `device_map` (single `model.device` can't cover all layers) skips eager init -> lazy.
         model._cache = None

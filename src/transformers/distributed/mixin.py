@@ -25,6 +25,7 @@ from .configuration_utils import DistributedConfig
 from .fsdp import is_fsdp_managed_module
 from .tensor_parallel import ALL_PARALLEL_STYLES, gather_tp_state_dict
 from .utils import (
+    _ensure_torch_distributed,
     _get_torch_distributed_rank,
     _is_torch_distributed_initialized,
     distribute_model,
@@ -58,7 +59,6 @@ class DistributedMixin:
 
     _device_mesh = None
     _tp_plan: dict[str, str] | None = None
-    _tp_size = None
     _pp_plan: dict[str, tuple[str, str]] = None
     _fsdp_plan: dict[str, str] | None = None
 
@@ -81,6 +81,17 @@ class DistributedMixin:
                 )
             return self._ep_plan
         return self._tp_plan
+
+    @property
+    def tp_size(self) -> int | None:
+        mesh = getattr(self, "_device_mesh", None)
+        if mesh is None:
+            return None
+        names = mesh.mesh_dim_names
+        if names is not None and "tp" not in names:
+            return None
+        size = mesh["tp"].size() if names and "tp" in names else mesh.size()
+        return size if size > 1 else None
 
     @property
     def fsdp_plan(self) -> dict[str, str]:
@@ -139,21 +150,24 @@ class DistributedMixin:
         device_mesh=None,
         device_map=None,
     ) -> tuple[DistributedConfig | None, object, object]:
-        """Parse ``distributed_config``, init TP/FSDP mesh, and validate."""
+        """Parse distributed_config, validate prerequisites, and init TP/FSDP mesh."""
         if distributed_config is None:
             return None, device_map, device_mesh
 
         if isinstance(distributed_config, dict):
             distributed_config = DistributedConfig.from_dict(distributed_config)
 
+        if distributed_config.tp_size > 1 or distributed_config.fsdp_size > 1:
+            device_type = torch._C._get_accelerator().type
+            _ensure_torch_distributed(device_type)
+
+        distributed_config.validate()
+
         if distributed_config.tp_size > 1:
-            # `tp_plan=None` lets `select_parallel_plan` pick the model's tp/sp/tp_ep/sp_ep plan from
-            # the DistributedConfig flags; set it explicitly to override.
             device_map, device_mesh = initialize_tensor_parallelism(distributed_config)
         elif distributed_config.fsdp_size > 1:
             device_map, device_mesh = initialize_fully_sharded_data_parallelism(distributed_config)
 
-        distributed_config.validate()
         return distributed_config, device_map, device_mesh
 
     @classmethod
