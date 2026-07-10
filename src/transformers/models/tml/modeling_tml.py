@@ -371,7 +371,6 @@ class TmlTopkRouter(nn.Module):
         return routed_logits, topk_weights, topk_indices, shared_gammas
 
 
-# TODO: should we make this as normal MLP with linear layers?
 class TmlSharedExperts(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -384,13 +383,12 @@ class TmlSharedExperts(nn.Module):
 
     def forward(self, hidden_states, gammas):
         input_shape = hidden_states.shape
-        hidden_states = hidden_states.reshape(-1, input_shape[-1])
-        gammas = gammas.reshape(-1, self.n_shared_experts).transpose(0, 1)
+        hidden_states = hidden_states.reshape(1, -1, input_shape[-1]).expand(self.n_shared_experts, -1, -1)
+        gammas = gammas.reshape(1, -1, self.n_shared_experts).transpose(1, 2)
 
-        expanded = hidden_states.unsqueeze(0).expand(self.n_shared_experts, -1, -1)
-        gate = torch.bmm(expanded, self.gate_proj)
-        up = torch.bmm(expanded, self.up_proj)
-        activated = self.act_fn(gate) * up * gammas.unsqueeze(-1)
+        gate = torch.bmm(hidden_states, self.gate_proj)
+        up = torch.bmm(hidden_states, self.up_proj)
+        activated = self.act_fn(gate) * up * gammas
         down = torch.bmm(activated, self.down_proj)
 
         out = down.float().sum(dim=0).to(hidden_states.dtype)
@@ -413,7 +411,6 @@ class TmlMoE(nn.Module):
         _, topk_weights, topk_indices, shared_gammas = self.gate(hidden_states)
         hidden_states = hidden_states.view(-1, hidden_states.shape[-1])
         hidden_states = self.experts(hidden_states, topk_indices, topk_weights).view(*input_shape)
-
         hidden_states = hidden_states + self.shared_experts(residuals, gammas=shared_gammas)
         return hidden_states
 
@@ -484,7 +481,7 @@ class TmlShortConvolution(nn.Module):
         **kwargs: Unpack[TransformersKwargs],
     ):
         # Keep the computation in fp32
-        orig_dtype = hidden_states.dtype
+        input_dtype = hidden_states.dtype
         hidden_states = hidden_states.float()
 
         residual = hidden_states
@@ -535,7 +532,7 @@ class TmlShortConvolution(nn.Module):
                 hidden_states = hidden_states[:, :, -seq_len:]
 
         hidden_states = hidden_states.transpose(1, 2)
-        hidden_states = (hidden_states + residual).to(dtype=orig_dtype)
+        hidden_states = (hidden_states + residual).to(dtype=input_dtype)
         return hidden_states
 
 
@@ -599,7 +596,7 @@ class TmlPreTrainedModel(PreTrainedModel):
     # The relative position bias flows through the attention interface as a `position_bias` (duh)
     # kwarg that only the eager path consumes; other backends need a score_mod/kernel
     _supports_flash_attn = False
-    _supports_sdpa = False
+    _supports_sdpa = True
     _supports_flex_attn = False
     _can_compile_fullgraph = False
     _supports_attention_backend = False
