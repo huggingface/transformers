@@ -44,6 +44,8 @@ from ...utils import (
 from ...utils.generic import merge_with_config_defaults
 from ...utils.import_utils import is_causal_conv1d_available
 from ...utils.output_capturing import capture_outputs
+from ..gemma3.modeling_gemma3 import Gemma3ModelOutputWithPast, Gemma3CausalLMOutputWithPast
+from ..llama.modeling_llama import LlamaRMSNorm, repeat_kv
 
 
 if is_causal_conv1d_available():
@@ -271,71 +273,16 @@ class TmlShortConvolutionsLayer(LinearAttentionCacheLayerMixin):
         raise NotImplementedError("Model does not use any recurrent cache!")
 
 
-@auto_docstring(
-    custom_intro="""
-    Base class for Tml outputs, with hidden states and attentions.
-    """
-)
-@dataclass
-class TmlModelOutputWithPast(BaseModelOutputWithPast):
-    r"""
-    image_hidden_states (`torch.FloatTensor`, *optional*):
-        A `torch.FloatTensor` of size `(batch_size, num_images, sequence_length, hidden_size)`.
-        image_hidden_states of the model produced by the vision encoder and after projecting the last hidden state.
-    """
-
-    image_hidden_states: torch.FloatTensor | None = None
+class TmlModelOutputWithPast(Gemma3ModelOutputWithPast):
+    pass
 
 
-@auto_docstring(
-    custom_intro="""
-    Base class for Tml causal language model (or autoregressive) outputs.
-    """
-)
-@dataclass
-class TmlCausalLMOutputWithPast(ModelOutput):
-    r"""
-    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
-        Language modeling loss (for next-token prediction).
-    logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.text_config.vocab_size)`):
-        Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
-    past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-        It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
-
-        Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
-        `past_key_values` input) to speed up sequential decoding.
-    image_hidden_states (`torch.FloatTensor`, *optional*):
-        A `torch.FloatTensor` of size `(batch_size, num_images, sequence_length, hidden_size)`.
-        image_hidden_states of the model produced by the vision encoder after projecting last hidden state.
-    """
-
-    loss: torch.FloatTensor | None = None
-    logits: torch.FloatTensor | None = None
-    past_key_values: Cache | None = None
-    hidden_states: tuple[torch.FloatTensor] | None = None
-    attentions: tuple[torch.FloatTensor] | None = None
-    image_hidden_states: torch.FloatTensor | None = None
+class TmlCausalLMOutputWithPast(Gemma3CausalLMOutputWithPast):
+    pass
 
 
-@use_kernel_forward_from_hub("RMSNorm")
-class TmlRMSNorm(nn.Module):
-    def __init__(self, hidden_size, eps: float = 1e-6) -> None:
-        """
-        TmlRMSNorm is equivalent to T5LayerNorm
-        """
-        super().__init__()
-        self.weight = nn.Parameter(torch.ones(hidden_size))
-        self.variance_epsilon = eps
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        input_dtype = hidden_states.dtype
-        hidden_states = hidden_states.to(torch.float32)
-        variance = hidden_states.pow(2).mean(-1, keepdim=True)
-        hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
-        return self.weight * hidden_states.to(input_dtype)
-
-    def extra_repr(self):
-        return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
+class TmlRMSNorm(LlamaRMSNorm):
+    pass
 
 
 class TmlRelativeLogits(nn.Module):
@@ -362,18 +309,6 @@ class TmlRelativeLogits(nn.Module):
         gather_index = distance.clamp(0, self.rel_extent - 1).expand(*rel_logits.shape[:2], -1, -1)
         position_bias = rel_logits.gather(-1, gather_index)
         return position_bias.masked_fill((distance < 0) | (distance >= self.rel_extent), 0.0)
-
-
-def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
-    """
-    This is the equivalent of torch.repeat_interleave(x, dim=1, repeats=n_rep). The hidden states go from (batch,
-    num_key_value_heads, seqlen, head_dim) to (batch, num_attention_heads, seqlen, head_dim)
-    """
-    batch, num_key_value_heads, slen, head_dim = hidden_states.shape
-    if n_rep == 1:
-        return hidden_states
-    hidden_states = hidden_states[:, :, None, :, :].expand(batch, num_key_value_heads, n_rep, slen, head_dim)
-    return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
 
 
 def eager_attention_forward(
