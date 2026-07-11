@@ -75,7 +75,7 @@ tokenizer.decode(predictions).split()
 ## Notes
 
 - Longformer is based on [RoBERTa](https://huggingface.co/docs/transformers/en/model_doc/roberta) and doesn't have `token_type_ids`. You don't need to indicate which token belongs to which segment. You only need to separate the segments with the separation token `</s>` or `tokenizer.sep_token`.
-- You can set which tokens can attend locally and which tokens attend globally with the `global_attention_mask` at inference (see this [example](https://huggingface.co/docs/transformers/en/model_doc/longformer#transformers.LongformerModel.forward.example) for more details). A value of `0` means a token attends locally and a value of `1` means a token attends globally.
+- You can set which tokens can attend locally and which tokens attend globally with the `global_attention_mask` at inference (see this [`~LongformerModel.forward#example`] for more details). A value of `0` means a token attends locally and a value of `1` means a token attends globally.
 - [`LongformerForMaskedLM`] is trained like [`RobertaForMaskedLM`] and should be used as shown below.
 
   ```py

@@ -193,7 +193,7 @@ class VideoLlama3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
                         {
                             "type": "video",
                             "url": url_to_local_path(
-                                "https://huggingface.co/datasets/raushan-testing-hf/videos-test/resolve/main/Big_Buck_Bunny_720_10s_10MB.mp4"
+                                "https://huggingface.co/datasets/hf-internal-testing/test-videos/resolve/main/big_buck_bunny_320x240_10s.mp4"
                             ),
                         },
                         {"type": "text", "text": "What is shown in this video?"},
@@ -214,7 +214,7 @@ class VideoLlama3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             num_frames=num_frames,
         )
         self.assertTrue(self.videos_input_name in out_dict_with_video)
-        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 180)
+        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 144)
 
         # Load with `fps` arg
         fps = 1
@@ -226,7 +226,7 @@ class VideoLlama3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             fps=fps,
         )
         self.assertTrue(self.videos_input_name in out_dict_with_video)
-        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 80)
+        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 192)
 
         # Load with `fps` and `num_frames` args, should raise an error
         with self.assertRaises(ValueError):
@@ -247,7 +247,7 @@ class VideoLlama3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             return_dict=True,
         )
         self.assertTrue(self.videos_input_name in out_dict_with_video)
-        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 1200)
+        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 120)
 
         # Load video as a list of frames (i.e. images). NOTE: each frame should have same size
         # because we assume they come from one video
