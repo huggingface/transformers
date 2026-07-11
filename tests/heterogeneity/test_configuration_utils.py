@@ -182,6 +182,25 @@ class TestHeterogeneousConfig(unittest.TestCase):
         self.assertEqual(config.per_layer_config[1].num_key_value_heads, 1)
         self.assertEqual(config.per_layer_config[2].num_key_value_heads, 4)
 
+    def test_flags_are_applied_from_pretrained_kwargs(self):
+        """The flags are properties, so `from_dict`'s kwargs handling applies them like `per_layer_config`."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tiny_llama_config().save_pretrained(tmpdir)
+            config = LlamaConfig.from_pretrained(
+                tmpdir,
+                per_layer_config={1: {"num_key_value_heads": 2}},
+                allow_global_per_layer_attribute_access=True,
+                serialize_explicit_per_layer_config=True,
+            )
+
+        self.assertEqual(config.num_key_value_heads, 4)
+        self.assertEqual(
+            config.to_dict()["per_layer_config"],
+            {str(i): {"num_key_value_heads": 2 if i == 1 else 4} for i in range(4)},
+        )
+        # The property defaults must not leak into the serialization of configs that never set the flags.
+        self.assertNotIn("allow_global_per_layer_attribute_access", tiny_llama_config().to_dict())
+
     def test_non_per_layer_attributes_do_not_warn(self):
         config = tiny_llama_config(per_layer_config={0: {"num_key_value_heads": 2}, 1: {"num_key_value_heads": 1}})
         logger = transformers_logging.get_logger("transformers.integrations.heterogeneity.configuration_utils")

@@ -320,9 +320,8 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin, Heterogeneous
         self._attn_implementation: str | None = kwargs.pop("attn_implementation", None)
         self._experts_implementation: str | None = kwargs.pop("experts_implementation", None)
 
-        # HeterogeneousConfigMixin: Heterogeneity kwargs have dedicated handling,
-        # so exclude them from regular additional attributes.
-        heterogeneous_kwargs = self._pop_heterogeneous_kwargs(kwargs)
+        # HeterogeneousConfigMixin: `per_layer_config` should be applied last, as heterogeneity needs to have all of the other kwargs set
+        per_layer_config = kwargs.pop("per_layer_config", None)
 
         # Additional attributes without default values
         for key, value in kwargs.items():
@@ -334,8 +333,9 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin, Heterogeneous
                     logger.error(f"Can't set {key} with value {value} for {self}")
                     raise err
 
-        # HeterogeneousConfigMixin: apply heterogeneity after all of the config attributes are initialized.
-        self._apply_heterogeneous_kwargs(heterogeneous_kwargs)
+        # HeterogeneousConfigMixin
+        if per_layer_config is not None:
+            self.per_layer_config = per_layer_config
 
     def __init_subclass__(cls, *args, **kwargs):
         super().__init_subclass__(*args, **kwargs)
@@ -507,7 +507,13 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin, Heterogeneous
             layers = getattr(self, layer_types, None)
             if not (layers is not None and hasattr(self, "num_hidden_layers")):
                 return
-            elif not all(layer_type in ALLOWED_LAYER_TYPES for layer_type in layers):
+            if self.is_custom_code():
+                # Custom code may have legacy layer types that need to be remapped
+                if (remapped := remap_legacy_layer_types(layers)) != layers:
+                    # Only try setattr if layers changed in case layer_types is a read-only property
+                    setattr(self, layer_types, remapped)
+                layers = remapped
+            if not all(layer_type in ALLOWED_LAYER_TYPES for layer_type in layers):
                 raise ValueError(f"The `{layer_types}` entries must be in {ALLOWED_LAYER_TYPES} but got {layers}")
             elif self.num_hidden_layers is not None and self.num_hidden_layers != len(layers):
                 raise ValueError(
@@ -1246,6 +1252,18 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin, Heterogeneous
             raise ValueError(f"{auto_class} is not a valid auto class.")
 
         cls._auto_class = auto_class
+
+    @classmethod
+    def is_remote_code(cls) -> bool:
+        """Return whether the current config is custom code, i.e. code loaded from the hub, or class that we just
+        registered via `register_for_auto_class`."""
+        return cls._auto_class is not None
+
+    @classmethod
+    def is_custom_code(cls) -> bool:
+        """Return whether the current config is custom code, i.e. either code loaded from the hub, or defined in any
+        user-specific module/session."""
+        return cls.is_remote_code() or not cls.__module__.startswith("transformers.")
 
     def _get_generation_parameters(self) -> dict[str, Any]:
         """

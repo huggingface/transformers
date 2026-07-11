@@ -594,8 +594,21 @@ def _get_resolved_checkpoint_files(
         # If the file is a local folder (but not in the HF_HOME cache, even if it's technically local)
         if is_local:
             if transformers_explicit_filename is not None:
-                # If the filename is explicitly defined, load this by default.
-                archive_file = os.path.join(pretrained_model_name_or_path, subfolder, transformers_explicit_filename)
+                # If the filename is explicitly defined, load this by default
+                base_dir = os.path.join(pretrained_model_name_or_path, subfolder)
+                archive_file = os.path.join(base_dir, transformers_explicit_filename)
+                # Just a small check to make sure `transformers_explicit_filename` does not escape the base_dir, i.e. it does not
+                # contain `..` for example
+                try:
+                    absolute_base_dir = os.path.abspath(base_dir)
+                    absolute_archive_file = os.path.abspath(archive_file)
+                    contained = os.path.commonpath([absolute_base_dir, absolute_archive_file]) == absolute_base_dir
+                except ValueError:
+                    contained = False
+                if not contained:
+                    raise ValueError(
+                        f"`transformers_weights` must reference a file inside the model directory, got {transformers_explicit_filename}"
+                    )
                 is_sharded = transformers_explicit_filename.endswith(".safetensors.index.json")
             elif use_safetensors is not False and os.path.isfile(
                 os.path.join(pretrained_model_name_or_path, subfolder, _add_variant(SAFE_WEIGHTS_NAME, variant))
@@ -1278,9 +1291,11 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
          Maps output names (e.g., "attentions", "hidden_states")
          to either:
              - A module class (e.g., `LlamaDecoderLayer`), using default index conventions:
-                 * index=0 for "hidden_states"
-                 * index=1 for "attentions"
-             - Or an `OutputRecorder(...)` with `target_class`, optional `index`, and `layer_name`.
+                 * index = 0 for a key that contains "hidden_states" (e.g. "hidden_states" or "vision_hidden_states")
+                 * index = 1 for any other key: "attentions", "cross_attentions", etc.
+             - A class name as a string, when the class is not importable at declaration time.
+             - An `OutputRecorder(...)` with `target_class`, optional `index`, and `layer_name`.
+             - A list of any of the above, to record outputs from several module types under one key.
 
          Examples:
              These two are equivalent:
@@ -1306,7 +1321,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
          ```python
          class LlamaModel(PreTrainedModel):
              _can_record_outputs = {
-                 "attentions": OutputRecorder(LlamaAttention, index=1, layer-name="self_attn"),
+                 "attentions": OutputRecorder(LlamaAttention, index=1, layer_name="self_attn"),
                  "cross_attentions": OutputRecorder(LlamaAttention, index=1, layer_name="cross_attn")
              }
 
@@ -2110,9 +2125,15 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
     @classmethod
     def _can_set_attn_implementation(cls) -> bool:
-        """Detect whether the class supports setting its attention implementation dynamically. Inspects the module source as a
-        heuristic, which avoids maintaining yet another property flag.
+        """Detect whether the class supports setting its attention implementation dynamically. Inspects the module
+        source as a heuristic, which avoids maintaining yet another property flag. Instead, the flag is set dynamically
+        on the first succesful call.
         """
+        # Early return if there is a cached value
+        cached_value = getattr(cls, "_can_set_attn_implementation_cached_value", None)
+        if isinstance(cached_value, bool):
+            return cached_value
+
         class_module = sys.modules.get(cls.__module__)
         # Missing module entry (e.g. cleared by a test) or custom model in a jupyter notebook / repl -> do not allow to set it
         if class_module is None:
@@ -2123,15 +2144,25 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             return False
         # Heuristic: if we find an `*Attention*(nn.Module)` class, check whether the interface is used
         if re.search(r"^class \w*Attention\w*\(nn\.Module\):", code, re.MULTILINE):
-            return "ALL_ATTENTION_FUNCTIONS.get_interface(" in code
+            can_set = "ALL_ATTENTION_FUNCTIONS.get_interface(" in code
         # If no attention layer, assume `True`. Most probably a multimodal model or inherits from existing models
-        return True
+        else:
+            can_set = True
+        # Succesful read of source code -> cache the result
+        cls._can_set_attn_implementation_cached_value = can_set
+        return cls._can_set_attn_implementation_cached_value
 
     @classmethod
     def _can_set_experts_implementation(cls) -> bool:
-        """Detect whether the class supports setting its experts implementation dynamically. Inspects the module source as a
-        heuristic, which avoids maintaining yet another property flag.
+        """Detect whether the class supports setting its experts implementation dynamically. Inspects the module source
+        as a heuristic, which avoids maintaining yet another property flag. Instead, the flag is set dynamically
+        on the first succesful call.
         """
+        # Early return if there is a cached value
+        cached_value = getattr(cls, "_can_set_experts_implementation_cached_value", None)
+        if isinstance(cached_value, bool):
+            return cached_value
+
         class_module = sys.modules.get(cls.__module__)
         # Missing module entry (e.g. cleared by a test) or custom model in a jupyter notebook / repl -> do not allow to set it
         if class_module is None:
@@ -2141,7 +2172,9 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         except (OSError, TypeError):
             return False
         # Heuristic: if the `@use_experts_implementation` decorator is used, then we can set it
-        return "@use_experts_implementation" in code
+        can_set = "@use_experts_implementation" in code
+        cls._can_set_experts_implementation_cached_value = can_set
+        return can_set
 
     def set_attn_implementation(self, attn_implementation: str | dict, allow_all_kernels: bool = False):
         """
@@ -2245,6 +2278,19 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                     if hasattr(subconfig, "_attn_was_changed"):
                         del subconfig._attn_was_changed
 
+    def get_experts_implementation(self) -> dict[str, str | None]:
+        """
+        Return the experts implementation of this model and its submodels, as a `dict` in the form accepted by
+        `set_experts_implementation` (`""` for this model, and one entry per sub_config). This is the counterpart of
+        `set_experts_implementation`, e.g. to snapshot the current implementation and later restore it.
+        """
+        experts_implementation = {"": self.config._experts_implementation}
+        for subconfig_key in self.config.sub_configs:
+            subconfig = getattr(self.config, subconfig_key, None)
+            if subconfig is not None:
+                experts_implementation[subconfig_key] = subconfig._experts_implementation
+        return experts_implementation
+
     def set_experts_implementation(self, experts_implementation: str | dict):
         """
         Set the requested `experts_implementation` for this model.
@@ -2261,10 +2307,9 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             else experts_implementation.get("", self.config._experts_implementation)
         )
 
-        # MegaMoE is locked at load time: its TP plan is baked into `base_model_tp_plan`
-        # by `update_tp_plan` (and isn't re-evaluated) and `setup_megamoe_weights`
-        # mutates the expert weights into UTCCP layout on first forward. Either side of
-        # a switch would silently produce garbage, so reject it with a clear pointer.
+        # MegaMoE is locked at load time: its TP plan is baked into `base_model_tp_plan` by `update_tp_plan` (and isn't
+        # re-evaluated) and `setup_megamoe_weights` mutates the expert weights into UTCCP layout on first forward.
+        # Either side of a switch would silently produce garbage, so reject it with a clear pointer.
         current = self.config._experts_implementation
         if "deepgemm_megamoe" in (current, requested_implementation) and current != requested_implementation:
             raise RuntimeError(
@@ -2273,10 +2318,14 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 "`from_pretrained(..., experts_implementation=...)` to switch."
             )
 
+        # Check the requested implementation is supported
         if requested_implementation != self.config._experts_implementation:
             requested_implementation = self._check_and_adjust_experts_implementation(requested_implementation)
-            # Apply the change (on the internal attr, to avoid setting it recursively)
-            self.config._experts_implementation_internal = requested_implementation
+
+            # Modify the implementation of the top level config
+            if self._can_set_experts_implementation():
+                # Apply the change (on the internal attr, to avoid setting it recursively)
+                self.config._experts_implementation_internal = requested_implementation
 
         # Apply it to all submodels as well
         for submodule in self.modules():
@@ -2286,6 +2335,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 submodule is not self
                 and isinstance(submodule, PreTrainedModel)
                 and submodule.config.__class__ != self.config.__class__
+                and submodule._can_set_experts_implementation()  # avoids bugs when text_model has MoEs but encoder no
             ):
                 # Set the experts on the submodule
                 sub_implementation = requested_implementation
@@ -5143,6 +5193,9 @@ def caching_allocator_warmup(model: PreTrainedModel, expanded_device_map: dict, 
             # which from testing seems to be about 2/3 of the total device memory (tested on apple silicon).
             # This causes the warmup function to return a `RuntimeError: Invalid buffer size: XX.XX GiB`.
             # NOTE: not tested on intel macs
+            continue
+        elif device.type == "neuron":
+            # Skip warmup on Neuron (AWS Trainium/Inferentia): it provides no benefit as there is no reusable memory pool
             continue
         # We divide by 2 here as we allocate in fp16
         _ = torch.empty(int(byte_count // 2), dtype=torch.float16, device=device, requires_grad=False)
