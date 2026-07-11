@@ -16,6 +16,8 @@
       title: Loading models
     - local: custom_models
       title: Customizing models
+    - local: heterogeneous_configurations
+      title: Heterogeneous configurations
     - local: monkey_patching
       title: Monkey patching
     - local: fusion_mapping
@@ -1477,6 +1479,10 @@
         title: Speech Encoder Decoder Models
       - local: model_doc/tapas
         title: TAPAS
+      - local: model_doc/tipsv2
+        title: TIPSv2
+      - local: model_doc/tipsv2_dpt
+        title: TIPSv2 DPT
       - local: model_doc/trocr
         title: TrOCR
       - local: model_doc/tvp
