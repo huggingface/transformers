@@ -156,7 +156,7 @@ diff = '''
 [rules.TRF010]
 description = "Direct config definitions must use @strict(accept_kwargs=True)."
 default_enabled = true
-allowlist_models = ["nemotron_h", "nemotron_h_omni", "vibevoice_asr"]
+allowlist_models = ["nemotron_h", "vibevoice_asr"]
 
 [rules.TRF010.explanation]
 what_it_does = "Checks direct PreTrainedConfig/PretrainedConfig subclasses in configuration_*.py and modular_*.py for an explicit @strict(accept_kwargs=True) decorator."
