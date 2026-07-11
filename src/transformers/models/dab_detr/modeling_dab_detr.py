@@ -329,7 +329,9 @@ class DabDetrSinePositionEmbedding(nn.Module):
         pos_x = torch.stack((pos_x[:, :, :, 0::2].sin(), pos_x[:, :, :, 1::2].cos()), dim=4).flatten(3)
         pos_y = torch.stack((pos_y[:, :, :, 0::2].sin(), pos_y[:, :, :, 1::2].cos()), dim=4).flatten(3)
         pos = torch.cat((pos_y, pos_x), dim=3).permute(0, 3, 1, 2)
-        return pos
+        # The embedding is computed in float32 for reproducibility; cast back so half-precision
+        # models do not receive float32 position embeddings.
+        return pos.to(pixel_values.dtype)
 
 
 def inverse_sigmoid(x, eps=1e-5):
@@ -1300,7 +1302,9 @@ class DabDetrModel(DabDetrPreTrainedModel):
         # Fifth, sent query embeddings + object_queries through the decoder (which is conditioned on the encoder output)
         num_queries = reference_position_embeddings.shape[1]
         if self.num_patterns == 0:
-            queries = torch.zeros(batch_size, num_queries, self.hidden_size, device=device)
+            queries = torch.zeros(
+                batch_size, num_queries, self.hidden_size, device=device, dtype=encoder_outputs[0].dtype
+            )
         else:
             queries = (
                 self.patterns.weight[:, None, None, :]

@@ -299,6 +299,20 @@ class GroundingDinoModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Tes
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
+    def test_forward_half_precision(self):
+        # Regression test: valid ratios, reference points and encoder output proposals were
+        # created in hardcoded float32, so bf16/fp16 models crashed in eager mode
+        # (float32 sampling grids in the deformable attention and float32 query embeddings).
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        for dtype in (torch.bfloat16, torch.float16):
+            model = GroundingDinoModel(config).eval().to(device=torch_device, dtype=dtype)
+            with torch.no_grad():
+                outputs = model(
+                    pixel_values=inputs_dict["pixel_values"].to(device=torch_device, dtype=dtype),
+                    input_ids=inputs_dict["input_ids"].to(torch_device),
+                )
+            self.assertEqual(outputs.last_hidden_state.dtype, dtype)
+
     def test_object_detection_head_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_object_detection_head_model(*config_and_inputs)

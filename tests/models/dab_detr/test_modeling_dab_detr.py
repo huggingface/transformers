@@ -231,6 +231,17 @@ class DabDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_dab_detr_object_detection_head_model(*config_and_inputs)
 
+    def test_forward_half_precision(self):
+        # Regression test: the sine position embedding returned hardcoded float32 and the decoder
+        # queries were created without a dtype, so bf16/fp16 models crashed in eager mode with
+        # "mat1 and mat2 must have the same dtype".
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        for dtype in (torch.bfloat16, torch.float16):
+            model = DabDetrModel(config).eval().to(device=torch_device, dtype=dtype)
+            with torch.no_grad():
+                outputs = model(pixel_values=inputs_dict["pixel_values"].to(device=torch_device, dtype=dtype))
+            self.assertEqual(outputs.last_hidden_state.dtype, dtype)
+
     def test_load_save_without_tied_weights(self):
         # DabDetrForObjectDetection forces `bbox_embed` to be tied by `self.x = y`
         # Run only DabDetrModel by overriding
