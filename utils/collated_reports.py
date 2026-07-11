@@ -19,7 +19,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 
-DEFAULT_GPU_NAMES = ["mi300", "mi325", "mi355", "h100", "a10"]
+DEFAULT_GPU_NAMES = ["mi300", "mi355", "h100", "a10"]
 
 
 def simplify_gpu_name(gpu_name: str, simplified_names: list[str]) -> str:
