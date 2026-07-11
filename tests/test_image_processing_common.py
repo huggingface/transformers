@@ -22,7 +22,7 @@ from copy import deepcopy
 
 import numpy as np
 import pytest
-from test_processing_common import load_test_image
+from .test_processing_common import load_test_image
 
 from transformers import AutoImageProcessor, BatchFeature
 from transformers.image_utils import AnnotationFormat
