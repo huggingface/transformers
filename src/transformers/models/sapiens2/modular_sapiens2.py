@@ -406,9 +406,80 @@ def post_dark_unbiased_data_processing(
     return keypoints - torch.cat([offset_x, offset_y], dim=-1)
 
 
+def generate_udp_gaussian_heatmaps(
+    boxes: list[list[list[float]]],
+    keypoints: list[list[list[list[float]]]],
+    output_size: tuple[int, int],
+    downscale_factor: int,
+    sigma: float,
+    device: Union[str, "torch.device"] | None = None,
+) -> tuple[list[torch.Tensor], list[torch.Tensor]]:
+    """Generates UDP Gaussian heatmaps and visibility weights from raw keypoint coordinates."""
+    heatmap_height = output_size[0] // downscale_factor
+    heatmap_width = output_size[1] // downscale_factor
+
+    heatmaps_list = []
+    weights_list = []
+
+    grid_y, grid_x = torch.meshgrid(
+        torch.arange(heatmap_height, dtype=torch.float32, device=device),
+        torch.arange(heatmap_width, dtype=torch.float32, device=device),
+        indexing="ij",
+    )
+    heatmap_size = torch.tensor([heatmap_width - 1, heatmap_height - 1], dtype=torch.float32, device=device)
+
+    for image_boxes, image_keypoints in zip(boxes, keypoints):
+        boxes_tensor = box_xywh_to_cxcywh(torch.tensor(image_boxes, dtype=torch.float32, device=device))
+
+        centers, scales = boxes_to_crop_params(boxes_tensor, output_size=output_size)
+
+        for person_idx in range(len(image_boxes)):
+            person_keypoints = image_keypoints[person_idx]
+
+            if len(person_keypoints) == 0:
+                heatmaps_list.append(
+                    torch.zeros((0, heatmap_height, heatmap_width), dtype=torch.float32, device=device)
+                )
+                weights_list.append(
+                    torch.zeros((0, heatmap_height, heatmap_width), dtype=torch.float32, device=device)
+                )
+                continue
+
+            person_keypoints_tensor = torch.tensor(person_keypoints, dtype=torch.float32, device=device)
+            raw_coords = person_keypoints_tensor[:, :2]
+
+            center = centers[person_idx]
+            scale = scales[person_idx]
+
+            heatmap_coords = ((raw_coords - center) / scale + 0.5) * heatmap_size
+
+            xs = heatmap_coords[:, 0].view(-1, 1, 1)
+            ys = heatmap_coords[:, 1].view(-1, 1, 1)
+
+            dist_sq = (grid_x.unsqueeze(0) - xs) ** 2 + (grid_y.unsqueeze(0) - ys) ** 2
+            person_heatmaps = torch.exp(-dist_sq / (2 * (sigma**2)))
+
+            if person_keypoints_tensor.shape[1] > 2:
+                visibilities = person_keypoints_tensor[:, 2].view(-1, 1, 1)
+                mask = (visibilities > 0).float()
+            else:
+                mask = torch.ones((person_keypoints_tensor.shape[0], 1, 1), dtype=torch.float32, device=device)
+
+            out_of_bounds = (xs < 0) | (xs >= heatmap_width) | (ys < 0) | (ys >= heatmap_height)
+
+            valid_mask = mask * (~out_of_bounds).float()
+            person_heatmaps = person_heatmaps * valid_mask
+            person_weights = valid_mask.expand_as(person_heatmaps)
+
+            heatmaps_list.append(person_heatmaps)
+            weights_list.append(person_weights)
+
+    return heatmaps_list, weights_list
+
+
 class Sapiens2ImageProcessorKwargs(BeitImageProcessorKwargs, total=False):
-    keypoints: list[list[list[list[float]]]] | None
-    boxes: list[list[list[float]]] | None
+    keypoint_heatmap_downscale_factor: int
+    keypoint_heatmap_sigma: float
 
 
 class Sapiens2ImageProcessor(BeitImageProcessor):
@@ -430,6 +501,8 @@ class Sapiens2ImageProcessor(BeitImageProcessor):
         segmentation_maps: ImageInput | None = None,
         boxes: list[list[list[float]]] | None = None,
         keypoints: list[list[list[list[float]]]] | None = None,
+        keypoint_heatmap_downscale_factor: int = 4,
+        keypoint_heatmap_sigma: float = 6.0,
         **kwargs: Unpack[Sapiens2ImageProcessorKwargs],
     ) -> BatchFeature:
         r"""
@@ -441,31 +514,34 @@ class Sapiens2ImageProcessor(BeitImageProcessor):
             (top_left_x, top_left_y, width, height). When provided, each person crop is
             affine-warped to the model input size instead of resizing the full image.
         keypoints (`list[list[list[list[float]]]]`, *optional*):
-            List of keypoints for each person in each image. Expected format is
-            `[images -> persons -> keypoints -> [x, y, visibility]]`. Used to generate
+            List of keypoints for each person in each image. Expected format is COCO-style `[x, y, visibility]`.
+            The `x` and `y` values are expected to be absolute image pixel coordinates.
+            Format is `[images -> persons -> keypoints -> [x, y, visibility]]`. Used to generate
             ground-truth heatmaps and visibility weights for pose estimation fine-tuning.
+        keypoint_heatmap_downscale_factor (`int`, *optional*, defaults to 4):
+            The downscale factor for the target heatmap size relative to the model input size.
+        keypoint_heatmap_sigma (`float`, *optional*, defaults to 6.0):
+            The standard deviation (sigma) for the 2D Gaussian distributions used to generate the heatmaps.
         """
-        if keypoints is not None:
-            kwargs["keypoints"] = keypoints
-        if boxes is not None:
-            kwargs["boxes"] = boxes
-        return super().preprocess(images, segmentation_maps=segmentation_maps, **kwargs)
+        kwargs["keypoint_heatmap_downscale_factor"] = keypoint_heatmap_downscale_factor
+        kwargs["keypoint_heatmap_sigma"] = keypoint_heatmap_sigma
+        return super().preprocess(images, segmentation_maps, boxes, keypoints, **kwargs)
 
     def _preprocess_image_like_inputs(
         self,
         images: ImageInput,
         segmentation_maps: ImageInput | None,
         boxes: list[list[list[float]]] | None,
-        keypoints: list[list[list[list[float]]]] | None = None,
-        do_convert_rgb: bool = True,
-        input_data_format: ChannelDimension | None = None,
-        return_tensors: str | TensorType | None = None,
-        device: Union[str, "torch.device"] | None = None,
+        keypoints: list[list[list[list[float]]]] | None,
+        do_convert_rgb: bool,
+        input_data_format: ChannelDimension | None,
+        return_tensors: str | TensorType | None,
+        device: Union[str, "torch.device"] | None,
+        keypoint_heatmap_downscale_factor: int,
+        keypoint_heatmap_sigma: float,
         **kwargs,
     ) -> BatchFeature:
         """Handle extra inputs beyond images."""
-        kwargs["boxes"] = boxes  # modular trick
-
         images = self._prepare_image_like_inputs(
             images=images, do_convert_rgb=do_convert_rgb, input_data_format=input_data_format, device=device
         )
@@ -502,63 +578,14 @@ class Sapiens2ImageProcessor(BeitImageProcessor):
             if boxes is None:
                 raise ValueError("Bounding `boxes` must be provided when passing `keypoints` for pose estimation.")
 
-            heatmap_h = self.size["height"] // 4
-            heatmap_w = self.size["width"] // 4
-            sigma = 2.0
-
-            heatmaps_list = []
-            weights_list = []
-
-            grid_y, grid_x = torch.meshgrid(
-                torch.arange(heatmap_h, dtype=torch.float32),
-                torch.arange(heatmap_w, dtype=torch.float32),
-                indexing="ij",
+            heatmaps_list, weights_list = generate_udp_gaussian_heatmaps(
+                boxes=boxes,
+                keypoints=keypoints,
+                output_size=(self.size["height"], self.size["width"]),
+                downscale_factor=keypoint_heatmap_downscale_factor,
+                sigma=keypoint_heatmap_sigma,
+                device=device,
             )
-            heatmap_size = torch.tensor([heatmap_w - 1, heatmap_h - 1], dtype=torch.float32)
-
-            for image_boxes, image_keypoints in zip(boxes, keypoints):
-                boxes_tensor = box_xywh_to_cxcywh(torch.tensor(image_boxes, dtype=torch.float32))
-
-                centers, scales = boxes_to_crop_params(
-                    boxes_tensor, output_size=(self.size["height"], self.size["width"])
-                )
-
-                for person_idx in range(len(image_boxes)):
-                    person_kps = image_keypoints[person_idx]
-
-                    if len(person_kps) == 0:
-                        heatmaps_list.append(torch.zeros((0, heatmap_h, heatmap_w), dtype=torch.float32))
-                        weights_list.append(torch.zeros((0, heatmap_h, heatmap_w), dtype=torch.float32))
-                        continue
-
-                    person_kps_tensor = torch.tensor(person_kps, dtype=torch.float32)
-                    raw_coords = person_kps_tensor[:, :2]
-
-                    center = centers[person_idx]
-                    scale = scales[person_idx]
-
-                    hm_coords = (raw_coords - center + 0.5 * scale) / scale * heatmap_size
-
-                    xs = hm_coords[:, 0].view(-1, 1, 1)
-                    ys = hm_coords[:, 1].view(-1, 1, 1)
-
-                    dist_sq = (grid_x.unsqueeze(0) - xs) ** 2 + (grid_y.unsqueeze(0) - ys) ** 2
-                    person_heatmaps = torch.exp(-dist_sq / (2 * (sigma**2)))
-
-                    if person_kps_tensor.shape[1] > 2:
-                        visibilities = person_kps_tensor[:, 2].view(-1, 1, 1)
-                        mask = (visibilities > 0).float()
-                    else:
-                        mask = torch.ones((person_kps_tensor.shape[0], 1, 1), dtype=torch.float32)
-
-                    out_of_bounds = (xs < 0) | (xs >= heatmap_w) | (ys < 0) | (ys >= heatmap_h)
-
-                    valid_mask = mask * (~out_of_bounds).float()
-                    person_heatmaps = person_heatmaps * valid_mask
-                    person_weights = valid_mask.expand_as(person_heatmaps)
-
-                    heatmaps_list.append(person_heatmaps)
-                    weights_list.append(person_weights)
 
             data["labels"] = heatmaps_list
             data["label_weights"] = weights_list

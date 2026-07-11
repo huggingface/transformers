@@ -292,3 +292,49 @@ class Sapiens2ImageProcessingTest(
 
         with self.assertRaises(ValueError):
             image_processor(images=image, keypoints=keypoints, return_tensors="pt")
+
+    def test_generate_udp_gaussian_heatmaps_parity(self):
+        import numpy as np
+        import torch
+
+        from transformers.models.sapiens2.modular_sapiens2 import (
+            box_xywh_to_cxcywh,
+            boxes_to_crop_params,
+            generate_udp_gaussian_heatmaps,
+        )
+
+        boxes = [[[50.0, 50.0, 200.0, 400.0]]]
+        keypoints = [[[[100.0, 150.0, 1.0]]]]
+        output_size = (1024, 768)
+        downscale_factor = 4
+        sigma = 6.0
+
+        heatmaps_pt, weights_pt = generate_udp_gaussian_heatmaps(
+            boxes=boxes,
+            keypoints=keypoints,
+            output_size=output_size,
+            downscale_factor=downscale_factor,
+            sigma=sigma,
+            device="cpu",
+        )
+        our_heatmap = heatmaps_pt[0].numpy()
+
+        heatmap_w = output_size[1] // downscale_factor
+        heatmap_h = output_size[0] // downscale_factor
+        expected_heatmap = np.zeros((1, heatmap_h, heatmap_w), dtype=np.float32)
+
+        boxes_tensor = box_xywh_to_cxcywh(torch.tensor(boxes[0], dtype=torch.float32))
+        centers, scales = boxes_to_crop_params(boxes_tensor, output_size=output_size)
+        center = centers[0].numpy()
+        scale = scales[0].numpy()
+
+        raw_coord = np.array([100.0, 150.0])
+        hm_coord = ((raw_coord - center) / scale + 0.5) * np.array([heatmap_w - 1, heatmap_h - 1])
+        x0, y0 = hm_coord[0], hm_coord[1]
+
+        x = np.arange(0, heatmap_w, 1, dtype=np.float32)
+        y = np.arange(0, heatmap_h, 1, dtype=np.float32)[:, None]
+        expected_heatmap[0] = np.exp(-((x - x0) ** 2 + (y - y0) ** 2) / (2 * sigma**2))
+
+        np.testing.assert_allclose(our_heatmap, expected_heatmap, rtol=1e-5, atol=1e-5)
+        self.assertEqual(weights_pt[0][0].max().item(), 1.0)
