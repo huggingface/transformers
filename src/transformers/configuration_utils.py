@@ -462,7 +462,6 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin, Heterogeneous
         if key != "attribute_map" and key in super().__getattribute__("attribute_map"):
             key = super().__getattribute__("attribute_map")[key]
 
-        # HeterogeneousConfigMixin participates in attribute access through the MRO.
         return super().__getattribute__(key)
 
     def validate_output_attentions(self):
@@ -876,9 +875,6 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin, Heterogeneous
                     to_remove.append(key)
                 elif value != "auto":
                     config_dict[key] = value
-
-        # HeterogeneousConfigMixin: move heterogeneity-specific kwargs into the constructor config dict.
-        cls._update_config_dict_with_heterogeneous_kwargs(config_dict, kwargs)
 
         config = cls(**config_dict)
 
