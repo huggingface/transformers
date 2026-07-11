@@ -564,7 +564,7 @@ class TimesFm2_5ModelForPrediction(TimesFmModelForPrediction):
         if window_size is not None:
             new_inputs: list[torch.Tensor] = []
             for ts in inputs:
-                new_inputs.extend(self._timesfm_moving_average(ts, window_size))
+                new_inputs.extend(self._timesfm2_5_moving_average(ts, window_size))
             inputs = new_inputs
 
         if truncate_negative is None:
@@ -649,6 +649,18 @@ class TimesFm2_5ModelForPrediction(TimesFmModelForPrediction):
             full_predictions=full_predictions,
             loss=loss,
         )
+
+
+    @staticmethod
+    def _timesfm2_5_moving_average(arr: torch.Tensor, window_size: int) -> list[torch.Tensor]:
+        """Calculates the moving average using PyTorch's convolution function."""
+        # Pad with zeros to handle initial window positions
+        arr_padded = F.pad(arr, (window_size - 1, 0), "constant", 0)
+        # Create a convolution kernel
+        kernel = torch.ones(window_size, dtype=arr.dtype, device=arr.device) / window_size
+        # Apply convolution to calculate the moving average
+        smoothed_arr = F.conv1d(arr_padded.view(1, 1, -1), kernel.view(1, 1, -1)).squeeze()
+        return [smoothed_arr, arr - smoothed_arr]
 
 
 __all__ = [
