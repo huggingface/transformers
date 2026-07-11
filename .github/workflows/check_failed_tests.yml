@@ -410,6 +410,7 @@ jobs:
         run: |
           ls -l new_failures_with_bad_commit.json
           cat new_failures_with_bad_commit.json
+          cat new_failures_with_bad_commit_grouped_by_authors.json
 
       - name: Upload artifacts
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -418,6 +419,7 @@ jobs:
           path: |
             /transformers/new_failures_with_bad_commit.json
             /transformers/new_failures_with_bad_commit_url.txt
+            /transformers/new_failures_with_bad_commit_grouped_by_authors.json
 
       - name: Prepare Slack report title
         working-directory: /transformers
