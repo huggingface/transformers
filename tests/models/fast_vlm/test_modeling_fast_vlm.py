@@ -22,7 +22,6 @@ from transformers import (
     FastVlmForConditionalGeneration,
     FastVlmModel,
     is_torch_available,
-    is_vision_available,
 )
 from transformers.testing_utils import (
     Expectations,
@@ -42,10 +41,6 @@ from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 
 if is_torch_available():
     import torch
-
-
-if is_vision_available():
-    pass
 
 
 class FastVlmVisionText2TextModelTester:

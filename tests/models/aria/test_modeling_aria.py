@@ -26,7 +26,6 @@ from transformers import (
     AutoTokenizer,
     BitsAndBytesConfig,
     is_torch_available,
-    is_vision_available,
 )
 from transformers.models.idefics3 import Idefics3VisionConfig
 from transformers.testing_utils import (
@@ -49,9 +48,6 @@ from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 if is_torch_available():
     import torch
 
-
-if is_vision_available():
-    pass
 
 # Used to be https://aria-vl.github.io/static/images/view.jpg but it was removed, llava-vl has the same image
 IMAGE_OF_VIEW_URL = "https://llava-vl.github.io/static/images/view.jpg"

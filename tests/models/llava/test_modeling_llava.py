@@ -27,7 +27,6 @@ from transformers import (
     LlavaForConditionalGeneration,
     LlavaModel,
     is_torch_available,
-    is_vision_available,
 )
 from transformers.testing_utils import (
     Expectations,
@@ -49,10 +48,6 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 
 if is_torch_available():
     import torch
-
-
-if is_vision_available():
-    pass
 
 
 class LlavaVisionText2TextModelTester:

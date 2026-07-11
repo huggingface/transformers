@@ -29,7 +29,6 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
-from transformers.utils.import_utils import is_vision_available
 
 from ...causal_lm_tester import CausalLMModelTester
 from ...generation.test_utils import GenerationTesterMixin
@@ -37,9 +36,6 @@ from ...test_configuration_common import ConfigTester
 from ...test_image_processing_common import load_test_image
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 
-
-if is_vision_available():
-    pass
 
 if is_torch_available():
     import torch
