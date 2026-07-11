@@ -26,6 +26,7 @@ import numpy as np
 from huggingface_hub import hf_hub_download
 from parameterized import parameterized
 
+from transformers.image_utils import load_image
 from transformers.processing_utils import (
     MODALITY_TO_AUTOPROCESSOR_MAPPING,
     Unpack,
@@ -43,6 +44,10 @@ from transformers.utils import is_torch_available, is_vision_available
 parent_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 sys.path.append(os.path.join(parent_dir, "utils"))
 from fetch_hub_objects_for_ci import url_to_local_path  # noqa: E402
+
+
+def load_test_image(url: str):
+    return load_image(url_to_local_path(url))
 
 
 global_rng = random.Random()

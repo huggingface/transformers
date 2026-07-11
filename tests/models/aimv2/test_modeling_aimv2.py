@@ -18,7 +18,6 @@ import tempfile
 import unittest
 
 import numpy as np
-import requests
 from parameterized import parameterized
 
 from transformers import Aimv2Config, Aimv2TextConfig, Aimv2VisionConfig
@@ -44,6 +43,7 @@ from ...test_modeling_common import (
     random_attention_mask,
 )
 from ...test_pipeline_mixin import PipelineTesterMixin
+from ...test_processing_common import load_test_image
 
 
 if is_torch_available():
@@ -58,7 +58,6 @@ if is_torch_available():
 
 
 if is_vision_available():
-    from PIL import Image
 
     from transformers import AutoImageProcessor, AutoProcessor
 
@@ -479,7 +478,7 @@ class Aimv2ModelIntegrationTest(unittest.TestCase):
         model = Aimv2Model.from_pretrained(model_name, device_map=torch_device)
         processor = AutoProcessor.from_pretrained(model_name)
 
-        image = Image.open(requests.get("http://images.cocodataset.org/val2017/000000039769.jpg", stream=True).raw)
+        image = load_test_image("https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg")
         inputs = processor(
             text=["a photo of a cat", "a photo of a dog"], images=image, padding=True, return_tensors="pt"
         ).to(model.device)
@@ -513,7 +512,7 @@ class Aimv2VisionModelIntegrationTests(unittest.TestCase):
         model = Aimv2VisionModel.from_pretrained(model_name, device_map=torch_device)
         processor = AutoImageProcessor.from_pretrained(model_name)
 
-        image = Image.open(requests.get("http://images.cocodataset.org/val2017/000000039769.jpg", stream=True).raw)
+        image = load_test_image("https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg")
         inputs = processor(image, return_tensors="pt").to(model.device)
 
         with torch.no_grad():
@@ -544,7 +543,7 @@ class Aimv2VisionModelIntegrationTests(unittest.TestCase):
         model = Aimv2VisionModel.from_pretrained(model_name, device_map="auto")
         processor = AutoImageProcessor.from_pretrained(model_name)
 
-        image = Image.open(requests.get("http://images.cocodataset.org/val2017/000000039769.jpg", stream=True).raw)
+        image = load_test_image("https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg")
         inputs = processor(image, return_tensors="pt").to(model.device)
 
         with torch.no_grad():

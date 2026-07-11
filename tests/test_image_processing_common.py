@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import inspect
-import io
 import json
 import os
 import pathlib
@@ -21,10 +20,10 @@ import tempfile
 import warnings
 from copy import deepcopy
 
-import httpx
 import numpy as np
 import pytest
 
+from tests.test_processing_common import load_test_image
 from transformers import AutoImageProcessor, BatchFeature
 from transformers.image_utils import AnnotationFormat
 from transformers.models.auto.image_processing_auto import (
@@ -175,10 +174,8 @@ class ImageProcessingTestMixin:
         if len(self.image_processing_classes) < 2:
             self.skipTest(reason="Skipping backends equivalence test as there are less than 2 backends")
 
-        dummy_image = Image.open(
-            io.BytesIO(
-                httpx.get("http://images.cocodataset.org/val2017/000000039769.jpg", follow_redirects=True).content
-            )
+        dummy_image = load_test_image(
+            "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg"
         )
 
         # Create processors for each backend
