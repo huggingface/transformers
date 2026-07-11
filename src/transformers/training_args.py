@@ -1565,6 +1565,8 @@ class TrainingArguments:
         if self.torch_compile and self.torch_compile_backend is None:
             if not self.use_cpu and is_torch_hpu_available():
                 self.torch_compile_backend = "hpu_backend"
+            elif not self.use_cpu and is_torch_neuron_available():
+                self.torch_compile_backend = "neuron"
             else:
                 self.torch_compile_backend = "inductor"
 
