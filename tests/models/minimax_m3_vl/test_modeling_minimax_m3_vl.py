@@ -697,7 +697,9 @@ class MiniMaxM3VLIntegrationTest(unittest.TestCase):
         # canonical COCO two-cats photo), paired with deliberately different-length questions so the
         # batch genuinely needs padding.
         dog = Image.open(requests.get("https://picsum.photos/id/237/400/300", stream=True).raw).convert("RGB")
-        cats = load_test_image("https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg").convert("RGB")
+        cats = load_test_image(
+            "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg"
+        ).convert("RGB")
         texts = [
             self._prompt(processor, "What animal is this? One word."),
             self._prompt(
