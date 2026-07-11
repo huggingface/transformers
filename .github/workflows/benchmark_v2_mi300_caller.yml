@@ -1,4 +1,4 @@
-name: Benchmark v2 Scheduled Runner - MI325 Single-GPU
+name: Benchmark v2 Scheduled Runner - MI300 Single-GPU
 
 on:
   workflow_dispatch:
@@ -11,7 +11,7 @@ jobs:
     name: Benchmark v2 - Default Models
     uses: ./.github/workflows/benchmark_v2.yml
     with:
-      runner: amd-mi325-ci-1gpu
+      runner: amd-mi300-ci-1gpu
       container_image: huggingface/transformers-pytorch-amd-gpu
       container_options: --device /dev/kfd --device /dev/dri --env ROCR_VISIBLE_DEVICES --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache
       commit_sha: ${{ github.sha }}
