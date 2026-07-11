@@ -189,7 +189,8 @@ class Kimi_K25VisionPositionEmbeddings(nn.Module):
         inv_freq = 1.0 / (10000 ** (torch.arange(0, self.dim, 2, dtype=torch.int64).to(dtype=torch.float) / self.dim))
         freqs = torch.outer(position_ids, inv_freq)  # (M, D/2)
         pos_embed = torch.cat([freqs.sin(), freqs.cos()], dim=1)  # (M, D)
-        return pos_embed.unsqueeze(1)
+        # Prepend a zero row so frame index 0 (single-frame clips) adds no temporal offset.
+        return torch.cat([pos_embed.new_zeros(1, self.dim), pos_embed])  # (M+1, D)
 
     def forward(self, hidden_states: torch.Tensor, grid_thw: torch.Tensor, **kwargs) -> torch.Tensor:
         # Spatial: bicubically resample the learned grid to each image's (h, w) as a fused weighted
@@ -202,10 +203,7 @@ class Kimi_K25VisionPositionEmbeddings(nn.Module):
         pos = F.embedding_bag(bicubic_indices, table, per_sample_weights=bicubic_weights.to(table.dtype), mode="sum")
         # Temporal: add a per-frame sinusoid. Row 0 of the table is a zero pad, so single-frame clips
         # (frame index 0) get none.
-        time_table = torch.cat(
-            [self.time_position_embeddings.new_zeros(1, self.dim), self.time_position_embeddings.squeeze(1)]
-        )
-        pos = pos + time_table[get_vision_frame_index(grid_thw, kwargs=kwargs)]
+        pos = pos + self.time_position_embeddings[get_vision_frame_index(grid_thw, kwargs=kwargs)]
         return hidden_states + pos.to(hidden_states.dtype)
 
 
