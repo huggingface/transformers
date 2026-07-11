@@ -14,6 +14,7 @@
 import copy
 import unittest
 from types import SimpleNamespace
+from unittest import mock
 
 import torch
 import torch.nn as nn
@@ -38,6 +39,8 @@ from transformers.core_model_loading import (
     VisionUnfuseAndPermuteForRope,
     WeightConverter,
     WeightRenaming,
+    _materialize_copy,
+    _should_break_mmap_alias,
     build_glob_alternation,
     convert_and_load_state_dict_in_model,
     rename_source_key,
@@ -1521,6 +1524,44 @@ class TestConversionMapping(unittest.TestCase):
         # Only one unscoped transform (from the root); child must be suppressed.
         self.assertEqual(len(transforms), 1)
         self.assertIsNone(transforms[0].scope_prefix)
+
+
+class MaterializeCopyUnifiedMemoryTest(unittest.TestCase):
+    """The load path must not COW-duplicate mmap'd weights on unified-memory devices."""
+
+    def test_should_break_mmap_alias_decision_table(self):
+        cpu_tensor = torch.zeros(4, dtype=torch.bfloat16)
+        cuda = torch.device("cuda:0")
+        with mock.patch("transformers.core_model_loading._accelerator_is_integrated", return_value=True):
+            # Integrated device + on-mmap cpu source: the H2D copy reads the mmap -> break the alias.
+            self.assertTrue(_should_break_mmap_alias(cpu_tensor, cuda, None))
+            # A no-op cast (target dtype == source dtype) still reads the mmap -> break it too.
+            self.assertTrue(_should_break_mmap_alias(cpu_tensor, cuda, torch.bfloat16))
+            # A genuine cast materializes a fresh tensor off the mmap -> nothing to break.
+            self.assertFalse(_should_break_mmap_alias(cpu_tensor, cuda, torch.float16))
+            # cpu / meta targets never DMA, and a missing device is a no-op.
+            self.assertFalse(_should_break_mmap_alias(cpu_tensor, torch.device("cpu"), None))
+            self.assertFalse(_should_break_mmap_alias(cpu_tensor, torch.device("meta"), None))
+            self.assertFalse(_should_break_mmap_alias(cpu_tensor, None, None))
+            # A source that is not on the host cannot alias a host mmap.
+            self.assertFalse(_should_break_mmap_alias(cpu_tensor.to("meta"), cuda, None))
+        with mock.patch("transformers.core_model_loading._accelerator_is_integrated", return_value=False):
+            # Discrete GPU: keep the existing zero-copy path untouched.
+            self.assertFalse(_should_break_mmap_alias(cpu_tensor, cuda, None))
+
+    def test_materialize_copy_clones_off_mmap_when_flagged(self):
+        src = torch.arange(16)
+        with mock.patch("transformers.core_model_loading._should_break_mmap_alias", return_value=True):
+            # device="cpu" keeps the follow-up `.to()` a no-op so the storage check stays host-only.
+            out = _materialize_copy(src, device="cpu")
+        self.assertNotEqual(out.data_ptr(), src.data_ptr())
+        self.assertTrue(torch.equal(out, src))
+
+    def test_materialize_copy_is_zero_copy_when_not_flagged(self):
+        src = torch.arange(16)
+        with mock.patch("transformers.core_model_loading._should_break_mmap_alias", return_value=False):
+            out = _materialize_copy(src)
+        self.assertEqual(out.data_ptr(), src.data_ptr())
 
 
 if __name__ == "__main__":
