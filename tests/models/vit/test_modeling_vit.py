@@ -217,6 +217,13 @@ class ViTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         super().test_multi_gpu_data_parallel_forward()
 
     def test_config(self):
+        # Intentional failure — DO NOT remove while working on `check_failed_tests` job or related
+        # workflow files / utility scripts.
+        # Reason: the `check_failed_tests` job only runs when there are *new* failing tests compared
+        # to the previous run. Without this failure there would be no new failing tests, the job would
+        # be skipped, and any fixes to the workflow files / utility scripts would never be exercised.
+        # Remove this line (or comment it out) if you want a real full re-run of the scheduled daily CI.
+        assert 1 == 2
         self.config_tester.run_common_tests()
 
     @unittest.skip(reason="ViT does not use inputs_embeds")

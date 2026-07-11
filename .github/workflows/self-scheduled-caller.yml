@@ -1,12 +1,33 @@
 name: Nvidia CI
 
+# HOW TO USE THIS BRANCH (tutorial)
+# =============================================================
+# Goal: re-run an existing scheduled daily CI run (e.g. July 10 2026) against a previous run (e.g. July 9 2026)
+# to detect new failing tests — but with fixes applied to workflow files / utility scripts.
+#
+# Steps:
+#   1. Set this branch's base commit to the same commit that the original scheduled run used
+#      (e.g. 1f8daee0, the commit that the July 10 scheduled run was on).
+#   2. Add fix commits on top (workflow files, utility scripts — NOT model code).
+#   3. Set `prev_workflow_run_id` below to the run ID of the *previous* scheduled run
+#      (e.g. July 9 run) so the comparison "new failing tests = July10 − July9" is correct.
+#   4. Push to this branch → the `push` trigger fires the CI.
+#
+# The intentional test failure in test_modeling_vit.py::test_config ensures the `check_failed_tests`
+# job actually runs (it is skipped when there are no new failing tests) — see comment in that file.
+# The limited model list in split_model_tests.py keeps CI fast during development/debugging so you
+# don't trigger a full run across all models — see comment in that file.
+# =============================================================
+
 on:
   repository_dispatch:
   schedule:
     - cron: "17 2 * * *"
   push:
+    # Push to this branch to trigger the CI. The base commit of this branch should match
+    # the commit that the original scheduled run used (see HOW TO USE above).
     branches:
-      - run_nvidia_ci*
+      - trigger_daily_ci_manually
   workflow_dispatch:
     inputs:
       prev_workflow_run_id:
@@ -23,7 +44,11 @@ on:
 
 # Used for `push` to easily modify the target workflow runs to compare against
 env:
-    prev_workflow_run_id: ""
+    # The "previous scheduled daily CI run" to compare against. New failing tests = (this run) − (prev run).
+    # Example: we are re-running the July 10 scheduled run (https://github.com/huggingface/transformers/actions/runs/29138021442)
+    # and want to compare it to the July 9 scheduled run (https://github.com/huggingface/transformers/actions/runs/29027505226),
+    # so set this to the July 9 run ID.
+    prev_workflow_run_id: "29027505226"
     other_workflow_run_id: ""
 
 
@@ -55,7 +80,10 @@ jobs:
     uses: ./.github/workflows/self-scheduled.yml
     with:
       job: run_models_gpu
-      slack_report_channel: "#transformers-ci-daily-models"
+      # Use `#transformers-ci-dummy` while debugging or working in progress.
+      slack_report_channel: "#transformers-ci-dummy"
+      # Use the original `transformers-ci-daily-models` if you are just triggering a re-run of daily CI (maybe because a previous run have serious issues.)
+      # slack_report_channel: "#transformers-ci-daily-models"
       docker: huggingface/transformers-all-latest-gpu
       ci_event: Daily CI
       runner_type: "a10"
@@ -63,76 +91,4 @@ jobs:
       commit_sha: ${{ github.sha }}
     secrets: inherit
 
-  torch-pipeline:
-    name: Torch pipeline CI
-    uses: ./.github/workflows/self-scheduled.yml
-    with:
-      job: run_pipelines_torch_gpu
-      slack_report_channel: "#transformers-ci-daily-pipeline-torch"
-      docker: huggingface/transformers-all-latest-gpu
-      ci_event: Daily CI
-      report_repo_id: hf-internal-testing/transformers_daily_ci
-      commit_sha: ${{ github.sha }}
-    secrets: inherit
-
-  example-ci:
-    name: Example CI
-    uses: ./.github/workflows/self-scheduled.yml
-    with:
-      job: run_examples_gpu
-      slack_report_channel: "#transformers-ci-daily-examples"
-      docker: huggingface/transformers-all-latest-gpu
-      ci_event: Daily CI
-      report_repo_id: hf-internal-testing/transformers_daily_ci
-      commit_sha: ${{ github.sha }}
-    secrets: inherit
-
-  trainer-fsdp-ci:
-    name: Trainer/FSDP CI
-    uses: ./.github/workflows/self-scheduled.yml
-    with:
-      job: run_trainer_and_fsdp_gpu
-      slack_report_channel: "#transformers-ci-daily-training"
-      docker: huggingface/transformers-all-latest-gpu
-      runner_type: "a10"
-      ci_event: Daily CI
-      report_repo_id: hf-internal-testing/transformers_daily_ci
-      commit_sha: ${{ github.sha }}
-    secrets: inherit
-
-  deepspeed-ci:
-    name: DeepSpeed CI
-    uses: ./.github/workflows/self-scheduled.yml
-    with:
-      job: run_torch_cuda_extensions_gpu
-      slack_report_channel: "#transformers-ci-daily-training"
-      docker: huggingface/transformers-pytorch-deepspeed-latest-gpu
-      ci_event: Daily CI
-      working-directory-prefix: /workspace
-      report_repo_id: hf-internal-testing/transformers_daily_ci
-      commit_sha: ${{ github.sha }}
-    secrets: inherit
-
-  quantization-ci:
-    name: Quantization CI
-    uses: ./.github/workflows/self-scheduled.yml
-    with:
-      job: run_quantization_torch_gpu
-      slack_report_channel: "#transformers-ci-daily-quantization"
-      docker: huggingface/transformers-quantization-latest-gpu
-      ci_event: Daily CI
-      report_repo_id: hf-internal-testing/transformers_daily_ci
-      commit_sha: ${{ github.sha }}
-    secrets: inherit
-
-  kernels-ci:
-    name: Kernels CI
-    uses: ./.github/workflows/self-scheduled.yml
-    with:
-      job: run_kernels_gpu
-      slack_report_channel: "#transformers-ci-daily-kernels"
-      docker: huggingface/transformers-all-latest-gpu
-      ci_event: Daily CI
-      report_repo_id: hf-internal-testing/transformers_daily_ci
-      commit_sha: ${{ github.sha }}
-    secrets: inherit
+  # When I trigger a manual (re-)run, I usually don't care other jobs. Not a problem if you want to keep all jobs.
