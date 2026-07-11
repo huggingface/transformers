@@ -45,11 +45,10 @@ class NemotronH_Omni_Reasoning_V3ImagesKwargs(ImagesKwargs):
 class NemotronH_Omni_Reasoning_V3ProcessorKwargs(ProcessingKwargs, total=False):
     images_kwargs: NemotronH_Omni_Reasoning_V3ImagesKwargs
     videos_kwargs: VideosKwargs
-    _defaults = {
-        "text_kwargs": {
-            "padding": False,
-        },
-    }
+    # `ProcessingKwargs` is a TypedDict, so `_defaults` is not inherited by subclasses and must be
+    # (re)declared. Left empty on purpose — no defaults are overridden here (`padding` already
+    # defaults to `False` in the tokenizer), so nothing needs to live in `processor_config.json`.
+    _defaults = {}
 
 
 class NemotronH_Omni_Reasoning_V3Processor(ProcessorMixin):
