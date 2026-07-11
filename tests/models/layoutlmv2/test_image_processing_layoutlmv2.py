@@ -25,7 +25,6 @@ from transformers.testing_utils import (
     torch_device,
 )
 from transformers.utils import (
-    is_pytesseract_available,
     is_torch_available,
 )
 
@@ -35,9 +34,6 @@ from ...test_processing_common import load_test_image
 
 if is_torch_available():
     import torch
-
-if is_pytesseract_available():
-    pass
 
 
 class LayoutLMv2ImageProcessingTester:
