@@ -126,29 +126,70 @@ EXPORT_SKIPS: dict[str, dict[str, str]] = {
     },
     # ExecuTorch, every variant.
     "executorch": {
+        "BarkFineModel": (
+            "ExecuTorch memory planning miscomputes the tensor spec (`buffer of size N, expected nbytes of M`) — a dtype-size mismatch in the lowered program."
+        ),
+        "ClvpModelForConditionalGeneration": (
+            "A pass-through output aliases an input (`Output node is already in the inputs`)."
+        ),
+        "ColQwen2ForRetrieval": (
+            "ExecuTorch dim-order lowering requires a copying view (`Cannot view a tensor ... with shape/strides`)."
+        ),
+        "DabDetrModel": ("XNNPACK partitioner: `Attempting to convert non-NHWC compatible node to NHWC`."),
+        "DabDetrForObjectDetection": "Same `nhwc` failure as `DabDetrModel`.",
+        "Ernie4_5_VLMoeModel": "Same `view` failure as `ColQwen2ForRetrieval`.",
+        "Ernie4_5_VLMoeForConditionalGeneration": "Same `view` failure as `ColQwen2ForRetrieval`.",
+        "FlavaForPreTraining": ("XNNPACK partitioner: `Invalid partition, found dependency cycles`."),
+        "GPT2Model": "Same `view` failure as `ColQwen2ForRetrieval`.",
+        "GPT2LMHeadModel": "Same `view` failure as `ColQwen2ForRetrieval`.",
+        "GPT2DoubleHeadsModel": "Same `view` failure as `ColQwen2ForRetrieval`.",
+        "GPT2ForQuestionAnswering": "Same `view` failure as `ColQwen2ForRetrieval`.",
+        "GPT2ForSequenceClassification": "Same `view` failure as `ColQwen2ForRetrieval`.",
+        "GPT2ForTokenClassification": "Same `view` failure as `ColQwen2ForRetrieval`.",
+        "Gemma3nModel": "Same `spec` failure as `BarkFineModel`.",
+        "Gemma3nForConditionalGeneration": "Same `spec` failure as `BarkFineModel`.",
+        "Glm46VModel": "Same `view` failure as `ColQwen2ForRetrieval`.",
+        "Glm46VForConditionalGeneration": "Same `view` failure as `ColQwen2ForRetrieval`.",
+        "Glm4vModel": "Same `view` failure as `ColQwen2ForRetrieval`.",
+        "Glm4vForConditionalGeneration": "Same `view` failure as `ColQwen2ForRetrieval`.",
+        "Glm4vMoeModel": "Same `view` failure as `ColQwen2ForRetrieval`.",
+        "Glm4vMoeForConditionalGeneration": "Same `view` failure as `ColQwen2ForRetrieval`.",
+        "GlmImageModel": "Same `view` failure as `ColQwen2ForRetrieval`.",
+        "GlmImageForConditionalGeneration": "Same `view` failure as `ColQwen2ForRetrieval`.",
+        "GlmOcrModel": "Same `view` failure as `ColQwen2ForRetrieval`.",
+        "GlmOcrForConditionalGeneration": "Same `view` failure as `ColQwen2ForRetrieval`.",
         "GroundingDinoModel": ("Lowering exceeds the test timeout under dynamic shapes."),
         "GroundingDinoForObjectDetection": "Same `timeout` failure as `GroundingDinoModel`.",
-        # These export fine via `torch.export` (dynamo) but hit ExecuTorch edge-lowering limits.
-        "FunnelModel": "ExecuTorch edge lowering rejects a broadcast in the relative-position attention.",
-        "FunnelForMaskedLM": "Same ExecuTorch broadcast limit as `FunnelModel`.",
-        "FunnelForPreTraining": "Same ExecuTorch broadcast limit as `FunnelModel`.",
-        "FunnelForQuestionAnswering": "Same ExecuTorch broadcast limit as `FunnelModel`.",
-        "FunnelForTokenClassification": "Same ExecuTorch broadcast limit as `FunnelModel`.",
-        "FunnelBaseModel": "Same ExecuTorch broadcast limit as `FunnelModel`.",
-        "FunnelForMultipleChoice": "Same ExecuTorch broadcast limit as `FunnelModel`.",
-        "FunnelForSequenceClassification": "Same ExecuTorch broadcast limit as `FunnelModel`.",
-        "HunYuanVLModel": "ExecuTorch edge lowering fails on the vision stack (same family as the ONNX/OpenVINO gaps).",
-        "HunYuanVLForConditionalGeneration": "Same ExecuTorch limit as `HunYuanVLModel`.",
-        "Kimi_K25Model": (
-            "ExecuTorch `to_edge` spec failure in the DeepseekV3 language model; the vision encoder exports fine."
-        ),
-        "Kimi_K25ForConditionalGeneration": "Same ExecuTorch `spec` failure as `Kimi_K25Model` (DeepseekV3 LM).",
+        "InstructBlipModel": "Same `spec` failure as `BarkFineModel`.",
+        "InstructBlipForConditionalGeneration": "Same `spec` failure as `BarkFineModel`.",
+        "InstructBlipVideoForConditionalGeneration": "Same `spec` failure as `BarkFineModel`.",
+        "InstructBlipVideoModel": "Same `spec` failure as `BarkFineModel`.",
         "MMGroundingDinoModel": "Same `timeout` failure as `GroundingDinoModel`.",
         "MMGroundingDinoForObjectDetection": "Same `timeout` failure as `GroundingDinoModel`.",
+        "MiniMaxM3VLModel": ("Serialization rejects an i64 constant (`bad number for type int32`)."),
+        "MiniMaxM3SparseForConditionalGeneration": "Same `int32` failure as `MiniMaxM3VLModel`.",
+        "PPDocLayoutV3ForObjectDetection": ("Delegation drops a referenced weight (`KeyError` on a state-dict key)."),
+        "PaddleOCRVLForConditionalGeneration": "Same `view` failure as `ColQwen2ForRetrieval`.",
+        "PerceptionLMModel": "Same `passthrough` failure as `ClvpModelForConditionalGeneration`.",
+        "PerceptionLMForConditionalGeneration": "Same `passthrough` failure as `ClvpModelForConditionalGeneration`.",
+        "Qwen2VLModel": "Same `spec` failure as `BarkFineModel`.",
+        "Qwen2VLForConditionalGeneration": "Same `spec` failure as `BarkFineModel`.",
+        "Qwen2_5OmniThinkerForConditionalGeneration": "Same `view` failure as `ColQwen2ForRetrieval`.",
+        "Qwen2_5_VLModel": "Same `spec` failure as `BarkFineModel`.",
+        "Qwen2_5_VLForConditionalGeneration": "Same `spec` failure as `BarkFineModel`.",
+        "Qwen3OmniMoeThinkerForConditionalGeneration": "Same `view` failure as `ColQwen2ForRetrieval`.",
+        "Qwen3_5Model": "Same `spec` failure as `BarkFineModel`.",
+        "Qwen3_5ForConditionalGeneration": "Same `spec` failure as `BarkFineModel`.",
+        "Qwen3_5ForSequenceClassification": "Same `spec` failure as `BarkFineModel`.",
+        "Qwen3_5ForTokenClassification": "Same `spec` failure as `BarkFineModel`.",
+        "Qwen3_5MoeModel": "Same `spec` failure as `BarkFineModel`.",
+        "Qwen3_5MoeForConditionalGeneration": "Same `spec` failure as `BarkFineModel`.",
     },
-    # ExecuTorch, generate path only.
-    "executorch.generate": {},
-    # ExecuTorch, dynamic-shape only.
+    "executorch.generate": {
+        "PPFormulaNetForConditionalGeneration": (
+            "ExecuTorch memory planning miscomputes the tensor spec (`buffer of size N, expected nbytes of M`) — a dtype-size mismatch in the lowered program."
+        ),
+    },
     "executorch.dynamic": {
         "BigBirdModel": ("Lowering exceeds the test timeout under dynamic shapes."),
         "BigBirdForPreTraining": "Same `timeout` failure as `BigBirdModel`.",
@@ -158,10 +199,43 @@ EXPORT_SKIPS: dict[str, dict[str, str]] = {
         "BigBirdForQuestionAnswering": "Same `timeout` failure as `BigBirdModel`.",
         "BigBirdForSequenceClassification": "Same `timeout` failure as `BigBirdModel`.",
         "BigBirdForTokenClassification": "Same `timeout` failure as `BigBirdModel`.",
-        "Qwen3NextModel": ("Lowering exceeds the 1000s test timeout under dynamic shapes."),
-        "Qwen3NextForCausalLM": "Same `timeout` failure as `Qwen3NextModel`.",
-        "DiffusionGemmaModel": ("Lowering exceeds the 1000s test timeout under dynamic shapes."),
-        "DiffusionGemmaForBlockDiffusion": "Same `timeout` failure as `DiffusionGemmaModel`.",
+        "DepthProModel": (
+            "`_ViewSpec is incompatible with its base` — mixed shape dynamism between a view and its base."
+        ),
+        "DepthProForDepthEstimation": "Same `viewspec` failure as `DepthProModel`.",
+        "DonutSwinModel": (
+            "ExecuTorch memory planning overflows under unbounded dynamic shapes (`mem_offset does not fit in 64 bits`)."
+        ),
+        "DonutSwinForImageClassification": "Same `overflow` failure as `DonutSwinModel`.",
+        "Mask2FormerModel": "Same `timeout` failure as `BigBirdModel`.",
+        "Mask2FormerForUniversalSegmentation": "Same `timeout` failure as `BigBirdModel`.",
+        "MaskFormerModel": "Same `timeout` failure as `BigBirdModel`.",
+        "MaskFormerForInstanceSegmentation": "Same `timeout` failure as `BigBirdModel`.",
+        "MaskFormerSwinModel": "Same `overflow` failure as `DonutSwinModel`.",
+        "MaskFormerSwinBackbone": "Same `overflow` failure as `DonutSwinModel`.",
+        "MllamaModel": "Same `overflow` failure as `DonutSwinModel`.",
+        "MllamaForConditionalGeneration": "Same `overflow` failure as `DonutSwinModel`.",
+        "PvtModel": "Same `viewspec` failure as `DepthProModel`.",
+        "PvtForImageClassification": "Same `viewspec` failure as `DepthProModel`.",
+        "Sam2Model": ("Delegation drops a referenced weight (`KeyError` on a state-dict key)."),
+        "Sam2VisionModel": "Same `timeout` failure as `BigBirdModel`.",
+        "Swin2SRModel": "Same `overflow` failure as `DonutSwinModel`.",
+        "Swin2SRForImageSuperResolution": "Same `overflow` failure as `DonutSwinModel`.",
+        "SwinModel": "Same `overflow` failure as `DonutSwinModel`.",
+        "SwinBackbone": "Same `overflow` failure as `DonutSwinModel`.",
+        "SwinForImageClassification": "Same `overflow` failure as `DonutSwinModel`.",
+        "SwinForMaskedImageModeling": "Same `overflow` failure as `DonutSwinModel`.",
+        "Swinv2Model": "Same `overflow` failure as `DonutSwinModel`.",
+        "Swinv2ForImageClassification": "Same `overflow` failure as `DonutSwinModel`.",
+        "Swinv2ForMaskedImageModeling": "Same `overflow` failure as `DonutSwinModel`.",
+        "Swinv2Backbone": "Same `overflow` failure as `DonutSwinModel`.",
+        "VitDetModel": "Same `viewspec` failure as `DepthProModel`.",
+        "VitDetBackbone": "Same `viewspec` failure as `DepthProModel`.",
+        "Wav2Vec2BertForCTC": ("`flatc` schema compilation fails when serializing the program."),
+        "Wav2Vec2BertModel": "Same `flatc` failure as `Wav2Vec2BertForCTC`.",
+        "Wav2Vec2BertForSequenceClassification": "Same `flatc` failure as `Wav2Vec2BertForCTC`.",
+        "Wav2Vec2BertForAudioFrameClassification": "Same `flatc` failure as `Wav2Vec2BertForCTC`.",
+        "Wav2Vec2BertForXVector": "Same `flatc` failure as `Wav2Vec2BertForCTC`.",
     },
     # OpenVINO, every variant.
     "openvino": {
@@ -513,9 +587,8 @@ class ExportTesterMixin:
         """Export each model class to ExecuTorch (xnnpack on CPU, cuda on GPU) and verify no errors."""
 
         self._skip_if_not_exportable()
-        backend = "cuda" if torch_device == "cuda" else "xnnpack"
         exporter = ExecutorchExporter()
-        config = ExecutorchConfig(backend=backend, dynamic=dynamic)
+        config = ExecutorchConfig(dynamic=dynamic)
 
         for model_class in self.all_model_classes:
             if self._should_skip(model_class, dynamic=dynamic, backend="executorch"):
@@ -664,9 +737,8 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
         """Export prefill and decode stages to ExecuTorch and verify no errors."""
 
         self._skip_if_not_exportable()
-        backend = "cuda" if torch_device == "cuda" else "xnnpack"
         exporter = ExecutorchExporter()
-        config = ExecutorchConfig(backend=backend, dynamic=dynamic)
+        config = ExecutorchConfig(dynamic=dynamic)
 
         for model_class in self.all_generative_model_classes:
             if self._should_skip(model_class, generate=True, dynamic=dynamic, backend="executorch"):
