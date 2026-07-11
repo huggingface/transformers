@@ -417,7 +417,8 @@ class Sapiens2ImageProcessor(TorchvisionBackend):
         """
         kwargs["keypoint_heatmap_downscale_factor"] = keypoint_heatmap_downscale_factor
         kwargs["keypoint_heatmap_sigma"] = keypoint_heatmap_sigma
-        return super().preprocess(images, segmentation_maps, **kwargs)
+        batch_feature = super().preprocess(images, segmentation_maps, boxes, keypoints, **kwargs)
+        return batch_feature
 
     def _preprocess_image_like_inputs(
         self,

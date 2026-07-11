@@ -297,7 +297,7 @@ class Sapiens2ImageProcessingTest(
         import numpy as np
         import torch
 
-        from transformers.models.sapiens2.modular_sapiens2 import (
+        from transformers.models.sapiens2.image_processing_sapiens2 import (
             box_xywh_to_cxcywh,
             boxes_to_crop_params,
             generate_udp_gaussian_heatmaps,
