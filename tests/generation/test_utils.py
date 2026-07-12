@@ -72,6 +72,7 @@ if is_torch_available():
         BartForConditionalGeneration,
         BartTokenizer,
         DataCollatorWithFlattening,
+        GPT2Config,
         GPT2LMHeadModel,
         GPT2Tokenizer,
         ImageGPTForCausalImageModeling,
@@ -93,10 +94,12 @@ if is_torch_available():
         GenerateDecoderOnlyOutput,
         GenerateEncoderDecoderOutput,
         GenerationConfig,
+        LogitsProcessor,
         LogitsProcessorList,
         MaxLengthCriteria,
         MinLengthLogitsProcessor,
         PromptLookupCandidateGenerator,
+        RepeatedNGramCriteria,
         StoppingCriteria,
         StoppingCriteriaList,
         SynthIDTextWatermarkingConfig,
@@ -3253,6 +3256,51 @@ class GenerationIntegrationTests(unittest.TestCase):
             list(bart_model.generate(input_ids, stopping_criteria=stopping_criteria, max_length=18).shape),
             [1, 18],
         )
+
+    def test_repeated_ngram_stopping_criteria(self):
+        prompt_length = 2
+        pattern = (1, 2)
+
+        class ForcePatternLogitsProcessor(LogitsProcessor):
+            def __call__(self, input_ids, scores):
+                next_token = pattern[(input_ids.shape[1] - prompt_length) % len(pattern)]
+                scores.fill_(-float("inf"))
+                scores[:, next_token] = 0
+                return scores
+
+        model = GPT2LMHeadModel(
+            GPT2Config(
+                vocab_size=10,
+                n_positions=16,
+                n_embd=8,
+                n_layer=1,
+                n_head=1,
+                bos_token_id=0,
+                eos_token_id=None,
+                pad_token_id=0,
+            )
+        ).to(torch_device)
+        model.eval()
+        input_ids = torch.tensor([[5, 6]], device=torch_device)
+        stopping_criteria = StoppingCriteriaList(
+            [
+                RepeatedNGramCriteria(
+                    min_ngram_size=len(pattern),
+                    num_repetitions=3,
+                    prompt_length_to_skip=prompt_length,
+                )
+            ]
+        )
+
+        output_ids = model.generate(
+            input_ids,
+            max_new_tokens=10,
+            logits_processor=LogitsProcessorList([ForcePatternLogitsProcessor()]),
+            stopping_criteria=stopping_criteria,
+        )
+
+        self.assertEqual(output_ids.shape[1], prompt_length + len(pattern) * 3)
+        self.assertListEqual(output_ids[0, prompt_length:].tolist(), list(pattern) * 3)
 
     # TODO (joao): replace `stop_sequence` in the pipeline by the more recent `generate` functionality
     def test_stop_sequence_stopping_criteria(self):
