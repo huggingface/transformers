@@ -1027,6 +1027,7 @@ PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("deepseek_vl", "DeepseekVLProcessor"),
         ("deepseek_vl_hybrid", "DeepseekVLHybridProcessor"),
         ("dia", "DiaProcessor"),
+        ("efficientvitsam", "EfficientViTSamProcessor"),
         ("emu3", "Emu3Processor"),
         ("ernie4_5_vl_moe", "Ernie4_5_VLMoeProcessor"),
         ("evolla", "EvollaProcessor"),
@@ -1169,6 +1170,10 @@ IMAGE_PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("dpt", {"pil": "DPTImageProcessorPil", "torchvision": "DPTImageProcessor"}),
         ("efficientloftr", {"pil": "EfficientLoFTRImageProcessorPil", "torchvision": "EfficientLoFTRImageProcessor"}),
         ("efficientnet", {"pil": "EfficientNetImageProcessorPil", "torchvision": "EfficientNetImageProcessor"}),
+        (
+            "efficientvitsam",
+            {"pil": "EfficientViTSamImageProcessorPil", "torchvision": "EfficientViTSamImageProcessor"},
+        ),
         ("eomt", {"pil": "EomtImageProcessorPil", "torchvision": "EomtImageProcessor"}),
         ("ernie4_5_vl_moe", {"pil": "Ernie4_5_VLMoeImageProcessorPil", "torchvision": "Ernie4_5_VLMoeImageProcessor"}),
         ("flava", {"pil": "FlavaImageProcessorPil", "torchvision": "FlavaImageProcessor"}),

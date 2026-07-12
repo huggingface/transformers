@@ -36,6 +36,9 @@ from ..sam.modeling_sam import (
     SamPositionalEmbedding,
     SamImageSegmentationOutput,
 )
+from ..sam.image_processing_sam import SamImageProcessor
+from ..sam.image_processing_pil_sam import SamImageProcessorPil
+from ..sam.processing_sam import SamProcessor
 
 logger = logging.get_logger(__name__)
 
@@ -1080,6 +1083,20 @@ class EfficientViTSamModel(SamModel):
         self.post_init()
 
 
+class EfficientViTSamImageProcessor(SamImageProcessor):
+    size = {"longest_edge": 512}
+    pad_size = {"height": 512, "width": 512}
+
+
+class EfficientViTSamImageProcessorPil(SamImageProcessorPil):
+    size = {"longest_edge": 512}
+    pad_size = {"height": 512, "width": 512}
+
+
+class EfficientViTSamProcessor(SamProcessor):
+    pass
+
+
 __all__ = [
     "EfficientViTSamPromptEncoderConfig",
     "EfficientViTSamMaskDecoderConfig",
@@ -1093,4 +1110,7 @@ __all__ = [
     "EfficientViTSamImageEncoder",
     "EfficientViTSamVisionModel",
     "EfficientViTSamModel",
+    "EfficientViTSamImageProcessor",
+    "EfficientViTSamImageProcessorPil",
+    "EfficientViTSamProcessor",
 ]
