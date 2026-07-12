@@ -114,6 +114,36 @@ class AutoTokenizerTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp_dir:
             self.assertFalse(_tokenizer_json_is_byte_level(tmp_dir))
 
+    @require_tokenizers
+    def test_byte_level_llama_keeps_tokenizers_backend_despite_tokenizer_model(self):
+        # Shape of repos such as `benyamini/DeepSeek-R1-Distill-Llama-8B-AWQ-w4g128`: a byte-level
+        # tokenizer.json, a `LlamaTokenizer` tokenizer_class, and a root tokenizer.model that the
+        # quantization pipeline copied over from the SentencePiece checkpoint it was derived from.
+        # Routing on the presence of tokenizer.model sends these to LlamaTokenizer, whose Metaspace
+        # pre-tokenizer/decoder drops spaces (#45488), so the decision must come from tokenizer.json.
+        from tokenizers import Tokenizer, decoders, models, pre_tokenizers, processors
+
+        byte_level = Tokenizer(
+            models.BPE(vocab={ch: i for i, ch in enumerate(pre_tokenizers.ByteLevel.alphabet())}, merges=[])
+        )
+        byte_level.pre_tokenizer = pre_tokenizers.ByteLevel(add_prefix_space=False)
+        byte_level.decoder = decoders.ByteLevel()
+        byte_level.post_processor = processors.ByteLevel(trim_offsets=False)
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            byte_level.save(os.path.join(tmp_dir, "tokenizer.json"))
+            with open(os.path.join(tmp_dir, "config.json"), "w") as f:
+                json.dump({"model_type": "llama"}, f)
+            with open(os.path.join(tmp_dir, "tokenizer_config.json"), "w") as f:
+                json.dump({"tokenizer_class": "LlamaTokenizer"}, f)
+            open(os.path.join(tmp_dir, "tokenizer.model"), "w").close()
+
+            tokenizer = AutoTokenizer.from_pretrained(tmp_dir)
+
+        # exact type: LlamaTokenizer is itself a TokenizersBackend subclass, so isinstance is not enough
+        self.assertIs(type(tokenizer), TokenizersBackend)
+        self.assertEqual(tokenizer.decode(tokenizer.encode("Hello world")), "Hello world")
+
     @slow
     def test_tokenizer_from_pretrained(self):
         for model_name in ("google-bert/bert-base-uncased", "google-bert/bert-base-cased"):
