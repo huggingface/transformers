@@ -13,6 +13,8 @@
 # limitations under the License.
 """Testing suite for the PyTorch DeepSeekV3.2 model."""
 
+import shutil
+import tempfile
 import unittest
 
 import pytest
@@ -243,6 +245,12 @@ class DeepseekV32ModelTest(CausalLMModelTest, unittest.TestCase):
 @slow
 @require_torch_accelerator
 class DeepseekV32IntegrationTest(unittest.TestCase):
+    def setUp(self):
+        self.offload_folder = tempfile.mkdtemp()
+
+    def tearDown(self):
+        shutil.rmtree(self.offload_folder, ignore_errors=True)
+
     def test_deepseek_v32(self):
         EXPECTED_TEXT = ['An attention function can be described as mapping a query and a set of key-value pairs to an output, where the query, keys, values, and output are all vectors. The output is computed as a weighted sum of the values, where the weight assigned to each value is computed by a compatibility function of the query with the corresponding key.\n\nWe call our particular attention "Scaled Dot-Product Attention" (Figure (left']  # fmt: skip
 
@@ -250,6 +258,7 @@ class DeepseekV32IntegrationTest(unittest.TestCase):
         model = DeepseekV32ForCausalLM.from_pretrained(
             "deepseek-ai/DeepSeek-V3.2-Exp",
             device_map="auto",
+            offload_folder=self.offload_folder,
             dtype=torch.bfloat16,
         )
 
@@ -268,6 +277,7 @@ class DeepseekV32IntegrationTest(unittest.TestCase):
         model = DeepseekV32ForCausalLM.from_pretrained(
             "deepseek-ai/DeepSeek-V3.2-Exp",
             device_map="auto",
+            offload_folder=self.offload_folder,
             dtype=torch.bfloat16,
             attn_implementation="eager",
         )
@@ -288,6 +298,7 @@ class DeepseekV32IntegrationTest(unittest.TestCase):
         model = DeepseekV32ForCausalLM.from_pretrained(
             "deepseek-ai/DeepSeek-V3.2-Exp",
             device_map="auto",
+            offload_folder=self.offload_folder,
             dtype=torch.bfloat16,
             attn_implementation="eager",
         )
@@ -328,6 +339,7 @@ class DeepseekV32IntegrationTest(unittest.TestCase):
         model = DeepseekV32ForCausalLM.from_pretrained(
             "deepseek-ai/DeepSeek-V3.2-Exp",
             device_map="auto",
+            offload_folder=self.offload_folder,
             dtype=torch.bfloat16,
             attn_implementation="eager",
         )
