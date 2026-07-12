@@ -58,7 +58,7 @@ BioGPT モデルは、[BioGPT: generative pre-trained transformer for biomedical
 [[autodoc]] BioGptForCausalLM
     - forward
 
-    
+
 ## BioGptForTokenClassification
 
 [[autodoc]] BioGptForTokenClassification
@@ -70,4 +70,4 @@ BioGPT モデルは、[BioGPT: generative pre-trained transformer for biomedical
 [[autodoc]] BioGptForSequenceClassification
     - forward
 
-    
+

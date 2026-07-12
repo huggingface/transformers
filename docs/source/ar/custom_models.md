@@ -258,10 +258,10 @@ ResnetModelForImageClassification.register_for_auto_class("AutoModelForImageClas
 الهيكل التالي:
 
 ```json
-"auto_map": {     
-	"AutoConfig": "<your-repo-name>--<config-name>",     
+"auto_map": {
+	"AutoConfig": "<your-repo-name>--<config-name>",
 	"AutoModel": "<your-repo-name>--<config-name>",
-	"AutoModelFor<Task>": "<your-repo-name>--<config-name>",    
+	"AutoModelFor<Task>": "<your-repo-name>--<config-name>",
 },
 ```
 

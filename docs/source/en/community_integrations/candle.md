@@ -20,7 +20,7 @@ rendered properly in your Markdown viewer.
 
 ```rust
 /// load model config
-let config: Config = 
+let config: Config =
     serde_json::from_reader(std::fs::File::open(config_filename)?)?;
 
 /// load safetensors and memory-maps them

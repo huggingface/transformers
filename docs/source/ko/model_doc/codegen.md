@@ -38,7 +38,7 @@ CodeGen 모델은 프로그램 합성(program synthesis)을 위한 자기회귀(
 * CodeGen 모델의 [체크포인트](https://huggingface.co/models?other=codegen)는 서로 다른 사전 학습 데이터와 다양한 크기로 제공됩니다.
 * 체크포인트의 형식은 다음과 같습니다: `Salesforce/codegen-{size}-{data}`
   * `size`: `350M`, `2B`, `6B`, `16B`
-  * `data`: 
+  * `data`:
     * `nl`: The Pile 데이터로 사전학습된 모델
     * `multi`: `nl` 모델에서 시작하여 다양한 프로그래밍 언어를 추가적으로 학습한 모델
     * `mono`: `multi` 모델에서 시작하여 추가로 Python 데이터에 대해 학습된 모델

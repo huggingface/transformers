@@ -26,13 +26,13 @@ The PatchTST 모델은 Yuqi Nie, Nam H. Nguyen, Phanwadee Sinthong, Jayant Kalag
 
 해당 논문의 초록입니다:
 
-*우리는 다변량 시계열 예측과 자기 감독 표현 학습을 위한 효율적인 트랜스포머 기반 모델 설계를 제안합니다. 이는 두 가지 주요 구성 요소를 기반으로 합니다: 
+*우리는 다변량 시계열 예측과 자기 감독 표현 학습을 위한 효율적인 트랜스포머 기반 모델 설계를 제안합니다. 이는 두 가지 주요 구성 요소를 기반으로 합니다:
 
 (i) 시계열을 하위 시리즈 수준의 패치로 분할하여 트랜스포머의 입력 토큰으로 사용
-(ii) 각 채널이 모든 시리즈에 걸쳐 동일한 임베딩과 트랜스포머 가중치를 공유하는 단일 단변량 시계열을 포함하는 채널 독립성. 패칭 설계는 자연스럽게 세 가지 이점을 가집니다: 
-    - 지역적 의미 정보가 임베딩에 유지됩니다; 
+(ii) 각 채널이 모든 시리즈에 걸쳐 동일한 임베딩과 트랜스포머 가중치를 공유하는 단일 단변량 시계열을 포함하는 채널 독립성. 패칭 설계는 자연스럽게 세 가지 이점을 가집니다:
+    - 지역적 의미 정보가 임베딩에 유지됩니다;
     - 동일한 룩백 윈도우에 대해 어텐션 맵의 계산과 메모리 사용량이 제곱으로 감소합니다
-    - 모델이 더 긴 과거를 참조할 수 있습니다. 
+    - 모델이 더 긴 과거를 참조할 수 있습니다.
     우리의 채널 독립적 패치 시계열 트랜스포머(PatchTST)는 최신 트랜스포머 기반 모델들과 비교했을 때 장기 예측 정확도를 크게 향상시킬 수 있습니다. 또한 모델을 자기지도 사전 훈련 작업에 적용하여, 대규모 데이터셋에 대한 지도 학습을 능가하는 아주 뛰어난 미세 조정 성능을 달성했습니다. 한 데이터셋에서 마스크된 사전 훈련 표현을 다른 데이터셋으로 전이하는 것도 최고 수준의 예측 정확도(SOTA)를 산출했습니다.*
 
 이 모델은 [namctin](https://huggingface.co/namctin), [gsinthong](https://huggingface.co/gsinthong), [diepi](https://huggingface.co/diepi), [vijaye12](https://huggingface.co/vijaye12), [wmgifford](https://huggingface.co/wmgifford), [kashif](https://huggingface.co/kashif)에 의해 기여 되었습니다. 원본코드는 [이곳](https://github.com/yuqinie98/PatchTST)에서 확인할 수 있습니다.
@@ -43,7 +43,7 @@ The PatchTST 모델은 Yuqi Nie, Nam H. Nguyen, Phanwadee Sinthong, Jayant Kalag
 
 ## 자료[[resources]]
 
-- PatchTST를 자세히 설명하는 블로그 포스트는 [이곳](https://huggingface.co/blog/patchtst)에서 찾을 수 있습니다. 
+- PatchTST를 자세히 설명하는 블로그 포스트는 [이곳](https://huggingface.co/blog/patchtst)에서 찾을 수 있습니다.
 이 블로그는 Google Colab에서도 열어볼 수 있습니다.
 
 ## PatchTSTConfig[[transformers.PatchTSTConfig]]

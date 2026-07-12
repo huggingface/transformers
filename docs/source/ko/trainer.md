@@ -155,7 +155,7 @@ from transformers import TrainerCallback
 class EarlyStoppingCallback(TrainerCallback):
     def __init__(self, num_steps=10):
         self.num_steps = num_steps
-    
+
     def on_step_end(self, args, state, control, **kwargs):
         if state.global_step >= self.num_steps:
             return {"should_training_stop": True}
@@ -341,7 +341,7 @@ trainer.train()
 
 ## LOMO 옵티마이저 [[lomo-optimizer]]
 
-LOMO 옵티마이저는 [제한된 자원으로 대형 언어 모델의 전체 매개변수 미세 조정](https://hf.co/papers/2306.09782)과 [적응형 학습률을 통한 저메모리 최적화(AdaLomo)](https://hf.co/papers/2310.10195)에서 도입되었습니다. 
+LOMO 옵티마이저는 [제한된 자원으로 대형 언어 모델의 전체 매개변수 미세 조정](https://hf.co/papers/2306.09782)과 [적응형 학습률을 통한 저메모리 최적화(AdaLomo)](https://hf.co/papers/2310.10195)에서 도입되었습니다.
 이들은 모두 효율적인 전체 매개변수 미세 조정 방법으로 구성되어 있습니다. 이러한 옵티마이저들은 메모리 사용량을 줄이기 위해 그레이디언트 계산과 매개변수 업데이트를 하나의 단계로 융합합니다. LOMO에서 지원되는 옵티마이저는 `"lomo"`와 `"adalomo"`입니다. 먼저 pypi에서 `pip install lomo-optim`를 통해 `lomo`를 설치하거나, GitHub 소스에서 `pip install git+https://github.com/OpenLMLab/LOMO.git`로 설치하세요.
 
 <Tip>
@@ -387,8 +387,8 @@ FSDP 샤딩 전략, CPU 오프로드 및 [`Trainer`]와 함께 사용할 수 있
 <hfoption id="DistributedDataParallel">
 
 ```yml
-compute_environment: LOCAL_MACHINE                                                                                             
-distributed_type: MULTI_GPU                                                                                                    
+compute_environment: LOCAL_MACHINE
+distributed_type: MULTI_GPU
 downcast_bf16: 'no'
 gpu_ids: all
 machine_rank: 0 # 노드에 따라 순위를 변경하세요
@@ -462,8 +462,8 @@ use_cpu: false
 <hfoption id="DeepSpeed with Accelerate plugin">
 
 ```yml
-compute_environment: LOCAL_MACHINE                                                                                             
-deepspeed_config:                                                                                                              
+compute_environment: LOCAL_MACHINE
+deepspeed_config:
   gradient_accumulation_steps: 1
   gradient_clipping: 0.7
   offload_optimizer_device: cpu

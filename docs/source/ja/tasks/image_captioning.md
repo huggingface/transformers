@@ -101,7 +101,7 @@ sample_images_to_visualize = [np.array(train_ds[i]["image"]) for i in range(5)]
 sample_captions = [train_ds[i]["text"] for i in range(5)]
 plot_images(sample_images_to_visualize, sample_captions)
 ```
-    
+
 <div class="flex justify-center">
     <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/sample_training_images_image_cap.png" alt="Sample training images"/>
 </div>
@@ -220,7 +220,7 @@ trainer = Trainer(
 
 トレーニングを開始するには、[`Trainer`] オブジェクトの [`~Trainer.train`] を呼び出すだけです。
 
-```python 
+```python
 trainer.train()
 ```
 

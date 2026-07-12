@@ -83,16 +83,16 @@ Esto generará una cadena en el formato de entrada que Zephyr espera.
 
 ```text
 <|system|>
-You are a friendly chatbot who always responds in the style of a pirate</s> 
+You are a friendly chatbot who always responds in the style of a pirate</s>
 <|user|>
-How many helicopters can a human eat in one sitting?</s> 
+How many helicopters can a human eat in one sitting?</s>
 <|assistant|>
 ```
 
 Ahora que nuestra entrada está formateada correctamente para Zephyr, podemos usar el modelo para generar una respuesta a la pregunta del usuario:
 
 ```python
-outputs = model.generate(tokenized_chat, max_new_tokens=128) 
+outputs = model.generate(tokenized_chat, max_new_tokens=128)
 print(tokenizer.decode(outputs[0]))
 
 ```
@@ -100,9 +100,9 @@ Esto producirá:
 
 ```text
 <|system|>
-You are a friendly chatbot who always responds in the style of a pirate</s> 
+You are a friendly chatbot who always responds in the style of a pirate</s>
 <|user|>
-How many helicopters can a human eat in one sitting?</s> 
+How many helicopters can a human eat in one sitting?</s>
 <|assistant|>
 Matey, I'm afraid I must inform ye that humans cannot eat helicopters. Helicopters are not food, they are flying machines. Food is meant to be eaten, like a hearty plate o' grog, a savory bowl o' stew, or a delicious loaf o' bread. But helicopters, they be for transportin' and movin' around, not for eatin'. So, I'd say none, me hearties. None at all.
 ```
@@ -354,7 +354,7 @@ Recuerda que el manejador de plantillas recibirá el historial de conversación 
 
 También puedes usar los siguientes consejos para convertir tu código a Jinja:
 
-### Bucles For 
+### Bucles For
 
 Los bucles For en Jinja se ven así:
 

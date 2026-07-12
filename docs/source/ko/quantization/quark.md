@@ -51,7 +51,7 @@ Quark를 통해 양자화된 모델은 함께 조합할 수 있는 광범위한 
 
 Quark 네이티브 직렬화를 사용하는 공개 모델은 https://huggingface.co/models?other=quark 에서 찾을 수 있습니다.
 
-Quark는 [`quant_method="fp8"`을 이용하는 모델](https://huggingface.co/models?other=fp8)과 [`quant_method="awq"`을 사용하는 모델](https://huggingface.co/models?other=awq)도 지원하지만, Transformers는 이러한 모델을 [AutoAWQ](https://huggingface.co/docs/transformers/quantization/awq)를 통해 불러오거나 
+Quark는 [`quant_method="fp8"`을 이용하는 모델](https://huggingface.co/models?other=fp8)과 [`quant_method="awq"`을 사용하는 모델](https://huggingface.co/models?other=awq)도 지원하지만, Transformers는 이러한 모델을 [AutoAWQ](https://huggingface.co/docs/transformers/quantization/awq)를 통해 불러오거나
 [🤗 Transformers의 네이티브 fp8 지원](https://huggingface.co/docs/transformers/quantization/finegrained_fp8)을 사용합니다.
 
 ## Transformers에서 Quark모델 사용하기[[Using Quark models in Transformers]]

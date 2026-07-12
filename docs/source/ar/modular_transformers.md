@@ -86,7 +86,7 @@ class RobertaModel(BertModel):
     super().__init__(config)
     self.embeddings = RobertaEmbeddings(config)
 
-      
+
 # الرؤوس الآن تحتاج فقط إلى إعادة تعريف النموذج داخل `RobertaModel` الصحيح
 class RobertaForMaskedLM(BertForMaskedLM):
   def __init__(self, config):
@@ -127,7 +127,7 @@ class GemmaModel(LlamaModel):                 |           class GemmaModel(PreTr
                                               |                 self.norm = LlamaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
                                               |                 self.rotary_emb = LlamaRotaryEmbedding(config=config)
                                               |                 self.gradient_checkpointing = False
-                                              |                 
+                                              |
                                               |                 # Initialize weights and apply final processing
                                               |                 self.post_init()
 ```
@@ -178,7 +178,7 @@ class GemmaTokenizer(LlamaTokenizer, PretrainedTokenizerFast):         |        
 ### التسمية الخاصة
 ندعم الآن أيضًا حالات خاصة مثل
 ```python
-class GemmaVisionModel(CLIPModel):                                 
+class GemmaVisionModel(CLIPModel):
     pass
 ```
 حيث اسم فئة `GemmaVision` الخاصة بك ليس هو نفسه `Gemma` النمطي. هذا مفيد للغاية للنماذج المركبة.

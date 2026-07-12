@@ -33,7 +33,7 @@ limitations under the License.
 
 ### GLM-5.2
 
-GLM-5.2, our latest flagship model for long-horizon tasks. It marks a substantial leap in long-horizon task capability over its predecessor GLM-5.1 and, for the first time, delivers that capability on a **solid 1M-token context**. 
+GLM-5.2, our latest flagship model for long-horizon tasks. It marks a substantial leap in long-horizon task capability over its predecessor GLM-5.1 and, for the first time, delivers that capability on a **solid 1M-token context**.
 
 GLM-5.2's new capabilities include:
 - **Solid 1M Context:** A solid 1M-token context that stably sustains long-horizon work

@@ -128,7 +128,7 @@ texts = generator(audio_filenames)
 ### 특정 태스크용 매개변수[[task-specific-parameters]]
 
 각 태스크마다 구현할 때 유연성과 옵션을 제공하기 위해 태스크용 매개변수가 있습니다.
-예를 들어 [`transformers.AutomaticSpeechRecognitionPipeline.__call__`] 메서드에는 동영상의 자막을 넣을 때 유용할 것 같은 `return_timestamps` 매개변수가 있습니다. 
+예를 들어 [`transformers.AutomaticSpeechRecognitionPipeline.__call__`] 메서드에는 동영상의 자막을 넣을 때 유용할 것 같은 `return_timestamps` 매개변수가 있습니다.
 
 ```py
 >>> # Not using whisper, as it cannot provide timestamps.

@@ -30,11 +30,11 @@ The model is available in two checkpoints:
 
 Voxtral builds on Ministral-3B by adding audio processing capabilities:
 
-- **Transcription mode**: Includes a dedicated mode for speech transcription. By default, Voxtral detects the spoken language and transcribes it accordingly.  
-- **Long-form context**: With a 32k token context window, Voxtral can process up to 30 minutes of audio for transcription or 40 minutes for broader audio understanding.  
-- **Integrated Q&A and summarization**: Supports querying audio directly and producing structured summaries without relying on separate ASR and language models.  
-- **Multilingual support**: Automatically detects language and performs well across several widely spoken languages, including English, Spanish, French, Portuguese, Hindi, German, Dutch, and Italian.  
-- **Function calling via voice**: Can trigger functions or workflows directly from spoken input based on detected user intent.  
+- **Transcription mode**: Includes a dedicated mode for speech transcription. By default, Voxtral detects the spoken language and transcribes it accordingly.
+- **Long-form context**: With a 32k token context window, Voxtral can process up to 30 minutes of audio for transcription or 40 minutes for broader audio understanding.
+- **Integrated Q&A and summarization**: Supports querying audio directly and producing structured summaries without relying on separate ASR and language models.
+- **Multilingual support**: Automatically detects language and performs well across several widely spoken languages, including English, Spanish, French, Portuguese, Hindi, German, Dutch, and Italian.
+- **Function calling via voice**: Can trigger functions or workflows directly from spoken input based on detected user intent.
 - **Text capabilities**: Maintains the strong text processing performance of its Ministral-3B foundation.
 
 ## Usage

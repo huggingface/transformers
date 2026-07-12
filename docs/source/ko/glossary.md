@@ -95,7 +95,7 @@ rendered properly in your Markdown viewer.
 
 컬러 이미지는 빨간색(R), 초록색(G), 파란색(B)의 세 채널 값을 조합하여 구성되며, 흑백 이미지는 단일 채널만을 가집니다. 🤗 Transformers에서는 이미지 텐서의 채널이 첫 번째 또는 마지막 차원에 위치할 수 있습니다:[`n_channels`, `height`, `width`] 또는 [`height`, `width`, `n_channels`]와 같은 형식입니다.
 
-### 연결 시간분류(connectionist temporal classification, CTC) 
+### 연결 시간분류(connectionist temporal classification, CTC)
 
 입력과 출력의 정렬 상태를 정확히 몰라도 모델이 학습할 수 있도록 돕는 알고리즘입니다. CTC는 주어진 입력에 대해 가능한 모든 출력의 확률 분포를 계산하고, 그중 가장 가능성이 높은 출력을 선택합니다. CTC는 말하는 속도의 차이 등 여러 이유로 음성과 텍스트가 항상 정확하게 일치하지 않기 때문에 음성 인식 작업에서 자주 사용됩니다.
 
@@ -258,7 +258,7 @@ DataParallel 방식에 대해 더 알아보려면 [여기](perf_train_gpu_many#d
 - 시멘틱 세그멘테이션 모델([`SegformerForSemanticSegmentation`] 등)의 경우, 모델은 `(batch_size, height, width)` 차원의 텐서를 입력으로 받으며, 배치의 각 값은 개별 픽셀에 대한 예상 레이블을 나타냅니다.
 - 객체 탐지 모델([`DetrForObjectDetection`] 등)의 경우, 모델은 `class_labels`와 `boxes` 키를 포함하는 딕셔너리들의 리스트를 입력으로 받습니다. 배치의 각 값은 개별 이미지에 대한 예상 클래스 레이블과 바운딩 박스 정보를 나타냅니다.
 - 자동 음성 인식 모델([`Wav2Vec2ForCTC`] 등)의 경우 모델은 `(batch_size,target_length)` 차원의 텐서를 입력으로 받으며, 각 값은 개별 토큰에 대한 예상 레이블을 나타냅니다.
-  
+
 <Tip>
 
 모델마다 요구하는 레이블 형식이 다를 수 있으므로, 각 모델의 문서를 확인하여 해당 모델에 맞는 레이블 형식을 반드시 확인하세요!
@@ -299,7 +299,7 @@ DataParallel 방식에 대해 더 알아보려면 [여기](perf_train_gpu_many#d
 
 ### 파이프라인 (pipeline)
 
-🤗 Transformers에서 파이프라인은 데이터를 전처리하고 변환한 후, 모델을 통해 예측값을 반환하는 일련의 단계를 순차적으로 수행하는 추상화된 개념입니다. 파이프라인에 포함될 수 있는 단계로는 데이터 전처리, 특징 추출(feature extraction), 정규화(normalization) 등이 있습니다.   
+🤗 Transformers에서 파이프라인은 데이터를 전처리하고 변환한 후, 모델을 통해 예측값을 반환하는 일련의 단계를 순차적으로 수행하는 추상화된 개념입니다. 파이프라인에 포함될 수 있는 단계로는 데이터 전처리, 특징 추출(feature extraction), 정규화(normalization) 등이 있습니다.
 
 자세한 내용은 [Pipelines for inference](https://huggingface.co/docs/transformers/pipeline_tutorial) 문서를 참고하세요.
 
@@ -349,7 +349,7 @@ RNN 모델과 달리 트랜스포머는 각 토큰의 위치 정보를 내부적
 
 입력의 각 요소가 다른 어떤 요소에 주목해야 하는지를 스스로 판단하는 메커니즘입니다. 이는 모델이 문장에서 특정 단어만을 보는 것이 아니라, 다른 단어들과의 관계를 고려하여 어떤 정보에 더 집중해야 할지를 학습하게 합니다.
 
-### 자기지도 학습 (self-supervised learning) 
+### 자기지도 학습 (self-supervised learning)
 
 레이블이 없는 데이터로부터 모델이 스스로 학습 목표를 정의하여 학습하는 머신러닝 기법의 한 종류입니다. [비지도 학습](#unsupervised-learning)이나 [지도 학습](#supervised-learning)과 달리, 학습 과정 자체는 감독 방식 되지만, 라벨이 명시적으로 주어지는 것은 아닙니다.
 
@@ -450,5 +450,5 @@ RNN 모델과 달리 트랜스포머는 각 토큰의 위치 정보를 내부적
 
 ### Zero Redundancy Optimizer (ZeRO)
 
-[TensorParallel](#tensor-parallelism-tp)과 유사하게 텐서를 샤딩(sharding)하는 병렬 처리 기법이지만, 순전파(forward)나 역전파(backward) 계산 시점에 전체 텐서를 다시 복원한다는 점에서 차이가 있습니다. 따라서 모델 자체를 수정할 필요가 없습니다. 이 방법은 GPU 메모리가 부족할 경우 이를 보완하기 위한 다양한 오프로딩 (offloading) 기법도 지원합니다. 
+[TensorParallel](#tensor-parallelism-tp)과 유사하게 텐서를 샤딩(sharding)하는 병렬 처리 기법이지만, 순전파(forward)나 역전파(backward) 계산 시점에 전체 텐서를 다시 복원한다는 점에서 차이가 있습니다. 따라서 모델 자체를 수정할 필요가 없습니다. 이 방법은 GPU 메모리가 부족할 경우 이를 보완하기 위한 다양한 오프로딩 (offloading) 기법도 지원합니다.
 ZeRO에 대해 더 알아보려면 [이 문서](perf_train_gpu_many#zero-data-parallelism)를 참고하세요.

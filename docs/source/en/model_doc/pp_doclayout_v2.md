@@ -20,7 +20,7 @@ rendered properly in your Markdown viewer.
 
 ## Overview
 
-**PP-DocLayoutV2** is a dedicated lightweight model for layout analysis, focusing specifically on element detection, classification, and reading order prediction. 
+**PP-DocLayoutV2** is a dedicated lightweight model for layout analysis, focusing specifically on element detection, classification, and reading order prediction.
 
 ## Model Architecture
 

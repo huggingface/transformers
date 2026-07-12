@@ -18,7 +18,7 @@ rendered properly in your Markdown viewer.
 
 🤗 Transformers 노트북과 함께 [PyTorch](https://github.com/huggingface/transformers/tree/main/examples/pytorch), [TensorFlow](https://github.com/huggingface/transformers/tree/main/examples/tensorflow), 또는 [JAX/Flax](https://github.com/huggingface/transformers/tree/main/examples/flax)를 사용해 특정 태스크에 대한 모델을 훈련하는 방법을 보여주는 예제 스크립트도 있습니다.
 
-또한 [연구 프로젝트](https://github.com/huggingface/transformers-research-projects/) 및 [레거시 예제](https://github.com/huggingface/transformers/tree/main/examples/legacy)에서 대부분 커뮤니티에서 제공한 스크립트를 찾을 수 있습니다. 
+또한 [연구 프로젝트](https://github.com/huggingface/transformers-research-projects/) 및 [레거시 예제](https://github.com/huggingface/transformers/tree/main/examples/legacy)에서 대부분 커뮤니티에서 제공한 스크립트를 찾을 수 있습니다.
 이러한 스크립트는 적극적으로 유지 관리되지 않으며 최신 버전의 라이브러리와 호환되지 않을 가능성이 높은 특정 버전의 🤗 Transformers를 필요로 합니다.
 
 예제 스크립트가 모든 문제에서 바로 작동하는 것은 아니며, 해결하려는 문제에 맞게 스크립트를 변경해야 할 수도 있습니다.
@@ -139,7 +139,7 @@ TensorFlow 스크립트는 분산 훈련을 위해 [`MirroredStrategy`](https://
 ## TPU 위에서 스크립트 실행하기[[run-a-script-on-a-tpu]]
 
 Tensor Processing Units (TPUs)는 성능을 가속화하기 위해 특별히 설계되었습니다.
-PyTorch는 [XLA](https://www.tensorflow.org/xla) 딥러닝 컴파일러와 함께 TPU를 지원합니다(자세한 내용은 [여기](https://github.com/pytorch/xla/blob/master/README.md) 참조). 
+PyTorch는 [XLA](https://www.tensorflow.org/xla) 딥러닝 컴파일러와 함께 TPU를 지원합니다(자세한 내용은 [여기](https://github.com/pytorch/xla/blob/master/README.md) 참조).
 TPU를 사용하려면 `xla_spawn.py` 스크립트를 실행하고 `num_cores` 인수를 사용하여 사용하려는 TPU 코어 수를 설정합니다.
 
 ```bash
@@ -253,7 +253,7 @@ examples/pytorch/summarization/run_summarization.py -h
 
 ## 체크포인트(checkpoint)에서 훈련 이어서 하기[[resume-training-from-checkpoint]]
 
-또 다른 유용한 옵션은 이전 체크포인트에서 훈련을 재개하는 것입니다. 
+또 다른 유용한 옵션은 이전 체크포인트에서 훈련을 재개하는 것입니다.
 이렇게 하면 훈련이 중단되더라도 처음부터 다시 시작하지 않고 중단한 부분부터 다시 시작할 수 있습니다.
 체크포인트에서 훈련을 재개하는 방법에는 두 가지가 있습니다.
 

@@ -43,7 +43,7 @@ pip install --upgrade accelerate transformers
 <hfoptions id="bnb">
 <hfoption id="8-bit">
 
-모델을 8비트로 양자화하면 메모리 사용량이 절반으로 줄어들며, 대규모 모델의 경우 사용 가능한 GPU를 효율적으로 활용하려면 `device_map="auto"`를 설정하세요. 
+모델을 8비트로 양자화하면 메모리 사용량이 절반으로 줄어들며, 대규모 모델의 경우 사용 가능한 GPU를 효율적으로 활용하려면 `device_map="auto"`를 설정하세요.
 
 ```py
 from transformers import AutoModelForCausalLM, BitsAndBytesConfig
@@ -51,7 +51,7 @@ from transformers import AutoModelForCausalLM, BitsAndBytesConfig
 quantization_config = BitsAndBytesConfig(load_in_8bit=True)
 
 model_8bit = AutoModelForCausalLM.from_pretrained(
-    "bigscience/bloom-1b7", 
+    "bigscience/bloom-1b7",
     quantization_config=quantization_config
 )
 ```
@@ -65,8 +65,8 @@ from transformers import AutoModelForCausalLM, BitsAndBytesConfig
 quantization_config = BitsAndBytesConfig(load_in_8bit=True)
 
 model_8bit = AutoModelForCausalLM.from_pretrained(
-    "facebook/opt-350m", 
-    quantization_config=quantization_config, 
+    "facebook/opt-350m",
+    quantization_config=quantization_config,
     dtype=torch.float32
 )
 model_8bit.model.decoder.layers[-1].final_layer_norm.weight.dtype
@@ -80,7 +80,7 @@ from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
 quantization_config = BitsAndBytesConfig(load_in_8bit=True)
 
 model = AutoModelForCausalLM.from_pretrained(
-    "bigscience/bloom-560m", 
+    "bigscience/bloom-560m",
     quantization_config=quantization_config
 )
 tokenizer = AutoTokenizer.from_pretrained("bigscience/bloom-560m")
@@ -114,7 +114,7 @@ quantization_config = BitsAndBytesConfig(load_in_4bit=True)
 
 model_4bit = AutoModelForCausalLM.from_pretrained(
     "facebook/opt-350m",
-    quantization_config=quantization_config, 
+    quantization_config=quantization_config,
     dtype=torch.float32
 )
 model_4bit.model.decoder.layers[-1].final_layer_norm.weight.dtype

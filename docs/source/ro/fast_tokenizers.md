@@ -107,7 +107,7 @@ tokenizer.decode(outputs["input_ids"])
 ```py
 tokenizer.decode(outputs["input_ids"], skip_special_tokens=True)
 ['Sphinx of black quartz, judge my vow.']
-``` 
+```
 
 ## Token-uri speciale
 
@@ -254,7 +254,7 @@ Toate backend-urile moștenesc din [`PreTrainedTokenizerBase`] și împart acele
         ...
     ]
     ```
-    
+
     Când un backend ca mistral-common nu este instalat, [`AutoTokenizer`] revine la [`TokenizersBackend`].
 
 Verifică ce backend folosește un tokenizer cu proprietatea `backend`.

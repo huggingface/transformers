@@ -28,7 +28,7 @@ Junnan Li, Dongxu Li, Silvio Savarese, Steven Hoi.・サバレーゼ、スティ
 *大規模モデルのエンドツーエンドのトレーニングにより、視覚と言語の事前トレーニングのコストはますます法外なものになってきています。この論文では、市販の凍結済み事前トレーニング画像エンコーダと凍結された大規模言語モデルから視覚言語の事前トレーニングをブートストラップする、汎用的で効率的な事前トレーニング戦略である BLIP-2 を提案します。 BLIP-2 は、2 段階で事前トレーニングされた軽量の Querying Transformer でモダリティのギャップを橋渡しします。最初のステージでは、フリーズされた画像エンコーダーから学習する視覚言語表現をブートストラップします。第 2 段階では、凍結された言語モデルから視覚から言語への生成学習をブートストラップします。 BLIP-2 は、既存の方法よりもトレーニング可能なパラメーターが大幅に少ないにもかかわらず、さまざまな視覚言語タスクで最先端のパフォーマンスを実現します。たとえば、私たちのモデルは、トレーニング可能なパラメーターが 54 分の 1 少ないゼロショット VQAv2 で、Flamingo80B を 8.7% 上回っています。また、自然言語の命令に従うことができる、ゼロショット画像からテキストへの生成というモデルの新しい機能も実証します*
 
 <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/blip2_architecture.jpg"
-alt="drawing" width="600"/> 
+alt="drawing" width="600"/>
 
 <small> BLIP-2 アーキテクチャ。 <a href="https://huggingface.co/papers/2301.12597">元の論文から抜粋。</a> </small>
 

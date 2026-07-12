@@ -48,7 +48,7 @@ rendered properly in your Markdown viewer.
 {'text': 'I HAVE A DREAM BUT ONE DAY THIS NATION WILL RISE UP LIVE UP THE TRUE MEANING OF ITS TREES'}
 ```
 
-您没有得到您期望的结果？可以在Hub上查看一些[最受欢迎的自动语音识别模型](https://huggingface.co/models?pipeline_tag=automatic-speech-recognition&sort=trending) 
+您没有得到您期望的结果？可以在Hub上查看一些[最受欢迎的自动语音识别模型](https://huggingface.co/models?pipeline_tag=automatic-speech-recognition&sort=trending)
 ，看看是否可以获得更好的转录。
 
 让我们尝试来自 OpenAI 的[Whisper large-v2](https://huggingface.co/openai/whisper-large) 模型。Whisperb比Wav2Vec2晚2年发布，使用接近10倍的数据进行了训练。因此，它在大多数下游基准测试上击败了Wav2Vec2。

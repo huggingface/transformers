@@ -53,15 +53,15 @@ Tips:
 
 </Tip>
 
-### Formatting Prompts with Chat Templates  
+### Formatting Prompts with Chat Templates
 
-Each **checkpoint** is trained with a specific prompt format, depending on the underlying large language model backbone. To ensure correct formatting, use the processor’s `apply_chat_template` method.  
+Each **checkpoint** is trained with a specific prompt format, depending on the underlying large language model backbone. To ensure correct formatting, use the processor’s `apply_chat_template` method.
 
-**Important:**  
+**Important:**
 
-- You must construct a conversation history — passing a plain string won't work.  
-- Each message should be a dictionary with `"role"` and `"content"` keys.  
-- The `"content"` should be a list of dictionaries for different modalities like `"text"` and `"image"`.  
+- You must construct a conversation history — passing a plain string won't work.
+- Each message should be a dictionary with `"role"` and `"content"` keys.
+- The `"content"` should be a list of dictionaries for different modalities like `"text"` and `"image"`.
 
 Here’s an example of how to structure your input.
 We will use [llava-onevision-qwen2-7b-si-hf](https://huggingface.co/llava-hf/llava-onevision-qwen2-7b-si-hf) and a conversation history of text and image. Each content field has to be a list of dicts, as follows:

@@ -24,10 +24,10 @@ This guide shows you how to implement a model in Transformers that works as a ba
 
 1. Follow the model [contribution guidelines](../add_new_model) or the [custom model contribution guidelines](../custom_models). The model must have a valid `config.json` in its directory and a valid `auto_map` field pointing to the model class in the config.
 
-2. Use the [`AttentionInterface`] class for custom and optimized attention functions. This interface unlocks each inference engine's performance features. 
+2. Use the [`AttentionInterface`] class for custom and optimized attention functions. This interface unlocks each inference engine's performance features.
 
    Use `ALL_ATTENTION_FUNCTIONS` when defining the attention layer and propagate `**kwargs` from the base `MyModel` class to the attention layers. Set `_supports_attention_backend` to `True` in [`PreTrainedModel`].
-   
+
    Expand the code below for an example.
 
     <details>

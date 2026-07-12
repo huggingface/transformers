@@ -47,12 +47,12 @@ Si bien cada tarea tiene un [`pipeline`] asociado, es más sencillo usar la abst
 {'text': 'I HAVE A DREAM BUT ONE DAY THIS NATION WILL RISE UP LIVE UP THE TRUE MEANING OF ITS TREES'}
 ```
 
-¿No es el resultado que tenías en mente? Echa un vistazo a algunos de los [modelos de reconocimiento automático del habla más descargados](https://huggingface.co/models?pipeline_tag=automatic-speech-recognition&sort=trending) 
+¿No es el resultado que tenías en mente? Echa un vistazo a algunos de los [modelos de reconocimiento automático del habla más descargados](https://huggingface.co/models?pipeline_tag=automatic-speech-recognition&sort=trending)
 en el Hub para ver si puedes obtener una mejor transcripción.
 
-Intentemos con el modelo [Whisper large-v2](https://huggingface.co/openai/whisper-large) de OpenAI. Whisper se lanzó 
-2 años después que Wav2Vec2, y se entrenó con cerca de 10 veces más datos. Como tal, supera a Wav2Vec2 en la mayoría de las pruebas 
-downstream. También tiene el beneficio adicional de predecir puntuación y mayúsculas, ninguno de los cuales es posible con  
+Intentemos con el modelo [Whisper large-v2](https://huggingface.co/openai/whisper-large) de OpenAI. Whisper se lanzó
+2 años después que Wav2Vec2, y se entrenó con cerca de 10 veces más datos. Como tal, supera a Wav2Vec2 en la mayoría de las pruebas
+downstream. También tiene el beneficio adicional de predecir puntuación y mayúsculas, ninguno de los cuales es posible con
 Wav2Vec2.
 
 Vamos a probarlo aquí para ver cómo se desempeña:
@@ -65,7 +65,7 @@ Vamos a probarlo aquí para ver cómo se desempeña:
 
 ¡Ahora este resultado parece más preciso! Para una comparación detallada de Wav2Vec2 vs Whisper, consulta el [Curso de Transformers de Audio](https://huggingface.co/learn/audio-course/chapter5/asr_models).
 Realmente te animamos a que eches un vistazo al Hub para modelos en diferentes idiomas, modelos especializados en tu campo, y más.
-Puedes comparar directamente los resultados de los modelos desde tu navegador en el Hub para ver si se adapta o 
+Puedes comparar directamente los resultados de los modelos desde tu navegador en el Hub para ver si se adapta o
 maneja casos de borde mejor que otros.
 Y si no encuentras un modelo para tu caso de uso, siempre puedes empezar a [entrenar](training) el tuyo propio.
 
@@ -273,7 +273,7 @@ pip install pytesseract
 
 ## Uso de `pipeline` en modelos grandes con 🤗 `accelerate`:
 
-¡Puedes ejecutar fácilmente `pipeline` en modelos grandes utilizando 🤗 `accelerate`! Primero asegúrate de haber instalado `accelerate` con `pip install accelerate`. 
+¡Puedes ejecutar fácilmente `pipeline` en modelos grandes utilizando 🤗 `accelerate`! Primero asegúrate de haber instalado `accelerate` con `pip install accelerate`.
 
 ¡Luego carga tu modelo utilizando `device_map="auto"`! Utilizaremos `facebook/opt-1.3b` para nuestro ejemplo.
 

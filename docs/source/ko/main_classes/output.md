@@ -46,7 +46,7 @@ outputs = model(**inputs, labels=labels)
 
 일반적으로 사용할 때와 동일하게 각 속성들에 접근할 수 있으며, 모델이 해당 속성을 반환하지 않은 경우 `None`이 반환됩니다. 예시에서는 `outputs.loss`는 모델에서 계산한 손실이고 `outputs.attentions`는 `None`입니다.
 
-`outputs` 객체를 튜플로 간주할 때는 `None` 값이 없는 속성만 고려합니다. 
+`outputs` 객체를 튜플로 간주할 때는 `None` 값이 없는 속성만 고려합니다.
 예시에서는 `loss`와 `logits`라는 두 개의 요소가 있습니다. 그러므로,
 
 ```python

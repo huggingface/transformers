@@ -41,7 +41,7 @@ The offical checkpoints are [moonshotai/Kimi-K2.5](https://huggingface.co/moonsh
 
 Note that the repositories don't yet have the correct fast tokenizer uploaded. You can get the converted processor and tokenizer from [RaushanTurganbay/kimi2.7-processor](https://huggingface.co/RaushanTurganbay/kimi2.7-processor)
 
-</Tip> 
+</Tip>
 
 ```python
 import os

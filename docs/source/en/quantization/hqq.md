@@ -39,9 +39,9 @@ from transformers import AutoModelForCausalLM, AutoTokenizer, HqqConfig
 
 quant_config = HqqConfig(nbits=8, group_size=64)
 model = AutoModelForCausalLM.from_pretrained(
-    "meta-llama/Llama-3.1-8B", 
-    dtype=torch.float16, 
-    device_map="auto", 
+    "meta-llama/Llama-3.1-8B",
+    dtype=torch.float16,
+    device_map="auto",
     quantization_config=quant_config
 )
 ```
@@ -66,9 +66,9 @@ quant_config  = HqqConfig(dynamic_config={
 })
 
 model = transformers.AutoModelForCausalLM.from_pretrained(
-    "meta-llama/Llama-3.1-8B", 
-    dtype=torch.float16, 
-    device_map="auto", 
+    "meta-llama/Llama-3.1-8B",
+    dtype=torch.float16,
+    device_map="auto",
     quantization_config=quant_config
 )
 ```

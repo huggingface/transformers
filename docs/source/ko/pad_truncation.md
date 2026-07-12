@@ -28,20 +28,20 @@ rendered properly in your Markdown viewer.
 
 `truncation` 인수는 잘라낼 방법을 정합니다. 불리언 또는 문자열일 수 있습니다:
 
-  - `True` 또는 `longest_first`: `max_length` 인수가 지정한 최대 길이로 잘라내거나, 
-    `max_length`가 제공되지 않은 경우(`max_length=None`) 모델에서 허용되는 최대 길이로 잘라냅니다. 
+  - `True` 또는 `longest_first`: `max_length` 인수가 지정한 최대 길이로 잘라내거나,
+    `max_length`가 제공되지 않은 경우(`max_length=None`) 모델에서 허용되는 최대 길이로 잘라냅니다.
     시퀀스 쌍에서 가장 긴 시퀀스의 토큰을 적절한 길이에 도달할 때까지 하나씩 제거합니다.
-  - `'only_second'`: `max_length` 인수가 지정한 최대 길이로 잘라내거나, 
+  - `'only_second'`: `max_length` 인수가 지정한 최대 길이로 잘라내거나,
     `max_length`가 제공되지 않은 경우(`max_length=None`) 모델에서 허용되는 최대 길이로 잘라냅니다.
     시퀀스 쌍(또는 시퀀스 쌍의 배치)가 제공된 경우 쌍의 두 번째 문장만 잘라냅니다.
-  - `'only_first'`: `max_length` 인수가 지정한 최대 길이로 잘라내거나, 
-    `max_length`가 제공되지 않은 경우(`max_length=None`) 모델에서 허용되는 최대 길이로 잘라냅니다. 
+  - `'only_first'`: `max_length` 인수가 지정한 최대 길이로 잘라내거나,
+    `max_length`가 제공되지 않은 경우(`max_length=None`) 모델에서 허용되는 최대 길이로 잘라냅니다.
     시퀀스 쌍(또는 시퀀스 쌍의 배치)가 제공된 경우 쌍의 첫 번째 문장만 잘라냅니다.
   - `False` 또는 `'do_not_truncate'`: 잘라내기를 적용하지 않습니다. 이것이 기본 동작입니다.
 
 `max_length` 인수는 패딩 및 잘라내기를 적용할 길이를 제어합니다. 이 인수는 정수 또는 `None`일 수 있으며, `None`일 경우 모델이 허용할 수 있는 최대 길이로 기본값이 설정됩니다. 모델에 특정한 최대 입력 길이가 없는 경우 `max_length`에 대한 잘라내기 또는 패딩이 비활성화됩니다.
 
-다음 표에는 패딩 및 잘라내기를 설정하는 권장 방법이 요약되어 있습니다. 
+다음 표에는 패딩 및 잘라내기를 설정하는 권장 방법이 요약되어 있습니다.
 입력으로 시퀀스 쌍을 사용하는 경우, 다음 예제에서 `truncation=True`를 `['only_first', 'only_second', 'longest_first']`에서 선택한 `STRATEGY`, 즉 `truncation='only_second'` 또는 `truncation='longest_first'`로 바꾸면 앞서 설명한 대로 쌍의 두 시퀀스가 잘리는 방식을 제어할 수 있습니다.
 
 | 잘라내기                             | 패딩                              | 사용 방법                                                                                 |

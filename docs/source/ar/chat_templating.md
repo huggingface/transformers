@@ -257,7 +257,7 @@ def current_time():
 def multiply(a: float, b: float):
     """
     A function that multiplies two numbers
-    
+
     Args:
         a: The first number to multiply
         b: The second number to multiply
@@ -377,7 +377,7 @@ from transformers.utils import get_json_schema
 def multiply(a: float, b: float):
     """
     A function that multiplies two numbers
-    
+
     Args:
         a: The first number to multiply
         b: The second number to multiply
@@ -392,22 +392,22 @@ print(schema)
 
 ```json
 {
-  "type": "function", 
+  "type": "function",
   "function": {
-    "name": "multiply", 
-    "description": "A function that multiplies two numbers", 
+    "name": "multiply",
+    "description": "A function that multiplies two numbers",
     "parameters": {
-      "type": "object", 
+      "type": "object",
       "properties": {
         "a": {
-          "type": "number", 
+          "type": "number",
           "description": "The first number to multiply"
-        }, 
+        },
         "b": {
           "type": "number",
           "description": "The second number to multiply"
         }
-      }, 
+      },
       "required": ["a", "b"]
     }
   }
@@ -421,7 +421,7 @@ print(schema)
 ```python
 # A simple function that takes no arguments
 current_time = {
-  "type": "function", 
+  "type": "function",
   "function": {
     "name": "current_time",
     "description": "Get the current local time as a string.",
@@ -437,18 +437,18 @@ multiply = {
   'type': 'function',
   'function': {
     'name': 'multiply',
-    'description': 'A function that multiplies two numbers', 
+    'description': 'A function that multiplies two numbers',
     'parameters': {
-      'type': 'object', 
+      'type': 'object',
       'properties': {
         'a': {
           'type': 'number',
           'description': 'The first number to multiply'
-        }, 
+        },
         'b': {
           'type': 'number', 'description': 'The second number to multiply'
         }
-      }, 
+      },
       'required': ['a', 'b']
     }
   }
@@ -482,7 +482,7 @@ conversation = [
 # تعريف المستندات لتوليد قائم على الاسترجاع
 documents = [
     {
-        "title": "The Moon: Our Age-Old Foe", 
+        "title": "The Moon: Our Age-Old Foe",
         "text": "Man has always dreamed of destroying the moon. In this essay, I shall..."
     },
     {
@@ -544,7 +544,7 @@ if add_generation_prompt:
 - لكل رسالة، بطبع الدور مُحاطًا بـ `<|` و `|>`، مثل `<|user|>` أو `<|assistant|>`.
 - بعد ذلك، يطبع محتوى الرسالة، متبوعًا برمز نهاية التسلسل `eos_token` .
 - أخيرًا، إذا تم تعيين `add_generation_prompt` ، يطبع الرمز المساعد، حتى يعرف النموذج أنه يجب أن يبدأ في توليد استجابة المساعد.
-  
+
 هذا قالب بسيط جدًا، لكن Jinja تمنحك الكثير من المرونة للقيام بأشياء أكثر تعقيدًا! دعونا نرى قالب Jinja يُمكنه تنسيق المُدخلات بطريقة تُشبه الطريقة التي تُنسّق بها LLaMA مُدخلاتها (لاحظ أن قالب LLaMA الحقيقي يتضمن معالجة لرسائل النظام الافتراضية ومعالجة رسائل النظام بشكل مختلف قليلاً بشكل عام - لا تستخدم هذا القالب في التعليمات البرمجية الفعلية الخاصة بك!)
 ```
 {%- for message in messages %}
@@ -744,22 +744,22 @@ tokenizer.chat_template = open("template.jinja").read()
 
 ```json
 {
-  "type": "function", 
+  "type": "function",
   "function": {
-    "name": "multiply", 
-    "description": "دالة تضرب عددين", 
+    "name": "multiply",
+    "description": "دالة تضرب عددين",
     "parameters": {
-      "type": "object", 
+      "type": "object",
       "properties": {
         "a": {
-          "type": "number", 
+          "type": "number",
           "description": "الرقم الأول للضرب"
-        }, 
+        },
         "b": {
-          "type": "number", 
+          "type": "number",
           "description": "الرقم الثاني للضرب"
         }
-      }, 
+      },
       "required": ["a", "b"]
     }
   }

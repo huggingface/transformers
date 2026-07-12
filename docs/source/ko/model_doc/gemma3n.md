@@ -34,7 +34,7 @@ rendered properly in your Markdown viewer.
 Gemma 3n의 원본 체크포인트는 [Gemma 3n][gemma3n-collection] 출시 페이지에서 확인할 수 있습니다.
 
 > [!TIP]
-> 오른쪽 사이드바에 있는 Gemma 3n 모델을 클릭하면, Gemma를 다양한 비전, 오디오, 
+> 오른쪽 사이드바에 있는 Gemma 3n 모델을 클릭하면, Gemma를 다양한 비전, 오디오,
 > 언어 작업에 적용하는 더 많은 예시를 확인할 수 있습니다.
 
 아래 예시는 [`Pipeline`] 또는 [`AutoModel`] 클래스를 사용하여 이미지를 입력으로 받아 텍스트를 생성하는 방법을 보여줍니다.

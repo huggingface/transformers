@@ -260,7 +260,7 @@ Since the text encoder and audio encoder models are frozen during training, the 
 
 ```bash
 python src/transformers/models/musicgen_melody/convert_musicgen_melody_transformers.py \
-    --checkpoint="facebook/musicgen-melody" --pytorch_dump_folder /output/path 
+    --checkpoint="facebook/musicgen-melody" --pytorch_dump_folder /output/path
 ```
 
 Tips:

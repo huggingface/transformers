@@ -136,7 +136,7 @@ input e output sono nel range di `1e4`. Questo addestramento è stato eseguito c
 
 All'inizio della traccia è possibile scoprire a quale lotto si è verificato il problema (questo `Detected inf/nan during batch_number=0` significa che il problema si è verificato nel primo lotto).
 
-Ogni frame segnalato inizia dichiarando la voce completamente qualificata per il modulo corrispondente per il quale il frame è stato segnalato. 
+Ogni frame segnalato inizia dichiarando la voce completamente qualificata per il modulo corrispondente per il quale il frame è stato segnalato.
 Se osserviamo il seguente frame:
 
 ```

@@ -77,7 +77,7 @@ Luego usa `notebook_login` para iniciar sesión al Hub, y sigue el link [aquí](
 
 Para asegurarnos que tu modelo pueda ser usado por alguien que esté trabajando con un framework diferente, te recomendamos convertir y subir tu modelo con checkpoints de pytorch y tensorflow. Aunque los usuarios aún son capaces de cargar su modelo desde un framework diferente, si se omite este paso será más lento debido a que 🤗 Transformers necesitará convertir el checkpoint sobre-la-marcha.
 
-Convertir un checkpoint para otro framework es fácil. Asegúrate tener Pytorch y TensorFlow instalado (Véase [aquí](installation) para instrucciones de instalación), y luego encuentra el modelo específico para tu tarea en el otro Framework. 
+Convertir un checkpoint para otro framework es fácil. Asegúrate tener Pytorch y TensorFlow instalado (Véase [aquí](installation) para instrucciones de instalación), y luego encuentra el modelo específico para tu tarea en el otro Framework.
 
 Por ejemplo, supongamos que has entrenado DistilBert para clasificación de secuencias en PyTorch y quieres convertirlo a su equivalente en TensorFlow. Cargas el equivalente en TensorFlow de tu modelo para tu tarea y especificas `from_pt=True` así 🤗 Transformers convertirá el Pytorch checkpoint a un TensorFlow Checkpoint:
 

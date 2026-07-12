@@ -19,7 +19,7 @@ rendered properly in your Markdown viewer.
         <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white" >
         <img alt= "TensorFlow" src= "https://img.shields.io/badge/TensorFlow-FF6F00?style=flat&logo=tensorflow&logoColor=white" >
         <img alt= "Flax" src="https://img.shields.io/badge/Flax-29a79b.svg?style…Nu+W0m6K/I9gGPd/dfx/EN/wN62AhsBWuAAAAAElFTkSuQmCC">
-        <img alt="SDPA" src= "https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white" > 
+        <img alt="SDPA" src= "https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white" >
     </div>
 </div>
 
@@ -146,8 +146,8 @@ for token_id in top_k[0]:
 
 ## AlbertTokenizer[[alberttokenizer]]
 
-[[autodoc]] AlbertTokenizer 
-    - get_special_tokens_mask 
+[[autodoc]] AlbertTokenizer
+    - get_special_tokens_mask
     - save_vocabulary
 
 ## AlbertTokenizerFast[[alberttokenizerfast]]
@@ -161,22 +161,22 @@ for token_id in top_k[0]:
 
 ## AlbertModel[[albertmodel]]
 
-[[autodoc]] AlbertModel 
+[[autodoc]] AlbertModel
     - forward
 
 ## AlbertForPreTraining[[albertforpretraining]]
 
-[[autodoc]] AlbertForPreTraining 
+[[autodoc]] AlbertForPreTraining
     - forward
 
 ## AlbertForMaskedLM[[albertformaskedlm]]
 
-[[autodoc]] AlbertForMaskedLM 
+[[autodoc]] AlbertForMaskedLM
     - forward
 
 ## AlbertForSequenceClassification[[albertforsequenceclassification]]
 
-[[autodoc]] AlbertForSequenceClassification 
+[[autodoc]] AlbertForSequenceClassification
     - forward
 
 ## AlbertForMultipleChoice[[albertformultiplechoice]]
@@ -185,11 +185,11 @@ for token_id in top_k[0]:
 
 ## AlbertForTokenClassification[[albertfortokenclassification]]
 
-[[autodoc]] AlbertForTokenClassification 
+[[autodoc]] AlbertForTokenClassification
     - forward
 
 ## AlbertForQuestionAnswering[[albertforquestionanswering]]
 
-[[autodoc]] AlbertForQuestionAnswering 
+[[autodoc]] AlbertForQuestionAnswering
     - forward
 

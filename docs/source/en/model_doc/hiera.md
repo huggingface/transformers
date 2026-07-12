@@ -57,7 +57,7 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 
 [[autodoc]] HieraForPreTraining
     - forward
-  
+
 ## HieraForImageClassification
 
 [[autodoc]] HieraForImageClassification

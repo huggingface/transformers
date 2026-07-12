@@ -36,11 +36,11 @@ model = SuperPointForKeypointDetection.from_pretrained("magic-leap-community/sup
 아래의 이미지로 모델을 테스트 해보겠습니다.
 
 <div style="display: flex; align-items: center;">
-    <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/bee.jpg" 
-         alt="Bee" 
+    <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/bee.jpg"
+         alt="Bee"
          style="height: 200px; object-fit: contain; margin-right: 10px;">
-    <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/cats.png" 
-         alt="Cats" 
+    <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/cats.png"
+         alt="Cats"
          style="height: 200px; object-fit: contain;">
 </div>
 
@@ -75,7 +75,7 @@ SuperPointKeypointDescriptionOutput(loss=None, keypoints=tensor([[[0.0437, 0.016
          [0.0172, 0.0188],
          ...,
          [0.5984, 0.9812],
-         [0.6953, 0.9812]]]), 
+         [0.6953, 0.9812]]]),
          scores=tensor([[0.0056, 0.0053, 0.0079,  ..., 0.0125, 0.0539, 0.0377],
         [0.0206, 0.0058, 0.0065,  ..., 0.0000, 0.0000, 0.0000]],
        grad_fn=<CopySlices>), descriptors=tensor([[[-0.0807,  0.0114, -0.1210,  ..., -0.1122,  0.0899,  0.0357],
@@ -145,11 +145,11 @@ for i in range(len(images)):
 아래에서 결과를 확인할 수 있습니다.
 
 <div style="display: flex; align-items: center;">
-    <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/bee_keypoint.png" 
-         alt="Bee" 
+    <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/bee_keypoint.png"
+         alt="Bee"
          style="height: 200px; object-fit: contain; margin-right: 10px;">
-    <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/cats_keypoint.png" 
-         alt="Cats" 
+    <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/cats_keypoint.png"
+         alt="Cats"
          style="height: 200px; object-fit: contain;">
 </div>
 

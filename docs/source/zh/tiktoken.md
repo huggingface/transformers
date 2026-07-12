@@ -30,7 +30,7 @@ rendered properly in your Markdown viewer.
 from transformers import AutoTokenizer
 
 model_id = "meta-llama/Meta-Llama-3-8B-Instruct"
-tokenizer = AutoTokenizer.from_pretrained(model_id, subfolder="original") 
+tokenizer = AutoTokenizer.from_pretrained(model_id, subfolder="original")
 ```
 ## 创建tiktoken词符化器(tokenizer)
 

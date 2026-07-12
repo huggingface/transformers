@@ -77,7 +77,7 @@ Verwenden Sie dann `notebook_login`, um sich beim Hub anzumelden, und folgen Sie
 
 Um sicherzustellen, dass Ihr Modell von jemandem verwendet werden kann, der mit einem anderen Framework arbeitet, empfehlen wir Ihnen, Ihr Modell sowohl mit PyTorch- als auch mit TensorFlow-Checkpoints zu konvertieren und hochzuladen. Während Benutzer immer noch in der Lage sind, Ihr Modell von einem anderen Framework zu laden, wenn Sie diesen Schritt überspringen, wird es langsamer sein, weil 🤗 Transformers den Checkpoint on-the-fly konvertieren müssen.
 
-Die Konvertierung eines Checkpoints für ein anderes Framework ist einfach. Stellen Sie sicher, dass Sie PyTorch und TensorFlow installiert haben (siehe [hier](installation) für Installationsanweisungen), und finden Sie dann das spezifische Modell für Ihre Aufgabe in dem anderen Framework. 
+Die Konvertierung eines Checkpoints für ein anderes Framework ist einfach. Stellen Sie sicher, dass Sie PyTorch und TensorFlow installiert haben (siehe [hier](installation) für Installationsanweisungen), und finden Sie dann das spezifische Modell für Ihre Aufgabe in dem anderen Framework.
 
 Geben Sie `from_tf=True` an, um einen Prüfpunkt von TensorFlow nach PyTorch zu konvertieren:
 

@@ -71,7 +71,7 @@ rendered properly in your Markdown viewer.
 * 노드 간 연결 속도가 느리며, GPU 메모리가 여전히 부족한 경우:
 
     1. DP+PP+TP+ZeRO-1
-	
+
 
 
 ## 데이터 병렬화 [[data-parallelism]]
@@ -356,7 +356,7 @@ Megatron 논문의 표기법을 따라 행렬의 점곱 부분을 `Y = GeLU(XA)`
 
 특별 고려사항: TP는 매우 빠른 네트워크가 필요하므로 한 개 이상의 노드에서 TP를 수행하는 것은 권장되지 않습니다. 실제로 노드에 4개의 GPU가 있는 경우 TP의 최대 차수는 4입니다. TP 차수가 8인 경우 최소한 8개의 GPU가 있는 노드를 사용해야 합니다.
 
-이 섹션은 원래의 [더 자세한 TP 개요](https://github.com/huggingface/transformers/issues/10321#issuecomment-783543530)를 기반으로 합니다. 
+이 섹션은 원래의 [더 자세한 TP 개요](https://github.com/huggingface/transformers/issues/10321#issuecomment-783543530)를 기반으로 합니다.
 작성자는 [@anton-l](https://github.com/anton-l)입니다.
 
 SageMaker는 더 효율적인 처리를 위해 TP와 DP를 결합합니다.

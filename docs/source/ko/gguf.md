@@ -74,7 +74,7 @@ GGUF 파일 형식은 [GGML](https://github.com/ggerganov/ggml)과 그에 의존
 
 ## 사용 예시 [[example-usage]]
 
-`transformers`에서 `gguf` 파일을 로드하려면 `from_pretrained` 메소드에 `gguf_file` 인수를 지정해야 합니다. 동일한 파일에서 토크나이저와 모델을 로드하는 방법은 다음과 같습니다: 
+`transformers`에서 `gguf` 파일을 로드하려면 `from_pretrained` 메소드에 `gguf_file` 인수를 지정해야 합니다. 동일한 파일에서 토크나이저와 모델을 로드하는 방법은 다음과 같습니다:
 
 ```python
 from transformers import AutoTokenizer, AutoModelForCausalLM

@@ -94,7 +94,7 @@ In a traditional auto-regressive Transformer, attention is written as
 
 $$O = \hbox{softmax}(QK^{T} / \sqrt{d}) V$$
 
-with $Q$, $K$ and $V$ are matrices of shape `seq_len x hidden_size` named query, key and value (they are actually bigger matrices with a batch dimension and an attention head dimension but we're only interested in the last two, which is where the matrix product is taken, so for the sake of simplicity we only consider those two). The product $QK^{T}$ then has shape `seq_len x seq_len` and we can take the matrix product with $V$ to get the output $O$ of the same shape as the others.  
+with $Q$, $K$ and $V$ are matrices of shape `seq_len x hidden_size` named query, key and value (they are actually bigger matrices with a batch dimension and an attention head dimension but we're only interested in the last two, which is where the matrix product is taken, so for the sake of simplicity we only consider those two). The product $QK^{T}$ then has shape `seq_len x seq_len` and we can take the matrix product with $V$ to get the output $O$ of the same shape as the others.
 
 Replacing the softmax by its value gives:
 

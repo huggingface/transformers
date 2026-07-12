@@ -19,8 +19,8 @@ rendered properly in your Markdown viewer.
 
 ## 개요
 
-[EXAONE 4.5](https://github.com/LG-AI-EXAONE/EXAONE-4.5) 모델은 LG AI연구원에서 공개한 최초의 오픈 웨이트(open-weight) 비전-자연어 모델(vision-language model)입니다. 
-전용 비전 인코더를 기존 개발된 EXAONE 4.0 프레임워크에 통합하여 모델의 능력을 비전과 자연어를 고려한 멀티모달리티로 확장했습니다. EXAONE 4.5는 1.2B 크기의 비전 인코더를 포함해 총 33B 크기의 모델로 구성됩니다. 
+[EXAONE 4.5](https://github.com/LG-AI-EXAONE/EXAONE-4.5) 모델은 LG AI연구원에서 공개한 최초의 오픈 웨이트(open-weight) 비전-자연어 모델(vision-language model)입니다.
+전용 비전 인코더를 기존 개발된 EXAONE 4.0 프레임워크에 통합하여 모델의 능력을 비전과 자연어를 고려한 멀티모달리티로 확장했습니다. EXAONE 4.5는 1.2B 크기의 비전 인코더를 포함해 총 33B 크기의 모델로 구성됩니다.
 EXAONE 4.5는 이전 EXAONE 모델군으로부터 이어져 온 강력한 언어 처리 능력 덕분에 범용 벤치마크에서 경쟁력 있는 성능을 달성함과 동시에, 동등 규모의 최신 SOTA 모델을 능가하는 문서 이해 능력과 한국 문화적 추론 능력을 갖추고 있습니다.
 
 EXAONE 4.5는 EXAONE 4.0을 기반으로 몇 가지 핵심 개선 사항을 적용했습니다. 어휘 크기를 153,600으로 확장했으며, 컨텍스트 윈도우는 최대 256K 토큰까지 지원합니다. 또한 MTP(Multi-Token Prediction) 메커니즘을 도입해 모델 성능을 한층 더 높였습니다.

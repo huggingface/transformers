@@ -97,7 +97,7 @@ The script leverages the [🤗 Trainer API](https://huggingface.co/docs/transfor
 
 Here we show how to fine-tune a [SegFormer](https://huggingface.co/nvidia/mit-b0) model on the [segments/sidewalk-semantic](https://huggingface.co/datasets/segments/sidewalk-semantic) dataset:
 
-In order to use `segments/sidewalk-semantic`: 
+In order to use `segments/sidewalk-semantic`:
  - Log in to Hugging Face with `hf auth login` (token can be accessed [here](https://huggingface.co/settings/tokens)).
  - Accept terms of use for `sidewalk-semantic` on [dataset page](https://huggingface.co/datasets/segments/sidewalk-semantic).
 

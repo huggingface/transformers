@@ -22,7 +22,7 @@ rendered properly in your Markdown viewer.
 
 **PP-Chart2Table** is a SOTA multimodal model developed by the PaddlePaddle team, specializing in chart parsing for both Chinese and English. Its high performance is driven by a novel "Shuffled Chart Data Retrieval" training task, which, combined with a refined token masking strategy, significantly improves its efficiency in converting charts to data tables. The model is further strengthened by an advanced data synthesis pipeline that uses high-quality seed data, RAG, and LLMs persona design to create a richer, more diverse training set. To address the challenge of large-scale unlabeled, out-of-distribution (OOD) data, the team implemented a two-stage distillation process, ensuring robust adaptability and generalization on real-world data.
 
-## Model Architecture 
+## Model Architecture
 PP-Chart2Table adopts a multimodal fusion architecture that combines a vision tower for chart feature extraction and a language model for table structure generation, enabling end-to-end chart-to-table conversion.
 
 

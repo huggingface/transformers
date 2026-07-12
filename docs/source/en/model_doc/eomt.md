@@ -46,9 +46,9 @@ Use the Hugging Face implementation of EoMT for inference with pre-trained model
 
 The EoMT model performs semantic segmentation using sliding-window inference. The input image is resized such that the shorter side matches the target input size, then it is split into overlapping crops. Each crop is then passed through the model. After inference, the predicted logits from each crop are stitched back together and rescaled to the original image size to get the final segmentation mask.
 
-> **Note:**  
-> If you want to use a custom target size for **semantic segmentation**, specify it in the following format:  
-> `{"shortest_edge": 512}`  
+> **Note:**
+> If you want to use a custom target size for **semantic segmentation**, specify it in the following format:
+> `{"shortest_edge": 512}`
 > Notice that `longest_edge` is not provided here — this is intentional. For semantic segmentation, images are typically **scaled so that the shortest edge is greater than or equal to the target size** hence longest_edge is not necessary.
 
 ```python
@@ -94,9 +94,9 @@ plt.show()
 
 The EoMT model performs instance segmentation using padded inference. The input image is resized so that the longer side matches the target input size, and the shorter side is zero-padded to form a square. The resulting mask and class logits are combined through post-processing (adapted from Mask2Former) to produce a unified instance segmentation map, along with segment metadata like segment id, class labels and confidence scores.
 
-> **Note:**  
-> To use a custom target size, specify the size as a dictionary in the following format:  
-> `{"shortest_edge": 512, "longest_edge": 512}`  
+> **Note:**
+> To use a custom target size, specify the size as a dictionary in the following format:
+> `{"shortest_edge": 512, "longest_edge": 512}`
 > For both instance and panoptic segmentation, input images will be **scaled and padded** to this target size.
 
 ```python

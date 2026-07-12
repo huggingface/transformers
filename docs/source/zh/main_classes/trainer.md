@@ -490,12 +490,12 @@ Accelerate 现在支持 Trainer。用户可以期待以下内容：
 通过 Accelerate Launcher 使用 Trainer 的步骤：
 1. 确保已安装 🤗 Accelerate，无论如何，如果没有它，你无法使用 `Trainer`。如果没有，请执行 `pip install accelerate`。你可能还需要更新 Accelerate 的版本：`pip install accelerate --upgrade`。
 2. 运行 `accelerate config` 并填写问题。以下是一些加速配置的示例：
-   
+
   a. DDP 多节点多 GPU 配置：
 
     ```yaml
-    compute_environment: LOCAL_MACHINE                                                                                             
-    distributed_type: MULTI_GPU                                                                                                    
+    compute_environment: LOCAL_MACHINE
+    distributed_type: MULTI_GPU
     downcast_bf16: 'no'
     gpu_ids: all
     machine_rank: 0 #change rank as per the node
@@ -541,7 +541,7 @@ Accelerate 现在支持 Trainer。用户可以期待以下内容：
     tpu_use_sudo: false
     use_cpu: false
     ```
- 
+
   c. 指向文件的 DeepSpeed 配置：
 
     ```yaml
@@ -566,8 +566,8 @@ Accelerate 现在支持 Trainer。用户可以期待以下内容：
   d. 使用 accelerate 插件的 DeepSpeed 配置：
 
     ```yaml
-    compute_environment: LOCAL_MACHINE                                                                                             
-    deepspeed_config:                                                                                                              
+    compute_environment: LOCAL_MACHINE
+    deepspeed_config:
       gradient_accumulation_steps: 1
       gradient_clipping: 0.7
       offload_optimizer_device: cpu

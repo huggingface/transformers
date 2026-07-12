@@ -103,7 +103,7 @@ plot_images
 Optionally, you can use the [`Pipeline`] API and set the task to `keypoint-matching`.
 
 ```python
-from transformers import pipeline 
+from transformers import pipeline
 
 image_1 = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/bee.jpg"
 image_2 = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/bee_edited.jpg"

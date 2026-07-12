@@ -53,8 +53,8 @@ A continuación, pasa tu frase al tokenizador:
 ```py
 >>> encoded_input = tokenizer("Do not meddle in the affairs of wizards, for they are subtle and quick to anger.")
 >>> print(encoded_input)
-{'input_ids': [101, 2079, 2025, 19960, 10362, 1999, 1996, 3821, 1997, 16657, 1010, 2005, 2027, 2024, 11259, 1998, 4248, 2000, 4963, 1012, 102], 
- 'token_type_ids': [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], 
+{'input_ids': [101, 2079, 2025, 19960, 10362, 1999, 1996, 3821, 1997, 16657, 1010, 2005, 2027, 2024, 11259, 1998, 4248, 2000, 4963, 1012, 102],
+ 'token_type_ids': [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
  'attention_mask': [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]}
 ```
 
@@ -84,14 +84,14 @@ Si hay varias frases que quieres preprocesar, pasa las frases como una lista al 
 ... ]
 >>> encoded_inputs = tokenizer(batch_sentences)
 >>> print(encoded_inputs)
-{'input_ids': [[101, 1252, 1184, 1164, 1248, 6462, 136, 102], 
-               [101, 1790, 112, 189, 1341, 1119, 3520, 1164, 1248, 6462, 117, 21902, 1643, 119, 102], 
-               [101, 1327, 1164, 5450, 23434, 136, 102]], 
- 'token_type_ids': [[0, 0, 0, 0, 0, 0, 0, 0], 
-                    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], 
-                    [0, 0, 0, 0, 0, 0, 0]], 
- 'attention_mask': [[1, 1, 1, 1, 1, 1, 1, 1], 
-                    [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1], 
+{'input_ids': [[101, 1252, 1184, 1164, 1248, 6462, 136, 102],
+               [101, 1790, 112, 189, 1341, 1119, 3520, 1164, 1248, 6462, 117, 21902, 1643, 119, 102],
+               [101, 1327, 1164, 5450, 23434, 136, 102]],
+ 'token_type_ids': [[0, 0, 0, 0, 0, 0, 0, 0],
+                    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                    [0, 0, 0, 0, 0, 0, 0]],
+ 'attention_mask': [[1, 1, 1, 1, 1, 1, 1, 1],
+                    [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
                     [1, 1, 1, 1, 1, 1, 1]]}
 ```
 
@@ -109,14 +109,14 @@ Establece el parámetro `padding` en `True` aplicando el pad a las secuencias m�
 ... ]
 >>> encoded_input = tokenizer(batch_sentences, padding=True)
 >>> print(encoded_input)
-{'input_ids': [[101, 1252, 1184, 1164, 1248, 6462, 136, 102, 0, 0, 0, 0, 0, 0, 0], 
-               [101, 1790, 112, 189, 1341, 1119, 3520, 1164, 1248, 6462, 117, 21902, 1643, 119, 102], 
-               [101, 1327, 1164, 5450, 23434, 136, 102, 0, 0, 0, 0, 0, 0, 0, 0]], 
- 'token_type_ids': [[0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], 
-                    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], 
-                    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]], 
- 'attention_mask': [[1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0], 
-                    [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1], 
+{'input_ids': [[101, 1252, 1184, 1164, 1248, 6462, 136, 102, 0, 0, 0, 0, 0, 0, 0],
+               [101, 1790, 112, 189, 1341, 1119, 3520, 1164, 1248, 6462, 117, 21902, 1643, 119, 102],
+               [101, 1327, 1164, 5450, 23434, 136, 102, 0, 0, 0, 0, 0, 0, 0, 0]],
+ 'token_type_ids': [[0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]],
+ 'attention_mask': [[1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0],
+                    [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
                     [1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0]]}
 ```
 
@@ -136,14 +136,14 @@ Establece el parámetro `truncation` a `True` para truncar una secuencia a la lo
 ... ]
 >>> encoded_input = tokenizer(batch_sentences, padding=True, truncation=True)
 >>> print(encoded_input)
-{'input_ids': [[101, 1252, 1184, 1164, 1248, 6462, 136, 102, 0, 0, 0, 0, 0, 0, 0], 
-               [101, 1790, 112, 189, 1341, 1119, 3520, 1164, 1248, 6462, 117, 21902, 1643, 119, 102], 
-               [101, 1327, 1164, 5450, 23434, 136, 102, 0, 0, 0, 0, 0, 0, 0, 0]], 
- 'token_type_ids': [[0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], 
-                    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], 
-                    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]], 
- 'attention_mask': [[1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0], 
-                    [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1], 
+{'input_ids': [[101, 1252, 1184, 1164, 1248, 6462, 136, 102, 0, 0, 0, 0, 0, 0, 0],
+               [101, 1790, 112, 189, 1341, 1119, 3520, 1164, 1248, 6462, 117, 21902, 1643, 119, 102],
+               [101, 1327, 1164, 5450, 23434, 136, 102, 0, 0, 0, 0, 0, 0, 0, 0]],
+ 'token_type_ids': [[0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]],
+ 'attention_mask': [[1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0],
+                    [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
                     [1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0]]}
 ```
 
@@ -162,9 +162,9 @@ Establece el parámetro `return_tensors` como `pt` para PyTorch, o `tf` para Ten
 >>> encoded_input = tokenizer(batch, padding=True, truncation=True, return_tensors="pt")
 >>> print(encoded_input)
 {'input_ids': tensor([[  101,   153,  7719, 21490,  1122,  1114,  9582,  1623,   102],
-                      [  101,  5226,  1122,  9649,  1199,  2610,  1236,   102,     0]]), 
+                      [  101,  5226,  1122,  9649,  1199,  2610,  1236,   102,     0]]),
  'token_type_ids': tensor([[0, 0, 0, 0, 0, 0, 0, 0, 0],
-                           [0, 0, 0, 0, 0, 0, 0, 0, 0]]), 
+                           [0, 0, 0, 0, 0, 0, 0, 0, 0]]),
  'attention_mask': tensor([[1, 1, 1, 1, 1, 1, 1, 1, 1],
                            [1, 1, 1, 1, 1, 1, 1, 1, 0]])}
 ===PT-TF-SPLIT===
@@ -178,10 +178,10 @@ Establece el parámetro `return_tensors` como `pt` para PyTorch, o `tf` para Ten
 {'input_ids': <tf.Tensor: shape=(2, 9), dtype=int32, numpy=
 array([[  101,   153,  7719, 21490,  1122,  1114,  9582,  1623,   102],
        [  101,  5226,  1122,  9649,  1199,  2610,  1236,   102,     0]],
-      dtype=int32)>, 
+      dtype=int32)>,
  'token_type_ids': <tf.Tensor: shape=(2, 9), dtype=int32, numpy=
 array([[0, 0, 0, 0, 0, 0, 0, 0, 0],
-       [0, 0, 0, 0, 0, 0, 0, 0, 0]], dtype=int32)>, 
+       [0, 0, 0, 0, 0, 0, 0, 0, 0]], dtype=int32)>,
  'attention_mask': <tf.Tensor: shape=(2, 9), dtype=int32, numpy=
 array([[1, 1, 1, 1, 1, 1, 1, 1, 1],
        [1, 1, 1, 1, 1, 1, 1, 1, 0]], dtype=int32)>}
@@ -221,7 +221,7 @@ Esto devuelve tres elementos:
 
 ### Resample
 
-Para este tutorial, se utilizará el modelo [Wav2Vec2](https://huggingface.co/facebook/wav2vec2-base). Como puedes ver en la model card, el modelo Wav2Vec2 está pre-entrenado en audio de voz muestreado a 16kHz. Es importante que la tasa de muestreo de tus datos de audio coincida con la tasa de muestreo del dataset utilizado para pre-entrenar el modelo. Si la tasa de muestreo de tus datos no es la misma, deberás volver a muestrear tus datos de audio. 
+Para este tutorial, se utilizará el modelo [Wav2Vec2](https://huggingface.co/facebook/wav2vec2-base). Como puedes ver en la model card, el modelo Wav2Vec2 está pre-entrenado en audio de voz muestreado a 16kHz. Es importante que la tasa de muestreo de tus datos de audio coincida con la tasa de muestreo del dataset utilizado para pre-entrenar el modelo. Si la tasa de muestreo de tus datos no es la misma, deberás volver a muestrear tus datos de audio.
 
 Por ejemplo, carga el dataset [LJ Speech](https://huggingface.co/datasets/lj_speech) que tiene una tasa de muestreo de 22050kHz. Para utilizar el modelo Wav2Vec2 con este dataset, reduce la tasa de muestreo a 16kHz:
 
@@ -284,7 +284,7 @@ Al igual que el tokenizador, puedes aplicar padding o truncamiento para manejar 
 (988891,)
 ```
 
-Como puedes ver, el `sampling_rate` se ha reducido a 16kHz. 
+Como puedes ver, el `sampling_rate` se ha reducido a 16kHz.
 
 ```py
 >>> def preprocess_function(examples):
@@ -389,7 +389,7 @@ Para las tareas de visión por computadora es común añadir algún tipo de aume
           [ 0.0275,  0.0745,  0.0510,  ..., -0.1137, -0.1216, -0.0824],
           [ 0.0667,  0.0824,  0.0667,  ..., -0.0588, -0.0745, -0.0980],
           [ 0.0353,  0.0353,  0.0431,  ..., -0.0039, -0.0039, -0.0588]],
- 
+
          [[ 0.2078,  0.2471,  0.2863,  ..., -0.9451, -0.9373, -0.9451],
           [ 0.1608,  0.2471,  0.3098,  ..., -0.9373, -0.9451, -0.9373],
           [ 0.2078,  0.2706,  0.3020,  ..., -0.9608, -0.9373, -0.8275],
@@ -397,7 +397,7 @@ Para las tareas de visión por computadora es común añadir algún tipo de aume
           [-0.0353,  0.0118, -0.0039,  ..., -0.2392, -0.2471, -0.2078],
           [ 0.0196,  0.0353,  0.0196,  ..., -0.1843, -0.2000, -0.2235],
           [-0.0118, -0.0039, -0.0039,  ..., -0.0980, -0.0980, -0.1529]],
- 
+
          [[ 0.3961,  0.4431,  0.4980,  ..., -0.9216, -0.9137, -0.9216],
           [ 0.3569,  0.4510,  0.5216,  ..., -0.9059, -0.9137, -0.9137],
           [ 0.4118,  0.4745,  0.5216,  ..., -0.9137, -0.8902, -0.7804],
@@ -492,41 +492,41 @@ Genial, ahora deberías ser capaz de preprocesar datos para cualquier modalidad 
 
 ## Todo lo que siempre quisiste saber sobre el padding y el truncamiento
 
-Hemos visto los comandos que funcionarán para la mayoría de los casos (hacer pad a tu batch teniendo en cuenta la longitud de la frase máxima y 
-truncar a la longitud máxima que el modelo puede aceptar). Sin embargo, la API admite más estrategias si las necesitas. Los 
+Hemos visto los comandos que funcionarán para la mayoría de los casos (hacer pad a tu batch teniendo en cuenta la longitud de la frase máxima y
+truncar a la longitud máxima que el modelo puede aceptar). Sin embargo, la API admite más estrategias si las necesitas. Los
 tres argumentos que necesitas conocer para ello son `padding`, `truncation` y `max_length`.
 
 - `padding` controla el aplicarme padding al texto. Puede ser un booleano o una cadena que debe ser:
 
-  - `True` o `'longest'` para aplicar el pad hasta la secuencia más larga del batch (no apliques el padding si sólo le proporcionas 
+  - `True` o `'longest'` para aplicar el pad hasta la secuencia más larga del batch (no apliques el padding si sólo le proporcionas
   una sola secuencia).
-  - `'max_length'` para aplicar el pad hasta la longitud especificada por el argumento `max_length` o la longitud máxima aceptada 
-  por el modelo si no le proporcionas `longitud_máxima` (`longitud_máxima=None`). Si sólo le proporcionas una única secuencia 
+  - `'max_length'` para aplicar el pad hasta la longitud especificada por el argumento `max_length` o la longitud máxima aceptada
+  por el modelo si no le proporcionas `longitud_máxima` (`longitud_máxima=None`). Si sólo le proporcionas una única secuencia
   se le aplicará el padding.
-  `False` o `'do_not_pad'` para no aplicar pad a las secuencias. Como hemos visto antes, este es el comportamiento por 
+  `False` o `'do_not_pad'` para no aplicar pad a las secuencias. Como hemos visto antes, este es el comportamiento por
   defecto.
 
 - `truncation` controla el truncamiento. Puede ser un booleano o una string que debe ser:
 
-  - `True` o `'longest_first'` truncan hasta la longitud máxima especificada por el argumento `max_length` o 
-  la longitud máxima aceptada por el modelo si no le proporcionas `max_length` (`max_length=None`). Esto 
-  truncará token por token, eliminando un token de la secuencia más larga del par hasta alcanzar la longitud 
+  - `True` o `'longest_first'` truncan hasta la longitud máxima especificada por el argumento `max_length` o
+  la longitud máxima aceptada por el modelo si no le proporcionas `max_length` (`max_length=None`). Esto
+  truncará token por token, eliminando un token de la secuencia más larga del par hasta alcanzar la longitud
   adecuada.
-  - `'only_second'` trunca hasta la longitud máxima especificada por el argumento `max_length` o la 
-  longitud máxima aceptada por el modelo si no le proporcionas `max_length` (`max_length=None`). Esto sólo truncará 
+  - `'only_second'` trunca hasta la longitud máxima especificada por el argumento `max_length` o la
+  longitud máxima aceptada por el modelo si no le proporcionas `max_length` (`max_length=None`). Esto sólo truncará
   la segunda frase de un par si le proporcionas un par de secuencias (o un batch de pares de secuencias).
-  - `'only_first'` trunca hasta la longitud máxima especificada por el argumento `max_length` o la longitud máxima 
-  aceptada por el modelo si no se proporciona `max_length` (`max_length=None`). Esto sólo truncará 
+  - `'only_first'` trunca hasta la longitud máxima especificada por el argumento `max_length` o la longitud máxima
+  aceptada por el modelo si no se proporciona `max_length` (`max_length=None`). Esto sólo truncará
   la primera frase de un par si se proporciona un par de secuencias (o un lote de pares de secuencias).
-  - `False` o `'do_not_truncate'` para no truncar las secuencias. Como hemos visto antes, este es el comportamiento 
+  - `False` o `'do_not_truncate'` para no truncar las secuencias. Como hemos visto antes, este es el comportamiento
   por defecto.
 
-- `max_length` para controlar la longitud del padding/truncamiento. Puede ser un número entero o `None`, en cuyo caso 
-será por defecto la longitud máxima que el modelo puede aceptar. Si el modelo no tiene una longitud máxima de entrada específica, el 
+- `max_length` para controlar la longitud del padding/truncamiento. Puede ser un número entero o `None`, en cuyo caso
+será por defecto la longitud máxima que el modelo puede aceptar. Si el modelo no tiene una longitud máxima de entrada específica, el
 padding/truncamiento a `longitud_máxima` se desactiva.
 
-A continuación te mostramos en una tabla que resume la forma recomendada de configurar el padding y el truncamiento. Si utilizas un par de secuencias de entrada en 
-algunos de los siguientes ejemplos, puedes sustituir `truncation=True` por una `STRATEGY` seleccionada en 
+A continuación te mostramos en una tabla que resume la forma recomendada de configurar el padding y el truncamiento. Si utilizas un par de secuencias de entrada en
+algunos de los siguientes ejemplos, puedes sustituir `truncation=True` por una `STRATEGY` seleccionada en
 `['only_first', 'only_second', 'longest_first']`, es decir, `truncation='only_second'` o `truncation= 'longest_first'` para controlar cómo se truncan ambas secuencias del par como se ha detallado anteriormente.
 
 | Truncation                           | Padding                           | Instrucciones                                                                               |

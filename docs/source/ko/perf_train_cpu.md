@@ -60,7 +60,7 @@ Trainer에서 IPEX의 자동 혼합 정밀도를 활성화하려면 사용자는
 --doc_stride 128 \
 --output_dir /tmp/debug_squad/ \
 <b>--use_ipex \</b>
-<b>--bf16 --no_cuda</b></pre> 
+<b>--bf16 --no_cuda</b></pre>
 
 ### 실습 예시 [[practice-example]]
 

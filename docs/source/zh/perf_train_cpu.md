@@ -67,7 +67,7 @@ pip install intel_extension_for_pytorch==<version_name> -f https://developer.int
 --output_dir /tmp/debug_squad/ \
 <b>--use_ipex</b> \
 <b>--bf16</b> \
-<b>--use_cpu</b></pre> 
+<b>--use_cpu</b></pre>
 
 如果您想在脚本中启用 `use_ipex` 和 `bf16`，请像下面这样将这些参数添加到 `TrainingArguments` 中：
 ```diff

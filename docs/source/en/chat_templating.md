@@ -109,7 +109,7 @@ How many helicopters can a human eat in one sitting?</s>
 Pass the tokenized chat to [`~GenerationMixin.generate`] to generate a response.
 
 ```py
-outputs = model.generate(tokenized_chat, max_new_tokens=128) 
+outputs = model.generate(tokenized_chat, max_new_tokens=128)
 print(tokenizer.decode(outputs[0]))
 ```
 

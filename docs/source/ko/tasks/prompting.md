@@ -35,7 +35,7 @@ Falcon, LLaMA 등의 대규모 언어 모델은 사전 훈련된 트랜스포머
 <Tip>
 
 프롬프트 엔지니어링은 대규모 언어 모델 출력 최적화 과정의 일부일 뿐입니다. 또 다른 중요한 구성 요소는 최적의 텍스트 생성 전략을 선택하는 것입니다. 학습 가능한 매개변수를 수정하지 않고도 대규모 언어 모델이 텍스트를 생성하리 때 각각의 후속 토큰을 선택하는 방식을 사용자가 직접 정의할 수 있습니다. 텍스트 생성 매개변수를 조정함으로써 생성된 텍스트의 반복을 줄이고 더 일관되고 사람이 말하는 것 같은 텍스트를 만들 수 있습니다. 텍스트 생성 전략과 매개변수는 이 가이드의 범위를 벗어나지만, 다음 가이드에서 이러한 주제에 대해 자세히 알아볼 수 있습니다:
- 
+
 * [대규모 언어 모델을 이용한 생성](../llm_tutorial)
 * [텍스트 생성 전략](../generation_strategies)
 
@@ -45,7 +45,7 @@ Falcon, LLaMA 등의 대규모 언어 모델은 사전 훈련된 트랜스포머
 
 ### 모델의 유형 [[types-of-models]]
 
-현대의 대부분의 대규모 언어 모델은 디코더만을 이용한 트랜스포머입니다. 예를 들어 [LLaMA](../model_doc/llama), 
+현대의 대부분의 대규모 언어 모델은 디코더만을 이용한 트랜스포머입니다. 예를 들어 [LLaMA](../model_doc/llama),
 [Llama2](../model_doc/llama2), [Falcon](../model_doc/falcon), [GPT2](../model_doc/gpt2) 등이 있습니다.
 
 디코더 전용 모델로 추론을 실행하려면 `text-generation` 파이프라인을 사용하세요:
@@ -67,7 +67,7 @@ Falcon, LLaMA 등의 대규모 언어 모델은 사전 훈련된 트랜스포머
 
 🤗 Hub에서 최근 사용 가능한 대부분의 대규모 언어 모델 체크포인트는 기본 버전과 지시(또는 채팅) 두 가지 버전이 제공됩니다. 예를 들어, [`tiiuae/falcon-7b`](https://huggingface.co/tiiuae/falcon-7b)와 [`tiiuae/falcon-7b-instruct`](https://huggingface.co/tiiuae/falcon-7b-instruct)가 있습니다.
 
-기본 모델은 초기 프롬프트가 주어졌을 때 텍스트를 완성하는 데 탁월하지만, 지시를 따라야 하거나 대화형 사용이 필요한 자연어 처리작업에는 이상적이지 않습니다. 이때 지시(채팅) 버전이 필요합니다. 이러한 체크포인트는 사전 훈련된 기본 버전을 지시사항과 대화 데이터로 추가 미세 조정한 결과입니다. 이 추가적인 미세 조정으로 인해 많은 자연어 처리 작업에 더 적합한 선택이 됩니다.  
+기본 모델은 초기 프롬프트가 주어졌을 때 텍스트를 완성하는 데 탁월하지만, 지시를 따라야 하거나 대화형 사용이 필요한 자연어 처리작업에는 이상적이지 않습니다. 이때 지시(채팅) 버전이 필요합니다. 이러한 체크포인트는 사전 훈련된 기본 버전을 지시사항과 대화 데이터로 추가 미세 조정한 결과입니다. 이 추가적인 미세 조정으로 인해 많은 자연어 처리 작업에 더 적합한 선택이 됩니다.
 
 [`tiiuae/falcon-7b-instruct`](https://huggingface.co/tiiuae/falcon-7b-instruct)를 사용하여 일반적인 자연어 처리 작업을 해결하는 데 사용할 수 있는 몇 가지 간단한 프롬프트를 살펴보겠습니다.
 
@@ -112,7 +112,7 @@ Falcon 모델은 bfloat16 데이터 타입을 사용하여 훈련되었으므로
 
 ```python
 >>> torch.manual_seed(0)
->>> prompt = """Classify the text into neutral, negative or positive. 
+>>> prompt = """Classify the text into neutral, negative or positive.
 ... Text: This movie is definitely one of my favorite movies of its kind. The interaction between respectable and morally strong characters is an ode to chivalry and the honor code amongst thieves and policemen.
 ... Sentiment:
 ... """
@@ -124,7 +124,7 @@ Falcon 모델은 bfloat16 데이터 타입을 사용하여 훈련되었으므로
 
 >>> for seq in sequences:
 ...     print(f"Result: {seq['generated_text']}")
-Result: Classify the text into neutral, negative or positive. 
+Result: Classify the text into neutral, negative or positive.
 Text: This movie is definitely one of my favorite movies of its kind. The interaction between respectable and morally strong characters is an ode to chivalry and the honor code amongst thieves and policemen.
 Sentiment:
 Positive
@@ -151,7 +151,7 @@ Positive
 >>> sequences = pipe(
 ...     prompt,
 ...     max_new_tokens=15,
-...     return_full_text = False,    
+...     return_full_text = False,
 ... )
 
 >>> for seq in sequences:
@@ -255,7 +255,7 @@ Result: Modern tools often used to make gazpacho include
 
 >>> for seq in sequences:
 ...     print(f"Result: {seq['generated_text']}")
-Result: 
+Result:
 There are a total of 5 groups, so there are 5 x 4=20 students in the class.
 ```
 
@@ -275,7 +275,7 @@ There are a total of 5 groups, so there are 5 x 4=20 students in the class.
 
 >>> for seq in sequences:
 ...     print(f"Result: {seq['generated_text']}")
-Result: 
+Result:
 The total number of muffins now is 21
 ```
 
@@ -311,7 +311,7 @@ The total number of muffins now is 21
 >>> torch.manual_seed(0) # doctest: +IGNORE_RESULT
 >>> prompt = """Text: The first human went into space and orbited the Earth on April 12, 1961.
 ... Date: 04/12/1961
-... Text: The first-ever televised presidential debate in the United States took place on September 28, 1960, between presidential candidates John F. Kennedy and Richard Nixon. 
+... Text: The first-ever televised presidential debate in the United States took place on September 28, 1960, between presidential candidates John F. Kennedy and Richard Nixon.
 ... Date:"""
 
 >>> sequences = pipe(
@@ -325,7 +325,7 @@ The total number of muffins now is 21
 ...     print(f"Result: {seq['generated_text']}")
 Result: Text: The first human went into space and orbited the Earth on April 12, 1961.
 Date: 04/12/1961
-Text: The first-ever televised presidential debate in the United States took place on September 28, 1960, between presidential candidates John F. Kennedy and Richard Nixon. 
+Text: The first-ever televised presidential debate in the United States took place on September 28, 1960, between presidential candidates John F. Kennedy and Richard Nixon.
 Date: 09/28/1960
 ```
 
@@ -360,10 +360,10 @@ Date: 09/28/1960
 
 프롬프트를 최적화하여 훌륭한 결과를 얻을 수 있지만, 여전히 모델을 미세 조정하는 것이 더 좋을지 고민할 수 있습니다. 다음은 더 작은 모델을 미세 조정하는 것이 선호되는 시나리오입니다:
 
-- 도메인이 대규모 언어 모델이 사전 훈련된 것과 크게 다르고 광범위한 프롬프트 최적화로도 충분한 결과를 얻지 못한 경우. 
+- 도메인이 대규모 언어 모델이 사전 훈련된 것과 크게 다르고 광범위한 프롬프트 최적화로도 충분한 결과를 얻지 못한 경우.
 - 저자원 언어에서 모델이 잘 작동해야 하는 경우.
 - 엄격한 규제 하에 있는 민감한 데이터로 모델을 훈련해야 하는 경우.
-- 비용, 개인정보 보호, 인프라 또는 기타 제한으로 인해 작은 모델을 사용해야 하는 경우. 
+- 비용, 개인정보 보호, 인프라 또는 기타 제한으로 인해 작은 모델을 사용해야 하는 경우.
 
 위의 모든 예시에서, 모델을 미세 조정하기 위해 충분히 큰 도메인별 데이터셋을 이미 가지고 있거나 합리적인 비용으로 쉽게 얻을 수 있는지 확인해야 합니다. 또한 모델을 미세 조정할 충분한 시간과 자원이 필요합니다.
 

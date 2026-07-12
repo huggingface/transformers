@@ -19,8 +19,8 @@ rendered properly in your Markdown viewer.
 
 [[open-in-colab]]
 
-이미지 캡셔닝(Image captioning)은 주어진 이미지에 대한 캡션을 예측하는 작업입니다. 
-이미지 캡셔닝은 시각 장애인이 다양한 상황을 탐색하는 데 도움을 줄 수 있도록 시각 장애인을 보조하는 등 실생활에서 흔히 활용됩니다. 
+이미지 캡셔닝(Image captioning)은 주어진 이미지에 대한 캡션을 예측하는 작업입니다.
+이미지 캡셔닝은 시각 장애인이 다양한 상황을 탐색하는 데 도움을 줄 수 있도록 시각 장애인을 보조하는 등 실생활에서 흔히 활용됩니다.
 따라서 이미지 캡셔닝은 이미지를 설명함으로써 사람들의 콘텐츠 접근성을 개선하는 데 도움이 됩니다.
 
 이 가이드에서는 소개할 내용은 아래와 같습니다:
@@ -35,7 +35,7 @@ pip install transformers datasets evaluate -q
 pip install jiwer -q
 ```
 
-Hugging Face 계정에 로그인하면 모델을 업로드하고 커뮤니티에 공유할 수 있습니다. 
+Hugging Face 계정에 로그인하면 모델을 업로드하고 커뮤니티에 공유할 수 있습니다.
 토큰을 입력하여 로그인하세요.
 
 
@@ -47,8 +47,8 @@ notebook_login()
 
 ## 포켓몬 BLIP 캡션 데이터세트 가져오기[[load-the-pokmon-blip-captions-dataset]]
 
-{이미지-캡션} 쌍으로 구성된 데이터세트를 가져오려면 🤗 Dataset 라이브러리를 사용합니다. 
-PyTorch에서 자신만의 이미지 캡션 데이터세트를 만들려면 [이 노트북](https://github.com/NielsRogge/Transformers-Tutorials/blob/master/GIT/Fine_tune_GIT_on_an_image_captioning_dataset.ipynb)을 참조하세요. 
+{이미지-캡션} 쌍으로 구성된 데이터세트를 가져오려면 🤗 Dataset 라이브러리를 사용합니다.
+PyTorch에서 자신만의 이미지 캡션 데이터세트를 만들려면 [이 노트북](https://github.com/NielsRogge/Transformers-Tutorials/blob/master/GIT/Fine_tune_GIT_on_an_image_captioning_dataset.ipynb)을 참조하세요.
 
 
 ```python
@@ -70,8 +70,8 @@ DatasetDict({
 
 <Tip>
 
-많은 이미지 캡션 데이터세트에는 이미지당 여러 개의 캡션이 포함되어 있습니다. 
-이러한 경우, 일반적으로 학습 중에 사용 가능한 캡션 중에서 무작위로 샘플을 추출합니다. 
+많은 이미지 캡션 데이터세트에는 이미지당 여러 개의 캡션이 포함되어 있습니다.
+이러한 경우, 일반적으로 학습 중에 사용 가능한 캡션 중에서 무작위로 샘플을 추출합니다.
 
 </Tip>
 
@@ -85,7 +85,7 @@ test_ds = ds["test"]
 ```
 
 학습 세트의 샘플 몇 개를 시각화해 봅시다.
-Let's visualize a couple of samples from the training set. 
+Let's visualize a couple of samples from the training set.
 
 
 ```python
@@ -109,7 +109,7 @@ sample_images_to_visualize = [np.array(train_ds[i]["image"]) for i in range(5)]
 sample_captions = [train_ds[i]["text"] for i in range(5)]
 plot_images(sample_images_to_visualize, sample_captions)
 ```
-    
+
 <div class="flex justify-center">
     <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/sample_training_images_image_cap.png" alt="Sample training images"/>
 </div>
@@ -118,7 +118,7 @@ plot_images(sample_images_to_visualize, sample_captions)
 
 데이터세트에는 이미지와 텍스트라는 두 가지 양식이 있기 때문에, 전처리 파이프라인에서 이미지와 캡션을 모두 전처리합니다.
 
-전처리 작업을 위해, 파인튜닝하려는 모델에 연결된 프로세서 클래스를 가져옵니다. 
+전처리 작업을 위해, 파인튜닝하려는 모델에 연결된 프로세서 클래스를 가져옵니다.
 
 ```python
 from transformers import AutoProcessor
@@ -127,7 +127,7 @@ checkpoint = "microsoft/git-base"
 processor = AutoProcessor.from_pretrained(checkpoint)
 ```
 
-프로세서는 내부적으로 크기 조정 및 픽셀 크기 조정을 포함한 이미지 전처리를 수행하고 캡션을 토큰화합니다. 
+프로세서는 내부적으로 크기 조정 및 픽셀 크기 조정을 포함한 이미지 전처리를 수행하고 캡션을 토큰화합니다.
 
 ```python
 def transforms(example_batch):
@@ -157,11 +157,11 @@ model = AutoModelForCausalLM.from_pretrained(checkpoint)
 
 ## 평가[[evaluate]]
 
-이미지 캡션 모델은 일반적으로 [Rouge 점수](https://huggingface.co/spaces/evaluate-metric/rouge) 또는 [단어 오류율(Word Error Rate)](https://huggingface.co/spaces/evaluate-metric/wer)로 평가합니다. 
-이 가이드에서는 단어 오류율(WER)을 사용합니다. 
+이미지 캡션 모델은 일반적으로 [Rouge 점수](https://huggingface.co/spaces/evaluate-metric/rouge) 또는 [단어 오류율(Word Error Rate)](https://huggingface.co/spaces/evaluate-metric/wer)로 평가합니다.
+이 가이드에서는 단어 오류율(WER)을 사용합니다.
 
-이를 위해 🤗 Evaluate 라이브러리를 사용합니다. 
-WER의 잠재적 제한 사항 및 기타 문제점은 [이 가이드](https://huggingface.co/spaces/evaluate-metric/wer)를 참조하세요. 
+이를 위해 🤗 Evaluate 라이브러리를 사용합니다.
+WER의 잠재적 제한 사항 및 기타 문제점은 [이 가이드](https://huggingface.co/spaces/evaluate-metric/wer)를 참조하세요.
 
 
 ```python
@@ -182,7 +182,7 @@ def compute_metrics(eval_pred):
 
 ## 학습![[train!]]
 
-이제 모델 파인튜닝을 시작할 준비가 되었습니다. 이를 위해 🤗 [`Trainer`]를 사용합니다. 
+이제 모델 파인튜닝을 시작할 준비가 되었습니다. 이를 위해 🤗 [`Trainer`]를 사용합니다.
 
 먼저, [`TrainingArguments`]를 사용하여 학습 인수를 정의합니다.
 
@@ -213,7 +213,7 @@ training_args = TrainingArguments(
 )
 ```
 
-학습 인수를 데이터세트, 모델과 함께 🤗 Trainer에 전달합니다. 
+학습 인수를 데이터세트, 모델과 함께 🤗 Trainer에 전달합니다.
 
 ```python
 trainer = Trainer(
@@ -227,7 +227,7 @@ trainer = Trainer(
 
 학습을 시작하려면 [`Trainer`] 객체에서 [`~Trainer.train`]을 호출하기만 하면 됩니다.
 
-```python 
+```python
 trainer.train()
 ```
 
@@ -257,7 +257,7 @@ image
 <div class="flex justify-center">
     <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/test_image_image_cap.png" alt="Test image"/>
 </div>
-    
+
 모델에 사용할 이미지를 준비합니다.
 
 ```python

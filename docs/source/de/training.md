@@ -254,7 +254,7 @@ Holen Sie sich mit einem gehosteten Notebook wie [Colaboratory](https://colab.re
 
 </Tip>
 
-Großartig, Sie sind bereit für das Training! 🥳 
+Großartig, Sie sind bereit für das Training! 🥳
 
 ### Trainingsschleife
 

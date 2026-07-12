@@ -22,7 +22,7 @@ rendered properly in your Markdown viewer.
 
 Clasificación de audio - al igual que con texto — asigna una etiqueta de clase como salida desde las entradas de datos. La diferencia única es en vez de entrada de texto, tiene formas de onda de audio. Algunas aplicaciones prácticas de clasificación incluye identificar la intención del hablante, identificación del idioma, y la clasificación de animales por sus sonidos.
 
-En esta guía te mostraremos como: 
+En esta guía te mostraremos como:
 
 1. Hacer fine-tuning al modelo [Wav2Vec2](https://huggingface.co/facebook/wav2vec2-base) en el dataset [MInDS-14](https://huggingface.co/datasets/PolyAI/minds14) para clasificar la intención del hablante.
 2. Usar tu modelo ajustado para tareas de inferencia.

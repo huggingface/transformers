@@ -91,7 +91,7 @@ autoround = AutoRound(
 
 output_dir = "./tmp_autoround"
 # format= 'auto_round'(default), 'auto_gptq', 'auto_awq'
-autoround.quantize_and_save(output_dir, format='auto_round') 
+autoround.quantize_and_save(output_dir, format='auto_round')
 ```
 
 </hfoption>
@@ -122,7 +122,7 @@ autoround = AutoRound(
 )
 
 output_dir = "./tmp_autoround"
-autoround.quantize_and_save(output_dir, format='auto_round') 
+autoround.quantize_and_save(output_dir, format='auto_round')
 ```
 
 </hfoption>
@@ -152,7 +152,7 @@ autoround = AutoRound(
 )
 
 output_dir = "./tmp_autoround"
-autoround.quantize_and_save(output_dir, format='auto_round') 
+autoround.quantize_and_save(output_dir, format='auto_round')
 ```
 
 </hfoption>
@@ -277,7 +277,7 @@ print(tokenizer.decode(model.generate(**inputs, max_new_tokens=50, do_sample=Fal
 ## Issues
 
 If you encounter any issues with the transformers integration, please open an issue on
-the [transformers](https://github.com/huggingface/transformers/issues) repository.  
+the [transformers](https://github.com/huggingface/transformers/issues) repository.
 If you encounter any issues with auto-round, please open an issue on
 the [AutoRound](https://github.com/intel/auto-round/issues) repository.
 

@@ -19,7 +19,7 @@ rendered properly in your Markdown viewer.
 
 <Tip warning={true}>
 
-일부 Pytorch 연산들은 아직 MPS에서 지원되지 않아 오류가 발생할 수 있습니다. 이를 방지하려면 환경 변수 `PYTORCH_ENABLE_MPS_FALLBACK=1` 를 설정하여 CPU 커널을 대신 사용하도록 해야 합니다(이때 `UserWarning`이 여전히 표시될 수 있습니다). 
+일부 Pytorch 연산들은 아직 MPS에서 지원되지 않아 오류가 발생할 수 있습니다. 이를 방지하려면 환경 변수 `PYTORCH_ENABLE_MPS_FALLBACK=1` 를 설정하여 CPU 커널을 대신 사용하도록 해야 합니다(이때 `UserWarning`이 여전히 표시될 수 있습니다).
 
 <br>
 

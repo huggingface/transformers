@@ -128,7 +128,7 @@ Criar um modelo pré-treinado com [`~PreTrainedModel.from_pretrained`]:
 >>> model = DistilBertModel.from_pretrained("distilbert/distilbert-base-uncased")
 ```
 
-Quando você carregar os pesos pré-treinados, a configuração padrão do modelo é automaticamente carregada se o modelo é provido pelo 🤗 Transformers. No entanto, você ainda consegue mudar - alguns ou todos - os atributos padrões de configuração do modelo com os seus próprio atributos, se você preferir: 
+Quando você carregar os pesos pré-treinados, a configuração padrão do modelo é automaticamente carregada se o modelo é provido pelo 🤗 Transformers. No entanto, você ainda consegue mudar - alguns ou todos - os atributos padrões de configuração do modelo com os seus próprio atributos, se você preferir:
 
 ```py
 >>> model = DistilBertModel.from_pretrained("distilbert/distilbert-base-uncased", config=my_config)

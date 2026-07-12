@@ -54,7 +54,7 @@ class SamVisionAttentionSplit(SamVisionAttention, nn.Module):
                 state_dict[key.replace("qkv.", "v.")] = v
                 # وضع علامة على مفتاح qkv القديم للحذف
                 keys_to_delete.append(key)
-        
+
         # حذف مفاتيح qkv القديمة
         for key in keys_to_delete:
             del state_dict[key]

@@ -40,7 +40,7 @@ image_real = Image.open(requests.get(img_urls[0], stream=True).raw).convert("RGB
 image_gen = Image.open(requests.get(img_urls[1], stream=True).raw).convert("RGB")
 ```
 
-파이프라인을 실행해 봅시다. 먼저 파이프라인을 초기화하세요. 모델을 지정하지 않으면, 파이프라인은 자동으로 [google/vit-base-patch16-224](google/vit-base-patch16-224) 모델로 초기화됩니다. 유사도를 계산하려면 `pool`을 True로 설정하세요. 
+파이프라인을 실행해 봅시다. 먼저 파이프라인을 초기화하세요. 모델을 지정하지 않으면, 파이프라인은 자동으로 [google/vit-base-patch16-224](google/vit-base-patch16-224) 모델로 초기화됩니다. 유사도를 계산하려면 `pool`을 True로 설정하세요.
 
 
 ```python

@@ -189,7 +189,7 @@ print(answer)
     sequence = sequence.replace(processor.tokenizer.eos_token, "").replace(processor.tokenizer.pad_token, "")
     sequence = re.sub(r"<.*?>", "", sequence, count=1).strip()  # remove first task start token
     print(processor.token2json(sequence))
-    {'menu': {'nm': 'CINNAMON SUGAR', 'unitprice': '17,000', 'cnt': '1 x', 'price': '17,000'}, 'sub_total': {'subtotal_price': '17,000'}, 'total': 
+    {'menu': {'nm': 'CINNAMON SUGAR', 'unitprice': '17,000', 'cnt': '1 x', 'price': '17,000'}, 'sub_total': {'subtotal_price': '17,000'}, 'total':
     {'total_price': '17,000', 'cashprice': '20,000', 'changeprice': '3,000'}}
     ```
 

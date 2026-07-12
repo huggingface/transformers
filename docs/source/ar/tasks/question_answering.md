@@ -167,7 +167,7 @@ pip install transformers datasets evaluate
 
 الآن قم بإنشاء دفعة من الأمثلة باستخدام [`DefaultDataCollator`]. بخلاف مجمّعات البيانات الأخرى في 🤗 Transformers، لا يطبق [`DefaultDataCollator`] أي معالجة مسبقة إضافية مثل الحشو.
 
- 
+
 ```py
 >>> from transformers import DefaultDataCollator
 

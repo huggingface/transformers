@@ -100,7 +100,7 @@ output_ids = model.generate(**inputs, max_new_tokens=256)
 generated_ids = output_ids[:, inputs["input_ids"].shape[1]:]
 print(f"Auto-detect: {processor.decode(generated_ids, return_format='transcription_only')[0]}")
 
-# With language hint 
+# With language hint
 inputs = processor.apply_transcription_request(
     audio="https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen3-ASR-Repo/asr_zh.wav",
     language="Chinese",  # or language code "zh"

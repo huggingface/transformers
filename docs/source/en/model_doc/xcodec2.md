@@ -37,11 +37,11 @@ A model checkpoint is available at [HKUSTAudio/xcodec2-hf](https://huggingface.c
 This model was contributed by [Eric Bezzam](https://huggingface.co/bezzam) and [Steven Zheng](https://huggingface.co/Steveeeeeeen).
 The original modeling code can be found [here](https://huggingface.co/HKUSTAudio/xcodec2/blob/main/modeling_xcodec2.py), while their training code is [here](https://github.com/zhenye234/X-Codec-2.0).
 
-## Usage example 
+## Usage example
 
 Here is a quick example of how to encode and decode an audio using this model:
 
-```python 
+```python
 from datasets import Audio, load_dataset
 from transformers import AutoFeatureExtractor, AutoModel
 

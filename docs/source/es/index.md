@@ -41,7 +41,7 @@ La documentación está organizada en cuatro partes:
 - **EMPEZAR** contiene un recorrido rápido e instrucciones de instalación para comenzar a usar 🤗 Transformers.
 - **TUTORIALES** es un excelente lugar para comenzar. Esta sección te ayudará a obtener las habilidades básicas que necesitas para comenzar a usar 🤗 Transformers.
 - **GUÍAS PRÁCTICAS** te mostrará cómo lograr un objetivo específico, cómo hacer fine-tuning a un modelo preentrenado para el modelado de lenguaje o cómo crear un cabezal para un modelo personalizado.
-- **GUÍAS CONCEPTUALES** proporciona más discusión y explicación de los conceptos e ideas subyacentes detrás de los modelos, las tareas y la filosofía de diseño de 🤗 Transformers. 
+- **GUÍAS CONCEPTUALES** proporciona más discusión y explicación de los conceptos e ideas subyacentes detrás de los modelos, las tareas y la filosofía de diseño de 🤗 Transformers.
 
 La biblioteca actualmente contiene implementaciones de JAX, PyTorch y TensorFlow, pesos de modelos preentrenados, scripts de uso y utilidades de conversión para los siguientes modelos.
 

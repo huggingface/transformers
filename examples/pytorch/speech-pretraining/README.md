@@ -41,8 +41,8 @@ A good metric to observe during training is the gradient norm which should ideal
 ---
 **NOTE 2**
 
-When training a model on large datasets it is recommended to run the data preprocessing 
-in a first run in a **non-distributed** mode via `--preprocessing_only` so that 
+When training a model on large datasets it is recommended to run the data preprocessing
+in a first run in a **non-distributed** mode via `--preprocessing_only` so that
 when running the model in **distributed** mode in a second step the preprocessed data
 can easily be loaded on each distributed device.
 
@@ -53,7 +53,7 @@ can easily be loaded on each distributed device.
 In this demo run we pre-train a `"base-sized"` Wav2Vec2 model simply only on the validation
 and test data of [librispeech_asr](https://huggingface.co/datasets/librispeech_asr).
 
-The demo is run on two Titan RTX (24 GB RAM each). In case you have less RAM available 
+The demo is run on two Titan RTX (24 GB RAM each). In case you have less RAM available
 per device, consider reducing `--batch_size` and/or the `--max_duration_in_seconds`.
 
 
@@ -87,7 +87,7 @@ The results of this run can be seen [here](https://wandb.ai/patrickvonplaten/wav
 
 ### Base
 
-To pre-train `"base-sized"` Wav2Vec2 model, *e.g.* [facebook/wav2vec2-base](https://huggingface.co/facebook/wav2vec2-base) 
+To pre-train `"base-sized"` Wav2Vec2 model, *e.g.* [facebook/wav2vec2-base](https://huggingface.co/facebook/wav2vec2-base)
 on [librispeech_asr](https://huggingface.co/datasets/librispeech_asr), the following command can be run:
 
 ```bash
@@ -116,7 +116,7 @@ accelerate launch run_wav2vec2_pretraining_no_trainer.py \
 	--mask_time_length="10"
 ```
 
-The experiment was run on 8 GPU V100 (16 GB RAM each) for 4 days. 
+The experiment was run on 8 GPU V100 (16 GB RAM each) for 4 days.
 In case you have more than 8 GPUs available for a higher effective `batch_size`,
 it is recommended to increase the `learning_rate` to `0.005` for faster convergence.
 
@@ -125,7 +125,7 @@ The results of this run can be seen [here](https://wandb.ai/patrickvonplaten/tes
 
 ### Large
 
-To pre-train `"large-sized"` Wav2Vec2 model, *e.g.* [facebook/wav2vec2-large-lv60](https://huggingface.co/facebook/wav2vec2-large-lv60), 
+To pre-train `"large-sized"` Wav2Vec2 model, *e.g.* [facebook/wav2vec2-large-lv60](https://huggingface.co/facebook/wav2vec2-large-lv60),
 on [librispeech_asr](https://huggingface.co/datasets/librispeech_asr), the following command can be run:
 
 ```bash
@@ -154,7 +154,7 @@ accelerate launch run_wav2vec2_pretraining_no_trainer.py \
 	--mask_time_length=10
 ```
 
-The experiment was run on 8 GPU V100 (16 GB RAM each) for 7 days. 
+The experiment was run on 8 GPU V100 (16 GB RAM each) for 7 days.
 In case you have more than 8 GPUs available for a higher effective `batch_size`,
 it is recommended to increase the `learning_rate` to `0.005` for faster convergence.
 

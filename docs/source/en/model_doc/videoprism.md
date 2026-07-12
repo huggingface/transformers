@@ -55,7 +55,7 @@ model = AutoModel.from_pretrained(
     revision="refs/pr/4",
     device_map="auto",
     # use "flash_attention_2" for faster inference on supported hardware
-    # attn_implementation="flash_attention_2" 
+    # attn_implementation="flash_attention_2"
 )
 
 video_url = "https://huggingface.co/datasets/nateraw/kinetics-mini/resolve/main/val/archery/-Qz25rXdMjE_000014_000024.mp4"

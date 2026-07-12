@@ -85,7 +85,7 @@ The `masks` looks like the following:
           [False, False, False,  ...,  True,  True,  True],
           [False, False, False,  ...,  True,  True,  True],
           ...,
-          [False, False, False,  ..., False, False, False], .. 
+          [False, False, False,  ..., False, False, False], ..
  'scores': tensor([0.9874, 0.9793, 0.9780, 0.9776, ... 0.9016])}
 ```
 
@@ -157,7 +157,7 @@ for i, mask in enumerate(mask_list, start=1):
     overlayed_image[:,:,0] = np.where(mask == 1, 255, overlayed_image[:,:,0])
     overlayed_image[:,:,1] = np.where(mask == 1, 0, overlayed_image[:,:,1])
     overlayed_image[:,:,2] = np.where(mask == 1, 0, overlayed_image[:,:,2])
-    
+
     axes[i].imshow(overlayed_image)
     axes[i].set_title(f'Mask {i}')
 for ax in axes:
@@ -243,7 +243,7 @@ from datasets import load_dataset
 dataset = load_dataset("merve/MicroMat-mini", split="train")
 dataset
 # Dataset({
-#    features: ['image', 'mask', 'prompt', 'image_id', 'object_id', 'sample_idx', 'granularity', 
+#    features: ['image', 'mask', 'prompt', 'image_id', 'object_id', 'sample_idx', 'granularity',
 # 'image_path', 'mask_path', 'prompt_path'],  num_rows: 94
 #})
 ```
@@ -311,7 +311,7 @@ show_mask(ground_truth_mask, ax)
 ax.set_title("Ground truth mask")
 ax.set_axis_off()
 
-plt.show() 
+plt.show()
 ```
 
 Now we can define our dataset for loading the data. SAMDataset wraps our dataset and formats each sample the way the SAM processor expects. So instead of raw images and masks, you get processed images, bounding boxes, and ground-truth masks ready for training.
@@ -414,7 +414,7 @@ for name, param in model.named_parameters():
 ``` 
 
 We can now define the optimizer and the loss function.
-```python 
+```python
 from torch.optim import Adam
 import monai
 
@@ -471,17 +471,17 @@ def predict_fn(img, bbox):
 def log_eval_masks_trackio(dataset, indices, step, predict_fn,  project=None, sample_cap=8):
     logs = {"eval/step": int(step)}
     for idx in indices[:sample_cap]:
-        item = dataset[idx] 
+        item = dataset[idx]
         img = item["image"]
         bbox = json.loads(item["prompt"])["bbox"]
         preds = predict_fn(img, bbox)
         preds = preds.squeeze(0)
-        mask = (preds[0] > 0).cpu().numpy()  
+        mask = (preds[0] > 0).cpu().numpy()
 
         overlay = np.asarray(img, dtype=np.uint8).copy()
         overlay[mask] = 0.55 * overlay[mask] + 0.45 * np.array([0, 255, 0], dtype=np.float32)
         logs[f"{idx}/overlay"] = trackio.Image(overlay, caption="overlay")
-        
+
     trackio.log(logs)
 ```
 
@@ -518,7 +518,7 @@ for epoch in range(num_epochs):
 
       optimizer.step()
       epoch_losses.append(loss.item())
-      
+
     log_eval_masks_trackio(dataset=val_ds, indices=[0, 3, 6, 9], step=epoch, predict_fn=predict_fn, project="mask-eval")
     print(f'Epoch: {epoch}')
     print(f'Mean loss: {mean(epoch_losses)}')

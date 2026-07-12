@@ -127,7 +127,7 @@ nearly 800 thousand customers were affected by the shutoffs. the aim is to reduc
 >>> # forward 함수가 자동으로 적합한 decoder_input_ids를 생성합니다.
 >>> loss = model(input_ids=input_ids, labels=labels).loss
 ```
-훈련에 대한 자세한 내용은 [colab](https://colab.research.google.com/drive/1WIk2bxglElfZewOHboPFNj8H44_VAyKE?usp=sharing#scrollTo=ZwQIEhKOrJpl) 노트북을 참조하세요. 
+훈련에 대한 자세한 내용은 [colab](https://colab.research.google.com/drive/1WIk2bxglElfZewOHboPFNj8H44_VAyKE?usp=sharing#scrollTo=ZwQIEhKOrJpl) 노트북을 참조하세요.
 
 이 모델은 [thomwolf](https://github.com/thomwolf)가 기여했으며, 이 모델에 대한 TensorFlow 및 Flax 버전은 [ydshieh](https://github.com/ydshieh)가 기여했습니다.
 

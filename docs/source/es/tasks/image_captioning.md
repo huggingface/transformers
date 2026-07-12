@@ -214,7 +214,7 @@ trainer = Trainer(
 
 Para comenzar el entrenamiento, simplemente llama a [`~Trainer.train`] en el objeto [`Trainer`].
 
-```python 
+```python
 trainer.train()
 ```
 

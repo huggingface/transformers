@@ -193,7 +193,7 @@ Then, let's see, if we can get the same response format for an image of the Stat
 </div>
 
 Photo by [Juan Mayobre](https://unsplash.com/@jmayobres).
-  
+
 ```py
 >>> prompt = ["User:",
 ...            "https://images.unsplash.com/photo-1543349689-9a4d426bee8e?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=3501&q=80",
@@ -210,7 +210,7 @@ Photo by [Juan Mayobre](https://unsplash.com/@jmayobres).
 >>> generated_text = processor.batch_decode(generated_ids, skip_special_tokens=True)
 >>> print(generated_text[0])
 User: Describe this image.
-Assistant: An image of the Eiffel Tower at night. Fun fact: the Eiffel Tower is the same height as an 81-storey building. 
+Assistant: An image of the Eiffel Tower at night. Fun fact: the Eiffel Tower is the same height as an 81-storey building.
 User: Describe this image.
 Assistant: An image of the Statue of Liberty. Fun fact: the Statue of Liberty is 151 feet tall.
 ```
@@ -270,7 +270,7 @@ We can instruct the model to classify the image into one of the categories that 
 ```py
 >>> categories = ['animals','vegetables', 'city landscape', 'cars', 'office']
 >>> prompt = [f"Instruction: Classify the following image into a single category from the following list: {categories}.\n",
-...     "https://images.unsplash.com/photo-1471193945509-9ad0617afabf?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=3540&q=80",    
+...     "https://images.unsplash.com/photo-1471193945509-9ad0617afabf?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=3540&q=80",
 ...     "Category: "
 ... ]
 
@@ -282,7 +282,7 @@ We can instruct the model to classify the image into one of the categories that 
 >>> print(generated_text[0])
 Instruction: Classify the following image into a single category from the following list: ['animals', 'vegetables', 'city landscape', 'cars', 'office'].
 Category: Vegetables
-```  
+```
 
 In the example above we instruct the model to classify the image into a single category, however, you can also prompt the model to do rank classification.
 
@@ -298,7 +298,7 @@ Let's prompt IDEFICS to write a story based on a simple image of a red door:
 </div>
 
 Photo by [Craig Tidball](https://unsplash.com/@devonshiremedia).
-  
+
 ```py
 >>> prompt = ["Instruction: Use the image to write a story. \n",
 ...     "https://images.unsplash.com/photo-1517086822157-2b0358e7684a?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=2203&q=80",
@@ -309,9 +309,9 @@ Photo by [Craig Tidball](https://unsplash.com/@devonshiremedia).
 
 >>> generated_ids = model.generate(**inputs, num_beams=2, max_new_tokens=200, bad_words_ids=bad_words_ids)
 >>> generated_text = processor.batch_decode(generated_ids, skip_special_tokens=True)
->>> print(generated_text[0]) 
-Instruction: Use the image to write a story. 
- Story: 
+>>> print(generated_text[0])
+Instruction: Use the image to write a story.
+ Story:
 Once upon a time, there was a little girl who lived in a house with a red door.  She loved her red door.  It was the prettiest door in the whole world.
 
 One day, the little girl was playing in her yard when she noticed a man standing on her doorstep.  He was wearing a long black coat and a top hat.
@@ -364,7 +364,7 @@ for a batch of examples by passing a list of prompts:
 >>> generated_ids = model.generate(**inputs, max_new_tokens=10, bad_words_ids=bad_words_ids)
 >>> generated_text = processor.batch_decode(generated_ids, skip_special_tokens=True)
 >>> for i,t in enumerate(generated_text):
-...     print(f"{i}:\n{t}\n") 
+...     print(f"{i}:\n{t}\n")
 0:
 This is an image of the Eiffel Tower in Paris, France.
 

@@ -454,7 +454,7 @@ Contribuțiile asistate de AI sunt binevenite, dar trebuie să fie coordonate, d
 - Evită PR-urile punctuale de "busywork" (un singur typo, curățare izolată de stil, o singură corecție de default mutabil, etc.). Grupează curățăturile mecanice într-un scop clar și sistematic.
 - Coordonează pe issues înainte de a deschide PR-uri, revizuiește PR-uri similare și așteaptă aprobarea.
 
-> [!WARNING] 
+> [!WARNING]
 > Aceste subiecte sunt prezentate pentru agenți în `AGENTS.MD` cu instrucțiuni despre cum să le implementeze autonom.
 
 ### Lista de verificare pentru pull request

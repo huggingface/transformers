@@ -83,16 +83,16 @@ print(tokenizer.decode(tokenized_chat[0]))
 이렇게 하면 Zephyr가 기대하는 입력 형식의 문자열이 생성됩니다.
 ```text
 <|system|>
-You are a friendly chatbot who always responds in the style of a pirate</s> 
+You are a friendly chatbot who always responds in the style of a pirate</s>
 <|user|>
-How many helicopters can a human eat in one sitting?</s> 
+How many helicopters can a human eat in one sitting?</s>
 <|assistant|>
 ```
 
 이제 입력이 Zephyr에 맞게 형식이 지정되었으므로 모델을 사용하여 사용자의 질문에 대한 응답을 생성할 수 있습니다:
 
 ```python
-outputs = model.generate(tokenized_chat, max_new_tokens=128) 
+outputs = model.generate(tokenized_chat, max_new_tokens=128)
 print(tokenizer.decode(outputs[0]))
 ```
 
@@ -100,9 +100,9 @@ print(tokenizer.decode(outputs[0]))
 
 ```text
 <|system|>
-You are a friendly chatbot who always responds in the style of a pirate</s> 
+You are a friendly chatbot who always responds in the style of a pirate</s>
 <|user|>
-How many helicopters can a human eat in one sitting?</s> 
+How many helicopters can a human eat in one sitting?</s>
 <|assistant|>
 Matey, I'm afraid I must inform ye that humans cannot eat helicopters. Helicopters are not food, they are flying machines. Food is meant to be eaten, like a hearty plate o' grog, a savory bowl o' stew, or a delicious loaf o' bread. But helicopters, they be for transportin' and movin' around, not for eatin'. So, I'd say none, me hearties. None at all.
 ```
@@ -237,7 +237,7 @@ def current_time():
 def multiply(a: float, b: float):
     """
     두 숫자를 곱하는 함수
-    
+
     인수:
         a: 곱할 첫 번째 숫자
         b: 곱할 두 번째 숫자
@@ -256,7 +256,7 @@ model_input = tokenizer.apply_chat_template(
 
 - 함수는 설명적인 이름을 가져야 합니다.
 - 모든 인수에는 타입 힌트가 있어야 합니다.
-- 함수에는 표준 Google 스타일의 도크스트링이 있어야 합니다(즉, 초기 함수 설명 다음에 인수를 설명하는 `Args:` 블록이 있어야 합니다). 
+- 함수에는 표준 Google 스타일의 도크스트링이 있어야 합니다(즉, 초기 함수 설명 다음에 인수를 설명하는 `Args:` 블록이 있어야 합니다).
 - `Args:` 블록에는 타입을 포함하지 마세요. 즉, `a (int): The first number to multiply` 대신 `a: The first number to multiply`라고 작성해야 합니다. 타입 힌트는 함수 헤더에 있어야 합니다.
 - 함수에는 반환 타입과 도크스트링에 `Returns:` 블록이 있을 수 있습니다. 그러나 대부분의 도구 사용 모델은 이를 무시하므로 이는 선택 사항입니다.
 
@@ -292,7 +292,7 @@ model = AutoModelForCausalLM.from_pretrained(checkpoint, dtype=torch.bfloat16, d
 def get_current_temperature(location: str, unit: str) -> float:
     """
     특정 위치의 현재 온도를 가져옵니다.
-    
+
     인수:
         위치: 온도를 가져올 위치, "도시, 국가" 형식
         단위: 온도 단위 (선택지: ["celsius", "fahrenheit"])
@@ -304,7 +304,7 @@ def get_current_temperature(location: str, unit: str) -> float:
 def get_current_wind_speed(location: str) -> float:
     """
     주어진 위치의 현재 풍속을 km/h 단위로 가져옵니다.
-    
+
     인수:
         위치(location): 풍속을 가져올 위치, "도시, 국가" 형식
     반환값:
@@ -391,7 +391,7 @@ from transformers.utils import get_json_schema
 def multiply(a: float, b: float):
     """
     두 숫자를 곱하는 함수
-    
+
     인수:
         a: 곱할 첫 번째 숫자
         b: 곱할 두 번째 숫자
@@ -406,22 +406,22 @@ print(schema)
 
 ```json
 {
-  "type": "function", 
+  "type": "function",
   "function": {
-    "name": "multiply", 
-    "description": "A function that multiplies two numbers", 
+    "name": "multiply",
+    "description": "A function that multiplies two numbers",
     "parameters": {
-      "type": "object", 
+      "type": "object",
       "properties": {
         "a": {
-          "type": "number", 
+          "type": "number",
           "description": "The first number to multiply"
-        }, 
+        },
         "b": {
           "type": "number",
           "description": "The second number to multiply"
         }
-      }, 
+      },
       "required": ["a", "b"]
     }
   }
@@ -435,7 +435,7 @@ print(schema)
 ```python
 # 인수를 받지 않는 간단한 함수
 current_time = {
-  "type": "function", 
+  "type": "function",
   "function": {
     "name": "current_time",
     "description": "Get the current local time as a string.",
@@ -451,18 +451,18 @@ multiply = {
   'type': 'function',
   'function': {
     'name': 'multiply',
-    'description': 'A function that multiplies two numbers', 
+    'description': 'A function that multiplies two numbers',
     'parameters': {
-      'type': 'object', 
+      'type': 'object',
       'properties': {
         'a': {
           'type': 'number',
           'description': 'The first number to multiply'
-        }, 
+        },
         'b': {
           'type': 'number', 'description': 'The second number to multiply'
         }
-      }, 
+      },
       'required': ['a', 'b']
     }
   }

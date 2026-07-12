@@ -20,7 +20,7 @@ This page explains how the Rotary Embedding is computed and applied in Transform
 
 ## Overview
 
-Rotary Position Embeddings are a technique used to inject positional information into attention mechanisms without relying on explicit position encodings.  
+Rotary Position Embeddings are a technique used to inject positional information into attention mechanisms without relying on explicit position encodings.
 Instead of adding position vectors to token embeddings, RoPE rotates query and key vectors in the complex plane according to their positions enabling relative positional awareness and better extrapolation to unseen sequence lengths.
 
 The Transformers library provides a flexible and extensible implementation of various RoPE types defined in `[`~modeling_rope_utils.ROPE_VALIDATION_FUNCTIONS`]`, including both the default and scaled variants:

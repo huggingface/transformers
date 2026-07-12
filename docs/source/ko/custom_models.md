@@ -16,11 +16,11 @@ rendered properly in your Markdown viewer.
 
 # 사용자 정의 모델 공유하기[[sharing-custom-models]]
 
-🤗 Transformers 라이브러리는 쉽게 확장할 수 있도록 설계되었습니다. 
+🤗 Transformers 라이브러리는 쉽게 확장할 수 있도록 설계되었습니다.
 모든 모델은 추상화 없이 저장소의 지정된 하위 폴더에 완전히 코딩되어 있으므로, 손쉽게 모델링 파일을 복사하고 필요에 따라 조정할 수 있습니다.
 
 완전히 새로운 모델을 만드는 경우에는 처음부터 시작하는 것이 더 쉬울 수 있습니다.
-이 튜토리얼에서는 Transformers 내에서 사용할 수 있도록 사용자 정의 모델과 구성을 작성하는 방법과 
+이 튜토리얼에서는 Transformers 내에서 사용할 수 있도록 사용자 정의 모델과 구성을 작성하는 방법과
 🤗 Transformers 라이브러리에 없는 경우에도 누구나 사용할 수 있도록 (의존성과 함께) 커뮤니티에 공유하는 방법을 배울 수 있습니다.
 
 [timm 라이브러리](https://github.com/rwightman/pytorch-image-models)의 ResNet 클래스를 [`PreTrainedModel`]로 래핑한 ResNet 모델을 예로 모든 것을 설명합니다.
@@ -251,7 +251,7 @@ from resnet_model.configuration_resnet import ResnetConfig
 from resnet_model.modeling_resnet import ResnetModel, ResnetModelForImageClassification
 ```
 
-다음으로 `save_pretrained` 메소드를 사용해 해당 객체의 코드 파일을 복사하고, 
+다음으로 `save_pretrained` 메소드를 사용해 해당 객체의 코드 파일을 복사하고,
 복사한 파일을 Auto 클래스로 등록하고(모델인 경우) 실행합니다:
 
 ```py
@@ -273,7 +273,7 @@ pretrained_model = timm.create_model("resnet50d", pretrained=True)
 resnet50d.model.load_state_dict(pretrained_model.state_dict())
 ```
 
-이제 모델을 Hub로 업로드하기 위해 로그인 상태인지 확인하세요. 
+이제 모델을 Hub로 업로드하기 위해 로그인 상태인지 확인하세요.
 터미널에서 다음 코드를 실행해 확인할 수 있습니다:
 
 ```bash

@@ -72,7 +72,7 @@ class SamVisionAttentionSplit(SamVisionAttention, nn.Module):
                 state_dict[key.replace("qkv.", "v.")] = v
                 # marchează vechea cheie qkv pentru ștergere
                 keys_to_delete.append(key)
-        
+
         # elimină cheile qkv vechi
         for key in keys_to_delete:
             del state_dict[key]

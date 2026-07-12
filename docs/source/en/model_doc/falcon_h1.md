@@ -36,7 +36,7 @@ The original code can be found [here](https://github.com/tiiuae/Falcon-H1).
 
 <!---
 ## Usage Tips
-Tips: 
+Tips:
 - The architecture is based on Mamba-2 models.
 ## FalconH1Model
 [[autodoc]] FalconH1Model

@@ -28,7 +28,7 @@ NOTE: If you encounter problems/have suggestions for improvement, open an issue 
 The `run_mim.py` script can be used to pre-train any Transformer-based vision model in the library (concretely, any model supported by the `AutoModelForMaskedImageModeling` API) for masked image modeling as proposed in [SimMIM: A Simple Framework for Masked Image Modeling](https://huggingface.co/papers/2111.09886) using PyTorch.
 
 <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/simmim_architecture.jpg"
-alt="drawing" width="300"/> 
+alt="drawing" width="300"/>
 
 <small> SimMIM framework. Taken from the <a href="https://huggingface.co/papers/2111.09886">original paper</a>. </small>
 
@@ -179,13 +179,13 @@ python run_mae.py \
 
 Here we set:
 - `mask_ratio` to 0.75 (to mask 75% of the patches for each image)
-- `norm_pix_loss` to use normalized pixel values as target (the authors reported better representations with this enabled) 
+- `norm_pix_loss` to use normalized pixel values as target (the authors reported better representations with this enabled)
 - `base_learning_rate` to 1.5e-4. Note that the effective learning rate is computed by the [linear schedule](https://huggingface.co/papers/1706.02677): `lr` = `blr` * total training batch size / 256. The total training batch size is computed as `training_args.train_batch_size` * `training_args.gradient_accumulation_steps` * `training_args.world_size`.
 
 This replicates the same hyperparameters as used in the original implementation, as shown in the table below.
 
 <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/mae_pretraining_setting.png"
-alt="drawing" width="300"/> 
+alt="drawing" width="300"/>
 
 <small> Original hyperparameters. Taken from the <a href="https://huggingface.co/papers/2111.06377">original paper</a>. </small>
 

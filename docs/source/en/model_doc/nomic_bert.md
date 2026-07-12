@@ -23,9 +23,9 @@ limitations under the License.
 
 ## Overview
 
-NomicBERT was proposed in [Nomic Embed: Training a Reproducible Long Context Text Embedder](https://huggingface.co/papers/2402.01613) by 
-Zach Nussbaum, John X. Morris, Brandon Duderstadt, and Andriy Mulyar. It is BERT-inspired with the most notable extension applying 
-[Rotary Position Embeddings](https://huggingface.co/papers/2104.09864.pdf) to an encoder model. 
+NomicBERT was proposed in [Nomic Embed: Training a Reproducible Long Context Text Embedder](https://huggingface.co/papers/2402.01613) by
+Zach Nussbaum, John X. Morris, Brandon Duderstadt, and Andriy Mulyar. It is BERT-inspired with the most notable extension applying
+[Rotary Position Embeddings](https://huggingface.co/papers/2104.09864.pdf) to an encoder model.
 
 The abstract from the paper is the following:
 
@@ -180,12 +180,12 @@ tokenizer = AutoTokenizer.from_pretrained(model_id, revision=revision, model_max
 
 # dynamic RoPE for increased context
 rope_parameters = {"rope_theta": 1000.0, "rope_type": "dynamic", "factor": 2.0}
-model = AutoModel.from_pretrained(model_id, revision=revision, rope_parameters=rope_parameters, device_map="auto") 
+model = AutoModel.from_pretrained(model_id, revision=revision, rope_parameters=rope_parameters, device_map="auto")
 ```
 
 ## Notes
 
-- NomicBERT uses Rotary Positional Embeddings (RoPE). For correct positional encoding either use 
+- NomicBERT uses Rotary Positional Embeddings (RoPE). For correct positional encoding either use
     - right padding (default)
     - left padding and prepare `position_ids` accordingly
 

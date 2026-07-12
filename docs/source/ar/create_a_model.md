@@ -51,7 +51,7 @@ DistilBertConfig {
 DistilBertConfig {
   "activation": "relu",
   "attention_dropout": 0.4,
- 
+
 ```
 
 يمكن تعديل خصائص النموذج المدرب مسبقًا في دالة [`~PreTrainedConfig.from_pretrained`] :
@@ -335,7 +335,7 @@ Wav2Vec2FeatureExtractor {
 ```
 
 <Tip>
-إذا لم تكن بحاجة لأي تخصيص، فاستخدم فقط طريقة `from_pretrained` لتحميل معلمات مستخرج الميزات الافتراضية للنموذج. 
+إذا لم تكن بحاجة لأي تخصيص، فاستخدم فقط طريقة `from_pretrained` لتحميل معلمات مستخرج الميزات الافتراضية للنموذج.
 </Tip>
 
 قم بتعديل أي من معلمات [`Wav2Vec2FeatureExtractor`] لإنشاء مستخرج ميزات مخصص:

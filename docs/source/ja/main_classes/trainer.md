@@ -489,7 +489,7 @@ TPU ユーザーの皆様に朗報です。 PyTorch/XLA は FSDP をサポート
   - サイズベースの自動ラップポリシーの場合は、設定ファイルに`fsdp_min_num_params`を追加してください。
     自動ラッピングのための FSDP のパラメータの最小数を指定します。
 
-### Using Trainer for accelerated PyTorch Training on Mac 
+### Using Trainer for accelerated PyTorch Training on Mac
 
 PyTorch v1.12 リリースにより、開発者と研究者は Apple シリコン GPU を利用してモデル トレーニングを大幅に高速化できます。
 これにより、プロトタイピングや微調整などの機械学習ワークフローを Mac 上でローカルで実行できるようになります。
@@ -559,8 +559,8 @@ MPS バックエンドの使用に関して問題や質問がある場合は、
 2. `accelerate config`を実行し、アンケートに記入します。以下は加速設定の例です。
   ａ． DDP マルチノード マルチ GPU 構成:
     ```yaml
-    compute_environment: LOCAL_MACHINE                                                                                             
-    distributed_type: MULTI_GPU                                                                                                    
+    compute_environment: LOCAL_MACHINE
+    distributed_type: MULTI_GPU
     downcast_bf16: 'no'
     gpu_ids: all
     machine_rank: 0 #change rank as per the node
@@ -623,13 +623,13 @@ MPS バックエンドの使用に関して問題や質問がある場合は、
     tpu_use_cluster: false
     tpu_use_sudo: false
     use_cpu: false
-    ``` 
+    ```
 
   d.加速プラグインを使用した DeepSpeed 構成:
 
     ```yaml
-    compute_environment: LOCAL_MACHINE                                                                                             
-    deepspeed_config:                                                                                                              
+    compute_environment: LOCAL_MACHINE
+    deepspeed_config:
       gradient_accumulation_steps: 1
       gradient_clipping: 0.7
       offload_optimizer_device: cpu
@@ -652,7 +652,7 @@ MPS バックエンドの使用に関して問題や質問がある場合は、
     ```
 
 3. 加速設定またはランチャー引数によって上記で処理された引数以外の引数を使用して、トレーナー スクリプトを実行します。
-以下は、上記の FSDP 構成で`accelerate launcher`を使用して`run_glue.py`を実行する例です。 
+以下は、上記の FSDP 構成で`accelerate launcher`を使用して`run_glue.py`を実行する例です。
 
 ```bash
 cd transformers

@@ -85,10 +85,10 @@ processor = SegformerImageProcessor(do_reduce_labels=True)
 
 ## Resources
 
-- [Original SegFormer code (NVlabs)](https://github.com/NVlabs/SegFormer)  
-- [Fine-tuning blog post](https://huggingface.co/blog/fine-tune-segformer)  
-- [Tutorial notebooks (Niels Rogge)](https://github.com/NielsRogge/Transformers-Tutorials/tree/master/SegFormer)  
-- [Hugging Face demo space](https://huggingface.co/spaces/chansung/segformer-tf-transformers)  
+- [Original SegFormer code (NVlabs)](https://github.com/NVlabs/SegFormer)
+- [Fine-tuning blog post](https://huggingface.co/blog/fine-tune-segformer)
+- [Tutorial notebooks (Niels Rogge)](https://github.com/NielsRogge/Transformers-Tutorials/tree/master/SegFormer)
+- [Hugging Face demo space](https://huggingface.co/spaces/chansung/segformer-tf-transformers)
 
 ## SegformerConfig
 
