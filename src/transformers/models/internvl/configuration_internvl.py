@@ -13,11 +13,63 @@
 # limitations under the License.
 
 
+import copy
+
 from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
 from ...utils import auto_docstring
 from ..auto import CONFIG_MAPPING, AutoConfig
+
+
+# Language backbone architecture -> (native text model_type, InternVL image token id).
+# The original `internvl_chat` checkpoints do not store these natively.
+_INTERNVL_CHAT_LM_MAPPING = {
+    "Qwen2ForCausalLM": ("qwen2", 151667),
+    "InternLM2ForCausalLM": ("llama", 92546),
+}
+
+
+def _convert_internvl_chat_config_dict(config_dict: dict) -> dict:
+    """Normalize an original ``internvl_chat`` config dict into the native layout.
+
+    The ``OpenGVLab/InternVL2-*`` checkpoints ship a bespoke ``internvl_chat``
+    config (``llm_config``/``vision_config`` with ``intern_vit_6b`` fields and a
+    ``select_layer`` index). This maps those onto the fields expected by
+    ``InternVLConfig`` so the checkpoints load with the native implementation
+    instead of remote code. Mirrors the offline conversion in
+    ``convert_internvl_weights_to_hf.py``.
+    """
+    config_dict = copy.deepcopy(config_dict)
+    llm_config = config_dict.get("llm_config") or {}
+    vision_config = config_dict.get("vision_config") or {}
+
+    lm_arch = (llm_config.get("architectures") or ["Qwen2ForCausalLM"])[0]
+    text_model_type, image_token_id = _INTERNVL_CHAT_LM_MAPPING.get(lm_arch, ("qwen2", 151667))
+    llm_config["model_type"] = text_model_type
+    llm_config.setdefault("use_cache", True)
+
+    # InternViT -> InternVLVisionConfig field renames.
+    if "attention_probs_dropout_prob" in vision_config:
+        dropout = vision_config.pop("attention_probs_dropout_prob")
+        vision_config["attention_dropout"] = dropout
+        vision_config["projection_dropout"] = dropout
+    if "qk_normalization" in vision_config:
+        vision_config["use_qk_norm"] = vision_config.pop("qk_normalization")
+    if "qkv_bias" in vision_config:
+        vision_config["attention_bias"] = vision_config.pop("qkv_bias")
+    vision_config["use_absolute_position_embeddings"] = True
+    allowed = set(InternVLVisionConfig.__annotations__)
+    vision_config = {k: v for k, v in vision_config.items() if k in allowed}
+
+    return {
+        "vision_config": vision_config,
+        "text_config": llm_config,
+        "image_token_id": image_token_id,
+        "downsample_ratio": config_dict.get("downsample_ratio", 0.5),
+        "vision_feature_layer": config_dict.get("select_layer", -1),
+        "tie_word_embeddings": llm_config.get("tie_word_embeddings", False),
+    }
 
 
 @auto_docstring(checkpoint="OpenGVLab/InternVL3-1B-hf")
@@ -117,6 +169,14 @@ class InternVLConfig(PreTrainedConfig):
     vision_feature_layer: int | list[int] = -1
     vision_feature_select_strategy: str = "default"
     tie_word_embeddings: bool = True
+
+    @classmethod
+    def from_dict(cls, config_dict, **kwargs):
+        # Original `internvl_chat` checkpoints are remapped onto the native layout
+        # so they can be loaded without remote code.
+        if config_dict.get("model_type") == "internvl_chat" or "llm_config" in config_dict:
+            config_dict = _convert_internvl_chat_config_dict(config_dict)
+        return super().from_dict(config_dict, **kwargs)
 
     def __post_init__(self, **kwargs):
         if isinstance(self.vision_config, dict):
