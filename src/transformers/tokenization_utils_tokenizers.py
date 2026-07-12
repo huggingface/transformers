@@ -71,8 +71,8 @@ def _check_tokenizer_thread_safety():
     borrow check is still in place, so a Python-side lock is required.
     """
     try:
-        from tokenizers import __version__ as _tok_version
         from packaging.version import Version as _Version
+        from tokenizers import __version__ as _tok_version
 
         _tok_ver = _Version(_tok_version)
     except Exception:
@@ -107,6 +107,21 @@ class _NullLock:
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         pass
+
+
+def _make_tokenizer_lock():
+    """
+    Build the per-instance lock guarding the underlying Rust ``tokenizers.Tokenizer``.
+
+    On regular CPython a reentrant ``threading.RLock`` is required to serialize access
+    to the non-thread-safe PyO3 borrow (see issue #47085). On free-threaded Python 3.14t
+    with tokenizers >= 0.23.1 the upstream ``Arc<RwLock<>>`` already provides safety, so a
+    no-op lock is returned instead.
+
+    This helper centralizes the lock-selection decision so that ``__init__`` and
+    ``__setstate__`` reconstruct an identical lock and cannot drift apart.
+    """
+    return threading.RLock() if _TOKENIZER_NEEDS_LOCK else _NullLock()
 
 
 # Fast tokenizers (provided by HuggingFace tokenizer's library) can be saved in a single file
@@ -454,7 +469,8 @@ class TokenizersBackend(PreTrainedTokenizerBase):
         # ``&self`` calls overlap across threads (notably
         # ``set_truncation_and_padding`` + ``encode_batch``).
         # See https://github.com/huggingface/transformers/issues/47085
-        self._lock = threading.RLock() if _TOKENIZER_NEEDS_LOCK else _NullLock()
+        # The lock is excluded from pickling (see __getstate__/__setstate__).
+        self._lock = _make_tokenizer_lock()
 
         _truncation = kwargs.pop("tokenizer_truncation", None) or self._tokenizer.truncation or _json_truncation
         if _truncation is not None:
@@ -552,6 +568,20 @@ class TokenizersBackend(PreTrainedTokenizerBase):
         )
         if self._should_update_post_processor:
             self.update_post_processor()
+
+    def __getstate__(self):
+        # ``threading.RLock`` (and the no-op ``_NullLock``) are not picklable, so
+        # drop the lock from the serialized state. It is rebuilt on unpickle via
+        # ``__setstate__`` using the same decision logic as ``__init__``.
+        state = self.__dict__.copy()
+        state.pop("_lock", None)
+        return state
+
+    def __setstate__(self, state):
+        self.__dict__.update(state)
+        # Reconstruct the per-instance lock with the same selection logic used in
+        # ``__init__`` (free-threaded Python detection vs. regular CPython).
+        self._lock = _make_tokenizer_lock()
 
     @property
     def is_fast(self) -> bool:

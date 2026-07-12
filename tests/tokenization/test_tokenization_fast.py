@@ -13,8 +13,11 @@
 # limitations under the License.
 
 import concurrent.futures
+import copy
 import json
+import multiprocessing
 import os
+import pickle
 import shutil
 import tempfile
 import unittest
@@ -24,6 +27,18 @@ from tokenizers.models import BPE, WordLevel
 
 from transformers import AutoTokenizer, PreTrainedTokenizerFast
 from transformers.testing_utils import require_tokenizers
+
+
+def _multiprocess_encode(tokenizer_bytes, batch):
+    """Worker body for the multiprocessing pickling test.
+
+    The tokenizer is received as already-pickled bytes (exactly how
+    ``datasets.map(num_proc=...)`` / ``DataLoader(num_workers=...)`` ship it to
+    the child process) and must round-trip through ``pickle.loads`` before being
+    used.
+    """
+    tokenizer = pickle.loads(tokenizer_bytes)
+    return tokenizer(batch, padding=True, truncation=True, max_length=8)["input_ids"]
 
 
 @require_tokenizers
@@ -639,6 +654,100 @@ class ReduceMutableBorrowTests(unittest.TestCase):
 
         with concurrent.futures.ThreadPoolExecutor(max_workers=64) as pool:
             futures = [pool.submit(worker) for _ in range(64)]
+            for f in concurrent.futures.as_completed(futures, timeout=120):
+                f.result()
+
+
+@require_tokenizers
+class FastTokenizerPickleTests(unittest.TestCase):
+    """Regression tests for the picklability of ``TokenizersBackend``.
+
+    The per-instance ``threading.RLock`` added for thread-safety (issue #47085)
+    is not picklable, which broke ``pickle.dumps`` / ``copy.deepcopy`` and any
+    multiprocessing usage (``datasets.map(num_proc=...)``,
+    ``DataLoader(num_workers=...)``). ``__getstate__`` / ``__setstate__`` exclude
+    the lock from serialization and rebuild it on unpickle.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        cls.tmpdirname = tempfile.mkdtemp()
+        wl_vocab = {"[UNK]": 0, "[PAD]": 1, "hello": 2, "world": 3, "test": 4, "tokenizer": 5, "thread": 6}
+        wl_dir = os.path.join(cls.tmpdirname, "wordlevel")
+        os.makedirs(wl_dir, exist_ok=True)
+        wl_tokenizer = Tokenizer(WordLevel(wl_vocab, unk_token="[UNK]"))
+        wl_tokenizer.pre_tokenizer = pre_tokenizers.Whitespace()
+        fast_wl = PreTrainedTokenizerFast(
+            tokenizer_object=wl_tokenizer,
+            unk_token="[UNK]",
+            pad_token="[PAD]",
+            cls_token="[CLS]",
+            sep_token="[SEP]",
+            mask_token="[MASK]",
+        )
+        fast_wl.save_pretrained(wl_dir)
+        cls.wordlevel_path = wl_dir
+
+    @classmethod
+    def tearDownClass(cls):
+        shutil.rmtree(cls.tmpdirname, ignore_errors=True)
+
+    def test_pickle_round_trip(self):
+        """pickle.dumps/loads must round-trip and still encode/decode."""
+        tokenizer = PreTrainedTokenizerFast.from_pretrained(self.wordlevel_path)
+        text = "hello world test tokenizer thread safety"
+        expected_ids = tokenizer.encode(text)
+
+        dumped = pickle.dumps(tokenizer)
+        restored = pickle.loads(dumped)
+
+        self.assertEqual(restored.encode(text), expected_ids)
+        self.assertEqual(
+            restored.decode(expected_ids, skip_special_tokens=True),
+            tokenizer.decode(expected_ids, skip_special_tokens=True),
+        )
+
+    def test_deepcopy_round_trip(self):
+        """copy.deepcopy must round-trip and still encode/decode."""
+        tokenizer = PreTrainedTokenizerFast.from_pretrained(self.wordlevel_path)
+        text = "hello world test tokenizer"
+        expected_ids = tokenizer.encode(text)
+
+        copied = copy.deepcopy(tokenizer)
+        self.assertEqual(copied.encode(text), expected_ids)
+        self.assertEqual(
+            copied.decode(expected_ids, skip_special_tokens=True),
+            tokenizer.decode(expected_ids, skip_special_tokens=True),
+        )
+
+    def test_multiprocessing_pool(self):
+        """A pickled tokenizer must work across a process pool (datasets.map)."""
+        tokenizer = PreTrainedTokenizerFast.from_pretrained(self.wordlevel_path)
+        batch = ["hello world", "test tokenizer", "thread safety"]
+        expected = tokenizer(batch, padding=True, truncation=True, max_length=8)["input_ids"]
+        # This is the real failure mode: the tokenizer is serialized and shipped to workers.
+        tokenizer_bytes = pickle.dumps(tokenizer)
+
+        with multiprocessing.Pool(processes=3) as pool:
+            results = pool.starmap(_multiprocess_encode, [(tokenizer_bytes, batch)] * 3)
+
+        for result in results:
+            self.assertEqual(result, expected)
+
+    def test_pickle_does_not_break_thread_safety(self):
+        """After unpickling, concurrent use must still be race-free (0 errors)."""
+        tokenizer = PreTrainedTokenizerFast.from_pretrained(self.wordlevel_path)
+        text = "hello world test tokenizer thread safety concurrent fast tokenization"
+        restored = pickle.loads(pickle.dumps(tokenizer))
+
+        def worker():
+            for i in range(50):
+                trunc = "longest_first" if i % 2 == 0 else "only_first"
+                pad = i % 3 == 0
+                restored.encode(text, truncation=trunc, padding=pad, max_length=8 + (i % 4))
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=8) as pool:
+            futures = [pool.submit(worker) for _ in range(8)]
             for f in concurrent.futures.as_completed(futures, timeout=120):
                 f.result()
 
