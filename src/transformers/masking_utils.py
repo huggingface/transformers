@@ -1524,12 +1524,10 @@ def create_masks_for_generate(
     # If the attribute exists, we need several masks keyed by layer type.
     if hasattr(effective_config, "layer_types"):
         layer_patterns = set(effective_config.layer_types)
-        # Without a registered attention-mask function, defer to the model by returning the raw attention mask
-        if any(layer_type not in LAYER_PATTERN_TO_MASK_FUNCTION_MAPPING for layer_type in layer_patterns):
-            return attention_mask
         causal_masks = {}
         for layer_pattern in layer_patterns:
-            causal_masks[layer_pattern] = LAYER_PATTERN_TO_MASK_FUNCTION_MAPPING[layer_pattern](**mask_kwargs)
+            mask_fn = LAYER_PATTERN_TO_MASK_FUNCTION_MAPPING.get(layer_pattern)
+            causal_masks[layer_pattern] = mask_fn(**mask_kwargs) if mask_fn is not None else attention_mask
         return causal_masks
     # In this case, all layers are sliding
     elif getattr(effective_config, "sliding_window", None) is not None:
