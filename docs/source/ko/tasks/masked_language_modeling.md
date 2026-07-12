@@ -51,7 +51,7 @@ Hugging Face 계정에 로그인하여 모델을 업로드하고 커뮤니티와
 
 ## ELI5 데이터 세트 가져오기[[load-eli5-dataset]]
 
-먼저 🤗 Datasets 라이브러리에서 ELI5 데이터 세트의 r/askscience 중 일부만 가져옵니다. 
+먼저 🤗 Datasets 라이브러리에서 ELI5 데이터 세트의 r/askscience 중 일부만 가져옵니다.
 이렇게 하면 전체 데이터 세트 학습에 더 많은 시간을 할애하기 전에 모든 것이 작동하는지 실험하고 확인할 수 있습니다.
 
 ```py
@@ -99,7 +99,7 @@ Hugging Face 계정에 로그인하여 모델을 업로드하고 커뮤니티와
 >>> tokenizer = AutoTokenizer.from_pretrained("distilbert/distilroberta-base")
 ```
 
-위의 예제에서와 마찬가지로, `text` 필드는 `answers` 안에 중첩되어 있습니다. 
+위의 예제에서와 마찬가지로, `text` 필드는 `answers` 안에 중첩되어 있습니다.
 따라서 중첩된 구조에서 [`flatten`](https://huggingface.co/docs/datasets/process#flatten) 메소드를 사용하여 `text` 하위 필드를 추출합니다:
 
 ```py
@@ -119,7 +119,7 @@ Hugging Face 계정에 로그인하여 모델을 업로드하고 커뮤니티와
  'title_urls.url': []}
 ```
 
-이제 각 하위 필드는 `answers` 접두사(prefix)로 표시된 대로 별도의 열이 되고, `text` 필드는 이제 리스트가 되었습니다. 
+이제 각 하위 필드는 `answers` 접두사(prefix)로 표시된 대로 별도의 열이 되고, `text` 필드는 이제 리스트가 되었습니다.
 각 문장을 개별적으로 토큰화하는 대신 리스트를 문자열로 변환하여 한번에 토큰화할 수 있습니다.
 
 다음은 각 예제에 대해 문자열로 이루어진 리스트를 `join`하고 결과를 토큰화하는 첫 번째 전처리 함수입니다:
@@ -129,8 +129,8 @@ Hugging Face 계정에 로그인하여 모델을 업로드하고 커뮤니티와
 ...     return tokenizer([" ".join(x) for x in examples["answers.text"]])
 ```
 
-이 전처리 함수를 전체 데이터 세트에 적용하기 위해 🤗 Datasets [`~datasets.Dataset.map`] 메소드를 사용합니다. 
-데이터 세트의 여러 요소를 한 번에 처리하도록 `batched=True`를 설정하고 `num_proc`로 처리 횟수를 늘리면 `map` 함수의 속도를 높일 수 있습니다. 
+이 전처리 함수를 전체 데이터 세트에 적용하기 위해 🤗 Datasets [`~datasets.Dataset.map`] 메소드를 사용합니다.
+데이터 세트의 여러 요소를 한 번에 처리하도록 `batched=True`를 설정하고 `num_proc`로 처리 횟수를 늘리면 `map` 함수의 속도를 높일 수 있습니다.
 필요하지 않은 열은 제거합니다:
 
 ```py
@@ -146,7 +146,7 @@ Hugging Face 계정에 로그인하여 모델을 업로드하고 커뮤니티와
 
 이제 두 번째 전처리 함수를 사용해
 - 모든 시퀀스를 연결하고
-- 연결된 시퀀스를 정의한 `block_size` 보다 더 짧은 덩어리로 분할하는데, 이 덩어리는 모델의 최대 입력 길이보다 짧고 GPU RAM이 수용할 수 있는 길이여야 합니다. 
+- 연결된 시퀀스를 정의한 `block_size` 보다 더 짧은 덩어리로 분할하는데, 이 덩어리는 모델의 최대 입력 길이보다 짧고 GPU RAM이 수용할 수 있는 길이여야 합니다.
 
 
 ```py
@@ -176,7 +176,7 @@ Hugging Face 계정에 로그인하여 모델을 업로드하고 커뮤니티와
 >>> lm_dataset = tokenized_eli5.map(group_texts, batched=True, num_proc=4)
 ```
 
-이제 [`DataCollatorForLanguageModeling`]을 사용하여 데이터 예제의 배치를 생성합니다. 
+이제 [`DataCollatorForLanguageModeling`]을 사용하여 데이터 예제의 배치를 생성합니다.
 데이터 세트 전체를 최대 길이로 패딩하는 것보다 collation 단계에서 매 배치안에서의 최대 길이로 문장을 *동적으로 패딩*하는 것이 더 효율적입니다.
 
 
@@ -241,7 +241,7 @@ Hugging Face 계정에 로그인하여 모델을 업로드하고 커뮤니티와
 Perplexity: 8.76
 ```
 
-그리고 [`~transformers.Trainer.push_to_hub`] 메소드를 사용해 다른 사람들이 사용할 수 있도록, Hub로 모델을 업로드합니다. 
+그리고 [`~transformers.Trainer.push_to_hub`] 메소드를 사용해 다른 사람들이 사용할 수 있도록, Hub로 모델을 업로드합니다.
 
 ```py
 >>> trainer.push_to_hub()
@@ -264,7 +264,7 @@ Perplexity: 8.76
 ```py
 >>> text = "The Milky Way is a <mask> galaxy."
 ```
-추론을 위해 미세 조정한 모델을 테스트하는 가장 간단한 방법은 [`pipeline`]에서 사용하는 것입니다. 
+추론을 위해 미세 조정한 모델을 테스트하는 가장 간단한 방법은 [`pipeline`]에서 사용하는 것입니다.
 `fill-mask`태스크로 `pipeline`을 인스턴스화하고 텍스트를 전달합니다.
 `top_k` 매개변수를 사용하여 반환하는 예측의 수를 지정할 수 있습니다:
 

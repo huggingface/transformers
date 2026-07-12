@@ -76,12 +76,12 @@ pip install -r requirements.txt
 
 ## تشغيل نص برمجي
 
-    
+
 - يقوم النص البرمجي التوضيحي بتنزيل مجموعة بيانات ومعالجتها مسبقًا من مكتبة 🤗 [Datasets](https://huggingface.co/docs/datasets).
-- ثم يقوم النص البرمجي بضبط نموذج بيانات دقيق باستخدام [Trainer](https://huggingface.co/docs/transformers/main_classes/trainer) على بنية تدعم الملخص. 
+- ثم يقوم النص البرمجي بضبط نموذج بيانات دقيق باستخدام [Trainer](https://huggingface.co/docs/transformers/main_classes/trainer) على بنية تدعم الملخص.
 - يوضح المثال التالي كيفية ضبط نموذج [T5-small](https://huggingface.co/google-t5/t5-small) على مجموعة بيانات [CNN/DailyMail](https://huggingface.co/datasets/cnn_dailymail).
 - يتطلب نموذج T5 معامل `source_prefix` إضافية بسبب الطريقة التي تم تدريبه بها. يتيح هذا المطالبة لـ T5 معرفة أن هذه مهمة التلخيص.
-    
+
 ```bash
 python examples/pytorch/summarization/run_summarization.py \
     --model_name_or_path google-t5/t5-small \
@@ -123,7 +123,7 @@ torchrun \
 
 ## تشغيل نص برمجي على وحدة معالجة الدقة الفائقة (TPU)
 
-    
+
 تُعد وحدات معالجة الدقة الفائقة (TPUs) مصممة خصيصًا لتسريع الأداء. يدعم PyTorch وحدات معالجة الدقة الفائقة (TPUs) مع [XLA](https://www.tensorflow.org/xla) مجمع الدقة الفائقة للتعلم العميق (راجع [هنا](https://github.com/pytorch/xla/blob/master/README.md) لمزيد من التفاصيل). لاستخدام وحدة معالجة الدقة الفائقة (TPU)، قم بتشغيل نص `xla_spawn.py` البرمجي واستخدم معامل `num_cores` لتعيين عدد وحدات معالجة الدقة الفائقة (TPU) التي تريد استخدامها.
 
 ```bash

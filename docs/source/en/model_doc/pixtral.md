@@ -49,9 +49,9 @@ url_mountain = "https://picsum.photos/seed/picsum/200/300"
 chat = [
     {
       "role": "user", "content": [
-        {"type": "text", "content": "Can this animal"}, 
-        {"type": "image", "url": url_dog}, 
-        {"type": "text", "content": "live here?"}, 
+        {"type": "text", "content": "Can this animal"},
+        {"type": "image", "url": url_dog},
+        {"type": "text", "content": "live here?"},
         {"type": "image", "url" : url_mountain}
       ]
     }

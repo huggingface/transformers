@@ -251,7 +251,7 @@ Pentru a mapa mai mult de un task la model, editează `auto_map` direct în fiș
 "auto_map": {
     "AutoConfig": "<your-repo-name>--<config-name>",
     "AutoModel": "<your-repo-name>--<config-name>",
-    "AutoModelFor<Task>": "<your-repo-name>--<config-name>",    
+    "AutoModelFor<Task>": "<your-repo-name>--<config-name>",
 },
 ```
 

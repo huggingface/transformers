@@ -34,7 +34,7 @@ rendered properly in your Markdown viewer.
 
 For more details, please refer to the [technical
 report](https://github.com/XiaomiMiMo/MiMo-V2-Flash/blob/main/paper.pdf), and the [official
-repository](https://github.com/XiaomiMiMo/MiMo-V2-Flash).  
+repository](https://github.com/XiaomiMiMo/MiMo-V2-Flash).
 This model was contributed by [casinca](https://huggingface.co/casinca).
 
 ## Usage examples

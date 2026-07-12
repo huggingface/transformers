@@ -57,7 +57,7 @@ be able to access `tokenizer.image_token_id` to obtain the special image token u
 
 To enable extra special tokens for any type of tokenizer, you have to add the following lines and save the tokenizer. Extra special tokens do not
 have to be modality related and can be anything that the model often needs access to. In the below code, tokenizer at `output_dir` will have direct access
-to three more special tokens.  
+to three more special tokens.
 
 ```python
 vision_tokenizer = AutoTokenizer.from_pretrained(

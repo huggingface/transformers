@@ -22,7 +22,7 @@ rendered properly in your Markdown viewer.
 
 このガイドでは、🤗 Transformersモデルを🤗 Optimumを使用してONNXにエクスポートする方法を示しており、モデルをTFLiteにエクスポートする方法については[Export to TFLiteページ](tflite)を参照してください。
 
-## Export to ONNX 
+## Export to ONNX
 
 [ONNX（Open Neural Network eXchange）](http://onnx.ai)は、PyTorchおよびTensorFlowを含むさまざまなフレームワークで深層学習モデルを表現するための共通の一連の演算子とファイル形式を定義するオープンスタンダードです。モデルがONNX形式にエクスポートされると、これらの演算子はニューラルネットワークを介するデータの流れを表す計算グラフ（一般的には「中間表現」と呼ばれる）を構築するために使用されます。
 

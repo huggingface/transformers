@@ -15,8 +15,8 @@ rendered properly in your Markdown viewer.
 -->
 
 # Condividere modelli personalizzati
-La libreria 🤗 Transformers è studiata per essere facilmente estendibile. Il codice di ogni modello è interamente 
-situato in una sottocartella del repository senza alcuna astrazione, perciò puoi facilmente copiare il file di un 
+La libreria 🤗 Transformers è studiata per essere facilmente estendibile. Il codice di ogni modello è interamente
+situato in una sottocartella del repository senza alcuna astrazione, perciò puoi facilmente copiare il file di un
 modello e modificarlo in base ai tuoi bisogni.
 
 Se stai scrivendo un nuovo modello, potrebbe essere più semplice iniziare da zero. In questo tutorial, ti mostreremo
@@ -24,16 +24,16 @@ come scrivere un modello personalizzato e la sua configurazione in modo che poss
 Transformers, e come condividerlo con la community (assieme al relativo codice) così che tutte le persone possano usarlo, anche
 se non presente nella libreria 🤗 Transformers.
 
-Illustriamo tutto questo su un modello ResNet, avvolgendo la classe ResNet della 
+Illustriamo tutto questo su un modello ResNet, avvolgendo la classe ResNet della
 [libreria timm](https://github.com/rwightman/pytorch-image-models) in un [`PreTrainedModel`].
 
 ## Scrivere una configurazione personalizzata
 Prima di iniziare a lavorare al modello, scriviamone la configurazione. La configurazione di un modello è un oggetto
-che contiene tutte le informazioni necessarie per la build del modello. Come vedremo nella prossima sezione, il 
+che contiene tutte le informazioni necessarie per la build del modello. Come vedremo nella prossima sezione, il
 modello può soltanto essere inizializzato tramite `config`, per cui dovremo rendere tale oggetto più completo possibile.
 
-Nel nostro esempio, prenderemo un paio di argomenti della classe ResNet che potremmo voler modificare. 
-Configurazioni differenti ci daranno quindi i differenti possibili tipi di ResNet. Salveremo poi questi argomenti, 
+Nel nostro esempio, prenderemo un paio di argomenti della classe ResNet che potremmo voler modificare.
+Configurazioni differenti ci daranno quindi i differenti possibili tipi di ResNet. Salveremo poi questi argomenti,
 dopo averne controllato la validità.
 
 ```python
@@ -79,8 +79,8 @@ Le tre cose più importanti da ricordare quando scrivi le tue configurazioni son
 - Il metodo `__init__` del tuo `PreTrainedConfig` deve accettare i kwargs,
 - I `kwargs` devono essere passati alla superclass `__init__`
 
-L’eredità è importante per assicurarsi di ottenere tutte le funzionalità della libreria 🤗 transformers, 
-mentre gli altri due vincoli derivano dal fatto che un `PreTrainedConfig` ha più campi di quelli che stai settando. 
+L’eredità è importante per assicurarsi di ottenere tutte le funzionalità della libreria 🤗 transformers,
+mentre gli altri due vincoli derivano dal fatto che un `PreTrainedConfig` ha più campi di quelli che stai settando.
 Quando ricarichi una config da un metodo `from_pretrained`, questi campi devono essere accettati dalla tua config e
 poi inviati alla superclasse.
 
@@ -108,11 +108,11 @@ per caricare direttamente la tua configurazione nell'hub.
 ## Scrivere un modello personalizzato
 
 Ora che abbiamo la nostra configurazione ResNet, possiamo continuare a scrivere il modello. In realtà, ne scriveremo
-due: uno che estrae le features nascoste da una batch di immagini (come [`BertModel`]) e uno che è utilizzabile per 
+due: uno che estrae le features nascoste da una batch di immagini (come [`BertModel`]) e uno che è utilizzabile per
 la classificazione di immagini (come [`BertModelForSequenceClassification`]).
 
-Come abbiamo menzionato in precedenza, scriveremo soltanto un wrapper del modello, per mantenerlo semplice ai fini di 
-questo esempio. L'unica cosa che dobbiamo fare prima di scrivere questa classe è una mappatura fra i tipi di blocco e 
+Come abbiamo menzionato in precedenza, scriveremo soltanto un wrapper del modello, per mantenerlo semplice ai fini di
+questo esempio. L'unica cosa che dobbiamo fare prima di scrivere questa classe è una mappatura fra i tipi di blocco e
 le vere classi dei blocchi. Successivamente il modello è definito tramite la configurazione, passando tutto quanto alla
 classe `ResNet`.
 
@@ -179,7 +179,7 @@ class ResnetModelForImageClassification(PreTrainedModel):
         return {"logits": logits}
 ```
 
-Nota come, in entrambi i casi, ereditiamo da `PreTrainedModel` e chiamiamo l'inizializzazione della superclasse 
+Nota come, in entrambi i casi, ereditiamo da `PreTrainedModel` e chiamiamo l'inizializzazione della superclasse
 con il metodo `config` (un po' come quando scrivi un normale `torch.nn.Module`). La riga che imposta la  `config_class`
 non è obbligatoria, a meno che tu non voglia registrare il modello con le classi Auto (vedi l'ultima sezione).
 
@@ -189,7 +189,7 @@ Se il tuo modello è molto simile a un modello all'interno della libreria, puoi 
 
 </Tip>
 
-Puoi fare in modo che il tuo modello restituisca in output qualunque cosa tu voglia, ma far restituire un dizionario 
+Puoi fare in modo che il tuo modello restituisca in output qualunque cosa tu voglia, ma far restituire un dizionario
 come abbiamo fatto per `ResnetModelForImageClassification`, con la funzione di perdita inclusa quando vengono passate le labels,
 renderà il tuo modello direttamente utilizzabile all'interno della classe [`Trainer`]. Utilizzare altri formati di output va bene
 se hai in progetto di utilizzare un tuo loop di allenamento, o se utilizzerai un'altra libreria per l'addestramento.
@@ -204,7 +204,7 @@ Ribadiamo, puoi usare qualunque metodo dei [`PreTrainedModel`], come [`~PreTrain
 [`~PreTrainedModel.push_to_hub`]. Utilizzeremo quest'ultimo nella prossima sezione, e vedremo come caricare i pesi del
 modello assieme al codice del modello stesso. Ma prima, carichiamo alcuni pesi pre-allenati all'interno del nostro modello.
 
-Nel tuo caso specifico, probabilmente allenerai il tuo modello sui tuoi dati. Per velocizzare in questo tutorial, 
+Nel tuo caso specifico, probabilmente allenerai il tuo modello sui tuoi dati. Per velocizzare in questo tutorial,
 utilizzeremo la versione pre-allenata del resnet50d. Dato che il nostro modello è soltanto un wrapper attorno a quel modello,
 sarà facile trasferirne i pesi:
 
@@ -215,7 +215,7 @@ pretrained_model = timm.create_model("resnet50d", pretrained=True)
 resnet50d.model.load_state_dict(pretrained_model.state_dict())
 ```
 
-Vediamo adesso come assicurarci che quando facciamo [`~PreTrainedModel.save_pretrained`] o [`~PreTrainedModel.push_to_hub`], 
+Vediamo adesso come assicurarci che quando facciamo [`~PreTrainedModel.save_pretrained`] o [`~PreTrainedModel.push_to_hub`],
 il codice del modello venga salvato.
 
 ## Inviare il codice all'Hub
@@ -229,7 +229,7 @@ Questa API è sperimentale e potrebbe avere alcuni cambiamenti nei prossimi rila
 Innanzitutto, assicurati che il tuo modello sia completamente definito in un file `.py`. Può sfruttare import relativi
 ad altri file, purchè questi siano nella stessa directory (non supportiamo ancora sotto-moduli per questa funzionalità).
 Per questo esempio, definiremo un file `modeling_resnet.py` e un file `configuration_resnet.py` in una cartella dell'attuale
-working directory chiamata `resnet_model`. Il file configuration contiene il codice per `ResnetConfig` e il file modeling 
+working directory chiamata `resnet_model`. Il file configuration contiene il codice per `ResnetConfig` e il file modeling
 contiene il codice di `ResnetModel` e `ResnetModelForImageClassification`.
 
 ```
@@ -244,14 +244,14 @@ Il file `__init__.py` può essere vuoto, serve solo perchè Python capisca che `
 
 <Tip warning={true}>
 
-Se stai copiando i file relativi alla modellazione della libreria, dovrai sostituire tutti gli import relativi in cima al file con import del 
+Se stai copiando i file relativi alla modellazione della libreria, dovrai sostituire tutti gli import relativi in cima al file con import del
     pacchetto `transformers`.
 
 </Tip>
 
 Nota che puoi ri-utilizzare (o usare come sottoclassi) un modello/configurazione esistente.
 
-Per condividere il tuo modello con la community, segui questi passi: prima importa il modello ResNet e la sua configurazione 
+Per condividere il tuo modello con la community, segui questi passi: prima importa il modello ResNet e la sua configurazione
 dai nuovi file creati:
 
 ```py
@@ -269,7 +269,7 @@ ResnetModelForImageClassification.register_for_auto_class("AutoModelForImageClas
 ```
 
 Nota che non c'è bisogno di specificare una Auto classe per la configurazione (c'è solo una Auto classe per le configurazioni,
-[`AutoConfig`], ma è diversa per i modelli). Il tuo modello personalizato potrebbe essere utilizzato per diverse tasks, 
+[`AutoConfig`], ma è diversa per i modelli). Il tuo modello personalizato potrebbe essere utilizzato per diverse tasks,
 per cui devi specificare quale delle classi Auto è quella corretta per il tuo modello.
 
 Successivamente, creiamo i modelli e la config come abbiamo fatto in precedenza:
@@ -306,15 +306,15 @@ Oltre ai pesi del modello e alla configurazione in formato json, questo ha anche
 configuration all'interno della cartella `custom-resnet50d` e ha caricato i risultati sull'Hub. Puoi controllare
 i risultati in questa [model repo](https://huggingface.co/sgugger/custom-resnet50d).
 
-Puoi controllare il tutorial di condivisione [tutorial di condivisione](model_sharing) per più informazioni sul 
+Puoi controllare il tutorial di condivisione [tutorial di condivisione](model_sharing) per più informazioni sul
 metodo con cui inviare all'Hub.
 
 ## Usare un modello con codice personalizzato
 
-Puoi usare ogni configurazione, modello o tokenizer con file di codice personalizzati nella sua repository 
+Puoi usare ogni configurazione, modello o tokenizer con file di codice personalizzati nella sua repository
 con le classi Auto e il metodo `from_pretrained`. Tutti i files e il codice caricati sull'Hub sono scansionati da malware
 (fai riferimento alla documentazione [Hub security](https://huggingface.co/docs/hub/security#malware-scanning) per più informazioni),
-ma dovresti comunque assicurarti dell'affidabilità del codice e dell'autore per evitare di eseguire codice dannoso sulla tua macchina. 
+ma dovresti comunque assicurarti dell'affidabilità del codice e dell'autore per evitare di eseguire codice dannoso sulla tua macchina.
 Imposta `trust_remote_code=True` per usare un modello con codice personalizzato:
 
 ```py
@@ -323,7 +323,7 @@ from transformers import AutoModelForImageClassification
 model = AutoModelForImageClassification.from_pretrained("sgugger/custom-resnet50d", trust_remote_code=True)
 ```
 
-Inoltre, raccomandiamo fortemente di passare un hash del commit come `revision` per assicurarti che le autrici o gli autori del modello 
+Inoltre, raccomandiamo fortemente di passare un hash del commit come `revision` per assicurarti che le autrici o gli autori del modello
 non abbiano modificato il codice con alcune nuove righe dannose (a meno che non ti fidi completamente della fonte):
 
 ```py
@@ -333,7 +333,7 @@ model = AutoModelForImageClassification.from_pretrained(
 )
 ```
 
-Nota che quando cerchi la storia dei commit della repo del modello sull'Hub, c'è un bottone con cui facilmente copiare il 
+Nota che quando cerchi la storia dei commit della repo del modello sull'Hub, c'è un bottone con cui facilmente copiare il
 commit hash di ciascun commit.
 
 ## Registrare un modello con codice personalizzato nelle classi Auto
@@ -342,7 +342,7 @@ Se stai scrivendo una libreria che estende 🤗 Transformers, potresti voler est
 Questo è diverso dall'inviare codice nell'Hub: gli utenti dovranno importare la tua libreria per ottenere il modello personalizzato
 (anzichè scaricare automaticamente il modello dall'Hub).
 
-Finchè il tuo file di configurazione ha un attributo `model_type` diverso dai model types esistenti, e finchè le tue 
+Finchè il tuo file di configurazione ha un attributo `model_type` diverso dai model types esistenti, e finchè le tue
 classi modello hanno i corretti attributi `config_class`, potrai semplicemente aggiungerli alle classi Auto come segue:
 
 ```py
@@ -353,7 +353,7 @@ AutoModel.register(ResnetConfig, ResnetModel)
 AutoModelForImageClassification.register(ResnetConfig, ResnetModelForImageClassification)
 ```
 
-Nota che il primo argomento utilizzato quando registri la configurazione di un modello personalizzato con [`AutoConfig`] 
-deve corrispondere al `model_type` della tua configurazione personalizzata, ed il primo argomento utilizzato quando 
+Nota che il primo argomento utilizzato quando registri la configurazione di un modello personalizzato con [`AutoConfig`]
+deve corrispondere al `model_type` della tua configurazione personalizzata, ed il primo argomento utilizzato quando
 registri i tuoi modelli personalizzati in una qualunque classe Auto del modello deve corrispondere alla `config_class`
 di quei modelli.

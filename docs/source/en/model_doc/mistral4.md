@@ -17,7 +17,7 @@ limitations under the License.
 -->
 *This model was contributed to Hugging Face Transformers on 2026-03-16.*
 
-# Mistral4 
+# Mistral4
 
 ## Overview
 

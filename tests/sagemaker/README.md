@@ -1,6 +1,6 @@
 # Testing new Hugging Face Deep Learning Container.
 
-This document explains the testing strategy for releasing the new Hugging Face Deep Learning Container. AWS maintains 14 days of currency with framework releases. Besides framework releases, AWS release train is bi-weekly on Monday. Code cutoff date for any changes is the Wednesday before release-Monday. 
+This document explains the testing strategy for releasing the new Hugging Face Deep Learning Container. AWS maintains 14 days of currency with framework releases. Besides framework releases, AWS release train is bi-weekly on Monday. Code cutoff date for any changes is the Wednesday before release-Monday.
 
 
 ## Test Case 1: Releasing a New Version (Minor/Major) of 🤗 Transformers
@@ -15,7 +15,7 @@ Before we can run the tests we need to adjust the `requirements.txt` for PyTorch
 git+https://github.com/huggingface/transformers.git@v4.5.0.rc0 # install main or adjust it with vX.X.X for installing version specific-transforms
 ```
 
-After we adjusted the `requirements.txt` we can run Amazon SageMaker tests with:  
+After we adjusted the `requirements.txt` we can run Amazon SageMaker tests with:
 
 ```bash
 AWS_PROFILE=<enter-your-profile> make test-sagemaker
@@ -61,12 +61,12 @@ images:
     datasets_version: &DATASETS_VERSION 1.6.0 # this was adjusted from 1.5.0 to 1.6.0
     tag: !join [ *VERSION, '-', 'transformers', *TRANSFORMERS_VERSION, '-', *DEVICE_TYPE, '-', *TAG_PYTHON_VERSION, '-',
       *CUDA_VERSION, '-', *OS_VERSION ]
-    docker_file: !join [ docker/, *SHORT_VERSION, /, *DOCKER_PYTHON_VERSION, /, 
+    docker_file: !join [ docker/, *SHORT_VERSION, /, *DOCKER_PYTHON_VERSION, /,
       *CUDA_VERSION, /Dockerfile., *DEVICE_TYPE ]
 ```
-2. In the PR comment describe what test, we ran and with which package versions. Here you can copy the table from [Current Tests](#current-tests). 
+2. In the PR comment describe what test, we ran and with which package versions. Here you can copy the table from [Current Tests](#current-tests).
 
-2. In the PR comment describe what test we ran and with which framework versions. Here you can copy the table from [Current Tests](#current-tests). You can take a look at this [PR](https://github.com/aws/deep-learning-containers/pull/1016), which information are needed. 
+2. In the PR comment describe what test we ran and with which framework versions. Here you can copy the table from [Current Tests](#current-tests). You can take a look at this [PR](https://github.com/aws/deep-learning-containers/pull/1016), which information are needed.
 ## Test Case 2: Releasing a New AWS Framework DLC
 
 
@@ -83,7 +83,7 @@ Before we can run the tests we need to adjust the `requirements.txt` for Pytorch
 torch==1.8.1 # for pytorch
 ```
 
-After we adjusted the `requirements.txt` we can run Amazon SageMaker tests with. 
+After we adjusted the `requirements.txt` we can run Amazon SageMaker tests with.
 
 ```bash
 AWS_PROFILE=<enter-your-profile> make test-sagemaker
@@ -98,7 +98,7 @@ After we have successfully run tests for the new framework version we need to cr
 
 1. Create a new `buildspec.yaml` config for [PyTorch](https://github.com/aws/deep-learning-containers/tree/master/huggingface/pytorch) and rename the old `buildspec.yaml` to `buildespec-x.x.x`, where `x.x.x` is the base framework version, e.g. if pytorch 1.6.0 is the latest version in `buildspec.yaml` the file should be renamed to `buildspec-yaml-1-6.yaml`.
 
-To create the new `buildspec.yaml` we need to adjust  the `version` and the `short_version`. Example for upgrading to `pytorch 1.7.1`. 
+To create the new `buildspec.yaml` we need to adjust  the `version` and the `short_version`. Example for upgrading to `pytorch 1.7.1`.
 
 ```yaml
 account_id: &ACCOUNT_ID <set-$ACCOUNT_ID-in-environment>
@@ -130,7 +130,7 @@ images:
     datasets_version: &DATASETS_VERSION 1.5.0
     tag: !join [ *VERSION, '-', 'transformers', *TRANSFORMERS_VERSION, '-', *DEVICE_TYPE, '-', *TAG_PYTHON_VERSION, '-',
       *CUDA_VERSION, '-', *OS_VERSION ]
-    docker_file: !join [ docker/, *SHORT_VERSION, /, *DOCKER_PYTHON_VERSION, /, 
+    docker_file: !join [ docker/, *SHORT_VERSION, /, *DOCKER_PYTHON_VERSION, /,
       *CUDA_VERSION, /Dockerfile., *DEVICE_TYPE ]
 ```
 2. In the PR comment describe what test we ran and with which framework versions. Here you can copy the table from [Current Tests](#current-tests). You can take a look at this [PR](https://github.com/aws/deep-learning-containers/pull/1025), which information are needed.

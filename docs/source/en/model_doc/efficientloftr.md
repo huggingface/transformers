@@ -89,19 +89,19 @@ processed_outputs = processor.post_process_keypoint_matching(outputs, image_size
     import torch
     from PIL import Image
     import requests
-    
+
     processor = AutoImageProcessor.from_pretrained("zju-community/efficientloftr")
     model = AutoModelForKeypointMatching.from_pretrained("zju-community/efficientloftr", device_map="auto")
-    
+
     # EfficientLoFTR requires pairs of images
     images = [image1, image2]
     inputs = processor(images, return_tensors="pt").to(model.device)
     with torch.inference_mode():
         outputs = model(**inputs)
-    
+
     # Extract matching information
     keypoints = outputs.keypoints        # Keypoints in both images
-    matches = outputs.matches            # Matching indices 
+    matches = outputs.matches            # Matching indices
     matching_scores = outputs.matching_scores  # Confidence scores
     ```
 
@@ -113,7 +113,7 @@ processed_outputs = processor.post_process_keypoint_matching(outputs, image_size
     # Process outputs for visualization
     image_sizes = [[(image.height, image.width) for image in images]]
     processed_outputs = processor.post_process_keypoint_matching(outputs, image_sizes, threshold=0.2)
-    
+
     for i, output in enumerate(processed_outputs):
         print(f"For the image pair {i}")
         for keypoint0, keypoint1, matching_score in zip(

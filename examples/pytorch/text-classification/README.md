@@ -82,7 +82,7 @@ python run_glue.py \
 > If your model classification head dimensions do not fit the number of labels in the dataset, you can specify `--ignore_mismatched_sizes` to adapt it.
 
 ## Text classification
-As an alternative, we can use the script [`run_classification.py`](./run_classification.py) to fine-tune models on a single/multi-label classification task. 
+As an alternative, we can use the script [`run_classification.py`](./run_classification.py) to fine-tune models on a single/multi-label classification task.
 
 The following example fine-tunes BERT on the `en` subset of  [`amazon_reviews_multi`](https://huggingface.co/datasets/amazon_reviews_multi) dataset.
 We can specify the metric, the label column and also choose which text columns to use jointly for classification.
@@ -127,7 +127,7 @@ python run_classification.py \
     --per_device_train_batch_size 32 \
     --learning_rate 2e-5 \
     --num_train_epochs 15 \
-    --output_dir /tmp/${dataset}_${subset}/ 
+    --output_dir /tmp/${dataset}_${subset}/
 ```
  It results in a Micro F1 score of around 0.82 without any text and label filtering. Note that you have to explicitly remove the "unused" split from the dataset, since it is not used for classification.
 

@@ -30,7 +30,7 @@ CLIPSeg 모델은 Timo Lüddecke와 Alexander Ecker가 [Image Segmentation Using
 
 
 <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/clipseg_architecture.png"
-alt="drawing" width="600"/> 
+alt="drawing" width="600"/>
 
 <small> CLIPSeg 개요. <a href="https://huggingface.co/papers/2112.10003">원본 논문</a>에서 발췌. </small>
 

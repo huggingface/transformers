@@ -81,7 +81,7 @@ from transformers import AutoModelForCausalLM, BitsAndBytesConfig
 quantization_config = BitsAndBytesConfig(load_in_8bit=True)
 
 model_8bit = AutoModelForCausalLM.from_pretrained(
-    "bigscience/bloom-1b7", 
+    "bigscience/bloom-1b7",
     device_map="auto",
     quantization_config=quantization_config
 )
@@ -96,9 +96,9 @@ from transformers import AutoModelForCausalLM, BitsAndBytesConfig
 quantization_config = BitsAndBytesConfig(load_in_8bit=True)
 
 model_8bit = AutoModelForCausalLM.from_pretrained(
-    "facebook/opt-350m", 
+    "facebook/opt-350m",
     device_map="auto",
-    quantization_config=quantization_config, 
+    quantization_config=quantization_config,
     dtype="auto"
 )
 model_8bit.model.decoder.layers[-1].final_layer_norm.weight.dtype
@@ -112,7 +112,7 @@ from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
 quantization_config = BitsAndBytesConfig(load_in_8bit=True)
 
 model = AutoModelForCausalLM.from_pretrained(
-    "bigscience/bloom-560m", 
+    "bigscience/bloom-560m",
     device_map="auto",
     quantization_config=quantization_config
 )
@@ -149,13 +149,13 @@ quantization_config = BitsAndBytesConfig(load_in_4bit=True)
 model_4bit = AutoModelForCausalLM.from_pretrained(
     "facebook/opt-350m",
     device_map="auto",
-    quantization_config=quantization_config, 
+    quantization_config=quantization_config,
     dtype="auto"
 )
 model_4bit.model.decoder.layers[-1].final_layer_norm.weight.dtype
 ```
 
-Make sure you have the latest bitsandbytes version so you can serialize 4-bit models and push them to the Hub with [`~PreTrainedModel.push_to_hub`]. Use [`~PreTrainedModel.save_pretrained`] to save the 4-bit model locally.  
+Make sure you have the latest bitsandbytes version so you can serialize 4-bit models and push them to the Hub with [`~PreTrainedModel.push_to_hub`]. Use [`~PreTrainedModel.save_pretrained`] to save the 4-bit model locally.
 
 ```py
 from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
@@ -163,7 +163,7 @@ from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
 quantization_config = BitsAndBytesConfig(load_in_4bit=True)
 
 model = AutoModelForCausalLM.from_pretrained(
-    "bigscience/bloom-560m", 
+    "bigscience/bloom-560m",
     device_map="auto",
     quantization_config=quantization_config
 )

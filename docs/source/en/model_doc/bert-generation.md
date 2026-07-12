@@ -87,7 +87,7 @@ print(tokenizer.decode(outputs[0]))
 
    ```python
    from transformers import BertGenerationEncoder, BertGenerationDecoder, BertTokenizer, EncoderDecoderModel
-   
+
    # leverage checkpoints for Bert2Bert model
    # use BERT's cls token as BOS token and sep token as EOS token
    encoder = BertGenerationEncoder.from_pretrained("google-bert/bert-large-uncased", bos_token_id=101, eos_token_id=102)

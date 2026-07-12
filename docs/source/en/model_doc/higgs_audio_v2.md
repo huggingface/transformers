@@ -26,8 +26,8 @@ rendered properly in your Markdown viewer.
 
 ## Overview
 
-Higgs Audio V2 is a powerful audio foundation model developed by [Boson AI](https://www.boson.ai/). 
-The model was pretrained on over 10 million hours of audio data and a diverse set of text data. 
+Higgs Audio V2 is a powerful audio foundation model developed by [Boson AI](https://www.boson.ai/).
+The model was pretrained on over 10 million hours of audio data and a diverse set of text data.
 Despite having no post-training or fine-tuning, Higgs Audio v2 excels in expressive audio generation, thanks to its deep language and acoustic understanding.
 
 **Model Architecture:**

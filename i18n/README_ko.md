@@ -81,9 +81,9 @@ Transformer의 모델은 표를 통한 질의응답(Table QA), 광학 문자 인
 
 대부분의 모델을 [모델 허브](https://huggingface.co/models) 페이지에서 바로 테스트해 볼 수 있습니다. 공개 및 비공개 모델을 위한 [비공개 모델 호스팅, 버전 관리, 추론 API](https://huggingface.co/pricing)도 제공합니다.
 
-아래 몇 가지 예시가 있습니다:  
+아래 몇 가지 예시가 있습니다:
 
-자연어 처리:   
+자연어 처리:
 - [BERT로 마스킹된 단어 완성하기](https://huggingface.co/google-bert/bert-base-uncased?text=Paris+is+the+%5BMASK%5D+of+France)
 - [Electra를 이용한 개체명 인식](https://huggingface.co/dbmdz/electra-large-discriminator-finetuned-conll03-english?text=My+name+is+Sarah+and+I+live+in+London+city)
 - [GPT-2로 텍스트 생성하기](https://huggingface.co/openai-community/gpt2?text=A+long+time+ago%2C+)

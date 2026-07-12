@@ -76,4 +76,4 @@ CLAP (Contrastive Language-Audio Pretraining) は、さまざまな (音声、�
 
 [[autodoc]] ClapAudioModelWithProjection
     - forward
-    
+

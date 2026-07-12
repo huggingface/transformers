@@ -56,7 +56,7 @@ inputs = image_processor(images=image, return_tensors="pt").to(model.device)
 outputs = model(**inputs)
 
 results = image_processor.post_process_object_detection(
-    outputs, 
+    outputs,
     target_sizes=inputs["target_sizes"],
     threshold=0.2,
     box_threshold=0.45,
@@ -96,7 +96,7 @@ inputs = image_processor(images=[image, image], return_tensors="pt").to(model.de
 outputs = model(**inputs)
 
 results = image_processor.post_process_object_detection(
-    outputs, 
+    outputs,
     target_sizes=inputs["target_sizes"],
     threshold=0.2,
     box_threshold=0.45,

@@ -41,7 +41,7 @@ Don't pass `model=` and `model_init=` together or [`Trainer`] raises an error.
 
 ## Define the search space
 
-Create a function that defines the search space. The format depends on the backend. If you don't define a `hp_space` function, the default 
+Create a function that defines the search space. The format depends on the backend. If you don't define a `hp_space` function, the default
 search covers `learning_rate`, `num_train_epochs`, and `per_device_train_batch_size`.
 
 ```bash

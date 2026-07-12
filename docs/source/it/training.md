@@ -247,7 +247,7 @@ Ottieni l'accesso gratuito a una GPU sul cloud se non ne possiedi una usando un 
 
 </Tip>
 
-Ottimo, adesso possiamo addestrare! 🥳 
+Ottimo, adesso possiamo addestrare! 🥳
 
 ### Training loop
 

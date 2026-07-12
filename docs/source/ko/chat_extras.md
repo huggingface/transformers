@@ -37,7 +37,7 @@ rendered properly in your Markdown viewer.
 def get_current_temperature(location: str, unit: str) -> float:
     """
     주어진 위치의 현재 온도를 가져옵니다.
-    
+
     Args:
         location: 온도를 가져올 위치, "도시, 국가" 형식
         unit: 온도를 반환할 단위. (선택지: ["celsius(섭씨)", "fahrenheit(화씨)"])
@@ -49,7 +49,7 @@ def get_current_temperature(location: str, unit: str) -> float:
 def get_current_wind_speed(location: str) -> float:
     """
     주어진 위치의 현재 풍속을 km/h 단위로 가져옵니다.
-    
+
     Args:
         location: 온도를 가져올 위치, "도시, 국가" 형식
     Returns:
@@ -156,7 +156,7 @@ from transformers.utils import get_json_schema
 def multiply(a: float, b: float):
     """
     두 숫자를 곱하는 함수
-    
+
     Args:
         a: 곱할 첫 번째 숫자
         b: 곱할 두 번째 숫자
@@ -169,22 +169,22 @@ print(schema)
 
 ```json
 {
-  "type": "function", 
+  "type": "function",
   "function": {
-    "name": "multiply", 
-    "description": "A function that multiplies two numbers", 
+    "name": "multiply",
+    "description": "A function that multiplies two numbers",
     "parameters": {
-      "type": "object", 
+      "type": "object",
       "properties": {
         "a": {
-          "type": "number", 
+          "type": "number",
           "description": "The first number to multiply"
-        }, 
+        },
         "b": {
           "type": "number",
           "description": "The second number to multiply"
         }
-      }, 
+      },
       "required": ["a", "b"]
     }
   }
@@ -201,7 +201,7 @@ print(schema)
 ```py
 # 인수를 받지 않는 간단한 함수
 current_time = {
-  "type": "function", 
+  "type": "function",
   "function": {
     "name": "current_time",
     "description": "Get the current local time as a string.",
@@ -217,18 +217,18 @@ multiply = {
   'type': 'function',
   'function': {
     'name': 'multiply',
-    'description': 'A function that multiplies two numbers', 
+    'description': 'A function that multiplies two numbers',
     'parameters': {
-      'type': 'object', 
+      'type': 'object',
       'properties': {
         'a': {
           'type': 'number',
           'description': 'The first number to multiply'
-        }, 
+        },
         'b': {
           'type': 'number', 'description': 'The second number to multiply'
         }
-      }, 
+      },
       'required': ['a', 'b']
     }
   }
@@ -252,7 +252,7 @@ model_input = tokenizer.apply_chat_template(
 ```py
 documents = [
     {
-        "title": "The Moon: Our Age-Old Foe", 
+        "title": "The Moon: Our Age-Old Foe",
         "text": "Man has always dreamed of destroying the moon. In this essay, I shall..."
     },
     {

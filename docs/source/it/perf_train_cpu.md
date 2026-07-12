@@ -62,7 +62,7 @@ Vedi un sempio di un caso d'uso [Transformers question-answering](https://github
 --doc_stride 128 \
 --output_dir /tmp/debug_squad/ \
 <b>--use_ipex \</b>
-<b>--bf16 --no_cuda</b></pre> 
+<b>--bf16 --no_cuda</b></pre>
 
 ### Esempi pratici
 

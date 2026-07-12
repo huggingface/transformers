@@ -128,7 +128,7 @@ torchrun \
 
 Les scripts TensorFlow utilisent une Strategie en Miroir [`MirroredStrategy`](https://www.tensorflow.org/guide/distributed_training#mirroredstrategy) pour l'entraînement distribué, et vous n'avez pas besoin d'ajouter d'arguments supplémentaires au script d'entraînement. Le script TensorFlow utilisera plusieurs GPU par défaut s'ils sont disponibles.
 
-## Exécuter un script sur un TPU 
+## Exécuter un script sur un TPU
 
 
 Les unités de traitement de tenseurs (UTT) (TPU) sont spécialement conçues pour accélérer les performances. PyTorch prend en charge les TPU avec le compilateur de deep learning [XLA](https://www.tensorflow.org/xla). Pour utiliser un TPU, lancez le script xla_spawn.py et utilisez l'argument num_cores pour définir le nombre de cœurs TPU que vous souhaitez utilise
@@ -148,7 +148,7 @@ python xla_spawn.py --num_cores 8 \
     --predict_with_generate
 ```
 
-## Exécuter un script avec 🤗 Accelerate 
+## Exécuter un script avec 🤗 Accelerate
 
 🤗 [Accelerate](https://huggingface.co/docs/accelerate) est une bibliothèque uniquement pour PyTorch qui offre une méthode unifiée pour entraîner un modèle sur plusieurs types de configurations (CPU uniquement, plusieurs GPU, TPU) tout en maintenant une visibilité complète sur la boucle d'entraînement PyTorch. Assurez-vous que vous avez installé 🤗 Accelerate si ce n'est pas déjà le cas.
 
@@ -180,7 +180,7 @@ accelerate launch run_summarization_no_trainer.py \
     --output_dir ~/tmp/tst-summarization
 ```
 
-## Utiliser un jeu de données personnalisé 
+## Utiliser un jeu de données personnalisé
 
 Le script de résumé prend en charge les jeux de données personnalisés tant qu'ils sont au format CSV ou JSON Line. Lorsque vous utilisez votre propre jeu de données, vous devez spécifier plusieurs arguments supplémentaires :
 
@@ -238,7 +238,7 @@ examples/pytorch/summarization/run_summarization.py -h
 
 ## Reprendre l'entraînement à partir d'un point de contrôle
 
-Une autre option utile est de reprendre l'entraînement à partir d'un point de contrôle précédent. Cela vous permettra de reprendre là où vous vous étiez arrêté sans recommencer si votre entraînement est interrompu: 
+Une autre option utile est de reprendre l'entraînement à partir d'un point de contrôle précédent. Cela vous permettra de reprendre là où vous vous étiez arrêté sans recommencer si votre entraînement est interrompu:
 
 ```bash
 python examples/pytorch/summarization/run_summarization.py
@@ -266,7 +266,7 @@ hf auth login
 Ensuite, ajoutez l'argument `push_to_hub` au script. Cet argument créera un dépôt avec votre nom d'utilisateur Hugging Face et le nom du dossier spécifié dans `output_dir`.
 
 
-Pour donner un nom spécifique à votre dépôt, utilisez l'argument `push_to_hub_model_id` pour l'ajouter. Le dépôt sera automatiquement listé sous votre namespace. 
+Pour donner un nom spécifique à votre dépôt, utilisez l'argument `push_to_hub_model_id` pour l'ajouter. Le dépôt sera automatiquement listé sous votre namespace.
 
 L'exemple suivant montre comment télécharger un modèle avec un nom de dépôt spécifique :
 

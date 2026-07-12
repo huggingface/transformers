@@ -56,7 +56,7 @@ The `assistant` role handles the tool request. Set `"type": "function"` in the `
 weather = {"name": "get_current_temperature", "arguments": {"location": "Paris, France", "unit": "celsius"}}
 message.append(
     {
-        "role": "assistant", 
+        "role": "assistant",
         "tool_calls": [{"type": "function", "function": weather}]
     }
 )

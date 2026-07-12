@@ -57,4 +57,4 @@ model = HFTransformerModel(model_args)
 
 ## Resources
 
-- [torchtitan](https://github.com/pytorch/torchtitan) repository 
+- [torchtitan](https://github.com/pytorch/torchtitan) repository

@@ -24,7 +24,7 @@ BLIP-2 모델은 Junnan Li, Dongxu Li, Silvio Savarese, Steven Hoi의 [BLIP-2: B
 *비전-언어 사전 학습의 비용은 대규모 모델의 엔드-투-엔드 학습으로 인해 점점 더 부담스러워지고 있습니다. 본 논문은 사전 학습된 이미지 인코더와 대규모 언어 모델을 활용하여 비전-언어 사전 학습을 부트스트래핑하는 일반적이고 효율적인 사전 학습 전략인 BLIP-2를 제안합니다. BLIP-2는 경량화된 Querying Transformer를 통해 모달리티 간의 차이를 연결하며, 두 단계로 사전 학습됩니다. 첫 번째 단계는 동결된 이미지 인코더로부터 비전-언어 표현 학습을 부트스트래핑하고, 두 번째 단계는 동결된 언어 모델로부터 비전-언어 생성 학습을 부트스트래핑합니다. BLIP-2는 기존 방법들에 비해 훨씬 적은 학습 가능한 파라미터로 다양한 비전-언어 작업에서 최첨단 성능을 달성합니다. 예를 들어, 우리 모델은 제로샷 VQAv2에서 Flamingo80B보다 8.7% 높은 성능을 기록하며, 학습 가능한 파라미터 수는 54배 적습니다. 우리는 또한 자연어 명령을 따를 수 있는 제로샷 이미지-텍스트 생성의 새로운 기능을 입증했습니다.*
 
 <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/blip2_architecture.jpg"
-alt="drawing" width="600"/> 
+alt="drawing" width="600"/>
 
 <small> BLIP-2 구조. <a href="https://huggingface.co/papers/2301.12597">원본 논문</a> 에서 발췌. </small>
 

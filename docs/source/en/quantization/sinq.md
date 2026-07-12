@@ -24,11 +24,11 @@
 | 📈 Model Quality | **Higher** | Lower | **Higher** | Lower |
 
 
-📄 **Want to know more?** 
+📄 **Want to know more?**
 - Read our paper on [**arXiv**](http://arxiv.org/abs/2509.22944)
 - Check the official [**SINQ**](https://github.com/huawei-csl/SINQ/tree/main) github repository
 
---- 
+---
 
 ## 1. Quantize any LLM with SINQ
 
@@ -45,7 +45,7 @@ pip install sinq
 
 ### Quantize in a few lines
 
-Quantizing any 🤗 Hugging Face model with SINQ is simple and takes only a few lines of code. 
+Quantizing any 🤗 Hugging Face model with SINQ is simple and takes only a few lines of code.
 First, create a [`SinqConfig`] and specify the following parameters:
 
 | Flag | Description | Type | Options | Default |
@@ -166,7 +166,7 @@ If you find **SINQ** useful in your research or applications
 
 ```bibtex
 @misc{muller2025sinq,
-      title={SINQ: Sinkhorn-Normalized Quantization for Calibration-Free Low-Precision LLM Weights}, 
+      title={SINQ: Sinkhorn-Normalized Quantization for Calibration-Free Low-Precision LLM Weights},
       author={Lorenz K. Muller and Philippe Bich and Jiawei Zhuang and Ahmet Celik and Luca Benfenati and Lukas Cavigelli},
       year={2025},
       eprint={2509.22944},

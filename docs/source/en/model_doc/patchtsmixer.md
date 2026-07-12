@@ -44,7 +44,7 @@ from transformers import Trainer, TrainingArguments,
 
 config = PatchTSMixerConfig(context_length = 512, prediction_length = 96)
 model = PatchTSMixerForPrediction(config)
-trainer = Trainer(model=model, args=training_args, 
+trainer = Trainer(model=model, args=training_args,
             train_dataset=train_dataset,
             eval_dataset=valid_dataset)
 trainer.train()

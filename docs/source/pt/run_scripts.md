@@ -205,7 +205,7 @@ python examples/pytorch/summarization/run_summarization.py \
     --predict_with_generate
 ```
 
-## Testando um script 
+## Testando um script
 
 Geralmente, é uma boa ideia executar seu script em um número menor de exemplos de conjuntos de dados para garantir que tudo funcione conforme o esperado antes de se comprometer com um conjunto de dados inteiro, que pode levar horas para ser concluído. Use os seguintes argumentos para truncar o conjunto de dados para um número máximo de amostras:
 
@@ -255,7 +255,7 @@ python examples/pytorch/summarization/run_summarization.py
     --predict_with_generate
 ```
 
-## Compartilhando seu modelo 
+## Compartilhando seu modelo
 
 Todos os scripts podem enviar seu modelo final para o [Model Hub](https://huggingface.co/models). Certifique-se de estar conectado ao Hugging Face antes de começar:
 

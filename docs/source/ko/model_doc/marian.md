@@ -49,7 +49,7 @@ BART와 동일한 모델을 사용하는 번역 모델 프레임워크입니다.
 ## 모델 이름 규칙[[Naming]]
 
 - 모든 모델 이름은 `Helsinki-NLP/opus-mt-{src}-{tgt}` 형식을 따릅니다.
-- 모델의 언어 코드 표기는 일관되지 않습니다. 두 자리 코드는 일반적으로 [여기](https://developers.google.com/admin-sdk/directory/v1/languages)에서 찾을 수 있으며, 세 자리 코드는 "언어 코드 {code}"로 구글 검색을 통해 찾습니다. 
+- 모델의 언어 코드 표기는 일관되지 않습니다. 두 자리 코드는 일반적으로 [여기](https://developers.google.com/admin-sdk/directory/v1/languages)에서 찾을 수 있으며, 세 자리 코드는 "언어 코드 {code}"로 구글 검색을 통해 찾습니다.
 - `es_AR`과 같은 형태의 코드는 `code_{region}` 형식을 의미합니다. 여기서의 예시는 아르헨티나의 스페인어를 의미합니다.
 - 모델 변환은 두 단계로 이루어졌습니다. 처음 1,000개 모델은 ISO-639-2 코드를 사용하고, 두 번째 그룹은 ISO-639-5와 ISO-639-2 코드를 조합하여 언어를 식별합니다.
 
@@ -149,7 +149,7 @@ GROUP_MEMBERS = {
 >>> model = MarianMTModel.from_pretrained(model_name)
 >>> translated = model.generate(**tokenizer(src_text, return_tensors="pt", padding=True))
 >>> tgt_text = [tokenizer.decode(t, skip_special_tokens=True) for t in translated]
-["c'est une phrase en anglais que nous voulons traduire en français", 
+["c'est une phrase en anglais que nous voulons traduire en français",
  'Isto deve ir para o português.',
  'Y esto al español']
 ```

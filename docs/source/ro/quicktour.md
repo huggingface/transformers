@@ -109,7 +109,7 @@ tokenizer.batch_decode(generated_ids)[0]
 '<s> The secret to baking a good cake is 100% in the preparation. There are so many recipes out there,'
 ```
 
-> [!TIP]    
+> [!TIP]
 > Vezi secțiunea [Trainer](#trainer-api) ca să înveți cum să ajustezi un model.
 
 ## Pipeline

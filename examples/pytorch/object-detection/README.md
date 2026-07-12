@@ -65,8 +65,8 @@ python run_object_detection.py \
     --seed 1337
 ```
 
-> Note:  
-`--eval_do_concat_batches false` is required for correct evaluation of detection models;  
+> Note:
+`--eval_do_concat_batches false` is required for correct evaluation of detection models;
 `--ignore_mismatched_sizes true` is required to load detection model for finetuning with different number of classes.
 
 The resulting model can be seen here: https://huggingface.co/qubvel-hf/qubvel-hf/detr-resnet-50-finetuned-10k-cppe5. The corresponding Weights and Biases report [here](https://api.wandb.ai/links/qubvel-hf-co/bnm0r5ex). Note that it's always advised to check the original paper to know the details regarding training hyperparameters. Hyperparameters for current example were not tuned. To improve model quality you could try:
@@ -74,7 +74,7 @@ The resulting model can be seen here: https://huggingface.co/qubvel-hf/qubvel-hf
  - changing training parameters, such as learning rate, batch size, warmup, optimizer and many more (see [TrainingArguments](https://huggingface.co/docs/transformers/main_classes/trainer#transformers.TrainingArguments))
  - adding more image augmentations (we created a helpful [HF Space](https://huggingface.co/spaces/qubvel-hf/albumentations-demo) to choose some)
 
-Note that you can replace the model and dataset by simply setting the `model_name_or_path` and `dataset_name` arguments respectively, with model or dataset from the [hub](https://huggingface.co/). 
+Note that you can replace the model and dataset by simply setting the `model_name_or_path` and `dataset_name` arguments respectively, with model or dataset from the [hub](https://huggingface.co/).
 For dataset, make sure it provides labels in the same format as [CPPE-5](https://huggingface.co/datasets/cppe-5) dataset and boxes are provided in [COCO format](https://albumentations.ai/docs/getting_started/bounding_boxes_augmentation/#coco).
 
 ![W&B report](https://i.imgur.com/ASNjamQ.png)
@@ -118,7 +118,7 @@ accelerate launch run_object_detection_no_trainer.py \
 
 and boom, you're training, possibly on multiple GPUs, logging everything to all trackers found in your environment (like Weights and Biases, Tensorboard) and regularly pushing your model to the hub (with the repo name being equal to `args.output_dir` at your HF username) 🤗
 
-With the default settings, the script fine-tunes a [DETR](https://huggingface.co/facebook/detr-resnet-50) model on the [CPPE-5](https://huggingface.co/datasets/cppe-5) dataset. The resulting model can be seen here: https://huggingface.co/qubvel-hf/detr-resnet-50-finetuned-10k-cppe5-no-trainer. 
+With the default settings, the script fine-tunes a [DETR](https://huggingface.co/facebook/detr-resnet-50) model on the [CPPE-5](https://huggingface.co/datasets/cppe-5) dataset. The resulting model can be seen here: https://huggingface.co/qubvel-hf/detr-resnet-50-finetuned-10k-cppe5-no-trainer.
 
 
 ## Reload and perform inference
@@ -148,7 +148,7 @@ inputs = image_processor(images=image, return_tensors="pt")
 with torch.no_grad():
     outputs = model(**inputs)
 
-# Post process model predictions 
+# Post process model predictions
 # this include conversion to Pascal VOC format and filtering non confident boxes
 width, height = image.size
 target_sizes = torch.tensor([height, width]).unsqueeze(0)  # add batch dim

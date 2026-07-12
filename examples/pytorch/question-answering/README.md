@@ -17,7 +17,7 @@ limitations under the License.
 # Question answering
 
 This folder contains several scripts that showcase how to fine-tune a 🤗 Transformers model on a question answering dataset,
-like SQuAD. 
+like SQuAD.
 
 ## Trainer-based scripts
 
@@ -131,7 +131,7 @@ python run_seq2seq_qa.py \
 Based on the scripts `run_qa_no_trainer.py` and `run_qa_beam_search_no_trainer.py`.
 
 Like `run_qa.py` and `run_qa_beam_search.py`, these scripts allow you to fine-tune any of the models supported on a
-SQuAD or a similar dataset, the main difference is that this script exposes the bare training loop, to allow you to quickly experiment and add any customization you would like. It offers less options than the script with `Trainer` (for instance you can easily change the options for the optimizer or the dataloaders directly in the script), but still run in a distributed setup, on TPU and supports mixed precision by leveraging the [🤗 `Accelerate`](https://github.com/huggingface/accelerate) library. 
+SQuAD or a similar dataset, the main difference is that this script exposes the bare training loop, to allow you to quickly experiment and add any customization you would like. It offers less options than the script with `Trainer` (for instance you can easily change the options for the optimizer or the dataloaders directly in the script), but still run in a distributed setup, on TPU and supports mixed precision by leveraging the [🤗 `Accelerate`](https://github.com/huggingface/accelerate) library.
 
 You can use the script normally after installing it:
 

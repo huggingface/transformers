@@ -245,4 +245,4 @@ LLMs هي [معماريات فك التشفير فقط](https://huggingface.co/l
 2. [`outlines`](https://github.com/outlines-dev/outlines), مكتبة للتحكم في توليد النصوص (على سبيل المثال، لتوليد ملفات JSON).
 3. [`SynCode`](https://github.com/uiuc-focal-lab/syncode), مكتبة للتوليد الموجه بقواعد اللغة الخالية من السياق (على سبيل المثال، JSON، SQL، Python).
 4. [`text-generation-inference`](https://github.com/huggingface/text-generation-inference), خادم جاهز للإنتاج لنماذج اللغات الكبيرة.
-5. [`text-generation-webui`](https://github.com/oobabooga/text-generation-webui), واجهة مستخدم لتوليد النصوص.   
+5. [`text-generation-webui`](https://github.com/oobabooga/text-generation-webui), واجهة مستخدم لتوليد النصوص.  

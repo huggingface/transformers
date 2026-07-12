@@ -30,7 +30,7 @@ Les approches précédentes prétraitaient l'audio pour en extraire des caracté
 
 La classification audio est une tâche qui consiste à attribuer une classe, parmi un ensemble de classes prédéfini, à un audio. La classification audio englobe de nombreuses applications spécifiques, dont certaines incluent :
 
-* la classification d'environnements sonores : attribuer une classe (catégorie) à l'audio pour indiquer l'environnement associé, tel que "bureau", "plage" ou "stade". 
+* la classification d'environnements sonores : attribuer une classe (catégorie) à l'audio pour indiquer l'environnement associé, tel que "bureau", "plage" ou "stade".
 * la détection d'événements sonores : étiqueter l'audio avec une étiquette d'événement sonore ("klaxon de voiture", "appel de baleine", "verre brisé")
 * l'identification d'éléments sonores : attribuer des tags (*étiquettes* en français) à l'audio pour marquer des sons spécifiques, comme "chant des oiseaux" ou "identification du locuteur lors d'une réunion".
 * la classification musicale : attribuer un genre à la musique, comme "metal", "hip-hop" ou "country".
@@ -69,7 +69,7 @@ L'une des premières réussites en vision par ordinateur a été la reconnaissan
 Il existe deux approches principales pour résoudre les tâches de vision par ordinateur :
 
 1. Utiliser des convolutions pour apprendre les caractéristiques hiérarchiques d'une image, des détails de bas niveau aux éléments abstraits de plus haut niveau.
-2. Diviser l'image en morceaux (*patches* en anglais) et utiliser un Transformer pour apprendre progressivement comment chaque morceau est lié aux autres pour former l'image complète. Contrairement à l'approche ascendante des CNNs, cette méthode ressemble à un processus où l'on démarre avec une image floue pour ensuite la mettre au point petit à petit. 
+2. Diviser l'image en morceaux (*patches* en anglais) et utiliser un Transformer pour apprendre progressivement comment chaque morceau est lié aux autres pour former l'image complète. Contrairement à l'approche ascendante des CNNs, cette méthode ressemble à un processus où l'on démarre avec une image floue pour ensuite la mettre au point petit à petit.
 
 ### Classification d'images
 
@@ -230,7 +230,7 @@ Le résumé de text consiste à créer une version plus courte d'un texte tout e
 Il existe deux types courants de summarization :
 
 - **Extractive** : identifier et extraire les phrases les plus importantes du texte original.
-- **Abstractive** : générer un résumé qui peut inclure des mots nouveaux non présents dans le texte d'origine. 
+- **Abstractive** : générer un résumé qui peut inclure des mots nouveaux non présents dans le texte d'origine.
 
 ### Traduction
 

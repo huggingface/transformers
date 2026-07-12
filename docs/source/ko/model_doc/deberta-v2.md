@@ -27,8 +27,8 @@ DeBERTa는 RoBERTa에서 사용된 데이터의 절반만을 사용하여 분리
 *사전 학습된 신경망 언어 모델의 최근 발전은 많은 자연어 처리(NLP) 작업의 성능을 크게 향상시켰습니다. 본 논문에서는 두 가지 새로운 기술을 사용하여 BERT와 RoBERTa 모델을 개선한 새로운 모델 구조인 DeBERTa를 제안합니다. 첫 번째는 분리된 어텐션 메커니즘으로, 각 단어가 내용과 위치를 각각 인코딩하는 두 개의 벡터로 표현되며, 단어들 간의 어텐션 가중치는 내용과 상대적 위치에 대한 분리된 행렬을 사용하여 계산됩니다. 두 번째로, 모델 사전 학습을 위해 마스킹된 토큰을 예측하는 출력 소프트맥스 층을 대체하는 향상된 마스크 디코더가 사용됩니다. 우리는 이 두 가지 기술이 모델 사전 학습의 효율성과 다운스트림 작업의 성능을 크게 향상시킨다는 것을 보여줍니다. RoBERTa-Large와 비교했을 때, 절반의 학습 데이터로 학습된 DeBERTa 모델은 광범위한 NLP 작업에서 일관되게 더 나은 성능을 보여주며, MNLI에서 +0.9%(90.2% vs 91.1%), SQuAD v2.0에서 +2.3%(88.4% vs 90.7%), RACE에서 +3.6%(83.2% vs 86.8%)의 성능 향상을 달성했습니다. DeBERTa 코드와 사전 학습된 모델은 https://github.com/microsoft/DeBERTa 에서 공개될 예정입니다.*
 
 
-다음 정보들은 [원본 구현 저장소](https://github.com/microsoft/DeBERTa)에서 보실 수 있습니다. DeBERTa v2는 DeBERTa의 두번째 모델입니다. 
-DeBERTa v2는 SuperGLUE 단일 모델 제출에 사용된 1.5B 모델을 포함하며, 인간 기준점(베이스라인) 89.8점 대비 89.9점을 달성했습니다. 저자의 
+다음 정보들은 [원본 구현 저장소](https://github.com/microsoft/DeBERTa)에서 보실 수 있습니다. DeBERTa v2는 DeBERTa의 두번째 모델입니다.
+DeBERTa v2는 SuperGLUE 단일 모델 제출에 사용된 1.5B 모델을 포함하며, 인간 기준점(베이스라인) 89.8점 대비 89.9점을 달성했습니다. 저자의
 [블로그](https://www.microsoft.com/en-us/research/blog/microsoft-deberta-surpasses-human-performance-on-the-superglue-benchmark/)에서 더 자세한 정보를 확인할 수 있습니다.
 
 v2의 새로운 점:

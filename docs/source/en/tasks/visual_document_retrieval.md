@@ -19,7 +19,7 @@ Documents can contain multimodal data if they include charts, tables, and visual
 
 Visual document retrieval can help retrieve information from all types of documents, including multimodal retrieval augmented generation (RAG). These models accept documents (as images) and texts and calculates the similarity scores between them.
 
-This guide demonstrates how to index and retrieve documents with [ColPali](../model_doc/colpali).  
+This guide demonstrates how to index and retrieve documents with [ColPali](../model_doc/colpali).
 
 > [!TIP]
 > For large scale use cases, you may want to index and retrieve documents with a vector database.
@@ -93,7 +93,7 @@ def find_top_k_indices_batched(dataset, text_embedding, processor, k=10, batch_s
     for start_idx in range(0, len(dataset), batch_size):
 
         end_idx = min(start_idx + batch_size, len(dataset))
-        batch = dataset[start_idx:end_idx]        
+        batch = dataset[start_idx:end_idx]
         batch_embeddings = [torch.tensor(emb[0], dtype=torch.float32) for emb in batch["embeddings"]]
         scores = processor.score_retrieval(text_embedding.to("cpu").to(torch.float32), batch_embeddings)
 

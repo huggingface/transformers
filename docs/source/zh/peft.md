@@ -210,6 +210,6 @@ model = AutoModelForCausalLM.from_pretrained(save_dir)
 <!--
 TODO: (@younesbelkada @stevhliu)
 -   Link to PEFT docs for further details
--   Trainer  
+-   Trainer
 -   8-bit / 4-bit examples ?
 -->

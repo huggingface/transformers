@@ -18,7 +18,7 @@ rendered properly in your Markdown viewer.
 
 이미지 프로세서는 이미지를 픽셀 값, 즉 이미지의 색상과 크기를 나타내는 텐서로 변환합니다. 이 픽셀 값은 비전 모델의 입력으로 사용됩니다. 이때 사전 학습된 모델이 새로운 이미지를 올바르게 인식하려면 입력되는 이미지의 형식이 학습 당시 사용했던 데이터와 똑같아야 합니다. 이미지 프로세서는 다음과 같은 작업을 통해 이미지 형식을 통일시켜주는 역할을 합니다.
 
-- 이미지 크기를 조절하는 [`~BaseImageProcessor.center_crop`] 
+- 이미지 크기를 조절하는 [`~BaseImageProcessor.center_crop`]
 - 픽셀 값을 정규화하는 [`~BaseImageProcessor.normalize`] 또는 크기를 재조정하는 [`~BaseImageProcessor.rescale`]
 
 Hugging Face [Hub](https://hf.co)나 로컬 디렉토리에 있는 비전 모델에서 이미지 프로세서의 설정(이미지 크기, 정규화 및 리사이즈 여부 등)을 불러오려면 [`~ImageProcessingMixin.from_pretrained`]를 사용하세요. 각 사전 학습된 모델의 설정은 [preprocessor_config.json](https://huggingface.co/google/vit-base-patch16-224/blob/main/preprocessor_config.json) 파일에 저장되어 있습니다.

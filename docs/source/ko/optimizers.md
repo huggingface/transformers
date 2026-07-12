@@ -16,9 +16,9 @@ rendered properly in your Markdown viewer.
 
 # 옵티마이저[[optimizers]]
 
-Transformers는 AdamW 및 AdaFactor와 같은 두 가지 기본 옵티마이저를 제공합니다. 또한, 보다 특화된 옵티마이저와의 통합도 지원합니다. 원하는 옵티마이저를 제공하는 라이브러리를 설치한 후, [`TrainingArguments`]의 `optim` 파라미터에 해당 옵티마이저명을 지정하시면 됩니다. 
+Transformers는 AdamW 및 AdaFactor와 같은 두 가지 기본 옵티마이저를 제공합니다. 또한, 보다 특화된 옵티마이저와의 통합도 지원합니다. 원하는 옵티마이저를 제공하는 라이브러리를 설치한 후, [`TrainingArguments`]의 `optim` 파라미터에 해당 옵티마이저명을 지정하시면 됩니다.
 
-이 가이드에서는 아래에 제시된 [`TrainingArguments`]와 함께 [`Trainer`]에서 이러한 옵티마이저를 사용하는 방법을 안내합니다. 
+이 가이드에서는 아래에 제시된 [`TrainingArguments`]와 함께 [`Trainer`]에서 이러한 옵티마이저를 사용하는 방법을 안내합니다.
 
 ```py
 import torch
@@ -42,12 +42,12 @@ args = TrainingArguments(
 pip install apollo-torch
 ```
 
-[Approximated Gradient Scaling for Memory Efficient LLM Optimization (APOLLO)](https://github.com/zhuhanqing/APOLLO) 는 사전 학습과 미세 조정 모두에 대해 전체 파라미터 학습을 지원하는, 메모리 효율적인 옵티마이저입니다. 이 옵티마이저는 SGD와 유사한 메모리 효율성으로 AdamW 수준의 성능을 유지합니다. 극한의 메모리 효율성이 필요하다면 APOLLO의 rank 1 변형인 APOLLO-Mini를 사용할 수 있습니다. APOLLO 옵티마이저는 다음과 같은 특징을 지원합니다. 
+[Approximated Gradient Scaling for Memory Efficient LLM Optimization (APOLLO)](https://github.com/zhuhanqing/APOLLO) 는 사전 학습과 미세 조정 모두에 대해 전체 파라미터 학습을 지원하는, 메모리 효율적인 옵티마이저입니다. 이 옵티마이저는 SGD와 유사한 메모리 효율성으로 AdamW 수준의 성능을 유지합니다. 극한의 메모리 효율성이 필요하다면 APOLLO의 rank 1 변형인 APOLLO-Mini를 사용할 수 있습니다. APOLLO 옵티마이저는 다음과 같은 특징을 지원합니다.
 
 * 초저랭크(rank) 효율성. [GaLoRE](./trainer#galore)보다 훨씬 낮은 랭크를 사용할 수 있으며, 랭크 1로도 충분합니다.
 * 고비용 SVD 연산 회피. APOLLO는 학습 중단(training stalls)을 피하기 위해 무작위 투영(random projections)을 활용합니다.
 
-학습할 레이어를 지정하려면 `optim_target_modules` 파라미터를 사용하세요. 
+학습할 레이어를 지정하려면 `optim_target_modules` 파라미터를 사용하세요.
 
 ```diff
 import torch
@@ -101,7 +101,7 @@ args = TrainingArguments(
 pip install grokadamw
 ```
 
-[GrokAdamW](https://github.com/cognitivecomputations/grokadamw)는 *grokking* 현상(기울기가 천천히 변화해 일반화가 지연되는 현상)에서 성능이 향상되는 모델들에게 적합하도록 설계된 옵티마이저입니다. GrokAdamW는 더 뛰어난 성능과 안정성을 위해 고급 최적화 기술이 필요한 모델에 특히 유용합니다. 
+[GrokAdamW](https://github.com/cognitivecomputations/grokadamw)는 *grokking* 현상(기울기가 천천히 변화해 일반화가 지연되는 현상)에서 성능이 향상되는 모델들에게 적합하도록 설계된 옵티마이저입니다. GrokAdamW는 더 뛰어난 성능과 안정성을 위해 고급 최적화 기술이 필요한 모델에 특히 유용합니다.
 
 ```diff
 import torch
@@ -156,7 +156,7 @@ pip install schedulefree
 
 SFO는 RAdam(`schedule_free_radam`), AdamW(`schedule_free_adamw`), SGD(`schedule_free_sgd`) 옵티마이저를 지원합니다. RAdam 스케줄러는 `warmup_steps`.
 
-기본적으로 `lr_scheduler_type="constant"`로 설정하는 것을 권장합니다. 다른 `lr_scheduler_type` 값도 동작할 순 있으나, SFO 옵티마이저와 다른 학습률 스케줄을 함께 사용하면 SFO의 의도된 동작과 성능에 영향을 줄 수 있습니다. 
+기본적으로 `lr_scheduler_type="constant"`로 설정하는 것을 권장합니다. 다른 `lr_scheduler_type` 값도 동작할 순 있으나, SFO 옵티마이저와 다른 학습률 스케줄을 함께 사용하면 SFO의 의도된 동작과 성능에 영향을 줄 수 있습니다.
 
 ```diff
 args = TrainingArguments(

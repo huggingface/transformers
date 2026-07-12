@@ -138,7 +138,7 @@ print(embeddings.shape)
 ```
 
 
-## JinaEmbeddingsV3Config 
+## JinaEmbeddingsV3Config
 
 [[autodoc]] JinaEmbeddingsV3Config
 
@@ -147,7 +147,7 @@ print(embeddings.shape)
 [[autodoc]] JinaEmbeddingsV3Model
     - forward
 
-## JinaEmbeddingsV3ForMaskedLM 
+## JinaEmbeddingsV3ForMaskedLM
 
 [[autodoc]] JinaEmbeddingsV3ForMaskedLM
     - forward

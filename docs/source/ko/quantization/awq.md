@@ -182,7 +182,7 @@ model = AutoModelForCausalLM.from_pretrained(model_id, quantization_config=quant
  `modules_to_fuse` 매개변수는 다음을 포함해야 합니다:
 
 - `"attention"`: 어텐션 레이어는 다음 순서로 퓨즈하세요 : 쿼리 (query), 키 (key), 값 (value) , 출력 프로젝션 계층 (output projection layer). 해당 레이어를 퓨즈하지 않으려면 빈 리스트를 전달하세요.
-- `"layernorm"`: 사용자 정의 퓨즈 레이어 정규화로 교할 레이어 정규화 레이어명. 해당 레이어를 퓨즈하지 않으려면 빈 리스트를 전달하세요. 
+- `"layernorm"`: 사용자 정의 퓨즈 레이어 정규화로 교할 레이어 정규화 레이어명. 해당 레이어를 퓨즈하지 않으려면 빈 리스트를 전달하세요.
 - `"mlp"`: 단일 MLP 레이어로 퓨즈할 MLP 레이어 순서 : (게이트 (gate) (덴스(dense), 레이어(layer), 포스트 어텐션(post-attention)) / 위 / 아래 레이어).
 - `"use_alibi"`: 모델이 ALiBi positional embedding을 사용할 경우 설정합니다.
 - `"num_attention_heads"`: 어텐션 헤드 (attention heads)의 수를 설정합니다.
@@ -196,7 +196,7 @@ model = AutoModelForCausalLM.from_pretrained(model_id, quantization_config=quant
 
 ## ExLlama-v2 서포트 [[exllama-v2-support]]
 
-최신 버전 `autoawq`는 빠른 프리필과 디코딩을 위해 ExLlama-v2 커널을 지원합니다. 시작하기 위해 먼저 최신 버전 `autoawq` 를 설치하세요 : 
+최신 버전 `autoawq`는 빠른 프리필과 디코딩을 위해 ExLlama-v2 커널을 지원합니다. 시작하기 위해 먼저 최신 버전 `autoawq` 를 설치하세요 :
 
 ```bash
 pip install git+https://github.com/casper-hansen/AutoAWQ.git

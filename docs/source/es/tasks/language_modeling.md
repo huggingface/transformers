@@ -26,7 +26,7 @@ El modelado de lenguaje causal predice el siguiente token en una secuencia de to
 
 El modelado de lenguaje por enmascaramiento predice un token enmascarado en una secuencia, y el modelo puede considerar los tokens bidireccionalmente.
 
-Esta guía te mostrará cómo realizar fine-tuning [DistilGPT2](https://huggingface.co/distilbert/distilgpt2) para modelos de lenguaje causales y [DistilRoBERTa](https://huggingface.co/distilbert/distilroberta-base) para modelos de lenguaje por enmascaramiento en el [r/askscience](https://www.reddit.com/r/askscience/) subdataset [ELI5](https://huggingface.co/datasets/eli5). 
+Esta guía te mostrará cómo realizar fine-tuning [DistilGPT2](https://huggingface.co/distilbert/distilgpt2) para modelos de lenguaje causales y [DistilRoBERTa](https://huggingface.co/distilbert/distilroberta-base) para modelos de lenguaje por enmascaramiento en el [r/askscience](https://www.reddit.com/r/askscience/) subdataset [ELI5](https://huggingface.co/datasets/eli5).
 
 <Tip>
 
@@ -158,7 +158,7 @@ Aplica la función `group_texts` sobre todo el dataset:
 >>> lm_dataset = tokenized_eli5.map(group_texts, batched=True, num_proc=4)
 ```
 
-Para modelados de lenguaje causales, usa [`DataCollatorForLanguageModeling`] para crear un lote de ejemplos. Esto también *rellenará dinámicamente* tu texto a la dimensión del elemento más largo del lote para que de esta manera tengan largo uniforme. Si bien es posible rellenar tu texto en la función `tokenizer` mediante el argumento `padding=True`, el rellenado dinámico es más eficiente. 
+Para modelados de lenguaje causales, usa [`DataCollatorForLanguageModeling`] para crear un lote de ejemplos. Esto también *rellenará dinámicamente* tu texto a la dimensión del elemento más largo del lote para que de esta manera tengan largo uniforme. Si bien es posible rellenar tu texto en la función `tokenizer` mediante el argumento `padding=True`, el rellenado dinámico es más eficiente.
 
 Puedes usar el token de final de secuencia como el token de relleno y asignar `mlm=False`. Esto usará los inputs como etiquetas movidas un elemento hacia la derecha:
 

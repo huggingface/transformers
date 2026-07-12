@@ -129,8 +129,8 @@ print(tokenizer.decode(output_ids, skip_special_tokens=True))
 
 ### Agentic tool use
 
-For your AI-powered agent, you can leverage K-EXAONE’s tool calling capability. 
-The K-EXAONE model is compatible with both OpenAI and HuggingFace tool calling specifications. 
+For your AI-powered agent, you can leverage K-EXAONE’s tool calling capability.
+The K-EXAONE model is compatible with both OpenAI and HuggingFace tool calling specifications.
 The example below demonstrates tool calling using HuggingFace’s docstring-to-tool-schema utility.
 
 Please check the [example file](https://github.com/LG-AI-EXAONE/K-EXAONE/blob/main/examples/example_output_search.txt) for an example of a search agent conversation using K-EXAONE.

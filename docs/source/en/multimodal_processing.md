@@ -63,7 +63,7 @@ Optionally override `prepare_inputs_layout` and `validate_inputs` methods. If th
 
 ```python
 def prepare_inputs_layout(self, images=None, text=None, videos=None, audio=None, **kwargs):
-    # Call `super()` to apply common preparation steps first 
+    # Call `super()` to apply common preparation steps first
     images, text, videos, audio = super().prepare_inputs_layout(images, text, videos, audio)
     if images is not None:
         images = make_nested_list_of_images(images)

@@ -21,7 +21,7 @@ rendered properly in your Markdown viewer.
 
 [EXAONE 4.5](https://github.com/LG-AI-EXAONE/EXAONE-4.5) model is the first open-weight vision language model developed by LG AI Research.
 Integrating a dedicated visual encoder into the existing EXAONE 4.0 framework, we expand the model's capability toward multimodality.
-EXAONE 4.5 features 33 billion parameters in total, including 1.2 billion parameters from the vision encoder. 
+EXAONE 4.5 features 33 billion parameters in total, including 1.2 billion parameters from the vision encoder.
 EXAONE 4.5 achieves competitive performance in general benchmark while outperforming SOTA models of similar size in document understanding and Korean contextual reasoning, inheriting powerful language capabilities from our previous language models.
 
 EXAONE 4.5 builds on the foundation of EXAONE 4.0 with several key enhancements. The vocabulary size has been expanded to 153,600, and the context window now supports up to 256K tokens. In addition, a Multi-Token Prediction (MTP) mechanism has been introduced, further improving the model's performance.
@@ -37,7 +37,7 @@ All model weights including quantized version are available at [Huggingface Coll
 > - We recommend to use `temperature=0.6`, `top_p=0.95`, `presence_penalty=1.5`, `top_k=20` for OCR/document-related tasks, and Korean inputs.
 > - We recommend to use `temperature=1.0`, `top_p=0.95` for text-only inputs.
 > - Different from EXAONE-4.0, EXAONE 4.5 uses `enable_thinking=True` as default. Thus, you need to set `enable_thinking=False` when you want to use non-reasoning mode.
-> - EXAONE 4.5 prefers using `\boxed{}` format to answer the question. We recommend using this format with the corresponding format instruction for better parsing accuracy. 
+> - EXAONE 4.5 prefers using `\boxed{}` format to answer the question. We recommend using this format with the corresponding format instruction for better parsing accuracy.
 
 For tasks that require accurate results, you can run the EXAONE 4.5 model in reasoning mode, whereas for tasks where latency matters more than accuracy, you can run the EXAONE 4.5 model in non-reasoning mode.
 

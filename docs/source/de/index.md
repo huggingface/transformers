@@ -42,7 +42,7 @@ Die Dokumentation ist in fünf Teile gegliedert:
 - **GET STARTED** enthält eine kurze Tour und Installationsanweisungen, um mit 🤗 Transformers loszulegen.
 - **TUTORIALS** sind ein hervorragender Ausgangspunkt, wenn Sie neu in unserer Bibliothek sind. Dieser Abschnitt hilft Ihnen, die grundlegenden Fähigkeiten zu erlangen, die Sie benötigen, um mit 🤗 Transformers zu arbeiten.
 - **HOW-TO GUIDES** zeigen Ihnen, wie Sie ein bestimmtes Ziel erreichen können, z. B. die Feinabstimmung eines vortrainierten Modells für die Sprachmodellierung oder die Erstellung eines benutzerdefinierten Modellkopfs.
-- **KONZEPTUELLE ANLEITUNGEN** bietet weitere Diskussionen und Erklärungen zu den zugrunde liegenden Konzepten und Ideen hinter Modellen, Aufgaben und der Designphilosophie von 🤗 Transformers. 
+- **KONZEPTUELLE ANLEITUNGEN** bietet weitere Diskussionen und Erklärungen zu den zugrunde liegenden Konzepten und Ideen hinter Modellen, Aufgaben und der Designphilosophie von 🤗 Transformers.
 - **API** beschreibt jede Klasse und Funktion, gruppiert in:
 
   - **MAIN CLASSES** für die Hauptklassen, die die wichtigsten APIs der Bibliothek darstellen.

@@ -142,9 +142,9 @@ Applying the template to our `messages` list would produce:
 <|assistant|>
 ```
 
-This tells the model:  
-1. The conversation history (user/assistant turns).  
-2. The model's turn to generate a response (`<|assistant|>` at the end).  
+This tells the model:
+1. The conversation history (user/assistant turns).
+2. The model's turn to generate a response (`<|assistant|>` at the end).
 
 ---
 

@@ -249,5 +249,5 @@ $$\mathcal{L} = -\sum_{i=1}^{N} \log \left ( \sum_{x \in S(x_{i})} p(x) \right )
 [`XLNetTokenizer`]는 센텐스피스를 사용하기 때문에, 위에서 다룬 예시에서 어휘에  `"▁"`가 포함되어있습니다.
 모든 토큰을 합친 후 `"▁"`을 공백으로 대체하면 되기 때문에 센텐스피스로 토큰화된 결과는 디코딩하기 수월합니다.
 
-transformers에서 제공하는 센텐스피스 토크나이저를 사용하는 모든 모델은 유니그램과 함께 사용됩니다. 
+transformers에서 제공하는 센텐스피스 토크나이저를 사용하는 모든 모델은 유니그램과 함께 사용됩니다.
 [ALBERT](model_doc/albert), [XLNet](model_doc/xlnet), [Marian](model_doc/marian), [T5](model_doc/t5) 모델이 센텐스피스 토크나이저를 사용합니다.

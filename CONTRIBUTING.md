@@ -31,8 +31,8 @@ limitations under the License.
 
 We understand that code agents are extremely powerful tools, and many people at Hugging Face use them in their work.
 However, it's important to realize that **if you simply run a code agent
-and generate a PR to an open-source project, you are merely a middleman between the reviewers and the agent**. 
-Although doing this creates something that looks very much like a useful contribution, in reality there was no reason 
+and generate a PR to an open-source project, you are merely a middleman between the reviewers and the agent**.
+Although doing this creates something that looks very much like a useful contribution, in reality there was no reason
 for you to be involved; the reviewers could have simply run the code agent themselves.
 
 If you want to contribute usefully to open-source in the agent era, **you need to do things that agents can't do on
@@ -46,7 +46,7 @@ multi-line comments to draw attention to all the hard work they did. If your PR 
 make it a 1-line fix. This makes the PR much easier to review and improves the chances that it will be accepted.
 - Take the time to reproduce the problem. Very often when a user reports an issue, the issue is actually caused by
 environment issues on their machine, or they misdiagnose the problem and suggest an invalid solution. Many code agents
-trust the user comments too much, which results in bad solutions, sometimes for problems that 
+trust the user comments too much, which results in bad solutions, sometimes for problems that
 do not exist! Writing a simple reproducer script and running it to make sure you see the problem is valuable.
 - Compare against other models. The Transformers repo is very large, and many models are doing similar things. When
 fixing a bug, it's valuable to see if the bug exists in other models. If your PR says
@@ -58,9 +58,9 @@ have time for small style changes or typo fixes in comments. You can provide val
 agent simply by having good taste about what's really important. Code agents often zero in on "theoretical bugs"
 found by code analysis that rarely if ever cause problems in practice. These are generally not worth fixing unless they
 can be exploited by an attacker.
-- Verify tests locally and in the CI. Before opening a PR, run `make fix-repo` and use `utils/tests_fetcher.py` to 
-see a list of tests that cover the files you have changed in your PR branch. Run those tests locally, and make sure 
-they pass before you open a PR. After you open your PR, please verify that the CI is green and fix any issues before 
+- Verify tests locally and in the CI. Before opening a PR, run `make fix-repo` and use `utils/tests_fetcher.py` to
+see a list of tests that cover the files you have changed in your PR branch. Run those tests locally, and make sure
+they pass before you open a PR. After you open your PR, please verify that the CI is green and fix any issues before
 pinging anyone for review! This reduces notification spam a lot, which keeps maintainers sane.
 
 </details>

@@ -16,7 +16,7 @@ rendered properly in your Markdown viewer.
 
 # Usa los tokenizadores de 🤗 Tokenizers
 
-[`PreTrainedTokenizerFast`] depende de la biblioteca [🤗 Tokenizers](https://huggingface.co/docs/tokenizers). Los tokenizadores obtenidos desde la biblioteca 🤗 Tokenizers pueden ser 
+[`PreTrainedTokenizerFast`] depende de la biblioteca [🤗 Tokenizers](https://huggingface.co/docs/tokenizers). Los tokenizadores obtenidos desde la biblioteca 🤗 Tokenizers pueden ser
 cargados de forma muy sencilla en los 🤗 Transformers.
 
 Antes de entrar en detalles, comencemos creando un tokenizador dummy en unas cuantas líneas:
@@ -38,7 +38,7 @@ Antes de entrar en detalles, comencemos creando un tokenizador dummy en unas cua
 Ahora tenemos un tokenizador entrenado en los archivos que definimos. Lo podemos seguir utilizando en ese entorno de ejecución (runtime en inglés), o puedes guardarlo
 en un archivo JSON para reutilizarlo en un futuro.
 
-## Cargando directamente desde el objeto tokenizador 
+## Cargando directamente desde el objeto tokenizador
 
 Veamos cómo utilizar este objeto tokenizador en la biblioteca 🤗 Transformers. La clase
 [`PreTrainedTokenizerFast`] permite una instanciación fácil, al aceptar el objeto

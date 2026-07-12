@@ -75,7 +75,7 @@ NCCL_DEBUG=INFO python -m torch.distributed.run --nproc_per_node 2 --nnodes 1 to
 ```
 또는 [`TrainingArguments`] 객체를 생성할 때 `debug="underflow_overflow"`를 전달합니다.
 
-자체 훈련 루프나 다른 Trainer를 사용하는 경우, 다음과 같이 수행할 수 있습니다. 
+자체 훈련 루프나 다른 Trainer를 사용하는 경우, 다음과 같이 수행할 수 있습니다.
 
 ```python
 from transformers.debug_utils import DebugUnderflowOverflow

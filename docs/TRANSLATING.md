@@ -17,7 +17,7 @@ As part of our mission to democratize machine learning, we aim to make the Trans
     ```bash
     git clone https://github.com/YOUR-USERNAME/transformers.git
     ```
-   
+
    Replace `YOUR-USERNAME` with your GitHub username.
 
 ## Copy-paste the English version with a new language code

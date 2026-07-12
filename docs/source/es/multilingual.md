@@ -61,7 +61,7 @@ A continuación, crea un input de ejemplo:
 >>> input_ids = torch.tensor([tokenizer.encode("Wikipedia was used to")])  # batch size of 1
 ```
 
-Establece el id del idioma, por ejemplo `"en"`, y utilízalo para definir el language embedding. El language embedding es un tensor lleno de `0` ya que es el id del idioma para inglés. Este tensor debe ser del mismo tamaño que `input_ids`. 
+Establece el id del idioma, por ejemplo `"en"`, y utilízalo para definir el language embedding. El language embedding es un tensor lleno de `0` ya que es el id del idioma para inglés. Este tensor debe ser del mismo tamaño que `input_ids`.
 
 ```py
 >>> language_id = tokenizer.lang2id["en"]  # 0

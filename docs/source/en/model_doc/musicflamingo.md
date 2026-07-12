@@ -40,9 +40,9 @@ This model was contributed by [Lasha Koroshinadze](https://huggingface.co/lashah
 
 ### Paper
 
-[Music Flamingo: Scaling Music Understanding in Audio Language Models](https://huggingface.co/papers/2511.10289)  
-S. Ghosh, A. Goel, L. Koroshinadze, S. Lee, Z. Kong, J. F. Santos, R. Duraiswami, D. Manocha, W. Ping, M. Shoeybi, B. Catanzaro  
-NVIDIA and University of Maryland  
+[Music Flamingo: Scaling Music Understanding in Audio Language Models](https://huggingface.co/papers/2511.10289)
+S. Ghosh, A. Goel, L. Koroshinadze, S. Lee, Z. Kong, J. F. Santos, R. Duraiswami, D. Manocha, W. Ping, M. Shoeybi, B. Catanzaro
+NVIDIA and University of Maryland
 Project: https://research.nvidia.com/labs/adlr/MF/
 
 ## Usage

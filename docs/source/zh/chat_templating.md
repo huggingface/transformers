@@ -90,16 +90,16 @@ print(tokenizer.decode(tokenized_chat[0]))
 这将生成Zephyr期望的输入格式的字符串。它看起来像这样：
 ```text
 <|system|>
-You are a friendly chatbot who always responds in the style of a pirate</s> 
+You are a friendly chatbot who always responds in the style of a pirate</s>
 <|user|>
-How many helicopters can a human eat in one sitting?</s> 
+How many helicopters can a human eat in one sitting?</s>
 <|assistant|>
 ```
 
 现在我们已经按照`Zephyr`的要求传入prompt了，我们可以使用模型来生成对用户问题的回复：
 
 ```python
-outputs = model.generate(tokenized_chat, max_new_tokens=128) 
+outputs = model.generate(tokenized_chat, max_new_tokens=128)
 print(tokenizer.decode(outputs[0]))
 ```
 
@@ -107,9 +107,9 @@ print(tokenizer.decode(outputs[0]))
 
 ```text
 <|system|>
-You are a friendly chatbot who always responds in the style of a pirate</s> 
+You are a friendly chatbot who always responds in the style of a pirate</s>
 <|user|>
-How many helicopters can a human eat in one sitting?</s> 
+How many helicopters can a human eat in one sitting?</s>
 <|assistant|>
 Matey, I'm afraid I must inform ye that humans cannot eat helicopters. Helicopters are not food, they are flying machines. Food is meant to be eaten, like a hearty plate o' grog, a savory bowl o' stew, or a delicious loaf o' bread. But helicopters, they be for transportin' and movin' around, not for eatin'. So, I'd say none, me hearties. None at all.
 ```

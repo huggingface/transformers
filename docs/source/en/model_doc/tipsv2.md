@@ -130,7 +130,7 @@ print(f"Most likely label: '{most_likely_label}' with probability: {probs[0][mos
 </hfoption>
 <hfoption id="AutoBackbone for vision feature maps">
 
-Use [`AutoBackbone`] to load the vision backbone directly and get spatial feature maps, without the text model. 
+Use [`AutoBackbone`] to load the vision backbone directly and get spatial feature maps, without the text model.
 
 ```python
 import torch

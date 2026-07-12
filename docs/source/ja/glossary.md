@@ -352,7 +352,7 @@ The encoded versions have different lengths:
 
 入力の各要素は、どの他の要素に注意を払うべきかを検出します。
 
-### self-supervised learning 
+### self-supervised learning
 
 モデルがラベルのないデータから自分自身の学習目標を作成する機械学習技術のカテゴリです。これは[教師なし学習](#unsupervised-learning)や[教師あり学習](#supervised-learning)とは異なり、学習プロセスはユーザーからは明示的には監督されていない点が異なります。
 

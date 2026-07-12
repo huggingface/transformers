@@ -22,9 +22,9 @@ Troverai anche script che abbiamo usato nei nostri [progetti di ricerca](https:/
 
 Non è dato per scontato che gli script di esempio funzionino senza apportare modifiche per ogni problema, bensì potrebbe essere necessario adattare lo script al tuo caso specifico. Per aiutarti in ciò, la maggioranza degli script espone le modalità di pre-processamento dei dati, consentendoti di modificare lo script come preferisci.
 
-Per qualsiasi feature che vorresti implementare in uno script d'esempio, per favore discutine nel [forum](https://discuss.huggingface.co/) o in un'[issue](https://github.com/huggingface/transformers/issues) prima di inviare una Pull Request. Mentre accogliamo con piacere la correzione di bug, è più improbabile che faremo la stessa con una PR che aggiunge funzionalità sacrificando la leggibilità. 
+Per qualsiasi feature che vorresti implementare in uno script d'esempio, per favore discutine nel [forum](https://discuss.huggingface.co/) o in un'[issue](https://github.com/huggingface/transformers/issues) prima di inviare una Pull Request. Mentre accogliamo con piacere la correzione di bug, è più improbabile che faremo la stessa con una PR che aggiunge funzionalità sacrificando la leggibilità.
 
-Questa guida ti mostrerà come eseguire uno script di esempio relativo al task di summarization in [PyTorch](https://github.com/huggingface/transformers/tree/main/examples/pytorch/summarization) e [TensorFlow](https://github.com/huggingface/transformers/tree/main/examples/tensorflow/summarization). Tutti gli esempi funzioneranno con entrambi i framework a meno che non sia specificato altrimenti. 
+Questa guida ti mostrerà come eseguire uno script di esempio relativo al task di summarization in [PyTorch](https://github.com/huggingface/transformers/tree/main/examples/pytorch/summarization) e [TensorFlow](https://github.com/huggingface/transformers/tree/main/examples/tensorflow/summarization). Tutti gli esempi funzioneranno con entrambi i framework a meno che non sia specificato altrimenti.
 
 ## Installazione
 
@@ -154,7 +154,7 @@ python xla_spawn.py --num_cores 8 \
 pip install git+https://github.com/huggingface/accelerate
 ```
 
-Invece che usare lo script `run_summarization.py`, devi usare lo script `run_summarization_no_trainer.py`. Gli script supportati in 🤗 Accelerate avranno un file chiamato `task_no_trainer.py` nella rispettiva cartella. Per iniziare, esegui il seguente comando per creare e salvare un file di configurazione: 
+Invece che usare lo script `run_summarization.py`, devi usare lo script `run_summarization_no_trainer.py`. Gli script supportati in 🤗 Accelerate avranno un file chiamato `task_no_trainer.py` nella rispettiva cartella. Per iniziare, esegui il seguente comando per creare e salvare un file di configurazione:
 
 ```bash
 accelerate config
@@ -236,7 +236,7 @@ examples/pytorch/summarization/run_summarization.py -h
 
 ## Riavviare addestramento da un checkpoint
 
-Un'altra utile opzione è riavviare un addestramento da un checkpoint precedente. Questo garantirà che tu possa riprendere da dove hai interrotto senza ricominciare se l'addestramento viene interrotto. Ci sono due metodi per riavviare l'addestramento da un checkpoint: 
+Un'altra utile opzione è riavviare un addestramento da un checkpoint precedente. Questo garantirà che tu possa riprendere da dove hai interrotto senza ricominciare se l'addestramento viene interrotto. Ci sono due metodi per riavviare l'addestramento da un checkpoint:
 
 ```bash
 python examples/pytorch/summarization/run_summarization.py

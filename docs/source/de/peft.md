@@ -13,7 +13,7 @@ rendered properly in your Markdown viewer.
 
 [[open-in-colab]]
 
-Die [Parameter-Efficient Fine Tuning (PEFT)](https://huggingface.co/blog/peft) Methoden frieren die vorab trainierten Modellparameter während der Feinabstimmung ein und fügen eine kleine Anzahl trainierbarer Parameter (die Adapter) hinzu. Die Adapter werden trainiert, um aufgabenspezifische Informationen zu lernen. Es hat sich gezeigt, dass dieser Ansatz sehr speichereffizient ist und weniger Rechenleistung beansprucht, während die Ergebnisse mit denen eines vollständig feinabgestimmten Modells vergleichbar sind. 
+Die [Parameter-Efficient Fine Tuning (PEFT)](https://huggingface.co/blog/peft) Methoden frieren die vorab trainierten Modellparameter während der Feinabstimmung ein und fügen eine kleine Anzahl trainierbarer Parameter (die Adapter) hinzu. Die Adapter werden trainiert, um aufgabenspezifische Informationen zu lernen. Es hat sich gezeigt, dass dieser Ansatz sehr speichereffizient ist und weniger Rechenleistung beansprucht, während die Ergebnisse mit denen eines vollständig feinabgestimmten Modells vergleichbar sind.
 
 Adapter, die mit PEFT trainiert wurden, sind in der Regel um eine Größenordnung kleiner als das vollständige Modell, so dass sie bequem gemeinsam genutzt, gespeichert und geladen werden können.
 
@@ -211,6 +211,6 @@ model = AutoModelForCausalLM.from_pretrained(save_dir)
 <!--
 TODO: (@younesbelkada @stevhliu)
 -   Link to PEFT docs for further details
--   Trainer  
+-   Trainer
 -   8-bit / 4-bit examples ?
 -->

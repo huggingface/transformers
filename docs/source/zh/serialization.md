@@ -29,7 +29,7 @@ rendered properly in your Markdown viewer.
 通过公开具有标准化运算符和数据类型的图，ONNX使得模型能够轻松在不同深度学习框架间切换。例如，在 PyTorch 中训练的模型可以被导出为 ONNX，然后再导入到 TensorFlow（反之亦然）。
 
 导出为 ONNX 后，模型可以：
-- 通过 [图优化（graph optimization）](https://huggingface.co/docs/optimum/onnxruntime/usage_guides/optimization) 和 [量化（quantization）](https://huggingface.co/docs/optimum/onnxruntime/usage_guides/quantization) 等技术进行推理优化。 
+- 通过 [图优化（graph optimization）](https://huggingface.co/docs/optimum/onnxruntime/usage_guides/optimization) 和 [量化（quantization）](https://huggingface.co/docs/optimum/onnxruntime/usage_guides/quantization) 等技术进行推理优化。
 - 通过 [`ORTModelForXXX` 类](https://huggingface.co/docs/optimum/onnxruntime/package_reference/modeling_ort) 使用 ONNX Runtime 运行，它同样遵循你熟悉的 Transformers 中的 `AutoModel` API。
 - 使用 [优化推理流水线（pipeline）](https://huggingface.co/docs/optimum/main/en/onnxruntime/usage_guides/pipelines) 运行，其 API 与 🤗 Transformers 中的 [`pipeline`] 函数相同。
 

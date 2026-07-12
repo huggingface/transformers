@@ -43,7 +43,7 @@ The original code can be found [here](https://github.com/neonbjb/tortoise-tts).
 - The [`ClvpForCausalLM`] uses those embeddings to generate multiple speech candidates.
 - Each speech candidate is passed through the speech encoder ([`ClvpEncoder`]) which converts them into a vector representation, and the text encoder ([`ClvpEncoder`]) converts the text tokens into the same latent space.
 - At the end, we compare each speech vector with the text vector to see which speech vector is most similar to the text vector.
-- [`ClvpModelForConditionalGeneration.generate()`] compresses all of the logic described above into a single method.  
+- [`ClvpModelForConditionalGeneration.generate()`] compresses all of the logic described above into a single method.
 
 Example :
 

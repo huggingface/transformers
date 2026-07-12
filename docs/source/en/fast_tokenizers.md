@@ -107,7 +107,7 @@ tokenizer.decode(outputs["input_ids"])
 ```py
 tokenizer.decode(outputs["input_ids"], skip_special_tokens=True)
 ['Sphinx of black quartz, judge my vow.']
-``` 
+```
 
 ## Special tokens
 
@@ -254,7 +254,7 @@ All backends inherit from [`PreTrainedTokenizerBase`] and share the same APIs fo
         ...
     ]
     ```
-    
+
     When a backend like mistral-common isn't installed, [`AutoTokenizer`] falls back to [`TokenizersBackend`].
 
 Check which backend a tokenizer is using with the `backend` property.

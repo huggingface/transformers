@@ -51,15 +51,15 @@ The original code can be found [here](https://github.com/haotian-liu/LLaVA/tree/
 Adding these attributes means that LLaVA will try to infer the number of image tokens required per image and expand the text with as many `<image>` placeholders as there will be tokens. Usually it is around 500 tokens per image, so make sure that the text is not truncated as otherwise there will be failure when merging the embeddings.
 The attributes can be obtained from model config, as `model.config.vision_config.patch_size` or `model.config.vision_feature_select_strategy`. The `num_additional_image_tokens` should be `1` if the vision backbone adds a CLS token or `0` if nothing extra is added to the vision patches.
 
-### Formatting Prompts with Chat Templates  
+### Formatting Prompts with Chat Templates
 
-Each **checkpoint** is trained with a specific prompt format, depending on the underlying large language model backbone. To ensure correct formatting, use the processor's `apply_chat_template` method.  
+Each **checkpoint** is trained with a specific prompt format, depending on the underlying large language model backbone. To ensure correct formatting, use the processor's `apply_chat_template` method.
 
-**Important:**  
+**Important:**
 
-- You must construct a conversation history — passing a plain string won't work.  
-- Each message should be a dictionary with `"role"` and `"content"` keys.  
-- The `"content"` should be a list of dictionaries for different modalities like `"text"` and `"image"`.  
+- You must construct a conversation history — passing a plain string won't work.
+- Each message should be a dictionary with `"role"` and `"content"` keys.
+- The `"content"` should be a list of dictionaries for different modalities like `"text"` and `"image"`.
 
 Here's an example of how to structure your input.
 We will use [llava-hf/llava-1.5-7b-hf](https://huggingface.co/llava-hf/llava-1.5-7b-hf) and a conversation history of text and image. Each content field has to be a list of dicts, as follows:

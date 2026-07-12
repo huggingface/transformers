@@ -21,15 +21,15 @@ a [reasoning model](https://huggingface.co/reasoning-course) might emit a chain 
 while a [tool calling](./chat_extras) model might emit function names and arguments.
 
 The problem with structured outputs, though, is that LLMs outputs are not inherently structured. LLM APIs usually
-accept and return message dicts, with keys like `role` and `content` and `thinking`, but internally, LLMs actually 
+accept and return message dicts, with keys like `role` and `content` and `thinking`, but internally, LLMs actually
 just continue a single sequence of tokens. We use a glue layer to connect the user-facing API to the actual token
 stream of the model. To turn inputs into a token stream, we use [`chat_templates`](./chat_templating), which are covered in other
 documents. This document is about the other half of that glue layer: **Response templates**, the system for turning the
-generated tokens output by the model back into a structured response dict. 
+generated tokens output by the model back into a structured response dict.
 
 In many ways, response templates perform the inverse operation to chat templates. With chat templates, you feed in
 a list of messages, and you get tokens ready to input to the model. With response templates, you feed in the raw
-model output tokens, and you get a structured message. Like chat templates, response 
+model output tokens, and you get a structured message. Like chat templates, response
 templates allow users to ignore the messy details of what specific formats and control tokens a model expects,
 and use a universal API of message dicts that works with any model.
 
@@ -53,7 +53,7 @@ print(tokenizer.parse_response(out_text, prefix=input_ids[0]))
 
 When a tokenizer has a `response_template`, the `parse_response` method will cleanly turn an output message into a
 structured dict, ready to append to the chat. Note that we need to pass the `prefix` (the prompt tokens) to this method as well. This is because many chat templates start
-messages or open thinking blocks before letting the model begin its response, and so our parser needs to see the 
+messages or open thinking blocks before letting the model begin its response, and so our parser needs to see the
 prompt to understand the message. All of the prefix before the final turn is discarded; we only parse one message
 at a time. We just need the prefix to ensure we're seeing the entire final message, and not miss any prefilled
 fields!
@@ -73,7 +73,7 @@ want to parse partial messages as they are generated, especially in user-facing 
 display a static page for a minute or two until the model is finished.
 
 When you want streaming parsing, call `tokenizer.get_response_parser()`, which returns a [`~utils.chat_parsing.ResponseParser`].
-As with `parse_response`, pass the chat prompt as `prefix=` so the parser knows about any parts of the message that 
+As with `parse_response`, pass the chat prompt as `prefix=` so the parser knows about any parts of the message that
 were prefilled by the chat template. The returned object is a
 stateful parser that you can feed text into as the model generates it:
 
@@ -134,12 +134,12 @@ A typical event stream might look like this:
 {"type": "region_close", "field": "tool_calls", "value": {"type": "function", "function": {"name": "greet_user", "arguments": {"greeting": "Hi!"}}}}
 ```
 
-Note how `thinking` is emitted with `dirty=False`, because fields like `thinking` and `content` are usually just raw 
+Note how `thinking` is emitted with `dirty=False`, because fields like `thinking` and `content` are usually just raw
 text. This means you can treat the chunks as valid "partial output". However, `tool_calls` is flagged as `dirty` because
 the raw text needs significant cleanup - tool calls often need to be parsed as JSON or another format and then
 restructured to generate the final tool call dict. As a result, the final output for these regions often looks very,
 very different from the raw text. This final parsing will only happen when `region_close` is reached. It's
-up to you what you want to do with the `dirty` chunks until then - you can display them as-is to show the user the 
+up to you what you want to do with the `dirty` chunks until then - you can display them as-is to show the user the
 "raw" output, or you can simply wait until you have something clean to display.
 
 This concludes most of what you need to know to use response templates. The rest of this document is focused on
@@ -455,8 +455,8 @@ becomes:
 ```
 
 Sometimes a field's parsed content is *itself* a list of records and you want to reshape each one. The Cohere
-template is a good example: It emits all tool calls inside a single JSON array, so we set `transform_each: True` to 
-apply the transform per element. Each array element's keys are unpacked into the template scope, so 
+template is a good example: It emits all tool calls inside a single JSON array, so we set `transform_each: True` to
+apply the transform per element. Each array element's keys are unpacked into the template scope, so
 `"{tool_name}"` looks up `tool_name` in the current element:
 
 ```python
@@ -500,7 +500,7 @@ who had to implement an entire Jinja parser to get non-Python chat templating to
 follow the simple guidelines below, then response templates should be much less painful:
 
 - We use Python's [`regex`](https://pypi.org/project/regex/) module for all regexes used in chat parsing.
-  Since all Python3 strings are unicode, **all of our regex matches are unicode-aware**. This particularly affects 
+  Since all Python3 strings are unicode, **all of our regex matches are unicode-aware**. This particularly affects
   common characters like `\w`. Make sure you set the relevant unicode flags in your engine.
 - We compile all regexes with `re.DOTALL` enabled and `re.MULTILINE` disabled, so `.` matches `\n` but `^` and `$`
   only match the start/end of the whole input, not line breaks.
@@ -510,10 +510,10 @@ follow the simple guidelines below, then response templates should be much less 
   and we don't want to emit that end-of-region delimiter, so we hold tokens back until we're sure that they're inside the region and not part of the boundary.
   This means that whenever a region end regex has a partial match, we hold back data until the regex either matches or fails. If your regex engine
   doesn't support partial matching, you can still implement response templates, but you may need to find another solution to this issue. One simple
-  approach is just to hold back these regions / emit them as `dirty` until you definitively see the ending delimiter. 
+  approach is just to hold back these regions / emit them as `dirty` until you definitively see the ending delimiter.
 - Your regex engine may (rarely) not support lookarounds like `(?!...)`. Although these aren't commonly used in response
   templates, they can appear and we do support them! You might need to either throw an error in those cases, or manually
   extract the lookarounds and enforce them in your code when the regex engine finds a possible match.
 - Other advanced features like backreferences, atomic groups, possessive quantifiers, recursion and so on are generally
-  not used in response templates. We'll try to dissuade model authors from using them, so you can hopefully safely 
+  not used in response templates. We'll try to dissuade model authors from using them, so you can hopefully safely
   ignore them.

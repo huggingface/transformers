@@ -49,7 +49,7 @@ The original code can be found [here](https://github.com/sweetcocoa/pop2piano).
 
 ## Usage tips
 
-* To use Pop2Piano, you will need to install the 🤗 Transformers library, as well as the following third party modules:  
+* To use Pop2Piano, you will need to install the 🤗 Transformers library, as well as the following third party modules:
 
 ```bash
 pip install pretty-midi==0.2.9 essentia==2.1b6.dev1034 librosa scipy

@@ -36,9 +36,9 @@ from transformers import AutoModelForCausalLM, AutoTokenizer, QuantoConfig
 
 quant_config = QuantoConfig(weights="int8")
 model = transformers.AutoModelForCausalLM.from_pretrained(
-    "meta-llama/Llama-3.1-8B", 
-    dtype="auto", 
-    device_map="auto", 
+    "meta-llama/Llama-3.1-8B",
+    dtype="auto",
+    device_map="auto",
     quantization_config=quant_config
 )
 ```

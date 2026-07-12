@@ -251,7 +251,7 @@ To map more than one task to the model, edit `auto_map` in the configuration JSO
 "auto_map": {
     "AutoConfig": "<your-repo-name>--<config-name>",
     "AutoModel": "<your-repo-name>--<config-name>",
-    "AutoModelFor<Task>": "<your-repo-name>--<config-name>",    
+    "AutoModelFor<Task>": "<your-repo-name>--<config-name>",
 },
 ```
 

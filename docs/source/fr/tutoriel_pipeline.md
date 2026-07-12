@@ -35,7 +35,7 @@ Bien que chaque tâche ait son propre [`pipeline`], il est plus simple d'utilise
 {'text': 'I HAVE A DREAM BUT ONE DAY THIS NATION WILL RISE UP LIVE UP THE TRUE MEANING OF ITS TREES'}
 ```
 
-Pas le résultat que vous aviez en tête ? Consultez certains des [modèles de reconnaissance vocale automatique les plus téléchargés](https://huggingface.co/models?pipeline_tag=automatic-speech-recognition&sort=trending) 
+Pas le résultat que vous aviez en tête ? Consultez certains des [modèles de reconnaissance vocale automatique les plus téléchargés](https://huggingface.co/models?pipeline_tag=automatic-speech-recognition&sort=trending)
 sur le Hub pour voir si vous pouvez obtenir une meilleure transcription.
 
 Essayons le modèle [Whisper large-v2](https://huggingface.co/openai/whisper-large) de OpenAI. Whisper a été publié 2 ans après Wav2Vec2 et a été entraîné sur près de 10 fois plus de données. En tant que tel, il surpasse Wav2Vec2 sur la plupart des benchmarks en aval. Il a également l'avantage supplémentaire de prédire la ponctuation et la casse, ce qui n'est pas possible avec Wav2Vec2.
@@ -119,7 +119,7 @@ audio_filenames = [f"https://huggingface.co/datasets/Narsil/asr_dummy/resolve/ma
 texts = transcriber(audio_filenames)
 ```
 
-Cela exécute le pipeline sur les 4 fichiers audio fournis, mais les passera par batch de 2 au modèle (qui est sur un GPU, où le batching est plus susceptible d'aider) sans nécessiter de code supplémentaire de votre part. 
+Cela exécute le pipeline sur les 4 fichiers audio fournis, mais les passera par batch de 2 au modèle (qui est sur un GPU, où le batching est plus susceptible d'aider) sans nécessiter de code supplémentaire de votre part.
 La sortie doit toujours correspondre à ce que vous auriez reçu sans batching. Il s'agit uniquement d'un moyen de vous aider à obtenir plus de vitesse avec un pipeline.
 
 Les pipelines peuvent également atténuer certaines des complexités du batching car, pour certains pipelines, un seul élément (comme un long fichier audio) doit être divisé en plusieurs parties pour être traité par un modèle. Le pipeline effectue ce [*batching par morceaux*](./main_classes/pipelines#pipeline-chunk-batching) pour vous.
@@ -263,7 +263,7 @@ pip install pytesseract
 
 ## Utilisation de `pipeline` sur de grands modèles avec 🤗 `accelerate` :
 
-Vous pouvez facilement exécuter `pipeline` sur de grands modèles en utilisant 🤗 `accelerate` ! Assurez-vous d'abord d'avoir installé `accelerate` avec `pip install accelerate`. 
+Vous pouvez facilement exécuter `pipeline` sur de grands modèles en utilisant 🤗 `accelerate` ! Assurez-vous d'abord d'avoir installé `accelerate` avec `pip install accelerate`.
 
 Chargez d'abord votre modèle en utilisant `device_map="auto"` ! Nous utiliserons `facebook/opt-1.3b` pour notre exemple.
 
@@ -275,7 +275,7 @@ from transformers import pipeline
 pipe = pipeline(model="facebook/opt-1.3b", dtype=torch.bfloat16, device_map="auto")
 output = pipe("This is a cool example!", do_sample=True, top_p=0.95)
 ```
-Vous pouvez également passer des modèles chargés en 8 bits si vous installez `bitsandbytes` et ajoutez l'argument `quantization_config` 
+Vous pouvez également passer des modèles chargés en 8 bits si vous installez `bitsandbytes` et ajoutez l'argument `quantization_config`
 Notez que vous pouvez remplacer le point de contrôle par n'importe quel modèle.
 
 ```py

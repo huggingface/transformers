@@ -53,7 +53,7 @@ quantization_config = QuantoConfig(weights="int8")
 quantized_model = AutoModelForCausalLM.from_pretrained(model_id, device_map="cuda:0", quantization_config=quantization_config)
 ```
 
-참고로, transformers에서는 아직 직렬화가 지원되지 않지만 곧 지원될 예정입니다! 
+참고로, transformers에서는 아직 직렬화가 지원되지 않지만 곧 지원될 예정입니다!
 모델을 저장하고 싶으면 quanto 라이브러리를 대신 사용할 수 있습니다.
 
 Quanto 라이브러리는 양자화를 위해 선형 양자화 알고리즘을 사용합니다. 비록 기본적인 양자화 기술이지만, 좋은 결과를 얻는데 아주 큰 도움이 됩니다! 바로 아래에 있는 벤치마크(llama-2-7b의 펄플렉서티 지표)를 확인해 보세요. 더 많은 벤치마크는 [여기](https://github.com/huggingface/quanto/tree/main/bench/generation) 에서 찾을 수 있습니다.

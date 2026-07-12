@@ -35,8 +35,8 @@ Every layer is GQA (`num_key_value_heads = 4`) with per-head QK-norm and **parti
 The indexer scores every key, then **max-poolsthose per-key scores into blocks of `index_block_size` keys**, so selection happens at the granularity of a *block
 of keys*: per query it keeps the top-`index_topk_blocks` key blocks plus the always-on `index_local_blocks`
 local-window block (under block-level causality), broadcasts the per-block `0`/`-inf` choice back onto every key in
-the block. The result is a `[B, 1, S_q, S_k]` additive bias summed onto the causal mask. 
-Theoretically this means that the attention is only computed over the selected blocks of keys, but `transformers` does not support the kernels that compute this efficiently! 
+the block. The result is a `[B, 1, S_q, S_k]` additive bias summed onto the causal mask.
+Theoretically this means that the attention is only computed over the selected blocks of keys, but `transformers` does not support the kernels that compute this efficiently!
 We are adding it to `kernels` asap!
 
 <img alt="MiniMax M3 Lightning Indexer mask" src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/minimax_m3_vl_indexer_mask.svg" />

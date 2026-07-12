@@ -140,16 +140,16 @@ print(processor.tokenizer.decode(generated[0], skip_special_tokens=True))
 - Use the [`~ProcessorMixin.apply_chat_template`] method to correctly format inputs.
 
 - The example below demonstrates inference with multiple images.
-  
+
     ```py
     import torch
     from transformers import AutoProcessor, AutoModelForImageTextToText
-        
+
     processor = AutoProcessor.from_pretrained("CohereForAI/aya-vision-8b")
     model = AutoModelForImageTextToText.from_pretrained(
         "CohereForAI/aya-vision-8b", device_map="auto"
     )
-    
+
     messages = [
         {
             "role": "user",
@@ -169,33 +169,33 @@ print(processor.tokenizer.decode(generated[0], skip_special_tokens=True))
             ],
         },
     ]
-    
+
     inputs = processor.apply_chat_template(
         messages, padding=True, add_generation_prompt=True, tokenize=True, return_dict=True, return_tensors="pt"
     ).to(model.device)
-    
+
     gen_tokens = model.generate(
-        **inputs, 
-        max_new_tokens=300, 
-        do_sample=True, 
+        **inputs,
+        max_new_tokens=300,
+        do_sample=True,
         temperature=0.3,
     )
-    
+
     gen_text = processor.tokenizer.decode(gen_tokens[0][inputs.input_ids.shape[1]:], skip_special_tokens=True)
     print(gen_text)
     ```
 
 - The example below demonstrates inference with batched inputs.
-  
+
     ```py
     import torch
     from transformers import AutoProcessor, AutoModelForImageTextToText
-        
+
     processor = AutoProcessor.from_pretrained(model_id)
     model = AutoModelForImageTextToText.from_pretrained(
         "CohereForAI/aya-vision-8b", device_map="auto"
     )
-    
+
     batch_messages = [
         [
             {
@@ -226,26 +226,26 @@ print(processor.tokenizer.decode(generated[0], skip_special_tokens=True))
             },
         ],
     ]
-    
+
     batch_inputs = processor.apply_chat_template(
-        batch_messages, 
-        padding=True, 
-        add_generation_prompt=True, 
-        tokenize=True, 
-        return_dict=True, 
+        batch_messages,
+        padding=True,
+        add_generation_prompt=True,
+        tokenize=True,
+        return_dict=True,
         return_tensors="pt"
     ).to(model.device)
-    
+
     batch_outputs = model.generate(
         **batch_inputs,
         max_new_tokens=300,
         do_sample=True,
         temperature=0.3,
     )
-    
+
     for i, output in enumerate(batch_outputs):
         response = processor.tokenizer.decode(
-            output[batch_inputs.input_ids.shape[1]:], 
+            output[batch_inputs.input_ids.shape[1]:],
             skip_special_tokens=True
         )
         print(f"Response {i+1}:\n{response}\n")

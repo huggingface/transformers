@@ -24,7 +24,7 @@ rendered properly in your Markdown viewer.
 
 ## Model Architecture
 
-PP-DocLayoutV3 evolves from a traditional detection-based approach to a robust instance segmentation architecture built upon the RT-DETR framework. Instead of simple bounding boxes, it utilizes a mask-based detection head to predict pixel-accurate segments for layout elements. 
+PP-DocLayoutV3 evolves from a traditional detection-based approach to a robust instance segmentation architecture built upon the RT-DETR framework. Instead of simple bounding boxes, it utilizes a mask-based detection head to predict pixel-accurate segments for layout elements.
 
 Unlike its predecessor, PP-DocLayoutV3 eliminates decoupled stages by embedding a Global Pointer Mechanism directly within the Transformer decoder layers. This allows the model to concurrently output classification labels, precise masks, and logical reading orders in a single forward pass, significantly reducing latency while enhancing parsing precision on complex document layouts.
 
@@ -144,7 +144,7 @@ for result in results:
 ## PPDocLayoutV3Model
 
 [[autodoc]] PPDocLayoutV3Model
-    
+
 ## PPDocLayoutV3Config
 
 [[autodoc]] PPDocLayoutV3Config

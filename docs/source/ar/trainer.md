@@ -137,7 +137,7 @@ from transformers import TrainerCallback
 class EarlyStoppingCallback(TrainerCallback):
     def __init__(self, num_steps=10):
         self.num_steps = num_steps
-    
+
     def on_step_end(self, args, state, control, **kwargs):
         if state.global_step >= self.num_steps:
             return {"should_training_stop": True}
@@ -494,8 +494,8 @@ trainer.train()
 <hfoption id="DistributedDataParallel">
 
 ```yml
-compute_environment: LOCAL_MACHINE                                                                                             
-distributed_type: MULTI_GPU                                                                                                    
+compute_environment: LOCAL_MACHINE
+distributed_type: MULTI_GPU
 downcast_bf16: 'no'
 gpu_ids: all
 machine_rank: 0 #change rank as per the node
@@ -569,8 +569,8 @@ use_cpu: false
 <hfoption id="DeepSpeed with Accelerate plugin">
 
 ```yml
-compute_environment: LOCAL_MACHINE                                                                                             
-deepspeed_config:                                                                                                              
+compute_environment: LOCAL_MACHINE
+deepspeed_config:
   gradient_accumulation_steps: 1
   gradient_clipping: 0.7
   offload_optimizer_device: cpu

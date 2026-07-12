@@ -38,9 +38,9 @@ This model was contributed by [Lasha Koroshinadze](https://huggingface.co/lashah
 
 ### Paper
 
-[Audio Flamingo 3](https://huggingface.co/papers/2507.08128): Advancing Audio Intelligence with Fully Open Large Audio Language Models  
-A. Goel, S. Ghosh, J. Kim, S. Kumar, Z. Kong, S. Lee, C.-H. H. Yang, R. Duraiswami, D. Manocha, R. Valle, B. Catanzaro  
-NVIDIA and University of Maryland  
+[Audio Flamingo 3](https://huggingface.co/papers/2507.08128): Advancing Audio Intelligence with Fully Open Large Audio Language Models
+A. Goel, S. Ghosh, J. Kim, S. Kumar, Z. Kong, S. Lee, C.-H. H. Yang, R. Duraiswami, D. Manocha, R. Valle, B. Catanzaro
+NVIDIA and University of Maryland
 Project: https://research.nvidia.com/labs/adlr/AF3/
 
 ## Usage

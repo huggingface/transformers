@@ -40,8 +40,8 @@ rendered properly in your Markdown viewer.
 # 사용
 
 ### 간단한 생성 예제
- 
-```python 
+
+```python
 from transformers import MambaConfig, MambaForCausalLM, AutoTokenizer
 import torch
 
@@ -56,7 +56,7 @@ print(tokenizer.batch_decode(out))
 ### Peft 파인튜닝
 느린 버전은 학습에서 아주 안정적이진 않습니다. 빠른 버전은 `float32`가 필요합니다!
 
-```python 
+```python
 from datasets import load_dataset
 from trl import SFTConfig, SFTTrainer
 from peft import LoraConfig

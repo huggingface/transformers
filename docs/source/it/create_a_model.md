@@ -14,7 +14,7 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# Crea un'architettura personalizzata 
+# Crea un'architettura personalizzata
 
 Una [`AutoClass`](model_doc/auto) deduce automaticamente il modello dell'architettura e scarica la configurazione e i pesi pre-allenati. Generalmente, noi consigliamo di usare un `AutoClass` per produrre un codice indipendente dal checkpoint. Ma gli utenti che desiderano un controllo maggiore su parametri specifici del modello possono creare un modello 🤗 Transformers personalizzato da poche classi base. Questo potrebbe essere particolarmente utile per qualunque persona sia interessata nel studiare, allenare o sperimentare con un modello 🤗 Transformers. In questa guida, approfondisci la creazione di un modello personalizzato senza `AutoClass`. Impara come:
 
@@ -146,7 +146,7 @@ Per esempio, [`DistilBertForSequenceClassification`] è un modello DistilBERT ba
 >>> model = DistilBertForSequenceClassification.from_pretrained("distilbert/distilbert-base-uncased")
 ```
 
-Riutilizza facilmente questo checkpoint per un'altra attività passando ad un model head differente. Per un attività di risposta alle domande, utilizzerai il model head [`DistilBertForQuestionAnswering`]. La head per compiti di question answering è simile alla classificazione di sequenza head tranne per il fatto che è uno strato lineare sopra l'output degli stati nascosti (hidden states in inglese) 
+Riutilizza facilmente questo checkpoint per un'altra attività passando ad un model head differente. Per un attività di risposta alle domande, utilizzerai il model head [`DistilBertForQuestionAnswering`]. La head per compiti di question answering è simile alla classificazione di sequenza head tranne per il fatto che è uno strato lineare sopra l'output degli stati nascosti (hidden states in inglese)
 
 ```py
 >>> from transformers import DistilBertForQuestionAnswering
@@ -165,11 +165,11 @@ Entrambi i tokenizer supportano metodi comuni come la codifica e la decodifica, 
 
 <Tip warning={true}>
 
-Non tutti i modelli supportano un tokenizer veloce. Dai un'occhiata a questo [tabella](index#supported-frameworks) per verificare se un modello ha il supporto per tokenizer veloce. 
+Non tutti i modelli supportano un tokenizer veloce. Dai un'occhiata a questo [tabella](index#supported-frameworks) per verificare se un modello ha il supporto per tokenizer veloce.
 
 </Tip>
 
-Se hai addestrato il tuo tokenizer, puoi crearne uno dal tuo file *vocabolario*: 
+Se hai addestrato il tuo tokenizer, puoi crearne uno dal tuo file *vocabolario*:
 
 ```py
 >>> from transformers import DistilBertTokenizer

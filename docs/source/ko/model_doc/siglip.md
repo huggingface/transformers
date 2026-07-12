@@ -163,10 +163,10 @@ Flash Attention 2를 사용하여 모델을 로드하고 실행하려면 아래 
 
 ## Scaled Dot Product Attention(SDPA) 사용하기[using-scaled-dot-product-attention(SDPA)]]
 
-PyTorch는 `torch.nn.functional`의 일부로 스케일된 점곱 어텐션(SDPA) 연산자를 포함합니다. 이 함수는 
-입력과 사용 중인 하드웨어에 따라 적용할 수 있는 여러 구현을 포함합니다. 자세한 내용은 
-[공식 문서](https://pytorch.org/docs/stable/generated/torch.nn.functional.scaled_dot_product_attention.html) 
-또는 [GPU 추론](https://huggingface.co/docs/transformers/main/en/perf_infer_gpu_one#pytorch-scaled-dot-product-attention) 
+PyTorch는 `torch.nn.functional`의 일부로 스케일된 점곱 어텐션(SDPA) 연산자를 포함합니다. 이 함수는
+입력과 사용 중인 하드웨어에 따라 적용할 수 있는 여러 구현을 포함합니다. 자세한 내용은
+[공식 문서](https://pytorch.org/docs/stable/generated/torch.nn.functional.scaled_dot_product_attention.html)
+또는 [GPU 추론](https://huggingface.co/docs/transformers/main/en/perf_infer_gpu_one#pytorch-scaled-dot-product-attention)
 페이지를 참조하세요.
 
 `from_pretrained()`에서 `attn_implementation="sdpa"`를 설정하여 SDPA를 명시적으로 요청할 수 있습니다. `torch>=2.1.1`이 설치되어 있는지 확인하세요.
@@ -249,4 +249,4 @@ PyTorch는 `torch.nn.functional`의 일부로 스케일된 점곱 어텐션(SDPA
 ## SiglipForImageClassification
 
 [[autodoc]] SiglipForImageClassification
-    - forward 
+    - forward

@@ -23,7 +23,7 @@ rendered properly in your Markdown viewer.
 正如我们在[the preprocessing tutorial](preprocessing)所看到的那样，对文本进行分词就是将一段文本分割成很多单词或者子单词，
 这些单词或者子单词然后会通过一个查询表格被转换到id，将单词或者子单词转换到id是很直截了当的，也就是一个简单的映射，
 所以这么来看，我们主要关注将一段文本分割成很多单词或者很多子单词（像：对一段文本进行分词），更加准确的来说，我们将关注
-在🤗 Transformers内用到的三种主要类型的分词器：[Byte-Pair Encoding (BPE)](#byte-pair-encoding), [WordPiece](#wordpiece), 
+在🤗 Transformers内用到的三种主要类型的分词器：[Byte-Pair Encoding (BPE)](#byte-pair-encoding), [WordPiece](#wordpiece),
 and [SentencePiece](#sentencepiece)，并且给出了示例，哪个模型用到了哪种类型的分词器。
 
 注意到在每个模型的主页，你可以查看文档上相关的分词器，就可以知道预训练模型使用了哪种类型的分词器。
@@ -41,7 +41,7 @@ and [SentencePiece](#sentencepiece)，并且给出了示例，哪个模型用到
 ["Don't", "you", "love", "🤗", "Transformers?", "We", "sure", "do."]
 ```
 
-上面的分词是一个明智的开始，但是如果我们查看token `"Transformers?"` 和 `"do."`，我们可以观察到标点符号附在单词`"Transformer"` 
+上面的分词是一个明智的开始，但是如果我们查看token `"Transformers?"` 和 `"do."`，我们可以观察到标点符号附在单词`"Transformer"`
 和 `"do"`的后面，这并不是最理想的情况。我们应该将标点符号考虑进来，这样一个模型就没必要学习一个单词和每个可能跟在后面的
 标点符号的不同的组合，这么组合的话，模型需要学习的组合的数量会急剧上升。将标点符号也考虑进来，对范例文本进行分词的结果就是：
 
@@ -230,5 +230,5 @@ detokenizer for Neural Text Processing (Kudo et al., 2018)](https://huggingface.
 
 举例来说，[`XLNetTokenizer`]使用了SentencePiece，这也是为什么上面的例子中`"▁"`符号包含在词典内。SentencePiece解码是非常容易的，因为所有的tokens能被concatenate起来，然后将`"▁"`替换成空格。
 
-库内所有使用了SentencePiece的transformers模型，会和unigram组合起来使用，像：使用了SentencePiece的模型是[ALBERT](model_doc/albert), 
+库内所有使用了SentencePiece的transformers模型，会和unigram组合起来使用，像：使用了SentencePiece的模型是[ALBERT](model_doc/albert),
 [XLNet](model_doc/xlnet)，[Marian](model_doc/marian)，和[T5](model_doc/t5)。

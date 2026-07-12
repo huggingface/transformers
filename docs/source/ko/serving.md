@@ -39,7 +39,7 @@ docker run --gpus all --shm-size 1g -p 8080:80 -v $volume:/data ghcr.io/huggingf
 
 ## vLLM [[vLLM]]
 
-[vLLM](https://docs.vllm.ai/en/latest/index.html)은 특정 모델이 vLLM에서 [네이티브로 구현된 모델](https://docs.vllm.ai/en/latest/models/supported_models.html#list-of-text-only-language-models)이 아닐 경우, Transformers 구현 모델을 서빙할 수도 있습니다. 
+[vLLM](https://docs.vllm.ai/en/latest/index.html)은 특정 모델이 vLLM에서 [네이티브로 구현된 모델](https://docs.vllm.ai/en/latest/models/supported_models.html#list-of-text-only-language-models)이 아닐 경우, Transformers 구현 모델을 서빙할 수도 있습니다.
 
 Transformers 구현에서는 양자화, LoRA 어댑터, 분산 추론 및 서빙과 같은 다양한 기능이 지원됩니다.
 

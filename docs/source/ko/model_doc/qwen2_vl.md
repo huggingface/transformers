@@ -198,7 +198,7 @@ processor = AutoProcessor.from_pretrained("Qwen/Qwen2-VL-7B-Instruct", min_pixel
 
 ```python
 min_pixels = 256*28*28
-max_pixels = 1024*28*28 
+max_pixels = 1024*28*28
 processor = AutoProcessor.from_pretrained("Qwen/Qwen2-VL-7B-Instruct", min_pixels=min_pixels, max_pixels=max_pixels)
 ```
 이렇게 하면 각 이미지가 256~1024개의 토큰으로 인코딩됩니다. 여기서 28은 모델이 14 크기의 패치(patch)와 2의 시간 패치(temporal patch size)를 사용하기 때문에 나온 값입니다 (14 × 2 = 28).
@@ -213,7 +213,7 @@ conversation = [
     {
         "role": "user",
         "content": [
-            {"type": "image"}, 
+            {"type": "image"},
             {"type": "text", "text": "Hello, how are you?"}
         ]
     },
@@ -224,10 +224,10 @@ conversation = [
     {
         "role": "user",
         "content": [
-            {"type": "text", "text": "Can you describe these images and video?"}, 
-            {"type": "image"}, 
-            {"type": "image"}, 
-            {"type": "video"}, 
+            {"type": "text", "text": "Can you describe these images and video?"},
+            {"type": "image"},
+            {"type": "image"},
+            {"type": "video"},
             {"type": "text", "text": "These are from my vacation."}
         ]
     },
@@ -268,8 +268,8 @@ Flash Attention-2를 사용하여 모델을 로드하고 실행하려면, 다음
 from transformers import Qwen2VLForConditionalGeneration
 
 model = Qwen2VLForConditionalGeneration.from_pretrained(
-    "Qwen/Qwen2-VL-7B-Instruct", 
-    dtype=torch.bfloat16, 
+    "Qwen/Qwen2-VL-7B-Instruct",
+    dtype=torch.bfloat16,
     attn_implementation="flash_attention_2",
 )
 ```

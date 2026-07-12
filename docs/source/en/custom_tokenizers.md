@@ -64,7 +64,7 @@ trained_tokenizer.push_to_hub("finance-gemma-tokenizer")
 An empty tokenizer supports custom vocabulary with the `vocab` and `merges` arguments.
 
 - `vocab` is the complete set of tokens a tokenizer knows and each entry maps a token to its input id.
-- `merges` defines how the BPE algorithm should combine adjacent tokens. 
+- `merges` defines how the BPE algorithm should combine adjacent tokens.
 
 ```py
 from transformers import GemmaTokenizer

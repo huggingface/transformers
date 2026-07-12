@@ -33,7 +33,7 @@ This guide focuses on inference with an instruction-tuned model.
 Let's begin installing the dependencies.
 
 ```bash
-pip install -q transformers accelerate 
+pip install -q transformers accelerate
 pip install flash-attn --no-build-isolation
 ```
 

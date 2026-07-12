@@ -20,7 +20,7 @@ rendered properly in your Markdown viewer.
 
 # Ejecutar el entrenamiento en Amazon SageMaker
 
-La documentación ha sido trasladada a [hf.co/docs/sagemaker](https://huggingface.co/docs/sagemaker). Esta página será eliminada en `transformers` 5.0. 
+La documentación ha sido trasladada a [hf.co/docs/sagemaker](https://huggingface.co/docs/sagemaker). Esta página será eliminada en `transformers` 5.0.
 
 ### Tabla de contenido
 

@@ -164,7 +164,7 @@ Samples/second: 8.86
 GPU memory occupied: 14949 MB.
 ```
 
-Vemos que incluso un tamaño de lote relativamente pequeño casi llena toda la memoria de nuestra GPU. Sin embargo, un tamaño de lote más grande a menudo puede resultar en una convergencia del modelo más rápida o un mejor rendimiento final. Así que idealmente queremos ajustar el tamaño del lote a las necesidades del modelo y no a las limitaciones de la GPU. Lo interesante es que utilizamos mucha más memoria que el tamaño del modelo. 
+Vemos que incluso un tamaño de lote relativamente pequeño casi llena toda la memoria de nuestra GPU. Sin embargo, un tamaño de lote más grande a menudo puede resultar en una convergencia del modelo más rápida o un mejor rendimiento final. Así que idealmente queremos ajustar el tamaño del lote a las necesidades del modelo y no a las limitaciones de la GPU. Lo interesante es que utilizamos mucha más memoria que el tamaño del modelo.
 Para entender un poco mejor por qué es el caso, echemos un vistazo a las operaciones y necesidades de memoria de un modelo.
 
 ## Anatomía de las Operaciones del Modelo

@@ -19,11 +19,11 @@ rendered properly in your Markdown viewer.
 
 ## Overview
 
-**[K-EXAONE](https://github.com/LG-AI-EXAONE/K-EXAONE)** 모델은 LG AI연구원이 개발한 대규모 다국어 언어 모델입니다. `EXAONE-MoE`라는 Mixture-of-Experts 기반 구조를 채택해 총 236B 개의 파라미터를 갖고 추론 시 23B 개의 파라미터가 활성화됩니다. 다양한 벤치마크를 통한 성능 평가를 통해 K-EXAONE은 추론 능력, 에이전틱 작동 능력, 범용 지식, 다국어 이해, 그리고 긴 문맥 처리 능력을 증명했습니다. 
+**[K-EXAONE](https://github.com/LG-AI-EXAONE/K-EXAONE)** 모델은 LG AI연구원이 개발한 대규모 다국어 언어 모델입니다. `EXAONE-MoE`라는 Mixture-of-Experts 기반 구조를 채택해 총 236B 개의 파라미터를 갖고 추론 시 23B 개의 파라미터가 활성화됩니다. 다양한 벤치마크를 통한 성능 평가를 통해 K-EXAONE은 추론 능력, 에이전틱 작동 능력, 범용 지식, 다국어 이해, 그리고 긴 문맥 처리 능력을 증명했습니다.
 
 ### 핵심 구조 및 기능
 
-- **구조적 개선과 효율성:** 236B의 fine-grained MoE 구조(활성화 23B)를 채택했고, **Multi-Token Prediction (MTP)** 형태의 self-speculative decoding을 적용해 약 1.5배의 추론 throughput을 달성했습니다. 
+- **구조적 개선과 효율성:** 236B의 fine-grained MoE 구조(활성화 23B)를 채택했고, **Multi-Token Prediction (MTP)** 형태의 self-speculative decoding을 적용해 약 1.5배의 추론 throughput을 달성했습니다.
 - **긴 문맥 처리 능력:** 256K 문맥 크기를 자체적으로 지원하며, **3:1 hybrid attention** 구조와 **128-token sliding window**를 활용해 긴 문서 처리 시의 메모리 사용량을 크게 줄였습니다.
 - **다국어 지원:** 한국어, 영어, 스페인어, 독일어, 일본어, 베트남어의 총 6개 언어를 공식 지원하며, 새로 디자인된 **SuperBPE** 기반 토크나이저와 **150k의 어휘 크기**를 통해 토큰 효율을 약 30% 향상했습니다.
 - **에이전틱 처리 능력:** **멀티 에이전트 전략**을 통해 뛰어난 도구 사용 및 검색 능력을 보여줍니다.
@@ -136,7 +136,7 @@ print(tokenizer.decode(output_ids, skip_special_tokens=True))
 ### Agentic tool use
 
 AI 기반 에이전트를 구성할 때 K-EXAONE의 도구 활용 능력이 발휘됩니다.
-K-EXAONE 모델은 OpenAI 및 HuggingFace의 도구 활용 명세를 따릅니다. 
+K-EXAONE 모델은 OpenAI 및 HuggingFace의 도구 활용 명세를 따릅니다.
 아래는 HuggingFace의 docstring을 도구 스키마로 변환하는 유틸리티를 사용해 도구 활용 기능을 이용하는 예시입니다.
 
 K-EXAONE을 활용한 검색 에이전트의 실제 대화 기록을 살펴보려면 [GitHub의 예시 파일](https://github.com/LG-AI-EXAONE/K-EXAONE/blob/main/examples/example_output_search.txt)을 참고하세요.

@@ -267,7 +267,7 @@ To load and run a model using Flash Attention-2, simply add `attn_implementation
 from transformers import Qwen2VLForConditionalGeneration
 
 model = Qwen2VLForConditionalGeneration.from_pretrained(
-    "Qwen/Qwen2-VL-7B-Instruct", , 
+    "Qwen/Qwen2-VL-7B-Instruct", ,
     attn_implementation="flash_attention_2",
  device_map="auto")
 ```
