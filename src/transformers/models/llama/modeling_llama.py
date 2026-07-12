@@ -41,7 +41,6 @@ from ...modeling_rope_utils import (
     ROPE_INIT_FUNCTIONS,
     apply_rotary_pos_emb,
     dynamic_rope_update,
-    rotate_half,
 )
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
