@@ -3,7 +3,7 @@ name: Nvidia CI
 on:
   repository_dispatch:
   schedule:
-    - cron: "57 13 * * *"
+    - cron: "17 2 * * *"
   push:
     branches:
       - run_nvidia_ci*
