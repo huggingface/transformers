@@ -96,6 +96,9 @@ def apply_heterogeneous_modeling(model: PreTrainedModel) -> None:
         model: The model being constructed. Must have a heterogeneous ``config``
             and a resolvable ``HeterogeneousModelingSpec`` with ``layer_cls`` set.
     """
+    if not model.config.is_heterogeneous:
+        return
+
     heterogeneous_modeling_spec = get_heterogeneous_modeling_spec(model)
 
     per_layer_skip_types = [layer_config.skip for layer_config in model.config.per_layer_config]
