@@ -366,6 +366,43 @@ class Tipsv2VisionEmbeddings(Dinov2WithRegistersEmbeddings):
         # Combine class and patch embeddings
         return torch.cat((class_pos_embed.unsqueeze(0), patch_pos_embed), dim=1)
 
+    def forward(self, pixel_values: torch.Tensor, bool_masked_pos: torch.Tensor | None = None) -> torch.Tensor:
+        batch_size, _, height, width = pixel_values.shape
+        target_dtype = self.patch_embeddings.projection.weight.dtype
+        embeddings = self.patch_embeddings(pixel_values.to(dtype=target_dtype))
+
+        if bool_masked_pos is not None:
+            embeddings = torch.where(
+                bool_masked_pos.unsqueeze(-1),
+                self.mask_token.to(device=embeddings.device, dtype=embeddings.dtype).unsqueeze(0),
+                embeddings,
+            )
+
+        # add the [CLS] token to the embedded patch tokens
+        cls_tokens = self.cls_token.to(device=embeddings.device, dtype=embeddings.dtype).expand(batch_size, -1, -1)
+        embeddings = torch.cat((cls_tokens, embeddings), dim=1)
+
+        # add positional encoding to each token
+        embeddings = embeddings + self.interpolate_pos_encoding(embeddings, height, width).to(
+            device=embeddings.device, dtype=embeddings.dtype
+        )
+
+        # add register tokens
+        embeddings = torch.cat(
+            (
+                embeddings[:, :1],
+                self.register_tokens.to(device=embeddings.device, dtype=embeddings.dtype).expand(
+                    embeddings.shape[0], -1, -1
+                ),
+                embeddings[:, 1:],
+            ),
+            dim=1,
+        )
+
+        embeddings = self.dropout(embeddings)
+
+        return embeddings
+
 
 class Tipsv2VisionPreTrainedModel(Dinov2WithRegistersPreTrainedModel):
     config: Tipsv2VisionConfig
@@ -675,6 +712,7 @@ class Tipsv2TextModel(Tipsv2TextPreTrainedModel):
         last_hidden_state = encoder_outputs.last_hidden_state
         last_hidden_state = self.final_layer_norm(last_hidden_state)
         if pooling_mask is not None:
+            pooling_mask = pooling_mask.to(last_hidden_state.device)
             masked_hidden_state = last_hidden_state * pooling_mask[..., None]
             pooled_output = masked_hidden_state.sum(dim=1) / (
                 pooling_mask.sum(dim=1, keepdim=True) + self.config.pooling_epsilon
@@ -845,7 +883,7 @@ class Tipsv2Model(Tipsv2PreTrainedModel):
         loss = None
         if image_embeds is not None and text_embeds is not None:
             logits_per_text = torch.matmul(text_embeds, image_embeds.t().to(text_embeds.device))
-            logits_per_text = logits_per_text / self.temperature
+            logits_per_text = logits_per_text / self.temperature.to(logits_per_text.device)
             logits_per_image = logits_per_text.t()
             if return_loss:
                 loss = image_text_contrastive_loss(logits_per_text)
