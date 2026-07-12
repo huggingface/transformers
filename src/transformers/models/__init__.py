@@ -239,6 +239,7 @@ if TYPE_CHECKING:
     from .lfm2_vl import *
     from .lightglue import *
     from .lilt import *
+    from .lingbot_vision import *
     from .llama import *
     from .llama4 import *
     from .llava import *
