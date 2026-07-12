@@ -380,19 +380,26 @@ class MaskTest(unittest.TestCase):
         `create_masks_for_generate` pre-builds attention masks for compilable caches by mapping each
         `config.layer_types` entry through `LAYER_PATTERN_TO_MASK_FUNCTION_MAPPING`. Hybrid models with a
         non-attention layer type (e.g. ``moe`` / ``mlp`` in Nemotron-H) have no mask function — the helper must
-        not raise `KeyError`; instead the raw attention mask is returned so the model can build its own masks.
+        not raise `KeyError`; instead the unmapped layer type defers to the raw attention mask while mapped
+        types still get their pre-computed masks, preserving the dict return type contract.
         """
         config = LlamaConfig(num_hidden_layers=2)
         config.layer_types = ["full_attention", "moe"]
         attention_mask = torch.ones((1, 5), dtype=torch.long, device=torch_device)
 
-        # Must not raise (previously `KeyError: 'moe'`), and defers the raw mask to the model.
+        # Must not raise (previously `KeyError: 'moe'`), and returns a dict keyed by layer type.
         out = create_masks_for_generate(
             config, inputs_embeds=None, attention_mask=attention_mask, past_key_values=None
         )
-        self.assertIs(out, attention_mask)
+        self.assertIsInstance(out, dict)
+        self.assertEqual(set(out.keys()), {"full_attention", "moe"})
+        # Unmapped layer type defers the raw attention mask to the model.
+        self.assertIs(out["moe"], attention_mask)
+        # Mapped layer type gets its pre-computed mask (None for a full mask with no padding).
+        self.assertIsNone(out["full_attention"])
 
-        # `None` (no padding) is deferred too.
-        self.assertIsNone(
-            create_masks_for_generate(config, inputs_embeds=None, attention_mask=None, past_key_values=None)
-        )
+        # `None` (no padding) is deferred for unmapped types, and mapped types compute None too.
+        out_none = create_masks_for_generate(config, inputs_embeds=None, attention_mask=None, past_key_values=None)
+        self.assertIsInstance(out_none, dict)
+        self.assertIsNone(out_none["moe"])
+        self.assertIsNone(out_none["full_attention"])
