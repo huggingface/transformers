@@ -1111,6 +1111,12 @@ class Cache:
             self.only_non_sliding = offload_only_non_sliding
             self.prefetch_stream = torch.Stream() if _is_torch_greater_or_equal_than_2_7 else torch.cuda.Stream()
 
+        # Cache metadata (sequence length, mask sizes) used to be readable from any KV layer, but in heterogeneous
+        # models a skip can replace the submodule that updates a layer's KV cache, leaving it unused, so
+        # `get_representative_kv_layer_idx` picks an updated layer instead — using the layers' lengths when this
+        # is `None`, or these indices when a subclass precomputes them (see `StaticCache`).
+        self._enabled_kv_layer_indices: tuple[int, ...] | None = None
+
     def __repr__(self):
         return f"{self.__class__.__name__}(layers={self.layers})"
 
@@ -1286,29 +1292,49 @@ class Cache:
             # Init the layer
             layer.lazy_initialization(fake_kv_tensor, fake_kv_tensor)
 
-    def get_seq_length(self, layer_idx: int = 0) -> int:
-        """Returns the sequence length of the cache for the given layer."""
+    def get_seq_length(self, layer_idx: int | None = None) -> int:
+        """Returns the sequence length of the cache for the given layer, or of a representative KV layer when
+        omitted."""
+        if layer_idx is None:
+            layer_idx = self.get_representative_kv_layer_idx(range(len(self.layers)))
+            if layer_idx is None:
+                # A cache made only of LinearAttention layers does not track sequence length
+                if self.layers and not any(isinstance(layer, CacheLayerMixin) for layer in self.layers):
+                    raise ValueError(
+                        "`get_seq_length` can only be called on Attention layers, and the current Cache seem to only "
+                        "contain LinearAttention layers."
+                    )
+                # No KV layer holds tokens yet, so the length is 0
+                return 0
+
         if layer_idx >= len(self.layers):
             return 0
 
-        # For alternating attention/linear attention  caches, `get_seq_length` needs to use attention layer idx when called with default layer_idx
         if not isinstance(self.layers[layer_idx], CacheLayerMixin):
-            # If this is called with non-default arg, raise
-            if layer_idx != 0:
-                raise ValueError(
-                    f"You called `get_seq_length` on layer index {layer_idx}, but this layer is a LinearAttention layer, which "
-                    "does not track sequence length."
-                )
-            try:
-                # Use the first attention layer
-                layer_idx = next(idx for idx in range(len(self)) if isinstance(self.layers[idx], CacheLayerMixin))
-            except StopIteration:
-                raise ValueError(
-                    "`get_seq_length` can only be called on Attention layers, and the current Cache seem to only contain "
-                    "LinearAttention layers."
-                )
+            raise ValueError(
+                f"You called `get_seq_length` on layer index {layer_idx}, but this layer is a LinearAttention layer, which "
+                "does not track sequence length."
+            )
 
         return self.layers[layer_idx].get_seq_length()
+
+    def get_representative_kv_layer_idx(self, layer_indices: Iterable[int]) -> int | None:
+        """Return the first of the given layer indices that can represent KV-cache metadata: the first layer with a
+        non-empty KV cache, or for static caches the first layer in `_enabled_kv_layer_indices`."""
+        if self._enabled_kv_layer_indices is not None:
+            return next(
+                (layer_idx for layer_idx in layer_indices if layer_idx in self._enabled_kv_layer_indices), None
+            )
+        return next(
+            (
+                layer_idx
+                for layer_idx in layer_indices
+                if layer_idx < len(self.layers)
+                and isinstance(self.layers[layer_idx], CacheLayerMixin)
+                and self.layers[layer_idx].get_seq_length() > 0
+            ),
+            None,
+        )
 
     def get_max_length(self, layer_idx: int | None = None) -> int:
         """
@@ -1470,37 +1496,48 @@ class Cache:
         return self.batch_size
 
 
-def get_layer_types_and_kwargs(config: PreTrainedConfig) -> tuple[list[str], dict]:
+def get_layer_types_and_kwargs(config: PreTrainedConfig) -> tuple[list[str], list[dict]]:
     """
     From a `config`, extract the layer types if not present already, as well as the kwargs needed to initialize
-    the corresponding layer caches.
+    the corresponding layer caches. In order to support heterogeneous configs as well, the kwargs are returned
+    per layer.
     """
+    if config.is_heterogeneous:
+        layer_configs = config.per_layer_config
+    else:
+        layer_configs = [config] * config.num_hidden_layers
+
     layer_types = getattr(config, "layer_types", None)
-    # If `layer_types` is not explicitly provided, infer it from config fields
+    # If `layer_types` is not explicitly provided, infer it from the layer config fields
     if layer_types is None:
-        if getattr(config, "sliding_window", None) is not None:
-            layer_types = ["sliding_attention" for _ in range(config.num_hidden_layers)]
-        elif getattr(config, "attention_chunk_size", None) is not None:
-            layer_types = ["chunked_attention" for _ in range(config.num_hidden_layers)]
-        else:
-            layer_types = ["full_attention" for _ in range(config.num_hidden_layers)]
+        layer_types = []
+        for layer_config in layer_configs:
+            if getattr(layer_config, "sliding_window", None) is not None:
+                layer_types.append("sliding_attention")
+            elif getattr(layer_config, "attention_chunk_size", None) is not None:
+                layer_types.append("chunked_attention")
+            else:
+                layer_types.append("full_attention")
 
     # Some models have shared layers thus no cache is needed for them (e.g. Gemma3n)
     num_kv_shared_layers = getattr(config, "num_kv_shared_layers", None)
     if num_kv_shared_layers is not None and num_kv_shared_layers > 0:
-        layer_types = layer_types[: -config.num_kv_shared_layers]
+        layer_types = layer_types[:-num_kv_shared_layers]
 
-    # Prepare additional kwargs that may be needed to __init__ the cache layers
-    layer_kwargs = {}
-    if "sliding_attention" in layer_types or "hybrid_sliding" in layer_types:
-        layer_kwargs["sliding_window"] = config.sliding_window
-    if "chunked_attention" in layer_types:
-        layer_kwargs["sliding_window"] = config.attention_chunk_size
-    # In this case, we need to pass the config as well to properly __init__ the layer classes
-    if "heavily_compressed_attention" in layer_types or "compressed_sparse_attention" in layer_types:
-        layer_kwargs["config"] = config
+    # Prepare additional kwargs that may be needed to __init__ each cache layer
+    per_layer_kwargs = []
+    for layer_type, layer_config in zip(layer_types, layer_configs):
+        layer_kwargs = {}
+        if layer_type in ("sliding_attention", "hybrid_sliding"):
+            layer_kwargs["sliding_window"] = layer_config.sliding_window
+        elif layer_type == "chunked_attention":
+            layer_kwargs["sliding_window"] = layer_config.attention_chunk_size
+        # In this case, we need to pass the config as well to properly __init__ the layer classes
+        elif layer_type in ("heavily_compressed_attention", "compressed_sparse_attention"):
+            layer_kwargs["config"] = layer_config
+        per_layer_kwargs.append(layer_kwargs)
 
-    return layer_types, layer_kwargs
+    return layer_types, per_layer_kwargs
 
 
 class DynamicCache(Cache):
@@ -1557,9 +1594,12 @@ class DynamicCache(Cache):
         # If a config is passed, use it to infer the layer types and initialize accordingly
         if config is not None:
             decoder_config = config.get_text_config(decoder=True)
-            layer_types, layer_kwargs = get_layer_types_and_kwargs(decoder_config)
+            layer_types, per_layer_kwargs = get_layer_types_and_kwargs(decoder_config)
             # Dispatch the layer types
-            layers = [DYNAMIC_LAYER_TYPE_MAPPING[layer_type](**layer_kwargs) for layer_type in layer_types]
+            layers = [
+                DYNAMIC_LAYER_TYPE_MAPPING[layer_type](**layer_kwargs)
+                for layer_type, layer_kwargs in zip(layer_types, per_layer_kwargs)
+            ]
 
         # In this case, use the passed data to already fill in the Cache
         if ddp_cache_data is not None:
@@ -1643,11 +1683,25 @@ class StaticCache(Cache):
         offload_only_non_sliding: bool = True,
         **kwargs,
     ):
-        layer_types, layer_kwargs = get_layer_types_and_kwargs(config.get_text_config(decoder=True))
-        layer_kwargs["max_cache_len"] = max_cache_len
+        config = config.get_text_config(decoder=True)
+        layer_types, per_layer_kwargs = get_layer_types_and_kwargs(config)
         # Dispatch the layer types
-        layers = [STATIC_LAYER_TYPE_MAPPING[layer_type](**layer_kwargs) for layer_type in layer_types]
+        layers = [
+            STATIC_LAYER_TYPE_MAPPING[layer_type](max_cache_len=max_cache_len, **layer_kwargs)
+            for layer_type, layer_kwargs in zip(layer_types, per_layer_kwargs)
+        ]
         super().__init__(layers=layers, offloading=offloading, offload_only_non_sliding=offload_only_non_sliding)
+
+        # Under `torch.compile` a static layer's length is a tensor, so `get_representative_kv_layer_idx` cannot
+        # pick a layer by length and relies on these precomputed indices instead. In heterogeneous configs, layers
+        # that never update their KV cache because a skip replaced the submodule responsible for it (e.g. layers
+        # that skip attention) cannot represent KV-cache metadata, so they are excluded.
+        disabled_kv_layer_indices = config.get_disabled_kv_layer_indices()
+        self._enabled_kv_layer_indices = tuple(
+            layer_idx
+            for layer_idx, layer in enumerate(layers)
+            if isinstance(layer, CacheLayerMixin) and layer_idx not in disabled_kv_layer_indices
+        )
 
 
 class QuantizedCache(Cache):
@@ -1794,9 +1848,13 @@ class EncoderDecoderCache(Cache):
         """
         return len(self.self_attention_cache)
 
-    def get_seq_length(self, layer_idx: int = 0) -> int:
+    def get_seq_length(self, layer_idx: int | None = None) -> int:
         """Returns the sequence length of the cached states. A layer index can be optionally passed."""
         return self.self_attention_cache.get_seq_length(layer_idx)
+
+    def get_representative_kv_layer_idx(self, layer_indices: Iterable[int]) -> int | None:
+        """Return the self-attention layer representing KV-cache metadata for the given layer indices."""
+        return self.self_attention_cache.get_representative_kv_layer_idx(layer_indices)
 
     def get_max_length(self, layer_idx: int | None = None) -> int:
         """Returns the maximum sequence length (i.e. max capacity) of the cache object"""
@@ -1850,6 +1908,10 @@ class EncoderDecoderCache(Cache):
     @property
     def is_sliding(self):
         return self.self_attention_cache.is_sliding
+
+    @property
+    def is_linear(self):
+        return self.self_attention_cache.is_linear
 
     @property
     def is_compileable(self) -> bool:

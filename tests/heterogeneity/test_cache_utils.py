@@ -167,7 +167,7 @@ class TestHeterogeneousCache(unittest.TestCase):
             per_layer_config={0: {"skip": ["attention"]}},
         )
 
-        with self.assertRaisesRegex(ValueError, "Construct the model before creating a `StaticCache`"):
+        with self.assertRaisesRegex(ValueError, "Construct a model from this config first"):
             StaticCache(config=config, max_cache_len=1)
 
         with hetero_context("llama"):
