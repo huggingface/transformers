@@ -24,9 +24,18 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from ...configuration_utils import PreTrainedConfig
+from ...modeling_utils import PreTrainedModel
 from ...utils import auto_docstring, logging
 from huggingface_hub.dataclasses import strict
 from ..sam.configuration_sam import SamPromptEncoderConfig, SamMaskDecoderConfig, SamConfig
+from ..sam.modeling_sam import (
+    SamVisionEncoderOutput,
+    SamPromptEncoder,
+    SamMaskDecoder,
+    SamModel,
+    SamPositionalEmbedding,
+    SamImageSegmentationOutput,
+)
 
 logger = logging.get_logger(__name__)
 
@@ -136,6 +145,8 @@ class EfficientViTSamVisionConfig(PreTrainedConfig):
         self.middle_op = middle_op
         self.out_dim = out_dim
         self.image_size = image_size
+        self.num_pos_feats = 128
+        self.scale = 128.0
 
 
 @auto_docstring(checkpoint="mit-han-lab/efficientvit-sam-l1")
@@ -191,6 +202,30 @@ class EfficientViTSamConfig(SamConfig):
             self.mask_decoder_config = EfficientViTSamMaskDecoderConfig()
 
         PreTrainedConfig.__post_init__(self)
+
+
+# =============================================================================
+# 1.5. Output and Auxiliary Classes from SAM
+# =============================================================================
+
+class EfficientViTSamVisionEncoderOutput(SamVisionEncoderOutput):
+    pass
+
+
+class EfficientViTSamImageSegmentationOutput(SamImageSegmentationOutput):
+    pass
+
+
+class EfficientViTSamPositionalEmbedding(SamPositionalEmbedding):
+    pass
+
+
+class EfficientViTSamPromptEncoder(SamPromptEncoder):
+    pass
+
+
+class EfficientViTSamMaskDecoder(SamMaskDecoder):
+    pass
 
 
 # =============================================================================
@@ -960,9 +995,102 @@ class SamNeck(nn.Module):
         return features
 
 
+class EfficientViTSamPreTrainedModel(PreTrainedModel):
+    config_class = EfficientViTSamConfig
+    base_model_prefix = "efficientvitsam"
+    main_input_name = "pixel_values"
+    input_modalities = ("image",)
+    supports_gradient_checkpointing = True
+
+    def _init_weights(self, module: nn.Module):
+        if isinstance(module, nn.Conv2d):
+            nn.init.kaiming_normal_(module.weight, mode="fan_out", nonlinearity="relu")
+            if module.bias is not None:
+                nn.init.zeros_(module.bias)
+        elif isinstance(module, (nn.BatchNorm2d, nn.GroupNorm, nn.LayerNorm, LayerNorm2d)):
+            if module.bias is not None:
+                nn.init.zeros_(module.bias)
+            if module.weight is not None:
+                nn.init.ones_(module.weight)
+        elif isinstance(module, nn.Linear):
+            nn.init.normal_(module.weight, std=self.config.initializer_range)
+            if module.bias is not None:
+                nn.init.zeros_(module.bias)
+        elif hasattr(module, "positional_embedding") and hasattr(module, "scale"):
+            nn.init.normal_(module.positional_embedding, std=module.scale)
+
+
+class EfficientViTSamImageEncoder(EfficientViTSamPreTrainedModel):
+    def __init__(self, config: EfficientViTSamVisionConfig):
+        super().__init__(config)
+        self.backbone = EfficientViTLargeBackbone(
+            width_list=config.width_list,
+            depth_list=config.depth_list,
+            block_list=config.block_list,
+            expand_list=config.expand_list,
+            fewer_norm_list=config.fewer_norm_list,
+            in_channels=config.in_channels,
+            qkv_dim=config.qkv_dim,
+            norm=config.norm,
+            act_func=config.act_func,
+        )
+        self.neck = SamNeck(
+            fid_list=config.fid_list,
+            in_channel_list=config.in_channel_list,
+            head_width=config.head_width,
+            head_depth=config.head_depth,
+            expand_ratio=config.expand_ratio,
+            middle_op=config.middle_op,
+            out_dim=config.out_dim,
+            norm=config.norm,
+            act_func=config.act_func,
+        )
+        self.post_init()
+
+    def forward(self, pixel_values: torch.Tensor) -> EfficientViTSamVisionEncoderOutput:
+        features = self.backbone(pixel_values)
+        features = self.neck(features)
+        return EfficientViTSamVisionEncoderOutput(last_hidden_state=features["sam_encoder"])
+
+
+class EfficientViTSamVisionModel(EfficientViTSamPreTrainedModel):
+    config_class = EfficientViTSamVisionConfig
+    main_input_name = "pixel_values"
+
+    def __init__(self, config: EfficientViTSamVisionConfig):
+        super().__init__(config)
+        self.vision_encoder = EfficientViTSamImageEncoder(config)
+        self.post_init()
+
+    def forward(self, pixel_values: torch.Tensor) -> EfficientViTSamVisionEncoderOutput:
+        return self.vision_encoder(pixel_values)
+
+
+class EfficientViTSamModel(SamModel):
+    config_class = EfficientViTSamConfig
+
+    def __init__(self, config: EfficientViTSamConfig):
+        super(SamModel, self).__init__(config)
+        self.shared_image_embedding = EfficientViTSamPositionalEmbedding(config.vision_config)
+        self.vision_encoder = EfficientViTSamImageEncoder(config.vision_config)
+        self.prompt_encoder = EfficientViTSamPromptEncoder(config)
+
+        config.mask_decoder_config._attn_implementation = config._attn_implementation
+        self.mask_decoder = EfficientViTSamMaskDecoder(config.mask_decoder_config)
+        self.post_init()
+
+
 __all__ = [
     "EfficientViTSamPromptEncoderConfig",
     "EfficientViTSamMaskDecoderConfig",
     "EfficientViTSamVisionConfig",
     "EfficientViTSamConfig",
+    "EfficientViTSamVisionEncoderOutput",
+    "EfficientViTSamImageSegmentationOutput",
+    "EfficientViTSamPositionalEmbedding",
+    "EfficientViTSamPromptEncoder",
+    "EfficientViTSamMaskDecoder",
+    "EfficientViTSamImageEncoder",
+    "EfficientViTSamVisionModel",
+    "EfficientViTSamModel",
 ]

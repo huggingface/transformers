@@ -168,6 +168,8 @@ class EfficientViTSamVisionConfig(PreTrainedConfig):
         self.middle_op = middle_op
         self.out_dim = out_dim
         self.image_size = image_size
+        self.num_pos_feats = 128
+        self.scale = 128.0
 
 
 @auto_docstring(checkpoint="mit-han-lab/efficientvit-sam-l1")
