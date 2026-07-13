@@ -36,6 +36,33 @@ if is_torch_available():
     from torch.multiprocessing.spawn import ProcessRaisedException
 
 
+# =============================================================================
+# Constants
+# =============================================================================
+
+# Set to None to run distributed TP tests for every model with a plan.
+# Top 8 MoE + top 2 dense model types by Hugging Face text-generation download volume.
+TP_DISTRIBUTED_TEST_MODEL_TYPES = {
+    # Dense
+    "qwen3",
+    "qwen2",
+    # MoE
+    "qwen3_moe",
+    "glm_moe_dsa",
+    "deepseek_v4",
+    "glm4_moe_lite",
+    "glm4_moe",
+    "olmoe",
+    "qwen2_moe",
+    "cohere2_moe",
+}
+
+
+# =============================================================================
+# Distributed helpers (top-level for pickling by mp.spawn)
+# =============================================================================
+
+
 def _find_free_port():
     """Find a free port by binding a socket and releasing it."""
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
@@ -448,6 +475,16 @@ class TensorParallelTesterMixin(ABC):
         config = self.model_tester.get_config()
         return hasattr(config, "base_model_tp_plan") and config.base_model_tp_plan is not None
 
+    def _skip_if_tp_distributed_not_enabled(self):
+        """Skip expensive distributed TP/EP tests for models outside the allowlist."""
+        config = self.model_tester.get_config()
+        if TP_DISTRIBUTED_TEST_MODEL_TYPES is not None and config.model_type not in TP_DISTRIBUTED_TEST_MODEL_TYPES:
+            self.skipTest(
+                f"Tensor parallel distributed tests are not enabled for model_type={config.model_type!r} "
+                f"(enabled: {sorted(TP_DISTRIBUTED_TEST_MODEL_TYPES)}). "
+                "Set TP_DISTRIBUTED_TEST_MODEL_TYPES = None to run all tests."
+            )
+
     def _get_tp_model_class(self):
         """Get the model class to use for TP tests (prefers *ForCausalLM)."""
         if hasattr(self.model_tester, "causal_lm_class") and self.model_tester.causal_lm_class is not None:
@@ -495,6 +532,17 @@ class TensorParallelTesterMixin(ABC):
                 self.skipTest("Model does not have an expert parallel plan (base_model_ep_plan)")
         elif not self._has_tp_plan():
             self.skipTest("Model does not have a tensor parallel plan (base_model_tp_plan)")
+
+        self._skip_if_tp_distributed_not_enabled()
+
+        # # Skip encoder-decoder models (TP not supported)
+        # if getattr(self, "is_encoder_decoder", False):
+        #     self.skipTest("TP tests not supported for encoder-decoder models")
+
+        # # Skip VLM models for now
+        # config = self.model_tester.get_config()
+        # if hasattr(config, "vision_config") and config.vision_config is not None:
+        #     self.skipTest("VLM models are not yet supported in TP tests")
 
     @is_tensor_parallel_test
     def test_tp_forward(self):
