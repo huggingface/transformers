@@ -13,6 +13,7 @@
 # limitations under the License.
 import functools
 import importlib
+import inspect
 import os
 import re
 import sys
@@ -32,6 +33,7 @@ from ..utils.import_utils import (
     is_kernels_available,
     is_rocm_platform,
     is_torch_available,
+    resolve_internal_import,
 )
 from .flash_attention import flash_attention_forward
 
@@ -654,6 +656,32 @@ def use_kernelized_func(module_names: list[Callable] | Callable):
     return decorator
 
 
+def use_kernel_func_from_hub_with_fallback(package: str, func_name: str, internal_path: str | None = None):
+    # TODO: change when we sync to 0.16.x+
+    kernel_wrapper_decorator = use_kernel_func_from_hub(func_name)
+
+    def decorator(torch_function: Callable) -> Callable:
+        implementation = None
+        try:
+            module = importlib.import_module(package)
+            implementation = resolve_internal_import(module, internal_path or func_name)
+        except Exception:
+            implementation = torch_function
+        finally:
+            implementation = torch_function if implementation is None else implementation
+
+        applicable_params = inspect.signature(implementation).parameters
+
+        @functools.wraps(torch_function)
+        def wrapped(*args, **kwargs):
+            kwargs = {k: v for k, v in kwargs.items() if k in applicable_params}
+            return implementation(*args, **kwargs)
+
+        return kernel_wrapper_decorator(wrapped)
+
+    return decorator
+
+
 # Whether to allow hub kernels coming from untrusted repos, i.e. repos outside `kernels-community`
 ALLOW_ALL_KERNELS = False
 
@@ -851,32 +879,6 @@ def register_kernel_replacements_and_fusions(
         new_mapping[kernel_cls.__name__] = final_repo
 
     kernel_config.kernel_mapping = new_mapping
-
-
-def use_kernel_func_from_hub_with_fallback(func_name: str, package: str):
-    """
-    Similar to `use_kernel_func_from_hub`, but first tries to replace the decorated function with `func_name` imported from `package`,
-    if it's available. If not, simply applies `use_kernel_func_from_hub` on the decorated function.
-    Useful to define explicit torch fallback functions, while still using an optimized implementations from either `kernels` or
-    an auxiliary package (e.g. `causal_conv1d`) if available.
-    This means that the precedence order will be the following:
-    - 1st `kernels`, if it's available and `use_kernels=True`
-    - if the above is not True, then `func_name` imported from `package` if `package` is available
-    - if None of the above are True, the base decorated function
-    """
-
-    kernel_wrapper_decorator = use_kernel_func_from_hub(func_name)
-
-    def decorator(func: Callable) -> Callable:
-        try:
-            module = importlib.import_module(package)
-            function = getattr(module, func_name)
-        except Exception:
-            function = func
-
-        return kernel_wrapper_decorator(function)
-
-    return decorator
 
 
 __all__ = [
