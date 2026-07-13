@@ -1634,49 +1634,19 @@ def _build_checkpoint_conversion_mapping():
     ]
 
     # Cosmos3 Edge's composite checkpoint stores its dense reasoner text tower as
-    # 28 conventional attention + MLP blocks. The visual/projector tensors already
+    # conventional attention + MLP blocks. The visual/projector tensors already
     # use their native module names and intentionally need no mapping.
     mapping["cosmos3_edge"] = [
-        WeightRenaming(r"^embed_tokens\.weight$", "model.language_model.embed_tokens.weight"),
-        WeightRenaming(r"^norm\.weight$", "model.language_model.norm.weight"),
+        WeightRenaming(r"^embed_tokens\.", "model.language_model.embed_tokens."),
+        WeightRenaming(r"^norm\.", "model.language_model.norm."),
+        WeightRenaming(r"^layers\.", "model.language_model.layers."),
+        WeightRenaming(r"\.self_attn\.to_q\.", ".self_attn.q_proj."),
+        WeightRenaming(r"\.self_attn\.to_k\.", ".self_attn.k_proj."),
+        WeightRenaming(r"\.self_attn\.to_v\.", ".self_attn.v_proj."),
+        WeightRenaming(r"\.self_attn\.to_out\.", ".self_attn.o_proj."),
+        WeightRenaming(r"\.mlp\.up_proj\.", ".mlp.fc1."),
+        WeightRenaming(r"\.mlp\.down_proj\.", ".mlp.fc2."),
     ]
-    for layer_idx in range(28):
-        mapping["cosmos3_edge"].extend(
-            [
-                WeightRenaming(
-                    rf"^layers\.{layer_idx}\.input_layernorm\.weight$",
-                    f"model.language_model.layers.{layer_idx}.input_layernorm.weight",
-                ),
-                WeightRenaming(
-                    rf"^layers\.{layer_idx}\.self_attn\.to_q\.weight$",
-                    f"model.language_model.layers.{layer_idx}.self_attn.q_proj.weight",
-                ),
-                WeightRenaming(
-                    rf"^layers\.{layer_idx}\.self_attn\.to_k\.weight$",
-                    f"model.language_model.layers.{layer_idx}.self_attn.k_proj.weight",
-                ),
-                WeightRenaming(
-                    rf"^layers\.{layer_idx}\.self_attn\.to_v\.weight$",
-                    f"model.language_model.layers.{layer_idx}.self_attn.v_proj.weight",
-                ),
-                WeightRenaming(
-                    rf"^layers\.{layer_idx}\.self_attn\.to_out\.weight$",
-                    f"model.language_model.layers.{layer_idx}.self_attn.o_proj.weight",
-                ),
-                WeightRenaming(
-                    rf"^layers\.{layer_idx}\.post_attention_layernorm\.weight$",
-                    f"model.language_model.layers.{layer_idx}.post_attention_layernorm.weight",
-                ),
-                WeightRenaming(
-                    rf"^layers\.{layer_idx}\.mlp\.up_proj\.weight$",
-                    f"model.language_model.layers.{layer_idx}.mlp.up_proj.weight",
-                ),
-                WeightRenaming(
-                    rf"^layers\.{layer_idx}\.mlp\.down_proj\.weight$",
-                    f"model.language_model.layers.{layer_idx}.mlp.down_proj.weight",
-                ),
-            ]
-        )
 
     # The legacy mapping is added to the esm model here since the extra weight renaming do not apply to the esm model.
     mapping["esm"] += mapping["legacy"].copy()

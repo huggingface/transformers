@@ -47,8 +47,8 @@ class Cosmos3EdgeTextConfig(PreTrainedConfig):
         "layers.*.self_attn.k_proj": "colwise",
         "layers.*.self_attn.v_proj": "colwise",
         "layers.*.self_attn.o_proj": "rowwise",
-        "layers.*.mlp.up_proj": "colwise",
-        "layers.*.mlp.down_proj": "rowwise",
+        "layers.*.mlp.fc1": "colwise",
+        "layers.*.mlp.fc2": "rowwise",
     }
     base_model_pp_plan = {
         "embed_tokens": (["input_ids"], ["inputs_embeds"]),
@@ -82,6 +82,8 @@ class Cosmos3EdgeTextConfig(PreTrainedConfig):
     ignore_keys_at_rope_validation = {"mrope_section"}
 
     def __post_init__(self, **kwargs):
+        if self.rope_parameters is None:
+            self.rope_parameters = {"mrope_section": [24, 20, 20]}
         if self.head_dim is None:
             self.head_dim = self.hidden_size // self.num_attention_heads
         if self.num_key_value_heads is None:
@@ -102,11 +104,6 @@ class Cosmos3EdgeTextConfig(PreTrainedConfig):
                 "`rope_parameters.mrope_section` must contain three sections whose sum equals half of `head_dim`, "
                 f"got {mrope_section} for head_dim={self.head_dim}."
             )
-
-    def convert_rope_params_to_dict(self, **kwargs):
-        kwargs = super().convert_rope_params_to_dict(**kwargs)
-        self.rope_parameters.setdefault("mrope_section", [24, 20, 20])
-        return kwargs
 
 
 @auto_docstring(checkpoint="nvidia/Cosmos3-Edge-Reasoner")
@@ -209,14 +206,16 @@ class Cosmos3EdgeConfig(PreTrainedConfig):
         elif isinstance(self.projector_config, dict):
             self.projector_config = Cosmos3EdgeProjectorConfig(**self.projector_config)
 
+        super().__post_init__(**kwargs)
+
+    def validate_architecture(self):
+        super().validate_architecture()
         if not isinstance(self.text_config, Cosmos3EdgeTextConfig):
             raise TypeError("`text_config` must be a `Cosmos3EdgeTextConfig` or a dictionary.")
         if not isinstance(self.vision_config, Cosmos3EdgeVisionConfig):
             raise TypeError("`vision_config` must be a `Cosmos3EdgeVisionConfig` or a dictionary.")
         if not isinstance(self.projector_config, Cosmos3EdgeProjectorConfig):
             raise TypeError("`projector_config` must be a `Cosmos3EdgeProjectorConfig` or a dictionary.")
-
-        super().__post_init__(**kwargs)
 
 
 __all__ = ["Cosmos3EdgeConfig", "Cosmos3EdgeTextConfig", "Cosmos3EdgeVisionConfig", "Cosmos3EdgeProjectorConfig"]

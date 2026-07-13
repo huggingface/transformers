@@ -200,7 +200,7 @@ class Cosmos3EdgeModelTest(unittest.TestCase):
 
         self.assertEqual(len(model.model.language_model.layers), 2)
         self.assertTrue(hasattr(model.model.language_model.layers[0].self_attn, "q_proj"))
-        self.assertTrue(hasattr(model.model.language_model.layers[0].mlp, "up_proj"))
+        self.assertTrue(hasattr(model.model.language_model.layers[0].mlp, "fc1"))
 
         expected_keys = {
             "model.language_model.embed_tokens.weight",
@@ -210,8 +210,8 @@ class Cosmos3EdgeModelTest(unittest.TestCase):
             "model.language_model.layers.0.self_attn.v_proj.weight",
             "model.language_model.layers.0.self_attn.o_proj.weight",
             "model.language_model.layers.0.post_attention_layernorm.weight",
-            "model.language_model.layers.0.mlp.up_proj.weight",
-            "model.language_model.layers.0.mlp.down_proj.weight",
+            "model.language_model.layers.0.mlp.fc1.weight",
+            "model.language_model.layers.0.mlp.fc2.weight",
             "model.language_model.norm.weight",
             "model.projector.norm.weight",
             "model.projector.linear_fc1.weight",
@@ -219,6 +219,8 @@ class Cosmos3EdgeModelTest(unittest.TestCase):
             "lm_head.weight",
         }
         self.assertTrue(expected_keys.issubset(state_dict), expected_keys - set(state_dict))
+        self.assertNotIn("model.language_model.layers.0.mlp.fc1.bias", state_dict)
+        self.assertNotIn("model.language_model.layers.0.mlp.fc2.bias", state_dict)
 
         # The projector sees four spatially grouped visual patches at once.
         self.assertEqual(tuple(state_dict["model.projector.linear_fc1.weight"].shape), (64, 128))
@@ -267,7 +269,7 @@ class Cosmos3EdgeModelTest(unittest.TestCase):
             )
 
         self.assertEqual(tuple(outputs.logits.shape), (1, 3, 97))
-        self.assertNotIn("rope_deltas", outputs)
+        self.assertIsNotNone(outputs.rope_deltas)
         self.assertEqual(tuple(generated.shape), (1, 4))
 
     def test_multimodal_forward_requires_token_type_ids(self):
@@ -299,8 +301,18 @@ class Cosmos3EdgeModelTest(unittest.TestCase):
                 mm_token_type_ids=torch.tensor([[0, 0, 2, 0, 0, 0, 2, 0]], dtype=torch.long, device=torch_device),
                 use_cache=False,
             )
+            generated = model.generate(
+                input_ids=input_ids,
+                pixel_values_videos=pixel_values_videos,
+                video_grid_thw=video_grid_thw,
+                mm_token_type_ids=torch.tensor([[0, 0, 2, 0, 0, 0, 2, 0]], dtype=torch.long, device=torch_device),
+                do_sample=False,
+                num_beams=2,
+                max_new_tokens=1,
+            )
 
         self.assertEqual(tuple(outputs.logits.shape), (1, 8, 97))
+        self.assertEqual(tuple(generated.shape), (1, 9))
 
     def test_mrope_positions_use_merged_image_grid(self):
         model = Cosmos3EdgeModel(_tiny_config()).to(torch_device)
@@ -335,11 +347,15 @@ class Cosmos3EdgeModelTest(unittest.TestCase):
         conversions = get_model_conversion_mapping(model, add_legacy=False)
 
         def rename(source_key):
+            target_key = source_key
+            matched = False
             for conversion in conversions:
-                target_key, matched_pattern = conversion.rename_source_key(source_key)
+                target_key, matched_pattern = conversion.rename_source_key(target_key)
                 if matched_pattern is not None:
-                    return target_key
-            self.fail(f"No native conversion mapping found for checkpoint key: {source_key}")
+                    matched = True
+            if not matched:
+                self.fail(f"No native conversion mapping found for checkpoint key: {source_key}")
+            return target_key
 
         expected = {
             "embed_tokens.weight": "model.language_model.embed_tokens.weight",
@@ -350,10 +366,10 @@ class Cosmos3EdgeModelTest(unittest.TestCase):
             "layers.0.self_attn.to_v.weight": "model.language_model.layers.0.self_attn.v_proj.weight",
             "layers.0.self_attn.to_out.weight": "model.language_model.layers.0.self_attn.o_proj.weight",
             "layers.0.post_attention_layernorm.weight": "model.language_model.layers.0.post_attention_layernorm.weight",
-            "layers.0.mlp.up_proj.weight": "model.language_model.layers.0.mlp.up_proj.weight",
-            "layers.0.mlp.down_proj.weight": "model.language_model.layers.0.mlp.down_proj.weight",
+            "layers.0.mlp.up_proj.weight": "model.language_model.layers.0.mlp.fc1.weight",
+            "layers.0.mlp.down_proj.weight": "model.language_model.layers.0.mlp.fc2.weight",
             "layers.27.input_layernorm.weight": "model.language_model.layers.27.input_layernorm.weight",
-            "layers.27.mlp.down_proj.weight": "model.language_model.layers.27.mlp.down_proj.weight",
+            "layers.27.mlp.down_proj.weight": "model.language_model.layers.27.mlp.fc2.weight",
         }
         for source_key, target_key in expected.items():
             with self.subTest(source_key=source_key):
@@ -381,13 +397,18 @@ class Cosmos3EdgeModelTest(unittest.TestCase):
                     "self_attn.v_proj": "self_attn.to_v",
                     "self_attn.o_proj": "self_attn.to_out",
                     "post_attention_layernorm": "post_attention_layernorm",
-                    "mlp.up_proj": "mlp.up_proj",
-                    "mlp.down_proj": "mlp.down_proj",
+                    "mlp.fc1": "mlp.up_proj",
+                    "mlp.fc2": "mlp.down_proj",
                 }
                 composite_state_dict[f"layers.{layer_idx}.{source_layer_names[layer_name]}.{suffix}"] = value
             else:
                 # The vision encoder, projector, and LM head already match the native module tree.
                 composite_state_dict[key] = value
+
+        # The unified checkpoint contains this generator-only branch. The reasoner loader deliberately excludes it
+        # after the text-key conversion has added the `model.language_model` prefix.
+        composite_state_dict["layers.0.mlp_moe_gen.up_proj.weight"] = torch.zeros(1)
+        composite_state_dict["layers.0.self_attn.add_q_proj.weight"] = torch.zeros(1)
 
         with tempfile.TemporaryDirectory() as temporary_directory:
             reference_model.config.save_pretrained(temporary_directory)
@@ -396,7 +417,11 @@ class Cosmos3EdgeModelTest(unittest.TestCase):
                 os.path.join(temporary_directory, "model.safetensors"),
                 metadata={"format": "pt"},
             )
-            loaded_model = Cosmos3EdgeForConditionalGeneration.from_pretrained(temporary_directory).eval()
+            loaded_model, loading_info = Cosmos3EdgeForConditionalGeneration.from_pretrained(
+                temporary_directory, output_loading_info=True
+            )
+            loaded_model = loaded_model.eval()
 
         for key, value in reference_model.state_dict().items():
             torch.testing.assert_close(value, loaded_model.state_dict()[key])
+        self.assertEqual(loading_info["unexpected_keys"], set())
