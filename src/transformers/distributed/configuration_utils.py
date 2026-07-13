@@ -53,29 +53,32 @@ class DistributedConfig:
     fsdp_size: int | None = None
     fsdp_cpu_offload: bool = False
     fsdp_mixed_precision: bool = False
+    pp_size: int | None = None
 
     def __post_init__(self):
-        if self.tp_size is None and self.fsdp_size is None:
+        if self.tp_size is None and self.fsdp_size is None and self.pp_size is None:
             return
 
         if self.tp_size is None:
             self.tp_size = 1
         if self.fsdp_size is None:
             self.fsdp_size = 1
+        if self.pp_size is None:
+            self.pp_size = 1
 
-        if self.tp_size > 1 and self.fsdp_size > 1:
+        if self.tp_size > 1 and self.fsdp_size > 1 and self.pp_size > 1:
             raise ValueError(
-                "FSDP+TP is not supported yet. "
-                "Use DistributedConfig(fsdp_size=N) or DistributedConfig(tp_size=N), not both. "
-                "2D support will come soon."
+                "FSDP+TP+PP is not supported yet. "
+                "Use DistributedConfig(fsdp_size=N) or DistributedConfig(tp_size=N) or DistributedConfig(pp_size=N), not all three. "
+                "Only 1D support is available for now."
             )
 
     def validate(self) -> None:
         """Validate against the live process group. Call before distributed load/train."""
-        if self.tp_size is None and self.fsdp_size is None:
+        if self.tp_size is None and self.fsdp_size is None and self.pp_size is None:
             return
 
-        if self.tp_size <= 1 and self.fsdp_size <= 1:
+        if self.tp_size <= 1 and self.fsdp_size <= 1 and self.pp_size <= 1:
             return
 
         if not is_torch_available():
