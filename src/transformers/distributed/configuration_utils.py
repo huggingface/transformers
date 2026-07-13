@@ -91,9 +91,11 @@ class DistributedConfig:
             )
 
         world_size = torch.distributed.get_world_size()
-        if self.tp_size * self.fsdp_size != world_size:
+        expected_world_size = self.tp_size * self.fsdp_size * self.pp_size
+        if expected_world_size != world_size:
             raise RuntimeError(
-                f"tp_size ({self.tp_size}) * fsdp_size ({self.fsdp_size}) is not equal to world_size ({world_size})"
+                f"tp_size ({self.tp_size}) * fsdp_size ({self.fsdp_size}) * pp_size ({self.pp_size}) "
+                f"is not equal to world_size ({world_size})"
             )
 
     @classmethod
