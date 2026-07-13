@@ -216,11 +216,8 @@ class Learnable2DInterpPosEmb(nn.Module):
         self.height = height
         self.width = width
         self.interpolation_mode = interpolation_mode
-        self.weight = nn.Parameter(torch.empty(height, width, dim))
-        self.reset_parameters()
-
-    def reset_parameters(self):
-        nn.init.normal_(self.weight)
+        # Filled by `LocateAnythingPreTrainedModel._init_weights`.
+        self.weight = nn.Parameter(torch.zeros(height, width, dim))
 
     def forward(self, x: torch.Tensor, grid_hws: torch.Tensor) -> torch.Tensor:
         pos_embs = []
@@ -376,10 +373,6 @@ class MLP2(nn.Module):
         self.fc0 = nn.Linear(dims[0], dims[1], bias=bias)
         self.fc1 = nn.Linear(dims[1], dims[2], bias=bias)
         self.activation = activation
-        for m in [self.fc0, self.fc1]:
-            nn.init.trunc_normal_(m.weight, std=math.sqrt(2 / m.in_features))
-            if m.bias is not None:
-                nn.init.zeros_(m.bias)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         x = self.fc0(x)
@@ -1071,18 +1064,15 @@ class LocateAnythingPreTrainedModel(LlavaPreTrainedModel):
             self, attn_implementation, is_init_check, *args, **kwargs
         )
 
-    # trf-ignore: TRF018
     def _init_weights(self, module):
-        # LocateAnythingConfig has no top-level `initializer_range`; fall back to the text config's.
-        std = getattr(self.config, "initializer_range", None) or self.config.text_config.initializer_range
-        if isinstance(module, (nn.Linear, nn.Conv2d)):
-            init.normal_(module.weight, mean=0.0, std=std)
-            if module.bias is not None:
-                init.zeros_(module.bias)
-        elif isinstance(module, nn.Embedding):
-            init.normal_(module.weight, mean=0.0, std=std)
-            if module.padding_idx is not None:
-                init.zeros_(module.weight[module.padding_idx])
+        PreTrainedModel._init_weights(self, module)
+        if isinstance(module, Learnable2DInterpPosEmb):
+            init.normal_(module.weight)
+        elif isinstance(module, MLP2):
+            for linear in (module.fc0, module.fc1):
+                init.trunc_normal_(linear.weight, std=math.sqrt(2 / linear.in_features))
+                if linear.bias is not None:
+                    init.zeros_(linear.bias)
 
 
 class LocateAnythingModel(LlavaModel):
