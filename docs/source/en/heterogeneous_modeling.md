@@ -41,7 +41,7 @@ architecture's layer class so that:
 
 All of this is driven by a single declaration, the `HeterogeneousModelingSpec`.
 
-## The modeling spec
+## The heterogeneous modeling spec
 
 A spec names the layer class to patch and how to find each layer's index during construction:
 
@@ -49,7 +49,7 @@ A spec names the layer class to patch and how to find each layer's index during 
 from transformers.integrations.heterogeneity import HeterogeneousModelingSpec
 from transformers.models.llama.modeling_llama import LlamaDecoderLayer
 
-spec = HeterogeneousModelingSpec(
+HeterogeneousModelingSpec(
     layer_cls=LlamaDecoderLayer,
     layer_idx_variable_name="layer_idx",
 )
@@ -81,7 +81,7 @@ def identity(hidden_states):
     return hidden_states
 
 
-spec = HeterogeneousModelingSpec(
+HeterogeneousModelingSpec(
     layer_cls=LlamaDecoderLayer,
     layer_idx_variable_name="layer_idx",
     skip_descriptors={
@@ -160,39 +160,60 @@ read cache metadata from a different layer.
 
 ## The resulting model
 
-For an architecture with a heterogeneous modeling spec, applying skips requires nothing beyond the configuration. Building a Llama model with
-one layer's attention skipped replaces that layer's attention with a parameter-free no-op, and the model runs as usual:
+A heterogeneous modeling spec and a configuration together determine the resulting model. In the following
+gpt-oss model, layer 1 is built with smaller experts, layer 2 uses a shorter sliding window, layer 3's attention is
+replaced with a no-op:
 
 ```py
-import torch
+from transformers import GptOssConfig, GptOssForCausalLM
 
-from transformers import LlamaConfig, LlamaForCausalLM
-
-config = LlamaConfig(
-    hidden_size=64,
-    intermediate_size=128,
+config = GptOssConfig(
     num_hidden_layers=4,
-    num_attention_heads=4,
-    num_key_value_heads=4,
-    per_layer_config={2: {"skip": ["attention"]}},
+    intermediate_size=128,
+    sliding_window=16,
+    layer_types=["sliding_attention", "full_attention", "sliding_attention", "full_attention"],
+    per_layer_config={
+        1: {"intermediate_size": 32},
+        2: {"sliding_window": 8},
+        3: {"skip": ["attention"]},
+    },
 )
-model = LlamaForCausalLM(config)
+model = GptOssForCausalLM(config)
 
+# Expert weights have shape (num_local_experts, intermediate_size, hidden_size).
+# Layer 0 uses the global intermediate size; layer 1 uses its override.
+model.model.layers[0].mlp.experts.down_proj.shape
+# torch.Size([128, 128, 2880])
+
+model.model.layers[1].mlp.experts.down_proj.shape
+# torch.Size([128, 32, 2880])
+
+# Layer 0 uses the global sliding window; layer 2 uses its override. Internally,
+# the sliding layers receive their attention masks as a dict keyed by window size,
+# {16: <mask>, 8: <mask>}, and each layer's forward selects its own entry.
+model.model.layers[0].self_attn.sliding_window
+# 16
+
+model.model.layers[2].self_attn.sliding_window
+# 8
+
+# Layer 3's attention is a no-op replacement.
 type(model.model.layers[0].self_attn).__name__
-# 'LlamaAttention'
+# 'GptOssAttention'
 
-type(model.model.layers[2].self_attn).__name__
+type(model.model.layers[3].self_attn).__name__
 # '_NoOpReplacement'
 
-list(model.model.layers[2].self_attn.parameters())
+list(model.model.layers[3].self_attn.parameters())
 # []
 
-model(torch.tensor([[1, 2, 3]])).logits.shape
-# torch.Size([1, 3, 32000])
+list(model.model.layers[0].self_attn.parameters())
+# [tensor(...), tensor(...), ...]
 ```
 
 Because the replacements hold no parameters, checkpoints of such models simply do not contain weights for the skipped
-members, and [`~PreTrainedModel.save_pretrained`] and [`~PreTrainedModel.from_pretrained`] round trip as usual.
+members, and [`~PreTrainedModel.save_pretrained`] and [`~PreTrainedModel.from_pretrained`] round trip them out of the
+box.
 
 ## Enable a custom model
 
