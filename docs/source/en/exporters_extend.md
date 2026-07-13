@@ -26,16 +26,16 @@ below follow that same layout 1:1, so the file you read and the doc you read are
 
 ## Patches and fixes
 
-The exporters use two lifecycles consistently.
+Patches and fixes differ in whether they can be reverted.
 
-Patches are registered with `@register_patch(backend, *dotted_paths)` and installed with
+- Patches are registered with `@register_patch(backend, *dotted_paths)` and installed with
 `apply_patches(backend)`. A patch reversibly swaps an attribute (a `torch` op, an ExecuTorch
 internal, or a model class method) for the duration of the export. Pass multiple paths to a single
 decorator to share one factory across targets, which is useful when the same method shape needs
 patching on several classes (for example `_update_mamba_mask` on Jamba, Bamba, and others).
 Originals are restored on exit, even if the export raises.
 
-Fixes are registered with `@register_fx_node_fix(backend)` or `@register_fx_program_fix(backend)`
+- Fixes are registered with `@register_fx_node_fix(backend)` or `@register_fx_program_fix(backend)`
 and applied with `apply_fx_node_fixes(backend, gm)` or `apply_fx_program_fixes(backend, ep)`.
 ONNX-IR fixes are listed in `_IR_FIXES` and applied with `apply_onnx_ir_fixes`. A fix mutates the
 in-progress graph or program in place. There's no revert, since fixes permanently repair the
@@ -43,13 +43,14 @@ artifact before the next pipeline step.
 
 Every patch and fix sits in a backend-keyed registry (`_PATCHES`, `_FX_NODE_FIXES`,
 `_FX_PROGRAM_FIXES` in [exporters/utils.py](https://github.com/huggingface/transformers/blob/main/src/transformers/exporters/utils.py)).
-Adding a new one is *write a function and decorate it*, nothing else.
+
+Adding a new one is *writing a function and decorating it*, nothing else.
 
 ## DynamoExporter
 
 The base exporter has one patch stage and four structural helpers. They run in this order inside
-`DynamoExporter.export`, against the original `nn.Module`. Source:
-[exporter_dynamo.py](https://github.com/huggingface/transformers/blob/main/src/transformers/exporters/exporter_dynamo.py).
+`DynamoExporter.export`, against the original `nn.Module` (see
+[exporter_dynamo.py](https://github.com/huggingface/transformers/blob/main/src/transformers/exporters/exporter_dynamo.py)).
 
 ### Stage 1: Forward-signature patch
 
@@ -59,7 +60,7 @@ Replaces `model.forward` with an explicit flat-arg signature derived from the in
 `torch.export` doesn't bundle `**kwargs` into a single tuple. This is the entry contract
 `torch.export` reads before tracing.
 
-This stage is internal and has no extension knob.
+This stage is internal and isn't an extension point.
 
 ### Stage 2: Model patches
 
@@ -79,11 +80,11 @@ mamba/linear-attn mask, the NLLB classifier cast, and chunked-vision attention.
 `register_cache_pytrees_for_model`, under the `# ── Stage 3: Pytree registration ──` marker.
 
 Registers flatten/unflatten via `torch.utils._pytree.register_pytree_node` for every captured
-`Cache` and `ModelOutput`. It's reflection-driven and tuned for tensor containers, not a general
-serializer.
+`Cache` and `ModelOutput`. It discovers each type's structure by walking its attributes at
+runtime, tuned for tensor containers rather than acting as a general serializer.
 
-This is usually automatic. If a type isn't reflectable, add a branch to `_flatten_to_context` or
-`_unflatten_from_context`.
+This is usually automatic. If a type keeps its tensors somewhere the attribute walk can't reach,
+add a branch to `_flatten_to_context` or `_unflatten_from_context`.
 
 ### Stage 4: Dynamic shapes
 
@@ -107,10 +108,10 @@ To extend, append the attribute name to `_STATEFUL_CACHE_ATTRS`.
 ## OnnxExporter
 
 `OnnxExporter` extends `DynamoExporter` with five numbered stages applied around
-`torch.onnx.export`. Source:
-[exporter_onnx.py](https://github.com/huggingface/transformers/blob/main/src/transformers/exporters/exporter_onnx.py).
+`torch.onnx.export`. (see
+[exporter_onnx.py](https://github.com/huggingface/transformers/blob/main/src/transformers/exporters/exporter_onnx.py)).
 
-A complete inventory of patches in the file is one grep away:
+Grep a complete inventory of patches in the file:
 
 ```bash
 grep -nE "^def (_patch_|_fix_|_aten_)" src/transformers/exporters/exporter_onnx.py
@@ -136,7 +137,7 @@ Hooks the private `_prepare_exported_program_for_export` step so the FX node fix
 again right after `run_decompositions`. Any new symbolic-guard nodes the ONNX decomposition
 introduces get repaired before the FX to ONNX lowering picks them up.
 
-Uses the same registry as stage 1: define `_patch_*(original)` and decorate it with
+Uses the same registry as stage 1. Define `_patch_*(original)` and decorate it with
 `@register_patch("onnx", "dotted.path")`.
 
 ### Stage 3: FX node fixes
@@ -176,17 +177,17 @@ To add one, implement `_fix_ir_*(graph_like)` and append it to `_IR_FIXES`.
 
 ## ExecutorchExporter
 
-`ExecutorchExporter` extends `DynamoExporter` with four stages applied around
-`to_edge_transform_and_lower` and `to_executorch`, plus a backend-preparation step that runs first.
-Source:
-[exporter_executorch.py](https://github.com/huggingface/transformers/blob/main/src/transformers/exporters/exporter_executorch.py).
+`ExecutorchExporter` extends `DynamoExporter` with five stages applied around
+`to_edge_transform_and_lower` and `to_executorch`, starting with a backend-preparation step
+(see
+[exporter_executorch.py](https://github.com/huggingface/transformers/blob/main/src/transformers/exporters/exporter_executorch.py)).
 
 ### Stage 1: Backend preparation
 
 `_BACKEND_PREPARE`, under the `# ── Stage 1: Backend preparation ──` marker. Runs before
 `torch.export` and is a one-shot step, not a reversible patch.
 
-`prepare_for_xnnpack` moves the model to CPU/fp32 and selects `XnnpackPartitioner`;
+`prepare_for_xnnpack` moves the model to CPU/fp32 and selects `XnnpackPartitioner`.
 `prepare_for_cuda` moves it to CUDA/bf16 and selects `CudaPartitioner`. Each returns
 `(model, sample_inputs, partitioner)`.
 
@@ -222,7 +223,7 @@ Uses the same registry as stage 2: define `_patch_*(original)` and decorate it w
 the `# ── Stage 4: FX program fixes ──` marker. Runs after `torch.export`, before
 `to_edge_transform_and_lower`.
 
-Repairs the `ExportedProgram` where the fix needs program-level context: widen `int_oo` upper
+Repairs the `ExportedProgram` where the fix needs program-level context. Widen `int_oo` upper
 bounds in `range_constraints`, and fill missing placeholder `meta["val"]` from `state_dict`.
 
 To add one, define `_fix_*(exported_program) → None` and decorate it with
@@ -233,7 +234,7 @@ To add one, define `_fix_*(exported_program) → None` and decorate it with
 `_FX_NODE_FIXES["executorch"]`, in-place via `apply_fx_node_fixes("executorch", gm)`, under the
 `# ── Stage 5: FX node fixes ──` marker. Runs after stage 4, before `to_edge_transform_and_lower`.
 
-Per-node rewrites: swap Python sym ops for `executorch_prim.*` equivalents, rewrite `pow` as a
+Per-node rewrites swap Python sym ops for `executorch_prim.*` equivalents. Rewrite `pow` as a
 `mul` chain, normalize amax/max negative dim, and force a contiguous clone. DCE runs automatically
 at the end of the walk.
 
@@ -266,5 +267,5 @@ A second list,
 [`EXPORT_SKIP_MODEL_CLASSES`](https://github.com/huggingface/transformers/blob/main/tests/exporters/test_utils.py),
 opts a handful of model classes out of the entire export sweep when the model itself is
 fundamentally non-exportable as-is (data-dependent control flow that can't be vectorized, or
-modules treated as forward arguments). Same expectations: every entry carries a TODO naming the
+modules treated as forward arguments). Same expectations: every entry carries a `TODO` naming the
 underlying model change needed, and the list is expected to shrink, not grow.

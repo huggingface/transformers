@@ -16,8 +16,7 @@ rendered properly in your Markdown viewer.
 
 # Exporters
 
-Export any [`PreTrainedModel`] to ONNX, ExecuTorch, or a standalone PyTorch program with the
-same two lines of code, regardless of the target runtime.
+Export any [`PreTrainedModel`] to ONNX, ExecuTorch, or a standalone PyTorch program, regardless of the target runtime.
 
 ```python
 exporter = DynamoExporter()  # or OnnxExporter, ExecutorchExporter
@@ -30,17 +29,13 @@ new attention patterns, and custom cache types are supported at export time as s
 in the modeling code.
 
 > [!WARNING]
-> The exporters are experimental. Many of the patches in this module work around specific
-> upstream bugs (Torch, ONNX Script, ONNX Runtime, ExecuTorch) and will be removed as soon as the
-> fix lands upstream. Until the API stabilizes, treat the patches as tied to the versions used in
-> the test suite. Pin those versions in production tooling, and expect new patches to appear and
-> old ones to disappear as upstream changes land.
+> The exporters are experimental. Many of the patches in this module work around specific upstream bugs (Torch, ONNX Script, ONNX Runtime, ExecuTorch) and will be removed as soon as the fix lands upstream. Until the API stabilizes, treat the patches as tied to the versions used in the test suite. Pin those versions in production tooling, and expect new patches to appear and old ones to disappear as upstream changes land.
 
-| Exporter               | Output                     | Runtime                                       |
-| ---------------------- | -------------------------- | --------------------------------------------- |
-| [`DynamoExporter`]     | `ExportedProgram`          | Any PyTorch runtime, AOT compilation          |
+| Exporter               | Output                     | Runtime                                    |
+| ---------------------- | -------------------------- | ------------------------------------------ |
+| [`DynamoExporter`]     | `ExportedProgram`          | Any PyTorch runtime, AOT compilation       |
 | [`OnnxExporter`]       | `ONNXProgram`              | Any ONNX runtime (ORT, TensorRT, OpenVINO) |
-| [`ExecutorchExporter`] | `ExecutorchProgramManager` | Mobile and edge devices (ExecuTorch)          |
+| [`ExecutorchExporter`] | `ExecutorchProgramManager` | Mobile and edge devices (ExecuTorch)       |
 
 [`AutoHfExporter`] picks the right exporter from a config, and [`AutoExportConfig`] picks the
 right config class from a dict. Both follow the same auto-class pattern in Transformers, which
@@ -92,6 +87,7 @@ pip install transformers "torch==2.12.0" "executorch==1.3.1"
 ## Export a model
 
 All exporters share the same interface. Create an exporter with a config, and call [`~exporters.HfExporter.export`].
+
 Switch between runtimes by swapping the exporter class.
 
 <hfoptions id="exporters-quickstart">
@@ -141,6 +137,8 @@ outputs = session.run(None, ort_inputs)
 </hfoption>
 <hfoption id="ExecuTorch">
 
+[`~exporters.ExecutorchConfig#backend`] defaults to `xnnpack` which targets the CPU and works on CPU-only installations. `cuda` targets the GPU and requires a CUDA-enabled environment. Requesting it without CUDA raises a `RuntimeError`.
+
 ```python
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from transformers.exporters import ExecutorchExporter, ExecutorchConfig
@@ -169,12 +167,12 @@ outputs = method.execute(list(inputs.values()))
 
 ## Dynamic shapes
 
-The examples above pass `dynamic=True`, which marks every tensor
+Passing `dynamic=True` marks every tensor
 dimension as dynamic so the exported graph accepts inputs of any size at runtime without
 retracing.
 
 For fine-grained control over which dimensions are dynamic, pass explicit `dynamic_shapes`
-instead. This is forwarded directly to [torch.export.export](https://pytorch.org/docs/stable/export.html).
+instead, which is forwarded directly to [torch.export.export](https://pytorch.org/docs/stable/export.html).
 
 <hfoptions id="explicit-dynamic-shapes">
 <hfoption id="Dynamo">
@@ -268,16 +266,16 @@ For autoregressive generation, the model's `forward` has different shapes at the
 expose [`~HfExporter.export_for_generation`], which splits both stages and exports each.
 
 For multi-modal generative models, the prefill additionally splits into an image or audio
-encoder, the language model, and `lm_head`. Encoder and language-model discovery uses the
-canonical [`~PreTrainedModel.get_encoder`] (`modality="image"` / `"audio"`) and
+encoder, the language model, and `lm_head`. Encoder and language-model discovery uses
+[`~PreTrainedModel.get_encoder`] (`modality="image"` or `"audio"`) and
 [`~PreTrainedModel.get_decoder`] accessors, so any new architecture using these
-works out of the box.
+work out of the box.
 
 A projector component appears only when the model exposes one
-under a canonical attribute name (`multi_modal_projector`, `connector`, `embed_vision`,
+under an attribute name (`multi_modal_projector`, `connector`, `embed_vision`,
 `embed_audio`). Qwen2-VL below folds its projector into the vision tower, so its component dict
 has no separate `multi_modal_projector` key. New architectures must align their projector
-attribute to one of these canonical names instead of growing the list.
+attribute to one of these names instead of growing the list.
 
 <hfoptions id="generate">
 <hfoption id="Dynamo">
@@ -344,23 +342,22 @@ components = exporter.export_for_generation(model, inputs, config=config)
 > caller is responsible for running each encoder, projecting embeddings, and orchestrating the
 > generation loop.
 
-<details>
-<summary>What <code>export_for_generation</code> does under the hood</summary>
+### How `export_for_generation` works
 
 [`~exporters.utils.decompose_for_generation`] runs `model.generate(**inputs, max_new_tokens=2)`
 once and hooks `model.forward` to capture the real prefill and decode kwargs (and the
-per-submodule kwargs via hooks on each encoder / projector / language model if the model is
+per-submodule kwargs via hooks on each encoder/projector/language model if the model is
 multi-modal). That's why it works for any architecture, including decoder-only, SSM,
 encoder-decoder, and multi-modal models, without per-model glue. `export_for_generation` is a
 one-liner over it.
 
-The capture runs the model eagerly on `inputs`, so pass small but representative values like a
-short prompt, a single small image, a few audio frames. The exported program isn't tied to
+The capture runs the model eagerly on `inputs`, so pass small but representative values, such as a
+short prompt, a single small image, or a few audio frames. The exported program isn't tied to
 those sizes (dynamic shapes still flow through), but smaller capture inputs make
 `decompose_for_generation` cheaper and keep symbolic-shape inference tractable.
 
-Call `decompose_for_generation` directly when you want to do something between decomposing and
-exporting like running an eager forward for verification, swapping a submodule's inputs, or skipping a stage.
+Call `decompose_for_generation` directly to act between decomposing and exporting, such as
+running an eager forward for verification, swapping a submodule's inputs, or skipping a stage.
 
 ```python
 from transformers.exporters.utils import decompose_for_generation
@@ -374,8 +371,6 @@ for name, (submodel, subinputs) in components.items():
     exported[name] = exporter.export(submodel, subinputs, config=config)
 ```
 
-</details>
-
 ## Limitations and workarounds
 
 `torch.export`, `torch.onnx.export`, and ExecuTorch each have rough edges around specific
@@ -383,17 +378,17 @@ PyTorch patterns. The exporters work around these with a small set of reversible
 and FX-level fixes applied at well-defined points in the export flow. None of this is
 visible from the public `export` API, but the most common things to know:
 
-- Flash-attention and flex-attention are not exportable on any backend; `sdpa` is the preferred
-  setting and `eager` also works (slower). Set one of them on the model before calling `export()`
-  if it's using something else.
-- `grouped_mm` traces fine through `DynamoExporter` and is auto-translated for `OnnxExporter`;
-  for `ExecutorchExporter` with the XNNPACK backend, the exporter swaps MoE experts to
-  `batched_mm` because XNNPACK has no `_grouped_mm.out` kernel.
+- FlashAttention and FlexAttention are not exportable on any backend. `sdpa` is the preferred
+setting and `eager` also works (slower). Set one of them on the model before calling `export`
+if it's using something else.
+- `grouped_mm` traces fine through `DynamoExporter` and is auto-translated for `OnnxExporter`.
+For `ExecutorchExporter` with the XNNPACK backend, the exporter swaps MoE experts to
+`batched_mm` because XNNPACK has no `_grouped_mm.out` kernel.
 - A short list of models (`EXPORT_SKIP_MODEL_CLASSES`) is skipped from the export sweep when
-  the model itself is fundamentally non-exportable; each entry carries a TODO with the
-  model-side change needed.
+the model itself is fundamentally non-exportable. Each entry carries a `TODO` with the
+model-side change needed.
 
 ## Next steps
 
 - Add export support for a new architecture or backend with the patch and fix registries in
-  [Extending the exporters](./exporters_extend).
+[Extending the exporters](./exporters_extend).
