@@ -29,6 +29,7 @@ from ..utils import SAFE_WEIGHTS_INDEX_NAME, is_torch_available, is_torch_greate
 from ..utils.hub import create_and_tag_model_card
 from .configuration_utils import DistributedConfig
 from .fsdp import apply_fully_sharded_data_parallelism, is_fsdp_managed_module
+from .pipeline_parallel import initialize_pipeline_parallelism
 from .utils import (
     _get_torch_distributed_rank,
     _is_torch_distributed_initialized,
@@ -178,6 +179,8 @@ class DistributedMixin:
             )
         elif distributed_config.fsdp_size > 1:
             device_map, device_mesh = initialize_fully_sharded_data_parallelism(distributed_config)
+        elif distributed_config.pp_size > 1:
+            device_map, device_mesh = initialize_pipeline_parallelism(distributed_config)
 
         distributed_config.validate()
         return distributed_config, device_map, device_mesh
