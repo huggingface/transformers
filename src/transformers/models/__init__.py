@@ -214,6 +214,7 @@ if TYPE_CHECKING:
     from .ijepa import *
     from .imagegpt import *
     from .informer import *
+    from .inkling import *
     from .instructblip import *
     from .instructblipvideo import *
     from .internvl import *
@@ -446,7 +447,6 @@ if TYPE_CHECKING:
     from .timesformer import *
     from .timm_backbone import *
     from .timm_wrapper import *
-    from .tml import *
     from .trocr import *
     from .tvp import *
     from .udop import *

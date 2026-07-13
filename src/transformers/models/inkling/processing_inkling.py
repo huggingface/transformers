@@ -20,13 +20,13 @@ from ...utils import auto_docstring, logging
 logger = logging.get_logger(__name__)
 
 
-class TmlProcessorKwargs(ProcessingKwargs, total=False):
+class InklingProcessorKwargs(ProcessingKwargs, total=False):
     _defaults = {}
 
 
 @auto_docstring
-class TmlProcessor(ProcessorMixin):
-    valid_processor_kwargs = TmlProcessorKwargs
+class InklingProcessor(ProcessorMixin):
+    valid_processor_kwargs = InklingProcessorKwargs
 
     def __init__(
         self,
@@ -68,4 +68,4 @@ class TmlProcessor(ProcessorMixin):
         return ["num_patches", "num_audio_tokens"]
 
 
-__all__ = ["TmlProcessor"]
+__all__ = ["InklingProcessor"]

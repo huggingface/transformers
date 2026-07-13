@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Testing suite for the PyTorch Tml model."""
+"""Testing suite for the PyTorch Inkling model."""
 
 import unittest
 from contextlib import contextmanager
@@ -21,8 +21,8 @@ from parameterized import parameterized
 
 from transformers import (
     AutoTokenizer,
-    TmlConfig,
-    TmlTextConfig,
+    InklingConfig,
+    InklingTextConfig,
     is_torch_available,
 )
 from transformers.testing_utils import (
@@ -48,24 +48,24 @@ if is_torch_available():
 
     from transformers import (
         AutoModelForCausalLM,
-        TmlForCausalLM,
-        TmlForConditionalGeneration,
-        TmlModel,
-        TmlProcessor,
-        TmlTextModel,
+        InklingForCausalLM,
+        InklingForConditionalGeneration,
+        InklingModel,
+        InklingProcessor,
+        InklingTextModel,
     )
 
 
 GEMMA4_RANDOM_MOE_FA2_SKIP_REASON = (
-    "Randomly initialized Tml MoE routers are too sensitive to tiny eager/FA2 input differences"
+    "Randomly initialized Inkling MoE routers are too sensitive to tiny eager/FA2 input differences"
 )
 
 
-class TmlTextModelTester(CausalLMModelTester):
+class InklingTextModelTester(CausalLMModelTester):
     if is_torch_available():
-        config_class = TmlTextConfig
-        base_model_class = TmlTextModel
-        causal_lm_class = TmlForCausalLM
+        config_class = InklingTextConfig
+        base_model_class = InklingTextModel
+        causal_lm_class = InklingForCausalLM
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -80,7 +80,7 @@ class TmlTextModelTester(CausalLMModelTester):
         self.moe_intermediate_size = 16
 
 
-class TmlAudio2TextModelTester:
+class InklingAudio2TextModelTester:
     def __init__(
         self,
         parent,
@@ -119,7 +119,7 @@ class TmlAudio2TextModelTester:
         self.boa_token_id = boa_token_id
         self.eoa_token_index = eoa_token_index
         self.video_token_id = video_token_id
-        self.llm_tester = TmlTextModelTester(self.parent)
+        self.llm_tester = InklingTextModelTester(self.parent)
         self.llm_tester.use_bidirectional_attention = None
         self.text_config = self.llm_tester.get_config()
         self.audio_config = audio_config
@@ -138,7 +138,7 @@ class TmlAudio2TextModelTester:
         self.encoder_seq_length = seq_length
 
     def get_config(self):
-        return TmlConfig(
+        return InklingConfig(
             text_config=self.text_config,
             vision_config=None,
             audio_config=self.audio_config,
@@ -181,13 +181,13 @@ class TmlAudio2TextModelTester:
 
 
 @require_torch
-class TmlAudio2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
-    all_model_classes = (TmlModel, TmlForConditionalGeneration) if is_torch_available() else ()
-    all_generative_model_classes = (TmlForConditionalGeneration,) if is_torch_available() else ()
+class InklingAudio2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+    all_model_classes = (InklingModel, InklingForConditionalGeneration) if is_torch_available() else ()
+    all_generative_model_classes = (InklingForConditionalGeneration,) if is_torch_available() else ()
 
     def setUp(self):
-        self.model_tester = TmlAudio2TextModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=TmlConfig, hidden_size=37)
+        self.model_tester = InklingAudio2TextModelTester(self)
+        self.config_tester = ConfigTester(self, config_class=InklingConfig, hidden_size=37)
 
     @unittest.skip("The tester has no image in input dict")
     def test_get_image_features_hidden_states(self):
@@ -219,7 +219,7 @@ class TmlAudio2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.T
     def test_num_layers_is_small(self):
         pass
 
-    @unittest.skip("Tml needs correct embeddings for per-layer-input computation, random won't work!")
+    @unittest.skip("Inkling needs correct embeddings for per-layer-input computation, random won't work!")
     def test_generate_from_random_inputs_embeds(self):
         pass
 
@@ -233,10 +233,10 @@ class TmlAudio2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.T
 
     def test_audio_rel_pos_encoding_uses_context_size_from_config(self):
         """Regression test for #45468; attention context size is properly read from config"""
-        from transformers.models.gemma4.configuration_gemma4 import TmlAudioConfig
-        from transformers.models.gemma4.modeling_gemma4 import TmlAudioRelPositionalEncoding
+        from transformers.models.gemma4.configuration_gemma4 import InklingAudioConfig
+        from transformers.models.gemma4.modeling_gemma4 import InklingAudioRelPositionalEncoding
 
-        config = TmlAudioConfig(
+        config = InklingAudioConfig(
             hidden_size=32,
             attention_chunk_size=6,
             attention_context_left=5,
@@ -244,7 +244,7 @@ class TmlAudio2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.T
             use_clipped_linears=False,
         )
 
-        module = TmlAudioRelPositionalEncoding(config)
+        module = InklingAudioRelPositionalEncoding(config)
         hidden_states = torch.zeros(1, 3, config.hidden_size)
 
         pos = module(hidden_states)
@@ -261,7 +261,7 @@ class TmlAudio2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.T
         torch.testing.assert_close(pos, expected)
 
 
-class TmlVision2TextModelTester:
+class InklingVision2TextModelTester:
     def __init__(
         self,
         parent,
@@ -297,7 +297,7 @@ class TmlVision2TextModelTester:
         self.audio_token_id = audio_token_id
         self.boi_token_id = boi_token_id
         self.eoi_token_id = eoi_token_id
-        self.llm_tester = TmlTextModelTester(self.parent)
+        self.llm_tester = InklingTextModelTester(self.parent)
         self.text_config = self.llm_tester.get_config()
         self.vision_config = vision_config
         self.seq_length = seq_length
@@ -315,7 +315,7 @@ class TmlVision2TextModelTester:
         self.encoder_seq_length = seq_length
 
     def get_config(self):
-        return TmlConfig(
+        return InklingConfig(
             text_config=self.text_config,
             vision_config=self.vision_config,
             image_token_id=self.image_token_id,
@@ -370,15 +370,15 @@ class TmlVision2TextModelTester:
 
 
 @require_torch
-class TmlVision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
-    all_model_classes = (TmlModel, TmlForConditionalGeneration) if is_torch_available() else ()
-    all_generative_model_classes = (TmlForConditionalGeneration,) if is_torch_available() else ()
+class InklingVision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+    all_model_classes = (InklingModel, InklingForConditionalGeneration) if is_torch_available() else ()
+    all_generative_model_classes = (InklingForConditionalGeneration,) if is_torch_available() else ()
     additional_model_inputs = ["mm_token_type_ids", "image_position_ids"]
     model_split_percents = [0.85, 0.9]
 
     def setUp(self):
-        self.model_tester = TmlVision2TextModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=TmlConfig, hidden_size=37)
+        self.model_tester = InklingVision2TextModelTester(self)
+        self.config_tester = ConfigTester(self, config_class=InklingConfig, hidden_size=37)
         self.skip_flash_attn_inference_equivalence_tests()
 
     def skip_flash_attn_inference_equivalence_tests(self):
@@ -390,7 +390,7 @@ class TmlVision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.
         for test in skippable_tests:
             if self._testMethodName.startswith(test):
                 self.skipTest(
-                    reason="The base test does not pass image_position_ids and mm_token_type_ids required by Tml"
+                    reason="The base test does not pass image_position_ids and mm_token_type_ids required by Inkling"
                 )
 
     def test_training(self):
@@ -398,10 +398,10 @@ class TmlVision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.return_dict = True
 
-        model = TmlForConditionalGeneration(config)
+        model = InklingForConditionalGeneration(config)
         model.to(torch_device)
         model.train()
-        inputs = self._prepare_for_class(inputs_dict, TmlForConditionalGeneration, return_labels=True)
+        inputs = self._prepare_for_class(inputs_dict, InklingForConditionalGeneration, return_labels=True)
         loss = model(**inputs).loss
         loss.backward()
 
@@ -441,7 +441,7 @@ class TmlVision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.
     def test_num_layers_is_small(self):
         pass
 
-    @unittest.skip("Tml needs correct embeddings for per-layer-input computation, random won't work!")
+    @unittest.skip("Inkling needs correct embeddings for per-layer-input computation, random won't work!")
     def test_generate_from_random_inputs_embeds(self):
         pass
 
@@ -464,11 +464,11 @@ class TmlVision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.
         pass
 
     def test_per_layer_inputs_are_correctly_forwarded(self):
-        from transformers.models.gemma4.modeling_gemma4 import TmlTextModel
+        from transformers.models.gemma4.modeling_gemma4 import InklingTextModel
 
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 
-        model = TmlForConditionalGeneration(config).to(torch_device)
+        model = InklingForConditionalGeneration(config).to(torch_device)
         model.eval()
 
         input_ids = torch.randint(20, 50, (1, 10), device=torch_device)
@@ -477,7 +477,7 @@ class TmlVision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.
 
         @contextmanager
         def count_get_per_layer_inputs_calls():
-            original = TmlTextModel.get_per_layer_inputs
+            original = InklingTextModel.get_per_layer_inputs
             counter = {"call_count": 0}
 
             def count_calls(*args, **kwargs):
@@ -485,11 +485,11 @@ class TmlVision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.
                 counter["call_count"] += 1
                 return original(*args, **kwargs)
 
-            TmlTextModel.get_per_layer_inputs = count_calls
+            InklingTextModel.get_per_layer_inputs = count_calls
             try:
                 yield counter
             finally:
-                TmlTextModel.get_per_layer_inputs = original
+                InklingTextModel.get_per_layer_inputs = original
 
         # We should never call `get_per_layer_input_embeddings` if we provide both inputs_embeds and per_layer_inputs
         with count_get_per_layer_inputs_calls() as counter:
@@ -509,10 +509,10 @@ class TmlVision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.
 
 @slow
 @require_torch_accelerator
-class TmlIntegrationTest(unittest.TestCase):
+class InklingIntegrationTest(unittest.TestCase):
     def setUp(self):
         self.model_name = "google/gemma-4-E2B-it"
-        self.processor = TmlProcessor.from_pretrained(self.model_name)
+        self.processor = InklingProcessor.from_pretrained(self.model_name)
 
         self.url1 = url_to_local_path(
             "https://huggingface.co/datasets/hf-internal-testing/fixtures-captioning/resolve/main/cow_beach_1.png"
@@ -536,7 +536,7 @@ class TmlIntegrationTest(unittest.TestCase):
 
     @require_deterministic_for_xpu
     def test_model_with_image(self):
-        model = TmlForConditionalGeneration.from_pretrained(self.model_name, device_map=torch_device)
+        model = InklingForConditionalGeneration.from_pretrained(self.model_name, device_map=torch_device)
 
         inputs = self.processor.apply_chat_template(
             self.messages,
@@ -561,7 +561,7 @@ class TmlIntegrationTest(unittest.TestCase):
 
     @require_deterministic_for_xpu
     def test_model_with_image_batch(self):
-        model = TmlForConditionalGeneration.from_pretrained(self.model_name, device_map=torch_device)
+        model = InklingForConditionalGeneration.from_pretrained(self.model_name, device_map=torch_device)
 
         messages_2 = [
             {"role": "system", "content": [{"type": "text", "text": "You are a helpful assistant."}]},
@@ -612,7 +612,7 @@ class TmlIntegrationTest(unittest.TestCase):
 
     @require_deterministic_for_xpu
     def test_model_multiimage(self):
-        model = TmlForConditionalGeneration.from_pretrained(self.model_name, device_map=torch_device)
+        model = InklingForConditionalGeneration.from_pretrained(self.model_name, device_map=torch_device)
 
         messages = [
             {"role": "system", "content": [{"type": "text", "text": "You are a helpful assistant."}]},
@@ -746,7 +746,7 @@ class TmlIntegrationTest(unittest.TestCase):
         ]
         inputs = tokenizer(input_text, padding=True, return_tensors="pt").to(torch_device)
 
-        model = TmlForConditionalGeneration.from_pretrained(
+        model = InklingForConditionalGeneration.from_pretrained(
             self.model_name,
             device_map=torch_device,
             attn_implementation=attn_implementation,
@@ -777,7 +777,7 @@ class TmlIntegrationTest(unittest.TestCase):
     def test_export_text_only(self):
         from transformers.integrations.executorch import TorchExportableModuleForDecoderOnlyLM
 
-        model = TmlForConditionalGeneration.from_pretrained(self.model_name, device_map=torch_device)
+        model = InklingForConditionalGeneration.from_pretrained(self.model_name, device_map=torch_device)
         tokenizer = AutoTokenizer.from_pretrained(self.model_name)
 
         exportable_module = TorchExportableModuleForDecoderOnlyLM(

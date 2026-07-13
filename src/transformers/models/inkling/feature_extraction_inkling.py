@@ -91,7 +91,7 @@ def _mel_filter_bank(sampling_rate: int, n_fft: int, n_mels: int) -> torch.Tenso
 # ---------------------------------------------------------------------------
 
 
-class TmlFeatureExtractor(SequenceFeatureExtractor):
+class InklingFeatureExtractor(SequenceFeatureExtractor):
     r"""
     Constructs a TML audio feature extractor, which converts raw audio waveforms into discretized dMel
     bins: a log-mel spectrogram whose values are quantized into `num_dmel_bins` equal-width bins.
@@ -272,4 +272,4 @@ class TmlFeatureExtractor(SequenceFeatureExtractor):
         return batch_input
 
 
-__all__ = ["TmlFeatureExtractor"]
+__all__ = ["InklingFeatureExtractor"]

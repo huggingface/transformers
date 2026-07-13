@@ -26,7 +26,7 @@ from ...utils import TensorType, auto_docstring
 from ...utils.constants import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD
 
 
-class TmlImageProcessorKwargs(ImagesKwargs, total=False):
+class InklingImageProcessorKwargs(ImagesKwargs, total=False):
     r"""
     rescale_image_frac (`float`, *optional*):
         Factor applied to the image's long edge before patch division, preserving aspect ratio. `None` disables
@@ -56,8 +56,8 @@ def divide_to_patches(image: "torch.Tensor", patch_size: int) -> list["torch.Ten
     return patches
 
 
-@auto_docstring(custom_intro="Constructs a Tml image processor.")
-class TmlImageProcessor(TorchvisionBackend):
+@auto_docstring(custom_intro="Constructs a Inkling image processor.")
+class InklingImageProcessor(TorchvisionBackend):
     resample = PILImageResampling.LANCZOS
     image_mean = OPENAI_CLIP_MEAN
     image_std = OPENAI_CLIP_STD
@@ -69,9 +69,9 @@ class TmlImageProcessor(TorchvisionBackend):
     size = {"height": 40, "width": 40}
     rescale_image_frac = 2.0
     rescale_image_max_upscaled_long_edge = 2048
-    valid_kwargs = TmlImageProcessorKwargs
+    valid_kwargs = InklingImageProcessorKwargs
 
-    def __init__(self, **kwargs: Unpack[TmlImageProcessorKwargs]):
+    def __init__(self, **kwargs: Unpack[InklingImageProcessorKwargs]):
         super().__init__(**kwargs)
 
     def _validate_preprocess_kwargs(
@@ -167,4 +167,4 @@ class TmlImageProcessor(TorchvisionBackend):
         return BatchFeature(data=data, tensor_type=return_tensors)
 
 
-__all__ = ["TmlImageProcessor"]
+__all__ = ["InklingImageProcessor"]

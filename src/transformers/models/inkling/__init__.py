@@ -19,11 +19,11 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_tml import *
-    from .feature_extraction_tml import *
-    from .image_processing_tml import *
-    from .modeling_tml import *
-    from .processing_tml import *
+    from .configuration_inkling import *
+    from .feature_extraction_inkling import *
+    from .image_processing_inkling import *
+    from .modeling_inkling import *
+    from .processing_inkling import *
 else:
     import sys
 
