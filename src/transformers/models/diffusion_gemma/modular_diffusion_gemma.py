@@ -712,15 +712,6 @@ class DiffusionGemmaPreTrainedModel(T5Gemma2PreTrainedModel):
         raise NotImplementedError("Diffusion Gemma doesn't uses noise-init canvas as decoder inputs")
 
 
-@auto_docstring
-@dataclass
-class DiffusionGemmaEncoderOutput(BaseModelOutputWithPast):
-    r"""
-    Output of the DiffusionGemma encoder: `last_hidden_state` plus the `past_key_values` KV cache the decoder reads
-    read-only.
-    """
-
-
 class DiffusionGemmaEncoderTextModel(DiffusionGemmaPreTrainedModel):
     config: DiffusionGemmaTextConfig
     input_modalities = ("text",)
@@ -810,7 +801,7 @@ class DiffusionGemmaEncoderTextModel(DiffusionGemmaPreTrainedModel):
 
         hidden_states = self.norm(hidden_states)
 
-        return DiffusionGemmaEncoderOutput(
+        return BaseModelOutputWithPast(
             last_hidden_state=hidden_states,
             past_key_values=past_key_values,
         )
@@ -941,7 +932,7 @@ class DiffusionGemmaEncoderModel(DiffusionGemmaPreTrainedModel, Gemma4Model):
             **kwargs,
         )
 
-        return DiffusionGemmaEncoderOutput(
+        return BaseModelOutputWithPast(
             last_hidden_state=outputs.last_hidden_state,
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
@@ -1179,11 +1170,6 @@ class DiffusionGemmaDecoderModel(DiffusionGemmaPreTrainedModel):
             mask.ndim == 4 for mask in decoder_attention_mask.values()
         ):
             return decoder_attention_mask
-
-        # The mask interface below keeps the incoming dtype, so cast a `1`/`0` int padding mask to bool. An already
-        # prepared bool/float mask is left as is, so an additive mask is not flipped.
-        if torch.is_tensor(decoder_attention_mask) and decoder_attention_mask.dtype not in (torch.bool, torch.float32):
-            decoder_attention_mask = decoder_attention_mask.bool()
 
         text_config = config.get_text_config()
         q_length = inputs_embeds.shape[1]
