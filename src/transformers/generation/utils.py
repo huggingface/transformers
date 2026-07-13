@@ -3305,7 +3305,7 @@ class GenerationMixin(ContinuousMixin):
         # 3. init running tensors and static-shaped placeholders
 
         # per batch, beam-item holding current token in loop and completed sequences
-        output_fill_value = pad_token_id or eos_token_id[0] if eos_token_id is not None else -1
+        output_fill_value = pad_token_id if pad_token_id is not None else (eos_token_id[0] if eos_token_id is not None else -1)
         running_sequences = torch.full(
             (batch_size, num_beams, max_length),
             fill_value=output_fill_value,
