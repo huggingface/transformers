@@ -28,6 +28,7 @@ from ..utils import is_torch_greater_or_equal, logging
 from ..utils.hub import create_and_tag_model_card
 from .configuration_utils import DistributedConfig
 from .fsdp import apply_fully_sharded_data_parallelism, is_fsdp_managed_module
+from .pipeline_parallel import initialize_pipeline_parallelism
 from .utils import (
     _distributed_barrier,
     _ensure_torch_distributed,
@@ -181,6 +182,8 @@ class DistributedMixin:
             )
         elif distributed_config.fsdp_size > 1:
             device_map, device_mesh = initialize_fully_sharded_data_parallelism(distributed_config)
+        elif distributed_config.pp_size > 1:
+            device_map, device_mesh = initialize_pipeline_parallelism(distributed_config)
 
         return distributed_config, device_map, device_mesh
 
