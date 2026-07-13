@@ -13,7 +13,9 @@
 # limitations under the License.
 
 import copy
+import functools
 import inspect
+import os
 import re
 
 import pytest
@@ -299,6 +301,35 @@ def _cast_inputs(obj, device, dtype):
     return obj
 
 
+def disable_hub_kernels(test_fn):
+    """Force `is_kernels_available()` to `False` for the duration of an export test.
+
+    Export must trace the pure-PyTorch path, never a Hub kernel (`mamba-ssm`, `causal-conv1d`, …): those
+    need optional deps (`einops`, triton, …) and aren't exportable anyway. Kernels load lazily on the first
+    (eager) forward — outside the exporter's own trace-time patch — so the whole test is wrapped. With
+    `is_kernels_available()` False, `lazy_load_kernel` short-circuits to `None` and the fallback runs.
+    (Also keeps a `pytest -n` sweep from hammering the `kernels-community` Hub org into a 429.)
+    """
+
+    @functools.wraps(test_fn)
+    def wrapper(*args, **kwargs):
+        from transformers.integrations import hub_kernels
+        from transformers.utils import import_utils
+
+        # `lazy_load_kernel` gates on `hub_kernels`'s own binding; patch the canonical def too.
+        targets = [(hub_kernels, "is_kernels_available"), (import_utils, "is_kernels_available")]
+        saved = [(obj, name, getattr(obj, name)) for obj, name in targets]
+        for obj, name in targets:
+            setattr(obj, name, lambda *args, **kwargs: False)
+        try:
+            return test_fn(*args, **kwargs)
+        finally:
+            for obj, name, original in saved:
+                setattr(obj, name, original)
+
+    return wrapper
+
+
 def _clean_inputs_for_export(inputs_dict, config):
     """Strip None values and export-incompatible keys from an inputs dict. Mutates config in-place."""
     inputs_dict = {k: v for k, v in inputs_dict.items() if v is not None}
@@ -317,16 +348,45 @@ def _run_onnx_program(onnx_program, inputs) -> dict:
     return dict(zip(onnx_names, onnx_outputs))
 
 
-def _run_openvino_model(ov_model, inputs) -> dict:
+def _stage_openvino_artifact(ov_model, model_dir: str, component: str, config=None) -> None:
+    """Stage the OpenVINO IR (+ ``config.json`` once per model) into the shared artifact tree as
+    ``<model_dir>/<component>.{xml,bin}`` + ``<model_dir>/config.json``.
+
+    The tree lives at ``OPENVINO_ARTIFACTS_DIR`` — created and exported by conftest's
+    ``pytest_configure`` when ``PUSH_OPENVINO_ARTIFACTS`` is set. Under ``pytest -n`` every worker
+    inherits that path and stages into the same tree; the controller uploads it once in one commit
+    at session finish (see conftest). This avoids the per-process / per-worker upload races that an
+    in-process ``atexit`` upload would cause.
+    """
+    import openvino
+
+    root = os.environ.get("OPENVINO_ARTIFACTS_DIR")
+    if root is None:  # conftest didn't set up staging (flag off) — nothing to do
+        return
+    dest = os.path.join(root, model_dir)
+    os.makedirs(dest, exist_ok=True)
+    openvino.save_model(ov_model, os.path.join(dest, f"{component}.xml"))
+    config_path = os.path.join(dest, "config.json")
+    if config is not None and not os.path.exists(config_path):
+        config.to_json_file(config_path)
+
+
+def _run_openvino_model(ov_model, inputs, model_dir=None, component=None, config=None) -> dict:
     """Compile an OpenVINO model and run it, returning outputs as a `{name: array}` dict.
 
     Feeds the tensor leaves that survived as input ports (stateful folding removes cache
     inputs), seeds folded state variables from the sample cache leaves so outputs correspond
     to the same inputs eager saw, supplies the identity `beam_idx`, and passes scalar kwargs
     through under their FX placeholder names.
+
+    When ``PUSH_OPENVINO_ARTIFACTS`` is set, stages the IR under ``<model_dir>/<component>`` for a
+    single Hub upload at process exit.
     """
     import numpy as np
     import openvino
+
+    if model_dir is not None and os.environ.get("PUSH_OPENVINO_ARTIFACTS"):
+        _stage_openvino_artifact(ov_model, model_dir, component, config)
 
     set_seed(1234)
     compiled = openvino.compile_model(ov_model, "AUTO")
@@ -440,7 +500,9 @@ class ExportTesterMixin:
         """Create model and forward inputs ready for export.
 
         Returns:
-            Dict of `{name: (model, inputs)}` — one entry per component.
+            `(config, components)`: the full model's init config, and a `{name: (model, inputs)}`
+            mapping (one entry per component). The config is returned separately because components
+            can be decomposed submodels carrying their own sub-configs, not the top-level one.
         """
         if hasattr(self.model_tester, "prepare_config_and_inputs_for_model_class"):
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_model_class(model_class)
@@ -461,8 +523,8 @@ class ExportTesterMixin:
             pass
 
         if is_multimodal(model):
-            return decompose_multimodal(model, inputs_dict)
-        return {"model": (model, inputs_dict)}
+            return model.config, decompose_multimodal(model, inputs_dict)
+        return model.config, {"model": (model, inputs_dict)}
 
     def _collect_eager_outputs(self, components):
         """Run eager forward for each component and return a ``{name: leaf_tensors}`` dict."""
@@ -493,6 +555,7 @@ class ExportTesterMixin:
     @pytest.mark.torch_export_test
     @pytest.mark.timeout(EXPORT_TEST_TIMEOUT)
     @require_torch_greater_or_equal(MIN_EXPORT_TORCH_VERSION)
+    @disable_hub_kernels
     def test_torch_export(self, dynamic, atol=1e-4, rtol=1e-4):
         """Export each model class with ``torch.export`` and verify outputs match eager within tolerance."""
         self._skip_if_not_exportable()
@@ -504,7 +567,7 @@ class ExportTesterMixin:
             if self._should_skip(model_class, dynamic=dynamic):
                 continue
 
-            components = self._prepare_export_model_and_inputs(model_class)
+            model_config, components = self._prepare_export_model_and_inputs(model_class)
             eager_outputs = self._collect_eager_outputs(components)
 
             for name, (model, inputs) in components.items():
@@ -527,6 +590,7 @@ class ExportTesterMixin:
     @pytest.mark.onnx_export_test
     @pytest.mark.timeout(EXPORT_TEST_TIMEOUT)
     @require_torch_greater_or_equal(MIN_EXPORT_TORCH_VERSION)
+    @disable_hub_kernels
     def test_onnx_export(self, dynamic):
         """Export each model class to ONNX and verify output names match eager."""
         self._skip_if_not_exportable()
@@ -538,7 +602,7 @@ class ExportTesterMixin:
             exporter = OnnxExporter()
             config = OnnxConfig(dynamic=dynamic)
 
-            components = self._prepare_export_model_and_inputs(model_class)
+            model_config, components = self._prepare_export_model_and_inputs(model_class)
             eager_outputs = self._collect_eager_outputs(components)
 
             for name, (model, inputs) in components.items():
@@ -555,6 +619,7 @@ class ExportTesterMixin:
     @require_openvino
     @pytest.mark.openvino_export_test
     @pytest.mark.timeout(EXPORT_TEST_TIMEOUT)
+    @disable_hub_kernels
     def test_openvino_export(self, dynamic):
         """Export each model class to OpenVINO IR and verify output names match eager."""
         self._skip_if_not_exportable()
@@ -565,13 +630,15 @@ class ExportTesterMixin:
             if self._should_skip(model_class, dynamic=dynamic, backend="openvino"):
                 continue
 
-            components = self._prepare_export_model_and_inputs(model_class)
+            model_config, components = self._prepare_export_model_and_inputs(model_class)
             eager_outputs = self._collect_eager_outputs(components)
 
             for name, (model, inputs) in components.items():
                 with self.subTest(f"{model_class.__name__}/{name}"):
                     ov_model = exporter.export(model, inputs, config=config)
-                    ov_outputs = _run_openvino_model(ov_model, inputs)
+                    ov_outputs = _run_openvino_model(
+                        ov_model, inputs, model_class.__name__, name, model_config
+                    )
                     self.assertTrue(ov_outputs, f"OpenVINO outputs are empty for {name}.")
                     self.assertEqual(set(ov_outputs.keys()), set(eager_outputs[name].keys()))
 
@@ -583,6 +650,7 @@ class ExportTesterMixin:
     @pytest.mark.executorch_export_test
     @pytest.mark.timeout(EXPORT_TEST_TIMEOUT)
     @require_torch_greater_or_equal(MIN_EXPORT_TORCH_VERSION)
+    @disable_hub_kernels
     def test_executorch_export(self, dynamic):
         """Export each model class to ExecuTorch (xnnpack on CPU, cuda on GPU) and verify no errors."""
 
@@ -594,7 +662,7 @@ class ExportTesterMixin:
             if self._should_skip(model_class, dynamic=dynamic, backend="executorch"):
                 continue
 
-            components = self._prepare_export_model_and_inputs(model_class)
+            model_config, components = self._prepare_export_model_and_inputs(model_class)
 
             for name, (model, inputs) in components.items():
                 with self.subTest(f"{model_class.__name__}/{name}"):
@@ -624,7 +692,8 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
         For decoder-only models: returns prefill and decode components.
 
         Returns:
-            Dict of `{name: (model, inputs)}` — one entry per component.
+            `(config, components)`: the full model's init config and the `{name: (model, inputs)}`
+            mapping (see `_prepare_export_model_and_inputs`).
         """
         config, inputs_dict = self.prepare_config_and_inputs_for_generate()
         inputs_dict = _clean_inputs_for_export(inputs_dict, config)
@@ -633,7 +702,7 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
         model = model_class(config).eval().to(torch_device)
         set_model_for_less_flaky_test(model)
 
-        return decompose_for_generation(model, inputs_dict)
+        return model.config, decompose_for_generation(model, inputs_dict)
 
     # ──────────────────── torch.export tests ─────────────────────
 
@@ -642,6 +711,7 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
     @pytest.mark.torch_export_test
     @pytest.mark.timeout(EXPORT_TEST_TIMEOUT)
     @require_torch_greater_or_equal(MIN_EXPORT_TORCH_VERSION)
+    @disable_hub_kernels
     def test_torch_export_generate(self, dynamic, atol=1e-4, rtol=1e-4):
         """Export prefill and decode stages with ``torch.export`` and verify outputs match eager."""
         self._skip_if_not_exportable()
@@ -653,7 +723,7 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
             if self._should_skip(model_class, generate=True):
                 continue
 
-            components = self._prepare_export_generate_model_and_inputs(model_class)
+            model_config, components = self._prepare_export_generate_model_and_inputs(model_class)
             eager_outputs = self._collect_eager_outputs(components)
 
             for name, (model, inputs) in components.items():
@@ -676,6 +746,7 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
     @pytest.mark.onnx_export_test
     @pytest.mark.timeout(EXPORT_TEST_TIMEOUT)
     @require_torch_greater_or_equal(MIN_EXPORT_TORCH_VERSION)
+    @disable_hub_kernels
     def test_onnx_export_generate(self, dynamic):
         """Export prefill and decode stages to ONNX and verify output names match eager."""
         self._skip_if_not_exportable()
@@ -687,7 +758,7 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
             exporter = OnnxExporter()
             config = OnnxConfig(dynamic=dynamic)
 
-            components = self._prepare_export_generate_model_and_inputs(model_class)
+            model_config, components = self._prepare_export_generate_model_and_inputs(model_class)
             eager_outputs = self._collect_eager_outputs(components)
 
             for name, (model, inputs) in components.items():
@@ -705,6 +776,7 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
     @require_openvino
     @pytest.mark.openvino_export_test
     @pytest.mark.timeout(EXPORT_TEST_TIMEOUT)
+    @disable_hub_kernels
     def test_openvino_export_generate(self, dynamic):
         """Export prefill and decode stages to OpenVINO IR and verify output names match eager."""
         self._skip_if_not_exportable()
@@ -715,13 +787,15 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
             if self._should_skip(model_class, generate=True, dynamic=dynamic, backend="openvino"):
                 continue
 
-            components = self._prepare_export_generate_model_and_inputs(model_class)
+            model_config, components = self._prepare_export_generate_model_and_inputs(model_class)
             eager_outputs = self._collect_eager_outputs(components)
 
             for name, (model, inputs) in components.items():
                 with self.subTest(f"{model_class.__name__}/{name}"):
                     ov_model = exporter.export(model, inputs, config=config)
-                    ov_outputs = _run_openvino_model(ov_model, inputs)
+                    ov_outputs = _run_openvino_model(
+                        ov_model, inputs, model_class.__name__, name, model_config
+                    )
                     self.assertTrue(ov_outputs, "OpenVINO outputs are empty.")
                     self.assertEqual(set(ov_outputs.keys()), set(eager_outputs[name].keys()))
 
@@ -733,6 +807,7 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
     @pytest.mark.executorch_export_test
     @pytest.mark.timeout(EXPORT_TEST_TIMEOUT)
     @require_torch_greater_or_equal(MIN_EXPORT_TORCH_VERSION)
+    @disable_hub_kernels
     def test_executorch_export_generate(self, dynamic):
         """Export prefill and decode stages to ExecuTorch and verify no errors."""
 
@@ -744,7 +819,7 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
             if self._should_skip(model_class, generate=True, dynamic=dynamic, backend="executorch"):
                 continue
 
-            components = self._prepare_export_generate_model_and_inputs(model_class)
+            model_config, components = self._prepare_export_generate_model_and_inputs(model_class)
 
             for name, (model, inputs) in components.items():
                 with self.subTest(f"{model_class.__name__}/{name}"):
