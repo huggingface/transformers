@@ -17,7 +17,9 @@ import collections
 import copy
 import gc
 import inspect
+import os
 import random
+import re
 import tempfile
 import unittest
 import warnings
@@ -62,6 +64,7 @@ from transformers.utils.generic import is_flash_attention_requested
 if is_torch_available():
     import torch
     import torch.nn.functional as F
+    from safetensors.torch import load_file, save_file
     from torch.nn.attention import SDPBackend, sdpa_kernel
 
     from transformers import (
@@ -111,6 +114,7 @@ if is_torch_available():
         AssistedCandidateGeneratorDifferentTokenizers,
     )
     from transformers.generation.utils import _speculative_sampling
+    from transformers.modeling_layers import MtpModel
 
 from unittest.mock import patch
 
@@ -2356,6 +2360,76 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
                 "All model classes in this test use 3D RoPE positions (`get_rope_index`), for which 2D custom "
                 "`position_ids` may be accepted but are expected to produce invalid outputs."
             )
+
+    def test_generate_with_mtp(self):
+        """Test that speculative decoding with mtp works correctly if we have mtp layers in the checkpoints. This checks
+        that layers saved under `mtp.xxx` and `model.layers.{num_hidden_layers+1}` patterns can correctly be reloaded, which
+        correspond to the 2 usual patterns we always have in real checkpoints."""
+        for model_class in self.all_generative_model_classes:
+            config, inputs_dict = self.prepare_config_and_inputs_for_generate(batch_size=1)
+
+            keys_to_ignore_unexpected = model_class._keys_to_ignore_on_load_unexpected or []
+            # If we don't have any mtp patterns, skip
+            if not hasattr(config.get_text_config(), "num_mtp_layers") or not any(
+                "mtp" in x or re.search(r"layers\.\d+", x) is not None for x in keys_to_ignore_unexpected
+            ):
+                self.skipTest("No MTP keys registered")
+
+            config.get_text_config().num_mtp_layers = 1
+            model = model_class(config).to(torch_device).eval()
+            mtp_model = MtpModel(model, num_mtp_layers=1)
+            mtp_non_shared_state_dict = {
+                k: v
+                for k, v in mtp_model.state_dict().items()
+                if k not in ("embed_tokens.weight", "shared_head.weight")
+            }
+
+            # This block tests that keys saved under `mtp.xxx` inside the model weights can be loaded and used correctly
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                model.save_pretrained(tmpdirname)
+                weight_filename = os.path.join(tmpdirname, "model.safetensors")
+                saved_state_dict = load_file(weight_filename)
+                # add mtp weights and resave
+                saved_state_dict.update({f"mtp.{k}": v for k, v in mtp_non_shared_state_dict.items()})
+                save_file(saved_state_dict, weight_filename)
+
+                with patch.object(
+                    model_class, "_keys_to_ignore_on_load_unexpected", keys_to_ignore_unexpected + [r"^mtp."]
+                ):
+                    # Reload model WITHOUT mtp
+                    reloaded_model = model_class.from_pretrained(tmpdirname).to(torch_device)
+
+                    # This will load the mtp weights and use them - check that it does not create any errors (results are random
+                    # since the mtp model was randomly created)
+                    _ = reloaded_model.generate(**inputs_dict, use_mtp=True, do_sample=False, max_new_tokens=10)
+
+            # This block tests that keys saved under `model.layers.{num_hidden_layers+1}.xxx` inside the model weights can be loaded
+            # and used correctly
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                model.save_pretrained(tmpdirname)
+                weight_filename = os.path.join(tmpdirname, "model.safetensors")
+                saved_state_dict = load_file(weight_filename)
+                # add mtp weights and resave
+                layer_mapped_mtp_dict = {
+                    k.replace(".0.", f".{config.num_hidden_layers}.").replace(".mtp_block.", "."): v
+                    for k, v in mtp_non_shared_state_dict.items()
+                }
+                saved_state_dict.update(
+                    {f"{model.base_model_prefix}.{k}": v for k, v in layer_mapped_mtp_dict.items()}
+                )
+                save_file(saved_state_dict, weight_filename)
+
+                with patch.object(
+                    model_class,
+                    "_keys_to_ignore_on_load_unexpected",
+                    keys_to_ignore_unexpected + [f"{model.base_model_prefix}.layers.{config.num_hidden_layers}"],
+                ):
+                    # Reload model WITHOUT mtp
+                    reloaded_model = model_class.from_pretrained(tmpdirname).to(torch_device)
+
+                    # This will load the mtp weights and use them - check that it does not create any errors (results are random
+                    # since the mtp model was randomly created)
+                    _ = reloaded_model.generate(**inputs_dict, use_mtp=True, do_sample=False, max_new_tokens=10)
 
     def _check_generate_outputs(self, output, config, use_cache=False, num_return_sequences=1, num_beams=1):
         input_batch_size = int(output.sequences.shape[0] / num_return_sequences)
