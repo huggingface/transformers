@@ -19,9 +19,11 @@ edge deployment. The export pipeline runs:
 
 1. **Backend preparation** (`_BACKEND_PREPARE`): `prepare_for_xnnpack` / `prepare_for_cuda`
    move the model to the target device/dtype and build the partitioner list.
-2. **Torch patches** (`_PATCHES["executorch"]` via `apply_patches("executorch")`):
-   reversibly swap `torch` ops the ExecuTorch backends can't accept (`split_copy`, `topk`,
-   `avg_pool2d`, …) with decomposed equivalents. Reverted on exit.
+2. **Torch patches** (`_PATCHES["executorch"]` via `apply_patches("executorch")`, plus the
+   backend-specific `_PATCHES[f"executorch.{backend}"]`): reversibly swap `torch` ops the
+   ExecuTorch backends can't accept (`split_copy`, `avg_pool2d`, …) with decomposed equivalents.
+   Backend-specific ones (e.g. the CUDA-only `topk` fallback) apply to just one backend.
+   Reverted on exit.
 3. **ExecuTorch patches** (`_PATCHES["executorch"]` via `apply_patches("executorch")`):
    reversibly swap ExecuTorch internals (`SpecPropPass`, `PruneEmptyTensorsPass`,
    `eval_upper_bound`, …) with versions that don't crash on legitimate dynamic-shape
@@ -139,7 +141,7 @@ class ExecutorchExporter(DynamoExporter):
 
         model, sample_inputs, partitioner = prepare_for_backend(model, sample_inputs)
 
-        with apply_patches("executorch"):
+        with apply_patches("executorch"), apply_patches(f"executorch.{config.backend}"):
             exported_program: ExportedProgram = super().export(model, sample_inputs, config=config)
             apply_fx_program_fixes("executorch", exported_program)
             apply_fx_node_fixes("executorch", exported_program.graph_module)
@@ -238,9 +240,13 @@ _BACKEND_PREPARE = {
 # `@register_patch("executorch", "dotted.path")` and installed through `apply_patches`.
 
 
-@register_patch("executorch", "torch.split", "torch.Tensor.split")
+@register_patch("executorch.cuda", "torch.split", "torch.Tensor.split")
 def _patch_split(original):
-    """Narrow-based split (split_copy not supported by CUDA backend)."""
+    """Narrow-based split for the CUDA backend, which can't lower `split_copy`.
+
+    Not registered for XNNPACK: the portable runtime has native `split_copy`/`slice_copy` kernels,
+    so native `torch.split` lowers there and delegates better than a chain of narrows.
+    """
 
     def patch(input, split_size_or_sections, dim=0):
         if isinstance(split_size_or_sections, int):
@@ -264,18 +270,16 @@ def _patch_split(original):
     return patch
 
 
-@register_patch("executorch", "torch.chunk", "torch.Tensor.chunk")
+@register_patch("executorch.cuda", "torch.chunk", "torch.Tensor.chunk")
 def _patch_chunk(original):
     """`torch.chunk` decomposes through `aten.split_copy.Tensor`, which AOT inductor for the
     ExecuTorch CUDA backend can't lower (`split_copy.Tensor is missing a c-shim implementation`).
-    Same root cause as `_patch_split`; route `chunk` through the already-patched `torch.split`
-    so it ends up as a sequence of `narrow`s instead. XNNPACK lowers `chunk` natively, so we
-    only swap when the input lives on CUDA.
+    Same root cause as `_patch_split`; route `chunk` through the (also CUDA-scoped) `torch.split`
+    so it ends up as a sequence of `narrow`s instead. Not registered for XNNPACK, which lowers
+    `chunk` natively via the portable `split_copy` kernel.
     """
 
     def patch(input, chunks, dim=0):
-        if input.device.type != "cuda":
-            return original(input, chunks, dim)
         total = input.size(dim)
         chunk_size = (total + chunks - 1) // chunks
         return torch.split(input, chunk_size, dim)
@@ -283,9 +287,15 @@ def _patch_chunk(original):
     return patch
 
 
-@register_patch("executorch", "torch.topk", "torch.Tensor.topk")
+@register_patch("executorch.cuda", "torch.topk", "torch.Tensor.topk")
 def _patch_topk(original):
-    """Argsort-based topk fallback."""
+    """Argsort-based topk fallback for the CUDA backend, which has no topk kernel.
+
+    Not registered for XNNPACK: the portable runtime ships a `topk.values` kernel but no `sort`,
+    so rewriting `topk` to `argsort` (which lowers to `aten.sort.values`) would make the program
+    fail to load (`Missing operator: aten::sort.values`). Native `topk` lowers to the supported
+    `aten.topk.values` there instead.
+    """
 
     def patch(input, k, dim=None, largest=True, sorted=True):
         if dim is None:
@@ -308,9 +318,13 @@ def _patch_detach(_original):
     return patch
 
 
-@register_patch("executorch", "torch.nn.functional.avg_pool2d")
+@register_patch("executorch.cuda", "torch.nn.functional.avg_pool2d")
 def _patch_avg_pool2d(original):
-    """Decompose avg_pool2d as depthwise conv2d (no CUDA ExecuTorch kernel)."""
+    """Decompose avg_pool2d as depthwise conv2d for the CUDA backend, which has no avg_pool2d kernel.
+
+    Not registered for XNNPACK: the portable runtime ships a native `avg_pool2d.out` kernel, so the
+    decomposition is unnecessary there.
+    """
 
     def patch(
         input, kernel_size, stride=None, padding=0, ceil_mode=False, count_include_pad=True, divisor_override=None
@@ -331,6 +345,148 @@ def _patch_avg_pool2d(original):
         divisor = divisor_override if divisor_override is not None else actual_kh * actual_kw
         weight = input.new_ones(channels, 1, actual_kh, actual_kw) / divisor
         return torch.nn.functional.conv2d(input, weight, bias=None, stride=stride, padding=padding, groups=channels)
+
+    return patch
+
+
+@register_patch("executorch", "torch.bucketize")
+def _patch_bucketize(original):
+    """Decompose bucketize into a broadcasted comparison + sum.
+
+    The portable runtime ships no `bucketize.Tensor_out` kernel (used by VLM vision position ids —
+    idefics2/3, smolvlm, phi4_multimodal). `boundaries` is 1-D and sorted, so the bucket index is
+    just the count of boundaries below each value — comparison and sum, both portable ops.
+    """
+
+    def patch(input, boundaries, *, out_int32=False, right=False, out=None):
+        below = (boundaries <= input.unsqueeze(-1)) if right else (boundaries < input.unsqueeze(-1))
+        result = below.sum(dim=-1)
+        return result.to(torch.int32) if out_int32 else result
+
+    return patch
+
+
+@register_patch("executorch", "torch.searchsorted")
+def _patch_searchsorted(original):
+    """Decompose searchsorted into a broadcasted comparison + sum (no portable kernel; same idea as
+    bucketize). ``sorted_sequence`` is sorted, so the insertion index is the count of entries below.
+    """
+
+    def patch(sorted_sequence, input, *, out_int32=False, right=False, side=None, out=None, sorter=None):
+        if side is not None:
+            right = side == "right"
+        seq, val = sorted_sequence.unsqueeze(-2), input.unsqueeze(-1)
+        below = (seq <= val) if right else (seq < val)
+        result = below.sum(dim=-1)
+        return result.to(torch.int32) if out_int32 else result
+
+    return patch
+
+
+@register_patch("executorch", "torch.nn.functional.adaptive_avg_pool2d")
+def _patch_adaptive_avg_pool2d(original):
+    """Decompose adaptive_avg_pool2d (no portable adaptive-pool kernel).
+
+    When the input spatial dims divide the output dims evenly it's a plain ``avg_pool2d``; otherwise
+    (e.g. pyramid pooling with output 2/3/6) each output cell averages a variable, overlapping window
+    per the adaptive formula — ``start = i*S // O``, ``end = ceil((i+1)*S / O)`` — which we build from
+    concrete slices + ``mean``. Falls back to the original for symbolic (dynamic) spatial dims, where
+    the window bounds aren't computable at trace time.
+    """
+
+    def patch(input, output_size):
+        oh, ow = (output_size, output_size) if isinstance(output_size, int) else output_size
+        h, w = input.shape[-2], input.shape[-1]
+        oh, ow = (h if oh is None else oh), (w if ow is None else ow)
+        if not (isinstance(h, int) and isinstance(w, int)):
+            return original(input, output_size)
+        if h % oh == 0 and w % ow == 0:
+            return torch.nn.functional.avg_pool2d(input, kernel_size=(h // oh, w // ow))
+
+        def bounds(size, out):
+            return [((i * size) // out, -(-(i + 1) * size // out)) for i in range(out)]
+
+        rows = [
+            torch.cat([input[..., hs:he, ws:we].mean(dim=(-2, -1), keepdim=True) for ws, we in bounds(w, ow)], dim=-1)
+            for hs, he in bounds(h, oh)
+        ]
+        return torch.cat(rows, dim=-2)
+
+    return patch
+
+
+def _cumulative_reduce(input: torch.Tensor, dim: int, maximum: bool) -> torch.Tensor:
+    """``cummax``/``cummin`` values via a triangular-masked ``amax``/``amin`` (no portable scan
+    kernel). Output ``[..., i]`` reduces over ``j <= i``: broadcast the sequence against a
+    lower-triangular keep-mask, fill the rest with the dtype's min/max, then reduce."""
+    seq = input.transpose(dim, -1)
+    length = seq.shape[-1]
+    positions = torch.arange(length, device=input.device)
+    keep = positions.unsqueeze(0) <= positions.unsqueeze(1)  # [i, j] = j <= i
+    info = torch.finfo if input.is_floating_point() else torch.iinfo
+    fill = info(input.dtype).min if maximum else info(input.dtype).max
+    windows = torch.where(keep, seq.unsqueeze(-2), fill)
+    reduced = windows.amax(dim=-1) if maximum else windows.amin(dim=-1)
+    return reduced.transpose(dim, -1)
+
+
+@register_patch("executorch", "torch.cummax", "torch.Tensor.cummax")
+def _patch_cummax(_original):
+    """Decompose ``cummax`` (no portable cumulative-scan kernel) — see ``_cumulative_reduce``.
+    Returns ``(values, indices)`` like ``torch.cummax``; indices are zeros (callers use the values)."""
+
+    def patch(input, dim):
+        values = _cumulative_reduce(input, dim, maximum=True)
+        return torch.return_types.cummax((values, torch.zeros_like(values, dtype=torch.long)))
+
+    return patch
+
+
+@register_patch("executorch", "torch.cummin", "torch.Tensor.cummin")
+def _patch_cummin(_original):
+    """Decompose ``cummin`` (no portable cumulative-scan kernel) — see ``_cumulative_reduce``.
+    Returns ``(values, indices)`` like ``torch.cummin``; indices are zeros (callers use the values)."""
+
+    def patch(input, dim):
+        values = _cumulative_reduce(input, dim, maximum=False)
+        return torch.return_types.cummin((values, torch.zeros_like(values, dtype=torch.long)))
+
+    return patch
+
+
+@register_patch("executorch", "torch.rand_like", "torch.randn_like")
+def _patch_rand_like(_original):
+    """Deterministic stand-in for ``rand_like`` / ``randn_like`` (no portable out-variant kernel).
+
+    These appear in stochastic-depth / dropout / sampling paths that are inert at inference; the
+    exported program just needs a same-shape/dtype tensor, so return zeros.
+    """
+
+    def patch(input, *args, **kwargs):
+        return torch.zeros_like(input)
+
+    return patch
+
+
+@register_patch("executorch", "torch.randint")
+def _patch_randint(_original):
+    """Deterministic stand-in for ``torch.randint`` (no portable kernel). Handles both signatures —
+    ``randint(high, size, ...)`` and ``randint(low, high, size, ...)`` — returning zeros of ``size``.
+    """
+
+    def patch(*args, dtype=torch.long, **kwargs):
+        size = args[1] if len(args) >= 3 else args[0] if len(args) == 2 else kwargs["size"]
+        return torch.zeros(size, dtype=dtype)
+
+    return patch
+
+
+@register_patch("executorch", "torch.randperm")
+def _patch_randperm(_original):
+    """Deterministic stand-in for ``torch.randperm`` (no portable kernel): the identity permutation."""
+
+    def patch(n, *args, dtype=torch.long, **kwargs):
+        return torch.arange(n, dtype=dtype)
 
     return patch
 
@@ -868,7 +1024,7 @@ def _patch_is_non_identity_clone(original):
 
 
 @register_patch(
-    "executorch", "executorch.backends.xnnpack.partition.config.node_configs.PreluConfig.check_constraints"
+    "executorch.xnnpack", "executorch.backends.xnnpack.partition.config.node_configs.PreluConfig.check_constraints"
 )
 def _patch_prelu_check_constraints(original):
     """Only delegate ``prelu`` to XNNPACK when its input is 4-D.
@@ -1178,7 +1334,7 @@ def _patch_flatc_compile_nonfinite(original):
     return patch
 
 
-@register_patch("executorch", "executorch.backends.xnnpack.operators.node_visitor._node_visitor_dict")
+@register_patch("executorch.xnnpack", "executorch.backends.xnnpack.operators.node_visitor._node_visitor_dict")
 def _patch_squeeze_node_visitors(original):
     """Swap the squeeze/unsqueeze visitor entries in ``_node_visitor_dict`` with subclasses
     whose ``define_node`` skips the strict reshape check.
@@ -1206,15 +1362,24 @@ def _patch_squeeze_node_visitors(original):
 # Program-level fixes need context the per-node walk doesn't have: `range_constraints`,
 # `graph_signature`, `state_dict`.
 
-# Heuristic caps for `int_oo` dynamic-dim upper bounds, used by `_fix_range_constraints`.
-# ExecuTorch's XNNPACK memory planner pre-allocates buffers from the upper bound, so leaving
-# `int_oo` blows up memory; capping too tight rejects legitimate trace-time shapes (e.g. VLM
-# image-token counts). The pair below — 4x the observed lower/trace value, with a 1024 floor —
-# was tuned empirically on the export test suite to keep every passing trace under realistic
-# planner memory while still covering the largest sampled inputs. Bump together if a new model
-# hits a "bound too tight" error during ExecuTorch lowering.
+# Caps for `int_oo` dynamic-dim upper bounds. ExecuTorch's XNNPACK memory planner pre-allocates
+# buffers from the upper bound, so an unbounded dim must get a finite cap; capping too tight rejects
+# legitimate trace-time shapes (e.g. VLM image-token counts). Each dim's cap is `max(lower, trace) *
+# multiplier`, floored so a dim traced small still gets a usable range.
 _MAX_DIM_MULTIPLIER = 4
-_MAX_DIM_FLOOR = 1024
+_MAX_DIM_FLOOR = 1024  # cap floor for a single unbounded dim
+_MIN_DIM_FLOOR = 64  # cap floor never drops below this, so dims stay usable at runtime
+# The planner's arena grows with the *product* of the unbounded dims, so a fixed floor lets several
+# small-traced dims multiply into a huge arena. `_dim_floor` instead splits this product budget
+# across the N unbounded dims, keeping that product bounded.
+_MAX_UNBOUNDED_PRODUCT = 2**24
+
+
+def _dim_floor(num_unbounded: int) -> int:
+    """Cap floor for each of `num_unbounded` simultaneously-unbounded dims, sized so their product
+    stays near `_MAX_UNBOUNDED_PRODUCT` and clamped to ``[_MIN_DIM_FLOOR, _MAX_DIM_FLOOR]``."""
+    per_dim = round(_MAX_UNBOUNDED_PRODUCT ** (1.0 / max(num_unbounded, 1)))
+    return max(_MIN_DIM_FLOOR, min(_MAX_DIM_FLOOR, per_dim))
 
 
 def _as_int(x, default: int = 0) -> int:
@@ -1234,9 +1399,9 @@ def _as_int(x, default: int = 0) -> int:
 def _fix_range_constraints(exported_program: ExportedProgram) -> None:
     """Cap ``int_oo`` upper bounds for ExecuTorch compatibility.
 
-    Uses ``max(lower * 4, trace_value * 4, 1024)`` per dim — keeps bounds
-    proportional to actual sample sizes so XNNPACK memory planning doesn't
-    overflow, while still covering trace-time values (e.g. VLM image tokens).
+    Caps each unbounded dim at ``max(lower, trace) * _MAX_DIM_MULTIPLIER`` or a floor that shrinks
+    with the number of unbounded dims (see `_dim_floor`), so bounds cover the sampled shapes without
+    the unbounded dims' product overflowing XNNPACK memory planning.
     """
     # Collect all range dicts that need patching: range_constraints (torch.export
     # verifiers) + shape_env.var_to_range (ExecuTorch sym_shape_eval_pass).
@@ -1250,13 +1415,15 @@ def _fix_range_constraints(exported_program: ExportedProgram) -> None:
             var_to_val = getattr(shape_env, "backed_var_to_val", None) or shape_env.var_to_val
             break  # all nodes share the same shape_env, so we only need one
 
+    floor = _dim_floor(len({sym for rd in range_dicts for sym, vr in rd.items() if isinstance(vr.upper, IntInfinity)}))
+
     unbounded = []
     for rd in range_dicts:
         for sym, vr in rd.items():
             if isinstance(vr.upper, IntInfinity):
                 lower = _as_int(vr.lower, 2)
                 trace_val = _as_int(var_to_val.get(sym), 0)
-                upper = max(lower * _MAX_DIM_MULTIPLIER, trace_val * _MAX_DIM_MULTIPLIER, _MAX_DIM_FLOOR)
+                upper = max(lower * _MAX_DIM_MULTIPLIER, trace_val * _MAX_DIM_MULTIPLIER, floor)
                 rd[sym] = ValueRanges(vr.lower, upper)
                 unbounded.append((str(sym), lower, upper))
 

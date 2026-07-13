@@ -325,6 +325,54 @@ def _run_onnx_program(onnx_program, inputs) -> dict:
     return dict(zip(onnx_names, onnx_outputs))
 
 
+def _run_executorch_program(program_manager, inputs):
+    """Load an ExecuTorch program and run it, returning its outputs (or ``None`` — see below).
+
+    Loading resolves every op against the kernel registry and sizes the memory arenas, so a missing
+    portable kernel (``Missing operator``, ``0x14``) or an oversized arena (``0x21``) raises here —
+    the failures worth catching, that ``export`` alone misses. Running then validates the program
+    actually computes; execution errors propagate as test failures.
+
+    Inputs are bound *positionally* against the program's declared slots (``num_inputs`` /
+    ``input_tensor_meta``), filled in order from the eager pytree leaves — tensor leaves for tensor
+    slots, scalars for the rest. torch.export can introduce a runtime input with no eager counterpart
+    (a symint derived from a shape), leaving fewer eager leaves than slots of that kind; that's a
+    reconstruction limit of this harness, not a model defect, so we return ``None`` and rely on the
+    load check. We do *not* otherwise swallow errors: if the leaves cover the slots, we run for real.
+    """
+    from executorch.runtime import Runtime, Verification
+
+    set_seed(1234)
+    leaves = torch.utils._pytree.tree_leaves(inputs)
+    # The runtime rejects non-contiguous inputs, so materialise tensor leaves. `int` covers `bool`.
+    tensors = [t.contiguous() for t in leaves if isinstance(t, torch.Tensor)]
+    scalars = (t for t in leaves if isinstance(t, (int, float)))
+
+    # Load (surfaces missing-kernel / memory failures) before binding inputs.
+    method = Runtime.get().load_program(program_manager.buffer, verification=Verification.Minimal).load_method("forward")
+
+    # Each slot declares its shape; match it to an eager tensor leaf of that shape so the right tensor
+    # lands in the right slot (count alone isn't enough — a wrong-shape tensor crashes conv/copy
+    # kernels at execute). Under dynamic shapes the declared shape is an upper bound and won't match a
+    # leaf, so fall back to the next unused leaf (leaf order tracks the program's input order). If a
+    # slot can't be filled — a derived symint, or no leaf of the right shape — reconstruction isn't
+    # possible; return None and rely on the load check rather than run with bogus inputs.
+    args = []
+    for i in range(method.metadata.num_inputs()):
+        try:
+            shape = tuple(method.metadata.input_tensor_meta(i).sizes())
+        except Exception:  # non-tensor slot
+            args.append(next(scalars, None))
+        else:
+            match = next((t for t in tensors if tuple(t.shape) == shape), tensors[0] if tensors else None)
+            if match is not None:
+                tensors.remove(match)
+            args.append(match)
+        if args[-1] is None:
+            return None
+    return method.execute(args)
+
+
 def _onnx_optimize_enabled(model_class, dynamic: bool) -> bool:
     """Return whether onnxscript optimisation should run for this model under this shape mode.
 
@@ -512,7 +560,7 @@ class ExportTesterMixin:
     @require_torch_greater_or_equal(MIN_EXPORT_TORCH_VERSION)
     @disable_hub_kernels
     def test_executorch_export(self, dynamic):
-        """Export each model class to ExecuTorch (xnnpack on CPU, cuda on GPU) and verify no errors."""
+        """Export each model class to ExecuTorch, run it, and verify output count matches eager."""
 
         self._skip_if_not_exportable()
         exporter = ExecutorchExporter()
@@ -528,10 +576,17 @@ class ExportTesterMixin:
             # CUDA model (`FakeTensor Device Propagation ... cuda:0, cpu`). The exporter *can* take a
             # CUDA model, but the suite exercises the canonical CPU-traced path.
             components = self._prepare_export_model_and_inputs(model_class, device="cpu")
+            eager_outputs = self._collect_eager_outputs(components)
 
             for name, (model, inputs) in components.items():
                 with self.subTest(f"{model_class.__name__}/{name}"):
-                    exporter.export(model, inputs, config=config)
+                    program = exporter.export(model, inputs, config=config)
+                    executorch_outputs = _run_executorch_program(program, inputs)
+                    if executorch_outputs is not None:  # None = inputs couldn't be reconstructed
+                        # Tensor outputs only: the runtime also returns non-tensor outputs (e.g. the
+                        # sliding-window sizes hybrid caches emit as ints), which `get_leaf_tensors` drops.
+                        tensor_outputs = [o for o in executorch_outputs if isinstance(o, torch.Tensor)]
+                        self.assertEqual(len(tensor_outputs), len(eager_outputs[name]))
 
 
 class ExportGenerateTesterMixin(ExportTesterMixin):
@@ -651,7 +706,7 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
     @require_torch_greater_or_equal(MIN_EXPORT_TORCH_VERSION)
     @disable_hub_kernels
     def test_executorch_export_generate(self, dynamic):
-        """Export prefill and decode stages to ExecuTorch and verify no errors."""
+        """Export prefill and decode stages to ExecuTorch, run each, and verify output count matches eager."""
 
         self._skip_if_not_exportable()
         exporter = ExecutorchExporter()
@@ -662,7 +717,14 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
                 continue
 
             components = self._prepare_export_generate_model_and_inputs(model_class, device="cpu")
+            eager_outputs = self._collect_eager_outputs(components)
 
             for name, (model, inputs) in components.items():
                 with self.subTest(f"{model_class.__name__}/{name}"):
-                    exporter.export(model, inputs, config=config)
+                    program = exporter.export(model, inputs, config=config)
+                    executorch_outputs = _run_executorch_program(program, inputs)
+                    if executorch_outputs is not None:  # None = inputs couldn't be reconstructed
+                        # Tensor outputs only: the runtime also returns non-tensor outputs (e.g. the
+                        # sliding-window sizes hybrid caches emit as ints), which `get_leaf_tensors` drops.
+                        tensor_outputs = [o for o in executorch_outputs if isinstance(o, torch.Tensor)]
+                        self.assertEqual(len(tensor_outputs), len(eager_outputs[name]))
