@@ -1390,6 +1390,10 @@ class DiffusionGemmaDecoderModel(DiffusionGemmaPreTrainedModel):
         ):
             return decoder_attention_mask
 
+        # Contrarily to the high-level mask creation functions, the mask interface used below does not cast the 2D
+        # mask, and an integer one would propagate its dtype to the final mask instead of yielding a boolean mask
+        decoder_attention_mask = decoder_attention_mask.bool()
+
         text_config = config.get_text_config()
         q_length = inputs_embeds.shape[1]
         q_offset = past_key_values.get_seq_length()
