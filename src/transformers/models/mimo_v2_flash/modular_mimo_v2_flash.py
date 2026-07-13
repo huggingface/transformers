@@ -21,10 +21,10 @@ from huggingface_hub.dataclasses import strict
 from ... import initialization as init
 from ...cache_utils import Cache
 from ...configuration_utils import PreTrainedConfig
+from ...integrations import use_kernel_func_from_hub
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
-from ...integrations import use_kernel_func_from_hub
 from ...utils import TransformersKwargs, auto_docstring
 from ..deepseek_v3.modeling_deepseek_v3 import (
     DeepseekV3Experts,
@@ -40,6 +40,13 @@ from ..glm4_moe_lite.modeling_glm4_moe_lite import Glm4MoeLiteDecoderLayer
 from ..laguna.modeling_laguna import LagunaModel
 from ..mixtral.modeling_mixtral import MixtralRMSNorm
 from ..qwen2.modeling_qwen2 import Qwen2Attention
+
+
+def rotate_half(x):
+    """Rotates half the hidden dims of the input."""
+    x1 = x[..., : x.shape[-1] // 2]
+    x2 = x[..., x.shape[-1] // 2 :]
+    return torch.cat((-x2, x1), dim=-1)
 
 
 @use_kernel_func_from_hub("rotary_pos_emb")
