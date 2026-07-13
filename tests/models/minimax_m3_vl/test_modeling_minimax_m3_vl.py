@@ -31,6 +31,7 @@ from transformers import (
     is_vision_available,
 )
 from transformers.testing_utils import (
+    get_device_properties,
     require_torch,
     require_torch_accelerator,
     slow,
@@ -470,6 +471,10 @@ class MiniMaxM3VLModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTest
                 )
 
     @require_torch_accelerator
+    @unittest.skipIf(
+        get_device_properties()[0] == "cuda" and get_device_properties()[1] < 10,
+        "Skipping: MSA sparse attention requires SM100/Blackwell (compute capability >= 10.0)",
+    )
     def test_sparse_attention_cache_position_on_cpu(self):
         """Regression test for the CPU/CUDA device-mismatch in ``_sparse_attention`` (PR #46848).
 
@@ -484,11 +489,10 @@ class MiniMaxM3VLModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTest
         The fix adds ``device=q.device`` to the ``.to()`` call so ``valid_k`` always follows
         the query tensor's device.
 
-        Note on hardware requirements: ``@require_torch_accelerator`` (any CUDA GPU) is
-        sufficient — no SM100/Blackwell guard is needed. This test calls ``_sparse_attention``
-        directly, which bypasses ``msa_attention_forward`` and therefore never hits the
-        ``_validate_msa_init`` SM100 capability check. ``_msa_sparse_atten_op`` (the Blackwell
-        kernel binary) is stubbed out so the test runs on any CUDA-capable device.
+        Note on hardware requirements: an SM100/Blackwell GPU is required. Although
+        ``_msa_sparse_atten_op`` is patched to a stub, ``_sparse_attention`` calls it through
+        the PyTorch op dispatcher, which on a non-SM100 device would attempt to load the
+        Blackwell CuTe-DSL hub kernel and crash before the patch intercepts the call.
         """
         from transformers.integrations.msa_attention import _sparse_attention
         from transformers.models.minimax_m3_vl.modeling_minimax_m3_vl import MiniMaxM3VLAttention
