@@ -13,6 +13,7 @@
 # limitations under the License.
 from __future__ import annotations
 
+from functools import wraps
 from typing import TYPE_CHECKING
 
 from ..utils import is_torch_available
@@ -22,10 +23,11 @@ if TYPE_CHECKING:
 
 if is_torch_available():
     import torch
+    import torch.distributed as dist
     import torch.nn as nn
 
 
-class PPMissingLayer(nn.Identity):
+class PipelineIdentityLayer(nn.Identity):
     """A placeholder layer for missing layers in a pipeline parallel model."""
 
     def __init__(self, *args, **kwargs):
@@ -36,38 +38,204 @@ class PPMissingLayer(nn.Identity):
         return args[0] if args else next(iter(kwargs.values()))
 
 
+class PipelineStage:
+    """Pipeline-parallel stage metadata derived from a 1-D PP device mesh."""
+
+    def __init__(
+        self,
+        pp_rank: int,
+        pp_size: int,
+        pp_group: dist.ProcessGroup,
+        pp_is_first_stage: bool,
+        pp_is_last_stage: bool,
+        pp_prev_rank: int | None,
+        pp_next_rank: int | None,
+    ):
+        self.pp_rank = pp_rank
+        self.pp_size = pp_size
+        self.pp_group = pp_group
+        self.pp_is_first_stage = pp_is_first_stage
+        self.pp_is_last_stage = pp_is_last_stage
+        self.pp_prev_rank = pp_prev_rank
+        self.pp_next_rank = pp_next_rank
+
+    @classmethod
+    def from_device_mesh(cls, device_mesh) -> PipelineStage:
+        pp_rank = device_mesh.get_local_rank()
+        pp_size = device_mesh.size()
+        if hasattr(device_mesh, "get_group"):
+            try:
+                pp_group = device_mesh.get_group("pp")
+            except (KeyError, ValueError, RuntimeError):
+                pp_group = device_mesh.get_group()
+        else:
+            pp_group = None
+        return cls(
+            pp_rank=pp_rank,
+            pp_size=pp_size,
+            pp_group=pp_group,
+            pp_is_first_stage=pp_rank == 0,
+            pp_is_last_stage=pp_rank == pp_size - 1,
+            pp_prev_rank=pp_rank - 1 if pp_rank > 0 else None,
+            pp_next_rank=pp_rank + 1 if pp_rank < pp_size - 1 else None,
+        )
+
+    def comm_device(self, device: torch.device) -> torch.device:
+        """Device used for collectives (gloo requires CPU tensors)."""
+        if dist.get_backend() == "gloo":
+            return torch.device("cpu")
+        return device
+
+    def communicate(
+        self,
+        operation: str,
+        *,
+        device: torch.device,
+        dtype: torch.dtype,
+        tensor: torch.Tensor | None = None,
+        shape: tuple[int, ...] | None = None,
+    ) -> torch.Tensor | None:
+        """Forward-only pipeline point-to-point communication."""
+        comm_device = self.comm_device(device)
+        group = self.pp_group
+        src = dest = None
+
+        if operation == "recv_forward":
+            if self.pp_is_first_stage:
+                return None
+            src = self.pp_prev_rank
+            if shape is None:
+                shape_meta = torch.empty(3, dtype=torch.long, device=comm_device)
+                [req.wait() for req in dist.batch_isend_irecv([dist.P2POp(dist.irecv, shape_meta, src, group=group)])]
+                shape = tuple(shape_meta.tolist())
+            tensor = torch.empty(shape, dtype=dtype, device=comm_device)
+        elif operation == "send_forward":
+            if self.pp_is_last_stage:
+                return None
+            dest = self.pp_next_rank
+            tensor = tensor.detach().to(device=comm_device, dtype=dtype).contiguous()
+            shape_meta = torch.tensor(list(tensor.shape), dtype=torch.long, device=comm_device)
+            [req.wait() for req in dist.batch_isend_irecv([dist.P2POp(dist.isend, shape_meta, dest, group=group)])]
+        else:
+            raise ValueError(f"Unsupported pipeline communication operation: {operation}")
+
+        is_send = operation.startswith("send")
+        peer_rank = dest if is_send else src
+        op = dist.P2POp(dist.isend if is_send else dist.irecv, tensor, peer_rank, group=group)
+        [req.wait() for req in dist.batch_isend_irecv([op])]
+        if comm_device.type == "cuda":
+            torch.cuda.synchronize()
+
+        return None if is_send else tensor.to(device=device, dtype=dtype)
+
+
 def apply_pipeline_parallelism(model: nn.Module, device_mesh: torch.distributed.device_mesh.DeviceMesh) -> nn.Module:
     """Naive even split of ``base_model.layers`` across PP ranks."""
     pp_size = device_mesh.size()
     if pp_size <= 1:
         return model
 
-    pp_rank = device_mesh.get_local_rank()
-    is_first_rank = pp_rank == 0
-    is_last_rank = pp_rank == pp_size - 1
-
+    stage = PipelineStage.from_device_mesh(device_mesh)
     base_model = getattr(model, model.base_model_prefix)
     layers = base_model.layers
     num_layers = len(layers)
 
     layers_per_rank = num_layers // pp_size
-    start_layer = pp_rank * layers_per_rank
-    end_layer = num_layers if is_last_rank else start_layer + layers_per_rank
+    start_layer = stage.pp_rank * layers_per_rank
+    end_layer = num_layers if stage.pp_is_last_stage else start_layer + layers_per_rank
 
-    if not is_first_rank:
-        base_model.embed_tokens = PPMissingLayer()
+    if not stage.pp_is_first_stage:
+        base_model.embed_tokens = PipelineIdentityLayer()
 
-    for i in range(num_layers):
-        if i < start_layer or i >= end_layer:
-            layers[i] = PPMissingLayer()
+    for layer_idx in range(num_layers):
+        if layer_idx < start_layer or layer_idx >= end_layer:
+            layers[layer_idx] = PipelineIdentityLayer()
 
-    if not is_last_rank:
-        base_model.norm = PPMissingLayer()
-        model.lm_head = PPMissingLayer()
+    if not stage.pp_is_last_stage:
+        base_model.norm = PipelineIdentityLayer()
+        model.lm_head = PipelineIdentityLayer()
 
-    model._pp_rank = pp_rank
-    model._pp_size = pp_size
+    #TODO(3outeille): do we really need to set these attributes?
+    model._pp_rank = stage.pp_rank
+    model._pp_size = stage.pp_size
+    _wrap_forward_for_pipeline_parallel(model)
     return model
 
 
-#TODO(3outeille): probably have to introduce pipeline_communicate here ?
+def pipeline_broadcast_from_last(
+    tensor: torch.Tensor | None,
+    stage: PipelineStage,
+    *,
+    dtype: torch.dtype,
+    device: torch.device,
+) -> torch.Tensor:
+    """Broadcast a tensor from the last PP stage to every PP rank."""
+    if stage.pp_size <= 1:
+        return tensor
+
+    comm_device = stage.comm_device(device)
+    src = stage.pp_size - 1
+
+    if stage.pp_is_last_stage:
+        tensor = tensor.detach().to(device=comm_device, dtype=dtype).contiguous()
+        meta = torch.tensor(list(tensor.shape), dtype=torch.long, device=comm_device)
+    else:
+        meta = torch.empty(3, dtype=torch.long, device=comm_device)
+
+    dist.broadcast(meta, src=src, group=stage.pp_group)
+
+    if not stage.pp_is_last_stage:
+        tensor = torch.empty(tuple(meta.tolist()), dtype=dtype, device=comm_device)
+    dist.broadcast(tensor, src=src, group=stage.pp_group)
+    return tensor.to(device=device, dtype=dtype)
+
+
+def _wrap_forward_for_pipeline_parallel(model: nn.Module) -> None:
+    #TODO(3outeille): where does that come from
+    if getattr(model, "_pp_forward_wrapped", False):
+        return
+
+    original_forward = model.forward
+
+    @wraps(original_forward)
+    def pp_forward(*args, **kwargs):
+        pp_size = getattr(model, "_pp_size", 1)
+        if pp_size <= 1:
+            return original_forward(*args, **kwargs)
+
+        stage = PipelineStage.from_device_mesh(model._device_mesh)
+        device = next(model.parameters()).device
+        dtype = next(model.parameters()).dtype
+
+        if not stage.pp_is_first_stage:
+            hidden_states = stage.communicate("recv_forward", device=device, dtype=dtype)
+            kwargs.pop("input_ids", None)
+            kwargs["inputs_embeds"] = hidden_states
+            if args:
+                args = (None, *args[1:])
+
+        if not stage.pp_is_last_stage:
+            model_kwargs = {key: value for key, value in kwargs.items() if key not in {"labels", "logits_to_keep"}}
+            base_model = getattr(model, model.base_model_prefix)
+            base_outputs = base_model(*args, **model_kwargs)
+            stage.communicate(
+                "send_forward",
+                device=device,
+                dtype=dtype,
+                tensor=base_outputs.last_hidden_state,
+            )
+            past_key_values = base_outputs.past_key_values
+            logits = None
+        else:
+            outputs = original_forward(*args, **kwargs)
+            logits = outputs.logits
+            past_key_values = outputs.past_key_values
+
+        logits = pipeline_broadcast_from_last(logits, stage, dtype=dtype, device=device)
+
+        from ..modeling_outputs import CausalLMOutputWithPast
+
+        return CausalLMOutputWithPast(logits=logits, past_key_values=past_key_values)
+
+    model.forward = pp_forward
+    model._pp_forward_wrapped = True
