@@ -47,8 +47,11 @@ class KVCacheSharingStorage:
     def items(self) -> Iterable[tuple[str, tuple[torch.Tensor, ...]]]:
         return self._storage.items()
 
-    def to(self, device: torch.device) -> "KVCacheSharingStorage":
-        self._storage = {key: tuple(v.to(device) for v in values) for key, values in self._storage.items()}
+    def to(self, device: torch.device, non_blocking: bool = False) -> "KVCacheSharingStorage":
+        self._storage = {
+            key: tuple(v.to(device, non_blocking=non_blocking) for v in values)
+            for key, values in self._storage.items()
+        }
         return self
 
     def asdict(self) -> dict[str, tuple[torch.Tensor, ...]]:

@@ -197,13 +197,12 @@ class Gemma4UnifiedTextConfig(PreTrainedConfig):
             # If there are no consumers, then there is no cache sharing for this attention type
             if not consumer_idx:
                 continue
-            else:
-                for i in consumer_idx:
-                    kv_sharing_roles[i] = "consumer"
+            for i in consumer_idx:
+                kv_sharing_roles[i] = "consumer"
             # Determine the index of the producer layer. There can be no producer (assistant models for instance)
             non_consumer_idx = [i for i in filtered_idx if i < first_shared_layer]
             if non_consumer_idx:
-                producer_idx = max([i for i in filtered_idx if i < first_shared_layer])
+                producer_idx = max(non_consumer_idx)
                 kv_sharing_roles[producer_idx] = "producer"
         return kv_sharing_roles
 
