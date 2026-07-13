@@ -1447,7 +1447,6 @@ def convert_and_load_state_dict_in_model(
     model: PreTrainedModel,
     state_dict: dict[str, Any],
     load_config: LoadStateDictConfig,
-    tp_plan: dict[str, str] | None,
     disk_offload_index: dict | None = None,
 ):
     r"""
@@ -1537,7 +1536,7 @@ def convert_and_load_state_dict_in_model(
 
     """
     base_model_prefix = model.base_model_prefix
-    tp_plan = tp_plan or {}
+    tp_plan = load_config.tp_plan or {}
     device_map = load_config.device_map or {"": "cpu"}
     hf_quantizer = load_config.hf_quantizer
     dtype = load_config.dtype
