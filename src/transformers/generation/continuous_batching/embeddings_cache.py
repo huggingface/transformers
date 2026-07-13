@@ -154,8 +154,8 @@ class EmbeddingsCache:
         # Extract the allocated blocks from the mask
         mask = allocated_blocks_mask != -1
         allocated_blocks = allocated_blocks_mask[mask].to(self.cache.device)
-        # Store the multimodal embeddings in the cache
-        self.cache[allocated_blocks] = mm_embedding
+        # Store the multimodal embeddings in the cache, flattening along the image dimension
+        self.cache[allocated_blocks] = mm_embedding.reshape(-1, mm_embedding.shape[-1])
 
     def release_cache_for_requests(self, requests: set[str]) -> None:
         """Releases the cache for the given requests from the embeddings cache. The set of request for which to release
