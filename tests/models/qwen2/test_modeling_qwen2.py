@@ -187,7 +187,9 @@ class Qwen2IntegrationTest(unittest.TestCase):
 
     @slow
     def test_speculative_generation(self):
-        EXPECTED_TEXT_COMPLETION = "My favourite condiment is 100% natural, organic, gluten-free, vegan, and vegetarian. I have been making"
+        EXPECTED_TEXT_COMPLETION = (
+            "My favourite condiment is 100% natural, organic, gluten-free, vegan, and vegetarian. I have been making"
+        )
         prompt = "My favourite condiment is "
         tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2-0.5B", use_fast=False)
         model = Qwen2ForCausalLM.from_pretrained("Qwen/Qwen2-0.5B", device_map="auto", dtype=torch.float16)
@@ -218,7 +220,9 @@ class Qwen2IntegrationTest(unittest.TestCase):
 
         tokenizer = AutoTokenizer.from_pretrained(qwen_model, pad_token="</s>", padding_side="right")
 
-        EXPECTED_TEXT_COMPLETION = ["My favourite condiment is 100% natural, organic, gluten free, vegan, and free from preservatives. I"]
+        EXPECTED_TEXT_COMPLETION = [
+            "My favourite condiment is 100% natural, organic, gluten free, vegan, and free from preservatives. I"
+        ]
 
         max_generation_length = tokenizer(EXPECTED_TEXT_COMPLETION, return_tensors="pt", padding=True)[
             "input_ids"
