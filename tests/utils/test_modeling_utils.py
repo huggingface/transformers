@@ -74,6 +74,7 @@ from transformers.testing_utils import (
     require_non_hpu,
     require_torch,
     require_torch_accelerator,
+    require_torch_gpu,
     require_torch_multi_accelerator,
     slow,
     torch_device,
@@ -859,6 +860,66 @@ class ModelUtilsTest(TestCasePlus):
                 for p1, p2 in zip(model.parameters(), new_model.parameters()):
                     torch.testing.assert_close(p1, p2)
 
+    def test_transformers_weights_config_field_rejects_path_traversal(self):
+        config = BertConfig(
+            vocab_size=16,
+            hidden_size=8,
+            num_hidden_layers=1,
+            num_attention_heads=1,
+            intermediate_size=8,
+            max_position_embeddings=8,
+        )
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            repo = os.path.join(tmp_dir, "repo")
+            outside_dir = os.path.join(tmp_dir, "outside")
+            BertModel(config).save_pretrained(repo)
+            BertModel(config).save_pretrained(outside_dir)
+
+            config_file = os.path.join(repo, "config.json")
+            with open(config_file, encoding="utf-8") as f:
+                repo_config = json.load(f)
+
+            for bad in [
+                os.path.join("..", "outside", "model.safetensors"),
+                os.path.join(outside_dir, "model.safetensors"),
+            ]:
+                repo_config["transformers_weights"] = bad
+                with open(config_file, "w", encoding="utf-8") as f:
+                    json.dump(repo_config, f)
+                with self.assertRaises(ValueError):
+                    BertModel.from_pretrained(repo)
+
+            repo_config["transformers_weights"] = "model.safetensors"
+            with open(config_file, "w", encoding="utf-8") as f:
+                json.dump(repo_config, f)
+            self.assertIsInstance(BertModel.from_pretrained(repo), BertModel)
+
+    def test_transformers_weights_allows_symlinked_snapshot_file(self):
+        if os.name == "nt":
+            self.skipTest("creating symlinks requires privileges on Windows")
+        config = BertConfig(
+            vocab_size=16,
+            hidden_size=8,
+            num_hidden_layers=1,
+            num_attention_heads=1,
+            intermediate_size=8,
+            max_position_embeddings=8,
+        )
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            blobs = os.path.join(tmp_dir, "blobs")
+            snapshot = os.path.join(tmp_dir, "snapshot")
+            os.makedirs(blobs)
+            os.makedirs(snapshot)
+            BertModel(config).save_pretrained(blobs, safe_serialization=True)
+
+            config_dict = config.to_dict()
+            config_dict["transformers_weights"] = "model.safetensors"
+            with open(os.path.join(snapshot, "config.json"), "w", encoding="utf-8") as f:
+                json.dump(config_dict, f)
+            os.symlink(os.path.join(blobs, "model.safetensors"), os.path.join(snapshot, "model.safetensors"))
+
+            self.assertIsInstance(BertModel.from_pretrained(snapshot), BertModel)
+
     def test_checkpoint_sharding_from_hub(self):
         model = BertModel.from_pretrained("hf-internal-testing/tiny-random-bert-sharded")
         # the model above is the same as the model below, just a sharded version.
@@ -1159,6 +1220,40 @@ class ModelUtilsTest(TestCasePlus):
             )
             outputs2 = new_model_with_offload(inputs)
             torch.testing.assert_close(outputs1[0].cpu(), outputs2[0].cpu())
+
+    @slow
+    @require_accelerate
+    @mark.accelerate_tests
+    @require_torch_accelerator
+    def test_disk_onload_dtype(self):
+        from accelerate.utils import align_module_device
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            # load model with full disk offloading
+            model = AutoModelForCausalLM.from_pretrained(
+                "inference-optimization/DSV4-tiny-empty",
+                device_map="auto",
+                max_memory={},
+                offload_folder=tmp_dir,
+                offload_buffers=True,
+            )
+
+            # note that `model.dtype` and the dtype of `tid2eid` differ
+            offloaded = model.model.layers[0].mlp.gate.tid2eid
+            self.assertEqual(offloaded.dtype, torch.int64)
+            self.assertEqual(model.dtype, torch.bfloat16)
+
+            # the dtype used to load from disk should match
+            index = model.model.layers[0].mlp.gate._hf_hook.weights_map.dataset.index
+            weights_info = index["model.layers.0.mlp.gate.tid2eid"]
+            weights_info_type = getattr(torch, weights_info["dtype"])
+            self.assertEqual(weights_info_type, offloaded.dtype)
+            self.assertEqual(weights_info_type, torch.int64)
+
+            # the onloaded dtype should be the weight dtype, not the model dtype
+            with align_module_device(model.model.layers[0].mlp.gate):
+                self.assertEqual(model.model.layers[0].mlp.gate.tid2eid.dtype, offloaded.dtype)
+                self.assertEqual(model.model.layers[0].mlp.gate.tid2eid.dtype, torch.int64)
 
     @slow
     @require_torch
@@ -2405,6 +2500,46 @@ class ModelUtilsTest(TestCasePlus):
         with_config_only = model(input_ids, attention_mask=attention_mask).last_hidden_state
         torch.testing.assert_close(reference, with_config_only)
 
+    def test_linear_attention_models_can_use_accelerate_hooks(self):
+        """
+        Test that linear attention models (here only tested on lfm2 as it has small checkpoints) can use device_map and
+        offloading correctly (the conv module inside the Mixer are not used through `forward`, so accelerate hooks have to be
+        forced)
+        """
+        model_id = "LiquidAI/LFM2.5-230M"
+        input_text = "Hello, who are you?"
+        tokenizer = AutoTokenizer.from_pretrained(model_id)
+        inputs = tokenizer.apply_chat_template(
+            [{"role": "user", "content": input_text}],
+            tokenize=True,
+            return_tensors="pt",
+            add_generation_prompt=True,
+        )
+
+        model = AutoModelForCausalLM.from_pretrained(model_id, dtype=torch.float16)
+        out = model.generate(**inputs.to(model.device), max_new_tokens=20, do_sample=False)
+        output_text1 = tokenizer.batch_decode(out[:, inputs["input_ids"].shape[1] :])[0]
+
+        # This will offload to disk
+        model = AutoModelForCausalLM.from_pretrained(
+            model_id, dtype=torch.float16, device_map="auto", max_memory={"cpu": "200MiB", "disk": "12GiB"}
+        )
+        # Make sure it was offloaded
+        self.assertTrue("cpu" in model.hf_device_map.values())
+        self.assertTrue("disk" in model.hf_device_map.values())
+
+        # Make sure we will not crash when reaching a disk offloaded mixer with linear attention
+        out = model.generate(**inputs.to(model.device), max_new_tokens=20, do_sample=False)
+        output_text2 = tokenizer.batch_decode(out[:, inputs["input_ids"].shape[1] :])[0]
+
+        EXPECTED_TEXT = (
+            "I’m an AI language model created to help answer questions, provide information, and assist with a wide"
+        )
+
+        # Make sure they are equal, and equal to the ref
+        self.assertEqual(output_text1, output_text2)
+        self.assertEqual(output_text1, EXPECTED_TEXT)
+
 
 @slow
 @require_torch
@@ -2881,6 +3016,39 @@ class TestAttentionImplementation(unittest.TestCase):
             )
         self.assertTrue("the package for FlashAttention2 doesn't seem to be installed." in str(cm.exception))
 
+    @parameterized.expand(
+        [
+            # (key head_dim, value head_dim, use_mask, GQA kept, expected backend): GQA is kept only for matched
+            # head_dim <= 256 without a mask, else `repeat_kv` runs so a fused kernel still serves it.
+            (256, 256, False, True, "flash"),  # matched <= 256: GQA kept
+            (512, 512, False, False, "efficient"),  # head_dim > 256: repeat_kv
+            (192, 128, False, False, "efficient"),  # mismatched (MLA): repeat_kv
+            (256, 256, True, False, "efficient"),  # mask disables GQA
+        ]
+    )
+    @require_torch_gpu
+    def test_gqa_in_sdpa_uses_a_fused_kernel(
+        self, key_head_dim, value_head_dim, use_mask, keeps_gqa, expected_backend
+    ):
+        # Restricting SDPA to the expected backend (which excludes `math`) proves each case stays on a fused kernel
+        # rather than silently falling back to math: the call must succeed.
+        from torch.nn.attention import SDPBackend, sdpa_kernel
+
+        from transformers.integrations.sdpa_attention import sdpa_attention_forward, use_gqa_in_sdpa
+
+        backends = {"flash": SDPBackend.FLASH_ATTENTION, "efficient": SDPBackend.EFFICIENT_ATTENTION}
+        module = torch.nn.Module()
+        module.num_key_value_groups = 4  # 8 query heads, 2 key/value heads
+        query = torch.randn(1, 8, 16, key_head_dim, device=torch_device, dtype=torch.float16)
+        key = torch.randn(1, 2, 16, key_head_dim, device=torch_device, dtype=torch.float16)
+        value = torch.randn(1, 2, 16, value_head_dim, device=torch_device, dtype=torch.float16)
+        attention_mask = torch.zeros(1, 1, 16, 16, device=torch_device, dtype=torch.float16) if use_mask else None
+
+        self.assertEqual(use_gqa_in_sdpa(attention_mask, key, value), keeps_gqa)
+        with sdpa_kernel([backends[expected_backend]]):
+            attn_output, _ = sdpa_attention_forward(module, query, key, value, attention_mask=attention_mask)
+        self.assertEqual(attn_output.shape, (1, 16, 8, value_head_dim))
+
     def test_flash_attn_available_no_keyerror_when_missing_from_distribution_map(self):
         # Regression test for https://github.com/huggingface/transformers/issues/45520.
         # When flash_attn is importable but not present in PACKAGE_DISTRIBUTION_MAPPING
@@ -3000,6 +3168,64 @@ class TestAttentionImplementation(unittest.TestCase):
         experts_module.config._experts_implementation = "foobar"
         with self.assertRaisesRegex(KeyError, "`foobar` is not a valid experts implementation registered"):
             _ = experts_module(hidden_states, dummy_indices, dummy_scores)
+
+    def test_can_set_attn_returns_false_when_module_missing(self):
+        # Simulate the "module cleared from sys.modules" case (test cleanup, REPL).
+        from transformers.models.llama.modeling_llama import LlamaModel
+
+        # The method _can_set_attn_implementation caches the result on a succesful call, so we need to clear the cache
+        if hasattr(LlamaModel, "_can_set_attn_implementation_cached_value"):
+            delattr(LlamaModel, "_can_set_attn_implementation_cached_value")
+
+        original = sys.modules.pop(LlamaModel.__module__)
+        try:
+            self.assertFalse(LlamaModel._can_set_attn_implementation())
+            self.assertFalse(LlamaModel._can_set_experts_implementation())
+        finally:
+            sys.modules[LlamaModel.__module__] = original
+
+    def test_can_set_attn_skips_torch_dynamic_wrappers(self):
+        # Simulate FSDP2's `FSDP<ModelName>`: a dynamic subclass whose __module__ lives under torch.*
+        from transformers.models.llama.modeling_llama import LlamaModel
+
+        FSDPLlamaModel = type("FSDPLlamaModel", (LlamaModel,), {})
+        FSDPLlamaModel.__module__ = "torch.distributed.fsdp._fully_shard._fsdp_state"
+
+        # The MRO walk should skip past FSDPLlamaModel to LlamaModel and find the underlying answer.
+        self.assertTrue(FSDPLlamaModel._can_set_attn_implementation())
+
+    def test_can_set_attn_modern_vs_legacy(self):
+        # Modern interface model: True. Legacy model (T5 doesn't use ALL_ATTENTION_FUNCTIONS): False.
+        from transformers.models.llama.modeling_llama import LlamaModel
+        from transformers.models.t5.modeling_t5 import T5Model
+
+        self.assertTrue(LlamaModel._can_set_attn_implementation())
+        self.assertFalse(T5Model._can_set_attn_implementation())
+
+    def test_can_set_attn_legacy_edge_cases(self):
+        # FSMT: bare `class Attention(nn.Module):` -- tightened regex catches this case.
+        from transformers.models.fsmt.modeling_fsmt import FSMTModel
+
+        self.assertFalse(FSMTModel._can_set_attn_implementation())
+
+        # SLANet: `class SLANetAttentionGRUCell(nn.Module):` -- "Attention" not at end of class name.
+        from transformers.models.slanet.modeling_slanet import SLANetBackbone
+
+        self.assertFalse(SLANetBackbone._can_set_attn_implementation())
+
+        # ShieldGemma2: output dataclass with "Attention" in the name but no `nn.Module` parent.
+        # No actual Attention class -> assume True (multimodal model or inherits from elsewhere).
+        from transformers.models.shieldgemma2.modeling_shieldgemma2 import ShieldGemma2ForImageClassification
+
+        self.assertTrue(ShieldGemma2ForImageClassification._can_set_attn_implementation())
+
+    def test_can_set_experts_moe_vs_dense(self):
+        # MoE model with @use_experts_implementation: True. Non-MoE model: False.
+        from transformers.models.llama.modeling_llama import LlamaModel
+        from transformers.models.mixtral.modeling_mixtral import MixtralModel
+
+        self.assertTrue(MixtralModel._can_set_experts_implementation())
+        self.assertFalse(LlamaModel._can_set_experts_implementation())
 
 
 @require_torch
@@ -3569,3 +3795,84 @@ class DisableMmapLoadingTest(unittest.TestCase):
         self.assertEqual(set(loaded_mmap.keys()), set(loaded_no_mmap.keys()))
         for k in loaded_mmap:
             torch.testing.assert_close(loaded_mmap[k], loaded_no_mmap[k])
+
+
+@require_torch
+class RemoteAndCustomCodeModelTests(unittest.TestCase):
+    def test_remote_code_registration(self):
+        """
+        Test that remote code is correctly registered with auto classes, and correctly sets its auto class, so that it's
+        detected by `is_remote_code()`
+        """
+        model = AutoModel.from_pretrained("hf-internal-testing/dummy_remote_code", trust_remote_code=True)
+        # Those 2 checks are equivalent, but keep both to make sure implementation of `is_remote_code` will not diverge
+        self.assertTrue(model.is_remote_code())
+        self.assertFalse(model.__class__.__module__.startswith("transformers."))
+
+    def test_remote_code_registration_with_model_type_collision(self):
+        """
+        Test that remote code is correctly registered with auto classes, and correctly sets its auto class, so that it's
+        detected by `is_remote_code()`, even if the `model_type` registered in the custom model is the same as an existing one
+        in the library. In this case, we should also be able to load the native model if `trust_remote_code=False` after registration.
+        """
+
+        # This remote model uses "llama" as model_type, same to our llama inside the lib
+        model_name = "hf-internal-testing/dummy_remote_code_collision_model_type"
+        custom_model = AutoModel.from_pretrained(model_name, trust_remote_code=True)
+        # Those 2 checks are equivalent, but keep both to make sure implementation of `is_remote_code` will not diverge
+        self.assertTrue(custom_model.is_remote_code())
+        self.assertFalse(custom_model.__class__.__module__.startswith("transformers."))
+        # Check the config as well
+        self.assertFalse(custom_model.config.__class__.__module__.startswith("transformers."))
+
+        # Check that if we do NOT use `trust_remote_code=True`, then the registration of the same model type before it will not force
+        # a model type of the wrong type, i.e. we use the native LlamaModel
+        native_model = AutoModel.from_pretrained("hf-internal-testing/tiny-llama")
+        # Those 2 checks are equivalent, but keep both to make sure implementation of `is_remote_code` will not diverge
+        self.assertFalse(native_model.is_remote_code())
+        self.assertTrue(native_model.__class__.__module__.startswith("transformers."))
+        # Check the config as well
+        self.assertTrue(native_model.config.__class__.__module__.startswith("transformers."))
+
+    def test_remote_code_registration_with_config_and_model_type_collision(self):
+        """
+        Test that remote code is correctly registered with auto classes, and correctly sets its auto class, so that it's
+        detected by `is_remote_code()`, even if the config class AND the `model_type` used in the custom model are the same as an
+        existing model in the library. In this case, we should also be able to load the native model if `trust_remote_code=False`
+        after registration.
+        """
+
+        model_name = "hf-internal-testing/dummy_remote_code_collision_config_and_model_type"
+        custom_model = AutoModel.from_pretrained(model_name, trust_remote_code=True)
+        # Those 2 checks are equivalent, but keep both to make sure implementation of `is_remote_code` will not diverge
+        self.assertTrue(custom_model.is_remote_code())
+        self.assertFalse(custom_model.__class__.__module__.startswith("transformers."))
+        # Here, the config class is the original llama config even with the remote model
+        self.assertTrue(custom_model.config.__class__.__module__.startswith("transformers."))
+
+        # Check that if we do NOT use `trust_remote_code=True`, then the registration of the same model type with the
+        # same name and same config class before it will not force a model type of the wrong type, i.e. we use the native LlamaModel
+        native_model = AutoModel.from_pretrained("hf-internal-testing/tiny-llama")
+        # Those 2 checks are equivalent, but keep both to make sure implementation of `is_remote_code` will not diverge
+        self.assertFalse(native_model.is_remote_code())
+        self.assertTrue(native_model.__class__.__module__.startswith("transformers."))
+        # Check config as well
+        self.assertTrue(native_model.config.__class__.__module__.startswith("transformers."))
+
+    def test_custom_code_is_detected(self):
+        """Test that classes defined in the current context (user module, notebook, ...) will be detected as custom code"""
+
+        class MyNewModel(PreTrainedModel):
+            def __init__(self, config):
+                super().__init__(config)
+                self.foo = nn.Linear(2, 2)
+                self.post_init()
+
+            def forward(self, x):
+                return self.foo(x)
+
+        # This is a type created in the current session - it should be custom code, but not remote code
+        model = MyNewModel(PreTrainedConfig())
+
+        self.assertTrue(model.is_custom_code())
+        self.assertFalse(model.is_remote_code())
