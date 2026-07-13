@@ -1111,10 +1111,8 @@ class Cache:
             self.only_non_sliding = offload_only_non_sliding
             self.prefetch_stream = torch.Stream() if _is_torch_greater_or_equal_than_2_7 else torch.cuda.Stream()
 
-        # Cache metadata (sequence length, mask sizes) used to be readable from any KV layer, but in heterogeneous
-        # models a skip can replace the submodule that updates a layer's KV cache, leaving it unused, so
-        # `get_representative_kv_layer_idx` picks an updated layer instead — using the layers' lengths when this
-        # is `None`, or these indices when a subclass precomputes them (see `StaticCache`).
+        # Precomputed by subclasses (e.g. StaticCache) for compile-safe representative-layer lookup; None means
+        # fall back to per-layer seq-length checks in `get_representative_kv_layer_idx`.
         self._enabled_kv_layer_indices: tuple[int, ...] | None = None
 
     def __repr__(self):
@@ -1697,10 +1695,7 @@ class StaticCache(Cache):
             layers.append(layer_cls(**layer_kwargs))
         super().__init__(layers=layers, offloading=offloading, offload_only_non_sliding=offload_only_non_sliding)
 
-        # Under `torch.compile` a static layer's length is a tensor, so `get_representative_kv_layer_idx` cannot
-        # pick a layer by length and relies on these precomputed indices instead. In heterogeneous configs, layers
-        # that never update their KV cache because a skip replaced the submodule responsible for it (e.g. layers
-        # that skip attention) cannot represent KV-cache metadata, so they are excluded.
+        # Exclude layers that never update their KV cache (e.g. attention-skipped layers in heterogeneous configs).
         self._enabled_kv_layer_indices = tuple(
             layer_idx
             for layer_idx, layer in enumerate(layers)
