@@ -331,24 +331,13 @@ class GitPreTrainedModel(PreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
+        super()._init_weights(module)
         if isinstance(module, GitVisionEmbeddings):
             init.normal_(module.class_embedding, mean=0.0, std=self.config.initializer_range)
             init.normal_(module.patch_embedding.weight, std=self.config.initializer_range)
             init.normal_(module.position_embedding.weight, std=self.config.initializer_range)
             init.copy_(module.position_ids, torch.arange(module.position_ids.shape[-1]).expand((1, -1)))
-        if isinstance(module, nn.Linear):
-            init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
-            if module.bias is not None:
-                init.zeros_(module.bias)
-        elif isinstance(module, nn.Embedding):
-            init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
-            # Here we need the check explicitly, as we slice the weight in the `zeros_` call, so it looses the flag
-            if module.padding_idx is not None and not getattr(module.weight, "_is_hf_initialized", False):
-                init.zeros_(module.weight[module.padding_idx])
-        elif isinstance(module, nn.LayerNorm):
-            init.zeros_(module.bias)
-            init.ones_(module.weight)
-        elif isinstance(module, GitEmbeddings):
+        if isinstance(module, GitEmbeddings):
             init.copy_(module.position_ids, torch.arange(module.position_ids.shape[-1]).expand((1, -1)))
 
 
@@ -847,10 +836,12 @@ class GitModel(GitPreTrainedModel):
 
             # concatenate patch token and text token embeddings
             embedding_output = torch.cat((projected_visual_features, embedding_output), dim=1)
-            image_token_type_ids = torch.ones_like(projected_visual_features, dtype=torch.int)[..., 0]
+            image_token_type_ids = torch.ones_like(projected_visual_features, dtype=token_type_ids.dtype)[..., 0]
             token_type_ids = torch.cat([image_token_type_ids, token_type_ids], dim=-1)
             if attention_mask is not None:
-                attention_mask = torch.cat([torch.ones_like(image_token_type_ids), attention_mask], dim=-1)
+                attention_mask = torch.cat(
+                    [torch.ones_like(image_token_type_ids, dtype=attention_mask.dtype), attention_mask], dim=-1
+                )
         elif past_key_values is not None and input_ids.shape[1] == 1:
             # Expand attention mask and cache position with image tokens because GIT doesn't add image
             # placeholder tokens when processing. Doesn't worth the refactor, low usage!
