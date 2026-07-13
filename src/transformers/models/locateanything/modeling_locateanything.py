@@ -34,7 +34,7 @@ from ...activations import PytorchGELUTanh
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
 from ...modeling_outputs import BaseModelOutputWithPast, ModelOutput
-from ...modeling_utils import PreTrainedModel
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import (
     TransformersKwargs,
@@ -47,11 +47,6 @@ from ...utils import (
 from ..auto import AutoModel
 from .configuration_locateanything import LocateAnythingConfig, MoonViTConfig
 
-
-if is_flash_attn_2_available():
-    from flash_attn import flash_attn_varlen_func
-else:
-    flash_attn_varlen_func = None
 
 logger = logging.get_logger(__name__)
 
@@ -226,128 +221,36 @@ class MLP2(nn.Module):
         return self.fc1(x)
 
 
-def multihead_attention(
-    q: torch.Tensor,
-    k: torch.Tensor,
-    v: torch.Tensor,
-    q_cu_seqlens: torch.Tensor | None = None,
-    k_cu_seqlens: torch.Tensor | None = None,
+def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
+    """Expand key/value heads for grouped-query attention (a no-op for MoonViT's multi-head attention)."""
+    batch, num_key_value_heads, slen, head_dim = hidden_states.shape
+    if n_rep == 1:
+        return hidden_states
+    hidden_states = hidden_states[:, :, None, :, :].expand(batch, num_key_value_heads, n_rep, slen, head_dim)
+    return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
+
+
+def eager_attention_forward(
+    module: nn.Module,
+    query: torch.Tensor,
+    key: torch.Tensor,
+    value: torch.Tensor,
+    attention_mask: torch.Tensor | None,
+    scaling: float,
+    dropout: float = 0.0,
+    **kwargs,
 ):
-    """Multi-head attention using flash attention 2.
+    key_states = repeat_kv(key, module.num_key_value_groups)
+    value_states = repeat_kv(value, module.num_key_value_groups)
 
-    Args:
-        q, k, v: tensor of shape (batch_size, seqlen, num_heads, head_dim),
-            or (tot_seqlens, num_heads, head_dim) if packing.
-        q_cu_seqlens (torch.Tensor): cumulative sequence lengths of q.
-            The first element should be 0 and the last element should be q.shape[0].
-        k_cu_seqlens (torch.Tensor): cumulative sequence lengths of k.
-            The first element should be 0 and the last element should be k.shape[0].
-
-    Returns:
-        output: shape (batch_size, seqlen, dim) or (tot_seqlens, dim) if packing,
-            where dim = num_heads * head_dim
-    """
-    if flash_attn_varlen_func is None:
-        logger.warning_once("flash_attn is not available for MoonViT; falling back to sdpa attention.")
-        return sdpa_attention(
-            q,
-            k,
-            v,
-            q_cu_seqlens=q_cu_seqlens,
-            k_cu_seqlens=k_cu_seqlens,
-        )
-
-    # Unified format legal check
-    if not (q.dim() == k.dim() == v.dim() == 3):
-        raise ValueError("q, k, v must have 3 dims")
-    if q_cu_seqlens[-1] != q.shape[0]:
-        raise ValueError("q_cu_seqlens must sum to q.shape[0]")
-    if not (k_cu_seqlens[-1] == k.shape[0] == v.shape[0]):
-        raise ValueError("k_cu_seqlens must sum to k.shape[0]")
-    if q.dtype not in (torch.bfloat16, torch.float16):
-        raise ValueError(f"unsupported dtype {q.dtype} for multihead attn")
-
-    max_seqlen_q = (q_cu_seqlens[1:] - q_cu_seqlens[:-1]).max().item()
-    max_seqlen_k = (k_cu_seqlens[1:] - k_cu_seqlens[:-1]).max().item()
-    attn_out = flash_attn_varlen_func(
-        q,
-        k,
-        v,
-        q_cu_seqlens,
-        k_cu_seqlens,
-        max_seqlen_q,
-        max_seqlen_k,
-        causal=False,
-    )
-    attn_out = attn_out.flatten(start_dim=-2)
-
-    return attn_out
-
-
-def sdpa_attention(
-    q: torch.Tensor,
-    k: torch.Tensor,
-    v: torch.Tensor,
-    q_cu_seqlens: torch.Tensor | None = None,
-    k_cu_seqlens: torch.Tensor | None = None,
-) -> torch.Tensor:
-    """SDPA attention.
-
-    Args:
-        q, k, v: tensor of shape (batch_size, seqlen, num_heads, head_dim),
-            or (tot_seqlens, num_heads, head_dim) if packing.
-    """
-    seq_length = q.shape[0]
-    attention_mask = torch.zeros([1, seq_length, seq_length], device=q.device, dtype=torch.bool)
-    for i in range(1, len(q_cu_seqlens)):
-        attention_mask[
-            ...,
-            q_cu_seqlens[i - 1] : q_cu_seqlens[i],
-            q_cu_seqlens[i - 1] : q_cu_seqlens[i],
-        ] = True
-    q = q.transpose(0, 1)
-    k = k.transpose(0, 1)
-    v = v.transpose(0, 1)
-    attn_output = F.scaled_dot_product_attention(q, k, v, attention_mask, dropout_p=0.0)
-    attn_output = attn_output.transpose(0, 1)
-    attn_output = attn_output.reshape(seq_length, -1)
-    return attn_output
-
-
-def eager_attention(
-    q: torch.Tensor,
-    k: torch.Tensor,
-    v: torch.Tensor,
-    q_cu_seqlens: torch.Tensor | None = None,
-    k_cu_seqlens: torch.Tensor | None = None,
-) -> torch.Tensor:
-    seq_length = q.shape[0]
-    attention_mask = torch.zeros([1, seq_length, seq_length], device=q.device, dtype=torch.bool)
-    for i in range(1, len(q_cu_seqlens)):
-        attention_mask[
-            ...,
-            q_cu_seqlens[i - 1] : q_cu_seqlens[i],
-            q_cu_seqlens[i - 1] : q_cu_seqlens[i],
-        ] = True
-    q = q.transpose(0, 1)
-    k = k.transpose(0, 1)
-    v = v.transpose(0, 1)
-
-    attn_weight = q @ k.transpose(-2, -1) / math.sqrt(q.shape[-1])
-    attn_weight += attention_mask
-    attn_weight = torch.softmax(attn_weight, dim=-1, dtype=torch.float32).to(q.dtype)
-
-    attn_output = attn_weight @ v
-    attn_output = attn_output.transpose(0, 1)
-    attn_output = attn_output.reshape(seq_length, -1)
-    return attn_output
-
-
-VL_VISION_ATTENTION_FUNCTIONS = {
-    "flash_attention_2": multihead_attention,
-    "sdpa": sdpa_attention,
-    "eager": eager_attention,
-}
+    attn_weights = torch.matmul(query, key_states.transpose(2, 3)) * scaling
+    if attention_mask is not None:
+        attn_weights = attn_weights + attention_mask
+    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
+    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
+    attn_output = torch.matmul(attn_weights, value_states)
+    attn_output = attn_output.transpose(1, 2).contiguous()
+    return attn_output, attn_weights
 
 
 def _apply_rope_input_validation(x, freqs_cis):
@@ -385,6 +288,7 @@ def apply_rope(xq: torch.Tensor, xk: torch.Tensor, freqs_cis: torch.Tensor) -> t
 class MoonVitEncoderLayer(nn.Module):
     def __init__(
         self,
+        config: MoonViTConfig,
         num_heads: int,
         hidden_dim: int,
         mlp_dim: int,
@@ -394,10 +298,14 @@ class MoonVitEncoderLayer(nn.Module):
         attn_bias: bool = False,
     ):
         super().__init__()
+        self.config = config
         self.num_heads = num_heads
         self.hidden_dim = hidden_dim
         self.hidden_size_per_attention_head = self.hidden_dim // self.num_heads
         self.attn_implementation = attn_implementation
+        self.scaling = self.hidden_size_per_attention_head**-0.5
+        self.num_key_value_groups = 1  # multi-head attention; needed by the attention interface
+        self.is_causal = False
 
         self.norm0 = nn.LayerNorm(hidden_dim)
         self.norm1 = nn.LayerNorm(hidden_dim)
@@ -413,27 +321,54 @@ class MoonVitEncoderLayer(nn.Module):
     ):
         """
         Args:
-            x (torch.Tensor): (batch_size, seqlen, hidden_dim)
-            cu_seqlens (torch.Tensor):
+            x (torch.Tensor): packed input of shape (total_seqlen, hidden_dim).
+            cu_seqlens (torch.Tensor): cumulative per-image sequence lengths that delimit the packed sequence.
         """
-        xqkv = self.wqkv(x)
-
-        qkv_shape = xqkv.size()[:-1] + (
-            3,
-            self.num_heads,
-            self.hidden_size_per_attention_head,
-        )
-        # xqkv: (batch_size, seqlen, 3, nheads, headdim)
-        xqkv = xqkv.view(*qkv_shape)
-        xq, xk, xv = torch.unbind(xqkv, dim=-3)
-
+        seq_length = x.shape[0]
+        xq, xk, xv = self.wqkv(x).view(seq_length, 3, self.num_heads, -1).permute(1, 0, 2, 3).unbind(0)
         xq, xk = apply_rope(xq, xk, rope_freqs_cis)
 
-        attn_func = VL_VISION_ATTENTION_FUNCTIONS[self.attn_implementation]
-        attn_out = attn_func(xq, xk, xv, q_cu_seqlens=cu_seqlens, k_cu_seqlens=cu_seqlens)
+        # `attention_interface` expects `(batch, num_heads, seq, head_dim)`.
+        xq = xq.transpose(0, 1).unsqueeze(0)
+        xk = xk.transpose(0, 1).unsqueeze(0)
+        xv = xv.transpose(0, 1).unsqueeze(0)
 
-        attn_out = self.wo(attn_out)
-        return attn_out
+        attention_interface = ALL_ATTENTION_FUNCTIONS.get_interface(self.attn_implementation, eager_attention_forward)
+
+        if self.attn_implementation == "flash_attention_2":
+            # Flash attention consumes `cu_seqlens` directly for variable-length packing.
+            max_seqlen = (cu_seqlens[1:] - cu_seqlens[:-1]).max()
+            attn_out, _ = attention_interface(
+                self,
+                xq,
+                xk,
+                xv,
+                attention_mask=None,
+                scaling=self.scaling,
+                dropout=0.0,
+                cu_seq_lens_q=cu_seqlens,
+                cu_seq_lens_k=cu_seqlens,
+                max_length_q=max_seqlen,
+                max_length_k=max_seqlen,
+                is_causal=False,
+            )
+        else:
+            # sdpa / eager: attend within each image independently (block-diagonal by construction),
+            # which also avoids materializing an O(L^2) attention mask over the whole packed sequence.
+            lengths = (cu_seqlens[1:] - cu_seqlens[:-1]).tolist()
+            splits = [torch.split(tensor, lengths, dim=2) for tensor in (xq, xk, xv)]
+            attn_out = torch.cat(
+                [
+                    attention_interface(
+                        self, q, k, v, attention_mask=None, scaling=self.scaling, dropout=0.0, is_causal=False
+                    )[0]
+                    for q, k, v in zip(*splits)
+                ],
+                dim=1,
+            )
+
+        attn_out = attn_out.reshape(seq_length, -1)
+        return self.wo(attn_out)
 
     def forward(
         self,
@@ -540,6 +475,7 @@ class MoonViTPreTrainedEncoder(PreTrainedModel):
             hidden_dim=config.hidden_size,
             num_layers=config.num_hidden_layers,
             block_cfg={
+                "config": config,
                 "num_heads": config.num_attention_heads,
                 "hidden_dim": config.hidden_size,
                 "mlp_dim": config.intermediate_size,
