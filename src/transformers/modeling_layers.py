@@ -345,7 +345,7 @@ class MtpLayer(nn.Module):
         return hidden_states
 
 
-class MtpLayerStack(PreTrainedModel):
+class MtpModel(PreTrainedModel):
     # These act as dummy values, that are properly set on the upstream model (without it, instantiating this model would
     # fail on an existing model's config where the attn is already set to a custom value)
     _supports_sdpa = True
@@ -362,10 +362,11 @@ class MtpLayerStack(PreTrainedModel):
         self.loss_type = "ForCausalLM"
         self.num_mtp_layers = num_mtp_layers
         # Infer the type of the layers based on the main model
-        layer_cls = type(main_model.base_model.layers[-1])
+        base_model = getattr(main_model.base_model, "language_model", main_model.base_model)
+        layer_cls = type(base_model.layers[-1])
         norm_cls = next(
             type(module)
-            for name, module in main_model.base_model.layers[-1].named_modules()  # type: ignore
+            for name, module in base_model.layers[-1].named_modules()  # type: ignore
             if "norm" in name
         )
 
@@ -388,7 +389,8 @@ class MtpLayerStack(PreTrainedModel):
         self.embed_tokens = main_model.get_input_embeddings()
         self.shared_head = main_model.lm_head
         # Use the same rotary class (it only has non-persistent buffers)
-        self.rotary_emb = main_model.base_model.rotary_emb
+        base_model = getattr(main_model.base_model, "language_model", main_model.base_model)
+        self.rotary_emb = base_model.rotary_emb
 
     def forward(
         self,
@@ -487,7 +489,7 @@ class MtpLayerStack(PreTrainedModel):
         return new_candidate_ids, candidate_logits, loss
 
     @classmethod
-    def from_pretrained(cls, main_model: PreTrainedModel, device_map=None, **kwargs) -> MtpLayerStack:
+    def from_pretrained(cls, main_model: PreTrainedModel, device_map=None, **kwargs) -> MtpModel:
         pretrained_model_name_or_path = main_model.config.name_or_path
         num_hidden_layers = main_model.config.get_text_config().num_hidden_layers
         # Heuristic: the main model should have the mtp layer patterns under `_keys_to_ignore_on_load_unexpected` to avoid
@@ -520,9 +522,14 @@ class MtpLayerStack(PreTrainedModel):
             user_agent=None,
             is_remote_code=False,
         )
-        # Filter out only the files containing mtp weights
-        mtp_weight_map = {k: v for k, v in sharded_metadata["weight_map"].items() if mtp_regex.search(k) is not None}
-        mtp_files = [file for file in checkpoint_files if os.path.basename(file) in mtp_weight_map.values()]
+        mtp_files = checkpoint_files
+        mtp_weight_map = None
+        # Filter out only the files containing mtp weights if we have sharded checkpoints
+        if sharded_metadata is not None:
+            mtp_weight_map = {
+                k: v for k, v in sharded_metadata["weight_map"].items() if mtp_regex.search(k) is not None
+            }
+            mtp_files = [file for file in checkpoint_files if os.path.basename(file) in mtp_weight_map.values()]
 
         # Open the files, get the slices corresponding only to mtp weights, rename them, and load them
         mtp_state_dict = {}
@@ -532,7 +539,9 @@ class MtpLayerStack(PreTrainedModel):
             all_pointer.add(file_pointer)
             for k in file_pointer.keys():
                 # It's one of the mtp weights
-                if k in mtp_weight_map.keys():
+                if (mtp_weight_map is not None and k in mtp_weight_map.keys()) or (
+                    mtp_weight_map is None and mtp_regex.search(k) is not None
+                ):
                     mtp_state_dict[k] = file_pointer.get_slice(k)  # don't materialize yet
 
         # For the correct conversions, we need first the mtp-specific renamings, then the main_model conversions

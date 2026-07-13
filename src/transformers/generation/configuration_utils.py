@@ -621,7 +621,6 @@ class GenerationConfig(PushToHubMixin):
             "assistant_confidence_threshold": 0.4,
             "assistant_lookbehind": 10,
             "target_lookbehind": 10,
-            "use_mtp": False,
             # Deprecated arguments (moved to the Hub). TODO joao, manuel: remove in v4.62.0
             "num_beam_groups": 1,
             "diversity_penalty": 0.0,

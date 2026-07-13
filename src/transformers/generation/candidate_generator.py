@@ -1434,7 +1434,7 @@ class MTPCandidateGenerator(AssistedCandidateGenerator):
         model_kwargs: dict[str, Any],
         logits_processor: Optional["LogitsProcessorList"] = None,
     ):
-        from ..modeling_layers import MtpLayerStack
+        from ..modeling_layers import MtpModel
 
         self.num_mtp_layers = getattr(main_model.config.get_text_config(), "num_mtp_layers", None)
         if self.num_mtp_layers is None:
@@ -1445,7 +1445,7 @@ class MTPCandidateGenerator(AssistedCandidateGenerator):
 
         # Heuristic: use the device of the last layer of the main model for the MTP layers
         self.device = next(x.device for x in main_model.base_model.layers[-1].parameters())  # type: ignore
-        self.mtp_model = MtpLayerStack.from_pretrained(main_model, device_map={"": self.device})
+        self.mtp_model = MtpModel.from_pretrained(main_model, device_map={"": self.device})
 
         # Artificially add the MTP layers to the cache
         if (cache := model_kwargs.get("past_key_values")) is not None:

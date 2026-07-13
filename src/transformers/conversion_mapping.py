@@ -1577,8 +1577,9 @@ def _build_checkpoint_conversion_mapping():
         WeightRenaming("mlp.shared_expert.", "mlp.shared_experts."),
     ]
 
-    mapping["MtpLayerStack"] = [
+    mapping["MtpModel"] = [
         PrefixChange(prefix_to_remove="model"),
+        PrefixChange(prefix_to_remove="mtp"),
         WeightRenaming(source_patterns=".shared_head.norm.", target_patterns=".post_norm."),
         WeightRenaming(source_patterns=".mtp_block.enorm.", target_patterns=".enorm."),
         WeightRenaming(source_patterns=".mtp_block.hnorm.", target_patterns=".hnorm."),
