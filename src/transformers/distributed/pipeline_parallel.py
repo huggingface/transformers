@@ -13,45 +13,61 @@
 # limitations under the License.
 from __future__ import annotations
 
-import os
 from typing import TYPE_CHECKING
 
-from ..utils import is_torch_available, is_torch_greater_or_equal
-from .utils import _ensure_torch_distributed
-
+from ..utils import is_torch_available
 
 if TYPE_CHECKING:
-    from .configuration_utils import DistributedConfig
+    import torch.nn as nn
 
 if is_torch_available():
     import torch
+    import torch.nn as nn
 
 
-def initialize_pipeline_parallelism(
-    distributed_config: DistributedConfig,
-):
-    if not is_torch_greater_or_equal("2.5"):
-        raise OSError("Pipeline parallelism with DistributedConfig requires `torch>=2.5`.")
+class PPMissingLayer(nn.Identity):
+    """A placeholder layer for missing layers in a pipeline parallel model."""
 
-    device_type = torch._C._get_accelerator().type
-    _ensure_torch_distributed(device_type)
+    def __init__(self, *args, **kwargs):
+        super().__init__()
 
-    world_size = torch.distributed.get_world_size()
-    pp_size = distributed_config.pp_size
-    if world_size != pp_size:
-        raise RuntimeError(f"world_size ({world_size}) must be equal to pp_size ({pp_size})")
+    def forward(self, *args, **kwargs):
+        """Return the first arg from args or the first value from kwargs."""
+        return args[0] if args else next(iter(kwargs.values()))
 
-    if device_type != "cpu":
-        local_rank = int(os.environ.get("LOCAL_RANK", 0))
-        getattr(torch, device_type).set_device(local_rank)
-        device_map = torch.device(device_type, local_rank)
-    else:
-        device_map = torch.device(device_type)
-    
 
-    assert world_size == pp_size, f"world_size ({world_size}) must be equal to pp_size ({pp_size})"
-    mesh = torch.distributed.init_device_mesh(device_type, (pp_size,), mesh_dim_names=("pp",))
+def apply_pipeline_parallelism(model: nn.Module, device_mesh: torch.distributed.device_mesh.DeviceMesh) -> nn.Module:
+    """Naive even split of ``base_model.layers`` across PP ranks."""
+    pp_size = device_mesh.size()
+    if pp_size <= 1:
+        return model
 
-    return device_map, mesh
+    pp_rank = device_mesh.get_local_rank()
+    is_first_rank = pp_rank == 0
+    is_last_rank = pp_rank == pp_size - 1
+
+    base_model = getattr(model, model.base_model_prefix)
+    layers = base_model.layers
+    num_layers = len(layers)
+
+    layers_per_rank = num_layers // pp_size
+    start_layer = pp_rank * layers_per_rank
+    end_layer = num_layers if is_last_rank else start_layer + layers_per_rank
+
+    if not is_first_rank:
+        base_model.embed_tokens = PPMissingLayer()
+
+    for i in range(num_layers):
+        if i < start_layer or i >= end_layer:
+            layers[i] = PPMissingLayer()
+
+    if not is_last_rank:
+        base_model.norm = PPMissingLayer()
+        model.lm_head = PPMissingLayer()
+
+    model._pp_rank = pp_rank
+    model._pp_size = pp_size
+    return model
+
 
 #TODO(3outeille): probably have to introduce pipeline_communicate here ?

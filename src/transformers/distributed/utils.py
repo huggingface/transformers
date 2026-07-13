@@ -149,6 +149,33 @@ def initialize_fully_sharded_data_parallelism(distributed_config: DistributedCon
     return device_map, mesh
 
 
+def initialize_pipeline_parallelism(
+    distributed_config: DistributedConfig,
+):
+    if not is_torch_greater_or_equal("2.5"):
+        raise OSError("Pipeline parallelism with DistributedConfig requires `torch>=2.5`.")
+
+    device_type = torch._C._get_accelerator().type
+    _ensure_torch_distributed(device_type)
+
+    world_size = torch.distributed.get_world_size()
+    pp_size = distributed_config.pp_size
+    if world_size != pp_size:
+        raise RuntimeError(f"world_size ({world_size}) must be equal to pp_size ({pp_size})")
+
+    if device_type != "cpu":
+        local_rank = int(os.environ.get("LOCAL_RANK", 0))
+        getattr(torch, device_type).set_device(local_rank)
+        device_map = torch.device(device_type, local_rank)
+    else:
+        device_map = torch.device(device_type)
+
+    assert world_size == pp_size, f"world_size ({world_size}) must be equal to pp_size ({pp_size})"
+    mesh = torch.distributed.init_device_mesh(device_type, (pp_size,), mesh_dim_names=("pp",))
+
+    return device_map, mesh
+
+
 def gather_full_state_dict(model) -> dict[str, torch.Tensor]:
     """Gather FSDP-sharded params to full plain CPU tensors.
 
