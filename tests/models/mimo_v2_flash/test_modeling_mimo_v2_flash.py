@@ -65,38 +65,6 @@ class MiMoV2FlashModelTester(CausalLMModelTester):
 class MiMoV2FlashModelTest(CausalLMModelTest, unittest.TestCase):
     model_tester_class = MiMoV2FlashModelTester
 
-    @unittest.skip("MiMo-V2-Flash uses asymmetric qk/v head dimensions and does not support FlashAttention2.")
-    def test_eager_matches_fa2_generate(self):
-        pass
-
-    @unittest.skip("MiMo-V2-Flash uses asymmetric qk/v head dimensions and does not support FlashAttention2.")
-    def test_flash_attention_2_continue_generate_with_position_ids(self):
-        pass
-
-    @unittest.skip("MiMo-V2-Flash uses asymmetric qk/v head dimensions and does not support FlashAttention2.")
-    def test_flash_attention_2_padding_matches_padding_free_with_position_ids(self):
-        pass
-
-    @unittest.skip("MiMo-V2-Flash uses asymmetric qk/v head dimensions and does not support FlashAttention2.")
-    def test_flash_attention_2_padding_matches_padding_free_with_position_ids_and_fa_kwargs(self):
-        pass
-
-    @unittest.skip("MiMo-V2-Flash uses asymmetric qk/v head dimensions and does not support FlashAttention2.")
-    def test_flash_attn_2_equivalence(self):
-        pass
-
-    @unittest.skip("MiMo-V2-Flash uses asymmetric qk/v head dimensions and does not support FlashAttention2.")
-    def test_flash_attn_2_fp32_ln(self):
-        pass
-
-    @unittest.skip("MiMo-V2-Flash uses asymmetric qk/v head dimensions and does not support FlashAttention2.")
-    def test_flash_attn_2_from_config(self):
-        pass
-
-    @unittest.skip("MiMo-V2-Flash uses sliding attention layers, which are not compatible with QuantizedCache.")
-    def test_generate_with_quant_cache(self):
-        pass
-
     def _check_past_key_values_for_generate(self, batch_size, past_key_values, seq_length, config):
         # SWA layers double the kv heads (see MiMoV2FlashAttention.__init__), so the per-layer
         # kv head count is layer-type dependent. Same override pattern as MiniMax.
