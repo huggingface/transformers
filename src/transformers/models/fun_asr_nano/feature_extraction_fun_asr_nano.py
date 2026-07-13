@@ -203,11 +203,11 @@ class FunAsrNanoFeatureExtractor(SequenceFeatureExtractor):
         # Kaldi fbank + LFR are computed per sample (variable length), then padded jointly via `self.pad`.
         lfr_features = []
         for waveform in raw_speech:
-            waveform = torch.as_tensor(np.asarray(waveform), dtype=torch.float32)
+            waveform = torch.as_tensor(waveform, dtype=torch.float32)
             fbank = self._extract_fbank_features(waveform)
             lfr_features.append(self._apply_lfr(fbank))
 
-        batched = BatchFeature({"input_features": [feat.numpy() for feat in lfr_features]})
+        batched = BatchFeature({"input_features": lfr_features})
         padded_inputs = self.pad(
             batched,
             padding=padding,
@@ -228,7 +228,7 @@ class FunAsrNanoFeatureExtractor(SequenceFeatureExtractor):
         if not output_attention_mask:
             padded_inputs.pop("attention_mask")
 
-        return BatchFeature(padded_inputs, tensor_type=return_tensors)
+        return padded_inputs
 
 
 __all__ = ["FunAsrNanoFeatureExtractor"]
