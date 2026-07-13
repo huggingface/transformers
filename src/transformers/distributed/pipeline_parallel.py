@@ -29,8 +29,6 @@ if is_torch_available():
 
 def initialize_pipeline_parallelism(
     distributed_config: DistributedConfig,
-    device_mesh=None,
-    device_map=None,
 ):
     if not is_torch_greater_or_equal("2.5"):
         raise OSError("Pipeline parallelism with DistributedConfig requires `torch>=2.5`.")
