@@ -23,7 +23,7 @@ from torch import nn
 from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
-from ...integrations import use_kernel_func_from_hub
+from ...integrations import use_kernel_func_from_hub, use_kernelized_func
 from ...integrations.accelerate import force_accelerate_hooks
 from ...masking_utils import create_causal_mask, create_recurrent_attention_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
@@ -31,10 +31,8 @@ from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPas
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
-from ...utils.generic import merge_with_config_defaults, no_inherit_decorator
-from ...utils.import_utils import (
-    is_flash_linear_attention_available,
-)
+from ...utils.generic import merge_with_config_defaults, no_inherit_decorator, replace_with_function_from_package
+from ...utils.import_utils import is_flash_linear_attention_available
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ..bamba.modeling_bamba import apply_mask_to_padding_states, apply_rotary_pos_emb
 from ..gemma2.modeling_gemma2 import Gemma2RotaryEmbedding
@@ -182,6 +180,7 @@ class Qwen3NextAttention(Qwen3MoeAttention):
 
 
 @use_kernel_func_from_hub("causal_conv1d_update")
+@replace_with_function_from_package("causal_conv1d_update", "causal_conv1d")
 def causal_conv1d_update(
     hidden_states: torch.Tensor,
     conv_state: torch.Tensor,
@@ -202,6 +201,7 @@ def causal_conv1d_update(
 
 
 @use_kernel_func_from_hub("causal_conv1d_fn")
+@replace_with_function_from_package("causal_conv1d_update", "causal_conv1d")
 def causal_conv1d_fn(
     hidden_states: torch.Tensor,
     weight: nn.Parameter,
@@ -355,6 +355,7 @@ def torch_recurrent_gated_delta_rule(
     return core_attn_out, last_recurrent_state
 
 
+@use_kernelized_func([causal_conv1d_update, causal_conv1d_fn])
 class Qwen3NextGatedDeltaNet(nn.Module):
     def __init__(self, config: Qwen3NextConfig, layer_idx: int):
         super().__init__()

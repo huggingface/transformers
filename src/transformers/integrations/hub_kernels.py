@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import functools
+import importlib
 import os
 import re
 import sys
@@ -531,8 +532,6 @@ def lazy_load_kernel(kernel_name: str, mapping: dict[str, ModuleType | None] = _
 
     else:
         # Try to import is_{kernel_name}_available from ..utils
-        import importlib
-
         new_kernel_name = kernel_name.replace("-", "_")
         func_name = f"is_{new_kernel_name}_available"
 
