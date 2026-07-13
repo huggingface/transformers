@@ -114,7 +114,6 @@ class FunAsrNanoEncoderConfig(PreTrainedConfig):
     attention_dropout: float = 0.0
     kernel_size: int = 11
     sanm_shift: int = 0
-    initializer_range: float = 0.02
 
 
 @auto_docstring(checkpoint="FunAudioLLM/Fun-ASR-Nano-2512-hf")

@@ -173,6 +173,9 @@ class FunAsrNanoForConditionalGenerationModelTest(ALMModelTest, unittest.TestCas
             "model.multi_modal_projector.linear_2.bias",
         )
 
+    def test_encoder_config_uses_common_initializer_default(self):
+        self.assertNotIn("initializer_range", FunAsrNanoEncoderConfig.__annotations__)
+
     def test_forward_docstring_uses_fun_asr_nano_checkpoint(self):
         docstring = FunAsrNanoForConditionalGeneration.forward.__doc__
         self.assertIn("FunAudioLLM/Fun-ASR-Nano-2512-hf", docstring)
@@ -274,7 +277,7 @@ class FunAsrNanoIntegrationTest(unittest.TestCase):
     def _decode_generated(self, generated_ids, inputs):
         """Decode only newly generated tokens, excluding the prompt."""
         generated_ids = generated_ids[:, inputs.input_ids.shape[1] :]
-        return self.processor.batch_decode(generated_ids, skip_special_tokens=True)
+        return self.processor.decode(generated_ids, skip_special_tokens=True)
 
     def _prepare_inputs(self, audio, prompt_text):
         """Prepare model inputs using apply_chat_template."""

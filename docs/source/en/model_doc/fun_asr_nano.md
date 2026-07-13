@@ -22,7 +22,7 @@ The model was proposed in [Fun-ASR: An Industrial-Grade Speech Recognition Syste
 
 ### Architecture
 
-Fun-ASR-Nano consists of four components:
+Fun-ASR-Nano consists of three components:
 
 1. **Audio Encoder** (SenseVoiceEncoderSmall): A 70-layer SANM (Self-Attention with FSMN Memory) encoder that combines multi-head self-attention with Feedforward Sequential Memory Networks for efficient speech feature extraction.
 
@@ -32,10 +32,9 @@ Fun-ASR-Nano consists of four components:
 
 ### Key Features
 
-- **31 languages**: Chinese (including 7 dialects and 26 regional accents), English, Japanese, and 20+ European languages
+- **Chinese, English, and Japanese**, including 7 Chinese dialects and 26 regional accents
 - **Hotword customization** for domain-specific vocabulary
 - **Native punctuation** output (no separate punctuation model needed)
-- **Streaming support** for chunk-by-chunk inference
 
 ## Usage
 
@@ -54,7 +53,7 @@ inputs = processor.apply_transcription_request(audio=audio_url, return_tensors="
 
 generated_ids = model.generate(**inputs, max_new_tokens=200)
 generated_ids = generated_ids[:, inputs.input_ids.shape[1]:]
-print(processor.batch_decode(generated_ids, skip_special_tokens=True)[0])
+print(processor.decode(generated_ids, skip_special_tokens=True)[0])
 ```
 
 ### Batch inference
@@ -77,7 +76,7 @@ inputs = processor.apply_transcription_request(audio=audio_urls, prompt=prompts,
 
 generated_ids = model.generate(**inputs, max_new_tokens=200)
 generated_ids = generated_ids[:, inputs.input_ids.shape[1]:]
-print(processor.batch_decode(generated_ids, skip_special_tokens=True))
+print(processor.decode(generated_ids, skip_special_tokens=True))
 ```
 
 ### Training
@@ -127,7 +126,7 @@ inputs = processor.apply_transcription_request(audio=audio_url, return_tensors="
 
 generated_ids = model.generate(**inputs, max_new_tokens=200)
 generated_ids = generated_ids[:, inputs.input_ids.shape[1]:]
-print(processor.batch_decode(generated_ids, skip_special_tokens=True)[0])
+print(processor.decode(generated_ids, skip_special_tokens=True)[0])
 ```
 
 ## FunAsrNanoConfig

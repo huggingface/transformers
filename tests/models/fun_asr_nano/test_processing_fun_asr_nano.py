@@ -144,6 +144,14 @@ class FunAsrNanoProcessorTest(unittest.TestCase):
 
         self.assertEqual(decoded, "hello")
 
+    def test_decode_handles_batches_without_processor_override(self):
+        processor = FunAsrNanoProcessor.__new__(FunAsrNanoProcessor)
+        processor.tokenizer = SimpleNamespace(decode=lambda *args, **kwargs: ["first", "second"])
+
+        self.assertEqual(processor.decode([[1], [2]]), ["first", "second"])
+        self.assertNotIn("batch_decode", ModularFunAsrNanoProcessor.__dict__)
+        self.assertIs(ModularFunAsrNanoProcessor.batch_decode, AudioFlamingo3Processor.batch_decode)
+
     def test_unused_audio_metadata_is_removed_from_model_inputs(self):
         processor = FunAsrNanoProcessor.__new__(FunAsrNanoProcessor)
         self.assertEqual(set(processor.unused_input_names), {"feature_lengths", "num_audio_tokens"})
