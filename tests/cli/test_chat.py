@@ -14,8 +14,16 @@
 import json
 import os
 import tempfile
+from unittest.mock import patch
 
-from transformers.cli.chat import new_chat_history, parse_generate_flags, save_chat
+from transformers.cli.chat import (
+    Chat,
+    RichInterface,
+    management_base_url,
+    new_chat_history,
+    parse_generate_flags,
+    save_chat,
+)
 
 
 def test_help(cli):
@@ -44,3 +52,25 @@ def test_parse_generate_flags():
     parsed = parse_generate_flags(["temperature=0.5", "max_new_tokens=10"])
     assert parsed["temperature"] == 0.5
     assert parsed["max_new_tokens"] == 10
+
+
+def test_management_base_url():
+    assert management_base_url("http://localhost:8000/v1") == "http://localhost:8000"
+    assert management_base_url("http://localhost:8000/v1/") == "http://localhost:8000"
+    assert management_base_url("http://localhost:8000") == "http://localhost:8000"
+    assert management_base_url("http://localhost:8000/") == "http://localhost:8000"
+    assert management_base_url("https://example.com/proxy/v1") == "https://example.com/proxy"
+
+
+def test_check_health_targets_service_root():
+    with patch("transformers.cli.chat.httpx.get") as get_mock:
+        get_mock.return_value.status_code = 200
+        Chat.check_health("http://localhost:8000/v1")
+    get_mock.assert_called_once_with("http://localhost:8000/health")
+
+
+def test_model_load_targets_service_root():
+    with patch("transformers.cli.chat.requests.post") as post_mock:
+        post_mock.return_value.iter_lines.return_value = []
+        RichInterface(model_id="m", user_id="u", base_url="http://localhost:8000/v1").print_model_load("m")
+    assert post_mock.call_args.args[0] == "http://localhost:8000/load_model"
