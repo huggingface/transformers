@@ -636,9 +636,7 @@ class ExportTesterMixin:
             for name, (model, inputs) in components.items():
                 with self.subTest(f"{model_class.__name__}/{name}"):
                     ov_model = exporter.export(model, inputs, config=config)
-                    ov_outputs = _run_openvino_model(
-                        ov_model, inputs, model_class.__name__, name, model_config
-                    )
+                    ov_outputs = _run_openvino_model(ov_model, inputs, model_class.__name__, name, model_config)
                     self.assertTrue(ov_outputs, f"OpenVINO outputs are empty for {name}.")
                     self.assertEqual(set(ov_outputs.keys()), set(eager_outputs[name].keys()))
 
@@ -793,9 +791,7 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
             for name, (model, inputs) in components.items():
                 with self.subTest(f"{model_class.__name__}/{name}"):
                     ov_model = exporter.export(model, inputs, config=config)
-                    ov_outputs = _run_openvino_model(
-                        ov_model, inputs, model_class.__name__, name, model_config
-                    )
+                    ov_outputs = _run_openvino_model(ov_model, inputs, model_class.__name__, name, model_config)
                     self.assertTrue(ov_outputs, "OpenVINO outputs are empty.")
                     self.assertEqual(set(ov_outputs.keys()), set(eager_outputs[name].keys()))
 
