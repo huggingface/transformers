@@ -1685,18 +1685,22 @@ class StaticCache(Cache):
     ):
         config = config.get_text_config(decoder=True)
         layer_types, per_layer_kwargs = get_layer_types_and_kwargs(config)
+        disabled_kv_layer_indices = config.get_disabled_kv_layer_indices()
         # Dispatch the layer types
-        layers = [
-            STATIC_LAYER_TYPE_MAPPING[layer_type](max_cache_len=max_cache_len, **layer_kwargs)
-            for layer_type, layer_kwargs in zip(layer_types, per_layer_kwargs)
-        ]
+        layers = []
+        for layer_idx, (layer_type, layer_kwargs) in enumerate(zip(layer_types, per_layer_kwargs)):
+            layer_cls = STATIC_LAYER_TYPE_MAPPING[layer_type]
+            if layer_idx in disabled_kv_layer_indices and issubclass(layer_cls, CacheLayerMixin):
+                layer_kwargs["max_cache_len"] = 0
+            else:
+                layer_kwargs["max_cache_len"] = max_cache_len
+            layers.append(layer_cls(**layer_kwargs))
         super().__init__(layers=layers, offloading=offloading, offload_only_non_sliding=offload_only_non_sliding)
 
         # Under `torch.compile` a static layer's length is a tensor, so `get_representative_kv_layer_idx` cannot
         # pick a layer by length and relies on these precomputed indices instead. In heterogeneous configs, layers
         # that never update their KV cache because a skip replaced the submodule responsible for it (e.g. layers
         # that skip attention) cannot represent KV-cache metadata, so they are excluded.
-        disabled_kv_layer_indices = config.get_disabled_kv_layer_indices()
         self._enabled_kv_layer_indices = tuple(
             layer_idx
             for layer_idx, layer in enumerate(layers)
