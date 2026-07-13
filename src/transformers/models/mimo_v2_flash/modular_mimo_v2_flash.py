@@ -21,6 +21,7 @@ from huggingface_hub.dataclasses import strict
 from ... import initialization as init
 from ...cache_utils import Cache
 from ...configuration_utils import PreTrainedConfig
+from ...integrations import use_kernel_func_from_hub
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
@@ -34,7 +35,7 @@ from ..deepseek_v3.modeling_deepseek_v3 import (
 )
 from ..gemma3.modeling_gemma3 import Gemma3RotaryEmbedding
 from ..glm4_moe.configuration_glm4_moe import Glm4MoeConfig
-from ..glm4_moe.modeling_glm4_moe import Glm4MoeMLP, apply_rotary_pos_emb, repeat_kv
+from ..glm4_moe.modeling_glm4_moe import Glm4MoeMLP, repeat_kv
 from ..glm4_moe_lite.modeling_glm4_moe_lite import Glm4MoeLiteDecoderLayer
 from ..laguna.modeling_laguna import LagunaModel
 from ..mixtral.modeling_mixtral import MixtralRMSNorm
@@ -205,6 +206,40 @@ class MiMoV2FlashMLP(Glm4MoeMLP):
     pass
 
 
+_KERNEL_TO_FLASH_ATTN_IMPL = {
+    "kernels-community/flash-attn2": "flash_attention_2",
+    "kernels-community/flash-attn3": "flash_attention_3",
+    "kernels-community/flash-attn4": "flash_attention_4",
+}
+
+
+@use_kernel_func_from_hub("rotary_pos_emb")
+def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
+    cos = cos.unsqueeze(unsqueeze_dim)
+    sin = sin.unsqueeze(unsqueeze_dim)
+
+    # Keep half or full tensor for later concatenation
+    rotary_dim = cos.shape[-1]
+    q_rot, q_pass = q[..., :rotary_dim], q[..., rotary_dim:]
+    k_rot, k_pass = k[..., :rotary_dim], k[..., rotary_dim:]
+
+    # Apply rotary embeddings on the first half or full tensor
+    q_embed = (q_rot * cos) + (rotate_half(q_rot) * sin)
+    k_embed = (k_rot * cos) + (rotate_half(k_rot) * sin)
+
+    # Concatenate back to full shape
+    q_embed = torch.cat([q_embed, q_pass], dim=-1)
+    k_embed = torch.cat([k_embed, k_pass], dim=-1)
+    return q_embed, k_embed
+
+
+def rotate_half(x):
+    """Rotates half the hidden dims of the input."""
+    x1 = x[..., : x.shape[-1] // 2]
+    x2 = x[..., x.shape[-1] // 2 :]
+    return torch.cat((-x2, x1), dim=-1)
+
+
 def eager_attention_forward(
     module: nn.Module,
     query: torch.Tensor,
@@ -282,9 +317,15 @@ class MiMoV2FlashAttention(Qwen2Attention):
         if past_key_values is not None:
             key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
 
-        attention_interface = ALL_ATTENTION_FUNCTIONS.get_interface(
-            self.config._attn_implementation, eager_attention_forward
-        )
+        attn_implementation = self.config._attn_implementation
+        is_paged = isinstance(attn_implementation, str) and attn_implementation.startswith("paged|")
+        if is_paged:
+            attn_implementation = attn_implementation[len("paged|") :]
+        attn_implementation = _KERNEL_TO_FLASH_ATTN_IMPL.get(attn_implementation, attn_implementation)
+        if is_paged:
+            attn_implementation = f"paged|{attn_implementation}"
+
+        attention_interface = ALL_ATTENTION_FUNCTIONS.get_interface(attn_implementation, eager_attention_forward)
         attn_output, attn_weights = attention_interface(
             self,
             query_states,
