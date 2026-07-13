@@ -23,7 +23,7 @@ from parameterized import parameterized
 
 from transformers import AutoModelForCausalLM, Qwen2Config, Qwen2ForCausalLM, set_seed
 from transformers.distributed.configuration_utils import DistributedConfig
-from transformers.distributed.pipeline_parallel import PPMissingLayer, apply_pipeline_parallelism
+from transformers.distributed.pipeline_parallel import PipelineIdentityLayer, apply_pipeline_parallelism
 from transformers.testing_utils import TestCasePlus, is_pipeline_parallel_test, require_torch_greater_or_equal
 
 class MockDeviceMesh:
@@ -68,13 +68,13 @@ def _verify_pp_split(model, pp_rank, pp_size):
     assert model._pp_rank == pp_rank
     assert model._pp_size == pp_size
 
-    assert (pp_rank == 0) == (not isinstance(base_model.embed_tokens, PPMissingLayer))
-    assert (pp_rank == pp_size - 1) == (not isinstance(base_model.norm, PPMissingLayer))
-    assert (pp_rank == pp_size - 1) == (not isinstance(model.lm_head, PPMissingLayer))
+    assert (pp_rank == 0) == (not isinstance(base_model.embed_tokens, PipelineIdentityLayer))
+    assert (pp_rank == pp_size - 1) == (not isinstance(base_model.norm, PipelineIdentityLayer))
+    assert (pp_rank == pp_size - 1) == (not isinstance(model.lm_head, PipelineIdentityLayer))
 
     for layer_idx, layer in enumerate(base_model.layers):
         is_local = start_layer <= layer_idx < end_layer
-        assert is_local == (not isinstance(layer, PPMissingLayer)), (
+        assert is_local == (not isinstance(layer, PipelineIdentityLayer)), (
             f"layer {layer_idx} on rank {pp_rank}: expected {'real' if is_local else 'stub'}"
         )
 
@@ -142,6 +142,74 @@ def _pp_weight_loading(rank, config_dict, pp_size, port):
     dist.destroy_process_group()
 
 
+def _pp_generation(rank, config_dict, pp_size, port, max_new_tokens):
+    os.environ.update(
+        {
+            "WORLD_SIZE": str(pp_size),
+            "RANK": str(rank),
+            "LOCAL_RANK": str(rank),
+            "MASTER_ADDR": "localhost",
+            "MASTER_PORT": str(port),
+        }
+    )
+    dist.init_process_group(backend="gloo", rank=rank, world_size=pp_size)
+    config = Qwen2Config.from_dict(config_dict)
+
+    with _shared_model_dir(rank) as model_dir:
+        if rank == 0:
+            set_seed(42)
+            tmp_model = Qwen2ForCausalLM(config)
+            tmp_model.to(torch.float32).save_pretrained(model_dir)
+            del tmp_model
+        dist.barrier()
+
+        pp_model = AutoModelForCausalLM.from_pretrained(
+            model_dir,
+            distributed_config=DistributedConfig(pp_size=pp_size),
+            tie_word_embeddings=False,
+            torch_dtype=torch.float32,
+        )
+        pp_model.eval()
+
+        ref_model = AutoModelForCausalLM.from_pretrained(model_dir, torch_dtype=torch.float32)
+        ref_model = ref_model.to(pp_model.device)
+        ref_model.eval()
+        dist.barrier()
+
+        set_seed(0)
+        input_ids = torch.randint(0, config.vocab_size, (1, 10))
+        generation_kwargs = {
+            "max_new_tokens": max_new_tokens,
+            "do_sample": False,
+            "num_beams": 1,
+            "output_logits": True,
+            "return_dict_in_generate": True,
+            "use_cache": True,
+        }
+
+        with torch.no_grad():
+            output_pp = pp_model.generate(input_ids.to(pp_model.device), **generation_kwargs)
+            output_ref = ref_model.generate(input_ids.to(pp_model.device), **generation_kwargs)
+
+        logits_pp = torch.stack(output_pp.logits).cpu()
+        logits_ref = torch.stack(output_ref.logits).cpu()
+
+        torch.testing.assert_close(
+            logits_pp,
+            logits_ref,
+            rtol=0,
+            atol=0,
+            msg=f"PP generation logits differ from reference on rank {rank}",
+        )
+        assert torch.equal(output_pp.sequences, output_ref.sequences), (
+            f"PP generated different token sequences than reference on rank {rank}. "
+            f"PP: {output_pp.sequences.tolist()} | Ref: {output_ref.sequences.tolist()}"
+        )
+
+    dist.barrier()
+    dist.destroy_process_group()
+
+
 def _tiny_qwen2_config(num_hidden_layers):
     return Qwen2Config(
         num_hidden_layers=num_hidden_layers,
@@ -177,3 +245,18 @@ class TestPipelineParallelWeightLoading(TestCasePlus):
             join=True,
         )
 
+
+@is_pipeline_parallel_test
+@require_torch_greater_or_equal("2.5")
+class TestPipelineParallelGeneration(TestCasePlus):
+    @parameterized.expand([(pp_size,) for pp_size in [2]])
+    def test_pp_generation(self, pp_size):
+        config = _tiny_qwen2_config(num_hidden_layers=12)
+        max_new_tokens = 5
+
+        mp.spawn(
+            _pp_generation,
+            args=(config.to_dict(), pp_size, _find_free_port(), max_new_tokens),
+            nprocs=pp_size,
+            join=True,
+        )
