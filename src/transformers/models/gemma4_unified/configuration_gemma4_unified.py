@@ -185,25 +185,24 @@ class Gemma4UnifiedTextConfig(PreTrainedConfig):
 
     @property
     def kv_sharing_roles(self) -> list[str]:
-        # Gemma4Unified shares KV cache between its layers: some layers produce cache for other layers to consume.
-        # Some layers don't participate in cache sharing, we call them "independent"
-        kv_sharing_roles = ["independent"] * self.num_hidden_layers
+        # After this index, all layers are consumers
+        layer_sharing_boundary = self.num_hidden_layers - self.num_kv_shared_layers
+        # Accumulators to build the list of roles in one pass
+        last_non_consumer_index = {"full_attention": None, "sliding_attention": None}
+        kv_sharing_roles = []
 
-        # Determine the KV sharing roles for each layer (KV sharing is done between layers with the same layer_type)
-        first_shared_layer = self.num_hidden_layers - self.num_kv_shared_layers
-        for layer_type in ["full_attention", "sliding_attention"]:
-            filtered_idx = [i for i, lt in enumerate(self.layer_types) if lt == layer_type]
-            consumer_idx = [i for i in filtered_idx if i >= first_shared_layer]
-            # If there are no consumers, then there is no cache sharing for this attention type
-            if not consumer_idx:
-                continue
-            for i in consumer_idx:
-                kv_sharing_roles[i] = "consumer"
-            # Determine the index of the producer layer. There can be no producer (assistant models for instance)
-            non_consumer_idx = [i for i in filtered_idx if i < first_shared_layer]
-            if non_consumer_idx:
-                producer_idx = max(non_consumer_idx)
-                kv_sharing_roles[producer_idx] = "producer"
+        for index, layer_type in enumerate(self.layer_types):
+            # Before the layer sharing boundary, all layers compute their cache. The layer role is "independent" (does
+            # not participate in cache sharing) but it can later be upgraded to "producer" (other layers read the cache)
+            if index < layer_sharing_boundary:
+                kv_sharing_roles.append("independent")
+                last_non_consumer_index[layer_type] = index
+            # After the boundary, all layers read cache computed by another layer. This other layer is the producer.
+            else:
+                kv_sharing_roles.append("consumer")
+                producer_index = last_non_consumer_index[layer_type]
+                if producer_index is not None:
+                    kv_sharing_roles[producer_index] = "producer"
         return kv_sharing_roles
 
     def convert_rope_params_to_dict(self, **kwargs):
