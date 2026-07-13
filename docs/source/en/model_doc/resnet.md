@@ -13,7 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2015-12-10 and added to Hugging Face Transformers on 2022-03-14.*
+*This model was published in HF papers on 2015-12-10 and contributed to Hugging Face Transformers on 2022-03-14.*
 
 # ResNet
 

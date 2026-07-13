@@ -1071,7 +1071,9 @@ class LocateAnythingPreTrainedModel(LlavaPreTrainedModel):
             self, attn_implementation, is_init_check, *args, **kwargs
         )
 
+    # trf-ignore: TRF018
     def _init_weights(self, module):
+        # LocateAnythingConfig has no top-level `initializer_range`; fall back to the text config's.
         std = getattr(self.config, "initializer_range", None) or self.config.text_config.initializer_range
         if isinstance(module, (nn.Linear, nn.Conv2d)):
             init.normal_(module.weight, mean=0.0, std=std)

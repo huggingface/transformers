@@ -111,7 +111,9 @@ class LocateAnythingModelTest(unittest.TestCase):
 
         image_mask = model.model.get_placeholder_mask(input_ids, inputs_embeds, image_features)
 
-        self.assertEqual(image_mask.shape, inputs_embeds.shape)
+        # The inherited Llava `get_placeholder_mask` returns a `(batch, seq_len, 1)` mask that broadcasts
+        # over the hidden dimension in `masked_scatter`.
+        self.assertEqual(image_mask.shape, (*input_ids.shape, 1))
         self.assertEqual(image_mask[..., 0].sum(), 1)
 
         with self.assertRaises(ValueError):

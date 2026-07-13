@@ -72,6 +72,9 @@ def _is_package_available(pkg_name: str, return_version: bool = False) -> tuple[
             # Note that this branch will almost never be run, so we do not import packages for nothing here
             package = importlib.import_module(pkg_name)
             package_version = getattr(package, "__version__", "N/A")
+            # No version + no __file__ means a namespace package (PEP 420) shadowing on sys.path, not a real install.
+            if package_version == "N/A" and getattr(package, "__file__", None) is None:
+                package_exists = False
         logger.debug(f"Detected {pkg_name} version: {package_version}")
 
     if return_version:
@@ -135,9 +138,12 @@ XLA_FSDPV2_MIN_VERSION = "2.2.0"
 HQQ_MIN_VERSION = "0.2.1"
 VPTQ_MIN_VERSION = "0.0.4"
 TORCHAO_MIN_VERSION = "0.15.0"
+COMPRESSED_TENSORS_MIN_VERSION = "0.15.0"
 AUTOROUND_MIN_VERSION = "0.5.0"
 TRITON_MIN_VERSION = "1.0.0"
-KERNELS_MIN_VERSION = "0.10.2"
+KERNELS_MIN_VERSION = "0.15.2"
+KERNELS_MAX_VERSION = "0.16.0"
+MISTRAL_COMMON_MIN_VERSION = "1.11.5"
 
 
 @lru_cache
@@ -220,13 +226,21 @@ def is_cuda_platform() -> bool:
 
 @lru_cache
 def get_cuda_runtime_version() -> tuple[int, int]:
-    """Return the CUDA runtime version as (major, minor).
+    """Deprecated. Return the CUDA runtime version as (major, minor).
+
+    Deprecated in favor of ``torch.version.cuda`` for the CUDA runtime version.
 
     Prefers a direct query of ``cudaRuntimeGetVersion`` via ``libcudart.so``. If that's
     not on the system loader path (common with pip-installed torch that bundles its own
     CUDA runtime), falls back to ``torch.version.cuda`` — which equals the bundled
     runtime's version for pip wheels. Returns ``(0, 0)`` for CPU-only torch.
     """
+    warnings.warn(
+        "`get_cuda_runtime_version` is deprecated and will be removed in v5.16. "
+        "Use `torch.version.cuda` for the CUDA runtime version.",
+        FutureWarning,
+        stacklevel=2,
+    )
     import ctypes
 
     try:
@@ -677,9 +691,14 @@ def is_kenlm_available() -> bool:
 
 
 @lru_cache
-def is_kernels_available(MIN_VERSION: str = KERNELS_MIN_VERSION) -> bool:
+def is_kernels_available(MIN_VERSION: str = KERNELS_MIN_VERSION, MAX_VERSION: str = KERNELS_MAX_VERSION) -> bool:
     is_available, kernels_version = _is_package_available("kernels", return_version=True)
-    return is_available and version.parse(kernels_version) >= version.parse(MIN_VERSION)
+    viable_version = False
+    if kernels_version != "N/A":
+        viable_version = version.parse(kernels_version) >= version.parse(MIN_VERSION) and version.parse(
+            kernels_version
+        ) < version.parse(MAX_VERSION)
+    return is_available and viable_version
 
 
 @lru_cache
@@ -738,6 +757,14 @@ def is_torchvision_v2_available() -> bool:
 
 
 @lru_cache
+def is_torchvision_greater_or_equal(library_version: str) -> bool:
+    if not is_torchvision_available():
+        return False
+    _, torchvision_version = _is_package_available("torchvision", return_version=True)
+    return version.parse(torchvision_version) >= version.parse(library_version)
+
+
+@lru_cache
 def is_galore_torch_available() -> bool:
     return _is_package_available("galore_torch")[0]
 
@@ -776,6 +803,16 @@ def is_pyctcdecode_available() -> bool:
 @lru_cache
 def is_librosa_available() -> bool:
     return _is_package_available("librosa")[0]
+
+
+@lru_cache
+def is_nagisa_available() -> bool:
+    return _is_package_available("nagisa")[0]
+
+
+@lru_cache
+def is_soynlp_available() -> bool:
+    return _is_package_available("soynlp")[0]
 
 
 @lru_cache
@@ -856,6 +893,18 @@ def is_peft_available() -> bool:
 
 
 @lru_cache
+def is_peft_greater_or_equal(library_version: str, accept_dev: bool = False) -> bool:
+    is_available, peft_version = _is_package_available("peft", return_version=True)
+    if not is_available:
+        return False
+
+    if accept_dev:
+        return version.parse(version.parse(peft_version).base_version) >= version.parse(library_version)
+    else:
+        return version.parse(peft_version) >= version.parse(library_version)
+
+
+@lru_cache
 def is_bs4_available() -> bool:
     return _is_package_available("bs4")[0]
 
@@ -868,6 +917,21 @@ def is_coloredlogs_available() -> bool:
 @lru_cache
 def is_onnx_available() -> bool:
     return _is_package_available("onnx")[0]
+
+
+@lru_cache
+def is_onnxscript_available() -> bool:
+    return _is_package_available("onnxscript")[0]
+
+
+@lru_cache
+def is_onnxruntime_available() -> bool:
+    return _is_package_available("onnxruntime")[0] or _is_package_available("onnxruntime-gpu")[0]
+
+
+@lru_cache
+def is_executorch_available() -> bool:
+    return _is_package_available("executorch")[0]
 
 
 @lru_cache
@@ -1167,8 +1231,9 @@ def is_qutlass_available():
 
 
 @lru_cache
-def is_compressed_tensors_available() -> bool:
-    return _is_package_available("compressed_tensors")[0]
+def is_compressed_tensors_available(min_version: str = COMPRESSED_TENSORS_MIN_VERSION) -> bool:
+    is_available, compressed_tensors_version = _is_package_available("compressed_tensors", return_version=True)
+    return is_available and version.parse(compressed_tensors_version) >= version.parse(min_version)
 
 
 @lru_cache
@@ -1370,8 +1435,11 @@ def is_matplotlib_available() -> bool:
 
 
 @lru_cache
-def is_mistral_common_available() -> bool:
-    return is_vision_available() and _is_package_available("mistral_common")[0]
+def is_mistral_common_available(min_version: str = MISTRAL_COMMON_MIN_VERSION) -> bool:
+    is_available, mistral_common_version = _is_package_available("mistral_common", return_version=True)
+    return (
+        is_vision_available() and is_available and version.parse(mistral_common_version) >= version.parse(min_version)
+    )
 
 
 @lru_cache
@@ -2626,6 +2694,8 @@ BASE_FILE_REQUIREMENTS = {
     ),
     lambda name, content: "image_processing_" in name: ("vision",),
     lambda name, content: "video_processing_" in name: ("vision", "torch", "torchvision"),
+    # Some models have specific generation and it always depends on torch (guard if importable via main module)
+    lambda name, content: "generation_" in name: ("torch",),
 }
 
 

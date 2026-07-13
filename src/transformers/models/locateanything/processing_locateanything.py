@@ -337,13 +337,7 @@ def fetch_video(
 
 
 class LocateAnythingProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {
-        "text_kwargs": {
-            "padding": False,
-        },
-        "images_kwargs": {},
-        "videos_kwargs": {},
-    }
+    pass
 
 
 @requires(backends=("torchvision",))

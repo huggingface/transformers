@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import inspect
 import unittest
 
 import numpy as np
@@ -35,15 +34,17 @@ if is_torch_available():
 @require_torchvision
 class Qwen3VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = Qwen3VLProcessor
-    model_id = "Qwen/Qwen3-VL-235B-A22B-Instruct"
-
-    @classmethod
-    def _setup_from_pretrained(cls, model_id, **kwargs):
-        return super()._setup_from_pretrained(model_id, patch_size=4, max_pixels=56 * 56, min_pixels=28 * 28, **kwargs)
+    # Use tiny repos to avoid loading the full 151k-vocab tokenizer (~327 MB)
+    # Tiny processor created with make_tiny_processor.py from "Qwen/Qwen3-VL-235B-A22B-Instruct"
+    tiny_model_id = "hf-internal-testing/tiny-processor-qwen3_vl"
+    video_unstructured_max_length = 870
+    video_text_kwargs_max_length = 870
+    video_text_kwargs_override_max_length = 870
 
     @classmethod
     def _setup_test_attributes(cls, processor):
         cls.image_token = processor.image_token
+        cls.video_token = processor.video_token
 
     def test_get_num_vision_tokens(self):
         "Tests general functionality of the helper used internally in vLLM"
@@ -168,27 +169,10 @@ class Qwen3VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             self.assertIsInstance(out_dict[k], return_tensor_to_type[return_tensors])
 
     @require_av
-    @unittest.skip("qwen3_vl can't sample frames from image frames directly, user can use `qwen-vl-utils`")
-    def test_apply_chat_template_video_1(self):
-        pass
-
-    @require_av
-    @unittest.skip("qwen3_vl can't sample frames from image frames directly, user can use `qwen-vl-utils`")
-    def test_apply_chat_template_video_2(self):
-        pass
-
-    @require_av
     def test_apply_chat_template_video_frame_sampling(self):
         processor = self.get_processor()
         if processor.chat_template is None:
             self.skipTest("Processor has no chat template")
-
-        signature = inspect.signature(processor.__call__)
-        if "videos" not in {*signature.parameters.keys()} or (
-            signature.parameters.get("videos") is not None
-            and signature.parameters["videos"].annotation == inspect._empty
-        ):
-            self.skipTest("Processor doesn't accept videos at input")
 
         messages = [
             [
@@ -198,7 +182,7 @@ class Qwen3VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
                         {
                             "type": "video",
                             "url": url_to_local_path(
-                                "https://huggingface.co/datasets/raushan-testing-hf/videos-test/resolve/main/tiny_video.mp4"
+                                "https://huggingface.co/datasets/hf-internal-testing/test-videos/resolve/main/tiny_video_320x240.mp4"
                             ),
                         },
                         {"type": "text", "text": "What is shown in this video?"},
@@ -224,7 +208,7 @@ class Qwen3VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             fps=None,  # if pass num_frames, fps should be None
         )
         self.assertTrue(self.videos_input_name in out_dict_with_video)
-        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 256)
+        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 280)
 
         # Load with `fps` arg
         fps = 1
@@ -236,7 +220,7 @@ class Qwen3VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             fps=fps,
         )
         self.assertTrue(self.videos_input_name in out_dict_with_video)
-        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 224)
+        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 192)
 
         # Load with `fps` and `num_frames` args, should raise an error
         with self.assertRaises(ValueError):
@@ -257,7 +241,7 @@ class Qwen3VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             return_dict=True,
         )
         self.assertTrue(self.videos_input_name in out_dict_with_video)
-        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 224)
+        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 192)
 
         # Load video as a list of frames (i.e. images). NOTE: each frame should have same size
         # because we assume they come from one video
@@ -288,3 +272,11 @@ class Qwen3VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertEqual(inputs[self.images_input_name].shape[0], 612)
         inputs = processor(text=input_str, images=image_input, return_tensors="pt")
         self.assertEqual(inputs[self.images_input_name].shape[0], 100)
+
+    @unittest.skip("qwen3_vl can't sample frames from image frames directly, user can use `qwen-vl-utils`")
+    def test_apply_chat_template_video_1(self):
+        pass
+
+    @unittest.skip("qwen3_vl can't sample frames from image frames directly, user can use `qwen-vl-utils`")
+    def test_apply_chat_template_video_2(self):
+        pass

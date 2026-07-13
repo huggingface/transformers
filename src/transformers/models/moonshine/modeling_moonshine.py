@@ -24,11 +24,11 @@ from typing import Optional
 
 import torch
 import torch.nn as nn
+from torch.nn import CrossEntropyLoss
 
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
 from ...generation import GenerationMixin
-from ...integrations import use_kernelized_func
 from ...masking_utils import create_bidirectional_mask, create_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
@@ -249,7 +249,6 @@ def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
     return q_embed, k_embed
 
 
-@use_kernelized_func(apply_rotary_pos_emb)
 class MoonshineAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
@@ -935,7 +934,8 @@ class MoonshineForConditionalGeneration(MoonshinePreTrainedModel, GenerationMixi
 
         loss = None
         if labels is not None:
-            loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.vocab_size)
+            loss_fct = CrossEntropyLoss()
+            loss = loss_fct(logits.reshape(-1, self.config.vocab_size), labels.reshape(-1))
 
         return Seq2SeqLMOutput(
             loss=loss,

@@ -53,7 +53,7 @@ If you run into CUDA-related install errors, check the [DeepSpeed CUDA](./debugg
 
 ## Configure
 
-[`Trainer`] integrates DeepSpeed through the [TrainingArguments.deepspeed](https://huggingface.co/docs/transformers/main_classes/trainer#transformers.TrainingArguments.deepspeed) argument, which accepts a JSON config file. Alternatively, use an [Accelerate config file](./accelerate#accelerate-config-file) instead of [`TrainingArguments`].
+[`Trainer`] integrates DeepSpeed through the [`~TrainingArguments#deepspeed`] argument, which accepts a JSON config file. Alternatively, use an [Accelerate config file](./accelerate#accelerate-config-file) instead of [`TrainingArguments`].
 
 <hfoptions id="launch">
 <hfoption id="TrainingArguments">

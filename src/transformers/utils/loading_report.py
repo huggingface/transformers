@@ -120,7 +120,7 @@ PALETTE = {
 
 def _style(s, color):
     """Return color/style-formatted input `s` if `sys.stdout` is interactive, e.g. connected to a terminal."""
-    if sys.stdout.isatty():
+    if sys.stdout is not None and sys.stdout.isatty():
         return f"{PALETTE[color]}{s}{PALETTE['reset']}"
     else:
         return s

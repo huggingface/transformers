@@ -648,7 +648,9 @@ class LocateAnythingPreTrainedModel(PreTrainedModel):
             return "magi"
         return super()._check_and_adjust_attn_implementation(attn_implementation, is_init_check, *args, **kwargs)
 
+    # trf-ignore: TRF018
     def _init_weights(self, module):
+        # LocateAnythingConfig has no top-level `initializer_range`; fall back to the text config's.
         std = getattr(self.config, "initializer_range", None) or self.config.text_config.initializer_range
         if isinstance(module, (nn.Linear, nn.Conv2d)):
             init.normal_(module.weight, mean=0.0, std=std)
@@ -769,9 +771,9 @@ class LocateAnythingModel(LocateAnythingPreTrainedModel):
 
         n_image_tokens = special_image_mask.sum()
         n_image_features = image_features.shape[0] * image_features.shape[1]
-        special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
+        special_image_mask = special_image_mask.unsqueeze(-1).to(inputs_embeds.device)
         torch_compilable_check(
-            inputs_embeds[special_image_mask].numel() == image_features.numel(),
+            n_image_tokens * inputs_embeds.shape[-1] == image_features.numel(),
             f"Image features and image tokens do not match, tokens: {n_image_tokens}, features: {n_image_features}",
         )
         return special_image_mask

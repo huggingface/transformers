@@ -13,7 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2022-05-02 and added to Hugging Face Transformers on 2022-05-12.*
+*This model was published in HF papers on 2022-05-02 and contributed to Hugging Face Transformers on 2022-05-12.*
 
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
@@ -69,7 +69,7 @@ tokenizer.batch_decode(generated_ids)[0]
 
 Quantization reduces the memory burden of large models by representing the weights in a lower precision. Refer to the [Quantization](../quantization/overview) overview for more available quantization backends.
 
-The example below uses [bitsandbytes](..quantization/bitsandbytes) to quantize the weights to 8-bits.
+The example below uses [bitsandbytes](../quantization/bitsandbytes) to quantize the weights to 8-bits.
 
 ```python
 from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
