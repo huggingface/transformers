@@ -57,6 +57,7 @@ class TmlTextConfig(PreTrainedConfig):
         # checkpoints store `sconv_kernel_size`; without the mapping a fresh config has no such
         # attribute (TmlAttention reads it) and a checkpoint value would bypass `conv_kernel_size`
         "sconv_kernel_size": "conv_kernel_size",
+        "model_max_length": "max_position_embeddings",
     }
 
     vocab_size: int = 201024
@@ -73,6 +74,8 @@ class TmlTextConfig(PreTrainedConfig):
     sliding_window_size: int = 512
     d_rel: int = 16
     rel_extent: int = 1024
+    log_scaling_n_floor: int | None = None
+    log_scaling_alpha: float = 0.1
     local_layer_ids: list[int] | None = None
     layer_types: list[str] | None = None
     max_position_embeddings: int = 131072
@@ -136,7 +139,8 @@ class TmlVisionConfig(PreTrainedConfig):
     attribute_map = {"num_hidden_layers": "n_layers"}
 
     text_hidden_size: int = 6144
-    patch_size: int = 14
+    patch_size: int = 40
+    temporal_patch_size: int = 2
     num_channels: int = 3
     hidden_size: int = 1024
     num_hidden_layers: int = 24

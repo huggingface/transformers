@@ -1774,6 +1774,12 @@ def _build_checkpoint_conversion_mapping():
         WeightRenaming("mlp.shared_expert.", "mlp.shared_experts."),
     ]
 
+    # temporary before rename
+    mapping["inkling_mm_model"] = [
+        WeightRenaming(source_patterns=r"^model\.llm\.layers", target_patterns=r"model.layers"),
+        WeightRenaming(source_patterns=r"^model\.llm\.(embed_norm|embed|norm|unembed)", target_patterns=r"\1"),
+    ] + mapping["tml_mm_model"]
+
     mapping["MtpModel"] = [
         PrefixChange(prefix_to_remove="model"),
         PrefixChange(prefix_to_remove="mtp"),

@@ -90,6 +90,8 @@ class TmlTextConfig(PreTrainedConfig):
         # checkpoints store `sconv_kernel_size`; without the mapping a fresh config has no such
         # attribute (TmlAttention reads it) and a checkpoint value would bypass `conv_kernel_size`
         "sconv_kernel_size": "conv_kernel_size",
+        # checkpoints advertise the context length as `model_max_length`
+        "model_max_length": "max_position_embeddings",
     }
 
     vocab_size: int = 201024
@@ -106,6 +108,8 @@ class TmlTextConfig(PreTrainedConfig):
     sliding_window_size: int = 512
     d_rel: int = 16
     rel_extent: int = 1024
+    log_scaling_n_floor: int | None = None
+    log_scaling_alpha: float = 0.1
     local_layer_ids: list[int] | None = None
     layer_types: list[str] | None = None
     max_position_embeddings: int = 131072
@@ -169,7 +173,8 @@ class TmlVisionConfig(PreTrainedConfig):
     attribute_map = {"num_hidden_layers": "n_layers"}
 
     text_hidden_size: int = 6144
-    patch_size: int = 14
+    patch_size: int = 40
+    temporal_patch_size: int = 2
     num_channels: int = 3
     hidden_size: int = 1024
     num_hidden_layers: int = 24
@@ -287,13 +292,13 @@ class TmlAttention(nn.Module):
         super().__init__()
         self.config = config
         self.layer_idx = layer_idx
-        self.is_local_attn = config.layer_types[self.layer_idx] == "hybrid_sliding"
-        self.head_dim = config.swa_head_dim if self.is_local_attn else config.head_dim
-        self.num_heads = config.swa_num_attention_heads if self.is_local_attn else config.num_attention_heads
-        self.num_key_value_heads = config.swa_num_key_value_heads if self.is_local_attn else config.num_key_value_heads
+        self.is_sliding = config.layer_types[self.layer_idx] == "hybrid_sliding"
+        self.head_dim = config.swa_head_dim if self.is_sliding else config.head_dim
+        self.num_heads = config.swa_num_attention_heads if self.is_sliding else config.num_attention_heads
+        self.num_key_value_heads = config.swa_num_key_value_heads if self.is_sliding else config.num_key_value_heads
         self.num_key_value_groups = self.num_heads // self.num_key_value_heads
-        self.sliding_window = config.sliding_window_size if self.is_local_attn else None
-        self.rel_extent = config.sliding_window_size if self.is_local_attn else config.rel_extent
+        self.sliding_window = config.sliding_window_size if self.is_sliding else None
+        self.rel_extent = config.sliding_window_size if self.is_sliding else config.rel_extent
         # q/k are RMS-normalized per head, hence 1/d rather than 1/sqrt(d)
         self.scaling = 1.0 / self.head_dim
         self.attention_dropout = config.attention_dropout
@@ -349,6 +354,16 @@ class TmlAttention(nn.Module):
         q_positions = torch.arange(q_length, device=hidden_states.device) + q_offset
         relative_states = relative_states.view(*input_shape, self.num_heads, -1)
         position_bias = self.rel_logits_proj(relative_states, q_positions, kv_positions)
+
+        # original impl applies log scalnig in f32
+        if not self.is_sliding and self.config.log_scaling_n_floor is not None:
+            effective_n = (q_positions + 1).float()
+            tau = 1.0 + self.config.log_scaling_alpha * torch.log(
+                (effective_n / self.config.log_scaling_n_floor).clamp(min=1.0)
+            )
+            tau = tau.view(1, 1, -1, 1)
+            query_states = (query_states.float() * tau).to(query_states.dtype)
+            position_bias = (position_bias.float() * tau).to(position_bias.dtype)
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward

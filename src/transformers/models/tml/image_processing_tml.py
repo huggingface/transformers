@@ -13,6 +13,8 @@
 # limitations under the License.
 
 
+import math
+
 import torch
 from torchvision.transforms.v2 import functional as tvF
 
@@ -22,6 +24,20 @@ from ...image_utils import ImageInput, PILImageResampling, SizeDict, validate_pr
 from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import TensorType, auto_docstring
 from ...utils.constants import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD
+
+
+class TmlImageProcessorKwargs(ImagesKwargs, total=False):
+    r"""
+    rescale_image_frac (`float`, *optional*):
+        Factor applied to the image's long edge before patch division, preserving aspect ratio. `None` disables
+        the pre-scaling.
+    rescale_image_max_upscaled_long_edge (`int`, *optional*):
+        Cap, in pixels, on the upscaled long edge. Only limits growth: an image already above the cap is kept
+        as is.
+    """
+
+    rescale_image_frac: float | None
+    rescale_image_max_upscaled_long_edge: int | None
 
 
 # Slightly different from `image_transforms.divide_to_patches`
@@ -42,7 +58,7 @@ def divide_to_patches(image: "torch.Tensor", patch_size: int) -> list["torch.Ten
 
 @auto_docstring(custom_intro="Constructs a Tml image processor.")
 class TmlImageProcessor(TorchvisionBackend):
-    resample = PILImageResampling.BICUBIC
+    resample = PILImageResampling.LANCZOS
     image_mean = OPENAI_CLIP_MEAN
     image_std = OPENAI_CLIP_STD
     default_to_square = False
@@ -51,9 +67,11 @@ class TmlImageProcessor(TorchvisionBackend):
     do_rescale = True
     do_normalize = True
     size = {"height": 40, "width": 40}
-    valid_kwargs = ImagesKwargs
+    rescale_image_frac = 2.0
+    rescale_image_max_upscaled_long_edge = 2048
+    valid_kwargs = TmlImageProcessorKwargs
 
-    def __init__(self, **kwargs: Unpack[ImagesKwargs]):
+    def __init__(self, **kwargs: Unpack[TmlImageProcessorKwargs]):
         super().__init__(**kwargs)
 
     def _validate_preprocess_kwargs(
@@ -108,12 +126,26 @@ class TmlImageProcessor(TorchvisionBackend):
         do_normalize: bool,
         image_mean: float | list[float] | None,
         image_std: float | list[float] | None,
+        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
+        rescale_image_frac: float | None,
+        rescale_image_max_upscaled_long_edge: int | None,
         return_tensors: str | TensorType | None,
         **kwargs,
     ) -> BatchFeature:
         per_image_patches: list[torch.Tensor] = []
         num_patches: list[int] = []
         for image in images:
+            if rescale_image_frac is not None:
+                height, width = image.shape[-2:]
+                long_edge = max(height, width)
+                target_long_edge = long_edge * rescale_image_frac
+                if rescale_image_max_upscaled_long_edge is not None:
+                    target_long_edge = min(target_long_edge, max(rescale_image_max_upscaled_long_edge, long_edge))
+                ratio = target_long_edge / long_edge
+                if ratio != 1.0:
+                    # half-up rounding to match reference
+                    new_size = SizeDict(height=math.floor(height * ratio + 0.5), width=math.floor(width * ratio + 0.5))
+                    image = self.resize(image, new_size, resample=resample)
             image_patches = divide_to_patches(image, size.height)
             image_patches = [im.float() for im in image_patches]  # so we can pad with -1.0
             image_patches = self.pad(
