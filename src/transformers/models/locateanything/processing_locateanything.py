@@ -337,7 +337,7 @@ def fetch_video(
 
 
 class LocateAnythingProcessorKwargs(ProcessingKwargs, total=False):
-    pass
+    _defaults = {}
 
 
 @requires(backends=("torchvision",))
