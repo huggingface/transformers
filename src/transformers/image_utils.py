@@ -524,15 +524,26 @@ def load_image_as_tensor(
     Returns:
         `torch.Tensor`: A `[C, H, W]` uint8 tensor in RGB channel order.
     """
+    import io
+
     import torch
+
+    def _decode_rgb_tensor(tv_input, pil_source):
+        # Some torchvision builds (e.g. certain ROCm wheels) are compiled without libPNG/libJPEG,
+        # so `decode_image` raises at runtime. Fall back to PIL decoding in that case, returning a
+        # `[C, H, W]` uint8 RGB tensor to match `decode_image`.
+        try:
+            return decode_image(tv_input, mode=ImageReadMode.RGB)
+        except RuntimeError:
+            return pil_to_tensor(PIL.Image.open(pil_source).convert("RGB"))
 
     if isinstance(image, str):
         if image.startswith("http://") or image.startswith("https://"):
             raw = httpx.get(image, timeout=timeout, follow_redirects=True).content
             buf = torch.frombuffer(bytearray(raw), dtype=torch.uint8)
-            return decode_image(buf, mode=ImageReadMode.RGB)
+            return _decode_rgb_tensor(buf, io.BytesIO(raw))
         elif os.path.isfile(image):
-            return decode_image(image, mode=ImageReadMode.RGB)
+            return _decode_rgb_tensor(image, image)
         else:
             if image.startswith("data:image/"):
                 image = image.split(",")[1]
@@ -543,7 +554,7 @@ def load_image_as_tensor(
                     f"Incorrect image source. Must be a valid URL starting with `http://` or `https://`, a valid path to an image file, or a base64 encoded string. Got {image}. Failed with {e}"
                 )
             buf = torch.frombuffer(bytearray(raw), dtype=torch.uint8)
-            return decode_image(buf, mode=ImageReadMode.RGB)
+            return _decode_rgb_tensor(buf, io.BytesIO(raw))
     elif isinstance(image, PIL.Image.Image):
         image = PIL.ImageOps.exif_transpose(image)
         return pil_to_tensor(image.convert("RGB"))
