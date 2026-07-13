@@ -853,6 +853,27 @@ def register_kernel_replacements_and_fusions(
     kernel_config.kernel_mapping = new_mapping
 
 
+def use_kernel_func_from_hub_with_fallback(func_name: str, package: str):
+    """
+    Decorator that tries to replace the decorated function with `func_name` imported from `package`, if it's available. If not,
+    simply returns the decorated function.
+    Useful to define explicit torch fallback functions, while still using an optimized kernel imported from somewhere else if available.
+    """
+
+    kernel_wrapper_decorator = use_kernel_func_from_hub(func_name)
+
+    def decorator(func: Callable) -> Callable:
+        try:
+            module = importlib.import_module(package)
+            function = getattr(module, func_name)
+        except Exception:
+            function = func
+
+        return kernel_wrapper_decorator(function)
+
+    return decorator
+
+
 __all__ = [
     "LayerRepository",
     "get_kernel",

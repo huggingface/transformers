@@ -32,8 +32,9 @@ from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
-from ...integrations import use_kernel_forward_from_hub, use_kernel_func_from_hub
+from ...integrations import use_kernel_forward_from_hub
 from ...integrations.accelerate import force_accelerate_hooks
+from ...integrations.hub_kernels import use_kernel_func_from_hub_with_fallback
 from ...masking_utils import create_causal_mask, create_recurrent_attention_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import (
@@ -57,7 +58,6 @@ from ...utils.generic import (
     is_flash_attention_requested,
     maybe_autocast,
     merge_with_config_defaults,
-    replace_with_function_from_package,
 )
 from ...utils.import_utils import is_flash_linear_attention_available
 from ...utils.output_capturing import capture_outputs
@@ -215,8 +215,7 @@ def apply_mask_to_padding_states(hidden_states, attention_mask):
 is_fast_path_available = all((chunk_gated_delta_rule, fused_recurrent_gated_delta_rule))
 
 
-@use_kernel_func_from_hub("causal_conv1d_update")
-@replace_with_function_from_package("causal_conv1d_update", "causal_conv1d")
+@use_kernel_func_from_hub_with_fallback("causal_conv1d_update", "causal_conv1d")
 def causal_conv1d_update(
     hidden_states: torch.Tensor,
     conv_state: torch.Tensor,
@@ -236,8 +235,7 @@ def causal_conv1d_update(
     return out.to(hidden_states.dtype)
 
 
-@use_kernel_func_from_hub("causal_conv1d_fn")
-@replace_with_function_from_package("causal_conv1d_update", "causal_conv1d")
+@use_kernel_func_from_hub_with_fallback("causal_conv1d_fn", "causal_conv1d")
 def causal_conv1d_fn(
     hidden_states: torch.Tensor,
     weight: nn.Parameter,

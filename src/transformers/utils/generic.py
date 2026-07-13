@@ -17,7 +17,6 @@ Generic utilities
 
 from __future__ import annotations
 
-import importlib
 import inspect
 import json
 import os
@@ -1155,24 +1154,5 @@ def retry(
                     delay = min(delay * 2, max_delay)
 
         return wrapper
-
-    return decorator
-
-
-def replace_with_function_from_package(function_name: str, package: str):
-    """
-    Decorator that tries to replace the decorated function with `function_name` imported from `package`, if it's available. If not,
-    simply returns the decorated function.
-    Useful to define explicit torch fallback functions, while still using an optimized kernel imported from somewhere else if available.
-    """
-
-    def decorator(func: Callable) -> Callable:
-        try:
-            module = importlib.import_module(package)
-            function = getattr(module, function_name)
-        except Exception:
-            function = func
-
-        return function
 
     return decorator
