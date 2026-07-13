@@ -77,7 +77,7 @@ def apply_heterogeneous_modeling(model: PreTrainedModel) -> None:
        arguments or by walking the call stack).
     2. It passes ``config.per_layer_config[layer_idx]`` to the original ``__init__``.
     3. For layers with a ``skip`` attribute, the
-       corresponding sub-modules are replaced with no-op modules according to
+       corresponding layer members are replaced with no-op modules according to
        ``HeterogeneousModelingSpec.skip_descriptors``.
     4. For layers with layer-specific attention masks, the layer ``forward``
        method is patched to select the mask matching that layer's configured

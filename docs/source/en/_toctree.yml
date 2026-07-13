@@ -18,6 +18,8 @@
       title: Customizing models
     - local: heterogeneous_configurations
       title: Heterogeneous configurations
+    - local: heterogeneous_modeling
+      title: Heterogeneous modeling
     - local: monkey_patching
       title: Monkey patching
     - local: fusion_mapping
