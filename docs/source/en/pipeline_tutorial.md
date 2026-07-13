@@ -202,6 +202,21 @@ Keep the following general rules of thumb in mind for determining whether batch 
 5. Do batch inference if your `sequence_length` is regular, and keep pushing it until you reach an OOM error. The larger the GPU, the more helpful batch inference is.
 6. Do make sure you can handle OOM errors if you decide to do batch inference.
 
+### Using Advanced Generation Features with Pipelines
+
+When using pipelines that generate text (such as `"text-generation"` or `"text2text-generation"`), you have full access to the underlying model's generation capabilities. 
+
+The pipeline acts as a convenience wrapper, but it does not lock down the model's configuration. Any extra keyword arguments you pass to the pipeline call are passed directly to the underlying `model.generate()` method. This means you can easily use advanced features like **Streaming**, **Assisted Decoding**, and specific **Decoder Strategies** natively.
+
+**Adjusting Decoder Strategies:**
+```python
+from transformers import pipeline
+
+generator = pipeline("text-generation", model="gpt2")
+# Pass generation parameters directly to the pipeline
+output = generator("In a hole in the ground there lived a", max_new_tokens=20, do_sample=True, top_k=50)
+
+
 ### Task-specific parameters
 
 [`Pipeline`] accepts any parameters that are supported by each individual task pipeline. Make sure to check out each individual task pipeline to see what type of parameters are available. If you can't find a parameter that is useful for your use case, please feel free to open a GitHub [issue](https://github.com/huggingface/transformers/issues/new?assignees=&labels=feature&template=feature-request.yml) to request it!
