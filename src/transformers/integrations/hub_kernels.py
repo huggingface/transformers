@@ -855,9 +855,14 @@ def register_kernel_replacements_and_fusions(
 
 def use_kernel_func_from_hub_with_fallback(func_name: str, package: str):
     """
-    Decorator that tries to replace the decorated function with `func_name` imported from `package`, if it's available. If not,
-    simply returns the decorated function.
-    Useful to define explicit torch fallback functions, while still using an optimized kernel imported from somewhere else if available.
+    Similar to `use_kernel_func_from_hub`, but first tries to replace the decorated function with `func_name` imported from `package`,
+    if it's available. If not, simply applies `use_kernel_func_from_hub` on the decorated function.
+    Useful to define explicit torch fallback functions, while still using an optimized implementations from either `kernels` or
+    an auxiliary package (e.g. `causal_conv1d`) if available.
+    This means that the precedence order will be the following:
+    - 1st `kernels`, if it's available and `use_kernels=True`
+    - if the above is not True, then `func_name` imported from `package` if `package` is available
+    - if None of the above are True, the base decorated function
     """
 
     kernel_wrapper_decorator = use_kernel_func_from_hub(func_name)
