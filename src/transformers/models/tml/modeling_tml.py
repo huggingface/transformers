@@ -31,26 +31,22 @@ from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
-from ...integrations import use_experts_implementation, use_kernel_forward_from_hub
+from ...integrations import (
+    use_experts_implementation,
+    use_kernel_forward_from_hub,
+    use_kernel_func_from_hub,
+    use_kernelized_func,
+)
 from ...integrations.accelerate import force_accelerate_hooks
 from ...masking_utils import create_causal_mask, create_recurrent_attention_mask, create_sliding_window_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple, logging, torch_compilable_check
+from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple, torch_compilable_check
 from ...utils.generic import merge_with_config_defaults
-from ...utils.import_utils import is_causal_conv1d_available
 from ...utils.output_capturing import capture_outputs
 from .configuration_tml import TmlAudioConfig, TmlConfig, TmlTextConfig, TmlVisionConfig
-
-
-if is_causal_conv1d_available():
-    from causal_conv1d import causal_conv1d_fn, causal_conv1d_update
-else:
-    causal_conv1d_update, causal_conv1d_fn = None, None
-
-logger = logging.get_logger(__name__)
 
 
 @auto_docstring(
@@ -431,8 +427,14 @@ def apply_mask_to_padding_states(hidden_states, attention_mask):
     return hidden_states
 
 
-# tml sconvs have no activation, so unlike the qwen3_next fallback this applies none
-def torch_causal_conv1d_update(hidden_states, conv_state, weight, bias=None):
+@use_kernel_func_from_hub("causal_conv1d_update")
+def causal_conv1d_update(
+    hidden_states: torch.Tensor,
+    conv_state: torch.Tensor,
+    weight: nn.Parameter,
+    bias: nn.Parameter | None = None,
+    activation: str | None = None,
+):
     _, hidden_size, seq_len = hidden_states.shape
     state_len = conv_state.shape[-1]
 
@@ -440,10 +442,35 @@ def torch_causal_conv1d_update(hidden_states, conv_state, weight, bias=None):
     conv_state.copy_(hidden_states_new[:, :, -state_len:])
     out = F.conv1d(hidden_states_new, weight.unsqueeze(1), bias, padding=0, groups=hidden_size)
     out = out[:, :, -seq_len:]
-    out = out.to(hidden_states.dtype)
-    return out
+    if activation is not None:
+        out = ACT2FN[activation](out)
+    return out.to(hidden_states.dtype)
 
 
+@use_kernel_func_from_hub("causal_conv1d_fn")
+def causal_conv1d_fn(
+    hidden_states: torch.Tensor,
+    weight: nn.Parameter,
+    bias: nn.Parameter | None = None,
+    activation: str | None = None,
+    **kwargs,
+):
+    _, hidden_size, seq_len = hidden_states.shape
+    padding = weight.shape[-1] - 1
+
+    out = F.conv1d(
+        hidden_states.to(weight.dtype),
+        weight=weight.unsqueeze(1),
+        bias=bias,
+        padding=padding,
+        groups=hidden_size,
+    )[:, :, :seq_len]
+    if activation is not None:
+        out = ACT2FN[activation](out)
+    return out.to(hidden_states.dtype)
+
+
+@use_kernelized_func([causal_conv1d_update, causal_conv1d_fn])
 class TmlShortConvolution(nn.Module):
     def __init__(self, hidden_size: int, conv_kernel_size: int, layer_idx: int, conv_idx: int):
         super().__init__()
@@ -459,16 +486,6 @@ class TmlShortConvolution(nn.Module):
             padding=conv_kernel_size - 1,
             bias=False,
         )
-
-        self.causal_conv1d_fn = causal_conv1d_fn
-        self.causal_conv1d_update = causal_conv1d_update or torch_causal_conv1d_update
-
-        if not (causal_conv1d_fn is not None and causal_conv1d_update is not None):
-            logger.warning_once(
-                "The fast path is not available because one of the required library is not installed. Falling back to "
-                "torch implementation. To install follow https://github.com/fla-org/flash-linear-attention#installation and"
-                " https://github.com/Dao-AILab/causal-conv1d"
-            )
 
     @force_accelerate_hooks("conv1d")
     def forward(
@@ -497,11 +514,8 @@ class TmlShortConvolution(nn.Module):
 
         if use_precomputed_states and seq_len == 1:
             # Single-token cached decode: the fused per-step kernel updates the conv state in-place.
-            hidden_states = self.causal_conv1d_update(
-                hidden_states,
-                conv_state,
-                self.conv1d.weight.squeeze(1),
-                self.conv1d.bias,
+            hidden_states = causal_conv1d_update(
+                hidden_states, conv_state, self.conv1d.weight.squeeze(1), self.conv1d.bias
             )
         else:
             # Multi-token forward with non empty cache (chunked prefill, continuation,...). We prepend the cached conv context so the
@@ -513,15 +527,9 @@ class TmlShortConvolution(nn.Module):
                 new_conv_state = F.pad(hidden_states, (self.conv_kernel_size - hidden_states.shape[-1], 0))
                 past_key_values.update_conv_state(new_conv_state, self.layer_idx, state_idx=self.conv_idx)
 
-            if self.causal_conv1d_fn is not None:
-                hidden_states = self.causal_conv1d_fn(
-                    x=hidden_states,
-                    weight=self.conv1d.weight.squeeze(1),
-                    bias=self.conv1d.bias,
-                    seq_idx=kwargs.get("seq_idx"),
-                )
-            else:
-                hidden_states = self.conv1d(hidden_states)[:, :, : hidden_states.shape[-1]]
+            hidden_states = causal_conv1d_fn(
+                hidden_states, self.conv1d.weight.squeeze(1), self.conv1d.bias, seq_idx=kwargs.get("seq_idx")
+            )
 
             # Drop the additional previous states
             if use_precomputed_states:
