@@ -132,7 +132,7 @@ class AudioFlamingo3Encoder(Qwen2AudioEncoder):
         inputs_embeds = inputs_embeds.permute(0, 2, 1)
 
         # Add positions, dropout
-        hidden_states = (inputs_embeds + self.embed_positions.weight).to(inputs_embeds.dtype)
+        hidden_states = inputs_embeds + self.embed_positions.weight
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
 
         attention_mask = create_bidirectional_mask(
@@ -273,6 +273,7 @@ class AudioFlamingo3Model(VoxtralModel):
     """
 )
 class AudioFlamingo3ForConditionalGeneration(VoxtralForConditionalGeneration):
+    _keep_in_fp32_modules_strict = None
     _tied_weights_keys = None
 
     def __init__(self, config):
