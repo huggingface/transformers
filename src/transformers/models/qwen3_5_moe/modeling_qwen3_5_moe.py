@@ -54,6 +54,7 @@ from ...utils.generic import (
     is_flash_attention_requested,
     maybe_autocast,
     merge_with_config_defaults,
+    replace_with_function_from_package,
 )
 from ...utils.import_utils import is_flash_linear_attention_available
 from ...utils.output_capturing import OutputRecorder, capture_outputs
@@ -212,6 +213,7 @@ is_fast_path_available = all((chunk_gated_delta_rule, fused_recurrent_gated_delt
 
 
 @use_kernel_func_from_hub("causal_conv1d_update")
+@replace_with_function_from_package("causal_conv1d_update", "causal_conv1d")
 def causal_conv1d_update(
     hidden_states: torch.Tensor,
     conv_state: torch.Tensor,
@@ -232,6 +234,7 @@ def causal_conv1d_update(
 
 
 @use_kernel_func_from_hub("causal_conv1d_fn")
+@replace_with_function_from_package("causal_conv1d_update", "causal_conv1d")
 def causal_conv1d_fn(
     hidden_states: torch.Tensor,
     weight: nn.Parameter,

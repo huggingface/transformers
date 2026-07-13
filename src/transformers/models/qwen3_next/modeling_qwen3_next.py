@@ -29,7 +29,7 @@ from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
-from ...integrations import use_experts_implementation, use_kernel_func_from_hub
+from ...integrations import use_experts_implementation, use_kernel_func_from_hub, use_kernelized_func
 from ...integrations.accelerate import force_accelerate_hooks
 from ...masking_utils import create_causal_mask, create_recurrent_attention_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
@@ -44,7 +44,7 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
-from ...utils.generic import maybe_autocast, merge_with_config_defaults
+from ...utils.generic import maybe_autocast, merge_with_config_defaults, replace_with_function_from_package
 from ...utils.import_utils import is_flash_linear_attention_available
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from .configuration_qwen3_next import Qwen3NextConfig
@@ -341,6 +341,7 @@ is_fast_path_available = all((chunk_gated_delta_rule, fused_recurrent_gated_delt
 
 
 @use_kernel_func_from_hub("causal_conv1d_update")
+@replace_with_function_from_package("causal_conv1d_update", "causal_conv1d")
 def causal_conv1d_update(
     hidden_states: torch.Tensor,
     conv_state: torch.Tensor,
@@ -361,6 +362,7 @@ def causal_conv1d_update(
 
 
 @use_kernel_func_from_hub("causal_conv1d_fn")
+@replace_with_function_from_package("causal_conv1d_update", "causal_conv1d")
 def causal_conv1d_fn(
     hidden_states: torch.Tensor,
     weight: nn.Parameter,
@@ -514,6 +516,7 @@ def torch_recurrent_gated_delta_rule(
     return core_attn_out, last_recurrent_state
 
 
+@use_kernelized_func([causal_conv1d_update, causal_conv1d_fn])
 class Qwen3NextGatedDeltaNet(nn.Module):
     def __init__(self, config: Qwen3NextConfig, layer_idx: int):
         super().__init__()
