@@ -81,6 +81,10 @@ class MiMoV2FlashModelTest(CausalLMModelTest, unittest.TestCase):
     def test_model_rope_scaling_from_config(self, scaling_type):
         pass
 
+    @unittest.skip("MiMo-V2-Flash uses sliding_attention layers, which are not compatible with QuantizedCache")
+    def test_generate_with_quant_cache(self):
+        pass
+
     # Test from Gemma3 adapted to MiMo
     def test_model_rope_scaling_frequencies(self):
         """Tests the frequency properties of the different RoPE scaling types on the model RoPE layer."""
