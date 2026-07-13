@@ -395,6 +395,8 @@ class MusicFlamingoModel(AudioFlamingo3Model):
     """
 )
 class MusicFlamingoForConditionalGeneration(AudioFlamingo3ForConditionalGeneration):
+    _keep_in_fp32_modules_strict = None
+
     def __init__(self, config: MusicFlamingoConfig):
         super().__init__(config)
         self.model = MusicFlamingoModel(config)

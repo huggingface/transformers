@@ -408,7 +408,7 @@ class MusicFlamingoCausalLMOutputWithPast(ModelOutput):
     """
 )
 class MusicFlamingoForConditionalGeneration(MusicFlamingoPreTrainedModel, GenerationMixin):
-    _keep_in_fp32_modules_strict = ["embed_positions"]
+    _keep_in_fp32_modules_strict = None
     _tied_weights_keys = None
 
     def __init__(self, config: MusicFlamingoConfig):
