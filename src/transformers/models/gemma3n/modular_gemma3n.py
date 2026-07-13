@@ -179,11 +179,10 @@ class Gemma3nTextConfig(Gemma3TextConfig):
                 f"Expected {self.num_hidden_layers} values but got {len_asp}."
             )
 
-        self.kv_sharing_roles = self.infer_kv_sharing_roles()
-
         PreTrainedConfig.__post_init__(**kwargs)
 
-    def infer_kv_sharing_roles(self) -> list[str]:
+    @property
+    def kv_sharing_roles(self) -> list[str]:
         # Gemma3n shares KV cache between its layers: some layers produce cache for other layers to consume.
         # Some layers don't participate in cache sharing, we call them "independent"
         kv_sharing_roles = ["independent"] * self.num_hidden_layers
@@ -1505,7 +1504,7 @@ class Gemma3nTextAttention(nn.Module):
         self.is_causal = True
 
         self.is_kv_shared_layer = config.kv_sharing_roles[layer_idx] == "consumer"
-        self.kv_sharing_role = config.kv_sharing_roles[layer_idx] == "producer"
+        self.store_full_length_kv = config.kv_sharing_roles[layer_idx] == "producer"
 
         self.q_proj = nn.Linear(
             config.hidden_size, config.num_attention_heads * self.head_dim, bias=config.attention_bias

@@ -157,8 +157,6 @@ class Gemma3nTextConfig(PreTrainedConfig):
                 f"Expected {self.num_hidden_layers} values but got {len_asp}."
             )
 
-        self.kv_sharing_roles = self.infer_kv_sharing_roles()
-
         super().__post_init__(**kwargs)
 
     def validate_architecture(self):
@@ -198,7 +196,8 @@ class Gemma3nTextConfig(PreTrainedConfig):
         self.standardize_rope_params()
         return kwargs
 
-    def infer_kv_sharing_roles(self) -> list[str]:
+    @property
+    def kv_sharing_roles(self) -> list[str]:
         # Gemma3n shares KV cache between its layers: some layers produce cache for other layers to consume.
         # Some layers don't participate in cache sharing, we call them "independent"
         kv_sharing_roles = ["independent"] * self.num_hidden_layers

@@ -1183,7 +1183,7 @@ class Gemma3nTextAttention(nn.Module):
         self.is_causal = True
 
         self.is_kv_shared_layer = config.kv_sharing_roles[layer_idx] == "consumer"
-        self.kv_sharing_role = config.kv_sharing_roles[layer_idx] == "producer"
+        self.store_full_length_kv = config.kv_sharing_roles[layer_idx] == "producer"
 
         self.q_proj = nn.Linear(
             config.hidden_size, config.num_attention_heads * self.head_dim, bias=config.attention_bias

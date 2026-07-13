@@ -214,13 +214,10 @@ class Gemma4TextConfig(PreTrainedConfig):
         if self.rope_parameters is None:
             self.rope_parameters = default_rope_params
 
-        # Infer the KV sharing roles for each layer, done in a separate method that will be reused if something updates
-        # num_kv_shared_layers, eg. an assistant model config
-        self.kv_sharing_roles = self.infer_kv_sharing_roles()
-
         super().__post_init__(**kwargs)
 
-    def infer_kv_sharing_roles(self) -> list[str]:
+    @property
+    def kv_sharing_roles(self) -> list[str]:
         # Gemma4 shares KV cache between its layers: some layers produce cache for other layers to consume.
         # Some layers don't participate in cache sharing, we call them "independent"
         kv_sharing_roles = ["independent"] * self.num_hidden_layers
