@@ -2833,7 +2833,7 @@ class Trainer:
 
         if isinstance(all_losses, list) and all_losses:
             metrics[f"{metric_key_prefix}_loss"] = np.concatenate(all_losses).mean().item()
-        elif isinstance(all_losses, np.ndarray):
+        elif isinstance(all_losses, np.ndarray) and all_losses.size > 0:
             metrics[f"{metric_key_prefix}_loss"] = all_losses.mean().item()
         if hasattr(self, "model_preparation_time"):
             metrics[f"{metric_key_prefix}_model_preparation_time"] = self.model_preparation_time
