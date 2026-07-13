@@ -233,7 +233,7 @@ def _get_polynomial_decay_schedule_with_warmup_lr_lambda(
         return lr_end / lr_init  # as LambdaLR multiplies by lr_init
     else:
         lr_range = lr_init - lr_end
-        decay_steps = num_training_steps - num_warmup_steps
+        decay_steps = max(1, num_training_steps - num_warmup_steps)
         pct_remaining = 1 - (current_step - num_warmup_steps) / decay_steps
         decay = lr_range * pct_remaining**power + lr_end
         return decay / lr_init  # as LambdaLR multiplies by lr_init
