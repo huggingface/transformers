@@ -680,7 +680,9 @@ def decompose_prefill_decode(
             decoder_calls = (
                 stack.enter_context(_capture_forward(decoder)) if decoder is not None and decoder is not model else []
             )
-            model.generate(**copy.deepcopy(inputs), max_new_tokens=2, min_new_tokens=2)
+            # `use_cache=True`: the prefill/decode split only makes sense with a KV cache, so force
+            # it on regardless of the model's config default (some set `use_cache=False`).
+            model.generate(**copy.deepcopy(inputs), max_new_tokens=2, min_new_tokens=2, use_cache=True)
     except Exception as e:
         raise RuntimeError(
             f"decompose_prefill_decode failed for {type(model).__name__}. "
