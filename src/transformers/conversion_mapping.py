@@ -140,7 +140,7 @@ _MODEL_TO_CONVERSION_PATTERN = {
 
 def _build_checkpoint_conversion_mapping():
     mapping = {
-        "gpt_neox": [
+        "GPTNeoXForCausalLM": [
             WeightRenaming(source_patterns=r"^embed_out\.", target_patterns="lm_head."),
         ],
         "gemma4_unified": [
