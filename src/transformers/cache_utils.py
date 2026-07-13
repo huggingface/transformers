@@ -233,8 +233,9 @@ class DummyLayer(CacheLayerMixin):
 
     def __init__(self, **kwargs):
         self.is_initialized = True
-        self.keys = torch.tensor([], device="cpu")  # needed to be compatible with the exporters
-        self.values = torch.tensor([], device="cpu")
+        # Setting keeps and values to None saves issues with exporters and multi-GPU gather
+        self.keys = None
+        self.values = None
 
     def lazy_initialization(self, key_states: torch.Tensor, value_states: torch.Tensor) -> None:
         raise NotImplementedError("Dummy layer cannot be lazily initialized: they are initialized at creation.")
@@ -242,6 +243,9 @@ class DummyLayer(CacheLayerMixin):
     def update(
         self, key_states: torch.Tensor, value_states: torch.Tensor, *args, **kwargs
     ) -> tuple[torch.Tensor, torch.Tensor]:
+        # Tolerate updates with None, None so that reconstruction of DynamicCache works well in DDP
+        if key_states is None and value_states is None:
+            return None, None
         raise NotImplementedError("Dummy layer don't store cache: they cannot be updated.")
 
     def get_mask_sizes(self, query_length: int) -> tuple[int, int]:
@@ -1657,8 +1661,13 @@ class DynamicCache(Cache):
         if ddp_cache_data is not None:
             # Init all the layers with the data
             for layer_idx, kv_and_optional_sliding in enumerate(ddp_cache_data):
+                key_states, value_states = kv_and_optional_sliding[0], kv_and_optional_sliding[1]
                 # If the config was not passed above, initialize a new cache layer for each entry of the ddp_data
                 if config is None:
+                    # A `None` key means a cache-less layer (a KV-sharing consumer, cf. `DummyLayer`)
+                    if key_states is None:
+                        layers.append(DummyLayer())
+                        continue
                     # kv_and_optional_sliding contains at least two elements: the key and value states. It can also
                     # contain a third element, which is an optional sliding window tensor.
                     sliding_window_tensor = kv_and_optional_sliding[2] if len(kv_and_optional_sliding) == 3 else None
@@ -1670,7 +1679,7 @@ class DynamicCache(Cache):
                     else:
                         layers.append(DynamicLayer())
                 # Update the layer with the data
-                _, _ = layers[layer_idx].update(kv_and_optional_sliding[0], kv_and_optional_sliding[1])
+                _, _ = layers[layer_idx].update(key_states, value_states)
 
         # If neither of config nor ddp_data was passed, then simply lazy init a full cache of DynamicLayer
         if len(layers) == 0:
