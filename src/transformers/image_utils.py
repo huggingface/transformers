@@ -470,6 +470,7 @@ def _validate_image_url(url: str) -> None:
     is made. This prevents SSRF via image URLs passed to pipelines.
     """
     import ipaddress
+    import socket
     from urllib.parse import urlparse
 
     parsed = urlparse(url)
