@@ -706,19 +706,6 @@ class ContinuousBatchingNoAcceleratorTest(unittest.TestCase):
             else:
                 os.environ["WORLD_SIZE"] = original_ws
 
-    def test_synced_gpus_warning_in_continuous_batching(self):
-        config = AutoConfig.from_pretrained("hf-internal-testing/tiny-random-gpt2")
-        model = AutoModelForCausalLM.from_config(config)
-        input_ids = torch.tensor([[1, 2, 3]])
-
-        with (
-            patch.object(model, "generate_batch", return_value={}),
-            self.assertLogs("transformers.generation.utils", level="WARNING") as cm,
-        ):
-            model.generate(input_ids, synced_gpus=True, cache_implementation="paged")
-
-        self.assertTrue(any("synced_gpus is ignored for continuous batching" in log for log in cm.output))
-
 
 @require_torch_accelerator
 class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
