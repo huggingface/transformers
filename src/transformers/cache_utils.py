@@ -271,6 +271,18 @@ class DummyLayer(CacheLayerMixin):
         """Selecting indices in a dummy layer is a no-op."""
         pass
 
+    def reset(self) -> None:
+        """Resetting a dummy layer is a no-op: it stores no cache."""
+        pass
+
+    def offload(self) -> None:
+        """Offloading a dummy layer is a no-op: it stores no cache."""
+        pass
+
+    def prefetch(self) -> None:
+        """Prefetching a dummy layer is a no-op: it stores no cache."""
+        pass
+
 
 class DynamicSlidingWindowLayer(DynamicLayer):
     """
