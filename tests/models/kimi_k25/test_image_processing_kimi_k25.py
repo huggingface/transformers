@@ -22,7 +22,7 @@ from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_image_processing_common import (
     ImageProcessingTestMixin,
-    load_test_image,
+    load_coco_image,
     prepare_image_inputs,
     prepare_video_inputs,
 )
@@ -270,9 +270,7 @@ class Kimi26ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
     # Override to test additional outputs for equivalence such as `image_grid_thw`
     def test_backends_equivalence(self):
-        dummy_image = load_test_image(
-            "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg"
-        )
+        dummy_image = load_coco_image("000000039769.jpg")
 
         # Create processors for each backend
         encodings = {}

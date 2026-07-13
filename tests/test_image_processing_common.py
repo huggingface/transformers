@@ -58,10 +58,9 @@ COCO_CATS_IMAGE_URL = (
 
 
 def load_test_image(url: str):
-    """Load a test image using the url_to_local_path fallback.
-
-    In CI, where fetch_hub_objects_for_ci.py has pre-downloaded files, this resolves
-    to a local path. Outside CI it falls back to fetching the URL directly via load_image.
+    """
+    Loads a test image from a given URL, properly routing through HuggingFace's
+    local hub caching mechanism using url_to_local_path.
     """
     from transformers.image_utils import load_image
 
@@ -825,3 +824,13 @@ class AnnotationFormatTestMixin:
                 first_encoding = image_processor_first(**params)
                 second_encoding = image_processor_second(**params)
                 _compare(first_encoding, second_encoding)
+
+
+COCO_DATASET_URL = "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/"
+
+
+def load_coco_image(image_name: str):
+    """
+    Helper to load a COCO fixture image by its filename.
+    """
+    return load_test_image(f"{COCO_DATASET_URL}{image_name}")

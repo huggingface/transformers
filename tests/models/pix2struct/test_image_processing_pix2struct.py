@@ -21,7 +21,11 @@ from transformers.image_utils import load_image
 from transformers.testing_utils import require_torch, require_torch_accelerator, require_vision, slow, torch_device
 from transformers.utils import is_torch_available, is_vision_available
 
-from ...test_image_processing_common import ImageProcessingTestMixin, load_test_image, prepare_image_inputs
+from ...test_image_processing_common import (
+    ImageProcessingTestMixin,
+    load_coco_image,
+    prepare_image_inputs,
+)
 from ...test_processing_common import url_to_local_path
 
 
@@ -99,9 +103,7 @@ class Pix2StructImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase)
         if len(self.image_processing_classes) < 2:
             self.skipTest(reason="Skipping backends equivalence test as there are less than 2 backends")
 
-        dummy_image = load_test_image(
-            "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg"
-        )
+        dummy_image = load_coco_image("000000039769.jpg")
 
         # Create processors for each backend
         encodings = {}

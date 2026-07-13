@@ -51,7 +51,6 @@ URLS_FOR_TESTING_DATA = [
     "https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/general_ocr_rec_001.png",
     "https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/general_ocr_001.png",
     "https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/table_recognition.jpg",
-    # Legacy COCO URLs have been removed; tests now use the HuggingFace internal testing fixtures mirror.
     "https://cdn.britannica.com/59/94459-050-DBA42467/Skyline-Chicago.jpg",
     "https://cdn.britannica.com/61/93061-050-99147DCE/Statue-of-Liberty-Island-New-York-Bay.jpg",
     "https://llava-vl.github.io/static/images/view.jpg",

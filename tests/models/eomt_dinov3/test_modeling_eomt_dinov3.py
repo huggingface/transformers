@@ -27,7 +27,7 @@ from transformers.testing_utils import (
 from transformers.utils import is_torch_available
 
 from ...test_configuration_common import ConfigTester
-from ...test_image_processing_common import load_test_image
+from ...test_image_processing_common import load_coco_image
 from ...test_modeling_common import ModelTesterMixin, _config_zero_init, floats_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
 
@@ -215,9 +215,7 @@ class EomtDinov3ForUniversalSegmentationIntegrationTest(unittest.TestCase):
         model = EomtDinov3ForUniversalSegmentation.from_pretrained(self.model_id, device_map="auto")
         processor = AutoImageProcessor.from_pretrained(self.model_id)
 
-        image = load_test_image(
-            "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg"
-        )
+        image = load_coco_image("000000039769.jpg")
 
         inputs = processor(images=image, return_tensors="pt").to(model.device)
 
@@ -259,9 +257,7 @@ class EomtDinov3ForUniversalSegmentationIntegrationTest(unittest.TestCase):
         )
         processor = AutoImageProcessor.from_pretrained(self.model_id)
 
-        image = load_test_image(
-            "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg"
-        )
+        image = load_coco_image("000000039769.jpg")
 
         inputs = processor(images=image, return_tensors="pt").to(model.device)
 
@@ -318,9 +314,7 @@ class EomtDinov3ForUniversalSegmentationIntegrationTest(unittest.TestCase):
         model = EomtDinov3ForUniversalSegmentation.from_pretrained(model_id, device_map="auto")
         processor = AutoImageProcessor.from_pretrained(model_id)
 
-        image = load_test_image(
-            "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg"
-        )
+        image = load_coco_image("000000039769.jpg")
 
         inputs = processor(images=image, return_tensors="pt").to(model.device)
 
@@ -376,9 +370,7 @@ class EomtDinov3ForUniversalSegmentationIntegrationTest(unittest.TestCase):
         model = EomtDinov3ForUniversalSegmentation.from_pretrained(self.model_id, device_map="auto")
         processor = AutoImageProcessor.from_pretrained(self.model_id)
 
-        image = load_test_image(
-            "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg"
-        )
+        image = load_coco_image("000000039769.jpg")
 
         inputs = processor(images=image, return_tensors="pt").to(model.device)
 
@@ -424,9 +416,7 @@ class EomtDinov3ForUniversalSegmentationIntegrationTest(unittest.TestCase):
         model = EomtDinov3ForUniversalSegmentation.from_pretrained(model_id, device_map="auto")
         processor = AutoImageProcessor.from_pretrained(model_id)
 
-        image = load_test_image(
-            "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg"
-        )
+        image = load_coco_image("000000039769.jpg")
 
         inputs = processor(images=image, return_tensors="pt").to(model.device)
 
@@ -468,9 +458,7 @@ class EomtDinov3ForUniversalSegmentationIntegrationTest(unittest.TestCase):
             self.assertTrue(0.0 <= info["score"] <= 1.0)
 
     def test_segmentation_pipeline(self):
-        image = load_test_image(
-            "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg"
-        )
+        image = load_coco_image("000000039769.jpg")
 
         model = EomtDinov3ForUniversalSegmentation.from_pretrained(self.model_id, device_map="auto")
         processor = AutoImageProcessor.from_pretrained(self.model_id)

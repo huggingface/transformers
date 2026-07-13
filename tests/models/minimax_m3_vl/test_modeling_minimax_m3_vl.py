@@ -37,7 +37,7 @@ from transformers.testing_utils import (
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
-from ...test_image_processing_common import load_test_image
+from ...test_image_processing_common import load_coco_image, load_test_image
 from ...test_modeling_common import (
     TEST_EAGER_MATCHES_BATCHED_AND_GROUPED_INFERENCE_PARAMETERIZATION,
     ModelTesterMixin,
@@ -696,9 +696,7 @@ class MiniMaxM3VLIntegrationTest(unittest.TestCase):
         # canonical COCO two-cats photo), paired with deliberately different-length questions so the
         # batch genuinely needs padding.
         dog = load_test_image("https://picsum.photos/id/237/400/300").convert("RGB")
-        cats = load_test_image(
-            "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg"
-        ).convert("RGB")
+        cats = load_coco_image("000000039769.jpg").convert("RGB")
         texts = [
             self._prompt(processor, "What animal is this? One word."),
             self._prompt(

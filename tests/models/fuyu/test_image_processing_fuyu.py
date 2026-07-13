@@ -14,7 +14,7 @@ from transformers.testing_utils import (
 )
 from transformers.utils import is_torch_available, is_vision_available
 
-from ...test_image_processing_common import ImageProcessingTestMixin, load_test_image
+from ...test_image_processing_common import ImageProcessingTestMixin, load_coco_image
 
 
 if is_torch_available() and is_vision_available():
@@ -178,9 +178,7 @@ class FuyuImageProcessorTest(ImageProcessingTestMixin, unittest.TestCase):
         if len(self.image_processing_classes) < 2:
             self.skipTest(reason="Skipping backends equivalence test as there are less than 2 backends")
 
-        dummy_image = load_test_image(
-            "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg"
-        )
+        dummy_image = load_coco_image("000000039769.jpg")
 
         encodings = {}
         for backend_name, image_processing_class in self.image_processing_classes.items():
