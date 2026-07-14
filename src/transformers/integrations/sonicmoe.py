@@ -67,6 +67,9 @@ def _load_sonicmoe_kernel() -> SonicMoE:
     from cutlass.utils.hardware_info import HardwareInfo
 
     # sonic-moe JIT-builds CuteDSL kernels; bail early if the driver can't load their device image.
+    # HardwareInfo uses the CUDA driver API directly and needs a current context, which torch only
+    # creates lazily — without this, the probe fails with CUDA_ERROR_INVALID_CONTEXT.
+    torch.cuda.synchronize()
     try:
         HardwareInfo().get_max_active_clusters(1)
     except Exception as e:  # cutlass wraps the CUDA driver error in a bare RuntimeError
@@ -104,8 +107,6 @@ def _load_sonicmoe_kernel() -> SonicMoE:
         activation_type_enum=activation_type_enum,
         moe_general_routing_inputs=moe_general_routing_inputs,
     )
-
-
 
 
 class SonicMoeHandle:
@@ -211,7 +212,7 @@ class SonicMoeHandle:
         w1 = w1.permute(*perm)  # (2*I, H, E)
         w2 = w2.permute(*perm)  # (I, H, E)
 
-        return self._sonicmoe_wrapper(
+        return _sonicmoe_wrapper(
             hidden_states=hidden_states,
             router_scores=router_scores,
             expert_ids=expert_ids,
@@ -226,57 +227,58 @@ class SonicMoeHandle:
             is_inference_mode_enabled=not torch.is_grad_enabled(),
         )
 
-    @torch._dynamo.allow_in_graph
-    def _sonicmoe_wrapper(
-        self,
-        hidden_states: torch.Tensor,
-        router_scores: torch.Tensor,
-        expert_ids: torch.Tensor,
-        token_idx: torch.Tensor,
-        w1: torch.Tensor,
-        b1: torch.Tensor | None,
-        w2: torch.Tensor,
-        b2: torch.Tensor | None,
-        activation_type: str,
-        num_experts: int,
-        concat_layout: bool,
-        is_inference_mode_enabled: bool,
-    ) -> torch.Tensor:
-        """Handle-level shim around `moe_general_routing_inputs` so `allow_in_graph` can wrap it.
-
-        sonicmoe asserts `not torch.compiler.is_compiling()` internally because it dispatches
-        CuteDSL kernels, which Dynamo can't trace. `allow_in_graph` keeps the call in the FX
-        graph as a single opaque node (no tracing into the body, no graph break) while still
-        running the real Python at runtime — autograd through `_UpProjection` / `_DownProjection`
-        flows normally. The decorator must be applied at module load time, not inside the compiled
-        function — hence this shim plus the `allow_in_graph` decorator above.
-        """
-        sonicmoe = self._load_sonicmoe_kernel()
-
-        # Default to SwiGLU if the activation type is not found
-        activation_type = getattr(
-            sonicmoe.activation_type_enum,
-            activation_type,
-            sonicmoe.activation_type_enum.SWIGLU
-        )
-
-        output, _ = sonicmoe.moe_general_routing_inputs(
-            hidden_states,
-            router_scores,
-            token_idx,
-            expert_ids,
-            w1,
-            b1,
-            w2,
-            b2,
-            E=num_experts,
-            activation_type=activation_type,
-            is_inference_mode_enabled=is_inference_mode_enabled,
-            concat_layout=concat_layout,
-            stream_id=None,
-        )
-        return output
-
 
 # Singleton object: this should be the only SonicMoeHandle object instantiated in the codebase
 SONIC_MOE_HANDLE = SonicMoeHandle()
+
+
+@torch._dynamo.allow_in_graph
+def _sonicmoe_wrapper(
+    hidden_states: torch.Tensor,
+    router_scores: torch.Tensor,
+    expert_ids: torch.Tensor,
+    token_idx: torch.Tensor,
+    w1: torch.Tensor,
+    b1: torch.Tensor | None,
+    w2: torch.Tensor,
+    b2: torch.Tensor | None,
+    activation_type: str,
+    num_experts: int,
+    concat_layout: bool,
+    is_inference_mode_enabled: bool,
+) -> torch.Tensor:
+    """Module-level shim around `moe_general_routing_inputs` so `allow_in_graph` can wrap it.
+
+    sonicmoe asserts `not torch.compiler.is_compiling()` internally because it dispatches
+    CuteDSL kernels, which Dynamo can't trace. `allow_in_graph` keeps the call in the FX
+    graph as a single opaque node (no tracing into the body, no graph break) while still
+    running the real Python at runtime — autograd through `_UpProjection` / `_DownProjection`
+    flows normally. This must be a plain module-level function: `allow_in_graph` registers the
+    function object itself, and Dynamo does not honor it through bound-method attribute access,
+    so it cannot live on `SonicMoeHandle`.
+    """
+    sonicmoe = SONIC_MOE_HANDLE._load_sonicmoe_kernel()
+
+    # Default to SwiGLU if the activation type is not found
+    activation_type = getattr(
+        sonicmoe.activation_type_enum,
+        activation_type,
+        sonicmoe.activation_type_enum.SWIGLU,
+    )
+
+    output, _ = sonicmoe.moe_general_routing_inputs(
+        hidden_states,
+        router_scores,
+        token_idx,
+        expert_ids,
+        w1,
+        b1,
+        w2,
+        b2,
+        E=num_experts,
+        activation_type=activation_type,
+        is_inference_mode_enabled=is_inference_mode_enabled,
+        concat_layout=concat_layout,
+        stream_id=None,
+    )
+    return output
