@@ -44,18 +44,24 @@ class TmlProcessor(ProcessorMixin):
         image_processor=None,
         tokenizer=None,
         chat_template=None,
-        image_token="<|content_image|>",
-        audio_token="<|content_audio_input|>",
+        image_token="<|unused_200007|>",
+        audio_token="<|unused_200021|>",
+        image_bos_token="<|content_image|>",
+        audio_bos_token="<|content_audio_input|>",
         num_dmel_bins=16,
         dmel_min_value=-7.0,
         dmel_max_value=2.0,
         **kwargs,
     ):
         r"""
-        image_token (`str`, *optional*, defaults to `"<|content_image|>"`):
-            Special token used to denote image location.
-        audio_token (`str`, *optional*, defaults to `"<|content_audio_input|>"`):
-            Special token used to denote audio location.
+        image_token (`str`, *optional*, defaults to `"<|unused_200007|>"`):
+            Placeholder token for each image soft-token slot (replaced by image features).
+        audio_token (`str`, *optional*, defaults to `"<|unused_200021|>"`):
+            Placeholder token for each audio soft-token slot (replaced by audio features).
+        image_bos_token (`str`, *optional*, defaults to `"<|content_image|>"`):
+            Marker token that begins an image span (kept as an ordinary embedded token).
+        audio_bos_token (`str`, *optional*, defaults to `"<|content_audio_input|>"`):
+            Marker token that begins an audio span (kept as an ordinary embedded token).
         num_dmel_bins (`int`, *optional*, defaults to 16):
             Number of discrete bins each (clamped) log-mel value is quantized into.
         dmel_min_value (`float`, *optional*, defaults to -7.0):
@@ -67,6 +73,10 @@ class TmlProcessor(ProcessorMixin):
         self.image_token_id = tokenizer.encode(self.image_token, add_special_tokens=False)[0]
         self.audio_token = tokenizer.audio_token if hasattr(tokenizer, "audio_token") else audio_token
         self.audio_token_id = tokenizer.encode(self.audio_token, add_special_tokens=False)[0]
+        self.image_bos_token = image_bos_token
+        self.image_bos_token_id = tokenizer.encode(self.image_bos_token, add_special_tokens=False)[0]
+        self.audio_bos_token = audio_bos_token
+        self.audio_bos_token_id = tokenizer.encode(self.audio_bos_token, add_special_tokens=False)[0]
 
         # dMel
         self.num_dmel_bins = num_dmel_bins

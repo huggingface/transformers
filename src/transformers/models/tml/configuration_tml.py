@@ -163,9 +163,10 @@ class TmlConfig(PreTrainedConfig):
     text_config: TmlTextConfig | dict | None = None
     audio_config: TmlAudioConfig | dict | None = None
     vision_config: TmlVisionConfig | dict | None = None
-    # `<|content_image|>` / `<|content_audio_input|>` in the tml tokenizer
-    image_token_id: int = 200005
-    audio_token_id: int = 200020
+    image_token_id: int = 200007
+    audio_token_id: int = 200021
+    image_bos_token_id: int = 200005
+    audio_bos_token_id: int = 200020
 
     def __post_init__(self, **kwargs):
         if isinstance(self.audio_config, dict):
