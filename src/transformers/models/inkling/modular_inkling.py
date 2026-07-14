@@ -181,7 +181,7 @@ class InklingVisionConfig(PreTrainedConfig):
 class InklingConfig(PreTrainedConfig):
     """Top-level multimodal config (`InklingMMConfig` in the SGLang source)."""
 
-    model_type = "inkling"
+    model_type = "inkling_mm_model"
     sub_configs = {
         "text_config": InklingTextConfig,
         "audio_config": InklingAudioConfig,
