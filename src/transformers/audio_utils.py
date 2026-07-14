@@ -271,6 +271,7 @@ def load_audio(audio: str | np.ndarray, sampling_rate=16000, timeout=None, backe
         return AudioDecoder(source, sample_rate=sampling_rate, num_channels=1).get_all_samples().data[0].numpy()
 
     if resolved_backend == "torchaudio":
+        requires_backends(load_audio, ["torchaudio"])
         waveform, src_sampling_rate = torchaudio.load(BytesIO(source) if isinstance(source, bytes) else source)
         waveform = waveform.mean(dim=0)  # to mono
 
