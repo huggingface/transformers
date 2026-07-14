@@ -56,6 +56,7 @@ from .candidate_generator import (
     AssistedCandidateGeneratorDifferentTokenizers,
     CandidateGenerator,
     EarlyExitCandidateGenerator,
+    MTPCandidateGenerator,
     PromptLookupCandidateGenerator,
     SinglePositionMultiTokenCandidateGenerator,
     UniversalSpeculativeDecodingGenerator,
@@ -1002,6 +1003,13 @@ class GenerationMixin(ContinuousMixin):
                 max_length=generation_config.max_length,
                 logits_processor=logits_processor,
                 vocab_size=self.config.get_text_config().vocab_size,
+            )
+        elif generation_config.use_mtp:
+            candidate_generator = MTPCandidateGenerator(
+                main_model=self,
+                generation_config=generation_config,
+                logits_processor=logits_processor,
+                model_kwargs=model_kwargs,
             )
         # SinglePositionMultiTokenCandidateGenerator requires a target model that can provide, and an assistant model that
         # can work from a shared_kv_states dictionary. Currently, the only models that can provide this are Gemma 3n and
@@ -2000,7 +2008,16 @@ class GenerationMixin(ContinuousMixin):
         # i.e. `cache_implementation` in [None, "dynamic", "offloaded", "dynamic_full"]
         # TODO: prepare linear cache from a single API, instead of creating in modeling code
         else:
-            model_kwargs[cache_name] = DynamicCache(**dynamic_cache_kwargs)
+            cache = DynamicCache(**dynamic_cache_kwargs)
+            # Replace sliding by full
+            if generation_config.cache_implementation == "dynamic_full":
+                from ..cache_utils import DynamicLayer, DynamicSlidingWindowLayer
+
+                cache.layers = [
+                    DynamicLayer() if type(layer) is DynamicSlidingWindowLayer else layer for layer in cache.layers
+                ]
+
+            model_kwargs[cache_name] = cache
 
         if (
             self.config.is_encoder_decoder
@@ -2440,11 +2457,7 @@ class GenerationMixin(ContinuousMixin):
 
         # 1. Handle kwargs, `generation_config`, validate them and obtain generation mode
         generation_mode_kwargs = self._extract_generation_mode_kwargs(
-            custom_generate,
-            kwargs,
-            synced_gpus,
-            assistant_model,
-            streamer,
+            custom_generate, kwargs, synced_gpus, assistant_model, streamer
         )
 
         # Check length values before updating the config with defaults. We'll use it later to define the final min/max length (# 6)
@@ -3613,6 +3626,13 @@ class GenerationMixin(ContinuousMixin):
             or type(model_kwargs.get("past_key_values")) is StaticCache
         ):
             raise ValueError("assisted generate is not supported with Static cache classes`")
+
+        # Make sure we can record past on the cache
+        cache = model_kwargs.get("past_key_values")
+        if cache is None:
+            raise RuntimeError("assisted decoding requires a cache")
+        cache.activate_past_recording()
+
         # Get the candidate generator, given the parameterization
         candidate_generator = self._get_candidate_generator(
             generation_config=generation_config,
@@ -3772,7 +3792,8 @@ class GenerationMixin(ContinuousMixin):
             new_cur_len = input_ids.shape[1]
 
             # 4.2. Discard past key values relative to unused assistant tokens
-            outputs.past_key_values.crop(new_cur_len - 1)
+            number_of_tokens_to_crop = candidate_input_ids.shape[-1] - input_ids.shape[-1]
+            outputs.past_key_values.crop(-number_of_tokens_to_crop)
 
             # 5. Update the candidate generation strategy if needed
             candidate_generator.update_candidate_strategy(input_ids, new_logits, n_matches)
@@ -3837,6 +3858,7 @@ class GenerationMixin(ContinuousMixin):
 
         if (
             isinstance(candidate_generator, AssistedCandidateGenerator)
+            and not isinstance(candidate_generator, MTPCandidateGenerator)
             and candidate_generator.assistant_model.generation_config.num_assistant_tokens_schedule == "heuristic"
         ):
             candidate_generator.assistant_model.generation_config.num_assistant_tokens = (

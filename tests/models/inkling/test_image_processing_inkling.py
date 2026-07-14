@@ -34,7 +34,7 @@ if is_vision_available():
         pass
 
 
-class TmlImageProcessingTester:
+class InklingImageProcessingTester:
     def __init__(
         self,
         parent,
@@ -102,12 +102,12 @@ class TmlImageProcessingTester:
 
 @require_torch
 @require_vision
-class TmlImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
+class InklingImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     def setUp(self):
         super().setUp()
-        self.image_processor_tester = TmlImageProcessingTester(self)
+        self.image_processor_tester = InklingImageProcessingTester(self)
 
-    @unittest.skip("Tml patchification requires RGB (3-channel) images; 4-channel inputs are unsupported.")
+    @unittest.skip("Inkling patchification requires RGB (3-channel) images; 4-channel inputs are unsupported.")
     def test_call_numpy_4_channels(self):
         pass
 
@@ -129,7 +129,7 @@ class TmlImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             self.assertTrue(hasattr(image_processing, "pooling_kernel_size"))
 
     def test_image_processor_defaults(self):
-        """Test default parameter values for Tml matching VARASP_SL280_K3."""
+        """Test default parameter values for Inkling matching VARASP_SL280_K3."""
         for image_processing_class in self.image_processing_classes.values():
             proc = image_processing_class()
             self.assertEqual(proc.patch_size, 16)

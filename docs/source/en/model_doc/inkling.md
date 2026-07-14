@@ -16,13 +16,14 @@ limitations under the License.
 ⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be rendered properly in your Markdown viewer.
 
 -->
+*This model was contributed to Hugging Face Transformers on 2026-07-13.*
 
 
-# Tml
+# Inkling
 
 ## Overview
 
-The Tml model was proposed in [<INSERT PAPER NAME HERE>](<INSERT PAPER LINK HERE>) by <INSERT AUTHORS HERE>.
+The Inkling model was proposed in [<INSERT PAPER NAME HERE>](<INSERT PAPER LINK HERE>) by <INSERT AUTHORS HERE>.
 <INSERT SHORT SUMMARY HERE>
 
 The abstract from the paper is the following:
@@ -40,63 +41,63 @@ The original code can be found [here](<INSERT LINK TO GITHUB REPO HERE>).
 
 <INSERT SOME NICE EXAMPLES HERE>
 
-## TmlAudioConfig
+## InklingAudioConfig
 
-[[autodoc]] TmlAudioConfig
+[[autodoc]] InklingAudioConfig
 
-## TmlConfig
+## InklingConfig
 
-[[autodoc]] TmlConfig
+[[autodoc]] InklingConfig
 
-## TmlTextConfig
+## InklingTextConfig
 
-[[autodoc]] TmlTextConfig
+[[autodoc]] InklingTextConfig
 
-## TmlVisionConfig
+## InklingVisionConfig
 
-[[autodoc]] TmlVisionConfig
+[[autodoc]] InklingVisionConfig
 
-## TmlAudioModel
+## InklingAudioModel
 
-[[autodoc]] TmlAudioModel
+[[autodoc]] InklingAudioModel
     - forward
 
-## TmlForCausalLM
+## InklingForCausalLM
 
-[[autodoc]] TmlForCausalLM
+[[autodoc]] InklingForCausalLM
 
-## TmlForConditionalGeneration
+## InklingForConditionalGeneration
 
-[[autodoc]] TmlForConditionalGeneration
+[[autodoc]] InklingForConditionalGeneration
 
-## TmlModel
+## InklingModel
 
-[[autodoc]] TmlModel
+[[autodoc]] InklingModel
     - forward
 
-## TmlPreTrainedModel
+## InklingPreTrainedModel
 
-[[autodoc]] TmlPreTrainedModel
+[[autodoc]] InklingPreTrainedModel
     - forward
 
-## TmlTextModel
+## InklingTextModel
 
-[[autodoc]] TmlTextModel
+[[autodoc]] InklingTextModel
     - forward
 
-## TmlVisionModel
+## InklingVisionModel
 
-[[autodoc]] TmlVisionModel
+[[autodoc]] InklingVisionModel
     - forward
 
-## TmlImageProcessor
+## InklingImageProcessor
 
-[[autodoc]] TmlImageProcessor
+[[autodoc]] InklingImageProcessor
 
-## TmlAudioFeatureExtractor
+## InklingAudioFeatureExtractor
 
-[[autodoc]] TmlAudioFeatureExtractor
+[[autodoc]] InklingAudioFeatureExtractor
 
-## TmlProcessor
+## InklingProcessor
 
-[[autodoc]] TmlProcessor
+[[autodoc]] InklingProcessor

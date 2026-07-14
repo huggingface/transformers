@@ -25,7 +25,7 @@ if is_torch_available():
 logger = logging.get_logger(__name__)
 
 
-class TmlProcessorKwargs(ProcessingKwargs, total=False):
+class InklingProcessorKwargs(ProcessingKwargs, total=False):
     _defaults = {
         "audio_kwargs": {
             "load_audio_backend": "torchaudio",  # sglang ref uses torchaudio resampling
@@ -35,8 +35,8 @@ class TmlProcessorKwargs(ProcessingKwargs, total=False):
 
 @auto_docstring
 @requires(backends=("torch",))
-class TmlProcessor(ProcessorMixin):
-    valid_processor_kwargs = TmlProcessorKwargs
+class InklingProcessor(ProcessorMixin):
+    valid_processor_kwargs = InklingProcessorKwargs
 
     def __init__(
         self,
@@ -129,4 +129,4 @@ class TmlProcessor(ProcessorMixin):
         return [name for name in dict.fromkeys(names) if name not in self.unused_input_names]
 
 
-__all__ = ["TmlProcessor"]
+__all__ = ["InklingProcessor"]

@@ -1422,6 +1422,101 @@ class SinglePositionMultiTokenCandidateGenerator(AssistedCandidateGenerator):
         return candidate_ids, candidate_logits
 
 
+class MTPCandidateGenerator(AssistedCandidateGenerator):
+    requires_model_outputs: bool = True
+    # We always need to pass the hidden states from the main model
+    model_kwargs_overrides: dict[str, Any] = {"output_hidden_states": True}
+
+    def __init__(
+        self,
+        main_model: "PreTrainedModel",
+        generation_config: "GenerationConfig",
+        model_kwargs: dict[str, Any],
+        logits_processor: Optional["LogitsProcessorList"] = None,
+    ):
+        from ..cache_utils import MtpCache
+        from ..modeling_layers import MtpModel
+
+        self.num_mtp_layers = getattr(main_model.config.get_text_config(), "num_mtp_layers", None)
+        if self.num_mtp_layers is None:
+            raise ValueError(
+                "Could not find `num_mtp_layers` in the model config. This model probably has no associated "
+                "mtp weights."
+            )
+
+        # Heuristic: use the device of the last layer of the main model for the MTP layers
+        self.device = next(x.device for x in main_model.base_model.layers[-1].parameters())  # type: ignore
+        self.mtp_model = MtpModel.from_pretrained(main_model, device_map={"": self.device})
+
+        # Create the mtp cache and allow it to keep its past before we crop it
+        self.mtp_cache = MtpCache(config=main_model.config.get_text_config())
+        self.mtp_cache.activate_past_recording()
+
+        # Save those to know how to decode mtp tokens
+        self.do_sample = generation_config.do_sample
+        self.logits_processor = logits_processor
+
+        self.is_main_model_prefill = True
+
+    def get_candidates(
+        self,
+        input_ids: torch.LongTensor,
+        model_kwargs: dict[str, Any],
+        model_outputs: ModelOutput,
+        is_first_iteration: bool,
+        n_last_matches: int,
+        **kwargs,
+    ) -> tuple[torch.LongTensor, torch.FloatTensor | None]:
+        # This is a trick to skip the first loop of the main model's `_assisted_decoding` method. Since we need the
+        # main model's outputs here to get the candidates, we skip the first loop to allow the main model to get the outputs
+        # (this is because usually `get_candidates` is called first in the main `_assisted_decoding` loop)
+        if is_first_iteration:
+            return input_ids, None
+
+        # Make sure we correctly collected all the main model outputs we needed
+        if model_outputs is None or not hasattr(model_outputs, "hidden_states"):
+            raise ValueError("`model_outputs` cannot be None, and they need to contain `hiden_states`")
+
+        last_hidden_states: torch.Tensor = model_outputs.hidden_states[-1]
+
+        # Here `input_ids`/`attention_mask`/`position_ids` are the full sequence inputs, including the last token that was
+        # just drafted from the main model. We need to slice to get only what the main model just processed, shifted by 1 to the
+        # right to take the new token as well. Say the main model just had token positions [2, 3] as input, the tensors
+        # contains the data for position [0, 1, 2, 3, 4], i.e. full inputs + new drafted token from last position 3 that was processed.
+        # We want to slice to get data for positions [3, 4] for the 1st mtp layer, i.e. same as main model, shifted by 1 to the right.
+        num_last_main_model_tokens = n_last_matches + 1 if not self.is_main_model_prefill else input_ids.shape[1] - 1
+        mtp_input_ids = input_ids[:, -num_last_main_model_tokens:]
+        mtp_position_ids = model_kwargs["position_ids"][:, -num_last_main_model_tokens:]
+        mtp_attention_mask = model_kwargs["attention_mask"][:, -num_last_main_model_tokens:]
+
+        # The hidden states have seq_len equal to the last main model's forward pass on all the candidates. We need the
+        # last hidden states of only the last validated tokens
+        last_hidden_states = last_hidden_states[:, :num_last_main_model_tokens].to(self.device)
+
+        candidate_ids, candidate_logits, _ = self.mtp_model(
+            input_ids=mtp_input_ids,
+            last_hidden_states=last_hidden_states,
+            attention_mask=mtp_attention_mask,
+            position_ids=mtp_position_ids,
+            mtp_cache=self.mtp_cache,
+            do_sample=self.do_sample,
+            logits_processor=self.logits_processor,
+            full_input_ids=input_ids,
+            **kwargs,
+        )
+
+        # Once we arrive here the first time, it's no longer the case
+        self.is_main_model_prefill = False
+
+        # cat everything back together (we need to return the full ids here)
+        candidate_ids = torch.cat([input_ids, candidate_ids], dim=-1)
+        return candidate_ids, candidate_logits
+
+    def update_candidate_strategy(self, *args, **kwargs):
+        # We never update the strategy
+        return
+
+
 def _prepare_attention_mask(model_kwargs: dict[str, Any], new_length: int, is_encoder_decoder: bool) -> dict[str, Any]:
     """Expands or crops the model's mask for decoding purposes, to the defined length"""
 

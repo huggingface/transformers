@@ -33,11 +33,11 @@ def _to_exact_int(value: float, name: str, tolerance: float = 1e-6) -> int:
     return int(rounded)
 
 
-class TmlFeatureExtractor(SequenceFeatureExtractor):
+class InklingFeatureExtractor(SequenceFeatureExtractor):
     r"""
     Constructs a TML audio feature extractor, which converts raw audio waveforms into log-mel spectrogram
     features (mel filterbank energies in log10 space). The quantization of these features into discrete
-    dMel bins is performed downstream by [`TmlProcessor`].
+    dMel bins is performed downstream by [`InklingProcessor`].
 
     This feature extractor inherits from [`~feature_extraction_sequence_utils.SequenceFeatureExtractor`]
     which contains most of the main methods. Users should refer to this superclass for more information
@@ -232,4 +232,4 @@ class TmlFeatureExtractor(SequenceFeatureExtractor):
         return BatchFeature(data=data, tensor_type=return_tensors)
 
 
-__all__ = ["TmlFeatureExtractor"]
+__all__ = ["InklingFeatureExtractor"]

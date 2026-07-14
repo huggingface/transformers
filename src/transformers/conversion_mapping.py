@@ -1784,6 +1784,22 @@ def _build_checkpoint_conversion_mapping():
         WeightRenaming("mlp.shared_expert.", "mlp.shared_experts."),
     ]
 
+    # temporary before rename
+    mapping["inkling_mm_model"] = [
+        WeightRenaming(source_patterns=r"^model\.llm\.layers", target_patterns=r"model.layers"),
+        WeightRenaming(source_patterns=r"^model\.llm\.(embed_norm|embed|norm|unembed)", target_patterns=r"\1"),
+    ] + mapping["tml_mm_model"]
+
+    mapping["MtpModel"] = [
+        PrefixChange(prefix_to_remove="model"),
+        PrefixChange(prefix_to_remove="mtp"),
+        WeightRenaming(source_patterns=".shared_head.norm.", target_patterns=".post_norm."),
+        WeightRenaming(source_patterns=".mtp_block.enorm.", target_patterns=".enorm."),
+        WeightRenaming(source_patterns=".mtp_block.hnorm.", target_patterns=".hnorm."),
+        WeightRenaming(source_patterns=".mtp_block.eh_proj.", target_patterns=".eh_proj."),
+        WeightRenaming(source_patterns=".mtp_block.post_norm.", target_patterns=".post_norm."),
+    ]
+
     for model_type, base_pattern in _MODEL_TO_CONVERSION_PATTERN.items():
         if model_type in mapping:
             continue
