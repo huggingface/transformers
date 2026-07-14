@@ -62,6 +62,7 @@ from ..llama.modeling_llama import (
     LlamaModel,
     LlamaRMSNorm,
     LlamaRotaryEmbedding,
+    repeat_kv,
 )
 from ..qwen2_vl.image_processing_qwen2_vl import smart_resize
 from ..qwen2_vl.modeling_qwen2_vl import Qwen2VLForConditionalGeneration, Qwen2VLModel, Qwen2VLPreTrainedModel
@@ -71,7 +72,6 @@ from ..siglip2.modeling_siglip2 import (
     Siglip2Encoder,
     Siglip2EncoderLayer,
     Siglip2VisionEmbeddings,
-    eager_attention_forward,
 )
 
 
@@ -276,6 +276,51 @@ class Cosmos3EdgeTextRotaryEmbedding(LlamaRotaryEmbedding):
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
 
+def eager_attention_forward(
+    module: nn.Module,
+    query: torch.Tensor,
+    key: torch.Tensor,
+    value: torch.Tensor,
+    attention_mask: torch.Tensor | None,
+    scaling: float,
+    dropout: float = 0.0,
+    **kwargs,
+):
+    """Llama's grouped-query eager attention fallback used by the Edge text tower."""
+    key_states = repeat_kv(key, module.num_key_value_groups)
+    value_states = repeat_kv(value, module.num_key_value_groups)
+
+    attn_weights = torch.matmul(query, key_states.transpose(2, 3)) * scaling
+    if attention_mask is not None:
+        attn_weights = attn_weights + attention_mask
+
+    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
+    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
+    attn_output = torch.matmul(attn_weights, value_states)
+    return attn_output.transpose(1, 2).contiguous(), attn_weights
+
+
+def siglip2_eager_attention_forward(
+    module: nn.Module,
+    query: torch.Tensor,
+    key: torch.Tensor,
+    value: torch.Tensor,
+    attention_mask: torch.Tensor | None,
+    scaling: float,
+    dropout: float = 0.0,
+    **kwargs,
+):
+    """SigLIP2's eager attention fallback used by the packed Edge vision tower."""
+    attn_weights = torch.matmul(query, key.transpose(-1, -2)) * scaling
+    if attention_mask is not None:
+        attn_weights = attn_weights + attention_mask
+
+    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
+    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
+    attn_output = torch.matmul(attn_weights, value)
+    return attn_output.transpose(1, 2).contiguous(), attn_weights
+
+
 class Cosmos3EdgeTextAttention(LlamaAttention):
     """Dense GQA attention with Cosmos3 Edge M-RoPE."""
 
@@ -319,6 +364,8 @@ _COSMOS3_EDGE_DROPPED_GENERATOR_KEYS = [
 class Cosmos3EdgePreTrainedModel(Qwen2VLPreTrainedModel):
     config_class = Cosmos3EdgeConfig
     input_modalities = ("image", "video", "text")
+    # Packed, variable-length visual inputs use Python-level per-grid reshaping and cannot be compiled fullgraph.
+    _can_compile_fullgraph = False
     _no_split_modules = ["Cosmos3EdgeTextDecoderLayer", "Cosmos3EdgeVisionEncoderLayer"]
     _can_record_outputs = {
         "hidden_states": Cosmos3EdgeTextDecoderLayer,
@@ -458,7 +505,7 @@ class Cosmos3EdgeVisionAttention(Siglip2Attention):
         value_states = value_states.transpose(0, 1).unsqueeze(0)
 
         attention_interface = ALL_ATTENTION_FUNCTIONS.get_interface(
-            self.config._attn_implementation, eager_attention_forward
+            self.config._attn_implementation, siglip2_eager_attention_forward
         )
 
         if is_flash_attention_requested(self.config):
@@ -751,11 +798,16 @@ class Cosmos3EdgeForConditionalGeneration(Qwen2VLForConditionalGeneration, Cosmo
         if cache is not None and cache.get_seq_length() and self.model.rope_deltas is not None:
             return text_positions.unsqueeze(0).expand(3, -1, -1) + self.model.rope_deltas.unsqueeze(0)
 
-        input_ids = model_kwargs.get("input_ids", inputs_tensor)
+        # `GenerationMixin` uses an empty `input_ids` placeholder when generation starts from `inputs_embeds`.
+        # M-RoPE needs actual token IDs to locate visual spans, so fall back to text positions for that path.
+        if "input_ids" in model_kwargs and model_kwargs["input_ids"].shape[1] > 0:
+            inputs_tensor = model_kwargs["input_ids"]
+
+        is_input_ids = inputs_tensor.ndim == 2 and inputs_tensor.dtype in (torch.int, torch.long)
         has_multimodal = (
             model_kwargs.get("image_grid_thw") is not None or model_kwargs.get("video_grid_thw") is not None
         )
-        if input_ids is not None and has_multimodal:
+        if is_input_ids and has_multimodal:
             if model_kwargs.get("mm_token_type_ids") is None:
                 raise ValueError(
                     "Multimodal data was passed (via `image_grid_thw` or `video_grid_thw`) but `mm_token_type_ids` is "
@@ -763,7 +815,7 @@ class Cosmos3EdgeForConditionalGeneration(Qwen2VLForConditionalGeneration, Cosmo
                     "computed correctly. `mm_token_type_ids` is returned by the processor alongside `input_ids`."
                 )
             position_ids, rope_deltas = self.model.get_rope_index(
-                input_ids=input_ids,
+                input_ids=inputs_tensor,
                 mm_token_type_ids=model_kwargs["mm_token_type_ids"],
                 image_grid_thw=model_kwargs.get("image_grid_thw"),
                 video_grid_thw=model_kwargs.get("video_grid_thw"),

@@ -180,6 +180,18 @@ def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
     return q_embed, k_embed
 
 
+def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
+    """
+    This is the equivalent of torch.repeat_interleave(x, dim=1, repeats=n_rep). The hidden states go from (batch,
+    num_key_value_heads, seqlen, head_dim) to (batch, num_attention_heads, seqlen, head_dim)
+    """
+    batch, num_key_value_heads, slen, head_dim = hidden_states.shape
+    if n_rep == 1:
+        return hidden_states
+    hidden_states = hidden_states[:, :, None, :, :].expand(batch, num_key_value_heads, n_rep, slen, head_dim)
+    return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
+
+
 def eager_attention_forward(
     module: nn.Module,
     query: torch.Tensor,
@@ -190,17 +202,18 @@ def eager_attention_forward(
     dropout: float = 0.0,
     **kwargs,
 ):
-    attn_weights = torch.matmul(query, key.transpose(-1, -2)) * scaling
+    """Llama's grouped-query eager attention fallback used by the Edge text tower."""
+    key_states = repeat_kv(key, module.num_key_value_groups)
+    value_states = repeat_kv(value, module.num_key_value_groups)
+
+    attn_weights = torch.matmul(query, key_states.transpose(2, 3)) * scaling
     if attention_mask is not None:
         attn_weights = attn_weights + attention_mask
 
     attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
     attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
-
-    attn_output = torch.matmul(attn_weights, value)
-    attn_output = attn_output.transpose(1, 2).contiguous()
-
-    return attn_output, attn_weights
+    attn_output = torch.matmul(attn_weights, value_states)
+    return attn_output.transpose(1, 2).contiguous(), attn_weights
 
 
 @use_kernelized_func(apply_rotary_pos_emb)
@@ -388,8 +401,8 @@ class Cosmos3EdgePreTrainedModel(PreTrainedModel):
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = True
     _supports_sdpa = True
-
-    _can_compile_fullgraph = True
+    # Packed, variable-length visual inputs use Python-level per-grid reshaping and cannot be compiled fullgraph.
+    _can_compile_fullgraph = False
     _supports_attention_backend = True
     config_class = Cosmos3EdgeConfig
     _can_record_outputs = {
@@ -614,6 +627,27 @@ class Cosmos3EdgeVisionEmbeddings(nn.Module):
         return patch_embeds + position_embeddings
 
 
+def siglip2_eager_attention_forward(
+    module: nn.Module,
+    query: torch.Tensor,
+    key: torch.Tensor,
+    value: torch.Tensor,
+    attention_mask: torch.Tensor | None,
+    scaling: float,
+    dropout: float = 0.0,
+    **kwargs,
+):
+    """SigLIP2's eager attention fallback used by the packed Edge vision tower."""
+    attn_weights = torch.matmul(query, key.transpose(-1, -2)) * scaling
+    if attention_mask is not None:
+        attn_weights = attn_weights + attention_mask
+
+    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
+    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
+    attn_output = torch.matmul(attn_weights, value)
+    return attn_output.transpose(1, 2).contiguous(), attn_weights
+
+
 class Cosmos3EdgeVisionAttention(nn.Module):
     """Packed non-causal SigLIP2 attention with one sequence per image or video frame."""
 
@@ -649,7 +683,7 @@ class Cosmos3EdgeVisionAttention(nn.Module):
         value_states = value_states.transpose(0, 1).unsqueeze(0)
 
         attention_interface = ALL_ATTENTION_FUNCTIONS.get_interface(
-            self.config._attn_implementation, eager_attention_forward
+            self.config._attn_implementation, siglip2_eager_attention_forward
         )
 
         if is_flash_attention_requested(self.config):
@@ -1431,11 +1465,16 @@ class Cosmos3EdgeForConditionalGeneration(Cosmos3EdgePreTrainedModel, Generation
         if cache is not None and cache.get_seq_length() and self.model.rope_deltas is not None:
             return text_positions.unsqueeze(0).expand(3, -1, -1) + self.model.rope_deltas.unsqueeze(0)
 
-        input_ids = model_kwargs.get("input_ids", inputs_tensor)
+        # `GenerationMixin` uses an empty `input_ids` placeholder when generation starts from `inputs_embeds`.
+        # M-RoPE needs actual token IDs to locate visual spans, so fall back to text positions for that path.
+        if "input_ids" in model_kwargs and model_kwargs["input_ids"].shape[1] > 0:
+            inputs_tensor = model_kwargs["input_ids"]
+
+        is_input_ids = inputs_tensor.ndim == 2 and inputs_tensor.dtype in (torch.int, torch.long)
         has_multimodal = (
             model_kwargs.get("image_grid_thw") is not None or model_kwargs.get("video_grid_thw") is not None
         )
-        if input_ids is not None and has_multimodal:
+        if is_input_ids and has_multimodal:
             if model_kwargs.get("mm_token_type_ids") is None:
                 raise ValueError(
                     "Multimodal data was passed (via `image_grid_thw` or `video_grid_thw`) but `mm_token_type_ids` is "
@@ -1443,7 +1482,7 @@ class Cosmos3EdgeForConditionalGeneration(Cosmos3EdgePreTrainedModel, Generation
                     "computed correctly. `mm_token_type_ids` is returned by the processor alongside `input_ids`."
                 )
             position_ids, rope_deltas = self.model.get_rope_index(
-                input_ids=input_ids,
+                input_ids=inputs_tensor,
                 mm_token_type_ids=model_kwargs["mm_token_type_ids"],
                 image_grid_thw=model_kwargs.get("image_grid_thw"),
                 video_grid_thw=model_kwargs.get("video_grid_thw"),
