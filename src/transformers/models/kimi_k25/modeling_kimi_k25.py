@@ -43,7 +43,7 @@ from ...utils import (
 from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import is_flash_attention_requested, maybe_autocast
 from ...utils.output_capturing import capture_outputs
-from ...vision_utils import get_vision_position_ids
+from ...vision_utils import get_vision_max_seqlen, get_vision_position_ids
 from ..auto import AutoModel
 from .configuration_kimi_k25 import Kimi_K25Config, Kimi_K25VisionConfig
 
@@ -539,7 +539,7 @@ class Kimi_K25VisionModel(Kimi_K25PreTrainedModel):
         cu_seqlens = lengths.cumsum(dim=0, dtype=torch.int32)
         max_seqlen = None
         if is_flash_attention_requested(self.config):
-            max_seqlen = int(lengths.max().item())
+            max_seqlen = get_vision_max_seqlen(cu_seqlens, kwargs=kwargs)
 
         for block in self.layers:
             hidden_states = block(

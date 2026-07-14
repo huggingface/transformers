@@ -60,6 +60,7 @@ from ...utils.output_capturing import capture_outputs
 from ...vision_utils import (
     get_vision_bilinear_indices_and_weights,
     get_vision_cu_seqlens,
+    get_vision_max_seqlen,
     get_vision_position_ids,
 )
 from ..ernie4_5.configuration_ernie4_5 import Ernie4_5Config
@@ -797,7 +798,7 @@ class PaddleOCRVisionEncoder(VideoLlama3VisionEncoder):
         cu_seqlens = get_vision_cu_seqlens(grid_thw, kwargs=kwargs)
         max_seqlen = None
         if is_flash_attention_requested(self.config):
-            max_seqlen = int((cu_seqlens[1:] - cu_seqlens[:-1]).max().item())
+            max_seqlen = get_vision_max_seqlen(cu_seqlens, kwargs=kwargs)
 
         hidden_states = inputs_embeds
         attention_mask = create_bidirectional_mask(

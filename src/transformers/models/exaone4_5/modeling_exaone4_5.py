@@ -39,7 +39,12 @@ from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, torch
 from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import accepts_precomputed_kwargs, is_flash_attention_requested, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
-from ...vision_utils import get_vision_cu_seqlens, get_vision_position_ids, get_vision_window_index
+from ...vision_utils import (
+    get_vision_cu_seqlens,
+    get_vision_max_seqlen,
+    get_vision_position_ids,
+    get_vision_window_index,
+)
 from ..auto import AutoModel
 from .configuration_exaone4_5 import Exaone4_5_Config, Exaone4_5_VisionConfig
 
@@ -572,8 +577,8 @@ class Exaone4_5_VisionModel(Exaone4_5_PreTrainedModel):
         )
         max_seqlen = max_window_seqlen = None
         if is_flash_attention_requested(self.config):
-            max_seqlen = int((cu_seqlens[1:] - cu_seqlens[:-1]).max().item())
-            max_window_seqlen = int((cu_window_seqlens[1:] - cu_window_seqlens[:-1]).max().item())
+            max_seqlen = get_vision_max_seqlen(cu_seqlens, kwargs=kwargs)
+            max_window_seqlen = get_vision_max_seqlen(cu_window_seqlens, kwargs=kwargs, kwarg_name="max_window_seqlen")
 
         hidden_states = self.patch_embed(hidden_states)
 

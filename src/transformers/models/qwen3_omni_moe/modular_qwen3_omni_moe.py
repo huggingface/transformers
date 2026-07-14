@@ -66,6 +66,7 @@ from ..qwen2_5_omni.modeling_qwen2_5_omni import (
     Qwen2_5OmniPreTrainedModelForConditionalGeneration,
     Qwen2_5OmniSnakeBeta,
     Qwen2_5OmniThinkerForConditionalGeneration,
+    get_audio_max_seqlen,
 )
 from ..qwen2_5_omni.processing_qwen2_5_omni import (
     Qwen2_5OmniProcessor,
@@ -1029,7 +1030,7 @@ class Qwen3OmniMoeAudioEncoder(Qwen2_5OmniAudioEncoder):
         )
         max_seqlen = None
         if is_flash_attention_requested(self.config):
-            max_seqlen = int((cu_seqlens[1:] - cu_seqlens[:-1]).max().item())
+            max_seqlen = get_audio_max_seqlen(cu_seqlens, kwargs=kwargs)
 
         # Add channel dim for Conv2d: (num_chunks, mel_bins, time) -> (num_chunks, 1, mel_bins, time)
         padded_feature = padded_feature.unsqueeze(1)

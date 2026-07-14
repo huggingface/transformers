@@ -64,7 +64,12 @@ from ...utils.generic import (
     merge_with_config_defaults,
 )
 from ...utils.output_capturing import OutputRecorder, capture_outputs
-from ...vision_utils import get_vision_bilinear_indices_and_weights, get_vision_cu_seqlens, get_vision_position_ids
+from ...vision_utils import (
+    get_vision_bilinear_indices_and_weights,
+    get_vision_cu_seqlens,
+    get_vision_max_seqlen,
+    get_vision_position_ids,
+)
 from .configuration_qwen3_omni_moe import (
     Qwen3OmniMoeAudioEncoderConfig,
     Qwen3OmniMoeCode2WavConfig,
@@ -648,6 +653,13 @@ class Qwen3OmniMoeAudioEncoderLayer(GradientCheckpointingLayer):
         return outputs
 
 
+def get_audio_max_seqlen(cu_seqlens: torch.Tensor, kwargs: dict | None = None) -> int:
+    """Get the maximum packed audio sequence length, or pop it from `kwargs` if precomputed."""
+    if kwargs is not None and (max_seqlen := kwargs.pop("max_seqlen", None)) is not None:
+        return max_seqlen
+    return int((cu_seqlens[1:] - cu_seqlens[:-1]).max().item())
+
+
 def chunk_and_pad_features(
     input_features: torch.Tensor, feature_lens: torch.Tensor, n_window: int, kwargs: dict | None = None
 ) -> tuple[torch.Tensor, torch.Tensor]:
@@ -818,7 +830,7 @@ class Qwen3OmniMoeAudioEncoder(Qwen3OmniMoePreTrainedModel):
         )
         max_seqlen = None
         if is_flash_attention_requested(self.config):
-            max_seqlen = int((cu_seqlens[1:] - cu_seqlens[:-1]).max().item())
+            max_seqlen = get_audio_max_seqlen(cu_seqlens, kwargs=kwargs)
 
         # Add channel dim for Conv2d: (num_chunks, mel_bins, time) -> (num_chunks, 1, mel_bins, time)
         padded_feature = padded_feature.unsqueeze(1)
@@ -1182,7 +1194,7 @@ class Qwen3OmniMoeVisionEncoder(Qwen3OmniMoePreTrainedModel):
         cu_seqlens = get_vision_cu_seqlens(grid_thw, kwargs=kwargs)
         max_seqlen = None
         if is_flash_attention_requested(self.config):
-            max_seqlen = int((cu_seqlens[1:] - cu_seqlens[:-1]).max().item())
+            max_seqlen = get_vision_max_seqlen(cu_seqlens, kwargs=kwargs)
 
         hidden_states = self.patch_embed(hidden_states)
         pos_embeds = (self.pos_embed(bilinear_indices) * bilinear_weights[:, :, None]).sum(0)

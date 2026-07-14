@@ -53,7 +53,12 @@ from ...utils.generic import (
     merge_with_config_defaults,
 )
 from ...utils.output_capturing import capture_outputs
-from ...vision_utils import get_vision_cu_seqlens, get_vision_position_ids, get_vision_window_index
+from ...vision_utils import (
+    get_vision_cu_seqlens,
+    get_vision_max_seqlen,
+    get_vision_position_ids,
+    get_vision_window_index,
+)
 from .configuration_qwen2_5_vl import Qwen2_5_VLConfig, Qwen2_5_VLTextConfig, Qwen2_5_VLVisionConfig
 
 
@@ -437,8 +442,8 @@ class Qwen2_5_VisionTransformerPretrainedModel(Qwen2_5_VLPreTrainedModel):
         )
         max_seqlen = max_window_seqlen = None
         if is_flash_attention_requested(self.config):
-            max_seqlen = int((cu_seqlens[1:] - cu_seqlens[:-1]).max().item())
-            max_window_seqlen = int((cu_window_seqlens[1:] - cu_window_seqlens[:-1]).max().item())
+            max_seqlen = get_vision_max_seqlen(cu_seqlens, kwargs=kwargs)
+            max_window_seqlen = get_vision_max_seqlen(cu_window_seqlens, kwargs=kwargs, kwarg_name="max_window_seqlen")
 
         hidden_states = self.patch_embed(hidden_states)
 

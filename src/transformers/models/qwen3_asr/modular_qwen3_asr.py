@@ -36,6 +36,7 @@ from ..qwen3_omni_moe.modeling_qwen3_omni_moe import (
     Qwen3OmniMoeAudioEncoderLayer,
     SinusoidsPositionEmbedding,
     get_audio_cu_seqlens,
+    get_audio_max_seqlen,
 )
 from ..voxtral.modeling_voxtral import VoxtralMultiModalProjector
 
@@ -209,7 +210,7 @@ class Qwen3ASREncoder(Qwen3OmniMoeAudioEncoder):
         )
         max_seqlen = None
         if is_flash_attention_requested(self.config):
-            max_seqlen = int((cu_seqlens[1:] - cu_seqlens[:-1]).max().item())
+            max_seqlen = get_audio_max_seqlen(cu_seqlens, kwargs=kwargs)
 
         # Chunk and process through CNN
         chunked = (

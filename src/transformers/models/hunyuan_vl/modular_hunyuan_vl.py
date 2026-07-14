@@ -40,7 +40,7 @@ from ...utils.generic import (
 )
 from ...utils.import_utils import requires
 from ...utils.output_capturing import capture_outputs
-from ...vision_utils import get_vision_cu_seqlens
+from ...vision_utils import get_vision_cu_seqlens, get_vision_max_seqlen
 from ..hunyuan_v1_dense.configuration_hunyuan_v1_dense import HunYuanDenseV1Config
 from ..hunyuan_v1_dense.modeling_hunyuan_v1_dense import (
     HunYuanDenseV1Attention,
@@ -867,7 +867,7 @@ class HunYuanVLVisionTransformer(HunYuanVLPreTrainedModel):
         cu_seqlens = get_vision_cu_seqlens(grid_thw, kwargs=kwargs)
         max_seqlen = None
         if is_flash_attention_requested(self.config):
-            max_seqlen = int((cu_seqlens[1:] - cu_seqlens[:-1]).max().item())
+            max_seqlen = get_vision_max_seqlen(cu_seqlens, kwargs=kwargs)
 
         for layer in self.layers:
             hidden_states = layer(

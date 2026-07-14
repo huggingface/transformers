@@ -37,6 +37,7 @@ from ...utils.generic import can_return_tuple, is_flash_attention_requested, mer
 from ...utils.import_utils import torch_compilable_check
 from ...utils.output_capturing import capture_outputs
 from ...vision_utils import (
+    get_vision_max_seqlen,
     get_vision_merged_shape,
     get_vision_nearest_position_ids,
     get_vision_window_index,
@@ -416,9 +417,10 @@ class MiniCPMV4_6VisionModel(MiniCPMV4_6VisionPreTrainedModel):
             torch.cumsum(target_sizes[:, 0] * target_sizes[:, 1], dim=0, dtype=torch.int32).to(hidden_states.device),
             (1, 0),
         )
-        max_seqlens = torch.max(cu_seqlens[1:] - cu_seqlens[:-1])
         if is_flash_attention_requested(self.config):
-            max_seqlens = int(max_seqlens.item())
+            max_seqlens = get_vision_max_seqlen(cu_seqlens, kwargs=kwargs)
+        else:
+            max_seqlens = torch.max(cu_seqlens[1:] - cu_seqlens[:-1])
 
         attn_kwargs = {
             "attention_mask": None,

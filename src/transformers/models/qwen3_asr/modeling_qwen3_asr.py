@@ -277,6 +277,13 @@ def _get_feat_extract_output_lengths(input_lengths, n_window=50):
     return ((feat_lengths - 1) // 2 + 1 - 1) // 2 + 1 + (input_lengths // chunk_len) * 13
 
 
+def get_audio_max_seqlen(cu_seqlens: torch.Tensor, kwargs: dict | None = None) -> int:
+    """Get the maximum packed audio sequence length, or pop it from `kwargs` if precomputed."""
+    if kwargs is not None and (max_seqlen := kwargs.pop("max_seqlen", None)) is not None:
+        return max_seqlen
+    return int((cu_seqlens[1:] - cu_seqlens[:-1]).max().item())
+
+
 def get_audio_cu_seqlens(
     chunk_lengths: torch.Tensor,
     feature_lens: torch.Tensor,
@@ -401,7 +408,7 @@ class Qwen3ASREncoder(Qwen3ASRPreTrainedModel):
         )
         max_seqlen = None
         if is_flash_attention_requested(self.config):
-            max_seqlen = int((cu_seqlens[1:] - cu_seqlens[:-1]).max().item())
+            max_seqlen = get_audio_max_seqlen(cu_seqlens, kwargs=kwargs)
 
         # Chunk and process through CNN
         chunked = (

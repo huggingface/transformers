@@ -50,6 +50,22 @@ def get_vision_cu_seqlens(grid_thw: torch.Tensor, kwargs: dict | None = None) ->
     return F.pad(cu_seqlens, (1, 0), value=0)
 
 
+def get_vision_max_seqlen(cu_seqlens: torch.Tensor, kwargs: dict | None = None, kwarg_name: str = "max_seqlen") -> int:
+    """Get the maximum packed sequence length, or pop it from `kwargs` if precomputed.
+
+    Args:
+        cu_seqlens: `(num_sequences + 1,)` cumulative sequence boundaries.
+        kwargs: optional caller kwargs containing a precomputed maximum sequence length.
+        kwarg_name: key used to pop the precomputed value from `kwargs`.
+
+    Returns:
+        Maximum packed sequence length as a Python integer.
+    """
+    if kwargs is not None and (max_seqlen := kwargs.pop(kwarg_name, None)) is not None:
+        return max_seqlen
+    return int((cu_seqlens[1:] - cu_seqlens[:-1]).max().item())
+
+
 def get_vision_position_ids(
     grid_thw: torch.Tensor,
     spatial_merge_size: int | torch.Tensor,

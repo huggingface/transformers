@@ -65,7 +65,12 @@ from ...utils.generic import (
 )
 from ...utils.hub import cached_file
 from ...utils.output_capturing import capture_outputs
-from ...vision_utils import get_vision_cu_seqlens, get_vision_position_ids, get_vision_window_index
+from ...vision_utils import (
+    get_vision_cu_seqlens,
+    get_vision_max_seqlen,
+    get_vision_position_ids,
+    get_vision_window_index,
+)
 from .configuration_qwen2_5_omni import (
     Qwen2_5OmniAudioEncoderConfig,
     Qwen2_5OmniBigVGANConfig,
@@ -787,6 +792,13 @@ def get_audio_cu_seqlens(chunk_lengths: torch.Tensor, kwargs: dict | None = None
     return F.pad(after_conv1.cumsum(0), (1, 0), value=0).to(torch.int32)
 
 
+def get_audio_max_seqlen(cu_seqlens: torch.Tensor, kwargs: dict | None = None) -> int:
+    """Get the maximum packed audio sequence length, or pop it from `kwargs` if precomputed."""
+    if kwargs is not None and (max_seqlen := kwargs.pop("max_seqlen", None)) is not None:
+        return max_seqlen
+    return int((cu_seqlens[1:] - cu_seqlens[:-1]).max().item())
+
+
 def get_valid_indices(chunk_lengths: torch.Tensor, kwargs: dict | None = None) -> torch.Tensor:
     """Compute flat indices of valid (non-padding) positions after one stride-2 conv, or pop `"valid_indices"` from `kwargs` if precomputed.
 
@@ -895,7 +907,7 @@ class Qwen2_5OmniAudioEncoder(Qwen2_5OmniPreTrainedModel):
         cu_seqlens = get_audio_cu_seqlens(chunk_lengths, kwargs=kwargs)
         max_seqlen = None
         if is_flash_attention_requested(self.config):
-            max_seqlen = int((cu_seqlens[1:] - cu_seqlens[:-1]).max().item())
+            max_seqlen = get_audio_max_seqlen(cu_seqlens, kwargs=kwargs)
 
         # Derive masks from chunk_lengths (traceable arithmetic + arange broadcasting)
         padded_feature = padded_feature.to(self.conv1.weight.dtype)
@@ -1297,8 +1309,8 @@ class Qwen2_5OmniVisionEncoder(Qwen2_5OmniPreTrainedModel):
         )
         max_seqlen = max_window_seqlen = None
         if is_flash_attention_requested(self.config):
-            max_seqlen = int((cu_seqlens[1:] - cu_seqlens[:-1]).max().item())
-            max_window_seqlen = int((cu_window_seqlens[1:] - cu_window_seqlens[:-1]).max().item())
+            max_seqlen = get_vision_max_seqlen(cu_seqlens, kwargs=kwargs)
+            max_window_seqlen = get_vision_max_seqlen(cu_window_seqlens, kwargs=kwargs, kwarg_name="max_window_seqlen")
 
         hidden_states = self.patch_embed(hidden_states)
 
