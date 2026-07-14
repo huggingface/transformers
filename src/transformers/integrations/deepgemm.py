@@ -367,8 +367,16 @@ def _ceil_to_ue8m0(sf: torch.Tensor) -> torch.Tensor:
 
 
 def _coerce_sf_for_kernel(sf: torch.Tensor, expected_mn: int | None = None) -> torch.Tensor:
-    """Lay out `sf` as DeepGEMM's `check_sf_layout` expects: MN-major
-    (`stride(-2) == 1`) and TMA-aligned (`stride(-1) == align(mn, 16/esize)`).
+    """Lay out `sf` as DeepGEMM's dispatch expects, per arch.
+
+    On SM100 the int-SF path only *checks* the SF (`tma_stride_check`) and never
+    transforms it, so we hand it a TMA-aligned MN-major layout (`stride(-2) == 1`,
+    `stride(-1) == align(mn, 16/esize)`). On SM90 DeepGEMM transforms SFA itself
+    (`get_mn_major_tma_aligned_tensor`) and only *checks* SFB against
+    `sm90_sfb_check`, which rejects TMA padding (`stride(-1)` must equal `size(-2)`,
+    not `align(mn, …)`); a padded weight SF trips `layout.hpp` whenever `mn` isn't a
+    multiple of `16/esize` (e.g. N=576 → mn=5). So on SM90 we return the raw
+    row-major SF and let DeepGEMM lay it out.
 
     Inputs come in three flavors:
       - `float8_e8m0fnu` on SM100: raw UE8M0 bytes — pack 4 K-bytes → int32
@@ -400,6 +408,11 @@ def _coerce_sf_for_kernel(sf: torch.Tensor, expected_mn: int | None = None) -> t
 
     if sf.dim() not in (2, 3):
         raise ValueError(f"DeepGEMM SF must be 2D or 3D, got {sf.dim()}D")
+
+    # SM90 dispatch transforms SFA and only checks SFB (`sm90_sfb_check`), which needs
+    # an unpadded contiguous layout — DeepGEMM does the MN-major alignment itself.
+    if not is_sm100:
+        return sf.contiguous()
 
     mn = sf.size(-2)
     kf = sf.size(-1)
