@@ -15,7 +15,6 @@
 
 import math
 import re
-from collections.abc import Iterable
 from typing import Any
 
 import numpy as np
@@ -31,8 +30,12 @@ from ...image_processing_backends import PilBackend, TorchvisionBackend
 from ...image_processing_utils import BatchFeature
 from ...image_utils import ChannelDimension, ImageInput, PILImageResampling, SizeDict, get_image_size
 from ...masking_utils import create_causal_mask
-from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPast, BaseModelOutputWithPooling
-from ...modeling_rope_utils import dynamic_rope_update
+from ...modeling_outputs import (
+    BaseModelOutput,
+    BaseModelOutputWithPast,
+    BaseModelOutputWithPooling,
+    CausalLMOutputWithPast,
+)
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import ImagesKwargs, MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack, VideosKwargs
 from ...utils import (
@@ -66,8 +69,14 @@ from ..llama.modeling_llama import (
     repeat_kv,
 )
 from ..qwen2_vl.image_processing_qwen2_vl import smart_resize
-from ..qwen2_vl.modeling_qwen2_vl import Qwen2VLForConditionalGeneration, Qwen2VLModel, Qwen2VLPreTrainedModel
+from ..qwen2_vl.modeling_qwen2_vl import (
+    Qwen2VLForConditionalGeneration,
+    Qwen2VLModel,
+    Qwen2VLPreTrainedModel,
+    TransformersKwargs,
+)
 from ..qwen3_5_moe.modeling_qwen3_5_moe import Qwen3_5MoeVisionPatchMerger
+from ..qwen3_vl.processing_qwen3_vl import Qwen3VLProcessor
 from ..siglip2.configuration_siglip2 import Siglip2VisionConfig
 from ..siglip2.modeling_siglip2 import (
     Siglip2Attention,
@@ -131,6 +140,10 @@ class Cosmos3EdgeTextConfig(LlamaConfig):
 
     def validate_architecture(self):
         super().validate_architecture()
+        rope_type = self.rope_parameters["rope_type"]
+        if rope_type != "default":
+            raise ValueError(f"Cosmos3 Edge requires `rope_type='default'`, got {rope_type!r}.")
+
         mrope_section = self.rope_parameters["mrope_section"]
         if len(mrope_section) != 3 or sum(mrope_section) != self.head_dim // 2:
             raise ValueError(
@@ -253,31 +266,41 @@ class Cosmos3EdgeConfig(PreTrainedConfig):
 class Cosmos3EdgeTextRotaryEmbedding(LlamaRotaryEmbedding):
     """Interleaved M-RoPE used for Cosmos3 Edge text and visual tokens."""
 
-    def __init__(self, config: Cosmos3EdgeTextConfig, device=None):
-        super().__init__(config, device=device)
-        self.mrope_section = config.rope_parameters["mrope_section"]
+    @staticmethod
+    def compute_default_rope_parameters(
+        config: Cosmos3EdgeTextConfig | None = None,
+        device: torch.device | None = None,
+        seq_len: int | None = None,
+    ) -> tuple[torch.Tensor, float]:
+        """Construct an axis-aware inverse-frequency matrix for interleaved temporal, height, and width RoPE."""
+        base = config.rope_parameters["rope_theta"]
+        dim = config.head_dim
+        inv_freq = 1.0 / (
+            base ** (torch.arange(0, dim, 2, dtype=torch.int64).to(device=device, dtype=torch.float) / dim)
+        )
 
-    def apply_interleaved_mrope(self, freqs: torch.Tensor) -> torch.Tensor:
-        """Interleave temporal, height, and width frequencies after applying their position IDs."""
-        # This reorders position-dependent frequencies, so it cannot be performed while constructing the fixed
-        # inverse-frequency buffer.
-        freqs_t = freqs[0]
-        for dim, offset in enumerate((1, 2), start=1):
-            length = self.mrope_section[dim] * 3
-            freqs_t[..., slice(offset, length, 3)] = freqs[dim, ..., slice(offset, length, 3)]
-        return freqs_t
+        indices = torch.arange(inv_freq.shape[0], device=device)
+        mrope_section = config.rope_parameters["mrope_section"]
+        height_mask = (indices % 3 == 1) & (indices < mrope_section[1] * 3)
+        width_mask = (indices % 3 == 2) & (indices < mrope_section[2] * 3)
+        temporal_mask = ~(height_mask | width_mask)
+        inv_freq = torch.stack(
+            (
+                inv_freq * temporal_mask,
+                inv_freq * height_mask,
+                inv_freq * width_mask,
+            )
+        )
+        return inv_freq, 1.0
 
     @torch.no_grad()
-    @dynamic_rope_update
     def forward(self, x, position_ids):
-        inv_freq_expanded = (
-            self.inv_freq[None, None, :, None].float().expand(3, position_ids.shape[1], -1, 1).to(x.device)
-        )
-        position_ids_expanded = position_ids[:, :, None, :].float()
+        if position_ids.shape[0] == 1:
+            position_ids = position_ids.expand(3, -1, -1)
+        position_ids = position_ids.permute(1, 2, 0).float()
         device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
         with maybe_autocast(device_type=device_type, enabled=False):
-            freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(2, 3)
-            freqs = self.apply_interleaved_mrope(freqs)
+            freqs = position_ids.float() @ self.inv_freq.float().to(x.device)
             emb = torch.cat((freqs, freqs), dim=-1)
             cos = emb.cos() * self.attention_scaling
             sin = emb.sin() * self.attention_scaling
@@ -393,7 +416,6 @@ class Cosmos3EdgeTextModel(LlamaModel, Cosmos3EdgePreTrainedModel):
         )
         self.norm = Cosmos3EdgeTextRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.rotary_emb = Cosmos3EdgeTextRotaryEmbedding(config)
-        self.post_init()
 
     @merge_with_config_defaults
     @capture_outputs
@@ -460,6 +482,17 @@ class Cosmos3EdgeVisionEmbeddings(Siglip2VisionEmbeddings):
     def resize_positional_embeddings(
         self, positional_embeddings: torch.Tensor, grid_thw: torch.LongTensor
     ) -> torch.Tensor:
+        """Resize a learned reference grid independently for every packed image or video frame.
+
+        Args:
+            positional_embeddings (`torch.Tensor`):
+                Learned positional embeddings of shape `(height, width, hidden_size)`.
+            grid_thw (`torch.LongTensor`):
+                Temporal, height, and width patch-grid dimensions for every packed image or video.
+
+        Returns:
+            `torch.Tensor`: Positional embeddings packed in the same block-major order as the input patches.
+        """
         # The checkpoint uses a learned square reference grid, interpolated independently for every packed frame.
         positional_embeddings = positional_embeddings.permute(2, 0, 1).unsqueeze(0)
         source_dtype = positional_embeddings.dtype
@@ -746,54 +779,120 @@ class Cosmos3EdgeModel(Qwen2VLModel, Cosmos3EdgePreTrainedModel):
             **super_kwargs,
         )
 
+    @can_return_tuple
+    @auto_docstring
+    def forward(
+        self,
+        input_ids: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: Cache | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        use_cache: bool | None = None,
+        pixel_values: torch.Tensor | None = None,
+        pixel_values_videos: torch.FloatTensor | None = None,
+        image_grid_thw: torch.LongTensor | None = None,
+        video_grid_thw: torch.LongTensor | None = None,
+        mm_token_type_ids: torch.IntTensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutputWithPast:
+        r"""
+        image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
+            The temporal, height, and width of the feature grid for each image.
+        video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
+            The temporal, height, and width of the feature grid for each video.
+        """
+        if inputs_embeds is None:
+            inputs_embeds = self.get_input_embeddings()(input_ids)
+
+        if pixel_values is not None:
+            image_embeds = self.get_image_features(pixel_values, image_grid_thw, **kwargs).pooler_output
+            image_embeds = torch.cat(image_embeds, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
+            image_mask, _ = self.get_placeholder_mask(
+                input_ids, inputs_embeds=inputs_embeds, image_features=image_embeds
+            )
+            inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_embeds)
+
+        if pixel_values_videos is not None:
+            video_embeds = self.get_video_features(pixel_values_videos, video_grid_thw, **kwargs).pooler_output
+            video_embeds = torch.cat(video_embeds, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
+            _, video_mask = self.get_placeholder_mask(
+                input_ids, inputs_embeds=inputs_embeds, video_features=video_embeds
+            )
+            inputs_embeds = inputs_embeds.masked_scatter(video_mask, video_embeds)
+
+        if position_ids is None:
+            position_ids = self.compute_3d_position_ids(
+                input_ids=input_ids,
+                image_grid_thw=image_grid_thw,
+                video_grid_thw=video_grid_thw,
+                inputs_embeds=inputs_embeds,
+                attention_mask=attention_mask,
+                past_key_values=past_key_values,
+                mm_token_type_ids=mm_token_type_ids,
+            )
+
+        outputs = self.language_model(
+            input_ids=None,
+            position_ids=position_ids,
+            attention_mask=attention_mask,
+            past_key_values=past_key_values,
+            inputs_embeds=inputs_embeds,
+            use_cache=use_cache,
+            **kwargs,
+        )
+        return BaseModelOutputWithPast(
+            last_hidden_state=outputs.last_hidden_state,
+            past_key_values=outputs.past_key_values,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+        )
+
 
 class Cosmos3EdgeForConditionalGeneration(Qwen2VLForConditionalGeneration, Cosmos3EdgePreTrainedModel):
     config_class = Cosmos3EdgeConfig
     _tied_weights_keys = {}
     accepts_loss_kwargs = False
 
-    def __init__(self, config: Cosmos3EdgeConfig):
-        Cosmos3EdgePreTrainedModel.__init__(self, config)
-        self.model = Cosmos3EdgeModel(config)
-        self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
-        self.post_init()
-
     def _prepare_position_ids_for_generation(self, inputs_tensor, model_kwargs):
         # Qwen2-VL exposes four axes (text plus three visual axes). Edge's interleaved M-RoPE consumes the three
         # visual axes directly, so start from the common 2D text positions rather than Qwen2-VL's four-axis helper.
         text_positions = GenerationMixin._prepare_position_ids_for_generation(self, inputs_tensor, model_kwargs)
-        cache = model_kwargs.get("past_key_values")
-        if cache is not None and cache.get_seq_length() and self.model.rope_deltas is not None:
-            return text_positions.unsqueeze(0).expand(3, -1, -1) + self.model.rope_deltas.unsqueeze(0)
 
-        # `GenerationMixin` uses an empty `input_ids` placeholder when generation starts from `inputs_embeds`.
-        # M-RoPE needs actual token IDs to locate visual spans, so fall back to text positions for that path.
+        # Early exit in case we are continuing generation from past kv.
+        past_length = 0
+        if (cache := model_kwargs.get("past_key_values")) is not None:
+            past_length = cache.get_seq_length()
+        if past_length != 0 and self.model.rope_deltas is not None:
+            position_ids = text_positions[None, ...] + self.model.rope_deltas
+            return position_ids
+
+        # Otherwise compute 3D position ids for vision tokens.
         if "input_ids" in model_kwargs and model_kwargs["input_ids"].shape[1] > 0:
             inputs_tensor = model_kwargs["input_ids"]
 
-        is_input_ids = inputs_tensor.ndim == 2 and inputs_tensor.dtype in (torch.int, torch.long)
-        has_multimodal = (
+        is_input_ids = len(inputs_tensor.shape) == 2 and inputs_tensor.dtype in [torch.int, torch.long]
+        has_multimodal_inputs = (
             model_kwargs.get("image_grid_thw") is not None or model_kwargs.get("video_grid_thw") is not None
         )
-        if is_input_ids and has_multimodal:
-            if model_kwargs.get("mm_token_type_ids") is None:
-                raise ValueError(
-                    "Multimodal data was passed (via `image_grid_thw` or `video_grid_thw`) but `mm_token_type_ids` is "
-                    "missing. Please pass `mm_token_type_ids` to the model so that multimodal RoPE (M-RoPE) can be "
-                    "computed correctly. `mm_token_type_ids` is returned by the processor alongside `input_ids`."
-                )
-            position_ids, rope_deltas = self.model.get_rope_index(
-                input_ids=inputs_tensor,
-                mm_token_type_ids=model_kwargs["mm_token_type_ids"],
-                image_grid_thw=model_kwargs.get("image_grid_thw"),
-                video_grid_thw=model_kwargs.get("video_grid_thw"),
-                attention_mask=model_kwargs.get("attention_mask"),
+        if is_input_ids and has_multimodal_inputs and model_kwargs.get("mm_token_type_ids") is None:
+            raise ValueError(
+                "Multimodal data was passed (via `image_grid_thw` or `video_grid_thw`) but `mm_token_type_ids` is "
+                "missing. Please pass `mm_token_type_ids` to the model so that multimodal RoPE (M-RoPE) can be "
+                "computed correctly. `mm_token_type_ids` is returned by the processor alongside `input_ids`."
             )
-            self.model.rope_deltas = rope_deltas
-            return position_ids
 
-        self.model.rope_deltas = torch.zeros(inputs_tensor.shape[0], 1, dtype=torch.long, device=inputs_tensor.device)
-        return text_positions.unsqueeze(0).expand(3, -1, -1)
+        if is_input_ids and model_kwargs.get("mm_token_type_ids") is not None and has_multimodal_inputs:
+            model_kwargs = {key: value for key, value in model_kwargs.items() if key != "input_ids"}
+            position_ids, rope_deltas = self.model.get_rope_index(inputs_tensor, **model_kwargs)
+            self.model.rope_deltas = rope_deltas
+        else:
+            position_ids = text_positions.unsqueeze(0).expand(3, -1, -1)
+            self.model.rope_deltas = torch.zeros(
+                inputs_tensor.shape[0], 1, dtype=torch.long, device=inputs_tensor.device
+            )
+
+        return position_ids
 
     def _expand_inputs_for_generation(
         self,
@@ -809,7 +908,7 @@ class Cosmos3EdgeForConditionalGeneration(Qwen2VLForConditionalGeneration, Cosmo
 
         visual_keys = ["pixel_values", "image_grid_thw", "pixel_values_videos", "video_grid_thw"]
 
-        def expand_visual_inputs(inputs):
+        def _expand_dict_for_generation_visual(dict_to_expand):
             image_grid_thw = model_kwargs.get("image_grid_thw")
             video_grid_thw = model_kwargs.get("video_grid_thw")
             image_nums, video_nums = self._get_image_nums_and_video_nums(
@@ -822,45 +921,151 @@ class Cosmos3EdgeForConditionalGeneration(Qwen2VLForConditionalGeneration, Cosmo
                 video_boundary_indices = torch.searchsorted(cumulative_frame_counts, cumulative_token_video_counts)
                 video_nums = torch.diff(torch.cat([-video_boundary_indices.new_ones(1), video_boundary_indices]))
 
-            def repeat_samples(values, lengths):
-                samples = torch.split(values, lengths)
-                repeat_args = [expand_size] + [1] * (values.dim() - 1)
+            def _repeat_interleave_samples(x, lengths, repeat_times):
+                samples = torch.split(x, lengths)
+                repeat_args = [repeat_times] + [1] * (x.dim() - 1)
                 return torch.cat([sample.repeat(*repeat_args) for sample in samples], dim=0)
 
-            for key in inputs:
+            for key in dict_to_expand:
                 if key == "pixel_values":
                     samples = torch.split(image_grid_thw, list(image_nums))
                     lengths = [torch.prod(sample, dim=1).sum() for sample in samples]
-                    inputs[key] = repeat_samples(inputs[key], lengths)
+                    dict_to_expand[key] = _repeat_interleave_samples(
+                        dict_to_expand[key], lengths=lengths, repeat_times=expand_size
+                    )
                 elif key == "image_grid_thw":
-                    inputs[key] = repeat_samples(inputs[key], list(image_nums))
+                    dict_to_expand[key] = _repeat_interleave_samples(
+                        dict_to_expand[key], lengths=list(image_nums), repeat_times=expand_size
+                    )
                 elif key == "pixel_values_videos":
                     samples = torch.split(video_grid_thw, list(video_nums))
                     lengths = [torch.prod(sample, dim=1).sum() for sample in samples]
-                    inputs[key] = repeat_samples(inputs[key], lengths)
+                    dict_to_expand[key] = _repeat_interleave_samples(
+                        dict_to_expand[key], lengths=lengths, repeat_times=expand_size
+                    )
                 elif key == "video_grid_thw":
-                    inputs[key] = repeat_samples(inputs[key], list(video_nums))
-            return inputs
+                    dict_to_expand[key] = _repeat_interleave_samples(
+                        dict_to_expand[key], lengths=list(video_nums), repeat_times=expand_size
+                    )
+            return dict_to_expand
 
-        def expand_batch_inputs(inputs):
-            for key, value in inputs.items():
+        def _expand_dict_for_generation(dict_to_expand):
+            for key, value in dict_to_expand.items():
                 if key == "position_ids" and value.ndim == 3:
-                    inputs[key] = value.repeat_interleave(expand_size, dim=1)
+                    dict_to_expand[key] = value.repeat_interleave(expand_size, dim=1)
                 elif value is not None and isinstance(value, torch.Tensor) and key not in visual_keys:
-                    inputs[key] = value.repeat_interleave(expand_size, dim=0)
-            return inputs
+                    dict_to_expand[key] = value.repeat_interleave(expand_size, dim=0)
+            return dict_to_expand
 
-        model_kwargs = expand_visual_inputs(model_kwargs)
+        model_kwargs = _expand_dict_for_generation_visual(model_kwargs)
         if input_ids is not None:
             input_ids = input_ids.repeat_interleave(expand_size, dim=0)
-        model_kwargs = expand_batch_inputs(model_kwargs)
+        model_kwargs = _expand_dict_for_generation(model_kwargs)
 
         if is_encoder_decoder:
             if model_kwargs.get("encoder_outputs") is None:
                 raise ValueError("If `is_encoder_decoder` is True, make sure that `encoder_outputs` is defined.")
-            model_kwargs["encoder_outputs"] = expand_batch_inputs(model_kwargs["encoder_outputs"])
+            model_kwargs["encoder_outputs"] = _expand_dict_for_generation(model_kwargs["encoder_outputs"])
 
         return input_ids, model_kwargs
+
+    @can_return_tuple
+    @auto_docstring
+    def forward(
+        self,
+        input_ids: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: Cache | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        labels: torch.LongTensor | None = None,
+        use_cache: bool | None = None,
+        pixel_values: torch.Tensor | None = None,
+        pixel_values_videos: torch.FloatTensor | None = None,
+        image_grid_thw: torch.LongTensor | None = None,
+        video_grid_thw: torch.LongTensor | None = None,
+        mm_token_type_ids: torch.IntTensor | None = None,
+        logits_to_keep: int | torch.Tensor = 0,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | CausalLMOutputWithPast:
+        r"""
+        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
+            config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
+            (masked), and the loss is only computed for tokens with labels in `[0, ..., config.vocab_size]`.
+        image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
+            The temporal, height, and width of the feature grid for each image.
+        video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
+            The temporal, height, and width of the feature grid for each video.
+
+        Example:
+
+        ```python
+        >>> from transformers import AutoProcessor, Cosmos3EdgeForConditionalGeneration
+
+        >>> model = Cosmos3EdgeForConditionalGeneration.from_pretrained("Qwen/Qwen2-VL-7B-Instruct")
+        >>> processor = AutoProcessor.from_pretrained("Qwen/Qwen2-VL-7B-Instruct")
+
+        >>> messages = [
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "image",
+                        "image": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg",
+                    },
+                    {"type": "text", "text": "Describe the image."},
+                ],
+            }
+        ]
+
+        >>> inputs = processor.apply_chat_template(
+            messages,
+            tokenize=True,
+            add_generation_prompt=True,
+            return_dict=True,
+            return_tensors="pt"
+        )
+
+        >>> # Generate
+        >>> generated_ids = model.generate(**inputs, max_new_tokens=1024)
+        >>> generated_ids_trimmed = [out_ids[len(in_ids) :] for in_ids, out_ids in zip(inputs.input_ids, generated_ids)]
+        >>> output_text = processor.batch_decode(generated_ids_trimmed, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
+        >>> print(output_text)
+        ```
+        """
+        outputs: BaseModelOutputWithPast = self.model(
+            input_ids=input_ids,
+            pixel_values=pixel_values,
+            pixel_values_videos=pixel_values_videos,
+            image_grid_thw=image_grid_thw,
+            video_grid_thw=video_grid_thw,
+            mm_token_type_ids=mm_token_type_ids,
+            position_ids=position_ids,
+            attention_mask=attention_mask,
+            past_key_values=past_key_values,
+            inputs_embeds=inputs_embeds,
+            use_cache=use_cache,
+            **kwargs,
+        )
+
+        hidden_states = outputs.last_hidden_state
+        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
+        logits = self.lm_head(hidden_states[:, slice_indices, :])
+
+        loss = None
+        if labels is not None:
+            loss = self.loss_function(
+                logits=logits, labels=labels, vocab_size=self.config.text_config.vocab_size, **kwargs
+            )
+
+        return CausalLMOutputWithPast(
+            loss=loss,
+            logits=logits,
+            past_key_values=outputs.past_key_values,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+        )
 
 
 # Processor implementations live in the modular source so the fast/PIL/video/generated modules stay synchronized.
@@ -868,10 +1073,6 @@ class Cosmos3EdgeForConditionalGeneration(Qwen2VLForConditionalGeneration, Cosmo
 
 class Cosmos3EdgeImageProcessorKwargs(ImagesKwargs, total=False):
     r"""
-    min_pixels (`int`, *optional*, defaults to `65536`):
-        Minimum number of pixels in a resized image.
-    max_pixels (`int`, *optional*, defaults to `16777216`):
-        Maximum number of pixels in a resized image.
     patch_size (`int`, *optional*, defaults to `16`):
         Spatial patch size of the vision encoder.
     merge_size (`int`, *optional*, defaults to `2`):
@@ -880,8 +1081,6 @@ class Cosmos3EdgeImageProcessorKwargs(ImagesKwargs, total=False):
         Per-image overrides for `min_pixels` and `max_pixels`.
     """
 
-    min_pixels: int
-    max_pixels: int
     patch_size: int
     merge_size: int
     per_image_kwargs: list[dict | None]
@@ -907,43 +1106,12 @@ class Cosmos3EdgeImageProcessor(TorchvisionBackend):
     model_input_names = ["pixel_values", "image_grid_thw"]
 
     def __init__(self, **kwargs: Unpack[Cosmos3EdgeImageProcessorKwargs]):
-        size = kwargs.pop("size", None)
-        min_pixels = kwargs.pop("min_pixels", None)
-        max_pixels = kwargs.pop("max_pixels", None)
-
-        size = dict(self.size) if size is None else dict(size)
-        if min_pixels is not None:
-            size["shortest_edge"] = min_pixels
-            size.pop("min_pixels", None)
-        if max_pixels is not None:
-            size["longest_edge"] = max_pixels
-            size.pop("max_pixels", None)
-        if "shortest_edge" not in size or "longest_edge" not in size:
+        super().__init__(**kwargs)
+        if self.size is not None and (self.size.shortest_edge is None or self.size.longest_edge is None):
             raise ValueError("`size` must contain `shortest_edge` and `longest_edge` keys.")
 
-        super().__init__(size=size, **kwargs)
-
-    def _standardize_kwargs(
-        self,
-        size: int | Iterable[int] | dict[str, int] | SizeDict | None = None,
-        min_pixels: int | None = None,
-        max_pixels: int | None = None,
-        **kwargs,
-    ) -> dict:
-        if min_pixels is not None or max_pixels is not None:
-            current_size = self.size if size is None else size
-            if isinstance(current_size, SizeDict):
-                current_min_pixels = current_size.shortest_edge
-                current_max_pixels = current_size.longest_edge
-            else:
-                current_min_pixels = current_size["shortest_edge"]
-                current_max_pixels = current_size["longest_edge"]
-            size = SizeDict(
-                shortest_edge=current_min_pixels if min_pixels is None else min_pixels,
-                longest_edge=current_max_pixels if max_pixels is None else max_pixels,
-            )
-
-        kwargs = super()._standardize_kwargs(size=size, **kwargs)
+    def _standardize_kwargs(self, **kwargs) -> dict:
+        kwargs = super()._standardize_kwargs(**kwargs)
         size = kwargs.get("size", self.size)
         if size.shortest_edge is None or size.longest_edge is None:
             raise ValueError("`size` must contain `shortest_edge` and `longest_edge` keys.")
@@ -1034,14 +1202,9 @@ class Cosmos3EdgeImageProcessor(TorchvisionBackend):
         images_kwargs = images_kwargs or {}
         size = images_kwargs.get("size", self.size)
         if isinstance(size, SizeDict):
-            default_min_pixels = size.shortest_edge
-            default_max_pixels = size.longest_edge
+            min_pixels, max_pixels = size.shortest_edge, size.longest_edge
         else:
-            default_min_pixels = size["shortest_edge"]
-            default_max_pixels = size["longest_edge"]
-
-        min_pixels = images_kwargs.get("min_pixels", default_min_pixels)
-        max_pixels = images_kwargs.get("max_pixels", default_max_pixels)
+            min_pixels, max_pixels = size["shortest_edge"], size["longest_edge"]
         patch_size = images_kwargs.get("patch_size", self.patch_size)
         merge_size = images_kwargs.get("merge_size", self.merge_size)
         resized_height, resized_width = smart_resize(
@@ -1058,10 +1221,6 @@ class Cosmos3EdgeImageProcessorPil(PilBackend):
     r"""
     Dynamically resize images and return packed, unpadded SigLIP2 patches.
 
-    min_pixels (`int`, *optional*, defaults to `65536`):
-        Minimum number of pixels in a resized image.
-    max_pixels (`int`, *optional*, defaults to `16777216`):
-        Maximum number of pixels in a resized image.
     patch_size (`int`, *optional*, defaults to `16`):
         Spatial patch size of the vision encoder.
     merge_size (`int`, *optional*, defaults to `2`):
@@ -1086,43 +1245,12 @@ class Cosmos3EdgeImageProcessorPil(PilBackend):
     model_input_names = ["pixel_values", "image_grid_thw"]
 
     def __init__(self, **kwargs: Unpack[Cosmos3EdgeImageProcessorKwargs]):
-        size = kwargs.pop("size", None)
-        min_pixels = kwargs.pop("min_pixels", None)
-        max_pixels = kwargs.pop("max_pixels", None)
-
-        size = dict(self.size) if size is None else dict(size)
-        if min_pixels is not None:
-            size["shortest_edge"] = min_pixels
-            size.pop("min_pixels", None)
-        if max_pixels is not None:
-            size["longest_edge"] = max_pixels
-            size.pop("max_pixels", None)
-        if "shortest_edge" not in size or "longest_edge" not in size:
+        super().__init__(**kwargs)
+        if self.size is not None and (self.size.shortest_edge is None or self.size.longest_edge is None):
             raise ValueError("`size` must contain `shortest_edge` and `longest_edge` keys.")
 
-        super().__init__(size=size, **kwargs)
-
-    def _standardize_kwargs(
-        self,
-        size: int | Iterable[int] | dict[str, int] | SizeDict | None = None,
-        min_pixels: int | None = None,
-        max_pixels: int | None = None,
-        **kwargs,
-    ) -> dict:
-        if min_pixels is not None or max_pixels is not None:
-            current_size = self.size if size is None else size
-            if isinstance(current_size, SizeDict):
-                current_min_pixels = current_size.shortest_edge
-                current_max_pixels = current_size.longest_edge
-            else:
-                current_min_pixels = current_size["shortest_edge"]
-                current_max_pixels = current_size["longest_edge"]
-            size = SizeDict(
-                shortest_edge=current_min_pixels if min_pixels is None else min_pixels,
-                longest_edge=current_max_pixels if max_pixels is None else max_pixels,
-            )
-
-        kwargs = super()._standardize_kwargs(size=size, **kwargs)
+    def _standardize_kwargs(self, **kwargs) -> dict:
+        kwargs = super()._standardize_kwargs(**kwargs)
         size = kwargs.get("size", self.size)
         if size.shortest_edge is None or size.longest_edge is None:
             raise ValueError("`size` must contain `shortest_edge` and `longest_edge` keys.")
@@ -1216,14 +1344,9 @@ class Cosmos3EdgeImageProcessorPil(PilBackend):
         images_kwargs = images_kwargs or {}
         size = images_kwargs.get("size", self.size)
         if isinstance(size, SizeDict):
-            default_min_pixels = size.shortest_edge
-            default_max_pixels = size.longest_edge
+            min_pixels, max_pixels = size.shortest_edge, size.longest_edge
         else:
-            default_min_pixels = size["shortest_edge"]
-            default_max_pixels = size["longest_edge"]
-
-        min_pixels = images_kwargs.get("min_pixels", default_min_pixels)
-        max_pixels = images_kwargs.get("max_pixels", default_max_pixels)
+            min_pixels, max_pixels = size["shortest_edge"], size["longest_edge"]
         patch_size = images_kwargs.get("patch_size", self.patch_size)
         merge_size = images_kwargs.get("merge_size", self.merge_size)
         resized_height, resized_width = smart_resize(
@@ -1245,37 +1368,46 @@ def smart_resize_video(
     min_pixels: int = 64 * 64,
     max_pixels: int = 24 * 1024 * 1024,
 ) -> tuple[int, int]:
-    """Resize video frames while keeping the packed patch grid valid for Cosmos3 Edge."""
+    """Resize video frames while keeping the packed patch grid valid for Cosmos3 Edge.
+
+    This follows Qwen3-VL's video resize function. Cosmos3 Edge changes the defaults because it processes every
+    sampled frame independently (`temporal_factor=1`) and uses the checkpoint's pixel budget.
+    """
     if height < factor or width < factor:
         raise ValueError(f"height:{height} or width:{width} must be larger than factor:{factor}")
-    if max(height, width) / min(height, width) > 200:
+    elif max(height, width) / min(height, width) > 200:
         raise ValueError(
             f"absolute aspect ratio must be smaller than 200, got {max(height, width) / min(height, width)}"
         )
-    if min_pixels <= 0 or max_pixels <= 0 or max_pixels < min_pixels:
-        raise ValueError(
-            "`min_pixels` and `max_pixels` must be positive and `max_pixels` must be greater than or equal to "
-            f"`min_pixels`, got min_pixels={min_pixels}, max_pixels={max_pixels}."
-        )
+    h_bar = round(height / factor) * factor
+    w_bar = round(width / factor) * factor
+    t_bar = math.ceil(num_frames / temporal_factor) * temporal_factor
 
-    resized_height = round(height / factor) * factor
-    resized_width = round(width / factor) * factor
-    resized_frames = math.ceil(num_frames / temporal_factor) * temporal_factor
-
-    if resized_frames * resized_height * resized_width > max_pixels:
+    if t_bar * h_bar * w_bar > max_pixels:
         beta = math.sqrt((num_frames * height * width) / max_pixels)
-        resized_height = max(factor, math.floor(height / beta / factor) * factor)
-        resized_width = max(factor, math.floor(width / beta / factor) * factor)
-    elif resized_frames * resized_height * resized_width < min_pixels:
+        h_bar = max(factor, math.floor(height / beta / factor) * factor)
+        w_bar = max(factor, math.floor(width / beta / factor) * factor)
+    elif t_bar * h_bar * w_bar < min_pixels:
         beta = math.sqrt(min_pixels / (num_frames * height * width))
-        resized_height = math.ceil(height * beta / factor) * factor
-        resized_width = math.ceil(width * beta / factor) * factor
+        h_bar = math.ceil(height * beta / factor) * factor
+        w_bar = math.ceil(width * beta / factor) * factor
 
-    return resized_height, resized_width
+    return h_bar, w_bar
 
 
 class Cosmos3EdgeVideoProcessorInitKwargs(VideosKwargs, total=False):
-    """Keyword arguments for [`Cosmos3EdgeVideoProcessor`]."""
+    r"""
+    patch_size (`int`, *optional*, defaults to `16`):
+        Spatial patch size of the vision encoder.
+    temporal_patch_size (`int`, *optional*, defaults to `1`):
+        Temporal patch size. Cosmos3 Edge processes every sampled frame independently, so only `1` is supported.
+    merge_size (`int`, *optional*, defaults to `2`):
+        Number of adjacent patches merged along each spatial axis by the projector.
+    min_frames (`int`, *optional*, defaults to `4`):
+        Minimum number of frames sampled from a video.
+    max_frames (`int`, *optional*, defaults to `768`):
+        Maximum number of frames sampled from a video.
+    """
 
     patch_size: int
     temporal_patch_size: int
@@ -1482,48 +1614,10 @@ class Cosmos3EdgeVideoProcessor(BaseVideoProcessor):
 
 
 @auto_docstring
-class Cosmos3EdgeProcessor(ProcessorMixin):
+class Cosmos3EdgeProcessor(Qwen3VLProcessor):
     """Construct a Cosmos3 Edge multimodal prompt from image, video, and text inputs."""
 
     valid_processor_kwargs = ProcessingKwargs
-
-    def __init__(
-        self,
-        image_processor=None,
-        tokenizer=None,
-        video_processor=None,
-        chat_template=None,
-        **kwargs,
-    ):
-        self.image_token = "<|image_pad|>" if not hasattr(tokenizer, "image_token") else tokenizer.image_token
-        self.video_token = "<|video_pad|>" if not hasattr(tokenizer, "video_token") else tokenizer.video_token
-        self.vision_start_token = (
-            "<|vision_start|>" if not hasattr(tokenizer, "vision_start_token") else tokenizer.vision_start_token
-        )
-        self.vision_end_token = (
-            "<|vision_end|>" if not hasattr(tokenizer, "vision_end_token") else tokenizer.vision_end_token
-        )
-        self.image_token_id = (
-            tokenizer.image_token_id
-            if getattr(tokenizer, "image_token_id", None)
-            else tokenizer.convert_tokens_to_ids(self.image_token)
-        )
-        self.video_token_id = (
-            tokenizer.video_token_id
-            if getattr(tokenizer, "video_token_id", None)
-            else tokenizer.convert_tokens_to_ids(self.video_token)
-        )
-        self.vision_start_token_id = (
-            tokenizer.vision_start_token_id
-            if getattr(tokenizer, "vision_start_token_id", None)
-            else tokenizer.convert_tokens_to_ids(self.vision_start_token)
-        )
-        self.vision_end_token_id = (
-            tokenizer.vision_end_token_id
-            if getattr(tokenizer, "vision_end_token_id", None)
-            else tokenizer.convert_tokens_to_ids(self.vision_end_token)
-        )
-        super().__init__(image_processor, tokenizer, video_processor, chat_template=chat_template)
 
     def replace_image_token(self, image_inputs: dict, image_idx: int) -> str:
         """Expand an image placeholder to one text token per projected 2×2 patch group."""
@@ -1534,37 +1628,22 @@ class Cosmos3EdgeProcessor(ProcessorMixin):
     def replace_video_token(self, video_inputs: dict, video_idx: int) -> str:
         """Expand a video into timestamped, frame-level vision segments."""
         grid_thw = video_inputs["video_grid_thw"][video_idx]
-        num_frames = int(grid_thw[0])
         merge_length = self.video_processor.merge_size**2
         num_tokens_per_frame = int(grid_thw[1:].prod()) // merge_length
+        metadata = video_inputs["video_metadata"][video_idx]
 
-        metadata = None
-        if (video_metadata := video_inputs.get("video_metadata")) is not None:
-            metadata = video_metadata[video_idx]
-        fps = self._get_metadata_value(metadata, "fps")
-        if fps is None:
+        if metadata.fps is None:
             logger.warning_once(
                 "Cosmos3 Edge requires frame timestamps to construct prompts, but the input video's fps could not "
                 "be inferred. Defaulting to fps=24. Pass `video_metadata` for accurate timestamps."
             )
-            fps = 24
+        metadata.fps = 24 if metadata.fps is None else metadata.fps
 
-        frame_indices = self._get_metadata_value(metadata, "frames_indices")
-        if frame_indices is None:
-            timestamps = self._get_metadata_value(metadata, "timestamps")
-            if timestamps is None:
-                timestamps = [frame_index / fps for frame_index in range(num_frames)]
-            else:
-                timestamps = list(timestamps.tolist() if hasattr(timestamps, "tolist") else timestamps)
-        else:
-            timestamps = self._calculate_timestamps(
-                frame_indices, fps, merge_size=self.video_processor.temporal_patch_size
-            )
-
-        if not timestamps:
-            timestamps = [0.0]
-        timestamps = timestamps[:num_frames]
-        timestamps.extend([timestamps[-1]] * (num_frames - len(timestamps)))
+        timestamps = self._calculate_timestamps(
+            metadata.frames_indices,
+            metadata.fps,
+            merge_size=self.video_processor.temporal_patch_size,
+        )
 
         return "".join(
             f"<{timestamp:.1f} seconds>{self.vision_start_token}"
@@ -1573,35 +1652,18 @@ class Cosmos3EdgeProcessor(ProcessorMixin):
         )
 
     @staticmethod
-    def _get_metadata_value(metadata, name: str):
-        if metadata is None:
-            return None
-        if isinstance(metadata, dict):
-            return metadata.get(name)
-        try:
-            return getattr(metadata, name, None)
-        except ValueError:
-            # `VideoMetadata.timestamps` intentionally raises when it cannot infer values from missing frame
-            # indices. The caller will fall back to a timestamp sequence in that case.
-            return None
-
-    @staticmethod
     def _calculate_timestamps(
         indices: list[int] | np.ndarray,
         video_fps: float,
         merge_size: int = 1,
     ) -> list[float]:
         """Compute one timestamp per temporal patch, using the center frame's time."""
-        indices = list(indices.tolist() if hasattr(indices, "tolist") else indices)
-        if not indices:
-            return []
-        if len(indices) % merge_size:
-            indices.extend([indices[-1]] * (merge_size - len(indices) % merge_size))
-        timestamps = [index / video_fps for index in indices]
-        return [
-            (timestamps[index] + timestamps[index + merge_size - 1]) / 2
-            for index in range(0, len(timestamps), merge_size)
-        ]
+        if not isinstance(indices, list):
+            indices = indices.tolist()
+        if len(indices) % merge_size != 0:
+            indices.extend(indices[-1] for _ in range(merge_size - len(indices) % merge_size))
+        timestamps = [idx / video_fps for idx in indices]
+        return [(timestamps[i] + timestamps[i + merge_size - 1]) / 2 for i in range(0, len(timestamps), merge_size)]
 
     def get_text_with_replacements(
         self,
@@ -1686,7 +1748,9 @@ class Cosmos3EdgeProcessor(ProcessorMixin):
             images_kwargs.setdefault("per_image_kwargs", per_image_kwargs)
             processor_kwargs["images_kwargs"] = images_kwargs
 
-        return super().apply_chat_template(conversation, *args, processor_kwargs=processor_kwargs, **kwargs)
+        return ProcessorMixin.apply_chat_template(
+            self, conversation, *args, processor_kwargs=processor_kwargs, **kwargs
+        )
 
     def _get_num_multimodal_tokens(self, image_sizes=None, video_sizes=None, **kwargs):
         """Compute placeholder counts for serving frameworks without materializing pixels."""
@@ -1712,17 +1776,6 @@ class Cosmos3EdgeProcessor(ProcessorMixin):
             vision_data["num_video_tokens"] = [num_patches // merge_size**2 for num_patches in num_video_patches]
 
         return MultiModalData(**vision_data)
-
-    def post_process_image_text_to_text(
-        self, generated_outputs, skip_special_tokens=True, clean_up_tokenization_spaces=False, **kwargs
-    ):
-        """Decode generated text."""
-        return self.tokenizer.batch_decode(
-            generated_outputs,
-            skip_special_tokens=skip_special_tokens,
-            clean_up_tokenization_spaces=clean_up_tokenization_spaces,
-            **kwargs,
-        )
 
     @property
     def model_input_names(self):

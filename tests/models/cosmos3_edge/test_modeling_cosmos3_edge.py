@@ -18,6 +18,8 @@ import os
 import tempfile
 import unittest
 
+from huggingface_hub.errors import StrictDataclassClassValidationError
+
 from transformers import (
     Cosmos3EdgeConfig,
     Cosmos3EdgeForConditionalGeneration,
@@ -38,6 +40,8 @@ from ...vlm_tester import VLMModelTest, VLMModelTester
 if is_torch_available():
     import torch
     from safetensors.torch import save_file as safe_save_file
+
+    from transformers.models.cosmos3_edge.modeling_cosmos3_edge import Cosmos3EdgeTextRotaryEmbedding
 
 
 def _tiny_config():
@@ -215,6 +219,18 @@ class Cosmos3EdgeConfigTest(unittest.TestCase):
         ):
             self.assertNotIn(deprecated_field, config_dict)
 
+    def test_only_default_rope_is_supported(self):
+        with self.assertRaisesRegex(StrictDataclassClassValidationError, "requires `rope_type='default'`"):
+            Cosmos3EdgeTextConfig(
+                head_dim=8,
+                rope_parameters={
+                    "rope_type": "linear",
+                    "rope_theta": 100_000_000,
+                    "factor": 2.0,
+                    "mrope_section": [2, 1, 1],
+                },
+            )
+
     def test_default_component_widths_match_the_reasoner_checkpoint(self):
         config = Cosmos3EdgeConfig()
 
@@ -358,6 +374,40 @@ class Cosmos3EdgeModelTest(VLMModelTest, unittest.TestCase):
         self.assertEqual(tuple(outputs.last_hidden_state.shape), (1, 3, 32))
         self.assertIsNotNone(outputs.past_key_values)
 
+    def test_mrope_interleaving_is_precomputed_in_inverse_frequencies(self):
+        config = Cosmos3EdgeTextConfig()
+        rotary_embedding = Cosmos3EdgeTextRotaryEmbedding(config).to(torch_device)
+        position_ids = torch.tensor(
+            [
+                [[0, 1, 2]],
+                [[0, 3, 4]],
+                [[0, 5, 6]],
+            ],
+            dtype=torch.long,
+            device=torch_device,
+        )
+        hidden_states = torch.zeros((1, 3, config.head_dim), device=torch_device)
+
+        cos, sin = rotary_embedding(hidden_states, position_ids)
+
+        base_inv_freq = 1.0 / (
+            config.rope_parameters["rope_theta"]
+            ** (torch.arange(0, config.head_dim, 2, dtype=torch.int64, device=torch_device).float() / config.head_dim)
+        )
+        reference_freqs = position_ids[..., None].float() * base_inv_freq
+        interleaved_freqs = reference_freqs[0].clone()
+        for dim, offset in enumerate((1, 2), start=1):
+            length = config.rope_parameters["mrope_section"][dim] * 3
+            interleaved_freqs[..., slice(offset, length, 3)] = reference_freqs[dim, ..., slice(offset, length, 3)]
+        expected_embedding = torch.cat((interleaved_freqs, interleaved_freqs), dim=-1)
+
+        self.assertEqual(tuple(rotary_embedding.inv_freq.shape), (3, config.head_dim // 2))
+        axis_assignment = rotary_embedding.inv_freq.ne(0).int().argmax(dim=0)
+        self.assertEqual(axis_assignment.bincount(minlength=3).tolist(), config.rope_parameters["mrope_section"])
+        self.assertEqual(axis_assignment[-4:].tolist(), [0, 0, 0, 0])
+        torch.testing.assert_close(cos, expected_embedding.cos())
+        torch.testing.assert_close(sin, expected_embedding.sin())
+
     def test_native_module_tree_and_checkpoint_key_layout(self):
         model = Cosmos3EdgeForConditionalGeneration(_tiny_config())
         state_dict = model.state_dict()
@@ -429,18 +479,27 @@ class Cosmos3EdgeModelTest(VLMModelTest, unittest.TestCase):
                 mm_token_type_ids=torch.tensor([[0, 1, 0]], dtype=torch.long, device=torch_device),
                 use_cache=False,
             )
+            base_outputs = model.model(
+                input_ids=input_ids,
+                pixel_values=pixel_values,
+                image_grid_thw=image_grid_thw,
+                mm_token_type_ids=torch.tensor([[0, 1, 0]], dtype=torch.long, device=torch_device),
+                use_cache=False,
+            )
             generated = model.generate(
                 input_ids=input_ids,
                 pixel_values=pixel_values,
                 image_grid_thw=image_grid_thw,
                 mm_token_type_ids=torch.tensor([[0, 1, 0]], dtype=torch.long, device=torch_device),
                 do_sample=False,
-                max_new_tokens=1,
+                max_new_tokens=2,
             )
 
         self.assertEqual(tuple(outputs.logits.shape), (1, 3, 97))
-        self.assertIsNotNone(outputs.rope_deltas)
-        self.assertEqual(tuple(generated.shape), (1, 4))
+        self.assertNotIn("rope_deltas", outputs)
+        self.assertNotIn("rope_deltas", base_outputs)
+        self.assertIsNotNone(model.model.rope_deltas)
+        self.assertEqual(tuple(generated.shape), (1, 5))
 
     def test_multimodal_forward_requires_token_type_ids(self):
         model = Cosmos3EdgeForConditionalGeneration(_tiny_config()).to(torch_device).eval()
@@ -478,11 +537,13 @@ class Cosmos3EdgeModelTest(VLMModelTest, unittest.TestCase):
                 mm_token_type_ids=torch.tensor([[0, 0, 2, 0, 0, 0, 2, 0]], dtype=torch.long, device=torch_device),
                 do_sample=False,
                 num_beams=2,
-                max_new_tokens=1,
+                max_new_tokens=2,
             )
 
         self.assertEqual(tuple(outputs.logits.shape), (1, 8, 97))
-        self.assertEqual(tuple(generated.shape), (1, 9))
+        self.assertNotIn("rope_deltas", outputs)
+        self.assertIsNotNone(model.model.rope_deltas)
+        self.assertEqual(tuple(generated.shape), (1, 10))
 
     def test_mrope_positions_use_merged_image_grid(self):
         model = Cosmos3EdgeModel(_tiny_config()).to(torch_device)

@@ -102,6 +102,10 @@ class Cosmos3EdgeTextConfig(PreTrainedConfig):
                 f"The hidden size ({self.hidden_size}) is not a multiple of the number of attention "
                 f"heads ({self.num_attention_heads})."
             )
+        rope_type = self.rope_parameters["rope_type"]
+        if rope_type != "default":
+            raise ValueError(f"Cosmos3 Edge requires `rope_type='default'`, got {rope_type!r}.")
+
         mrope_section = self.rope_parameters["mrope_section"]
         if len(mrope_section) != 3 or sum(mrope_section) != self.head_dim // 2:
             raise ValueError(

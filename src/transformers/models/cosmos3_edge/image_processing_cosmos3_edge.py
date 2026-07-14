@@ -19,7 +19,6 @@
 # limitations under the License.
 
 import math
-from collections.abc import Iterable
 
 import torch
 
@@ -39,10 +38,6 @@ if is_torchvision_available():
 
 class Cosmos3EdgeImageProcessorKwargs(ImagesKwargs, total=False):
     r"""
-    min_pixels (`int`, *optional*, defaults to `65536`):
-        Minimum number of pixels in a resized image.
-    max_pixels (`int`, *optional*, defaults to `16777216`):
-        Maximum number of pixels in a resized image.
     patch_size (`int`, *optional*, defaults to `16`):
         Spatial patch size of the vision encoder.
     merge_size (`int`, *optional*, defaults to `2`):
@@ -51,8 +46,6 @@ class Cosmos3EdgeImageProcessorKwargs(ImagesKwargs, total=False):
         Per-image overrides for `min_pixels` and `max_pixels`.
     """
 
-    min_pixels: int
-    max_pixels: int
     patch_size: int
     merge_size: int
     per_image_kwargs: list[dict | None]
@@ -107,43 +100,12 @@ class Cosmos3EdgeImageProcessor(TorchvisionBackend):
     model_input_names = ["pixel_values", "image_grid_thw"]
 
     def __init__(self, **kwargs: Unpack[Cosmos3EdgeImageProcessorKwargs]):
-        size = kwargs.pop("size", None)
-        min_pixels = kwargs.pop("min_pixels", None)
-        max_pixels = kwargs.pop("max_pixels", None)
-
-        size = dict(self.size) if size is None else dict(size)
-        if min_pixels is not None:
-            size["shortest_edge"] = min_pixels
-            size.pop("min_pixels", None)
-        if max_pixels is not None:
-            size["longest_edge"] = max_pixels
-            size.pop("max_pixels", None)
-        if "shortest_edge" not in size or "longest_edge" not in size:
+        super().__init__(**kwargs)
+        if self.size is not None and (self.size.shortest_edge is None or self.size.longest_edge is None):
             raise ValueError("`size` must contain `shortest_edge` and `longest_edge` keys.")
 
-        super().__init__(size=size, **kwargs)
-
-    def _standardize_kwargs(
-        self,
-        size: int | Iterable[int] | dict[str, int] | SizeDict | None = None,
-        min_pixels: int | None = None,
-        max_pixels: int | None = None,
-        **kwargs,
-    ) -> dict:
-        if min_pixels is not None or max_pixels is not None:
-            current_size = self.size if size is None else size
-            if isinstance(current_size, SizeDict):
-                current_min_pixels = current_size.shortest_edge
-                current_max_pixels = current_size.longest_edge
-            else:
-                current_min_pixels = current_size["shortest_edge"]
-                current_max_pixels = current_size["longest_edge"]
-            size = SizeDict(
-                shortest_edge=current_min_pixels if min_pixels is None else min_pixels,
-                longest_edge=current_max_pixels if max_pixels is None else max_pixels,
-            )
-
-        kwargs = super()._standardize_kwargs(size=size, **kwargs)
+    def _standardize_kwargs(self, **kwargs) -> dict:
+        kwargs = super()._standardize_kwargs(**kwargs)
         size = kwargs.get("size", self.size)
         if size.shortest_edge is None or size.longest_edge is None:
             raise ValueError("`size` must contain `shortest_edge` and `longest_edge` keys.")
@@ -234,14 +196,9 @@ class Cosmos3EdgeImageProcessor(TorchvisionBackend):
         images_kwargs = images_kwargs or {}
         size = images_kwargs.get("size", self.size)
         if isinstance(size, SizeDict):
-            default_min_pixels = size.shortest_edge
-            default_max_pixels = size.longest_edge
+            min_pixels, max_pixels = size.shortest_edge, size.longest_edge
         else:
-            default_min_pixels = size["shortest_edge"]
-            default_max_pixels = size["longest_edge"]
-
-        min_pixels = images_kwargs.get("min_pixels", default_min_pixels)
-        max_pixels = images_kwargs.get("max_pixels", default_max_pixels)
+            min_pixels, max_pixels = size["shortest_edge"], size["longest_edge"]
         patch_size = images_kwargs.get("patch_size", self.patch_size)
         merge_size = images_kwargs.get("merge_size", self.merge_size)
         resized_height, resized_width = smart_resize(

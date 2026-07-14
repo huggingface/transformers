@@ -39,7 +39,18 @@ logger = logging.get_logger(__name__)
 
 
 class Cosmos3EdgeVideoProcessorInitKwargs(VideosKwargs, total=False):
-    """Keyword arguments for [`Cosmos3EdgeVideoProcessor`]."""
+    r"""
+    patch_size (`int`, *optional*, defaults to `16`):
+        Spatial patch size of the vision encoder.
+    temporal_patch_size (`int`, *optional*, defaults to `1`):
+        Temporal patch size. Cosmos3 Edge processes every sampled frame independently, so only `1` is supported.
+    merge_size (`int`, *optional*, defaults to `2`):
+        Number of adjacent patches merged along each spatial axis by the projector.
+    min_frames (`int`, *optional*, defaults to `4`):
+        Minimum number of frames sampled from a video.
+    max_frames (`int`, *optional*, defaults to `768`):
+        Maximum number of frames sampled from a video.
+    """
 
     patch_size: int
     temporal_patch_size: int
@@ -57,33 +68,31 @@ def smart_resize_video(
     min_pixels: int = 64 * 64,
     max_pixels: int = 24 * 1024 * 1024,
 ) -> tuple[int, int]:
-    """Resize video frames while keeping the packed patch grid valid for Cosmos3 Edge."""
+    """Resize video frames while keeping the packed patch grid valid for Cosmos3 Edge.
+
+    This follows Qwen3-VL's video resize function. Cosmos3 Edge changes the defaults because it processes every
+    sampled frame independently (`temporal_factor=1`) and uses the checkpoint's pixel budget.
+    """
     if height < factor or width < factor:
         raise ValueError(f"height:{height} or width:{width} must be larger than factor:{factor}")
-    if max(height, width) / min(height, width) > 200:
+    elif max(height, width) / min(height, width) > 200:
         raise ValueError(
             f"absolute aspect ratio must be smaller than 200, got {max(height, width) / min(height, width)}"
         )
-    if min_pixels <= 0 or max_pixels <= 0 or max_pixels < min_pixels:
-        raise ValueError(
-            "`min_pixels` and `max_pixels` must be positive and `max_pixels` must be greater than or equal to "
-            f"`min_pixels`, got min_pixels={min_pixels}, max_pixels={max_pixels}."
-        )
+    h_bar = round(height / factor) * factor
+    w_bar = round(width / factor) * factor
+    t_bar = math.ceil(num_frames / temporal_factor) * temporal_factor
 
-    resized_height = round(height / factor) * factor
-    resized_width = round(width / factor) * factor
-    resized_frames = math.ceil(num_frames / temporal_factor) * temporal_factor
-
-    if resized_frames * resized_height * resized_width > max_pixels:
+    if t_bar * h_bar * w_bar > max_pixels:
         beta = math.sqrt((num_frames * height * width) / max_pixels)
-        resized_height = max(factor, math.floor(height / beta / factor) * factor)
-        resized_width = max(factor, math.floor(width / beta / factor) * factor)
-    elif resized_frames * resized_height * resized_width < min_pixels:
+        h_bar = max(factor, math.floor(height / beta / factor) * factor)
+        w_bar = max(factor, math.floor(width / beta / factor) * factor)
+    elif t_bar * h_bar * w_bar < min_pixels:
         beta = math.sqrt(min_pixels / (num_frames * height * width))
-        resized_height = math.ceil(height * beta / factor) * factor
-        resized_width = math.ceil(width * beta / factor) * factor
+        h_bar = math.ceil(height * beta / factor) * factor
+        w_bar = math.ceil(width * beta / factor) * factor
 
-    return resized_height, resized_width
+    return h_bar, w_bar
 
 
 @add_start_docstrings(

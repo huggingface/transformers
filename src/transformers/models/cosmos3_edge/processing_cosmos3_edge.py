@@ -34,22 +34,9 @@ class Cosmos3EdgeProcessor(ProcessorMixin):
 
     valid_processor_kwargs = ProcessingKwargs
 
-    def __init__(
-        self,
-        image_processor=None,
-        tokenizer=None,
-        video_processor=None,
-        chat_template=None,
-        **kwargs,
-    ):
+    def __init__(self, image_processor=None, tokenizer=None, video_processor=None, chat_template=None, **kwargs):
         self.image_token = "<|image_pad|>" if not hasattr(tokenizer, "image_token") else tokenizer.image_token
         self.video_token = "<|video_pad|>" if not hasattr(tokenizer, "video_token") else tokenizer.video_token
-        self.vision_start_token = (
-            "<|vision_start|>" if not hasattr(tokenizer, "vision_start_token") else tokenizer.vision_start_token
-        )
-        self.vision_end_token = (
-            "<|vision_end|>" if not hasattr(tokenizer, "vision_end_token") else tokenizer.vision_end_token
-        )
         self.image_token_id = (
             tokenizer.image_token_id
             if getattr(tokenizer, "image_token_id", None)
@@ -59,6 +46,13 @@ class Cosmos3EdgeProcessor(ProcessorMixin):
             tokenizer.video_token_id
             if getattr(tokenizer, "video_token_id", None)
             else tokenizer.convert_tokens_to_ids(self.video_token)
+        )
+        super().__init__(image_processor, tokenizer, video_processor, chat_template=chat_template)
+        self.vision_start_token = (
+            "<|vision_start|>" if not hasattr(tokenizer, "vision_start_token") else tokenizer.vision_start_token
+        )
+        self.vision_end_token = (
+            "<|vision_end|>" if not hasattr(tokenizer, "vision_end_token") else tokenizer.vision_end_token
         )
         self.vision_start_token_id = (
             tokenizer.vision_start_token_id
@@ -70,7 +64,6 @@ class Cosmos3EdgeProcessor(ProcessorMixin):
             if getattr(tokenizer, "vision_end_token_id", None)
             else tokenizer.convert_tokens_to_ids(self.vision_end_token)
         )
-        super().__init__(image_processor, tokenizer, video_processor, chat_template=chat_template)
 
     def replace_image_token(self, image_inputs: dict, image_idx: int) -> str:
         """Expand an image placeholder to one text token per projected 2×2 patch group."""
@@ -81,37 +74,22 @@ class Cosmos3EdgeProcessor(ProcessorMixin):
     def replace_video_token(self, video_inputs: dict, video_idx: int) -> str:
         """Expand a video into timestamped, frame-level vision segments."""
         grid_thw = video_inputs["video_grid_thw"][video_idx]
-        num_frames = int(grid_thw[0])
         merge_length = self.video_processor.merge_size**2
         num_tokens_per_frame = int(grid_thw[1:].prod()) // merge_length
+        metadata = video_inputs["video_metadata"][video_idx]
 
-        metadata = None
-        if (video_metadata := video_inputs.get("video_metadata")) is not None:
-            metadata = video_metadata[video_idx]
-        fps = self._get_metadata_value(metadata, "fps")
-        if fps is None:
+        if metadata.fps is None:
             logger.warning_once(
                 "Cosmos3 Edge requires frame timestamps to construct prompts, but the input video's fps could not "
                 "be inferred. Defaulting to fps=24. Pass `video_metadata` for accurate timestamps."
             )
-            fps = 24
+        metadata.fps = 24 if metadata.fps is None else metadata.fps
 
-        frame_indices = self._get_metadata_value(metadata, "frames_indices")
-        if frame_indices is None:
-            timestamps = self._get_metadata_value(metadata, "timestamps")
-            if timestamps is None:
-                timestamps = [frame_index / fps for frame_index in range(num_frames)]
-            else:
-                timestamps = list(timestamps.tolist() if hasattr(timestamps, "tolist") else timestamps)
-        else:
-            timestamps = self._calculate_timestamps(
-                frame_indices, fps, merge_size=self.video_processor.temporal_patch_size
-            )
-
-        if not timestamps:
-            timestamps = [0.0]
-        timestamps = timestamps[:num_frames]
-        timestamps.extend([timestamps[-1]] * (num_frames - len(timestamps)))
+        timestamps = self._calculate_timestamps(
+            metadata.frames_indices,
+            metadata.fps,
+            merge_size=self.video_processor.temporal_patch_size,
+        )
 
         return "".join(
             f"<{timestamp:.1f} seconds>{self.vision_start_token}"
@@ -119,18 +97,61 @@ class Cosmos3EdgeProcessor(ProcessorMixin):
             for timestamp in timestamps
         )
 
-    @staticmethod
-    def _get_metadata_value(metadata, name: str):
-        if metadata is None:
-            return None
-        if isinstance(metadata, dict):
-            return metadata.get(name)
-        try:
-            return getattr(metadata, name, None)
-        except ValueError:
-            # `VideoMetadata.timestamps` intentionally raises when it cannot infer values from missing frame
-            # indices. The caller will fall back to a timestamp sequence in that case.
-            return None
+    def _get_num_multimodal_tokens(self, image_sizes=None, video_sizes=None, **kwargs):
+        """Compute placeholder counts for serving frameworks without materializing pixels."""
+        vision_data = {}
+        images_kwargs = dict(kwargs.get("images_kwargs", kwargs))
+        videos_kwargs = dict(kwargs.get("videos_kwargs", kwargs))
+
+        if image_sizes is not None:
+            merge_size = images_kwargs.get("merge_size", self.image_processor.merge_size)
+            num_image_patches = [
+                self.image_processor.get_number_of_image_patches(height, width, images_kwargs)
+                for height, width in image_sizes
+            ]
+            vision_data["num_image_patches"] = num_image_patches
+            vision_data["num_image_tokens"] = [num_patches // merge_size**2 for num_patches in num_image_patches]
+
+        if video_sizes is not None:
+            merge_size = videos_kwargs.get("merge_size", self.video_processor.merge_size)
+            num_video_patches = [
+                self.video_processor.get_number_of_video_patches(num_frames, height, width, videos_kwargs)
+                for num_frames, height, width in video_sizes
+            ]
+            vision_data["num_video_tokens"] = [num_patches // merge_size**2 for num_patches in num_video_patches]
+
+        return MultiModalData(**vision_data)
+
+    def post_process_image_text_to_text(
+        self, generated_outputs, skip_special_tokens=True, clean_up_tokenization_spaces=False, **kwargs
+    ):
+        """
+        Post-process the output of the model to decode the text.
+
+        Args:
+            generated_outputs (`torch.Tensor` or `np.ndarray`):
+                The output of the model `generate` function. The output is expected to be a tensor of shape `(batch_size, sequence_length)`
+                or `(sequence_length,)`.
+            skip_special_tokens (`bool`, *optional*, defaults to `True`):
+                Whether or not to remove special tokens in the output. Argument passed to the tokenizer's `batch_decode` method.
+            clean_up_tokenization_spaces (`bool`, *optional*, defaults to `False`):
+                Whether or not to clean up the tokenization spaces. Argument passed to the tokenizer's `batch_decode` method.
+            **kwargs:
+                Additional arguments to be passed to the tokenizer's `batch_decode method`.
+
+        Returns:
+            `list[str]`: The decoded text.
+        """
+        return self.tokenizer.batch_decode(
+            generated_outputs,
+            skip_special_tokens=skip_special_tokens,
+            clean_up_tokenization_spaces=clean_up_tokenization_spaces,
+            **kwargs,
+        )
+
+    @property
+    def model_input_names(self):
+        return super().model_input_names + ["mm_token_type_ids"]
 
     @staticmethod
     def _calculate_timestamps(
@@ -139,16 +160,12 @@ class Cosmos3EdgeProcessor(ProcessorMixin):
         merge_size: int = 1,
     ) -> list[float]:
         """Compute one timestamp per temporal patch, using the center frame's time."""
-        indices = list(indices.tolist() if hasattr(indices, "tolist") else indices)
-        if not indices:
-            return []
-        if len(indices) % merge_size:
-            indices.extend([indices[-1]] * (merge_size - len(indices) % merge_size))
-        timestamps = [index / video_fps for index in indices]
-        return [
-            (timestamps[index] + timestamps[index + merge_size - 1]) / 2
-            for index in range(0, len(timestamps), merge_size)
-        ]
+        if not isinstance(indices, list):
+            indices = indices.tolist()
+        if len(indices) % merge_size != 0:
+            indices.extend(indices[-1] for _ in range(merge_size - len(indices) % merge_size))
+        timestamps = [idx / video_fps for idx in indices]
+        return [(timestamps[i] + timestamps[i + merge_size - 1]) / 2 for i in range(0, len(timestamps), merge_size)]
 
     def get_text_with_replacements(
         self,
@@ -234,46 +251,6 @@ class Cosmos3EdgeProcessor(ProcessorMixin):
             processor_kwargs["images_kwargs"] = images_kwargs
 
         return super().apply_chat_template(conversation, *args, processor_kwargs=processor_kwargs, **kwargs)
-
-    def _get_num_multimodal_tokens(self, image_sizes=None, video_sizes=None, **kwargs):
-        """Compute placeholder counts for serving frameworks without materializing pixels."""
-        vision_data = {}
-        images_kwargs = dict(kwargs.get("images_kwargs", kwargs))
-        videos_kwargs = dict(kwargs.get("videos_kwargs", kwargs))
-
-        if image_sizes is not None:
-            merge_size = images_kwargs.get("merge_size", self.image_processor.merge_size)
-            num_image_patches = [
-                self.image_processor.get_number_of_image_patches(height, width, images_kwargs)
-                for height, width in image_sizes
-            ]
-            vision_data["num_image_patches"] = num_image_patches
-            vision_data["num_image_tokens"] = [num_patches // merge_size**2 for num_patches in num_image_patches]
-
-        if video_sizes is not None:
-            merge_size = videos_kwargs.get("merge_size", self.video_processor.merge_size)
-            num_video_patches = [
-                self.video_processor.get_number_of_video_patches(num_frames, height, width, videos_kwargs)
-                for num_frames, height, width in video_sizes
-            ]
-            vision_data["num_video_tokens"] = [num_patches // merge_size**2 for num_patches in num_video_patches]
-
-        return MultiModalData(**vision_data)
-
-    def post_process_image_text_to_text(
-        self, generated_outputs, skip_special_tokens=True, clean_up_tokenization_spaces=False, **kwargs
-    ):
-        """Decode generated text."""
-        return self.tokenizer.batch_decode(
-            generated_outputs,
-            skip_special_tokens=skip_special_tokens,
-            clean_up_tokenization_spaces=clean_up_tokenization_spaces,
-            **kwargs,
-        )
-
-    @property
-    def model_input_names(self):
-        return super().model_input_names + ["mm_token_type_ids"]
 
 
 __all__ = ["Cosmos3EdgeProcessor"]

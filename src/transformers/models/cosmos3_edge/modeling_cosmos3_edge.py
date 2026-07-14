@@ -19,8 +19,7 @@
 # limitations under the License.
 import itertools
 from collections.abc import Callable
-from dataclasses import dataclass
-from typing import Any, Optional
+from typing import Any
 
 import torch
 import torch.nn as nn
@@ -39,7 +38,7 @@ from ...modeling_outputs import (
     BaseModelOutputWithPooling,
     CausalLMOutputWithPast,
 )
-from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
+from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import (
@@ -48,7 +47,6 @@ from ...utils import (
     can_return_tuple,
     torch_compilable_check,
 )
-from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import (
     accepts_precomputed_kwargs,
     is_flash_attention_requested,
@@ -85,63 +83,46 @@ class Cosmos3EdgeTextRotaryEmbedding(nn.Module):
 
         self.register_buffer("inv_freq", inv_freq, persistent=False)
         self.register_buffer("original_inv_freq", inv_freq.clone(), persistent=False)
-        self.mrope_section = config.rope_parameters["mrope_section"]
 
     @staticmethod
     def compute_default_rope_parameters(
         config: Cosmos3EdgeTextConfig | None = None,
-        device: Optional["torch.device"] = None,
+        device: torch.device | None = None,
         seq_len: int | None = None,
-    ) -> tuple["torch.Tensor", float]:
-        """
-        Computes the inverse frequencies according to the original RoPE implementation
-        Args:
-            config ([`~transformers.PreTrainedConfig`]):
-                The model configuration.
-            device (`torch.device`):
-                The device to use for initialization of the inverse frequencies.
-            seq_len (`int`, *optional*):
-                The current sequence length. Unused for this type of RoPE.
-        Returns:
-            Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
-            post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
-        """
+    ) -> tuple[torch.Tensor, float]:
+        """Construct an axis-aware inverse-frequency matrix for interleaved temporal, height, and width RoPE."""
         base = config.rope_parameters["rope_theta"]
-        dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
-
-        attention_factor = 1.0  # Unused in this type of RoPE
-
-        # Compute the inverse frequencies
+        dim = config.head_dim
         inv_freq = 1.0 / (
             base ** (torch.arange(0, dim, 2, dtype=torch.int64).to(device=device, dtype=torch.float) / dim)
         )
-        return inv_freq, attention_factor
+
+        indices = torch.arange(inv_freq.shape[0], device=device)
+        mrope_section = config.rope_parameters["mrope_section"]
+        height_mask = (indices % 3 == 1) & (indices < mrope_section[1] * 3)
+        width_mask = (indices % 3 == 2) & (indices < mrope_section[2] * 3)
+        temporal_mask = ~(height_mask | width_mask)
+        inv_freq = torch.stack(
+            (
+                inv_freq * temporal_mask,
+                inv_freq * height_mask,
+                inv_freq * width_mask,
+            )
+        )
+        return inv_freq, 1.0
 
     @torch.no_grad()
-    @dynamic_rope_update
     def forward(self, x, position_ids):
-        inv_freq_expanded = (
-            self.inv_freq[None, None, :, None].float().expand(3, position_ids.shape[1], -1, 1).to(x.device)
-        )
-        position_ids_expanded = position_ids[:, :, None, :].float()
+        if position_ids.shape[0] == 1:
+            position_ids = position_ids.expand(3, -1, -1)
+        position_ids = position_ids.permute(1, 2, 0).float()
         device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
         with maybe_autocast(device_type=device_type, enabled=False):
-            freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(2, 3)
-            freqs = self.apply_interleaved_mrope(freqs)
+            freqs = position_ids.float() @ self.inv_freq.float().to(x.device)
             emb = torch.cat((freqs, freqs), dim=-1)
             cos = emb.cos() * self.attention_scaling
             sin = emb.sin() * self.attention_scaling
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
-
-    def apply_interleaved_mrope(self, freqs: torch.Tensor) -> torch.Tensor:
-        """Interleave temporal, height, and width frequencies after applying their position IDs."""
-        # This reorders position-dependent frequencies, so it cannot be performed while constructing the fixed
-        # inverse-frequency buffer.
-        freqs_t = freqs[0]
-        for dim, offset in enumerate((1, 2), start=1):
-            length = self.mrope_section[dim] * 3
-            freqs_t[..., slice(offset, length, 3)] = freqs[dim, ..., slice(offset, length, 3)]
-        return freqs_t
 
 
 def rotate_half(x):
@@ -515,19 +496,16 @@ class Cosmos3EdgeVisionEmbeddings(nn.Module):
     def resize_positional_embeddings(
         self, positional_embeddings: torch.Tensor, grid_thw: torch.LongTensor
     ) -> torch.Tensor:
-        """
-        Resize positional embeddings to image-specific size and pad to a fixed size.
+        """Resize a learned reference grid independently for every packed image or video frame.
 
         Args:
             positional_embeddings (`torch.Tensor`):
-                Position embeddings of shape (height, width, embed_dim)
-            spatial_shapes (`torch.LongTensor`):
-                Spatial shapes of shape (batch_size, 2) to resize the positional embeddings to
-            max_length (`int`):
-                Maximum length of the positional embeddings to pad resized positional embeddings to
+                Learned positional embeddings of shape `(height, width, hidden_size)`.
+            grid_thw (`torch.LongTensor`):
+                Temporal, height, and width patch-grid dimensions for every packed image or video.
 
         Returns:
-            `torch.Tensor`: Embeddings of shape (batch_size, max_length, embed_dim)
+            `torch.Tensor`: Positional embeddings packed in the same block-major order as the input patches.
         """
         # The checkpoint uses a learned square reference grid, interpolated independently for every packed frame.
         positional_embeddings = positional_embeddings.permute(2, 0, 1).unsqueeze(0)
@@ -819,18 +797,6 @@ class Cosmos3EdgePatchMerger(nn.Module):
         x = self.norm(x.view(-1, self.hidden_size) if self.use_postshuffle_norm else x).view(-1, self.hidden_size)
         x = self.linear_fc2(self.act_fn(self.linear_fc1(x)))
         return x
-
-
-@auto_docstring
-@dataclass
-class Cosmos3EdgeModelOutputWithPast(BaseModelOutputWithPast):
-    r"""
-    rope_deltas (`torch.LongTensor` of shape `(batch_size, )`, *optional*):
-        The rope index difference between sequence length and multimodal rope.
-        The attribute is deprecated and will be removed in v5.20, use `model.base_model.rope_deltas` instead.
-    """
-
-    rope_deltas: torch.LongTensor | None = None
 
 
 @auto_docstring
@@ -1143,7 +1109,6 @@ class Cosmos3EdgeModel(Cosmos3EdgePreTrainedModel):
             position_ids = None
         return position_ids
 
-    @deprecate_kwarg("rope_deltas", version="v5.10")
     @can_return_tuple
     @auto_docstring
     def forward(
@@ -1160,14 +1125,13 @@ class Cosmos3EdgeModel(Cosmos3EdgePreTrainedModel):
         video_grid_thw: torch.LongTensor | None = None,
         mm_token_type_ids: torch.IntTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | Cosmos3EdgeModelOutputWithPast:
+    ) -> tuple | BaseModelOutputWithPast:
         r"""
         image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
-            The temporal, height and width of feature shape of each image in LLM.
+            The temporal, height, and width of the feature grid for each image.
         video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
-            The temporal, height and width of feature shape of each video in LLM.
+            The temporal, height, and width of the feature grid for each video.
         """
-
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
@@ -1207,25 +1171,12 @@ class Cosmos3EdgeModel(Cosmos3EdgePreTrainedModel):
             use_cache=use_cache,
             **kwargs,
         )
-        return Cosmos3EdgeModelOutputWithPast(
+        return BaseModelOutputWithPast(
             last_hidden_state=outputs.last_hidden_state,
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            rope_deltas=self.rope_deltas,
         )
-
-
-@auto_docstring
-@dataclass
-class Cosmos3EdgeCausalLMOutputWithPast(CausalLMOutputWithPast):
-    r"""
-    rope_deltas (`torch.LongTensor` of shape `(batch_size, )`, *optional*):
-        The rope index difference between sequence length and multimodal rope.
-        The attribute is deprecated and will be removed in v5.20, use `model.base_model.rope_deltas` instead.
-    """
-
-    rope_deltas: torch.LongTensor | None = None
 
 
 class Cosmos3EdgeForConditionalGeneration(Cosmos3EdgePreTrainedModel, GenerationMixin):
@@ -1233,10 +1184,11 @@ class Cosmos3EdgeForConditionalGeneration(Cosmos3EdgePreTrainedModel, Generation
     config_class = Cosmos3EdgeConfig
     accepts_loss_kwargs = False
 
-    def __init__(self, config: Cosmos3EdgeConfig):
+    def __init__(self, config):
         super().__init__(config)
         self.model = Cosmos3EdgeModel(config)
         self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
+
         self.post_init()
 
     @auto_docstring
@@ -1269,7 +1221,6 @@ class Cosmos3EdgeForConditionalGeneration(Cosmos3EdgePreTrainedModel, Generation
         """
         return self.model.get_image_features(pixel_values, image_grid_thw, **kwargs)
 
-    @deprecate_kwarg("rope_deltas", version="v5.10")
     @can_return_tuple
     @auto_docstring
     def forward(
@@ -1288,16 +1239,16 @@ class Cosmos3EdgeForConditionalGeneration(Cosmos3EdgePreTrainedModel, Generation
         mm_token_type_ids: torch.IntTensor | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | Cosmos3EdgeCausalLMOutputWithPast:
+    ) -> tuple | CausalLMOutputWithPast:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
             config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
-            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
+            (masked), and the loss is only computed for tokens with labels in `[0, ..., config.vocab_size]`.
         image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
-            The temporal, height and width of feature shape of each image in LLM.
+            The temporal, height, and width of the feature grid for each image.
         video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
-            The temporal, height and width of feature shape of each video in LLM.
+            The temporal, height, and width of the feature grid for each video.
 
         Example:
 
@@ -1335,8 +1286,7 @@ class Cosmos3EdgeForConditionalGeneration(Cosmos3EdgePreTrainedModel, Generation
         >>> print(output_text)
         ```
         """
-
-        outputs: Cosmos3EdgeModelOutputWithPast = self.model(
+        outputs: BaseModelOutputWithPast = self.model(
             input_ids=input_ids,
             pixel_values=pixel_values,
             pixel_values_videos=pixel_values_videos,
@@ -1352,7 +1302,6 @@ class Cosmos3EdgeForConditionalGeneration(Cosmos3EdgePreTrainedModel, Generation
         )
 
         hidden_states = outputs.last_hidden_state
-        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
         slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
         logits = self.lm_head(hidden_states[:, slice_indices, :])
 
@@ -1362,13 +1311,12 @@ class Cosmos3EdgeForConditionalGeneration(Cosmos3EdgePreTrainedModel, Generation
                 logits=logits, labels=labels, vocab_size=self.config.text_config.vocab_size, **kwargs
             )
 
-        return Cosmos3EdgeCausalLMOutputWithPast(
+        return CausalLMOutputWithPast(
             loss=loss,
             logits=logits,
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            rope_deltas=outputs.rope_deltas,
         )
 
     def prepare_inputs_for_generation(
@@ -1413,38 +1361,41 @@ class Cosmos3EdgeForConditionalGeneration(Cosmos3EdgePreTrainedModel, Generation
         # Qwen2-VL exposes four axes (text plus three visual axes). Edge's interleaved M-RoPE consumes the three
         # visual axes directly, so start from the common 2D text positions rather than Qwen2-VL's four-axis helper.
         text_positions = super()._prepare_position_ids_for_generation(inputs_tensor, model_kwargs)
-        cache = model_kwargs.get("past_key_values")
-        if cache is not None and cache.get_seq_length() and self.model.rope_deltas is not None:
-            return text_positions.unsqueeze(0).expand(3, -1, -1) + self.model.rope_deltas.unsqueeze(0)
 
-        # `GenerationMixin` uses an empty `input_ids` placeholder when generation starts from `inputs_embeds`.
-        # M-RoPE needs actual token IDs to locate visual spans, so fall back to text positions for that path.
+        # Early exit in case we are continuing generation from past kv.
+        past_length = 0
+        if (cache := model_kwargs.get("past_key_values")) is not None:
+            past_length = cache.get_seq_length()
+        if past_length != 0 and self.model.rope_deltas is not None:
+            position_ids = text_positions[None, ...] + self.model.rope_deltas
+            return position_ids
+
+        # Otherwise compute 3D position ids for vision tokens.
         if "input_ids" in model_kwargs and model_kwargs["input_ids"].shape[1] > 0:
             inputs_tensor = model_kwargs["input_ids"]
 
-        is_input_ids = inputs_tensor.ndim == 2 and inputs_tensor.dtype in (torch.int, torch.long)
-        has_multimodal = (
+        is_input_ids = len(inputs_tensor.shape) == 2 and inputs_tensor.dtype in [torch.int, torch.long]
+        has_multimodal_inputs = (
             model_kwargs.get("image_grid_thw") is not None or model_kwargs.get("video_grid_thw") is not None
         )
-        if is_input_ids and has_multimodal:
-            if model_kwargs.get("mm_token_type_ids") is None:
-                raise ValueError(
-                    "Multimodal data was passed (via `image_grid_thw` or `video_grid_thw`) but `mm_token_type_ids` is "
-                    "missing. Please pass `mm_token_type_ids` to the model so that multimodal RoPE (M-RoPE) can be "
-                    "computed correctly. `mm_token_type_ids` is returned by the processor alongside `input_ids`."
-                )
-            position_ids, rope_deltas = self.model.get_rope_index(
-                input_ids=inputs_tensor,
-                mm_token_type_ids=model_kwargs["mm_token_type_ids"],
-                image_grid_thw=model_kwargs.get("image_grid_thw"),
-                video_grid_thw=model_kwargs.get("video_grid_thw"),
-                attention_mask=model_kwargs.get("attention_mask"),
+        if is_input_ids and has_multimodal_inputs and model_kwargs.get("mm_token_type_ids") is None:
+            raise ValueError(
+                "Multimodal data was passed (via `image_grid_thw` or `video_grid_thw`) but `mm_token_type_ids` is "
+                "missing. Please pass `mm_token_type_ids` to the model so that multimodal RoPE (M-RoPE) can be "
+                "computed correctly. `mm_token_type_ids` is returned by the processor alongside `input_ids`."
             )
-            self.model.rope_deltas = rope_deltas
-            return position_ids
 
-        self.model.rope_deltas = torch.zeros(inputs_tensor.shape[0], 1, dtype=torch.long, device=inputs_tensor.device)
-        return text_positions.unsqueeze(0).expand(3, -1, -1)
+        if is_input_ids and model_kwargs.get("mm_token_type_ids") is not None and has_multimodal_inputs:
+            model_kwargs = {key: value for key, value in model_kwargs.items() if key != "input_ids"}
+            position_ids, rope_deltas = self.model.get_rope_index(inputs_tensor, **model_kwargs)
+            self.model.rope_deltas = rope_deltas
+        else:
+            position_ids = text_positions.unsqueeze(0).expand(3, -1, -1)
+            self.model.rope_deltas = torch.zeros(
+                inputs_tensor.shape[0], 1, dtype=torch.long, device=inputs_tensor.device
+            )
+
+        return position_ids
 
     def _get_image_nums_and_video_nums(
         self,
@@ -1511,7 +1462,7 @@ class Cosmos3EdgeForConditionalGeneration(Cosmos3EdgePreTrainedModel, Generation
 
         visual_keys = ["pixel_values", "image_grid_thw", "pixel_values_videos", "video_grid_thw"]
 
-        def expand_visual_inputs(inputs):
+        def _expand_dict_for_generation_visual(dict_to_expand):
             image_grid_thw = model_kwargs.get("image_grid_thw")
             video_grid_thw = model_kwargs.get("video_grid_thw")
             image_nums, video_nums = self._get_image_nums_and_video_nums(
@@ -1524,43 +1475,51 @@ class Cosmos3EdgeForConditionalGeneration(Cosmos3EdgePreTrainedModel, Generation
                 video_boundary_indices = torch.searchsorted(cumulative_frame_counts, cumulative_token_video_counts)
                 video_nums = torch.diff(torch.cat([-video_boundary_indices.new_ones(1), video_boundary_indices]))
 
-            def repeat_samples(values, lengths):
-                samples = torch.split(values, lengths)
-                repeat_args = [expand_size] + [1] * (values.dim() - 1)
+            def _repeat_interleave_samples(x, lengths, repeat_times):
+                samples = torch.split(x, lengths)
+                repeat_args = [repeat_times] + [1] * (x.dim() - 1)
                 return torch.cat([sample.repeat(*repeat_args) for sample in samples], dim=0)
 
-            for key in inputs:
+            for key in dict_to_expand:
                 if key == "pixel_values":
                     samples = torch.split(image_grid_thw, list(image_nums))
                     lengths = [torch.prod(sample, dim=1).sum() for sample in samples]
-                    inputs[key] = repeat_samples(inputs[key], lengths)
+                    dict_to_expand[key] = _repeat_interleave_samples(
+                        dict_to_expand[key], lengths=lengths, repeat_times=expand_size
+                    )
                 elif key == "image_grid_thw":
-                    inputs[key] = repeat_samples(inputs[key], list(image_nums))
+                    dict_to_expand[key] = _repeat_interleave_samples(
+                        dict_to_expand[key], lengths=list(image_nums), repeat_times=expand_size
+                    )
                 elif key == "pixel_values_videos":
                     samples = torch.split(video_grid_thw, list(video_nums))
                     lengths = [torch.prod(sample, dim=1).sum() for sample in samples]
-                    inputs[key] = repeat_samples(inputs[key], lengths)
+                    dict_to_expand[key] = _repeat_interleave_samples(
+                        dict_to_expand[key], lengths=lengths, repeat_times=expand_size
+                    )
                 elif key == "video_grid_thw":
-                    inputs[key] = repeat_samples(inputs[key], list(video_nums))
-            return inputs
+                    dict_to_expand[key] = _repeat_interleave_samples(
+                        dict_to_expand[key], lengths=list(video_nums), repeat_times=expand_size
+                    )
+            return dict_to_expand
 
-        def expand_batch_inputs(inputs):
-            for key, value in inputs.items():
+        def _expand_dict_for_generation(dict_to_expand):
+            for key, value in dict_to_expand.items():
                 if key == "position_ids" and value.ndim == 3:
-                    inputs[key] = value.repeat_interleave(expand_size, dim=1)
+                    dict_to_expand[key] = value.repeat_interleave(expand_size, dim=1)
                 elif value is not None and isinstance(value, torch.Tensor) and key not in visual_keys:
-                    inputs[key] = value.repeat_interleave(expand_size, dim=0)
-            return inputs
+                    dict_to_expand[key] = value.repeat_interleave(expand_size, dim=0)
+            return dict_to_expand
 
-        model_kwargs = expand_visual_inputs(model_kwargs)
+        model_kwargs = _expand_dict_for_generation_visual(model_kwargs)
         if input_ids is not None:
             input_ids = input_ids.repeat_interleave(expand_size, dim=0)
-        model_kwargs = expand_batch_inputs(model_kwargs)
+        model_kwargs = _expand_dict_for_generation(model_kwargs)
 
         if is_encoder_decoder:
             if model_kwargs.get("encoder_outputs") is None:
                 raise ValueError("If `is_encoder_decoder` is True, make sure that `encoder_outputs` is defined.")
-            model_kwargs["encoder_outputs"] = expand_batch_inputs(model_kwargs["encoder_outputs"])
+            model_kwargs["encoder_outputs"] = _expand_dict_for_generation(model_kwargs["encoder_outputs"])
 
         return input_ids, model_kwargs
 
