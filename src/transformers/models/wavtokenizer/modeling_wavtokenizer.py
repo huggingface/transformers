@@ -593,7 +593,12 @@ class WavTokenizerModel(WavTokenizerPreTrainedModel):
             audio_length = padding_mask.sum(dim=-1, keepdim=True)
             token_length = (audio_length + self.hop_length - 1) // self.hop_length
             idx = torch.arange(audio_codes.shape[-1], device=padding_mask.device).view(1, 1, -1)
-            audio_codes_mask = (idx < token_length).to(padding_mask.dtype)
+            right_padded_codes_mask = idx < token_length
+            left_padded_codes_mask = idx >= audio_codes.shape[-1] - token_length
+            is_left_padded = padding_mask[..., :1] == 0
+            audio_codes_mask = torch.where(is_left_padded, left_padded_codes_mask, right_padded_codes_mask).to(
+                padding_mask.dtype
+            )
 
         return WavTokenizerEncoderOutput(audio_codes=audio_codes, audio_codes_mask=audio_codes_mask)
 

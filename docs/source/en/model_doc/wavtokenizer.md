@@ -30,7 +30,7 @@ quantizer follow [EnCodec](encodec)'s SEANet encoder with a single-codebook vect
 [Vocos](https://huggingface.co/papers/2306.00814)-style backbone (ConvNeXt blocks and a positional conv/attention net) with
 an inverse STFT head.
 
-The 40 tokens/s variant of WavTokenizer is used as the audio tokenizer of Apertus 1.5 (see [apertus1p5](apertus1p5)).
+The 40 tokens/s variant of WavTokenizer is used as the audio tokenizer of Apertus 1.5.
 
 The abstract from the paper is the following:
 
