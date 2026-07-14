@@ -109,6 +109,10 @@ def _load_sonicmoe_kernel() -> SonicMoE:
 
 
 class SonicMoeHandle:
+    """An handle to the sonicmoe kernel. This object is meant to be instancied only once, and then provides an entry
+    point to the kernel. Having an object allows to cache the kernel after the first call to `_load_sonicmoe_kernel`,
+    or to cache the error that occurred then.
+    """
 
     # Map activation function names from HF config to SonicMoE epilogue names
     ACT_MAP = {"silu": "SWIGLU", "gelu": "GEGLU", "relu": "REGLU"}
