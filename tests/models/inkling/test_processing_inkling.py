@@ -244,7 +244,7 @@ class InklingProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
 
 @slow
-class TmlProcessingIntegrationTest(unittest.TestCase):
+class InklingProcessingIntegrationTest(unittest.TestCase):
     """
     Check against sglang reference..
 
