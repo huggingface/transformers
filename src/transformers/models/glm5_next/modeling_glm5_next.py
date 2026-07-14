@@ -750,18 +750,15 @@ def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
 
 class Glm5NextIndexer(nn.Module):
     """
-    Recompute k-pool indexer.
+    DeepSeek Sparse Attention (DSA) indexer for selecting top-k tokens.
 
-    The stock indexed cache gives us one tensor, so we pack everything the
-    indexer needs into it:
+    The indexer uses lightweight projections (`wq_b`, `wk`) separate from the main MLA
+    attention path. It scores compressed k-pool candidates, expands selected pools back
+    into raw cache indices, and optionally appends the current incomplete tail pool.
 
-        [indexer_key, compression_gate, valid_bit]
-
-    The output is fixed-width topk_indices. A real key is represented by its raw
-    KV-cache index. An unused, padded, or invisible slot is represented by -1.
-
-    This module only computes routing indices. Shared sparse layers reuse the
-    previous layer's topk_indices and only rebuild the backend attention mask.
+    **Cache strategy**: the indexer state cache lives on the per-layer `DynamicIndexedLayer` (or the
+    `StaticIndexedLayer` for static caches) inside the shared cache, accessed via
+    `past_key_values.update_indexer()`.
     """
 
     def __init__(self, config, layer_idx: int):
@@ -798,10 +795,7 @@ class Glm5NextIndexer(nn.Module):
         past_key_values: Cache | None,
     ) -> torch.LongTensor:
         """
-        Selects the top-k tokens per query for DeepSeek Sparse Attention (DSA).
-
-        Same as [`DeepseekV32Indexer.forward`], but the indexer applies **interleaved** RoPE
-        rather than the non-interleaved half-split RoPE used by DeepSeek-V3.2.
+        Selects the top-k tokens per query for DeepSeek Sparse Attention (DSA) based on grouping pools (and tails).
 
         Args:
             hidden_states: Input hidden states `[B, S, hidden_size]`.
@@ -993,7 +987,9 @@ class Glm5NextIndexer(nn.Module):
         # Learn a weighted average over the tokens inside each complete pool
         logits = grouped_gate_scores.float() + self.index_kpool_compress_ape.float()[None, None]
         logits = logits.masked_fill(~grouped_valid_keys[..., None], float("-inf"))
-        probabilities = torch.nan_to_num(logits.softmax(dim=2)).to(grouped_keys.dtype)  # nan to num for full invalid pools
+        probabilities = torch.nan_to_num(logits.softmax(dim=2)).to(
+            grouped_keys.dtype
+        )  # nan to num for full invalid pools
         pool_keys = (probabilities * grouped_keys).sum(dim=2)
 
         # Avoids static cache allocated positions
@@ -1017,7 +1013,7 @@ class Glm5NextIndexer(nn.Module):
         if (max_tail_width := self.index_kpool - 1) == 0:
             return topk_indices
 
-        batch_size, q_length, kv_length = token_visible.shape
+        batch_size, _, kv_length = token_visible.shape
         device = token_visible.device
 
         # Example, index_kpool=4:
