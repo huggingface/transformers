@@ -14,7 +14,7 @@
 
 """SonicMoE integration: fused MoE using CuteDSL kernels from `kernels-community/sonic-moe`.
 
-Provides `sonicmoe_experts_forward` registered as "sonicmoe" in the ExpertsInterface.
+Provides `SONIC_MOE_HANDLE` registered as "sonicmoe" in the ExpertsInterface.
 Requirements: CUDA, `kernels`, `nvidia-cutlass-dsl`, has_gate=True.
 """
 
@@ -105,49 +105,6 @@ def _load_sonicmoe_kernel() -> SonicMoE:
     )
 
 
-@torch._dynamo.allow_in_graph
-def _sonicmoe_wrapper(
-    sonicmoe_fn: Callable,
-    hidden_states: torch.Tensor,
-    router_scores: torch.Tensor,
-    expert_ids: torch.Tensor,
-    token_idx: torch.Tensor,
-    w1: torch.Tensor,
-    b1: torch.Tensor | None,
-    w2: torch.Tensor,
-    b2: torch.Tensor | None,
-    activation_type: int,
-    num_experts: int,
-    concat_layout: bool,
-    is_inference_mode_enabled: bool,
-) -> torch.Tensor:
-    """Module-level shim around `moe_general_routing_inputs` so `allow_in_graph` can wrap it.
-
-    sonicmoe asserts `not torch.compiler.is_compiling()` internally because it dispatches
-    CuteDSL kernels, which Dynamo can't trace. `allow_in_graph` keeps the call in the FX
-    graph as a single opaque node (no tracing into the body, no graph break) while still
-    running the real Python at runtime — autograd through `_UpProjection` / `_DownProjection`
-    flows normally. The decorator must be applied at module load time, not inside the compiled
-    function — hence this shim plus the `allow_in_graph` decorator above.
-    """
-    output, _ = sonicmoe_fn(
-        hidden_states,
-        router_scores,
-        token_idx,
-        expert_ids,
-        w1,
-        b1,
-        w2,
-        b2,
-        E=num_experts,
-        activation_type=activation_type,
-        is_inference_mode_enabled=is_inference_mode_enabled,
-        concat_layout=concat_layout,
-        stream_id=None,
-    )
-    return output
-
-
 
 
 class SonicMoeHandle:
@@ -171,12 +128,14 @@ class SonicMoeHandle:
         """
         # If this is the first time loading the kernel, it is not cached, so we need to actually load it
         if not self._loaded:
-            self._loaded = True
             try:
                 self._cached_sonicmoe = _load_sonicmoe_kernel()
-            except Exception as e:
+                self._loaded = True
+            # Guard only against import errors: other errors are unexpected, so we raise them
+            except ImportError as e:
                 self._loading_error = e
-                raise e
+                self._loaded = False
+                raise
         # Otherwise, re-raise the loading error if it occurred the first time
         if self._loading_error is not None:
             raise ImportError(
@@ -193,7 +152,7 @@ class SonicMoeHandle:
         """A boolean indicating whether the sonicmoe kernel is available. Silences regular import errors that would
         indicate that the kernel is not available, but not other errors that are unexpected."""
         try:
-            _ = self._load_sonicmoe_kernel()
+            self._load_sonicmoe_kernel()
             return True
         except ImportError:
             pass
@@ -214,18 +173,9 @@ class SonicMoeHandle:
         if hidden_states.device.type != "cuda":
             raise ValueError("sonicmoe requires CUDA device")
 
-        # Look up the kernel (no-op if already loaded)
-        sonicmoe = self._load_sonicmoe_kernel()
-
         # Retrieve sonicmoe-compatible activation type
         activation_hf = getattr(module.config, "hidden_act", "silu").lower()
-        activation_sonicmoe = self.ACT_MAP.get(activation_hf, "SWIGLU")
-        # Default to SwiGLU if the activation type is not found
-        activation_type = getattr(
-            sonicmoe.activation_type_enum,
-            activation_sonicmoe,
-            sonicmoe.activation_type_enum.SWIGLU  # type: ignore
-        )
+        activation_type = self.ACT_MAP.get(activation_hf, "SWIGLU")
 
         # Prepare auxilary inputs
         device = hidden_states.device
@@ -256,8 +206,7 @@ class SonicMoeHandle:
         w1 = w1.permute(*perm)  # (2*I, H, E)
         w2 = w2.permute(*perm)  # (I, H, E)
 
-        return _sonicmoe_wrapper(
-            sonicmoe_fn=sonicmoe.moe_general_routing_inputs,
+        return self._sonicmoe_wrapper(
             hidden_states=hidden_states,
             router_scores=router_scores,
             expert_ids=expert_ids,
@@ -271,6 +220,58 @@ class SonicMoeHandle:
             concat_layout=module.is_concatenated,
             is_inference_mode_enabled=not torch.is_grad_enabled(),
         )
+
+    @torch._dynamo.allow_in_graph
+    def _sonicmoe_wrapper(
+        self,
+        hidden_states: torch.Tensor,
+        router_scores: torch.Tensor,
+        expert_ids: torch.Tensor,
+        token_idx: torch.Tensor,
+        w1: torch.Tensor,
+        b1: torch.Tensor | None,
+        w2: torch.Tensor,
+        b2: torch.Tensor | None,
+        activation_type: str,
+        num_experts: int,
+        concat_layout: bool,
+        is_inference_mode_enabled: bool,
+    ) -> torch.Tensor:
+        """Handle-level shim around `moe_general_routing_inputs` so `allow_in_graph` can wrap it.
+
+        sonicmoe asserts `not torch.compiler.is_compiling()` internally because it dispatches
+        CuteDSL kernels, which Dynamo can't trace. `allow_in_graph` keeps the call in the FX
+        graph as a single opaque node (no tracing into the body, no graph break) while still
+        running the real Python at runtime — autograd through `_UpProjection` / `_DownProjection`
+        flows normally. The decorator must be applied at module load time, not inside the compiled
+        function — hence this shim plus the `allow_in_graph` decorator above.
+        """
+        sonicmoe = self._load_sonicmoe_kernel()
+
+        # Default to SwiGLU if the activation type is not found
+        activation_type = getattr(
+            sonicmoe.activation_type_enum,
+            activation_type,
+            sonicmoe.activation_type_enum.SWIGLU  # type: ignore
+        )
+
+        output, _ = sonicmoe.moe_general_routing_inputs(
+            hidden_states,
+            router_scores,
+            token_idx,
+            expert_ids,
+            w1,
+            b1,
+            w2,
+            b2,
+            E=num_experts,
+            activation_type=activation_type,
+            is_inference_mode_enabled=is_inference_mode_enabled,
+            concat_layout=concat_layout,
+            stream_id=None,
+        )
+        return output
+
 
 # Singleton object: this should be the only SonicMoeHandle object instantiated in the codebase
 SONIC_MOE_HANDLE = SonicMoeHandle()
