@@ -180,6 +180,25 @@ EXPORT_SKIPS: dict[str, dict[str, str]] = {
     # ExecuTorch — lowering failures grouped by root cause; see the first entry of each
     # `Same ... as` chain for the full description.
     "executorch": {
+        "JetMoeModel": (
+            "MoE and mixture-of-attention route tokens with a data-dependent `inputs.split(expert_size)` "
+            "(per-expert token counts), which ExecuTorch's ahead-of-time memory planner can't size "
+            "(`GuardOnDataDependentSymNode`). A static rewrite exists (per-token weight gather) but "
+            "duplicates expert weights per token, so it's only viable for low-batch decode — not as the "
+            "eager default — and the framework's `@use_experts_implementation` is MLP-only, so it can't "
+            "host the mixture-of-attention experts. Exports fine on torch.export/ONNX (dynamic dim at runtime)."
+        ),
+        "JetMoeForCausalLM": "Same data-dependent MoE/MoA routing as `JetMoeModel`.",
+        "JetMoeForSequenceClassification": "Same data-dependent MoE/MoA routing as `JetMoeModel`.",
+        "FastVlmForConditionalGeneration": (
+            "ExecuTorch lowering of the vision stack crashes the process (native segfault/OOM) — the "
+            "failure is uncatchable in-process, so the pytest worker dies rather than raising."
+        ),
+        "FastVlmModel": "Same native ExecuTorch crash as `FastVlmForConditionalGeneration`.",
+        "LlavaOnevisionForConditionalGeneration": "Same native ExecuTorch vision-stack crash as `FastVlmForConditionalGeneration`.",
+        "LlavaOnevisionModel": "Same native ExecuTorch crash as `LlavaOnevisionForConditionalGeneration`.",
+        "PaddleOCRVLForConditionalGeneration": "Same native ExecuTorch vision-stack crash as `FastVlmForConditionalGeneration`.",
+        "PaddleOCRVLModel": "Same native ExecuTorch crash as `PaddleOCRVLForConditionalGeneration`.",
         "Qwen3NextModel": ("Lowering exceeds the 10-minute test timeout."),
         "Qwen3NextForCausalLM": "Same `timeout` failure as `Qwen3NextModel`.",
         "Qwen3NextForQuestionAnswering": "Same `timeout` failure as `Qwen3NextModel`.",
@@ -334,7 +353,10 @@ def _run_executorch_program(program_manager, inputs):
       failure at execute (``0x12`` / ``0x1``): a runtime limitation, not a transformers export defect; or
     - the inputs couldn't be reconstructed for this program (a derived symint slot with no eager leaf).
 
-    Otherwise the runtime outputs are returned for the caller to check against eager.
+    Otherwise the model's declared outputs are returned for the caller to check against eager.
+    ``torch.export`` also appends mutated inputs (in-place-modified ``pixel_values``, recurrent state,
+    …) to the program outputs; those are dropped here — keeping only ``USER_OUTPUT`` slots — so the
+    result matches eager's returned leaves.
 
     Inputs are bound *positionally* against the program's declared slots (``num_inputs`` /
     ``input_tensor_meta``), filled in order from the eager pytree leaves — tensor leaves for tensor
@@ -378,11 +400,20 @@ def _run_executorch_program(program_manager, inputs):
             return None
 
     try:
-        return method.execute(args)
+        outputs = method.execute(args)
     except (RuntimeError, MemoryError) as e:
         if _is_executorch_runtime_limit(e):
             return None
         raise
+
+    # Drop `torch.export`'s appended mutated-input outputs, keeping only the model's `USER_OUTPUT`s
+    # (in program-output order), so the result matches eager's returned leaves.
+    exported_program = program_manager.exported_program
+    exported_program = exported_program() if callable(exported_program) else exported_program
+    output_kinds = [spec.kind.name for spec in exported_program.graph_signature.output_specs]
+    if len(output_kinds) == len(outputs):
+        outputs = [out for out, kind in zip(outputs, output_kinds) if kind == "USER_OUTPUT"]
+    return outputs
 
 
 # ExecuTorch runtime error codes that mean "the export is valid (it produced a loadable program) but
