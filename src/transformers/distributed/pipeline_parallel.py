@@ -58,6 +58,7 @@ class PipelineStage:
         self.pp_is_last_stage = pp_is_last_stage
         self.pp_prev_rank = pp_prev_rank
         self.pp_next_rank = pp_next_rank
+        self.comm_on_cpu = dist.get_backend(pp_group) == "gloo"
 
     @classmethod
     def from_device_mesh(cls, pp_mesh) -> PipelineStage | None:
@@ -76,13 +77,6 @@ class PipelineStage:
 
         return cls(pp_rank, pp_size, pp_group, pp_is_first_stage, pp_is_last_stage, pp_prev_rank, pp_next_rank)
 
-    def comm_device(self, device: torch.device) -> torch.device:
-        """Device used for collectives (gloo requires CPU tensors)."""
-        #TODO(3outeille): do we really need to check the backend?
-        if dist.get_backend() == "gloo":
-            return torch.device("cpu")
-        return device
-
     def communicate(
         self,
         operation: str,
@@ -93,7 +87,7 @@ class PipelineStage:
         shape: tuple[int, ...] | None = None,
     ) -> torch.Tensor | None:
         """Forward-only pipeline point-to-point communication."""
-        comm_device = self.comm_device(device)
+        comm_device = torch.device("cpu") if self.comm_on_cpu else device
         group = self.pp_group
         src = dest = None
 
@@ -193,7 +187,7 @@ def pipeline_broadcast_from_last(
     if stage.pp_size <= 1:
         return tensor
 
-    comm_device = stage.comm_device(device)
+    comm_device = torch.device("cpu") if stage.comm_on_cpu else device
     src = stage.pp_size - 1
 
     if stage.pp_is_last_stage:
