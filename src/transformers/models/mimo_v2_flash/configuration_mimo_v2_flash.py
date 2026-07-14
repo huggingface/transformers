@@ -72,9 +72,7 @@ class MiMoV2FlashConfig(PreTrainedConfig):
         "layers.*.mlp.experts.down_proj": "grouped_gemm",
         "layers.*.mlp.experts": "moe_tp_experts",
     }
-    attribute_map = {
-        "num_local_experts": "n_routed_experts",
-    }
+    attribute_map = {"num_local_experts": "n_routed_experts"}
 
     # Overrides from Glm4MoeConfig
     vocab_size: int = 152576
