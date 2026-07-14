@@ -15,11 +15,14 @@
 
 import unittest
 from contextlib import contextmanager
+import os
+import tempfile
 
 import pytest
 from parameterized import parameterized
 
 from transformers import (
+    AutoProcessor,
     AutoTokenizer,
     TmlConfig,
     TmlTextConfig,
@@ -41,6 +44,9 @@ from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 from ...test_processing_common import url_to_local_path
+
+from huggingface_hub import download_bucket_files
+from safetensors.torch import load_file
 
 
 if is_torch_available():
@@ -510,302 +516,121 @@ class TmlVision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.
 @slow
 @require_torch_accelerator
 class TmlIntegrationTest(unittest.TestCase):
-    def setUp(self):
-        self.model_name = "google/gemma-4-E2B-it"
-        self.processor = TmlProcessor.from_pretrained(self.model_name)
+    """Validate the Tml next-token distribution against sglang, across every input modality.
 
-        self.url1 = url_to_local_path(
-            "https://huggingface.co/datasets/hf-internal-testing/fixtures-captioning/resolve/main/cow_beach_1.png"
-        )
-        self.url2 = url_to_local_path(
-            "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/australia.jpg"
-        )
-        self.messages = [
-            {"role": "system", "content": [{"type": "text", "text": "You are a helpful assistant."}]},
-            {
-                "role": "user",
-                "content": [
-                    {"type": "image", "url": self.url1},
-                    {"type": "text", "text": "What is shown in this image?"},
-                ],
-            },
-        ]
+    reproducer (single sglang Engine, all cases, uploads the golden to
+    ``hf://buckets/eustlb/tml-integration-tests/<case>/expected_next_token_logprobs.safetensors``):
+        ~/tml/reproducers/reproducer_logits.py
+    gist: https://gist.github.com/eustlb/cb2a5df1676911fa0eb07d0a76a38ae7
+    """
 
-    def tearDown(self):
+    IMAGE_URL = "http://images.cocodataset.org/val2017/000000039769.jpg"
+    IMAGE_URL_2 = "http://images.cocodataset.org/val2017/000000000139.jpg"
+    AUDIO_URL = "https://huggingface.co/datasets/adarshxs/voxcpm2-native-generated-audio-user-ref/resolve/main/zs_medium.wav"
+    AUDIO_URL_2 = "https://huggingface.co/datasets/adarshxs/voxcpm2-native-generated-audio-user-ref/resolve/main/zs_short.wav"
+
+    @classmethod
+    def setUpClass(cls):
+        cls.checkpoint_name = "eustlb/dummy-model"
+        cls.bucket = "eustlb/tml-integration-tests"
+        cls.processor = AutoProcessor.from_pretrained(cls.checkpoint_name)
+        cls.model = TmlForConditionalGeneration.from_pretrained(cls.checkpoint_name, device_map=torch_device)
+
+    @classmethod
+    def tearDownClass(cls):
+        del cls.model
         cleanup(torch_device, gc_collect=True)
 
-    @require_deterministic_for_xpu
-    def test_model_with_image(self):
-        model = TmlForConditionalGeneration.from_pretrained(self.model_name, device_map=torch_device)
+    def _load_expected_logprobs(self, case: str):
+        remote = f"{case}/expected_next_token_logprobs.safetensors"
+        with tempfile.TemporaryDirectory() as tmp:
+            local = os.path.join(tmp, "expected_next_token_logprobs.safetensors")
+            download_bucket_files(self.bucket, files=[(remote, local)])
+            return load_file(local)["next_token_logprobs"]
 
-        inputs = self.processor.apply_chat_template(
-            self.messages,
-            tokenize=True,
-            return_dict=True,
-            return_tensors="pt",
-            add_generation_prompt=True,
-        ).to(torch_device)
-
-        output = model.generate(**inputs, max_new_tokens=30, do_sample=False)
-        input_size = inputs.input_ids.shape[-1]
-        output_text = self.processor.batch_decode(output[:, input_size:], skip_special_tokens=True)
-
-        EXPECTED_TEXTS = Expectations(
-            {
-                ("cuda", 8): ['This image shows a **brown and white cow** standing on a **sandy beach** with the **ocean and a blue sky** in the background'],
-                ("xpu", 3): ['This image shows a **brown and white cow** standing on a **sandy beach** with the **ocean and a blue sky** in the background'],
-            }
-        )  # fmt: skip
-        EXPECTED_TEXT = EXPECTED_TEXTS.get_expectation()
-        self.assertEqual(output_text, EXPECTED_TEXT)
-
-    @require_deterministic_for_xpu
-    def test_model_with_image_batch(self):
-        model = TmlForConditionalGeneration.from_pretrained(self.model_name, device_map=torch_device)
-
-        messages_2 = [
-            {"role": "system", "content": [{"type": "text", "text": "You are a helpful assistant."}]},
-            {
-                "role": "user",
-                "content": [
-                    {
-                        "type": "image",
-                        "url": self.url1,
-                    },
-                    {"type": "image", "url": self.url2},
-                    {"type": "text", "text": "Are these images identical?"},
-                ],
-            },
-        ]
-
-        inputs = self.processor.apply_chat_template(
-            [self.messages, messages_2],
-            tokenize=True,
-            return_dict=True,
-            return_tensors="pt",
-            padding=True,
-            add_generation_prompt=True,
-        ).to(torch_device)
-
-        output = model.generate(**inputs, max_new_tokens=30, do_sample=False)
-        input_size = inputs.input_ids.shape[-1]
-        output_text = self.processor.batch_decode(output[:, input_size:], skip_special_tokens=True)
-
-        EXPECTED_TEXTS = Expectations(
-            {
-                ("cuda", (8, 0)): [
-                    "This image shows a **brown and white cow** standing on a **sandy beach** with the **ocean and a blue sky** in the background",
-                    "No, these images are not identical.\n\nThe first image is a photograph of a **cow** standing on a beach under a blue sky.\n\n",
-                ],
-                ("cuda", (8, 6)): [
-                    "This image shows a **brown and white cow** standing on a **sandy beach** with the **ocean and a blue sky** in the background",
-                    "No, these images are not identical.\n\nThe first image is a photograph of a **brown and white cow standing on a beach** under a blue",
-                ],
-                ("xpu", 3): [
-                    "This image shows a **brown and white cow** standing on a **sandy beach** with the **ocean and a blue sky** in the background",
-                    "No, these images are **not identical**.\n\nHere's a breakdown of the differences:\n\n1.  **Image 1 (Cow on",
-                ],
-            }
-        )
-        EXPECTED_TEXT = EXPECTED_TEXTS.get_expectation()
-        self.assertEqual(output_text, EXPECTED_TEXT)
-
-    @require_deterministic_for_xpu
-    def test_model_multiimage(self):
-        model = TmlForConditionalGeneration.from_pretrained(self.model_name, device_map=torch_device)
-
-        messages = [
-            {"role": "system", "content": [{"type": "text", "text": "You are a helpful assistant."}]},
-            {
-                "role": "user",
-                "content": [
-                    {"type": "image", "url": self.url2},
-                    {"type": "text", "text": "What do you see here?"},
-                ],
-            },
-        ]
-
+    def _assert_next_token_logprobs(self, case: str, messages: list):
         inputs = self.processor.apply_chat_template(
             messages,
+            add_generation_prompt=True,
             tokenize=True,
             return_dict=True,
             return_tensors="pt",
-            padding=True,
-            add_generation_prompt=True,
-        ).to(torch_device)
-
-        output = model.generate(**inputs, max_new_tokens=30, do_sample=False)
-        input_size = inputs.input_ids.shape[-1]
-        output_text = self.processor.batch_decode(output[:, input_size:], skip_special_tokens=True)
-        EXPECTED_TEXTS = Expectations(
-            {
-                ("cuda", 8): ['Based on the image, here is a description of what I see:\n\n**Foreground & Street Scene:**\n* **Traffic Sign:** The most prominent'],
-                ("xpu", 3): ['Based on the image, here is a description of what I see:\n\n**Foreground & Street Scene:**\n* **Roadway:** There is an'],
-            }
-        )  # fmt: skip
-        EXPECTED_TEXT = EXPECTED_TEXTS.get_expectation()
-        self.assertEqual(output_text, EXPECTED_TEXT)
-
-    @require_torch_multi_gpu
-    def test_model_text_only_multigpu(self):
-        """Accelerate destroys the input dict `shared_kv_states` if it's not passed as kwarg and part of
-        `_skip_keys_device_placement`, so test this to avoid regresions.
-        """
-        model = AutoModelForCausalLM.from_pretrained(self.model_name, device_map="auto")
-        tokenizer = AutoTokenizer.from_pretrained(self.model_name, padding_side="left")
-        inputs = tokenizer.apply_chat_template(
-            [{"role": "user", "content": "Write a poem about Machine Learning."}],
-            tokenize=True,
-            return_dict=True,
-            return_tensors="pt",
-            add_generation_prompt=True,
-        ).to(model.device)
-
-        output = model.generate(**inputs, max_new_tokens=30, do_sample=False)
-        input_size = inputs.input_ids.shape[-1]
-        output_text = self.processor.batch_decode(output[:, input_size:], skip_special_tokens=True)
-
-        EXPECTED_TEXTS = Expectations(
-            {
-                ("cuda", (8, 0)): ['## The Algorithmic Mind\n\nA whisper starts, a seed unseen,\nOf data vast, a vibrant sheen.\nA sea of numbers,'],
-                ("cuda", (8, 6)): ['## The Algorithmic Mind\n\nA tapestry of data, vast and deep,\nWhere silent numbers in their slumber sleep.\nA sea of text'],
-            }
-        )  # fmt: skip
-        EXPECTED_TEXT = EXPECTED_TEXTS.get_expectation()
-        self.assertEqual(output_text, EXPECTED_TEXT)
-
-    @require_deterministic_for_xpu
-    def test_model_text_only(self):
-        model = AutoModelForCausalLM.from_pretrained(self.model_name, device_map=torch_device)
-        tokenizer = AutoTokenizer.from_pretrained(self.model_name, padding_side="left")
-        inputs = tokenizer.apply_chat_template(
-            [{"role": "user", "content": "Write a poem about Machine Learning."}],
-            tokenize=True,
-            return_dict=True,
-            return_tensors="pt",
-            add_generation_prompt=True,
-        ).to(torch_device)
-
-        output = model.generate(**inputs, max_new_tokens=30, do_sample=False)
-        input_size = inputs.input_ids.shape[-1]
-        output_text = self.processor.batch_decode(output[:, input_size:], skip_special_tokens=True)
-
-        EXPECTED_TEXTS = Expectations(
-            {
-                ("cuda", (8, 0)): ['## The Algorithmic Mind\n\nA whisper starts, a seed unseen,\nOf data vast, a vibrant sheen.\nA sea of numbers,'],
-                ("cuda", (8, 6)): ['## The Algorithmic Mind\n\nA tapestry of data, vast and deep,\nWhere silent numbers in their slumber sleep.\nA sea of text'],
-                ("xpu", 3): ['## The Algorithmic Mind\n\nA whisper starts in silicon deep,\nWhere data streams in endless sweep.\nNo flesh and blood, no beating'],
-            }
-        )  # fmt: skip
-        EXPECTED_TEXT = EXPECTED_TEXTS.get_expectation()
-        self.assertEqual(output_text, EXPECTED_TEXT)
-
-    def test_states_sharing_with_and_without_cache(self):
-        model = AutoModelForCausalLM.from_pretrained(self.model_name, device_map=torch_device)
-        tokenizer = AutoTokenizer.from_pretrained(self.model_name, padding_side="left")
-        inputs = tokenizer.apply_chat_template(
-            [{"role": "user", "content": "Who are you? What can you do?"}],
-            tokenize=True,
-            return_dict=True,
-            return_tensors="pt",
-            add_generation_prompt=True,
-        ).to(torch_device)
-        input_size = inputs.input_ids.shape[-1]
-
-        # With and without cache generatiom should share kv states the same way
-        output_with_cache = model.generate(**inputs, max_new_tokens=30, do_sample=False, use_cache=True)
-        output_without_cache = model.generate(**inputs, max_new_tokens=30, do_sample=False, use_cache=False)
-
-        output_text_with_cache = tokenizer.batch_decode(output_with_cache[:, input_size:], skip_special_tokens=True)
-        output_text_without_cache = tokenizer.batch_decode(
-            output_without_cache[:, input_size:], skip_special_tokens=True
         )
+        with torch.no_grad():
+            logits = self.model(**inputs.to(self.model.device)).logits[0, -1].float().cpu()
+        logprobs = torch.log_softmax(logits, dim=-1)
 
-        self.assertEqual(output_text_with_cache, output_text_without_cache)
+        expected_logprobs = self._load_expected_logprobs(case)
 
-    # Note: we do not test FA2 as the head dim is 512 on some layers, which is not compatible with the kernels
-    @parameterized.expand([("sdpa",), ("eager",)])
-    @require_deterministic_for_xpu
-    def test_generation_beyond_sliding_window(self, attn_implementation: str):
-        """Test that we can correctly generate beyond the sliding window. Outputs for every attention functions
-        should be coherent and identical.
-        """
+        self.assertEqual(tuple(logprobs.shape), tuple(expected_logprobs.shape))
+        self.assertEqual(int(logprobs.argmax()), int(expected_logprobs.argmax()))
+        torch.testing.assert_close(logprobs.exp(), expected_logprobs.exp(), rtol=1e-3, atol=5e-4)
 
-        input_text = [
-            "This is a nice place. " * 800 + "I really enjoy the scenery,",  # This is larger than 4096 tokens
-            "A list of colors: red, blue",  # This will almost all be padding tokens
+    def test_text_next_token_logprobs(self):
+        messages = [
+            {"role": "user", "content": [{"type": "text", "text": "What is the capital of France?"}]}
         ]
-        tokenizer = AutoTokenizer.from_pretrained(self.model_name, padding="left")
-        input_text = [
-            tokenizer.apply_chat_template(
-                [{"role": "user", "content": item}],
-                tokenize=False,
-                add_generation_prompt=True,
-            )
-            for item in input_text
-        ]
-        inputs = tokenizer(input_text, padding=True, return_tensors="pt").to(torch_device)
+        self._assert_next_token_logprobs("text", messages)
 
-        model = TmlForConditionalGeneration.from_pretrained(
-            self.model_name,
-            device_map=torch_device,
-            attn_implementation=attn_implementation,
-        )
-
-        # Make sure prefill is larger than sliding window
-        input_size = inputs.input_ids.shape[-1]
-        self.assertTrue(input_size > model.config.get_text_config().sliding_window)
-
-        out = model.generate(**inputs, max_new_tokens=16, do_sample=False, cache_implementation="static")
-        output_text = tokenizer.batch_decode(out[:, input_size:])
-
-        EXPECTED_COMPLETIONS = Expectations(
+    def test_image_next_token_logprobs(self):
+        messages = [
             {
-                ("cuda", 8): [
-                    "That sounds lovely! It seems like you're really enjoying the place you'",
-                    "Here are a few ways you could use or expand upon that list, depending on",
-                ],
-                ("xpu", 3): [
-                    "That sounds lovely! It seems like you're really enjoying the place you'",
-                    "Here are a few ways you could use or expand upon that list, depending on",
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": "What is shown in this image?"},
+                    {"type": "image", "url": self.IMAGE_URL},
                 ],
             }
-        )
-        self.assertEqual(output_text, EXPECTED_COMPLETIONS.get_expectation())
+        ]
+        self._assert_next_token_logprobs("image", messages)
 
-    @pytest.mark.torch_export_test
-    def test_export_text_only(self):
-        from transformers.integrations.executorch import TorchExportableModuleForDecoderOnlyLM
+    def test_audio_next_token_logprobs(self):
+        messages = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": "What is said in this clip?"},
+                    {"type": "audio", "url": self.AUDIO_URL},
+                ],
+            }
+        ]
+        self._assert_next_token_logprobs("audio", messages)
 
-        model = TmlForConditionalGeneration.from_pretrained(self.model_name, device_map=torch_device)
-        tokenizer = AutoTokenizer.from_pretrained(self.model_name)
+    def test_image_audio_next_token_logprobs(self):
+        messages = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": "Describe the image and tell me what is said in the clip."},
+                    {"type": "image", "url": self.IMAGE_URL},
+                    {"type": "audio", "url": self.AUDIO_URL},
+                ],
+            }
+        ]
+        self._assert_next_token_logprobs("image_audio", messages)
 
-        exportable_module = TorchExportableModuleForDecoderOnlyLM(
-            model, batch_size=1, max_cache_len=1024, device=torch_device
-        )
-        exported_program = exportable_module.export(
-            input_ids=torch.tensor([[1]], device=torch_device, dtype=torch.long),
-        )
+    def test_multi_image_next_token_logprobs(self):
+        messages = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": "Compare these two images."},
+                    {"type": "image", "url": self.IMAGE_URL},
+                    {"type": "image", "url": self.IMAGE_URL_2},
+                ],
+            }
+        ]
+        self._assert_next_token_logprobs("multi_image", messages)
 
-        # Test generation with the exported model
-        prompt = tokenizer.apply_chat_template(
-            [{"role": "user", "content": "What is the capital of France?"}],
-            tokenize=False,
-            add_generation_prompt=True,
-        )
-
-        max_new_tokens_to_generate = 20
-        # Generate text with the exported model
-        export_generated_text = TorchExportableModuleForDecoderOnlyLM.generate(
-            exported_program, tokenizer, prompt, max_new_tokens=max_new_tokens_to_generate, device=torch_device
-        )
-
-        input_text = tokenizer(prompt, return_tensors="pt").to(torch_device)
-        eager_outputs = model.generate(
-            **input_text,
-            max_new_tokens=max_new_tokens_to_generate,
-            do_sample=False,  # Use greedy decoding to match the exported model
-        )
-
-        eager_generated_text = tokenizer.decode(eager_outputs[0], skip_special_tokens=True)
-        self.assertEqual(export_generated_text, eager_generated_text)
+    def test_multi_audio_next_token_logprobs(self):
+        messages = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": "What is said in these two clips?"},
+                    {"type": "audio", "url": self.AUDIO_URL},
+                    {"type": "audio", "url": self.AUDIO_URL_2},
+                ],
+            }
+        ]
+        self._assert_next_token_logprobs("multi_audio", messages)
