@@ -40,6 +40,7 @@ from .utils.loading_report import log_state_dict_report
 
 
 if TYPE_CHECKING:
+    from .cache_utils import MtpCache
     from .configuration_utils import PreTrainedConfig
     from .generation.logits_process import LogitsProcessorList
 
@@ -310,15 +311,21 @@ class GenericForTokenClassification:
 
 class MtpLayer(nn.Module):
     def __init__(
-        self, config: PreTrainedConfig, decoder_layer_cls: type[nn.Module], norm_cls: type[nn.Module], layer_idx: int
+        self,
+        config: PreTrainedConfig,
+        decoder_layer_cls: type[nn.Module],
+        norm_cls: type[nn.Module],
+        layer_idx: int,
+        use_post_norm: bool = True,
     ):
         super().__init__()
         self.config = config
+        self.use_post_norm = use_post_norm
         self.enorm = norm_cls(config.hidden_size, eps=config.rms_norm_eps)
         self.hnorm = norm_cls(config.hidden_size, eps=config.rms_norm_eps)
         self.eh_proj = nn.Linear(config.hidden_size * 2, config.hidden_size, bias=False)
         self.mtp_block = decoder_layer_cls(config, layer_idx)
-        self.post_norm = norm_cls(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_norm = norm_cls(config.hidden_size, eps=config.rms_norm_eps) if use_post_norm else None
 
     def forward(
         self,
@@ -340,7 +347,8 @@ class MtpLayer(nn.Module):
             past_key_values=past_key_values,
             **kwargs,
         )
-        hidden_states = self.post_norm(hidden_states)
+        if self.use_post_norm:
+            hidden_states = self.post_norm(hidden_states)
 
         return hidden_states
 
@@ -369,14 +377,22 @@ class MtpModel(PreTrainedModel):
             for name, module in base_model.layers[-1].named_modules()  # type: ignore
             if "norm" in name
         )
+        # If the config contains the field, we never use per-layer post norm, but maybe a shared one
+        self.use_post_norm = True
+        self.use_shared_post_norm = False
+        if hasattr(self.config, "chain_hidden_post_norm"):
+            self.use_post_norm = False
+            self.use_shared_post_norm = self.config.chain_hidden_post_norm
 
         # Instantiate new mtp layers
         self.layers = nn.ModuleList(
             [
-                MtpLayer(self.config, layer_cls, norm_cls, self.config.num_hidden_layers + k)
+                MtpLayer(self.config, layer_cls, norm_cls, self.config.num_hidden_layers + k, self.use_post_norm)
                 for k in range(num_mtp_layers)
             ]
         )
+        if self.use_shared_post_norm:
+            self.shared_post_norm = norm_cls(self.config.hidden_size, eps=self.config.rms_norm_eps)
 
         # Embedding/head/rotary are shared with the main model
         self.tie_with_main_model(main_model)
@@ -398,7 +414,7 @@ class MtpModel(PreTrainedModel):
         last_hidden_states: torch.Tensor,
         attention_mask: torch.Tensor | None,
         position_ids: torch.Tensor | None,
-        past_key_values: Cache | None,
+        mtp_cache: MtpCache | None,
         labels: torch.LongTensor | None = None,
         # Control how we sample the new token from each layer
         do_sample: bool = False,
@@ -418,14 +434,6 @@ class MtpModel(PreTrainedModel):
         """
         batch_size = input_ids.shape[0]
 
-        # We create this dummy cache simply to create the masks correctly, since they rely on the sizes of layer 0 of
-        # the cache. Note that it does not create any copy of data, it simply keep a ref to internal tensors
-        dummy_cache_for_masking = (
-            Cache(layers=past_key_values.layers[self.config.num_hidden_layers :])  # type: ignore
-            if past_key_values is not None
-            else None
-        )
-
         drafted_logits = []
         drafted_tokens = []
         loss = None
@@ -437,7 +445,7 @@ class MtpModel(PreTrainedModel):
                 config=self.config,
                 inputs_embeds=inputs_embeds,
                 attention_mask=attention_mask,
-                past_key_values=dummy_cache_for_masking,
+                past_key_values=mtp_cache,
             )
 
             last_hidden_states = mtp_layer(
@@ -446,9 +454,11 @@ class MtpModel(PreTrainedModel):
                 position_embeddings=position_embeddings,
                 attention_mask=causal_mask,
                 position_ids=position_ids,
-                past_key_values=past_key_values,
+                past_key_values=mtp_cache,
                 **kwargs,
             )
+            if self.use_shared_post_norm:
+                last_hidden_states = self.shared_post_norm(last_hidden_states)
 
             # If we are not computing the loss, only compute logits for the next drafted token to save memory
             slice_indices = slice(-1, None) if labels is None else slice(None, None)
@@ -487,6 +497,92 @@ class MtpModel(PreTrainedModel):
         new_candidate_ids = torch.cat(drafted_tokens, dim=1)
         candidate_logits = torch.cat(drafted_logits, dim=1)
         return new_candidate_ids, candidate_logits, loss
+
+    def correct_mtp_cache_for_decode(
+        self,
+        n_last_matches: int,
+        full_input_ids: torch.Tensor,
+        full_attention_mask: torch.Tensor,
+        full_position_ids: torch.Tensor,
+        full_last_hidden_states: torch.Tensor,
+        mtp_cache: MtpCache,
+        # Control how we sample the new token from each layer
+        do_sample: bool = False,
+        logits_processor: LogitsProcessorList | None = None,
+        **kwargs,
+    ):
+        """
+        If we have several mtp layers, and we did not validate all mtp-drafted with the main model, some mtp layers based
+        their kv cache on drafted tokens that were not validated. This function takes care of cropping those tokens out of
+        the mtp cache, and filling it with the correct validated tokens.
+        """
+        # With one layer, or if validating enough tokens, the cache is always correct since the first mtp layer sees the token
+        # drafted directly from main model, which is necessarily correct
+        if n_last_matches >= self.num_mtp_layers - 1:
+            return
+
+        batch_size = full_input_ids.shape[0]
+
+        # Invalidate the full chains of layers, before recomputing with the validated tokens
+        # Note: we could do better and simply invalidate layers after `n_last_matches + 1`, but we would then need to cache
+        # last_hidden_states for the full sequence for main model and all mtp layers
+        mtp_cache.crop(-self.num_mtp_layers)
+
+        # Create a sequence of length `self.num_mtp_layers` to refill the cache, with the last index matching the last index that
+        # was passed to the first mtp layer in the previous iteration
+        input_ids = full_input_ids[:, -self.num_mtp_layers - n_last_matches - 1 : -n_last_matches - 1]
+        position_ids = full_position_ids[:, -self.num_mtp_layers - n_last_matches - 1 : -n_last_matches - 1]
+        attention_mask = full_attention_mask[:, -self.num_mtp_layers - n_last_matches - 1 : -n_last_matches - 1]
+        last_hidden_states = full_last_hidden_states[
+            :, -self.num_mtp_layers - n_last_matches - 1 : -n_last_matches - 1
+        ]
+
+        # Perform the same as a forward, but replacing the validated tokens accordingly
+        for i, mtp_layer in enumerate(self.layers):
+            # We need to recompute those every layer since they change
+            inputs_embeds = self.embed_tokens(input_ids).to(last_hidden_states.device)
+            position_embeddings = self.rotary_emb(inputs_embeds, position_ids=position_ids)
+            causal_mask = create_causal_mask(
+                config=self.config,
+                inputs_embeds=inputs_embeds,
+                attention_mask=attention_mask,
+                past_key_values=mtp_cache,
+            )
+
+            last_hidden_states = mtp_layer(
+                inputs_embeds,
+                last_hidden_states,
+                position_embeddings=position_embeddings,
+                attention_mask=causal_mask,
+                position_ids=position_ids,
+                past_key_values=mtp_cache,
+                **kwargs,
+            )
+            if self.use_shared_post_norm:
+                last_hidden_states = self.shared_post_norm(last_hidden_states)
+
+            # In this case we validated the token already, or drafted it directly from main model, so use it as-is
+            if i <= n_last_matches:
+                next_mtp_token = full_input_ids[:, -n_last_matches - 1 + i].unsqueeze(1)
+            # In this case, we did not validate enough tokens previously, and need to re-draft!
+            else:
+                logits = self.shared_head(last_hidden_states[:, -1:, :])
+                # Decode one token
+                next_token_logits = logits[:, -1, :].to(device=input_ids.device)
+                if logits_processor is not None and full_input_ids is not None:
+                    next_token_scores = logits_processor(
+                        full_input_ids[:, : -n_last_matches - 1], next_token_logits.to(torch.float32)
+                    )
+                if do_sample:
+                    probs = nn.functional.softmax(next_token_scores, dim=-1, dtype=torch.float32)
+                    next_mtp_token = torch.multinomial(probs, num_samples=1)
+                else:
+                    next_mtp_token = torch.argmax(next_token_scores, dim=-1, keepdim=True)
+
+            # Roll by 1 and append for next layer
+            input_ids = torch.cat([input_ids[:, 1:], next_mtp_token], dim=-1)
+            attention_mask = torch.cat([attention_mask[:, 1:], attention_mask.new_ones(batch_size, 1)], dim=-1)  # type: ignore
+            position_ids = torch.cat([position_ids[:, 1:], position_ids[:, -1:] + 1], dim=-1)
 
     @classmethod
     def from_pretrained(cls, main_model: PreTrainedModel, device_map=None, **kwargs) -> MtpModel:

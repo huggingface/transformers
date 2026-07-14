@@ -21,7 +21,6 @@ import numpy as np
 import torch
 import torch.nn as nn
 
-from ..cache_utils import DynamicLayer
 from ..pytorch_utils import prune_linear_layer
 from ..utils import ModelOutput, is_sklearn_available
 from .configuration_utils import GenerationConfig
@@ -1435,6 +1434,7 @@ class MTPCandidateGenerator(AssistedCandidateGenerator):
         model_kwargs: dict[str, Any],
         logits_processor: Optional["LogitsProcessorList"] = None,
     ):
+        from ..cache_utils import MtpCache
         from ..modeling_layers import MtpModel
 
         self.num_mtp_layers = getattr(main_model.config.get_text_config(), "num_mtp_layers", None)
@@ -1448,12 +1448,9 @@ class MTPCandidateGenerator(AssistedCandidateGenerator):
         self.device = next(x.device for x in main_model.base_model.layers[-1].parameters())  # type: ignore
         self.mtp_model = MtpModel.from_pretrained(main_model, device_map={"": self.device})
 
-        # Artificially add the MTP layers to the cache
-        if (cache := model_kwargs.get("past_key_values")) is not None:
-            if len(cache) != main_model.config.get_text_config().num_hidden_layers + self.num_mtp_layers:
-                cache.layers.extend([DynamicLayer() for _ in range(self.num_mtp_layers)])
-        else:
-            raise ValueError("No cache yet")
+        # Create the mtp cache and allow it to keep its past before we crop it
+        self.mtp_cache = MtpCache(config=main_model.config.get_text_config())
+        self.mtp_cache.activate_past_recording()
 
         # Save those to know how to decode mtp tokens
         self.do_sample = generation_config.do_sample
@@ -1496,12 +1493,34 @@ class MTPCandidateGenerator(AssistedCandidateGenerator):
         # last hidden states of only the last validated tokens
         last_hidden_states = last_hidden_states[:, :num_last_main_model_tokens].to(self.device)
 
+        # Potentially correct the mtp cache based on validated tokens
+        if self.num_mtp_layers > 1:
+            # To correct the mtp cache based on validated tokens, we need to keep all previous last_hidden_states
+            if self.is_main_model_prefill:
+                self.full_seq_last_hidden_states = last_hidden_states
+            else:
+                self.full_seq_last_hidden_states = torch.cat(
+                    [self.full_seq_last_hidden_states, last_hidden_states], dim=1
+                )
+                # This is the very tricky part: invalidate and recreate the mtp cache for wrong positions if necessary
+                self.correct_mtp_cache_for_decode(
+                    n_last_matches=n_last_matches,
+                    full_input_ids=input_ids,
+                    full_attention_mask=model_kwargs["attention_mask"],
+                    full_position_ids=model_kwargs["position_ids"],
+                    full_last_hidden_states=self.full_seq_last_hidden_states,
+                    mtp_cache=self.mtp_cache,
+                    do_sample=self.do_sample,
+                    logits_processor=self.logits_processor,
+                    **kwargs,
+                )
+
         candidate_ids, candidate_logits, _ = self.mtp_model(
             input_ids=mtp_input_ids,
             last_hidden_states=last_hidden_states,
             attention_mask=mtp_attention_mask,
             position_ids=mtp_position_ids,
-            past_key_values=model_kwargs["past_key_values"],
+            mtp_cache=self.mtp_cache,
             do_sample=self.do_sample,
             logits_processor=self.logits_processor,
             full_input_ids=input_ids,

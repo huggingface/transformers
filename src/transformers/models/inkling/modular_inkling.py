@@ -567,24 +567,17 @@ class InklingShortConvolution(nn.Module):
             self.layer_idx, self.conv_idx
         )
 
-        # getting projected states from cache if it exists
-        if use_precomputed_states:
+        if use_precomputed_states and seq_len == 1 and not past_key_values.layers[self.layer_idx].record_past:
             conv_state = past_key_values.layers[self.layer_idx].conv_states[self.conv_idx]
-
-        if use_precomputed_states and seq_len == 1:
             # Single-token cached decode: the fused per-step kernel updates the conv state in-place.
             hidden_states = causal_conv1d_update(
                 hidden_states, conv_state, self.conv1d.weight.squeeze(1), self.conv1d.bias
             )
         else:
-            # Multi-token forward with non empty cache (chunked prefill, continuation,...). We prepend the cached conv context so the
-            # causal conv sees the correct left-context rather than zero-padding, then we drop it from the output at the end of this branch
-            if use_precomputed_states:
-                hidden_states = torch.cat([conv_state, hidden_states], dim=-1)
-
             if past_key_values is not None:
-                new_conv_state = F.pad(hidden_states, (self.conv_kernel_size - hidden_states.shape[-1], 0))
-                past_key_values.update_conv_state(new_conv_state, self.layer_idx, state_idx=self.conv_idx)
+                hidden_states = past_key_values.update_conv_state(
+                    hidden_states, self.layer_idx, state_idx=self.conv_idx, conv_kernel_size=self.conv_kernel_size
+                )
 
             hidden_states = causal_conv1d_fn(
                 hidden_states, self.conv1d.weight.squeeze(1), self.conv1d.bias, seq_idx=kwargs.get("seq_idx")
