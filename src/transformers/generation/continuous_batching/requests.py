@@ -325,14 +325,19 @@ class RequestState:
             "logit_processor_kwargs": deepcopy(self.logit_processor_kwargs),
         }
 
+    @property
+    def mm_inputs_consumed(self) -> bool:
+        """True if this request carried multimodal inputs that have already been encoded (the dict was emptied) and can
+        no longer be retrieved. False for text-only requests and for multimodal requests not yet encoded."""
+        return self.multimodal_inputs is not None and len(self.multimodal_inputs) == 0
+
     def create_equivalent_initial_request(self) -> "RequestState":
         """Creates an equivalent new request by removing the generated tokens and adding them to the initial prompt. The
         created request has THE SAME request_id. Notably, we can retrieve the original request from the created one with
         the _true_initial_tokens attribute. The logprobs of the generated tokens are kept in the new request."""
 
-        # If this is a request that had multimodal inputs AND they were consumed, since they cannot be retrieved, it's
-        # impossible to create an equivalent request: raise an error
-        if self.multimodal_inputs is not None and len(self.multimodal_inputs) == 0:
+        # A request whose multimodal inputs were consumed cannot be recreated: the embeddings cannot be recomputed
+        if self.mm_inputs_consumed:
             raise RuntimeError(f"Cannot soft reset a request that consumed its multimodal inputs: {self.request_id}")
 
         request_config = self.get_request_config()

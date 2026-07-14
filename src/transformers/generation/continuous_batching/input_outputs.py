@@ -52,7 +52,7 @@ class PagedAttentionArgs(TypedDict):
         max_seqlen_k: Maximum key/value sequence length. Can be an int or dictionary for hybrid models.
         write_index: List of tensors indicating where to write new KV states in the cache, one per attention group.
         read_index: List of tensors indicating which cache positions to read from, one per attention group.
-        embeddings_cache_read_index: Tensor indicating which positions in the embeddings cache to read from.
+        embeddings_read_index: Tensor indicating which positions in the embeddings cache to read from.
         logits_indices: Tensor indicating which positions in the output should be used for next-token prediction.
         logits_to_keep: Same as logits_indices, but only used for models that support logits_to_keep.
         cache: The [`PagedAttentionCache`] instance managing the KV cache.
@@ -72,7 +72,7 @@ class PagedAttentionArgs(TypedDict):
     max_seqlen_k: int | dict[str, int]
     write_index: list[torch.Tensor]
     read_index: list[torch.Tensor]
-    embeddings_cache_read_index: torch.Tensor | None
+    embeddings_read_index: torch.Tensor | None
     logits_indices: torch.Tensor
     logits_to_keep: torch.Tensor | None
     cache: PagedAttentionCache
@@ -148,7 +148,7 @@ class ContinuousBatchingIOs:
         The allocated tensors are:
 
         - `_bulk_input_tensor`: Storage for all the small inputs: `input_ids`, `position_ids`, `cumulative_seqlens_q`,
-          `logits_indices`, `cumulative_seqlens_k`, `carry_over_ids`.
+          `logits_indices`, `cumulative_seqlens_k`, `carry_over_ids`, `embeddings_read_index`.
         - `attention_mask`: Optional attention masks (only for eager/SDPA implementations)
         - `write_index` and `read_index` storage: Cache indexing tensors for each attention group
         - `output_ids`: Storage for generated token IDs and maybe log probabilities if return_logprobs is True
@@ -182,7 +182,7 @@ class ContinuousBatchingIOs:
         full_attention_cumulative_seqlens_k = self._bulk_input_tensor[4, : max_requests_per_batch + 1]
         sliding_attention_cumulative_seqlens_k = self._bulk_input_tensor[5, : max_requests_per_batch + 1]
         self.carry_over_ids = self._bulk_input_tensor[6, :max_batch_tokens]  # only used for async API
-        self.embeddings_cache_read_index = self._bulk_input_tensor[7, :max_batch_tokens]  # only used for multimodal model
+        self.embeddings_read_index = self._bulk_input_tensor[7, :max_batch_tokens]  # only used for MM model
 
         # For sequence length of KV, the entries in the dict depend on the model
         self.cumulative_seqlens_k: dict[str, torch.Tensor] = {}
@@ -290,8 +290,9 @@ class ContinuousBatchingIOs:
 
         # Reset the attributes part of the bulk input tensor in one kernel
         self._bulk_input_tensor[: self.static_inputs, : q_len + 1].zero_()
-        # Safe for the embeddings cache read index, which is reset to -1
-        self.embeddings_cache_read_index[:q_len].fill_(-1)
+        # Except for the embeddings cache read index, which is reset to -1 (only needed for multimodal models)
+        if self.cache.embeddings_cache is not None:
+            self.embeddings_read_index[:q_len].fill_(-1)
         # ... and the logits processors arguments, which are reset to their default values
         if full_reset:
             self._bulk_input_tensor[self.static_inputs :] = self.logits_processors_defaults
@@ -406,7 +407,7 @@ class ContinuousBatchingIOs:
         cumulative_seqlens_k = {layer_type: [0] for layer_type in self.cumulative_seqlens_k.keys()}
         write_index = [[] for _ in range(self.cache.num_groups)]
         read_index = None if self.max_kv_read == 0 else [[] for _ in range(self.cache.num_groups)]
-        embeddings_cache_read_index = []
+        embeddings_read_index = []
 
         # Go through all the requests in the batch
         for i, future_state in enumerate(requests_in_batch):
@@ -440,7 +441,7 @@ class ContinuousBatchingIOs:
             # Also accumulate the embeddings cache read index if there is an embeddings cache
             if self.cache.embeddings_cache is not None:
                 embeddings_cache_read, to_free = self.cache.embeddings_cache.extend_read_indices(
-                    state.request_id, past_length, query_length, embeddings_cache_read_index
+                    state.request_id, past_length, query_length, embeddings_read_index
                 )
                 self.embeddings_cache_read |= embeddings_cache_read
                 if to_free:
@@ -498,7 +499,7 @@ class ContinuousBatchingIOs:
         self.position_ids[: len(position_ids)] = to_tensor(position_ids)
         self.cumulative_seqlens_q[: len(cumulative_seqlens_q)] = to_tensor(cumulative_seqlens_q)
         self.logits_indices[: len(logits_indices)] = to_tensor(logits_indices)
-        self.embeddings_cache_read_index[: len(embeddings_cache_read_index)] = to_tensor(embeddings_cache_read_index)
+        self.embeddings_read_index[: len(embeddings_read_index)] = to_tensor(embeddings_read_index)
 
         # Those kwargs are either dict of tensors or tensors, so we need to handle both cases
         for layer_type, layer_type_seqlens_k in cumulative_seqlens_k.items():
@@ -546,7 +547,7 @@ class ContinuousBatchingIOs:
             attention_mask=None if self.attention_mask is None else {},
             read_index=[],
             write_index=[],
-            embeddings_cache_read_index=self.embeddings_cache_read_index[:q_size] if self.embeddings_cache_read else None,
+            embeddings_read_index=self.embeddings_read_index[:q_size] if self.embeddings_cache_read else None,
             cache=self.cache,
             block_table=self.block_table[:, :num_sequences] if self.use_block_table else None,
             use_cache=False,

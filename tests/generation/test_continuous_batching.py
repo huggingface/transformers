@@ -828,7 +828,7 @@ class EmbeddingsCacheTest(unittest.TestCase):
         config, cache = self.get_config_and_embeddings_cache()
         img = config.image_token_id
         state = RequestState(request_id="r", initial_tokens=[img, img, img])  # 3 image tokens
-        cache.free_blocks = deque([0, 1])  # fewer free blocks than demand
+        cache.free_rows = deque([0, 1])  # fewer free blocks than demand
         self.assertFalse(cache.can_store_mm_embeddings(state))
 
     def test_allocate_blocks_builds_mask_and_consumes_free_blocks(self) -> None:
@@ -837,19 +837,19 @@ class EmbeddingsCacheTest(unittest.TestCase):
         img = config.image_token_id
         state = RequestState(request_id="r", initial_tokens=[1, img, img, 1])  # image tokens at index 1, 2
         cache.can_store_mm_embeddings(state)  # populates embeddings_lengths
-        free_before = len(cache.free_blocks)
+        free_before = len(cache.free_rows)
 
-        cache.allocate_blocks(state)
+        cache.allocate_rows(state)
 
         expected_mask = torch.tensor([-1, 0, 1, -1], dtype=torch.int32)  # fresh deque pops 0 then 1
-        torch.testing.assert_close(cache.allocated_blocks_masks["r"], expected_mask)
-        self.assertEqual(len(cache.free_blocks), free_before - 2)
+        torch.testing.assert_close(cache.allocated_rows_masks["r"], expected_mask)
+        self.assertEqual(len(cache.free_rows), free_before - 2)
         self.assertNotIn("r", cache.embeddings_lengths)  # popped, never used again
 
     def test_extend_read_indices_documented_example(self) -> None:
         """Reproduces the example from the extend_read_indices docstring."""
         _, cache = self.get_config_and_embeddings_cache()
-        cache.allocated_blocks_masks["r"] = torch.tensor([-1, -1, -1, 0, 1, 3, -1], dtype=torch.int32)
+        cache.allocated_rows_masks["r"] = torch.tensor([-1, -1, -1, 0, 1, 3, -1], dtype=torch.int32)
         read_indices: list[int] = []
         cache_read, to_free = cache.extend_read_indices("r", past_length=3, query_length=5, read_indices=read_indices)
         self.assertEqual(read_indices, [0, 1, 3, -1, -1])
@@ -858,7 +858,7 @@ class EmbeddingsCacheTest(unittest.TestCase):
 
     def test_extend_read_indices_text_only_window_returns_false(self) -> None:
         _, cache = self.get_config_and_embeddings_cache()
-        cache.allocated_blocks_masks["r"] = torch.tensor([-1, -1, -1, 0, 1, 3, -1], dtype=torch.int32)
+        cache.allocated_rows_masks["r"] = torch.tensor([-1, -1, -1, 0, 1, 3, -1], dtype=torch.int32)
         read_indices: list[int] = []
         cache_read, to_free = cache.extend_read_indices("r", past_length=0, query_length=3, read_indices=read_indices)
         self.assertEqual(read_indices, [-1, -1, -1])
@@ -880,7 +880,7 @@ class EmbeddingsCacheTest(unittest.TestCase):
         """When the query window runs past the end of the block table, the missing positions are padded with -1 and
         the request is reported ready to free."""
         _, cache = self.get_config_and_embeddings_cache()
-        cache.allocated_blocks_masks["r"] = torch.tensor([-1, -1, -1, 0, 1, 3, -1], dtype=torch.int32)
+        cache.allocated_rows_masks["r"] = torch.tensor([-1, -1, -1, 0, 1, 3, -1], dtype=torch.int32)
         read_indices: list[int] = []
         cache_read, to_free = cache.extend_read_indices("r", past_length=5, query_length=5, read_indices=read_indices)
         self.assertEqual(read_indices, [3, -1, -1, -1, -1])
@@ -889,11 +889,11 @@ class EmbeddingsCacheTest(unittest.TestCase):
 
     def test_store_mm_embeddings_writes_at_allocated_blocks(self) -> None:
         config, cache = self.get_config_and_embeddings_cache()
-        cache.allocated_blocks_masks["r"] = torch.tensor([-1, 0, 2, -1], dtype=torch.int32)
+        cache.allocated_rows_masks["r"] = torch.tensor([-1, 0, 2, -1], dtype=torch.int32)
         feats = torch.randn(2, config.text_config.hidden_size)
         cache.store_mm_embeddings("r", feats)
-        torch.testing.assert_close(cache.cache[0], feats[0])
-        torch.testing.assert_close(cache.cache[2], feats[1])
+        torch.testing.assert_close(cache.storage[0], feats[0])
+        torch.testing.assert_close(cache.storage[2], feats[1])
 
     def test_store_mm_embeddings_unknown_request_raises(self) -> None:
         config, cache = self.get_config_and_embeddings_cache()
@@ -905,42 +905,42 @@ class EmbeddingsCacheTest(unittest.TestCase):
         img = config.image_token_id
         state = RequestState(request_id="r", initial_tokens=[1, img, img, 1])  # 2 image tokens
         cache.can_store_mm_embeddings(state)
-        cache.allocate_blocks(state)
-        free_after_alloc = len(cache.free_blocks)
+        cache.allocate_rows(state)
+        free_after_alloc = len(cache.free_rows)
 
         cache.release_cache_for_requests({"r"})
 
-        self.assertEqual(len(cache.free_blocks), free_after_alloc + 2)
-        self.assertNotIn("r", cache.allocated_blocks_masks)
+        self.assertEqual(len(cache.free_rows), free_after_alloc + 2)
+        self.assertNotIn("r", cache.allocated_rows_masks)
 
     def test_release_cache_for_requests_unknown_id_is_noop(self) -> None:
         """Releasing an id with no allocated blocks (already released, or a text-only request) is a silent no-op: the
         request may have been freed on the other IO pair in async mode."""
         _, cache = self.get_config_and_embeddings_cache()
-        free_before = len(cache.free_blocks)
+        free_before = len(cache.free_rows)
         cache.release_cache_for_requests({"ghost"})  # must not raise
-        self.assertEqual(len(cache.free_blocks), free_before)
+        self.assertEqual(len(cache.free_rows), free_before)
 
     def test_allocate_store_read_release_round_trip_conserves_blocks(self) -> None:
         """End-to-end of the cache lifecycle: every block allocated for a request is returned to the free pool once
         the request is released."""
         config, cache = self.get_config_and_embeddings_cache()
         img = config.image_token_id
-        total_blocks = len(cache.free_blocks)
+        total_blocks = len(cache.free_rows)
         state = RequestState(request_id="r", initial_tokens=[1, img, img, img, 1])  # 3 image tokens
 
         self.assertTrue(cache.can_store_mm_embeddings(state))
-        cache.allocate_blocks(state)
+        cache.allocate_rows(state)
         cache.store_mm_embeddings("r", torch.randn(3, config.text_config.hidden_size))
-        self.assertEqual(len(cache.free_blocks), total_blocks - 3)
+        self.assertEqual(len(cache.free_rows), total_blocks - 3)
 
         read_indices: list[int] = []
         _, to_free = cache.extend_read_indices("r", past_length=0, query_length=5, read_indices=read_indices)
         self.assertTrue(to_free)
 
         cache.release_cache_for_requests({"r"})
-        self.assertEqual(len(cache.free_blocks), total_blocks)
-        self.assertEqual(len(cache.allocated_blocks_masks), 0)
+        self.assertEqual(len(cache.free_rows), total_blocks)
+        self.assertEqual(len(cache.allocated_rows_masks), 0)
 
 
 @require_torch_accelerator

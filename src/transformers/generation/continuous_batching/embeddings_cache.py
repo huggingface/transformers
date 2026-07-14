@@ -24,10 +24,12 @@ from ...configuration_utils import PretrainedConfig
 from .requests import RequestState
 
 
-# TODO: add block-based indexing
+# TODO: add block-based indexing (group several embeddings per allocation to cut bookkeeping)
 # TODO: add hash-based indexing for multimodal inputs
 class EmbeddingsCache:
-    cache: torch.Tensor
+    # One embedding is stored per row of the storage tensor. Rows are named this way to avoid confusion with the KV
+    # cache "blocks" (each of which spans block_size tokens).
+    storage: torch.Tensor
     REQUEST_ID_KEY: str = "_cb_request_id"
 
     def __init__(
@@ -39,13 +41,13 @@ class EmbeddingsCache:
         device: torch.device,
     ) -> None:
         text_config = config.get_text_config(decoder=True)
-        # Create the actual cache tensor
+        # Create the actual storage tensor
         self.cache_size = max(16384, max_batch_tokens)
-        cache_shape = (self.cache_size, text_config.hidden_size)
-        self.cache = torch.empty(cache_shape, dtype=model_dtype, device=device)
+        storage_shape = (self.cache_size, text_config.hidden_size)
+        self.storage = torch.empty(storage_shape, dtype=model_dtype, device=device)
         # Create bookkeeping data structures
-        self.free_blocks = deque(range(self.cache_size))
-        self.allocated_blocks_masks: dict[str, torch.Tensor] = {}
+        self.free_rows = deque(range(self.cache_size))
+        self.allocated_rows_masks: dict[str, torch.Tensor] = {}
         self.embeddings_lengths: dict[str, int] = {}
         # Specialize on modality the embeddings cache object
         self._specialize_on_modality(config, modality)
@@ -98,19 +100,19 @@ class EmbeddingsCache:
         if num_mm_embeddings is None:
             num_mm_embeddings = state.count_mm_embeddings(self.special_token_id)
             self.embeddings_lengths[state.request_id] = num_mm_embeddings
-        return len(self.free_blocks) >= num_mm_embeddings
+        return len(self.free_rows) >= num_mm_embeddings
 
-    def allocate_blocks(self, state: RequestState) -> None:
-        """Allocates blocks for a request. This should only be called once per request."""
-        # Get the list of allocated blocks for the request
+    def allocate_rows(self, state: RequestState) -> None:
+        """Allocates storage rows for a request. This should only be called once per request."""
+        # Get the list of allocated rows for the request
         num_mm_embeddings = self.embeddings_lengths.pop(state.request_id)  # this value will never be used again
-        allocated_blocks = [self.free_blocks.popleft() for _ in range(num_mm_embeddings)]
-        # Infer the allocated blocks mask
+        allocated_rows = [self.free_rows.popleft() for _ in range(num_mm_embeddings)]
+        # Infer the allocated rows mask
         input_ids = torch.tensor(state.initial_tokens, device="cpu", dtype=torch.int32)
         img_mask = input_ids == self.special_token_id
         input_ids.fill_(-1)
-        input_ids[img_mask] = torch.tensor(allocated_blocks, device="cpu", dtype=torch.int32)
-        self.allocated_blocks_masks[state.request_id] = input_ids
+        input_ids[img_mask] = torch.tensor(allocated_rows, device="cpu", dtype=torch.int32)
+        self.allocated_rows_masks[state.request_id] = input_ids
         # TODO: this could be optimized by truncating from the first and last img tokens
 
     def extend_read_indices(
@@ -120,67 +122,73 @@ class EmbeddingsCache:
         Extends the list of indices being read from the embeddings cache for a given request. Returns a tuple of booleans:
             - cache_read: True if any multimodal embedding is read by this request
             - to_free: True if the request has all its multimodal embeddings read and can be freed from the cache
-        For instance, if the initial tokens and allocated blocks are as follows:
+        For instance, if the initial tokens and allocated rows are as follows:
 
             Initial tokens:   [xxx, xxx, xxx, img, img, img, xxx]
-            Allocated blocks: [ -1,  -1,  -1,   0,   1,   3,  -1]
+            Allocated rows:   [ -1,  -1,  -1,   0,   1,   3,  -1]
         Then for a past length of 3 and a query length of 5, the read indices will be:
 
             Read indices:     [                 0,   1,   3,  -1,  -1]
 
-        and the function will return (True, True) because there are actual cache reads (block 0, 1 and 3 are read) and
+        and the function will return (True, True) because there are actual cache reads (row 0, 1 and 3 are read) and
         all its multimodal embeddings have been read: they can be freed from the cache.
         """
         to_free = False
-        block_table = self.allocated_blocks_masks.get(request_id)
-        # Only compute read indices if the request has allocated blocks
-        if block_table is not None:
-            intersection = block_table[past_length : past_length + query_length].tolist()
-            missing_indices = query_length - len(intersection)
+        rows_mask = self.allocated_rows_masks.get(request_id)
+        # Only compute read indices if the request has allocated rows
+        if rows_mask is not None:
+            submask = rows_mask[past_length : past_length + query_length]
+            read_ids = submask.tolist()
+            missing_indices = query_length - len(read_ids)
             # Check if any of the multimodal embeddings for this request are read in this batch
-            cache_read = (block_table[past_length : past_length + query_length] != -1).any().item()
+            cache_read = (submask != -1).any().item()
             # Check if all the multimodal embeddings for this request have been read
-            if past_length + query_length >= len(block_table):
+            if past_length + query_length >= len(rows_mask):
                 to_free = True
         else:
-            intersection = []
+            read_ids = []
             missing_indices = query_length
             cache_read = False
         # Extend the read indices
-        read_indices.extend(intersection)
+        read_indices.extend(read_ids)
         read_indices.extend(repeat(-1, missing_indices))
         return cache_read, to_free
 
     def store_mm_embeddings(self, request_id: str, mm_embedding: torch.Tensor) -> None:
         """Stores the multimodal embeddings for a request in the embeddings cache."""
-        # Retrieve the allocated blocks mask for the request
-        allocated_blocks_mask = self.allocated_blocks_masks.get(request_id)
-        if allocated_blocks_mask is None:
-            raise ValueError(f"Request {request_id} has no allocated blocks mask")
-        # Extract the allocated blocks from the mask
-        mask = allocated_blocks_mask != -1
-        allocated_blocks = allocated_blocks_mask[mask].to(self.cache.device)
-        # Store the multimodal embeddings in the cache, flattening along the image dimension
-        self.cache[allocated_blocks] = mm_embedding.reshape(-1, mm_embedding.shape[-1])
+        # Retrieve the allocated rows mask for the request
+        allocated_rows_mask = self.allocated_rows_masks.get(request_id)
+        if allocated_rows_mask is None:
+            raise ValueError(f"Request {request_id} has no allocated rows mask")
+        # Extract the allocated rows from the mask
+        mask = allocated_rows_mask != -1
+        allocated_rows = allocated_rows_mask[mask].to(self.storage.device)
+        # Flatten along the image dimension; the row count must match the number of special-token positions
+        mm_embedding = mm_embedding.reshape(-1, mm_embedding.shape[-1])
+        if mm_embedding.shape[0] != allocated_rows.numel():
+            raise ValueError(
+                f"Request {request_id} has {allocated_rows.numel()} multimodal tokens but the encoder produced "
+                f"{mm_embedding.shape[0]} embeddings."
+            )
+        # Store the multimodal embeddings in the cache
+        self.storage[allocated_rows] = mm_embedding
 
     def release_cache_for_requests(self, requests: set[str]) -> None:
         """Releases the cache for the given requests from the embeddings cache. The set of request for which to release
         cache is kept by the InputAndOutputs object, because in the case of asynchronous batching, a request for which
         the multimodal embeddings were fully processed in batch N cannot be freed in batch N+1."""
-        # Loop until there are no requests for which to release cache
-        while requests:
-            request_id = requests.pop()
-            # Retrieve the list of blocks to free
-            allocated_blocks_mask = self.allocated_blocks_masks.pop(request_id, None)
-            if allocated_blocks_mask is not None:
-                mask = allocated_blocks_mask != -1
-                blocks_to_free = allocated_blocks_mask[mask].tolist()
-                # Actually free the blocks
-                self.free_blocks.extend(blocks_to_free)
+        for request_id in requests:
+            # Retrieve the list of rows to free
+            allocated_rows_mask = self.allocated_rows_masks.pop(request_id, None)
+            if allocated_rows_mask is not None:
+                mask = allocated_rows_mask != -1
+                rows_to_free = allocated_rows_mask[mask].tolist()
+                # Actually free the rows
+                self.free_rows.extend(rows_to_free)
             # Also pop the embedding length for the request
             self.embeddings_lengths.pop(request_id, None)
 
     def free_all_requests(self) -> None:
         """Frees all requests from the embeddings cache, whatever their state."""
-        all_requests_stored = set(self.allocated_blocks_masks.keys()) | set(self.embeddings_lengths.keys())
+        all_requests_stored = set(self.allocated_rows_masks.keys()) | set(self.embeddings_lengths.keys())
         self.release_cache_for_requests(all_requests_stored)

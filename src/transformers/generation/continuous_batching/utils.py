@@ -88,8 +88,10 @@ def find_head_dim(config: PretrainedConfig) -> int:
     """Finds the head dimension for the given config."""
     if hasattr(config, "head_dim") and config.head_dim is not None:
         return config.head_dim
-    if hasattr(config, "hidden_size") and hasattr(config, "num_attention_heads"):
-        return config.hidden_size // config.num_attention_heads  # will crash if any is None
+    hidden_size = getattr(config, "hidden_size", None)
+    num_attention_heads = getattr(config, "num_attention_heads", None)
+    if hidden_size is not None and num_attention_heads is not None:
+        return hidden_size // num_attention_heads
     raise ValueError(f"head_dim or (hidden_size and num_attention_heads) could not be found in the config:\n{config}")
 
 
@@ -214,8 +216,8 @@ def check_modality_support(input_modalities: str | list[str]) -> str | None:
         return "audio"
     if input_modalities == {"text", "image", "audio"}:
         logger.warning(
-            "This model supports bith image and audio but CB currently only supports text+image or text+audio. Chosing"
-            "\"image\" as the extra modality."
+            "This model supports both image and audio but CB currently only supports text+image or text+audio. "
+            'Choosing "image" as the extra modality.'
         )
         return "image"
 

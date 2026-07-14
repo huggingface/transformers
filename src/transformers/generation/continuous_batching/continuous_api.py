@@ -800,7 +800,7 @@ class ContinuousBatchingManager:
                 preview = f"{input_ids[:3]}"[:-1] + ", ..., " + f"{input_ids[-3:]}"[1:]
                 num_mm_embeddings = state.count_mm_embeddings(embeddings_cache.special_token_id)
                 logger.error(
-                    f"Request {request_id} with ids {preview} will be dropped because it has too many multimodal"
+                    f"Request {request_id} with ids {preview} will be dropped because it has too many multimodal "
                     f"embeddings: {num_mm_embeddings = } is more than {embeddings_cache.cache_size = }."
                 )
                 return None

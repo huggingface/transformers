@@ -281,7 +281,7 @@ class Scheduler(ABC):
 
             # If the request has multimodal data to process, we allocate space in the embeddings cache
             if state.multimodal_inputs:
-                self.cache.embeddings_cache.allocate_blocks(state)  # type: ignore (was already checked)
+                self.cache.embeddings_cache.allocate_rows(state)  # type: ignore (was already checked)
 
             # The decode fast path is only used if the request is a single token and its length is less than the max blocks per request
             decode_fast_path &= request_len == 1 and state.position_offset < self.max_decode_fast_path_length

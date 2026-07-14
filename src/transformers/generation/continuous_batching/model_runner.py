@@ -123,13 +123,13 @@ class ModelRunner:
         embedding_module = model.get_input_embeddings()
         inputs_embeds.copy_(embedding_module(input_ids))
         # If there are no multimodal embeddings to incorporate, we can return early
-        mm_embeddings_read_index = batch_data.get("embeddings_cache_read_index")  # shape [q_tokens] or None
+        mm_embeddings_read_index = batch_data.get("embeddings_read_index")  # shape [q_tokens] or None
         if mm_embeddings_read_index is None:
             return None
         # Otherwise, retrieve the multimodal embeddings according to the index
-        mm_embeddings = self.cache.embeddings_cache.cache[mm_embeddings_read_index]  # type: ignore
+        mm_embeddings = self.cache.embeddings_cache.storage[mm_embeddings_read_index]  # type: ignore
         mm_embeddings = mm_embeddings.unsqueeze(0)  # shape [1, q_tokens, hidden_size]
-        mask = (mm_embeddings_read_index == -1).unsqueeze(-1)  # shape [1, q_tokens]
+        mask = (mm_embeddings_read_index == -1).unsqueeze(-1)  # shape [q_tokens, 1]
         inputs_embeds.copy_(torch.where(mask, inputs_embeds, mm_embeddings))
 
     def _pop_or_get_input_ids(self, batch_data: PagedAttentionArgs) -> torch.Tensor:
