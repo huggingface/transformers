@@ -1045,7 +1045,7 @@ def is_bitsandbytes_available(min_version: str = BITSANDBYTES_MIN_VERSION) -> bo
 
 
 @lru_cache
-def is_flash_attn_2_available(kernel_fallback_ok: bool = False) -> bool:
+def is_flash_attn_2_available(kernels_fallback_ok: bool = False) -> bool:
     is_available, flash_attn_version = _is_package_available("flash_attn", return_version=True)
     # FA4 is also distributed under "flash_attn", hence we need to check the naming here
     is_available = is_available and "flash-attn" in [
@@ -1057,7 +1057,7 @@ def is_flash_attn_2_available(kernel_fallback_ok: bool = False) -> bool:
         return version.parse(flash_attn_version) >= version.parse("2.3.3")
 
     # If the kernels fallback is allowed, check if it is available
-    if kernel_fallback_ok and is_kernels_available():
+    if kernels_fallback_ok and is_kernels_available():
         try:
             from kernels import get_kernel
 
@@ -1071,7 +1071,7 @@ def is_flash_attn_2_available(kernel_fallback_ok: bool = False) -> bool:
 
 
 @lru_cache
-def is_flash_attn_3_available(kernel_fallback_ok: bool = False) -> bool:
+def is_flash_attn_3_available(kernels_fallback_ok: bool = False) -> bool:
     # Universally available under `flash_attn_interface`
     is_available = _is_package_available("flash_attn_interface")[0]
     # Resolving and ensuring the proper name of FA3 being associated
@@ -1082,7 +1082,7 @@ def is_flash_attn_3_available(kernel_fallback_ok: bool = False) -> bool:
         return True
 
     # If the kernels fallback is allowed, check if it is available
-    if kernel_fallback_ok and is_kernels_available():
+    if kernels_fallback_ok and is_kernels_available():
         try:
             from kernels import get_kernel
 
