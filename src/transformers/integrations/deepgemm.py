@@ -295,6 +295,11 @@ def _coerce_sf_for_kernel(sf: torch.Tensor, expected_mn: int | None = None) -> t
     if sf.dim() not in (2, 3):
         raise ValueError(f"DeepGEMM SF must be 2D or 3D, got {sf.dim()}D")
 
+    # SM90 dispatch transforms SFA and only checks SFB (`sm90_sfb_check`), which needs
+    # an unpadded contiguous layout — DeepGEMM does the MN-major alignment itself.
+    if not is_sm100:
+        return sf.contiguous()
+
     mn = sf.size(-2)
     kf = sf.size(-1)
     align_to = 16 // sf.element_size()  # `get_tma_aligned_size`: align(mn, 16 / element_size)
