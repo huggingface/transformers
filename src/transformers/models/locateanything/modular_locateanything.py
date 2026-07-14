@@ -26,6 +26,7 @@ from torch import nn
 from ... import initialization as init
 from ...activations import PytorchGELUTanh
 from ...cache_utils import Cache, DynamicCache
+from ...modeling_outputs import BaseModelOutputWithPooling
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import (
@@ -35,6 +36,8 @@ from ...utils import (
     is_flash_attn_2_available,
     logging,
 )
+from ...utils.generic import merge_with_config_defaults
+from ...utils.output_capturing import capture_outputs
 from ..auto import AutoModel
 from ..llava.modeling_llava import (
     LlavaCausalLMOutputWithPast,
@@ -119,7 +122,7 @@ class Learnable2DInterpPosEmb(nn.Module):
         self.height = height
         self.width = width
         self.interpolation_mode = interpolation_mode
-        # Filled by `LocateAnythingPreTrainedModel._init_weights`.
+        # Filled by `MoonViTPreTrainedEncoder._init_weights`.
         self.weight = nn.Parameter(torch.zeros(height, width, dim))
 
     def forward(self, x: torch.Tensor, grid_hws: torch.Tensor) -> torch.Tensor:
@@ -283,16 +286,14 @@ class MLP2(nn.Module):
         return self.fc1(x)
 
 
-class MoonVitEncoderLayer(nn.Module):
+class MoonVitAttention(nn.Module):
     def __init__(
         self,
         config: MoonViTConfig,
         num_heads: int,
         hidden_dim: int,
-        mlp_dim: int,
         *,
         attn_implementation: str = "eager",
-        activation=F.gelu,
         attn_bias: bool = False,
     ):
         super().__init__()
@@ -305,25 +306,23 @@ class MoonVitEncoderLayer(nn.Module):
         self.num_key_value_groups = 1  # multi-head attention; needed by the attention interface
         self.is_causal = False
 
-        self.norm0 = nn.LayerNorm(hidden_dim)
-        self.norm1 = nn.LayerNorm(hidden_dim)
-        self.mlp = MLP2([hidden_dim, mlp_dim, hidden_dim], activation)
         self.wqkv = nn.Linear(hidden_dim, hidden_dim * 3, bias=attn_bias)
         self.wo = nn.Linear(hidden_dim, hidden_dim, bias=attn_bias)
 
-    def attention_qkvpacked(
+    def forward(
         self,
-        x: torch.Tensor,
+        hidden_states: torch.Tensor,
         cu_seqlens: torch.Tensor,
         rope_freqs_cis: torch.Tensor | None = None,
-    ):
+        **kwargs,
+    ) -> torch.Tensor:
         """
         Args:
-            x (torch.Tensor): packed input of shape (total_seqlen, hidden_dim).
+            hidden_states (torch.Tensor): packed input of shape (total_seqlen, hidden_dim).
             cu_seqlens (torch.Tensor): cumulative per-image sequence lengths that delimit the packed sequence.
         """
-        seq_length = x.shape[0]
-        xq, xk, xv = self.wqkv(x).view(seq_length, 3, self.num_heads, -1).permute(1, 0, 2, 3).unbind(0)
+        seq_length = hidden_states.shape[0]
+        xq, xk, xv = self.wqkv(hidden_states).view(seq_length, 3, self.num_heads, -1).permute(1, 0, 2, 3).unbind(0)
         xq, xk = apply_rope(xq, xk, rope_freqs_cis)
 
         # `attention_interface` expects `(batch, num_heads, seq, head_dim)`.
@@ -368,22 +367,42 @@ class MoonVitEncoderLayer(nn.Module):
         attn_out = attn_out.reshape(seq_length, -1)
         return self.wo(attn_out)
 
+
+class MoonVitEncoderLayer(nn.Module):
+    def __init__(
+        self,
+        config: MoonViTConfig,
+        num_heads: int,
+        hidden_dim: int,
+        mlp_dim: int,
+        *,
+        attn_implementation: str = "eager",
+        activation=F.gelu,
+        attn_bias: bool = False,
+    ):
+        super().__init__()
+        self.norm0 = nn.LayerNorm(hidden_dim)
+        self.norm1 = nn.LayerNorm(hidden_dim)
+        self.mlp = MLP2([hidden_dim, mlp_dim, hidden_dim], activation)
+        self.attn = MoonVitAttention(
+            config, num_heads, hidden_dim, attn_implementation=attn_implementation, attn_bias=attn_bias
+        )
+
     def forward(
         self,
         hidden_states: torch.Tensor,
         cu_seqlens: torch.Tensor,
         rope_freqs_cis: torch.Tensor | None = None,
+        **kwargs,
     ) -> torch.Tensor:
         """
         Args:
-            hidden_states: non-packed (B, N, D) or packed (L, D). if non-packed, seqlens should be None, if packed, seqlens should be set
-
-        Returns:
-            output: same shape of input, non-packed (B, N, D) for non-packed input, (L, D) for packed input
+            hidden_states (torch.Tensor): packed input of shape (total_seqlen, hidden_dim).
+            cu_seqlens (torch.Tensor): cumulative per-image sequence lengths that delimit the packed sequence.
         """
         residual = hidden_states
         hidden_states = self.norm0(hidden_states)
-        attn_out = self.attention_qkvpacked(hidden_states, cu_seqlens, rope_freqs_cis=rope_freqs_cis)
+        attn_out = self.attn(hidden_states, cu_seqlens, rope_freqs_cis=rope_freqs_cis, **kwargs)
         hidden_states = residual + attn_out
 
         residual = hidden_states
@@ -405,7 +424,7 @@ class MoonVitEncoder(nn.Module):
         self.blocks = nn.ModuleList([MoonVitEncoderLayer(**block_cfg) for _ in range(num_layers)])
         self.final_layernorm = nn.LayerNorm(hidden_dim)
 
-    def forward(self, hidden_states: torch.Tensor, grid_hws: torch.Tensor) -> torch.Tensor:
+    def forward(self, hidden_states: torch.Tensor, grid_hws: torch.Tensor, **kwargs) -> torch.Tensor:
         rope_freqs_cis = self.rope_2d.get_freqs_cis(grid_hws=grid_hws)
 
         lengths = torch.cat(
@@ -416,8 +435,8 @@ class MoonVitEncoder(nn.Module):
         )
         cu_seqlens = lengths.cumsum(dim=0, dtype=torch.int32)
 
-        for _, block in enumerate(self.blocks):
-            hidden_states = block(hidden_states, cu_seqlens, rope_freqs_cis=rope_freqs_cis)
+        for block in self.blocks:
+            hidden_states = block(hidden_states, cu_seqlens, rope_freqs_cis=rope_freqs_cis, **kwargs)
 
         hidden_states = self.final_layernorm(hidden_states)
 
@@ -453,9 +472,25 @@ def patch_merger(
 class MoonViTPreTrainedEncoder(PreTrainedModel):
     config_class = MoonViTConfig
     model_type = "moonvit"
-    _no_split_modules = ["PackingTransformer"]
+    input_modalities = ("image",)
+    _input_embed_layer = "patch_embed"
+    _no_split_modules = ["MoonVitEncoderLayer"]
     _supports_flash_attn_2 = True
     _supports_sdpa = True
+    _can_record_outputs = {
+        "hidden_states": MoonVitEncoderLayer,
+        "attentions": MoonVitAttention,
+    }
+
+    def _init_weights(self, module):
+        PreTrainedModel._init_weights(self, module)
+        if isinstance(module, Learnable2DInterpPosEmb):
+            init.normal_(module.weight)
+        elif isinstance(module, MLP2):
+            for linear in (module.fc0, module.fc1):
+                init.trunc_normal_(linear.weight, std=math.sqrt(2 / linear.in_features))
+                if linear.bias is not None:
+                    init.zeros_(linear.bias)
 
     def __init__(self, config: MoonViTConfig, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
@@ -484,19 +519,23 @@ class MoonViTPreTrainedEncoder(PreTrainedModel):
         )
         self.post_init()
 
-    def forward(self, pixel_values: torch.Tensor, grid_hws: torch.Tensor, **kwargs) -> torch.Tensor:
-        """
-        Args:
-            pixel_values (torch.Tensor): The input pixel values.
-            grid_hws (torch.Tensor): The grid height and width.
-
-        Returns:
-            torch.Tensor: The output tokens.
+    @merge_with_config_defaults
+    @capture_outputs
+    @auto_docstring
+    def forward(
+        self, pixel_values: torch.Tensor, grid_hws: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
+    ) -> BaseModelOutputWithPooling:
+        r"""
+        grid_hws (`torch.Tensor` of shape `(num_images, 2)`):
+            The grid height and width (in patches) of each packed image.
         """
         hidden_states = self.patch_embed(pixel_values, grid_hws)
-        hidden_states = self.encoder(hidden_states, grid_hws)
-        hidden_states = patch_merger(hidden_states, grid_hws, merge_kernel_size=self.merge_kernel_size)
-        return hidden_states
+        hidden_states = self.encoder(hidden_states, grid_hws, **kwargs)
+        merged_hidden_states = patch_merger(hidden_states, grid_hws, merge_kernel_size=self.merge_kernel_size)
+        return BaseModelOutputWithPooling(
+            last_hidden_state=hidden_states,
+            pooler_output=merged_hidden_states,
+        )
 
 
 def build_window_attention_mask(
@@ -1000,16 +1039,6 @@ class LocateAnythingPreTrainedModel(LlavaPreTrainedModel):
             self, attn_implementation, is_init_check, *args, **kwargs
         )
 
-    def _init_weights(self, module):
-        PreTrainedModel._init_weights(self, module)
-        if isinstance(module, Learnable2DInterpPosEmb):
-            init.normal_(module.weight)
-        elif isinstance(module, MLP2):
-            for linear in (module.fc0, module.fc1):
-                init.trunc_normal_(linear.weight, std=math.sqrt(2 / linear.in_features))
-                if linear.bias is not None:
-                    init.zeros_(linear.bias)
-
 
 class LocateAnythingModel(LlavaModel):
     def __init__(self, config: LocateAnythingConfig):
@@ -1060,7 +1089,7 @@ class LocateAnythingModel(LlavaModel):
         self.post_init()
 
     def extract_feature(self, pixel_values, image_grid_hws):
-        return self.vision_model(pixel_values=pixel_values, grid_hws=image_grid_hws)
+        return self.vision_model(pixel_values=pixel_values, grid_hws=image_grid_hws).pooler_output
 
     @can_return_tuple
     @auto_docstring(
@@ -1072,14 +1101,15 @@ class LocateAnythingModel(LlavaModel):
         image_grid_hws: torch.Tensor | None = None,
         image_flags: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> torch.FloatTensor:
+    ) -> tuple | BaseModelOutputWithPooling:
         r"""
         image_grid_hws (`torch.Tensor` of shape `(num_images, 2)`, *optional*):
             The grid height and width (in patches) of each image, used by the MoonViT vision tower.
         image_flags (`torch.Tensor`, *optional*):
             Per-sample flags selecting which packed images contribute visual features.
         """
-        image_features = self.extract_feature(pixel_values, image_grid_hws)
+        vision_outputs = self.vision_model(pixel_values=pixel_values, grid_hws=image_grid_hws, **kwargs)
+        image_features = vision_outputs.pooler_output
 
         if image_flags is not None and image_flags.sum() > 0:
             filtered_image_features = []
@@ -1094,12 +1124,14 @@ class LocateAnythingModel(LlavaModel):
             image_features = filtered_image_features
 
         if not image_features:
-            return torch.empty(
+            vision_outputs.pooler_output = torch.empty(
                 0, self.config.text_config.hidden_size, device=pixel_values.device, dtype=pixel_values.dtype
             )
+            return vision_outputs
 
         image_features = torch.cat(image_features, dim=0)
-        return self.mlp1(image_features)
+        vision_outputs.pooler_output = self.mlp1(image_features)
+        return vision_outputs
 
     @can_return_tuple
     @auto_docstring
@@ -1131,8 +1163,8 @@ class LocateAnythingModel(LlavaModel):
         image_features = None
         if pixel_values is not None:
             image_features = self.get_image_features(
-                pixel_values=pixel_values, image_grid_hws=image_grid_hws, image_flags=image_flags
-            )
+                pixel_values=pixel_values, image_grid_hws=image_grid_hws, image_flags=image_flags, return_dict=True
+            ).pooler_output
             image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
             special_image_mask = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, image_features=image_features
@@ -1171,7 +1203,7 @@ class LocateAnythingForConditionalGeneration(LlavaForConditionalGeneration):
         image_grid_hws: torch.Tensor | None = None,
         image_flags: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> torch.FloatTensor:
+    ) -> tuple | BaseModelOutputWithPooling:
         r"""
         image_grid_hws (`torch.Tensor` of shape `(num_images, 2)`, *optional*):
             The grid height and width (in patches) of each image, used by the MoonViT vision tower.
@@ -1179,7 +1211,7 @@ class LocateAnythingForConditionalGeneration(LlavaForConditionalGeneration):
             Per-sample flags selecting which packed images contribute visual features.
         """
         return self.model.get_image_features(
-            pixel_values=pixel_values, image_grid_hws=image_grid_hws, image_flags=image_flags
+            pixel_values=pixel_values, image_grid_hws=image_grid_hws, image_flags=image_flags, **kwargs
         )
 
     @can_return_tuple

@@ -552,10 +552,14 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(source_patterns=r"^multi_modal_projector", target_patterns="model.multi_modal_projector"),
         ],
         "locateanything": [
+            # ---- Pass 1: structural prefix renames ----
             WeightRenaming(source_patterns=r"^language_model.model", target_patterns="model.language_model"),
             WeightRenaming(source_patterns=r"^language_model.lm_head", target_patterns="lm_head"),
             WeightRenaming(source_patterns=r"^vision_model", target_patterns="model.vision_model"),
             WeightRenaming(source_patterns=r"^mlp1", target_patterns="model.mlp1"),
+            # ---- Pass 2: in-prefix renames (MoonViT attention projections moved into `attn`) ----
+            WeightRenaming(source_patterns=r"\.wqkv\.", target_patterns=".attn.wqkv."),
+            WeightRenaming(source_patterns=r"\.wo\.", target_patterns=".attn.wo."),
         ],
         "minimax_m3_vl": [
             # Ordering matters for save round-tripping: the reverse mapping flips the order *and* each

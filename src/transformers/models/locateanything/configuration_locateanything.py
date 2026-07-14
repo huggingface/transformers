@@ -140,9 +140,6 @@ class LocateAnythingConfig(PreTrainedConfig):
                     "Qwen3ForCausalLM are supported."
                 )
 
-        if not hasattr(self.text_config, "rope_theta"):
-            self.text_config.rope_theta = 10000.0
-
         self.tie_word_embeddings = self.text_config.tie_word_embeddings
         super().__post_init__(**kwargs)
 
