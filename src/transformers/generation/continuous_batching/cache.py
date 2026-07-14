@@ -147,7 +147,7 @@ class PagedAttentionCache:
 
         # For most attributes, the relevant values are inside the text model (LLM) config, not the main config
         is_multimodal_model = mm_modality is not None
-        text_config = config.text_config if is_multimodal_model and hasattr(config, "text_config") else config
+        text_config = config.get_text_config(decoder=True)
 
         # Extract model dimensions
         self.num_key_value_heads = find_num_kv_heads(text_config)
