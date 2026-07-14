@@ -2052,6 +2052,10 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def test_chat_template_return_assistant_tokens_mask_truncated(self):
         pass
 
+    @unittest.skip("Chat is not supported")
+    def test_chat_template_return_assistant_tokens_mask_edge_cases(self):
+        pass
+
     def test_empty_input_string(self):
         tokenizer_return_type = []
         output_tensor_type = []

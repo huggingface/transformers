@@ -1084,6 +1084,10 @@ class UdopTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def test_chat_template_return_assistant_tokens_mask_truncated(self):
         pass
 
+    @unittest.skip("Chat is not supported")
+    def test_chat_template_return_assistant_tokens_mask_edge_cases(self):
+        pass
+
     @unittest.skip(reason="Chat template tests don't play well with table/layout models.")
     def test_chat_template_batched(self):
         pass
