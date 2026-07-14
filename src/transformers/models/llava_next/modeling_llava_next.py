@@ -145,12 +145,12 @@ def unpad_image(tensor, original_size):
     return unpadded_tensor
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for Llava outputs, with hidden states and attentions.
     """
 )
+@dataclass
 class LlavaNextModelOutputWithPast(BaseModelOutputWithPast):
     r"""
     past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
@@ -166,12 +166,12 @@ class LlavaNextModelOutputWithPast(BaseModelOutputWithPast):
     image_hidden_states: torch.FloatTensor | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for LlavaNext causal language model (or autoregressive) outputs.
     """
 )
+@dataclass
 class LlavaNextCausalLMOutputWithPast(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
@@ -226,7 +226,7 @@ class LlavaNextPreTrainedModel(PreTrainedModel):
     input_modalities = ("image", "text")
     supports_gradient_checkpointing = True
     _no_split_modules = ["LlamaDecoderLayer"]
-    _skip_keys_device_placement = "past_key_values"
+    _skip_keys_device_placement = ["past_key_values"]
 
     _supports_flash_attn = True
     _supports_sdpa = True
@@ -237,13 +237,8 @@ class LlavaNextPreTrainedModel(PreTrainedModel):
 
     @torch.no_grad()
     def _init_weights(self, module):
-        std = getattr(self.config, "initializer_range", self.config.get_text_config().initializer_range)
-
-        if isinstance(module, nn.Linear):
-            init.normal_(module.weight, mean=0.0, std=std)
-            if module.bias is not None:
-                init.zeros_(module.bias)
-        elif isinstance(module, LlavaNextModel):
+        super()._init_weights(module)
+        if isinstance(module, LlavaNextModel):
             embed_std = 1 / math.sqrt(self.config.text_config.hidden_size)
             init.normal_(module.image_newline, mean=0.0, std=embed_std)
 
@@ -254,9 +249,6 @@ class LlavaNextPreTrainedModel(PreTrainedModel):
     """
 )
 class LlavaNextModel(LlavaNextPreTrainedModel):
-    _checkpoint_conversion_mapping = {
-        r"^language_model.model": "language_model",
-    }
     base_model_prefix = "model"
 
     def __init__(self, config: LlavaNextConfig):
@@ -270,12 +262,6 @@ class LlavaNextModel(LlavaNextPreTrainedModel):
         self.vocab_size = config.text_config.vocab_size
         self.language_model = AutoModel.from_config(config.text_config)
         self.post_init()
-
-    def get_input_embeddings(self):
-        return self.language_model.get_input_embeddings()
-
-    def set_input_embeddings(self, value):
-        self.language_model.set_input_embeddings(value)
 
     def pack_image_features(self, image_features, image_sizes, vision_feature_select_strategy, image_newline=None):
         """
@@ -353,7 +339,7 @@ class LlavaNextModel(LlavaNextPreTrainedModel):
         self,
         pixel_values: torch.FloatTensor,
         image_sizes: torch.Tensor,
-        vision_feature_layer: int | list[int] | None = None,
+        vision_feature_layer: int | list[int] | list[int] | None = None,
         vision_feature_select_strategy: str | None = None,
         output_hidden_states: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
@@ -435,9 +421,9 @@ class LlavaNextModel(LlavaNextPreTrainedModel):
             special_image_mask = input_ids == self.config.image_token_id
 
         n_image_tokens = special_image_mask.sum()
-        special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
+        special_image_mask = special_image_mask.unsqueeze(-1).to(inputs_embeds.device)
         torch_compilable_check(
-            inputs_embeds[special_image_mask].numel() == image_features.numel(),
+            n_image_tokens * inputs_embeds.shape[-1] == image_features.numel(),
             f"Image features and image tokens do not match, tokens: {n_image_tokens}, features: {image_features.shape[0]}",
         )
         return special_image_mask
@@ -454,10 +440,9 @@ class LlavaNextModel(LlavaNextPreTrainedModel):
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
-        vision_feature_layer: int | list[int] | None = None,
+        vision_feature_layer: int | list[int] | list[int] | None = None,
         vision_feature_select_strategy: str | None = None,
         use_cache: bool | None = None,
-        cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> tuple | LlavaNextModelOutputWithPast:
         r"""
@@ -492,7 +477,6 @@ class LlavaNextModel(LlavaNextPreTrainedModel):
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
-            cache_position=cache_position,
             **kwargs,
         )
 
@@ -511,13 +495,6 @@ class LlavaNextModel(LlavaNextPreTrainedModel):
     """
 )
 class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel, GenerationMixin):
-    _checkpoint_conversion_mapping = {
-        r"^language_model.model": "model.language_model",
-        r"^vision_tower": "model.vision_tower",
-        r"^multi_modal_projector": "model.multi_modal_projector",
-        r"^image_newline": "model.image_newline",
-        r"^language_model.lm_head": "lm_head",
-    }
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
 
     def __init__(self, config: LlavaNextConfig):
@@ -525,12 +502,6 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel, GenerationMixi
         self.model = LlavaNextModel(config)
         self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
         self.post_init()
-
-    def get_input_embeddings(self):
-        return self.model.get_input_embeddings()
-
-    def set_input_embeddings(self, value):
-        self.model.set_input_embeddings(value)
 
     def get_output_embeddings(self) -> nn.Module:
         return self.lm_head
@@ -550,7 +521,7 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel, GenerationMixi
         self,
         pixel_values: torch.FloatTensor,
         image_sizes: torch.Tensor,
-        vision_feature_layer: int | list[int] | None = None,
+        vision_feature_layer: int | list[int] | list[int] | None = None,
         vision_feature_select_strategy: str | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
@@ -587,11 +558,10 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel, GenerationMixi
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
-        vision_feature_layer: int | list[int] | None = None,
+        vision_feature_layer: int | list[int] | list[int] | None = None,
         vision_feature_select_strategy: str | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
-        cache_position: torch.LongTensor | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | LlavaNextCausalLMOutputWithPast:
@@ -641,7 +611,6 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel, GenerationMixi
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
             return_dict=True,
-            cache_position=cache_position,
             **kwargs,
         )
 
@@ -673,7 +642,6 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel, GenerationMixi
         pixel_values=None,
         image_sizes=None,
         attention_mask=None,
-        cache_position=None,
         logits_to_keep=None,
         is_first_iteration=False,
         **kwargs,
@@ -685,7 +653,6 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel, GenerationMixi
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
-            cache_position=cache_position,
             logits_to_keep=logits_to_keep,
             is_first_iteration=is_first_iteration,
             **kwargs,

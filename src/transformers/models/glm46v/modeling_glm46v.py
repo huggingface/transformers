@@ -28,10 +28,17 @@ import torch.nn as nn
 
 from ...cache_utils import Cache
 from ...generation import GenerationMixin
-from ...modeling_outputs import BaseModelOutputWithPooling, ModelOutput
+from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, CausalLMOutputWithPast
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, torch_compilable_check
+from ...utils import (
+    TransformersKwargs,
+    auto_docstring,
+    can_return_tuple,
+    torch_compilable_check,
+)
+from ...utils.deprecation import deprecate_kwarg
+from ...utils.generic import accepts_precomputed_kwargs
 from ..auto import AutoModel
 from .configuration_glm46v import Glm46VConfig
 
@@ -43,7 +50,7 @@ class Glm46VPreTrainedModel(PreTrainedModel):
     input_modalities = ("image", "video", "text")
     supports_gradient_checkpointing = True
     _no_split_modules = None
-    _skip_keys_device_placement = "past_key_values"
+    _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = True
     _supports_sdpa = True
 
@@ -52,34 +59,21 @@ class Glm46VPreTrainedModel(PreTrainedModel):
     _can_record_outputs = None
 
 
+@auto_docstring
 @dataclass
-@auto_docstring(
-    custom_intro="""
-    Base class for Llava outputs, with hidden states and attentions.
-    """
-)
-class Glm46VModelOutputWithPast(ModelOutput):
+class Glm46VModelOutputWithPast(BaseModelOutputWithPast):
     r"""
-    past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-        It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
-
-        Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
-        `past_key_values` input) to speed up sequential decoding.
     rope_deltas (`torch.LongTensor` of shape `(batch_size, )`, *optional*):
         The rope index difference between sequence length and multimodal rope.
+        The attribute is deprecated and will be removed in v5.20, use `model.base_model.rope_deltas` instead.
     """
 
-    last_hidden_state: torch.FloatTensor | None = None
-    past_key_values: Cache | None = None
-    hidden_states: tuple[torch.FloatTensor] | None = None
-    attentions: tuple[torch.FloatTensor] | None = None
     rope_deltas: torch.LongTensor | None = None
 
 
 @auto_docstring
 class Glm46VModel(Glm46VPreTrainedModel):
     base_model_prefix = "model"
-    _checkpoint_conversion_mapping = {}
     # Reference: fix gemma3 grad acc #37208
     accepts_loss_kwargs = False
     _no_split_modules = None
@@ -92,12 +86,6 @@ class Glm46VModel(Glm46VPreTrainedModel):
 
         # Initialize weights and apply final processing
         self.post_init()
-
-    def get_input_embeddings(self):
-        return self.language_model.get_input_embeddings()
-
-    def set_input_embeddings(self, value):
-        self.language_model.set_input_embeddings(value)
 
     def get_vision_position_ids(
         self,
@@ -142,17 +130,13 @@ class Glm46VModel(Glm46VPreTrainedModel):
             grid_thw[2].item() // spatial_merge_size,
         )
 
-        image_seq_length = llm_grid_h * llm_grid_w * llm_grid_t
-        position_width = torch.arange(start_position, start_position + llm_grid_w, device=device).repeat(
-            llm_grid_h * llm_grid_t
-        )
-        position_height = torch.arange(start_position, start_position + llm_grid_h, device=device).repeat_interleave(
-            llm_grid_w * llm_grid_t
-        )
-        position_temporal = torch.full((image_seq_length,), start_position, device=device, dtype=torch.long)
-        position_temporal = position_temporal * time_interval
-        vision_position_ids = torch.stack([position_temporal, position_height, position_width], dim=0)
+        position_temporal = torch.arange(llm_grid_t, device=device) * time_interval
+        position_height = torch.arange(llm_grid_h, device=device) + start_position
+        position_width = torch.arange(llm_grid_w, device=device) + start_position
 
+        T_grid, H_grid, W_grid = torch.meshgrid(position_temporal, position_height, position_width, indexing="ij")
+        vision_position_ids = torch.stack([T_grid, H_grid, W_grid], dim=0).reshape(3, -1)
+        vision_position_ids[0] += start_position  # must be after time_interval multiply
         return vision_position_ids
 
     def get_rope_index(
@@ -165,24 +149,8 @@ class Glm46VModel(Glm46VPreTrainedModel):
         **kwargs,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """
-        Calculate the 3D rope index based on image and video's sizes. The utility expects a `vision + text`
-        sequence and will error out otherwise. For pure text sequence, please rely on model's auto-inferred
-        position ids. In a mixed vision + text sequence, vision tokens use 3D RoPE (temporal, height, width)
-        while text tokens use standard 1D RoPE.
-
-        Example:
-            Temporal patches: 3; Height patches: 2; Width patches: 2
-            Each vision input results in (temporal x height × width) positions. Here: 3 x 2 × 2 = 12 positions total.
-
-            Temporal position IDs are spaced by:
-                `interval = tokens_per_second * temporal_patch_size / fps`
-
-                If fps = 1; tokens_per_second = 25; temporal_patch_size = 2, temporal IDs increase by 50 for each temporal patch:
-                `[0, 0, 0, 0, 50, 50, 50, 50, 100, 100, 100, 100]`
-
-            Height IDs repeat per row: `[0, 0, 1, 1, ...]`
-            Width IDs alternate per column: `[0, 1, 0, 1, ...]`
-            Text tokens follow standard 1D RoPE and the position IDs grow consequently with a step of `1`
+        Difference from Qwen2VL/Qwen2.5VL's get_rope_index:
+        - GLM46V uses timestamps to separate each video frame, so the video_grid_thw should also be split too.
 
         Args:
             input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
@@ -204,6 +172,11 @@ class Glm46VModel(Glm46VPreTrainedModel):
             position_ids (`torch.LongTensor` of shape `(3, batch_size, sequence_length)`)
             mrope_position_deltas (`torch.Tensor` of shape `(batch_size)`)
         """
+
+        # Separate video grid thw into multiple grids because timestamps are used to separate videos.
+        if video_grid_thw is not None:
+            video_grid_thw = torch.repeat_interleave(video_grid_thw, video_grid_thw[:, 0], dim=0)
+            video_grid_thw[:, 0] = 1
         spatial_merge_size = self.config.vision_config.spatial_merge_size
 
         mrope_position_deltas = []
@@ -233,7 +206,6 @@ class Glm46VModel(Glm46VPreTrainedModel):
                 input_type_group.append((key, start_index, end_index))
 
             current_pos = 0
-            video_group_index = 0
             llm_pos_ids_list = []
             for modality_type, start_idx, end_idx in input_type_group:
                 # text == 0
@@ -245,21 +217,9 @@ class Glm46VModel(Glm46VPreTrainedModel):
                     current_pos += text_len
                 # image == 1, video == 2
                 else:
-                    # GLM46V splits video into segments per frame but there's only one `grid_thw`
-                    # per whole video. We can't exhaus the iterator and have to re-use the grid
-                    # while processing the same video!
-                    if modality_type == 2:
-                        if video_group_index == 0:
-                            grid_thw = next(grid_iters[modality_type])
-                        video_group_index += 1
-                        video_group_index = 0 if video_group_index >= grid_thw[0] else video_group_index
-                    else:
-                        grid_thw = next(grid_iters[modality_type])
-
-                    # Videos are processed per frame separately, each temporal grid is always `1`
-                    temp_merge_size = grid_thw[0]
+                    grid_thw = next(grid_iters[modality_type])
                     vision_position_ids = self.get_vision_position_ids(
-                        current_pos, grid_thw, temp_merge_size, spatial_merge_size, device=input_ids.device
+                        current_pos, grid_thw, 1, spatial_merge_size, device=input_ids.device
                     )
                     llm_pos_ids_list.append(vision_position_ids)
                     current_pos += max(grid_thw[1], grid_thw[2]) // spatial_merge_size
@@ -272,6 +232,7 @@ class Glm46VModel(Glm46VPreTrainedModel):
         mrope_position_deltas = torch.tensor(mrope_position_deltas, device=input_ids.device).unsqueeze(1)
         return position_ids, mrope_position_deltas
 
+    @accepts_precomputed_kwargs(modality="video")
     @can_return_tuple
     @auto_docstring
     def get_video_features(
@@ -288,12 +249,12 @@ class Glm46VModel(Glm46VPreTrainedModel):
         """
         pixel_values_videos = pixel_values_videos.type(self.visual.dtype)
         # reshape video_grid_thw -> [b, 3] -> [1, h, w] * frames
-        temp_frames_hw = []
-        video_grid_thw_list = video_grid_thw.tolist()
-        for t, h, w in video_grid_thw_list:
-            repeated_row = torch.tensor([1, h, w]).unsqueeze(0).repeat(t, 1)
-            temp_frames_hw.append(repeated_row)
-        flattened_video_grid_thw = torch.cat(temp_frames_hw, dim=0)
+        t = video_grid_thw[:, 0]
+        hw = video_grid_thw[:, 1:]
+        # repeat each (h,w) row `t` times
+        flattened_hw = torch.repeat_interleave(hw, t, dim=0)
+        prefix_ones = video_grid_thw.new_ones(flattened_hw.shape[0], 1)
+        flattened_video_grid_thw = torch.cat([prefix_ones, flattened_hw], dim=1)
         vision_outputs = self.visual(
             pixel_values_videos, grid_thw=flattened_video_grid_thw, return_dict=True, **kwargs
         )
@@ -303,6 +264,7 @@ class Glm46VModel(Glm46VPreTrainedModel):
 
         return vision_outputs
 
+    @accepts_precomputed_kwargs(modality="image")
     @can_return_tuple
     @auto_docstring
     def get_image_features(
@@ -351,18 +313,18 @@ class Glm46VModel(Glm46VPreTrainedModel):
             special_video_mask = input_ids == self.config.image_token_id
 
         n_image_tokens = special_image_mask.sum()
-        special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
+        special_image_mask = special_image_mask.unsqueeze(-1).to(inputs_embeds.device)
         if image_features is not None:
             torch_compilable_check(
-                inputs_embeds[special_image_mask].numel() == image_features.numel(),
+                n_image_tokens * inputs_embeds.shape[-1] == image_features.numel(),
                 f"Image features and image tokens do not match, tokens: {n_image_tokens}, features: {image_features.shape[0]}",
             )
 
         n_video_tokens = special_video_mask.sum()
-        special_video_mask = special_video_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
+        special_video_mask = special_video_mask.unsqueeze(-1).to(inputs_embeds.device)
         if video_features is not None:
             torch_compilable_check(
-                inputs_embeds[special_video_mask].numel() == video_features.numel(),
+                n_video_tokens * inputs_embeds.shape[-1] == video_features.numel(),
                 f"Video features and video tokens do not match, tokens: {n_video_tokens}, features: {video_features.shape[0]}",
             )
         return special_image_mask, special_video_mask
@@ -396,8 +358,11 @@ class Glm46VModel(Glm46VPreTrainedModel):
                 mm_token_type_ids=mm_token_type_ids,
             )
             self.rope_deltas = rope_deltas
-        # Use pre-calculated rope-deltas to infer correct 3D position ids
-        elif self.rope_deltas is not None:
+        # Use pre-calculated rope-deltas to infer correct 3D position ids during incremental
+        # generation (past_key_values_length > 0) or when only inputs_embeds is provided (no input_ids
+        # to recompute from). Skip when input_ids is provided without past_key_values to avoid shape
+        # mismatches from stale rope_deltas (e.g., training forward pass after generation).
+        elif self.rope_deltas is not None and (past_key_values_length > 0 or input_ids is None):
             batch_size, seq_length, _ = inputs_embeds.shape
             if attention_mask is not None:
                 position_ids = attention_mask.long().cumsum(-1) - 1
@@ -413,6 +378,7 @@ class Glm46VModel(Glm46VPreTrainedModel):
             position_ids = None
         return position_ids
 
+    @deprecate_kwarg("rope_deltas", version="v5.10")
     @auto_docstring
     @can_return_tuple
     def forward(
@@ -426,7 +392,6 @@ class Glm46VModel(Glm46VPreTrainedModel):
         pixel_values_videos: torch.FloatTensor | None = None,
         image_grid_thw: torch.LongTensor | None = None,
         video_grid_thw: torch.LongTensor | None = None,
-        rope_deltas: torch.LongTensor | None = None,
         mm_token_type_ids: torch.IntTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | Glm46VModelOutputWithPast:
@@ -435,8 +400,6 @@ class Glm46VModel(Glm46VPreTrainedModel):
             The temporal, height and width of feature shape of each image in LLM.
         video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
             The temporal, height and width of feature shape of each video in LLM.
-        rope_deltas (`torch.LongTensor` of shape `(batch_size, )`, *optional*):
-            The rope index difference between sequence length and multimodal rope.
         """
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
@@ -445,13 +408,17 @@ class Glm46VModel(Glm46VPreTrainedModel):
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
         if pixel_values is not None:
-            image_embeds = self.get_image_features(pixel_values, image_grid_thw, return_dict=True).pooler_output
+            image_embeds = self.get_image_features(
+                pixel_values, image_grid_thw, return_dict=True, **kwargs
+            ).pooler_output
             image_embeds = torch.cat(image_embeds, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
             image_mask, _ = self.get_placeholder_mask(input_ids, inputs_embeds, image_features=image_embeds)
             inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_embeds)
 
         if pixel_values_videos is not None:
-            video_embeds = self.get_video_features(pixel_values_videos, video_grid_thw, return_dict=True).pooler_output
+            video_embeds = self.get_video_features(
+                pixel_values_videos, video_grid_thw, return_dict=True, **kwargs
+            ).pooler_output
             video_embeds = torch.cat(video_embeds, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
             _, video_mask = self.get_placeholder_mask(input_ids, inputs_embeds, video_features=video_embeds)
             inputs_embeds = inputs_embeds.masked_scatter(video_mask, video_embeds)
@@ -482,37 +449,19 @@ class Glm46VModel(Glm46VPreTrainedModel):
         )
 
 
+@auto_docstring
 @dataclass
-@auto_docstring(
-    custom_intro="""
-    Base class for Glm46V causal language model (or autoregressive) outputs.
-    """
-)
-class Glm46VCausalLMOutputWithPast(ModelOutput):
+class Glm46VCausalLMOutputWithPast(CausalLMOutputWithPast):
     r"""
-    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
-        Language modeling loss (for next-token prediction).
-    logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
-        Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
-    past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-        It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
-
-        Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
-        `past_key_values` input) to speed up sequential decoding.
     rope_deltas (`torch.LongTensor` of shape `(batch_size, )`, *optional*):
         The rope index difference between sequence length and multimodal rope.
+        The attribute is deprecated and will be removed in v5.20, use `model.base_model.rope_deltas` instead.
     """
 
-    loss: torch.FloatTensor | None = None
-    logits: torch.FloatTensor | None = None
-    past_key_values: Cache | None = None
-    hidden_states: tuple[torch.FloatTensor] | None = None
-    attentions: tuple[torch.FloatTensor] | None = None
     rope_deltas: torch.LongTensor | None = None
 
 
 class Glm46VForConditionalGeneration(Glm46VPreTrainedModel, GenerationMixin):
-    _checkpoint_conversion_mapping = {}
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
     # Reference: fix gemma3 grad acc #37208
     accepts_loss_kwargs = False
@@ -523,12 +472,6 @@ class Glm46VForConditionalGeneration(Glm46VPreTrainedModel, GenerationMixin):
         self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
 
         self.post_init()
-
-    def get_input_embeddings(self):
-        return self.model.get_input_embeddings()
-
-    def set_input_embeddings(self, value):
-        self.model.set_input_embeddings(value)
 
     @auto_docstring
     def get_video_features(
@@ -543,9 +486,7 @@ class Glm46VForConditionalGeneration(Glm46VPreTrainedModel, GenerationMixin):
         video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
             The temporal, height and width of feature shape of each video in LLM.
         """
-        return self.model.get_video_features(
-            pixel_values_videos=pixel_values_videos, video_grid_thw=video_grid_thw, **kwargs
-        )
+        return self.model.get_video_features(pixel_values_videos, video_grid_thw, **kwargs)
 
     @auto_docstring
     def get_image_features(
@@ -560,8 +501,9 @@ class Glm46VForConditionalGeneration(Glm46VPreTrainedModel, GenerationMixin):
         image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
             The temporal, height and width of feature shape of each image in LLM.
         """
-        return self.model.get_image_features(pixel_values=pixel_values, image_grid_thw=image_grid_thw, **kwargs)
+        return self.model.get_image_features(pixel_values, image_grid_thw, **kwargs)
 
+    @deprecate_kwarg("rope_deltas", version="v5.10")
     @can_return_tuple
     @auto_docstring
     def forward(
@@ -854,8 +796,7 @@ class Glm46VForConditionalGeneration(Glm46VPreTrainedModel, GenerationMixin):
                 if key == "position_ids" and dict_to_expand[key].ndim == 3:
                     dict_to_expand[key] = dict_to_expand[key].repeat_interleave(expand_size, dim=1)
                 elif (
-                    key != "cache_position"
-                    and dict_to_expand[key] is not None
+                    dict_to_expand[key] is not None
                     and isinstance(dict_to_expand[key], torch.Tensor)
                     and key not in visual_keys
                 ):

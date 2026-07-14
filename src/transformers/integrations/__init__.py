@@ -51,6 +51,12 @@ _import_structure = {
     "fbgemm_fp8": ["FbgemmFp8Linear", "FbgemmFp8Llama4TextExperts", "replace_with_fbgemm_fp8_linear"],
     "finegrained_fp8": ["FP8Linear", "replace_with_fp8_linear"],
     "fsdp": ["is_fsdp_enabled", "is_fsdp_managed_module"],
+    "gemma_quant": [
+        "QuantizedEmbedding",
+        "QuantizedLinear",
+        "apply_srq",
+        "replace_with_quant_layers",
+    ],
     "ggml": [
         "GGUF_CONFIG_DEFAULTS_MAPPING",
         "GGUF_CONFIG_MAPPING",
@@ -68,6 +74,7 @@ _import_structure = {
     "hqq": ["prepare_for_hqq_linear"],
     "hub_kernels": [
         "LayerRepository",
+        "kernelize",
         "lazy_load_kernel",
         "register_kernel_mapping",
         "replace_kernel_forward_from_hub",
@@ -84,6 +91,7 @@ _import_structure = {
         "DagsHubCallback",
         "DVCLiveCallback",
         "FlyteCallback",
+        "KubeflowCallback",
         "MLflowCallback",
         "NeptuneCallback",
         "NeptuneMissingConfiguration",
@@ -102,6 +110,7 @@ _import_structure = {
         "is_dvclive_available",
         "is_flyte_deck_standard_available",
         "is_flytekit_available",
+        "is_kubeflow_available",
         "is_mlflow_available",
         "is_neptune_available",
         "is_optuna_available",
@@ -208,6 +217,12 @@ if TYPE_CHECKING:
     from .fbgemm_fp8 import FbgemmFp8Linear, FbgemmFp8Llama4TextExperts, replace_with_fbgemm_fp8_linear
     from .finegrained_fp8 import FP8Linear, replace_with_fp8_linear
     from .fsdp import is_fsdp_enabled, is_fsdp_managed_module
+    from .gemma_quant import (
+        QuantizedEmbedding,
+        QuantizedLinear,
+        apply_srq,
+        replace_with_quant_layers,
+    )
     from .ggml import (
         GGUF_CONFIG_DEFAULTS_MAPPING,
         GGUF_CONFIG_MAPPING,
@@ -220,6 +235,7 @@ if TYPE_CHECKING:
     from .hqq import prepare_for_hqq_linear
     from .hub_kernels import (
         LayerRepository,
+        kernelize,
         lazy_load_kernel,
         register_kernel_mapping,
         replace_kernel_forward_from_hub,
@@ -236,6 +252,7 @@ if TYPE_CHECKING:
         DagsHubCallback,
         DVCLiveCallback,
         FlyteCallback,
+        KubeflowCallback,
         MLflowCallback,
         NeptuneCallback,
         NeptuneMissingConfiguration,
@@ -254,6 +271,7 @@ if TYPE_CHECKING:
         is_dvclive_available,
         is_flyte_deck_standard_available,
         is_flytekit_available,
+        is_kubeflow_available,
         is_mlflow_available,
         is_neptune_available,
         is_optuna_available,

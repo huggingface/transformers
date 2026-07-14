@@ -15,7 +15,7 @@ limitations under the License.
 ⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2016-07-01 and added to Hugging Face Transformers on 2025-09-12.*
+*This model was published in HF papers on 2016-07-01 and contributed to Hugging Face Transformers on 2025-09-12.*
 
 # VaultGemma
 
@@ -47,10 +47,10 @@ command line.
 ```python
 from transformers import pipeline
 
+
 pipe = pipeline(
     task="text-generation",
     model="google/vaultgemma-1b",
-    dtype="auto",
     device_map="auto",
 )
 
@@ -65,11 +65,12 @@ print(response)
 
 ```python
 # pip install accelerate
-from transformers import AutoTokenizer, AutoModelForCausalLM
+from transformers import AutoModelForCausalLM, AutoTokenizer
+
 
 model_id = "google/vaultgemma-1b"
 tokenizer = AutoTokenizer.from_pretrained(model_id)
-model = AutoModelForCausalLM.from_pretrained(model_id, device_map="auto", dtype="auto")
+model = AutoModelForCausalLM.from_pretrained(model_id, device_map="auto")
 
 text = "Tell me an unknown interesting biology fact about the brain."
 input_ids = tokenizer(text, return_tensors="pt").to(model.device)

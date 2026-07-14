@@ -16,11 +16,12 @@ from collections.abc import Callable
 
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
+from huggingface_hub.dataclasses import strict
 
 from ...modeling_outputs import BaseModelOutputWithPooling
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...utils import auto_docstring
+from ...vision_utils import get_vision_cu_seqlens, get_vision_position_ids
 from ..glm4v.configuration_glm4v import Glm4vConfig, Glm4vTextConfig, Glm4vVisionConfig
 from ..glm4v.modeling_glm4v import (
     Glm4vForConditionalGeneration,
@@ -53,23 +54,17 @@ class GlmOcrVisionMlp(Glm4VisionMlp):
 
 
 @auto_docstring(checkpoint="zai-org/GLM-OCR")
+@strict
 class GlmOcrVisionConfig(Glm4vVisionConfig):
-    def __init__(
-        self,
-        depth=24,
-        hidden_size=1024,
-        hidden_act="silu",
-        attention_bias=True,
-        num_heads=16,
-        image_size=336,
-        out_hidden_size=1536,
-        intermediate_size=4096,
-        **super_kwargs,
-    ):
-        super().__init__(**super_kwargs)
+    hidden_size: int = 1024
+    attention_bias: bool = True
+    num_heads: int = 16
+    out_hidden_size: int = 1536
+    intermediate_size: int = 4096
 
 
 @auto_docstring(checkpoint="zai-org/GLM-OCR")
+@strict
 class GlmOcrTextConfig(Glm4vTextConfig):
     r"""
     Example:
@@ -87,21 +82,17 @@ class GlmOcrTextConfig(Glm4vTextConfig):
     >>> configuration = model.config
     ```"""
 
-    def __init__(
-        self,
-        vocab_size: int | None = 59392,
-        hidden_size: int | None = 1024,
-        intermediate_size: int | None = 4096,
-        num_hidden_layers: int | None = 16,
-        num_attention_heads: int | None = 16,
-        num_key_value_heads: int | None = 8,
-        max_position_embeddings: int | None = 131072,
-        **super_kwargs,
-    ):
-        super().__init__(**super_kwargs)
+    vocab_size: int = 59392
+    hidden_size: int = 1024
+    intermediate_size: int = 4096
+    num_hidden_layers: int = 16
+    num_attention_heads: int = 16
+    num_key_value_heads: int = 8
+    max_position_embeddings: int = 131072
 
 
 @auto_docstring(checkpoint="zai-org/GLM-OCR")
+@strict
 class GlmOcrConfig(Glm4vConfig):
     r"""
     image_start_token_id (`int`, *optional*, defaults to 59256):
@@ -126,20 +117,12 @@ class GlmOcrConfig(Glm4vConfig):
     >>> configuration = model.config
     ```"""
 
-    def __init__(
-        self,
-        text_config=None,
-        vision_config=None,
-        image_token_id=59280,
-        video_token_id=59281,
-        image_start_token_id=59256,
-        image_end_token_id=59257,
-        video_start_token_id=59258,
-        video_end_token_id=59259,
-        tie_word_embeddings=False,
-        **super_kwargs,
-    ):
-        super().__init__(**super_kwargs)
+    image_token_id: int = 59280
+    video_token_id: int = 59281
+    image_start_token_id: int = 59256
+    image_end_token_id: int = 59257
+    video_start_token_id: int = 59258
+    video_end_token_id: int = 59259
 
 
 class GlmOcrTextAttention(Glm4vTextAttention, nn.Module):
@@ -175,7 +158,6 @@ class GlmOcrVisionAttention(Glm4vVisionAttention):
         self,
         hidden_states: torch.Tensor,
         cu_seqlens: torch.Tensor,
-        rotary_pos_emb: torch.Tensor | None = None,
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         **kwargs,
     ) -> torch.Tensor:
@@ -264,7 +246,12 @@ class GlmOcrVisionModel(Glm4vVisionModel):
             hidden_act=config.hidden_act,
         )
 
-    def forward(self, hidden_states: torch.Tensor, grid_thw: torch.Tensor, **kwargs) -> torch.Tensor:
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        grid_thw: torch.Tensor,
+        **kwargs,
+    ) -> torch.Tensor:
         r"""
         hidden_states (`torch.Tensor` of shape `(seq_len, hidden_size)`):
             The final hidden states of the model.
@@ -274,20 +261,13 @@ class GlmOcrVisionModel(Glm4vVisionModel):
         Returns:
             `torch.Tensor`: hidden_states.
         """
-        hidden_states = self.patch_embed(hidden_states)
-        rotary_pos_emb, image_type_ids = self.rot_pos_emb(grid_thw)
-        emb = torch.cat((rotary_pos_emb, rotary_pos_emb), dim=-1)
-        position_embeddings = (emb.cos(), emb.sin())
+        position_ids = get_vision_position_ids(grid_thw, self.spatial_merge_size, kwargs=kwargs)
+        cu_seqlens = get_vision_cu_seqlens(grid_thw, kwargs=kwargs)
 
-        cu_seqlens = torch.repeat_interleave(grid_thw[:, 1] * grid_thw[:, 2], grid_thw[:, 0]).cumsum(
-            dim=0,
-            # Select dtype based on the following factors:
-            #  - FA2 requires that cu_seqlens_q must have dtype int32
-            #  - torch.onnx.export requires that cu_seqlens_q must have same dtype as grid_thw
-            # See https://github.com/huggingface/transformers/pull/34852 for more information
-            dtype=grid_thw.dtype if torch.jit.is_tracing() else torch.int32,
-        )
-        cu_seqlens = F.pad(cu_seqlens, (1, 0), value=0)
+        hidden_states = self.patch_embed(hidden_states)
+        rotary_emb = self.rotary_pos_emb(position_ids)
+        emb = torch.cat((rotary_emb, rotary_emb), dim=-1)
+        position_embeddings = (emb.cos(), emb.sin())
 
         for blk in self.blocks:
             hidden_states = blk(

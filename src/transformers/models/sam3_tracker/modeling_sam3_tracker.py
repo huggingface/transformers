@@ -18,6 +18,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+
 from collections.abc import Callable
 from dataclasses import dataclass
 
@@ -43,8 +44,8 @@ from .configuration_sam3_tracker import Sam3TrackerConfig, Sam3TrackerMaskDecode
 logger = logging.get_logger(__name__)
 
 
-@dataclass
 @auto_docstring(custom_intro="Base class for the Sam3Tracker model's output.")
+@dataclass
 class Sam3TrackerImageSegmentationOutput(ModelOutput):
     r"""
     iou_scores (`torch.FloatTensor` of shape `(batch_size, point_batch_size, num_masks)`):
@@ -484,8 +485,8 @@ class Sam3TrackerTwoWayTransformer(nn.Module):
         if image_embeddings is None:
             raise ValueError("You have to specify an image_embedding")
 
-        image_embeddings = image_embeddings.flatten(2).permute(0, 2, 1).unsqueeze(1)
-        image_positional_embeddings = image_positional_embeddings.flatten(2).permute(0, 2, 1).unsqueeze(1)
+        image_embeddings = image_embeddings.flatten(2).transpose(1, 2).unsqueeze(1)
+        image_positional_embeddings = image_positional_embeddings.flatten(2).transpose(1, 2).unsqueeze(1)
 
         # Prepare queries
         queries = point_embeddings
@@ -744,20 +745,12 @@ class Sam3TrackerMaskDecoder(nn.Module):
         return mask_logits_out, iou_scores_out
 
 
-@dataclass
 @auto_docstring(custom_intro="Base class for the vision encoder's outputs.")
+@dataclass
 class Sam3TrackerVisionEncoderOutput(BaseModelOutputWithPooling):
     r"""
     last_hidden_state (`torch.FloatTensor` of shape `(batch_size, height, width, hidden_size)`):
         Sequence of hidden-states at the output of the last layer of the model.
-    hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-        Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
-        one for the output of each stage) of shape `(batch_size, height, width, hidden_size)`. Hidden-states of the
-        model at the output of each stage.
-    attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-        Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-        sequence_length)`. Attentions weights after the attention softmax, used to compute the weighted average in
-        the self-attention heads.
     fpn_hidden_states (`tuple(torch.FloatTensor)`):
         Tuple of `torch.FloatTensor` (one for each feature level, from high to low resolution) of shape
         `(batch_size, hidden_size, height, width)`. Feature maps from the Feature Pyramid Network neck.
@@ -780,11 +773,7 @@ class Sam3TrackerModel(Sam3TrackerPreTrainedModel):
     input_modalities = ("image", "text")
     _can_record_outputs = {"mask_decoder_attentions": OutputRecorder(Sam3TrackerTwoWayAttentionBlock, index=2)}
     _tied_weights_keys = {}
-    _checkpoint_conversion_mapping = {
-        r"tracker_model.(.+)": r"\1",  # the regex allows to remove the prefix, and add it back in revert mode
-        "detector_model.vision_encoder.backbone.": "vision_encoder.backbone.",
-        "tracker_neck.": "vision_encoder.neck.",
-    }
+    _base_model_prefix = "tracker_model"
     _keys_to_ignore_on_load_unexpected = [
         r"^detector_model.",
         r"^memory_.*",
@@ -1097,8 +1086,8 @@ class Sam3TrackerModel(Sam3TrackerPreTrainedModel):
         # flatten NxCxHxW to HWxNxC
         feature_maps = [feature_map.flatten(2).permute(2, 0, 1) for feature_map in feature_maps]
         feature_maps_position_embeddings = [
-            feature_map_position_embedding.flatten(2).permute(2, 0, 1)
-            for feature_map_position_embedding in feature_maps_position_embeddings
+            feature_maps_position_embeddings.flatten(2).permute(2, 0, 1)
+            for feature_maps_position_embeddings in feature_maps_position_embeddings
         ]
         vision_outputs.fpn_hidden_states = feature_maps
         vision_outputs.fpn_position_encoding = feature_maps_position_embeddings

@@ -18,8 +18,8 @@ import torch
 from torch import nn
 
 from ... import initialization as init
-from ...cache_utils import Cache
-from ...masking_utils import create_causal_mask
+from ...cache_utils import Cache, DynamicCache
+from ...masking_utils import create_causal_mask, create_recurrent_attention_mask
 from ...modeling_outputs import BaseModelOutputWithPast, MoeModelOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
@@ -27,7 +27,7 @@ from ...utils import TransformersKwargs, auto_docstring, logging
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..bamba.configuration_bamba import BambaConfig
-from ..bamba.modeling_bamba import BambaMixer, BambaRMSNormGated, HybridMambaAttentionDynamicCache
+from ..bamba.modeling_bamba import BambaMixer, BambaRMSNormGated
 from ..gemma2.modeling_gemma2 import Gemma2RotaryEmbedding
 from ..granitemoeshared.modeling_granitemoeshared import (
     GraniteFlashAttentionKwargs,
@@ -48,15 +48,16 @@ logger = logging.get_logger(__name__)
 
 
 class GraniteMoeHybridAttention(GraniteMoeSharedAttention):
-    def __init__(self, config: GraniteMoeHybridConfig, layer_idx: int):
-        super().__init__(config, layer_idx)
+    """Hybrid variant that handles ``position_embeddings is None`` — granitemoe-hybrid configs can
+    opt out of RoPE via ``position_embedding_type=None``, in which case the model passes ``None``
+    instead of a ``(cos, sin)`` tuple."""
 
-    def forward(  # FIME: @ARTHUR this forward is also classic: attention nope
+    def forward(
         self,
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor | None,
         past_key_values: Cache | None = None,
-        position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,  # None or rope embeddings
+        position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor]:
         input_shape = hidden_states.shape[:-1]
@@ -76,7 +77,6 @@ class GraniteMoeHybridAttention(GraniteMoeSharedAttention):
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
         )
-
         attn_output, attn_weights = attention_interface(
             self,
             query_states,
@@ -87,7 +87,6 @@ class GraniteMoeHybridAttention(GraniteMoeSharedAttention):
             scaling=self.scaling,
             **kwargs,
         )
-
         attn_output = attn_output.reshape(*input_shape, -1).contiguous()
         attn_output = self.o_proj(attn_output)
         return attn_output, attn_weights
@@ -124,11 +123,11 @@ class GraniteMoeHybridDecoderLayer(GraniteMoeSharedDecoderLayer):
         self.self_attn = None
         self.mamba = None
 
-        if config.layers_block_type[layer_idx] == "mamba":
+        if config.layers_block_type[layer_idx] == "linear_attention":
             self.mamba = GraniteMoeHybridMambaLayer(config, layer_idx)
         else:
             self.self_attn = GraniteMoeHybridAttention(config, layer_idx)
-        self.layer_type = config.layers_block_type[layer_idx]
+        self.block_type = config.layers_block_type[layer_idx]
 
         # Allow non-MoE (dense)
         self.block_sparse_moe = GraniteMoeHybridMoE(config) if config.num_local_experts > 0 else None
@@ -226,18 +225,27 @@ class GraniteMoeHybridModel(GraniteMoeSharedModel):
 
         inputs_embeds = inputs_embeds * self.embedding_multiplier
 
+        if use_cache and past_key_values is None:
+            past_key_values = DynamicCache(config=self.config)
+
         if position_ids is None:
             past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
             position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
             position_ids = position_ids.unsqueeze(0)
 
-        causal_mask = create_causal_mask(
-            config=self.config,
-            inputs_embeds=inputs_embeds,
-            attention_mask=attention_mask,
-            past_key_values=past_key_values,
-        )
-        mamba_mask = self._update_mamba_mask(attention_mask, past_key_values)
+        if not isinstance(causal_mask_mapping := attention_mask, dict):
+            # Prepare mask arguments
+            mask_kwargs = {
+                "config": self.config,
+                "inputs_embeds": inputs_embeds,
+                "attention_mask": attention_mask,
+                "past_key_values": past_key_values,
+            }
+            # Create the masks
+            causal_mask_mapping = {
+                "full_attention": create_causal_mask(**mask_kwargs),
+                "linear_attention": create_recurrent_attention_mask(**mask_kwargs),
+            }
 
         # embed positions
         hidden_states = inputs_embeds
@@ -245,13 +253,10 @@ class GraniteMoeHybridModel(GraniteMoeSharedModel):
         if self.rotary_emb is not None:
             position_embeddings = self.rotary_emb(hidden_states, position_ids)
 
-        for decoder_layer in self.layers:
-            # Depending on the layer type we opt for 2D base attention mask (Mamba) or 4D causal mask (Attention)
-            layer_mask = mamba_mask if decoder_layer.layer_type == "mamba" else causal_mask
-
+        for i, decoder_layer in enumerate(self.layers):
             hidden_states = decoder_layer(
                 hidden_states,
-                attention_mask=layer_mask,
+                attention_mask=causal_mask_mapping[self.config.layers_block_type[i]],
                 past_key_values=past_key_values,
                 use_cache=use_cache,
                 position_embeddings=position_embeddings,
@@ -259,26 +264,10 @@ class GraniteMoeHybridModel(GraniteMoeSharedModel):
             )
         hidden_states = self.norm(hidden_states)
 
-        if past_key_values and not past_key_values.has_previous_state:
-            past_key_values.has_previous_state = True
-
         return MoeModelOutputWithPast(
             last_hidden_state=hidden_states,
             past_key_values=past_key_values,
         )
-
-    def _update_mamba_mask(self, attention_mask, past_key_values):
-        """
-        No need for zeroing states when
-            1. Cached forward
-            2. Attending to all inputs
-        """
-        mamba_mask = attention_mask
-        if (past_key_values is not None and past_key_values.has_previous_state) or (
-            attention_mask is not None and torch.all(attention_mask == 1)
-        ):
-            mamba_mask = None
-        return mamba_mask
 
 
 class GraniteMoeHybridForCausalLM(GraniteMoeSharedForCausalLM):
@@ -314,37 +303,6 @@ class GraniteMoeHybridForCausalLM(GraniteMoeSharedForCausalLM):
         "Hey, are you conscious? Can you talk to me?\nI'm not conscious, but I can talk to you."
         ```"""
         return super().forward(**super_kwargs)
-
-    def prepare_inputs_for_generation(
-        self,
-        input_ids,
-        past_key_values=None,
-        attention_mask=None,
-        inputs_embeds=None,
-        position_ids=None,
-        use_cache=True,
-        is_first_iteration=False,
-        **kwargs,
-    ):
-        # Overwritten -- has a unique cache type, `HybridMambaAttentionDynamicCache`
-
-        if past_key_values is None and use_cache:
-            past_key_values = HybridMambaAttentionDynamicCache(
-                self.config, input_ids.shape[0], self.dtype, device=self.device
-            )
-
-        model_inputs = super().prepare_inputs_for_generation(
-            input_ids,
-            past_key_values=past_key_values,
-            attention_mask=attention_mask,
-            inputs_embeds=inputs_embeds,
-            position_ids=position_ids,
-            use_cache=use_cache,
-            is_first_iteration=is_first_iteration,
-            **kwargs,
-        )
-
-        return model_inputs
 
 
 __all__ = ["GraniteMoeHybridForCausalLM", "GraniteMoeHybridModel", "GraniteMoeHybridPreTrainedModel"]

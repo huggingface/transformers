@@ -17,21 +17,14 @@ import unittest
 
 from datasets import load_dataset
 
-from transformers.file_utils import is_torch_available, is_vision_available
+from transformers.file_utils import is_torch_available
 from transformers.testing_utils import require_torch, require_vision
-from transformers.utils import is_torchvision_available
 
 from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
 
 
 if is_torch_available():
     import torch
-
-if is_vision_available():
-    from transformers import SamImageProcessor
-
-    if is_torchvision_available():
-        from transformers import SamImageProcessorFast
 
 
 class SamImageProcessingTester:
@@ -117,9 +110,6 @@ def prepare_semantic_batch_inputs():
 @require_torch
 @require_vision
 class SamImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
-    image_processing_class = SamImageProcessor if is_vision_available() else None
-    fast_image_processing_class = SamImageProcessorFast if is_torchvision_available() else None
-
     def setUp(self):
         super().setUp()
         self.image_processor_tester = SamImageProcessingTester(self)
@@ -129,7 +119,7 @@ class SamImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         return self.image_processor_tester.prepare_image_processor_dict()
 
     def test_image_processor_properties(self):
-        for image_processing_class in self.image_processor_list:
+        for image_processing_class in self.image_processing_classes.values():
             image_processing = image_processing_class(**self.image_processor_dict)
             self.assertTrue(hasattr(image_processing, "image_mean"))
             self.assertTrue(hasattr(image_processing, "image_std"))
@@ -144,7 +134,7 @@ class SamImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             self.assertTrue(hasattr(image_processing, "mask_pad_size"))
 
     def test_image_processor_from_dict_with_kwargs(self):
-        for image_processing_class in self.image_processor_list:
+        for image_processing_class in self.image_processing_classes.values():
             image_processing_class = image_processing_class(**self.image_processor_dict)
             image_processor = image_processing_class.from_dict(self.image_processor_dict)
             self.assertEqual(image_processor.size, {"longest_edge": 20})
@@ -153,7 +143,7 @@ class SamImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             self.assertEqual(image_processor.size, {"longest_edge": 42})
 
     def test_call_segmentation_maps(self):
-        for image_processing_class in self.image_processor_list:
+        for image_processing_class in self.image_processing_classes.values():
             # Initialize image_processor
             image_processor = image_processing_class(**self.image_processor_dict)
             # create random PyTorch tensors
@@ -259,43 +249,58 @@ class SamImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             self.assertTrue(encoding["labels"].min().item() >= 0)
             self.assertTrue(encoding["labels"].max().item() <= 255)
 
-    def test_slow_fast_equivalence(self):
-        if not self.test_slow_image_processor or not self.test_fast_image_processor:
-            self.skipTest(reason="Skipping slow/fast equivalence test")
-
-        if self.image_processing_class is None or self.fast_image_processing_class is None:
-            self.skipTest(reason="Skipping slow/fast equivalence test as one of the image processors is not defined")
+    def test_backends_equivalence(self):
+        """Override base class test to also compare segmentation labels."""
+        if len(self.image_processing_classes) < 2:
+            self.skipTest(reason="Skipping backends equivalence test as there are less than 2 backends")
 
         dummy_image, dummy_map = prepare_semantic_single_inputs()
 
-        image_processor_slow = self.image_processing_class(**self.image_processor_dict)
-        image_processor_fast = self.fast_image_processing_class(**self.image_processor_dict)
+        encodings = {}
+        for backend_name, image_processing_class in self.image_processing_classes.items():
+            image_processor = image_processing_class(**self.image_processor_dict)
+            encodings[backend_name] = image_processor(dummy_image, segmentation_maps=dummy_map, return_tensors="pt")
 
-        image_encoding_slow = image_processor_slow(dummy_image, segmentation_maps=dummy_map, return_tensors="pt")
-        image_encoding_fast = image_processor_fast(dummy_image, segmentation_maps=dummy_map, return_tensors="pt")
+        backend_names = list(encodings.keys())
+        reference_backend = backend_names[0]
+        for backend_name in backend_names[1:]:
+            self._assert_tensors_equivalence(
+                encodings[reference_backend].pixel_values, encodings[backend_name].pixel_values, atol=1e-1
+            )
+            self.assertLessEqual(
+                torch.mean(
+                    torch.abs(encodings[reference_backend].pixel_values - encodings[backend_name].pixel_values)
+                ).item(),
+                1e-3,
+            )
+            self._assert_tensors_equivalence(
+                encodings[reference_backend].labels.float(), encodings[backend_name].labels.float(), atol=1e-1
+            )
 
-        self.assertTrue(torch.allclose(image_encoding_slow.pixel_values, image_encoding_fast.pixel_values, atol=1e-1))
-        self.assertLessEqual(
-            torch.mean(torch.abs(image_encoding_slow.pixel_values - image_encoding_fast.pixel_values)).item(), 1e-3
-        )
-        self.assertTrue(torch.allclose(image_encoding_slow.labels, image_encoding_fast.labels, atol=1e-1))
-
-    def test_slow_fast_equivalence_batched(self):
-        if not self.test_slow_image_processor or not self.test_fast_image_processor:
-            self.skipTest(reason="Skipping slow/fast equivalence test")
-
-        if self.image_processing_class is None or self.fast_image_processing_class is None:
-            self.skipTest(reason="Skipping slow/fast equivalence test as one of the image processors is not defined")
+    def test_backends_equivalence_batched(self):
+        """Override base class test to also compare segmentation labels."""
+        if len(self.image_processing_classes) < 2:
+            self.skipTest(reason="Skipping backends equivalence test as there are less than 2 backends")
 
         dummy_images, dummy_maps = prepare_semantic_batch_inputs()
 
-        image_processor_slow = self.image_processing_class(**self.image_processor_dict)
-        image_processor_fast = self.fast_image_processing_class(**self.image_processor_dict)
+        encodings = {}
+        for backend_name, image_processing_class in self.image_processing_classes.items():
+            image_processor = image_processing_class(**self.image_processor_dict)
+            encodings[backend_name] = image_processor(dummy_images, segmentation_maps=dummy_maps, return_tensors="pt")
 
-        encoding_slow = image_processor_slow(dummy_images, segmentation_maps=dummy_maps, return_tensors="pt")
-        encoding_fast = image_processor_fast(dummy_images, segmentation_maps=dummy_maps, return_tensors="pt")
-
-        self.assertTrue(torch.allclose(encoding_slow.pixel_values, encoding_fast.pixel_values, atol=1e-1))
-        self.assertLessEqual(
-            torch.mean(torch.abs(encoding_slow.pixel_values - encoding_fast.pixel_values)).item(), 1e-3
-        )
+        backend_names = list(encodings.keys())
+        reference_backend = backend_names[0]
+        for backend_name in backend_names[1:]:
+            self._assert_tensors_equivalence(
+                encodings[reference_backend].pixel_values, encodings[backend_name].pixel_values, atol=1e-1
+            )
+            self.assertLessEqual(
+                torch.mean(
+                    torch.abs(encodings[reference_backend].pixel_values - encodings[backend_name].pixel_values)
+                ).item(),
+                1e-3,
+            )
+            self._assert_tensors_equivalence(
+                encodings[reference_backend].labels.float(), encodings[backend_name].labels.float(), atol=1e-1
+            )

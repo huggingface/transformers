@@ -98,9 +98,7 @@ class ModernBertRotaryEmbedding(nn.Module):
         super().__init__()
         self.max_seq_len_cached = config.max_position_embeddings
         self.original_max_seq_len = config.max_position_embeddings
-
         self.config = config
-
         self.layer_types = list(set(config.layer_types))
         self.rope_type = {}
         for layer_type in self.layer_types:
@@ -112,7 +110,7 @@ class ModernBertRotaryEmbedding(nn.Module):
             rope_init_fn: Callable = self.compute_default_rope_parameters
             if self.rope_type[layer_type] != "default":
                 rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type[layer_type]]
-            curr_inv_freq, curr_attention_scaling = rope_init_fn(self.config, device, layer_type=layer_type)
+            curr_inv_freq, curr_attention_scaling = rope_init_fn(self.config, layer_type=layer_type)
             self.register_buffer(f"{layer_type}_inv_freq", curr_inv_freq, persistent=False)
             self.register_buffer(f"{layer_type}_original_inv_freq", curr_inv_freq.clone(), persistent=False)
             setattr(self, f"{layer_type}_attention_scaling", curr_attention_scaling)
@@ -288,9 +286,9 @@ class ModernBertAttention(nn.Module):
         cos, sin = position_embeddings
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, unsqueeze_dim=1)
 
-        attention_interface = eager_attention_forward
-        if self.config._attn_implementation != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
 
         attn_output, attn_weights = attention_interface(
             self,
@@ -360,6 +358,7 @@ class ModernBertPreTrainedModel(PreTrainedModel):
 
     @torch.no_grad()
     def _init_weights(self, module: nn.Module):
+        super()._init_weights(module)
         cutoff_factor = self.config.initializer_cutoff_factor
         if cutoff_factor is None:
             cutoff_factor = 3
@@ -406,10 +405,6 @@ class ModernBertPreTrainedModel(PreTrainedModel):
             ),
         ):
             init_weight(module.classifier, stds["final_out"])
-        elif isinstance(module, nn.LayerNorm):
-            init.ones_(module.weight)
-            if module.bias is not None:
-                init.zeros_(module.bias)
         elif isinstance(module, ModernBertRotaryEmbedding):
             for layer_type in module.layer_types:
                 rope_init_fn = module.compute_default_rope_parameters
@@ -474,7 +469,7 @@ class ModernBertModel(ModernBertPreTrainedModel):
             }
 
         position_embeddings = {}
-        for layer_type in self.config.layer_types:
+        for layer_type in set(self.config.layer_types):
             position_embeddings[layer_type] = self.rotary_emb(hidden_states, position_ids, layer_type)
 
         for encoder_layer in self.layers:

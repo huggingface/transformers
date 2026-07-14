@@ -95,9 +95,7 @@ class ModernBertDecoderRotaryEmbedding(nn.Module):
         super().__init__()
         self.max_seq_len_cached = config.max_position_embeddings
         self.original_max_seq_len = config.max_position_embeddings
-
         self.config = config
-
         self.layer_types = list(set(config.layer_types))
         self.rope_type = {}
         for layer_type in self.layer_types:
@@ -109,7 +107,7 @@ class ModernBertDecoderRotaryEmbedding(nn.Module):
             rope_init_fn: Callable = self.compute_default_rope_parameters
             if self.rope_type[layer_type] != "default":
                 rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type[layer_type]]
-            curr_inv_freq, curr_attention_scaling = rope_init_fn(self.config, device, layer_type=layer_type)
+            curr_inv_freq, curr_attention_scaling = rope_init_fn(self.config, layer_type=layer_type)
             self.register_buffer(f"{layer_type}_inv_freq", curr_inv_freq, persistent=False)
             self.register_buffer(f"{layer_type}_original_inv_freq", curr_inv_freq.clone(), persistent=False)
             setattr(self, f"{layer_type}_attention_scaling", curr_attention_scaling)
@@ -209,7 +207,7 @@ def eager_attention_forward(
     key: torch.Tensor,
     value: torch.Tensor,
     attention_mask: torch.Tensor | None,
-    dropout: float = 0.0,
+    dropout: float | int = 0.0,
     scaling: float | None = None,
     sliding_window: int | None = None,
     **kwargs,
@@ -312,7 +310,6 @@ class ModernBertDecoderLayer(GradientCheckpointingLayer):
         super().__init__()
         self.config = config
         self.layer_idx = layer_idx
-        self.attention_type = config.layer_types[layer_idx]
         self.attn_norm = (
             nn.LayerNorm(config.hidden_size, eps=config.norm_eps, bias=config.norm_bias)
             if layer_idx != 0
@@ -384,6 +381,8 @@ class ModernBertDecoderPreTrainedModel(PreTrainedModel):
 
     @torch.no_grad()
     def _init_weights(self, module: nn.Module):
+        super()._init_weights(module)
+
         cutoff_factor = self.config.initializer_cutoff_factor
         if cutoff_factor is None:
             cutoff_factor = 3
@@ -424,10 +423,6 @@ class ModernBertDecoderPreTrainedModel(PreTrainedModel):
             init_weight(module.classifier, stds["final_out"])
         elif isinstance(module, ModernBertDecoderForCausalLM):
             init_weight(module.decoder, stds["out"])
-        elif isinstance(module, nn.LayerNorm):
-            init.ones_(module.weight)
-            if module.bias is not None:
-                init.zeros_(module.bias)
         elif isinstance(module, ModernBertDecoderRotaryEmbedding):
             for layer_type in module.layer_types:
                 rope_init_fn = module.compute_default_rope_parameters
@@ -505,14 +500,14 @@ class ModernBertDecoderModel(ModernBertDecoderPreTrainedModel):
             }
 
         position_embeddings = {}
-        for layer_type in self.config.layer_types:
+        for layer_type in set(self.config.layer_types):
             position_embeddings[layer_type] = self.rotary_emb(hidden_states, position_ids, layer_type)
 
-        for decoder_layer in self.layers:
+        for i, decoder_layer in enumerate(self.layers):
             hidden_states = decoder_layer(
                 hidden_states,
-                attention_mask=causal_mask_mapping[decoder_layer.attention_type],
-                position_embeddings=position_embeddings[decoder_layer.attention_type],
+                attention_mask=causal_mask_mapping[self.config.layer_types[i]],
+                position_embeddings=position_embeddings[self.config.layer_types[i]],
                 past_key_values=past_key_values,
                 position_ids=position_ids,
                 **kwargs,

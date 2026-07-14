@@ -72,7 +72,7 @@ def simple_eager_attention_forward(
     value_states: torch.Tensor,
     attention_mask: torch.Tensor | None,
     scaling: float,
-    dropout: float = 0.0,
+    dropout: float | int = 0.0,
     **kwargs: Unpack[TransformersKwargs],
 ):
     attn_weights = torch.matmul(query_states, key_states.transpose(2, 3)) * scaling
@@ -228,6 +228,7 @@ class Phi4MultimodalVisionPreTrainedModel(PreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
+        super()._init_weights(module)
         if isinstance(module, Phi4MultimodalVisionEmbeddings):
             width = (
                 self.config.hidden_size
@@ -259,9 +260,6 @@ class Phi4MultimodalVisionPreTrainedModel(PreTrainedModel):
             init.lecun_normal_(module.weight)
             if module.bias is not None:
                 init.zeros_(module.bias)
-        elif isinstance(module, nn.LayerNorm):
-            init.zeros_(module.bias)
-            init.ones_(module.weight)
 
 
 class Phi4MultimodalVisionEmbeddings(nn.Module):

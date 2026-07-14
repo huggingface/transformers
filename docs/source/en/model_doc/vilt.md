@@ -13,13 +13,10 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2021-02-05 and added to Hugging Face Transformers on 2022-01-19.*
+*This model was published in HF papers on 2021-02-05 and contributed to Hugging Face Transformers on 2022-01-19.*
 
 # ViLT
 
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-</div>
 
 ## Overview
 
@@ -67,9 +64,9 @@ This model was contributed by [nielsr](https://huggingface.co/nielsr). The origi
 [[autodoc]] ViltImageProcessor
     - preprocess
 
-## ViltImageProcessorFast
+## ViltImageProcessorPil
 
-[[autodoc]] ViltImageProcessorFast
+[[autodoc]] ViltImageProcessorPil
     - preprocess
 
 ## ViltProcessor

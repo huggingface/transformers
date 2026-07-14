@@ -27,7 +27,6 @@ from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
-from ...integrations import use_kernel_forward_from_hub
 from ...masking_utils import create_causal_mask, create_chunked_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
@@ -153,7 +152,7 @@ class Llama4Router(nn.Linear):
         return router_scores, router_logits
 
 
-@use_kernel_forward_from_hub("Llama4TextMoe")
+# @use_kernel_forward_from_hub("Llama4TextMoe")
 class Llama4TextMoe(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -415,7 +414,6 @@ class Llama4TextDecoderLayer(GradientCheckpointingLayer):
         super().__init__()
         self.hidden_size = config.hidden_size
         self.layer_idx = layer_idx
-        self.attention_type = config.layer_types[layer_idx]
         self.self_attn = Llama4TextAttention(config, layer_idx)
         self.is_moe_layer = layer_idx in config.moe_layers
         if self.is_moe_layer:  # the 128E model interleaves dense / sparse
@@ -569,10 +567,10 @@ class Llama4TextModel(Llama4PreTrainedModel):
         # create position embeddings to be shared across the decoder layers
         freq_cis = self.rotary_emb(hidden_states, position_ids)
 
-        for decoder_layer in self.layers[: self.config.num_hidden_layers]:
+        for i, decoder_layer in enumerate(self.layers[: self.config.num_hidden_layers]):
             hidden_states = decoder_layer(
                 hidden_states,
-                attention_mask=causal_mask_mapping[decoder_layer.attention_type],
+                attention_mask=causal_mask_mapping[self.config.layer_types[i]],
                 position_ids=position_ids,
                 past_key_values=past_key_values,
                 use_cache=use_cache,
@@ -666,12 +664,12 @@ class Llama4ForCausalLM(Llama4PreTrainedModel, GenerationMixin):
         )
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for Llava causal language model (or autoregressive) outputs.
     """
 )
+@dataclass
 class Llama4CausalLMOutputWithPast(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
@@ -949,7 +947,7 @@ class Llama4VisionEncoder(nn.Module):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         encoder_states = () if output_hidden_states else None
         all_attentions = () if output_attentions else None
@@ -1105,7 +1103,7 @@ class Llama4VisionModel(Llama4PreTrainedModel):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         # num_concurrent_media and num_chunks are both currently 1
         batch_size_times_num_tiles, num_channels, height, width = pixel_values.shape
@@ -1188,12 +1186,6 @@ class Llama4ForConditionalGeneration(Llama4PreTrainedModel, GenerationMixin):
 
         self.post_init()
 
-    def get_input_embeddings(self):
-        return self.language_model.get_input_embeddings()
-
-    def set_input_embeddings(self, value):
-        self.language_model.set_input_embeddings(value)
-
     def get_output_embeddings(self):
         return self.language_model.get_output_embeddings()
 
@@ -1241,9 +1233,9 @@ class Llama4ForConditionalGeneration(Llama4PreTrainedModel, GenerationMixin):
             special_image_mask = input_ids == self.config.image_token_id
 
         n_image_tokens = special_image_mask.sum()
-        special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
+        special_image_mask = special_image_mask.unsqueeze(-1).to(inputs_embeds.device)
         torch_compilable_check(
-            inputs_embeds[special_image_mask].numel() == image_features.numel(),
+            n_image_tokens * inputs_embeds.shape[-1] == image_features.numel(),
             f"Image features and image tokens do not match, tokens: {n_image_tokens}, features: {image_features.shape[0]}",
         )
         return special_image_mask
@@ -1302,7 +1294,7 @@ class Llama4ForConditionalGeneration(Llama4PreTrainedModel, GenerationMixin):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")

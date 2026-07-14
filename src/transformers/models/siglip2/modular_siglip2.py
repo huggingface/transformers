@@ -12,9 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from huggingface_hub.dataclasses import strict
 from tokenizers import normalizers
 
 from transformers.models.gemma.tokenization_gemma import GemmaTokenizer
@@ -32,7 +34,6 @@ from transformers.models.siglip.modeling_siglip import (
     SiglipTextModelOutput,
     SiglipVisionModel,
     SiglipVisionModelOutput,
-    SiglipVisionTransformer,
 )
 
 from ...masking_utils import create_bidirectional_mask
@@ -83,11 +84,13 @@ class Siglip2Tokenizer(GemmaTokenizer):
 
 
 @auto_docstring(checkpoint="google/siglip2-base-patch16-naflex")
+@strict
 class Siglip2TextConfig(SiglipTextConfig):
     pass
 
 
 @auto_docstring(checkpoint="google/siglip2-base-patch16-naflex")
+@strict
 class Siglip2VisionConfig(SiglipVisionConfig):
     r"""
     num_patches (`int`, *optional*, defaults to 256):
@@ -111,26 +114,12 @@ class Siglip2VisionConfig(SiglipVisionConfig):
     >>> configuration = model.config
     ```"""
 
-    def __init__(
-        self,
-        hidden_size=768,
-        intermediate_size=3072,
-        num_hidden_layers=12,
-        num_attention_heads=12,
-        num_channels=3,
-        num_patches=256,
-        patch_size=16,
-        hidden_act="gelu_pytorch_tanh",
-        layer_norm_eps=1e-6,
-        attention_dropout=0.0,
-        **kwargs,
-    ):
-        super().__init__(**kwargs)
-        self.num_patches = num_patches
-        del self.image_size
+    num_patches: int = 256
+    image_size = AttributeError()
 
 
 @auto_docstring(checkpoint="google/siglip2-base-patch16-naflex")
+@strict
 class Siglip2Config(SiglipConfig):
     pass
 
@@ -257,7 +246,7 @@ class Siglip2PreTrainedModel(SiglipPreTrainedModel):
     _supports_flash_attn = False
 
 
-class Siglip2VisionTransformer(SiglipVisionTransformer):
+class Siglip2VisionModel(SiglipVisionModel):
     def __init__(self, config: Siglip2VisionConfig):
         super().__init__(config)
 
@@ -267,20 +256,44 @@ class Siglip2VisionTransformer(SiglipVisionTransformer):
     def forward(
         self,
         pixel_values: torch.FloatTensor,
-        attention_mask: torch.Tensor,
+        pixel_attention_mask: torch.Tensor,
         spatial_shapes: torch.LongTensor,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPooling:
         r"""
+        pixel_attention_mask (`torch.Tensor` of shape `(batch_size, image_size, image_size)`, *optional*):
+            Mask to avoid performing attention on padding pixel indices.
         spatial_shapes (`torch.LongTensor` of shape `(batch_size, 2)`):
             Tensor containing the spatial dimensions (height, width) of the input images.
+
+        Examples:
+
+        ```python
+        >>> import httpx
+        >>> from io import BytesIO
+        >>> from PIL import Image
+        >>> from transformers import AutoProcessor, Siglip2VisionModel
+
+        >>> model = Siglip2VisionModel.from_pretrained("google/siglip2-base-patch16-224")
+        >>> processor = AutoProcessor.from_pretrained("google/siglip2-base-patch16-224")
+
+        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
+
+        >>> inputs = processor(images=image, return_tensors="pt")
+
+        >>> outputs = model(**inputs)
+        >>> last_hidden_state = outputs.last_hidden_state
+        >>> pooled_output = outputs.pooler_output  # pooled features
+        ```
         """
         hidden_states = self.embeddings(pixel_values, spatial_shapes)
 
         encoder_attention_mask = create_bidirectional_mask(
             config=self.config,
             inputs_embeds=hidden_states,
-            attention_mask=attention_mask,
+            attention_mask=pixel_attention_mask,
         )
 
         encoder_outputs: BaseModelOutput = self.encoder(
@@ -292,7 +305,7 @@ class Siglip2VisionTransformer(SiglipVisionTransformer):
         last_hidden_state = encoder_outputs.last_hidden_state
         last_hidden_state = self.post_layernorm(last_hidden_state)
 
-        pooler_output = self.head(last_hidden_state, attention_mask) if self.use_head else None
+        pooler_output = self.head(last_hidden_state, pixel_attention_mask) if self.use_head else None
 
         return BaseModelOutputWithPooling(
             last_hidden_state=last_hidden_state,
@@ -344,51 +357,6 @@ class Siglip2MultiheadAttentionPoolingHead(SiglipMultiheadAttentionPoolingHead):
         return hidden_state[:, 0]
 
 
-class Siglip2VisionModel(SiglipVisionModel):
-    @can_return_tuple
-    @auto_docstring
-    def forward(
-        self,
-        pixel_values: torch.FloatTensor,
-        pixel_attention_mask: torch.Tensor,
-        spatial_shapes: torch.LongTensor,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> BaseModelOutputWithPooling:
-        r"""
-        pixel_attention_mask (`torch.Tensor` of shape `(batch_size, image_size, image_size)`, *optional*):
-            Mask to avoid performing attention on padding pixel indices.
-        spatial_shapes (`torch.LongTensor` of shape `(batch_size, 2)`):
-            Tensor containing the spatial dimensions (height, width) of the input images.
-
-        Examples:
-
-        ```python
-        >>> from PIL import Image
-        >>> import httpx
-        >>> from io import BytesIO
-        >>> from transformers import AutoProcessor, Siglip2VisionModel
-
-        >>> model = Siglip2VisionModel.from_pretrained("google/siglip2-base-patch16-224")
-        >>> processor = AutoProcessor.from_pretrained("google/siglip2-base-patch16-224")
-
-        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> with httpx.stream("GET", url) as response:
-        ...     image = Image.open(BytesIO(response.read()))
-
-        >>> inputs = processor(images=image, return_tensors="pt")
-
-        >>> outputs = model(**inputs)
-        >>> last_hidden_state = outputs.last_hidden_state
-        >>> pooled_output = outputs.pooler_output  # pooled features
-        ```"""
-        return self.vision_model(
-            pixel_values=pixel_values,
-            attention_mask=pixel_attention_mask,
-            spatial_shapes=spatial_shapes,
-            **kwargs,
-        )
-
-
 class Siglip2Model(SiglipModel):
     # Update: add `spatial_shapes` and `pixel_attention_mask`
     @can_return_tuple
@@ -427,7 +395,7 @@ class Siglip2Model(SiglipModel):
         """
         return self.vision_model(
             pixel_values=pixel_values,
-            attention_mask=pixel_attention_mask,
+            pixel_attention_mask=pixel_attention_mask,
             spatial_shapes=spatial_shapes,
             **kwargs,
         )
@@ -485,7 +453,7 @@ class Siglip2Model(SiglipModel):
         """
         vision_outputs: BaseModelOutputWithPooling = self.vision_model(
             pixel_values=pixel_values,
-            attention_mask=pixel_attention_mask,
+            pixel_attention_mask=pixel_attention_mask,
             spatial_shapes=spatial_shapes,
             **kwargs,
         )
@@ -584,7 +552,7 @@ class Siglip2ForImageClassification(SiglipForImageClassification):
         """
         outputs: BaseModelOutputWithPooling = self.vision_model(
             pixel_values,
-            attention_mask=pixel_attention_mask,
+            pixel_attention_mask=pixel_attention_mask,
             spatial_shapes=spatial_shapes,
             **kwargs,
         )

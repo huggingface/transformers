@@ -51,6 +51,7 @@ if __name__ == "__main__":
     )
     parser.add_argument("--config-file", type=str, help="Path to a config file stored as a json or jsonl format")
     parser.add_argument("--num-tokens-to-profile", "-p", type=int, default=0, help="Number of tokens to profile")
+    parser.add_argument("--enable-tp", action="store_true", help="Enable tensor parallelism with tp_plan=auto")
 
     parser.add_argument("--branch-name", type=str, help="Git branch name")
     parser.add_argument("--commit-id", type=str, help="Git commit ID (if not provided, will auto-detect from git)")
@@ -118,11 +119,15 @@ if __name__ == "__main__":
         not args.no_gpu_monitoring,
     )
 
+    if args.enable_tp:
+        for config in configs:
+            config.tp_plan = "auto"
+
     runner = BenchmarkRunner(logger, args.output_dir, args.branch_name, args.commit_id, args.commit_message)
     timestamp, results = runner.run_benchmarks(
         args.model_id, configs, args.num_tokens_to_profile, pretty_print_summary=True
     )
 
     dataset_id = args.push_result_to_dataset
-    if dataset_id is not None and len(results) > 0:
+    if dataset_id is not None and len(results) > 0 and runner._is_primary_process():
         runner.push_results_to_hub(dataset_id, results, timestamp)

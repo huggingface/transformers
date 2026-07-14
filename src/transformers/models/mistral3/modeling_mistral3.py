@@ -124,12 +124,12 @@ class Mistral3MultiModalProjector(nn.Module):
         return hidden_states
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for Mistral3 causal language model (or autoregressive) outputs.
     """
 )
+@dataclass
 class Mistral3CausalLMOutputWithPast(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
@@ -154,12 +154,12 @@ class Mistral3CausalLMOutputWithPast(ModelOutput):
     image_hidden_states: torch.FloatTensor | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for Mistral3 outputs, with hidden states and attentions.
     """
 )
+@dataclass
 class Mistral3ModelOutputWithPast(BaseModelOutputWithPast):
     r"""
     past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
@@ -181,7 +181,7 @@ class Mistral3PreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
     input_modalities = ("image", "text")
     supports_gradient_checkpointing = True
-    _skip_keys_device_placement = "past_key_values"
+    _skip_keys_device_placement = ["past_key_values"]
 
     _supports_flash_attn = True
     _supports_sdpa = True
@@ -197,10 +197,6 @@ class Mistral3PreTrainedModel(PreTrainedModel):
     """
 )
 class Mistral3Model(Mistral3PreTrainedModel):
-    _checkpoint_conversion_mapping = {
-        r"^language_model.model": "language_model",
-    }
-
     def __init__(self, config: Mistral3Config):
         super().__init__(config)
         self.vision_tower = AutoModel.from_config(config.vision_config)
@@ -208,12 +204,6 @@ class Mistral3Model(Mistral3PreTrainedModel):
         self.multi_modal_projector = Mistral3MultiModalProjector(config)
         self.language_model = AutoModel.from_config(config.text_config)
         self.post_init()
-
-    def get_input_embeddings(self):
-        return self.language_model.get_input_embeddings()
-
-    def set_input_embeddings(self, value):
-        self.language_model.set_input_embeddings(value)
 
     @merge_with_config_defaults
     @can_return_tuple
@@ -224,7 +214,7 @@ class Mistral3Model(Mistral3PreTrainedModel):
         self,
         pixel_values: torch.FloatTensor,
         image_sizes: torch.Tensor,
-        vision_feature_layer: int | list[int] | None = None,
+        vision_feature_layer: int | list[int] | list[int] | None = None,
         output_hidden_states: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
@@ -272,9 +262,9 @@ class Mistral3Model(Mistral3PreTrainedModel):
 
         n_image_tokens = special_image_mask.sum()
         n_image_features = image_features.shape[0] * image_features.shape[1]
-        special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
+        special_image_mask = special_image_mask.unsqueeze(-1).to(inputs_embeds.device)
         torch_compilable_check(
-            inputs_embeds[special_image_mask].numel() == image_features.numel(),
+            n_image_tokens * inputs_embeds.shape[-1] == image_features.numel(),
             f"Image features and image tokens do not match, tokens: {n_image_tokens}, features: {n_image_features}",
         )
         return special_image_mask
@@ -290,7 +280,7 @@ class Mistral3Model(Mistral3PreTrainedModel):
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
-        vision_feature_layer: int | list[int] | None = None,
+        vision_feature_layer: int | list[int] | list[int] | None = None,
         use_cache: bool | None = None,
         image_sizes: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
@@ -338,12 +328,6 @@ class Mistral3Model(Mistral3PreTrainedModel):
     """
 )
 class Mistral3ForConditionalGeneration(Mistral3PreTrainedModel, GenerationMixin):
-    _checkpoint_conversion_mapping = {
-        r"^language_model.model": "model.language_model",
-        r"^vision_tower": "model.vision_tower",
-        r"^multi_modal_projector": "model.multi_modal_projector",
-        r"^language_model.lm_head": "lm_head",
-    }
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
 
     def __init__(self, config: Mistral3Config):
@@ -351,12 +335,6 @@ class Mistral3ForConditionalGeneration(Mistral3PreTrainedModel, GenerationMixin)
         self.model = Mistral3Model(config)
         self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
         self.post_init()
-
-    def get_input_embeddings(self):
-        return self.model.get_input_embeddings()
-
-    def set_input_embeddings(self, value):
-        self.model.set_input_embeddings(value)
 
     def get_output_embeddings(self) -> nn.Module:
         return self.lm_head
@@ -368,7 +346,7 @@ class Mistral3ForConditionalGeneration(Mistral3PreTrainedModel, GenerationMixin)
         self,
         pixel_values: torch.FloatTensor,
         image_sizes: torch.Tensor,
-        vision_feature_layer: int | list[int] | None = None,
+        vision_feature_layer: int | list[int] | list[int] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         return self.model.get_image_features(

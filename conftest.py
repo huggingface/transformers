@@ -16,10 +16,14 @@
 # by pytest before any tests are run
 
 import doctest
+import errno
+import functools
 import os
 import sys
+import tempfile
 import warnings
 from os.path import abspath, dirname, join
+from unittest import mock
 
 import _pytest
 import pytest
@@ -32,6 +36,42 @@ from transformers.testing_utils import (
     patch_torch_compile_force_graph,
 )
 from transformers.utils import enable_tf32
+from transformers.utils.network_logging import register_network_debug_plugin
+
+
+_ci_fallback_cache_dir = None
+
+
+def _with_tmpdir_cache_fallback(fn):
+    """Decorator that retries `fn` with a writable tmp cache dir if it raises EROFS.
+
+    In CI, the shared HF cache is read-only. Most models are pre-populated there and
+    work fine. Only downloads of new or updated files fail with EROFS. On such failure,
+    a session-scoped tmp dir is created once (via `tempfile.mkdtemp`, which is atomic
+    and process-safe) and the call is retried with `cache_dir` set to the tmp dir.
+    `HF_XET_CACHE` is also redirected (via both the Python constant and `os.environ`) to
+    cover the Xet storage path used by the `hf_xet` Rust library.
+    """
+
+    @functools.wraps(fn)
+    def wrapper(*args, **kwargs):
+        try:
+            return fn(*args, **kwargs)
+        except OSError as e:
+            if e.errno != errno.EROFS:
+                raise
+            global _ci_fallback_cache_dir
+            if _ci_fallback_cache_dir is None:
+                _ci_fallback_cache_dir = tempfile.mkdtemp(prefix="ci_fallback_tmpdir_cache_dir_")
+            import huggingface_hub.constants as hf_constants
+
+            with (
+                mock.patch.object(hf_constants, "HF_XET_CACHE", _ci_fallback_cache_dir),
+                mock.patch.dict(os.environ, {"HF_XET_CACHE": _ci_fallback_cache_dir}),
+            ):
+                return fn(*args, **{**kwargs, "cache_dir": _ci_fallback_cache_dir})
+
+    return wrapper
 
 
 NOT_DEVICE_TESTS = {
@@ -82,6 +122,10 @@ warnings.simplefilter(action="ignore", category=FutureWarning)
 
 
 def pytest_configure(config):
+    import transformers.utils.hub as _hub
+
+    _hub.cached_files = _with_tmpdir_cache_fallback(_hub.cached_files)
+
     config.addinivalue_line("markers", "is_pipeline_test: mark test to run only when pipelines are tested")
     config.addinivalue_line("markers", "is_staging_test: mark test to run only in the staging environment")
     config.addinivalue_line("markers", "accelerate_tests: mark test that require accelerate")
@@ -98,6 +142,7 @@ def pytest_configure(config):
     config.addinivalue_line("markers", "tensor_parallel_ci: mark test for tensor parallel CI validation")
 
     os.environ["DISABLE_SAFETENSORS_CONVERSION"] = "true"
+    register_network_debug_plugin(config)
 
 
 def pytest_collection_modifyitems(items):
@@ -110,6 +155,12 @@ def pytest_addoption(parser):
     from transformers.testing_utils import pytest_addoption_shared
 
     pytest_addoption_shared(parser)
+
+
+def pytest_runtest_logreport(report):
+    if report.when == "call":
+        outcome = "PASSED" if report.passed else "FAILED" if report.failed else "SKIPPED"
+        print(f"{report.nodeid} [{outcome}] {report.duration:.2f}s")
 
 
 def pytest_terminal_summary(terminalreporter):
@@ -144,9 +195,26 @@ _pytest.doctest.DoctestModule = HfDoctestModule
 doctest.DocTestParser = HfDocTestParser
 
 if is_torch_available():
+    # # torch.backends.fp32_precision does not cascade to torch.backends.cudnn.conv.fp32_precision and torch.backends.cudnn.rnn.fp32_precision
+    # TODO: Considering move this to `enable_tf32`, or report a bug to `torch`.
+    import torch
+
+    # In order to set `torch.backends.cudnn.conv.fp32_precision = "ieee"` below (new API), we still need to set this
+    # (old API) because it defaults to `True` (and not changed automatically when we change `cudnn.conv.fp32_precision`)
+    # and such inconsistency cause `torch` to complain `RuntimeError: PyTorch is checking whether allow_tf32 is enabled for cuDNN without a specific operator name,but the current flag(s) indica
+    # te that cuDNN conv and cuDNN RNN have different TF32 flags.This combination indicates that you have used a mix of the legacy and new APIs
+    #  to set the TF32 flags. We suggest only using the new API to set the TF32 flag(s).`.
+    # TODO: report a bug to `torch`
+    if hasattr(torch.backends.cudnn, "allow_tf32"):
+        torch.backends.cudnn.allow_tf32 = False
+
     # The flag below controls whether to allow TF32 on cuDNN. This flag defaults to True.
     # We set it to `False` for CI. See https://github.com/pytorch/pytorch/issues/157274#issuecomment-3090791615
     enable_tf32(False)
+
+    # This is necessary to make several `test_batching_equivalence` pass (within the tolerance `1e-5`)
+    if hasattr(torch.backends.cudnn, "conv") and hasattr(torch.backends.cudnn.conv, "fp32_precision"):
+        torch.backends.cudnn.conv.fp32_precision = "ieee"
 
     # patch `torch.compile`: if `TORCH_COMPILE_FORCE_FULLGRAPH=1` (or values considered as true, e.g. yes, y, etc.),
     # the patched version will always run with `fullgraph=True`.

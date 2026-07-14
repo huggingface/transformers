@@ -13,13 +13,10 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2021-12-02 and added to Hugging Face Transformers on 2023-01-16.*
+*This model was published in HF papers on 2021-12-02 and contributed to Hugging Face Transformers on 2023-01-16.*
 
 # Mask2Former
 
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-</div>
 
 ## Overview
 
@@ -75,14 +72,13 @@ The resource should ideally demonstrate something new instead of duplicating an 
 
 [[autodoc]] Mask2FormerImageProcessor
     - preprocess
-    - encode_inputs
     - post_process_semantic_segmentation
     - post_process_instance_segmentation
     - post_process_panoptic_segmentation
 
-## Mask2FormerImageProcessorFast
+## Mask2FormerImageProcessorPil
 
-[[autodoc]] Mask2FormerImageProcessorFast
+[[autodoc]] Mask2FormerImageProcessorPil
     - preprocess
     - post_process_semantic_segmentation
     - post_process_instance_segmentation

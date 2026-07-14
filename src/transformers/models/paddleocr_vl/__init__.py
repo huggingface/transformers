@@ -21,7 +21,7 @@ from ...utils.import_utils import define_import_structure
 if TYPE_CHECKING:
     from .configuration_paddleocr_vl import *
     from .image_processing_paddleocr_vl import *
-    from .image_processing_paddleocr_vl_fast import *
+    from .image_processing_pil_paddleocr_vl import *
     from .modeling_paddleocr_vl import *
     from .processing_paddleocr_vl import *
 else:

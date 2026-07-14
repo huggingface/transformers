@@ -67,6 +67,8 @@ Here is the list of the available [`TrainerCallback`] in the library:
 
 [[autodoc]] integrations.FlyteCallback
 
+[[autodoc]] integrations.KubeflowCallback
+
 [[autodoc]] integrations.DVCLiveCallback
     - setup
 

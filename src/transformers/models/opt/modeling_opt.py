@@ -138,7 +138,6 @@ class OPTAttention(nn.Module):
         past_key_values: Cache | None = None,
         attention_mask: torch.Tensor | None = None,
         output_attentions: bool = False,
-        cache_position: torch.Tensor | None = None,
         **kwargs,
     ) -> tuple[torch.Tensor, torch.Tensor | None, Cache | None]:
         """Input shape: Batch x Time x Channel"""
@@ -159,9 +158,7 @@ class OPTAttention(nn.Module):
 
         if past_key_values is not None:
             # save all key/value_states to cache to be re-used for fast auto-regressive generation
-            key_states, value_states = past_key_values.update(
-                key_states, value_states, self.layer_idx, {"cache_position": cache_position}
-            )
+            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
@@ -209,7 +206,6 @@ class OPTDecoderLayer(GradientCheckpointingLayer):
         past_key_values: Cache | None = None,
         use_cache: bool | None = False,
         position_ids: torch.LongTensor | None = None,
-        cache_position: torch.Tensor | None = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> torch.Tensor:
         residual = hidden_states
@@ -224,7 +220,6 @@ class OPTDecoderLayer(GradientCheckpointingLayer):
             past_key_values=past_key_values,
             position_ids=position_ids,
             attention_mask=attention_mask,
-            cache_position=cache_position,
             **kwargs,
         )
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
@@ -331,7 +326,6 @@ class OPTDecoder(OPTPreTrainedModel):
         inputs_embeds: torch.FloatTensor | None = None,
         use_cache: bool | None = None,
         position_ids: torch.LongTensor | None = None,
-        cache_position: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPast:
         if (input_ids is None) ^ (inputs_embeds is not None):
@@ -347,10 +341,6 @@ class OPTDecoder(OPTPreTrainedModel):
             past_key_values = DynamicCache(config=self.config)
 
         past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
-        if cache_position is None:
-            cache_position = torch.arange(
-                past_seen_tokens, past_seen_tokens + inputs_embeds.shape[1], device=inputs_embeds.device
-            )
 
         if attention_mask is None:
             seq_length = past_seen_tokens + inputs_embeds.shape[1]
@@ -367,7 +357,6 @@ class OPTDecoder(OPTPreTrainedModel):
             config=self.config,
             inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
-            cache_position=cache_position,
             past_key_values=past_key_values,
         )
 
@@ -392,7 +381,6 @@ class OPTDecoder(OPTPreTrainedModel):
                 position_ids=position_ids,
                 past_key_values=past_key_values,
                 use_cache=use_cache,
-                cache_position=cache_position,
                 **kwargs,
             )
 
@@ -432,7 +420,6 @@ class OPTModel(OPTPreTrainedModel):
         inputs_embeds: torch.FloatTensor | None = None,
         use_cache: bool | None = None,
         position_ids: torch.LongTensor | None = None,
-        cache_position: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPast:
         decoder_outputs: BaseModelOutputWithPast = self.decoder(
@@ -442,7 +429,6 @@ class OPTModel(OPTPreTrainedModel):
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
-            cache_position=cache_position,
             **kwargs,
         )
 
@@ -484,7 +470,6 @@ class OPTForCausalLM(OPTPreTrainedModel, GenerationMixin):
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
         position_ids: torch.LongTensor | None = None,
-        cache_position: torch.Tensor | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | CausalLMOutputWithPast:
@@ -518,7 +503,6 @@ class OPTForCausalLM(OPTPreTrainedModel, GenerationMixin):
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
-            cache_position=cache_position,
             **kwargs,
         )
 

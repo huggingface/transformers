@@ -24,6 +24,7 @@
 # limitations under the License.
 
 import itertools
+import warnings
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any, Optional
@@ -39,13 +40,25 @@ from ...integrations import use_kernel_forward_from_hub
 from ...masking_utils import create_bidirectional_mask, create_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPast, BaseModelOutputWithPooling, ModelOutput
+from ...modeling_outputs import (
+    BaseModelOutput,
+    BaseModelOutputWithPast,
+    BaseModelOutputWithPooling,
+    CausalLMOutputWithPast,
+)
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging, torch_compilable_check, torch_int
-from ...utils.generic import is_flash_attention_requested, maybe_autocast, merge_with_config_defaults
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging, torch_compilable_check
+from ...utils.deprecation import deprecate_kwarg
+from ...utils.generic import (
+    accepts_precomputed_kwargs,
+    is_flash_attention_requested,
+    maybe_autocast,
+    merge_with_config_defaults,
+)
 from ...utils.output_capturing import capture_outputs
+from ...vision_utils import get_vision_bilinear_indices_and_weights, get_vision_cu_seqlens, get_vision_position_ids
 from .configuration_paddleocr_vl import PaddleOCRTextConfig, PaddleOCRVisionConfig, PaddleOCRVLConfig
 
 
@@ -98,10 +111,8 @@ class PaddleOCRVisionRotaryEmbedding(nn.Module):
         inv_freq = 1.0 / (theta ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
         self.register_buffer("inv_freq", inv_freq, persistent=False)
 
-    def forward(self, seqlen: int) -> torch.Tensor:
-        seq = torch.arange(seqlen, device=self.inv_freq.device, dtype=self.inv_freq.dtype)
-        freqs = torch.outer(seq, self.inv_freq)
-        return freqs
+    def forward(self, position_ids: torch.Tensor) -> torch.Tensor:
+        return (position_ids.unsqueeze(-1) * self.inv_freq).flatten(1)
 
 
 class PaddleOCRRotaryEmbedding(nn.Module):
@@ -555,6 +566,7 @@ class PaddleOCRVisionEmbeddings(nn.Module):
         self.num_positions = self.num_patches
         self.position_embedding = nn.Embedding(self.num_positions, self.embed_dim)
         self.register_buffer("position_ids", torch.arange(self.num_positions).expand((1, -1)), persistent=False)
+        self.num_grid_per_side = int(self.num_positions**0.5)
 
     def interpolate_pos_encoding(self, embeddings: torch.Tensor, height: int, width: int) -> torch.Tensor:
         """
@@ -565,57 +577,44 @@ class PaddleOCRVisionEmbeddings(nn.Module):
         - https://github.com/facebookresearch/dino/blob/de9ee3df6cf39fac952ab558447af1fa1365362a/vision_transformer.py#L174-L194, and
         - https://github.com/facebookresearch/dinov2/blob/e1277af2ba9496fbadf7aec6eba56e8d882d1e35/dinov2/models/vision_transformer.py#L179-L211
         """
-        num_positions = self.position_embedding.weight.shape[0]
-
-        patch_pos_embed = self.position_embedding.weight.unsqueeze(0)
-
-        dim = embeddings.shape[-1]
-
-        sqrt_num_positions = torch_int(num_positions**0.5)
-        patch_pos_embed = patch_pos_embed.reshape(1, sqrt_num_positions, sqrt_num_positions, dim)
-        patch_pos_embed = patch_pos_embed.permute(0, 3, 1, 2)
-
-        patch_pos_embed = nn.functional.interpolate(
-            patch_pos_embed,
-            size=(height, width),
-            mode="bilinear",
-            align_corners=False,
+        warnings.warn(
+            f"`{self.__class__.__name__}.interpolate_pos_encoding` is deprecated and will be removed in v5.11. "
+            "Use `get_vision_bilinear_indices_and_weights` from `transformers.vision_utils` and apply `self.position_embedding`.",
+            FutureWarning,
+            stacklevel=2,
         )
+        grid_thw = torch.tensor([[1, height, width]], device=embeddings.device)
+        bilinear_indices, bilinear_weights = get_vision_bilinear_indices_and_weights(
+            grid_thw, num_grid_per_side=self.num_grid_per_side, spatial_merge_size=1
+        )
+        return (self.position_embedding(bilinear_indices) * bilinear_weights[:, :, None]).sum(0).unsqueeze(0)
 
-        patch_pos_embed = patch_pos_embed.permute(0, 2, 3, 1).view(1, -1, dim)
-        return patch_pos_embed
-
+    @deprecate_kwarg("image_grid_thw", new_name="grid_thw", version="5.11.0")
     def forward(
         self,
         pixel_values: torch.FloatTensor,
-        image_grid_thw: list[tuple[int, int, int] | list[tuple[int, int, int]]] | None = None,
+        grid_thw: torch.LongTensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
         """
         Args:
             pixel_values (`torch.FloatTensor` of shape `(batch_size, sequence_length, image_channels, patch_size, patch_size)`):
                 The tensors corresponding to the input images.
-            image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
+            grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
                 The temporal, height and width of feature shape of each image in LLM.
         """
-        batch_size, squence_len, channel, height, width = pixel_values.shape
+        batch_size, sequence_len, channel, height, width = pixel_values.shape
         target_dtype = self.patch_embedding.weight.dtype
-        pixel_values = pixel_values.reshape(batch_size * squence_len, channel, height, width)
+        pixel_values = pixel_values.reshape(batch_size * sequence_len, channel, height, width)
         patch_embeds = self.patch_embedding(pixel_values.to(dtype=target_dtype))  # shape = [*, width, grid, grid]
         embeddings = patch_embeds.flatten(-2).squeeze(-1)
-        embeddings = embeddings.reshape(batch_size, squence_len, -1)
+        embeddings = embeddings.reshape(batch_size * sequence_len, -1)
 
-        start = 0
-        embeddings = embeddings.squeeze(0)
-        tmp_embeddings = []
-        for image_grid in image_grid_thw:
-            t, h, w = image_grid
-            end = start + t * h * w
-            image_embeddings = embeddings[start:end, :]
-            position_embedding = self.interpolate_pos_encoding(image_embeddings, h, w).squeeze(0).repeat(t, 1)
-            image_embeddings = image_embeddings + position_embedding
-            tmp_embeddings.append(image_embeddings)
-            start = end
-        embeddings = torch.concat(tmp_embeddings, dim=0)
+        bilinear_indices, bilinear_weights = get_vision_bilinear_indices_and_weights(
+            grid_thw, num_grid_per_side=self.num_grid_per_side, spatial_merge_size=1, kwargs=kwargs
+        )
+        pos_embeds = (self.position_embedding(bilinear_indices) * bilinear_weights[:, :, None]).sum(0)
+        embeddings = embeddings + pos_embeds.to(embeddings.dtype)
 
         return embeddings
 
@@ -818,12 +817,12 @@ class PaddleOCRVisionEncoder(nn.Module):
     # Ignore copy
     @can_return_tuple
     @auto_docstring
+    @deprecate_kwarg("image_grid_thw", new_name="grid_thw", version="5.11.0")
     def forward(
         self,
         inputs_embeds: torch.FloatTensor,
-        cu_seqlens: torch.Tensor,
         attention_mask: torch.Tensor | None = None,
-        image_grid_thw: list[tuple[int, int, int] | list[tuple[int, int, int]]] | None = None,
+        grid_thw: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutput:
         r"""
@@ -831,35 +830,23 @@ class PaddleOCRVisionEncoder(nn.Module):
             Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation.
             This is useful if you want more control over how to convert `input_ids` indices into associated vectors
             than the model's internal embedding lookup matrix.
-        cu_seqlens (`torch.Tensor` of shape `(num_images + 1,)`):
-            The cumulative sequence lengths of each image or video feature.
         attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
             The attention_mask used in forward function shape [batch_size X sequence_length] if not None.
-        image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
+        grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
             The temporal, height and width of feature shape of each image in LLM.
         """
-        device = inputs_embeds.device
+        # Use merge_size=1: PaddleOCR merges patches in the projector (after the encoder),
+        # unlike Qwen which merges inside the encoder, so rotary positions here are simple (row, col).
+        position_ids = get_vision_position_ids(grid_thw, 1, kwargs=kwargs)
+        cu_seqlens = get_vision_cu_seqlens(grid_thw, kwargs=kwargs)
+
         hidden_states = inputs_embeds
         attention_mask = create_bidirectional_mask(
             config=self.config,
             inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
         )
-        split_hids = []
-        split_wids = []
-        for t, h, w in image_grid_thw:
-            image_pids = torch.arange(t * h * w, device=device) % (h * w)
-            sample_hids = image_pids // w
-            sample_wids = image_pids % w
-            split_hids.append(sample_hids)
-            split_wids.append(sample_wids)
-        width_position_ids = torch.concat(split_wids, dim=0)
-        height_position_ids = torch.concat(split_hids, dim=0)
-
-        pids = torch.stack([height_position_ids, width_position_ids], dim=-1)
-        max_grid_size = pids.max() + 1
-        rotary_embeddings_max_grid = self.rotary_pos_emb(max_grid_size)
-        rotary_embeddings = rotary_embeddings_max_grid[pids].flatten(1)
+        rotary_embeddings = self.rotary_pos_emb(position_ids)
         rotary_embeddings = rotary_embeddings.repeat(1, 2)
         position_embeddings = (rotary_embeddings.cos(), rotary_embeddings.sin())
 
@@ -898,32 +885,28 @@ class PaddleOCRVisionTransformer(PaddleOCRVLPreTrainedModel):
 
     @merge_with_config_defaults
     @capture_outputs(tie_last_hidden_states=False)
+    @deprecate_kwarg("image_grid_thw", new_name="grid_thw", version="5.11.0")
     def forward(
         self,
         pixel_values: torch.FloatTensor,
-        cu_seqlens: torch.Tensor,
         attention_mask: torch.Tensor | None = None,
-        image_grid_thw: list[tuple[int, int, int] | list[tuple[int, int, int]]] | None = None,
+        grid_thw: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPooling:
         """
         Args:
             pixel_values (`torch.FloatTensor` of shape `(batch_size, sequence_length, patch_size * patch_size * image_channels)`):
                 The tensors corresponding to the input images.
-            cu_seqlens (`torch.Tensor` of shape `(num_images + 1,)`):
-                The cumulative sequence lengths of each image or video feature.
             attention_mask (`torch.Tensor`, *optional*):
                 The attention_mask used in forward function shape [batch_size X sequence_length] if not None.
-            image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
+            grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
                 The temporal, height and width of feature shape of each image in LLM.
         """
-        hidden_states = self.embeddings(pixel_values, image_grid_thw=image_grid_thw)
-
+        hidden_states = self.embeddings(pixel_values, grid_thw=grid_thw, **kwargs)
         encoder_outputs: BaseModelOutput = self.encoder(
             inputs_embeds=hidden_states,
-            cu_seqlens=cu_seqlens,
+            grid_thw=grid_thw,
             attention_mask=attention_mask,
-            image_grid_thw=image_grid_thw,
             **kwargs,
         )
 
@@ -949,87 +932,50 @@ class PaddleOCRVisionModel(PaddleOCRVLPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @deprecate_kwarg("image_grid_thw", new_name="grid_thw", version="5.11.0")
     def forward(
         self,
         pixel_values: torch.FloatTensor,
-        cu_seqlens: torch.Tensor,
-        image_grid_thw: list[tuple[int, int, int] | list[tuple[int, int, int]]] | None = None,
+        grid_thw: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         """
         Args:
             pixel_values (`torch.FloatTensor` of shape `(batch_size, sequence_length, image_channels, patch_size, patch_size)`):
                 The tensors corresponding to the input images.
-            cu_seqlens (`torch.Tensor` of shape `(num_images + 1,)`):
-                The cumulative sequence lengths of each image or video feature.
-            image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
+            grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
                 The temporal, height and width of feature shape of each image in LLM.
         """
-        return self.vision_model(
-            pixel_values=pixel_values,
-            cu_seqlens=cu_seqlens,
-            image_grid_thw=image_grid_thw,
-            **kwargs,
-        )
+        return self.vision_model(pixel_values=pixel_values, grid_thw=grid_thw, **kwargs)
 
 
+@auto_docstring
 @dataclass
-@auto_docstring(
-    custom_intro="""
-    Base class for Llava outputs, with hidden states and attentions.
-    """
-)
-class PaddleOCRVLModelOutputWithPast(ModelOutput):
+class PaddleOCRVLModelOutputWithPast(BaseModelOutputWithPast):
     r"""
-    past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-        It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
-
-        Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
-        `past_key_values` input) to speed up sequential decoding.
     rope_deltas (`torch.LongTensor` of shape `(batch_size, )`, *optional*):
         The rope index difference between sequence length and multimodal rope.
+        The attribute is deprecated and will be removed in v5.20, use `model.base_model.rope_deltas` instead.
     """
 
-    last_hidden_state: torch.FloatTensor | None = None
-    past_key_values: Cache | None = None
-    hidden_states: tuple[torch.FloatTensor] | None = None
-    attentions: tuple[torch.FloatTensor] | None = None
     rope_deltas: torch.LongTensor | None = None
 
 
+@auto_docstring
 @dataclass
-@auto_docstring(
-    custom_intro="""
-    Base class for PaddleOCRVL causal language model (or autoregressive) outputs.
-    """
-)
-class PaddleOCRVLCausalLMOutputWithPast(ModelOutput):
+class PaddleOCRVLCausalLMOutputWithPast(CausalLMOutputWithPast):
     r"""
-    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
-        Language modeling loss (for next-token prediction).
-    logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
-        Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
-    past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-        It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
-
-        Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
-        `past_key_values` input) to speed up sequential decoding.
     rope_deltas (`torch.LongTensor` of shape `(batch_size, )`, *optional*):
         The rope index difference between sequence length and multimodal rope.
+        The attribute is deprecated and will be removed in v5.20, use `model.base_model.rope_deltas` instead.
     """
 
-    loss: torch.FloatTensor | None = None
-    logits: torch.FloatTensor | None = None
-    past_key_values: Cache | None = None
-    hidden_states: tuple[torch.FloatTensor] | None = None
-    attentions: tuple[torch.FloatTensor] | None = None
     rope_deltas: torch.LongTensor | None = None
 
 
 @auto_docstring
 class PaddleOCRVLModel(PaddleOCRVLPreTrainedModel):
     base_model_prefix = "model"
-    _checkpoint_conversion_mapping = {"^model": "language_model"}
     # Reference: fix gemma3 grad acc #37208
     accepts_loss_kwargs = False
     _keys_to_ignore_on_load_unexpected = ["packing_position_embedding", "vision_model.head"]
@@ -1043,12 +989,6 @@ class PaddleOCRVLModel(PaddleOCRVLPreTrainedModel):
 
         # Initialize weights and apply final processing
         self.post_init()
-
-    def get_input_embeddings(self):
-        return self.language_model.embed_tokens
-
-    def set_input_embeddings(self, value):
-        self.language_model.embed_tokens = value
 
     def get_vision_position_ids(
         self,
@@ -1093,17 +1033,13 @@ class PaddleOCRVLModel(PaddleOCRVLPreTrainedModel):
             grid_thw[2].item() // spatial_merge_size,
         )
 
-        image_seq_length = llm_grid_h * llm_grid_w * llm_grid_t
-        position_width = torch.arange(start_position, start_position + llm_grid_w, device=device).repeat(
-            llm_grid_h * llm_grid_t
-        )
-        position_height = torch.arange(start_position, start_position + llm_grid_h, device=device).repeat_interleave(
-            llm_grid_w * llm_grid_t
-        )
-        position_temporal = torch.full((image_seq_length,), start_position, device=device, dtype=torch.long)
-        position_temporal = position_temporal * time_interval
-        vision_position_ids = torch.stack([position_temporal, position_height, position_width], dim=0)
+        position_temporal = torch.arange(llm_grid_t, device=device) * time_interval
+        position_height = torch.arange(llm_grid_h, device=device) + start_position
+        position_width = torch.arange(llm_grid_w, device=device) + start_position
 
+        T_grid, H_grid, W_grid = torch.meshgrid(position_temporal, position_height, position_width, indexing="ij")
+        vision_position_ids = torch.stack([T_grid, H_grid, W_grid], dim=0).reshape(3, -1)
+        vision_position_ids[0] += start_position  # must be after time_interval multiply
         return vision_position_ids
 
     def get_rope_index(
@@ -1210,6 +1146,7 @@ class PaddleOCRVLModel(PaddleOCRVLPreTrainedModel):
         mrope_position_deltas = torch.tensor(mrope_position_deltas, device=input_ids.device).unsqueeze(1)
         return position_ids, mrope_position_deltas
 
+    @accepts_precomputed_kwargs(modality="image")
     @can_return_tuple
     @auto_docstring
     def get_image_features(
@@ -1225,22 +1162,7 @@ class PaddleOCRVLModel(PaddleOCRVLPreTrainedModel):
             The temporal, height and width of feature shape of each image in LLM.
         """
         pixel_values = pixel_values.type(self.visual.dtype).unsqueeze(0)
-        cu_seqlens = torch.repeat_interleave(image_grid_thw[:, 1] * image_grid_thw[:, 2], image_grid_thw[:, 0]).cumsum(
-            dim=0,
-            # Select dtype based on the following factors:
-            #  - FA2 requires that cu_seqlens_q must have dtype int32
-            #  - torch.onnx.export requires that cu_seqlens_q must have same dtype as grid_thw
-            # See https://github.com/huggingface/transformers/pull/34852 for more information
-            dtype=image_grid_thw.dtype if torch.jit.is_tracing() else torch.int32,
-        )
-        cu_seqlens = torch.nn.functional.pad(cu_seqlens, (1, 0), value=0)
-        vision_outputs = self.visual(
-            pixel_values=pixel_values,
-            image_grid_thw=image_grid_thw,
-            cu_seqlens=cu_seqlens,
-            return_dict=True,
-            **kwargs,
-        )
+        vision_outputs = self.visual(pixel_values=pixel_values, grid_thw=image_grid_thw, **kwargs)
         image_embeds = vision_outputs.last_hidden_state
         image_embeds = self.projector(image_embeds, image_grid_thw)
         vision_outputs.pooler_output = image_embeds
@@ -1263,10 +1185,10 @@ class PaddleOCRVLModel(PaddleOCRVLPreTrainedModel):
             special_image_mask = input_ids == self.config.image_token_id
 
         n_image_tokens = special_image_mask.sum()
-        special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
+        special_image_mask = special_image_mask.unsqueeze(-1).to(inputs_embeds.device)
         n_image_features = image_features.shape[0] * image_features.shape[1]
         torch_compilable_check(
-            inputs_embeds[special_image_mask].numel() == image_features.numel(),
+            n_image_tokens * inputs_embeds.shape[-1] == image_features.numel(),
             f"Image features and image tokens do not match: tokens: {n_image_tokens}, features {n_image_features}",
         )
         return special_image_mask
@@ -1300,8 +1222,11 @@ class PaddleOCRVLModel(PaddleOCRVLPreTrainedModel):
                 mm_token_type_ids=mm_token_type_ids,
             )
             self.rope_deltas = rope_deltas
-        # Use pre-calculated rope-deltas to infer correct 3D position ids
-        elif self.rope_deltas is not None:
+        # Use pre-calculated rope-deltas to infer correct 3D position ids during incremental
+        # generation (past_key_values_length > 0) or when only inputs_embeds is provided (no input_ids
+        # to recompute from). Skip when input_ids is provided without past_key_values to avoid shape
+        # mismatches from stale rope_deltas (e.g., training forward pass after generation).
+        elif self.rope_deltas is not None and (past_key_values_length > 0 or input_ids is None):
             batch_size, seq_length, _ = inputs_embeds.shape
             if attention_mask is not None:
                 position_ids = attention_mask.long().cumsum(-1) - 1
@@ -1317,7 +1242,9 @@ class PaddleOCRVLModel(PaddleOCRVLPreTrainedModel):
             position_ids = None
         return position_ids
 
+    @deprecate_kwarg("rope_deltas", version="v5.10")
     @can_return_tuple
+    @auto_docstring
     def forward(
         self,
         input_ids: torch.LongTensor = None,
@@ -1329,20 +1256,19 @@ class PaddleOCRVLModel(PaddleOCRVLPreTrainedModel):
         pixel_values: torch.Tensor | None = None,
         image_grid_thw: torch.LongTensor | None = None,
         mm_token_type_ids: torch.IntTensor | None = None,
-        rope_deltas: torch.LongTensor | None = None,
         **kwargs,
     ) -> tuple | PaddleOCRVLModelOutputWithPast:
         r"""
         image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
             The temporal, height and width of feature shape of each image in LLM.
-        rope_deltas (`torch.LongTensor` of shape `(batch_size, )`, *optional*):
-            The rope index difference between sequence length and multimodal rope.
         """
         if inputs_embeds is None:
             inputs_embeds = self.language_model.embed_tokens(input_ids)
 
         if pixel_values is not None:
-            image_embeds = self.get_image_features(pixel_values, image_grid_thw, return_dict=True).pooler_output
+            image_embeds = self.get_image_features(
+                pixel_values, image_grid_thw, return_dict=True, **kwargs
+            ).pooler_output
             image_embeds = image_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
             image_mask = self.get_placeholder_mask(input_ids, inputs_embeds=inputs_embeds, image_features=image_embeds)
             inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_embeds)
@@ -1379,11 +1305,6 @@ class PaddleOCRVLModel(PaddleOCRVLPreTrainedModel):
 
 
 class PaddleOCRVLForConditionalGeneration(PaddleOCRVLPreTrainedModel, GenerationMixin):
-    _checkpoint_conversion_mapping = {
-        "^visual": "model.visual",
-        "^mlp_AR": "model.projector",
-        r"^model(?!(\.visual|\.projector|\.language_model))": "model.language_model",
-    }
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
     _keys_to_ignore_on_load_unexpected = ["packing_position_embedding", "vision_model.head"]
 
@@ -1393,12 +1314,6 @@ class PaddleOCRVLForConditionalGeneration(PaddleOCRVLPreTrainedModel, Generation
         self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
 
         self.post_init()
-
-    def get_input_embeddings(self):
-        return self.model.get_input_embeddings()
-
-    def set_input_embeddings(self, value):
-        self.model.set_input_embeddings(value)
 
     @auto_docstring
     def get_image_features(
@@ -1413,8 +1328,9 @@ class PaddleOCRVLForConditionalGeneration(PaddleOCRVLPreTrainedModel, Generation
         image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
             The temporal, height and width of feature shape of each image in LLM.
         """
-        return self.model.get_image_features(pixel_values=pixel_values, image_grid_thw=image_grid_thw, **kwargs)
+        return self.model.get_image_features(pixel_values, image_grid_thw, **kwargs)
 
+    @deprecate_kwarg("rope_deltas", version="v5.10")
     @can_return_tuple
     @auto_docstring
     def forward(
@@ -1428,7 +1344,6 @@ class PaddleOCRVLForConditionalGeneration(PaddleOCRVLPreTrainedModel, Generation
         use_cache: bool | None = None,
         pixel_values: torch.Tensor | None = None,
         image_grid_thw: torch.LongTensor | None = None,
-        rope_deltas: torch.LongTensor | None = None,
         mm_token_type_ids: torch.IntTensor | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
@@ -1440,8 +1355,6 @@ class PaddleOCRVLForConditionalGeneration(PaddleOCRVLPreTrainedModel, Generation
             (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
         image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
             The temporal, height and width of feature shape of each image in LLM.
-        rope_deltas (`torch.LongTensor` of shape `(batch_size, )`, *optional*):
-            The rope index difference between sequence length and multimodal rope.
 
         Example:
 
@@ -1488,7 +1401,6 @@ class PaddleOCRVLForConditionalGeneration(PaddleOCRVLPreTrainedModel, Generation
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
             pixel_values=pixel_values,
-            rope_deltas=rope_deltas,
             mm_token_type_ids=mm_token_type_ids,
             **kwargs,
         )
@@ -1706,8 +1618,7 @@ class PaddleOCRVLForConditionalGeneration(PaddleOCRVLPreTrainedModel, Generation
                 if key == "position_ids" and dict_to_expand[key].ndim == 3:
                     dict_to_expand[key] = dict_to_expand[key].repeat_interleave(expand_size, dim=1)
                 elif (
-                    key != "cache_position"
-                    and dict_to_expand[key] is not None
+                    dict_to_expand[key] is not None
                     and isinstance(dict_to_expand[key], torch.Tensor)
                     and key not in visual_keys
                 ):

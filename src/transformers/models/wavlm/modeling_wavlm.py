@@ -112,7 +112,7 @@ class WavLMAttention(nn.Module):
         self,
         embed_dim: int,
         num_heads: int,
-        dropout: float = 0.0,
+        dropout: float | int = 0.0,
         num_buckets: int = 320,
         max_distance: int = 800,
         has_relative_position_bias: bool = True,
@@ -606,6 +606,7 @@ class WavLMPreTrainedModel(PreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
+        super()._init_weights(module)
         # gumbel softmax requires special init
         if isinstance(module, WavLMGumbelVectorQuantizer):
             init.normal_(module.weight_proj.weight, mean=0.0, std=1)
@@ -622,14 +623,6 @@ class WavLMPreTrainedModel(PreTrainedModel):
             k = math.sqrt(1 / module.projection.in_features)
             init.uniform_(module.projection.weight, a=-k, b=k)
             init.uniform_(module.projection.bias, a=-k, b=k)
-        elif isinstance(module, nn.Linear):
-            init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
-
-            if module.bias is not None:
-                init.zeros_(module.bias)
-        elif isinstance(module, (nn.LayerNorm, nn.GroupNorm)):
-            init.zeros_(module.bias)
-            init.ones_(module.weight)
         elif isinstance(module, nn.Conv1d):
             init.kaiming_normal_(module.weight)
 
@@ -1055,7 +1048,7 @@ class WavLMModel(WavLMPreTrainedModel):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         extract_features = self.feature_extractor(input_values)
         extract_features = extract_features.transpose(1, 2)
@@ -1190,7 +1183,7 @@ class WavLMForCTC(WavLMPreTrainedModel):
             All labels set to `-100` are ignored (masked), the loss is only computed for labels in `[0, ...,
             config.vocab_size - 1]`.
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         if labels is not None and labels.max() >= self.config.vocab_size:
             raise ValueError(f"Label values must be <= vocab_size: {self.config.vocab_size}")
@@ -1308,7 +1301,7 @@ class WavLMForSequenceClassification(WavLMPreTrainedModel):
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
 
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
         output_hidden_states = True if self.config.use_weighted_layer_sum else output_hidden_states
 
         outputs = self.wavlm(
@@ -1412,7 +1405,7 @@ class WavLMForAudioFrameClassification(WavLMPreTrainedModel):
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
 
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
         output_hidden_states = True if self.config.use_weighted_layer_sum else output_hidden_states
 
         outputs = self.wavlm(
@@ -1584,7 +1577,7 @@ class WavLMForXVector(WavLMPreTrainedModel):
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
 
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
         output_hidden_states = True if self.config.use_weighted_layer_sum else output_hidden_states
 
         outputs = self.wavlm(

@@ -98,9 +98,7 @@ class T5Gemma2RotaryEmbedding(nn.Module):
         super().__init__()
         self.max_seq_len_cached = config.max_position_embeddings
         self.original_max_seq_len = config.max_position_embeddings
-
         self.config = config
-
         self.layer_types = list(set(config.layer_types))
         self.rope_type = {}
         for layer_type in self.layer_types:
@@ -112,7 +110,7 @@ class T5Gemma2RotaryEmbedding(nn.Module):
             rope_init_fn: Callable = self.compute_default_rope_parameters
             if self.rope_type[layer_type] != "default":
                 rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type[layer_type]]
-            curr_inv_freq, curr_attention_scaling = rope_init_fn(self.config, device, layer_type=layer_type)
+            curr_inv_freq, curr_attention_scaling = rope_init_fn(self.config, layer_type=layer_type)
             self.register_buffer(f"{layer_type}_inv_freq", curr_inv_freq, persistent=False)
             self.register_buffer(f"{layer_type}_original_inv_freq", curr_inv_freq.clone(), persistent=False)
             setattr(self, f"{layer_type}_attention_scaling", curr_attention_scaling)
@@ -223,7 +221,7 @@ def eager_attention_forward(
     key: torch.Tensor,
     value: torch.Tensor,
     attention_mask: torch.Tensor | None,
-    dropout: float = 0.0,
+    dropout: float | int = 0.0,
     scaling: float | None = None,
     softcap: float | None = None,
     **kwargs,
@@ -671,14 +669,8 @@ class T5Gemma2PreTrainedModel(PreTrainedModel):
 
     _can_compile_fullgraph = True
     _supports_attention_backend = True
-    _can_record_outputs = {
-        "hidden_states": [T5Gemma2EncoderLayer, T5Gemma2DecoderLayer],
-        "attentions": [
-            OutputRecorder(T5Gemma2SelfAttention, index=1, layer_name="self_attn"),
-            OutputRecorder(T5Gemma2MergedAttention, index=1, layer_name="self_attn"),
-            OutputRecorder(T5Gemma2MergedAttention, index=2, layer_name="cross_attn"),
-        ],
-    }
+    # Recording is declared on the text encoder/decoder classes; None avoids inheriting the gemma3 dict
+    _can_record_outputs = None
     input_modalities = ("image", "text")
 
     @torch.no_grad()
@@ -706,7 +698,7 @@ class T5Gemma2PreTrainedModel(PreTrainedModel):
                 init.copy_(getattr(module, f"{layer_type}_inv_freq"), curr_inv_freq)
                 init.copy_(getattr(module, f"{layer_type}_original_inv_freq"), curr_inv_freq)
 
-    def prepare_decoder_input_ids_from_labels(self, input_ids):
+    def prepare_decoder_input_ids_from_labels(self, labels: torch.Tensor):
         """
         Shifts input_ids to the right, prepends the decoder_start_token_id, and handles
         pad_token_id replacement for labels that were -100.
@@ -720,8 +712,8 @@ class T5Gemma2PreTrainedModel(PreTrainedModel):
             raise ValueError("self.model.config.decoder.bos_token_id has to be defined. ")
 
         # shift inputs to the right
-        shifted_input_ids = input_ids.new_zeros(input_ids.shape)
-        shifted_input_ids[..., 1:] = input_ids[..., :-1].clone()
+        shifted_input_ids = labels.new_zeros(labels.shape)
+        shifted_input_ids[..., 1:] = labels[..., :-1].clone()
         shifted_input_ids[..., 0] = decoder_start_token_id
 
         if pad_token_id is None:
@@ -832,17 +824,17 @@ class T5Gemma2TextEncoder(T5Gemma2PreTrainedModel):
 
         # global and local position embeddings
         position_embeddings = {}
-        for layer_type in self.config.layer_types:
+        for layer_type in set(self.config.layer_types):
             position_embeddings[layer_type] = self.rotary_emb(hidden_states, position_ids, layer_type)
 
         # dropout
         hidden_states = self.dropout(hidden_states)
 
-        for layer_module in self.layers[: self.config.num_hidden_layers]:
+        for i, layer_module in enumerate(self.layers[: self.config.num_hidden_layers]):
             hidden_states = layer_module(
                 hidden_states,
-                position_embeddings[layer_module.attention_type],
-                self_attn_mask_mapping[layer_module.attention_type],
+                position_embeddings[self.config.layer_types[i]],
+                self_attn_mask_mapping[self.config.layer_types[i]],
                 position_ids,
                 **kwargs,
             )
@@ -913,10 +905,10 @@ class T5Gemma2Encoder(T5Gemma2PreTrainedModel):
             special_image_mask = input_ids == image_token_id
 
         n_image_tokens = special_image_mask.sum()
-        special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
+        special_image_mask = special_image_mask.unsqueeze(-1).to(inputs_embeds.device)
         n_image_features = image_features.shape[0] * image_features.shape[1]
         torch_compilable_check(
-            inputs_embeds[special_image_mask].numel() == image_features.numel(),
+            n_image_tokens * inputs_embeds.shape[-1] == image_features.numel(),
             f"Image features and image tokens do not match: tokens: {n_image_tokens}, features {n_image_features}",
         )
         return special_image_mask
@@ -1061,17 +1053,17 @@ class T5Gemma2Decoder(T5Gemma2PreTrainedModel):
 
         # global and local position embeddings
         position_embeddings = {}
-        for layer_type in self.config.layer_types:
+        for layer_type in set(self.config.layer_types):
             position_embeddings[layer_type] = self.rotary_emb(hidden_states, position_ids, layer_type)
 
         # dropout
         hidden_states = self.dropout(hidden_states)
 
-        for layer_module in self.layers[: self.config.num_hidden_layers]:
+        for i, layer_module in enumerate(self.layers[: self.config.num_hidden_layers]):
             hidden_states = layer_module(
                 hidden_states,
-                position_embeddings[layer_module.attention_type],
-                merged_attn_mask_mapping[layer_module.attention_type],
+                position_embeddings[self.config.layer_types[i]],
+                merged_attn_mask_mapping[self.config.layer_types[i]],
                 position_ids,
                 past_key_values,
                 use_cache,
@@ -1103,7 +1095,7 @@ class T5Gemma2Model(T5Gemma2PreTrainedModel):
 
         self.post_init()
 
-    def get_encoder(self):
+    def get_encoder(self, modality: str | None = None):
         return self.encoder
 
     def get_decoder(self):
@@ -1210,8 +1202,8 @@ class T5Gemma2ForConditionalGeneration(T5Gemma2PreTrainedModel, GenerationMixin)
     def set_input_embeddings(self, value):
         self.model.set_input_embeddings(value)
 
-    def get_encoder(self):
-        return self.model.get_encoder()
+    def get_encoder(self, modality: str | None = None):
+        return self.model.get_encoder(modality=modality)
 
     def get_decoder(self):
         return self.model.get_decoder()
@@ -1341,8 +1333,8 @@ class T5Gemma2ForConditionalGeneration(T5Gemma2PreTrainedModel, GenerationMixin)
         cross_attn_config = copy.deepcopy(self.config.get_text_config(decoder=True))
 
         # cross-attention does not use sliding window
-        del cross_attn_config.sliding_window
-        del cross_attn_config.layer_types
+        cross_attn_config.sliding_window = None
+        cross_attn_config.layer_types = ["full_attention"] * cross_attn_config.num_hidden_layers
 
         cross_attn_cache_kwargs = {
             "config": cross_attn_config,

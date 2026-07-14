@@ -22,6 +22,7 @@ import pytest
 from datasets import Audio, load_dataset
 from pytest import mark
 
+from tests.utils.test_audio_utils import normalize_waveform
 from transformers import AutoFeatureExtractor, MimiConfig, set_seed
 from transformers.audio_utils import load_audio
 from transformers.testing_utils import (
@@ -165,7 +166,7 @@ class MimiModelTest(ModelTesterMixin, unittest.TestCase):
     is_encoder_decoder = True
 
     test_resize_embeddings = False
-    test_torch_exportable = False
+    test_torch_exportable = False  # data-dependent guard in conv padding (`u0 + u1 + 2 < 7`)
 
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
         # model does support returning hidden states
@@ -179,7 +180,7 @@ class MimiModelTest(ModelTesterMixin, unittest.TestCase):
     def setUp(self):
         self.model_tester = MimiModelTester(self)
         self.config_tester = ConfigTester(
-            self, config_class=MimiConfig, hidden_size=37, common_properties=[], has_text_modality=False
+            self, config_class=MimiConfig, hidden_size=32, common_properties=[], has_text_modality=False
         )
 
     def test_config(self):
@@ -336,18 +337,8 @@ class MimiModelTest(ModelTesterMixin, unittest.TestCase):
         pass
 
 
-# Copied from transformers.tests.encodec.test_modeling_encodec.normalize
-def normalize(arr):
-    norm = np.linalg.norm(arr)
-    normalized_arr = arr / norm
-    return normalized_arr
-
-
-# Copied from transformers.tests.encodec.test_modeling_encodec.compute_rmse
 def compute_rmse(arr1, arr2):
-    arr1_normalized = normalize(arr1)
-    arr2_normalized = normalize(arr2)
-    return np.sqrt(((arr1_normalized - arr2_normalized) ** 2).mean())
+    return np.sqrt(((normalize_waveform(arr1) - normalize_waveform(arr2)) ** 2).mean())
 
 
 @slow

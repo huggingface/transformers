@@ -27,7 +27,12 @@ from torch.nn import functional as F
 from ... import initialization as init
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
-from ...integrations import use_experts_implementation, use_kernel_forward_from_hub, use_kernelized_func
+from ...integrations import (
+    use_experts_implementation,
+    use_kernel_forward_from_hub,
+    use_kernel_func_from_hub,
+    use_kernelized_func,
+)
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_layers import (
     GenericForSequenceClassification,
@@ -65,7 +70,7 @@ class GptOssRMSNorm(nn.Module):
         return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
 
 
-@use_experts_implementation(is_transposed=True, has_bias=True)
+@use_experts_implementation(is_concatenated=False, is_transposed=True, has_bias=True)
 class GptOssExperts(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -234,7 +239,8 @@ def _apply_rotary_emb(
     return torch.cat((first_, second_), dim=-1)
 
 
-def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
+@use_kernel_func_from_hub("rotary_pos_emb")
+def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
     cos = cos.unsqueeze(unsqueeze_dim)
     sin = sin.unsqueeze(unsqueeze_dim)
     q_embed = _apply_rotary_emb(q, cos, sin)
@@ -249,7 +255,7 @@ def eager_attention_forward(
     value: torch.Tensor,
     attention_mask: torch.Tensor | None,
     scaling: float,
-    dropout: float = 0.0,
+    dropout: float | int = 0.0,
     **kwargs,
 ):
     key_states = repeat_kv(key, module.num_key_value_groups)
@@ -353,7 +359,6 @@ class GptOssDecoderLayer(GradientCheckpointingLayer):
         self.mlp = GptOssMLP(config)
         self.input_layernorm = GptOssRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = GptOssRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.attention_type = config.layer_types[layer_idx]
 
     def forward(
         self,
@@ -426,8 +431,6 @@ class GptOssPreTrainedModel(PreTrainedModel):
 
 @auto_docstring
 class GptOssModel(GptOssPreTrainedModel):
-    _no_split_modules = ["GptOssDecoderLayer"]
-
     def __init__(self, config: GptOssConfig):
         super().__init__(config)
         self.padding_idx = config.pad_token_id
@@ -487,10 +490,10 @@ class GptOssModel(GptOssPreTrainedModel):
         hidden_states = inputs_embeds
         position_embeddings = self.rotary_emb(hidden_states, position_ids)
 
-        for decoder_layer in self.layers:
+        for i, decoder_layer in enumerate(self.layers):
             hidden_states = decoder_layer(
                 hidden_states,
-                attention_mask=causal_mask_mapping[decoder_layer.attention_type],
+                attention_mask=causal_mask_mapping[self.config.layer_types[i]],
                 position_embeddings=position_embeddings,
                 position_ids=position_ids,
                 past_key_values=past_key_values,

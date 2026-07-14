@@ -17,6 +17,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import RopeParameters
@@ -24,6 +25,7 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="zai-org/GLM-4.5")
+@strict
 class Glm4MoeConfig(PreTrainedConfig):
     r"""
     n_group (`int`, *optional*, defaults to 1):
@@ -31,6 +33,10 @@ class Glm4MoeConfig(PreTrainedConfig):
     first_k_dense_replace (`int`, *optional*, defaults to 1):
         Number of dense layers in shallow layers(embed->dense->dense->...->dense->moe->moe...->lm_head).
                                                         \--k dense layers--/
+    num_mtp_layers (`int`, *optional*, defaults to 1):
+        Number of Multi-Token Prediction (MTP) modules available to append after the base transformer model. When `0`,
+        the model behaves as a standard decoder. When `>0`, each extra module can predict one additional future token at inference
+        time (speculative decoding via `generate(..., use_mtp=True)`).
 
     Example:
 
@@ -71,76 +77,50 @@ class Glm4MoeConfig(PreTrainedConfig):
         "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
         "norm": (["hidden_states"], ["hidden_states"]),
     }
+    base_model_ep_plan = {
+        "layers.*.mlp.gate": "ep_router",
+        "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
+        "layers.*.mlp.experts.down_proj": "grouped_gemm",
+        "layers.*.mlp.experts": "moe_tp_experts",
+    }
     attribute_map = {
         "num_local_experts": "n_routed_experts",
+        "num_mtp_layers": "num_nextn_predict_layers",
     }
 
-    def __init__(
-        self,
-        vocab_size: int | None = 151552,
-        hidden_size: int | None = 4096,
-        intermediate_size: int | None = 10944,
-        num_hidden_layers: int | None = 46,
-        num_attention_heads: int | None = 96,
-        num_key_value_heads: int | None = 8,
-        hidden_act: str | None = "silu",
-        max_position_embeddings: int | None = 131072,
-        initializer_range: float | None = 0.02,
-        rms_norm_eps: int | None = 1e-5,
-        use_cache: bool | None = True,
-        tie_word_embeddings: bool | None = False,
-        rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
-        attention_bias: bool | None = False,
-        attention_dropout: float | None = 0.0,
-        moe_intermediate_size: int | None = 1408,
-        num_experts_per_tok: int | None = 8,
-        n_shared_experts: int | None = 1,
-        n_routed_experts: int | None = 128,
-        routed_scaling_factor: float | None = 1.0,
-        n_group: int | None = 1,
-        topk_group: int | None = 1,
-        first_k_dense_replace: int | None = 1,
-        norm_topk_prob: bool | None = True,
-        use_qk_norm: bool | None = False,
-        bos_token_id: int | None = None,
-        eos_token_id: int | None = None,
-        pad_token_id: int | None = None,
-        **kwargs,
-    ):
-        self.vocab_size = vocab_size
-        self.max_position_embeddings = max_position_embeddings
-        self.hidden_size = hidden_size
-        self.intermediate_size = intermediate_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
+    vocab_size: int = 151552
+    hidden_size: int = 4096
+    intermediate_size: int = 10944
+    num_hidden_layers: int = 46
+    num_attention_heads: int = 96
+    num_key_value_heads: int = 8
+    hidden_act: str = "silu"
+    max_position_embeddings: int = 131072
+    initializer_range: float = 0.02
+    rms_norm_eps: float = 1e-5
+    use_cache: bool = True
+    tie_word_embeddings: bool = False
+    rope_parameters: RopeParameters | dict | None = None
+    attention_bias: bool = False
+    attention_dropout: float | int = 0.0
+    moe_intermediate_size: int = 1408
+    num_experts_per_tok: int = 8
+    n_shared_experts: int = 1
+    n_routed_experts: int = 128
+    routed_scaling_factor: float = 1.0
+    n_group: int = 1
+    topk_group: int = 1
+    first_k_dense_replace: int = 1
+    norm_topk_prob: bool = True
+    use_qk_norm: bool = False
+    bos_token_id: int | None = None
+    eos_token_id: int | list[int] | None = None
+    pad_token_id: int | None = None
+    num_mtp_layers: int = 1
 
-        self.num_key_value_heads = num_key_value_heads
-        self.hidden_act = hidden_act
-        self.initializer_range = initializer_range
-        self.rms_norm_eps = rms_norm_eps
-        self.use_cache = use_cache
-        self.attention_bias = attention_bias
-        self.attention_dropout = attention_dropout
-        self.rope_parameters = rope_parameters
+    def __post_init__(self, **kwargs):
         kwargs.setdefault("partial_rotary_factor", 0.5)  # assign default for BC
-
-        # MoE arguments
-        self.moe_intermediate_size = moe_intermediate_size
-        self.num_experts_per_tok = num_experts_per_tok
-        self.n_group = n_group
-        self.topk_group = topk_group
-        self.n_shared_experts = n_shared_experts
-        self.n_routed_experts = n_routed_experts
-        self.routed_scaling_factor = routed_scaling_factor
-        self.first_k_dense_replace = first_k_dense_replace
-        self.norm_topk_prob = norm_topk_prob
-        self.use_qk_norm = use_qk_norm
-        self.tie_word_embeddings = tie_word_embeddings
-        self.bos_token_id = bos_token_id
-        self.eos_token_id = eos_token_id
-        self.pad_token_id = pad_token_id
-
-        super().__init__(**kwargs)
+        super().__post_init__(**kwargs)
 
 
 __all__ = ["Glm4MoeConfig"]

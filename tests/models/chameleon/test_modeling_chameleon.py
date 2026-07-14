@@ -219,7 +219,7 @@ class ChameleonModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
 
     def setUp(self):
         self.model_tester = ChameleonModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=ChameleonConfig, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=ChameleonConfig, hidden_size=32)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -232,8 +232,8 @@ class ChameleonModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
     def test_batching_equivalence(self):
         pass
 
-    @unittest.skip("Skip get_image_features tests as those are tested via ChameleonVision2SeqModelTest instead")
     @parameterized.expand([True, False, None])
+    @unittest.skip("Skip get_image_features tests as those are tested via ChameleonVision2SeqModelTest instead")
     def test_get_image_features_output(self, return_dict: bool | None):
         pass
 
@@ -284,7 +284,7 @@ class ChameleonVision2SeqModelTest(ModelTesterMixin, GenerationTesterMixin, Pipe
 
     def setUp(self):
         self.model_tester = ChameleonVision2SeqModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=ChameleonConfig, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=ChameleonConfig, hidden_size=32)
 
     def test_config(self):
         self.config_tester.run_common_tests()

@@ -43,6 +43,7 @@ from ...test_modeling_common import (
     ids_tensor,
 )
 from ...test_pipeline_mixin import PipelineTesterMixin
+from ...test_processing_common import url_to_local_path
 
 
 if is_torch_available():
@@ -71,7 +72,6 @@ class PaddleOCRVLVisionText2TextModelTester:
             "image_token_id": 100295,
             "intermediate_size": 32,
             "max_position_embeddings": 512,
-            "model_type": "paddleocr_vl",
             "num_attention_heads": 4,
             "num_hidden_layers": 2,
             "num_key_value_heads": 2,
@@ -89,7 +89,6 @@ class PaddleOCRVLVisionText2TextModelTester:
             "hidden_size": 144,
             "intermediate_size": 32,
             "layer_norm_eps": 1e-06,
-            "model_type": "paddleocr_vl",
             "num_attention_heads": 4,
             "num_channels": 3,
             "num_hidden_layers": 2,
@@ -183,6 +182,24 @@ class PaddleOCRVLModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTest
 
     def test_config(self):
         self.config_tester.run_common_tests()
+
+    @unittest.skip(
+        reason="embed_tokens is ~80% of test model size, exceeding the 70% GPU budget so device_map puts everything on CPU"
+    )
+    def test_cpu_offload(self):
+        pass
+
+    @unittest.skip(
+        reason="embed_tokens is ~80% of test model size, exceeding the 70% GPU budget so device_map puts everything on CPU"
+    )
+    def test_disk_offload_bin(self):
+        pass
+
+    @unittest.skip(
+        reason="embed_tokens is ~80% of test model size, exceeding the 70% GPU budget so device_map puts everything on CPU"
+    )
+    def test_disk_offload_safetensors(self):
+        pass
 
     def test_mismatching_num_image_tokens(self):
         """
@@ -342,7 +359,9 @@ class PaddleOCRVLIntegrationTest(unittest.TestCase):
                 "content": [
                     {
                         "type": "image",
-                        "url": "https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/ocr_demo2.jpg",
+                        "url": url_to_local_path(
+                            "https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/ocr_demo2.jpg"
+                        ),
                     },
                     {"type": "text", "text": "OCR:"},
                 ],

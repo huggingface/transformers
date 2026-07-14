@@ -12,16 +12,18 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import copy
 from collections.abc import Callable
 from typing import Any
 
 import torch
 import torch.nn as nn
+from huggingface_hub.dataclasses import strict
 
 from ... import initialization as init
-from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
+from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache, StaticCache
 from ...configuration_utils import PreTrainedConfig
-from ...generation import GenerationMixin
+from ...generation import GenerationConfig, GenerationMixin, GenerationMode
 from ...masking_utils import (
     create_bidirectional_mask,
     create_bidirectional_sliding_window_mask,
@@ -38,7 +40,6 @@ from ...modeling_outputs import (
     SequenceClassifierOutput,
     TokenClassifierOutput,
 )
-from ...modeling_rope_utils import RopeParameters
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import (
@@ -60,13 +61,11 @@ from ..gemma2.modeling_gemma2 import (
 )
 
 
-_CHECKPOINT_FOR_DOC = "google/t5gemma-2b-2b-prefixlm-it"
-
-
 logger = logging.get_logger(__name__)
 
 
 @auto_docstring(checkpoint="google/t5_gemma_module-7b")
+@strict
 class T5GemmaModuleConfig(Gemma2Config):
     r"""
     query_pre_attn_scalar (`float`, *optional*, defaults to 256):
@@ -86,68 +85,12 @@ class T5GemmaModuleConfig(Gemma2Config):
     >>> configuration = model.config
     ```"""
 
-    def __init__(
-        self,
-        vocab_size: int | None = 256000,
-        hidden_size: int | None = 2304,
-        intermediate_size: int | None = 9216,
-        num_hidden_layers: int | None = 26,
-        num_attention_heads: int | None = 8,
-        num_key_value_heads: int | None = 4,
-        head_dim: int | None = 256,
-        hidden_activation: str | None = "gelu_pytorch_tanh",
-        max_position_embeddings: int | None = 8192,
-        initializer_range: float | None = 0.02,
-        rms_norm_eps: int | None = 1e-6,
-        use_cache: bool | None = True,
-        pad_token_id: int | None = 0,
-        eos_token_id: int | None = 1,
-        bos_token_id: int | None = 2,
-        tie_word_embeddings: bool | None = True,
-        rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
-        attention_bias: bool | None = False,
-        attention_dropout: float | None = 0.0,
-        query_pre_attn_scalar: int | None = 256,
-        sliding_window: int | None = 4096,
-        layer_types: list[str] | None = None,
-        final_logit_softcapping: float | None = 30.0,
-        attn_logit_softcapping: float | None = 50.0,
-        is_decoder: bool | None = False,
-        **kwargs,
-    ):
-        self.is_decoder = is_decoder
-        super().__init__(
-            vocab_size=vocab_size,
-            hidden_size=hidden_size,
-            intermediate_size=intermediate_size,
-            num_hidden_layers=num_hidden_layers,
-            num_attention_heads=num_attention_heads,
-            num_key_value_heads=num_key_value_heads,
-            head_dim=head_dim,
-            hidden_activation=hidden_activation,
-            max_position_embeddings=max_position_embeddings,
-            initializer_range=initializer_range,
-            rms_norm_eps=rms_norm_eps,
-            use_cache=use_cache,
-            pad_token_id=pad_token_id,
-            eos_token_id=eos_token_id,
-            bos_token_id=bos_token_id,
-            tie_word_embeddings=tie_word_embeddings,
-            rope_parameters=rope_parameters,
-            attention_bias=attention_bias,
-            attention_dropout=attention_dropout,
-            query_pre_attn_scalar=query_pre_attn_scalar,
-            sliding_window=sliding_window,
-            layer_types=layer_types,
-            final_logit_softcapping=final_logit_softcapping,
-            attn_logit_softcapping=attn_logit_softcapping,
-            **kwargs,
-        )
-
-        del self.use_bidirectional_attention
+    is_decoder: bool = False
+    use_bidirectional_attention = AttributeError()
 
 
 @auto_docstring(checkpoint="google/t5_gemma_module-7b")
+@strict
 class T5GemmaConfig(PreTrainedConfig):
     r"""
     encoder (`Union[T5GemmaModuleConfig, dict]`, optional, *optional*):
@@ -167,60 +110,43 @@ class T5GemmaConfig(PreTrainedConfig):
     keys_to_ignore_at_inference = ["past_key_values"]
     sub_configs = {"encoder": T5GemmaModuleConfig, "decoder": T5GemmaModuleConfig}
 
-    def __init__(
-        self,
-        encoder: T5GemmaModuleConfig | dict[Any, Any] | None = None,
-        decoder: T5GemmaModuleConfig | dict[Any, Any] | None = None,
-        is_encoder_decoder: bool | None = True,
-        dropout_rate: float | None = 0.0,
-        classifier_dropout_rate: float | None = 0.0,
-        attention_dropout: float | None = 0.0,
-        tie_word_embeddings: bool | None = True,
-        vocab_size: int | None = 256000,
-        **kwargs,
-    ):
-        if isinstance(encoder, dict):
-            encoder = T5GemmaModuleConfig(**encoder)
-        elif encoder is None:
-            encoder = T5GemmaModuleConfig()
-        else:
-            assert isinstance(encoder, T5GemmaModuleConfig), f"{type(encoder)} is not supported."
+    encoder: T5GemmaModuleConfig | dict[Any, Any] | None = None
+    decoder: T5GemmaModuleConfig | dict[Any, Any] | None = None
+    is_encoder_decoder: bool = True
+    dropout_rate: int | float = 0.0
+    classifier_dropout_rate: int | float = 0.0
+    attention_dropout: float | int = 0.0
+    tie_word_embeddings: bool = True
+    vocab_size: int = 256000
 
-        if isinstance(decoder, dict):
-            decoder = T5GemmaModuleConfig(**decoder)
-        elif decoder is None:
-            decoder = encoder
-        else:
-            assert isinstance(decoder, T5GemmaModuleConfig), f"{type(decoder)} is not supported."
+    def __post_init__(self, **kwargs):
+        if isinstance(self.encoder, dict):
+            self.encoder = T5GemmaModuleConfig(**self.encoder)
+        elif self.encoder is None:
+            self.encoder = T5GemmaModuleConfig()
 
-        encoder = T5GemmaModuleConfig(**encoder.to_dict())
-        decoder = T5GemmaModuleConfig(**decoder.to_dict())
+        if isinstance(self.decoder, dict):
+            self.decoder = T5GemmaModuleConfig(**self.decoder)
+        elif self.decoder is None:
+            self.decoder = T5GemmaModuleConfig()
 
-        encoder.is_decoder = False
-        encoder.dropout_rate = dropout_rate
-        encoder.attention_dropout = attention_dropout
-        self.encoder = encoder
+        self.encoder.is_decoder = False
+        self.encoder.dropout_rate = self.dropout_rate
+        self.encoder.attention_dropout = self.attention_dropout
 
-        decoder.is_decoder = True
-        decoder.use_cache = True
-        decoder.dropout_rate = dropout_rate
-        decoder.attention_dropout = attention_dropout
-        decoder.cross_attention_hidden_size = encoder.hidden_size
-        self.decoder = decoder
+        self.decoder.is_decoder = True
+        self.decoder.use_cache = True
+        self.decoder.dropout_rate = self.dropout_rate
+        self.decoder.attention_dropout = self.attention_dropout
+        self.decoder.cross_attention_hidden_size = self.encoder.hidden_size
+
+        self.initializer_range = kwargs.pop("initializer_range", self.decoder.initializer_range)
 
         for special_token_key in ["bos_token_id", "pad_token_id", "eos_token_id"]:
             if special_token_key not in kwargs:
-                kwargs[special_token_key] = getattr(decoder, special_token_key)
+                kwargs[special_token_key] = getattr(self.decoder, special_token_key)
 
-        super().__init__(**kwargs)
-
-        self.is_encoder_decoder = is_encoder_decoder
-        self.initializer_range = kwargs.get("initializer_range", decoder.initializer_range)
-        self.classifier_dropout_rate = classifier_dropout_rate
-        self.tie_word_embeddings = tie_word_embeddings
-
-        # Used in pipeline generation.
-        self.vocab_size = vocab_size
+        super().__post_init__(**kwargs)
 
 
 class T5GemmaRMSNorm(Gemma2RMSNorm):
@@ -478,14 +404,8 @@ class T5GemmaPreTrainedModel(Gemma2PreTrainedModel):
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["T5GemmaEncoderLayer", "T5GemmaDecoderLayer"]
-    _can_record_outputs = {
-        "hidden_states": T5GemmaDecoderLayer,
-        "attentions": [
-            OutputRecorder(T5GemmaSelfAttention, index=1, layer_name="self_attn"),
-            OutputRecorder(T5GemmaSelfAttention, index=1, layer_name="cross_attn"),
-            OutputRecorder(T5GemmaCrossAttention, index=1, layer_name="cross_attn"),
-        ],
-    }
+    # Recording is declared on T5GemmaEncoder/T5GemmaDecoder; None avoids inheriting the gemma2 dict
+    _can_record_outputs = None
 
     @torch.no_grad()
     def _init_weights(self, module):
@@ -617,11 +537,11 @@ class T5GemmaEncoder(T5GemmaPreTrainedModel):
 
         position_embeddings = self.rotary_emb(hidden_states, position_ids)
 
-        for layer_module in self.layers[: self.config.num_hidden_layers]:
+        for i, layer_module in enumerate(self.layers[: self.config.num_hidden_layers]):
             hidden_states = layer_module(
                 hidden_states,
                 position_embeddings,
-                self_attn_mask_mapping[layer_module.attention_type],
+                self_attn_mask_mapping[self.config.layer_types[i]],
                 position_ids,
                 **kwargs,
             )
@@ -722,11 +642,11 @@ class T5GemmaDecoder(T5GemmaPreTrainedModel):
 
         position_embeddings = self.rotary_emb(hidden_states, position_ids)
 
-        for layer_module in self.layers[: self.config.num_hidden_layers]:
+        for i, layer_module in enumerate(self.layers[: self.config.num_hidden_layers]):
             hidden_states = layer_module(
                 hidden_states,
                 position_embeddings,
-                self_attn_mask_mapping[layer_module.attention_type],
+                self_attn_mask_mapping[self.config.layer_types[i]],
                 position_ids,
                 past_key_values,
                 use_cache,
@@ -875,6 +795,12 @@ class T5GemmaForConditionalGeneration(T5GemmaPreTrainedModel, GenerationMixin):
 
     def set_output_embeddings(self, new_embeddings):
         self.lm_head.out_proj = new_embeddings
+        # The tying happens from decoder to lm-head, but when resizing
+        # the resized embed is assigned only to the head. Then tying weights
+        # again reverts everything back. So we have to update decoder here
+        if self.config.tie_word_embeddings:
+            self.model.decoder.embed_tokens.weight = new_embeddings.weight
+            self.model.decoder.embed_tokens.num_embeddings = new_embeddings.weight.shape[0]
 
     def get_output_embeddings(self):
         return self.lm_head.out_proj
@@ -956,6 +882,81 @@ class T5GemmaForConditionalGeneration(T5GemmaPreTrainedModel, GenerationMixin):
 
     def prepare_decoder_input_ids_from_labels(self, labels: torch.Tensor):
         return self._shift_right(labels)
+
+    def _prepare_cache_for_generation(
+        self,
+        generation_config: GenerationConfig,
+        model_kwargs: dict,
+        generation_mode: GenerationMode,
+        batch_size: int,
+        max_cache_length: int,
+    ) -> bool:
+        """Override cache preparation to force full attention on the cross-attention cache.
+
+        The decoder config may declare sliding-window layers, but cross-attention must always use full attention.
+        The default `_prepare_cache_for_generation` would otherwise build a sliding cross-attention cache.
+        """
+        super()._prepare_cache_for_generation(
+            generation_config,
+            model_kwargs,
+            generation_mode,
+            batch_size,
+            max_cache_length,
+        )
+
+        # If use_cache is False, do not prepare the cache.
+        if generation_config.use_cache is False:
+            return
+
+        cache_implementation = generation_config.cache_implementation
+        if cache_implementation is None:
+            offload_cache = False
+        else:
+            offload_cache = "offloaded" in generation_config.cache_implementation
+
+        # Main change: use full cache for cross-attention.
+        cross_attn_config = copy.deepcopy(self.config.get_text_config(decoder=True))
+        cross_attn_config.sliding_window = None
+        cross_attn_config.layer_types = ["full_attention"] * cross_attn_config.num_hidden_layers
+
+        cross_attn_cache_kwargs = {
+            "config": cross_attn_config,
+            "offloading": offload_cache,
+        }
+
+        past_key_values = model_kwargs.get("past_key_values")
+        if past_key_values is not None:
+            if not isinstance(past_key_values, EncoderDecoderCache):
+                raise ValueError(
+                    "The `past_key_values` in `model_kwargs` must be of type `EncoderDecoderCache` for T5Gemma model."
+                )
+
+            # Cache already established, no need to re-initialize.
+            if len(past_key_values.is_updated) > 0 and past_key_values.is_updated.get(0):
+                return
+
+            cross_attn_cls = type(past_key_values.cross_attention_cache)
+            if cross_attn_cls == StaticCache:
+                cross_attn_cache_kwargs["max_cache_len"] = model_kwargs["encoder_outputs"][0].shape[1]
+            # Update cross-attention cache only (switch from sliding_window to full).
+            past_key_values.cross_attention_cache = cross_attn_cls(**cross_attn_cache_kwargs)
+        else:
+            # Initialize new cache.
+            model_kwargs["past_key_values"] = EncoderDecoderCache(
+                DynamicCache(
+                    **{
+                        "config": self.config.get_text_config(decoder=True),
+                        "offloading": offload_cache,
+                    }
+                ),  # self-attention cache
+                DynamicCache(),  # cross-attention cache
+            )
+
+        if hasattr(self, "_cache") and self._cache is not None:
+            if not isinstance(self._cache, EncoderDecoderCache):
+                raise ValueError("The internal cache must be of type `EncoderDecoderCache` for T5Gemma model.")
+
+            self._cache = model_kwargs["past_key_values"]
 
 
 @auto_docstring

@@ -13,12 +13,11 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2024-04-22 and added to Hugging Face Transformers on 2024-04-24.*
+*This model was published in HF papers on 2024-04-22 and contributed to Hugging Face Transformers on 2024-04-24.*
 
 # Phi-3
 
 <div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
 <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
 <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
 <img alt="Tensor parallelism" src="https://img.shields.io/badge/Tensor%20parallelism-06b6d4?style=flat&logoColor=white">
@@ -54,17 +53,17 @@ Phi-3 has been integrated in the development version (4.40.0.dev) of `transforme
 </Tip>
 
 ```python
->>> from transformers import AutoModelForCausalLM, AutoTokenizer
+from transformers import AutoModelForCausalLM, AutoTokenizer
 
->>> model = AutoModelForCausalLM.from_pretrained("microsoft/Phi-3-mini-4k-instruct")
->>> tokenizer = AutoTokenizer.from_pretrained("microsoft/Phi-3-mini-4k-instruct")
+model = AutoModelForCausalLM.from_pretrained("microsoft/Phi-3-mini-4k-instruct", device_map="auto")
+tokenizer = AutoTokenizer.from_pretrained("microsoft/Phi-3-mini-4k-instruct")
 
->>> messages = [{"role": "user", "content": "Can you provide ways to eat combinations of bananas and dragonfruits?"}]
->>> inputs = tokenizer.apply_chat_template(messages, add_generation_prompt=True, return_tensors="pt")
+messages = [{"role": "user", "content": "Can you provide ways to eat combinations of bananas and dragonfruits?"}]
+inputs = tokenizer.apply_chat_template(messages, add_generation_prompt=True, return_tensors="pt").to(model.device)
 
->>> outputs = model.generate(inputs, max_new_tokens=32)
->>> text = tokenizer.batch_decode(outputs)[0]
->>> print(text)
+outputs = model.generate(inputs, max_new_tokens=32)
+text = tokenizer.batch_decode(outputs)[0]
+print(text)
 <|user|> Can you provide ways to eat combinations of bananas and dragonfruits?<|end|><|assistant|> Certainly! Bananas and dragonfruits can be combined in various delicious ways. Here are some creative ideas for incorporating both fruits
 ```
 

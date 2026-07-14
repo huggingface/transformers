@@ -45,12 +45,12 @@ from .configuration_omdet_turbo import OmDetTurboConfig
 logger = logging.get_logger(__name__)
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for outputs of the OmDetTurboHybridEncoder.
     """
 )
+@dataclass
 class OmDetTurboEncoderOutput(ModelOutput):
     r"""
     last_hidden_state (`torch.FloatTensor`):
@@ -65,12 +65,12 @@ class OmDetTurboEncoderOutput(ModelOutput):
     extracted_states: tuple[torch.FloatTensor] | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for outputs of the OmDetTurboDecoder.
     """
 )
+@dataclass
 class OmDetTurboDecoderOutput(ModelOutput):
     r"""
     last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
@@ -100,12 +100,12 @@ class OmDetTurboDecoderOutput(ModelOutput):
     intermediate_reference_points: tuple[tuple[torch.FloatTensor]] = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Output type of [`OmDetTurboObjectDetectionOutput`].
     """
 )
+@dataclass
 class OmDetTurboObjectDetectionOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor`):
@@ -743,7 +743,7 @@ class OmDetTurboHybridEncoder(nn.Module):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         hidden_states = inputs_embeddings
 
@@ -989,6 +989,8 @@ class OmDetTurboPreTrainedModel(PreTrainedModel):
 
     @torch.no_grad()
     def _init_weights(self, module):
+        super()._init_weights(module)
+
         def linear_init_(module_to_init):
             bound = 1 / math.sqrt(module_to_init.weight.shape[0])
             init.uniform_(module_to_init.weight, -bound, bound)
@@ -1014,17 +1016,6 @@ class OmDetTurboPreTrainedModel(PreTrainedModel):
                 init.xavier_uniform_(layer[0].weight)
         elif isinstance(module, OmDetTurboLanguageBackbone):
             init.normal_(module.text_projection, std=self.config.text_projection_in_dim**-0.5)
-        elif isinstance(module, (nn.Linear, nn.Conv2d)):
-            init.normal_(module.weight, mean=0.0, std=self.config.init_std)
-            if module.bias is not None:
-                init.zeros_(module.bias)
-        elif isinstance(module, (nn.LayerNorm, nn.BatchNorm2d)):
-            init.ones_(module.weight)
-            init.zeros_(module.bias)
-            if getattr(module, "running_mean", None) is not None:
-                init.zeros_(module.running_mean)
-                init.ones_(module.running_var)
-                init.zeros_(module.num_batches_tracked)
 
     def _set_gradient_checkpointing(self, module, value=False):
         if isinstance(module, OmDetTurboDecoder):
@@ -1341,7 +1332,7 @@ class OmDetTurboDecoder(OmDetTurboPreTrainedModel):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         vision_features, vision_shapes, vision_shapes_list, level_start_index = self._get_encoder_input(
             vision_features
@@ -1588,7 +1579,7 @@ class OmDetTurboForObjectDetection(OmDetTurboPreTrainedModel):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         loss = None
         image_features = self.vision_backbone(pixel_values)

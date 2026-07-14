@@ -22,6 +22,7 @@ from transformers.generation.configuration_utils import GenerationConfig
 from transformers.testing_utils import (
     Expectations,
     cleanup,
+    require_flash_attn,
     require_torch,
     require_torch_accelerator,
     slow,
@@ -35,9 +36,11 @@ if is_torch_available():
     import torch
 
     from transformers import (
+        AutoModelForCausalLM,
         LlamaForCausalLM,
         LlamaModel,
         LlamaTokenizer,
+        StaticLayer,
     )
 
 
@@ -59,6 +62,7 @@ class LlamaModelTest(CausalLMModelTest, unittest.TestCase):
 
 
 @require_torch_accelerator
+@slow
 class LlamaIntegrationTest(unittest.TestCase):
     def setup(self):
         cleanup(torch_device, gc_collect=True)
@@ -70,7 +74,6 @@ class LlamaIntegrationTest(unittest.TestCase):
         # Investigate the root cause.
         cleanup(torch_device, gc_collect=True)
 
-    @slow
     def test_llama_3_1_hard(self):
         """
         An integration test for llama 3.1. It tests against a long output to ensure the subtle numerical differences
@@ -95,7 +98,6 @@ class LlamaIntegrationTest(unittest.TestCase):
         generated_text = tokenizer.decode(generated_ids[0], skip_special_tokens=True)
         self.assertEqual(generated_text, EXPECTED_TEXT)
 
-    @slow
     def test_model_7b_logits_bf16(self):
         input_ids = [1, 306, 4658, 278, 6593, 310, 2834, 338]
 
@@ -140,7 +142,6 @@ class LlamaIntegrationTest(unittest.TestCase):
         actual_slice = out.logits[0, 0, :15].float()
         self.assertTrue(torch.allclose(expected_slice, actual_slice, atol=1e-2, rtol=1e-2))
 
-    @slow
     def test_model_7b_logits(self):
         input_ids = [1, 306, 4658, 278, 6593, 310, 2834, 338]
 
@@ -187,7 +188,6 @@ class LlamaIntegrationTest(unittest.TestCase):
             )
         )
 
-    @slow
     @require_torch_accelerator
     @pytest.mark.torch_compile_test
     def test_compile_static_cache(self):
@@ -224,7 +224,6 @@ class LlamaIntegrationTest(unittest.TestCase):
         static_text = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
         self.assertEqual(EXPECTED_TEXT_COMPLETION, static_text)
 
-    @slow
     @pytest.mark.torch_export_test
     def test_export_static_cache(self):
         from transformers.integrations.executorch import (
@@ -286,6 +285,48 @@ class LlamaIntegrationTest(unittest.TestCase):
             )
             ep_generated_text = tokenizer.batch_decode(ep_generated_ids, skip_special_tokens=True)
             self.assertEqual(EXPECTED_TEXT_COMPLETION, ep_generated_text)
+
+    @pytest.mark.flash_attn_test
+    @require_flash_attn
+    def test_flash_with_static_cache(self):
+        """Test that FA works correctly with a StaticCache"""
+        model_name = "meta-llama/Llama-3.2-3B-Instruct"
+
+        model = AutoModelForCausalLM.from_pretrained(model_name, device_map=torch_device, dtype=torch.bfloat16)
+        tokenizer = AutoTokenizer.from_pretrained(model_name)
+
+        input_text = {"role": "user", "content": "What's the meaning of life?"}
+        inputs = tokenizer.apply_chat_template(
+            [input_text], tokenize=True, return_tensors="pt", add_generation_prompt=True
+        ).to(model.device)
+
+        out_sdpa = model.generate(**inputs, max_new_tokens=100, cache_implementation="static", do_sample=False)
+        output_text_sdpa = tokenizer.batch_decode(out_sdpa[0, inputs.input_ids.shape[1] :])[0]
+
+        # Now toggle FA and test again
+        model.set_attn_implementation("flash_attention_2")
+
+        out_fa = model.generate(
+            **inputs, max_new_tokens=100, cache_implementation="static", do_sample=False, return_dict_in_generate=True
+        )
+        output_text_fa = tokenizer.batch_decode(out_fa.sequences[0, inputs.input_ids.shape[1] :])[0]
+
+        # Just to make sure
+        self.assertTrue(all(isinstance(layer, StaticLayer) for layer in out_fa.past_key_values.layers))
+
+        expected_text = Expectations(
+            {
+                (
+                    "cuda",
+                    8,
+                ): "The question of the meaning of life is one of the most profound and debated topics in human history. It has been explored by philosophers, theologians, scientists, and many others across various cultures and disciplines. While there is no one definitive answer, here are some perspectives to consider:\n\n1. **Religious and spiritual perspectives**: Many religions and spiritual traditions offer their own answers to the meaning of life. For example, in Christianity, the meaning of life is often seen as serving God and preparing for eternal"  # fmt: skip
+            }
+        )
+        EXPECTED_TEXT = expected_text.get_expectation()
+
+        # Both output text should be the same, and equal to the reference
+        self.assertEqual(output_text_sdpa, output_text_fa)
+        self.assertEqual(output_text_fa, EXPECTED_TEXT)
 
 
 @slow
@@ -445,7 +486,6 @@ class Mask4DTestHard(unittest.TestCase):
             input_ids_shared_prefix,
             attention_mask=padded_attention_mask,
             position_ids=position_ids_shared_prefix,
-            cache_position=torch.arange(input_ids_shared_prefix.shape[-1], device=torch_device),
             past_key_values=past_key_values,
         ).logits
         logits_shared_prefix_last = logits_shared_prefix[
@@ -493,7 +533,6 @@ class Mask4DTestHard(unittest.TestCase):
             input_1a,
             attention_mask=padded_mask_1a,
             position_ids=position_ids_1a,
-            cache_position=torch.arange(part_a, device=torch_device),
             past_key_values=past_key_values,
         )
 
@@ -510,11 +549,6 @@ class Mask4DTestHard(unittest.TestCase):
             input_1b,
             attention_mask=padded_mask_1b,
             position_ids=position_ids_1b,
-            cache_position=torch.arange(
-                part_a,
-                input_ids_shared_prefix.shape[-1],
-                device=torch_device,
-            ),
             past_key_values=past_key_values,
         )
         decoded_1b = [

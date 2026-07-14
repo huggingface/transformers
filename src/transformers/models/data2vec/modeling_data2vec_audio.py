@@ -251,18 +251,17 @@ class Data2VecAudioAttention(nn.Module):
         is_cross_attention = key_value_states is not None
 
         # determine input shapes
-        bsz, tgt_len = hidden_states.shape[:-1]
-        src_len = key_value_states.shape[1] if is_cross_attention else tgt_len
+        input_shape = hidden_states.shape[:-1]
 
-        q_input_shape = (bsz, tgt_len, -1, self.head_dim)
-        kv_input_shape = (bsz, src_len, -1, self.head_dim)
+        hidden_shape = (*input_shape, -1, self.head_dim)
 
         # get query proj
-        query_states = self.q_proj(hidden_states).view(*q_input_shape).transpose(1, 2)
+        query_states = self.q_proj(hidden_states).view(hidden_shape).transpose(1, 2)
 
         current_states = key_value_states if is_cross_attention else hidden_states
-        key_states = self.k_proj(current_states).view(*kv_input_shape).transpose(1, 2)
-        value_states = self.v_proj(current_states).view(*kv_input_shape).transpose(1, 2)
+        kv_shape = (*current_states.shape[:-1], -1, self.head_dim)
+        key_states = self.k_proj(current_states).view(kv_shape).transpose(1, 2)
+        value_states = self.v_proj(current_states).view(kv_shape).transpose(1, 2)
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
@@ -280,7 +279,7 @@ class Data2VecAudioAttention(nn.Module):
             **kwargs,
         )
 
-        attn_output = attn_output.reshape(bsz, tgt_len, -1).contiguous()
+        attn_output = attn_output.reshape(*input_shape, -1).contiguous()
         attn_output = self.out_proj(attn_output)
 
         return attn_output, attn_weights, None
@@ -481,22 +480,13 @@ class Data2VecAudioPreTrainedModel(PreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
+        super()._init_weights(module)
         if isinstance(module, Data2VecAudioFeatureProjection):
             k = math.sqrt(1 / module.projection.in_features)
             init.uniform_(module.projection.weight, a=-k, b=k)
             init.uniform_(module.projection.bias, a=-k, b=k)
         elif isinstance(module, Data2VecAudioPositionalConvLayer):
             init.constant_(module.conv.bias, 0)
-        elif isinstance(module, nn.Linear):
-            init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
-
-            if module.bias is not None:
-                init.zeros_(module.bias)
-        elif isinstance(module, (nn.LayerNorm, nn.GroupNorm)):
-            if module.bias is not None:
-                init.zeros_(module.bias)
-            if module.weight is not None:
-                init.ones_(module.weight)
         elif isinstance(module, nn.Conv1d):
             init.kaiming_normal_(module.weight)
 
@@ -760,7 +750,7 @@ class Data2VecAudioModel(Data2VecAudioPreTrainedModel):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         extract_features = self.feature_extractor(input_values)
         extract_features = extract_features.transpose(1, 2)
@@ -861,7 +851,7 @@ class Data2VecAudioForCTC(Data2VecAudioPreTrainedModel):
             All labels set to `-100` are ignored (masked), the loss is only computed for labels in `[0, ...,
             config.vocab_size - 1]`.
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         if labels is not None and labels.max() >= self.config.vocab_size:
             raise ValueError(f"Label values must be <= vocab_size: {self.config.vocab_size}")
@@ -979,7 +969,7 @@ class Data2VecAudioForSequenceClassification(Data2VecAudioPreTrainedModel):
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
 
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
         output_hidden_states = True if self.config.use_weighted_layer_sum else output_hidden_states
 
         outputs = self.data2vec_audio(
@@ -1083,7 +1073,7 @@ class Data2VecAudioForAudioFrameClassification(Data2VecAudioPreTrainedModel):
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
 
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
         output_hidden_states = True if self.config.use_weighted_layer_sum else output_hidden_states
 
         outputs = self.data2vec_audio(
@@ -1255,7 +1245,7 @@ class Data2VecAudioForXVector(Data2VecAudioPreTrainedModel):
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
 
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
         output_hidden_states = True if self.config.use_weighted_layer_sum else output_hidden_states
 
         outputs = self.data2vec_audio(

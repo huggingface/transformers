@@ -17,7 +17,12 @@ import unittest
 
 import numpy as np
 
-from transformers import MODEL_FOR_MULTIMODAL_LM_MAPPING, is_vision_available
+from transformers import (
+    MODEL_FOR_MULTIMODAL_LM_MAPPING,
+    AutoProcessor,
+    Qwen2_5OmniForConditionalGeneration,
+    is_vision_available,
+)
 from transformers.pipelines import AnyToAnyPipeline, pipeline
 from transformers.testing_utils import (
     Expectations,
@@ -174,6 +179,26 @@ class AnyToAnyPipelineTests(unittest.TestCase):
                 ],
             )
 
+    def test_qwen_omni_batched_text_only_outputs_all_rows(self):
+        model_id = "hf-internal-testing/tiny-random-Qwen2_5OmniForConditionalGeneration"
+        processor = AutoProcessor.from_pretrained(model_id)
+        model = Qwen2_5OmniForConditionalGeneration.from_pretrained(model_id).eval()
+        pipe = pipeline("any-to-any", model=model, processor=processor)
+
+        outputs = pipe(
+            text=["hello", "world"],
+            return_full_text=False,
+            generate_kwargs={
+                "generation_mode": "text",
+                "thinker_do_sample": False,
+                "thinker_max_new_tokens": 1,
+            },
+        )
+
+        self.assertEqual(len(outputs), 2)
+        self.assertEqual([output["input_text"] for output in outputs], ["hello", "world"])
+        self.assertTrue(all("generated_text" in output for output in outputs))
+
     @slow
     def test_small_model_pt_token_text_only(self):
         pipe = pipeline("any-to-any", model="google/gemma-3n-E4B-it")
@@ -300,6 +325,82 @@ class AnyToAnyPipelineTests(unittest.TestCase):
             }
         ).get_expectation()
         self.assertEqual(outputs, EXPECTED_OUTPUT)
+
+    @slow
+    @require_torch
+    def test_small_model_pt_chat_with_response_parsing(self):
+        pipe = pipeline("any-to-any", model="google/gemma-3n-E4B-it")
+        messages = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": "What is the capital of France?"},
+                ],
+            },
+        ]
+        pipe.tokenizer.response_schema = {
+            # A real response schema should probably have things like "role" and "content"
+            # and "reasoning_content" but it's unlikely we'd get a tiny model to reliably
+            # output anything like that, so let's keep it simple.
+            "type": "object",
+            "properties": {
+                "first_word": {"type": "string", "x-regex": r"^\s*([a-zA-Z]+)"},
+                "last_word": {"type": "string", "x-regex": r"([a-zA-Z]+)\s*$"},
+            },
+        }
+        outputs = pipe(text=messages, generate_kwargs={"do_sample": False})
+        parsed_message = outputs[0]["generated_text"][-1]
+        # The parsed message should be a dict with the schema keys, not {"role": "assistant", "content": ...}
+        self.assertIn("first_word", parsed_message)
+        self.assertIn("last_word", parsed_message)
+        self.assertNotIn("role", parsed_message)
+        self.assertIsInstance(parsed_message["first_word"], str)
+        self.assertIsInstance(parsed_message["last_word"], str)
+
+    @slow
+    @require_torch
+    def test_small_model_pt_chat_with_response_template_prefix(self):
+        # When the chat template pre-writes the start of the assistant message (here, an
+        # opening <think> block), the pipeline must pass the prompt to `parse_response` as
+        # `prefix=` so that generated text is correctly routed into the prefilled region.
+        pipe = pipeline("any-to-any", model="google/gemma-3n-E4B-it")
+        pipe.processor.chat_template = (
+            "{% for message in messages %}"
+            "{{ '<start_of_turn>' + message['role'] + '\n' }}"
+            "{% for item in message['content'] %}"
+            "{% if item['type'] == 'text' %}{{ item['text'] }}{% endif %}"
+            "{% endfor %}"
+            "{{ '<end_of_turn>' + '\n' }}"
+            "{% endfor %}"
+            "{% if add_generation_prompt %}{{ '<start_of_turn>model\n<think>\n' }}{% endif %}"
+        )
+        pipe.tokenizer.response_template = {
+            "defaults": {"role": "assistant"},
+            "start_anchor": "<start_of_turn>model\n",
+            "fields": {
+                "thinking": {"open": "<think>", "close": "</think>", "content": "text"},
+                "content": {"close": "<end_of_turn>", "content": "text"},
+            },
+        }
+        messages = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": "What is the capital of France?"},
+                ],
+            },
+        ]
+        outputs = pipe(text=messages, generate_kwargs={"do_sample": False})
+        parsed_message = outputs[0]["generated_text"][-1]
+        # The model never emits </think> here, so everything it generates stays inside the
+        # `thinking` region opened by the chat template in the prompt. Without `prefix=`,
+        # the parser would never see the opening <think> and would mis-route the generated
+        # text into `content` instead.
+        self.assertEqual(parsed_message["role"], "assistant")
+        self.assertIn("thinking", parsed_message)
+        self.assertNotIn("content", parsed_message)
+        self.assertIsInstance(parsed_message["thinking"], str)
+        self.assertGreater(len(parsed_message["thinking"]), 0)
 
     @slow
     def test_small_model_pt_token_audio_input(self):

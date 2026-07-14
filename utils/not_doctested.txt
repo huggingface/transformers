@@ -246,9 +246,7 @@ docs/source/en/peft.md
 docs/source/en/perf_hardware.md
 docs/source/en/perf_torch_compile.md
 docs/source/en/perf_train_cpu.md
-docs/source/en/perf_train_cpu_many.md
 docs/source/en/perf_train_gpu_many.md
-docs/source/en/perf_train_gpu_one.md
 docs/source/en/perf_train_special.md
 docs/source/en/perplexity.md
 docs/source/en/philosophy.md
@@ -283,7 +281,6 @@ docs/source/en/training.md
 docs/source/en/troubleshooting.md
 src/transformers/activations.py
 src/transformers/audio_utils.py
-src/transformers/cli/add_fast_image_processor.py
 src/transformers/cli/add_new_model_like.py
 src/transformers/cli/chat.py
 src/transformers/cli/download.py

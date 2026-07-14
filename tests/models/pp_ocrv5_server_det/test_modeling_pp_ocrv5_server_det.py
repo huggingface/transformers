@@ -17,17 +17,17 @@
 import inspect
 import unittest
 
-import requests
 from parameterized import parameterized
 
 from transformers import (
     PPOCRV5ServerDetConfig,
     PPOCRV5ServerDetForObjectDetection,
-    PPOCRV5ServerDetImageProcessorFast,
+    PPOCRV5ServerDetImageProcessor,
     PPOCRV5ServerDetModel,
     is_torch_available,
     is_vision_available,
 )
+from transformers.image_utils import load_image
 from transformers.testing_utils import (
     require_cv2,
     require_torch,
@@ -40,13 +40,11 @@ from transformers.testing_utils import (
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
+from ...test_processing_common import url_to_local_path
 
 
 if is_torch_available():
     import torch
-
-if is_vision_available():
-    from PIL import Image
 
 
 class PPOCRV5ServerDetModelTester:
@@ -258,16 +256,15 @@ class PPOCRV5ServerDetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.
 @slow
 class PPOCRV5ServerDetModelIntegrationTest(unittest.TestCase):
     def setUp(self):
-        model_path = "PaddlePaddle/PP-OCRV5_server_det_safetensors"
+        model_path = "PaddlePaddle/PP-OCRv5_server_det_safetensors"
         self.model = PPOCRV5ServerDetForObjectDetection.from_pretrained(model_path).to(torch_device)
         self.image_processor = (
-            PPOCRV5ServerDetImageProcessorFast.from_pretrained(model_path) if is_vision_available() else None
+            PPOCRV5ServerDetImageProcessor.from_pretrained(model_path) if is_vision_available() else None
         )
-        self.image = Image.open(
-            requests.get(
-                "https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/general_ocr_001.png", stream=True
-            ).raw
-        ).convert("RGB")
+        img_url = url_to_local_path(
+            "https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/general_ocr_001.png"
+        )
+        self.image = load_image(img_url)
 
     def test_inference_object_detection_head(self):
         inputs = self.image_processor(images=self.image, return_tensors="pt").to(torch_device)

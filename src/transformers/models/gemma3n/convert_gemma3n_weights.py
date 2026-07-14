@@ -22,8 +22,6 @@ python src/transformers/models/gemma3n/convert_gemma3n_weights.py \
     --output_path="$HOME/checkpoints/gemma-3n-safetensors/"
 """
 
-import json
-import os
 import re
 from collections.abc import Iterable, Mapping
 from typing import Any
@@ -43,11 +41,12 @@ from transformers import (
     Gemma3nProcessor,
     Gemma3nTextConfig,
     Gemma3nVisionConfig,
-    GemmaTokenizerFast,
+    GemmaTokenizer,
     GenerationConfig,
     SiglipImageProcessorFast,
 )
 from transformers.image_utils import PILImageResampling
+from transformers.tokenization_utils_sentencepiece import SentencePieceExtractor
 
 
 # ==== Internal Constants and Classes ====
@@ -741,9 +740,13 @@ def main(*args):
 
     chat_template_kwargs = {"chat_template": _CHAT_TEMPLATE} if _INCLUDE_CHAT_TEMPLATE.value else {}
 
-    tokenizer = GemmaTokenizerFast(
-        _TOKENIZER_PATH.value,
+    sentencepiece_extractor = SentencePieceExtractor(_TOKENIZER_PATH.value)
+    vocab, _, merges = sentencepiece_extractor.extract()
+    tokenizer = GemmaTokenizer(
+        vocab=vocab,
+        merges=merges,
         add_bos_token=True,
+        padding_side="left",
         extra_special_tokens={
             "image_token": "<image_soft_token>",  # Should be ID=262_145
             "boi_token": "<start_of_image>",  # Should be ID=255_999
@@ -775,17 +778,6 @@ def main(*args):
     processor.save_pretrained(output_path)
 
     logging.info("Saved Gemma3nProcessor for %s to %s", variant, output_path)
-
-    # NOTE: feature_extractor and image_processor both use the same filename, preprocessor_config.json, when saved to
-    # disk, but the files are overwritten by processor.save_pretrained(). However, the configs can be unioned, saved,
-    # and loaded from the same preprocessor_config.json file, so we do that explicitly here.
-    feature_extractor_config = json.loads(feature_extractor.to_json_string())
-    image_processor_config = json.loads(image_processor.to_json_string())
-    preprocessor_config = {**feature_extractor_config, **image_processor_config}
-    with open(os.path.join(output_path, "preprocessor_config.json"), "w", encoding="utf-8") as writer:
-        writer.write(json.dumps(preprocessor_config, indent=2, sort_keys=True) + "\n")
-
-    logging.info("Saved joint preprocessor_config.json for %s to %s", variant, output_path)
 
     del feature_extractor, image_processor, processor, tokenizer
 

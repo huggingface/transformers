@@ -39,7 +39,6 @@ from ...utils import (
     is_torch_accelerator_available,
     logging,
 )
-from ...utils.deprecation import deprecate_kwarg
 from ..auto import AutoModel
 from .configuration_bark import (
     BarkCoarseConfig,
@@ -392,7 +391,6 @@ class BarkCausalModel(BarkPreTrainedModel, GenerationMixin):
     def set_input_embeddings(self, new_embeddings):
         self.input_embeds_layer = new_embeddings
 
-    @deprecate_kwarg("input_embeds", version="5.6.0", new_name="inputs_embeds")
     @auto_docstring
     def forward(
         self,
@@ -413,7 +411,7 @@ class BarkCausalModel(BarkPreTrainedModel, GenerationMixin):
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
         use_cache = use_cache if use_cache is not None else self.config.use_cache
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         loss = None
         if labels is not None:
@@ -990,7 +988,6 @@ class BarkFineModel(BarkPreTrainedModel):
 
         return model_embeds
 
-    @deprecate_kwarg("input_embeds", version="5.6.0", new_name="inputs_embeds")
     @auto_docstring
     def forward(
         self,
@@ -1015,7 +1012,7 @@ class BarkFineModel(BarkPreTrainedModel):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         loss = None
         if labels is not None:

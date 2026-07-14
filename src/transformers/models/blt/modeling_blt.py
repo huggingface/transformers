@@ -38,7 +38,6 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
-from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import maybe_autocast, merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from .configuration_blt import (
@@ -444,15 +443,9 @@ class BltPreTrainedModel(PreTrainedModel):
         - Scale is ~ 1 / sqrt(model_dim) (or 1 / sqrt(hidden_dim) for FFN outputs).
         - Norm layers are set to weight = 1, bias = 0.
         """
-        class_name = module.__class__.__name__
+        super()._init_weights(module)
 
-        # Norms: RMSNorm / LayerNorm
-        if isinstance(module, (BltRMSNorm, nn.LayerNorm)) or "RMSNorm" in class_name or "LayerNorm" in class_name:
-            if getattr(module, "weight", None) is not None:
-                init.ones_(module.weight)
-            if getattr(module, "bias", None) is not None:
-                init.zeros_(module.bias)
-            return
+        class_name = module.__class__.__name__
 
         # Embeddings (encoder / patcher / hash embeddings)
         if isinstance(module, nn.Embedding):
@@ -582,16 +575,6 @@ class BltPreTrainedModel(PreTrainedModel):
                 init.zeros_(module.bias)
             return
 
-        if isinstance(module, BltRotaryEmbedding):
-            rope_fn = (
-                ROPE_INIT_FUNCTIONS[module.rope_type]
-                if module.rope_type != "default"
-                else module.compute_default_rope_parameters
-            )
-            buffer_value, _ = rope_fn(module.config)
-            init.copy_(module.inv_freq, buffer_value)
-            init.copy_(module.original_inv_freq, buffer_value)
-
 
 class BltLocalEncoder(BltPreTrainedModel):
     config: BltLocalEncoderConfig
@@ -670,7 +653,7 @@ class BltLocalEncoder(BltPreTrainedModel):
                     attention_mask=encoder_attention_mask,
                     **kwargs,
                 )
-                patch_embeds = patch_embeds + cross_attention_output
+                patch_embeds = patch_embeds + cross_attention_output.to(patch_embeds.device)
         encoder_cross_states = patch_embeds
         return hidden_states, encoder_cross_states
 
@@ -806,7 +789,6 @@ class BltGlobalTransformer(BltPreTrainedModel):
 
         self.post_init()
 
-    @deprecate_kwarg("input_embeds", version="5.6.0", new_name="inputs_embeds")
     def forward(
         self,
         inputs_embeds: torch.Tensor,

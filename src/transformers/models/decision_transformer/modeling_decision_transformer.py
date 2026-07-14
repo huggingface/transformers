@@ -458,12 +458,12 @@ class DecisionTransformerGPT2Model(DecisionTransformerGPT2PreTrainedModel):
         )
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for model's outputs that also contains a pooling of the last hidden states.
     """
 )
+@dataclass
 class DecisionTransformerOutput(ModelOutput):
     r"""
     state_preds (`torch.FloatTensor` of shape `(batch_size, sequence_length, state_dim)`):
@@ -599,7 +599,7 @@ class DecisionTransformerModel(DecisionTransformerPreTrainedModel):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         batch_size, seq_length = states.shape[0], states.shape[1]
 

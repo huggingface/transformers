@@ -21,6 +21,7 @@ def paged_attention_forward(
     """Performs the forward pass of attention with paged key-value cache. This function handles the cache updates and
     performs the attention computation. For decode-only batches (when block_table is provided), uses
     `flash_attn_with_kvcache` for fused attention + cache update. Otherwise uses `flash_attn_varlen_func`.
+    See the [paged attention guide](https://huggingface.co/docs/transformers/en/paged_attention) for more details.
 
     Args:
         q: (1, nheads, total_q, headdim), where total_q = total number of query tokens in the batch.
@@ -36,8 +37,8 @@ def paged_attention_forward(
             If provided, uses flash_attn_with_kvcache for fused attention + cache update. For each request, the block
             table is a vector of size (max_blocks_per_seq,) with indices indicating the physical location of the cache
             to read from and write to. The kernel, using the cache_seqlens for that request, knows how much cache to
-            read and dispatches the read using the block table. Same for the write. If a request has less  blocksthan
-            max_blocks_per_seq blocks, the block table is padded with -1s to indicate that this cache is not allocated.
+            read and dispatches the read using the block table. Same for the write. If a request has fewer than
+            max_blocks_per_seq blocks, the block table is padded with -1s to indicate that the block is not allocated.
     """
     # Retrieve the flash attention functions
     flash_attn_varlen_func, flash_attn_with_kvcache = lazy_import_paged_flash_attention(
@@ -80,42 +81,58 @@ def paged_attention_forward(
 
     # Otherwise, use flash_attn_with_kvcache which updates the cache in-place and computes attention
     else:
-        # Get layer group index for this layer
-        group_idx, layer_idx_in_group = cache.layer_index_to_group_indices[module.layer_idx]
-        # KV cache shape: [num_pages, num_kv_heads, head_dim] -> [num_blocks, block_size, num_kv_heads, head_dim]
-        k_cache = cache.key_cache[layer_idx_in_group].view(
-            -1, cache.block_size, cache.num_key_value_heads, cache.head_dim
+        flash_kwargs = {"s_aux": kwargs["s_aux"]} if "s_aux" in kwargs else {}  # this is only available in VLLM's FA3
+        attn_output = _paged_decode_forward(
+            module, q, k, v, cache, cu_seq_lens_k, sliding_window, flash_attn_with_kvcache, block_table, **flash_kwargs
         )
-        v_cache = cache.value_cache[layer_idx_in_group].view(
-            -1, cache.block_size, cache.num_key_value_heads, cache.head_dim
-        )
-        # Reshape Q, K, V from [1, num_*_heads, batch_size, head_dim] to [batch_size, 1, num_*_heads, head_dim]
-        q = q.permute(2, 0, 1, 3).contiguous()
-        k = k.permute(2, 0, 1, 3).contiguous()
-        v = v.permute(2, 0, 1, 3).contiguous()
-        # Compute cache_seqlens from cu_seq_lens_k (current cache length BEFORE adding new tokens)
-        # cu_seq_lens_k is cumulative, so seqlens[i] = cu_seq_lens_k[i+1] - cu_seq_lens_k[i] - 1 (subtract 1 for the new token)
-        batch_size = k.size(0)
-        cache_seqlens = (cu_seq_lens_k[1 : batch_size + 1] - cu_seq_lens_k[:batch_size] - 1).to(torch.int32)
-        # The arg name for the block table is not the same in VLLM's kernel and Tri Dao's kernel, so we need to parse it
-        flash_kwargs = {cache.get_block_table_key(flash_attn_with_kvcache): block_table[group_idx]}
-        if "s_aux" in kwargs:
-            flash_kwargs["s_aux"] = kwargs["s_aux"]  # this is only available in VLLM's FA3
-        # Call flash_attn_with_kvcache - this updates cache in-place and computes attention
-        attn_output = flash_attn_with_kvcache(  # TODO: add more doc in a dedicated wrapper (coming in next PRs)
-            q,
-            k_cache,
-            v_cache,
-            k=k,
-            v=v,
-            cache_seqlens=cache_seqlens,
-            softmax_scale=module.scaling,
-            causal=True,
-            window_size=sliding_window,
-            **flash_kwargs,
-        )
-        if isinstance(attn_output, tuple):
-            attn_output = attn_output[0]
-        # Reshape output from [batch_size, 1, num_heads, head_dim] to [batch_size, num_heads, head_dim]
-        attn_output = attn_output.squeeze(1)
     return attn_output, None
+
+
+@torch.compiler.disable
+def _paged_decode_forward(
+    module: torch.nn.Module,
+    q: torch.Tensor,
+    k: torch.Tensor,
+    v: torch.Tensor,
+    cache: PagedAttentionCache,
+    cu_seq_lens_k: torch.Tensor,
+    sliding_window: tuple[int, int],
+    flash_attn_with_kvcache,
+    block_table: torch.Tensor,
+    **flash_kwargs,
+) -> torch.Tensor:
+    """Decode fast path using flash_attn_with_kvcache. Disabled because FA3 has issue with tracing this."""
+    # Get layer group index for this layer
+    group_idx, layer_idx_in_group = cache.layer_index_to_group_indices[module.layer_idx]
+    # KV cache shape: [num_pages, num_kv_heads, head_dim] -> [num_blocks, block_size, num_kv_heads, head_dim]
+    k_cache = cache.key_cache[layer_idx_in_group].view(-1, cache.block_size, cache.num_key_value_heads, cache.head_dim)
+    v_cache = cache.value_cache[layer_idx_in_group].view(
+        -1, cache.block_size, cache.num_key_value_heads, cache.head_dim
+    )
+    # Reshape Q, K, V from [1, num_*_heads, batch_size, head_dim] to [batch_size, 1, num_*_heads, head_dim]
+    q = q.permute(2, 0, 1, 3).contiguous()
+    k = k.permute(2, 0, 1, 3).contiguous()
+    v = v.permute(2, 0, 1, 3).contiguous()
+    # Compute cache_seqlens from cu_seq_lens_k (current cache length BEFORE adding new tokens)
+    # cu_seq_lens_k is cumulative, so seqlens[i] = cu_seq_lens_k[i+1] - cu_seq_lens_k[i] - 1 (subtract 1 for the new token)
+    batch_size = k.size(0)
+    cache_seqlens = (cu_seq_lens_k[1 : batch_size + 1] - cu_seq_lens_k[:batch_size] - 1).to(torch.int32)
+    # The arg name for the block table is not the same in VLLM's kernel and Tri Dao's kernel, so we need to parse it
+    flash_kwargs[cache.get_block_table_key(flash_attn_with_kvcache)] = block_table[group_idx]
+    # Call flash_attn_with_kvcache - this updates cache in-place and computes attention
+    attn_output = flash_attn_with_kvcache(
+        q=q,
+        k_cache=k_cache,
+        v_cache=v_cache,
+        k=k,
+        v=v,
+        cache_seqlens=cache_seqlens,
+        softmax_scale=module.scaling,
+        causal=True,
+        window_size=sliding_window,
+        **flash_kwargs,
+    )
+    if isinstance(attn_output, tuple):
+        attn_output = attn_output[0]
+    # Reshape output from [batch_size, 1, num_heads, head_dim] to [batch_size, num_heads, head_dim]
+    return attn_output.squeeze(1)

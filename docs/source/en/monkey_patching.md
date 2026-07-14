@@ -360,7 +360,6 @@ class FusedQKVAttention(nn.Module):
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         attention_mask: torch.Tensor | None = None,
         past_key_values: Cache | None = None,
-        cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor]:
         input_shape = hidden_states.shape[:-1]
@@ -376,9 +375,7 @@ class FusedQKVAttention(nn.Module):
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
         if past_key_values is not None:
-            # sin and cos are specific to RoPE models; cache_position needed for the static cache
-            cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
-            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx, cache_kwargs)
+            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
 
         attn_output, attn_weights = sdpa_attention_forward(
             self,
@@ -421,6 +418,102 @@ register_checkpoint_conversion_mapping(
 
 model = AutoModelForCausalLM.from_pretrained("Qwen/Qwen1.5-MoE-A2.7B")
 ```
+
+## Recording and replaying MoE expert routing
+
+Mixture-of-Experts training workflows like RLHF need to record which experts each token was routed to during generation, then replay that exact routing in a separate training forward pass. You can build this end-to-end with the existing monkey patching and output capturing machinery — no modeling-file changes required.
+
+The pattern has three pieces:
+
+1. A **replayable router subclass** that can optionally read forced expert indices from an instance attribute.
+2. A **context manager** that sets those attributes across every router before a forward pass and clears them afterwards.
+3. An entry in the model's output-capture registry so `output_<name>=True` exposes the indices through the standard `@capture_outputs` path.
+
+```python
+from contextlib import contextmanager
+
+import torch
+import torch.nn.functional as F
+
+from transformers import Qwen3MoeConfig, Qwen3MoeForCausalLM
+from transformers.models.qwen3_moe.modeling_qwen3_moe import Qwen3MoeTopKRouter
+from transformers.monkey_patching import apply_patches, register_patch_mapping
+from transformers.utils.output_capturing import _CAN_RECORD_REGISTRY, OutputRecorder
+
+
+class ReplayableQwen3MoeTopKRouter(Qwen3MoeTopKRouter):
+    _forced_indices: torch.Tensor | None = None
+
+    def forward(self, hidden_states):
+        hidden_states = hidden_states.reshape(-1, self.hidden_dim)
+        router_logits = F.linear(hidden_states, self.weight)
+        router_logits = F.softmax(router_logits, dtype=torch.float, dim=-1)
+
+        if self._forced_indices is not None:
+            router_indices = self._forced_indices.to(router_logits.device).long()
+            # Megatron-style replay: preserve expert path, recompute current scores
+            router_top_value = router_logits.gather(-1, router_indices)
+        else:
+            router_top_value, router_indices = torch.topk(router_logits, self.top_k, dim=-1)
+
+        if self.norm_topk_prob:
+            router_top_value = router_top_value / router_top_value.sum(dim=-1, keepdim=True)
+        return router_logits, router_top_value.to(router_logits.dtype), router_indices
+
+
+@contextmanager
+def replay_moe_routing(model, selected_experts_per_layer):
+    routers = [m for m in model.modules() if isinstance(m, ReplayableQwen3MoeTopKRouter)]
+    if len(routers) != len(selected_experts_per_layer):
+        raise ValueError(f"Got {len(routers)} routers but {len(selected_experts_per_layer)} tensors")
+    for r, t in zip(routers, selected_experts_per_layer):
+        r._forced_indices = t
+    try:
+        yield
+    finally:
+        for r in routers:
+            r._forced_indices = None
+
+
+# Swap the router class and construct the model
+register_patch_mapping({"Qwen3MoeTopKRouter": ReplayableQwen3MoeTopKRouter})
+with apply_patches():
+    model = Qwen3MoeForCausalLM(Qwen3MoeConfig(...)).eval()
+
+# Expose `output_selected_experts=True` on the base model by adding an OutputRecorder
+# at runtime. Index 2 of the router's tuple output is the expert indices.
+inner = model.model
+existing = _CAN_RECORD_REGISTRY.get(str(inner.__class__), {}) or {}
+_CAN_RECORD_REGISTRY[str(inner.__class__)] = {
+    **existing,
+    "selected_experts": OutputRecorder(ReplayableQwen3MoeTopKRouter, index=2),
+}
+
+# Record
+captured = inner(input_ids=input_ids, output_selected_experts=True)
+selected_experts = captured.selected_experts  # tuple of (num_tokens, top_k) LongTensors
+
+# Replay — same expert path regardless of current router weights
+with replay_moe_routing(inner, list(selected_experts)):
+    outputs = inner(input_ids=input_ids)
+```
+
+Replay preserves the exact expert indices and recomputes routing scores with the current router weights, so gradients flow through the live parameters while the expert selection stays fixed. This is the minimal replay contract used by Megatron-style MoE training.
+
+### Interop with vLLM
+
+vLLM's `enable_return_routed_experts=True` populates `CompletionOutput.routed_experts` as an `(seq_len, num_layers, top_k)` `np.int32` array. Convert it to the per-layer list this pattern expects with a single expression:
+
+```python
+selected = [
+    torch.from_numpy(routed_experts[:, layer, :].copy()).long()
+    for layer in range(routed_experts.shape[1])
+]
+with replay_moe_routing(model, selected):
+    loss = model(input_ids=input_ids, labels=labels).loss
+```
+
+The same recipe applies to other MoE families — subclass the family's `*TopKRouter`, match the original return contract (typically `(router_logits, router_scores, router_indices)`), and register the patch. See each model's router class for the exact signature.
 
 ## API reference
 

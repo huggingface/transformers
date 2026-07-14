@@ -11,21 +11,20 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import itertools
+import warnings
 from collections.abc import Callable
 
 import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from huggingface_hub.dataclasses import strict
 from torch.nn import LayerNorm
 
 from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import PreTrainedConfig
-from ...feature_extraction_utils import BatchFeature
-from ...image_utils import ImageInput
 from ...masking_utils import create_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
@@ -33,7 +32,6 @@ from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPool
 from ...modeling_rope_utils import RopeParameters
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import (
     TransformersKwargs,
     auto_docstring,
@@ -41,9 +39,10 @@ from ...utils import (
     logging,
     torch_compilable_check,
 )
-from ...utils.generic import maybe_autocast, merge_with_config_defaults
+from ...utils.deprecation import deprecate_kwarg
+from ...utils.generic import accepts_precomputed_kwargs, maybe_autocast, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
-from ...video_utils import VideoInput
+from ...vision_utils import get_vision_cu_seqlens, get_vision_position_ids
 from ..glm4.modeling_glm4 import Glm4MLP, Glm4RMSNorm, Glm4RotaryEmbedding, eager_attention_forward
 from ..qwen2_5_vl.modeling_qwen2_5_vl import (
     Qwen2_5_VisionPatchEmbed,
@@ -68,6 +67,7 @@ logger = logging.get_logger(__name__)
 
 
 @auto_docstring(checkpoint="zai-org/GLM-4.1V-9B-Thinking")
+@strict
 class Glm4vVisionConfig(PreTrainedConfig):
     r"""
     out_hidden_size (`int`, *optional*, defaults to 4096):
@@ -91,45 +91,25 @@ class Glm4vVisionConfig(PreTrainedConfig):
     model_type = "glm4v_vision"
     base_config_key = "vision_config"
 
-    def __init__(
-        self,
-        depth=24,
-        hidden_size=1536,
-        hidden_act="silu",
-        attention_bias=False,
-        attention_dropout=0.0,
-        num_heads=12,
-        in_channels=3,
-        image_size=336,
-        patch_size=14,
-        rms_norm_eps=1e-05,
-        spatial_merge_size=2,
-        temporal_patch_size=2,
-        out_hidden_size=4096,
-        intermediate_size=13696,
-        initializer_range=0.02,
-        **kwargs,
-    ):
-        super().__init__(**kwargs)
-
-        self.depth = depth
-        self.hidden_size = hidden_size
-        self.hidden_act = hidden_act
-        self.num_heads = num_heads
-        self.in_channels = in_channels
-        self.image_size = image_size
-        self.patch_size = patch_size
-        self.spatial_merge_size = spatial_merge_size
-        self.temporal_patch_size = temporal_patch_size
-        self.out_hidden_size = out_hidden_size
-        self.intermediate_size = intermediate_size
-        self.initializer_range = initializer_range
-        self.rms_norm_eps = rms_norm_eps
-        self.attention_bias = attention_bias
-        self.attention_dropout = attention_dropout
+    depth: int = 24
+    hidden_size: int = 1536
+    hidden_act: str = "silu"
+    attention_bias: bool = False
+    attention_dropout: float | int = 0.0
+    num_heads: int = 12
+    in_channels: int = 3
+    image_size: int | list[int] | tuple[int, int] = 336
+    patch_size: int | list[int] | tuple[int, int] = 14
+    rms_norm_eps: float = 1e-05
+    spatial_merge_size: int = 2
+    temporal_patch_size: int | list[int] | tuple[int, int] = 2
+    out_hidden_size: int = 4096
+    intermediate_size: int = 13696
+    initializer_range: float = 0.02
 
 
 @auto_docstring(checkpoint="zai-org/GLM-4.1V-9B-Thinking")
+@strict
 class Glm4vTextConfig(PreTrainedConfig):
     r"""
     Example:
@@ -164,49 +144,32 @@ class Glm4vTextConfig(PreTrainedConfig):
         "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
         "norm": (["hidden_states"], ["hidden_states"]),
     }
+    ignore_keys_at_rope_validation = {"mrope_section"}
 
-    def __init__(
-        self,
-        vocab_size: int | None = 151552,
-        hidden_size: int | None = 4096,
-        intermediate_size: int | None = 13696,
-        num_hidden_layers: int | None = 40,
-        num_attention_heads: int | None = 32,
-        num_key_value_heads: int | None = 2,
-        hidden_act: str | None = "silu",
-        max_position_embeddings: int | None = 32768,
-        initializer_range: float | None = 0.02,
-        rms_norm_eps: int | None = 1e-05,
-        use_cache: bool | None = True,
-        attention_dropout: float | None = 0.0,
-        rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
-        pad_token_id: int | None = None,
-        **kwargs,
-    ):
-        self.vocab_size = vocab_size
-        self.max_position_embeddings = max_position_embeddings
-        self.hidden_size = hidden_size
-        self.intermediate_size = intermediate_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
+    vocab_size: int = 151552
+    hidden_size: int = 4096
+    intermediate_size: int = 13696
+    num_hidden_layers: int = 40
+    num_attention_heads: int = 32
+    num_key_value_heads: int | None = 2
+    hidden_act: str = "silu"
+    max_position_embeddings: int = 32768
+    initializer_range: float = 0.02
+    rms_norm_eps: float = 1e-05
+    use_cache: bool = True
+    attention_dropout: float | int = 0.0
+    rope_parameters: RopeParameters | dict | None = None
+    pad_token_id: int | None = None
 
-        # for backward compatibility
-        if num_key_value_heads is None:
-            num_key_value_heads = num_attention_heads
+    def __post_init__(self, **kwargs):
+        if self.num_key_value_heads is None:
+            self.num_key_value_heads = self.num_attention_heads
 
-        self.num_key_value_heads = num_key_value_heads
-        self.hidden_act = hidden_act
-        self.initializer_range = initializer_range
-        self.rms_norm_eps = rms_norm_eps
-        self.use_cache = use_cache
-        self.attention_dropout = attention_dropout
-        self.rope_parameters = rope_parameters
-        self.pad_token_id = pad_token_id
-
-        super().__init__(ignore_keys_at_rope_validation={"mrope_section"}, **kwargs)
+        super().__post_init__(**kwargs)
 
 
 @auto_docstring(checkpoint="zai-org/GLM-4.1V-9B-Thinking")
+@strict
 class Glm4vConfig(PreTrainedConfig):
     r"""
     image_start_token_id (`int`, *optional*, defaults to 151339):
@@ -217,7 +180,6 @@ class Glm4vConfig(PreTrainedConfig):
         The video start token index to encode the start of video.
     video_end_token_id (`int`, *optional*, defaults to 151342):
         The video end token index to encode the end of video.
-
 
     ```python
     >>> from transformers import Glm4vForConditionalGeneration, Glm4vConfig
@@ -236,38 +198,28 @@ class Glm4vConfig(PreTrainedConfig):
     sub_configs = {"vision_config": Glm4vVisionConfig, "text_config": Glm4vTextConfig}
     keys_to_ignore_at_inference = ["past_key_values"]
 
-    def __init__(
-        self,
-        text_config=None,
-        vision_config=None,
-        image_token_id=151343,
-        video_token_id=151344,
-        image_start_token_id=151339,
-        image_end_token_id=151340,
-        video_start_token_id=151341,
-        video_end_token_id=151342,
-        tie_word_embeddings=False,
-        **kwargs,
-    ):
-        if isinstance(vision_config, dict):
-            self.vision_config = self.sub_configs["vision_config"](**vision_config)
-        elif vision_config is None:
-            self.vision_config = self.sub_configs["vision_config"]()
+    text_config: dict | PreTrainedConfig | None = None
+    vision_config: dict | PreTrainedConfig | None = None
+    image_token_id: int = 151343
+    video_token_id: int = 151344
+    image_start_token_id: int = 151339
+    image_end_token_id: int = 151340
+    video_start_token_id: int = 151341
+    video_end_token_id: int = 151342
+    tie_word_embeddings: bool = False
 
-        if isinstance(text_config, dict):
-            self.text_config = self.sub_configs["text_config"](**text_config)
-        elif text_config is None:
+    def __post_init__(self, **kwargs):
+        if isinstance(self.vision_config, dict):
+            self.vision_config = self.sub_configs["vision_config"](**self.vision_config)
+        elif self.vision_config is None:
+            self.vision_config = self.sub_configs["vision_config"](**kwargs)
+
+        if isinstance(self.text_config, dict):
+            self.text_config = self.sub_configs["text_config"](**self.text_config)
+        elif self.text_config is None:
             self.text_config = self.sub_configs["text_config"](**kwargs)
 
-        self.image_token_id = image_token_id
-        self.video_token_id = video_token_id
-        self.video_start_token_id = video_start_token_id
-        self.video_end_token_id = video_end_token_id
-        self.image_start_token_id = image_start_token_id
-        self.image_end_token_id = image_end_token_id
-        self.tie_word_embeddings = tie_word_embeddings
-
-        super().__init__(**kwargs)
+        super().__post_init__(**kwargs)
 
 
 # Will be used for both Text and Vision modalities
@@ -361,12 +313,11 @@ class Glm4vVisionEmbeddings(nn.Module):
         )
 
         # Calculate target dimensions for each patch
-        target_h = torch.cat([image_shapes[i, 1].repeat(lengths[i]) for i in range(len(lengths))]).to(
-            device=device, dtype=torch.float32
-        )
-        target_w = torch.cat([image_shapes[i, 2].repeat(lengths[i]) for i in range(len(lengths))]).to(
-            device=device, dtype=torch.float32
-        )
+        num_tokens = embeddings.shape[0]
+        token_positions = torch.arange(num_tokens, device=embeddings.device)
+        seq_ids = (token_positions.unsqueeze(0) >= lengths.cumsum(0).unsqueeze(1)).sum(0)
+        target_h = image_shapes[seq_ids, 1].to(dtype=torch.float32)
+        target_w = image_shapes[seq_ids, 2].to(dtype=torch.float32)
 
         # Normalize coordinates to [-1, 1] range for grid_sample
         norm_w = ((w_coords + 0.5) / target_w) * 2 - 1
@@ -657,33 +608,14 @@ class Glm4vVisionModel(Glm4vPreTrainedModel):
         self.post_init()
 
     def rot_pos_emb(self, grid_thw):
-        pos_ids = []
-        for t, h, w in grid_thw:
-            hpos_ids = torch.arange(h).unsqueeze(1).expand(-1, w)
-            hpos_ids = hpos_ids.reshape(
-                h // self.spatial_merge_size,
-                self.spatial_merge_size,
-                w // self.spatial_merge_size,
-                self.spatial_merge_size,
-            )
-            hpos_ids = hpos_ids.permute(0, 2, 1, 3)
-            hpos_ids = hpos_ids.flatten()
-
-            wpos_ids = torch.arange(w).unsqueeze(0).expand(h, -1)
-            wpos_ids = wpos_ids.reshape(
-                h // self.spatial_merge_size,
-                self.spatial_merge_size,
-                w // self.spatial_merge_size,
-                self.spatial_merge_size,
-            )
-            wpos_ids = wpos_ids.permute(0, 2, 1, 3)
-            wpos_ids = wpos_ids.flatten()
-            pos_ids.append(torch.stack([hpos_ids, wpos_ids], dim=-1).repeat(t, 1))
-        pos_ids = torch.cat(pos_ids, dim=0)
-        max_grid_size = grid_thw[:, 1:].max()
-        rotary_pos_emb_full = self.rotary_pos_emb(max_grid_size)
-        rotary_pos_emb = rotary_pos_emb_full[pos_ids].flatten(1)
-        return rotary_pos_emb, pos_ids
+        warnings.warn(
+            f"`{self.__class__.__name__}.rot_pos_emb` is deprecated and will be removed in v5.11. Use `get_vision_position_ids` from `transformers.vision_utils` and apply the rotary embedding module.",
+            FutureWarning,
+            stacklevel=2,
+        )
+        position_ids = get_vision_position_ids(grid_thw, self.spatial_merge_size)
+        rotary_pos_emb = self.rotary_pos_emb(position_ids)
+        return rotary_pos_emb, position_ids
 
     @merge_with_config_defaults
     @capture_outputs
@@ -700,28 +632,22 @@ class Glm4vVisionModel(Glm4vPreTrainedModel):
         Returns:
             `torch.Tensor`: hidden_states.
         """
+        position_ids = get_vision_position_ids(grid_thw, self.spatial_merge_size, kwargs=kwargs)
+        cu_seqlens = get_vision_cu_seqlens(grid_thw, kwargs=kwargs)
+
         hidden_states = self.patch_embed(hidden_states)
         hidden_states = self.post_conv_layernorm(hidden_states)
-        rotary_pos_emb, image_type_ids = self.rot_pos_emb(grid_thw)
-        emb = torch.cat((rotary_pos_emb, rotary_pos_emb), dim=-1)
+        rotary_emb = self.rotary_pos_emb(position_ids)
+        emb = torch.cat((rotary_emb, rotary_emb), dim=-1)
         position_embeddings = (emb.cos(), emb.sin())
 
-        cu_seqlens = torch.repeat_interleave(grid_thw[:, 1] * grid_thw[:, 2], grid_thw[:, 0]).cumsum(
-            dim=0,
-            # Select dtype based on the following factors:
-            #  - FA2 requires that cu_seqlens_q must have dtype int32
-            #  - torch.onnx.export requires that cu_seqlens_q must have same dtype as grid_thw
-            # See https://github.com/huggingface/transformers/pull/34852 for more information
-            dtype=grid_thw.dtype if torch.jit.is_tracing() else torch.int32,
-        )
-        cu_seqlens = F.pad(cu_seqlens, (1, 0), value=0)
-        seqlens = (cu_seqlens[1:] - cu_seqlens[:-1]).tolist()
+        seqlens = cu_seqlens[1:] - cu_seqlens[:-1]
         hidden_states = self.embeddings(
             hidden_states,
             seqlens,
             grid_thw,
-            image_type_ids[:, 0].to(hidden_states.device),
-            image_type_ids[:, 1].to(hidden_states.device),
+            position_ids[:, 0].to(hidden_states.device),
+            position_ids[:, 1].to(hidden_states.device),
         )
 
         for blk in self.blocks:
@@ -799,7 +725,7 @@ class Glm4vTextModel(Qwen2_5_VLTextModel):
         # where each dim indicates visual spatial positions for temporal/height/width grids.
         # There are two scenarios when FA2-like packed masking might be activated.
         # 1. User specifically passed packed `position_ids` and no attention mask.
-        #    In this case we expect the useer to create correct position ids for all 3 grids
+        #    In this case we expect the user to create correct position ids for all 3 grids
         #    and prepend text-only position ids to it. The final tensor will be [4, bs, seq-len]
         # 2. User runs forward with no attention mask and no position ids. In this case, position ids
         #    are prepared by the model (`get_rope_index`) as `[4, bs, seq-len]` tensor. Text-only positions are
@@ -845,13 +771,13 @@ class Glm4vTextModel(Qwen2_5_VLTextModel):
 
 
 class Glm4vModel(Qwen2VLModel):
-    _checkpoint_conversion_mapping = {}
     _no_split_modules = ["Glm4vTextDecoderLayer", "Glm4vVisionBlock"]
 
     def __init__(self, config):
         super().__init__(config)
         self.visual = Glm4vVisionModel._from_config(config.vision_config)
 
+    @accepts_precomputed_kwargs(modality="video")
     @can_return_tuple
     @auto_docstring
     def get_video_features(
@@ -868,12 +794,12 @@ class Glm4vModel(Qwen2VLModel):
         """
         pixel_values_videos = pixel_values_videos.type(self.visual.dtype)
         # reshape video_grid_thw -> [b, 3] -> [1, h, w] * frames
-        temp_frames_hw = []
-        video_grid_thw_list = video_grid_thw.tolist()
-        for t, h, w in video_grid_thw_list:
-            repeated_row = torch.tensor([1, h, w]).unsqueeze(0).repeat(t, 1)
-            temp_frames_hw.append(repeated_row)
-        flattened_video_grid_thw = torch.cat(temp_frames_hw, dim=0)
+        t = video_grid_thw[:, 0]
+        hw = video_grid_thw[:, 1:]
+        # repeat each (h,w) row `t` times
+        flattened_hw = torch.repeat_interleave(hw, t, dim=0)
+        prefix_ones = video_grid_thw.new_ones(flattened_hw.shape[0], 1)
+        flattened_video_grid_thw = torch.cat([prefix_ones, flattened_hw], dim=1)
         vision_outputs = self.visual(
             pixel_values_videos, grid_thw=flattened_video_grid_thw, return_dict=True, **kwargs
         )
@@ -909,50 +835,30 @@ class Glm4vModel(Qwen2VLModel):
             special_video_mask = input_ids == self.config.image_token_id
 
         n_image_tokens = special_image_mask.sum()
-        special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
+        special_image_mask = special_image_mask.unsqueeze(-1).to(inputs_embeds.device)
         if image_features is not None:
             torch_compilable_check(
-                inputs_embeds[special_image_mask].numel() == image_features.numel(),
+                n_image_tokens * inputs_embeds.shape[-1] == image_features.numel(),
                 f"Image features and image tokens do not match, tokens: {n_image_tokens}, features: {image_features.shape[0]}",
             )
 
         n_video_tokens = special_video_mask.sum()
-        special_video_mask = special_video_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
+        special_video_mask = special_video_mask.unsqueeze(-1).to(inputs_embeds.device)
         if video_features is not None:
             torch_compilable_check(
-                inputs_embeds[special_video_mask].numel() == video_features.numel(),
+                n_video_tokens * inputs_embeds.shape[-1] == video_features.numel(),
                 f"Video features and video tokens do not match, tokens: {n_video_tokens}, features: {video_features.shape[0]}",
             )
         return special_image_mask, special_video_mask
 
     def get_rope_index(
         self,
-        input_ids: torch.LongTensor,
-        mm_token_type_ids: torch.IntTensor,
-        image_grid_thw: torch.LongTensor | None = None,
         video_grid_thw: torch.LongTensor | None = None,
-        attention_mask: torch.Tensor | None = None,
-        **kwargs,
+        **super_kwargs,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """
-        Calculate the 3D rope index based on image and video's sizes. The utility expects a `vision + text`
-        sequence and will error out otherwise. For pure text sequence, please rely on model's auto-inferred
-        position ids. In a mixed vision + text sequence, vision tokens use 3D RoPE (temporal, height, width)
-        while text tokens use standard 1D RoPE.
-
-        Example:
-            Temporal patches: 3; Height patches: 2; Width patches: 2
-            Each vision input results in (temporal x height × width) positions. Here: 3 x 2 × 2 = 12 positions total.
-
-            Temporal position IDs are spaced by:
-                `interval = tokens_per_second * temporal_patch_size / fps`
-
-                If fps = 1; tokens_per_second = 25; temporal_patch_size = 2, temporal IDs increase by 50 for each temporal patch:
-                `[0, 0, 0, 0, 50, 50, 50, 50, 100, 100, 100, 100]`
-
-            Height IDs repeat per row: `[0, 0, 1, 1, ...]`
-            Width IDs alternate per column: `[0, 1, 0, 1, ...]`
-            Text tokens follow standard 1D RoPE and the position IDs grow consequently with a step of `1`
+        Difference from Qwen2VL/Qwen2.5VL's get_rope_index:
+        - GLM4V uses timestamps to separate each video frame, so the video_grid_thw should also be split too.
 
         Args:
             input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
@@ -974,74 +880,15 @@ class Glm4vModel(Qwen2VLModel):
             position_ids (`torch.LongTensor` of shape `(3, batch_size, sequence_length)`)
             mrope_position_deltas (`torch.Tensor` of shape `(batch_size)`)
         """
-        spatial_merge_size = self.config.vision_config.spatial_merge_size
 
-        mrope_position_deltas = []
-        position_ids = torch.zeros(
-            3,
-            input_ids.shape[0],
-            input_ids.shape[1],
-            dtype=input_ids.dtype,
-            device=input_ids.device,
-        )
-        grid_iters = {
-            1: iter(image_grid_thw) if image_grid_thw is not None else None,
-            2: iter(video_grid_thw) if video_grid_thw is not None else None,
-        }
+        # Separate video grid thw into multiple grids because timestamps are used to separate videos.
+        if video_grid_thw is not None:
+            video_grid_thw = torch.repeat_interleave(video_grid_thw, video_grid_thw[:, 0], dim=0)
+            video_grid_thw[:, 0] = 1
 
-        for batch_idx, current_input_ids in enumerate(input_ids):
-            input_token_type = mm_token_type_ids[batch_idx]
-            if attention_mask is not None:
-                current_input_ids = current_input_ids[attention_mask[batch_idx].bool()]
-                input_token_type = input_token_type[attention_mask[batch_idx].bool()]
+        return super().get_rope_index(video_grid_thw=video_grid_thw, **super_kwargs)
 
-            input_type_group = []
-            for key, group in itertools.groupby(enumerate(input_token_type.tolist()), lambda x: x[1]):
-                group = list(group)
-                start_index = group[0][0]
-                end_index = group[-1][0] + 1
-                input_type_group.append((key, start_index, end_index))
-
-            current_pos = 0
-            video_group_index = 0
-            llm_pos_ids_list = []
-            for modality_type, start_idx, end_idx in input_type_group:
-                # text == 0
-                if modality_type == 0:
-                    text_len = end_idx - start_idx
-                    llm_pos_ids_list.append(
-                        torch.arange(text_len, device=input_ids.device).view(1, -1).expand(3, -1) + current_pos
-                    )
-                    current_pos += text_len
-                # image == 1, video == 2
-                else:
-                    # GLM4V splits video into segments per frame but there's only one `grid_thw`
-                    # per whole video. We can't exhaus the iterator and have to re-use the grid
-                    # while processing the same video!
-                    if modality_type == 2:
-                        if video_group_index == 0:
-                            grid_thw = next(grid_iters[modality_type])
-                        video_group_index += 1
-                        video_group_index = 0 if video_group_index >= grid_thw[0] else video_group_index
-                    else:
-                        grid_thw = next(grid_iters[modality_type])
-
-                    # Videos are processed per frame separately, each temporal grid is always `1`
-                    temp_merge_size = grid_thw[0]
-                    vision_position_ids = self.get_vision_position_ids(
-                        current_pos, grid_thw, temp_merge_size, spatial_merge_size, device=input_ids.device
-                    )
-                    llm_pos_ids_list.append(vision_position_ids)
-                    current_pos += max(grid_thw[1], grid_thw[2]) // spatial_merge_size
-            llm_positions = torch.cat(llm_pos_ids_list, dim=1).reshape(3, -1)
-            if attention_mask is not None:
-                position_ids[:, batch_idx, attention_mask[batch_idx].bool()] = llm_positions.to(position_ids.device)
-            else:
-                position_ids[:, batch_idx] = llm_positions.to(position_ids.device)
-            mrope_position_deltas.append(llm_positions.max() + 1 - len(current_input_ids))
-        mrope_position_deltas = torch.tensor(mrope_position_deltas, device=input_ids.device).unsqueeze(1)
-        return position_ids, mrope_position_deltas
-
+    @deprecate_kwarg("rope_deltas", version="v5.10")
     @auto_docstring
     @can_return_tuple
     def forward(
@@ -1055,7 +902,6 @@ class Glm4vModel(Qwen2VLModel):
         pixel_values_videos: torch.FloatTensor | None = None,
         image_grid_thw: torch.LongTensor | None = None,
         video_grid_thw: torch.LongTensor | None = None,
-        rope_deltas: torch.LongTensor | None = None,
         mm_token_type_ids: torch.IntTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | Glm4vModelOutputWithPast:
@@ -1064,8 +910,6 @@ class Glm4vModel(Qwen2VLModel):
             The temporal, height and width of feature shape of each image in LLM.
         video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
             The temporal, height and width of feature shape of each video in LLM.
-        rope_deltas (`torch.LongTensor` of shape `(batch_size, )`, *optional*):
-            The rope index difference between sequence length and multimodal rope.
         """
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
@@ -1074,13 +918,17 @@ class Glm4vModel(Qwen2VLModel):
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
         if pixel_values is not None:
-            image_embeds = self.get_image_features(pixel_values, image_grid_thw, return_dict=True).pooler_output
+            image_embeds = self.get_image_features(
+                pixel_values, image_grid_thw, return_dict=True, **kwargs
+            ).pooler_output
             image_embeds = torch.cat(image_embeds, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
             image_mask, _ = self.get_placeholder_mask(input_ids, inputs_embeds, image_features=image_embeds)
             inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_embeds)
 
         if pixel_values_videos is not None:
-            video_embeds = self.get_video_features(pixel_values_videos, video_grid_thw, return_dict=True).pooler_output
+            video_embeds = self.get_video_features(
+                pixel_values_videos, video_grid_thw, return_dict=True, **kwargs
+            ).pooler_output
             video_embeds = torch.cat(video_embeds, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
             _, video_mask = self.get_placeholder_mask(input_ids, inputs_embeds, video_features=video_embeds)
             inputs_embeds = inputs_embeds.masked_scatter(video_mask, video_embeds)
@@ -1116,8 +964,6 @@ class Glm4vCausalLMOutputWithPast(Qwen2_5_VLCausalLMOutputWithPast):
 
 
 class Glm4vForConditionalGeneration(Qwen2_5_VLForConditionalGeneration):
-    _checkpoint_conversion_mapping = {}
-
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -1323,129 +1169,60 @@ class Glm4vProcessor(Qwen2VLProcessor):
         self.video_start_id = tokenizer.convert_tokens_to_ids("<|begin_of_video|>")
         self.video_end_id = tokenizer.convert_tokens_to_ids("<|end_of_video|>")
 
-    def __call__(
-        self,
-        images: ImageInput | None = None,
-        text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] = None,
-        videos: VideoInput | None = None,
-        **kwargs: Unpack[Glm4vProcessorKwargs],
-    ) -> BatchFeature:
-        r"""
-        Returns:
-            [`BatchFeature`]: A [`BatchFeature`] with the following fields:
+    def replace_video_token(self, video_inputs: dict, video_idx: int) -> str:
+        merge_length = self.video_processor.merge_size**2
+        num_frames = video_inputs["video_grid_thw"][video_idx][0]
+        num_image_tokens = video_inputs["video_grid_thw"][video_idx].prod() // merge_length // num_frames
+        metadata = video_inputs["video_metadata"][video_idx]
+        video_structure = ""
 
-            - **input_ids** -- List of token ids to be fed to a model. Returned when `text` is not `None`.
-            - **attention_mask** -- List of indices specifying which tokens should be attended to by the model (when
-              `return_attention_mask=True` or if *"attention_mask"* is in `self.model_input_names` and if `text` is not
-              `None`).
-            - **pixel_values** -- Pixel values to be fed to a model. Returned when `images` is not `None`.
-            - **pixel_values_videos** -- Pixel values of videos to be fed to a model. Returned when `videos` is not `None`.
-            - **image_grid_thw** -- List of image 3D grid in LLM. Returned when `images` is not `None`.
-            - **video_grid_thw** -- List of video 3D grid in LLM. Returned when `videos` is not `None`.
-        """
-        output_kwargs = self._merge_kwargs(
-            Glm4vProcessorKwargs,
-            tokenizer_init_kwargs=self.tokenizer.init_kwargs,
-            **kwargs,
-        )
-        if images is not None:
-            image_inputs = self.image_processor(images=images, **output_kwargs["images_kwargs"])
-            image_grid_thw = image_inputs["image_grid_thw"]
-        else:
-            image_inputs = {}
-            image_grid_thw = None
+        if metadata.fps is None:
+            logger.warning_once(
+                "GLM4V requires frame timestamps to construct prompts, but the `fps` of the input video could not be inferred. "
+                "Probably `video_metadata` was missing from inputs and you passed pre-sampled frames. "
+                "Defaulting to `fps=24`. Please provide `video_metadata` for more accurate results."
+            )
+        metadata.fps = 24 if metadata.fps is None else metadata.fps
+        timestamps = metadata.timestamps[::2]  # mrope
 
-        if videos is not None:
-            videos_inputs = self.video_processor(videos=videos, **output_kwargs["videos_kwargs"])
-            # If user has not requested video metadata, pop it
-            if not kwargs.get("return_metadata"):
-                video_metadata = videos_inputs.pop("video_metadata")
-            else:
-                video_metadata = videos_inputs["video_metadata"]
-            video_grid_thw = videos_inputs["video_grid_thw"]
-        else:
-            videos_inputs = {}
-            video_grid_thw = None
+        unique_timestamps = []
+        for idx in range(0, len(timestamps)):
+            unique_timestamps.append(timestamps[idx])
 
-        if not isinstance(text, list):
-            text = [text]
+        selected_timestamps = unique_timestamps[:num_frames]
+        while len(selected_timestamps) < num_frames:
+            selected_timestamps.append(selected_timestamps[-1] if selected_timestamps else 0)
 
-        text = text.copy()  # below lines change text in-place
-        if image_grid_thw is not None:
-            merge_length = self.image_processor.merge_size**2
-            index = 0
-            for i in range(len(text)):
-                while self.image_token in text[i]:
-                    num_image_tokens = image_grid_thw[index].prod() // merge_length
-                    text[i] = text[i].replace(self.image_token, "<|placeholder|>" * num_image_tokens, 1)
-                    index += 1
-                text[i] = text[i].replace("<|placeholder|>", self.image_token)
+        for frame_idx in range(num_frames):
+            timestamp_sec = selected_timestamps[frame_idx]
+            frame_structure = self.replace_frame_token_id(timestamp_sec, num_image_tokens=num_image_tokens)
+            video_structure += frame_structure
 
-        if video_grid_thw is not None:
-            merge_length = self.video_processor.merge_size**2
-            video_index = 0
-            for i in range(len(text)):
-                while self.video_token in text[i]:
-                    num_frames = video_grid_thw[video_index][0]
-                    video_structure = ""
+        return video_structure
 
-                    metadata = video_metadata[video_index]
-                    if metadata.fps is None:
-                        logger.warning_once(
-                            "SmolVLM requires frame timestamps to construct prompts, but the `fps` of the input video could not be inferred. "
-                            "Probably `video_metadata` was missing from inputs and you passed pre-sampled frames. "
-                            "Defaulting to `fps=24`. Please provide `video_metadata` for more accurate results."
-                        )
-                    metadata.fps = 24 if metadata.fps is None else metadata.fps
-                    timestamps = metadata.timestamps[::2]  # mrope
-
-                    unique_timestamps = []
-                    for idx in range(0, len(timestamps)):
-                        unique_timestamps.append(timestamps[idx])
-
-                    selected_timestamps = unique_timestamps[:num_frames]
-                    while len(selected_timestamps) < num_frames:
-                        selected_timestamps.append(selected_timestamps[-1] if selected_timestamps else 0)
-
-                    for frame_idx in range(num_frames):
-                        timestamp_sec = selected_timestamps[frame_idx]
-                        frame_structure = self.replace_frame_token_id(timestamp_sec)
-                        video_structure += frame_structure
-
-                    text[i] = text[i].replace(self.video_token, video_structure, 1)
-                    num_image_tokens = (
-                        video_grid_thw[video_index].prod() // merge_length // video_grid_thw[video_index][0]
-                    )
-                    for frame_idx in range(num_frames):
-                        if self.image_token in text[i]:
-                            text[i] = text[i].replace(self.image_token, "<|placeholder|>" * num_image_tokens, 1)
-
-                    video_index += 1
-
-                text[i] = text[i].replace("<|placeholder|>", self.image_token)
-        return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
-        return_mm_token_type_ids = output_kwargs["text_kwargs"].pop("return_mm_token_type_ids", False)
-        text_inputs = self.tokenizer(text, **output_kwargs["text_kwargs"])
-        self._check_special_mm_tokens(text, text_inputs, modalities=["image", "video"])
-
-        if return_mm_token_type_ids:
-            array_ids = np.array(text_inputs["input_ids"])
-            mm_token_type_ids = np.zeros_like(text_inputs["input_ids"])
+    def create_mm_token_type_ids(self, input_ids: list) -> list[list[int]]:
+        # We have to iterate for each list separately because inputs
+        # might be non-padded lists and we can't cast numpy on that!
+        # Then cast numpy as each input for faster indexing
+        mm_token_type_ids = []
+        for input in input_ids:
+            array_ids = np.array(input)
+            mm_token_types = np.zeros_like(input)
 
             # Replace 0 -> 2 only inside video segments because GLM4v
             # uses the same special token to denote images and video
             # Otherwise replace 0 -> 1 for image modality
-            starts = np.cumsum(array_ids == self.video_start_id, axis=1)
-            ends = np.cumsum(array_ids == self.video_end_id, axis=1)
+            starts = np.cumsum(array_ids == self.video_start_id, axis=0)
+            ends = np.cumsum(array_ids == self.video_end_id, axis=0)
             is_video_modality = starts > ends
 
-            mm_token_type_ids[(array_ids == self.image_token_id) & is_video_modality] = 2
-            mm_token_type_ids[(array_ids == self.image_token_id) & (~is_video_modality)] = 1
-            text_inputs["mm_token_type_ids"] = mm_token_type_ids.tolist()
-        return BatchFeature(data={**text_inputs, **image_inputs, **videos_inputs}, tensor_type=return_tensors)
+            mm_token_types[(array_ids == self.image_token_id) & is_video_modality] = 2
+            mm_token_types[(array_ids == self.image_token_id) & (~is_video_modality)] = 1
+            mm_token_type_ids.append(mm_token_types.tolist())
+        return mm_token_type_ids
 
-    def replace_frame_token_id(self, timestamp_sec):
-        return f"<|begin_of_image|>{self.image_token}<|end_of_image|>{int(timestamp_sec)}"
+    def replace_frame_token_id(self, timestamp_sec, num_image_tokens: int = 1):
+        return f"<|begin_of_image|>{self.image_token * num_image_tokens}<|end_of_image|>{int(timestamp_sec)}"
 
 
 __all__ = [

@@ -27,7 +27,6 @@ import torch.nn as nn
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
-from ...integrations import use_kernelized_func
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
@@ -195,7 +194,6 @@ def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
     return q_embed.to(dtype=dtype), k_embed.to(dtype=dtype)
 
 
-@use_kernelized_func(apply_rotary_pos_emb)
 class Cohere2Attention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
@@ -208,8 +206,7 @@ class Cohere2Attention(nn.Module):
         self.scaling = self.head_dim**-0.5
         self.attention_dropout = config.attention_dropout
         self.is_causal = True
-        layer_type = config.layer_types[layer_idx] if hasattr(config, "layer_types") else None
-        self.sliding_window = config.sliding_window if layer_type == "sliding_attention" else None
+        self.sliding_window = config.sliding_window if config.layer_types[layer_idx] == "sliding_attention" else None
 
         self.q_proj = nn.Linear(
             config.hidden_size, config.num_attention_heads * self.head_dim, bias=config.attention_bias
@@ -290,7 +287,6 @@ class Cohere2DecoderLayer(GradientCheckpointingLayer):
         self.self_attn = Cohere2Attention(config=config, layer_idx=layer_idx)
         self.mlp = Cohere2MLP(config)
         self.input_layernorm = Cohere2LayerNorm(hidden_size=(config.hidden_size), eps=config.layer_norm_eps)
-        self.attention_type = config.layer_types[layer_idx]
 
     def forward(
         self,
@@ -413,10 +409,10 @@ class Cohere2Model(Cohere2PreTrainedModel):
         hidden_states = inputs_embeds
         position_embeddings = self.rotary_emb(hidden_states, position_ids)
 
-        for decoder_layer in self.layers:
+        for i, decoder_layer in enumerate(self.layers):
             hidden_states = decoder_layer(
                 hidden_states,
-                attention_mask=causal_mask_mapping[decoder_layer.attention_type],
+                attention_mask=causal_mask_mapping[self.config.layer_types[i]],
                 position_embeddings=position_embeddings,
                 past_key_values=past_key_values,
                 use_cache=use_cache,

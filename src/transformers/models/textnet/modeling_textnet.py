@@ -237,7 +237,7 @@ class TextNetModel(TextNetPreTrainedModel):
         return_dict: bool | None = None,
         **kwargs,
     ) -> tuple[Any, list[Any]] | tuple[Any] | BaseModelOutputWithPoolingAndNoAttention:
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
@@ -319,7 +319,7 @@ class TextNetForImageClassification(TextNetPreTrainedModel):
         >>> outputs.logits.shape
         torch.Size([1, 2])
         ```"""
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         outputs = self.textnet(pixel_values, output_hidden_states=output_hidden_states, return_dict=return_dict)
         last_hidden_state = outputs[0]
@@ -386,7 +386,7 @@ class TextNetBackbone(BackboneMixin, TextNetPreTrainedModel):
         >>> with torch.no_grad():
         >>>     outputs = model(**inputs)
         ```"""
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )

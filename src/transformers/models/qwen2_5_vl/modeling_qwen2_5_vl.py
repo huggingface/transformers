@@ -24,13 +24,13 @@
 # limitations under the License.
 
 import itertools
+import warnings
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any, Optional
 
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 
 from ... import initialization as init
 from ...activations import ACT2FN
@@ -40,13 +40,20 @@ from ...integrations import use_kernel_forward_from_hub
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, ModelOutput
+from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, CausalLMOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging, torch_compilable_check
-from ...utils.generic import is_flash_attention_requested, maybe_autocast, merge_with_config_defaults
+from ...utils.deprecation import deprecate_kwarg
+from ...utils.generic import (
+    accepts_precomputed_kwargs,
+    is_flash_attention_requested,
+    maybe_autocast,
+    merge_with_config_defaults,
+)
 from ...utils.output_capturing import capture_outputs
+from ...vision_utils import get_vision_cu_seqlens, get_vision_position_ids, get_vision_window_index
 from .configuration_qwen2_5_vl import Qwen2_5_VLConfig, Qwen2_5_VLTextConfig, Qwen2_5_VLVisionConfig
 
 
@@ -91,8 +98,8 @@ class Qwen2_5_VLMLP(nn.Module):
 class Qwen2_5_VisionPatchEmbed(nn.Module):
     def __init__(
         self,
-        patch_size: int = 14,
-        temporal_patch_size: int = 2,
+        patch_size: int | list[int] | tuple[int, int] = 14,
+        temporal_patch_size: int | list[int] | tuple[int, int] = 2,
         in_channels: int = 3,
         embed_dim: int = 1152,
     ) -> None:
@@ -124,10 +131,8 @@ class Qwen2_5_VisionRotaryEmbedding(nn.Module):
         inv_freq = 1.0 / (theta ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
         self.register_buffer("inv_freq", inv_freq, persistent=False)
 
-    def forward(self, seqlen: int) -> torch.Tensor:
-        seq = torch.arange(seqlen, device=self.inv_freq.device, dtype=self.inv_freq.dtype)
-        freqs = torch.outer(seq, self.inv_freq)
-        return freqs
+    def forward(self, position_ids: torch.Tensor) -> torch.Tensor:
+        return (position_ids.unsqueeze(-1) * self.inv_freq).flatten(1)
 
 
 class Qwen2_5_VLPatchMerger(nn.Module):
@@ -218,11 +223,11 @@ class Qwen2_5_VLVisionAttention(nn.Module):
         self.attention_dropout = 0.0
         self.is_causal = False
 
+    @deprecate_kwarg("rotary_pos_emb", version="v5.10")
     def forward(
         self,
         hidden_states: torch.Tensor,
         cu_seqlens: torch.Tensor,
-        rotary_pos_emb: torch.Tensor | None = None,
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         **kwargs,
     ) -> torch.Tensor:
@@ -295,25 +300,22 @@ class Qwen2_5_VLVisionBlock(GradientCheckpointingLayer):
         self.attn = Qwen2_5_VLVisionAttention(config=config)
         self.mlp = Qwen2_5_VLMLP(config, bias=True)
 
+    @deprecate_kwarg("rotary_pos_emb", version="v5.10")
     @auto_docstring
     def forward(
         self,
         hidden_states: torch.Tensor,
         cu_seqlens: torch.Tensor,
-        rotary_pos_emb: torch.Tensor | None = None,
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         **kwargs,
     ) -> torch.Tensor:
         r"""
         cu_seqlens (`torch.Tensor`):
             Cumulative sequence lengths used for packed variable-length attention in Flash Attention kernels.
-        rotary_pos_emb (`torch.Tensor`, *optional*):
-            Precomputed rotary positional embeddings applied to the vision attention query/key states.
         """
         hidden_states = hidden_states + self.attn(
             self.norm1(hidden_states),
             cu_seqlens=cu_seqlens,
-            rotary_pos_emb=rotary_pos_emb,
             position_embeddings=position_embeddings,
             **kwargs,
         )
@@ -328,7 +330,7 @@ class Qwen2_5_VLPreTrainedModel(PreTrainedModel):
     input_modalities = ("image", "video", "text")
     supports_gradient_checkpointing = True
     _no_split_modules = ["Qwen2_5_VLDecoderLayer", "Qwen2_5_VLVisionBlock"]
-    _skip_keys_device_placement = "past_key_values"
+    _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = True
     _supports_sdpa = True
 
@@ -380,75 +382,28 @@ class Qwen2_5_VisionTransformerPretrainedModel(Qwen2_5_VLPreTrainedModel):
         self.post_init()
 
     def rot_pos_emb(self, grid_thw):
-        pos_ids = []
-        for t, h, w in grid_thw.tolist():
-            hpos_ids = torch.arange(h).unsqueeze(1).expand(-1, w)
-            hpos_ids = hpos_ids.reshape(
-                h // self.spatial_merge_size,
-                self.spatial_merge_size,
-                w // self.spatial_merge_size,
-                self.spatial_merge_size,
-            )
-            hpos_ids = hpos_ids.permute(0, 2, 1, 3)
-            hpos_ids = hpos_ids.flatten()
-
-            wpos_ids = torch.arange(w).unsqueeze(0).expand(h, -1)
-            wpos_ids = wpos_ids.reshape(
-                h // self.spatial_merge_size,
-                self.spatial_merge_size,
-                w // self.spatial_merge_size,
-                self.spatial_merge_size,
-            )
-            wpos_ids = wpos_ids.permute(0, 2, 1, 3)
-            wpos_ids = wpos_ids.flatten()
-            pos_ids.append(torch.stack([hpos_ids, wpos_ids], dim=-1).repeat(t, 1))
-        pos_ids = torch.cat(pos_ids, dim=0)
-        max_grid_size = grid_thw[:, 1:].max()
-        rotary_pos_emb_full = self.rotary_pos_emb(max_grid_size)
-        rotary_pos_emb = rotary_pos_emb_full[pos_ids].flatten(1)
+        warnings.warn(
+            f"`{self.__class__.__name__}.rot_pos_emb` is deprecated and will be removed in v5.11. Use `get_vision_position_ids` from `transformers.vision_utils` and apply the rotary embedding module.",
+            FutureWarning,
+            stacklevel=2,
+        )
+        position_ids = get_vision_position_ids(grid_thw, self.spatial_merge_size)
+        rotary_pos_emb = self.rotary_pos_emb(position_ids)
         return rotary_pos_emb
 
     def get_window_index(self, grid_thw):
-        window_index: list = []
-        cu_window_seqlens: list = [0]
-        window_index_id = 0
-        vit_merger_window_size = self.window_size // self.spatial_merge_size // self.patch_size
-        grid_thw_list = grid_thw.tolist()
-
-        for grid_t, grid_h, grid_w in grid_thw_list:
-            llm_grid_h, llm_grid_w = (
-                grid_h // self.spatial_merge_size,
-                grid_w // self.spatial_merge_size,
-            )
-            index = torch.arange(grid_t * llm_grid_h * llm_grid_w).reshape(grid_t, llm_grid_h, llm_grid_w)
-            pad_h = vit_merger_window_size - llm_grid_h % vit_merger_window_size
-            pad_w = vit_merger_window_size - llm_grid_w % vit_merger_window_size
-            num_windows_h = (llm_grid_h + pad_h) // vit_merger_window_size
-            num_windows_w = (llm_grid_w + pad_w) // vit_merger_window_size
-            index_padded = F.pad(index, (0, pad_w, 0, pad_h), "constant", -100)
-            index_padded = index_padded.reshape(
-                grid_t,
-                num_windows_h,
-                vit_merger_window_size,
-                num_windows_w,
-                vit_merger_window_size,
-            )
-            index_padded = index_padded.permute(0, 1, 3, 2, 4).reshape(
-                grid_t,
-                num_windows_h * num_windows_w,
-                vit_merger_window_size,
-                vit_merger_window_size,
-            )
-            seqlens = (index_padded != -100).sum([2, 3]).reshape(-1)
-            index_padded = index_padded.reshape(-1)
-            index_new = index_padded[index_padded != -100]
-            window_index.append(index_new + window_index_id)
-            cu_seqlens_tmp = seqlens.cumsum(0) * self.spatial_merge_unit + cu_window_seqlens[-1]
-            cu_window_seqlens.extend(cu_seqlens_tmp.tolist())
-            window_index_id += grid_t * llm_grid_h * llm_grid_w
-        window_index = torch.cat(window_index, dim=0)
-
-        return window_index, cu_window_seqlens
+        warnings.warn(
+            f"`{self.__class__.__name__}.get_window_index` is deprecated and will be removed in v5.11. Use `get_vision_window_index` from `transformers.vision_utils` instead.",
+            FutureWarning,
+            stacklevel=2,
+        )
+        window_index, cu_window_seqlens = get_vision_window_index(
+            grid_thw,
+            spatial_merge_size=self.spatial_merge_size,
+            window_size=self.window_size,
+            patch_size=self.patch_size,
+        )
+        return window_index, cu_window_seqlens.tolist()
 
     @merge_with_config_defaults
     @capture_outputs
@@ -465,35 +420,29 @@ class Qwen2_5_VisionTransformerPretrainedModel(Qwen2_5_VLPreTrainedModel):
         Returns:
             `torch.Tensor`: hidden_states.
         """
-        hidden_states = self.patch_embed(hidden_states)
-        rotary_pos_emb = self.rot_pos_emb(grid_thw)
-        window_index, cu_window_seqlens = self.get_window_index(grid_thw)
-        cu_window_seqlens = torch.tensor(
-            cu_window_seqlens,
-            device=hidden_states.device,
-            dtype=grid_thw.dtype if torch.jit.is_tracing() else torch.int32,
+        position_ids = get_vision_position_ids(grid_thw, self.spatial_merge_size, kwargs=kwargs)
+        cu_seqlens = get_vision_cu_seqlens(grid_thw, kwargs=kwargs)
+        window_index, cu_window_seqlens = get_vision_window_index(
+            grid_thw,
+            spatial_merge_size=self.spatial_merge_size,
+            window_size=self.window_size,
+            patch_size=self.patch_size,
+            kwargs=kwargs,
         )
-        cu_window_seqlens = torch.unique_consecutive(cu_window_seqlens)
+
+        hidden_states = self.patch_embed(hidden_states)
 
         seq_len, _ = hidden_states.size()
         hidden_states = hidden_states.reshape(seq_len // self.spatial_merge_unit, self.spatial_merge_unit, -1)
         hidden_states = hidden_states[window_index, :, :]
         hidden_states = hidden_states.reshape(seq_len, -1)
+
+        rotary_pos_emb = self.rotary_pos_emb(position_ids)
         rotary_pos_emb = rotary_pos_emb.reshape(seq_len // self.spatial_merge_unit, self.spatial_merge_unit, -1)
         rotary_pos_emb = rotary_pos_emb[window_index, :, :]
         rotary_pos_emb = rotary_pos_emb.reshape(seq_len, -1)
         emb = torch.cat((rotary_pos_emb, rotary_pos_emb), dim=-1)
         position_embeddings = (emb.cos(), emb.sin())
-
-        cu_seqlens = torch.repeat_interleave(grid_thw[:, 1] * grid_thw[:, 2], grid_thw[:, 0]).cumsum(
-            dim=0,
-            # Select dtype based on the following factors:
-            #  - FA2 requires that cu_seqlens_q must have dtype int32
-            #  - torch.onnx.export requires that cu_seqlens_q must have same dtype as grid_thw
-            # See https://github.com/huggingface/transformers/pull/34852 for more information
-            dtype=grid_thw.dtype if torch.jit.is_tracing() else torch.int32,
-        )
-        cu_seqlens = F.pad(cu_seqlens, (1, 0), value=0)
 
         for layer_num, blk in enumerate(self.blocks):
             if layer_num in self.fullatt_block_indexes:
@@ -508,8 +457,8 @@ class Qwen2_5_VisionTransformerPretrainedModel(Qwen2_5_VLPreTrainedModel):
                 **kwargs,
             )
 
-        merged_hidden_states = self.merger(hidden_states)
         reverse_indices = torch.argsort(window_index)
+        merged_hidden_states = self.merger(hidden_states)
         merged_hidden_states = merged_hidden_states[reverse_indices, :]
 
         return BaseModelOutputWithPooling(
@@ -518,27 +467,15 @@ class Qwen2_5_VisionTransformerPretrainedModel(Qwen2_5_VLPreTrainedModel):
         )
 
 
+@auto_docstring
 @dataclass
-@auto_docstring(
-    custom_intro="""
-    Base class for Llava outputs, with hidden states and attentions.
-    """
-)
-class Qwen2_5_VLModelOutputWithPast(ModelOutput):
+class Qwen2_5_VLModelOutputWithPast(BaseModelOutputWithPast):
     r"""
-    past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-        It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
-
-        Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
-        `past_key_values` input) to speed up sequential decoding.
     rope_deltas (`torch.LongTensor` of shape `(batch_size, )`, *optional*):
         The rope index difference between sequence length and multimodal rope.
+        The attribute is deprecated and will be removed in v5.20, use `model.base_model.rope_deltas` instead.
     """
 
-    last_hidden_state: torch.FloatTensor | None = None
-    past_key_values: Cache | None = None
-    hidden_states: tuple[torch.FloatTensor] | None = None
-    attentions: tuple[torch.FloatTensor] | None = None
     rope_deltas: torch.LongTensor | None = None
 
 
@@ -774,7 +711,6 @@ class Qwen2_5_VLDecoderLayer(GradientCheckpointingLayer):
         self.mlp = Qwen2MLP(config)
         self.input_layernorm = Qwen2_5_VLRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = Qwen2_5_VLRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.attention_type = config.layer_types[layer_idx]
 
     def forward(
         self,
@@ -890,7 +826,7 @@ class Qwen2_5_VLTextModel(Qwen2_5_VLPreTrainedModel):
         # where each dim indicates visual spatial positions for temporal/height/width grids.
         # There are two scenarios when FA2-like packed masking might be activated.
         # 1. User specifically passed packed `position_ids` and no attention mask.
-        #    In this case we expect the useer to create correct position ids for all 3 grids
+        #    In this case we expect the user to create correct position ids for all 3 grids
         #    and prepend text-only position ids to it. The final tensor will be [4, bs, seq-len]
         # 2. User runs forward with no attention mask and no position ids. In this case, position ids
         #    are prepared by the model (`get_rope_index`) as `[4, bs, seq-len]` tensor. Text-only positions are
@@ -924,10 +860,10 @@ class Qwen2_5_VLTextModel(Qwen2_5_VLPreTrainedModel):
         hidden_states = inputs_embeds
         position_embeddings = self.rotary_emb(hidden_states, position_ids)
 
-        for decoder_layer in self.layers:
+        for i, decoder_layer in enumerate(self.layers):
             hidden_states = decoder_layer(
                 hidden_states,
-                attention_mask=causal_mask_mapping[decoder_layer.attention_type],
+                attention_mask=causal_mask_mapping[self.config.layer_types[i]],
                 position_embeddings=position_embeddings,
                 position_ids=text_position_ids,
                 past_key_values=past_key_values,
@@ -946,7 +882,6 @@ class Qwen2_5_VLTextModel(Qwen2_5_VLPreTrainedModel):
 @auto_docstring
 class Qwen2_5_VLModel(Qwen2_5_VLPreTrainedModel):
     base_model_prefix = "model"
-    _checkpoint_conversion_mapping = {"^model": "language_model"}
     # Reference: fix gemma3 grad acc #37208
     accepts_loss_kwargs = False
     config: Qwen2_5_VLConfig
@@ -960,12 +895,6 @@ class Qwen2_5_VLModel(Qwen2_5_VLPreTrainedModel):
 
         # Initialize weights and apply final processing
         self.post_init()
-
-    def get_input_embeddings(self):
-        return self.language_model.get_input_embeddings()
-
-    def set_input_embeddings(self, value):
-        self.language_model.set_input_embeddings(value)
 
     def get_vision_position_ids(
         self,
@@ -1010,17 +939,13 @@ class Qwen2_5_VLModel(Qwen2_5_VLPreTrainedModel):
             grid_thw[2].item() // spatial_merge_size,
         )
 
-        image_seq_length = llm_grid_h * llm_grid_w * llm_grid_t
-        position_width = torch.arange(start_position, start_position + llm_grid_w, device=device).repeat(
-            llm_grid_h * llm_grid_t
-        )
-        position_height = torch.arange(start_position, start_position + llm_grid_h, device=device).repeat_interleave(
-            llm_grid_w * llm_grid_t
-        )
-        position_temporal = torch.full((image_seq_length,), start_position, device=device, dtype=torch.long)
-        position_temporal = position_temporal * time_interval
-        vision_position_ids = torch.stack([position_temporal, position_height, position_width], dim=0)
+        position_temporal = torch.arange(llm_grid_t, device=device) * time_interval
+        position_height = torch.arange(llm_grid_h, device=device) + start_position
+        position_width = torch.arange(llm_grid_w, device=device) + start_position
 
+        T_grid, H_grid, W_grid = torch.meshgrid(position_temporal, position_height, position_width, indexing="ij")
+        vision_position_ids = torch.stack([T_grid, H_grid, W_grid], dim=0).reshape(3, -1)
+        vision_position_ids[0] += start_position  # must be after time_interval multiply
         return vision_position_ids
 
     def get_rope_index(
@@ -1119,7 +1044,12 @@ class Qwen2_5_VLModel(Qwen2_5_VLPreTrainedModel):
                 # image == 1, video == 2
                 else:
                     grid_thw = next(grid_iters[modality_type])
-                    time_interval = tokens_per_second * int(next(second_per_grid_ts))
+                    # Only apply temporal scaling for videos; still images have no
+                    # temporal dimension to space out (fixes #45325).
+                    if modality_type == 2:
+                        time_interval = tokens_per_second * int(next(second_per_grid_ts))
+                    else:
+                        time_interval = 1
                     vision_position_ids = self.get_vision_position_ids(
                         current_pos, grid_thw, 1, spatial_merge_size, time_interval, device=input_ids.device
                     )
@@ -1134,6 +1064,7 @@ class Qwen2_5_VLModel(Qwen2_5_VLPreTrainedModel):
         mrope_position_deltas = torch.tensor(mrope_position_deltas, device=input_ids.device).unsqueeze(1)
         return position_ids, mrope_position_deltas
 
+    @accepts_precomputed_kwargs(modality="video")
     @can_return_tuple
     @auto_docstring
     def get_video_features(
@@ -1156,6 +1087,7 @@ class Qwen2_5_VLModel(Qwen2_5_VLPreTrainedModel):
 
         return vision_outputs
 
+    @accepts_precomputed_kwargs(modality="image")
     @can_return_tuple
     @auto_docstring
     def get_image_features(
@@ -1203,18 +1135,18 @@ class Qwen2_5_VLModel(Qwen2_5_VLPreTrainedModel):
             special_video_mask = input_ids == self.config.video_token_id
 
         n_image_tokens = special_image_mask.sum()
-        special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
+        special_image_mask = special_image_mask.unsqueeze(-1).to(inputs_embeds.device)
         if image_features is not None:
             torch_compilable_check(
-                inputs_embeds[special_image_mask].numel() == image_features.numel(),
+                n_image_tokens * inputs_embeds.shape[-1] == image_features.numel(),
                 f"Image features and image tokens do not match, tokens: {n_image_tokens}, features: {image_features.shape[0]}",
             )
 
         n_video_tokens = special_video_mask.sum()
-        special_video_mask = special_video_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
+        special_video_mask = special_video_mask.unsqueeze(-1).to(inputs_embeds.device)
         if video_features is not None:
             torch_compilable_check(
-                inputs_embeds[special_video_mask].numel() == video_features.numel(),
+                n_video_tokens * inputs_embeds.shape[-1] == video_features.numel(),
                 f"Video features and video tokens do not match, tokens: {n_video_tokens}, features: {video_features.shape[0]}",
             )
         return special_image_mask, special_video_mask
@@ -1247,8 +1179,11 @@ class Qwen2_5_VLModel(Qwen2_5_VLPreTrainedModel):
                 mm_token_type_ids=mm_token_type_ids,
             )
             self.rope_deltas = rope_deltas
-        # Use pre-calculated rope-deltas to infer correct 3D position ids
-        elif self.rope_deltas is not None:
+        # Use pre-calculated rope-deltas to infer correct 3D position ids during incremental
+        # generation (past_key_values_length > 0) or when only inputs_embeds is provided (no input_ids
+        # to recompute from). Skip when input_ids is provided without past_key_values to avoid shape
+        # mismatches from stale rope_deltas (e.g., training forward pass after generation).
+        elif self.rope_deltas is not None and (past_key_values_length > 0 or input_ids is None):
             batch_size, seq_length, _ = inputs_embeds.shape
             if attention_mask is not None:
                 position_ids = attention_mask.long().cumsum(-1) - 1
@@ -1264,6 +1199,7 @@ class Qwen2_5_VLModel(Qwen2_5_VLPreTrainedModel):
             position_ids = None
         return position_ids
 
+    @deprecate_kwarg("rope_deltas", version="v5.10")
     @can_return_tuple
     @auto_docstring
     def forward(
@@ -1278,7 +1214,6 @@ class Qwen2_5_VLModel(Qwen2_5_VLPreTrainedModel):
         pixel_values_videos: torch.FloatTensor | None = None,
         image_grid_thw: torch.LongTensor | None = None,
         video_grid_thw: torch.LongTensor | None = None,
-        rope_deltas: torch.LongTensor | None = None,
         mm_token_type_ids: torch.IntTensor | None = None,
         second_per_grid_ts: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
@@ -1288,8 +1223,6 @@ class Qwen2_5_VLModel(Qwen2_5_VLPreTrainedModel):
             The temporal, height and width of feature shape of each image in LLM.
         video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
             The temporal, height and width of feature shape of each video in LLM.
-        rope_deltas (`torch.LongTensor` of shape `(batch_size, )`, *optional*):
-            The rope index difference between sequence length and multimodal rope.
         second_per_grid_ts (`torch.Tensor` of shape `(num_videos)`, *optional*):
             The time interval (in seconds) for each grid along the temporal dimension in the 3D position IDs.
         """
@@ -1298,7 +1231,7 @@ class Qwen2_5_VLModel(Qwen2_5_VLPreTrainedModel):
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
         if pixel_values is not None:
-            image_embeds = self.get_image_features(pixel_values, image_grid_thw).pooler_output
+            image_embeds = self.get_image_features(pixel_values, image_grid_thw, **kwargs).pooler_output
             image_embeds = torch.cat(image_embeds, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
             image_mask, _ = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, image_features=image_embeds
@@ -1306,7 +1239,7 @@ class Qwen2_5_VLModel(Qwen2_5_VLPreTrainedModel):
             inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_embeds)
 
         if pixel_values_videos is not None:
-            video_embeds = self.get_video_features(pixel_values_videos, video_grid_thw).pooler_output
+            video_embeds = self.get_video_features(pixel_values_videos, video_grid_thw, **kwargs).pooler_output
             video_embeds = torch.cat(video_embeds, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
             _, video_mask = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, video_features=video_embeds
@@ -1344,40 +1277,19 @@ class Qwen2_5_VLModel(Qwen2_5_VLPreTrainedModel):
         )
 
 
+@auto_docstring
 @dataclass
-@auto_docstring(
-    custom_intro="""
-    Base class for Qwen2_5_VL causal language model (or autoregressive) outputs.
-    """
-)
-class Qwen2_5_VLCausalLMOutputWithPast(ModelOutput):
+class Qwen2_5_VLCausalLMOutputWithPast(CausalLMOutputWithPast):
     r"""
-    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
-        Language modeling loss (for next-token prediction).
-    logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
-        Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
-    past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-        It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
-
-        Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
-        `past_key_values` input) to speed up sequential decoding.
     rope_deltas (`torch.LongTensor` of shape `(batch_size, )`, *optional*):
         The rope index difference between sequence length and multimodal rope.
+        The attribute is deprecated and will be removed in v5.20, use `model.base_model.rope_deltas` instead.
     """
 
-    loss: torch.FloatTensor | None = None
-    logits: torch.FloatTensor | None = None
-    past_key_values: Cache | None = None
-    hidden_states: tuple[torch.FloatTensor] | None = None
-    attentions: tuple[torch.FloatTensor] | None = None
     rope_deltas: torch.LongTensor | None = None
 
 
 class Qwen2_5_VLForConditionalGeneration(Qwen2_5_VLPreTrainedModel, GenerationMixin):
-    _checkpoint_conversion_mapping = {
-        "^visual": "model.visual",
-        r"^model(?!\.(language_model|visual))": "model.language_model",
-    }
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
     # Reference: fix gemma3 grad acc #37208
     accepts_loss_kwargs = False
@@ -1388,12 +1300,6 @@ class Qwen2_5_VLForConditionalGeneration(Qwen2_5_VLPreTrainedModel, GenerationMi
         self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
 
         self.post_init()
-
-    def get_input_embeddings(self):
-        return self.model.get_input_embeddings()
-
-    def set_input_embeddings(self, value):
-        self.model.set_input_embeddings(value)
 
     @auto_docstring
     def get_video_features(
@@ -1408,9 +1314,7 @@ class Qwen2_5_VLForConditionalGeneration(Qwen2_5_VLPreTrainedModel, GenerationMi
         video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
             The temporal, height and width of feature shape of each video in LLM.
         """
-        return self.model.get_video_features(
-            pixel_values_videos=pixel_values_videos, video_grid_thw=video_grid_thw, **kwargs
-        )
+        return self.model.get_video_features(pixel_values_videos, video_grid_thw, **kwargs)
 
     @auto_docstring
     def get_image_features(
@@ -1425,8 +1329,9 @@ class Qwen2_5_VLForConditionalGeneration(Qwen2_5_VLPreTrainedModel, GenerationMi
         image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
             The temporal, height and width of feature shape of each image in LLM.
         """
-        return self.model.get_image_features(pixel_values=pixel_values, image_grid_thw=image_grid_thw, **kwargs)
+        return self.model.get_image_features(pixel_values, image_grid_thw, **kwargs)
 
+    @deprecate_kwarg("rope_deltas", version="v5.10")
     @can_return_tuple
     @auto_docstring
     def forward(
@@ -1442,7 +1347,6 @@ class Qwen2_5_VLForConditionalGeneration(Qwen2_5_VLPreTrainedModel, GenerationMi
         pixel_values_videos: torch.FloatTensor | None = None,
         image_grid_thw: torch.LongTensor | None = None,
         video_grid_thw: torch.LongTensor | None = None,
-        rope_deltas: torch.LongTensor | None = None,
         mm_token_type_ids: torch.IntTensor | None = None,
         second_per_grid_ts: torch.Tensor | None = None,
         logits_to_keep: int | torch.Tensor = 0,
@@ -1457,8 +1361,6 @@ class Qwen2_5_VLForConditionalGeneration(Qwen2_5_VLPreTrainedModel, GenerationMi
             The temporal, height and width of feature shape of each image in LLM.
         video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
             The temporal, height and width of feature shape of each video in LLM.
-        rope_deltas (`torch.LongTensor` of shape `(batch_size, )`, *optional*):
-            The rope index difference between sequence length and multimodal rope.
         second_per_grid_ts (`torch.Tensor` of shape `(num_videos)`, *optional*):
             The time interval (in seconds) for each grid along the temporal dimension in the 3D position IDs.
 
@@ -1732,8 +1634,7 @@ class Qwen2_5_VLForConditionalGeneration(Qwen2_5_VLPreTrainedModel, GenerationMi
                 if key == "position_ids" and dict_to_expand[key].ndim == 3:
                     dict_to_expand[key] = dict_to_expand[key].repeat_interleave(expand_size, dim=1)
                 elif (
-                    key != "cache_position"
-                    and dict_to_expand[key] is not None
+                    dict_to_expand[key] is not None
                     and isinstance(dict_to_expand[key], torch.Tensor)
                     and key not in visual_keys
                 ):

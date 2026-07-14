@@ -12,8 +12,9 @@ _use_top_left_mask = flash_attn_supports_top_left_mask()
 def get_target_dtype(query: torch.Tensor, module: torch.nn.Module) -> torch.dtype:
     """If the query is in float32, return a target dtype compatible with flash attention. Return None otherwise."""
     if query.dtype == torch.float32:
-        if torch.is_autocast_enabled("cuda"):
-            return torch.get_autocast_dtype("cuda")
+        device_type = query.device.type
+        if torch.is_autocast_enabled(device_type):
+            return torch.get_autocast_dtype(device_type)
         # Handle the case where the model is quantized
         elif hasattr(module.config, "_is_quantized"):
             return module.config.dtype
@@ -33,6 +34,7 @@ def flash_attention_forward(
     sliding_window: int | None = None,
     softcap: float | None = None,
     is_causal: bool | None = None,
+    s_aux: torch.Tensor | None = None,  # alias: learnable attention sink
     **kwargs,
 ) -> tuple[torch.Tensor, None]:
     if kwargs.get("output_attentions", False):
@@ -80,6 +82,11 @@ def flash_attention_forward(
         target_dtype=target_dtype,
         attn_implementation=module.config._attn_implementation,
         layer_idx=module.layer_idx if hasattr(module, "layer_idx") else None,
+        s_aux=(
+            s_aux.to(query.dtype)  # FA only accepts half precision
+            if s_aux is not None
+            else None
+        ),
         **kwargs,
     )
 

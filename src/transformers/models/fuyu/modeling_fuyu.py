@@ -32,7 +32,7 @@ logger = logging.get_logger(__name__)
 @auto_docstring
 class FuyuPreTrainedModel(PreTrainedModel):
     config: FuyuConfig
-    base_model_prefix = "fuyu"
+    base_model_prefix = "model"
     input_modalities = ("image", "text")
     supports_gradient_checkpointing = True
     _supports_attention_backend = True
@@ -40,7 +40,7 @@ class FuyuPreTrainedModel(PreTrainedModel):
     _supports_sdpa = True
     _supports_flex_attn = True
     _no_split_modules = []
-    _skip_keys_device_placement = "past_key_values"
+    _skip_keys_device_placement = ["past_key_values"]
 
 
 @auto_docstring(
@@ -49,8 +49,6 @@ class FuyuPreTrainedModel(PreTrainedModel):
     """
 )
 class FuyuModel(FuyuPreTrainedModel):
-    _checkpoint_conversion_mapping = {"language_model.model": "language_model"}
-
     def __init__(self, config: FuyuConfig):
         super().__init__(config)
         self.padding_idx = config.pad_token_id
@@ -63,12 +61,6 @@ class FuyuModel(FuyuPreTrainedModel):
         self.gradient_checkpointing = False
         # Initialize weights and apply final processing
         self.post_init()
-
-    def get_input_embeddings(self):
-        return self.language_model.get_input_embeddings()
-
-    def set_input_embeddings(self, value):
-        self.language_model.set_input_embeddings(value)
 
     def gather_continuous_embeddings(
         self,
@@ -143,9 +135,9 @@ class FuyuModel(FuyuPreTrainedModel):
 
         n_image_tokens = special_image_mask.sum()
         n_image_features = image_features.shape[0] * image_features.shape[1]
-        special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
+        special_image_mask = special_image_mask.unsqueeze(-1).to(inputs_embeds.device)
         torch_compilable_check(
-            inputs_embeds[special_image_mask].numel() == image_features.numel(),
+            n_image_tokens * inputs_embeds.shape[-1] == image_features.numel(),
             f"Image features and image tokens do not match, tokens: {n_image_tokens}, features: {n_image_features}",
         )
         return special_image_mask
@@ -214,11 +206,6 @@ class FuyuModel(FuyuPreTrainedModel):
     """
 )
 class FuyuForCausalLM(FuyuPreTrainedModel, GenerationMixin):
-    _checkpoint_conversion_mapping = {
-        "^language_model.model": "model.language_model",
-        "^vision_embed_tokens": "model.vision_embed_tokens",
-        "^language_model.lm_head": "lm_head",
-    }
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
 
     def __init__(self, config: FuyuConfig):
@@ -226,12 +213,6 @@ class FuyuForCausalLM(FuyuPreTrainedModel, GenerationMixin):
         self.model = FuyuModel(config)
         self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
         self.post_init()
-
-    def get_input_embeddings(self):
-        return self.model.get_input_embeddings()
-
-    def set_input_embeddings(self, value):
-        self.model.set_input_embeddings(value)
 
     @can_return_tuple
     @auto_docstring
@@ -325,7 +306,6 @@ class FuyuForCausalLM(FuyuPreTrainedModel, GenerationMixin):
         inputs_embeds=None,
         image_patches=None,
         image_patches_indices=None,
-        cache_position=None,
         is_first_iteration=False,
         **kwargs,
     ):
@@ -338,7 +318,6 @@ class FuyuForCausalLM(FuyuPreTrainedModel, GenerationMixin):
             inputs_embeds=inputs_embeds,
             image_patches=image_patches,
             image_patches_indices=image_patches_indices,
-            cache_position=cache_position,
             is_first_iteration=is_first_iteration,
             **kwargs,
         )

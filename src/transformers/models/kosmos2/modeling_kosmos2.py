@@ -58,6 +58,7 @@ class Kosmos2PreTrainedModel(PreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module: nn.Module):
         """Initialize the weights"""
+        super()._init_weights(module)
         if hasattr(self.config, "initializer_factor"):
             factor = self.config.initializer_factor
         elif hasattr(self.config, "vision_config"):
@@ -102,17 +103,11 @@ class Kosmos2PreTrainedModel(PreTrainedModel):
             init.normal_(module.embed_tokens.weight, mean=0.0, std=std)
             if module.embed_tokens.padding_idx is not None:
                 init.zeros_(module.embed_tokens.weight[module.embed_tokens.padding_idx])
-        elif isinstance(module, nn.LayerNorm):
-            init.ones_(module.weight)
-            init.zeros_(module.bias)
         elif isinstance(module, Kosmos2TextSinusoidalPositionalEmbedding):
             emb_weights = module.get_embedding(
                 module.num_positions + module.offset, module.embedding_dim, module.padding_idx
             )
             init.copy_(module.weights, emb_weights)
-
-        if isinstance(module, nn.Linear) and module.bias is not None:
-            init.zeros_(module.bias)
 
 
 def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: int | None = None):
@@ -146,8 +141,8 @@ def _make_causal_mask(
     return mask[None, None, :, :].expand(bsz, 1, tgt_len, tgt_len + past_key_values_length)
 
 
-@dataclass
 @auto_docstring
+@dataclass
 class BaseModelOutputWithProjectionAttentions(BaseModelOutputWithPooling):
     r"""
     projection_attentions (`tuple(torch.FloatTensor)`):
@@ -161,20 +156,14 @@ class BaseModelOutputWithProjectionAttentions(BaseModelOutputWithPooling):
     projection_attentions: tuple[torch.FloatTensor] | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for text model's outputs that also contains a pooling of the last hidden states.
     """
 )
+@dataclass
 class Kosmos2ModelOutput(ModelOutput):
     r"""
-    past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-        It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
-
-        Contains pre-computed hidden-states (key and values in the self-attention blocks and optionally if
-        `config.is_encoder_decoder=True` in the cross-attention blocks) that can be used (see `past_key_values`
-        input) to speed up sequential decoding.
     image_embeds (`torch.FloatTensor` of shape `(batch_size, latent_query_num, hidden_size)`, *optional*):
         Sequence of hidden-states at the output of `Kosmos2ImageToTextProjection`.
     projection_attentions (`tuple(torch.FloatTensor)`, *optional*):
@@ -202,24 +191,18 @@ class Kosmos2ModelOutput(ModelOutput):
         )
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Model output class for `Kosmos2ForConditionalGeneration`.
     """
 )
+@dataclass
 class Kosmos2ForConditionalGenerationModelOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
         Language modeling loss (for next-token prediction).
     logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
         Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
-    past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-        It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
-
-        Contains pre-computed hidden-states (key and values in the self-attention blocks and optionally if
-        `config.is_encoder_decoder=True` in the cross-attention blocks) that can be used (see `past_key_values`
-        input) to speed up sequential decoding.
     image_embeds (`torch.FloatTensor` of shape `(batch_size, latent_query_num, hidden_size)`, *optional*):
         Sequence of hidden-states at the output of `Kosmos2ImageToTextProjection`.
     projection_attentions (`tuple(torch.FloatTensor)`, *optional*):
@@ -386,15 +369,16 @@ class Kosmos2VisionAttention(nn.Module):
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
         """Input shape: Batch x Time x Channel"""
 
-        batch_size, seq_length, embed_dim = hidden_states.shape
+        input_shape = hidden_states.shape[:-1]
 
+        hidden_shape = (*input_shape, -1, self.head_dim)
         queries = self.q_proj(hidden_states)
         keys = self.k_proj(hidden_states)
         values = self.v_proj(hidden_states)
 
-        queries = queries.view(batch_size, seq_length, self.num_heads, self.head_dim).transpose(1, 2)
-        keys = keys.view(batch_size, seq_length, self.num_heads, self.head_dim).transpose(1, 2)
-        values = values.view(batch_size, seq_length, self.num_heads, self.head_dim).transpose(1, 2)
+        queries = queries.view(hidden_shape).transpose(1, 2)
+        keys = keys.view(hidden_shape).transpose(1, 2)
+        values = values.view(hidden_shape).transpose(1, 2)
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
@@ -412,7 +396,7 @@ class Kosmos2VisionAttention(nn.Module):
             **kwargs,
         )
 
-        attn_output = attn_output.reshape(batch_size, seq_length, embed_dim).contiguous()
+        attn_output = attn_output.reshape(*input_shape, -1).contiguous()
         attn_output = self.out_proj(attn_output)
         return attn_output, attn_weights
 
@@ -433,7 +417,7 @@ class Kosmos2VisionMLP(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.altclip.modeling_altclip.AltCLIPEncoderLayer with AltCLIP->Kosmos2Vision
+# Copied from transformers.models.altclip.modeling_altclip.AltCLIPEncoderLayer with AltCLIPVisionConfig->Kosmos2VisionConfig,AltCLIP->Kosmos2Vision
 class Kosmos2VisionEncoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: Kosmos2VisionConfig):
         super().__init__()
@@ -448,7 +432,7 @@ class Kosmos2VisionEncoderLayer(GradientCheckpointingLayer):
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.FloatTensor, torch.Tensor | None]:
+    ) -> torch.FloatTensor:
         residual = hidden_states
 
         hidden_states = self.layer_norm1(hidden_states)
@@ -515,7 +499,7 @@ class Kosmos2VisionEncoder(nn.Module):
         )
 
 
-# Similar to `transformers.models.clip.modeling_clip.CLIPVisionTransformer` but without docstring for `forward`
+# Similar to `transformers.models.clip.modeling_clip.CLIPVisionModel` but without docstring for `forward`
 class Kosmos2VisionTransformer(Kosmos2PreTrainedModel):
     _can_record_outputs = {
         "hidden_states": Kosmos2VisionEncoderLayer,
@@ -721,7 +705,6 @@ class KosmosTextAttention(nn.Module):
         encoder_hidden_states: torch.Tensor | None = None,
         past_key_values: Cache | None = None,
         attention_mask: torch.Tensor | None = None,
-        cache_position: torch.Tensor | None = None,
         **kwargs,
     ) -> tuple[torch.Tensor, torch.Tensor | None, Cache | None]:
         """Input shape: Batch x Time x Channel"""
@@ -729,10 +712,11 @@ class KosmosTextAttention(nn.Module):
         # if key_value_states are provided this layer is used as a cross-attention layer
         # for the decoder
         is_cross_attention = encoder_hidden_states is not None
-        batch_size, seq_length = hidden_states.shape[:2]
+        input_shape = hidden_states.shape[:-1]
 
+        hidden_shape = (*input_shape, -1, self.head_dim)
         query_states = self.q_proj(hidden_states)
-        query_states = query_states.view(batch_size, seq_length, self.num_heads, self.head_dim).transpose(1, 2)
+        query_states = query_states.view(hidden_shape).transpose(1, 2)
 
         is_updated = False
         if past_key_values is not None:
@@ -752,17 +736,13 @@ class KosmosTextAttention(nn.Module):
             key_states = curr_past_key_values.layers[self.layer_idx].keys
             value_states = curr_past_key_values.layers[self.layer_idx].values
         else:
-            key_states = self.k_proj(current_states)
-            value_states = self.v_proj(current_states)
-            key_states = key_states.view(batch_size, -1, self.num_heads, self.head_dim).transpose(1, 2)
-            value_states = value_states.view(batch_size, -1, self.num_heads, self.head_dim).transpose(1, 2)
+            kv_shape = (*current_states.shape[:-1], -1, self.head_dim)
+            key_states = self.k_proj(current_states).view(kv_shape).transpose(1, 2)
+            value_states = self.v_proj(current_states).view(kv_shape).transpose(1, 2)
 
             if past_key_values is not None:
                 # save all key/value_states to cache to be re-used for fast auto-regressive generation
-                cache_position = cache_position if not is_cross_attention else None
-                key_states, value_states = curr_past_key_values.update(
-                    key_states, value_states, self.layer_idx, {"cache_position": cache_position}
-                )
+                key_states, value_states = curr_past_key_values.update(key_states, value_states, self.layer_idx)
                 # set flag that curr layer for cross-attn is already updated so we can re-use in subsequent calls
                 if is_cross_attention and isinstance(past_key_values, EncoderDecoderCache):
                     past_key_values.is_updated[self.layer_idx] = True
@@ -782,7 +762,7 @@ class KosmosTextAttention(nn.Module):
             **kwargs,
         )
 
-        attn_output = attn_output.reshape(batch_size, seq_length, -1).contiguous()
+        attn_output = attn_output.reshape(*input_shape, -1).contiguous()
         if self.inner_attn_ln is not None:
             attn_output = self.inner_attn_ln(attn_output)
 
@@ -854,7 +834,6 @@ class Kosmos2TextBlock(GradientCheckpointingLayer):
         encoder_attention_mask: torch.Tensor | None = None,
         past_key_values: Cache | None = None,
         output_attentions: bool | None = False,
-        cache_position: torch.Tensor | None = None,
         **kwargs,
     ) -> tuple[torch.FloatTensor, tuple[torch.FloatTensor, torch.FloatTensor] | None]:
         residual = hidden_states
@@ -865,7 +844,6 @@ class Kosmos2TextBlock(GradientCheckpointingLayer):
             past_key_values=past_key_values,
             attention_mask=attention_mask,
             output_attentions=output_attentions,
-            cache_position=cache_position,
             **kwargs,
         )
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
@@ -888,7 +866,6 @@ class Kosmos2TextBlock(GradientCheckpointingLayer):
                 attention_mask=encoder_attention_mask,
                 past_key_values=past_key_values,
                 output_attentions=output_attentions,
-                cache_position=cache_position,
                 **kwargs,
             )
             hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
@@ -1012,7 +989,6 @@ class Kosmos2TextTransformer(Kosmos2PreTrainedModel):
         output_attentions: bool | None = None,
         output_hidden_states: bool | None = None,
         return_dict: bool | None = None,
-        cache_position: torch.Tensor | None = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> tuple | BaseModelOutputWithPastAndCrossAttentions:
         r"""
@@ -1084,7 +1060,6 @@ class Kosmos2TextTransformer(Kosmos2PreTrainedModel):
                 past_key_values=past_key_values,
                 output_attentions=output_attentions,
                 use_cache=use_cache,
-                cache_position=cache_position,
                 **kwargs,
             )
 
@@ -1102,14 +1077,12 @@ class Kosmos2VisionModel(Kosmos2PreTrainedModel):
     main_input_name = "pixel_values"
     input_modalities = ("image",)
 
-    # Copied from transformers.models.clip.modeling_clip.CLIPVisionModel.__init__ with CLIP_VISION->KOSMOS2_VISION,CLIP->Kosmos2,self.vision_model->self.model
     def __init__(self, config: Kosmos2VisionConfig):
         super().__init__(config)
         self.model = Kosmos2VisionTransformer(config)
         # Initialize weights and apply final processing
         self.post_init()
 
-    # Copied from transformers.models.clip.modeling_clip.CLIPVisionModel.get_input_embeddings with CLIP_VISION->KOSMOS2_VISION,CLIP->Kosmos2,self.vision_model->self.model
     def get_input_embeddings(self) -> nn.Module:
         return self.model.embeddings.patch_embedding
 
@@ -1155,7 +1128,6 @@ class Kosmos2TextModel(Kosmos2PreTrainedModel):
         inputs_embeds: torch.Tensor | None = None,
         position_ids: torch.Tensor | None = None,
         use_cache: bool | None = None,
-        cache_position: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPastAndCrossAttentions:
         r"""
@@ -1179,7 +1151,6 @@ class Kosmos2TextModel(Kosmos2PreTrainedModel):
             inputs_embeds=inputs_embeds,
             position_ids=position_ids,
             use_cache=use_cache,
-            cache_position=cache_position,
             **kwargs,
         )
 
@@ -1224,7 +1195,6 @@ class Kosmos2TextForCausalLM(Kosmos2PreTrainedModel, GenerationMixin):
         position_ids: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
-        cache_position: torch.Tensor | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | CausalLMOutputWithCrossAttentions:
@@ -1258,7 +1228,6 @@ class Kosmos2TextForCausalLM(Kosmos2PreTrainedModel, GenerationMixin):
             inputs_embeds=inputs_embeds,
             position_ids=position_ids,
             use_cache=use_cache,
-            cache_position=cache_position,
             **kwargs,
         )
 
@@ -1289,7 +1258,6 @@ class Kosmos2TextForCausalLM(Kosmos2PreTrainedModel, GenerationMixin):
         attention_mask=None,
         inputs_embeds=None,
         use_cache=None,
-        cache_position=None,
         is_first_iteration=False,
         **model_kwargs,
     ):
@@ -1323,7 +1291,6 @@ class Kosmos2TextForCausalLM(Kosmos2PreTrainedModel, GenerationMixin):
             image_embeds_position_mask=image_embeds_position_mask,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
-            cache_position=cache_position,
             is_first_iteration=is_first_iteration,
             **model_kwargs,
         )

@@ -25,7 +25,7 @@ from parameterized import parameterized
 
 from transformers import (
     RTDetrConfig,
-    RTDetrImageProcessor,
+    RTDetrImageProcessorPil,
     RTDetrResNetConfig,
     is_torch_available,
     is_vision_available,
@@ -635,6 +635,31 @@ class RTDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                 f"Max diff: {(outputs_static.last_hidden_state - outputs_dynamic.last_hidden_state).abs().max()}",
             )
 
+    def test_num_feature_levels_greater_than_backbone_outputs(self):
+        # Regression test for indexing bug when num_feature_levels > number of backbone outputs.
+        # This previously crashed with TypeError when num_feature_levels exceeded the number of backbone output levels.
+        config = self.model_tester.get_config()
+        config.num_labels = self.model_tester.num_labels
+        config.num_feature_levels = 4
+        config.decoder_in_channels = [32, 32, 32, 32]
+        model = RTDetrForObjectDetection(config)
+        model.to(torch_device)
+        model.eval()
+        pixel_values = torch.rand(
+            self.model_tester.batch_size,
+            self.model_tester.num_channels,
+            self.model_tester.image_size,
+            self.model_tester.image_size,
+            device=torch_device,
+        )
+        with torch.no_grad():
+            outputs = model(pixel_values=pixel_values)
+        self.assertIsNotNone(outputs.logits)
+        self.assertEqual(
+            outputs.logits.shape,
+            (self.model_tester.batch_size, self.model_tester.num_queries, self.model_tester.num_labels),
+        )
+
 
 TOLERANCE = 1e-4
 
@@ -651,7 +676,7 @@ def prepare_img():
 class RTDetrModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_image_processor(self):
-        return RTDetrImageProcessor.from_pretrained(CHECKPOINT) if is_vision_available() else None
+        return RTDetrImageProcessorPil.from_pretrained(CHECKPOINT) if is_vision_available() else None
 
     def test_inference_object_detection_head(self):
         model = RTDetrForObjectDetection.from_pretrained(CHECKPOINT).to(torch_device)

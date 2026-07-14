@@ -23,6 +23,7 @@ from transformers import PreTrainedModel
 from transformers.models.superglue.configuration_superglue import SuperGlueConfig
 
 from ... import initialization as init
+from ...masking_utils import create_bidirectional_mask
 from ...utils import ModelOutput, auto_docstring, logging
 from ..auto import AutoModelForKeypointDetection
 
@@ -145,7 +146,6 @@ def arange_like(x, dim: int) -> torch.Tensor:
     return x.new_ones(x.shape[dim]).cumsum(0) - 1
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for outputs of SuperGlue keypoint matching models. Due to the nature of keypoint detection and matching, the number
@@ -155,6 +155,7 @@ def arange_like(x, dim: int) -> torch.Tensor:
     information.
     """
 )
+@dataclass
 class SuperGlueKeypointMatchingOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*):
@@ -587,11 +588,11 @@ class SuperGlueForKeypointMatching(SuperGluePreTrainedModel):
         # Keypoint MLP encoder.
         descriptors = descriptors + last_hidden_state
 
-        if mask is not None:
-            input_shape = descriptors.size()
-            extended_attention_mask = self.get_extended_attention_mask(mask, input_shape)
-        else:
-            extended_attention_mask = torch.ones((batch_size, num_keypoints), device=keypoints.device)
+        extended_attention_mask = create_bidirectional_mask(
+            config=self.config,
+            inputs_embeds=descriptors[:, 0:1, :],  # force q_len == 1
+            attention_mask=mask,
+        )
 
         # Multi-layer Transformer network.
         gnn_outputs = self.gnn(
@@ -706,7 +707,7 @@ class SuperGlueForKeypointMatching(SuperGluePreTrainedModel):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         if pixel_values.ndim != 5 or pixel_values.size(1) != 2:
             raise ValueError("Input must be a 5D tensor of shape (batch_size, 2, num_channels, height, width)")

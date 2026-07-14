@@ -438,6 +438,7 @@ class EfficientNetPreTrainedModel(PreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module: nn.Module):
         """Initialize the weights"""
+        super()._init_weights(module)
         if isinstance(module, (nn.Linear, nn.Conv2d, nn.BatchNorm2d)):
             init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
@@ -478,7 +479,7 @@ class EfficientNetModel(EfficientNetPreTrainedModel):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
@@ -540,7 +541,7 @@ class EfficientNetForImageClassification(EfficientNetPreTrainedModel):
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         outputs = self.efficientnet(pixel_values, output_hidden_states=output_hidden_states, return_dict=return_dict)
 

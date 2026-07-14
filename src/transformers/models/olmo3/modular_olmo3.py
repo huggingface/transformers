@@ -13,24 +13,28 @@
 # limitations under the License.
 
 from collections.abc import Callable
+from typing import Optional
 
 import torch
 import torch.nn as nn
+from huggingface_hub.dataclasses import strict
 
+from ... import initialization as init
 from ...cache_utils import Cache, DynamicCache
-from ...configuration_utils import PreTrainedConfig, layer_type_validation
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_outputs import BaseModelOutputWithPast
-from ...modeling_rope_utils import RopeParameters
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
+from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import auto_docstring
-from ...utils.generic import TransformersKwargs
-from ..gemma2.modeling_gemma2 import Gemma2RotaryEmbedding
+from ...utils.generic import TransformersKwargs, maybe_autocast
+from ..gemma3.modeling_gemma3 import Gemma3RotaryEmbedding
+from ..olmo2.configuration_olmo2 import Olmo2Config
 from ..olmo2.modeling_olmo2 import (
     Olmo2Attention,
     Olmo2DecoderLayer,
     Olmo2ForCausalLM,
+    Olmo2ForSequenceClassification,
     Olmo2Model,
     Olmo2PreTrainedModel,
     Olmo2RMSNorm,
@@ -40,7 +44,8 @@ from ..olmo2.modeling_olmo2 import (
 
 
 @auto_docstring(checkpoint="allenai/Olmo-3-7B-Instruct")
-class Olmo3Config(PreTrainedConfig):
+@strict
+class Olmo3Config(Olmo2Config):
     r"""
     Example:
 
@@ -59,6 +64,7 @@ class Olmo3Config(PreTrainedConfig):
     """
 
     model_type = "olmo3"
+    default_theta = 500000.0
     keys_to_ignore_at_inference = ["past_key_values"]
     base_model_tp_plan = {
         "layers.*.self_attn.q_proj": "colwise_gather_output",  # we need to replicate here due to the added norm on q and k
@@ -75,64 +81,46 @@ class Olmo3Config(PreTrainedConfig):
         "norm": (["hidden_states"], ["hidden_states"]),
     }
 
-    def __init__(
-        self,
-        vocab_size: int | None = 50304,
-        hidden_size: int | None = 4096,
-        intermediate_size: int | None = 11008,
-        num_hidden_layers: int | None = 32,
-        num_attention_heads: int | None = 32,
-        num_key_value_heads: int | None = None,
-        hidden_act: str | None = "silu",
-        max_position_embeddings: int | None = 2048,
-        initializer_range: float | None = 0.02,
-        use_cache: bool | None = True,
-        pad_token_id: int | None = 1,
-        bos_token_id: int | None = None,
-        eos_token_id: int | None = 50279,
-        tie_word_embeddings: bool | None = False,
-        rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
-        attention_bias: bool | None = False,
-        attention_dropout: float | None = 0.0,
-        rms_norm_eps: float | None = 1e-5,
-        sliding_window: int | None = 4096,
-        layer_types: list[str] | None = None,
-        **kwargs,
-    ):
-        self.vocab_size = vocab_size
-        self.max_position_embeddings = max_position_embeddings
-        self.hidden_size = hidden_size
-        self.intermediate_size = intermediate_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
+    sliding_window: int | None = 4096
+    layer_types: list[str] | None = None
 
-        # for backward compatibility
-        if num_key_value_heads is None:
-            num_key_value_heads = num_attention_heads
+    def __post_init__(self, **kwargs):
+        if self.num_key_value_heads is None:
+            self.num_key_value_heads = self.num_attention_heads
 
-        self.num_key_value_heads = num_key_value_heads
-        self.hidden_act = hidden_act
-        self.initializer_range = initializer_range
-        self.use_cache = use_cache
-        self.attention_bias = attention_bias
-        self.attention_dropout = attention_dropout
-        self.tie_word_embeddings = tie_word_embeddings
-        self.pad_token_id = pad_token_id
-        self.bos_token_id = bos_token_id
-        self.eos_token_id = eos_token_id
-
-        self.rms_norm_eps = rms_norm_eps
-        self.sliding_window = sliding_window
-        self.layer_types = layer_types
         if self.layer_types is None:
             self.layer_types = [
                 "sliding_attention" if (i + 1) % 4 != 0 else "full_attention" for i in range(self.num_hidden_layers)
             ]
-        layer_type_validation(self.layer_types, self.num_hidden_layers)
 
-        self.rope_parameters = rope_parameters
+        super().__post_init__(**kwargs)
 
-        super().__init__(**kwargs)
+    def convert_rope_params_to_dict(self, **kwargs):
+        rope_scaling = kwargs.pop("rope_scaling", None)
+
+        # Try to set `rope_scaling` if available, otherwise use `rope_parameters`. If we find `rope_parameters`
+        # as arg in the inputs, we can safely assume that it is in the new format. New naming used -> new format
+        default_rope_params = {
+            "sliding_attention": {"rope_type": "default"},
+            "full_attention": {"rope_type": "default"},
+        }
+        self.rope_parameters = self.rope_parameters if self.rope_parameters is not None else default_rope_params
+        if rope_scaling is not None:
+            self.rope_parameters["full_attention"].update(rope_scaling)
+
+        # Set default values if not present
+        if self.rope_parameters.get("full_attention") is None:
+            self.rope_parameters["full_attention"] = {"rope_type": "default"}
+        self.rope_parameters["full_attention"].setdefault("rope_theta", kwargs.pop("rope_theta", self.default_theta))
+        if self.rope_parameters.get("sliding_attention") is None:
+            self.rope_parameters["sliding_attention"] = {"rope_type": "default"}
+        self.rope_parameters["sliding_attention"].setdefault(
+            "rope_theta", kwargs.pop("rope_theta", self.default_theta)
+        )
+
+        # Standardize and validate the correctness of rotary position embeddings parameters
+        self.standardize_rope_params()
+        return kwargs
 
 
 class Olmo3RMSNorm(Olmo2RMSNorm):
@@ -197,12 +185,48 @@ class Olmo3DecoderLayer(Olmo2DecoderLayer):
     pass
 
 
-class Olmo3RotaryEmbedding(Gemma2RotaryEmbedding):
-    pass
+class Olmo3RotaryEmbedding(Gemma3RotaryEmbedding):
+    def __init__(self, config: Olmo3Config, device=None):
+        super().__init__(config, device=device)
+
+    @staticmethod
+    def compute_default_rope_parameters(
+        config: Olmo3Config | None = None,
+        device: Optional["torch.device"] = None,
+        seq_len: int | None = None,
+        layer_type: str | None = None,
+    ) -> tuple["torch.Tensor", float]:
+        return super().compute_default_rope_parameters(config, device, seq_len, layer_type)
+
+    def forward(self, x, position_ids, layer_type=None):
+        # diff -> returns cos/sin in fp32 without casting to `x.dtype`
+        inv_freq = getattr(self, f"{layer_type}_inv_freq")
+        attention_scaling = getattr(self, f"{layer_type}_attention_scaling")
+
+        inv_freq_expanded = inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1).to(x.device)
+        position_ids_expanded = position_ids[:, None, :].float()
+
+        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
+        with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
+            freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
+            emb = torch.cat((freqs, freqs), dim=-1)
+            cos = emb.cos() * attention_scaling
+            sin = emb.sin() * attention_scaling
+
+        return cos, sin
 
 
 class Olmo3PreTrainedModel(Olmo2PreTrainedModel):
-    pass
+    def _init_weights(self, module):
+        PreTrainedModel._init_weights(module)
+        if isinstance(module, Olmo3RotaryEmbedding):
+            for layer_type in module.layer_types:
+                rope_init_fn = module.compute_default_rope_parameters
+                if module.rope_type[layer_type] != "default":
+                    rope_init_fn = ROPE_INIT_FUNCTIONS[module.rope_type[layer_type]]
+                curr_inv_freq, _ = rope_init_fn(module.config, layer_type=layer_type)
+                init.copy_(getattr(module, f"{layer_type}_inv_freq"), curr_inv_freq)
+                init.copy_(getattr(module, f"{layer_type}_original_inv_freq"), curr_inv_freq)
 
 
 # The OLMo 3 model is identical to the OLMo 2 model, except:
@@ -258,15 +282,17 @@ class Olmo3Model(Olmo2Model):
             }
 
         hidden_states = inputs_embeds
-        position_embeddings = self.rotary_emb(hidden_states, position_ids)
+        position_embeddings = {}
+        for layer_type in set(self.config.layer_types):
+            position_embeddings[layer_type] = self.rotary_emb(hidden_states, position_ids, layer_type)
 
-        for decoder_layer in self.layers[: self.config.num_hidden_layers]:
+        for i, decoder_layer in enumerate(self.layers[: self.config.num_hidden_layers]):
             hidden_states = decoder_layer(
                 hidden_states,
-                attention_mask=causal_mask_mapping[decoder_layer.self_attn.attention_type],
+                attention_mask=causal_mask_mapping[self.config.layer_types[i]],
                 position_ids=position_ids,
                 past_key_values=past_key_values,
-                position_embeddings=position_embeddings,
+                position_embeddings=position_embeddings[self.config.layer_types[i]],
                 **kwargs,
             )
 
@@ -281,9 +307,14 @@ class Olmo3ForCausalLM(Olmo2ForCausalLM):
     pass
 
 
+class Olmo3ForSequenceClassification(Olmo2ForSequenceClassification):
+    pass
+
+
 __all__ = [
     "Olmo3Config",
     "Olmo3ForCausalLM",
+    "Olmo3ForSequenceClassification",
     "Olmo3Model",
     "Olmo3PreTrainedModel",
 ]
