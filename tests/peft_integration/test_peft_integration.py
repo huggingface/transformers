@@ -264,9 +264,13 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
         model_id = "hf-internal-testing/tiny-random-paligemma-lora-key-mapping"
         sentinel_a, sentinel_b = 0.0234, 0.0567
 
-        model = PaliGemmaModel.from_pretrained(
-            model_id, key_mapping={r"language_model\.model\.": "language_model."}
-        ).to(torch_device)
+        # Use a tmp_cache to avoid the potentially read-only default CI cache dir
+        with tempfile.TemporaryDirectory() as tmp_cache:
+            model = PaliGemmaModel.from_pretrained(
+                model_id,
+                key_mapping={r"language_model\.model\.": "language_model."},
+                cache_dir=tmp_cache,
+            ).to(torch_device)
 
         lora_params = {n: p for n, p in model.named_parameters() if "lora_A" in n or "lora_B" in n}
         self.assertTrue(lora_params, "no LoRA parameters found on reloaded model")
