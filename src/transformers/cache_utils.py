@@ -1531,6 +1531,15 @@ class Cache:
         for layer_idx in range(len(self.layers)):
             self.layers[layer_idx].batch_select_indices(indices)
 
+    def activate_past_recording(self):
+        """
+        Calling this function will activate past state recording, meaning that cache with fixed size such as a linear cache will
+        wait for a call to `crop` before restricting the size of its cached states, in order to be able to retrieve previous full states.
+        """
+        for layer_idx in range(len(self.layers)):
+            if hasattr(self.layers[layer_idx], "activate_past_recording"):
+                self.layers[layer_idx].activate_past_recording()
+
     @property
     def batch_size(self) -> int:
         """Return the batch size of the cache, or ``-1`` if no layer has been initialized yet

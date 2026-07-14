@@ -2008,7 +2008,16 @@ class GenerationMixin(ContinuousMixin):
         # i.e. `cache_implementation` in [None, "dynamic", "offloaded", "dynamic_full"]
         # TODO: prepare linear cache from a single API, instead of creating in modeling code
         else:
-            model_kwargs[cache_name] = DynamicCache(**dynamic_cache_kwargs)
+            cache = DynamicCache(**dynamic_cache_kwargs)
+            # Replace sliding by full
+            if generation_config.cache_implementation == "dynamic_full":
+                from ..cache_utils import DynamicLayer, DynamicSlidingWindowLayer
+
+                cache.layers = [
+                    DynamicLayer() if type(layer) is DynamicSlidingWindowLayer else layer for layer in cache.layers
+                ]
+
+            model_kwargs[cache_name] = cache
 
         if (
             self.config.is_encoder_decoder
@@ -3617,6 +3626,13 @@ class GenerationMixin(ContinuousMixin):
             or type(model_kwargs.get("past_key_values")) is StaticCache
         ):
             raise ValueError("assisted generate is not supported with Static cache classes`")
+
+        # Make sure we can record past on the cache
+        cache = model_kwargs.get("past_key_values")
+        if cache is None:
+            raise RuntimeError("assisted decoding requires a cache")
+        cache.activate_past_recording()
+
         # Get the candidate generator, given the parameterization
         candidate_generator = self._get_candidate_generator(
             generation_config=generation_config,
