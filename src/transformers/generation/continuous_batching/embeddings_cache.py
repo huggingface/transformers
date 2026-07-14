@@ -40,11 +40,11 @@ class EmbeddingsCache:
     ) -> None:
         text_config = config.get_text_config(decoder=True)
         # Create the actual cache tensor
-        cache_size = max(16384, max_batch_tokens)
-        cache_shape = (cache_size, text_config.hidden_size)
+        self.cache_size = max(16384, max_batch_tokens)
+        cache_shape = (self.cache_size, text_config.hidden_size)
         self.cache = torch.empty(cache_shape, dtype=model_dtype, device=device)
         # Create bookkeeping data structures
-        self.free_blocks = deque(range(cache_size))
+        self.free_blocks = deque(range(self.cache_size))
         self.allocated_blocks_masks: dict[str, torch.Tensor] = {}
         self.embeddings_lengths: dict[str, int] = {}
         # Specialize on modality the embeddings cache object
@@ -85,13 +85,18 @@ class EmbeddingsCache:
             return encoding_output
         raise ValueError(f"Invalid encoding output: {og_encoding_output}")
 
+    def can_ever_fit_mm_embeddings(self, state: RequestState) -> bool:
+        """Checks if there is enough space in the embeddings cache to fit the multimodal embeddings if it is the only
+        request."""
+        num_mm_embeddings = state.count_mm_embeddings(self.special_token_id)
+        return self.cache_size >= num_mm_embeddings
+
     def can_store_mm_embeddings(self, state: RequestState) -> bool:
         """Checks if there is enough space in the embeddings cache to store the multimodal embeddings."""
         # Retrieve the number of multimodal embeddings from the multimodal data (or compute and cache it)
         num_mm_embeddings = self.embeddings_lengths.get(state.request_id)
         if num_mm_embeddings is None:
-            input_ids = torch.tensor(state.initial_tokens, device="cpu", dtype=torch.int32)
-            num_mm_embeddings = (input_ids == self.special_token_id).sum().item()
+            num_mm_embeddings = state.count_mm_embeddings(self.special_token_id)
             self.embeddings_lengths[state.request_id] = num_mm_embeddings
         return len(self.free_blocks) >= num_mm_embeddings
 

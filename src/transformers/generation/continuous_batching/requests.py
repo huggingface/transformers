@@ -356,6 +356,12 @@ class RequestState:
             new_state._true_initial_tokens = len(self.initial_tokens)
         return new_state
 
+    def count_mm_embeddings(self, special_token_id: int) -> int:
+        """Count the number of multimodal embeddings in the initial tokens."""
+        input_ids = torch.tensor(self.initial_tokens, device="cpu", dtype=torch.int32)
+        num_mm_embeddings = (input_ids == special_token_id).sum().item()
+        return num_mm_embeddings
+
 
 class FutureRequestState:
     """Tracks the current state of a request and the relevant information to update it."""

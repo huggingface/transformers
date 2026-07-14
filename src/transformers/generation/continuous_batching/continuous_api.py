@@ -31,6 +31,7 @@ from ...utils.logging import logging
 from .cache import PagedAttentionCache
 from .cb_logits_processors import ContinuousBatchingLogitsProcessorList
 from .distributed import DistributedHelper
+from .embeddings_cache import EmbeddingsCache
 from .initialization import resolve_continuous_batching_config, update_cb_config_after_cache_creation
 from .input_outputs import ContinuousBatchingAsyncIOs, ContinuousBatchingIOs
 from .model_runner import ModelRunner
@@ -735,24 +736,24 @@ class ContinuousBatchingManager:
     def add_request(
         self,
         input_ids: list[int],
-        multimodal_inputs: dict[str, Any] | None = None,
         request_id: str | None = None,
         max_new_tokens: int | None = None,
         streaming: bool = False,
         record_timestamps: bool = False,
         eos_token_id: int | list[int] | None = None,
+        multimodal_inputs: dict[str, Any] | None = None,
         **logit_processor_kwargs: Any,
     ) -> str | None:
         """Add a new generation request to the queue. If the process is not a TP driver, this is a no-op.
 
         Args:
             input_ids: Input token IDs to use as prompt
-            multimodal_inputs: Multimodal inputs returned by the processor. Tensors are assumed to be device-side.
             request_id: Optional custom request ID (auto-generated if None)
             max_new_tokens: Maximum number of new tokens to generate
             streaming: Whether to stream tokens as they're generated
             record_timestamps: Whether to record timestamps for each generated token
             eos_token_id: End-of-sequence token ID(s)
+            multimodal_inputs: Multimodal inputs returned by the processor. Tensors are assumed to be device-side.
             logit_processor_kwargs: Keyword arguments for the logits processor.
 
         Returns:
@@ -790,6 +791,20 @@ class ContinuousBatchingManager:
             logit_processor_kwargs=logit_processor_kwargs,
         )
 
+        # Reject the request if it is multimodal and has too many multimodal embeddings
+        if multimodal_inputs is not None and self.batch_processor is not None:
+            embeddings_cache = self.batch_processor.cache.embeddings_cache
+            if embeddings_cache is None:
+                raise ValueError("Embeddings cache is not initialized.")
+            if not embeddings_cache.can_ever_fit_mm_embeddings(state):
+                preview = f"{input_ids[:3]}"[:-1] + ", ..., " + f"{input_ids[-3:]}"[1:]
+                num_mm_embeddings = state.count_mm_embeddings(embeddings_cache.special_token_id)
+                logger.error(
+                    f"Request {request_id} with ids {preview} will be dropped because it has too many multimodal"
+                    f"embeddings: {num_mm_embeddings = } is more than {embeddings_cache.cache_size = }."
+                )
+                return None
+
         # Use block=True with timeout to handle backpressure if queue is full
         self.input_queue.put(state, block=True, timeout=10)
         self._has_new_requests.set()
@@ -798,10 +813,10 @@ class ContinuousBatchingManager:
     def add_requests(
         self,
         inputs: list[list[int]],
-        multimodal_inputs: list[dict[str, Any] | None] | None = None,
         max_new_tokens: int | None = None,
         streaming: bool = False,
         record_timestamps: bool = False,
+        multimodal_inputs: list[dict[str, Any] | None] | None = None,
         **logit_processor_kwargs: Any,
     ) -> list[str]:
         """Utility function to batch `add_request` and return their IDs. Check its documentation for more details."""
@@ -825,12 +840,12 @@ class ContinuousBatchingManager:
         for request_id, input_ids, multimodal_input in ids_and_inputs:
             self.add_request(
                 input_ids=input_ids,
-                multimodal_inputs=multimodal_input,
                 request_id=request_id,
                 max_new_tokens=max_new_tokens,
                 streaming=streaming,
                 record_timestamps=record_timestamps,
                 eos_token_id=eos_token_id,
+                multimodal_inputs=multimodal_input,
                 **logit_processor_kwargs,
             )
         return request_ids
@@ -1261,9 +1276,9 @@ class ContinuousMixin:
             try:
                 request_ids = manager.add_requests(
                     inputs=inputs,
-                    multimodal_inputs=multimodal_inputs,
                     max_new_tokens=max_new_tokens,
                     record_timestamps=record_timestamps,
+                    multimodal_inputs=multimodal_inputs,
                 )
                 while finished_count < num_requests:
                     result = manager.get_result(timeout=1)
