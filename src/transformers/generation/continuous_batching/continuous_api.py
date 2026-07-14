@@ -31,7 +31,6 @@ from ...utils.logging import logging
 from .cache import PagedAttentionCache
 from .cb_logits_processors import ContinuousBatchingLogitsProcessorList
 from .distributed import DistributedHelper
-from .embeddings_cache import EmbeddingsCache
 from .initialization import resolve_continuous_batching_config, update_cb_config_after_cache_creation
 from .input_outputs import ContinuousBatchingAsyncIOs, ContinuousBatchingIOs
 from .model_runner import ModelRunner
@@ -514,7 +513,11 @@ class ContinuousBatchProcessor:
         # TODO: better integration of the encoder in async mode (side stream? profile and see)
         encoder_kwargs = self.inputs_and_outputs.encoder_kwargs
         if encoder_kwargs:
-            self.model_runner.run_encoder(model, encoder_kwargs)
+            req_ids_with_errors = self.model_runner.run_encoder(model, encoder_kwargs)
+            # Handle any errors that occurred during encoding
+            if req_ids_with_errors:
+                for req_id, exception in req_ids_with_errors.items():
+                    self._handle_request_error(exception, req_id)
 
         # This takes care of the forward pass, logits processing, and sampling. After this returns, the compute is
         # scheduled on the device's compute stream, but may not have finished yet.
@@ -697,7 +700,7 @@ class ContinuousBatchingManager:
         # Otherwise, we keep the batch processor and cache the manager as a model attribute
         else:
             logger.info("Continuous batching manager will be kept for next session.")
-            self.model._cached_continuous_batching_manager = self
+            self.model._cached_continuous_batching_manager = self  # type: ignore
 
         # Restore the original attention implementation
         if self._original_attn_impl is not None:
@@ -799,11 +802,10 @@ class ContinuousBatchingManager:
             if not embeddings_cache.can_ever_fit_mm_embeddings(state):
                 preview = f"{input_ids[:3]}"[:-1] + ", ..., " + f"{input_ids[-3:]}"[1:]
                 num_mm_embeddings = state.count_mm_embeddings(embeddings_cache.special_token_id)
-                logger.error(
+                raise RuntimeError(
                     f"Request {request_id} with ids {preview} will be dropped because it has too many multimodal "
                     f"embeddings: {num_mm_embeddings = } is more than {embeddings_cache.cache_size = }."
                 )
-                return None
 
         # Use block=True with timeout to handle backpressure if queue is full
         self.input_queue.put(state, block=True, timeout=10)

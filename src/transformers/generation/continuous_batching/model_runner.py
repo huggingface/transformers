@@ -96,25 +96,38 @@ class ModelRunner:
             max_kv_read = 0
         return num_q_tokens, max_kv_read
 
-    def run_encoder(self, model: nn.Module, encoder_kwargs: list[dict]) -> None:
+    def run_encoder(self, model: nn.Module, encoder_kwargs: list[dict]) -> dict[str, Exception]:
         """Runs the encoder on the given set of kwargs and stores the new embeddings in the embeddings cache."""
         if self.cache.embeddings_cache is None:
             raise ValueError("Cannot run encoder because there is no embeddings cache.")
+
+        # Accumulator for eventual errors during encoding
+        req_ids_with_errors: dict[str, Exception] = {}
+
+        # Choose feature extractor based on modality
+        if self.cache.embeddings_cache.modality == "image":
+            feature_extractor = model.get_image_feature_extractor
+        elif self.cache.embeddings_cache.modality == "audio":
+            feature_extractor = model.get_audio_feature_extractor
+        else:
+            raise ValueError(f"Invalid modality: {self.cache.embeddings_cache.modality}")
+
         # The encoder never runs at the same time as the model (because it runs on the compute stream) so we can use the
         # same memory pool as the model and avoid new tensor allocations
         with self.compute_stream_ctx(), mem_pool_ctx(self.mem_pool):
             for encoder_kw in encoder_kwargs:
+                # Retrieve request ID from encoder kwargs
                 request_id = encoder_kw.pop(self.cache.embeddings_cache.REQUEST_ID_KEY)
-
-                if self.cache.embeddings_cache.modality == "image":
-                    encoding_output = model.get_image_features(**encoder_kw)
-                elif self.cache.embeddings_cache.modality == "audio":
-                    encoding_output = model.get_audio_features(**encoder_kw)
-                else:
-                    raise ValueError(f"Invalid modality: {self.cache.embeddings_cache.modality}")
-
+                # Run feature extractor and catch any errors
+                try:
+                    encoding_output = feature_extractor(**encoder_kw)
+                except Exception as e:
+                    req_ids_with_errors[request_id] = e
+                    continue
+                # If feature extractor ran successfully, extract and store multimodal embeddings
                 mm_embeddings = self.cache.embeddings_cache.extract_mm_embeddings(encoding_output)
                 self.cache.embeddings_cache.store_mm_embeddings(request_id, mm_embeddings)
+        return req_ids_with_errors
 
     def fill_inputs_embeds(self, model: nn.Module, input_ids: torch.Tensor, batch_data: PagedAttentionArgs) -> None:
         """Fill the inputs_embeds tensor inside the batch_data dictionary."""
@@ -150,6 +163,8 @@ class ModelRunner:
         # If there is inputs_embeds tensor, it is filled before the forward pass
         # TODO: this can be made CUDA graphable with 0-masking + trick, but it will run every iteration: benchmark if
         # worth it across models / tasks
+        # TODO: for block table batches, we can bake the embedding layer in the graph, and deactivate them if any mm
+        # embedding is present (wont happen in the large majority of cases anyways)
         input_ids = self._pop_or_get_input_ids(batch_data)
         if batch_data["inputs_embeds"] is not None:
             with self.compute_stream_ctx():
