@@ -244,8 +244,34 @@ class WavTokenizerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
         inputs = feature_extractor(batch, sampling_rate=config.sampling_rate, return_tensors="pt").to(torch_device)
         with torch.no_grad():
             out = model.encode(inputs["input_values"], padding_mask=inputs["padding_mask"])
-        mask_sums = out.audio_codes_mask.sum(dim=-1).flatten().tolist()
-        self.assertEqual(mask_sums, [feature_extractor.get_num_audio_codes(length) for length in lengths])
+
+        num_codes = out.audio_codes.shape[-1]
+        expected_masks = []
+        for length in lengths:
+            valid_codes = feature_extractor.get_num_audio_codes(length)
+            expected_masks.append([1] * valid_codes + [0] * (num_codes - valid_codes))
+        self.assertEqual(out.audio_codes_mask[:, 0].tolist(), expected_masks)
+
+    def test_left_padded_batch_codes_mask(self):
+        """Left-padded inputs must mark valid audio codes at the end of each sequence."""
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        model = randomize_codebook(WavTokenizerModel(config)).to(torch_device).eval()
+        feature_extractor = WavTokenizerFeatureExtractor(
+            sampling_rate=config.sampling_rate, hop_length=config.hop_length, padding_side="left"
+        )
+        hop = config.hop_length
+        lengths = [2 * hop, 5 * hop - 1, 9 * hop + 1]
+        batch = [floats_tensor([length], scale=1.0).numpy() for length in lengths]
+        inputs = feature_extractor(batch, sampling_rate=config.sampling_rate, return_tensors="pt").to(torch_device)
+        with torch.no_grad():
+            out = model.encode(inputs["input_values"], padding_mask=inputs["padding_mask"])
+
+        num_codes = out.audio_codes.shape[-1]
+        expected_masks = []
+        for length in lengths:
+            valid_codes = feature_extractor.get_num_audio_codes(length)
+            expected_masks.append([0] * (num_codes - valid_codes) + [1] * valid_codes)
+        self.assertEqual(out.audio_codes_mask[:, 0].tolist(), expected_masks)
 
     @unittest.skip("WavTokenizer does not have `inputs_embeds` logics")
     def test_model_get_set_embeddings(self):
