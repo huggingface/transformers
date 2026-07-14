@@ -141,9 +141,23 @@ _MODEL_TO_CONVERSION_PATTERN = {
 
 def _build_checkpoint_conversion_mapping():
     mapping = {
-        "tml_mm_model": [
-            # Vision/Audio
-            WeightRenaming(source_patterns=r"visual", target_patterns=r"vision_tower"),
+        "inkling_mm_model": [
+            WeightRenaming(source_patterns=r"model\.llm\.layers", target_patterns=r"model.language_model.layers"),
+            WeightRenaming(
+                source_patterns=r"model\.llm\.embed_norm\.weight",
+                target_patterns=r"model.language_model.embed_norm.weight",
+            ),
+            WeightRenaming(
+                source_patterns=r"model\.llm\.embed\.weight",
+                target_patterns=r"model.language_model.embed_tokens.weight",
+            ),
+            WeightRenaming(
+                source_patterns=r"model\.llm\.norm\.weight", target_patterns=r"model.language_model.norm.weight"
+            ),
+            WeightRenaming(source_patterns=r"model\.llm\.unembed\.weight", target_patterns=r"lm_head.weight"),
+            WeightRenaming(source_patterns=r"model\.audio\.", target_patterns=r"model.audio_tower."),
+            WeightRenaming(source_patterns=r"model\.visual", target_patterns=r"model.vision_tower"),
+            # Vision encoder internals (run after the tower namespace renames)
             WeightRenaming(
                 source_patterns=r"vision_tower.layers.linear_(\d+)",
                 target_patterns=r"vision_tower.encoder_layers.\1.projection",
@@ -152,14 +166,6 @@ def _build_checkpoint_conversion_mapping():
                 source_patterns=r"vision_tower.layers.norm_(\d+)",
                 target_patterns=r"vision_tower.encoder_layers.\1.layer_norm",
             ),
-            WeightRenaming(source_patterns=r"vision_tower.layers", target_patterns=r"vision_tower.encoder_layers"),
-            WeightRenaming(source_patterns=r"unembed.weight", target_patterns=r"lm_head.weight"),
-            WeightRenaming(source_patterns=r"audio.", target_patterns=r"audio_tower."),
-            # LM
-            WeightRenaming(source_patterns=r"^norm.weight", target_patterns=r"language_model.norm.weight"),
-            WeightRenaming(source_patterns=r"^embed.weight", target_patterns=r"language_model.embed_tokens.weight"),
-            WeightRenaming(source_patterns=r"^embed_norm.weight", target_patterns=r"language_model.embed_norm.weight"),
-            WeightRenaming(source_patterns=r"model.layers", target_patterns=r"language_model.layers"),
             # MoE and MLP
             # no Transpose ops here: the TP loader shards the raw tensor but validates the shard
             # shape on the target param, so dim-permuting conversions break sharded loads cc @cyril
@@ -1773,12 +1779,6 @@ def _build_checkpoint_conversion_mapping():
         WeightRenaming("mlp.experts.e_score_correction_bias", "mlp.gate.e_score_correction_bias"),
         WeightRenaming("mlp.shared_expert.", "mlp.shared_experts."),
     ]
-
-    # temporary before rename
-    mapping["inkling_mm_model"] = [
-        WeightRenaming(source_patterns=r"^model\.llm\.layers", target_patterns=r"model.layers"),
-        WeightRenaming(source_patterns=r"^model\.llm\.(embed_norm|embed|norm|unembed)", target_patterns=r"\1"),
-    ] + mapping["tml_mm_model"]
 
     mapping["MtpModel"] = [
         PrefixChange(prefix_to_remove="model"),
