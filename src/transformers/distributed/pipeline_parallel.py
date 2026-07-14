@@ -161,28 +161,36 @@ class PipelineStage:
         dtype: torch.dtype,
         device: torch.device,
     ) -> torch.Tensor:
-        """Broadcast a tensor from the last PP stage to every PP rank."""
+        """Broadcast logits from the last PP rank to every rank. Only the last stage computes logits, but every rank must return them so `generate()` works without PP-specific changes.
+        """
         if self.pp_size <= 1:
             return tensor
 
+        last_rank = self.pp_size - 1
         comm_device = torch.device("cpu") if self.comm_on_cpu else device
-        src = self.pp_size - 1
 
-        # Phase 1: agree on the shape. The last stage announces it; every other rank receives it
-        # so they know how big a buffer to allocate. (Activations/logits are always 3-D.)
+        # broadcast logits number of dimensions
         if self.pp_is_last_stage:
-            tensor = tensor.to(device=comm_device, dtype=dtype).contiguous()
-            shape = torch.tensor(list(tensor.shape), dtype=torch.long, device=comm_device)
+            ndim_msg = torch.tensor([tensor.ndim], dtype=torch.long, device=comm_device)
         else:
-            shape = torch.empty(3, dtype=torch.long, device=comm_device)
-        dist.broadcast(shape, src=src, group=self.pp_group)
+            ndim_msg = torch.empty(1, dtype=torch.long, device=comm_device)
+        dist.broadcast(ndim_msg, src=last_rank, group=self.pp_group)
+        ndim = ndim_msg.item()
 
-        # Phase 2: share the payload. Non-source ranks allocate a matching buffer to receive into.
+        # broadcast logits shape
+        if self.pp_is_last_stage:
+            logits = tensor.to(device=comm_device, dtype=dtype).contiguous()
+            shape_msg = torch.tensor(list(logits.shape), dtype=torch.long, device=comm_device)
+        else:
+            shape_msg = torch.empty(ndim, dtype=torch.long, device=comm_device)
+        dist.broadcast(shape_msg, src=last_rank, group=self.pp_group)
+
+        # broadcast the actual logits values
         if not self.pp_is_last_stage:
-            tensor = torch.empty(tuple(shape.tolist()), dtype=dtype, device=comm_device)
-        dist.broadcast(tensor, src=src, group=self.pp_group)
+            logits = torch.empty(tuple(shape_msg.tolist()), dtype=dtype, device=comm_device)
+        dist.broadcast(logits, src=last_rank, group=self.pp_group)
 
-        return tensor.to(device=device, dtype=dtype)
+        return logits.to(device=device, dtype=dtype)
 
 
 def apply_pipeline_parallelism(model: nn.Module, pp_mesh: torch.distributed.device_mesh.DeviceMesh) -> nn.Module:
