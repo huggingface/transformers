@@ -2328,7 +2328,7 @@ class _TestToolCallBase:
 @require_serve
 @require_torch_accelerator
 class TestToolCallQwen(_TestToolCallBase, unittest.TestCase):
-    """Tool call tests with Qwen (fallback config, no response_schema)."""
+    """Tool call tests with Qwen (fallback config, no response_template)."""
 
     MODEL = "Qwen/Qwen2.5-0.5B-Instruct"
 
@@ -2346,7 +2346,7 @@ class TestToolCallQwen3_5(_TestToolCallBase, unittest.TestCase):
 @require_serve
 @require_torch_accelerator
 class TestToolCallGemma(_TestToolCallBase, unittest.TestCase):
-    """Tool call tests with Gemma 4 (response_schema + stc/etc special tokens)."""
+    """Tool call tests with Gemma 4 (response_template + stc/etc special tokens)."""
 
     MODEL = "google/gemma-4-E2B-it"
 
@@ -2578,7 +2578,7 @@ class TestReasoningQwen(_TestReasoningBase, unittest.TestCase):
 @require_serve
 @require_torch_accelerator
 class TestReasoningGemma(_TestReasoningBase, unittest.TestCase):
-    """Reasoning tests with Gemma 4 (response_schema-based thinking channel)."""
+    """Reasoning tests with Gemma 4 (response_template-based thinking channel)."""
 
     MODEL = "google/gemma-4-E2B-it"
 
