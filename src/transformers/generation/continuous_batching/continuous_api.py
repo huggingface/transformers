@@ -29,6 +29,7 @@ from tqdm.contrib.logging import logging_redirect_tqdm
 
 from ...configuration_utils import PretrainedConfig
 from ...generation.configuration_utils import ContinuousBatchingConfig, GenerationConfig
+from ...utils.import_utils import is_flash_attn_2_available, is_flash_attn_3_available, is_kernels_available
 from ...utils.logging import logging
 from ..logits_process import LogitsProcessorList
 from .cache import PagedAttentionCache
@@ -591,7 +592,7 @@ class ContinuousBatchingManager:
 
         # Model-related attributes
         self._original_attn_impl = None  # needs to be set before the model is switched to paged attention
-        self.switch_to_paged_attn(model)
+        self.switch_to_cb_friendly_attn(model)
         self.model = model.eval()
 
         # Generation config related attributes
@@ -626,11 +627,35 @@ class ContinuousBatchingManager:
         # This is an approximation until the cache is created: it will infer the correct value in cache.__init__
         self._use_prefix_sharing = self.continuous_batching_config.allow_block_sharing
 
-    def switch_to_paged_attn(self, model: ProtoPretrainedModel) -> None:
-        """Switch to the paged version of the attention implementation. If the attn is already paged, does nothing."""
-        if "paged|" not in model.config._attn_implementation:
-            self._original_attn_impl = model.config._attn_implementation
-            model.set_attn_implementation(f"paged|{model.config._attn_implementation}")
+    def switch_to_cb_friendly_attn(self, model: ProtoPretrainedModel) -> None:
+        """Switch the attn implementation to one that is CB friendly: try to find a flash implementation if flash is "
+        "and, in any cases, switch to a paged implementation."""
+        self._original_attn_impl = model.config._attn_implementation
+        target_implem = self._original_attn_impl
+
+        # Check if flash attention is supported and available
+        if "flash" not in target_implem and model._supports_flash_attn:
+            # Try to use use FA3, then FA2 native or kernels, then give up
+            if is_flash_attn_3_available():
+                version = 3
+            elif is_flash_attn_2_available() or is_kernels_available():
+                version = 2
+            else:
+                version = None
+            # Change and warn
+            msg = "Continuous batching is much better when using flash attention. "
+            if version is not None:
+                target_implem = f"flash_attention_{version}"
+                logger.warning(
+                    f"{msg} Switching from {self._original_attn_impl} to {target_implem}. "
+                    "If you need to use eager or sdpa, set `model._supports_flash_attn` to False to avoid this."
+                )
+            else:
+                logger.warning(f"{msg} Consider using a flash `attn_implementation` when loading the model.")
+
+        # Switch to a paged implementation
+        if "paged|" not in target_implem:
+            model.set_attn_implementation(f"paged|{target_implem}")
 
     def warmup(self) -> None:
         """Pre-capture CUDA graphs for varlen and decode paths by running dummy batches. Initializes the batch
@@ -1090,7 +1115,7 @@ class ContinuousMixin:
                 "Cached continuous batching manager found: it will be re-used instead of creating a new one. If you"
                 " want to create a new manager, you should call `destroy_cached_continuous_batching_manager` first."
             )
-            cached_manager.switch_to_paged_attn(self)  # might have switched in .stop
+            cached_manager.switch_to_cb_friendly_attn(self)  # might have switched in .stop
             return cached_manager
 
         # Retrieve generation config
