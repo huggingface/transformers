@@ -343,9 +343,11 @@ class PagedAttentionCache:
 
     def free_blocks(self, request_id: str) -> None:
         """Free all allocated cache blocks for a given request across all layer groups. Actual deallocation is done
-        by the cache managers."""
+        by the cache managers. Also releases the embeddings cache for the request."""
         for cm in self.group_cache_managers:
             cm.free_blocks(request_id, self._block_manager)
+        if self.embeddings_cache is not None:
+            self.embeddings_cache.release_cache_for_requests({request_id})
 
     def get_num_free_blocks(self) -> int:
         """Get the current number of unallocated blocks available for new requests."""

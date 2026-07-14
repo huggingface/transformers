@@ -38,9 +38,10 @@ class EmbeddingsCache:
         model_dtype: torch.dtype,
         device: torch.device,
     ) -> None:
+        text_config = config.get_text_config(decoder=True)
         # Create the actual cache tensor
         cache_size = max(16384, max_batch_tokens)
-        cache_shape = (cache_size, config.text_config.hidden_size)
+        cache_shape = (cache_size, text_config.hidden_size)
         self.cache = torch.empty(cache_shape, dtype=model_dtype, device=device)
         # Create bookkeeping data structures
         self.free_blocks = deque(range(cache_size))
