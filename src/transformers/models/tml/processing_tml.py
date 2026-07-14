@@ -26,7 +26,11 @@ logger = logging.get_logger(__name__)
 
 
 class TmlProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {}
+    _defaults = {
+        "audio_kwargs": {
+            "load_audio_backend": "torchaudio",  # sglang ref uses torchaudio resampling
+        },
+    }
 
 
 @auto_docstring
