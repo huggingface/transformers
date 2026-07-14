@@ -69,9 +69,11 @@ On Hopper (SM90+) and Blackwell (SM100+) GPUs, every FP8 linear automatically di
 pip install -U kernels
 ```
 
-DeepGEMM JIT-compiles its kernels, so the CUDA toolchain (`nvcc`/`nvrtc`) must be available. The required CUDA runtime depends on the hardware, 12.3+ on Hopper and 12.9+ on Blackwell.
+DeepGEMM JIT-compiles its kernels with the system `nvcc`, so a full CUDA toolkit must be installed. A runtime-only install (CUDA libraries without `nvcc`) won't work. The minimum toolkit version depends on the hardware: 12.3 or later on Hopper (SM90), 12.9 or later on Blackwell (SM100).
 
-If the kernel cannot load (missing `kernels`, unsupported GPU, missing CUDA toolchain, or older CUDA), Transformers logs a warning once and falls back to the Triton finegrained-fp8 kernel. Static activation quantization always stays on the Triton path.
+Transformers finds the toolkit by checking `CUDA_HOME`, then `CUDA_PATH`, then `nvcc` on your `PATH`, then `/usr/local/cuda`. Set `CUDA_HOME` to the toolkit root if `nvcc` isn't discovered.
+
+If the kernel cannot load (missing `kernels`, unsupported GPU, no CUDA toolkit, or an `nvcc` older than the required version), Transformers logs a warning once and falls back to the Triton finegrained-fp8 kernel. Static activation quantization always stays on the Triton path.
 
 To force the Triton fallback even when DeepGEMM is available, set `TRANSFORMERS_DISABLE_DEEPGEMM_LINEAR=1`. This only affects the FP8 linear dispatch and leaves the `"deepgemm"` experts backend untouched, which you switch with [`~PreTrainedModel.set_experts_implementation`].
 
