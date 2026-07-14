@@ -930,7 +930,7 @@ class LinearAttentionLayer(LinearAttentionCacheLayerMixin):
             # Even if prefill is larger/shorter than the conv_size, the tensor is always either padded or truncated
             self.conv_kernel_size[state_idx] = conv_states.shape[-1]
             # The shape is always static, so we init as such
-            self.conv_states[state_idx] = torch.zeros_like(conv_states, dtype=self.dtype, device=self.device)
+            self.conv_states[state_idx] = torch.zeros_like(conv_states)
             # Mark as static address to be able to use cudagraphs
             if not is_torchdynamo_compiling():
                 torch._dynamo.mark_static_address(self.conv_states[state_idx])
@@ -938,7 +938,7 @@ class LinearAttentionLayer(LinearAttentionCacheLayerMixin):
 
         if recurrent_states is not None:
             # The shape is always static, so we init as such
-            self.recurrent_states[state_idx] = torch.zeros_like(recurrent_states, dtype=self.dtype, device=self.device)
+            self.recurrent_states[state_idx] = torch.zeros_like(recurrent_states)
             # Mark as static address to be able to use cudagraphs
             if not is_torchdynamo_compiling():
                 torch._dynamo.mark_static_address(self.recurrent_states[state_idx])
