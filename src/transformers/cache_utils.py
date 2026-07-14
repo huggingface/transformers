@@ -849,6 +849,7 @@ class LinearAttentionCacheLayerMixin(ABC):
         self.device = None
         self.dtype = None
         self.batch_size = None
+        self.record_past = False
 
     def __getattribute__(self, name):
         """Small simple wrapper to ensure BC when trying to get `conv_states` and `recurrent_states` when `number_of_states==1`"""
@@ -907,9 +908,33 @@ class LinearAttentionCacheLayerMixin(ABC):
             if self.is_recurrent_states_initialized[i]:
                 self.recurrent_states[i] = self.recurrent_states[i].index_select(0, beam_idx.to(self.device))
 
-    def crop(self, max_length: int):
-        # We don't crop the linear attention cache, so simply do nothing here
-        pass
+    def activate_past_recording(self):
+        """
+        Calling this function will activate past state recording, meaning that a call to `update_conv_states` will
+        wait for a call to `crop` before restricting the size of the `conv_states` to `conv_kernel_size`, to be able
+        to retrieve previous full states.
+        """
+        self.record_past = True
+
+    def crop(self, tokens_to_remove: int):
+        if not self.record_past:
+            raise RuntimeError(
+                "`crop` was called, but the current layer does not track past states. Call `activate_past_recording` before "
+                "`crop` to be able to rollback the cache."
+            )
+        if tokens_to_remove >= 0:
+            raise RuntimeError(
+                "Linear attention layers can only be cropped by passing a negative int, to specify how many tokens to remove"
+            )
+        for i in range(self.number_of_states):
+            tokens_to_remove = abs(tokens_to_remove)
+            self.conv_states[i] = self.conv_states[i][
+                ..., -tokens_to_remove - self.conv_kernel_size[i] : -tokens_to_remove
+            ]
+            if self.conv_states[i].shape[-1] != self.conv_kernel_size[i]:
+                raise RuntimeError(
+                    "You are trying to remore more tokens than was added in the latest `update_conv_states`"
+                )
 
     def get_max_length(self) -> int:
         # LinearAttention layer have no sequence length dimension, so simply return -1 here
@@ -932,7 +957,7 @@ class LinearAttentionLayer(LinearAttentionCacheLayerMixin):
             # The shape is always static, so we init as such
             self.conv_states[state_idx] = torch.zeros_like(conv_states, dtype=self.dtype, device=self.device)
             # Mark as static address to be able to use cudagraphs
-            if not is_torchdynamo_compiling():
+            if not is_torchdynamo_compiling() and not self.record_past:
                 torch._dynamo.mark_static_address(self.conv_states[state_idx])
             self.is_conv_states_initialized[state_idx] = True
 
@@ -959,23 +984,26 @@ class LinearAttentionLayer(LinearAttentionCacheLayerMixin):
             self.lazy_initialization(conv_states=conv_states, state_idx=state_idx)
 
         if not self.has_previous_state[state_idx]:
-            # Note that we copy instead of assigning, to preserve the static address for cudagraphs
+            # Note that we copy instead of assigning, to preserve the static address for cudagraphs - the states are always
+            # either truncated or padded here, so they are always the correct size
             self.conv_states[state_idx].copy_(conv_states)
             self.has_previous_state[state_idx] = True
-        # Technically, this update is not logically correct if the prefill is smaller than `conv_kernel_size`,
-        # as it will `roll` anyway in the first decoding step, even though it should `roll` ONLY if the cache is already full.
-        # But since `conv_kernel_size=4` in practice, it's almost impossible to have a smaller prefill so it's mostly fine for now
-        else:
-            # Note that we copy instead of assigning, to preserve the static address for cudagraphs
-            num_new_tokens = conv_states.shape[-1]
-            if num_new_tokens >= self.conv_kernel_size[state_idx]:
-                self.conv_states[state_idx].copy_(conv_states[..., -self.conv_kernel_size :])
-            else:
-                new_conv_states = self.conv_states[state_idx].roll(shifts=-num_new_tokens, dims=-1)
-                new_conv_states[:, :, -num_new_tokens:] = conv_states
-                self.conv_states[state_idx].copy_(new_conv_states)
+            return self.conv_states[state_idx]
 
-        return self.conv_states[state_idx]
+        # We need to return the concatenation of the current state and the full new one so that the causal conv can see the
+        # correct left context - however we usually cache only the last part
+        full_conv_states = torch.cat([self.conv_states[state_idx], conv_states], dim=-1)
+
+        # Usually, keep only the last part
+        if not self.record_past:
+            # Copy instead of assigning to keep the static address
+            self.conv_states[state_idx].copy_(full_conv_states[..., -self.conv_kernel_size[state_idx] :])
+        # If we need to record the past, keep the full states for now to be able to rollback later
+        else:
+            self.conv_states[state_idx] = full_conv_states
+
+        # Return full states no matter what
+        return full_conv_states
 
     def update_recurrent_state(self, recurrent_states: torch.Tensor, state_idx: int = 0, **kwargs) -> torch.Tensor:
         """
@@ -1028,6 +1056,10 @@ class LinearAttentionAndFullAttentionLayer(LinearAttentionLayer, DynamicLayer):
         LinearAttentionLayer.reorder_cache(self, beam_idx)
         DynamicLayer.reorder_cache(self, beam_idx)
 
+    def crop(self, max_length: int) -> None:
+        LinearAttentionLayer.crop(self, max_length)
+        DynamicLayer.crop(self, max_length)
+
 
 class LinearAttentionAndSlidingWindowAttentionLayer(LinearAttentionLayer, DynamicSlidingWindowLayer):
     # The dynamic sliding attention part makes it non-compileable
@@ -1054,6 +1086,10 @@ class LinearAttentionAndSlidingWindowAttentionLayer(LinearAttentionLayer, Dynami
         """Reorders the cache for beam search, given the selected beam indices."""
         LinearAttentionLayer.reorder_cache(self, beam_idx)
         DynamicSlidingWindowLayer.reorder_cache(self, beam_idx)
+
+    def crop(self, max_length: int) -> None:
+        LinearAttentionLayer.crop(self, max_length)
+        DynamicSlidingWindowLayer.crop(self, max_length)
 
 
 class LinearAttentionAndStaticFullAttentionLayer(LinearAttentionLayer, StaticLayer):
@@ -1955,3 +1991,10 @@ class EncoderDecoderCache(Cache):
 
 # Deprecated alias: SlidingWindowCache was removed in transformers v5. StaticCache is the replacement.
 SlidingWindowCache = StaticCache
+
+
+class MtpCache(DynamicCache):
+    def get_seq_length(self, layer_idx=0):
+        # MTP layers have an absolute query offset
+        mtp_offset = layer_idx + 1
+        return super().get_seq_length(layer_idx) + mtp_offset

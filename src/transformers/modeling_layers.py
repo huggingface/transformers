@@ -40,6 +40,7 @@ from .utils.loading_report import log_state_dict_report
 
 
 if TYPE_CHECKING:
+    from .cache_utils import MtpCache
     from .configuration_utils import PreTrainedConfig
     from .generation.logits_process import LogitsProcessorList
 
@@ -310,15 +311,21 @@ class GenericForTokenClassification:
 
 class MtpLayer(nn.Module):
     def __init__(
-        self, config: PreTrainedConfig, decoder_layer_cls: type[nn.Module], norm_cls: type[nn.Module], layer_idx: int
+        self,
+        config: PreTrainedConfig,
+        decoder_layer_cls: type[nn.Module],
+        norm_cls: type[nn.Module],
+        layer_idx: int,
+        use_post_norm: bool = True,
     ):
         super().__init__()
         self.config = config
+        self.use_post_norm = use_post_norm
         self.enorm = norm_cls(config.hidden_size, eps=config.rms_norm_eps)
         self.hnorm = norm_cls(config.hidden_size, eps=config.rms_norm_eps)
         self.eh_proj = nn.Linear(config.hidden_size * 2, config.hidden_size, bias=False)
         self.mtp_block = decoder_layer_cls(config, layer_idx)
-        self.post_norm = norm_cls(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_norm = norm_cls(config.hidden_size, eps=config.rms_norm_eps) if use_post_norm else None
 
     def forward(
         self,
@@ -340,7 +347,8 @@ class MtpLayer(nn.Module):
             past_key_values=past_key_values,
             **kwargs,
         )
-        hidden_states = self.post_norm(hidden_states)
+        if self.use_post_norm:
+            hidden_states = self.post_norm(hidden_states)
 
         return hidden_states
 
@@ -369,14 +377,22 @@ class MtpModel(PreTrainedModel):
             for name, module in base_model.layers[-1].named_modules()  # type: ignore
             if "norm" in name
         )
+        # If the config contains the field, we never use per-layer post norm, but maybe a shared one
+        self.use_post_norm = True
+        self.use_shared_post_norm = False
+        if hasattr(self.config, "chain_hidden_post_norm"):
+            self.use_post_norm = False
+            self.use_shared_post_norm = self.config.chain_hidden_post_norm
 
         # Instantiate new mtp layers
         self.layers = nn.ModuleList(
             [
-                MtpLayer(self.config, layer_cls, norm_cls, self.config.num_hidden_layers + k)
+                MtpLayer(self.config, layer_cls, norm_cls, self.config.num_hidden_layers + k, self.use_post_norm)
                 for k in range(num_mtp_layers)
             ]
         )
+        if self.use_shared_post_norm:
+            self.shared_post_norm = norm_cls(self.config.hidden_size, eps=self.config.rms_norm_eps)
 
         # Embedding/head/rotary are shared with the main model
         self.tie_with_main_model(main_model)
@@ -398,7 +414,7 @@ class MtpModel(PreTrainedModel):
         last_hidden_states: torch.Tensor,
         attention_mask: torch.Tensor | None,
         position_ids: torch.Tensor | None,
-        past_key_values: Cache | None,
+        mtp_cache: MtpCache | None,
         labels: torch.LongTensor | None = None,
         # Control how we sample the new token from each layer
         do_sample: bool = False,
@@ -418,14 +434,6 @@ class MtpModel(PreTrainedModel):
         """
         batch_size = input_ids.shape[0]
 
-        # We create this dummy cache simply to create the masks correctly, since they rely on the sizes of layer 0 of
-        # the cache. Note that it does not create any copy of data, it simply keep a ref to internal tensors
-        dummy_cache_for_masking = (
-            Cache(layers=past_key_values.layers[self.config.num_hidden_layers :])  # type: ignore
-            if past_key_values is not None
-            else None
-        )
-
         drafted_logits = []
         drafted_tokens = []
         loss = None
@@ -437,7 +445,7 @@ class MtpModel(PreTrainedModel):
                 config=self.config,
                 inputs_embeds=inputs_embeds,
                 attention_mask=attention_mask,
-                past_key_values=dummy_cache_for_masking,
+                past_key_values=mtp_cache,
             )
 
             last_hidden_states = mtp_layer(
@@ -446,9 +454,11 @@ class MtpModel(PreTrainedModel):
                 position_embeddings=position_embeddings,
                 attention_mask=causal_mask,
                 position_ids=position_ids,
-                past_key_values=past_key_values,
+                past_key_values=mtp_cache,
                 **kwargs,
             )
+            if self.use_shared_post_norm:
+                last_hidden_states = self.shared_post_norm(last_hidden_states)
 
             # If we are not computing the loss, only compute logits for the next drafted token to save memory
             slice_indices = slice(-1, None) if labels is None else slice(None, None)

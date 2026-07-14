@@ -21,7 +21,6 @@ import numpy as np
 import torch
 import torch.nn as nn
 
-from ..cache_utils import DynamicLayer
 from ..pytorch_utils import prune_linear_layer
 from ..utils import ModelOutput, is_sklearn_available
 from .configuration_utils import GenerationConfig
@@ -1435,6 +1434,7 @@ class MTPCandidateGenerator(AssistedCandidateGenerator):
         model_kwargs: dict[str, Any],
         logits_processor: Optional["LogitsProcessorList"] = None,
     ):
+        from ..cache_utils import MtpCache
         from ..modeling_layers import MtpModel
 
         self.num_mtp_layers = getattr(main_model.config.get_text_config(), "num_mtp_layers", None)
@@ -1448,12 +1448,8 @@ class MTPCandidateGenerator(AssistedCandidateGenerator):
         self.device = next(x.device for x in main_model.base_model.layers[-1].parameters())  # type: ignore
         self.mtp_model = MtpModel.from_pretrained(main_model, device_map={"": self.device})
 
-        # Artificially add the MTP layers to the cache
-        if (cache := model_kwargs.get("past_key_values")) is not None:
-            if len(cache) != main_model.config.get_text_config().num_hidden_layers + self.num_mtp_layers:
-                cache.layers.extend([DynamicLayer() for _ in range(self.num_mtp_layers)])
-        else:
-            raise ValueError("No cache yet")
+        # Create the mtp cache
+        self.mtp_cache = MtpCache(config=main_model.config.get_text_config())
 
         # Save those to know how to decode mtp tokens
         self.do_sample = generation_config.do_sample
@@ -1501,7 +1497,7 @@ class MTPCandidateGenerator(AssistedCandidateGenerator):
             last_hidden_states=last_hidden_states,
             attention_mask=mtp_attention_mask,
             position_ids=mtp_position_ids,
-            past_key_values=model_kwargs["past_key_values"],
+            mtp_cache=self.mtp_cache,
             do_sample=self.do_sample,
             logits_processor=self.logits_processor,
             full_input_ids=input_ids,
