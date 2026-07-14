@@ -154,33 +154,11 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
                 scale = getattr(module, attr)
                 setattr(module, attr, torch.nn.Parameter(scale.data.to(ue8m0), requires_grad=False))
 
-        # DeepGEMM loads each kernel via `cuKernelGetFunction`, which binds the `CUfunction` handle
-        # to the CUDA context live at load time, so one process driving it across >1 device launches
-        # against the wrong context and produces garbage. (The build-time fix is compiling DeepGEMM
-        # with `DG_JIT_USE_RUNTIME_API=1` for a context-free `cudaKernel_t` loader; until the wheel
-        # we ship picks that up, we avoid single-process multi-device.) When this model's FP8 weights
-        # span multiple CUDA devices (single-process `device_map="auto"`), flag every FP8 module so
-        # its linear and experts paths skip DeepGEMM entirely and run through Triton/grouped_mm. A
-        # model that fits on one device keeps DeepGEMM even when other GPUs are visible; TP/EP put one
-        # device per process, so this is a no-op there.
-        from ..integrations.finegrained_fp8 import FP8Experts, FP8Linear
+        # Single-process multi-device is unsafe for DeepGEMM (its kernels are bound to one CUDA
+        # context); route those models through Triton/grouped_mm instead.
+        from ..integrations.finegrained_fp8 import disable_deepgemm_on_multi_device
 
-        fp8_modules = [m for m in model.modules() if isinstance(m, (FP8Linear, FP8Experts))]
-        cuda_devices = set()
-        for m in fp8_modules:
-            param = next(m.parameters(), None)
-            if param is not None and param.device.type == "cuda":
-                cuda_devices.add(param.device.index)
-        if len(cuda_devices) > 1:
-            for m in fp8_modules:
-                m._deepgemm_disabled = True
-            logger.warning_once(
-                "This FP8 model spans multiple CUDA devices in one process; routing its FP8 linear "
-                "and experts layers through Triton/grouped_mm instead of DeepGEMM (DeepGEMM's cached "
-                "kernels are bound to a single CUDA context and corrupt across devices). Run "
-                "tensor/expert parallel (one device per process) to use the faster DeepGEMM path."
-            )
-
+        disable_deepgemm_on_multi_device(model)
         return model
 
     def update_tp_plan(self, config):

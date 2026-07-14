@@ -183,12 +183,14 @@ def finegrained_fp8_linear(
     block_size: list[int] | None = None,
     bias: torch.Tensor | None = None,
     activation_scale: torch.Tensor | None = None,
+    output_dtype: torch.dtype | None = None,
 ) -> torch.Tensor:
     """Triton FP8/FP4 linear: fused act-quant + matmul, then optional bias add.
 
     ``activation_scale=None`` → dynamic per-K-block scales (inline); set it for
     static per-tensor quant. ``weight_scale_inv`` accepts fp32 or UE8M0; the
-    dispatcher routes FP4 (``int8``-packed) weights automatically.
+    dispatcher routes FP4 (``int8``-packed) weights automatically. ``output_dtype``
+    defaults to ``input.dtype`` when left ``None``.
     """
     finegrained_fp8 = load_finegrained_fp8_kernel()
     output = finegrained_fp8.matmul(
@@ -196,7 +198,7 @@ def finegrained_fp8_linear(
         weight,
         weight_scale_inv,
         block_size,
-        input.dtype,
+        output_dtype if output_dtype is not None else input.dtype,
         activation_scale=activation_scale,
     )
     if bias is not None:
@@ -211,11 +213,10 @@ def fp8_linear(
     block_size: list[int] | None = None,
     bias: torch.Tensor | None = None,
     activation_scale: torch.Tensor | None = None,
+    output_dtype: torch.dtype | None = None,
     allow_deepgemm: bool = True,
 ) -> torch.Tensor:
     """End-to-end FP8/FP4 linear used by `FP8Linear` and the eager `FP8Experts` loop.
-
-    The output dtype always follows ``input``.
 
     Dispatch order — both backends handle FP8 and FP4 weights with fp32 or UE8M0 scales:
       1. DeepGEMM (`deepgemm_fp8_fp4_linear`) — 3-6× faster on the shapes it supports.
@@ -234,11 +235,15 @@ def fp8_linear(
         bias: optional bias added to the matmul output.
         activation_scale: pass a per-tensor scalar to use static activation quant; leave `None`
             for dynamic (per-token) quant.
+        output_dtype: output dtype; defaults to ``input.dtype`` when left ``None``.
         allow_deepgemm: set ``False`` to force the Triton fallback for this call. Used when the
             model spans multiple CUDA devices in one process — DeepGEMM's cached kernels are bound
             to a single CUDA context and produce garbage across devices (see the multi-device guard
             in ``quantizer_finegrained_fp8.py``).
     """
+    if output_dtype is None:
+        output_dtype = input.dtype
+
     # DeepGEMM is CUDA-only, dynamic-only, SM90+ only, FP4/FP8-block-128-only.
     # ``TRANSFORMERS_DISABLE_DEEPGEMM_LINEAR=1`` forces the Triton fallback for this single
     # dispatcher (the experts ``"deepgemm"`` impl is unaffected — use ``set_experts_implementation``
@@ -262,6 +267,7 @@ def fp8_linear(
                 weight,
                 weight_scale_inv,
                 block_size=block_size,
+                output_dtype=output_dtype,
                 activation_scale=activation_scale,
                 bias=bias,
             )
@@ -273,7 +279,7 @@ def fp8_linear(
                 "Set `TRANSFORMERS_DISABLE_DEEPGEMM_LINEAR=1` to skip DeepGEMM for FP8 linear entirely."
             )
 
-    return finegrained_fp8_linear(input, weight, weight_scale_inv, block_size, bias, activation_scale)
+    return finegrained_fp8_linear(input, weight, weight_scale_inv, block_size, bias, activation_scale, output_dtype)
 
 
 class FP8Linear(nn.Linear):
@@ -752,6 +758,35 @@ class FP8ExpertsInterface(ExpertsInterface):
 
 
 ALL_FP8_EXPERTS_FUNCTIONS = FP8ExpertsInterface()
+
+
+def disable_deepgemm_on_multi_device(model: nn.Module) -> None:
+    """Flag every FP8 module to skip DeepGEMM when the model spans >1 CUDA device in one process.
+
+    DeepGEMM loads each kernel via `cuKernelGetFunction`, which binds the `CUfunction` handle to the
+    CUDA context live at load time; driving that cached handle from another device launches it against
+    the wrong context and produces garbage. (Build-time fix: compile DeepGEMM with
+    `DG_JIT_USE_RUNTIME_API=1` for a context-free `cudaKernel_t` loader; until our wheel picks that up
+    we avoid single-process multi-device.) Setting `_deepgemm_disabled` routes both the linear and
+    experts paths through Triton/grouped_mm. A model that fits on one device keeps DeepGEMM even with
+    other GPUs visible; TP/EP put one device per process, so this is a no-op there.
+    """
+    fp8_modules = [m for m in model.modules() if isinstance(m, (FP8Linear, FP8Experts))]
+    cuda_devices = set()
+    for m in fp8_modules:
+        param = next(m.parameters(), None)
+        if param is not None and param.device.type == "cuda":
+            cuda_devices.add(param.device.index)
+    if len(cuda_devices) <= 1:
+        return
+    for m in fp8_modules:
+        m._deepgemm_disabled = True
+    logger.warning_once(
+        "This FP8 model spans multiple CUDA devices in one process; routing its FP8 linear and experts "
+        "layers through Triton/grouped_mm instead of DeepGEMM (DeepGEMM's cached kernels are bound to a "
+        "single CUDA context and corrupt across devices). Run tensor/expert parallel (one device per "
+        "process) to use the faster DeepGEMM path."
+    )
 
 
 def replace_with_fp8_linear(
