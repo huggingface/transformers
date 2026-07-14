@@ -582,12 +582,8 @@ class InklingShortConvolution(nn.Module):
             )
         else:
             if past_key_values is not None:
-                # Here we need to truncate or pad during prefill to have the correct shape
-                if not use_precomputed_states:
-                    hidden_states = F.pad(hidden_states, (self.conv_kernel_size - hidden_states.shape[-1], 0))
-
                 hidden_states = past_key_values.update_conv_state(
-                    hidden_states, self.layer_idx, state_idx=self.conv_idx
+                    hidden_states, self.layer_idx, state_idx=self.conv_idx, conv_kernel_size=self.conv_kernel_size
                 )
 
             hidden_states = causal_conv1d_fn(
