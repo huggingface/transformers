@@ -86,41 +86,42 @@ class PipelineStage:
         tensor: torch.Tensor | None = None,
         shape: tuple[int, ...] | None = None,
     ) -> torch.Tensor | None:
-        """Forward-only pipeline point-to-point communication."""
+        """Point-to-point pipeline communication between adjacent stages."""
         comm_device = torch.device("cpu") if self.comm_on_cpu else device
-        group = self.pp_group
         src = dest = None
 
         if operation == "recv_forward":
             if self.pp_is_first_stage:
                 return None
+            # Receive hidden states from the previous stage.
             src = self.pp_prev_rank
-            if shape is None:
-                shape_meta = torch.empty(3, dtype=torch.long, device=comm_device)
-                [req.wait() for req in dist.batch_isend_irecv([dist.P2POp(dist.irecv, shape_meta, src, group=group)])]
-                shape = tuple(shape_meta.tolist())
+            # Shape is provided by the caller (derived from input_ids / inputs_embeds).
             tensor = torch.empty(shape, dtype=dtype, device=comm_device)
+
         elif operation == "send_forward":
             if self.pp_is_last_stage:
                 return None
+            # Send hidden states to the next stage.
             dest = self.pp_next_rank
-            tensor = tensor.detach().to(device=comm_device, dtype=dtype).contiguous()
-            shape_meta = torch.tensor(list(tensor.shape), dtype=torch.long, device=comm_device)
-            [req.wait() for req in dist.batch_isend_irecv([dist.P2POp(dist.isend, shape_meta, dest, group=group)])]
+            tensor = tensor.to(device=comm_device, dtype=dtype).contiguous()
+
         else:
             raise ValueError(f"Unsupported pipeline communication operation: {operation}")
 
+        # Shared P2P: one isend/irecv with the adjacent rank.
         is_send = operation.startswith("send")
         peer_rank = dest if is_send else src
-        op = dist.P2POp(dist.isend if is_send else dist.irecv, tensor, peer_rank, group=group)
-        [req.wait() for req in dist.batch_isend_irecv([op])]
+        op = dist.P2POp(dist.isend if is_send else dist.irecv, tensor, peer_rank, group=self.pp_group)
+        # Wait for the communication to complete.
+        for req in dist.batch_isend_irecv([op]):
+            req.wait()
         if comm_device.type == "cuda":
             torch.cuda.synchronize()
 
         return None if is_send else tensor.to(device=device, dtype=dtype)
 
     def layer_range_for_rank(self, rank: int, num_layers: int) -> tuple[int, int]:
-        """Return the half-open layer index range ``[start, end)`` owned by ``rank``."""
+        """Return [start, end) owned by rank."""
         layers_per_rank = num_layers // self.pp_size
         start_layer = rank * layers_per_rank
         end_layer = num_layers if rank == self.pp_size - 1 else start_layer + layers_per_rank
@@ -147,6 +148,33 @@ class PipelineStage:
                 return rank
 
         return None
+
+    def broadcast_from_last(
+        self,
+        tensor: torch.Tensor | None,
+        *,
+        dtype: torch.dtype,
+        device: torch.device,
+    ) -> torch.Tensor:
+        """Broadcast a tensor from the last PP stage to every PP rank."""
+        if self.pp_size <= 1:
+            return tensor
+
+        comm_device = torch.device("cpu") if self.comm_on_cpu else device
+        src = self.pp_size - 1
+
+        if self.pp_is_last_stage:
+            tensor = tensor.detach().to(device=comm_device, dtype=dtype).contiguous()
+            meta = torch.tensor(list(tensor.shape), dtype=torch.long, device=comm_device)
+        else:
+            meta = torch.empty(3, dtype=torch.long, device=comm_device)
+
+        dist.broadcast(meta, src=src, group=self.pp_group)
+
+        if not self.pp_is_last_stage:
+            tensor = torch.empty(tuple(meta.tolist()), dtype=dtype, device=comm_device)
+        dist.broadcast(tensor, src=src, group=self.pp_group)
+        return tensor.to(device=device, dtype=dtype)
 
 
 def apply_pipeline_parallelism(model: nn.Module, pp_mesh: torch.distributed.device_mesh.DeviceMesh) -> nn.Module:
@@ -176,79 +204,67 @@ def apply_pipeline_parallelism(model: nn.Module, pp_mesh: torch.distributed.devi
     return model
 
 
-def pipeline_broadcast_from_last(
-    tensor: torch.Tensor | None,
-    stage: PipelineStage,
-    *,
-    dtype: torch.dtype,
-    device: torch.device,
-) -> torch.Tensor:
-    """Broadcast a tensor from the last PP stage to every PP rank."""
-    if stage.pp_size <= 1:
-        return tensor
+def _hidden_states_shape(model: nn.Module, args: tuple, kwargs: dict) -> tuple[int, ...]:
+    inputs_embeds = kwargs.get("inputs_embeds")
+    if inputs_embeds is not None:
+        return tuple(inputs_embeds.shape)
 
-    comm_device = torch.device("cpu") if stage.comm_on_cpu else device
-    src = stage.pp_size - 1
+    input_ids = kwargs.get("input_ids")
+    if input_ids is None and args:
+        input_ids = args[0]
+    if input_ids is not None:
+        batch_size, sequence_length = input_ids.shape[:2]
+        return (batch_size, sequence_length, model.config.hidden_size)
 
-    if stage.pp_is_last_stage:
-        tensor = tensor.detach().to(device=comm_device, dtype=dtype).contiguous()
-        meta = torch.tensor(list(tensor.shape), dtype=torch.long, device=comm_device)
-    else:
-        meta = torch.empty(3, dtype=torch.long, device=comm_device)
-
-    dist.broadcast(meta, src=src, group=stage.pp_group)
-
-    if not stage.pp_is_last_stage:
-        tensor = torch.empty(tuple(meta.tolist()), dtype=dtype, device=comm_device)
-    dist.broadcast(tensor, src=src, group=stage.pp_group)
-    return tensor.to(device=device, dtype=dtype)
+    raise ValueError("Cannot determine hidden states shape for pipeline recv_forward")
 
 
 def _wrap_forward_for_pipeline_parallel(model: nn.Module) -> None:
-    #TODO(3outeille): where does that come from
+    # Only wrap the forward method once.
     if getattr(model, "_pp_forward_wrapped", False):
         return
 
     original_forward = model.forward
 
+    # TODO(3outeille): add different pipeline parallelism schedules.
     @wraps(original_forward)
     def pp_forward(*args, **kwargs):
-        device_mesh = getattr(model, "_device_mesh", None)
-        stage = PipelineStage.from_device_mesh(device_mesh)
+        stage = PipelineStage.from_device_mesh(model._device_mesh)
         if stage is None:
             return original_forward(*args, **kwargs)
-
         device = next(model.parameters()).device
         dtype = next(model.parameters()).dtype
 
+        # Non-first ranks: replace input_ids with activations from prev stage
         if not stage.pp_is_first_stage:
-            hidden_states = stage.communicate("recv_forward", device=device, dtype=dtype)
+            shape = _hidden_states_shape(model, args, kwargs)
+            hidden_states = stage.communicate("recv_forward", device=device, dtype=dtype, shape=shape)
             kwargs.pop("input_ids", None)
             kwargs["inputs_embeds"] = hidden_states
             if args:
                 args = (None, *args[1:])
 
-        if not stage.pp_is_last_stage:
-            model_kwargs = {key: value for key, value in kwargs.items() if key not in {"labels", "logits_to_keep"}}
+        # Run this rank's part of the model
+        if stage.pp_is_last_stage:
+            outputs = original_forward(*args, **kwargs)
+            logits = outputs.logits
+            past_key_values = outputs.past_key_values
+        else:
             base_model = getattr(model, model.base_model_prefix)
+            model_kwargs = {k: v for k, v in kwargs.items() if k not in {"labels", "logits_to_keep"}}
             base_outputs = base_model(*args, **model_kwargs)
+            past_key_values = base_outputs.past_key_values
+            logits = None
+            # Non-last ranks: send activations to next stage
             stage.communicate(
                 "send_forward",
                 device=device,
                 dtype=dtype,
                 tensor=base_outputs.last_hidden_state,
             )
-            past_key_values = base_outputs.past_key_values
-            logits = None
-        else:
-            outputs = original_forward(*args, **kwargs)
-            logits = outputs.logits
-            past_key_values = outputs.past_key_values
-
-        logits = pipeline_broadcast_from_last(logits, stage, dtype=dtype, device=device)
-
+        # 4. Every rank gets logits from the last stage
+        logits = stage.broadcast_from_last(logits, dtype=dtype, device=device)
         from ..modeling_outputs import CausalLMOutputWithPast
-
         return CausalLMOutputWithPast(logits=logits, past_key_values=past_key_values)
 
     model.forward = pp_forward
