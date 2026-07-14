@@ -407,13 +407,14 @@ def _run_executorch_program(program_manager, inputs):
         raise
 
     # Drop `torch.export`'s appended mutated-input outputs, keeping only the model's `USER_OUTPUT`s
-    # (in program-output order), so the result matches eager's returned leaves.
+    # (in program-output order). Then keep tensors only, mirroring eager's `get_leaf_tensors`, so the
+    # returned outputs line up with eager's returned leaves for the caller's count check.
     exported_program = program_manager.exported_program
     exported_program = exported_program() if callable(exported_program) else exported_program
     output_kinds = [spec.kind.name for spec in exported_program.graph_signature.output_specs]
     if len(output_kinds) == len(outputs):
         outputs = [out for out, kind in zip(outputs, output_kinds) if kind == "USER_OUTPUT"]
-    return outputs
+    return [out for out in outputs if isinstance(out, torch.Tensor)]
 
 
 # ExecuTorch runtime error codes that mean "the export is valid (it produced a loadable program) but
@@ -650,10 +651,7 @@ class ExportTesterMixin:
                     executorch_outputs = _run_executorch_program(program, inputs)
                     if executorch_outputs is None:  # ExecuTorch runtime limit / inputs not reconstructible
                         continue
-                    # Tensor outputs only: the runtime also returns non-tensor outputs (e.g. the
-                    # sliding-window sizes hybrid caches emit as ints), which `get_leaf_tensors` drops.
-                    tensor_outputs = [o for o in executorch_outputs if isinstance(o, torch.Tensor)]
-                    self.assertEqual(len(tensor_outputs), len(eager_outputs[name]))
+                    self.assertEqual(len(executorch_outputs), len(eager_outputs[name]))
 
 
 class ExportGenerateTesterMixin(ExportTesterMixin):
@@ -792,7 +790,4 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
                     executorch_outputs = _run_executorch_program(program, inputs)
                     if executorch_outputs is None:  # ExecuTorch runtime limit / inputs not reconstructible
                         continue
-                    # Tensor outputs only: the runtime also returns non-tensor outputs (e.g. the
-                    # sliding-window sizes hybrid caches emit as ints), which `get_leaf_tensors` drops.
-                    tensor_outputs = [o for o in executorch_outputs if isinstance(o, torch.Tensor)]
-                    self.assertEqual(len(tensor_outputs), len(eager_outputs[name]))
+                    self.assertEqual(len(executorch_outputs), len(eager_outputs[name]))
