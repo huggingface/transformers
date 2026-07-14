@@ -42,6 +42,7 @@ from ...utils import (
     can_return_tuple,
     is_torchvision_available,
     logging,
+    no_inherit_decorator,
     torch_compilable_check,
 )
 from ...utils.generic import (
@@ -66,6 +67,7 @@ from ..llama.modeling_llama import (
 )
 from ..qwen2_vl.image_processing_qwen2_vl import smart_resize
 from ..qwen2_vl.modeling_qwen2_vl import Qwen2VLForConditionalGeneration, Qwen2VLModel, Qwen2VLPreTrainedModel
+from ..qwen3_5_moe.modeling_qwen3_5_moe import Qwen3_5MoeVisionPatchMerger
 from ..siglip2.configuration_siglip2 import Siglip2VisionConfig
 from ..siglip2.modeling_siglip2 import (
     Siglip2Attention,
@@ -120,7 +122,11 @@ class Cosmos3EdgeTextConfig(LlamaConfig):
 
     def __post_init__(self, **kwargs):
         if self.rope_parameters is None:
-            self.rope_parameters = {"mrope_section": [24, 20, 20]}
+            self.rope_parameters = {
+                "rope_type": "default",
+                "rope_theta": self.default_theta,
+                "mrope_section": [24, 20, 20],
+            }
         super().__post_init__(**kwargs)
 
     def validate_architecture(self):
@@ -171,6 +177,11 @@ class Cosmos3EdgeProjectorConfig(PreTrainedConfig):
     out_hidden_size: int = 2048
     spatial_merge_size: int = 2
     use_postshuffle_norm: bool = False
+
+    @property
+    def hidden_size(self) -> int:
+        """The unmerged visual hidden size expected by the shared patch merger."""
+        return self.input_hidden_size
 
 
 @auto_docstring(checkpoint="nvidia/Cosmos3-Edge-Reasoner")
@@ -259,9 +270,6 @@ class Cosmos3EdgeTextRotaryEmbedding(LlamaRotaryEmbedding):
     @torch.no_grad()
     @dynamic_rope_update
     def forward(self, x, position_ids):
-        # Text positions use the same index across the three axes, whereas vision tokens carry independent 3D IDs.
-        if position_ids.ndim == 2:
-            position_ids = position_ids[None, ...].expand(3, position_ids.shape[0], -1)
         inv_freq_expanded = (
             self.inv_freq[None, None, :, None].float().expand(3, position_ids.shape[1], -1, 1).to(x.device)
         )
@@ -403,7 +411,6 @@ class Cosmos3EdgeTextModel(LlamaModel, Cosmos3EdgePreTrainedModel):
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
-        use_cache = self.config.use_cache if use_cache is None else use_cache
         # torch.jit.trace() doesn't support cache objects in the output.
         if use_cache and past_key_values is None and not torch.jit.is_tracing():
             past_key_values = DynamicCache(config=self.config)
@@ -449,13 +456,11 @@ class Cosmos3EdgeTextModel(LlamaModel, Cosmos3EdgePreTrainedModel):
 class Cosmos3EdgeVisionEmbeddings(Siglip2VisionEmbeddings):
     """SigLIP2 patch and learned-position embeddings for packed Edge vision inputs."""
 
-    def forward(self, pixel_values: torch.FloatTensor, grid_thw: torch.LongTensor) -> torch.Tensor:
+    @no_inherit_decorator
+    def resize_positional_embeddings(
+        self, positional_embeddings: torch.Tensor, grid_thw: torch.LongTensor
+    ) -> torch.Tensor:
         # The checkpoint uses a learned square reference grid, interpolated independently for every packed frame.
-        target_dtype = self.patch_embedding.weight.dtype
-        patch_embeds = self.patch_embedding(pixel_values.to(dtype=target_dtype))
-        positional_embeddings = self.position_embedding.weight.reshape(
-            self.position_embedding_size, self.position_embedding_size, -1
-        )
         positional_embeddings = positional_embeddings.permute(2, 0, 1).unsqueeze(0)
         source_dtype = positional_embeddings.dtype
         if positional_embeddings.device.type == "cpu":
@@ -483,7 +488,18 @@ class Cosmos3EdgeVisionEmbeddings(Siglip2VisionEmbeddings):
             resized_embeddings = resized_embeddings.transpose(1, 2).reshape(height * width, -1)
             position_chunks.append(resized_embeddings.repeat(temporal, 1))
 
-        position_embeddings = torch.cat(position_chunks, dim=0)
+        return torch.cat(position_chunks, dim=0)
+
+    def forward(self, pixel_values: torch.FloatTensor, grid_thw: torch.LongTensor) -> torch.Tensor:
+        # Apply patch embeddings to already patchified pixel values.
+        target_dtype = self.patch_embedding.weight.dtype
+        patch_embeds = self.patch_embedding(pixel_values.to(dtype=target_dtype))
+
+        # Get image-specific positional embeddings in the packed block-major order expected by the checkpoint.
+        positional_embeddings = self.position_embedding.weight.reshape(
+            self.position_embedding_size, self.position_embedding_size, -1
+        )
+        position_embeddings = self.resize_positional_embeddings(positional_embeddings, grid_thw)
         torch_compilable_check(
             patch_embeds.shape[0] == position_embeddings.shape[0],
             "The packed visual patch count does not match `grid_thw`.",
@@ -608,6 +624,10 @@ class Cosmos3EdgeVisionModel(Cosmos3EdgePreTrainedModel):
     main_input_name = "pixel_values"
     input_modalities = ("image", "video")
     _no_split_modules = ["Cosmos3EdgeVisionEncoderLayer"]
+    _can_record_outputs = {
+        "hidden_states": Cosmos3EdgeVisionEncoderLayer,
+        "attentions": Cosmos3EdgeVisionAttention,
+    }
 
     def __init__(self, config: Cosmos3EdgeVisionConfig):
         super().__init__(config)
@@ -629,35 +649,20 @@ class Cosmos3EdgeVisionModel(Cosmos3EdgePreTrainedModel):
         hidden_states = self.embeddings(pixel_values, grid_thw)
         encoder_outputs = self.encoder(hidden_states, grid_thw=grid_thw, **kwargs)
         last_hidden_state = self.post_layernorm(encoder_outputs.last_hidden_state)
-        return BaseModelOutputWithPooling(last_hidden_state=last_hidden_state, pooler_output=last_hidden_state)
+        return BaseModelOutputWithPooling(last_hidden_state=last_hidden_state)
 
 
-class Cosmos3EdgePatchMerger(nn.Module):
-    def __init__(self, config: Cosmos3EdgeProjectorConfig):
-        super().__init__()
+class Cosmos3EdgePatchMerger(Qwen3_5MoeVisionPatchMerger):
+    def __init__(self, config: Cosmos3EdgeProjectorConfig, use_postshuffle_norm: bool = False):
+        super().__init__(config, use_postshuffle_norm=use_postshuffle_norm)
         self.spatial_merge_size = config.spatial_merge_size
         self.input_hidden_size = config.input_hidden_size
-        self.hidden_size = config.input_hidden_size * config.spatial_merge_size**2
-        self.use_postshuffle_norm = config.use_postshuffle_norm
-        self.norm = nn.LayerNorm(
-            self.hidden_size if self.use_postshuffle_norm else config.input_hidden_size,
-            eps=1e-6,
-        )
         self.linear_fc1 = nn.Linear(self.hidden_size, config.merger_intermediate_size)
-        self.act_fn = nn.GELU()
         self.linear_fc2 = nn.Linear(config.merger_intermediate_size, config.out_hidden_size)
 
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        hidden_states = self.norm(
-            hidden_states.reshape(-1, self.hidden_size) if self.use_postshuffle_norm else hidden_states
-        ).reshape(-1, self.hidden_size)
-        return self.linear_fc2(self.act_fn(self.linear_fc1(hidden_states)))
-
-
-Cosmos3EdgePreTrainedModel._can_record_outputs = {
-    "hidden_states": [Cosmos3EdgeTextDecoderLayer, Cosmos3EdgeVisionEncoderLayer],
-    "attentions": [Cosmos3EdgeTextAttention, Cosmos3EdgeVisionAttention],
-}
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        x = x.reshape(-1, self.spatial_merge_size**2, self.input_hidden_size)
+        return super().forward(x)
 
 
 class Cosmos3EdgeModel(Qwen2VLModel, Cosmos3EdgePreTrainedModel):
@@ -669,7 +674,9 @@ class Cosmos3EdgeModel(Qwen2VLModel, Cosmos3EdgePreTrainedModel):
         # multimodal API, but its checkpoint has distinct packed vision and Llama-derived text components.
         Cosmos3EdgePreTrainedModel.__init__(self, config)
         self.visual = Cosmos3EdgeVisionModel._from_config(config.vision_config)
-        self.projector = Cosmos3EdgePatchMerger(config.projector_config)
+        self.projector = Cosmos3EdgePatchMerger(
+            config.projector_config, use_postshuffle_norm=config.projector_config.use_postshuffle_norm
+        )
         self.language_model = Cosmos3EdgeTextModel._from_config(config.text_config)
         self.rope_deltas = None
         self.post_init()
@@ -691,10 +698,7 @@ class Cosmos3EdgeModel(Qwen2VLModel, Cosmos3EdgePreTrainedModel):
         """
         pixel_values = pixel_values.type(self.visual.dtype)
         vision_outputs = self.visual(pixel_values, grid_thw=image_grid_thw, return_dict=True, **kwargs)
-        projector_input = vision_outputs.last_hidden_state.reshape(
-            -1, self.projector.spatial_merge_size**2, self.projector.input_hidden_size
-        )
-        image_embeds = self.projector(projector_input)
+        image_embeds = self.projector(vision_outputs.last_hidden_state)
         split_sizes = (image_grid_thw.prod(-1) // self.projector.spatial_merge_size**2).tolist()
         vision_outputs.pooler_output = torch.split(image_embeds, split_sizes)
 
@@ -753,42 +757,6 @@ class Cosmos3EdgeForConditionalGeneration(Qwen2VLForConditionalGeneration, Cosmo
         self.model = Cosmos3EdgeModel(config)
         self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
         self.post_init()
-
-    def prepare_inputs_for_generation(
-        self,
-        input_ids,
-        past_key_values=None,
-        attention_mask=None,
-        inputs_embeds=None,
-        position_ids=None,
-        use_cache=True,
-        pixel_values=None,
-        pixel_values_videos=None,
-        image_grid_thw=None,
-        video_grid_thw=None,
-        mm_token_type_ids=None,
-        is_first_iteration=False,
-        **kwargs,
-    ):
-        model_inputs = super().prepare_inputs_for_generation(
-            input_ids,
-            past_key_values=past_key_values,
-            attention_mask=attention_mask,
-            inputs_embeds=inputs_embeds,
-            position_ids=position_ids,
-            use_cache=use_cache,
-            pixel_values=pixel_values,
-            pixel_values_videos=pixel_values_videos,
-            image_grid_thw=image_grid_thw,
-            video_grid_thw=video_grid_thw,
-            mm_token_type_ids=mm_token_type_ids,
-            is_first_iteration=is_first_iteration,
-            **kwargs,
-        )
-        if not is_first_iteration and use_cache:
-            model_inputs["pixel_values"] = None
-            model_inputs["pixel_values_videos"] = None
-        return model_inputs
 
     def _prepare_position_ids_for_generation(self, inputs_tensor, model_kwargs):
         # Qwen2-VL exposes four axes (text plus three visual axes). Edge's interleaved M-RoPE consumes the three

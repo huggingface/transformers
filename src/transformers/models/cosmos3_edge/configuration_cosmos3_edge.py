@@ -83,7 +83,11 @@ class Cosmos3EdgeTextConfig(PreTrainedConfig):
 
     def __post_init__(self, **kwargs):
         if self.rope_parameters is None:
-            self.rope_parameters = {"mrope_section": [24, 20, 20]}
+            self.rope_parameters = {
+                "rope_type": "default",
+                "rope_theta": self.default_theta,
+                "mrope_section": [24, 20, 20],
+            }
         if self.head_dim is None:
             self.head_dim = self.hidden_size // self.num_attention_heads
         if self.num_key_value_heads is None:
@@ -150,6 +154,11 @@ class Cosmos3EdgeProjectorConfig(PreTrainedConfig):
     out_hidden_size: int = 2048
     spatial_merge_size: int = 2
     use_postshuffle_norm: bool = False
+
+    @property
+    def hidden_size(self) -> int:
+        """The unmerged visual hidden size expected by the shared patch merger."""
+        return self.input_hidden_size
 
 
 @auto_docstring(checkpoint="nvidia/Cosmos3-Edge-Reasoner")

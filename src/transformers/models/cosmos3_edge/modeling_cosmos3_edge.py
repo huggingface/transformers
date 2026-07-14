@@ -120,9 +120,6 @@ class Cosmos3EdgeTextRotaryEmbedding(nn.Module):
     @torch.no_grad()
     @dynamic_rope_update
     def forward(self, x, position_ids):
-        # Text positions use the same index across the three axes, whereas vision tokens carry independent 3D IDs.
-        if position_ids.ndim == 2:
-            position_ids = position_ids[None, ...].expand(3, position_ids.shape[0], -1)
         inv_freq_expanded = (
             self.inv_freq[None, None, :, None].float().expand(3, position_ids.shape[1], -1, 1).to(x.device)
         )
@@ -455,7 +452,6 @@ class Cosmos3EdgeTextModel(Cosmos3EdgePreTrainedModel):
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
-        use_cache = self.config.use_cache if use_cache is None else use_cache
         # torch.jit.trace() doesn't support cache objects in the output.
         if use_cache and past_key_values is None and not torch.jit.is_tracing():
             past_key_values = DynamicCache(config=self.config)
@@ -516,11 +512,8 @@ class Cosmos3EdgeVisionEmbeddings(nn.Module):
         self.position_embedding_size = int(self.num_patches**0.5)
         self.position_embedding = nn.Embedding(self.num_patches, self.embed_dim)
 
-    @staticmethod
     def resize_positional_embeddings(
-        positional_embeddings: torch.Tensor,
-        spatial_shapes: torch.LongTensor,
-        max_length: int,
+        self, positional_embeddings: torch.Tensor, grid_thw: torch.LongTensor
     ) -> torch.Tensor:
         """
         Resize positional embeddings to image-specific size and pad to a fixed size.
@@ -536,62 +529,7 @@ class Cosmos3EdgeVisionEmbeddings(nn.Module):
         Returns:
             `torch.Tensor`: Embeddings of shape (batch_size, max_length, embed_dim)
         """
-        batch_size = spatial_shapes.shape[0]
-        embed_dim = positional_embeddings.shape[-1]
-        source_dtype = positional_embeddings.dtype
-
-        resulted_positional_embeddings = torch.empty(
-            (batch_size, max_length, embed_dim),
-            device=positional_embeddings.device,
-            dtype=source_dtype,
-        )
-
-        # (height, width, embed_dim) -> (1, embed_dim, height, width) for interpolation
-        positional_embeddings = positional_embeddings.permute(2, 0, 1).unsqueeze(0)
-
-        # Upcast to float32 on CPU because antialias is not supported for bfloat16/float16 on CPU
-        if positional_embeddings.device.type == "cpu":
-            positional_embeddings = positional_embeddings.to(torch.float32)
-
-        for i in range(batch_size):
-            # (1, dim, height, width) -> (1, dim, target_height, target_width)
-            height, width = spatial_shapes[i].tolist()  # will be itemized in F.interpolate either way
-            torch_compilable_check((width > 0), "Width of resized positional embeddings must be positive.")
-            torch_compilable_check((height > 0), "Height of resized positional embeddings must be positive.")
-            torch_compilable_check((height * width) <= max_length, "Resized positional embeddings exceed max_length.")
-            resized_embeddings = F.interpolate(
-                positional_embeddings,
-                size=(height, width),
-                mode="bilinear",
-                align_corners=False,
-                antialias=True,
-            )
-
-            # (1, dim, target_height, target_width) -> (target_height * target_width, dim)
-            resized_embeddings = resized_embeddings.reshape(embed_dim, height * width).transpose(0, 1)
-
-            # Cast to original dtype
-            resized_embeddings = resized_embeddings.to(source_dtype)
-
-            resulted_positional_embeddings[i, : height * width] = resized_embeddings
-            resulted_positional_embeddings[i, height * width :] = resized_embeddings[0]
-
-        return resulted_positional_embeddings
-
-    def forward(self, pixel_values: torch.FloatTensor, grid_thw: torch.LongTensor) -> torch.Tensor:
-        """
-        Args:
-            pixel_values (`torch.FloatTensor`):
-                Pixel values of shape (batch_size, max_num_patches, num_channels * patch_size * patch_size)
-            spatial_shapes (`list[tuple[int, int]]`):
-                Spatial shapes of shape (batch_size, 2) to resize the positional embeddings to
-        """
         # The checkpoint uses a learned square reference grid, interpolated independently for every packed frame.
-        target_dtype = self.patch_embedding.weight.dtype
-        patch_embeds = self.patch_embedding(pixel_values.to(dtype=target_dtype))
-        positional_embeddings = self.position_embedding.weight.reshape(
-            self.position_embedding_size, self.position_embedding_size, -1
-        )
         positional_embeddings = positional_embeddings.permute(2, 0, 1).unsqueeze(0)
         source_dtype = positional_embeddings.dtype
         if positional_embeddings.device.type == "cpu":
@@ -619,7 +557,25 @@ class Cosmos3EdgeVisionEmbeddings(nn.Module):
             resized_embeddings = resized_embeddings.transpose(1, 2).reshape(height * width, -1)
             position_chunks.append(resized_embeddings.repeat(temporal, 1))
 
-        position_embeddings = torch.cat(position_chunks, dim=0)
+        return torch.cat(position_chunks, dim=0)
+
+    def forward(self, pixel_values: torch.FloatTensor, grid_thw: torch.LongTensor) -> torch.Tensor:
+        """
+        Args:
+            pixel_values (`torch.FloatTensor`):
+                Pixel values of shape (batch_size, max_num_patches, num_channels * patch_size * patch_size)
+            spatial_shapes (`list[tuple[int, int]]`):
+                Spatial shapes of shape (batch_size, 2) to resize the positional embeddings to
+        """
+        # Apply patch embeddings to already patchified pixel values.
+        target_dtype = self.patch_embedding.weight.dtype
+        patch_embeds = self.patch_embedding(pixel_values.to(dtype=target_dtype))
+
+        # Get image-specific positional embeddings in the packed block-major order expected by the checkpoint.
+        positional_embeddings = self.position_embedding.weight.reshape(
+            self.position_embedding_size, self.position_embedding_size, -1
+        )
+        position_embeddings = self.resize_positional_embeddings(positional_embeddings, grid_thw)
         torch_compilable_check(
             patch_embeds.shape[0] == position_embeddings.shape[0],
             "The packed visual patch count does not match `grid_thw`.",
@@ -811,12 +767,6 @@ class Cosmos3EdgeEncoder(nn.Module):
         return BaseModelOutput(last_hidden_state=hidden_states)
 
 
-Cosmos3EdgePreTrainedModel._can_record_outputs = {
-    "hidden_states": [Cosmos3EdgeTextDecoderLayer, Cosmos3EdgeVisionEncoderLayer],
-    "attentions": [Cosmos3EdgeTextAttention, Cosmos3EdgeVisionAttention],
-}
-
-
 class Cosmos3EdgeVisionModel(Cosmos3EdgePreTrainedModel):
     """Packed variable-resolution SigLIP2 vision tower used by Cosmos3 Edge."""
 
@@ -824,6 +774,10 @@ class Cosmos3EdgeVisionModel(Cosmos3EdgePreTrainedModel):
     main_input_name = "pixel_values"
     input_modalities = ("image", "video")
     _no_split_modules = ["Cosmos3EdgeVisionEncoderLayer"]
+    _can_record_outputs = {
+        "hidden_states": Cosmos3EdgeVisionEncoderLayer,
+        "attentions": Cosmos3EdgeVisionAttention,
+    }
 
     def __init__(self, config: Cosmos3EdgeVisionConfig):
         super().__init__(config)
@@ -845,29 +799,26 @@ class Cosmos3EdgeVisionModel(Cosmos3EdgePreTrainedModel):
         hidden_states = self.embeddings(pixel_values, grid_thw)
         encoder_outputs = self.encoder(hidden_states, grid_thw=grid_thw, **kwargs)
         last_hidden_state = self.post_layernorm(encoder_outputs.last_hidden_state)
-        return BaseModelOutputWithPooling(last_hidden_state=last_hidden_state, pooler_output=last_hidden_state)
+        return BaseModelOutputWithPooling(last_hidden_state=last_hidden_state)
 
 
 class Cosmos3EdgePatchMerger(nn.Module):
-    def __init__(self, config: Cosmos3EdgeProjectorConfig):
+    def __init__(self, config: Cosmos3EdgeProjectorConfig, use_postshuffle_norm: bool = False) -> None:
         super().__init__()
-        self.spatial_merge_size = config.spatial_merge_size
-        self.input_hidden_size = config.input_hidden_size
-        self.hidden_size = config.input_hidden_size * config.spatial_merge_size**2
-        self.use_postshuffle_norm = config.use_postshuffle_norm
-        self.norm = nn.LayerNorm(
-            self.hidden_size if self.use_postshuffle_norm else config.input_hidden_size,
-            eps=1e-6,
-        )
+        self.hidden_size = config.hidden_size * (config.spatial_merge_size**2)
+        self.use_postshuffle_norm = use_postshuffle_norm
+        self.norm = nn.LayerNorm(self.hidden_size if use_postshuffle_norm else config.hidden_size, eps=1e-6)
         self.linear_fc1 = nn.Linear(self.hidden_size, config.merger_intermediate_size)
         self.act_fn = nn.GELU()
         self.linear_fc2 = nn.Linear(config.merger_intermediate_size, config.out_hidden_size)
+        self.spatial_merge_size = config.spatial_merge_size
+        self.input_hidden_size = config.input_hidden_size
 
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        hidden_states = self.norm(
-            hidden_states.reshape(-1, self.hidden_size) if self.use_postshuffle_norm else hidden_states
-        ).reshape(-1, self.hidden_size)
-        return self.linear_fc2(self.act_fn(self.linear_fc1(hidden_states)))
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        x = x.reshape(-1, self.spatial_merge_size**2, self.input_hidden_size)
+        x = self.norm(x.view(-1, self.hidden_size) if self.use_postshuffle_norm else x).view(-1, self.hidden_size)
+        x = self.linear_fc2(self.act_fn(self.linear_fc1(x)))
+        return x
 
 
 @auto_docstring
@@ -893,7 +844,9 @@ class Cosmos3EdgeModel(Cosmos3EdgePreTrainedModel):
         # multimodal API, but its checkpoint has distinct packed vision and Llama-derived text components.
         super().__init__(config)
         self.visual = Cosmos3EdgeVisionModel._from_config(config.vision_config)
-        self.projector = Cosmos3EdgePatchMerger(config.projector_config)
+        self.projector = Cosmos3EdgePatchMerger(
+            config.projector_config, use_postshuffle_norm=config.projector_config.use_postshuffle_norm
+        )
         self.language_model = Cosmos3EdgeTextModel._from_config(config.text_config)
         self.rope_deltas = None
         self.post_init()
@@ -1094,10 +1047,7 @@ class Cosmos3EdgeModel(Cosmos3EdgePreTrainedModel):
         """
         pixel_values = pixel_values.type(self.visual.dtype)
         vision_outputs = self.visual(pixel_values, grid_thw=image_grid_thw, return_dict=True, **kwargs)
-        projector_input = vision_outputs.last_hidden_state.reshape(
-            -1, self.projector.spatial_merge_size**2, self.projector.input_hidden_size
-        )
-        image_embeds = self.projector(projector_input)
+        image_embeds = self.projector(vision_outputs.last_hidden_state)
         split_sizes = (image_grid_thw.prod(-1) // self.projector.spatial_merge_size**2).tolist()
         vision_outputs.pooler_output = torch.split(image_embeds, split_sizes)
 
@@ -1433,28 +1383,30 @@ class Cosmos3EdgeForConditionalGeneration(Cosmos3EdgePreTrainedModel, Generation
         pixel_values_videos=None,
         image_grid_thw=None,
         video_grid_thw=None,
-        mm_token_type_ids=None,
         is_first_iteration=False,
         **kwargs,
     ):
+        # Overwritten -- in specific circumstances we don't want to forward image inputs to the model
+
         model_inputs = super().prepare_inputs_for_generation(
             input_ids,
             past_key_values=past_key_values,
             attention_mask=attention_mask,
             inputs_embeds=inputs_embeds,
             position_ids=position_ids,
-            use_cache=use_cache,
             pixel_values=pixel_values,
             pixel_values_videos=pixel_values_videos,
             image_grid_thw=image_grid_thw,
             video_grid_thw=video_grid_thw,
-            mm_token_type_ids=mm_token_type_ids,
+            use_cache=use_cache,
             is_first_iteration=is_first_iteration,
             **kwargs,
         )
+
         if not is_first_iteration and use_cache:
             model_inputs["pixel_values"] = None
             model_inputs["pixel_values_videos"] = None
+
         return model_inputs
 
     def _prepare_position_ids_for_generation(self, inputs_tensor, model_kwargs):

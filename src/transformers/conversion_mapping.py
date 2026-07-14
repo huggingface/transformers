@@ -140,6 +140,19 @@ _MODEL_TO_CONVERSION_PATTERN = {
 
 def _build_checkpoint_conversion_mapping():
     mapping = {
+        # Cosmos3 Edge's composite checkpoint stores its dense reasoner text tower as conventional attention + MLP
+        # blocks. The visual/projector tensors already use their native module names and intentionally need no mapping.
+        "cosmos3_edge": [
+            WeightRenaming(r"^embed_tokens\.", "model.language_model.embed_tokens."),
+            WeightRenaming(r"^norm\.", "model.language_model.norm."),
+            WeightRenaming(r"^layers\.", "model.language_model.layers."),
+            WeightRenaming(r"\.self_attn\.to_q\.", ".self_attn.q_proj."),
+            WeightRenaming(r"\.self_attn\.to_k\.", ".self_attn.k_proj."),
+            WeightRenaming(r"\.self_attn\.to_v\.", ".self_attn.v_proj."),
+            WeightRenaming(r"\.self_attn\.to_out\.", ".self_attn.o_proj."),
+            WeightRenaming(r"\.mlp\.up_proj\.", ".mlp.fc1."),
+            WeightRenaming(r"\.mlp\.down_proj\.", ".mlp.fc2."),
+        ],
         "gemma4_unified": [
             WeightRenaming(source_patterns=r"vision_embedder\.patch_ln1", target_patterns="embed_vision.patch_ln1"),
             WeightRenaming(
@@ -1631,21 +1644,6 @@ def _build_checkpoint_conversion_mapping():
     mapping["Tipsv2DptForSemanticSegmentation"] = [
         WeightRenaming(renaming.source_patterns[0].replace("depth", "segmentation"), renaming.target_patterns[0])
         for renaming in mapping["Tipsv2DptForDepthEstimation"]
-    ]
-
-    # Cosmos3 Edge's composite checkpoint stores its dense reasoner text tower as
-    # conventional attention + MLP blocks. The visual/projector tensors already
-    # use their native module names and intentionally need no mapping.
-    mapping["cosmos3_edge"] = [
-        WeightRenaming(r"^embed_tokens\.", "model.language_model.embed_tokens."),
-        WeightRenaming(r"^norm\.", "model.language_model.norm."),
-        WeightRenaming(r"^layers\.", "model.language_model.layers."),
-        WeightRenaming(r"\.self_attn\.to_q\.", ".self_attn.q_proj."),
-        WeightRenaming(r"\.self_attn\.to_k\.", ".self_attn.k_proj."),
-        WeightRenaming(r"\.self_attn\.to_v\.", ".self_attn.v_proj."),
-        WeightRenaming(r"\.self_attn\.to_out\.", ".self_attn.o_proj."),
-        WeightRenaming(r"\.mlp\.up_proj\.", ".mlp.fc1."),
-        WeightRenaming(r"\.mlp\.down_proj\.", ".mlp.fc2."),
     ]
 
     # The legacy mapping is added to the esm model here since the extra weight renaming do not apply to the esm model.
