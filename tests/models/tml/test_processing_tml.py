@@ -12,17 +12,24 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import os
 import shutil
+import tempfile
 import unittest
 
 import numpy as np
+from huggingface_hub import download_bucket_files
+from safetensors.torch import load_file
 
-from transformers import TmlProcessor
-from transformers.testing_utils import get_tests_dir, require_vision
+from transformers import AutoProcessor, TmlProcessor, is_torch_available
+from transformers.testing_utils import get_tests_dir, require_vision, slow
 from transformers.utils import is_vision_available
 
 from ...test_processing_common import ProcessorTesterMixin
 
+
+if is_torch_available():
+    import torch
 
 if is_vision_available():
     pass
@@ -234,3 +241,141 @@ class TmlProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     @unittest.skip("This test seems to be loading a different video, check for all models and fix")
     def test_apply_chat_template_video_frame_sampling(self):
         pass
+
+
+@slow
+class TmlProcessingIntegrationTest(unittest.TestCase):
+    """
+    Check against sglang reference..
+
+    reproducers (one per modality, regenerate from sglang and upload the golden to
+    ``hf://buckets/eustlb/tml-integration-tests/<case>/expected_processing.safetensors``):
+        ~/tml/reproducers/reproducer_processing_{text,image,audio,image_audio,multi_image,multi_audio}.py
+    gist: https://gist.github.com/eustlb/cb2a5df1676911fa0eb07d0a76a38ae7
+    """
+    # sglang sentinels
+    IMAGE_SENTINEL = -101
+    AUDIO_SENTINEL = -102
+
+    IMAGE_URL = "http://images.cocodataset.org/val2017/000000039769.jpg"
+    IMAGE_URL_2 = "http://images.cocodataset.org/val2017/000000000139.jpg"
+    AUDIO_URL = (
+        "https://huggingface.co/datasets/adarshxs/voxcpm2-native-generated-audio-user-ref/resolve/main/zs_medium.wav"
+    )
+    AUDIO_URL_2 = (
+        "https://huggingface.co/datasets/adarshxs/voxcpm2-native-generated-audio-user-ref/resolve/main/zs_short.wav"
+    )
+
+    @classmethod
+    def setUpClass(cls):
+        cls.checkpoint_name = "eustlb/dummy-model"
+        cls.processor = AutoProcessor.from_pretrained(cls.checkpoint_name)
+        cls.bucket = "eustlb/tml-integration-tests"
+
+    def _load_expected(self, case: str) -> dict:
+        remote = f"{case}/expected_processing.safetensors"
+        with tempfile.TemporaryDirectory() as tmp:
+            local = os.path.join(tmp, "expected_processing.safetensors")
+            download_bucket_files(self.bucket, files=[(remote, local)])
+            return load_file(local)
+
+    def _remap_sentinels(self, input_ids: "torch.Tensor") -> "torch.Tensor":
+        input_ids = input_ids.clone()
+        input_ids[input_ids == self.IMAGE_SENTINEL] = self.processor.image_token_id
+        input_ids[input_ids == self.AUDIO_SENTINEL] = self.processor.audio_token_id
+        return input_ids
+
+    def _expected_dmel_from_inputs(self, inputs) -> "torch.Tensor":
+        # Trim each padded audio's dmel by its mask and concatenate in order
+        audio_input_ids = inputs["audio_input_ids"].to(torch.int64)
+        mask = inputs.get("audio_input_ids_mask")
+        per_audio = [
+            audio_input_ids[i][mask[i].bool()] if mask is not None else audio_input_ids[i]
+            for i in range(audio_input_ids.shape[0])
+        ]
+        return torch.cat(per_audio, dim=0)
+
+    def _assert_matches_sglang(self, case: str, messages: list, has_audio: bool = False):
+        inputs = self.processor.apply_chat_template(
+            messages,
+            add_generation_prompt=True,
+            tokenize=True,
+            return_dict=True,
+            return_tensors="pt",
+        )
+        expected = self._load_expected(case)
+
+        input_ids = inputs["input_ids"][0].to(torch.int64)
+        expected_input_ids = self._remap_sentinels(expected["input_ids"].to(torch.int64))
+        torch.testing.assert_close(input_ids, expected_input_ids, rtol=0, atol=0)
+
+        if has_audio:
+            dmel = self._expected_dmel_from_inputs(inputs)
+            torch.testing.assert_close(dmel, expected["audio_dmel"].to(torch.int64), rtol=0, atol=0)
+
+    def test_apply_chat_template_text(self):
+        messages = [{"role": "user", "content": [{"type": "text", "text": "What is the capital of France?"}]}]
+        self._assert_matches_sglang("text", messages)
+
+    def test_apply_chat_template_image(self):
+        messages = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": "What is shown in this image?"},
+                    {"type": "image", "url": self.IMAGE_URL},
+                ],
+            }
+        ]
+        self._assert_matches_sglang("image", messages)
+
+    def test_apply_chat_template_audio(self):
+        messages = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": "What is said in this clip?"},
+                    {"type": "audio", "url": self.AUDIO_URL},
+                ],
+            }
+        ]
+        self._assert_matches_sglang("audio", messages, has_audio=True)
+
+    def test_apply_chat_template_image_audio(self):
+        messages = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": "Describe the image and tell me what is said in the clip."},
+                    {"type": "image", "url": self.IMAGE_URL},
+                    {"type": "audio", "url": self.AUDIO_URL},
+                ],
+            }
+        ]
+        self._assert_matches_sglang("image_audio", messages, has_audio=True)
+
+    def test_apply_chat_template_multi_image(self):
+        messages = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": "Compare these two images."},
+                    {"type": "image", "url": self.IMAGE_URL},
+                    {"type": "image", "url": self.IMAGE_URL_2},
+                ],
+            }
+        ]
+        self._assert_matches_sglang("multi_image", messages)
+
+    def test_apply_chat_template_multi_audio(self):
+        messages = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": "What is said in these two clips?"},
+                    {"type": "audio", "url": self.AUDIO_URL},
+                    {"type": "audio", "url": self.AUDIO_URL_2},
+                ],
+            }
+        ]
+        self._assert_matches_sglang("multi_audio", messages, has_audio=True)
