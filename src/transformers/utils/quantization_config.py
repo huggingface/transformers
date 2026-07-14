@@ -1701,7 +1701,7 @@ class QuarkConfig(QuantizationConfigMixin):
             from quark import __version__ as quark_version
             from quark.torch.export.config.config import JsonExporterConfig
             from quark.torch.export.main_export.quant_config_parser import QuantConfigParser
-            from quark.torch.quantization.config.config import Config
+            from quark.torch.quantization.config.config import QConfig
         else:
             raise ImportError(
                 "Quark is not installed. Please refer to https://quark.docs.amd.com/latest/install.html."
@@ -1715,7 +1715,7 @@ class QuarkConfig(QuantizationConfigMixin):
             self.quant_config = QuantConfigParser.from_custom_config(kwargs, is_bias_quantized=False)
             self.json_export_config = JsonExporterConfig()
         else:
-            self.quant_config = Config.from_dict(kwargs)
+            self.quant_config = QConfig.from_dict(kwargs)
 
             if "export" in kwargs:
                 # TODO: Remove this check once configuration version is handled natively by Quark.
