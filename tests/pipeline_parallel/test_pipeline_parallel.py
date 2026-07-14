@@ -38,6 +38,15 @@ def _find_free_port():
         return s.getsockname()[1]
 
 
+class _FakeDeviceMesh:
+    def __init__(self, *, ndim: int, size: int, mesh_dim_names: tuple[str, ...] | None):
+        self.ndim = ndim
+        self._size = size
+        self.mesh_dim_names = mesh_dim_names
+
+    def size(self):
+        return self._size
+
 def init_process_group(rank, pp_size, port):
     os.environ.update(
         {
@@ -258,6 +267,13 @@ def _tiny_qwen2_config(num_hidden_layers):
         vocab_size=128,
     )
 
+
+class TestPipelineStageFromDeviceMesh(unittest.TestCase):
+    def test_from_device_mesh_requires_pp_dimension(self):
+        self.assertIsNone(PipelineStage.from_device_mesh(None))
+        self.assertIsNone(PipelineStage.from_device_mesh(_FakeDeviceMesh(ndim=1, size=2, mesh_dim_names=("tp",))))
+        self.assertIsNone(PipelineStage.from_device_mesh(_FakeDeviceMesh(ndim=1, size=2, mesh_dim_names=None)))
+        self.assertIsNone(PipelineStage.from_device_mesh(_FakeDeviceMesh(ndim=1, size=1, mesh_dim_names=("pp",))))
 
 @is_pipeline_parallel_test
 @require_torch_greater_or_equal("2.5")

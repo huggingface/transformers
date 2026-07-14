@@ -64,6 +64,9 @@ class PipelineStage:
     def from_device_mesh(cls, pp_mesh) -> PipelineStage | None:
         if pp_mesh is None:
             return None
+        mesh_dim_names = getattr(pp_mesh, "mesh_dim_names", None)
+        if mesh_dim_names is None or "pp" not in mesh_dim_names:
+            return None
         if pp_mesh.ndim != 1 or pp_mesh.size() <= 1:
             return None
 
