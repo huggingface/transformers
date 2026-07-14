@@ -46,11 +46,6 @@ from ..llava.modeling_llava import (
 from .configuration_locateanything import LocateAnythingConfig, MoonViTConfig
 
 
-if is_flash_attn_2_available():
-    from flash_attn import flash_attn_varlen_func
-else:
-    flash_attn_varlen_func = None
-
 logger = logging.get_logger(__name__)
 
 
