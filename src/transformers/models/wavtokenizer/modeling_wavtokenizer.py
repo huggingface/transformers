@@ -569,8 +569,7 @@ class WavTokenizerModel(WavTokenizerPreTrainedModel):
         r"""
         input_values (`torch.Tensor` of shape `(batch_size, 1, sequence_length)`):
             Input audio waveform. Arbitrary non-zero lengths are supported; the encoder pads internally and emits
-            `ceil(sequence_length / hop_length)` codes. Note that decoding requires at least 2 codes (see
-            [`~WavTokenizerModel.decode`]).
+            `ceil(sequence_length / hop_length)` codes.
 
             <Tip warning={true}>
 
@@ -612,17 +611,11 @@ class WavTokenizerModel(WavTokenizerPreTrainedModel):
     ) -> tuple | WavTokenizerDecoderOutput:
         r"""
         audio_codes (`torch.LongTensor` of shape `(batch_size, 1, codes_length)`):
-            Discrete code indices computed using `model.encode`. At least 2 codes are required — the decoder's
-            GroupNorm layers cannot operate on a single time step, so audio of at most `hop_length` samples
-            (a single code) cannot be decoded.
+            Discrete code indices computed using `model.encode`. One or more codes are supported; each code decodes
+            to `hop_length` audio samples.
         bandwidth_id (`int`, *optional*, defaults to 0):
             Condition embedding id of the decoder's adaptive layer norms. Always 0 at inference.
         """
-        if audio_codes.shape[-1] < 2:
-            raise ValueError(
-                f"`decode` requires at least 2 audio codes, got {audio_codes.shape[-1]}. Inputs of at most "
-                "`hop_length` samples produce a single code, which the decoder's GroupNorm layers cannot process."
-            )
         quantized = self.quantizer.decode(audio_codes.squeeze(1))
         bandwidth_id = torch.tensor([bandwidth_id], device=audio_codes.device)
         hidden_states = self.backbone(quantized, bandwidth_id)
