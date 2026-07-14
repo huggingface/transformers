@@ -110,9 +110,9 @@ def _load_sonicmoe_kernel() -> SonicMoE:
 
 
 class SonicMoeHandle:
-    """An handle to the sonicmoe kernel. This object is meant to be instancied only once, and then provides an entry
-    point to the kernel. Having an object allows to cache the kernel after the first call to `_load_sonicmoe_kernel`,
-    or to cache the error that occurred then.
+    """A handle to the sonicmoe kernel. This object is meant to be instantiated only once, and then provides an entry
+    point to the kernel. Having an object allows caching the kernel after the first call to `_load_sonicmoe_kernel`,
+    or caching the error that occurred then.
     """
 
     # Map activation function names from HF config to SonicMoE epilogue names
@@ -128,7 +128,7 @@ class SonicMoeHandle:
         self._cached_sonicmoe: SonicMoE | None = None
 
     def _load_sonicmoe_kernel(self) -> SonicMoE:
-        """Loads and return a SonicMoE object which contains what's necessary to call the kernel. After the first call
+        """Loads and returns a SonicMoE object which contains what's necessary to call the kernel. After the first call
         to this function, the output or the Exception is cached: call `.reset` to reset the cached state. Private
         method because the sonicmoe kernel is meant to be called from the handle.
         """
