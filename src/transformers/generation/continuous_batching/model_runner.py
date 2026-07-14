@@ -118,15 +118,13 @@ class ModelRunner:
             for encoder_kw in encoder_kwargs:
                 # Retrieve request ID from encoder kwargs
                 request_id = encoder_kw.pop(self.cache.embeddings_cache.REQUEST_ID_KEY)
-                # Run feature extractor and catch any errors
+                # Run feature extractor and catch any errors (during feature extraction or storing in cache)
                 try:
                     encoding_output = feature_extractor(**encoder_kw)
                     mm_embeddings = self.cache.embeddings_cache.extract_mm_embeddings(encoding_output)
+                    self.cache.embeddings_cache.store_mm_embeddings(request_id, mm_embeddings)
                 except Exception as e:
                     req_ids_with_errors[request_id] = e
-                    continue
-                # If feature extractor ran successfully, extract and store multimodal embeddings
-                self.cache.embeddings_cache.store_mm_embeddings(request_id, mm_embeddings)
         return req_ids_with_errors
 
     def fill_inputs_embeds(self, model: nn.Module, input_ids: torch.Tensor, batch_data: PagedAttentionArgs) -> None:
