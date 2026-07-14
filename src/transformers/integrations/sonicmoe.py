@@ -20,6 +20,7 @@ Requirements: CUDA, `kernels`, `nvidia-cutlass-dsl`, has_gate=True.
 
 from __future__ import annotations
 
+import traceback
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
@@ -124,7 +125,7 @@ class SonicMoeHandle:
     def reset(self) -> None:
         """Resets the state of the handle, for instance to retry loading the kernel after the first attempt failed."""
         self._loaded: bool = False
-        self._loading_error: Exception | None = None
+        self._error_traceback: Exception | None = None
         self._cached_sonicmoe: SonicMoE | None = None
 
     def _load_sonicmoe_kernel(self) -> SonicMoE:
@@ -138,16 +139,16 @@ class SonicMoeHandle:
                 self._cached_sonicmoe = _load_sonicmoe_kernel()
                 self._loaded = True
             # Guard only against import errors: other errors are unexpected, so we raise them
-            except ImportError as e:
-                self._loading_error = e
+            except ImportError:
+                self._error_traceback = traceback.format_exc()
                 self._loaded = True
                 raise
         # Otherwise, re-raise the loading error if it occurred the first time
-        if self._loading_error is not None:
+        if self._error_traceback is not None:
             raise ImportError(
-                "Tried calling sonicmoe_experts_forward but the kernel failed to load on the first call. You can call "
-                "`reset` on the handle if you want to retry loading the kernel"
-            ) from self._loading_error
+                "Tried calling sonicmoe_experts_forward but the kernel failed to load on the first call. Call `reset` "
+                f"on the handle if you want to retry loading the kernel. Original traceback:\n{self._error_traceback}"
+            )
         # Sanity check to see if the kernel was loaded successfully
         elif self._cached_sonicmoe is None:
             raise RuntimeError("sonicmoe kernel was marked as loaded but cannot be found. This should never happen.")
