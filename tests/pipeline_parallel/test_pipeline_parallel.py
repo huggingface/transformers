@@ -23,10 +23,15 @@ from parameterized import parameterized
 
 from transformers import AutoModelForCausalLM, Qwen2Config, Qwen2ForCausalLM, set_seed
 from transformers.distributed.configuration_utils import DistributedConfig
-from transformers.distributed.pipeline_parallel import PipelineIdentityLayer, apply_pipeline_parallelism
+from transformers.distributed.pipeline_parallel import PipelineIdentityLayer, PipelineStage, apply_pipeline_parallelism
+from transformers.modeling_utils import LoadStateDictConfig
+from transformers.core_model_loading import convert_and_load_state_dict_in_model
 from transformers.testing_utils import TestCasePlus, is_pipeline_parallel_test, require_torch_greater_or_equal
+from transformers.utils.loading_report import log_state_dict_report
 
 class MockDeviceMesh:
+    mesh_dim_names = ("pp",)
+
     def __init__(self, world_size, rank):
         self.world_size = world_size
         self.rank = rank
@@ -58,15 +63,13 @@ def _shared_model_dir(rank):
         if rank == 0 and tmpdir is not None:
             tmpdir.cleanup()
 
-def _verify_pp_split(model, pp_rank, pp_size):
+def _verify_pp_split(model):
+    stage = PipelineStage.from_device_mesh(model._device_mesh)
+    pp_rank = stage.pp_rank
+    pp_size = stage.pp_size
     base_model = model.model
     num_layers = len(base_model.layers)
-    layers_per_rank = num_layers // pp_size
-    start_layer = pp_rank * layers_per_rank
-    end_layer = num_layers if pp_rank == pp_size - 1 else start_layer + layers_per_rank
-
-    assert model._pp_rank == pp_rank
-    assert model._pp_size == pp_size
+    start_layer, end_layer = stage.layer_range_for_rank(pp_rank, num_layers)
 
     assert (pp_rank == 0) == (not isinstance(base_model.embed_tokens, PipelineIdentityLayer))
     assert (pp_rank == pp_size - 1) == (not isinstance(base_model.norm, PipelineIdentityLayer))
@@ -124,7 +127,7 @@ def _pp_weight_loading(rank, config_dict, pp_size, port):
         dist.barrier()
 
         # Check if the model is split correctly
-        _verify_pp_split(pp_model, pp_model._pp_rank, pp_size)
+        _verify_pp_split(pp_model)
 
         # Check that each local weight matches the reference.
         local_names = set()
@@ -221,6 +224,40 @@ def _tiny_qwen2_config(num_hidden_layers):
     )
 
 @is_pipeline_parallel_test
+class TestPipelineParallelLoadReport(TestCasePlus):
+    def test_pp_loading_report_table(self):
+        config = _tiny_qwen2_config(num_hidden_layers=12)
+        model = Qwen2ForCausalLM(config)
+        model = apply_pipeline_parallelism(model, MockDeviceMesh(2, 0))
+
+        full_model = Qwen2ForCausalLM(config)
+        load_config = LoadStateDictConfig()
+        loading_info, _ = convert_and_load_state_dict_in_model(model, full_model.state_dict(), load_config)
+
+        report = loading_info.create_loading_report(model)
+        self.assertIsNotNone(report)
+        self.assertIn("OWNED", report)
+        self.assertIn("SKIPPED", report)
+        self.assertIn("PP rank 0", report)
+        self.assertIn("PP rank 1", report)
+        self.assertIn("model.embed_tokens.weight", report)
+        self.assertIn("lm_head.weight", report)
+        self.assertEqual(loading_info.unexpected_keys, set())
+
+        with self.assertLogs("transformers.utils.loading_report", level="WARNING") as logs:
+            log_state_dict_report(model, "/tmp/pp-test", True, loading_info)
+
+        log_text = "\n".join(logs.output)
+        self.assertIn("LOAD REPORT", log_text)
+        self.assertIn("OWNED", log_text)
+        self.assertIn("SKIPPED", log_text)
+        self.assertIn("PP rank 0", log_text)
+        self.assertIn("PP rank 1", log_text)
+        self.assertIn("model.layers.{0, 1, 2, 3, 4, 5}", log_text)
+        self.assertIn("model.layers.{6, 7, 8, 9, 10, 11}", log_text)
+
+
+@is_pipeline_parallel_test
 class TestPipelineParallelSplit(TestCasePlus):
     @parameterized.expand([(pp_size,) for pp_size in [2]])
     def test_pp_split(self, pp_size):
@@ -228,7 +265,7 @@ class TestPipelineParallelSplit(TestCasePlus):
         for pp_rank in range(pp_size):
             model = Qwen2ForCausalLM(config)
             model = apply_pipeline_parallelism(model, MockDeviceMesh(pp_size, pp_rank))
-            _verify_pp_split(model, pp_rank, pp_size)
+            _verify_pp_split(model)
 
 @is_pipeline_parallel_test
 @require_torch_greater_or_equal("2.5")
