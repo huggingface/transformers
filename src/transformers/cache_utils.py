@@ -1111,10 +1111,6 @@ class Cache:
             self.only_non_sliding = offload_only_non_sliding
             self.prefetch_stream = torch.Stream() if _is_torch_greater_or_equal_than_2_7 else torch.cuda.Stream()
 
-        # Precomputed by subclasses (e.g. StaticCache) for compile-safe representative-layer lookup; None means
-        # fall back to per-layer seq-length checks in `get_representative_kv_layer_idx`.
-        self._enabled_kv_layer_indices: tuple[int, ...] | None = None
-
     def __repr__(self):
         return f"{self.__class__.__name__}(layers={self.layers})"
 
@@ -1317,12 +1313,7 @@ class Cache:
         return self.layers[layer_idx].get_seq_length()
 
     def get_representative_kv_layer_idx(self, layer_indices: Iterable[int]) -> int | None:
-        """Return the first of the given layer indices that can represent KV-cache metadata: the first layer with a
-        non-empty KV cache, or for static caches the first layer in `_enabled_kv_layer_indices`."""
-        if self._enabled_kv_layer_indices is not None:
-            return next(
-                (layer_idx for layer_idx in layer_indices if layer_idx in self._enabled_kv_layer_indices), None
-            )
+        """Return the first of the given layer indices that has already updated its KV cache, or `None` if none do."""
         return next(
             (
                 layer_idx
@@ -1695,11 +1686,19 @@ class StaticCache(Cache):
             layers.append(layer_cls(**layer_kwargs))
         super().__init__(layers=layers, offloading=offloading, offload_only_non_sliding=offload_only_non_sliding)
 
-        # Exclude layers that never update their KV cache (e.g. attention-skipped layers in heterogeneous configs).
-        self._enabled_kv_layer_indices = tuple(
-            layer_idx
-            for layer_idx, layer in enumerate(layers)
-            if isinstance(layer, CacheLayerMixin) and layer_idx not in disabled_kv_layer_indices
+        self._disabled_kv_layer_indices = disabled_kv_layer_indices
+
+    def get_representative_kv_layer_idx(self, layer_indices: Iterable[int]) -> int | None:
+        """Return the first of the given layer indices that has the KV cache enabled."""
+        return next(
+            (
+                layer_idx
+                for layer_idx in layer_indices
+                if layer_idx < len(self.layers)
+                and isinstance(self.layers[layer_idx], CacheLayerMixin)
+                and layer_idx not in self._disabled_kv_layer_indices
+            ),
+            None,
         )
 
 
