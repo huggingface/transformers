@@ -1193,6 +1193,8 @@
         title: Wav2Vec2Phoneme
       - local: model_doc/wavlm
         title: WavLM
+      - local: model_doc/wavtokenizer
+        title: WavTokenizer
       - local: model_doc/whisper
         title: Whisper
       - local: model_doc/xcodec

@@ -686,6 +686,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("wav2vec2-bert", "Wav2Vec2BertConfig"),
         ("wav2vec2-conformer", "Wav2Vec2ConformerConfig"),
         ("wavlm", "WavLMConfig"),
+        ("wavtokenizer", "WavTokenizerConfig"),
         ("whisper", "WhisperConfig"),
         ("xclip", "XCLIPConfig"),
         ("xclip_text_model", "XCLIPTextConfig"),
@@ -1009,6 +1010,7 @@ FEATURE_EXTRACTOR_MAPPING_NAMES = OrderedDict(
         ("vibevoice_acoustic_tokenizer", "VibeVoiceAcousticTokenizerFeatureExtractor"),
         ("voxtral_realtime", "VoxtralRealtimeFeatureExtractor"),
         ("wav2vec2", "Wav2Vec2FeatureExtractor"),
+        ("wavtokenizer", "WavTokenizerFeatureExtractor"),
         ("whisper", "WhisperFeatureExtractor"),
         ("xcodec2", "Xcodec2FeatureExtractor"),
     ]
