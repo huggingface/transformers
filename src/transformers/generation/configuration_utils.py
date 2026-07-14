@@ -1283,7 +1283,7 @@ class GenerationConfig(PushToHubMixin):
             model_config = model_config.get_text_config(decoder=True)
             model_config = model_config.to_dict()
 
-        default_generation_config = GenerationConfig()
+        default_generation_config = cls()
         for attr in generation_config.to_dict():
             is_unset = getattr(generation_config, attr) == getattr(default_generation_config, attr)
             if attr in model_config and is_unset:

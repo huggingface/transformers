@@ -453,6 +453,7 @@ if TYPE_CHECKING:
     from .unispeech import *
     from .unispeech_sat import *
     from .univnet import *
+    from .unlimited_ocr import *
     from .upernet import *
     from .uvdoc import *
     from .vaultgemma import *

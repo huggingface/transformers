@@ -237,6 +237,7 @@ SPECIAL_CASES_TO_ALLOW = {
         "num_last_full_attention_layers",  # builder attr consumed in __post_init__ to compute num_key_value_heads_per_layer
         "flip_pairs",  # used externally for post-processing keypoints, not in forward pass
     ],
+    "UnlimitedOcrTextConfig": ["sliding_window"],  # only used for cache init
 }
 
 # Common and important attributes, even if they do not always appear in the modeling files (can be a regex pattern)

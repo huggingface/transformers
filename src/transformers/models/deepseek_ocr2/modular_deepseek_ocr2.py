@@ -682,6 +682,8 @@ class DeepseekOcr2PreTrainedModel(LlavaNextPreTrainedModel):
     ]
     # SAM uses rel-pos bias, incompatible with flash attention.
     _supports_flash_attn = False
+    # SAM doesn't support flex attention
+    _supports_flex_attn = False
 
     @torch.no_grad()
     def _init_weights(self, module):
@@ -745,6 +747,8 @@ class DeepseekOcr2SamVisionProj(nn.Module):
 
 
 class DeepseekOcr2SamVisionEncoder(SamVisionEncoder, DeepseekOcr2PreTrainedModel):
+    _input_embed_layer = "patch_embed"
+
     def __init__(self, config: DeepseekOcr2SamVisionConfig):
         super().__init__(config)
         self.proj = DeepseekOcr2SamVisionProj(config)
@@ -782,6 +786,9 @@ class DeepseekOcr2SamVisionEncoder(SamVisionEncoder, DeepseekOcr2PreTrainedModel
         hidden_states = self.neck(hidden_states)
         hidden_states = self.proj(hidden_states)
         return BaseModelOutput(last_hidden_state=hidden_states)
+
+    def get_input_embeddings(self):
+        raise AttributeError()
 
 
 class DeepseekOcr2VisionMLP(Qwen2MLP):
