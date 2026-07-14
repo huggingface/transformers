@@ -49,6 +49,10 @@ class ColQwen2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def test_processor_with_multiple_inputs(self):
         pass
 
+    @unittest.skip("ColQwen2Processor can only process one of text or images at a time")
+    def test_apply_chat_template_literal_image_token(self):
+        pass
+
     @unittest.skip("ColQwen2Processor adds a prefix and suffix to the text")
     def test_tokenizer_defaults(self):
         pass

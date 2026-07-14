@@ -148,7 +148,11 @@ AudioInput = Union[np.ndarray, "torch.Tensor", list[np.ndarray], list["torch.Ten
 # occurrences into the reserved Private Use Area block below before rendering, and tokenizers turn those spans back
 # into plain text when encoding, so they never map to a special token id. The mapping is per-character, so it is
 # length-preserving and character offsets into the rendered prompt stay valid.
-LITERAL_TEXT_ESCAPE_BASE = 0xE000
+#
+# The block lives in Supplementary Private Use Area-A rather than in the much more common Private Use Area of the
+# Basic Multilingual Plane, which is not free: CANINE spells its special tokens out as the codepoints U+E000 and
+# following (see `models/canine/tokenization_canine.py`).
+LITERAL_TEXT_ESCAPE_BASE = 0xF0000
 _re_escaped_literal_text = re.compile(f"[{chr(LITERAL_TEXT_ESCAPE_BASE)}-{chr(LITERAL_TEXT_ESCAPE_BASE + 0xFF)}]+")
 
 
