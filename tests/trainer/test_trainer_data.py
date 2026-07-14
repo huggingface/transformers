@@ -35,6 +35,7 @@ from transformers import (
 from transformers.data.data_collator import default_data_collator as _default_data_collator
 from transformers.modeling_outputs import SequenceClassifierOutput
 from transformers.testing_utils import (
+    CaptureLogger,
     TestCasePlus,
     backend_device_count,
     require_accelerate,
@@ -549,7 +550,6 @@ class TrainerSamplerTest(unittest.TestCase):
                 effective_batch_size=effective_batch_size,
                 dp_size=dp_size,
                 grad_accum=grad_accum,
-                micro_batch_size=micro_batch_size,
                 rank=rank,
             )
             batches = list(sampler)
@@ -564,7 +564,6 @@ class TrainerSamplerTest(unittest.TestCase):
                 effective_batch_size=effective_batch_size,
                 dp_size=dp_size,
                 grad_accum=grad_accum,
-                micro_batch_size=micro_batch_size,
                 rank=rank,
             )
             for batch in sampler:
@@ -584,7 +583,6 @@ class TrainerSamplerTest(unittest.TestCase):
                 effective_batch_size=effective_batch_size,
                 dp_size=dp_size,
                 grad_accum=grad_accum,
-                micro_batch_size=2,
                 rank=r,
             )
             for r in range(dp_size)
@@ -618,7 +616,6 @@ class TrainerSamplerTest(unittest.TestCase):
                 effective_batch_size=effective_batch_size,
                 dp_size=dp_size,
                 grad_accum=grad_accum,
-                micro_batch_size=2,
                 rank=r,
             )
             for r in range(dp_size)
@@ -649,7 +646,6 @@ class TrainerSamplerTest(unittest.TestCase):
                 effective_batch_size=effective_batch_size,
                 dp_size=dp_size,
                 grad_accum=grad_accum,
-                micro_batch_size=1,
                 rank=rank,
                 max_tokens=max_tokens,
             )
@@ -659,6 +655,46 @@ class TrainerSamplerTest(unittest.TestCase):
                     padded = len(batch) * max_len
                     self.assertLessEqual(padded, max_tokens + max(lengths),
                                          f"bs={len(batch)}, max_len={max_len}, padded={padded}")
+
+    def test_batch_rebalance_max_tokens_infeasible_no_data_loss(self):
+        """
+        Test that when `max_tokens` cannot be satisfied for a group (no other group has spare
+        capacity to donate/receive samples), the sampler does not silently drop samples. Instead it
+        should keep all samples (falling back to exceeding `max_tokens` for that group) and emit a
+        warning via `logger.warning_once`.
+
+        Regression test for a bug where `counts[gi] -= 1` was applied unconditionally before checking
+        whether any other group could absorb the extra sample, causing `sum(counts) < n` and therefore
+        silently dropping samples from the batch.
+        """
+        # K = dp_size * grad_accum = 1, so the "donor" search loop (`for r in range(K): if r != gi`)
+        # can never find a candidate — this deterministically reproduces the infeasible case.
+        lengths = [100] * 10 + [5000] * 2  # 12 samples
+        dp_size = 1
+        grad_accum = 1
+        effective_batch_size = 12
+        max_tokens = 1  # impossibly small, guarantees the limit can never be satisfied
+
+        sampler = BatchRebalanceSampler(
+            lengths=lengths,
+            effective_batch_size=effective_batch_size,
+            dp_size=dp_size,
+            grad_accum=grad_accum,
+            rank=0,
+            max_tokens=max_tokens,
+        )
+
+        from transformers.trainer_pt_utils import logger as trainer_pt_utils_logger
+
+        with CaptureLogger(trainer_pt_utils_logger) as cl:
+            all_indices = []
+            for batch in sampler:
+                all_indices.extend(batch)
+
+        # No samples should have been dropped.
+        self.assertEqual(sorted(all_indices), list(range(len(lengths))))
+        # A warning should have been emitted since the `max_tokens` constraint could not be satisfied.
+        self.assertIn("max_tokens", cl.out)
 
     def test_batch_rebalance_deterministic(self):
         """Test that same seed produces same results, and different ranks produce same partition."""
@@ -671,18 +707,18 @@ class TrainerSamplerTest(unittest.TestCase):
         for rank in range(dp_size):
             s1 = BatchRebalanceSampler(
                 lengths=lengths, effective_batch_size=effective_batch_size,
-                dp_size=dp_size, grad_accum=grad_accum, micro_batch_size=1,
+                dp_size=dp_size, grad_accum=grad_accum,
                 rank=rank, seed=42,
             )
             s2 = BatchRebalanceSampler(
                 lengths=lengths, effective_batch_size=effective_batch_size,
-                dp_size=dp_size, grad_accum=grad_accum, micro_batch_size=1,
+                dp_size=dp_size, grad_accum=grad_accum,
                 rank=rank, seed=42,
             )
             self.assertEqual(list(s1), list(s2))
 
     def test_batch_rebalance_cost_fn(self):
-        """Test that custom cost_fn is used instead of default cost model."""
+        """Test that a custom `cost_fn` overrides the default cost model."""
         lengths = [100, 200, 500, 1000, 2000, 3000, 50, 150]
 
         def my_cost(bs, max_len):
@@ -690,25 +726,22 @@ class TrainerSamplerTest(unittest.TestCase):
 
         sampler_default = BatchRebalanceSampler(
             lengths=lengths, effective_batch_size=8, dp_size=2, grad_accum=2,
-            micro_batch_size=1, rank=0, alpha=0.001,
+            rank=0, alpha=0.001,
         )
         sampler_custom = BatchRebalanceSampler(
             lengths=lengths, effective_batch_size=8, dp_size=2, grad_accum=2,
-            micro_batch_size=1, rank=0, cost_fn=my_cost,
+            rank=0, cost_fn=my_cost,
         )
-        # Results should differ with different cost models
-        # (but both should be valid partitions)
-        result_default = list(sampler_default)
-        result_custom = list(sampler_custom)
 
-        # Both should cover the same total indices
-        all_default = set()
-        all_custom = set()
-        for batch in result_default:
-            all_default.update(batch)
-        for batch in result_custom:
-            all_custom.update(batch)
-        self.assertEqual(all_default, all_custom)
+        for bs, max_len in [(1, 100), (2, 500), (4, 2000), (8, 3000)]:
+            # Default sampler should use the built-in cost formula, not `my_cost`.
+            self.assertEqual(
+                sampler_default._cost(bs, max_len),
+                0.0 + bs * max_len + 0.001 * bs * max_len * max_len,
+            )
+            # Custom sampler should delegate directly to `my_cost`, overriding
+            # `alpha`/`intercept` entirely.
+            self.assertEqual(sampler_custom._cost(bs, max_len), my_cost(bs, max_len))
 
 
 # ---------------------------------------------------------------------------

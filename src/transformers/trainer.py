@@ -1074,7 +1074,6 @@ class Trainer:
                 effective_batch_size=effective_batch_size,
                 dp_size=world_size,
                 grad_accum=grad_accum,
-                micro_batch_size=micro_batch_size,
                 rank=rank,
                 alpha=self.args.batch_rebalance_alpha,
                 max_tokens=self.args.batch_rebalance_max_tokens,

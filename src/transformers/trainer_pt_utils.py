@@ -644,7 +644,7 @@ class BatchRebalanceSampler(Sampler):
     Sampler that balances sequence length cost across DP ranks while minimizing padding waste within each
     micro-batch. Designed for distributed training with variable-length sequences (e.g., LLM fine-tuning).
 
-    Uses a cost-aware rebalance algorithm ("Poorman's Batch Rebalance") that:
+    Uses a cost-aware rebalance algorithm ("Poor Man's Batch Rebalance") that:
     1. For each optimizer step, collects `effective_batch_size` samples (shuffled, same set on all ranks
        via shared seed — no cross-rank communication needed).
     2. Sorts samples by length descending.
@@ -677,13 +677,11 @@ class BatchRebalanceSampler(Sampler):
         lengths (`list[int]`):
             Token lengths of all samples in the dataset.
         effective_batch_size (`int`):
-            Total samples per optimizer step (`micro_batch_size * grad_accum * world_size`).
+            Total samples per optimizer step (`dp_size * grad_accum * per-group batch size`).
         dp_size (`int`):
             Data parallel size (number of ranks).
         grad_accum (`int`):
             Gradient accumulation steps.
-        micro_batch_size (`int`):
-            Minimum micro-batch size per rank (actual may be larger for short sequences).
         shuffle (`bool`, *optional*, defaults to `True`):
             Whether to shuffle samples each epoch.
         seed (`int`, *optional*, defaults to 42):
@@ -712,7 +710,6 @@ class BatchRebalanceSampler(Sampler):
     ...     effective_batch_size=16,
     ...     dp_size=4,
     ...     grad_accum=2,
-    ...     micro_batch_size=2,
     ...     rank=0,
     ... )
     >>> for batch_indices in sampler:
@@ -727,7 +724,6 @@ class BatchRebalanceSampler(Sampler):
         effective_batch_size: int,
         dp_size: int,
         grad_accum: int,
-        micro_batch_size: int,
         shuffle: bool = True,
         seed: int = 42,
         rank: int = 0,
@@ -745,7 +741,6 @@ class BatchRebalanceSampler(Sampler):
         self.effective_batch_size = effective_batch_size
         self.dp_size = dp_size
         self.grad_accum = grad_accum
-        self.min_micro_batch_size = micro_batch_size
         self.shuffle = shuffle
         self.seed = seed
         self.rank = rank
@@ -856,13 +851,24 @@ class BatchRebalanceSampler(Sampler):
                 while counts[gi] > min_per_group + 1:
                     gs = group_start_index(counts, gi)
                     if not self._within_token_limit(counts[gi], sorted_pairs, gs):
-                        counts[gi] -= 1
+                        donor_found = False
                         for r in range(K):
                             if r != gi:
                                 gs_r = group_start_index(counts, r)
                                 if self._within_token_limit(counts[r] + 1, sorted_pairs, gs_r):
+                                    counts[gi] -= 1
                                     counts[r] += 1
+                                    donor_found = True
                                     break
+                        if not donor_found:
+                            logger.warning_once(
+                                "BatchRebalanceSampler: unable to satisfy `max_tokens` constraint for one or more "
+                                "groups in this batch — no other group has spare capacity to absorb the excess "
+                                "sample(s). Falling back to leaving the group over the limit for this batch rather "
+                                "than dropping samples. Consider increasing `batch_rebalance_max_tokens` or "
+                                "decreasing the effective batch size if this occurs frequently."
+                            )
+                            break
                     else:
                         break
 
