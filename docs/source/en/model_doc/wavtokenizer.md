@@ -60,8 +60,8 @@ with torch.no_grad():
     reconstruction = model.decode(audio_codes).audio_values
 ```
 
-Note that decoded audio is always returned in `float32` (the ISTFT head upcasts internally), and decoding requires
-at least 2 codes (audio longer than one hop, i.e. > 25 ms at 40 tokens/s).
+Decoded audio is always returned in `float32` (the ISTFT head upcasts internally). A single code is supported and
+decodes to one hop (600 samples, or 25 ms at 40 tokens/s).
 
 > [!WARNING]
 > Load and run the tokenizer in `float32` (the default). Code assignment is a nearest-neighbour argmin over the
