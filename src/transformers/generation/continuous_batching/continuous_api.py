@@ -739,9 +739,9 @@ class ContinuousBatchingManager:
         request_id: str | None = None,
         max_new_tokens: int | None = None,
         streaming: bool = False,
+        multimodal_inputs: dict[str, Any] | None = None,
         record_timestamps: bool = False,
         eos_token_id: int | list[int] | None = None,
-        multimodal_inputs: dict[str, Any] | None = None,
         **logit_processor_kwargs: Any,
     ) -> str | None:
         """Add a new generation request to the queue. If the process is not a TP driver, this is a no-op.
@@ -751,9 +751,9 @@ class ContinuousBatchingManager:
             request_id: Optional custom request ID (auto-generated if None)
             max_new_tokens: Maximum number of new tokens to generate
             streaming: Whether to stream tokens as they're generated
+            multimodal_inputs: Multimodal inputs returned by the processor. Tensors are assumed to be device-side.
             record_timestamps: Whether to record timestamps for each generated token
             eos_token_id: End-of-sequence token ID(s)
-            multimodal_inputs: Multimodal inputs returned by the processor. Tensors are assumed to be device-side.
             logit_processor_kwargs: Keyword arguments for the logits processor.
 
         Returns:
@@ -815,8 +815,8 @@ class ContinuousBatchingManager:
         inputs: list[list[int]],
         max_new_tokens: int | None = None,
         streaming: bool = False,
-        record_timestamps: bool = False,
         multimodal_inputs: list[dict[str, Any] | None] | None = None,
+        record_timestamps: bool = False,
         **logit_processor_kwargs: Any,
     ) -> list[str]:
         """Utility function to batch `add_request` and return their IDs. Check its documentation for more details."""
@@ -1197,9 +1197,9 @@ class ContinuousMixin:
     def generate_batch(
         self,
         inputs: list[list[int]],
-        multimodal_inputs: list[dict[str, Any] | None] | None = None,
         generation_config: GenerationConfig | None = None,
         continuous_batching_config: ContinuousBatchingConfig | None = None,
+        multimodal_inputs: list[dict[str, Any] | None] | None = None,
         record_timestamps: bool = False,
         progress_bar: bool = True,
         persistent_manager: bool = False,
@@ -1210,9 +1210,9 @@ class ContinuousMixin:
 
         Args:
             inputs: List of input token sequences (prompts)
-            multimodal_inputs: List of multimodal inputs returned by the processor. Tensors are assumed to be device-side.
             generation_config: Optional generation configuration
             continuous_batching_config: Optional continuous batching configuration
+            multimodal_inputs: List of multimodal inputs returned by the processor. Tensors are assumed to be device-side.
             record_timestamps: If set to true, the requests will have a timestamp for each token generated
             progress_bar: If set to true, a progress bar will be displayed
             persistent_manager: whether to persist the manager after the generation is finished. Default is False.
