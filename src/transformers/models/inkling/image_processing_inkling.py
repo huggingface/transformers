@@ -67,7 +67,7 @@ class InklingImageProcessor(TorchvisionBackend):
     do_rescale = True
     do_normalize = True
     size = {"height": 40, "width": 40}
-    rescale_image_frac = 2.0
+    rescale_image_frac = None
     rescale_image_max_upscaled_long_edge = 2048
     valid_kwargs = InklingImageProcessorKwargs
 
