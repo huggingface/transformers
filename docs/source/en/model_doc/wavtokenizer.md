@@ -63,6 +63,11 @@ with torch.no_grad():
 Note that decoded audio is always returned in `float32` (the ISTFT head upcasts internally), and decoding requires
 at least 2 codes (audio longer than one hop, i.e. > 25 ms at 40 tokens/s).
 
+> [!WARNING]
+> Load and run the tokenizer in `float32` (the default). Code assignment is a nearest-neighbour argmin over the
+> codebook, so half precision (`dtype=torch.bfloat16`/`float16`) flips a large fraction of codes near decision
+> boundaries (~66% disagreement vs. `float32` measured in bf16) and breaks reproducible tokenization.
+
 ## WavTokenizerConfig
 
 [[autodoc]] WavTokenizerConfig

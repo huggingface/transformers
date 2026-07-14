@@ -571,6 +571,14 @@ class WavTokenizerModel(WavTokenizerPreTrainedModel):
             Input audio waveform. Arbitrary non-zero lengths are supported; the encoder pads internally and emits
             `ceil(sequence_length / hop_length)` codes. Note that decoding requires at least 2 codes (see
             [`~WavTokenizerModel.decode`]).
+
+            <Tip warning={true}>
+
+            Run the model in `float32` for reproducible codes: code assignment is a nearest-neighbour argmin over
+            codebook distances, and half precision (`bfloat16`/`float16`) perturbs the embeddings enough to flip a
+            large fraction of codes near decision boundaries.
+
+            </Tip>
         padding_mask (`torch.Tensor` of shape `(batch_size, sequence_length)` or `(batch_size, 1, sequence_length)`, *optional*):
             Padding mask used to pad `input_values`; used to compute `audio_codes_mask`.
         """
