@@ -1054,7 +1054,10 @@ def is_flash_attn_2_available(kernels_fallback_ok: bool = False) -> bool:
 
     # Only allow versions >= 2.3.3 to avoid very old legacy workarounds that are now 2+ years old
     if is_available and (is_torch_cuda_available() or is_torch_mlu_available()):
-        return version.parse(flash_attn_version) >= version.parse("2.3.3")
+        try:
+            return version.parse(flash_attn_version) >= version.parse("2.3.3")
+        except packaging.version.InvalidVersion:
+            return False
 
     # If the kernels fallback is allowed, check if it is available
     if kernels_fallback_ok and is_kernels_available():
