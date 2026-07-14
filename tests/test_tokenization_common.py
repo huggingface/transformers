@@ -1438,6 +1438,85 @@ Hey how are you doing"""  # noqa: W293
                 )
 
     @require_jinja
+    def test_chat_template_return_assistant_tokens_mask_edge_cases(self):
+        # Regression tests for cases where char_to_token(assistant_end_char - 1) is falsy without
+        # the assistant span being truncated: the last assistant token is at index 0, or the span
+        # ends on a char with no aligned token (e.g. whitespace stripped by the pre-tokenizer). In
+        # both cases the mask must stop at the last real assistant token, not run to the end of the
+        # sequence and wrongly cover the following user turn.
+
+        # Case A: the assistant turn is the first content, so its last token is at index 0.
+        assistant_first_template = (
+            "{% for message in messages %}"
+            "{% if message['role'] == 'assistant' %}"
+            "{% generation %}{{ message['content'] }}{% endgeneration %}"
+            "{% else %}{{ '<|user|>' + message['content'] }}{% endif %}"
+            "{% endfor %}"
+        )
+        conversation_a = [
+            {"role": "assistant", "content": "A"},
+            {"role": "user", "content": "user message"},
+        ]
+
+        # Case B: the assistant generation block ends with a trailing space.
+        trailing_space_template = (
+            "{% for message in messages %}"
+            "{% if message['role'] == 'assistant' %}"
+            "{% generation %}{{ message['content'] + ' ' }}{% endgeneration %}"
+            "{% else %}{{ message['content'] }}{% endif %}"
+            "{% endfor %}"
+        )
+        conversation_b = [
+            {"role": "assistant", "content": "hello world"},
+            {"role": "user", "content": "followup question here"},
+        ]
+
+        for tokenizer, pretrained_name, _ in self.tokenizers_list:
+            with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
+                tokenizer_r = self.get_tokenizer(pretrained_name)
+                if tokenizer_r.backend != "tokenizers":
+                    self.skipTest(reason="Custom backend tokenizer")
+
+                # `assistant_content` is the assistant text that must be masked, and `user_content` is a
+                # slice of the following user turn that must not be masked. For the trailing-space case
+                # we deliberately pick a user slice past the first user word: byte-level BPE tokenizers
+                # merge the stripped trailing space into the first user token, so that boundary token is
+                # legitimately ambiguous, but everything after it must stay unmasked.
+                for template, conversation, assistant_content, user_content in (
+                    (assistant_first_template, conversation_a, "A", "user message"),
+                    (trailing_space_template, conversation_b, "hello world", "question here"),
+                ):
+                    output = tokenizer_r.apply_chat_template(
+                        conversation,
+                        chat_template=template,
+                        tokenize=True,
+                        return_assistant_tokens_mask=True,
+                        return_dict=True,
+                    )
+                    chat_string = tokenizer_r.apply_chat_template(conversation, tokenize=False, chat_template=template)
+                    assistant_masks = output["assistant_masks"]
+
+                    assistant_start = output.char_to_token(chat_string.index(assistant_content))
+                    assistant_end = output.char_to_token(
+                        chat_string.index(assistant_content) + len(assistant_content) - 1
+                    )
+                    user_start = output.char_to_token(chat_string.index(user_content))
+                    user_end = output.char_to_token(chat_string.index(user_content) + len(user_content) - 1)
+                    if None in (assistant_start, assistant_end, user_start, user_end):
+                        continue
+
+                    # The assistant content is masked ...
+                    self.assertEqual(
+                        assistant_masks[assistant_start : assistant_end + 1],
+                        [1] * (assistant_end - assistant_start + 1),
+                    )
+                    # ... and the following user turn is not.
+                    self.assertEqual(
+                        assistant_masks[user_start : user_end + 1],
+                        [0] * (user_end - user_start + 1),
+                    )
+
+    @require_jinja
     def test_continue_final_message(self):
         dummy_template = """
         {%- for message in messages %}

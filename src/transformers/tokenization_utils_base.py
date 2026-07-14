@@ -3153,11 +3153,22 @@ class PreTrainedTokenizerBase(PushToHubMixin):
                         current_mask = [0] * len(input_ids[i])
                         for assistant_start_char, assistant_end_char in generation_indices[i]:
                             start_token = out.char_to_token(i, assistant_start_char)
-                            end_token = out.char_to_token(i, assistant_end_char - 1)
                             if start_token is None:
                                 # start_token is out of bounds maybe due to truncation.
                                 break
-                            for token_id in range(start_token, end_token + 1 if end_token else len(input_ids[i])):
+                            # char_to_token can return None when a char has no aligned token (e.g. a
+                            # trailing space stripped by the pre-tokenizer), so scan backwards for the
+                            # last char in the span that does map to a token. We cannot rely on the
+                            # truthiness of end_token because index 0 is a valid token.
+                            end_token = None
+                            for char_idx in range(assistant_end_char - 1, assistant_start_char - 1, -1):
+                                end_token = out.char_to_token(i, char_idx)
+                                if end_token is not None:
+                                    break
+                            if end_token is None:
+                                # No token in the span is in bounds, the span was truncated: mask to the end.
+                                end_token = len(input_ids[i]) - 1
+                            for token_id in range(start_token, end_token + 1):
                                 current_mask[token_id] = 1
                         assistant_masks.append(current_mask)
 
