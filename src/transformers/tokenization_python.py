@@ -645,9 +645,7 @@ class PythonBackend(PreTrainedTokenizerBase):
             for chunk, is_literal in split_escaped_literal_text(text):
                 if not chunk:
                     continue
-                tokens.extend(
-                    self.tokenize(chunk, split_special_tokens=is_literal or split_special_tokens, **kwargs)
-                )
+                tokens.extend(self.tokenize(chunk, split_special_tokens=is_literal or split_special_tokens, **kwargs))
             return tokens
 
         text, kwargs = self.prepare_for_tokenization(text, **kwargs)
