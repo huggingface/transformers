@@ -21,7 +21,7 @@ from transformers.cli.chat import new_chat_history, parse_generate_flags, save_c
 def test_help(cli):
     output = cli("chat", "--help")
     assert output.exit_code == 0
-    assert "Chat with a model from the command line." in output.output
+    assert "Chat with a model from the command line" in output.output
 
 
 def test_save_and_clear_chat():
