@@ -445,7 +445,7 @@ class AnyToAnyPipeline(Pipeline):
 
         # Decode inputs and outputs the same way to remove input text from generated text if present
         skip_special_tokens = skip_special_tokens if skip_special_tokens is not None else True
-        if getattr(self.tokenizer, "response_template", None) or getattr(self.tokenizer, "response_schema", None):
+        if getattr(self.tokenizer, "response_template", None):
             skip_special_tokens = False
         generation_mode = postprocess_kwargs["generation_mode"] or "text"
         if generation_mode == "image" and hasattr(self.model, "decode_image_tokens"):
@@ -500,9 +500,6 @@ class AnyToAnyPipeline(Pipeline):
                             # templates often pre-write part of the assistant message (e.g. an
                             # opening <think> tag), which affects parsing.
                             assistant_message = self.tokenizer.parse_response(generated_text, prefix=decoded_input)
-                        elif getattr(self.tokenizer, "response_schema", None) is not None:
-                            # Legacy schemas parse the generated text alone and don't support `prefix`
-                            assistant_message = self.tokenizer.parse_response(generated_text)
                         else:
                             assistant_message = {"role": "assistant", "content": generated_text}
                         generated_text = list(prompt_text.messages) + [assistant_message]
