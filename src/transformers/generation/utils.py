@@ -1776,7 +1776,8 @@ class GenerationMixin(ContinuousMixin):
         # `cache_implementation="hybrid"` (the static sliding window cache). For these models, we now want to use
         # the dynamic sliding window cache by default, so we UNSET `cache_implementation` if it is a default value.
         # (if we're inside this branch, then it is because we're using default values from the Hub)
-        if generation_config.cache_implementation == "hybrid":
+        # Only unset when the value comes from the model's default config, not when explicitly passed by the user.
+        if "cache_implementation" not in kwargs and generation_config.cache_implementation == "hybrid":
             generation_config.cache_implementation = None
 
         # It doesn't make sense to allow kwargs and `generation_config`, that should be mutually exclusive
