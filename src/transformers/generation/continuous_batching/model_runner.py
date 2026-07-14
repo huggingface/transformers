@@ -106,9 +106,9 @@ class ModelRunner:
 
         # Choose feature extractor based on modality
         if self.cache.embeddings_cache.modality == "image":
-            feature_extractor = model.get_image_feature_extractor
+            feature_extractor = model.get_image_features
         elif self.cache.embeddings_cache.modality == "audio":
-            feature_extractor = model.get_audio_feature_extractor
+            feature_extractor = model.get_audio_features
         else:
             raise ValueError(f"Invalid modality: {self.cache.embeddings_cache.modality}")
 
@@ -121,11 +121,11 @@ class ModelRunner:
                 # Run feature extractor and catch any errors
                 try:
                     encoding_output = feature_extractor(**encoder_kw)
+                    mm_embeddings = self.cache.embeddings_cache.extract_mm_embeddings(encoding_output)
                 except Exception as e:
                     req_ids_with_errors[request_id] = e
                     continue
                 # If feature extractor ran successfully, extract and store multimodal embeddings
-                mm_embeddings = self.cache.embeddings_cache.extract_mm_embeddings(encoding_output)
                 self.cache.embeddings_cache.store_mm_embeddings(request_id, mm_embeddings)
         return req_ids_with_errors
 

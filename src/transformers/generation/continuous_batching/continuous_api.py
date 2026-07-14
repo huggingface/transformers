@@ -517,7 +517,7 @@ class ContinuousBatchProcessor:
             # Handle any errors that occurred during encoding
             if req_ids_with_errors:
                 for req_id, exception in req_ids_with_errors.items():
-                    self._handle_request_error(exception, req_id)
+                    self._handle_request_error(exception, self.scheduler.active_requests[req_id])
 
         # This takes care of the forward pass, logits processing, and sampling. After this returns, the compute is
         # scheduled on the device's compute stream, but may not have finished yet.

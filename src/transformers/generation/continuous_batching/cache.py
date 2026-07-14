@@ -620,7 +620,10 @@ class PagedAttentionMemoryHandler:
         self.num_output_rows = 2 if continuous_batching_config.return_logprobs else 1
         # This account for the set of 2 IOs if async batching is used
         self.io_multiplier = 2 if continuous_batching_config.use_async_batching else 1
+        # Calculate available memory for cache allocation (less if there is an encoder cache)
         self.available_memory = self.get_available_memory()
+        if self.is_multimodal_model:  # embeddings_cache: [max(M, 16384), hidden_size] * activation_dtype
+            self.available_memory -= 16384 * self.text_config.hidden_size * self.activation_dtype.itemsize
 
     @property
     def activation_peak(self) -> dict[str, tuple[int, ...]]:
