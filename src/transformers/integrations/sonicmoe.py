@@ -22,6 +22,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
+from typing import Any
 
 import torch
 
@@ -37,7 +38,7 @@ logger = logging.get_logger(__name__)
 class SonicMoE:
     """Entry points exposed by the `kernels-community/sonic-moe` kernel."""
 
-    activation_type_enum: type
+    activation_type_enum: Any  # an Enum defined kernel-side
     moe_general_routing_inputs: Callable
 
 
@@ -134,17 +135,17 @@ class SonicMoeHandle:
             # Guard only against import errors: other errors are unexpected, so we raise them
             except ImportError as e:
                 self._loading_error = e
-                self._loaded = False
+                self._loaded = True
                 raise
         # Otherwise, re-raise the loading error if it occurred the first time
         if self._loading_error is not None:
             raise ImportError(
                 "Tried calling sonicmoe_experts_forward but the kernel failed to load on the first call. You can call "
-                "`reset on the handle if you want to retry loading the kernel"
+                "`reset` on the handle if you want to retry loading the kernel"
             ) from self._loading_error
         # Sanity check to see if the kernel was loaded successfully
         elif self._cached_sonicmoe is None:
-            raise RuntimeError("sonicmoe kernel was marked has loaded but cannot be found. This should never happen.")
+            raise RuntimeError("sonicmoe kernel was marked as loaded but cannot be found. This should never happen.")
         return self._cached_sonicmoe
 
     @property
@@ -177,7 +178,7 @@ class SonicMoeHandle:
         activation_hf = getattr(module.config, "hidden_act", "silu").lower()
         activation_type = self.ACT_MAP.get(activation_hf, "SWIGLU")
 
-        # Prepare auxilary inputs
+        # Prepare auxiliary inputs
         device = hidden_states.device
         num_top_k = top_k_index.size(-1)
         num_tokens = hidden_states.size(0)
@@ -252,7 +253,7 @@ class SonicMoeHandle:
         activation_type = getattr(
             sonicmoe.activation_type_enum,
             activation_type,
-            sonicmoe.activation_type_enum.SWIGLU  # type: ignore
+            sonicmoe.activation_type_enum.SWIGLU
         )
 
         output, _ = sonicmoe.moe_general_routing_inputs(
