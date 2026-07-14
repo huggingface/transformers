@@ -386,12 +386,14 @@ def _run_executorch_program(program_manager, inputs):
 
 
 # ExecuTorch runtime error codes that mean "the export is valid (it produced a loadable program) but
-# ExecuTorch's own portable runtime can't service it" — a runtime limitation, not a transformers
-# export defect (which surfaces earlier as a `torch.export` error or later as an output mismatch).
-# Load: 0x14 missing portable kernel, 0x21 arena that can't be allocated. Execute: 0x12 portable-kernel
-# InvalidArgument (constant_pad_nd/convolution/upsample_aa out-tensor sizing), 0x1 XNNPACK delegate.
-_ET_LOAD_LIMIT_CODES = {"14", "21"}
-_ET_EXECUTE_LIMIT_CODES = {"0x12", "0x1"}
+# ExecuTorch's own portable runtime / XNNPACK backend can't service it" — a runtime limitation, not a
+# transformers export defect (which surfaces earlier as a `torch.export` error or later as an output
+# mismatch). Load: 0x14 missing portable kernel, 0x21 arena can't be allocated, 0x1 XNNPACK partition
+# won't compile (`xnn_status_unsupported_parameter`). Execute: 0x12 portable-kernel InvalidArgument
+# (constant_pad_nd/convolution/upsample_aa out-tensor sizing), 0x1 XNNPACK delegate failure, 0x10
+# XNNPACK delegate can't resize a static tensor to the runtime shape.
+_ET_LOAD_LIMIT_CODES = {"1", "14", "21"}
+_ET_EXECUTE_LIMIT_CODES = {"0x1", "0x10", "0x12"}
 
 
 def _is_executorch_runtime_limit(exc):
