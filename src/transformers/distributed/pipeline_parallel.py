@@ -60,25 +60,21 @@ class PipelineStage:
         self.pp_next_rank = pp_next_rank
 
     @classmethod
-    def from_device_mesh(cls, device_mesh) -> PipelineStage | None:
-        if device_mesh is None:
+    def from_device_mesh(cls, pp_mesh) -> PipelineStage | None:
+        if pp_mesh is None:
             return None
-        mesh_dim_names = getattr(device_mesh, "mesh_dim_names", None)
-        if mesh_dim_names is None or "pp" not in mesh_dim_names or device_mesh.size() <= 1:
+        if pp_mesh.ndim != 1 or pp_mesh.size() <= 1:
             return None
 
-        pp_rank = device_mesh.get_local_rank()
-        pp_size = device_mesh.size()
-        pp_group = device_mesh.get_group() if hasattr(device_mesh, "get_group") else None
-        return cls(
-            pp_rank=pp_rank,
-            pp_size=pp_size,
-            pp_group=pp_group,
-            pp_is_first_stage=pp_rank == 0,
-            pp_is_last_stage=pp_rank == pp_size - 1,
-            pp_prev_rank=pp_rank - 1 if pp_rank > 0 else None,
-            pp_next_rank=pp_rank + 1 if pp_rank < pp_size - 1 else None,
-        )
+        pp_rank = pp_mesh.get_local_rank()
+        pp_size = pp_mesh.size()
+        pp_group = pp_mesh.get_group()
+        pp_is_first_stage = pp_rank == 0
+        pp_is_last_stage = pp_rank == pp_size - 1
+        pp_prev_rank = pp_rank - 1 if pp_rank > 0 else None
+        pp_next_rank = pp_rank + 1 if pp_rank < pp_size - 1 else None
+
+        return cls(pp_rank, pp_size, pp_group, pp_is_first_stage, pp_is_last_stage, pp_prev_rank, pp_next_rank)
 
     def comm_device(self, device: torch.device) -> torch.device:
         """Device used for collectives (gloo requires CPU tensors)."""
@@ -159,9 +155,9 @@ class PipelineStage:
         return None
 
 
-def apply_pipeline_parallelism(model: nn.Module, device_mesh: torch.distributed.device_mesh.DeviceMesh) -> nn.Module:
+def apply_pipeline_parallelism(model: nn.Module, pp_mesh: torch.distributed.device_mesh.DeviceMesh) -> nn.Module:
     """Naive even split of ``base_model.layers`` across PP ranks."""
-    stage = PipelineStage.from_device_mesh(device_mesh)
+    stage = PipelineStage.from_device_mesh(pp_mesh)
     if stage is None:
         return model
 

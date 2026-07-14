@@ -14,6 +14,7 @@
 import os
 import socket
 import tempfile
+import unittest
 from contextlib import contextmanager
 
 import torch
@@ -29,24 +30,27 @@ from transformers.core_model_loading import convert_and_load_state_dict_in_model
 from transformers.testing_utils import TestCasePlus, is_pipeline_parallel_test, require_torch_greater_or_equal
 from transformers.utils.loading_report import log_state_dict_report
 
-class MockDeviceMesh:
-    mesh_dim_names = ("pp",)
-
-    def __init__(self, world_size, rank):
-        self.world_size = world_size
-        self.rank = rank
-
-    def size(self):
-        return self.world_size
-
-    def get_local_rank(self):
-        return self.rank
 
 def _find_free_port():
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         s.bind(("localhost", 0))
         return s.getsockname()[1]
+
+
+def init_process_group(rank, pp_size, port):
+    os.environ.update(
+        {
+            "WORLD_SIZE": str(pp_size),
+            "RANK": str(rank),
+            "LOCAL_RANK": str(rank),
+            "MASTER_ADDR": "localhost",
+            "MASTER_PORT": str(port),
+        }
+    )
+    dist.init_process_group(backend="gloo", rank=rank, world_size=pp_size)
+    return dist.init_device_mesh("cpu", (pp_size,), mesh_dim_names=("pp",))
+
 
 @contextmanager
 def _shared_model_dir(rank):
@@ -62,6 +66,7 @@ def _shared_model_dir(rank):
     finally:
         if rank == 0 and tmpdir is not None:
             tmpdir.cleanup()
+
 
 def _verify_pp_split(model):
     stage = PipelineStage.from_device_mesh(model._device_mesh)
@@ -90,17 +95,58 @@ def _verify_pp_split(model):
         elif name.startswith(("model.norm.", "lm_head.")):
             assert pp_rank == pp_size - 1, f"{name} should only exist on last rank"
 
+
+def _pp_split(rank, config_dict, pp_size, port):
+    pp_mesh = init_process_group(rank, pp_size, port)
+    config = Qwen2Config.from_dict(config_dict)
+    model = Qwen2ForCausalLM(config)
+    model = apply_pipeline_parallelism(model, pp_mesh)
+    model._device_mesh = pp_mesh
+    _verify_pp_split(model)
+    dist.barrier()
+    dist.destroy_process_group()
+
+
+def _pp_load_report(rank, config_dict, pp_size, port):
+    pp_mesh = init_process_group(rank, pp_size, port)
+    config = Qwen2Config.from_dict(config_dict)
+    model = Qwen2ForCausalLM(config)
+    model = apply_pipeline_parallelism(model, pp_mesh)
+    model._device_mesh = pp_mesh
+
+    if rank == 0:
+        full_model = Qwen2ForCausalLM(config)
+        load_config = LoadStateDictConfig()
+        loading_info, _ = convert_and_load_state_dict_in_model(model, full_model.state_dict(), load_config)
+
+        report = loading_info.create_loading_report(model)
+        assert report is not None
+        assert "OWNED" in report
+        assert "SKIPPED" in report
+        assert "PP rank 0" in report
+        assert "PP rank 1" in report
+        assert "model.embed_tokens.weight" in report
+        assert "lm_head.weight" in report
+        assert loading_info.unexpected_keys == set()
+
+        with unittest.TestCase().assertLogs("transformers.utils.loading_report", level="WARNING") as logs:
+            log_state_dict_report(model, "/tmp/pp-test", True, loading_info)
+
+        log_text = "\n".join(logs.output)
+        assert "LOAD REPORT" in log_text
+        assert "OWNED" in log_text
+        assert "SKIPPED" in log_text
+        assert "PP rank 0" in log_text
+        assert "PP rank 1" in log_text
+        assert "model.layers.{0, 1, 2, 3, 4, 5}" in log_text
+        assert "model.layers.{6, 7, 8, 9, 10, 11}" in log_text
+
+    dist.barrier()
+    dist.destroy_process_group()
+
+
 def _pp_weight_loading(rank, config_dict, pp_size, port):
-    os.environ.update(
-        {
-            "WORLD_SIZE": str(pp_size),
-            "RANK": str(rank),
-            "LOCAL_RANK": str(rank),
-            "MASTER_ADDR": "localhost",
-            "MASTER_PORT": str(port),
-        }
-    )
-    dist.init_process_group(backend="gloo", rank=rank, world_size=pp_size)
+    init_process_group(rank, pp_size, port)
     config = Qwen2Config.from_dict(config_dict)
 
     with _shared_model_dir(rank) as model_dir:
@@ -121,7 +167,7 @@ def _pp_weight_loading(rank, config_dict, pp_size, port):
         pp_model = AutoModelForCausalLM.from_pretrained(
             model_dir,
             distributed_config=DistributedConfig(pp_size=pp_size),
-            tie_word_embeddings=False, #TODO(3outeille): should test with tie_word_embeddings=True later
+            tie_word_embeddings=False,  # TODO(3outeille): should test with tie_word_embeddings=True later
             torch_dtype=torch.float32,
         )
         dist.barrier()
@@ -130,9 +176,7 @@ def _pp_weight_loading(rank, config_dict, pp_size, port):
         _verify_pp_split(pp_model)
 
         # Check that each local weight matches the reference.
-        local_names = set()
         for name, param in pp_model.named_parameters():
-            local_names.add(name)
             torch.testing.assert_close(
                 param.detach().cpu(),
                 ref_state[name],
@@ -146,16 +190,7 @@ def _pp_weight_loading(rank, config_dict, pp_size, port):
 
 
 def _pp_generation(rank, config_dict, pp_size, port, max_new_tokens):
-    os.environ.update(
-        {
-            "WORLD_SIZE": str(pp_size),
-            "RANK": str(rank),
-            "LOCAL_RANK": str(rank),
-            "MASTER_ADDR": "localhost",
-            "MASTER_PORT": str(port),
-        }
-    )
-    dist.init_process_group(backend="gloo", rank=rank, world_size=pp_size)
+    init_process_group(rank, pp_size, port)
     config = Qwen2Config.from_dict(config_dict)
 
     with _shared_model_dir(rank) as model_dir:
@@ -223,56 +258,41 @@ def _tiny_qwen2_config(num_hidden_layers):
         vocab_size=128,
     )
 
+
 @is_pipeline_parallel_test
+@require_torch_greater_or_equal("2.5")
 class TestPipelineParallelLoadReport(TestCasePlus):
     def test_pp_loading_report_table(self):
         config = _tiny_qwen2_config(num_hidden_layers=12)
-        model = Qwen2ForCausalLM(config)
-        model = apply_pipeline_parallelism(model, MockDeviceMesh(2, 0))
 
-        full_model = Qwen2ForCausalLM(config)
-        load_config = LoadStateDictConfig()
-        loading_info, _ = convert_and_load_state_dict_in_model(model, full_model.state_dict(), load_config)
-
-        report = loading_info.create_loading_report(model)
-        self.assertIsNotNone(report)
-        self.assertIn("OWNED", report)
-        self.assertIn("SKIPPED", report)
-        self.assertIn("PP rank 0", report)
-        self.assertIn("PP rank 1", report)
-        self.assertIn("model.embed_tokens.weight", report)
-        self.assertIn("lm_head.weight", report)
-        self.assertEqual(loading_info.unexpected_keys, set())
-
-        with self.assertLogs("transformers.utils.loading_report", level="WARNING") as logs:
-            log_state_dict_report(model, "/tmp/pp-test", True, loading_info)
-
-        log_text = "\n".join(logs.output)
-        self.assertIn("LOAD REPORT", log_text)
-        self.assertIn("OWNED", log_text)
-        self.assertIn("SKIPPED", log_text)
-        self.assertIn("PP rank 0", log_text)
-        self.assertIn("PP rank 1", log_text)
-        self.assertIn("model.layers.{0, 1, 2, 3, 4, 5}", log_text)
-        self.assertIn("model.layers.{6, 7, 8, 9, 10, 11}", log_text)
+        mp.spawn(
+            _pp_load_report,
+            args=(config.to_dict(), 2, _find_free_port()),
+            nprocs=2,
+            join=True,
+        )
 
 
 @is_pipeline_parallel_test
+@require_torch_greater_or_equal("2.5")
 class TestPipelineParallelSplit(TestCasePlus):
     @parameterized.expand([(pp_size,) for pp_size in [2]])
     def test_pp_split(self, pp_size):
         config = _tiny_qwen2_config(num_hidden_layers=12)
-        for pp_rank in range(pp_size):
-            model = Qwen2ForCausalLM(config)
-            model = apply_pipeline_parallelism(model, MockDeviceMesh(pp_size, pp_rank))
-            _verify_pp_split(model)
+
+        mp.spawn(
+            _pp_split,
+            args=(config.to_dict(), pp_size, _find_free_port()),
+            nprocs=pp_size,
+            join=True,
+        )
+
 
 @is_pipeline_parallel_test
 @require_torch_greater_or_equal("2.5")
 class TestPipelineParallelWeightLoading(TestCasePlus):
     @parameterized.expand([(pp_size,) for pp_size in [2]])
     def test_pp_weight_loading(self, pp_size):
-
         config = _tiny_qwen2_config(num_hidden_layers=12)
 
         mp.spawn(
