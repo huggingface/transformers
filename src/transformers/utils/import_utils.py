@@ -1088,7 +1088,6 @@ def is_flash_attn_3_available(kernel_fallback_ok: bool = False) -> bool:
 
             from transformers.modeling_flash_attention_utils import FLASH_ATTN_KERNEL_FALLBACK
 
-
             get_kernel(FLASH_ATTN_KERNEL_FALLBACK["flash_attention_3"], version=1)
             return True
         except Exception:  # noqa: S110  # we don't care about the Exception here: we just want to check availability
