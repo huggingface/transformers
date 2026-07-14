@@ -60,16 +60,16 @@ class PipelineStage:
         self.pp_next_rank = pp_next_rank
 
     @classmethod
-    def from_device_mesh(cls, device_mesh) -> PipelineStage:
+    def from_device_mesh(cls, device_mesh) -> PipelineStage | None:
+        if device_mesh is None:
+            return None
+        mesh_dim_names = getattr(device_mesh, "mesh_dim_names", None)
+        if mesh_dim_names is None or "pp" not in mesh_dim_names or device_mesh.size() <= 1:
+            return None
+
         pp_rank = device_mesh.get_local_rank()
         pp_size = device_mesh.size()
-        if hasattr(device_mesh, "get_group"):
-            try:
-                pp_group = device_mesh.get_group("pp")
-            except (KeyError, ValueError, RuntimeError):
-                pp_group = device_mesh.get_group()
-        else:
-            pp_group = None
+        pp_group = device_mesh.get_group() if hasattr(device_mesh, "get_group") else None
         return cls(
             pp_rank=pp_rank,
             pp_size=pp_size,
@@ -82,6 +82,7 @@ class PipelineStage:
 
     def comm_device(self, device: torch.device) -> torch.device:
         """Device used for collectives (gloo requires CPU tensors)."""
+        #TODO(3outeille): do we really need to check the backend?
         if dist.get_backend() == "gloo":
             return torch.device("cpu")
         return device
@@ -128,21 +129,47 @@ class PipelineStage:
 
         return None if is_send else tensor.to(device=device, dtype=dtype)
 
+    def layer_range_for_rank(self, rank: int, num_layers: int) -> tuple[int, int]:
+        """Return the half-open layer index range ``[start, end)`` owned by ``rank``."""
+        layers_per_rank = num_layers // self.pp_size
+        start_layer = rank * layers_per_rank
+        end_layer = num_layers if rank == self.pp_size - 1 else start_layer + layers_per_rank
+        return start_layer, end_layer
+
+    def find_rank_for_key(self, key: str, num_layers: int, base_model_prefix: str) -> int | None:
+        """Return the PP rank that owns a checkpoint parameter key, or ``None`` if unknown."""
+        base_prefix = f"{base_model_prefix}."
+
+        if key.startswith(f"{base_prefix}embed_tokens."):
+            return 0
+
+        if key.startswith(f"{base_prefix}norm.") or key.startswith("lm_head."):
+            return self.pp_size - 1
+
+        layers_prefix = f"{base_prefix}layers."
+        if not key.startswith(layers_prefix):
+            return None
+
+        layer_idx = int(key.split(".")[2])
+        for rank in range(self.pp_size):
+            start_layer, end_layer = self.layer_range_for_rank(rank, num_layers)
+            if start_layer <= layer_idx < end_layer:
+                return rank
+
+        return None
+
 
 def apply_pipeline_parallelism(model: nn.Module, device_mesh: torch.distributed.device_mesh.DeviceMesh) -> nn.Module:
     """Naive even split of ``base_model.layers`` across PP ranks."""
-    pp_size = device_mesh.size()
-    if pp_size <= 1:
+    stage = PipelineStage.from_device_mesh(device_mesh)
+    if stage is None:
         return model
 
-    stage = PipelineStage.from_device_mesh(device_mesh)
     base_model = getattr(model, model.base_model_prefix)
     layers = base_model.layers
     num_layers = len(layers)
 
-    layers_per_rank = num_layers // pp_size
-    start_layer = stage.pp_rank * layers_per_rank
-    end_layer = num_layers if stage.pp_is_last_stage else start_layer + layers_per_rank
+    start_layer, end_layer = stage.layer_range_for_rank(stage.pp_rank, num_layers)
 
     if not stage.pp_is_first_stage:
         base_model.embed_tokens = PipelineIdentityLayer()
@@ -155,9 +182,6 @@ def apply_pipeline_parallelism(model: nn.Module, device_mesh: torch.distributed.
         base_model.norm = PipelineIdentityLayer()
         model.lm_head = PipelineIdentityLayer()
 
-    #TODO(3outeille): do we really need to set these attributes?
-    model._pp_rank = stage.pp_rank
-    model._pp_size = stage.pp_size
     _wrap_forward_for_pipeline_parallel(model)
     return model
 
@@ -199,11 +223,11 @@ def _wrap_forward_for_pipeline_parallel(model: nn.Module) -> None:
 
     @wraps(original_forward)
     def pp_forward(*args, **kwargs):
-        pp_size = getattr(model, "_pp_size", 1)
-        if pp_size <= 1:
+        device_mesh = getattr(model, "_device_mesh", None)
+        stage = PipelineStage.from_device_mesh(device_mesh)
+        if stage is None:
             return original_forward(*args, **kwargs)
 
-        stage = PipelineStage.from_device_mesh(model._device_mesh)
         device = next(model.parameters()).device
         dtype = next(model.parameters()).dtype
 

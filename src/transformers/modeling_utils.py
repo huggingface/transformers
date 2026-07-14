@@ -4467,6 +4467,7 @@ class PreTrainedModel(
                 unexpected_keys=set(),
                 mismatched_keys=set(),
                 conversion_errors={},
+                skipped_pp_keys=set(),
             )
         else:
             all_pointer = set()

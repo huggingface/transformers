@@ -34,6 +34,7 @@ from .distributed.sharding_utils import DtensorShardOperation, _dtensor_from_loc
 from .integrations.accelerate import get_device, offload_weight
 from .integrations.tensor_parallel import ALL_PARALLEL_STYLES
 from .utils import is_env_variable_true
+from .distributed.pipeline_parallel import PipelineStage
 from .utils.loading_report import LoadStateDictInfo
 from .utils.logging import get_logger, tqdm
 
@@ -1443,6 +1444,26 @@ def rename_source_key(
     return renamed_key, source_pattern
 
 
+def _add_unmatched_checkpoint_key(
+    key: str,
+    model: PreTrainedModel,
+    loading_info: LoadStateDictInfo,
+) -> None:
+    stage = PipelineStage.from_device_mesh(model._device_mesh)
+    if stage is None:
+        loading_info.unexpected_keys.add(key)
+        return
+
+    base_model = getattr(model, model.base_model_prefix)
+    owner_rank = stage.find_rank_for_key(key, len(base_model.layers), model.base_model_prefix)
+    owned_by_another_stage = owner_rank is not None and owner_rank != stage.pp_rank
+
+    if owned_by_another_stage:
+        loading_info.skipped_pp_keys.add(key)
+    else:
+        loading_info.unexpected_keys.add(key)
+
+
 def convert_and_load_state_dict_in_model(
     model: PreTrainedModel,
     state_dict: dict[str, Any],
@@ -1555,6 +1576,7 @@ def convert_and_load_state_dict_in_model(
         mismatched_keys=set(),
         conversion_errors={},
         error_msgs=[],
+        skipped_pp_keys=set(),
     )
 
     # We use threading by default, if not explicitly deactivated via env variable. If we have to offload,
@@ -1684,9 +1706,13 @@ def convert_and_load_state_dict_in_model(
         elif source_pattern is not None:  # add all target keys as unexpected
             mapping = pattern_to_converter[source_pattern]
             for k in mapping.target_patterns:
-                loading_info.unexpected_keys.add(renamed_key.replace(mapping.target_patterns[0], k))
+                _add_unmatched_checkpoint_key(
+                    renamed_key.replace(mapping.target_patterns[0], k),
+                    model,
+                    loading_info,
+                )
         else:
-            loading_info.unexpected_keys.add(renamed_key)
+            _add_unmatched_checkpoint_key(renamed_key, model, loading_info)
 
     try:
         for first_param_name, mapping in tqdm(param_name_to_load.items(), desc="Loading weights"):
