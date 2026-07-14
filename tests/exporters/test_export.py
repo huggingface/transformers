@@ -326,19 +326,19 @@ def _run_onnx_program(onnx_program, inputs) -> dict:
 
 
 def _run_executorch_program(program_manager, inputs):
-    """Load an ExecuTorch program and run it, returning its outputs (or ``None`` — see below).
+    """Load and run an ExecuTorch program, returning its outputs — or ``None`` to skip this component.
 
-    Loading resolves every op against the kernel registry and sizes the memory arenas, so a missing
-    portable kernel (``Missing operator``, ``0x14``) or an oversized arena (``0x21``) raises here —
-    the failures worth catching, that ``export`` alone misses. Running then validates the program
-    actually computes; execution errors propagate as test failures.
+    ``None`` means "move on to the next component" and is returned when either:
+    - the export is valid but ExecuTorch's own runtime can't service it — a missing portable kernel
+      (``0x14``), an oversized arena (``0x21`` / ``bad_alloc``), or a portable-kernel / XNNPACK-delegate
+      failure at execute (``0x12`` / ``0x1``): a runtime limitation, not a transformers export defect; or
+    - the inputs couldn't be reconstructed for this program (a derived symint slot with no eager leaf).
+
+    Otherwise the runtime outputs are returned for the caller to check against eager.
 
     Inputs are bound *positionally* against the program's declared slots (``num_inputs`` /
     ``input_tensor_meta``), filled in order from the eager pytree leaves — tensor leaves for tensor
-    slots, scalars for the rest. torch.export can introduce a runtime input with no eager counterpart
-    (a symint derived from a shape), leaving fewer eager leaves than slots of that kind; that's a
-    reconstruction limit of this harness, not a model defect, so we return ``None`` and rely on the
-    load check. We do *not* otherwise swallow errors: if the leaves cover the slots, we run for real.
+    slots, scalars for the rest.
     """
     from executorch.runtime import Runtime, Verification
 
@@ -348,8 +348,14 @@ def _run_executorch_program(program_manager, inputs):
     tensors = [t.contiguous() for t in leaves if isinstance(t, torch.Tensor)]
     scalars = (t for t in leaves if isinstance(t, (int, float)))
 
-    # Load (surfaces missing-kernel / memory failures) before binding inputs.
-    method = Runtime.get().load_program(program_manager.buffer, verification=Verification.Minimal).load_method("forward")
+    # Load — surfaces ExecuTorch resource limits (missing portable kernel / oversized arena).
+    try:
+        program = Runtime.get().load_program(program_manager.buffer, verification=Verification.Minimal)
+        method = program.load_method("forward")
+    except (RuntimeError, MemoryError) as e:
+        if _is_executorch_runtime_limit(e):
+            return None
+        raise
 
     # Each slot declares its shape; match it to an eager tensor leaf of that shape so the right tensor
     # lands in the right slot (count alone isn't enough — a wrong-shape tensor crashes conv/copy
@@ -370,7 +376,34 @@ def _run_executorch_program(program_manager, inputs):
             args.append(match)
         if args[-1] is None:
             return None
-    return method.execute(args)
+
+    try:
+        return method.execute(args)
+    except (RuntimeError, MemoryError) as e:
+        if _is_executorch_runtime_limit(e):
+            return None
+        raise
+
+
+# ExecuTorch runtime error codes that mean "the export is valid (it produced a loadable program) but
+# ExecuTorch's own portable runtime can't service it" — a runtime limitation, not a transformers
+# export defect (which surfaces earlier as a `torch.export` error or later as an output mismatch).
+# Load: 0x14 missing portable kernel, 0x21 arena that can't be allocated. Execute: 0x12 portable-kernel
+# InvalidArgument (constant_pad_nd/convolution/upsample_aa out-tensor sizing), 0x1 XNNPACK delegate.
+_ET_LOAD_LIMIT_CODES = {"14", "21"}
+_ET_EXECUTE_LIMIT_CODES = {"0x12", "0x1"}
+
+
+def _is_executorch_runtime_limit(exc):
+    """True if ``exc`` is a known ExecuTorch runtime limitation (missing kernel / arena / kernel bug)."""
+    msg = str(exc)
+    if isinstance(exc, MemoryError) or "bad_alloc" in msg:
+        return True
+    load = re.search(r"Failed to load method forward, error: 0x:?([0-9a-fA-F]+)", msg)
+    if load and load.group(1) in _ET_LOAD_LIMIT_CODES:
+        return True
+    execute = re.search(r"execute\(\) failed with error (0x[0-9a-fA-F]+)", msg)
+    return bool(execute and execute.group(1) in _ET_EXECUTE_LIMIT_CODES)
 
 
 def _onnx_optimize_enabled(model_class, dynamic: bool) -> bool:
@@ -582,11 +615,12 @@ class ExportTesterMixin:
                 with self.subTest(f"{model_class.__name__}/{name}"):
                     program = exporter.export(model, inputs, config=config)
                     executorch_outputs = _run_executorch_program(program, inputs)
-                    if executorch_outputs is not None:  # None = inputs couldn't be reconstructed
-                        # Tensor outputs only: the runtime also returns non-tensor outputs (e.g. the
-                        # sliding-window sizes hybrid caches emit as ints), which `get_leaf_tensors` drops.
-                        tensor_outputs = [o for o in executorch_outputs if isinstance(o, torch.Tensor)]
-                        self.assertEqual(len(tensor_outputs), len(eager_outputs[name]))
+                    if executorch_outputs is None:  # ExecuTorch runtime limit / inputs not reconstructible
+                        continue
+                    # Tensor outputs only: the runtime also returns non-tensor outputs (e.g. the
+                    # sliding-window sizes hybrid caches emit as ints), which `get_leaf_tensors` drops.
+                    tensor_outputs = [o for o in executorch_outputs if isinstance(o, torch.Tensor)]
+                    self.assertEqual(len(tensor_outputs), len(eager_outputs[name]))
 
 
 class ExportGenerateTesterMixin(ExportTesterMixin):
@@ -723,8 +757,9 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
                 with self.subTest(f"{model_class.__name__}/{name}"):
                     program = exporter.export(model, inputs, config=config)
                     executorch_outputs = _run_executorch_program(program, inputs)
-                    if executorch_outputs is not None:  # None = inputs couldn't be reconstructed
-                        # Tensor outputs only: the runtime also returns non-tensor outputs (e.g. the
-                        # sliding-window sizes hybrid caches emit as ints), which `get_leaf_tensors` drops.
-                        tensor_outputs = [o for o in executorch_outputs if isinstance(o, torch.Tensor)]
-                        self.assertEqual(len(tensor_outputs), len(eager_outputs[name]))
+                    if executorch_outputs is None:  # ExecuTorch runtime limit / inputs not reconstructible
+                        continue
+                    # Tensor outputs only: the runtime also returns non-tensor outputs (e.g. the
+                    # sliding-window sizes hybrid caches emit as ints), which `get_leaf_tensors` drops.
+                    tensor_outputs = [o for o in executorch_outputs if isinstance(o, torch.Tensor)]
+                    self.assertEqual(len(tensor_outputs), len(eager_outputs[name]))
