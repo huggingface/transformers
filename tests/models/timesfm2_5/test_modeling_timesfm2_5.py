@@ -290,15 +290,18 @@ class TimesFm2_5ModelIntegrationTests(unittest.TestCase):
         model = TimesFm2_5ModelForPrediction.from_pretrained(
             "google/timesfm-2.5-200m-transformers", revision="refs/pr/3"
         ).to(torch_device)
-        forecast_input = [
-            np.sin(np.linspace(0, 20, 100)),
-            np.sin(np.linspace(0, 20, 200)),
-            np.sin(np.linspace(0, 20, 400)),
+        sequences = [
+            torch.sin(torch.linspace(0, 20, 100, dtype=torch.float32, device=torch_device)),
+            torch.sin(torch.linspace(0, 20, 200, dtype=torch.float32, device=torch_device)),
+            torch.sin(torch.linspace(0, 20, 400, dtype=torch.float32, device=torch_device)),
         ]
-        forecast_input_tensor = [torch.tensor(ts, dtype=torch.float32, device=torch_device) for ts in forecast_input]
+        past_values = TimesFm2_5ModelForPrediction._past_values_to_tensor(sequences)
+        past_observed_mask = torch.zeros_like(past_values, dtype=torch.long)
+        for i, ts in enumerate(sequences):
+            past_observed_mask[i, past_values.shape[1] - ts.shape[0] :] = 1
 
         with torch.no_grad():
-            output = model(past_values=forecast_input_tensor)
+            output = model(past_values=past_values, past_observed_mask=past_observed_mask)
 
         mean_predictions = output.mean_predictions
         self.assertEqual(mean_predictions.shape, torch.Size([3, model.config.horizon_length]))
