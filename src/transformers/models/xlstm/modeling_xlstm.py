@@ -1461,7 +1461,7 @@ class xLSTMModel(xLSTMPreTrainedModel):
         if inputs_embeds is None:
             inputs_embeds = self.embeddings(input_ids)
 
-        if use_cache and "with_padding" in self.config.mode:
+        if use_cache and self.config.mode == "train_with_padding":
             logger.warning_once(
                 "`use_cache=True` is not supported with `mode='train_with_padding'` as no last states can be "
                 "computed on padded sequences. Setting `use_cache=False`."
@@ -1516,6 +1516,8 @@ class xLSTMModel(xLSTMPreTrainedModel):
 
                 if cache_params and rnn_state is not None:
                     for state_idx in range(len(cache_params.rnn_state[layer_idx])):
+                        # Detach so the cached state is not part of the autograd graph; the
+                        # next step's in-place copy_ into it would otherwise break backward.
                         local_rnn_state = rnn_state[state_idx].detach()
                         cache_params.rnn_state[layer_idx][state_idx].copy_(local_rnn_state)
                     cache_params.rnn_state_initial = False
