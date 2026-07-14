@@ -165,7 +165,7 @@ class DynamicLayer(CacheLayerMixin):
         Crop the past key values up to a new `max_length` in terms of tokens. `max_length` can also be negative
         to remove `max_length` tokens.
         """
-        if max_length < 0:
+        if max_length <= 0:
             max_length = self.get_seq_length() - abs(max_length)
 
         if self.get_seq_length() <= max_length:
@@ -922,7 +922,7 @@ class LinearAttentionCacheLayerMixin(ABC):
                 "`crop` was called, but the current layer does not track past states. Call `activate_past_recording` before "
                 "`crop` to be able to rollback the cache."
             )
-        if tokens_to_remove >= 0:
+        if tokens_to_remove > 0:
             raise RuntimeError(
                 "Linear attention layers can only be cropped by passing a negative int, to specify how many tokens to remove"
             )
@@ -930,13 +930,12 @@ class LinearAttentionCacheLayerMixin(ABC):
             tokens_to_remove = abs(tokens_to_remove)
             # This both crop the last `tokens_to_remove`, as well as resize the conv states to `conv_kernel_size` as we never
             # need more for the next forward
-            self.conv_states[i] = self.conv_states[i][
-                ..., -tokens_to_remove - self.conv_kernel_size[i] : -tokens_to_remove
-            ]
-            if self.conv_states[i].shape[-1] != self.conv_kernel_size[i]:
-                raise RuntimeError(
-                    "You are trying to remore more tokens than was added in the latest `update_conv_states`"
-                )
+            if tokens_to_remove == 0:
+                self.conv_states[i] = self.conv_states[i][..., -self.conv_kernel_size[i] :]
+            else:
+                self.conv_states[i] = self.conv_states[i][
+                    ..., -tokens_to_remove - self.conv_kernel_size[i] : -tokens_to_remove
+                ]
 
     def get_max_length(self) -> int:
         # LinearAttention layer have no sequence length dimension, so simply return -1 here
