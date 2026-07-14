@@ -247,6 +247,12 @@ EXPORT_SKIPS: dict[str, dict[str, str]] = {
         "TapasForSequenceClassification": "Same OpenVINO `scatter_reduce` gap as `TapasModel`.",
         "HunYuanVLModel": "OpenVINO conversion of the vision stack fails (same family as the ONNX/ExecuTorch gaps).",
         "HunYuanVLForConditionalGeneration": "Same OpenVINO gap as `HunYuanVLModel`.",
+        "Kimi_K25Model": (
+            "OpenVINO CPU plugin fails to compile (`to_shape was called on a dynamic shape`) — a node in "
+            "the vision/MLA stack keeps a fully dynamic shape even under static export (data-dependent "
+            "vision token count from `image_grid_thw`)."
+        ),
+        "Kimi_K25ForConditionalGeneration": "Same OpenVINO `to_shape`/dynamic-shape compile failure as `Kimi_K25Model`.",
     },
     # OpenVINO, generate path only.
     "openvino.generate": {},
@@ -351,6 +357,9 @@ def _run_onnx_program(onnx_program, inputs) -> dict:
 def _stage_openvino_artifact(ov_model, model_dir: str, component: str, config=None) -> None:
     """Stage the OpenVINO IR (+ ``config.json`` once per model) into the shared artifact tree as
     ``<model_dir>/<component>.{xml,bin}`` + ``<model_dir>/config.json``.
+
+    Only the dynamic export is staged (the caller passes ``model_dir=None`` for static runs) — its
+    symbolic shapes are the more useful reference and it avoids the two modes overwriting each other.
 
     The tree lives at ``OPENVINO_ARTIFACTS_DIR`` — created and exported by conftest's
     ``pytest_configure`` when ``PUSH_OPENVINO_ARTIFACTS`` is set. Under ``pytest -n`` every worker
@@ -636,7 +645,9 @@ class ExportTesterMixin:
             for name, (model, inputs) in components.items():
                 with self.subTest(f"{model_class.__name__}/{name}"):
                     ov_model = exporter.export(model, inputs, config=config)
-                    ov_outputs = _run_openvino_model(ov_model, inputs, model_class.__name__, name, model_config)
+                    ov_outputs = _run_openvino_model(
+                        ov_model, inputs, model_class.__name__ if dynamic else None, name, model_config
+                    )
                     self.assertTrue(ov_outputs, f"OpenVINO outputs are empty for {name}.")
                     self.assertEqual(set(ov_outputs.keys()), set(eager_outputs[name].keys()))
 
@@ -791,7 +802,9 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
             for name, (model, inputs) in components.items():
                 with self.subTest(f"{model_class.__name__}/{name}"):
                     ov_model = exporter.export(model, inputs, config=config)
-                    ov_outputs = _run_openvino_model(ov_model, inputs, model_class.__name__, name, model_config)
+                    ov_outputs = _run_openvino_model(
+                        ov_model, inputs, model_class.__name__ if dynamic else None, name, model_config
+                    )
                     self.assertTrue(ov_outputs, "OpenVINO outputs are empty.")
                     self.assertEqual(set(ov_outputs.keys()), set(eager_outputs[name].keys()))
 
