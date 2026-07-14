@@ -60,6 +60,7 @@ class WavTokenizerModelTester:
         decoder_hidden_size=32,
         decoder_intermediate_size=64,
         decoder_num_layers=2,
+        decoder_attention_num_groups=8,
         is_training=False,
     ):
         self.parent = parent
@@ -74,6 +75,7 @@ class WavTokenizerModelTester:
         self.decoder_hidden_size = decoder_hidden_size
         self.decoder_intermediate_size = decoder_intermediate_size
         self.decoder_num_layers = decoder_num_layers
+        self.decoder_attention_num_groups = decoder_attention_num_groups
         self.is_training = is_training
 
         self.hop_length = 1
@@ -103,6 +105,7 @@ class WavTokenizerModelTester:
             decoder_hidden_size=self.decoder_hidden_size,
             decoder_intermediate_size=self.decoder_intermediate_size,
             decoder_num_layers=self.decoder_num_layers,
+            decoder_attention_num_groups=self.decoder_attention_num_groups,
         )
 
     def create_and_check_model_forward(self, config, inputs_dict):
@@ -119,6 +122,7 @@ class WavTokenizerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
     all_model_classes = (WavTokenizerModel,) if is_torch_available() else ()
     is_encoder_decoder = True
     test_resize_embeddings = False
+    test_torch_exportable = False  # data-dependent control flow in `_pad1d` (`if length <= max_pad`)
     pipeline_model_mapping = {"feature-extraction": WavTokenizerModel} if is_torch_available() else {}
 
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
@@ -204,13 +208,26 @@ class WavTokenizerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
             audio_values = model.decode(audio_codes).audio_values
         self.assertEqual(audio_values.shape, (2, 1, num_codes * config.hop_length))
 
-    def test_decode_single_code_raises(self):
-        """Inputs of at most `hop_length` samples yield one code; the decoder's GroupNorm cannot process it."""
+    def test_decode_single_code(self):
+        """A single code is valid with the production architecture's multiple channels per GroupNorm group."""
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
         model = WavTokenizerModel(config).to(torch_device).eval()
         audio_codes = torch.zeros(1, 1, 1, dtype=torch.long, device=torch_device)
-        with self.assertRaises(ValueError):
-            model.decode(audio_codes)
+        self.assertGreater(config.decoder_hidden_size // config.decoder_attention_num_groups, 1)
+        with torch.no_grad():
+            audio_values = model.decode(audio_codes).audio_values
+        self.assertEqual(audio_values.shape, (1, 1, config.hop_length))
+
+    def test_forward_single_code_inputs(self):
+        """Waveforms up to one hop encode to one code and can be reconstructed."""
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        model = randomize_codebook(WavTokenizerModel(config)).to(torch_device).eval()
+        for num_samples in [1, config.hop_length - 1, config.hop_length]:
+            input_values = floats_tensor([1, 1, num_samples], scale=1.0).to(torch_device)
+            with torch.no_grad():
+                output = model(input_values)
+            self.assertEqual(output.audio_codes.shape, (1, 1, 1))
+            self.assertEqual(output.audio_values.shape, input_values.shape)
 
     def test_encode_deterministic(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
