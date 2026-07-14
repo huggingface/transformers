@@ -157,7 +157,7 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(source_patterns=r"audio.", target_patterns=r"audio_tower."),
             # Renames are applied cumulatively, so these run AFTER the generic `audio.` -> `audio_tower.`
             # above and match its output. The audio dMel embedding moved from `audio.encoder` to a
-            # `TmlAudioModelEmbeddings` submodule, and `final_norm` was renamed to `norm`.
+            # `InklingAudioModelEmbeddings` submodule, and `final_norm` was renamed to `norm`.
             WeightRenaming(
                 source_patterns=r"audio_tower.encoder.weight",
                 target_patterns=r"audio_tower.embed_audio_tokens.embed_audio_tokens.weight",
