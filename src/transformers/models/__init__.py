@@ -24,6 +24,7 @@ if TYPE_CHECKING:
     from .align import *
     from .altclip import *
     from .apertus import *
+    from .apertus1p5 import *
     from .arcee import *
     from .aria import *
     from .audio_spectrogram_transformer import *
