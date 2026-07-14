@@ -46,6 +46,8 @@ from .tokenization_utils_base import (
     TextInput,
     TruncationStrategy,
     generate_merges,
+    has_escaped_literal_text,
+    split_escaped_literal_text,
 )
 from .utils import PaddingStrategy, add_end_docstrings, logging
 
@@ -854,6 +856,86 @@ class TokenizersBackend(PreTrainedTokenizerBase):
             if _padding != target:
                 self._tokenizer.enable_padding(**target)
 
+    def _encode_batch_with_literal_text(
+        self,
+        batch_text: list[TextInput],
+        add_special_tokens: bool,
+        padding_strategy: PaddingStrategy,
+        max_length: int | None,
+        pad_to_multiple_of: int | None,
+        padding_side: str | None,
+    ) -> list[EncodingFast]:
+        """
+        Encode a batch of texts holding escaped literal spans (see [`~tokenization_utils_base.escape_literal_text`]).
+
+        Such a span is text that a user typed themselves and which collides with a special token, in practice a
+        multimodal placeholder such as `<image>`. It is encoded as plain text while the rest of the sequence is
+        encoded as usual, so that only the placeholders that a chat template emitted for actual media end up as
+        special token ids.
+        """
+        if not all(isinstance(text, str) for text in batch_text):
+            raise ValueError(
+                "Text pairs and pretokenized inputs are not supported for text holding literal special tokens."
+            )
+
+        # Chunks are encoded on their own and merged afterwards, so truncation and padding cannot be left to the
+        # backend here: it would apply them to every chunk instead of to the whole sequence.
+        truncation, padding = self._tokenizer.truncation, self._tokenizer.padding
+        split_special_tokens = self._tokenizer.encode_special_tokens
+        self._tokenizer.no_truncation()
+        self._tokenizer.no_padding()
+
+        try:
+            batch_chunk_encodings = []
+            for text in batch_text:
+                chunk_encodings = []
+                for chunk, is_literal in split_escaped_literal_text(text):
+                    if not chunk:
+                        continue
+                    # Literal text may never match a special token, the rest keeps the behavior asked for by the user
+                    self._tokenizer.encode_special_tokens = is_literal or split_special_tokens
+                    chunk_encodings.append(self._tokenizer.encode(chunk, add_special_tokens=False))
+                if not chunk_encodings:
+                    chunk_encodings.append(self._tokenizer.encode("", add_special_tokens=False))
+                batch_chunk_encodings.append(chunk_encodings)
+
+            # Truncation is about the whole sequence, so it is restored for the post-processing step. Padding stays
+            # off: it is applied below, where the length of the longest sequence of the batch is known.
+            if truncation is not None:
+                self._tokenizer.enable_truncation(**truncation)
+            encodings = [
+                self._tokenizer.post_process(
+                    EncodingFast.merge(chunk_encodings), add_special_tokens=add_special_tokens
+                )
+                for chunk_encodings in batch_chunk_encodings
+            ]
+        finally:
+            self._tokenizer.encode_special_tokens = split_special_tokens
+            if truncation is None:
+                self._tokenizer.no_truncation()
+            else:
+                self._tokenizer.enable_truncation(**truncation)
+            if padding is None:
+                self._tokenizer.no_padding()
+            else:
+                self._tokenizer.enable_padding(**padding)
+
+        if padding_strategy != PaddingStrategy.DO_NOT_PAD:
+            length = max_length if padding_strategy == PaddingStrategy.MAX_LENGTH and max_length else None
+            length = length if length is not None else max(len(encoding.ids) for encoding in encodings)
+            if pad_to_multiple_of is not None and length % pad_to_multiple_of != 0:
+                length = ((length // pad_to_multiple_of) + 1) * pad_to_multiple_of
+            for encoding in encodings:
+                encoding.pad(
+                    length,
+                    direction=padding_side if padding_side is not None else self.padding_side,
+                    pad_id=self.pad_token_id,
+                    pad_token=self.pad_token,
+                    pad_type_id=self.pad_token_type_id,
+                )
+
+        return encodings
+
     def _encode_plus(
         self,
         text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput],
@@ -955,12 +1037,22 @@ class TokenizersBackend(PreTrainedTokenizerBase):
         if self._tokenizer.encode_special_tokens != split_special_tokens:
             self._tokenizer.encode_special_tokens = split_special_tokens
 
-        # Direct rust backend call
-        encodings = self._tokenizer.encode_batch(
-            batch_text_or_text_pairs,
-            add_special_tokens=add_special_tokens,
-            is_pretokenized=is_split_into_words,
-        )
+        if not is_split_into_words and has_escaped_literal_text(batch_text_or_text_pairs):
+            encodings = self._encode_batch_with_literal_text(
+                batch_text_or_text_pairs,
+                add_special_tokens=add_special_tokens,
+                padding_strategy=padding_strategy,
+                max_length=max_length,
+                pad_to_multiple_of=pad_to_multiple_of,
+                padding_side=padding_side,
+            )
+        else:
+            # Direct rust backend call
+            encodings = self._tokenizer.encode_batch(
+                batch_text_or_text_pairs,
+                add_special_tokens=add_special_tokens,
+                is_pretokenized=is_split_into_words,
+            )
 
         # Convert encodings to BatchEncoding format
         tokens_and_encodings = [

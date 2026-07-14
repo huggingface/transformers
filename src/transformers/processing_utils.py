@@ -44,6 +44,8 @@ from .tokenization_utils_base import (
     PreTrainedTokenizerBase,
     TextInput,
     TruncationStrategy,
+    can_escape_literal_text,
+    escape_literal_text,
 )
 from .utils import (
     AUDIO_TOKENIZER_NAME,
@@ -1960,6 +1962,47 @@ class ProcessorMixin(PushToHubMixin):
 
         return unused_kwargs, valid_kwargs
 
+    def _escape_literal_multimodal_tokens(self, conversations: list[list[dict]]) -> list[list[dict]]:
+        """
+        Escape the multimodal placeholder tokens (`<image>`, `<video>`, ...) that a user typed inside the text blocks
+        of a conversation.
+
+        The images, videos and audio of a conversation are passed as their own content blocks, so a placeholder token
+        found in a `"text"` block is text the user meant literally, not a reference to some media. It must not be
+        expanded by the processor nor tokenized as a special token, but the rendered chat template is a plain string
+        in which both are spelled the exact same way. Escaping the user-typed ones keeps them distinguishable all the
+        way down to the tokenizer, which turns them back into plain text (see [`escape_literal_text`]).
+
+        Conversations are copied on write, so the caller's messages are left untouched.
+        """
+        mm_tokens = [token for token in self.all_special_multimodal_tokens if can_escape_literal_text(token)]
+        if not mm_tokens:
+            return conversations
+
+        # Longest first, so that a token that is a prefix of another one doesn't shadow it
+        mm_tokens_regex = re.compile("|".join(re.escape(token) for token in sorted(mm_tokens, key=len, reverse=True)))
+        escaped_conversations = []
+        for conversation in conversations:
+            escaped_conversation = []
+            for message in conversation:
+                content = message.get("content") if isinstance(message, dict) else None
+                if isinstance(content, list):
+                    escaped_content = []
+                    is_escaped = False
+                    for block in content:
+                        if isinstance(block, dict) and block.get("type") == "text" and "text" in block:
+                            text = block["text"]
+                            if isinstance(text, str) and mm_tokens_regex.search(text):
+                                escaped_text = mm_tokens_regex.sub(lambda m: escape_literal_text(m.group()), text)
+                                block = {**block, "text": escaped_text}
+                                is_escaped = True
+                        escaped_content.append(block)
+                    if is_escaped:
+                        message = {**message, "content": escaped_content}
+                escaped_conversation.append(message)
+            escaped_conversations.append(escaped_conversation)
+        return escaped_conversations
+
     def apply_chat_template(
         self,
         conversation: list[dict[str, str]] | list[list[dict[str, str]]],
@@ -2146,6 +2189,12 @@ class ProcessorMixin(PushToHubMixin):
                 # So we'll make a batched list of images and let the processor handle it
                 batch_images.append(images)
                 batch_videos.append(videos)
+
+        if tokenize:
+            # Only the placeholders that the template itself emits for the media of the conversation may be expanded
+            # and tokenized as special tokens. Escape the ones a user typed in their text so that both stay
+            # distinguishable in the rendered prompt, which is a plain string.
+            conversations = self._escape_literal_multimodal_tokens(conversations)
 
         # `kwargs` overwrite special tokens if both are present
         template_kwargs = {**self.tokenizer.special_tokens_map, **kwargs}

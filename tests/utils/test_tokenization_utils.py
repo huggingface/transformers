@@ -24,6 +24,7 @@ import httpx
 from transformers import AutoTokenizer, BertTokenizer, BertTokenizerFast, GPT2TokenizerFast, is_tokenizers_available
 from transformers.testing_utils import TOKEN, TemporaryHubRepo, is_staging_test, require_tokenizers
 from transformers.tokenization_python import ExtensionsTrie, Trie
+from transformers.tokenization_utils_base import escape_literal_text, unescape_literal_text
 
 
 sys.path.append(str(Path(__file__).parent.parent.parent / "utils"))
@@ -216,6 +217,66 @@ class TokenizersBackendTest(unittest.TestCase):
         # With BPE guard, cleanup=True also preserves the text
         decoded_with_cleanup = tokenizer.decode(token_ids, clean_up_tokenization_spaces=True)
         self.assertEqual(decoded_with_cleanup, text)
+
+
+class LiteralTextEscapingTest(unittest.TestCase):
+    """
+    Tests for the escaping of text that a user typed themselves and which collides with a special token, in practice
+    a multimodal placeholder such as `<image>`. Such text must never be tokenized as the special token. See #47217.
+    """
+
+    def test_escaping_round_trip(self):
+        for token in ["<image>", "<|image_pad|>", "<img><IMG_CONTEXT></img>", "<image_soft_token>"]:
+            escaped = escape_literal_text(token)
+            # Escaping is length-preserving, so character offsets into a rendered prompt stay valid
+            self.assertEqual(len(escaped), len(token))
+            # ... and the token no longer appears as such, so it can't be matched by a processor or a tokenizer
+            self.assertNotIn(token, escaped)
+            self.assertEqual(unescape_literal_text(escaped), token)
+
+    @require_tokenizers
+    def test_fast_tokenizer_encodes_escaped_text_as_plain_text(self):
+        tokenizer = GPT2TokenizerFast.from_pretrained("openai-community/gpt2")
+        tokenizer.add_special_tokens({"additional_special_tokens": ["<image>"]})
+        image_token_id = tokenizer.convert_tokens_to_ids("<image>")
+
+        placeholder_ids = tokenizer("an <image> here", add_special_tokens=False).input_ids
+        literal_ids = tokenizer(f"an {escape_literal_text('<image>')} here", add_special_tokens=False).input_ids
+
+        # A placeholder is the special token, the same characters escaped are plain text spelling it out
+        self.assertIn(image_token_id, placeholder_ids)
+        self.assertNotIn(image_token_id, literal_ids)
+        self.assertEqual(tokenizer.decode(literal_ids), "an <image> here")
+
+    @require_tokenizers
+    def test_fast_tokenizer_pads_and_truncates_escaped_text(self):
+        tokenizer = GPT2TokenizerFast.from_pretrained("openai-community/gpt2")
+        tokenizer.add_special_tokens({"additional_special_tokens": ["<image>"]})
+        tokenizer.pad_token = tokenizer.eos_token
+        texts = [f"an {escape_literal_text('<image>')} here", "much shorter"]
+
+        padded = tokenizer(texts, padding=True, add_special_tokens=False)
+        self.assertEqual(len(padded.input_ids[0]), len(padded.input_ids[1]))
+        for input_ids, attention_mask in zip(padded.input_ids, padded.attention_mask):
+            self.assertEqual(len(input_ids), len(attention_mask))
+
+        truncated = tokenizer(texts, padding="max_length", truncation=True, max_length=4, add_special_tokens=False)
+        self.assertTrue(all(len(input_ids) == 4 for input_ids in truncated.input_ids))
+
+    def test_python_tokenizer_encodes_escaped_text_as_plain_text(self):
+        tokenizer = BertTokenizer.from_pretrained("hf-internal-testing/tiny-random-bert")
+        tokenizer.add_special_tokens({"additional_special_tokens": ["<image>"]})
+        image_token_id = tokenizer.convert_tokens_to_ids("<image>")
+
+        placeholder_ids = tokenizer("an <image> here", add_special_tokens=False).input_ids
+        literal_ids = tokenizer(f"an {escape_literal_text('<image>')} here", add_special_tokens=False).input_ids
+
+        self.assertIn(image_token_id, placeholder_ids)
+        self.assertNotIn(image_token_id, literal_ids)
+        self.assertEqual(
+            tokenizer.tokenize(escape_literal_text("<image>")),
+            tokenizer.tokenize("<image>", split_special_tokens=True),
+        )
 
 
 class TrieTest(unittest.TestCase):

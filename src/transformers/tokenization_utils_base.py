@@ -142,6 +142,62 @@ EncodedInputPair = tuple[list[int], list[int]]
 # Define type aliases for text-related non-text modalities
 AudioInput = Union[np.ndarray, "torch.Tensor", list[np.ndarray], list["torch.Tensor"]]
 
+# Once a chat template has been rendered to a plain string, a multimodal placeholder such as `<image>` that the
+# template emitted for an actual image is indistinguishable from the very same characters typed by a user inside a
+# text message. To keep them apart, `ProcessorMixin.apply_chat_template` rewrites the characters of user-typed
+# occurrences into the reserved Private Use Area block below before rendering, and tokenizers turn those spans back
+# into plain text when encoding, so they never map to a special token id. The mapping is per-character, so it is
+# length-preserving and character offsets into the rendered prompt stay valid.
+LITERAL_TEXT_ESCAPE_BASE = 0xE000
+_re_escaped_literal_text = re.compile(f"[{chr(LITERAL_TEXT_ESCAPE_BASE)}-{chr(LITERAL_TEXT_ESCAPE_BASE + 0xFF)}]+")
+
+
+def can_escape_literal_text(text: str) -> bool:
+    """Whether `text` only contains characters that [`escape_literal_text`] is able to map."""
+    return all(ord(char) <= 0xFF for char in text)
+
+
+def escape_literal_text(text: str) -> str:
+    """
+    Map every character of `text` into a reserved Private Use Area block, so that the result no longer matches any
+    special token but keeps the exact same length.
+    """
+    return "".join(chr(LITERAL_TEXT_ESCAPE_BASE + ord(char)) for char in text)
+
+
+def unescape_literal_text(text: str) -> str:
+    """Inverse of [`escape_literal_text`]."""
+    return "".join(chr(ord(char) - LITERAL_TEXT_ESCAPE_BASE) for char in text)
+
+
+def has_escaped_literal_text(text) -> bool:
+    """Whether `text`, a string or an arbitrarily nested list of strings, holds any escaped span."""
+    if isinstance(text, str):
+        # Escaped characters are never ASCII, and `str.isascii` is O(1), so texts don't pay for the scan below
+        return not text.isascii() and _re_escaped_literal_text.search(text) is not None
+    if isinstance(text, (list, tuple)):
+        return any(has_escaped_literal_text(item) for item in text)
+    return False
+
+
+def split_escaped_literal_text(text: str) -> list[tuple[str, bool]]:
+    """
+    Split `text` into `(chunk, is_literal)` pairs. Escaped chunks are returned unescaped and have to be encoded as
+    plain text (i.e. with `split_special_tokens=True`), the other ones are encoded as usual.
+    """
+    chunks = []
+    last_end = 0
+    for match in _re_escaped_literal_text.finditer(text):
+        start, end = match.span()
+        if start > last_end:
+            chunks.append((text[last_end:start], False))
+        chunks.append((unescape_literal_text(match.group()), True))
+        last_end = end
+    if last_end < len(text):
+        chunks.append((text[last_end:], False))
+    return chunks
+
+
 # Slow tokenizers used to be saved in three separated files
 SPECIAL_TOKENS_MAP_FILE = "special_tokens_map.json"
 ADDED_TOKENS_FILE = "added_tokens.json"

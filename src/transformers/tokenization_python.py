@@ -30,6 +30,8 @@ from .tokenization_utils_base import (
     PreTrainedTokenizerBase,
     TextInput,
     TruncationStrategy,
+    has_escaped_literal_text,
+    split_escaped_literal_text,
 )
 from .utils import PaddingStrategy, TensorType, add_end_docstrings, logging
 
@@ -634,6 +636,20 @@ class PythonBackend(PreTrainedTokenizerBase):
             The list of tokens.
         """
         split_special_tokens = kwargs.pop("split_special_tokens", self.split_special_tokens)
+
+        if has_escaped_literal_text(text):
+            # Escaped spans hold text that a user typed themselves and which collides with a special token, in
+            # practice a multimodal placeholder such as `<image>`. They are tokenized as plain text, so that they
+            # never map to a special token id, while the rest of the text keeps the requested behavior.
+            tokens = []
+            for chunk, is_literal in split_escaped_literal_text(text):
+                if not chunk:
+                    continue
+                tokens.extend(
+                    self.tokenize(chunk, split_special_tokens=is_literal or split_special_tokens, **kwargs)
+                )
+            return tokens
+
         text, kwargs = self.prepare_for_tokenization(text, **kwargs)
 
         if split_special_tokens:

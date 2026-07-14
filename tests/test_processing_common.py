@@ -2011,6 +2011,64 @@ class ProcessorTesterMixin:
         self.assertEqual(formatted_prompt, expected_prompt)
 
     @require_torch
+    @require_vision
+    def test_apply_chat_template_literal_image_token(self):
+        # An image placeholder token typed by a user inside a text block is text they meant literally, not a
+        # reference to an image: it must neither be expanded nor tokenized as the image token. See #47217.
+        processor = self.get_processor()
+
+        if processor.chat_template is None:
+            self.skipTest("Processor has no chat template")
+
+        if "image_processor" not in self.processor_class.get_attributes():
+            self.skipTest(f"image_processor attribute not present in {self.processor_class}")
+
+        image_token = getattr(processor, "image_token", None)
+        if image_token is None:
+            self.skipTest(f"{self.processor_class} has no image token")
+
+        def messages_with_text(text):
+            return [
+                [
+                    {
+                        "role": "user",
+                        "content": [
+                            {"type": "text", "text": text},
+                            {"type": "image", "url": MODALITY_INPUT_DATA["images"][0]},
+                        ],
+                    }
+                ]
+            ]
+
+        inputs = processor.apply_chat_template(
+            messages_with_text("Describe this."), tokenize=True, return_dict=True, return_tensors="pt"
+        )
+        inputs_literal = processor.apply_chat_template(
+            messages_with_text(f"Describe this, and tell me about the {image_token} token."),
+            tokenize=True,
+            return_dict=True,
+            return_tensors="pt",
+        )
+
+        image_token_id = processor.tokenizer.convert_tokens_to_ids(image_token)
+        input_ids = inputs["input_ids"][0].tolist()
+        input_ids_literal = inputs_literal["input_ids"][0].tolist()
+
+        # The literal token is text, so it doesn't add any image placeholder to the prompt: both conversations hold
+        # a single image and are expanded the exact same way
+        self.assertEqual(input_ids_literal.count(image_token_id), input_ids.count(image_token_id))
+
+        # ... and it survives tokenization as plain text. Compare on the decoded text rather than on ids, as the
+        # pieces a tokenizer splits the token into depend on the surrounding text. Tiny testing tokenizers have a
+        # vocabulary too small to spell the token out as plain text, so skip them.
+        as_plain_text = processor.tokenizer.encode(image_token, add_special_tokens=False, split_special_tokens=True)
+        if processor.tokenizer.decode(as_plain_text) == image_token:
+            text_without_placeholders = processor.tokenizer.decode(
+                [input_id for input_id in input_ids_literal if input_id != image_token_id]
+            )
+            self.assertIn(image_token, text_without_placeholders)
+
+    @require_torch
     def test_apply_chat_template_assistant_mask(self):
         processor = self.get_processor()
 
