@@ -784,7 +784,8 @@ class Gemma3Model(Gemma3PreTrainedModel):
         self.multi_modal_projector = Gemma3MultiModalProjector(config)
         self.vocab_size = config.text_config.vocab_size
 
-        self.language_model = AutoModel.from_config(config=config.text_config)
+        language_model = AutoModel.from_config(config=config.text_config)
+        self.language_model = language_model
         self.post_init()
 
     @can_return_tuple
