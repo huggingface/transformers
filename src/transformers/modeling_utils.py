@@ -2455,17 +2455,19 @@ class PreTrainedModel(
         if getattr(module, "_is_hf_initialized", False):
             return
 
-        # Respect per-parameter _is_hf_initialized flag. This covers both:
-        # - remote code that writes params in-place in _init_weights, and
-        # - models whose params were externally marked via _load_parameter_into_model
-        #   or the FSDP path in _initialize_missing_keys (param._is_hf_initialized = True).
-        # Without this, non-remote-code models would still go through expensive
-        # _init_weights → normal_ re-initialization despite all params being marked.
+        # Check per-parameter _is_hf_initialized flag to skip redundant _init_weights:
+        # - remote code that writes params in-place without using torch.nn.init (is_custom_code),
+        # - non-CUDA hardware (NPU/XPU/MLU) where torch.Tensor.normal_ can be >1000x slower
+        #   than CUDA, making redundant re-initialization prohibitively expensive (e.g. 224s
+        #   for UMT5 under FSDP on Ascend NPU vs ~1ms on CUDA).
         #
         # Safety: mark_tied_weights_as_initialized may set _is_hf_initialized on tied params
         # that are still on meta device. Never skip _init_weights if any param is still on meta.
+        _check_per_param_flag = is_custom_code or not is_torch_cuda_available()
+
         if (
-            all(getattr(param, "_is_hf_initialized", False) for param in module.parameters(recurse=False))
+            _check_per_param_flag
+            and all(getattr(param, "_is_hf_initialized", False) for param in module.parameters(recurse=False))
             and not any(param.device.type == "meta" for param in module.parameters(recurse=False))
             and all(
                 getattr(buffer, "_is_hf_initialized", False)
