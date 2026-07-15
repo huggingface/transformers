@@ -134,8 +134,7 @@ class InklingTextConfig(PreTrainedConfig):
                 return ["hybrid"] * self.num_mtp_layers
             else:
                 return [
-                    "hybrid_sliding" if i in self.mtp_local_layer_ids else "hybrid"
-                    for i in range(self.mtp_local_layer_ids)
+                    "hybrid_sliding" if i in self.mtp_local_layer_ids else "hybrid" for i in range(self.num_mtp_layers)
                 ]
         return None
 
