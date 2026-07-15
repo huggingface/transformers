@@ -68,9 +68,11 @@ class InklingTextModelTester(CausalLMModelTester):
         super().__init__(*args, **kwargs)
         self.num_hidden_layers = 2
         # we want to test sharing on both types
-        self.layer_types = ["sliding_attention", "full_attention"]
+        self.layer_types = ["hybrid_sliding", "hybrid"]
         self.mlp_layer_types = ["dense", "sparse"]
-        self.global_head_dim = self.head_dim  # gemma4 use a different head_dim for full and sliding layers
+        self.swa_num_attention_heads = self.num_attention_heads
+        self.swa_num_key_value_heads = self.num_key_value_heads
+        self.swa_head_dim = self.head_dim
 
         # To activate moe blocks
         self.enable_moe_block = True
@@ -85,44 +87,31 @@ class InklingAudio2TextModelTester:
         boi_token_id=5,
         eoi_token_id=6,
         audio_token_id=7,
-        boa_token_id=8,
-        eoa_token_index=9,
         video_token_id=10,
         seq_length=50,
-        audio_seq_length=96,
-        audio_num_channels=16,
+        audio_num_frames=4,
+        n_mel_bins=4,
+        mel_vocab_size=8,
         is_training=True,
-        audio_config={
-            "hidden_size": 32,
-            "num_hidden_layers": 2,
-            "num_attention_heads": 4,
-            "hidden_act": "silu",
-            "subsampling_conv_channels": [16, 8],
-            "conv_kernel_size": 3,
-            "attention_chunk_size": 4,
-            "attention_context_left": 5,
-            "attention_context_right": 0,
-            "output_proj_dims": 32,
-            # Clipped linears register inf/-inf buffers which cause NaN in test_torch_save_load's
-            # comparison logic (inf - inf = NaN). Disable for testing.
-            "use_clipped_linears": False,
-        },
     ):
         self.parent = parent
         self.image_token_id = image_token_id
         self.boi_token_id = boi_token_id
         self.eoi_token_id = eoi_token_id
         self.audio_token_id = audio_token_id
-        self.boa_token_id = boa_token_id
-        self.eoa_token_index = eoa_token_index
         self.video_token_id = video_token_id
         self.llm_tester = InklingTextModelTester(self.parent)
         self.llm_tester.use_bidirectional_attention = None
         self.text_config = self.llm_tester.get_config()
-        self.audio_config = audio_config
+        self.audio_num_frames = audio_num_frames
+        self.n_mel_bins = n_mel_bins
+        self.mel_vocab_size = mel_vocab_size
+        self.audio_config = {
+            "hidden_size": self.text_config.hidden_size,
+            "n_mel_bins": n_mel_bins,
+            "mel_vocab_size": mel_vocab_size,
+        }
         self.seq_length = seq_length
-        self.audio_seq_length = audio_seq_length
-        self.audio_num_channels = audio_num_channels
         self.pad_token_id = self.text_config.pad_token_id
 
         self.num_hidden_layers = self.text_config.num_hidden_layers
@@ -137,25 +126,23 @@ class InklingAudio2TextModelTester:
     def get_config(self):
         return InklingConfig(
             text_config=self.text_config,
-            vision_config=None,
+            vision_config={"patch_size": 5, "num_hidden_layers": 2, "num_channels": 3},
             audio_config=self.audio_config,
             image_token_id=self.image_token_id,
             boi_token_id=self.boi_token_id,
             eoi_token_id=self.eoi_token_id,
             audio_token_id=self.audio_token_id,
-            boa_token_id=self.boa_token_id,
-            eoa_token_index=self.eoa_token_index,
             video_token_id=self.video_token_id,
         )
 
     def prepare_config_and_inputs(self):
-        input_features = floats_tensor([self.batch_size, self.audio_seq_length, self.audio_num_channels])
-        input_features_mask = torch.ones(self.batch_size, self.audio_seq_length, dtype=torch.bool)
+        audio_input_ids = ids_tensor([self.batch_size, self.audio_num_frames, self.n_mel_bins], self.mel_vocab_size)
+        audio_input_ids_mask = torch.ones(self.batch_size, self.audio_num_frames, dtype=torch.bool)
         config = self.get_config()
-        return config, input_features, input_features_mask
+        return config, audio_input_ids, audio_input_ids_mask
 
     def prepare_config_and_inputs_for_common(self):
-        config, input_features, input_features_mask = self.prepare_config_and_inputs()
+        config, audio_input_ids, audio_input_ids_mask = self.prepare_config_and_inputs()
         input_ids = ids_tensor([self.batch_size, self.seq_length], config.text_config.vocab_size - 1) + 1
         attention_mask = input_ids.ne(self.pad_token_id).to(torch_device)
 
@@ -163,14 +150,12 @@ class InklingAudio2TextModelTester:
         for token_id in [config.image_token_id, config.video_token_id, config.audio_token_id]:
             input_ids[input_ids == token_id] = self.pad_token_id
 
-        # The audio encoder produces audio_seq_length / 4 tokens per audio sample after subsampling.
-        # We need that many audio placeholder tokens per sequence in input_ids.
-        num_audio_tokens = self.audio_seq_length // 4
-        input_ids[:, :num_audio_tokens] = config.audio_token_id
+        # One audio embedding is produced per valid frame; place that many audio placeholders per sequence
+        input_ids[:, : self.audio_num_frames] = config.audio_token_id
 
         inputs_dict = {
-            "input_features": input_features,
-            "input_features_mask": input_features_mask,
+            "audio_input_ids": audio_input_ids,
+            "audio_input_ids_mask": audio_input_ids_mask,
             "input_ids": input_ids,
             "attention_mask": attention_mask,
         }
@@ -181,10 +166,20 @@ class InklingAudio2TextModelTester:
 class InklingAudio2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     all_model_classes = (InklingModel, InklingForConditionalGeneration) if is_torch_available() else ()
     all_generative_model_classes = (InklingForConditionalGeneration,) if is_torch_available() else ()
+    # Audio embeddings are packed per valid frame, so last_hidden_state[0] is the total frame count, not batch size
+    skip_test_audio_features_output_shape = True
 
     def setUp(self):
         self.model_tester = InklingAudio2TextModelTester(self)
         self.config_tester = ConfigTester(self, config_class=InklingConfig, hidden_size=37)
+
+    @unittest.skip("Inkling's audio tower is an embedding+norm module with no attention or hidden-state layers")
+    def test_get_audio_features_hidden_states(self):
+        pass
+
+    @unittest.skip("Inkling's audio tower is an embedding+norm module with no attention or hidden-state layers")
+    def test_get_audio_features_attentions(self):
+        pass
 
     @unittest.skip("The tester has no image in input dict")
     def test_get_image_features_hidden_states(self):
@@ -227,35 +222,6 @@ class InklingAudio2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unitte
     @unittest.skip(GEMMA4_RANDOM_MOE_FA2_SKIP_REASON)
     def test_flash_attn_2_inference_equivalence_right_padding(self):
         pass
-
-    def test_audio_rel_pos_encoding_uses_context_size_from_config(self):
-        """Regression test for #45468; attention context size is properly read from config"""
-        from transformers.models.gemma4.configuration_gemma4 import InklingAudioConfig
-        from transformers.models.gemma4.modeling_gemma4 import InklingAudioRelPositionalEncoding
-
-        config = InklingAudioConfig(
-            hidden_size=32,
-            attention_chunk_size=6,
-            attention_context_left=5,
-            attention_context_right=1,
-            use_clipped_linears=False,
-        )
-
-        module = InklingAudioRelPositionalEncoding(config)
-        hidden_states = torch.zeros(1, 3, config.hidden_size)
-
-        pos = module(hidden_states)
-
-        context_size = config.attention_chunk_size + config.attention_context_left - 1 + config.attention_context_right
-        expected_len = context_size // 2 + 1
-
-        self.assertEqual(pos.shape, (1, expected_len, config.hidden_size))
-
-        position_ids = torch.arange(context_size // 2, -1, -1, device=hidden_states.device)[..., None]
-        scaled_time = position_ids * module.inv_timescales.to(device=hidden_states.device)
-        expected = torch.cat([torch.sin(scaled_time), torch.cos(scaled_time)], dim=-1).to(hidden_states.dtype)
-
-        torch.testing.assert_close(pos, expected)
 
 
 class InklingVision2TextModelTester:

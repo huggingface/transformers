@@ -41,7 +41,12 @@ from ...utils import (
 )
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
-from ..gemma3.modeling_gemma3 import Gemma3CausalLMOutputWithPast, Gemma3MLP, Gemma3ModelOutputWithPast
+from ..gemma3.modeling_gemma3 import (
+    Gemma3CausalLMOutputWithPast,
+    Gemma3ForCausalLM,
+    Gemma3MLP,
+    Gemma3ModelOutputWithPast,
+)
 from ..higgs_audio_v2.modeling_higgs_audio_v2 import HiggsAudioV2Embeddings
 from ..llama.modeling_llama import LlamaRMSNorm, repeat_kv
 from ..mixtral.modeling_mixtral import MixtralExperts
@@ -808,6 +813,56 @@ class InklingTextModel(InklingPreTrainedModel):
         )
 
 
+class InklingForCausalLM(Gemma3ForCausalLM):
+    # `embed` and `unembed` are separate tensors in the checkpoints, never tied
+    _tied_weights_keys = {}
+    _tp_plan = {"lm_head": "rowwise_split_input"}
+
+    @can_return_tuple
+    @auto_docstring
+    def forward(
+        self,
+        input_ids: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: Cache | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        labels: torch.LongTensor | None = None,
+        use_cache: bool | None = None,
+        logits_to_keep: int | torch.Tensor = 0,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> InklingCausalLMOutputWithPast:
+        outputs = self.model(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            position_ids=position_ids,
+            past_key_values=past_key_values,
+            inputs_embeds=inputs_embeds,
+            use_cache=use_cache,
+            **kwargs,
+        )
+
+        hidden_states = outputs.last_hidden_state / self.config.logits_mup_width_multiplier
+        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
+        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
+        logits = self.lm_head(hidden_states[:, slice_indices, :])
+        unpadded_vocab_size = self.config.unpadded_vocab_size
+        if unpadded_vocab_size is not None and unpadded_vocab_size < logits.shape[-1]:
+            logits = logits[..., :unpadded_vocab_size]
+
+        loss = None
+        if labels is not None:
+            loss = self.loss_function(logits=logits, labels=labels, vocab_size=logits.shape[-1], **kwargs)
+
+        return InklingCausalLMOutputWithPast(
+            loss=loss,
+            logits=logits,
+            past_key_values=outputs.past_key_values,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+        )
+
+
 class InklingAudioModelEmbeddings(HiggsAudioV2Embeddings): ...
 
 
@@ -1012,14 +1067,14 @@ class InklingModel(InklingPreTrainedModel):
     ) -> tuple | BaseModelOutputWithPooling:
         return self.vision_tower(pixel_values=pixel_values, **kwargs)
 
+    @can_return_tuple
+    @auto_docstring(custom_intro="Projects discretized dMel bin tokens into the language model space.")
     def get_audio_features(
         self,
         audio_input_ids: torch.LongTensor,
         audio_input_ids_mask: torch.Tensor | None = None,
-    ) -> torch.FloatTensor:
+    ) -> tuple | BaseModelOutputWithPooling:
         r"""
-        Projects discretized dMel bin tokens into the language model space.
-
         audio_input_ids (`torch.LongTensor` of shape `(num_audios, max_num_frames, n_mel_bins)`):
             Batch of (padded) dMel bin tokens produced by [`InklingProcessor`].
         audio_input_ids_mask (`torch.Tensor` of shape `(num_audios, max_num_frames)`, *optional*):
@@ -1030,7 +1085,7 @@ class InklingModel(InklingPreTrainedModel):
             audio_input_ids = audio_input_ids[audio_input_ids_mask.bool()]
         else:
             audio_input_ids = audio_input_ids.reshape(-1, audio_input_ids.shape[-1])
-        return self.audio_tower(audio_input_ids).last_hidden_state
+        return self.audio_tower(audio_input_ids)
 
     def get_placeholder_mask(
         self,
@@ -1127,7 +1182,7 @@ class InklingModel(InklingPreTrainedModel):
         # Merge text and audio
         audio_features = None
         if audio_input_ids is not None:
-            audio_features = self.get_audio_features(audio_input_ids, audio_input_ids_mask)
+            audio_features = self.get_audio_features(audio_input_ids, audio_input_ids_mask).last_hidden_state
             audio_features = audio_features.to(inputs_embeds.device, inputs_embeds.dtype)
             special_audio_mask = self.get_placeholder_mask(
                 input_ids, inputs_embeds, audio_features, self.config.audio_token_id
@@ -1338,6 +1393,7 @@ __all__ = [
     "InklingVisionConfig",
     "InklingPreTrainedModel",
     "InklingTextModel",
+    "InklingForCausalLM",
     "InklingAudioModel",
     "InklingVisionModel",
     "InklingModel",
