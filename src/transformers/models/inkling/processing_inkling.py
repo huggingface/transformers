@@ -26,11 +26,7 @@ logger = logging.get_logger(__name__)
 
 
 class InklingProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {
-        "audio_kwargs": {
-            "load_audio_backend": "torchaudio",  # sglang ref uses torchaudio resampling
-        },
-    }
+    _defaults = {}
 
 
 @auto_docstring
