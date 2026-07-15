@@ -558,9 +558,6 @@ def deepgemm_fp8_fp4_linear(
 
     Static (per-tensor) activation quantization is rejected — DeepGEMM needs
     per-row SFs. Callers should route static activations through the Triton fallback.
-
-    `output_dtype` is deprecated and ignored: like `torch.nn.functional.linear`, the output
-    always follows the input dtype.
     """
     if activation_scale is not None:
         raise NotImplementedError("DeepGEMM linear does not support static activation quantization.")
