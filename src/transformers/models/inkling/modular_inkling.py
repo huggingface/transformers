@@ -225,8 +225,8 @@ class InklingConfig(PreTrainedConfig):
     text_config: InklingTextConfig | dict | None = None
     audio_config: InklingAudioConfig | dict | None = None
     vision_config: InklingVisionConfig | dict | None = None
-    image_token_id: int = 200007
-    audio_token_id: int = 200021
+    image_token_id: int = 200054
+    audio_token_id: int = 200053
     image_bos_token_id: int = 200005
     audio_bos_token_id: int = 200020
 
