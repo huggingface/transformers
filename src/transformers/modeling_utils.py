@@ -2455,12 +2455,14 @@ class PreTrainedModel(
         if getattr(module, "_is_hf_initialized", False):
             return
 
-        # This check is for remote code that does NOT use either `torch.init` or `transformers.initialization` in `_init_weights`
-        # which allow to check the flag directly on param. As they don't and write the params in-place, params would be reinitialized
-        # otherwise
+        # Respect per-parameter _is_hf_initialized flag. This covers both:
+        # - remote code that writes params in-place in _init_weights, and
+        # - models whose params were externally marked via _load_parameter_into_model
+        #   or the FSDP path in _initialize_missing_keys (param._is_hf_initialized = True).
+        # Without this, non-remote-code models would still go through expensive
+        # _init_weights → normal_ re-initialization despite all params being marked.
         if (
-            is_custom_code
-            and all(getattr(param, "_is_hf_initialized", False) for param in module.parameters(recurse=False))
+            all(getattr(param, "_is_hf_initialized", False) for param in module.parameters(recurse=False))
             and all(
                 getattr(buffer, "_is_hf_initialized", False)
                 for buffer in module.buffers(recurse=False)
