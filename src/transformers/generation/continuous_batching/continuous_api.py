@@ -630,8 +630,9 @@ class ContinuousBatchingManager:
     def switch_to_cb_friendly_attn(self, model: ProtoPretrainedModel) -> None:
         """Switch the attn implementation to one that is CB friendly: try to find a flash implementation if flash is "
         "and, in any cases, switch to a paged implementation."""
-        self._original_attn_impl = model.config._attn_implementation
-        target_implem = self._original_attn_impl
+        # The self._original_attn_impl is set only if the attn implementation is changed (makes this fn idempotent)
+        original_attn_impl = model.config._attn_implementation
+        target_implem = original_attn_impl
 
         # Check if flash attention is supported and available
         if "flash" not in target_implem and model._supports_flash_attn:
@@ -653,9 +654,10 @@ class ContinuousBatchingManager:
             else:
                 logger.warning(f"{msg} Consider using a flash `attn_implementation` when loading the model.")
 
-        # Switch to a paged implementation
+        # Switch to a paged implementation (always entered if conversion to flash happened)
         if "paged|" not in target_implem:
             model.set_attn_implementation(f"paged|{target_implem}")
+            self._original_attn_impl = original_attn_impl
 
     def warmup(self) -> None:
         """Pre-capture CUDA graphs for varlen and decode paths by running dummy batches. Initializes the batch
