@@ -410,7 +410,6 @@ class InklingProcessingIntegrationTest(unittest.TestCase):
 
         audio_id = self.processor.audio_token_id
         num_frames = with_mask["audio_input_ids"].shape[-2]
-        n_mel_bins = with_mask["audio_input_ids"].shape[-1]
         n_placeholders_with = int((with_mask["input_ids"] == audio_id).sum())
         n_placeholders_without = int((without_mask["input_ids"] == audio_id).sum())
 
