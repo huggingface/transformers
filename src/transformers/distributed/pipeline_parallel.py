@@ -133,9 +133,18 @@ class PipelineStage:
         return None if is_send else tensor.to(device=device, dtype=dtype)
 
     def layer_range_for_rank(self, rank: int, num_layers: int) -> tuple[int, int]:
-        """Return [start, end) owned by rank."""
+        """
+            Return [start, end) owned by rank.
+                    
+            Example with pp_size=3 and num_layers=32:
+                layers_per_rank = 32 // 3 = 10
+                rank 0 -> [0, 10)   # layers 0-9
+                rank 1 -> [10, 20)  # layers 10-19
+                rank 2 -> [20, 32)  # layers 20-31 (10 + 2 remainder)    
+        """
         layers_per_rank = num_layers // self.pp_size
         start_layer = rank * layers_per_rank
+        # last rank will always have more layers if uneven split. Else, it will have the same number of layers as the other ranks.
         end_layer = num_layers if rank == self.pp_size - 1 else start_layer + layers_per_rank
         return start_layer, end_layer
 
