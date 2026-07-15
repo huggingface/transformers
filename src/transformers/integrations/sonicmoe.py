@@ -162,9 +162,7 @@ def _sonicmoe_wrapper(
     """
     sonicmoe = load_sonicmoe_kernel()
     activation_type_enum = sonicmoe.activation_type_enum
-    activation_type = getattr(
-        activation_type_enum, ACT_MAP.get(act_name, "swiglu").upper(), activation_type_enum.SWIGLU
-    )
+    activation_type = getattr(activation_type_enum, ACT_MAP[act_name].upper())
     output, _ = sonicmoe.moe_general_routing_inputs(
         hidden_states,
         router_scores,
@@ -216,6 +214,9 @@ def sonicmoe_experts_forward(
 
     # Map activation function
     act_name = getattr(self.config, "hidden_act", "silu").lower()
+    if act_name not in ACT_MAP:
+        raise ValueError(f"sonicmoe does not support the {act_name!r} activation; expected one of {sorted(ACT_MAP)}.")
+
     # Permute weights as expected by sonic-moe (E=num_experts, H=hidden_size, I=intermediate_size).
     # Non-transposed: gate_up_proj is (E, 2*I, H), down_proj is (E, H, I) -> permute(1, 2, 0).
     # Transposed: gate_up_proj is (E, H, 2*I), down_proj is (E, I, H) -> permute(2, 1, 0).
