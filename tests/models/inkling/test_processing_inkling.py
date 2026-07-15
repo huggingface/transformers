@@ -249,7 +249,7 @@ class InklingProcessingIntegrationTest(unittest.TestCase):
     Check against sglang reference..
 
     reproducers (one per modality, regenerate from sglang and upload the golden to
-    ``hf://buckets/eustlb/tml-integration-tests/<case>/expected_processing.safetensors``):
+    ``hf://buckets/hf-internal-testing/tml-integration-tests/<case>/expected_processing.safetensors``):
         ~/tml/reproducers/reproducer_processing_{text,image,audio,image_audio,multi_image,multi_audio}.py
     gist: https://gist.github.com/eustlb/cb2a5df1676911fa0eb07d0a76a38ae7
     """
@@ -271,7 +271,7 @@ class InklingProcessingIntegrationTest(unittest.TestCase):
     def setUpClass(cls):
         cls.checkpoint_name = "eustlb/dummy-model"
         cls.processor = AutoProcessor.from_pretrained(cls.checkpoint_name)
-        cls.bucket = "eustlb/tml-integration-tests"
+        cls.bucket = "hf-internal-testing/tml-integration-tests"
 
     def _load_expected(self, case: str) -> dict:
         remote = f"{case}/expected_processing.safetensors"

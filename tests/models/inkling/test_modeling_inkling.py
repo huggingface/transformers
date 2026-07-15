@@ -510,7 +510,7 @@ class InklingIntegrationTest(unittest.TestCase):
     """Validate the Inkling next-token distribution against sglang, across every input modality.
 
     reproducer (single sglang Engine, all cases, uploads the golden to
-    ``hf://buckets/eustlb/tml-integration-tests/<case>/expected_next_token_logprobs.safetensors``):
+    ``hf://buckets/hf-internal-testing/tml-integration-tests/<case>/expected_next_token_logprobs.safetensors``):
         ~/tml/reproducers/reproducer_logits.py
     gist: https://gist.github.com/eustlb/cb2a5df1676911fa0eb07d0a76a38ae7
     """
@@ -527,7 +527,7 @@ class InklingIntegrationTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.checkpoint_name = "eustlb/dummy-model"
-        cls.bucket = "eustlb/tml-integration-tests"
+        cls.bucket = "hf-internal-testing/tml-integration-tests"
         cls.processor = AutoProcessor.from_pretrained(cls.checkpoint_name)
         cls.model = InklingForConditionalGeneration.from_pretrained(cls.checkpoint_name, device_map=torch_device)
 
