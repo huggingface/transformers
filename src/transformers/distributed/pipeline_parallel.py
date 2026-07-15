@@ -168,24 +168,19 @@ class PipelineStage:
 
         last_rank = self.pp_size - 1
         comm_device = torch.device("cpu") if self.comm_on_cpu else device
+        # Logits are always (batch, seq_len, vocab_size).
+        logits_ndim = 3
 
-        # broadcast logits number of dimensions
+        # last rank sends the logits vector shape; other ranks receive it to size their buffer.
         if self.pp_is_last_stage:
-            ndim_msg = torch.tensor([tensor.ndim], dtype=torch.long, device=comm_device)
-        else:
-            ndim_msg = torch.empty(1, dtype=torch.long, device=comm_device)
-        dist.broadcast(ndim_msg, src=last_rank, group=self.pp_group)
-        ndim = ndim_msg.item()
-
-        # broadcast logits shape
-        if self.pp_is_last_stage:
+            assert tensor.ndim == logits_ndim, f"Expected logits with {logits_ndim} dims (batch, seq_len, vocab_size), got {tensor.ndim}"
             logits = tensor.to(device=comm_device, dtype=dtype).contiguous()
             shape_msg = torch.tensor(list(logits.shape), dtype=torch.long, device=comm_device)
         else:
-            shape_msg = torch.empty(ndim, dtype=torch.long, device=comm_device)
+            shape_msg = torch.empty(logits_ndim, dtype=torch.long, device=comm_device)
         dist.broadcast(shape_msg, src=last_rank, group=self.pp_group)
 
-        # broadcast the actual logits values
+        # last rank sends the actual logits value; other ranks receive into the pre-allocated buffer.
         if not self.pp_is_last_stage:
             logits = torch.empty(tuple(shape_msg.tolist()), dtype=dtype, device=comm_device)
         dist.broadcast(logits, src=last_rank, group=self.pp_group)
