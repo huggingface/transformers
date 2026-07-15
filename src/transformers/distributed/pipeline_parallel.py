@@ -190,6 +190,7 @@ class PipelineStage:
 
 def apply_pipeline_parallelism(model: nn.Module, pp_mesh: torch.distributed.device_mesh.DeviceMesh) -> nn.Module:
     """Naive even split of `base_model.layers` across PP ranks."""
+    #TODO(3outeille): involves pp_plan to do the split ?
     stage = PipelineStage.from_device_mesh(pp_mesh)
     if stage is None:
         return model
@@ -230,8 +231,7 @@ def _hidden_states_shape(fwd_kwargs: dict, hidden_size: int) -> tuple[int, ...]:
 
 
 def _feed_hidden_states_as_input_embeds(fwd_kwargs: dict, hidden_states: torch.Tensor) -> dict:
-    """stage 0 uses input_ids; later stages use hidden_states received as inputs_embeds."""
-    fwd_kwargs = dict(fwd_kwargs)
+    """Stage 0 uses input_ids; later stages use received hidden states as inputs_embeds."""
     fwd_kwargs.pop("input_ids", None)
     fwd_kwargs["inputs_embeds"] = hidden_states
     return fwd_kwargs
@@ -268,6 +268,7 @@ def _wrap_forward_for_pipeline_parallel(model: nn.Module) -> None:
             logits, past_key_values = outputs.logits, outputs.past_key_values
         else:
             # Non-last stages: Compute and send the activations to the next stage.
+            # We need the base models because hidden_states is getting slices in the causal_lm models + we want last_hidden_state
             base_model = getattr(model, model.base_model_prefix)
             base_kwargs = {k: v for k, v in fwd_kwargs.items() if k not in {"labels", "logits_to_keep"}}
             base_outputs = base_model(**base_kwargs)
@@ -275,7 +276,8 @@ def _wrap_forward_for_pipeline_parallel(model: nn.Module) -> None:
             logits, past_key_values = None, base_outputs.past_key_values
 
         # Only the last stage computed the logits, so broadcast them to every rank (they will be waiting)
-        #TODO(3outeille): very naive implementation to make it work seamless with generate(). In long term, we want only the last stage to hold the logits not every stages
+        #TODO(3outeille): very naive implementation to make it work seamless with generate(). 
+        # In long term, we want only the last stage to hold the logits not every stages that will require changes in generate() directly
         logits = stage.broadcast_from_last(logits, dtype=dtype, device=device)
 
         return CausalLMOutputWithPast(logits=logits, past_key_values=past_key_values)
