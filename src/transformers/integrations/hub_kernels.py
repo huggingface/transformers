@@ -175,26 +175,26 @@ if is_kernels_available():
                 # NOTE: Not torch.compile friendly for unknown reasons
                 "cuda": {
                     Mode.TRAINING: LayerRepository(
-                        repo_id="kernels-community/liger-kernels",
+                        repo_id="kernels-staging/liger-kernels",
                         layer_name="LigerRMSNorm",
-                        version=2,
+                        revision="pr-1029",
                     ),
                     Mode.INFERENCE: LayerRepository(
-                        repo_id="kernels-community/liger-kernels",
+                        repo_id="kernels-staging/liger-kernels",
                         layer_name="LigerRMSNorm",
-                        version=2,
+                        revision="pr-1029",
                     ),
                 },
                 "rocm": {
                     Mode.TRAINING: LayerRepository(
-                        repo_id="kernels-community/liger-kernels",
+                        repo_id="kernels-staging/liger-kernels",
                         layer_name="LigerRMSNorm",
-                        version=2,
+                        revision="pr-1029",
                     ),
                     Mode.INFERENCE: LayerRepository(
-                        repo_id="kernels-community/liger-kernels",
+                        repo_id="kernels-staging/liger-kernels",
                         layer_name="LigerRMSNorm",
-                        version=2,
+                        revision="pr-1029",
                     ),
                 },
                 "xpu": {
@@ -213,14 +213,14 @@ if is_kernels_available():
                 },
                 "npu": {
                     Mode.TRAINING: LayerRepository(
-                        repo_id="kernels-community/liger-kernels",
+                        repo_id="kernels-staging/liger-kernels",
                         layer_name="LigerRMSNorm",
-                        version=2,
+                        revision="pr-1029",
                     ),
                     Mode.INFERENCE: LayerRepository(
-                        repo_id="kernels-community/liger-kernels",
+                        repo_id="kernels-staging/liger-kernels",
                         layer_name="LigerRMSNorm",
-                        version=2,
+                        revision="pr-1029",
                     ),
                 },
             },
