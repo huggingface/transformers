@@ -11,156 +11,145 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""
-End-to-end parity check between the transformers `WavTokenizerModel` port and the ORIGINAL WavTokenizer
-implementation (https://github.com/jishengpeng/WavTokenizer), covering every intended use case in transformers.
+"""End-to-end parity checks between Transformers and the original WavTokenizer implementation.
 
-What it verifies (per test signal: sines, chirp, noise, silence, impulse, hop-multiple and odd lengths):
-  1. convert    - the conversion script converts the original .ckpt with a strict state-dict load
-  2. encode     - our codes are BIT-EXACT equal to the original `encode_infer` codes
-  3. decode     - our decoded waveform matches the original decode (allclose, reports max abs diff)
-  4. roundtrip  - forward() == encode()+decode() internally consistent
-  5. batch      - equal-length batched encode is bit-exact vs per-sample encode
-  6. fe         - the WavTokenizerFeatureExtractor path yields identical codes to the raw-tensor path
-  7. auto       - AutoModel / AutoModelForAudioTokenization / AutoFeatureExtractor resolve on the converted
-                  dir and reproduce identical codes
-  8. reload     - save_pretrained/from_pretrained round trip is bit-exact
-  9. dtype      - (informational) bf16 encode agreement rate vs fp32
+For a named checkpoint, the script resolves its original-author Hub repository and filename, downloads the raw
+checkpoint, and converts it by calling `convert_wavtokenizer_checkpoint.convert_checkpoint`. It can also use a custom
+local checkpoint or process the complete released checkpoint matrix. Pass `--skip_convert` to reuse an existing
+converted output directory.
 
-Requirements: a clone of the original repo (jishengpeng/WavTokenizer or the swiss-ai fork) for the reference
-implementation, and the original checkpoint (auto-downloaded from `novateur/WavTokenizer-large-unify-40token`
-unless --checkpoint_path is given).
+Unless `--skip_convert` is used, each run verifies strict conversion. Every run checks bit-exact encoding, decoded
+waveform parity, forward roundtrips, batching, feature extraction, Auto classes, and save/reload behavior.
 
-Example:
-    python scripts/check_wavtokenizer_parity.py \
-        --original_repo /path/to/WavTokenizer \
-        --output_dir /tmp/wavtokenizer-hf \
-        [--checkpoint_path /path/to/wavtokenizer_large_unify_600_24k.ckpt] \
-        [--config_path /path/to/configs/wavtokenizer_smalldata_frame40_3s_nq1_code4096_dim512_kmeans200_attn.yaml]
+Examples:
+    python scripts/check_wavtokenizer_parity.py --original_repo /path/to/WavTokenizer --checkpoint large-unify-40 --output_dir /tmp/wavtokenizer-hf
+
+    python scripts/check_wavtokenizer_parity.py --original_repo /path/to/WavTokenizer --all-checkpoints --output_dir /tmp/wavtokenizer-matrix
 """
 
 import argparse
+import gc
 import math
 import sys
+from dataclasses import dataclass
 from pathlib import Path
 
 import numpy as np
 import torch
 
 
-HOP = 600
-SAMPLING_RATE = 24000
-DEFAULT_CKPT_REPO = "novateur/WavTokenizer-large-unify-40token"
-DEFAULT_CKPT_FILE = "wavtokenizer_large_unify_600_24k.ckpt"
-DEFAULT_CONFIG_RELPATH = "configs/wavtokenizer_smalldata_frame40_3s_nq1_code4096_dim512_kmeans200_attn.yaml"
-
+DEFAULT_CHECKPOINT = "large-unify-40"
+ORIGINAL_CONFIGS = {
+    600: "configs/wavtokenizer_smalldata_frame40_3s_nq1_code4096_dim512_kmeans200_attn.yaml",
+    320: "configs/wavtokenizer_smalldata_frame75_3s_nq1_code4096_dim512_kmeans200_attn.yaml",
+}
 PASS, FAIL, INFO = "PASS", "FAIL", "INFO"
 
 
-def make_test_signals() -> dict[str, np.ndarray]:
-    """Deterministic signals covering the intended input space (mono, 24 kHz, float32)."""
+@dataclass(frozen=True)
+class CheckpointSpec:
+    repo_id: str
+    filename: str
+
+
+CHECKPOINTS = {
+    "small-speech-40": CheckpointSpec("novateur/WavTokenizer", "WavTokenizer_small_600_24k_4096.ckpt"),
+    "small-speech-75": CheckpointSpec("novateur/WavTokenizer", "WavTokenizer_small_320_24k_4096.ckpt"),
+    "medium-speech-75": CheckpointSpec(
+        "novateur/WavTokenizer-medium-speech-75token", "wavtokenizer_medium_speech_320_24k.ckpt"
+    ),
+    "medium-speech-75-v2": CheckpointSpec(
+        "novateur/WavTokenizer-medium-speech-75token", "wavtokenizer_medium_speech_320_24k_v2.ckpt"
+    ),
+    "medium-music-audio-75": CheckpointSpec(
+        "novateur/WavTokenizer-medium-music-audio-75token", "wavtokenizer_medium_music_audio_320_24k.ckpt"
+    ),
+    "medium-music-audio-75-v2": CheckpointSpec(
+        "novateur/WavTokenizer-medium-music-audio-75token", "wavtokenizer_medium_music_audio_320_24k_v2.ckpt"
+    ),
+    "large-unify-40": CheckpointSpec(
+        "novateur/WavTokenizer-large-unify-40token", "wavtokenizer_large_unify_600_24k.ckpt"
+    ),
+    "large-speech-75-v2": CheckpointSpec(
+        "novateur/WavTokenizer-large-speech-75token", "wavtokenizer_large_speech_320_v2.ckpt"
+    ),
+}
+
+
+def make_test_signals(hop_length: int, sampling_rate: int) -> dict[str, np.ndarray]:
+    """Create deterministic mono float32 signals, including hop-boundary and odd-length inputs."""
     rng = np.random.default_rng(seed=0)
-    t = lambda seconds: np.arange(int(seconds * SAMPLING_RATE)) / SAMPLING_RATE  # noqa: E731
-    # speech-like: amplitude-modulated harmonic stack in the speech band with pauses
-    t_sp = t(3.0)
+    time = lambda seconds: np.arange(int(seconds * sampling_rate)) / sampling_rate  # noqa: E731
+    speech_time = time(3.0)
     speech_like = (
         (
-            0.3 * np.sin(2 * np.pi * 120 * t_sp)
-            + 0.2 * np.sin(2 * np.pi * 240 * t_sp)
-            + 0.1 * np.sin(2 * np.pi * 800 * t_sp)
+            0.3 * np.sin(2 * np.pi * 120 * speech_time)
+            + 0.2 * np.sin(2 * np.pi * 240 * speech_time)
+            + 0.1 * np.sin(2 * np.pi * 800 * speech_time)
         )
-        * (0.5 + 0.5 * np.sin(2 * np.pi * 3.1 * t_sp))  # ~3 Hz syllable-rate envelope
-        * (np.sin(2 * np.pi * 0.4 * t_sp) > -0.6)  # intermittent pauses
+        * (0.5 + 0.5 * np.sin(2 * np.pi * 3.1 * speech_time))
+        * (np.sin(2 * np.pi * 0.4 * speech_time) > -0.6)
     )
-    # long mixed content: chirp + noise + sine + silence, 60 s total (2400 codes)
     long_mixed = np.concatenate(
         [
-            0.4 * np.sin(2 * np.pi * (50 + 4000 * t(20.0)) * t(20.0)),
-            0.2 * rng.standard_normal(int(15.0 * SAMPLING_RATE)),
-            0.5 * np.sin(2 * np.pi * 440.0 * t(15.0)),
-            np.zeros(int(10.0 * SAMPLING_RATE)),
+            0.4 * np.sin(2 * np.pi * (50 + 4000 * time(20.0)) * time(20.0)),
+            0.2 * rng.standard_normal(int(15.0 * sampling_rate)),
+            0.5 * np.sin(2 * np.pi * 440.0 * time(15.0)),
+            np.zeros(int(10.0 * sampling_rate)),
         ]
     )
     signals = {
-        "sine_440hz_1s": 0.5 * np.sin(2 * np.pi * 440.0 * t(1.0)),
-        "chirp_1.7s": 0.4 * np.sin(2 * np.pi * (100 + 2000 * t(1.7)) * t(1.7)),
-        "noise_0.35s": 0.2 * rng.standard_normal(int(0.35 * SAMPLING_RATE)),
-        "silence_0.5s": np.zeros(int(0.5 * SAMPLING_RATE)),
-        "impulse_short": np.eye(1, 2 * HOP + 1, HOP)[0],  # single 1.0 in the middle, odd length
-        "len_hop_multiple": 0.3 * rng.standard_normal(20 * HOP),
-        "len_hop_plus_one": 0.3 * rng.standard_normal(20 * HOP + 1),
-        "len_sub_hop": 0.3 * rng.standard_normal(HOP - 1),
+        "sine_440hz_1s": 0.5 * np.sin(2 * np.pi * 440.0 * time(1.0)),
+        "chirp_1.7s": 0.4 * np.sin(2 * np.pi * (100 + 2000 * time(1.7)) * time(1.7)),
+        "noise_0.35s": 0.2 * rng.standard_normal(int(0.35 * sampling_rate)),
+        "silence_0.5s": np.zeros(int(0.5 * sampling_rate)),
+        "impulse_short": np.eye(1, 2 * hop_length + 1, hop_length)[0],
+        "len_hop_multiple": 0.3 * rng.standard_normal(20 * hop_length),
+        "len_hop_plus_one": 0.3 * rng.standard_normal(20 * hop_length + 1),
         "speech_like_3s": speech_like,
         "long_mixed_60s": long_mixed,
     }
-    return {name: sig.astype(np.float32) for name, sig in signals.items()}
+    return {name: signal.astype(np.float32) for name, signal in signals.items()}
 
 
-def load_original_model(original_repo: str, config_path: str | None, checkpoint_path: str):
-    """Load the reference model through the ORIGINAL repo code (decoder.pretrained.WavTokenizer)."""
+def load_original_model(original_repo: str, config_path: str, checkpoint_path: str):
     repo = Path(original_repo).resolve()
     if not (repo / "decoder" / "pretrained.py").exists():
         raise FileNotFoundError(f"{repo} does not look like a WavTokenizer clone (no decoder/pretrained.py)")
     sys.path.insert(0, str(repo))
     from decoder.pretrained import WavTokenizer as OriginalWavTokenizer  # noqa: PLC0415
 
-    config_path = config_path or str(repo / DEFAULT_CONFIG_RELPATH)
-    model = OriginalWavTokenizer.from_pretrained0802(config_path, checkpoint_path)
-    return model.eval()
+    return OriginalWavTokenizer.from_pretrained0802(config_path, checkpoint_path).eval()
 
 
 def original_encode(original, waveform: torch.Tensor) -> torch.Tensor:
-    """Original codes for a (B, T) waveform -> (B, N) int64."""
-    bandwidth_id = torch.tensor([0])
     with torch.no_grad():
-        _, codes = original.encode_infer(waveform, bandwidth_id=bandwidth_id)
-    return codes.squeeze(0) if codes.dim() == 3 else codes  # (n_q=1, B, N) -> (B, N)
+        _, codes = original.encode_infer(waveform, bandwidth_id=torch.tensor([0]))
+    return codes.squeeze(0) if codes.dim() == 3 else codes
 
 
 def original_decode(original, codes: torch.Tensor) -> torch.Tensor:
-    """Original waveform for (B, N) codes -> (B, T)."""
-    bandwidth_id = torch.tensor([0])
     with torch.no_grad():
-        features = original.codes_to_features(codes.unsqueeze(0))  # (1, B, N)
-        audio = original.decode(features, bandwidth_id=bandwidth_id)
-    return audio
+        features = original.codes_to_features(codes.unsqueeze(0))
+        return original.decode(features, bandwidth_id=torch.tensor([0]))
 
 
-def main():
-    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--original_repo", required=True, help="Path to a clone of jishengpeng/WavTokenizer")
-    parser.add_argument("--config_path", default=None, help="Original config yaml (defaults to the 40-token one)")
-    parser.add_argument("--checkpoint_path", default=None, help="Original .ckpt (downloaded from the Hub if unset)")
-    parser.add_argument("--output_dir", required=True, help="Where the converted HF model is written/reused")
-    parser.add_argument("--skip_convert", action="store_true", help="Reuse an existing converted --output_dir")
-    parser.add_argument("--decode_atol", type=float, default=1e-4, help="Absolute tolerance for decoded audio")
-    args = parser.parse_args()
-
+def run_checkpoint(name, checkpoint_path, output_dir, config_path, args):
     results: list[tuple[str, str, str]] = []
 
-    def record(status: str, name: str, detail: str = ""):
-        results.append((status, name, detail))
-        print(f"[{status}] {name}" + (f" — {detail}" if detail else ""))
+    def record(status: str, test_name: str, detail: str = ""):
+        results.append((status, test_name, detail))
+        print(f"[{name}] [{status}] {test_name}" + (f" — {detail}" if detail else ""))
 
-    checkpoint_path = args.checkpoint_path
-    if checkpoint_path is None:
-        from huggingface_hub import hf_hub_download
-
-        print(f"Downloading original checkpoint {DEFAULT_CKPT_REPO}/{DEFAULT_CKPT_FILE} ...")
-        checkpoint_path = hf_hub_download(repo_id=DEFAULT_CKPT_REPO, filename=DEFAULT_CKPT_FILE)
-
-    # ---- 1. convert -------------------------------------------------------------------------------------
     if not args.skip_convert:
         from transformers.models.wavtokenizer.convert_wavtokenizer_checkpoint import convert_checkpoint
 
         try:
-            convert_checkpoint(checkpoint_path, args.output_dir)
+            convert_checkpoint(checkpoint_path, output_dir)
             record(PASS, "convert: strict state-dict load + save_pretrained")
-        except Exception as exc:  # noqa: BLE001
-            record(FAIL, "convert", f"{type(exc).__name__}: {exc}")
-            print("Conversion failed — aborting.")
-            _summarize(results)
-            sys.exit(1)
+        except Exception as exception:  # noqa: BLE001
+            record(FAIL, "convert", f"{type(exception).__name__}: {exception}")
+            return results
 
     from transformers import (
         AutoFeatureExtractor,
@@ -170,127 +159,209 @@ def main():
         WavTokenizerModel,
     )
 
-    model = WavTokenizerModel.from_pretrained(args.output_dir).eval()
-    feature_extractor = WavTokenizerFeatureExtractor.from_pretrained(args.output_dir)
-    original = load_original_model(args.original_repo, args.config_path, checkpoint_path)
+    model = WavTokenizerModel.from_pretrained(output_dir).eval()
+    feature_extractor = WavTokenizerFeatureExtractor.from_pretrained(output_dir)
+    hop_length = model.config.hop_length
+    sampling_rate = model.config.sampling_rate
+    if feature_extractor.hop_length != hop_length or feature_extractor.sampling_rate != sampling_rate:
+        record(
+            FAIL,
+            "config",
+            "model and feature extractor disagree on sampling rate or hop length",
+        )
+        return results
 
-    signals = make_test_signals()
+    if config_path is None:
+        if hop_length not in ORIGINAL_CONFIGS:
+            record(FAIL, "config", f"no original reference YAML registered for hop_length={hop_length}")
+            return results
+        config_path = str(Path(args.original_repo).resolve() / ORIGINAL_CONFIGS[hop_length])
+    original = load_original_model(args.original_repo, config_path, checkpoint_path)
+    signals = make_test_signals(hop_length, sampling_rate)
     our_codes: dict[str, torch.Tensor] = {}
 
-    # ---- 2. encode parity (bit-exact) -------------------------------------------------------------------
-    for name, signal in signals.items():
-        waveform = torch.from_numpy(signal)[None, :]  # (1, T)
+    for signal_name, signal in signals.items():
+        waveform = torch.from_numpy(signal)[None, :]
         with torch.no_grad():
-            ours = model.encode(waveform[:, None, :]).audio_codes[:, 0, :]  # (1, N)
+            ours = model.encode(waveform[:, None, :]).audio_codes[:, 0, :]
         theirs = original_encode(original, waveform)
-        our_codes[name] = ours
-        expected_n = math.ceil(signal.shape[-1] / HOP)
+        our_codes[signal_name] = ours
+        expected_codes = math.ceil(signal.shape[-1] / hop_length)
         if ours.shape != theirs.shape:
-            record(FAIL, f"encode[{name}]", f"shape ours {tuple(ours.shape)} vs original {tuple(theirs.shape)}")
+            record(FAIL, f"encode[{signal_name}]", f"shape ours {tuple(ours.shape)} vs original {tuple(theirs.shape)}")
         elif not torch.equal(ours.long(), theirs.long()):
-            n_diff = (ours.long() != theirs.long()).sum().item()
-            record(FAIL, f"encode[{name}]", f"{n_diff}/{ours.numel()} codes differ")
-        elif ours.shape[-1] != expected_n:
-            record(FAIL, f"encode[{name}]", f"{ours.shape[-1]} codes, expected ceil(T/hop)={expected_n}")
+            different = (ours.long() != theirs.long()).sum().item()
+            record(FAIL, f"encode[{signal_name}]", f"{different}/{ours.numel()} codes differ")
+        elif ours.shape[-1] != expected_codes:
+            record(FAIL, f"encode[{signal_name}]", f"{ours.shape[-1]} codes, expected {expected_codes}")
         else:
-            record(PASS, f"encode[{name}]", f"{ours.shape[-1]} codes bit-exact")
+            record(PASS, f"encode[{signal_name}]", f"{ours.shape[-1]} codes bit-exact")
 
-    # ---- 3. decode parity --------------------------------------------------------------------------------
-    for name in signals:
-        codes = our_codes[name]
-        if codes.shape[-1] < 2:
-            # single-code decode is unsupported by the architecture (GroupNorm over one time step);
-            # our port raises a clear ValueError by design — verify the guard fires
-            try:
-                with torch.no_grad():
-                    model.decode(codes[:, None, :])
-                record(FAIL, f"decode[{name}]", "expected ValueError for single-code decode, got none")
-            except ValueError:
-                record(PASS, f"decode[{name}]", "single-code guard raised as designed")
-            continue
+    for signal_name, codes in our_codes.items():
         with torch.no_grad():
-            ours = model.decode(codes[:, None, :]).audio_values[:, 0, :]
+            ours = model.decode(codes[:, None, :]).audio_values
         theirs = original_decode(original, codes)
-        theirs = theirs.reshape(ours.shape[0], -1)[:, : ours.shape[-1]]
-        max_diff = (ours[..., : theirs.shape[-1]] - theirs).abs().max().item()
-        status = PASS if max_diff <= args.decode_atol else FAIL
-        record(status, f"decode[{name}]", f"max|Δ|={max_diff:.2e} (atol={args.decode_atol})")
+        expected_length = codes.shape[-1] * hop_length
+        expected_ours_shape = (codes.shape[0], 1, expected_length)
+        expected_theirs_shape = (codes.shape[0], expected_length)
+        if ours.shape != expected_ours_shape or theirs.shape != expected_theirs_shape:
+            record(
+                FAIL,
+                f"decode[{signal_name}]",
+                f"shape ours {tuple(ours.shape)} vs expected {expected_ours_shape}; "
+                f"original {tuple(theirs.shape)} vs expected {expected_theirs_shape}",
+            )
+            continue
+        max_difference = (ours[:, 0, :] - theirs).abs().max().item()
+        status = PASS if max_difference <= args.decode_atol else FAIL
+        record(status, f"decode[{signal_name}]", f"max|delta|={max_difference:.2e} (atol={args.decode_atol})")
 
-    # ---- 4. roundtrip forward ----------------------------------------------------------------------------
+    del original
+    gc.collect()
+
     signal = signals["chirp_1.7s"]
     waveform = torch.from_numpy(signal)[None, None, :]
     with torch.no_grad():
-        fwd = model(waveform)
-        enc = model.encode(waveform).audio_codes
-        dec = model.decode(enc).audio_values[..., : waveform.shape[-1]]
-    ok = torch.equal(fwd.audio_codes, enc) and torch.equal(fwd.audio_values, dec)
-    record(PASS if ok else FAIL, "roundtrip: forward == encode + decode")
+        forward_output = model(waveform)
+        encoded = model.encode(waveform).audio_codes
+        decoded = model.decode(encoded).audio_values[..., : waveform.shape[-1]]
+    consistent = torch.equal(forward_output.audio_codes, encoded) and torch.equal(forward_output.audio_values, decoded)
+    record(PASS if consistent else FAIL, "roundtrip: forward == encode + decode")
 
-    # ---- 5. batched vs single ----------------------------------------------------------------------------
     batch = torch.from_numpy(np.stack([signals["len_hop_multiple"], signals["len_hop_multiple"][::-1].copy()]))
     with torch.no_grad():
         batched = model.encode(batch[:, None, :]).audio_codes
-        singles = torch.cat([model.encode(batch[i : i + 1, None, :]).audio_codes for i in range(2)], dim=0)
+        singles = torch.cat([model.encode(batch[index : index + 1, None, :]).audio_codes for index in range(2)])
     record(PASS if torch.equal(batched, singles) else FAIL, "batch: batched encode == per-sample encode")
 
-    # ---- 6. feature extractor path -----------------------------------------------------------------------
-    signal = signals["len_hop_multiple"]  # hop multiple: FE pads nothing, must match the raw path exactly
-    inputs = feature_extractor(signal, sampling_rate=SAMPLING_RATE, return_tensors="pt")
+    signal = signals["len_hop_multiple"]
+    inputs = feature_extractor(signal, sampling_rate=sampling_rate, return_tensors="pt")
     with torch.no_grad():
         fe_codes = model.encode(inputs["input_values"], padding_mask=inputs["padding_mask"]).audio_codes
         raw_codes = model.encode(torch.from_numpy(signal)[None, None, :]).audio_codes
-    record(PASS if torch.equal(fe_codes, raw_codes) else FAIL, "fe: feature-extractor path == raw-tensor path")
+    record(PASS if torch.equal(fe_codes, raw_codes) else FAIL, "feature extractor == raw tensor path")
 
-    # ---- 7. auto classes ----------------------------------------------------------------------------------
-    auto_model = AutoModel.from_pretrained(args.output_dir).eval()
-    auto_tok = AutoModelForAudioTokenization.from_pretrained(args.output_dir).eval()
-    auto_fe = AutoFeatureExtractor.from_pretrained(args.output_dir)
-    ok = (
-        type(auto_model).__name__ == "WavTokenizerModel"
-        and type(auto_tok).__name__ == "WavTokenizerModel"
-        and type(auto_fe).__name__ == "WavTokenizerFeatureExtractor"
-    )
-    if ok:
+    auto_model = AutoModel.from_pretrained(output_dir).eval()
+    auto_model_ok = type(auto_model).__name__ == "WavTokenizerModel"
+    if auto_model_ok:
         with torch.no_grad():
-            ok = torch.equal(
-                auto_model.encode(waveform).audio_codes,
-                our_codes["chirp_1.7s"][:, None, :],
-            )
-    record(PASS if ok else FAIL, "auto: AutoModel/AutoModelForAudioTokenization/AutoFeatureExtractor")
+            auto_model_ok = torch.equal(auto_model.encode(waveform).audio_codes, our_codes["chirp_1.7s"][:, None, :])
+    del auto_model
+    gc.collect()
 
-    # ---- 8. save/load round trip --------------------------------------------------------------------------
+    auto_tokenizer = AutoModelForAudioTokenization.from_pretrained(output_dir).eval()
+    auto_feature_extractor = AutoFeatureExtractor.from_pretrained(output_dir)
+    auto_inputs = auto_feature_extractor(signal, sampling_rate=sampling_rate, return_tensors="pt")
+    auto_tokenizer_ok = (
+        type(auto_tokenizer).__name__ == "WavTokenizerModel"
+        and type(auto_feature_extractor).__name__ == "WavTokenizerFeatureExtractor"
+    )
+    if auto_tokenizer_ok:
+        with torch.no_grad():
+            auto_tokenizer_codes = auto_tokenizer.encode(
+                auto_inputs["input_values"], padding_mask=auto_inputs["padding_mask"]
+            ).audio_codes
+        auto_tokenizer_ok = torch.equal(auto_tokenizer_codes, raw_codes)
+    record(PASS if auto_model_ok and auto_tokenizer_ok else FAIL, "auto classes")
+    del auto_tokenizer, auto_feature_extractor, auto_inputs
+    gc.collect()
+
     import tempfile
 
-    with tempfile.TemporaryDirectory() as tmp:
-        model.save_pretrained(tmp)
-        reloaded = WavTokenizerModel.from_pretrained(tmp).eval()
+    with tempfile.TemporaryDirectory() as temporary_directory:
+        model.save_pretrained(temporary_directory)
+        reloaded = WavTokenizerModel.from_pretrained(temporary_directory).eval()
         with torch.no_grad():
-            ok = torch.equal(reloaded.encode(waveform).audio_codes, our_codes["chirp_1.7s"][:, None, :])
-    record(PASS if ok else FAIL, "reload: save_pretrained/from_pretrained round trip")
+            reload_ok = torch.equal(reloaded.encode(waveform).audio_codes, our_codes["chirp_1.7s"][:, None, :])
+        del reloaded
+    record(PASS if reload_ok else FAIL, "save_pretrained/from_pretrained roundtrip")
+    gc.collect()
 
-    # ---- 9. dtype (informational) -------------------------------------------------------------------------
     try:
-        bf16 = WavTokenizerModel.from_pretrained(args.output_dir, dtype=torch.bfloat16).eval()
+        bf16_model = WavTokenizerModel.from_pretrained(output_dir, dtype=torch.bfloat16).eval()
         with torch.no_grad():
-            bf16_codes = bf16.encode(waveform.to(torch.bfloat16)).audio_codes
+            bf16_codes = bf16_model.encode(waveform.to(torch.bfloat16)).audio_codes
         agreement = (bf16_codes == our_codes["chirp_1.7s"][:, None, :]).float().mean().item()
-        record(INFO, "dtype: bf16 encode agreement vs fp32", f"{agreement:.1%}")
-    except Exception as exc:  # noqa: BLE001
-        record(INFO, "dtype: bf16 encode", f"not supported: {type(exc).__name__}: {exc}")
+        record(INFO, "BF16 encode agreement vs FP32", f"{agreement:.1%}")
+        del bf16_model
+    except Exception as exception:  # noqa: BLE001
+        record(INFO, "BF16 encode", f"not supported: {type(exception).__name__}: {exception}")
 
-    _summarize(results)
-    sys.exit(1 if any(status == FAIL for status, _, _ in results) else 0)
+    del model, feature_extractor
+    gc.collect()
+    return results
 
 
-def _summarize(results):
-    n_pass = sum(1 for s, _, _ in results if s == PASS)
-    n_fail = sum(1 for s, _, _ in results if s == FAIL)
+def summarize(results, title="PARITY SUMMARY"):
+    passed = sum(status == PASS for status, _, _ in results)
+    failed = sum(status == FAIL for status, _, _ in results)
     print("\n" + "=" * 80)
-    print(f"PARITY SUMMARY: {n_pass} passed, {n_fail} failed, {len(results) - n_pass - n_fail} informational")
+    print(f"{title}: {passed} passed, {failed} failed, {len(results) - passed - failed} informational")
     for status, name, detail in results:
         if status == FAIL:
             print(f"  FAILED: {name} — {detail}")
     print("=" * 80)
+
+
+def parse_args(argv=None):
+    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument("--original_repo", required=True, help="Path to a clone of jishengpeng/WavTokenizer")
+    source = parser.add_mutually_exclusive_group()
+    source.add_argument(
+        "--checkpoint", choices=sorted(CHECKPOINTS), help=f"Named checkpoint (default: {DEFAULT_CHECKPOINT})"
+    )
+    source.add_argument("--checkpoint_path", help="Custom original .ckpt path")
+    parser.add_argument("--all-checkpoints", action="store_true", help="Run the complete released checkpoint matrix")
+    parser.add_argument("--config_path", help="Custom original config YAML for a single checkpoint")
+    parser.add_argument("--output_dir", required=True, help="Converted model directory, or matrix base directory")
+    parser.add_argument("--skip_convert", action="store_true", help="Reuse already converted output directories")
+    parser.add_argument("--decode_atol", type=float, default=1e-4, help="Absolute decoded-audio tolerance")
+    args = parser.parse_args(argv)
+    if args.all_checkpoints and (args.checkpoint is not None or args.checkpoint_path or args.config_path):
+        parser.error("--all-checkpoints cannot be combined with --checkpoint, --checkpoint_path, or --config_path")
+    return args
+
+
+def main():
+    args = parse_args()
+    if args.all_checkpoints:
+        from huggingface_hub import hf_hub_download
+
+        aggregate = []
+        for name, spec in CHECKPOINTS.items():
+            try:
+                checkpoint_path = hf_hub_download(spec.repo_id, spec.filename)
+            except Exception as exception:  # noqa: BLE001
+                results = [(FAIL, "download", f"{type(exception).__name__}: {exception}")]
+            else:
+                try:
+                    results = run_checkpoint(
+                        name,
+                        checkpoint_path,
+                        str(Path(args.output_dir) / name),
+                        None,
+                        args,
+                    )
+                except Exception as exception:  # noqa: BLE001
+                    results = [(FAIL, "unexpected parity execution", f"{type(exception).__name__}: {exception}")]
+            summarize(results, title=f"PARITY SUMMARY [{name}]")
+            aggregate.extend((status, f"{name}: {test_name}", detail) for status, test_name, detail in results)
+        summarize(aggregate, title="AGGREGATE PARITY SUMMARY")
+        sys.exit(1 if any(status == FAIL for status, _, _ in aggregate) else 0)
+
+    if args.checkpoint_path:
+        name = "custom"
+        checkpoint_path = args.checkpoint_path
+    else:
+        from huggingface_hub import hf_hub_download
+
+        name = args.checkpoint or DEFAULT_CHECKPOINT
+        spec = CHECKPOINTS[name]
+        checkpoint_path = hf_hub_download(spec.repo_id, spec.filename)
+
+    results = run_checkpoint(name, checkpoint_path, args.output_dir, args.config_path, args)
+    summarize(results, title=f"PARITY SUMMARY [{name}]")
+    sys.exit(1 if any(status == FAIL for status, _, _ in results) else 0)
 
 
 if __name__ == "__main__":

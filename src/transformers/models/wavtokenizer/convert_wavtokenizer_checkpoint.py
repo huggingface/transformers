@@ -11,12 +11,24 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""
-Convert an original WavTokenizer checkpoint (https://github.com/jishengpeng/WavTokenizer) into a
-transformers WavTokenizerModel.
+"""Convert original-author WavTokenizer checkpoints to Transformers format.
 
-The reference checkpoint for Apertus 1.5 is the 40 tokens/s, 24 kHz variant:
-    novateur/WavTokenizer-large-unify-40token / wavtokenizer_large_unify_600_24k.ckpt
+The converter supports the currently available 24 kHz releases and infers their 40- or 75-token architecture from
+checkpoint tensor shapes:
+
+    novateur/WavTokenizer:
+        WavTokenizer_small_600_24k_4096.ckpt
+        WavTokenizer_small_320_24k_4096.ckpt
+    novateur/WavTokenizer-medium-speech-75token:
+        wavtokenizer_medium_speech_320_24k.ckpt
+        wavtokenizer_medium_speech_320_24k_v2.ckpt
+    novateur/WavTokenizer-medium-music-audio-75token:
+        wavtokenizer_medium_music_audio_320_24k.ckpt
+        wavtokenizer_medium_music_audio_320_24k_v2.ckpt
+    novateur/WavTokenizer-large-unify-40token:
+        wavtokenizer_large_unify_600_24k.ckpt
+    novateur/WavTokenizer-large-speech-75token:
+        wavtokenizer_large_speech_320_v2.ckpt
 
 Example:
     python src/transformers/models/wavtokenizer/convert_wavtokenizer_checkpoint.py \
@@ -25,6 +37,7 @@ Example:
 """
 
 import argparse
+import math
 import re
 
 import torch
@@ -49,6 +62,106 @@ IGNORE_PREFIXES = (
 
 # Buffers that transformers re-creates (non-persistent) instead of loading.
 IGNORE_KEYS = ("head.istft.window",)
+
+
+_DOWNSAMPLING_WEIGHT_RE = re.compile(r"^feature_extractor\.encodec\.encoder\.model\.(\d+)\.conv\.conv\.weight_v$")
+_LSTM_WEIGHT_RE = re.compile(r"^feature_extractor\.encodec\.encoder\.model\.\d+\.lstm\.weight_ih_l(\d+)$")
+_CONVNEXT_WEIGHT_RE = re.compile(r"^backbone\.convnext\.(\d+)\.dwconv\.weight$")
+
+
+def _require_tensor(state_dict: dict[str, torch.Tensor], key: str) -> torch.Tensor:
+    if key not in state_dict:
+        raise ValueError(f"Cannot infer WavTokenizer architecture: checkpoint is missing `{key}`.")
+    value = state_dict[key]
+    if not isinstance(value, torch.Tensor):
+        raise ValueError(f"Cannot infer WavTokenizer architecture: `{key}` is not a tensor.")
+    return value
+
+
+def infer_wavtokenizer_config(state_dict: dict[str, torch.Tensor]) -> WavTokenizerConfig:
+    """Infer the inference architecture shared by the released original WavTokenizer checkpoints."""
+    downsampling_layers = []
+    for key, value in state_dict.items():
+        match = _DOWNSAMPLING_WEIGHT_RE.match(key)
+        if match is None or not isinstance(value, torch.Tensor) or value.ndim != 3:
+            continue
+        # The initial/final encoder convolutions do not double the channel dimension. Each downsampling
+        # convolution does, and its kernel size is twice its stride/downsampling ratio.
+        if value.shape[0] == 2 * value.shape[1]:
+            kernel_size = value.shape[-1]
+            if kernel_size % 2:
+                raise ValueError(
+                    "Cannot infer WavTokenizer architecture: encoder downsampling kernel "
+                    f"`{key}` has odd size {kernel_size}."
+                )
+            downsampling_layers.append((int(match.group(1)), kernel_size // 2))
+
+    downsampling_layers.sort()
+    if len(downsampling_layers) != 4:
+        raise ValueError(
+            "Cannot infer WavTokenizer architecture: expected 4 channel-doubling encoder downsampling "
+            f"convolutions, found {len(downsampling_layers)}."
+        )
+    upsampling_ratios = [ratio for _, ratio in reversed(downsampling_layers)]
+
+    initial_conv = _require_tensor(state_dict, "feature_extractor.encodec.encoder.model.0.conv.conv.weight_v")
+    codebook = _require_tensor(state_dict, "feature_extractor.encodec.quantizer.vq.layers.0._codebook.embed")
+    backbone_embed = _require_tensor(state_dict, "backbone.embed.weight")
+    intermediate = _require_tensor(state_dict, "backbone.convnext.0.pwconv1.weight")
+    adanorm_scale = _require_tensor(state_dict, "backbone.norm.scale.weight")
+    head = _require_tensor(state_dict, "head.out.weight")
+
+    if initial_conv.ndim != 3 or codebook.ndim != 2 or backbone_embed.ndim != 3 or head.ndim != 2:
+        raise ValueError("Cannot infer WavTokenizer architecture: checkpoint contains invalid inference tensor ranks.")
+
+    lstm_layers = sorted(
+        {int(match.group(1)) for key in state_dict if (match := _LSTM_WEIGHT_RE.match(key)) is not None}
+    )
+    if lstm_layers != list(range(len(lstm_layers))) or not lstm_layers:
+        raise ValueError("Cannot infer WavTokenizer architecture: encoder LSTM layers are missing or non-contiguous.")
+
+    convnext_layers = sorted(
+        {int(match.group(1)) for key in state_dict if (match := _CONVNEXT_WEIGHT_RE.match(key)) is not None}
+    )
+    if convnext_layers != list(range(len(convnext_layers))) or not convnext_layers:
+        raise ValueError(
+            "Cannot infer WavTokenizer architecture: decoder ConvNeXt layers are missing or non-contiguous."
+        )
+
+    codebook_size, codebook_dim = codebook.shape
+    decoder_hidden_size, hidden_size = backbone_embed.shape[:2]
+    if codebook_dim != hidden_size:
+        raise ValueError(
+            "Cannot infer WavTokenizer architecture: codebook dimension "
+            f"({codebook_dim}) differs from decoder input dimension ({hidden_size})."
+        )
+    if head.shape[1] != decoder_hidden_size:
+        raise ValueError(
+            "Cannot infer WavTokenizer architecture: ISTFT head input dimension "
+            f"({head.shape[1]}) differs from decoder hidden size ({decoder_hidden_size})."
+        )
+
+    hop_length = math.prod(upsampling_ratios)
+    checkpoint_n_fft = head.shape[0] - 2
+    if checkpoint_n_fft != 4 * hop_length:
+        raise ValueError(
+            "Cannot infer WavTokenizer architecture: ISTFT head implies "
+            f"n_fft={checkpoint_n_fft}, but encoder ratios {upsampling_ratios} imply "
+            f"n_fft={4 * hop_length}."
+        )
+
+    return WavTokenizerConfig(
+        num_filters=initial_conv.shape[0],
+        upsampling_ratios=upsampling_ratios,
+        num_lstm_layers=len(lstm_layers),
+        hidden_size=hidden_size,
+        codebook_size=codebook_size,
+        codebook_dim=codebook_dim,
+        decoder_hidden_size=decoder_hidden_size,
+        decoder_intermediate_size=intermediate.shape[0],
+        decoder_num_layers=len(convnext_layers),
+        adanorm_num_embeddings=adanorm_scale.shape[0],
+    )
 
 
 def remap_key(key: str) -> str | None:
@@ -82,7 +195,13 @@ def convert_checkpoint(checkpoint_path: str, output_dir: str, push_to_hub: str |
         if new_key is not None:
             converted[new_key] = value
 
-    config = WavTokenizerConfig()
+    config = infer_wavtokenizer_config(state_dict)
+    logger.info(
+        "Inferred WavTokenizer architecture: upsampling_ratios=%s, hop_length=%s, frame_rate=%s",
+        config.upsampling_ratios,
+        config.hop_length,
+        config.frame_rate,
+    )
     model = WavTokenizerModel(config)
     model.load_state_dict(converted, strict=True)
     model.eval()
