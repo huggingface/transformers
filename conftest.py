@@ -41,6 +41,10 @@ from transformers.utils.network_logging import register_network_debug_plugin
 
 
 _ci_fallback_cache_dir = None
+# Records the repo/file id for every call that was retried through the read-only cache
+# fallback. Surfaced in the pytest terminal summary so CI logs show whether (and how
+# often) the fallback actually fired during a run.
+_ci_fallback_events = []
 
 
 # Rust's `std::io::Error` renders OS-level failures as ``"<strerror> (os error <N>)"``
@@ -98,6 +102,16 @@ def _with_tmpdir_cache_fallback(fn):
             global _ci_fallback_cache_dir
             if _ci_fallback_cache_dir is None:
                 _ci_fallback_cache_dir = tempfile.mkdtemp(prefix="ci_fallback_tmpdir_cache_dir_")
+            repo_id = kwargs.get("path_or_repo_id") or (args[0] if args else "?")
+            _ci_fallback_events.append(str(repo_id))
+            # Emit a marker as well; captured per-test by pytest, but the guaranteed-visible
+            # count is reported in `pytest_terminal_summary` at the end of the run.
+            print(
+                f"[CI_CACHE_FALLBACK] read-only cache hit for {repo_id!r} ({type(e).__name__}); "
+                "retrying via writable tmp cache_dir with Xet disabled",
+                file=sys.stderr,
+                flush=True,
+            )
             import huggingface_hub.constants as hf_constants
 
             with (
@@ -202,6 +216,21 @@ def pytest_runtest_logreport(report):
 
 
 def pytest_terminal_summary(terminalreporter):
+    # Always report whether the read-only cache fallback fired, so CI logs give an
+    # unambiguous signal that the fallback path was (or was not) exercised this run.
+    if _ci_fallback_events:
+        from collections import Counter
+
+        terminalreporter.write_sep("=", "CI READ-ONLY CACHE FALLBACK", yellow=True, bold=True)
+        terminalreporter.write_line(
+            f"Read-only cache fallback fired {len(_ci_fallback_events)} time(s); "
+            f"tmp cache_dir={_ci_fallback_cache_dir}"
+        )
+        for repo_id, count in sorted(Counter(_ci_fallback_events).items()):
+            terminalreporter.write_line(f"  - {repo_id} (x{count})")
+    else:
+        terminalreporter.write_sep("=", "CI READ-ONLY CACHE FALLBACK: not triggered", bold=True)
+
     from transformers.testing_utils import pytest_terminal_summary_main
 
     make_reports = terminalreporter.config.getoption("--make-reports")
