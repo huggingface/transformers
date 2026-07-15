@@ -13,7 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was published in HF papers on 2025-08-26 and contributed to Hugging Face Transformers on 2026-07-03.*
+*This model was published in HF papers on 2025-08-26 and contributed to Hugging Face Transformers on 2026-07-15.*
 
 
 # VibeVoice
@@ -420,7 +420,7 @@ inputs = processor.apply_chat_template(
 # Forward pass
 outputs = model(**inputs, ddpm_batch_multiplier=2, num_diffusion_steps=2)
 
-# Compute losses
+# Compute loss as simple sum, but they can be weighted differently
 lm_loss = outputs.loss
 diffusion_loss = outputs.diffusion_loss
 total_loss = lm_loss + diffusion_loss
@@ -433,27 +433,28 @@ print(f"Total loss: {total_loss.item():.4f}")
 total_loss.backward()
 ```
 
-### Torch compile (~2x speed-up)
+### Torch compile
 
 The model can be compiled with `torch.compile` for faster inference. A few warmup runs are needed before the compiled model reaches full speed.
 
-On an A100 with batch size 4, we observed a 1.9x speed-up between compiled vs. non-compiled inference, see [this script](https://gist.github.com/ebezzam/c45b9fdee65f3029e17d566e30c59399).
+On an A100 with batch size 4, we observed a ~1.5x speed-up between compiled vs. non-compiled inference, see [this script](https://gist.github.com/ebezzam/c45b9fdee65f3029e17d566e30c59399).
 
 ```python
+import os
 import time
 import torch
-from transformers import AutoProcessor, AutoModelForTextToWaveform
+from transformers import AutoModelForTextToWaveform, AutoProcessor, CompileConfig
+
 
 model_id = "bezzam/VibeVoice-1.5B-hf"   # "bezzam/VibeVoice-7B-hf"
 num_warmup = 5
+max_new_tokens = 128
 
 torch.set_float32_matmul_precision("high")
 
 # Load processor + model
 processor = AutoProcessor.from_pretrained(model_id)
-model = AutoModelForTextToWaveform.from_pretrained(
-    model_id, dtype=torch.bfloat16, device_map="auto"
-)
+model = AutoModelForTextToWaveform.from_pretrained(model_id, dtype=torch.bfloat16, device_map="auto").eval()
 
 # Prepare inputs
 chat_template = [
@@ -473,18 +474,32 @@ inputs = processor.apply_chat_template(
     chat_template, tokenize=True, return_dict=True,
 ).to(model.device, model.dtype)
 
-# Compile the model
-model = torch.compile(model)
+compile_config = CompileConfig(mode="default" dynamic=False)
 
-# Warmup (required for torch.compile to reach full speed)
+generate_kwargs = dict(
+    **inputs,
+    max_new_tokens=max_new_tokens,
+    cache_implementation="static",
+    compile_config=compile_config,
+)
+
+# Warmup
 print("Warming up...")
 warmup_start = time.time()
-with torch.no_grad():
+with torch.inference_mode():
     for _ in range(num_warmup):
-        _ = model(**inputs)
+        torch.compiler.cudagraph_mark_step_begin()
+        _ = model.generate(**generate_kwargs)
 torch.cuda.synchronize()
-print(f"Warmup complete in {time.time() - warmup_start:.2f}s.")
-# Warmup complete in 46.39s
+print(f"Warmup complete in {time.time() - warmup_start:.2f}s. Ready!")
+
+# Apply model
+with torch.inference_mode():
+    torch.compiler.cudagraph_mark_step_begin()
+    audio = model.generate(**generate_kwargs)
+fn = f"{os.path.basename(model_id)}_compiled_output.wav"
+processor.save_audio(audio, fn)
+print(f"Saved output to {fn}")
 ```
 
 ## VibeVoiceConfig

@@ -62,17 +62,6 @@ class VibeVoiceConfig(PreTrainedConfig):
         "text_config": AutoConfig,
     }
 
-    # Default tensor parallel plan for base model `Qwen2`
-    base_model_tp_plan = {
-        "language_model.layers.*.self_attn.q_proj": "colwise",
-        "language_model.layers.*.self_attn.k_proj": "colwise",
-        "language_model.layers.*.self_attn.v_proj": "colwise",
-        "language_model.layers.*.self_attn.o_proj": "rowwise",
-        "language_model.layers.*.mlp.gate_proj": "colwise",
-        "language_model.layers.*.mlp.up_proj": "colwise",
-        "language_model.layers.*.mlp.down_proj": "rowwise",
-    }
-
     audio_config: dict | PreTrainedConfig | None = None
     semantic_model_config: dict | PreTrainedConfig | None = None
     text_config: dict | PreTrainedConfig | None = None
@@ -115,11 +104,6 @@ class VibeVoiceConfig(PreTrainedConfig):
         self.vocab_size = self.text_config.vocab_size
         self.tie_word_embeddings = getattr(self.text_config, "tie_word_embeddings", False)
         super().__post_init__(**kwargs)
-
-    # NOTE (ebezzam) for modular usage of `LlamaMLP`
-    @property
-    def hidden_size(self) -> int:
-        return self.text_config.hidden_size
 
 
 __all__ = ["VibeVoiceConfig"]
