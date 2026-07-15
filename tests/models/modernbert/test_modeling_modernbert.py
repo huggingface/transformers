@@ -433,7 +433,7 @@ class ModernBertModelIntegrationTest(unittest.TestCase):
                     dtype=torch.float16,
                 ),
                 ("rocm", (12, 5)): torch.tensor(
-                    [[[ 3.8477, -0.1993, 12.2812], [ 3.6270,  0.6851, 14.6953], [-5.1133, -3.8125, 12.0000]]],
+                    [[[3.8477, -0.1993, 12.2812], [3.6270, 0.6851, 14.6953], [-5.1133, -3.8125, 12.0000]]],
                     dtype=torch.float16,
                 ),
                 ("xpu", None): torch.tensor(
