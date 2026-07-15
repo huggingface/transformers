@@ -880,7 +880,14 @@ class BatchRebalanceSampler(Sampler):
         best_spread = float("inf")
         best_counts = list(counts)
 
-        for _ in range(K * 30):
+        # Each iteration moves exactly one sample between groups, so worst-case
+        # convergence is O(n). `effective_batch_size` (= n) covers the move-dominated
+        # regime (large batch, small K) that a fixed `K * 30` cap could cut off
+        # prematurely; `K * 30` stays as a floor for the detection-dominated regime
+        # (tiny batch, n ~= K) where convergence is reached via `spread == 0` / `seen`
+        # rather than the move budget. `best_counts` is tracked below, so hitting the
+        # cap only degrades the result gracefully (no samples are dropped).
+        for _ in range(max(K * 30, self.effective_batch_size)):
             key = tuple(counts)
             if key in seen:
                 break

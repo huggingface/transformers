@@ -813,6 +813,82 @@ class TrainerSamplerTest(unittest.TestCase):
             # `alpha`/`intercept` entirely.
             self.assertEqual(sampler_custom._cost(bs, max_len), my_cost(bs, max_len))
 
+    def test_batch_rebalance_converges_for_large_effective_batch_size(self):
+        """
+        Regression test for the rebalance iteration budget.
+
+        With a large `effective_batch_size` and a small `dp_size * grad_accum` (K), the old
+        fixed cap `K * 30` was smaller than the number of single-sample moves needed to
+        converge, so the loop could hit the ceiling with a non-optimal spread. The budget is
+        now `max(K * 30, effective_batch_size)`, which is O(n) and matches the worst-case
+        move count. This test builds a heavily skewed batch (a few very long sequences plus
+        many short ones) under exactly that regime (large n=246, small K=2) and asserts that:
+
+          1. Every sample is still covered across all ranks combined (no data loss), and
+          2. The rebalanced partition reaches the brute-force-optimal cost spread over all
+             contiguous K=2 partitions — i.e. the algorithm actually ran to convergence
+             instead of being truncated at the old `K * 30` cap (which stops at ~63 moves
+             and never reaches the optimum at counts[0] == 6).
+        """
+        lengths = [100] * 240 + [8000, 6000, 5000, 4000, 3000, 2000]  # 246 samples
+        dp_size = 2
+        grad_accum = 1
+        effective_batch_size = 246  # K = 2, so the old cap K * 30 = 60 < 246 = n
+
+        # (1) Full coverage across ALL ranks combined — no samples dropped. Each rank only
+        # yields its own group, so the union over ranks must equal the whole batch.
+        all_indices = set()
+        for rank in range(dp_size):
+            sampler = BatchRebalanceSampler(
+                lengths=lengths,
+                effective_batch_size=effective_batch_size,
+                dp_size=dp_size,
+                grad_accum=grad_accum,
+                rank=rank,
+                alpha=0.001,
+            )
+            for batch in sampler:
+                all_indices.update(batch)
+        self.assertEqual(all_indices, set(range(len(lengths))))
+
+        # (2) Convergence: the produced spread must equal the brute-force optimum over all
+        # contiguous K=2 partitions. Under the old `K * 30` (=60) cap the loop truncated
+        # around counts[0] == 63 (spread ~4.5e6); the optimum is counts[0] == 6 (spread
+        # ~4.06e5), which only the larger budget reaches.
+        sampler = BatchRebalanceSampler(
+            lengths=lengths,
+            effective_batch_size=effective_batch_size,
+            dp_size=dp_size,
+            grad_accum=grad_accum,
+            rank=0,
+            alpha=0.001,
+        )
+        indices = list(range(effective_batch_size))
+        batch_lengths = [lengths[i] for i in indices]
+        sorted_pairs = sorted(zip(indices, batch_lengths), key=lambda x: x[1], reverse=True)
+
+        rebalanced_groups = sampler._assign(indices, batch_lengths)
+        # `rank_mbs` is nested as [rank][slot] -> list of sample indices; rebuild each
+        # micro-batch's cost from its indices -> lengths.
+        rebalanced_costs = []
+        for rank_slots in rebalanced_groups:
+            for slot_indices in rank_slots:
+                bs = len(slot_indices)
+                max_len = max((lengths[i] for i in slot_indices), default=0)
+                rebalanced_costs.append(sampler._cost(bs, max_len))
+        rebalanced_spread = max(rebalanced_costs) - min(rebalanced_costs)
+
+        n = effective_batch_size
+        optimal_spread = float("inf")
+        for c in range(1, n):
+            g0 = sorted_pairs[:c]
+            g1 = sorted_pairs[c:]
+            spread = abs(sampler._group_cost(g0) - sampler._group_cost(g1))
+            if spread < optimal_spread:
+                optimal_spread = spread
+
+        self.assertAlmostEqual(rebalanced_spread, optimal_spread, places=6)
+
 
 # ---------------------------------------------------------------------------
 # Batch size finder tests
