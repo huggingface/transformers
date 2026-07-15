@@ -32,6 +32,7 @@ Backbones are supported for the following models:
 * [DiNAT](../model_doc/dinat)
 * [DINOV2](../model_doc/dinov2)
 * [FocalNet](../model_doc/focalnet)
+* [LingBot-Vision](../model_doc/lingbot_vision)
 * [MaskFormer](../model_doc/maskformer)
 * [NAT](../model_doc/nat)
 * [ResNet](../model_doc/resnet)

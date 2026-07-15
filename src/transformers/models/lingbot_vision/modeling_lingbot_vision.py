@@ -403,6 +403,7 @@ class LingbotVisionPreTrainedModel(PreTrainedModel):
     _no_split_modules = ["LingbotVisionLayer"]
 
     def _init_weights(self, module):
+        super()._init_weights(module)
         if isinstance(module, (nn.Linear, nn.Conv2d)):
             init.trunc_normal_(module.weight, std=self.config.initializer_range)
             if module.bias is not None:

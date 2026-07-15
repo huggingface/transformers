@@ -715,6 +715,8 @@
         title: LFM2
       - local: model_doc/lfm2_moe
         title: LFM2Moe
+      - local: model_doc/lingbot_vision
+        title: LingBot-Vision
       - local: model_doc/llama
         title: LLaMA
       - local: model_doc/llama2
