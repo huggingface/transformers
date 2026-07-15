@@ -42,6 +42,20 @@ from transformers.utils.network_logging import register_network_debug_plugin
 _ci_fallback_cache_dir = None
 
 
+def _is_readonly_fs_error(e):
+    """Return True if `e` signals a read-only filesystem (EROFS).
+
+    The plain download path raises `OSError` with `errno == EROFS`. The Xet path
+    (`hf_xet` Rust library) instead raises a bare `RuntimeError` whose message contains
+    "os error 30" (EROFS) with no `.errno` set, so it must be matched on the message.
+    """
+    if isinstance(e, OSError) and e.errno == errno.EROFS:
+        return True
+    # hf_xet surfaces the read-only failure as a RuntimeError, e.g.
+    # "Previous task error: I/O error: I/O error: Read-only file system (os error 30)"
+    return isinstance(e, RuntimeError) and "os error 30" in str(e)
+
+
 def _with_tmpdir_cache_fallback(fn):
     """Decorator that retries `fn` with a writable tmp cache dir if it raises EROFS.
 
@@ -57,8 +71,8 @@ def _with_tmpdir_cache_fallback(fn):
     def wrapper(*args, **kwargs):
         try:
             return fn(*args, **kwargs)
-        except OSError as e:
-            if e.errno != errno.EROFS:
+        except (OSError, RuntimeError) as e:
+            if not _is_readonly_fs_error(e):
                 raise
             global _ci_fallback_cache_dir
             if _ci_fallback_cache_dir is None:
