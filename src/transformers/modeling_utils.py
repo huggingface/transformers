@@ -3559,10 +3559,8 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
         # if any model parameters are offloaded, we need to know it for later
         is_offloaded = False
-        if (
-            hasattr(self, "hf_device_map")
-            and len(set(self.hf_device_map.values())) > 1
-            and ("cpu" in self.hf_device_map.values() or "disk" in self.hf_device_map.values())
+        if hasattr(self, "hf_device_map") and (
+            len(set(self.hf_device_map.values())) > 1 or "disk" in self.hf_device_map.values()
         ):
             is_offloaded = True
             warnings.warn(
@@ -3666,7 +3664,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                     shard_state_dict = revert_weight_conversion(model_to_save, shard_state_dict)
                     # Save the weight_map, since some names etc may have changed due to conversion compared to initial `state_dict_split`
                     if state_dict_split.is_sharded:
-                        weight_map.update({k: os.path.basename(shard_file)} for k in shard_state_dict.keys())  # ty: ignore[unresolved-attribute]
+                        weight_map.update({k: os.path.basename(shard_file) for k in shard_state_dict.keys()})  # ty: ignore[unresolved-attribute]
                 except Exception:
                     raise RuntimeError(
                         "We could not revert some weight conversions because of offlading, and several weights needed for a single "
@@ -3677,6 +3675,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             # TODO: it would be very nice to do the writing concurrently, but safetensors never releases the GIL,
             # so it's not possible for now....
             # Write the shard to disk
+            breakpoint()
             safe_save_file(shard_state_dict, filename, metadata=metadata)
             # Cleanup the data before next loop (important with offloading, so we don't blowup cpu RAM)
             del shard_state_dict
