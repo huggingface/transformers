@@ -62,6 +62,13 @@ class Qwen3OmniMoeProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             cls.tiny_model_id, size={"shortest_edge": 28 * 28, "longest_edge": 56 * 56}
         )
 
+    @classmethod
+    def _setup_feature_extractor(cls):
+        feature_extractor_class = cls._get_component_class_from_processor("feature_extractor")
+        # chunk_length=30s instead of the default 300s reduces input_features from
+        # (batch, 128, 30000) to (batch, 128, 3000), cutting peak memory per audio test.
+        return feature_extractor_class.from_pretrained(cls.tiny_model_id, chunk_length=30)
+
     def prepare_audio_inputs(self, batch_size: int = 3):
         """This function prepares a list of numpy audios."""
         audio_inputs = [np.random.rand(160000) * 2 - 1] * batch_size
@@ -211,7 +218,7 @@ class Qwen3OmniMoeProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             {
                 "type": "video",
                 "url": url_to_local_path(
-                    "https://huggingface.co/datasets/raushan-testing-hf/videos-test/resolve/main/tiny_video.mp4"
+                    "https://huggingface.co/datasets/hf-internal-testing/test-videos/resolve/main/tiny_video_320x240.mp4"
                 ),
             }
         )
@@ -224,7 +231,7 @@ class Qwen3OmniMoeProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             num_frames=num_frames,
         )
         self.assertTrue(self.videos_input_name in out_dict_with_video)
-        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 7728)
+        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 1440)
 
         # Load with `fps` arg
         fps = 1
@@ -236,7 +243,7 @@ class Qwen3OmniMoeProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             fps=fps,
         )
         self.assertTrue(self.videos_input_name in out_dict_with_video)
-        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 7728)
+        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 1440)
 
         # Load with `fps` and `num_frames` args, should raise an error
         with self.assertRaises(ValueError):
@@ -257,7 +264,7 @@ class Qwen3OmniMoeProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             return_dict=True,
         )
         self.assertTrue(self.videos_input_name in out_dict_with_video)
-        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 23184)
+        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 4320)
 
         # Load video as a list of frames (i.e. images). NOTE: each frame should have same size
         # because we assume they come from one video
@@ -307,7 +314,7 @@ class Qwen3OmniMoeProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             self.skipTest(f"feature_extractor attribute not present in {self.processor_class}")
 
         video_file_path = hf_hub_download(
-            repo_id="raushan-testing-hf/videos-test", filename="sample_demo_1.mp4", repo_type="dataset"
+            repo_id="hf-internal-testing/test-videos", filename="sample_demo_1_320x240.mp4", repo_type="dataset"
         )
         messages = [
             {
@@ -347,4 +354,4 @@ class Qwen3OmniMoeProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertEqual(len(out_dict["input_ids"]), 1)  # batch-size=1
         self.assertEqual(len(out_dict["attention_mask"]), 1)  # batch-size=1
         self.assertEqual(len(out_dict[self.audio_input_name]), 1)  # 1 audio in the conversation
-        self.assertEqual(len(out_dict[self.videos_input_name]), 145912)  # 1 video in the conversation
+        self.assertEqual(len(out_dict[self.videos_input_name]), 10800)  # 1 video in the conversation

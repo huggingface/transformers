@@ -684,14 +684,16 @@ class Zamba2MambaMixer(nn.Module):
     def torch_forward(self, input_states, cache_params: Cache | None=None, attention_mask: torch.Tensor | None = None):
         batch_size, seq_len, _ = input_states.shape
         dtype = input_states.dtype
-        # Gated MLP's linear projection
-        if cache_params is not None and cache_params.has_previous_state(self.layer_idx):
-            projected_states = self.in_proj(input_states)
-        else:
-            if attention_mask is not None:
-                # tune out hidden states for pad tokens, see https://github.com/state-spaces/mamba/issues/66
-                input_states = (input_states * attention_mask[:, :, None]).to(dtype)
-            projected_states = self.in_proj(input_states)
+        # Gated MLP's linear projection. Padding must be tuned out of the projection inputs on
+        # continued (cached) forwards too, not only on the first one — restoring the masking the
+        # cuda path already applies on its multi-token branch. The guard is specific to this torch
+        # path: the mask only applies when it is the 2D padding mask covering exactly the current
+        # tokens — the recurrent-layer mask is None on single-token decode, and full-history or
+        # 4D masks on cached steps are skipped as before.
+        if attention_mask is not None and attention_mask.ndim == 2 and attention_mask.shape[1] == seq_len:
+            # tune out hidden states for pad tokens, see https://github.com/state-spaces/mamba/issues/66
+            input_states = (input_states * attention_mask[:, :, None]).to(dtype)
+        projected_states = self.in_proj(input_states)
         d_mlp = (projected_states.shape[-1] - 2 * self.intermediate_size - 2 * self.n_groups * self.ssm_state_size- self.num_heads) // 2
         _, _, gate, hidden_states, dt = projected_states.split(
                 [d_mlp, d_mlp, self.intermediate_size,  self.conv_dim, self.num_heads], dim=-1

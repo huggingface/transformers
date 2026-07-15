@@ -52,19 +52,19 @@ from transformers.generation.continuous_batching.requests import (
     get_device_and_memory_breakdown,
 )
 from transformers.testing_utils import (
+    backend_empty_cache,
+    backend_memory_allocated,
     require_deterministic_for_xpu,
     require_flash_attn,
     require_flash_attn_3,
     require_kernels,
     require_torch_accelerator,
-    require_torch_gpu,
     require_torch_multi_accelerator,
     slow,
     torch_device,
 )
 from transformers.utils import (
     is_flash_attn_2_available,
-    is_kernels_available,
     is_torch_xpu_available,
 )
 from transformers.utils.generic import is_flash_attention_requested
@@ -574,39 +574,46 @@ class ContinuousBatchingNoAcceleratorTest(unittest.TestCase):
         """Test continuous batching generation when no accelerator is available. It uses a simulated CPU-only PyTorch
         environment by mocking all acceleratoravailability checks to return False"""
         model_id = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
+        # `is_torch_xpu_available` is lru-cached, so clear it before mocking `torch.xpu.is_available` to ensure the
+        # CPU-only simulation observes the mocked value.
+        is_torch_xpu_available.cache_clear()
 
         # Mock all accelerator availability checks to simulate CPU-only PyTorch
-        with (
-            patch("torch.cuda.is_available", return_value=False),
-            patch("transformers.utils.is_torch_xpu_available", return_value=False),
-            patch("torch.backends.mps.is_available", return_value=False),
-        ):
-            # Verify patches work
-            self.assertFalse(torch.cuda.is_available())
-            self.assertFalse(is_torch_xpu_available())
-            self.assertFalse(torch.backends.mps.is_available())
+        try:
+            with (
+                patch("torch.cuda.is_available", return_value=False),
+                patch("torch.xpu.is_available", return_value=False),
+                patch("torch.backends.mps.is_available", return_value=False),
+            ):
+                # Verify patches work
+                self.assertFalse(torch.cuda.is_available())
+                self.assertFalse(is_torch_xpu_available())
+                self.assertFalse(torch.backends.mps.is_available())
 
-            tokenizer, model = get_tokenizer_and_model(model_id, "sdpa", "cpu")
-            user_messages = _DEFAULT_USER_MESSAGES[:1]
-            input_ids = get_generation_inputs(user_messages, tokenizer, for_continuous_batching=True)
+                tokenizer, model = get_tokenizer_and_model(model_id, "sdpa", "cpu")
+                user_messages = _DEFAULT_USER_MESSAGES[:1]
+                input_ids = get_generation_inputs(user_messages, tokenizer, for_continuous_batching=True)
 
-            model.generation_config.max_new_tokens = 10
-            model.generation_config.do_sample = False
+                model.generation_config.max_new_tokens = 10
+                model.generation_config.do_sample = False
 
-            continuous_batching_config = ContinuousBatchingConfig(use_cuda_graph=False, use_async_batching=False)
+                continuous_batching_config = ContinuousBatchingConfig(use_cuda_graph=False, use_async_batching=False)
 
-            # This should not crash even with all accelerators unavailable
-            outputs = model.generate_batch(
-                inputs=input_ids,
-                generation_config=model.generation_config,
-                continuous_batching_config=continuous_batching_config,
-            )
+                # This should not crash even with all accelerators unavailable
+                outputs = model.generate_batch(
+                    inputs=input_ids,
+                    generation_config=model.generation_config,
+                    continuous_batching_config=continuous_batching_config,
+                )
 
-            # Verify we got outputs
-            self.assertEqual(len(outputs), len(input_ids))
-            for output in outputs.values():
-                self.assertIsNotNone(output.generated_tokens)
-                self.assertGreater(len(output.generated_tokens), 0)
+                # Verify we got outputs
+                self.assertEqual(len(outputs), len(input_ids))
+                for output in outputs.values():
+                    self.assertIsNotNone(output.generated_tokens)
+                    self.assertGreater(len(output.generated_tokens), 0)
+        finally:
+            # Clear the lru_cache again so the mocked XPU availability does not leak into subsequent tests.
+            is_torch_xpu_available.cache_clear()
 
     def test_output_router_deliver_to_queue(self):
         """Test that OutputRouter.deliver places outputs on the queue when no handler is registered."""
@@ -725,7 +732,7 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
 
         # Skip the test if Flash Attention is required but not available
         is_fa = is_flash_attention_requested(requested_attention_implementation=attn_implementation)
-        if is_fa and not (is_flash_attn_2_available() or is_kernels_available()):
+        if is_fa and not is_flash_attn_2_available(kernels_fallback_ok=True):
             self.skipTest("Flash Attention is not available and neither is the kernels library. Skipping test.")
         # Skip the test if cuda graph is on but the device is not CUDA
         if continuous_batching_config.use_cuda_graph and torch_device != "cuda":
@@ -1581,12 +1588,12 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
         )
 
 
-@require_torch_gpu
+@require_torch_accelerator
 class TestMemoryHandlerPrediction(unittest.TestCase):
-    """Verifies that ``PagedAttentionMemoryHandler.compute_memory_footprint`` matches real GPU memory usage.
+    """Verifies that ``PagedAttentionMemoryHandler.compute_memory_footprint`` matches real accelerator memory usage.
 
     For each configuration we allocate tensors at the *idealized* sizes modeled by the handler (same shapes, same
-    dtypes, no alignment padding or extra blocks) and compare the CUDA memory delta to the handler's prediction. The
+    dtypes, no alignment padding or extra blocks) and compare the accelerator memory delta to the handler's prediction. The
     handler derives the page size and the two activation peaks (LM head and attention) from the model config, so we
     allocate the tensors of whichever peak dominates -- that is the one ``compute_memory_footprint`` reports.
     """
@@ -1658,9 +1665,9 @@ class TestMemoryHandlerPrediction(unittest.TestCase):
         predicted = handler.compute_memory_footprint(M, self.NUM_BLOCKS)
 
         # -- Allocate tensors at the exact idealized sizes the handler models --
-        device = "cuda"
-        torch.cuda.empty_cache()
-        baseline = torch.cuda.memory_allocated(device)
+        device = torch_device
+        backend_empty_cache(device)
+        baseline = backend_memory_allocated(device)
 
         # Tensors present regardless of which activation peak is live
         fixed = []
@@ -1698,16 +1705,16 @@ class TestMemoryHandlerPrediction(unittest.TestCase):
         }
         peak_nbytes = {name: sum(t.nbytes for t in ts) for name, ts in peaks.items()}
         dominant = max(peak_nbytes, key=peak_nbytes.get)
-        # Free the non-dominant peak so the CUDA delta reflects only the live one
+        # Free the non-dominant peak so the accelerator delta reflects only the live one
         for name in [n for n in peaks if n != dominant]:
             del peaks[name]
 
-        actual_cuda = torch.cuda.memory_allocated(device) - baseline
+        actual_accelerator = backend_memory_allocated(device) - baseline
         expected_nbytes = sum(t.nbytes for t in fixed) + peak_nbytes[dominant]
         num_allocations = len(fixed) + len(peaks[dominant])
 
         del fixed, peaks
-        torch.cuda.empty_cache()
+        backend_empty_cache(device)
 
         # 1) Exact check: prediction must equal the sum of tensor nbytes. This validates the polynomial
         #    coefficients against the tensor shapes, with zero tolerance.
@@ -1717,14 +1724,14 @@ class TestMemoryHandlerPrediction(unittest.TestCase):
             f"Prediction ({predicted}) != sum of tensor nbytes ({expected_nbytes})",
         )
 
-        # 2) GPU memory check: CUDA's caching allocator rounds each allocation up (typically to 512 bytes).
+        # 2) Accelerator memory check: caching allocators round each allocation up (typically to 512 bytes).
         #    We allow up to 512 bytes of overhead per allocation.
-        max_cuda_overhead = num_allocations * 512
+        max_accelerator_overhead = num_allocations * 512
         self.assertLessEqual(
-            abs(actual_cuda - predicted),
-            max_cuda_overhead,
-            f"CUDA delta ({actual_cuda}) too far from prediction ({predicted}), "
-            f"allowed overhead = {max_cuda_overhead} ({num_allocations} allocs × 512B)",
+            abs(actual_accelerator - predicted),
+            max_accelerator_overhead,
+            f"Accelerator delta ({actual_accelerator}) too far from prediction ({predicted}), "
+            f"allowed overhead = {max_accelerator_overhead} ({num_allocations} allocs × 512B)",
         )
 
 

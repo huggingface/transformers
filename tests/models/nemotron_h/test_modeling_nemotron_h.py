@@ -486,13 +486,6 @@ class NemotronHModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
     def test_generate_with_quant_cache(self):
         pass
 
-    @unittest.skip(
-        "NemotronH's Mamba2 mixer skips the pre-in_proj padding masking on its has_previous_state branch, so "
-        "continued forwards diverge independently of the recurrent mask #47087 restores; tracked separately."
-    )
-    def test_recurrent_layers_mask_padding_on_continued_forward(self):
-        pass
-
     @unittest.skip(reason="A large nemotron3 would be necessary (and costly) for that")
     def test_multi_gpu_data_parallel_forward(self):
         pass
