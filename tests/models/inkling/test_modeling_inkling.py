@@ -517,8 +517,12 @@ class InklingIntegrationTest(unittest.TestCase):
 
     IMAGE_URL = "http://images.cocodataset.org/val2017/000000039769.jpg"
     IMAGE_URL_2 = "http://images.cocodataset.org/val2017/000000000139.jpg"
-    AUDIO_URL = "https://huggingface.co/datasets/adarshxs/voxcpm2-native-generated-audio-user-ref/resolve/main/zs_medium.wav"
-    AUDIO_URL_2 = "https://huggingface.co/datasets/adarshxs/voxcpm2-native-generated-audio-user-ref/resolve/main/zs_short.wav"
+    AUDIO_URL = (
+        "https://huggingface.co/datasets/adarshxs/voxcpm2-native-generated-audio-user-ref/resolve/main/zs_medium.wav"
+    )
+    AUDIO_URL_2 = (
+        "https://huggingface.co/datasets/adarshxs/voxcpm2-native-generated-audio-user-ref/resolve/main/zs_short.wav"
+    )
 
     @classmethod
     def setUpClass(cls):
@@ -558,9 +562,7 @@ class InklingIntegrationTest(unittest.TestCase):
         torch.testing.assert_close(logprobs.exp(), expected_logprobs.exp(), rtol=1e-3, atol=5e-4)
 
     def test_text_next_token_logprobs(self):
-        messages = [
-            {"role": "user", "content": [{"type": "text", "text": "What is the capital of France?"}]}
-        ]
+        messages = [{"role": "user", "content": [{"type": "text", "text": "What is the capital of France?"}]}]
         self._assert_next_token_logprobs("text", messages)
 
     def test_image_next_token_logprobs(self):

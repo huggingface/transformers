@@ -253,6 +253,7 @@ class InklingProcessingIntegrationTest(unittest.TestCase):
         ~/tml/reproducers/reproducer_processing_{text,image,audio,image_audio,multi_image,multi_audio}.py
     gist: https://gist.github.com/eustlb/cb2a5df1676911fa0eb07d0a76a38ae7
     """
+
     # sglang sentinels
     IMAGE_SENTINEL = -101
     AUDIO_SENTINEL = -102

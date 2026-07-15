@@ -3780,6 +3780,13 @@ class GenerationMixin(ContinuousMixin):
                     n_matches -= 1
                 valid_tokens = selected_tokens[:, : n_matches + 1]
 
+            # A partial acceptance plus the correction/bonus token can overshoot the length budget when the
+            # candidate generator does not cap its drafts (e.g. MTP always drafts `num_mtp_layers` tokens)
+            tokens_budget = generation_config.max_length - input_ids.shape[1]
+            if valid_tokens.shape[1] > tokens_budget:
+                valid_tokens = valid_tokens[:, :tokens_budget]
+                n_matches = valid_tokens.shape[1] - 1
+
             # 4. Update variables according to the number of matching assistant tokens. Remember: the token generated
             # by the model after the last candidate match is also valid, as it is generated from a correct sequence.
             # Because of this last token, assisted generation search reduces to a normal greedy search/sample if there
@@ -3791,9 +3798,11 @@ class GenerationMixin(ContinuousMixin):
                 streamer.put(valid_tokens.cpu())
             new_cur_len = input_ids.shape[1]
 
-            # 4.2. Discard past key values relative to unused assistant tokens
+            # 4.2. Discard past key values relative to unused assistant tokens. When every candidate was
+            # accepted, `input_ids` also holds the bonus token, which is not in the cache yet: nothing to discard (and we should not crop negative tokens!!)
             number_of_tokens_to_crop = candidate_input_ids.shape[-1] - input_ids.shape[-1]
-            outputs.past_key_values.crop(-number_of_tokens_to_crop)
+            if number_of_tokens_to_crop > 0:
+                outputs.past_key_values.crop(-number_of_tokens_to_crop)
 
             # 5. Update the candidate generation strategy if needed
             candidate_generator.update_candidate_strategy(input_ids, new_logits, n_matches)

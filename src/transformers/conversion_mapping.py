@@ -141,9 +141,23 @@ _MODEL_TO_CONVERSION_PATTERN = {
 
 def _build_checkpoint_conversion_mapping():
     mapping = {
-        "tml_mm_model": [
-            # Vision/Audio
-            WeightRenaming(source_patterns=r"visual", target_patterns=r"vision_tower"),
+        "inkling_mm_model": [
+            WeightRenaming(source_patterns=r"model\.llm\.layers", target_patterns=r"model.language_model.layers"),
+            WeightRenaming(
+                source_patterns=r"model\.llm\.embed_norm\.weight",
+                target_patterns=r"model.language_model.embed_norm.weight",
+            ),
+            WeightRenaming(
+                source_patterns=r"model\.llm\.embed\.weight",
+                target_patterns=r"model.language_model.embed_tokens.weight",
+            ),
+            WeightRenaming(
+                source_patterns=r"model\.llm\.norm\.weight", target_patterns=r"model.language_model.norm.weight"
+            ),
+            WeightRenaming(source_patterns=r"model\.llm\.unembed\.weight", target_patterns=r"lm_head.weight"),
+            WeightRenaming(source_patterns=r"model\.audio\.", target_patterns=r"model.audio_tower."),
+            WeightRenaming(source_patterns=r"model\.visual", target_patterns=r"model.vision_tower"),
+            # Vision encoder internals (run after the tower namespace renames)
             WeightRenaming(
                 source_patterns=r"vision_tower.layers.linear_(\d+)",
                 target_patterns=r"vision_tower.encoder_layers.\1.projection",
@@ -152,12 +166,10 @@ def _build_checkpoint_conversion_mapping():
                 source_patterns=r"vision_tower.layers.norm_(\d+)",
                 target_patterns=r"vision_tower.encoder_layers.\1.layer_norm",
             ),
-            WeightRenaming(source_patterns=r"vision_tower.layers", target_patterns=r"vision_tower.encoder_layers"),
-            WeightRenaming(source_patterns=r"unembed.weight", target_patterns=r"lm_head.weight"),
-            WeightRenaming(source_patterns=r"audio.", target_patterns=r"audio_tower."),
-            # Renames are applied cumulatively, so these run AFTER the generic `audio.` -> `audio_tower.`
-            # above and match its output. The audio dMel embedding moved from `audio.encoder` to a
-            # `InklingAudioModelEmbeddings` submodule, and `final_norm` was renamed to `norm`.
+            # Audio tower internals. These run AFTER the generic `model.audio.` -> `model.audio_tower.`
+            # rename above and substring-match its output. The audio dMel embedding moved from
+            # `audio.encoder` to an `InklingAudioModelEmbeddings` submodule, and `final_norm` was
+            # renamed to `norm`.
             WeightRenaming(
                 source_patterns=r"audio_tower.encoder.weight",
                 target_patterns=r"audio_tower.embed_audio_tokens.embed_audio_tokens.weight",
@@ -165,11 +177,6 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(
                 source_patterns=r"audio_tower.final_norm.weight", target_patterns=r"audio_tower.norm.weight"
             ),
-            # LM
-            WeightRenaming(source_patterns=r"^norm.weight", target_patterns=r"language_model.norm.weight"),
-            WeightRenaming(source_patterns=r"^embed.weight", target_patterns=r"language_model.embed_tokens.weight"),
-            WeightRenaming(source_patterns=r"^embed_norm.weight", target_patterns=r"language_model.embed_norm.weight"),
-            WeightRenaming(source_patterns=r"model.layers", target_patterns=r"language_model.layers"),
             # MoE and MLP
             # no Transpose ops here: the TP loader shards the raw tensor but validates the shard
             # shape on the target param, so dim-permuting conversions break sharded loads cc @cyril
@@ -1784,12 +1791,6 @@ def _build_checkpoint_conversion_mapping():
         WeightRenaming("mlp.shared_expert.", "mlp.shared_experts."),
     ]
 
-    # temporary before rename
-    mapping["inkling_mm_model"] = [
-        WeightRenaming(source_patterns=r"^model\.llm\.layers", target_patterns=r"model.layers"),
-        WeightRenaming(source_patterns=r"^model\.llm\.(embed_norm|embed|norm|unembed)", target_patterns=r"\1"),
-    ] + mapping["tml_mm_model"]
-
     mapping["MtpModel"] = [
         PrefixChange(prefix_to_remove="model"),
         PrefixChange(prefix_to_remove="mtp"),
@@ -1798,6 +1799,14 @@ def _build_checkpoint_conversion_mapping():
         WeightRenaming(source_patterns=".mtp_block.hnorm.", target_patterns=".hnorm."),
         WeightRenaming(source_patterns=".mtp_block.eh_proj.", target_patterns=".eh_proj."),
         WeightRenaming(source_patterns=".mtp_block.post_norm.", target_patterns=".post_norm."),
+        # Inkling checkpoint layout: per-depth extras sit at `layers.{k}.` while the decoder block
+        # is nested under `layers.{k}.transformer_block.`; the main-model conversions (applied after)
+        # rename the block internals
+        WeightRenaming(source_patterns=r"\.hidden_norm\.", target_patterns=r".hnorm."),
+        WeightRenaming(source_patterns=r"\.embed_norm\.", target_patterns=r".enorm."),
+        WeightRenaming(source_patterns=r"\.input_proj\.", target_patterns=r".eh_proj."),
+        WeightRenaming(source_patterns=r"^chain_norm\.", target_patterns=r"shared_post_norm."),
+        WeightRenaming(source_patterns=r"layers\.(\d+)\.transformer_block\.", target_patterns=r"layers.\1.mtp_block."),
     ]
 
     for model_type, base_pattern in _MODEL_TO_CONVERSION_PATTERN.items():

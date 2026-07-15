@@ -1445,7 +1445,8 @@ class MTPCandidateGenerator(AssistedCandidateGenerator):
             )
 
         # Heuristic: use the device of the last layer of the main model for the MTP layers
-        self.device = next(x.device for x in main_model.base_model.layers[-1].parameters())  # type: ignore
+        base_model = main_model.get_decoder()
+        self.device = next(x.device for x in base_model.layers[-1].parameters())  # type: ignore
         self.mtp_model = MtpModel.from_pretrained(main_model, device_map={"": self.device})
 
         # Create the mtp cache and allow it to keep its past before we crop it
@@ -1455,6 +1456,10 @@ class MTPCandidateGenerator(AssistedCandidateGenerator):
         # Save those to know how to decode mtp tokens
         self.do_sample = generation_config.do_sample
         self.logits_processor = logits_processor
+
+        # Drafting consumes the main model's last hidden states at every step
+        # not sure if we could e.g. use decorators here
+        model_kwargs["output_hidden_states"] = True
 
         self.is_main_model_prefill = True
 
@@ -1492,6 +1497,28 @@ class MTPCandidateGenerator(AssistedCandidateGenerator):
         # The hidden states have seq_len equal to the last main model's forward pass on all the candidates. We need the
         # last hidden states of only the last validated tokens
         last_hidden_states = last_hidden_states[:, :num_last_main_model_tokens].to(self.device)
+
+        # Potentially correct the mtp cache based on validated tokens
+        if self.num_mtp_layers > 1:
+            # To correct the mtp cache based on validated tokens, we need to keep all previous last_hidden_states
+            if self.is_main_model_prefill:
+                self.full_seq_last_hidden_states = last_hidden_states
+            else:
+                self.full_seq_last_hidden_states = torch.cat(
+                    [self.full_seq_last_hidden_states, last_hidden_states], dim=1
+                )
+                # This is the very tricky part: invalidate and recreate the mtp cache for wrong positions if necessary
+                self.mtp_model.correct_mtp_cache_for_decode(
+                    n_last_matches=n_last_matches,
+                    full_input_ids=input_ids,
+                    full_attention_mask=model_kwargs["attention_mask"],
+                    full_position_ids=model_kwargs["position_ids"],
+                    full_last_hidden_states=self.full_seq_last_hidden_states,
+                    mtp_cache=self.mtp_cache,
+                    do_sample=self.do_sample,
+                    logits_processor=self.logits_processor,
+                    **kwargs,
+                )
 
         candidate_ids, candidate_logits, _ = self.mtp_model(
             input_ids=mtp_input_ids,

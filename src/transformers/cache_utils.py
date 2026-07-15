@@ -165,7 +165,9 @@ class DynamicLayer(CacheLayerMixin):
         Crop the past key values up to a new `max_length` in terms of tokens. `max_length` can also be negative
         to remove `max_length` tokens.
         """
-        if max_length < 0:
+        if not self.is_initialized:
+            return
+        if max_length <= 0:
             max_length = self.get_seq_length() - abs(max_length)
 
         if self.get_seq_length() <= max_length:
@@ -199,7 +201,17 @@ class DynamicSlidingWindowLayer(DynamicLayer):
         super().__init__()
         self.sliding_window = sliding_window
         self.cumulative_length = 0
+        self.record_past = False
         self._sliding_window_tensor = torch.tensor(self.sliding_window, dtype=torch.long)
+
+    def activate_past_recording(self):
+        """
+        Calling this function will activate past state recording: the layer keeps the full key/value history
+        (instead of only the last window) so that `crop` can rollback past the sliding window saturation point.
+        Attention still only sees the window through the slice returned by `update`. Note that this makes the
+        layer memory grow with the full sequence length for as long as recording is active.
+        """
+        self.record_past = True
 
     def lazy_initialization(self, key_states: torch.Tensor, value_states: torch.Tensor) -> None:
         super().lazy_initialization(key_states, value_states)
@@ -227,6 +239,13 @@ class DynamicSlidingWindowLayer(DynamicLayer):
         # Compute the full states
         full_key_states = torch.cat([self.keys, key_states], dim=-2)
         full_value_states = torch.cat([self.values, value_states], dim=-2)
+        # If we need to record the past, keep the full history to be able to rollback later, but return
+        # only the slice the window allows (same content a non-recording layer would return)
+        if self.record_past:
+            self.keys = full_key_states
+            self.values = full_value_states
+            window_length = min(full_key_states.shape[-2], self.sliding_window - 1 + key_states.shape[-2])
+            return full_key_states[:, :, -window_length:, :], full_value_states[:, :, -window_length:, :]
         # Only cache the last `self.sliding_window - 1` tokens (or all of them if lower than that)
         self.keys = full_key_states[:, :, -self.sliding_window + 1 :, :]
         self.values = full_value_states[:, :, -self.sliding_window + 1 :, :]
@@ -259,10 +278,13 @@ class DynamicSlidingWindowLayer(DynamicLayer):
         Crop the past key values up to a new `max_length` in terms of tokens. `max_length` can also be
         negative to remove `max_length` tokens.
         """
-        if self.get_seq_length() >= self.sliding_window:
+        if not self.is_initialized:
+            return
+        if not self.record_past and self.get_seq_length() >= self.sliding_window:
             raise ValueError(
-                "Cannot `crop` a `DynamicSlidingWindowLayer` after it has seen more tokens than its"
-                "sliding window (otherwise some states are lost)"
+                "Cannot `crop` a `DynamicSlidingWindowLayer` after it has seen more tokens than its "
+                "sliding window (otherwise some states are lost). Call `activate_past_recording` before "
+                "`crop` to be able to rollback the cache."
             )
         super().crop(max_length)
         self.cumulative_length = self.keys.shape[-2]
@@ -922,21 +944,23 @@ class LinearAttentionCacheLayerMixin(ABC):
                 "`crop` was called, but the current layer does not track past states. Call `activate_past_recording` before "
                 "`crop` to be able to rollback the cache."
             )
-        if tokens_to_remove >= 0:
+        if tokens_to_remove > 0:
             raise RuntimeError(
                 "Linear attention layers can only be cropped by passing a negative int, to specify how many tokens to remove"
             )
         for i in range(self.number_of_states):
+            # Layers that were never used (e.g. the backbone-region layers of an MtpCache) have nothing to crop
+            if not self.is_conv_states_initialized[i]:
+                continue
             tokens_to_remove = abs(tokens_to_remove)
             # This both crop the last `tokens_to_remove`, as well as resize the conv states to `conv_kernel_size` as we never
             # need more for the next forward
-            self.conv_states[i] = self.conv_states[i][
-                ..., -tokens_to_remove - self.conv_kernel_size[i] : -tokens_to_remove
-            ]
-            if self.conv_states[i].shape[-1] != self.conv_kernel_size[i]:
-                raise RuntimeError(
-                    "You are trying to remore more tokens than was added in the latest `update_conv_states`"
-                )
+            if tokens_to_remove == 0:
+                self.conv_states[i] = self.conv_states[i][..., -self.conv_kernel_size[i] :]
+            else:
+                self.conv_states[i] = self.conv_states[i][
+                    ..., -tokens_to_remove - self.conv_kernel_size[i] : -tokens_to_remove
+                ]
 
     def get_max_length(self) -> int:
         # LinearAttention layer have no sequence length dimension, so simply return -1 here
@@ -961,7 +985,9 @@ class LinearAttentionLayer(LinearAttentionCacheLayerMixin):
             self.conv_kernel_size[state_idx] = conv_kernel_size
             # The shape is always static, so we init as such
             self.conv_states[state_idx] = torch.zeros(
-                (self.batch_size, conv_states.shape[1], conv_kernel_size), dtype=self.dtype, device=self.device
+                (self.batch_size, conv_states.shape[1], conv_kernel_size),
+                dtype=conv_states.dtype,
+                device=conv_states.device,
             )
             # Mark as static address to be able to use cudagraphs
             if not is_torchdynamo_compiling() and not self.record_past:
@@ -970,7 +996,7 @@ class LinearAttentionLayer(LinearAttentionCacheLayerMixin):
 
         if recurrent_states is not None:
             # The shape is always static, so we init as such
-            self.recurrent_states[state_idx] = torch.zeros_like(recurrent_states, dtype=self.dtype, device=self.device)
+            self.recurrent_states[state_idx] = torch.zeros_like(recurrent_states)
             # Mark as static address to be able to use cudagraphs
             if not is_torchdynamo_compiling():
                 torch._dynamo.mark_static_address(self.recurrent_states[state_idx])
@@ -2014,7 +2040,19 @@ SlidingWindowCache = StaticCache
 
 
 class MtpCache(DynamicCache):
+    def __init__(self, *args, config=None, **kwargs):
+        super().__init__(*args, config=config, **kwargs)
+        self.num_hidden_layers = getattr(config, "num_hidden_layers", 0)
+
     def get_seq_length(self, layer_idx=0):
-        # MTP layers have an absolute query offset
-        mtp_offset = layer_idx + 1
+        # Queries of MTP depth k run k+1 tokens ahead of the backbone stream, and the depth blocks
+        # are indexed `num_hidden_layers + k`
+        mtp_offset = max(layer_idx - self.num_hidden_layers, -1) + 1
         return super().get_seq_length(layer_idx) + mtp_offset
+
+    def get_mask_sizes(self, query_length: int, layer_idx: int) -> tuple[int, int]:
+        # Only the depth layers have states; the keys of depth k start at absolute position k+1, the same
+        # shifted frame `get_seq_length` reports for the queries
+        mtp_offset = max(layer_idx - self.num_hidden_layers, -1) + 1
+        kv_length, kv_offset = super().get_mask_sizes(query_length, max(layer_idx, self.num_hidden_layers))
+        return kv_length, kv_offset + mtp_offset

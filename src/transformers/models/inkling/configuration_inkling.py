@@ -100,6 +100,10 @@ class InklingTextConfig(PreTrainedConfig):
     pad_token_id: int | None = None
     bos_token_id: int | None = 1
     eos_token_id: int | None = 2
+    num_mtp_layers: int | None = None
+    chain_hidden_post_norm: bool = False
+    # on this not sure how we should handle it. cat order is different in sglang implem
+    mtp_hidden_states_first: bool = True
 
     def __post_init__(self, **kwargs):
         if self.layer_types is None:
@@ -116,6 +120,12 @@ class InklingTextConfig(PreTrainedConfig):
 
         if kwargs.get("dense_intermediate_size") is not None:
             self.intermediate_size = kwargs.pop("dense_intermediate_size")
+
+        # MTP layers are after the regular layers and are always full-attention with dense MLP
+        # we extend once so a config saved after this ran already contains the extra entries.
+        if self.num_mtp_layers and len(self.layer_types) == self.num_hidden_layers:
+            self.layer_types = self.layer_types + ["hybrid"] * self.num_mtp_layers
+            self.mlp_layer_types = self.mlp_layer_types + ["dense"] * self.num_mtp_layers
 
         # The architecture contains 4 conv modules per layer, each needing a different conv cache
         self.number_of_conv_states = 4
@@ -158,7 +168,7 @@ class InklingVisionConfig(PreTrainedConfig):
 class InklingConfig(PreTrainedConfig):
     """Top-level multimodal config (`InklingMMConfig` in the SGLang source)."""
 
-    model_type = "inkling"
+    model_type = "inkling_mm_model"
     sub_configs = {
         "text_config": InklingTextConfig,
         "audio_config": InklingAudioConfig,
@@ -174,6 +184,12 @@ class InklingConfig(PreTrainedConfig):
     audio_bos_token_id: int = 200020
 
     def __post_init__(self, **kwargs):
+        # checkpoints carry the MTP fields in a top-level `mtp_config` block
+        mtp_config = kwargs.get("mtp_config") or {}
+        if isinstance(self.text_config, dict):
+            self.text_config.setdefault("num_mtp_layers", mtp_config.get("num_nextn_predict_layers"))
+            self.text_config.setdefault("chain_hidden_post_norm", mtp_config.get("chain_hidden_post_norm", False))
+
         if isinstance(self.audio_config, dict):
             self.audio_config = self.sub_configs["audio_config"](**self.audio_config)
         elif self.audio_config is None:

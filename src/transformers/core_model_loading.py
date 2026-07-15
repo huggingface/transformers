@@ -184,8 +184,9 @@ class Concatenate(ConversionOps):
 class Interleave(ConversionOps):
     """Deinterleaves a tensor along `dim` by splitting in two and transposing. Reshapes param back to its original size."""
 
-    def __init__(self, dim: int = 0):
+    def __init__(self, dim: int = 0, inverse: bool = False):
         self.dim = dim
+        self.inverse = inverse
 
     def convert(self, input_dict, source_patterns, target_patterns, **kwargs):
         tensor = next(iter(input_dict.values()))
@@ -193,7 +194,10 @@ class Interleave(ConversionOps):
 
         # Split into two in given dim and transpose to interleave along it
         shape = list(tensor.shape)
-        shape[self.dim : self.dim + 1] = [shape[self.dim] // 2, 2]
+        if self.inverse:
+            shape[self.dim : self.dim + 1] = [2, shape[self.dim] // 2]
+        else:
+            shape[self.dim : self.dim + 1] = [shape[self.dim] // 2, 2]
 
         tensor = tensor.reshape(shape).transpose(self.dim, self.dim + 1).reshape(tensor.shape).contiguous()
         return {target_patterns[0]: tensor}
@@ -201,7 +205,7 @@ class Interleave(ConversionOps):
     @property
     def reverse_op(self) -> ConversionOps:
         # can use the same dim and it will inverse it back
-        return Interleave(self.dim)
+        return Interleave(self.dim, inverse=not self.inverse)
 
 
 class MergeModulelist(ConversionOps):

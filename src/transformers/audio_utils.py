@@ -229,16 +229,12 @@ def load_audio(audio: str | np.ndarray, sampling_rate=16000, timeout=None, backe
     # torchcodec handles audio/video; librosa only plain audio. `backend` lets callers pin one.
     if backend == "auto":
         resolved_backend = (
-            "torchcodec"
-            if is_torchcodec_available() and version.parse("0.3.0") <= TORCHCODEC_VERSION
-            else "librosa"
+            "torchcodec" if is_torchcodec_available() and version.parse("0.3.0") <= TORCHCODEC_VERSION else "librosa"
         )
     elif backend in ("torchcodec", "librosa", "torchaudio"):
         resolved_backend = backend
     else:
-        raise ValueError(
-            f"Unknown backend {backend!r}; expected 'auto', 'torchcodec', 'librosa', or 'torchaudio'."
-        )
+        raise ValueError(f"Unknown backend {backend!r}; expected 'auto', 'torchcodec', 'librosa', or 'torchaudio'.")
     # soundfile-based backends (librosa / torchaudio) cannot decode the video-ish formats below.
     use_torchcodec = resolved_backend == "torchcodec"
 

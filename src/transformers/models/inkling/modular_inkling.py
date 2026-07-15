@@ -129,6 +129,10 @@ class InklingTextConfig(PreTrainedConfig):
     pad_token_id: int | None = None
     bos_token_id: int | None = 1
     eos_token_id: int | None = 2
+    num_mtp_layers: int | None = None
+    chain_hidden_post_norm: bool = False
+    # on this not sure how we should handle it. cat order is different in sglang implem
+    mtp_hidden_states_first: bool = True
 
     def __post_init__(self, **kwargs):
         if self.layer_types is None:
@@ -145,6 +149,12 @@ class InklingTextConfig(PreTrainedConfig):
 
         if kwargs.get("dense_intermediate_size") is not None:
             self.intermediate_size = kwargs.pop("dense_intermediate_size")
+
+        # MTP layers are after the regular layers and are always full-attention with dense MLP
+        # we extend once so a config saved after this ran already contains the extra entries.
+        if self.num_mtp_layers and len(self.layer_types) == self.num_hidden_layers:
+            self.layer_types = self.layer_types + ["hybrid"] * self.num_mtp_layers
+            self.mlp_layer_types = self.mlp_layer_types + ["dense"] * self.num_mtp_layers
 
         # The architecture contains 4 conv modules per layer, each needing a different conv cache
         self.number_of_conv_states = 4
@@ -187,7 +197,7 @@ class InklingVisionConfig(PreTrainedConfig):
 class InklingConfig(PreTrainedConfig):
     """Top-level multimodal config (`InklingMMConfig` in the SGLang source)."""
 
-    model_type = "inkling"
+    model_type = "inkling_mm_model"
     sub_configs = {
         "text_config": InklingTextConfig,
         "audio_config": InklingAudioConfig,
@@ -203,6 +213,12 @@ class InklingConfig(PreTrainedConfig):
     audio_bos_token_id: int = 200020
 
     def __post_init__(self, **kwargs):
+        # checkpoints carry the MTP fields in a top-level `mtp_config` block
+        mtp_config = kwargs.get("mtp_config") or {}
+        if isinstance(self.text_config, dict):
+            self.text_config.setdefault("num_mtp_layers", mtp_config.get("num_nextn_predict_layers"))
+            self.text_config.setdefault("chain_hidden_post_norm", mtp_config.get("chain_hidden_post_norm", False))
+
         if isinstance(self.audio_config, dict):
             self.audio_config = self.sub_configs["audio_config"](**self.audio_config)
         elif self.audio_config is None:
@@ -344,15 +360,17 @@ class InklingAttention(nn.Module):
         q_length = query_states.shape[2]
         if past_key_values is not None:
             # Important to get those values before updating the cache to be correct
-            kv_length, kv_offset = past_key_values.get_mask_sizes(q_length, self.layer_idx)
+            kv_length, _ = past_key_values.get_mask_sizes(q_length, self.layer_idx)
             q_offset = past_key_values.get_seq_length(self.layer_idx)
             # Update the cache
             key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
         else:
             kv_length = key_states.shape[2]
-            q_offset, kv_offset = 0, 0
+            q_offset = 0
 
-        kv_positions = torch.arange(kv_length, device=hidden_states.device) + kv_offset
+        # The first cached key sits `kv_length - q_length` positions before the current query, so q and kv
+        # share one absolute frame for any query offset (fill, sliding, or MtpCache)
+        kv_positions = torch.arange(kv_length, device=hidden_states.device) + (q_offset + q_length - kv_length)
         q_positions = torch.arange(q_length, device=hidden_states.device) + q_offset
         relative_states = relative_states.view(*input_shape, self.num_heads, -1)
         position_bias = self.rel_logits_proj(relative_states, q_positions, kv_positions)
@@ -665,6 +683,10 @@ class InklingPreTrainedModel(PreTrainedModel):
     _supports_attention_backend = False
     _keys_to_ignore_on_load_unexpected = [r"model\.mtp\..*"]
     _keep_in_fp32_modules_strict = ["attn_sconv", "mlp_sconv", "k_sconv", "v_sconv"]
+    _can_record_outputs = {
+        "hidden_states": InklingDecoderLayer,
+        "attentions": InklingAttention,
+    }
 
     @torch.no_grad()
     def _init_weights(self, module):
