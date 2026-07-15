@@ -82,7 +82,7 @@ class InklingTextConfig(PreTrainedConfig):
     max_position_embeddings: int = 131072
     rms_norm_eps: float = 1e-6
     conv_kernel_size: int = 4
-    mlp_layer_types: list[int] | None = None
+    mlp_layer_types: list[str] | None = None
     intermediate_size: int = 24576
     hidden_act: str = "silu"
     # MoE
@@ -100,10 +100,11 @@ class InklingTextConfig(PreTrainedConfig):
     pad_token_id: int | None = None
     bos_token_id: int | None = 1
     eos_token_id: int | None = 2
+    # MTP related fields
     num_mtp_layers: int | None = None
     chain_hidden_post_norm: bool = False
-    # on this not sure how we should handle it. cat order is different in sglang implem
     mtp_hidden_states_first: bool = True
+    mtp_local_layer_ids: list[int] | None = None
 
     def __post_init__(self, **kwargs):
         if self.layer_types is None:
@@ -126,14 +127,19 @@ class InklingTextConfig(PreTrainedConfig):
 
         super().__post_init__(**kwargs)
 
-    # MTP layers are always full-attention with dense MLP
     @property
     def mtp_layer_types(self):
         if self.num_mtp_layers is not None:
-            return ["hybrid"] * self.num_mtp_layers
+            if self.mtp_local_layer_ids is None:
+                return ["hybrid"] * self.num_mtp_layers
+            else:
+                return [
+                    "hybrid_sliding" if i in self.mtp_local_layer_ids else "hybrid"
+                    for i in range(self.mtp_local_layer_ids)
+                ]
         return None
 
-    # MTP layers are always full-attention with dense MLP
+    # MTP layers are always dense MLP
     @property
     def mtp_mlp_layer_types(self):
         if self.num_mtp_layers is not None:
@@ -197,6 +203,7 @@ class InklingConfig(PreTrainedConfig):
         if isinstance(self.text_config, dict):
             self.text_config.setdefault("num_mtp_layers", mtp_config.get("num_nextn_predict_layers"))
             self.text_config.setdefault("chain_hidden_post_norm", mtp_config.get("chain_hidden_post_norm", False))
+            self.text_config.setdefault("mtp_local_layer_ids", mtp_config.get("local_layer_ids"))
 
         if isinstance(self.audio_config, dict):
             self.audio_config = self.sub_configs["audio_config"](**self.audio_config)
