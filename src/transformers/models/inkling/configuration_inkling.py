@@ -121,16 +121,24 @@ class InklingTextConfig(PreTrainedConfig):
         if kwargs.get("dense_intermediate_size") is not None:
             self.intermediate_size = kwargs.pop("dense_intermediate_size")
 
-        # MTP layers are after the regular layers and are always full-attention with dense MLP
-        # we extend once so a config saved after this ran already contains the extra entries.
-        if self.num_mtp_layers and len(self.layer_types) == self.num_hidden_layers:
-            self.layer_types = self.layer_types + ["hybrid"] * self.num_mtp_layers
-            self.mlp_layer_types = self.mlp_layer_types + ["dense"] * self.num_mtp_layers
-
         # The architecture contains 4 conv modules per layer, each needing a different conv cache
         self.number_of_conv_states = 4
 
         super().__post_init__(**kwargs)
+
+    # MTP layers are always full-attention with dense MLP
+    @property
+    def mtp_layer_types(self):
+        if self.num_mtp_layers is not None:
+            return ["hybrid"] * self.num_mtp_layers
+        return None
+
+    # MTP layers are always full-attention with dense MLP
+    @property
+    def mtp_mlp_layer_types(self):
+        if self.num_mtp_layers is not None:
+            return ["dense"] * self.num_mtp_layers
+        return None
 
 
 class InklingAudioConfig(PreTrainedConfig):
