@@ -537,8 +537,32 @@ class TrainerSamplerTest(unittest.TestCase):
 
     def test_batch_rebalance_basic(self):
         """Test that BatchRebalanceSampler yields correct number of micro-batches and covers all samples."""
-        lengths = [100, 500, 200, 800, 300, 1000, 50, 600, 150, 400, 250, 700,
-                   120, 900, 350, 2000, 450, 550, 80, 300, 650, 750, 180, 1200]
+        lengths = [
+            100,
+            500,
+            200,
+            800,
+            300,
+            1000,
+            50,
+            600,
+            150,
+            400,
+            250,
+            700,
+            120,
+            900,
+            350,
+            2000,
+            450,
+            550,
+            80,
+            300,
+            650,
+            750,
+            180,
+            1200,
+        ]
         dp_size = 2
         grad_accum = 2
         micro_batch_size = 1
@@ -603,9 +627,40 @@ class TrainerSamplerTest(unittest.TestCase):
 
     def test_batch_rebalance_eff_batch_size(self):
         """Test that each global batch has exactly effective_batch_size total samples."""
-        lengths = [50, 300, 100, 800, 200, 500, 150, 700, 400, 1000, 250, 600,
-                   120, 900, 350, 2000, 450, 550, 80, 300, 650, 750, 180, 1200,
-                   60, 400, 220, 850, 330, 480, 130, 1100]
+        lengths = [
+            50,
+            300,
+            100,
+            800,
+            200,
+            500,
+            150,
+            700,
+            400,
+            1000,
+            250,
+            600,
+            120,
+            900,
+            350,
+            2000,
+            450,
+            550,
+            80,
+            300,
+            650,
+            750,
+            180,
+            1200,
+            60,
+            400,
+            220,
+            850,
+            330,
+            480,
+            130,
+            1100,
+        ]
         dp_size = 2
         grad_accum = 2
         effective_batch_size = 2 * 2 * 2  # = 8
@@ -629,8 +684,9 @@ class TrainerSamplerTest(unittest.TestCase):
             for slot in range(grad_accum):
                 for r in range(dp_size):
                     total += len(all_batches[r][gb * grad_accum + slot])
-            self.assertEqual(total, effective_batch_size,
-                             f"gb={gb}: expected {effective_batch_size} samples, got {total}")
+            self.assertEqual(
+                total, effective_batch_size, f"gb={gb}: expected {effective_batch_size} samples, got {total}"
+            )
 
     def test_batch_rebalance_max_tokens(self):
         """Test that max_tokens constraint limits padded tokens per micro-batch."""
@@ -653,8 +709,9 @@ class TrainerSamplerTest(unittest.TestCase):
                 if batch:
                     max_len = max(lengths[i] for i in batch)
                     padded = len(batch) * max_len
-                    self.assertLessEqual(padded, max_tokens + max(lengths),
-                                         f"bs={len(batch)}, max_len={max_len}, padded={padded}")
+                    self.assertLessEqual(
+                        padded, max_tokens + max(lengths), f"bs={len(batch)}, max_len={max_len}, padded={padded}"
+                    )
 
     def test_batch_rebalance_max_tokens_infeasible_no_data_loss(self):
         """
@@ -705,14 +762,20 @@ class TrainerSamplerTest(unittest.TestCase):
 
         for rank in range(dp_size):
             s1 = BatchRebalanceSampler(
-                lengths=lengths, effective_batch_size=effective_batch_size,
-                dp_size=dp_size, grad_accum=grad_accum,
-                rank=rank, seed=42,
+                lengths=lengths,
+                effective_batch_size=effective_batch_size,
+                dp_size=dp_size,
+                grad_accum=grad_accum,
+                rank=rank,
+                seed=42,
             )
             s2 = BatchRebalanceSampler(
-                lengths=lengths, effective_batch_size=effective_batch_size,
-                dp_size=dp_size, grad_accum=grad_accum,
-                rank=rank, seed=42,
+                lengths=lengths,
+                effective_batch_size=effective_batch_size,
+                dp_size=dp_size,
+                grad_accum=grad_accum,
+                rank=rank,
+                seed=42,
             )
             self.assertEqual(list(s1), list(s2))
 
@@ -724,12 +787,20 @@ class TrainerSamplerTest(unittest.TestCase):
             return bs * max_len + max_len * max_len * 0.01
 
         sampler_default = BatchRebalanceSampler(
-            lengths=lengths, effective_batch_size=8, dp_size=2, grad_accum=2,
-            rank=0, alpha=0.001,
+            lengths=lengths,
+            effective_batch_size=8,
+            dp_size=2,
+            grad_accum=2,
+            rank=0,
+            alpha=0.001,
         )
         sampler_custom = BatchRebalanceSampler(
-            lengths=lengths, effective_batch_size=8, dp_size=2, grad_accum=2,
-            rank=0, cost_fn=my_cost,
+            lengths=lengths,
+            effective_batch_size=8,
+            dp_size=2,
+            grad_accum=2,
+            rank=0,
+            cost_fn=my_cost,
         )
 
         for bs, max_len in [(1, 100), (2, 500), (4, 2000), (8, 3000)]:

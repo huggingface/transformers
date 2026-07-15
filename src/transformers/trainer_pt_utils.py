@@ -937,7 +937,8 @@ class BatchRebalanceSampler(Sampler):
                         if self.max_tokens > 0 and projected_tokens > self.max_tokens:
                             break
                         donors = [
-                            i for i in range(K)
+                            i
+                            for i in range(K)
                             if i not in frozen and i not in slot_members and counts[i] > min_per_group
                         ]
                         if not donors:
