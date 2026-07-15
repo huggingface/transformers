@@ -13,6 +13,7 @@
 # limitations under the License.
 """Testing suite for the PyTorch NemotronH model."""
 
+import copy
 import tempfile
 import unittest
 
@@ -356,6 +357,41 @@ class NemotronHModelTester:
             msg=f"Max diff: {(ref_first - under_test_first).abs().max().item():.6f}",
         )
 
+    def create_and_check_nemotron_h_slow_path_multi_chunk(self, config, input_ids, *args):
+        """
+        Regression test for the inter-chunk recurrence of the Mamba2 slow (torch) path: a
+        single chunked forward over a multi-chunk sequence must reproduce a token-by-token
+        recurrent decode.
+
+        The mixer is fed a large-magnitude input so the SSM state is O(1). With a normal
+        activation scale the inter-chunk contribution is ~1e-7, i.e. below any tolerance,
+        which is why neither `create_and_check_mamba2_slow_vs_fast_forward` (single chunk,
+        needs the kernels) nor a plain `prepare_config_and_inputs` input surfaces the bug.
+        A small `chunk_size` lets a short sequence span several chunks. Runs on CPU without
+        the fast-path kernels.
+        """
+        config = copy.deepcopy(config)
+        config.chunk_size = 8
+        model = NemotronHModel(config).eval().to(torch_device)
+        mixer = next(layer.mixer for layer in model.layers if getattr(layer, "block_type", None) == "linear_attention")
+
+        seq_len = 4 * config.chunk_size + 1
+        torch.manual_seed(0)
+        hidden_states = 100.0 * torch.randn(1, seq_len, config.hidden_size, device=torch_device)
+
+        with torch.no_grad():
+            chunked = mixer.torch_forward(hidden_states)
+            cache = DynamicCache(config=config)
+            recurrent = torch.cat(
+                [mixer.torch_forward(hidden_states[:, t : t + 1], cache_params=cache) for t in range(seq_len)],
+                dim=1,
+            )
+
+        max_diff = (chunked - recurrent).abs().max().item()
+        self.parent.assertLess(
+            max_diff, 1e-3, f"slow-path chunked forward disagrees with recurrent decode: {max_diff}"
+        )
+
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
         (
@@ -521,46 +557,9 @@ class NemotronHModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
         self.model_tester.create_and_check_mamba2_slow_vs_fast_forward(*config_and_inputs)
 
     def test_mamba2_slow_path_multi_chunk(self):
-        """
-        Regression test for the inter-chunk recurrence in the Mamba2 slow (torch) path.
-
-        A single chunked forward over a multi-chunk sequence must match a token-by-token
-        recurrent decode. The input is deliberately large-magnitude so the SSM state is
-        O(1) and the inter-chunk contribution is not numerically negligible; with the
-        previous `.sum(dim=2)` reduction the two disagree by orders of magnitude. Runs on
-        CPU without the fast-path kernels.
-        """
-        config = NemotronHConfig(
-            vocab_size=99,
-            hidden_size=32,
-            mamba_num_heads=8,
-            mamba_head_dim=8,
-            ssm_state_size=16,
-            n_groups=1,
-            mamba_chunk_size=8,
-            num_attention_heads=2,
-            num_key_value_heads=2,
-            head_dim=8,
-            intermediate_size=32,
-            use_mamba_kernels=False,
-            layers_block_type=["mamba"],
-        )
-        torch.manual_seed(0)
-        mixer = NemotronHModel(config).eval().to(torch_device).layers[0].mixer
-
-        seq_len = 5 * config.chunk_size + 3
-        hidden_states = 50.0 * torch.randn(1, seq_len, config.hidden_size, device=torch_device)
-
-        with torch.no_grad():
-            chunked = mixer.torch_forward(hidden_states)
-            cache = DynamicCache(config=config)
-            recurrent = torch.cat(
-                [mixer.torch_forward(hidden_states[:, t : t + 1], cache_params=cache) for t in range(seq_len)],
-                dim=1,
-            )
-
-        max_diff = (chunked - recurrent).abs().max().item()
-        self.assertLess(max_diff, 1e-3, f"slow-path chunked forward disagrees with recurrent decode: {max_diff}")
+        """The Mamba2 slow path must reproduce the token-by-token recurrence across chunks."""
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_nemotron_h_slow_path_multi_chunk(*config_and_inputs)
 
     def test_attention_outputs(self):
         r"""
