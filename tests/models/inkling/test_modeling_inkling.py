@@ -230,6 +230,18 @@ class InklingAudio2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unitte
     def test_inputs_embeds_matches_input_ids(self):
         pass
 
+    @unittest.skip("Accelerate does not create a device map when the entire tiny model fits on CPU")
+    def test_cpu_offload(self):
+        pass
+
+    @unittest.skip("Accelerate maps the entire tiny model to disk instead of producing a split device map")
+    def test_disk_offload_bin(self):
+        pass
+
+    @unittest.skip("Accelerate maps the entire tiny model to disk instead of producing a split device map")
+    def test_disk_offload_safetensors(self):
+        pass
+
     @unittest.skip(GEMMA4_RANDOM_MOE_FA2_SKIP_REASON)
     def test_flash_attn_2_inference_equivalence(self):
         pass
