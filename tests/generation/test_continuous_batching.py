@@ -727,6 +727,7 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
         attn_implementation: str,
         max_new_tokens: int = 20,
         num_repeat_prompts: int = 1,
+        compare_to_fp32_eager: bool = False,
     ) -> None:
         """Tests the parity between continuous batching and non-continuous batching generation."""
 
@@ -781,17 +782,26 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
             flush_memory(flush_compile=True)
 
         # Generation without continuous batching (reload model to avoid any state contamination)
-        _, model = get_tokenizer_and_model(model_id, attn_implementation, torch_device, dtype)
+        if compare_to_fp32_eager:
+            non_paged_attn_implem = "eager"
+            dtype = torch.float32
+        else:
+            non_paged_attn_implem = attn_implementation.replace("paged|", "")
+
+        _, model = get_tokenizer_and_model(model_id, non_paged_attn_implem, torch_device, dtype)
         model.generation_config.max_new_tokens = max_new_tokens
         model.generation_config.do_sample = False
-        model.generation_config.use_cuda_graph = continuous_batching_config.use_cuda_graph
-        model.generation_config.compile_config = continuous_batching_config.varlen_compile_config
 
-        # Create a static cache if compile_config is set, because regular generate requires a compileable cache
+        # The fp32 eager reference stays a plain generate: flash + StaticCache (needed to compile a regular generate)
+        # can flip an early greedy tie in bf16, whereas eager float32 tracks the true greedy path.
         past_key_values = None
-        if model.generation_config.compile_config is not None:
-            max_cache_len = num_input_tokens + max_new_tokens
-            past_key_values = StaticCache(config=model.config, max_cache_len=max_cache_len)
+        if not compare_to_fp32_eager:
+            model.generation_config.use_cuda_graph = continuous_batching_config.use_cuda_graph
+            model.generation_config.compile_config = continuous_batching_config.varlen_compile_config
+            # Create a static cache if compile_config is set, because regular generate requires a compileable cache
+            if model.generation_config.compile_config is not None:
+                max_cache_len = num_input_tokens + max_new_tokens
+                past_key_values = StaticCache(config=model.config, max_cache_len=max_cache_len)
 
         generate_outputs = model.generate(
             **inputs.to(torch_device), generation_config=model.generation_config, past_key_values=past_key_values
@@ -863,10 +873,12 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
             use_cuda_graph=use_cuda_graph,
             default_compile_level=1,
         )
+        # Flash + compile forces a StaticCache reference that can flip an early greedy tie in bf16: use fp32 eager
         self._test_continuous_batching_parity(
             model_id=model_id,
             continuous_batching_config=continuous_batching_config,
             attn_implementation=attn_implementation,
+            compare_to_fp32_eager=is_flash_attention_requested(requested_attention_implementation=attn_implementation),
         )
 
     # FIXME: Qwen2.5-0.5B-Instruct is not here because it's  broken (it uses a repetition penalty logits processor)
@@ -1314,6 +1326,8 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
     ) -> None:
         # Again, we try to not overly use_compile because it adds a lot of overhead
         model_id = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
+        # Flash + compile forces a StaticCache reference that can flip an early greedy tie in bf16: use fp32 eager
+        is_fa = is_flash_attention_requested(requested_attention_implementation=attn_implementation)
         self._test_continuous_batching_parity(
             model_id=model_id,
             continuous_batching_config=ContinuousBatchingConfig(
@@ -1323,6 +1337,7 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
                 default_compile_level=1 if use_compile else 0,
             ),
             attn_implementation=attn_implementation,
+            compare_to_fp32_eager=is_fa and use_compile,
         )
 
     @parameterized.expand([(False, False), (False, True), (True, False), (True, True)])
