@@ -19,6 +19,7 @@ import doctest
 import errno
 import functools
 import os
+import re
 import sys
 import tempfile
 import warnings
@@ -42,20 +43,32 @@ from transformers.utils.network_logging import register_network_debug_plugin
 _ci_fallback_cache_dir = None
 
 
+# Rust's `std::io::Error` renders OS-level failures as ``"<strerror> (os error <N>)"``
+# where ``<N>`` is the raw platform errno. The trailing ``(os error N)`` fragment is
+# emitted by Rust in English regardless of locale, so the numeric code -- not the
+# human-readable ``<strerror>`` text -- is the stable signal to key off.
+_OS_ERROR_CODE_RE = re.compile(r"os error (\d+)", re.IGNORECASE)
+
+
 def _is_readonly_fs_error(e):
     """Return True if `e` signals a read-only filesystem (EROFS).
 
     The plain download path raises `OSError` with `errno == EROFS`. The Xet path
-    (`hf_xet` Rust library) instead raises a bare `RuntimeError` whose message contains
-    "os error 30" (EROFS) with no `.errno` set, so it must be matched on the message.
+    (`hf_xet` Rust library) instead raises a bare `RuntimeError` with no `.errno` set,
+    carrying a Rust-rendered message that ends with ``(os error <N>)``. We extract that
+    numeric code and compare it to `errno.EROFS` rather than matching the locale-dependent
+    strerror text, which is far more robust. The cause/context chain is followed so a
+    wrapped error is still recognised.
     """
-    if isinstance(e, OSError) and e.errno == errno.EROFS:
-        return True
-    # hf_xet surfaces the read-only failure as a RuntimeError with no `.errno`, e.g.
-    # "Previous task error: I/O error: I/O error: Read-only file system (os error 30)"
-    if isinstance(e, RuntimeError):
-        msg = str(e).lower()
-        return "read-only file system" in msg or f"os error {errno.EROFS}" in msg
+    # Follow the cause/context chain so a wrapped error is still recognised.
+    while e is not None:
+        # Standard path: an OSError carrying the EROFS errno.
+        if isinstance(e, OSError) and e.errno == errno.EROFS:
+            return True
+        # hf_xet path: a bare RuntimeError with the raw OS errno rendered as "(os error N)".
+        if isinstance(e, RuntimeError) and any(int(c) == errno.EROFS for c in _OS_ERROR_CODE_RE.findall(str(e))):
+            return True
+        e = e.__cause__ or e.__context__
     return False
 
 
@@ -133,6 +146,7 @@ NOT_DEVICE_TESTS = {
     "ModelTester::test_pipeline_",
     "/repo_utils/",
     "/utils/",
+    "/conftest_tests/",
 }
 
 # allow having multiple repository checkouts and not needing to remember to rerun
