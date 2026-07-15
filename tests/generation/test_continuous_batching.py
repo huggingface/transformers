@@ -65,7 +65,6 @@ from transformers.testing_utils import (
 )
 from transformers.utils import (
     is_flash_attn_2_available,
-    is_kernels_available,
     is_torch_xpu_available,
 )
 from transformers.utils.generic import is_flash_attention_requested
@@ -726,7 +725,7 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
 
         # Skip the test if Flash Attention is required but not available
         is_fa = is_flash_attention_requested(requested_attention_implementation=attn_implementation)
-        if is_fa and not is_flash_attn_2_available(kernel_fallback_ok=True):
+        if is_fa and not is_flash_attn_2_available(kernels_fallback_ok=True):
             self.skipTest("Flash Attention is not available and neither is the kernels library. Skipping test.")
         # Skip the test if cuda graph is on but the device is not CUDA
         if continuous_batching_config.use_cuda_graph and torch_device != "cuda":

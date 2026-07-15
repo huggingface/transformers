@@ -693,7 +693,7 @@ def require_flash_attn(test_case):
     These tests are skipped when Flash Attention isn't installed.
 
     """
-    flash_attn_available = is_flash_attn_2_available(kernel_fallback_ok=True)
+    flash_attn_available = is_flash_attn_2_available(kernels_fallback_ok=True)
     return unittest.skipUnless(flash_attn_available, "test requires Flash Attention")(test_case)
 
 
@@ -726,7 +726,7 @@ def require_flash_attn_4(test_case):
 
 
 def require_all_flash_attn(test_case):
-    flash_attn_available = is_flash_attn_2_available(kernel_fallback_ok=True)
+    flash_attn_available = is_flash_attn_2_available(kernels_fallback_ok=True)
 
     return unittest.skipUnless(
         all(
