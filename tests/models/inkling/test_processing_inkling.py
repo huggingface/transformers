@@ -269,7 +269,7 @@ class InklingProcessingIntegrationTest(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        cls.checkpoint_name = "eustlb/dummy-model"
+        cls.checkpoint_name = "hf-internal-testing/tiny-inkling"
         cls.processor = AutoProcessor.from_pretrained(cls.checkpoint_name)
         cls.bucket = "hf-internal-testing/tml-integration-tests"
 
@@ -288,7 +288,7 @@ class InklingProcessingIntegrationTest(unittest.TestCase):
 
     def _expected_dmel_from_inputs(self, inputs) -> "torch.Tensor":
         # Trim each padded audio's dmel by its mask and concatenate in order
-        audio_input_ids = inputs["audio_input_ids"].to(torch.int64)
+        audio_input_ids = inputs["audio_input_ids"]
         mask = inputs.get("audio_input_ids_mask")
         per_audio = [
             audio_input_ids[i][mask[i].bool()] if mask is not None else audio_input_ids[i]
@@ -306,13 +306,13 @@ class InklingProcessingIntegrationTest(unittest.TestCase):
         )
         expected = self._load_expected(case)
 
-        input_ids = inputs["input_ids"][0].to(torch.int64)
+        input_ids = inputs["input_ids"][0]
         expected_input_ids = self._remap_sentinels(expected["input_ids"].to(torch.int64))
         torch.testing.assert_close(input_ids, expected_input_ids, rtol=0, atol=0)
 
         if has_audio:
             dmel = self._expected_dmel_from_inputs(inputs)
-            torch.testing.assert_close(dmel, expected["audio_dmel"].to(torch.int64), rtol=0, atol=0)
+            torch.testing.assert_close(dmel, expected["audio_dmel"].to(torch.int32), rtol=0, atol=0)
 
     def test_apply_chat_template_text(self):
         messages = [{"role": "user", "content": [{"type": "text", "text": "What is the capital of France?"}]}]
