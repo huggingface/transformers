@@ -65,6 +65,7 @@ from transformers.testing_utils import (
 )
 from transformers.utils import (
     is_flash_attn_2_available,
+    is_flash_attn_3_available,
     is_torch_xpu_available,
 )
 from transformers.utils.generic import is_flash_attention_requested
@@ -870,6 +871,47 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
             continuous_batching_config=continuous_batching_config,
             attn_implementation=attn_implementation,
         )
+
+    @parameterized.expand(
+        [
+            # (loaded_attn_implementation, supports_flash_attn, expect_flash_after_switch)
+            ("sdpa", True, True),  # flash-capable model on a non-flash impl -> auto-switched to a paged flash impl
+            ("paged|sdpa", True, False),  # an explicit paged request is respected: no flash upgrade
+            ("sdpa", False, False),  # _supports_flash_attn=False opts out: stays on paged|sdpa
+        ]
+    )
+    @slow
+    def test_switch_to_cb_friendly_attn(
+        self, attn_implementation: str, supports_flash_attn: bool, expect_flash_after_switch: bool
+    ) -> None:
+        """Continuous batching switches to a paged (ideally flash) attention and restores the original on stop."""
+        flash_available = (
+            is_flash_attn_2_available(kernels_fallback_ok=True) or
+            is_flash_attn_3_available(kernels_fallback_ok=True)
+        )
+        if expect_flash_after_switch and not flash_available:
+            self.skipTest("Flash attention is unavailable, cannot test the auto-switch to flash.")
+
+        model_id = "Qwen/Qwen2.5-0.5B-Instruct"
+        _, model = get_tokenizer_and_model(model_id, attn_implementation, torch_device, torch.bfloat16)
+        model._supports_flash_attn = supports_flash_attn
+        original_attn_impl = model.config._attn_implementation
+
+        # Creating the manager switches the model to a CB-friendly attention implementation
+        manager = model.init_continuous_batching(
+            continuous_batching_config=ContinuousBatchingConfig(num_blocks=8, block_size=32, use_cuda_graph=False)
+        )
+        switched_attn_impl = model.config._attn_implementation
+        self.assertTrue(switched_attn_impl.startswith("paged|"), f"Expected a paged impl, got {switched_attn_impl}")
+        is_flash = is_flash_attention_requested(requested_attention_implementation=switched_attn_impl)
+        self.assertEqual(is_flash, expect_flash_after_switch)
+        if not expect_flash_after_switch:
+            self.assertEqual(switched_attn_impl, "paged|sdpa")
+
+        # Starting then stopping the manager restores the original attention implementation
+        manager.start()
+        manager.stop(block=True)
+        self.assertEqual(model.config._attn_implementation, original_attn_impl)
 
     # FIXME: Qwen2.5-0.5B-Instruct is not here because it's  broken (it uses a repetition penalty logits processor)
     # TODO: replace gemma2 with a tiny version of GPT-OSS? That way we can test sliding window AND attention sink
