@@ -2461,10 +2461,17 @@ class PreTrainedModel(
         #   or the FSDP path in _initialize_missing_keys (param._is_hf_initialized = True).
         # Without this, non-remote-code models would still go through expensive
         # _init_weights → normal_ re-initialization despite all params being marked.
-        if all(getattr(param, "_is_hf_initialized", False) for param in module.parameters(recurse=False)) and all(
-            getattr(buffer, "_is_hf_initialized", False)
-            for buffer in module.buffers(recurse=False)
-            if buffer is not None
+        #
+        # Safety: mark_tied_weights_as_initialized may set _is_hf_initialized on tied params
+        # that are still on meta device. Never skip _init_weights if any param is still on meta.
+        if (
+            all(getattr(param, "_is_hf_initialized", False) for param in module.parameters(recurse=False))
+            and not any(param.device.type == "meta" for param in module.parameters(recurse=False))
+            and all(
+                getattr(buffer, "_is_hf_initialized", False)
+                for buffer in module.buffers(recurse=False)
+                if buffer is not None
+            )
         ):
             module._is_hf_initialized = True
             return
