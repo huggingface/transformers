@@ -75,6 +75,8 @@ class Qwen3_5TextConfig(Qwen3NextConfig):
         Number of key heads used in linear attention layers.
     linear_num_value_heads (`int`, *optional*, defaults to 32):
         Number of value heads used in linear attention layers.
+    num_mtp_layers (`int`, *optional*, defaults to 0):
+        Number of Multi-Token Prediction (MTP) layers. When set to 0, MTP is disabled.
 
     ```python
     >>> from transformers import Qwen3_5TextModel, Qwen3_5TextConfig
@@ -117,6 +119,7 @@ class Qwen3_5TextConfig(Qwen3NextConfig):
     intermediate_size: int = 12288
     num_hidden_layers: int = 32
     num_key_value_heads: int = 4
+    num_mtp_layers: int = 0
 
     decoder_sparse_step = AttributeError()
     norm_topk_prob = AttributeError()
@@ -150,6 +153,9 @@ class Qwen3_5VisionConfig(Qwen3VLVisionConfig):
 @strict
 class Qwen3_5Config(Qwen3VLConfig):
     r"""
+    num_mtp_layers (`int`, *optional*, defaults to 0):
+        Number of Multi-Token Prediction (MTP) layers. When set to 0, MTP is disabled.
+
     Example:
 
     ```python
@@ -169,6 +175,7 @@ class Qwen3_5Config(Qwen3VLConfig):
     video_token_id: int = 248057
     vision_start_token_id: int = 248053
     vision_end_token_id: int = 248054
+    num_mtp_layers: int = 0
 
 
 class Qwen3_5VisionRotaryEmbedding(Qwen3VLVisionRotaryEmbedding):
