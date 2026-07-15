@@ -221,6 +221,10 @@ class InklingAudio2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unitte
     def test_generate_without_input_ids(self):
         pass
 
+    @unittest.skip("Audio placeholder embeddings are replaced when audio inputs are provided")
+    def test_inputs_embeds_matches_input_ids(self):
+        pass
+
     @unittest.skip(GEMMA4_RANDOM_MOE_FA2_SKIP_REASON)
     def test_flash_attn_2_inference_equivalence(self):
         pass
