@@ -38,6 +38,44 @@ def use_gqa_in_sdpa(attention_mask: torch.Tensor | None, key: torch.Tensor, valu
     return _is_torch_greater_or_equal_than_2_5 and attention_mask is None and key.shape[-1] == value.shape[-1] <= 256
 
 
+def create_position_bias_mask(
+    position_bias: torch.Tensor,
+    attention_mask: torch.Tensor | None,
+    is_causal: bool,
+    query: torch.Tensor,
+    key: torch.Tensor,
+) -> torch.Tensor:
+    """
+    Create a floating-point dtype mask to use with sdpa. The mask contains the values of `position_bias` to positions where we should
+    attend to tokens, and -inf where we should not. It will be added to the QK^T result in the attention, before the softmax. Note
+    that using such a mask will usually prevent sdpa from dispatching to the most efficient kernel implementations.
+
+    Note that we cannot create this in advance when we create the mask in the model, as the position_bias is usually learned
+    differently in every layer.
+    """
+    min_dtype = torch.finfo(key.dtype).min
+    # If we don't have a mask already, we need to check causality to be sure to respect it
+    if attention_mask is None:
+        # If we were gonna rely on `is_causal`, we need to create a mask to respect causality on top of the position_bias mask
+        if is_causal:
+            device = key.device
+            q_length, kv_length = query.shape[2], key.shape[2]
+            causal_mask = (
+                torch.arange(q_length, device=device)[:, None] >= torch.arange(kv_length, device=device)[None, :]
+            )
+            causal_mask = causal_mask.view(1, 1, q_length, kv_length)
+            position_bias_mask = torch.where(causal_mask, position_bias, min_dtype)
+        # If it's not causal, we can simply use the position_bias as the additive mask in sdpa
+        else:
+            position_bias_mask = position_bias
+    else:
+        # If we have a mask already, it's always of boolean dtype here. We only have to use the superpose both mask to float
+        # dtype to use as additive mask in sdpa
+        position_bias_mask = torch.where(attention_mask, position_bias, min_dtype)
+
+    return position_bias_mask
+
+
 def sdpa_attention_forward(
     module: torch.nn.Module,
     query: torch.Tensor,
@@ -47,6 +85,7 @@ def sdpa_attention_forward(
     dropout: float = 0.0,
     scaling: float | None = None,
     is_causal: bool | None = None,
+    position_bias: torch.Tensor | None = None,
     **kwargs,
 ) -> tuple[torch.Tensor, None]:
     if kwargs.get("output_attentions", False):
@@ -102,6 +141,12 @@ def sdpa_attention_forward(
     if is_causal and attention_mask is None and q_length > 1 and kv_length > q_length:
         key = key[:, :, :q_length, :]
         value = value[:, :, :q_length, :]
+
+    # If we have a position_bias, create the correct floating-point mask by combining it with the existing mask, or a causal mask
+    # if `is_causal=True`
+    if position_bias is not None:
+        attention_mask = create_position_bias_mask(position_bias, attention_mask, is_causal, query, key)
+        is_causal = False
 
     attn_output = torch.nn.functional.scaled_dot_product_attention(
         query,
