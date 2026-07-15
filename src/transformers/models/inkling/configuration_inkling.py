@@ -183,6 +183,7 @@ class InklingVisionConfig(PreTrainedConfig):
     initializer_range: float = 0.02
 
 
+@strict
 class InklingConfig(PreTrainedConfig):
     """Top-level multimodal config (`InklingMMConfig` in the SGLang source)."""
 
