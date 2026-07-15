@@ -1045,32 +1045,57 @@ def is_bitsandbytes_available(min_version: str = BITSANDBYTES_MIN_VERSION) -> bo
 
 
 @lru_cache
-def is_flash_attn_2_available() -> bool:
+def is_flash_attn_2_available(kernels_fallback_ok: bool = False) -> bool:
     is_available, flash_attn_version = _is_package_available("flash_attn", return_version=True)
     # FA4 is also distributed under "flash_attn", hence we need to check the naming here
     is_available = is_available and "flash-attn" in [
         pkg.replace("_", "-") for pkg in PACKAGE_DISTRIBUTION_MAPPING.get("flash_attn", [])
     ]
 
-    if not is_available or not (is_torch_cuda_available() or is_torch_mlu_available()):
-        return False
-
     # Only allow versions >= 2.3.3 to avoid very old legacy workarounds that are now 2+ years old
-    try:
-        return version.parse(flash_attn_version) >= version.parse("2.3.3")
-    except packaging.version.InvalidVersion:
-        return False
+    if is_available and (is_torch_cuda_available() or is_torch_mlu_available()):
+        try:
+            return version.parse(flash_attn_version) >= version.parse("2.3.3")
+        except packaging.version.InvalidVersion:
+            return False
+
+    # If the kernels fallback is allowed, check if it is available
+    if kernels_fallback_ok and is_kernels_available():
+        try:
+            from kernels import get_kernel
+
+            from transformers.modeling_flash_attention_utils import FLASH_ATTN_KERNEL_FALLBACK
+
+            get_kernel(FLASH_ATTN_KERNEL_FALLBACK["flash_attention_2"], version=1)
+            return True
+        except Exception:  # noqa: S110  # we don't care about the Exception here: we just want to check availability
+            pass
+    return False
 
 
 @lru_cache
-def is_flash_attn_3_available() -> bool:
+def is_flash_attn_3_available(kernels_fallback_ok: bool = False) -> bool:
     # Universally available under `flash_attn_interface`
     is_available = _is_package_available("flash_attn_interface")[0]
     # Resolving and ensuring the proper name of FA3 being associated
     is_available = is_available and "flash-attn-3" in [
         pkg.replace("_", "-") for pkg in PACKAGE_DISTRIBUTION_MAPPING.get("flash_attn_interface", [])
     ]
-    return is_available and is_torch_cuda_available()
+    if is_available and is_torch_cuda_available():
+        return True
+
+    # If the kernels fallback is allowed, check if it is available
+    if kernels_fallback_ok and is_kernels_available():
+        try:
+            from kernels import get_kernel
+
+            from transformers.modeling_flash_attention_utils import FLASH_ATTN_KERNEL_FALLBACK
+
+            get_kernel(FLASH_ATTN_KERNEL_FALLBACK["flash_attention_3"], version=1)
+            return True
+        except Exception:  # noqa: S110  # we don't care about the Exception here: we just want to check availability
+            pass
+    return False
 
 
 @lru_cache
