@@ -82,6 +82,7 @@ if is_torch_available():
     )
     from transformers.cache_utils import (
         Cache,
+        DummyLayer,
         DynamicCache,
         EncoderDecoderCache,
         LinearAttentionAndFullAttentionLayer,
@@ -2691,12 +2692,10 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
 
         # Check the size is coherent
         num_hidden_layers = config.num_hidden_layers
-        if getattr(config, "num_kv_shared_layers", None) is not None:
-            num_hidden_layers -= config.num_kv_shared_layers
         self.assertEqual(num_hidden_layers, len(past_key_values))
 
         # Check each layer has the correct shape
-        for layer in past_key_values.layers:
+        for idx, layer in enumerate(past_key_values.layers):
             # Mamba + Attention layer cache
             if type(layer) is LinearAttentionAndFullAttentionLayer:
                 # Remove the seq_length dim for cross-attention cache (it changes based on the model)
@@ -2714,6 +2713,10 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
                 # May not be used (e.g. lfm2)
                 if layer.is_recurrent_states_initialized:
                     self.assertEqual(layer.recurrent_states.shape, recurrent_shape)
+            # Dummy layer type
+            elif type(layer) is DummyLayer:
+                kv_sharing_role = config.kv_sharing_roles[idx]
+                self.assertTrue(kv_sharing_role == "consumer")
             # Attention only layer type
             else:
                 # Remove the seq_length dim for cross-attention cache (it changes based on the model)

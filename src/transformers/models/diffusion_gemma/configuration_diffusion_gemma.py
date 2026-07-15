@@ -127,7 +127,7 @@ class DiffusionGemmaTextConfig(PreTrainedConfig):
             )
             self.layer_types[-1] = "full_attention"
 
-        default_rope_params: dict[Literal["full_attention", "sliding_attention"] : dict[str, Any]] = {
+        default_rope_params: dict[Literal["full_attention", "sliding_attention"], dict[str, Any]] = {
             "sliding_attention": {"rope_type": "default", "rope_theta": 10_000.0},
             "full_attention": {"rope_type": "proportional", "partial_rotary_factor": 0.25, "rope_theta": 1_000_000.0},
         }
@@ -135,6 +135,11 @@ class DiffusionGemmaTextConfig(PreTrainedConfig):
             self.rope_parameters = default_rope_params
 
         super().__post_init__(**kwargs)
+
+    @property
+    def kv_sharing_roles(self) -> list[str]:
+        """DiffusionGemma does not use KV cache sharing."""
+        return ["independent"] * self.num_hidden_layers
 
     def convert_rope_params_to_dict(self, **kwargs):
         # No need to handle BC for new models, because they have no old-format `rope_scaling`
