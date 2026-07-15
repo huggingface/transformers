@@ -170,7 +170,7 @@ class DeepGemmLoaderTest(unittest.TestCase):
             def run(x):
                 return dg.load_deepgemm_kernel().per_token_cast_to_fp8(x)
 
-            out = run(torch.zeros(3))
+        out = run(torch.zeros(3))
         self.assertTrue(torch.equal(out, torch.ones(3)))
 
     def test_loader_is_compile_safe_when_warm(self):
@@ -187,7 +187,7 @@ class DeepGemmLoaderTest(unittest.TestCase):
             def run(x):
                 return dg.load_deepgemm_kernel().per_token_cast_to_fp8(x)
 
-            out = run(torch.zeros(3))
+        out = run(torch.zeros(3))
         self.assertTrue(torch.equal(out, torch.ones(3)))
 
 
