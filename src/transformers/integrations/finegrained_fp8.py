@@ -26,6 +26,7 @@ from ..activations import ACT2FN
 from ..core_model_loading import ConversionOps
 from ..quantizers.quantizers_utils import get_module_from_name, should_convert_module
 from ..utils import logging
+from ..utils.deprecation import deprecate_kwarg
 from ..utils.import_utils import (
     KERNELS_MAX_VERSION,
     KERNELS_MIN_VERSION,
@@ -176,6 +177,7 @@ def _alloc_expert_proj(
     return weight, sf
 
 
+@deprecate_kwarg("output_dtype", version="v5.16")
 def finegrained_fp8_linear(
     input: torch.Tensor,
     weight: torch.Tensor,
@@ -190,7 +192,8 @@ def finegrained_fp8_linear(
     ``activation_scale=None`` → dynamic per-K-block scales (inline); set it for
     static per-tensor quant. ``weight_scale_inv`` accepts fp32 or UE8M0; the
     dispatcher routes FP4 (``int8``-packed) weights automatically. ``output_dtype``
-    defaults to ``input.dtype`` when left ``None``.
+    is deprecated and ignored: like ``torch.nn.functional.linear``, the output always
+    follows the input dtype.
     """
     finegrained_fp8 = load_finegrained_fp8_kernel()
     output = finegrained_fp8.matmul(
@@ -198,7 +201,7 @@ def finegrained_fp8_linear(
         weight,
         weight_scale_inv,
         block_size,
-        output_dtype if output_dtype is not None else input.dtype,
+        input.dtype,
         activation_scale=activation_scale,
     )
     if bias is not None:
@@ -206,6 +209,7 @@ def finegrained_fp8_linear(
     return output
 
 
+@deprecate_kwarg("output_dtype", version="v5.16")
 def fp8_linear(
     input: torch.Tensor,
     weight: torch.Tensor,
@@ -235,15 +239,13 @@ def fp8_linear(
         bias: optional bias added to the matmul output.
         activation_scale: pass a per-tensor scalar to use static activation quant; leave `None`
             for dynamic (per-token) quant.
-        output_dtype: output dtype; defaults to ``input.dtype`` when left ``None``.
+        output_dtype: deprecated and ignored — like ``torch.nn.functional.linear``, the output
+            always follows the input dtype.
         allow_deepgemm: set ``False`` to force the Triton fallback for this call. Used when the
             model spans multiple CUDA devices in one process — DeepGEMM's cached kernels are bound
             to a single CUDA context and produce garbage across devices (see the multi-device guard
             in ``quantizer_finegrained_fp8.py``).
     """
-    if output_dtype is None:
-        output_dtype = input.dtype
-
     # DeepGEMM is CUDA-only, dynamic-only, SM90+ only, FP4/FP8-block-128-only.
     # ``TRANSFORMERS_DISABLE_DEEPGEMM_LINEAR=1`` forces the Triton fallback for this single
     # dispatcher (the experts ``"deepgemm"`` impl is unaffected — use ``set_experts_implementation``
@@ -267,7 +269,6 @@ def fp8_linear(
                 weight,
                 weight_scale_inv,
                 block_size=block_size,
-                output_dtype=output_dtype,
                 activation_scale=activation_scale,
                 bias=bias,
             )
@@ -279,7 +280,7 @@ def fp8_linear(
                 "Set `TRANSFORMERS_DISABLE_DEEPGEMM_LINEAR=1` to skip DeepGEMM for FP8 linear entirely."
             )
 
-    return finegrained_fp8_linear(input, weight, weight_scale_inv, block_size, bias, activation_scale, output_dtype)
+    return finegrained_fp8_linear(input, weight, weight_scale_inv, block_size, bias, activation_scale)
 
 
 class FP8Linear(nn.Linear):

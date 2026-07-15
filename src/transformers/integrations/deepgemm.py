@@ -37,6 +37,7 @@ from dataclasses import dataclass
 import torch
 
 from ..utils import logging
+from ..utils.deprecation import deprecate_kwarg
 from ..utils.import_utils import (
     KERNELS_MAX_VERSION,
     KERNELS_MIN_VERSION,
@@ -543,6 +544,7 @@ def _combine_routed_output(
 # ── Public dispatches ──────────────────────────────────────────────────────────
 
 
+@deprecate_kwarg("output_dtype", version="v5.16")
 def deepgemm_fp8_fp4_linear(
     input: torch.Tensor,
     weight: torch.Tensor,
@@ -556,6 +558,9 @@ def deepgemm_fp8_fp4_linear(
 
     Static (per-tensor) activation quantization is rejected — DeepGEMM needs
     per-row SFs. Callers should route static activations through the Triton fallback.
+
+    `output_dtype` is deprecated and ignored: like `torch.nn.functional.linear`, the output
+    always follows the input dtype.
     """
     if activation_scale is not None:
         raise NotImplementedError("DeepGEMM linear does not support static activation quantization.")
@@ -567,8 +572,7 @@ def deepgemm_fp8_fp4_linear(
 
     input_2d = input.view(-1, input.shape[-1])
     qinput_2d, scale_2d = deepgemm.per_token_cast_to_fp8(input_2d, **cast_kwargs)
-    out_dtype = output_dtype if output_dtype is not None else input.dtype
-    output = torch.empty(qinput_2d.shape[0], weight.shape[0], device=input.device, dtype=out_dtype)
+    output = torch.empty(qinput_2d.shape[0], weight.shape[0], device=input.device, dtype=input.dtype)
 
     # Pass `(1, 1, gran_k)` for int-SF paths so the kernel uses the right K granularity
     # (the default `(1, 1, 128)` mismatches FP4's gran_k=32). Float-SF leaves it None.
