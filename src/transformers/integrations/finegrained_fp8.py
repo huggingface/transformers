@@ -30,7 +30,6 @@ from ..utils.import_utils import (
     KERNELS_MAX_VERSION,
     KERNELS_MIN_VERSION,
     is_kernels_available,
-    is_torchdynamo_compiling,
 )
 from .deepgemm import (
     deepgemm_fp8_fp4_experts_forward,
@@ -81,21 +80,34 @@ class FineGrainedFP8:
     grouped_matmul: Callable
 
 
-@functools.cache
-def _load_finegrained_fp8_kernel() -> FineGrainedFP8:
+# Cache only a successful load: a loaded kernel stays valid, but failures aren't cached so the
+# loader can retry as the environment changes between attempts (e.g. a missing dependency gets
+# installed). Retrying is cheap and `lazy_load_kernel` dedupes its warnings via `warning_once`.
+_FINEGRAINED_FP8: FineGrainedFP8 | None = None
+
+
+@torch._dynamo.allow_in_graph
+def _load_finegrained_fp8_kernel() -> None:
     """
-    Load the finegrained-fp8 Triton kernel once and return its entry points.
+    Load the finegrained-fp8 Triton kernel once into the `_FINEGRAINED_FP8` module global.
+
+    `@allow_in_graph` makes `torch.compile` treat the untraceable hub download + dynamic import as a
+    single opaque node instead of tracing into it; it returns `None` (proxyable) and populates the
+    global, which `load_finegrained_fp8_kernel` then returns.
 
     Raises `ImportError` if the `kernels` package is missing, or the kernel or required
     symbols cannot be found.
     """
-    if not is_torchdynamo_compiling():
-        if not is_kernels_available():
-            raise ImportError(
-                "finegrained-fp8 kernel requires the `kernels` package. "
-                f"Please install a compatible version ({KERNELS_MIN_VERSION} <= version < {KERNELS_MAX_VERSION}), "
-                f"e.g. `pip install kernels=={KERNELS_MIN_VERSION}`"
-            )
+    global _FINEGRAINED_FP8
+    if _FINEGRAINED_FP8 is not None:
+        return
+
+    if not is_kernels_available():
+        raise ImportError(
+            "finegrained-fp8 kernel requires the `kernels` package. "
+            f"Please install a compatible version ({KERNELS_MIN_VERSION} <= version < {KERNELS_MAX_VERSION}), "
+            f"e.g. `pip install kernels=={KERNELS_MIN_VERSION}`"
+        )
 
     kernel = lazy_load_kernel("finegrained-fp8")
     if kernel is None:
@@ -124,23 +136,16 @@ def _load_finegrained_fp8_kernel() -> FineGrainedFP8:
             f"e.g. `pip install kernels=={KERNELS_MIN_VERSION}`"
         )
 
-    return FineGrainedFP8(
+    _FINEGRAINED_FP8 = FineGrainedFP8(
         matmul=matmul,
         batched_matmul=batched_matmul,
         grouped_matmul=grouped_matmul,
     )
 
 
-@torch._dynamo.allow_in_graph
-def _populate_finegrained_fp8_kernel() -> None:
-    _ = _load_finegrained_fp8_kernel()
-    return None
-
-
 def load_finegrained_fp8_kernel() -> FineGrainedFP8:
-    if is_torchdynamo_compiling():
-        _populate_finegrained_fp8_kernel()
-    return _load_finegrained_fp8_kernel()
+    _load_finegrained_fp8_kernel()
+    return _FINEGRAINED_FP8
 
 
 def _cdiv(a: int, b: int) -> int:

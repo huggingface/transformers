@@ -20,7 +20,6 @@ Requirements: CUDA, `kernels`, `nvidia-cutlass-dsl`, has_gate=True.
 
 from __future__ import annotations
 
-import functools
 from collections.abc import Callable
 from dataclasses import dataclass
 
@@ -50,14 +49,31 @@ class SonicMoE:
     moe_general_routing_inputs: Callable
 
 
-@functools.cache
-def _load_sonicmoe_kernel() -> SonicMoE:
+# Cache only a successful load: a loaded kernel stays valid, but failures aren't cached so the
+# loader can retry as the environment changes between attempts (e.g. a missing dependency gets
+# installed). Retrying is cheap and `lazy_load_kernel` dedupes its warnings via `warning_once`.
+# A module global rather than `@functools.cache`: when Dynamo traces into a call to a
+# `functools.cache`-wrapped function it warns ("Dynamo detected a call to a `functools.lru_cache`-
+# wrapped function ... ignores the cache wrapper and directly traces") on every compile; reading a
+# plain global is silent.
+_SONICMOE: SonicMoE | None = None
+
+
+@torch._dynamo.allow_in_graph
+def _load_sonicmoe_kernel() -> None:
     """
-    Load sonic-moe once and return its entry points.
+    Load sonic-moe once into the `_SONICMOE` module global.
+
+    `@allow_in_graph` makes `torch.compile` treat the untraceable hub download + dynamic import as a
+    single opaque node instead of tracing into it; it returns `None` (proxyable) and populates the
+    global, which `load_sonicmoe_kernel` then returns.
 
     Raises `ImportError` if CUDA/hardware requirements are not met, or if the kernel or
     required symbols are not found.
     """
+    global _SONICMOE
+    if _SONICMOE is not None:
+        return
 
     if not torch.cuda.is_available():
         raise ImportError(
@@ -109,10 +125,15 @@ def _load_sonicmoe_kernel() -> SonicMoE:
             "Make sure you have the `kernels` package and `nvidia-cutlass-dsl` installed."
         )
 
-    return SonicMoE(
+    _SONICMOE = SonicMoE(
         activation_type_enum=activation_type_enum,
         moe_general_routing_inputs=moe_general_routing_inputs,
     )
+
+
+def load_sonicmoe_kernel() -> SonicMoE:
+    _load_sonicmoe_kernel()
+    return _SONICMOE
 
 
 @torch._dynamo.allow_in_graph
@@ -139,7 +160,7 @@ def _sonicmoe_wrapper(
     flows normally. The decorator must be applied at module load time, not inside the compiled
     function — hence this shim plus the `allow_in_graph` decorator above.
     """
-    sonicmoe = _load_sonicmoe_kernel()
+    sonicmoe = load_sonicmoe_kernel()
     activation_type_enum = sonicmoe.activation_type_enum
     activation_type = getattr(
         activation_type_enum, ACT_MAP.get(act_name, "swiglu").upper(), activation_type_enum.SWIGLU

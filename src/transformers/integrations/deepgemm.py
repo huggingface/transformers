@@ -41,7 +41,6 @@ from ..utils.import_utils import (
     KERNELS_MAX_VERSION,
     KERNELS_MIN_VERSION,
     is_kernels_available,
-    is_torchdynamo_compiling,
     resolve_internal_import,
 )
 from .hub_kernels import lazy_load_kernel
@@ -142,70 +141,86 @@ def _get_nvcc_version() -> tuple[int, int] | None:
     return None
 
 
-@functools.cache
-def _load_deepgemm_kernel(requires_sm100: bool = False) -> DeepGEMM | str:
-    """Load DeepGEMM once or returns an error message if env or any required symbol is missing. This is wrapped in a
-    function that will raise an `ImportError` with the error message. The reason we raise in the wrapper rather than
-    here is that @functools.cache will only cache a return value, not an exception.
+# Cache only a successful load: a loaded kernel stays valid, but failures aren't cached so the
+# loader can retry as the environment changes between attempts (e.g. `CUDA_HOME` gets set). The
+# arch/env checks below run on every call — they're cheap and enforce the per-call `requires_sm100`
+# gate — so only the kernel-bundle resolution is guarded by the cache.
+_DEEPGEMM: DeepGEMM | None = None
+
+
+@torch._dynamo.allow_in_graph
+def _load_deepgemm_kernel(requires_sm100: bool = False) -> None:
+    """Load DeepGEMM once into the `_DEEPGEMM` module global, raising `ImportError` if the env or any
+    required symbol is missing.
+
+    `@allow_in_graph` makes `torch.compile` treat the untraceable cold path (hub download + dynamic
+    import via `lazy_load_kernel`) as a single opaque node instead of tracing into it; it returns `None`
+    (proxyable) and populates the global, which `load_deepgemm_kernel` then returns. The arch/env checks
+    run on every call — enforcing the per-call `requires_sm100` gate — before the cache short-circuit.
 
     `requires_sm100` raises a Blackwell-specific error for callers (FP4 / Mega MoE) that won't work on Hopper, instead
     of the generic SM90+ message.
     """
-    if not is_torchdynamo_compiling():
-        if not is_kernels_available():
-            return (
-                "DeepGEMM kernel requires the `kernels` package. Please install a compatible version ("
-                f"{KERNELS_MIN_VERSION} <= version < {KERNELS_MAX_VERSION}), e.g. `pip install kernels=="
-                f"{KERNELS_MIN_VERSION}`"
-            )
-        if not torch.cuda.is_available():
-            return "DeepGEMM kernel requires CUDA, but CUDA is not available."
+    global _DEEPGEMM
+    if not is_kernels_available():
+        raise ImportError(
+            "DeepGEMM kernel requires the `kernels` package. Please install a compatible version ("
+            f"{KERNELS_MIN_VERSION} <= version < {KERNELS_MAX_VERSION}), e.g. `pip install kernels=="
+            f"{KERNELS_MIN_VERSION}`"
+        )
+    if not torch.cuda.is_available():
+        raise ImportError("DeepGEMM kernel requires CUDA, but CUDA is not available.")
 
-        major, minor = torch.cuda.get_device_capability()
-        # DeepGEMM ships kernels only for SM90 (Hopper) and SM100 (Blackwell); anything
-        # else — Ada (SM89), Ampere (SM80), or future archs (SM110+) — has no build.
-        allowed = (10,) if requires_sm100 else (9, 10)
-        if major not in allowed:
-            arch = "Blackwell (SM100)" if requires_sm100 else "Hopper (SM90) or Blackwell (SM100)"
-            return f"DeepGEMM requires {arch}; current device is SM{major}{minor}."
+    major, minor = torch.cuda.get_device_capability()
+    # DeepGEMM ships kernels only for SM90 (Hopper) and SM100 (Blackwell); anything
+    # else — Ada (SM89), Ampere (SM80), or future archs (SM110+) — has no build.
+    allowed = (10,) if requires_sm100 else (9, 10)
+    if major not in allowed:
+        arch = "Blackwell (SM100)" if requires_sm100 else "Hopper (SM90) or Blackwell (SM100)"
+        raise ImportError(f"DeepGEMM requires {arch}; current device is SM{major}{minor}.")
 
-        # DeepGEMM JIT-compiles kernels with the system nvcc, so a resolvable CUDA toolkit is required.
-        # Per the DeepGEMM README: SM90 needs CUDA 12.3+, SM100 needs CUDA 12.9+.
-        min_cuda = (12, 9) if major == 10 else (12, 3)
-        cuda_home = _get_cuda_home()
-        if cuda_home is None:
-            return (
-                f"DeepGEMM's JIT needs a CUDA toolkit ≥ {min_cuda[0]}.{min_cuda[1]}, but none was found. "
-                "Set `CUDA_HOME` to a CUDA toolkit."
-            )
+    # DeepGEMM JIT-compiles kernels with the system nvcc, so a resolvable CUDA toolkit is required.
+    # Per the DeepGEMM README: SM90 needs CUDA 12.3+, SM100 needs CUDA 12.9+.
+    min_cuda = (12, 9) if major == 10 else (12, 3)
+    cuda_home = _get_cuda_home()
+    if cuda_home is None:
+        raise ImportError(
+            f"DeepGEMM's JIT needs a CUDA toolkit ≥ {min_cuda[0]}.{min_cuda[1]}, but none was found. "
+            "Set `CUDA_HOME` to a CUDA toolkit."
+        )
 
-        # The Kernel Hub `deep-gemm` build always uses nvcc and ignores `DG_JIT_USE_NVRTC` (there is no
-        # NVRTC fallback), so `CUDA_HOME` must hold an nvcc of the required version.
-        if not os.path.isfile(os.path.join(cuda_home, "bin", "nvcc")):
-            return (
-                f"DeepGEMM's JIT compiles with nvcc, but none was found in `{cuda_home}/bin`. Point "
-                f"`CUDA_HOME` at a full CUDA ≥ {min_cuda[0]}.{min_cuda[1]} toolkit (not a runtime-only install)."
-            )
+    # The Kernel Hub `deep-gemm` build always uses nvcc and ignores `DG_JIT_USE_NVRTC` (there is no
+    # NVRTC fallback), so `CUDA_HOME` must hold an nvcc of the required version.
+    if not os.path.isfile(os.path.join(cuda_home, "bin", "nvcc")):
+        raise ImportError(
+            f"DeepGEMM's JIT compiles with nvcc, but none was found in `{cuda_home}/bin`. Point "
+            f"`CUDA_HOME` at a full CUDA ≥ {min_cuda[0]}.{min_cuda[1]} toolkit (not a runtime-only install)."
+        )
 
-        # Treat an unreadable version as unsupported: `cuda.h` (with `CUDA_VERSION`) ships with every real
-        # toolkit, so `None` here means an incomplete install we can't vouch for — fail early to Triton.
-        nvcc_version = _get_nvcc_version()
-        if nvcc_version is None:
-            return (
-                f"DeepGEMM found nvcc in `{cuda_home}/bin` but could not read its CUDA version "
-                f"(no parseable `version.json`, `version.txt`, or `include/cuda.h`). Point `CUDA_HOME` at a "
-                f"complete CUDA ≥ {min_cuda[0]}.{min_cuda[1]} toolkit."
-            )
-        if nvcc_version < min_cuda:
-            return (
-                f"DeepGEMM on SM{major}{minor} needs a CUDA ≥ {min_cuda[0]}.{min_cuda[1]} toolkit, but nvcc "
-                f"{nvcc_version[0]}.{nvcc_version[1]} in `{cuda_home}` is too old. Point `CUDA_HOME` at a "
-                f"CUDA ≥ {min_cuda[0]}.{min_cuda[1]} toolkit."
-            )
+    # Treat an unreadable version as unsupported: `cuda.h` (with `CUDA_VERSION`) ships with every real
+    # toolkit, so `None` here means an incomplete install we can't vouch for — fail early to Triton.
+    nvcc_version = _get_nvcc_version()
+    if nvcc_version is None:
+        raise ImportError(
+            f"DeepGEMM found nvcc in `{cuda_home}/bin` but could not read its CUDA version "
+            f"(no parseable `version.json`, `version.txt`, or `include/cuda.h`). Point `CUDA_HOME` at a "
+            f"complete CUDA ≥ {min_cuda[0]}.{min_cuda[1]} toolkit."
+        )
+    if nvcc_version < min_cuda:
+        raise ImportError(
+            f"DeepGEMM on SM{major}{minor} needs a CUDA ≥ {min_cuda[0]}.{min_cuda[1]} toolkit, but nvcc "
+            f"{nvcc_version[0]}.{nvcc_version[1]} in `{cuda_home}` is too old. Point `CUDA_HOME` at a "
+            f"CUDA ≥ {min_cuda[0]}.{min_cuda[1]} toolkit."
+        )
+
+    if _DEEPGEMM is not None:
+        return _DEEPGEMM
 
     kernel = lazy_load_kernel("deep-gemm")
     if kernel is None:
-        return "Failed to load `kernels-community/deep-gemm` — check that a build matches the current torch/CUDA."
+        raise ImportError(
+            "Failed to load `kernels-community/deep-gemm` — check that a build matches the current torch/CUDA."
+        )
 
     fp8_fp4_matmul = getattr(kernel, "fp8_fp4_gemm_nt", None)
     grouped_fp8_fp4_matmul_nt = getattr(kernel, "m_grouped_fp8_fp4_gemm_nt_contiguous", None)
@@ -237,13 +252,13 @@ def _load_deepgemm_kernel(requires_sm100: bool = False) -> DeepGEMM | str:
         if attr is None
     ]
     if missing:
-        return (
+        raise ImportError(
             f"DeepGEMM kernel is missing required symbols: {', '.join(missing)}. "
             f"Please install a compatible version ({KERNELS_MIN_VERSION} <= version < {KERNELS_MAX_VERSION}), "
             f"e.g. `pip install kernels=={KERNELS_MIN_VERSION}`"
         )
 
-    return DeepGEMM(
+    _DEEPGEMM = DeepGEMM(
         fp8_fp4_matmul=fp8_fp4_matmul,
         grouped_fp8_fp4_matmul_nt=grouped_fp8_fp4_matmul_nt,
         grouped_fp8_fp4_matmul_nn=grouped_fp8_fp4_matmul_nn,
@@ -258,27 +273,9 @@ def _load_deepgemm_kernel(requires_sm100: bool = False) -> DeepGEMM | str:
     )
 
 
-@torch._dynamo.allow_in_graph
-def _populate_deepgemm_kernel(requires_sm100: bool = False) -> None:
-    """Warm the `_load_deepgemm_kernel` cache from an opaque graph node, so Dynamo never traces the loader.
-
-    Under `torch.compile`, Dynamo ignores `@functools.cache` and traces into `_load_deepgemm_kernel`,
-    whose cold path (hub download + dynamic import via `lazy_load_kernel`) is untraceable and errors under
-    `fullgraph`. `@allow_in_graph` turns the call into an opaque fx node instead — but an fx node's return
-    must be proxyable, and the `DeepGEMM` bundle of Python callables isn't (`Unsupported: torch.* op
-    returned non-Tensor`), so we can't just decorate the real loader. Hence two loaders: this one is
-    opaque, returns `None`, and only warms the cache; the real `_load_deepgemm_kernel` right after is then
-    a plain cache lookup.
-    """
-    _load_deepgemm_kernel(requires_sm100=requires_sm100)
-
-
 def load_deepgemm_kernel(requires_sm100: bool = False) -> DeepGEMM:
-    _populate_deepgemm_kernel(requires_sm100=requires_sm100)
-    deepgemm_or_error = _load_deepgemm_kernel(requires_sm100=requires_sm100)
-    if isinstance(deepgemm_or_error, str):
-        raise ImportError(deepgemm_or_error)
-    return deepgemm_or_error
+    _load_deepgemm_kernel(requires_sm100=requires_sm100)
+    return _DEEPGEMM
 
 
 # ── Scale-factor helpers ───────────────────────────────────────────────────────
