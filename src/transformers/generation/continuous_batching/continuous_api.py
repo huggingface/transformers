@@ -629,8 +629,8 @@ class ContinuousBatchingManager:
         self._use_prefix_sharing = self.continuous_batching_config.allow_block_sharing
 
     def switch_to_cb_friendly_attn(self, model: ProtoPretrainedModel) -> None:
-        """Switch the attn implementation to one that is CB friendly: try to find a flash implementation if flash is "
-        "and, in any cases, switch to a paged implementation."""
+        """Switch the attn implementation to one that is CB friendly: try to find a flash implementation if flash is
+        requested and, in any cases, switch to a paged implementation."""
         # The self._original_attn_impl is set only if the attn implementation is changed (makes this fn idempotent)
         original_attn_impl = model.config._attn_implementation
         target_implem = original_attn_impl
@@ -651,7 +651,7 @@ class ContinuousBatchingManager:
             if version is not None:
                 target_implem = f"flash_attention_{version}"  # no "paged|" prefix here to enter the branch below
                 logger.warning(
-                    f"{msg} Switching from {self._original_attn_impl} to {target_implem}. "
+                    f"{msg} Switching from {original_attn_impl} to {target_implem}. "
                     "If you need to use eager or sdpa, use paged|eager or paged|sdpa as the `attn_implementation`."
                 )
             else:
