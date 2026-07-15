@@ -369,7 +369,7 @@ class MtpModel(PreTrainedModel):
     _keys_to_ignore_on_load_missing = ["shared_head.weight", "embed_tokens.weight"]
 
     def __init__(self, main_model: PreTrainedModel, num_mtp_layers: int):
-        super().__init__(main_model.config.get_text_config())
+        super().__init__(main_model.config.get_mtp_config())
         # Make sure we have the correct loss type in case of training
         self.loss_type = "ForCausalLM"
         self.num_mtp_layers = num_mtp_layers
@@ -390,10 +390,7 @@ class MtpModel(PreTrainedModel):
 
         # Instantiate new mtp layers
         self.layers = nn.ModuleList(
-            [
-                MtpLayer(self.config, layer_cls, norm_cls, self.config.num_hidden_layers + k, self.use_post_norm)
-                for k in range(num_mtp_layers)
-            ]
+            [MtpLayer(self.config, layer_cls, norm_cls, k, self.use_post_norm) for k in range(num_mtp_layers)]
         )
         if self.use_shared_post_norm:
             self.shared_post_norm = norm_cls(self.config.hidden_size, eps=self.config.rms_norm_eps)

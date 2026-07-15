@@ -150,16 +150,24 @@ class InklingTextConfig(PreTrainedConfig):
         if kwargs.get("dense_intermediate_size") is not None:
             self.intermediate_size = kwargs.pop("dense_intermediate_size")
 
-        # MTP layers are after the regular layers and are always full-attention with dense MLP
-        # we extend once so a config saved after this ran already contains the extra entries.
-        if self.num_mtp_layers and len(self.layer_types) == self.num_hidden_layers:
-            self.layer_types = self.layer_types + ["hybrid"] * self.num_mtp_layers
-            self.mlp_layer_types = self.mlp_layer_types + ["dense"] * self.num_mtp_layers
-
         # The architecture contains 4 conv modules per layer, each needing a different conv cache
         self.number_of_conv_states = 4
 
         super().__post_init__(**kwargs)
+
+    # MTP layers are always full-attention with dense MLP
+    @property
+    def mtp_layer_types(self):
+        if self.num_mtp_layers is not None:
+            return ["hybrid"] * self.num_mtp_layers
+        return None
+
+    # MTP layers are always full-attention with dense MLP
+    @property
+    def mtp_mlp_layer_types(self):
+        if self.num_mtp_layers is not None:
+            return ["dense"] * self.num_mtp_layers
+        return None
 
 
 class InklingAudioConfig(PreTrainedConfig):
@@ -360,17 +368,15 @@ class InklingAttention(nn.Module):
         q_length = query_states.shape[2]
         if past_key_values is not None:
             # Important to get those values before updating the cache to be correct
-            kv_length, _ = past_key_values.get_mask_sizes(q_length, self.layer_idx)
+            kv_length, kv_offset = past_key_values.get_mask_sizes(q_length, self.layer_idx)
             q_offset = past_key_values.get_seq_length(self.layer_idx)
             # Update the cache
             key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
         else:
             kv_length = key_states.shape[2]
-            q_offset = 0
+            q_offset, kv_offset = 0, 0
 
-        # The first cached key sits `kv_length - q_length` positions before the current query, so q and kv
-        # share one absolute frame for any query offset (fill, sliding, or MtpCache)
-        kv_positions = torch.arange(kv_length, device=hidden_states.device) + (q_offset + q_length - kv_length)
+        kv_positions = torch.arange(kv_length, device=hidden_states.device) + kv_offset
         q_positions = torch.arange(q_length, device=hidden_states.device) + q_offset
         relative_states = relative_states.view(*input_shape, self.num_heads, -1)
         position_bias = self.rel_logits_proj(relative_states, q_positions, kv_positions)
