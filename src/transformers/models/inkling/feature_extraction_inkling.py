@@ -171,34 +171,44 @@ class InklingFeatureExtractor(SequenceFeatureExtractor):
                 "Failing to do so can result in silent errors that might be hard to debug."
             )
 
-        # Convert to torch tensor
+        cls_name = self.__class__.__name__
+        def _to_mono(clip: "np.ndarray | torch.Tensor | list") -> torch.Tensor:
+            tensor = clip if isinstance(clip, torch.Tensor) else torch.as_tensor(np.asarray(clip))
+            tensor = tensor.to(torch.float32)
+            if tensor.ndim == 2:
+                logger.warning_once(
+                    f"Only mono-channel audio is supported for input to {cls_name}. "
+                    "Taking the mean over the channel (last) axis to convert to mono."
+                )
+                tensor = tensor.mean(dim=-1)
+            elif tensor.ndim != 1:
+                raise ValueError(
+                    f"Each audio clip must be 1-D (mono) or 2-D (multichannel), got shape {tuple(tensor.shape)}."
+                )
+            return tensor
+
         if isinstance(raw_speech, np.ndarray):
-            raw_speech = torch.tensor(raw_speech)
-        elif isinstance(raw_speech, (list, tuple)) and isinstance(raw_speech[0], np.ndarray):
-            raw_speech = [torch.tensor(speech) for speech in raw_speech]
-
-        is_batched_torch = isinstance(raw_speech, torch.Tensor) and len(raw_speech.shape) > 1
-        if is_batched_torch and len(raw_speech.shape) > 2:
-            logger.warning(
-                f"Only mono-channel audio is supported for input to {self.__class__.__name__}. "
-                "We will take the mean of the channels to convert to mono."
-            )
-            raw_speech = raw_speech.mean(-1)
-
-        is_batched_sequence = isinstance(raw_speech, (list, tuple))
-        if is_batched_sequence:
-            for speech in raw_speech:
-                if len(speech.shape) > 1:
-                    logger.warning(
-                        f"Only mono-channel audio is supported for input to {self.__class__.__name__}. "
-                        "We will take the mean of the channels to convert to mono."
-                    )
-                    speech = speech.mean(-1)
-
-        if is_batched_torch or is_batched_sequence:
-            raw_speech = [speech[:, None].to(torch.float32) for speech in raw_speech]
+            raw_speech = torch.from_numpy(raw_speech)
+        if isinstance(raw_speech, torch.Tensor):
+            # A single array is one clip: 1-D mono or 2-D multichannel (never a batch).
+            if raw_speech.ndim > 2:
+                raise ValueError(
+                    f"A single array input must be 1-D (mono) or 2-D (multichannel); got {raw_speech.ndim} dims. "
+                    "Pass a list of arrays for a batch of clips."
+                )
+            clips = [raw_speech]
+        elif isinstance(raw_speech, (list, tuple)):
+            if len(raw_speech) == 0:
+                raise ValueError("Received an empty audio input.")
+            # A flat list of scalars is a single mono clip; a list of arrays/lists is a batch of clips.
+            if isinstance(raw_speech[0], (int, float, np.integer, np.floating)):
+                clips = [raw_speech]
+            else:
+                clips = list(raw_speech)
         else:
-            raw_speech = [raw_speech[:, None].to(torch.float32)]
+            raise TypeError(f"Unsupported audio input type for {cls_name}: {type(raw_speech)}")
+
+        raw_speech = [_to_mono(clip)[:, None] for clip in clips]
 
         # Stack and pad the raw waveforms to the longest clip in the batch, then extract the log-mel
         # spectrogram on the batched audio in a single `torch.stft` pass (mirrors Parakeet).
