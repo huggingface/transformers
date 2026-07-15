@@ -340,6 +340,7 @@ class GPTBigCodePreTrainedModel(PreTrainedModel):
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = True
     _supports_sdpa = True
+    _supports_attention_backend = True
     _can_record_outputs = {
         "hidden_states": GPTBigCodeBlock,
         "attentions": OutputRecorder(GPTBigCodeAttention, index=1, layer_name="attn"),
