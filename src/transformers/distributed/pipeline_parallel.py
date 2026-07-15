@@ -20,6 +20,7 @@ from typing import TYPE_CHECKING
 from ..modeling_outputs import CausalLMOutputWithPast
 from ..utils import is_torch_available
 
+
 if TYPE_CHECKING:
     import torch.nn as nn
 
@@ -27,6 +28,12 @@ if is_torch_available():
     import torch
     import torch.distributed as dist
     import torch.nn as nn
+
+
+def _bind_forward_kwargs(forward_fn, args: tuple, kwargs: dict) -> dict:
+    bound = inspect.signature(forward_fn).bind_partial(*args, **kwargs)
+    bound.apply_defaults()
+    return dict(bound.arguments)
 
 
 class PipelineIdentityLayer(nn.Identity):
@@ -161,8 +168,7 @@ class PipelineStage:
         dtype: torch.dtype,
         device: torch.device,
     ) -> torch.Tensor:
-        """Broadcast logits from the last PP rank to every rank. Only the last stage computes logits, but every rank must return them so `generate()` works without PP-specific changes.
-        """
+        """Broadcast logits from the last PP rank to every rank. Only the last stage computes logits, but every rank must return them so `generate()` works without PP-specific changes."""
         if self.pp_size <= 1:
             return tensor
 
@@ -173,7 +179,9 @@ class PipelineStage:
 
         # last rank sends the logits vector shape; other ranks receive it to size their buffer.
         if self.pp_is_last_stage:
-            assert tensor.ndim == logits_ndim, f"Expected logits with {logits_ndim} dims (batch, seq_len, vocab_size), got {tensor.ndim}"
+            assert tensor.ndim == logits_ndim, (
+                f"Expected logits with {logits_ndim} dims (batch, seq_len, vocab_size), got {tensor.ndim}"
+            )
             logits = tensor.to(device=comm_device, dtype=dtype).contiguous()
             shape_msg = torch.tensor(list(logits.shape), dtype=torch.long, device=comm_device)
         else:
@@ -190,7 +198,7 @@ class PipelineStage:
 
 def apply_pipeline_parallelism(model: nn.Module, pp_mesh: torch.distributed.device_mesh.DeviceMesh) -> nn.Module:
     """Naive even split of `base_model.layers` across PP ranks."""
-    #TODO(3outeille): involves pp_plan to do the split ?
+    # TODO(3outeille): involves pp_plan to do the split ?
     stage = PipelineStage.from_device_mesh(pp_mesh)
     if stage is None:
         return model
@@ -215,81 +223,75 @@ def apply_pipeline_parallelism(model: nn.Module, pp_mesh: torch.distributed.devi
         base_model.norm = PipelineIdentityLayer()
         model.lm_head = PipelineIdentityLayer()
 
-
     # let _finalize_model_loading know that we want to tie the lm_head only in the last rank
     if tied and not stage.pp_is_last_stage:
         model.all_tied_weights_keys = {}
 
-    _wrap_forward_for_pipeline_parallel(model)
+    # TODO(3outeille): dispatch to different pipeline parallelism schedules (gpipe, 1f1b, etc.)
+    if not getattr(model, "_pp_forward_wrapped", False):
+        original_forward = model.forward
+
+        @wraps(original_forward)
+        def pp_naive_forward(*args, **kwargs):
+            return pipeline_parallel_naive_forward(model, original_forward, *args, **kwargs)
+
+        # @wraps(original_forward)
+        # def pp_gpipe_forward(*args, **kwargs):
+        #     return pipeline_parallel_gpipe_forward(model, original_forward, *args, **kwargs)
+
+        model.forward = pp_naive_forward
+        model._pp_forward_wrapped = True
+
     return model
 
 
-def _bind_forward_kwargs(forward_fn, args: tuple, kwargs: dict) -> dict:
-    bound = inspect.signature(forward_fn).bind_partial(*args, **kwargs)
-    bound.apply_defaults()
-    return dict(bound.arguments)
+def pipeline_parallel_naive_forward(model: nn.Module, original_forward, *args, **kwargs):
+    def _hidden_states_shape(fwd_kwargs: dict, hidden_size: int) -> tuple[int, ...]:
+        if (inputs_embeds := fwd_kwargs.get("inputs_embeds")) is not None:
+            return tuple(inputs_embeds.shape)
+        if (input_ids := fwd_kwargs.get("input_ids")) is not None:
+            return (*input_ids.shape[:2], hidden_size)
+        raise ValueError("Cannot determine hidden states shape for pipeline recv_forward")
 
+    def _feed_hidden_states_as_input_embeds(fwd_kwargs: dict, hidden_states: torch.Tensor) -> dict:
+        """Stage 0 uses input_ids; later stages use received hidden states as inputs_embeds."""
+        fwd_kwargs.pop("input_ids", None)
+        fwd_kwargs["inputs_embeds"] = hidden_states
+        return fwd_kwargs
 
-def _hidden_states_shape(fwd_kwargs: dict, hidden_size: int) -> tuple[int, ...]:
-    if (inputs_embeds := fwd_kwargs.get("inputs_embeds")) is not None:
-        return tuple(inputs_embeds.shape)
-    if (input_ids := fwd_kwargs.get("input_ids")) is not None:
-        return (*input_ids.shape[:2], hidden_size)
-    raise ValueError("Cannot determine hidden states shape for pipeline recv_forward")
+    stage = PipelineStage.from_device_mesh(model._device_mesh)
+    if stage is None:
+        return original_forward(*args, **kwargs)
 
+    device = next(model.parameters()).device
+    dtype = next(model.parameters()).dtype
 
-def _feed_hidden_states_as_input_embeds(fwd_kwargs: dict, hidden_states: torch.Tensor) -> dict:
-    """Stage 0 uses input_ids; later stages use received hidden states as inputs_embeds."""
-    fwd_kwargs.pop("input_ids", None)
-    fwd_kwargs["inputs_embeds"] = hidden_states
-    return fwd_kwargs
+    # Bind the forward function to the arguments so that we can easily access them regardless of the number of arguments
+    caller_kwargs = _bind_forward_kwargs(original_forward, args, kwargs)
+    fwd_kwargs = caller_kwargs
 
+    # Non-first stages: recv activations from prev stage and use them as inputs_embeds.
+    if not stage.pp_is_first_stage:
+        shape = _hidden_states_shape(caller_kwargs, model.config.hidden_size)
+        hidden_states = stage.communicate("recv_forward", device=device, dtype=dtype, shape=shape)
+        fwd_kwargs = _feed_hidden_states_as_input_embeds(caller_kwargs, hidden_states)
 
-def _wrap_forward_for_pipeline_parallel(model: nn.Module) -> None:
-    if getattr(model, "_pp_forward_wrapped", False):
-        return
+    if stage.pp_is_last_stage:
+        # Last stage: compute the logits.
+        outputs = original_forward(**fwd_kwargs)
+        logits, past_key_values = outputs.logits, outputs.past_key_values
+    else:
+        # Non-last stages: Compute and send the activations to the next stage.
+        # We need the base models because hidden_states is getting slices in the causal_lm models + we want last_hidden_state
+        base_model = getattr(model, model.base_model_prefix)
+        base_kwargs = {k: v for k, v in fwd_kwargs.items() if k not in {"labels", "logits_to_keep"}}
+        base_outputs = base_model(**base_kwargs)
+        stage.communicate("send_forward", device=device, dtype=dtype, tensor=base_outputs.last_hidden_state)
+        logits, past_key_values = None, base_outputs.past_key_values
 
-    original_forward = model.forward
+    # Only the last stage computed the logits, so broadcast them to every rank (they will be waiting)
+    # TODO(3outeille): very naive implementation to make it work seamless with generate().
+    # In long term, we want only the last stage to hold the logits not every stages that will require changes in generate() directly
+    logits = stage.broadcast_from_last(logits, dtype=dtype, device=device)
 
-    @wraps(original_forward)
-    def pp_forward(*args, **kwargs):
-        stage = PipelineStage.from_device_mesh(model._device_mesh)
-        if stage is None:
-            return original_forward(*args, **kwargs)
-
-        device = next(model.parameters()).device
-        dtype = next(model.parameters()).dtype
-
-        # Bind the forward function to the arguments so that we can easily access them regardless of the number of arguments
-        caller_kwargs = _bind_forward_kwargs(original_forward, args, kwargs)
-        fwd_kwargs = caller_kwargs
-
-        # Non-first stages: recv activations from prev stage and use them as inputs_embeds.
-        if not stage.pp_is_first_stage:
-            shape = _hidden_states_shape(caller_kwargs, model.config.hidden_size)
-            hidden_states = stage.communicate("recv_forward", device=device, dtype=dtype, shape=shape)
-            fwd_kwargs = _feed_hidden_states_as_input_embeds(caller_kwargs, hidden_states)
-
-        if stage.pp_is_last_stage:
-            # Last stage: compute the logits.
-            outputs = original_forward(**fwd_kwargs)
-            logits, past_key_values = outputs.logits, outputs.past_key_values
-        else:
-            # Non-last stages: Compute and send the activations to the next stage.
-            # We need the base models because hidden_states is getting slices in the causal_lm models + we want last_hidden_state
-            base_model = getattr(model, model.base_model_prefix)
-            base_kwargs = {k: v for k, v in fwd_kwargs.items() if k not in {"labels", "logits_to_keep"}}
-            base_outputs = base_model(**base_kwargs)
-            stage.communicate("send_forward", device=device, dtype=dtype, tensor=base_outputs.last_hidden_state)
-            logits, past_key_values = None, base_outputs.past_key_values
-
-        # Only the last stage computed the logits, so broadcast them to every rank (they will be waiting)
-        #TODO(3outeille): very naive implementation to make it work seamless with generate(). 
-        # In long term, we want only the last stage to hold the logits not every stages that will require changes in generate() directly
-        logits = stage.broadcast_from_last(logits, dtype=dtype, device=device)
-
-        return CausalLMOutputWithPast(logits=logits, past_key_values=past_key_values)
-
-    # TODO(3outeille): dispatch to different pipeline parallelism schedules (gpipe, 1f1b, etc.)
-    model.forward = pp_forward
-    model._pp_forward_wrapped = True
+    return CausalLMOutputWithPast(logits=logits, past_key_values=past_key_values)

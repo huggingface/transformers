@@ -23,10 +23,10 @@ import torch.multiprocessing as mp
 from parameterized import parameterized
 
 from transformers import AutoModelForCausalLM, Qwen2Config, Qwen2ForCausalLM, set_seed
+from transformers.core_model_loading import convert_and_load_state_dict_in_model
 from transformers.distributed.configuration_utils import DistributedConfig
 from transformers.distributed.pipeline_parallel import PipelineIdentityLayer, PipelineStage, apply_pipeline_parallelism
 from transformers.modeling_utils import LoadStateDictConfig
-from transformers.core_model_loading import convert_and_load_state_dict_in_model
 from transformers.testing_utils import TestCasePlus, require_torch_greater_or_equal
 from transformers.utils.loading_report import log_state_dict_report
 
@@ -46,6 +46,7 @@ class _FakeDeviceMesh:
 
     def size(self):
         return self._size
+
 
 def init_process_group(rank, pp_size, port):
     os.environ.update(
@@ -86,9 +87,7 @@ def _verify_pp_split(model, tie_word_embeddings: bool = False):
     start_layer, end_layer = stage.layer_range_for_rank(pp_rank, num_layers)
 
     has_embed_tokens = not isinstance(base_model.embed_tokens, PipelineIdentityLayer)
-    assert has_embed_tokens == (
-        pp_rank == 0 or (tie_word_embeddings and pp_rank == pp_size - 1)
-    )
+    assert has_embed_tokens == (pp_rank == 0 or (tie_word_embeddings and pp_rank == pp_size - 1))
     assert (pp_rank == pp_size - 1) == (not isinstance(base_model.norm, PipelineIdentityLayer))
     assert (pp_rank == pp_size - 1) == (not isinstance(model.lm_head, PipelineIdentityLayer))
 
@@ -284,15 +283,10 @@ class TestPipelineStageFromDeviceMesh(unittest.TestCase):
         self.assertIsNone(PipelineStage.from_device_mesh(_FakeDeviceMesh(ndim=1, size=2, mesh_dim_names=None)))
         self.assertIsNone(PipelineStage.from_device_mesh(_FakeDeviceMesh(ndim=1, size=1, mesh_dim_names=("pp",))))
 
+
 @require_torch_greater_or_equal("2.5")
 class TestPipelineParallelLoadReport(TestCasePlus):
-    @parameterized.expand(
-        [
-            (pp_size, tie_word_embeddings)
-            for pp_size in [2]
-            for tie_word_embeddings in [True, False]
-        ]
-    )
+    @parameterized.expand([(pp_size, tie_word_embeddings) for pp_size in [2] for tie_word_embeddings in [True, False]])
     def test_pp_loading_report_table(self, pp_size, tie_word_embeddings):
         config = _tiny_qwen2_config(num_hidden_layers=12, tie_word_embeddings=tie_word_embeddings)
 
@@ -306,13 +300,7 @@ class TestPipelineParallelLoadReport(TestCasePlus):
 
 @require_torch_greater_or_equal("2.5")
 class TestPipelineParallelSplit(TestCasePlus):
-    @parameterized.expand(
-        [
-            (pp_size, tie_word_embeddings)
-            for pp_size in [2]
-            for tie_word_embeddings in [True, False]
-        ]
-    )
+    @parameterized.expand([(pp_size, tie_word_embeddings) for pp_size in [2] for tie_word_embeddings in [True, False]])
     def test_pp_split(self, pp_size, tie_word_embeddings):
         config = _tiny_qwen2_config(num_hidden_layers=12, tie_word_embeddings=tie_word_embeddings)
 

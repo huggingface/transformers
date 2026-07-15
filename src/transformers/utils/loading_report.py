@@ -136,12 +136,14 @@ def _get_terminal_width(default=80):
         return default
 
 
-def _pp_report_key_owners(stage: PipelineStage, model, skipped_pp_keys: set[str]) -> tuple[dict[str, int], dict[str, int]]:
+def _pp_report_key_owners(
+    stage: PipelineStage, model, skipped_pp_keys: set[str]
+) -> tuple[dict[str, int], dict[str, int]]:
     """Map checkpoint keys to their owning PP rank for the load report."""
     prefix = model.base_model_prefix
     num_layers = len(getattr(model, prefix).layers)
 
-    owned = {key: stage.pp_rank for key in model.state_dict()}
+    owned = dict.fromkeys(model.state_dict(), stage.pp_rank)
     skipped = {
         key: owner
         for key in skipped_pp_keys
