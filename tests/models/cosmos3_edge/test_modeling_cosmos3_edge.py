@@ -28,14 +28,143 @@ from transformers import (
 )
 from transformers.testing_utils import cleanup, require_torch, require_torch_accelerator, slow, torch_device
 
-from ...test_modeling_common import floats_tensor
+from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 from ...vlm_tester import VLMModelTest, VLMModelTester
 
 
 if is_torch_available():
     import torch
 
+    from transformers import Cosmos3EdgeTextModel, Cosmos3EdgeVisionModel
     from transformers.models.cosmos3_edge.modeling_cosmos3_edge import Cosmos3EdgeTextRotaryEmbedding
+
+
+class Cosmos3EdgeTextModelTester:
+    """Tiny text-only inputs for the common model-test suite."""
+
+    def __init__(self, parent):
+        self.parent = parent
+        self.batch_size = 3
+        self.seq_length = 7
+        self.vocab_size = 97
+        self.hidden_size = 32
+        self.intermediate_size = 64
+        self.num_hidden_layers = 2
+        self.num_attention_heads = 4
+        self.num_key_value_heads = 2
+        self.head_dim = 8
+        self.is_training = True
+
+    def get_config(self):
+        return Cosmos3EdgeTextConfig(
+            vocab_size=self.vocab_size,
+            hidden_size=self.hidden_size,
+            intermediate_size=self.intermediate_size,
+            num_hidden_layers=self.num_hidden_layers,
+            num_attention_heads=self.num_attention_heads,
+            num_key_value_heads=self.num_key_value_heads,
+            head_dim=self.head_dim,
+            max_position_embeddings=128,
+            hidden_act="relu2",
+            rms_norm_eps=1e-5,
+            rope_parameters={"rope_type": "default", "rope_theta": 100_000_000, "mrope_section": [2, 1, 1]},
+            pad_token_id=0,
+        )
+
+    def prepare_config_and_inputs_for_common(self):
+        config = self.get_config()
+        input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
+        attention_mask = torch.ones_like(input_ids)
+        return config, {"input_ids": input_ids, "attention_mask": attention_mask}
+
+    def create_and_check_model(self, config, inputs):
+        model = Cosmos3EdgeTextModel(config).to(torch_device).eval()
+        with torch.no_grad():
+            output = model(**inputs)
+        self.parent.assertEqual(
+            tuple(output.last_hidden_state.shape),
+            (self.batch_size, self.seq_length, self.hidden_size),
+        )
+
+
+@require_torch
+class Cosmos3EdgeTextModelTest(ModelTesterMixin, unittest.TestCase):
+    all_model_classes = (Cosmos3EdgeTextModel,) if is_torch_available() else ()
+
+    def setUp(self):
+        self.model_tester = Cosmos3EdgeTextModelTester(self)
+
+    def test_model(self):
+        config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
+        self.model_tester.create_and_check_model(config, inputs)
+
+
+class Cosmos3EdgeVisionModelTester:
+    """Tiny pre-patchified inputs for the packed vision common tests."""
+
+    def __init__(self, parent):
+        self.parent = parent
+        self.batch_size = 3
+        self.image_size = 4
+        self.patch_size = 2
+        self.patches_per_sample = (self.image_size // self.patch_size) ** 2
+        self.seq_length = self.batch_size * self.patches_per_sample
+        self.num_channels = 3
+        self.hidden_size = 32
+        self.intermediate_size = 64
+        self.num_hidden_layers = 2
+        self.num_attention_heads = 4
+        self.is_training = True
+
+    def get_config(self):
+        return Cosmos3EdgeVisionConfig(
+            hidden_size=self.hidden_size,
+            intermediate_size=self.intermediate_size,
+            num_hidden_layers=self.num_hidden_layers,
+            num_attention_heads=self.num_attention_heads,
+            num_channels=self.num_channels,
+            patch_size=self.patch_size,
+            num_patches=self.patches_per_sample,
+            spatial_merge_size=2,
+        )
+
+    def prepare_config_and_inputs_for_common(self):
+        config = self.get_config()
+        pixel_values = floats_tensor(
+            [self.seq_length, self.num_channels * self.patch_size**2],
+        )
+        patch_grid_size = self.image_size // self.patch_size
+        grid_thw = torch.tensor([[1, patch_grid_size, patch_grid_size]] * self.batch_size, device=torch_device)
+        return config, {"pixel_values": pixel_values, "grid_thw": grid_thw}
+
+    def create_and_check_model(self, config, inputs):
+        model = Cosmos3EdgeVisionModel(config).to(torch_device).eval()
+        with torch.no_grad():
+            output = model(**inputs)
+        self.parent.assertEqual(tuple(output.last_hidden_state.shape), (self.seq_length, self.hidden_size))
+
+
+@require_torch
+class Cosmos3EdgeVisionModelTest(ModelTesterMixin, unittest.TestCase):
+    all_model_classes = (Cosmos3EdgeVisionModel,) if is_torch_available() else ()
+
+    # This tower consumes pre-patchified pixels rather than token embeddings.
+    test_resize_embeddings = False
+    # Packed grids use data-dependent Python shape handling.
+    test_torch_exportable = False
+    # The packed vision attention API returns hidden states, not attention-probability maps.
+    has_attentions = False
+
+    def setUp(self):
+        self.model_tester = Cosmos3EdgeVisionModelTester(self)
+
+    def test_model(self):
+        config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
+        self.model_tester.create_and_check_model(config, inputs)
+
+    @unittest.skip(reason="The packed vision tower has no token input or output embeddings.")
+    def test_model_get_set_embeddings(self):
+        pass
 
 
 class Cosmos3EdgeVisionText2TextModelTester(VLMModelTester):
