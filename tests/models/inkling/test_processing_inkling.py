@@ -40,25 +40,11 @@ SAMPLE_VOCAB = get_tests_dir("fixtures/test_sentencepiece.model")
 @require_vision
 class InklingProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = InklingProcessor
-    video_unstructured_max_length = 570
-    video_text_kwargs_max_length = 570
-    video_text_kwargs_override_max_length = 570
+    audio_input_name = "audio_input_ids"
 
     @classmethod
     def _setup_test_attributes(cls, processor):
         cls.image_token = processor.image_token
-        cls.video_token = processor.video_token
-
-    @classmethod
-    def _setup_video_processor(cls):
-        video_processor_class = cls._get_component_class_from_processor("video_processor")
-        gemma4_video_processor_kwargs = {
-            "patch_size": 28,
-            "max_soft_tokens": 70,
-            "pooling_kernel_size": 3,
-            "num_frames": 2,
-        }
-        return video_processor_class(**gemma4_video_processor_kwargs)
 
     @classmethod
     def _setup_feature_extractor(cls):
@@ -81,7 +67,6 @@ class InklingProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         tokenizer_class = cls._get_component_class_from_processor("tokenizer")
         extra_special_tokens = {
             "image_token": "<|image|>",
-            "video_token": "<|video|>",
             "boi_token": "<start_of_image>",
             "eoi_token": "<end_of_image>",
             "audio_token": "<audio_soft_token>",

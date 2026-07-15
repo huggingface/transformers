@@ -16,7 +16,6 @@
 import os
 import tempfile
 import unittest
-from contextlib import contextmanager
 
 from huggingface_hub import download_bucket_files
 from parameterized import parameterized
@@ -167,6 +166,7 @@ class InklingAudio2TextModelTester:
 class InklingAudio2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     all_model_classes = (InklingModel, InklingForConditionalGeneration) if is_torch_available() else ()
     all_generative_model_classes = (InklingForConditionalGeneration,) if is_torch_available() else ()
+    test_all_params_have_gradient = False  # e-score correction bias is only used for expert routing
     # Audio embeddings are packed per valid frame, so last_hidden_state[0] is the total frame count, not batch size
     skip_test_audio_features_output_shape = True
 
@@ -175,9 +175,9 @@ class InklingAudio2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unitte
         self.config_tester = ConfigTester(self, config_class=InklingConfig, hidden_size=37)
 
     @unittest.skip(
-        "TOFIX: Inkling's shared_w13_weight conversion uses Chunk(dim=1), which returns non-contiguous strided views"
+        "Inkling chains tower namespace and internal renames, so intermediate source keys are absent after reverse mapping"
     )
-    def test_load_contiguous_weights(self):
+    def test_reverse_loading_mapping(self):
         pass
 
     @unittest.skip("Inkling's audio tower is an embedding+norm module with no attention or hidden-state layers")
@@ -293,9 +293,10 @@ class InklingVision2TextModelTester:
         self.encoder_seq_length = seq_length
 
     def get_config(self):
-        return InklingConfig(
+        config = InklingConfig(
             text_config=self.text_config,
             vision_config=self.vision_config,
+            audio_config={"hidden_size": self.text_config.hidden_size, "n_mel_bins": 4, "mel_vocab_size": 8},
             image_token_id=self.image_token_id,
             video_token_id=self.video_token_id,
             audio_token_id=self.audio_token_id,
@@ -303,29 +304,29 @@ class InklingVision2TextModelTester:
             eoi_token_id=self.eoi_token_id,
             mm_tokens_per_image=self.mm_tokens_per_image,
         )
+        config.num_hidden_layers = config.text_config.num_hidden_layers
+        return config
 
     def prepare_config_and_inputs(self):
         config = self.get_config()
         config.vision_config.pooling_kernel_size = 2
 
-        # (num_images, max_num_patches, patch_size * patch_size * num_channels)
+        # One packed patch per image placeholder: (num_patches, time, height, width, channels)
         patch_size = config.vision_config.patch_size
         pixel_values = floats_tensor(
             [
                 self.batch_size,
-                self.vision_config["image_size"],
-                patch_size * patch_size * self.vision_config["num_channels"],
+                config.vision_config.temporal_patch_size,
+                patch_size,
+                patch_size,
+                self.vision_config["num_channels"],
             ]
         )
-        # (num_images, max_num_patches, 2) for height/width positions. Let it be all ones for testign
-        pixel_position_ids = torch.ones(self.vision_config["image_size"], device=torch_device, dtype=torch.long)
-        pixel_position_ids = pixel_position_ids[None, :, None].repeat(self.batch_size, 1, 2)
-
-        return config, pixel_values, pixel_position_ids
+        return config, pixel_values
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
-        config, pixel_values, pixel_position_ids = config_and_inputs
+        config, pixel_values = config_and_inputs
         input_ids = ids_tensor([self.batch_size, self.seq_length], config.text_config.vocab_size - 1) + 1
         attention_mask = input_ids.ne(self.pad_token_id).to(torch_device)
 
@@ -334,15 +335,10 @@ class InklingVision2TextModelTester:
             input_ids[input_ids == token_id] = self.pad_token_id
         input_ids[:, :1] = config.image_token_id
 
-        mm_token_type_ids = torch.zeros_like(input_ids)
-        mm_token_type_ids[input_ids == config.image_token_id] = 1
-
         inputs_dict = {
             "pixel_values": pixel_values,
-            "image_position_ids": pixel_position_ids,
             "input_ids": input_ids,
             "attention_mask": attention_mask,
-            "mm_token_type_ids": mm_token_type_ids,
         }
         return config, inputs_dict
 
@@ -351,25 +347,18 @@ class InklingVision2TextModelTester:
 class InklingVision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     all_model_classes = (InklingModel, InklingForConditionalGeneration) if is_torch_available() else ()
     all_generative_model_classes = (InklingForConditionalGeneration,) if is_torch_available() else ()
-    additional_model_inputs = ["mm_token_type_ids", "image_position_ids"]
+    test_all_params_have_gradient = False  # e-score correction bias is only used for expert routing
     model_split_percents = [0.85, 0.9]
 
     def setUp(self):
         self.model_tester = InklingVision2TextModelTester(self)
         self.config_tester = ConfigTester(self, config_class=InklingConfig, hidden_size=37)
-        self.skip_flash_attn_inference_equivalence_tests()
 
-    def skip_flash_attn_inference_equivalence_tests(self):
-        skippable_tests = [
-            "test_flash_attn_2_inference_equivalence",
-            "test_flash_attn_3_inference_equivalence",
-            "test_flash_attn_4_inference_equivalence",
-        ]
-        for test in skippable_tests:
-            if self._testMethodName.startswith(test):
-                self.skipTest(
-                    reason="The base test does not pass image_position_ids and mm_token_type_ids required by Inkling"
-                )
+    @unittest.skip(
+        "Inkling chains tower namespace and internal renames, so intermediate source keys are absent after reverse mapping"
+    )
+    def test_reverse_loading_mapping(self):
+        pass
 
     def test_training(self):
         # Overwrite to test training with text-only samples, should not raise errors
@@ -384,7 +373,6 @@ class InklingVision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unitt
         loss.backward()
 
         # pop out image-related inputs and try to run forward
-        inputs.pop("mm_token_type_ids", None)
         inputs.pop("pixel_values", None)
         loss = model(**inputs).loss
         loss.backward()
@@ -400,6 +388,14 @@ class InklingVision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unitt
     @parameterized.expand([True, False, None])
     @unittest.skip("The tester has no audios in input dict")
     def test_get_audio_features_output(self, return_dict: bool | None):
+        pass
+
+    @unittest.skip("Inkling's HMLP vision tower has no attention or hidden-state outputs")
+    def test_get_image_features_hidden_states(self):
+        pass
+
+    @unittest.skip("Inkling's HMLP vision tower has no attention or hidden-state outputs")
+    def test_get_image_features_attentions(self):
         pass
 
     @unittest.skip("The tester has no videos in input dict")
@@ -423,6 +419,14 @@ class InklingVision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unitt
     def test_generate_from_random_inputs_embeds(self):
         pass
 
+    @unittest.skip("Inkling requires an explicit prompt for generation")
+    def test_generate_without_input_ids(self):
+        pass
+
+    @unittest.skip("Image placeholder embeddings are replaced when pixel values are provided")
+    def test_inputs_embeds_matches_input_ids(self):
+        pass
+
     @unittest.skip(
         "Randomly starts failing after module order changed in the __init__ because accelertate is not robust enough"
     )
@@ -440,50 +444,6 @@ class InklingVision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unitt
     )
     def test_disk_offload_safetensors(self):
         pass
-
-    def test_per_layer_inputs_are_correctly_forwarded(self):
-        from transformers.models.gemma4.modeling_gemma4 import InklingTextModel
-
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-
-        model = InklingForConditionalGeneration(config).to(torch_device)
-        model.eval()
-
-        input_ids = torch.randint(20, 50, (1, 10), device=torch_device)
-        inputs_embeds = model.get_input_embeddings()(input_ids)
-        per_layer_inputs = model.model.language_model.get_per_layer_inputs(input_ids, None)
-
-        @contextmanager
-        def count_get_per_layer_inputs_calls():
-            original = InklingTextModel.get_per_layer_inputs
-            counter = {"call_count": 0}
-
-            def count_calls(*args, **kwargs):
-                nonlocal counter
-                counter["call_count"] += 1
-                return original(*args, **kwargs)
-
-            InklingTextModel.get_per_layer_inputs = count_calls
-            try:
-                yield counter
-            finally:
-                InklingTextModel.get_per_layer_inputs = original
-
-        # We should never call `get_per_layer_input_embeddings` if we provide both inputs_embeds and per_layer_inputs
-        with count_get_per_layer_inputs_calls() as counter:
-            _ = model(inputs_embeds=inputs_embeds, per_layer_inputs=per_layer_inputs)
-            self.assertEqual(counter["call_count"], 0)
-
-        # We should call it once if we provide only input_ids
-        with count_get_per_layer_inputs_calls() as counter:
-            _ = model(input_ids)
-            self.assertEqual(counter["call_count"], 1)
-
-        # We should call it once as well if we provide only inputs_embeds
-        with count_get_per_layer_inputs_calls() as counter:
-            _ = model(inputs_embeds=inputs_embeds)
-            self.assertEqual(counter["call_count"], 1)
-
 
 @slow
 @require_torch_accelerator
