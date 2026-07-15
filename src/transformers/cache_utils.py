@@ -904,9 +904,8 @@ class LinearAttentionLayer(LinearAttentionCacheLayerMixin):
         # Callers (`update_conv_state` / `update_recurrent_state`) already gate on the
         # `is_..._initialized` flags, so each branch here runs at most once per layer.
         if conv_states is not None:
-            if self.device is None:
-                self.dtype, self.device = conv_states.dtype, conv_states.device
-                self.batch_size = conv_states.shape[0]
+            self.dtype, self.device = conv_states.dtype, conv_states.device
+            self.batch_size = conv_states.shape[0]
 
             # Even if prefill is larger/shorter than the conv_size, the tensor is always either padded or truncated
             self.conv_kernel_size = conv_states.shape[-1]
