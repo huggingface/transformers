@@ -463,7 +463,7 @@ class MtpModel(PreTrainedModel):
                 attention_mask=None,
                 past_key_values=mtp_cache,
                 position_ids=position_ids,
-                layer_idx=self.config.num_hidden_layers + i,
+                layer_idx=i,
             )
 
             last_hidden_states = mtp_layer(
@@ -569,7 +569,7 @@ class MtpModel(PreTrainedModel):
                 attention_mask=None,
                 past_key_values=mtp_cache,
                 position_ids=position_ids,
-                layer_idx=self.config.num_hidden_layers + i,
+                layer_idx=i,
             )
 
             last_hidden_states = mtp_layer(
@@ -692,8 +692,7 @@ class MtpModel(PreTrainedModel):
         # Maybe remove the shared head/embedding from unexpected
         mtp_model._adjust_missing_and_unexpected_keys(loading_info)
 
-        # The model is initialized on meta and missing keys are never materialized: they would crash
-        # with a cryptic device error at first forward, so fail at load time instead
+        # For MTP, we need to raise if anything is missing, otherwise inference will not make any sense
         if loading_info.missing_keys:
             raise RuntimeError(
                 f"The following {cls.__name__} weights are missing from {pretrained_model_name_or_path} "
