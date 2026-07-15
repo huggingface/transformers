@@ -11,6 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import errno
 import json
 import os
 import tempfile
@@ -195,6 +196,91 @@ class GetFromCacheTests(unittest.TestCase):
             with self.assertRaises(ModuleNotFoundError):
                 # The error should be re-raised by cached_files, not caught in the exception handling block
                 cached_file(RANDOM_BERT, "nonexistent.json")
+
+
+class ReadOnlyCacheFallbackTest(unittest.TestCase):
+    """Guards the read-only cache fallback defined in the repo-root ``conftest.py``.
+
+    In CI the shared HF cache is read-only, so downloads of models not already present
+    fail with EROFS. ``conftest._with_tmpdir_cache_fallback`` wraps ``cached_files`` to
+    retry such failures against a writable tmp dir with Xet disabled. Both the plain
+    ``OSError``/EROFS path and the ``hf_xet`` ``RuntimeError`` path must be handled --
+    the latter was the regression that slipped past the original errno-only check.
+    """
+
+    def setUp(self):
+        import conftest
+
+        self.conftest = conftest
+        # Reset the module-level session cache dir so each test starts from a clean slate.
+        self._saved_cache_dir = conftest._ci_fallback_cache_dir
+        conftest._ci_fallback_cache_dir = None
+
+    def tearDown(self):
+        self.conftest._ci_fallback_cache_dir = self._saved_cache_dir
+
+    def test_is_readonly_fs_error_classification(self):
+        is_ro = self.conftest._is_readonly_fs_error
+        # Plain download path: OSError with EROFS errno.
+        self.assertTrue(is_ro(OSError(errno.EROFS, "Read-only file system")))
+        # hf_xet path: bare RuntimeError, matched on message (no .errno set).
+        self.assertTrue(is_ro(RuntimeError("I/O error: Read-only file system (os error 30)")))
+        self.assertTrue(is_ro(RuntimeError("Data processing error: I/O error: OS ERROR 30")))
+        # Negatives: unrelated errors must propagate untouched.
+        self.assertFalse(is_ro(OSError(errno.EACCES, "Permission denied")))
+        self.assertFalse(is_ro(RuntimeError("some unrelated runtime error")))
+        self.assertFalse(is_ro(ValueError("nope")))
+
+    def test_passthrough_on_success(self):
+        fn = mock.Mock(return_value="resolved")
+        wrapped = self.conftest._with_tmpdir_cache_fallback(fn)
+        self.assertEqual(wrapped("repo", filenames=["f"]), "resolved")
+        fn.assert_called_once_with("repo", filenames=["f"])
+
+    def test_reraises_non_readonly_error(self):
+        fn = mock.Mock(side_effect=OSError(errno.EACCES, "Permission denied"))
+        wrapped = self.conftest._with_tmpdir_cache_fallback(fn)
+        with self.assertRaises(OSError):
+            wrapped()
+        fn.assert_called_once()
+
+    def _assert_recovers(self, first_error):
+        """The first call raises ``first_error``; the retry must be given a writable
+        ``cache_dir`` with Xet disabled, and its result returned."""
+        import huggingface_hub.constants as hf_constants
+
+        original_disable_xet = hf_constants.HF_HUB_DISABLE_XET
+        calls = []
+
+        def side_effect(*args, **kwargs):
+            calls.append(kwargs)
+            if len(calls) == 1:
+                raise first_error
+            # On the retry Xet must be disabled and a writable cache_dir supplied.
+            self.assertTrue(hf_constants.HF_HUB_DISABLE_XET)
+            self.assertEqual(os.environ.get("HF_HUB_DISABLE_XET"), "1")
+            return "recovered"
+
+        fn = mock.Mock(side_effect=side_effect)
+        wrapped = self.conftest._with_tmpdir_cache_fallback(fn)
+
+        self.assertEqual(wrapped(path_or_repo_id="repo"), "recovered")
+        self.assertEqual(len(calls), 2)
+        # The first attempt is untouched; the retry gets the fallback cache dir.
+        self.assertNotIn("cache_dir", calls[0])
+        retry_cache_dir = calls[1]["cache_dir"]
+        self.assertEqual(retry_cache_dir, self.conftest._ci_fallback_cache_dir)
+        self.assertTrue(os.path.isdir(retry_cache_dir))
+        # Xet-disable patch is scoped to the retry and restored afterwards.
+        self.assertEqual(hf_constants.HF_HUB_DISABLE_XET, original_disable_xet)
+
+    def test_retry_on_xet_runtime_error(self):
+        # The exact error raised by the hf_xet Rust layer against a read-only cache.
+        self._assert_recovers(RuntimeError("Data processing error: I/O error: Read-only file system (os error 30)"))
+
+    def test_retry_on_oserror_erofs(self):
+        # The plain (non-Xet) download path raises this.
+        self._assert_recovers(OSError(errno.EROFS, "Read-only file system"))
 
 
 class OfflineModeTests(unittest.TestCase):

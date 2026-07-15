@@ -51,9 +51,12 @@ def _is_readonly_fs_error(e):
     """
     if isinstance(e, OSError) and e.errno == errno.EROFS:
         return True
-    # hf_xet surfaces the read-only failure as a RuntimeError, e.g.
+    # hf_xet surfaces the read-only failure as a RuntimeError with no `.errno`, e.g.
     # "Previous task error: I/O error: I/O error: Read-only file system (os error 30)"
-    return isinstance(e, RuntimeError) and "os error 30" in str(e)
+    if isinstance(e, RuntimeError):
+        msg = str(e).lower()
+        return "read-only file system" in msg or f"os error {errno.EROFS}" in msg
+    return False
 
 
 def _with_tmpdir_cache_fallback(fn):
@@ -63,8 +66,13 @@ def _with_tmpdir_cache_fallback(fn):
     work fine. Only downloads of new or updated files fail with EROFS. On such failure,
     a session-scoped tmp dir is created once (via `tempfile.mkdtemp`, which is atomic
     and process-safe) and the call is retried with `cache_dir` set to the tmp dir.
-    `HF_XET_CACHE` is also redirected (via both the Python constant and `os.environ`) to
-    cover the Xet storage path used by the `hf_xet` Rust library.
+
+    The retry also disables Xet (``HF_HUB_DISABLE_XET``) so the download takes the plain
+    HTTP path, which writes into the redirected `cache_dir`. This is required because the
+    Xet path (`hf_xet` Rust library) uses a process-wide session singleton that binds to
+    the original read-only `HF_XET_CACHE` the first time it runs; redirecting `HF_XET_CACHE`
+    on retry has no effect on that already-created session, so the write keeps failing.
+    `HF_XET_CACHE` is still redirected too, as a belt-and-suspenders measure.
     """
 
     @functools.wraps(fn)
@@ -80,6 +88,8 @@ def _with_tmpdir_cache_fallback(fn):
             import huggingface_hub.constants as hf_constants
 
             with (
+                mock.patch.object(hf_constants, "HF_HUB_DISABLE_XET", True),
+                mock.patch.dict(os.environ, {"HF_HUB_DISABLE_XET": "1"}),
                 mock.patch.object(hf_constants, "HF_XET_CACHE", _ci_fallback_cache_dir),
                 mock.patch.dict(os.environ, {"HF_XET_CACHE": _ci_fallback_cache_dir}),
             ):
