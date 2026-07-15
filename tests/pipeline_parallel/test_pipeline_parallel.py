@@ -77,7 +77,7 @@ def _shared_model_dir(rank):
             tmpdir.cleanup()
 
 
-def _verify_pp_split(model):
+def _verify_pp_split(model, tie_word_embeddings: bool = False):
     stage = PipelineStage.from_device_mesh(model._device_mesh)
     pp_rank = stage.pp_rank
     pp_size = stage.pp_size
@@ -85,7 +85,10 @@ def _verify_pp_split(model):
     num_layers = len(base_model.layers)
     start_layer, end_layer = stage.layer_range_for_rank(pp_rank, num_layers)
 
-    assert (pp_rank == 0) == (not isinstance(base_model.embed_tokens, PipelineIdentityLayer))
+    has_embed_tokens = not isinstance(base_model.embed_tokens, PipelineIdentityLayer)
+    assert has_embed_tokens == (
+        pp_rank == 0 or (tie_word_embeddings and pp_rank == pp_size - 1)
+    )
     assert (pp_rank == pp_size - 1) == (not isinstance(base_model.norm, PipelineIdentityLayer))
     assert (pp_rank == pp_size - 1) == (not isinstance(model.lm_head, PipelineIdentityLayer))
 
@@ -100,7 +103,9 @@ def _verify_pp_split(model):
             layer_idx = int(name.split(".")[2])
             assert start_layer <= layer_idx < end_layer, f"{name} should not exist on rank {pp_rank}"
         elif name.startswith("model.embed_tokens."):
-            assert pp_rank == 0, f"{name} should only exist on rank 0"
+            assert pp_rank == 0 or (tie_word_embeddings and pp_rank == pp_size - 1), (
+                f"{name} should only exist on rank 0 or last rank when tied"
+            )
         elif name.startswith(("model.norm.", "lm_head.")):
             assert pp_rank == pp_size - 1, f"{name} should only exist on last rank"
 
@@ -111,7 +116,7 @@ def _pp_split(rank, config_dict, pp_size, port):
     model = Qwen2ForCausalLM(config)
     model = apply_pipeline_parallelism(model, pp_mesh)
     model._device_mesh = pp_mesh
-    _verify_pp_split(model)
+    _verify_pp_split(model, tie_word_embeddings=config.tie_word_embeddings)
     dist.barrier()
     dist.destroy_process_group()
 
@@ -172,23 +177,27 @@ def _pp_weight_loading(rank, config_dict, pp_size, port):
         ref_state = {name: param.detach().cpu() for name, param in ref_model.state_dict().items()}
         del ref_model
 
-        # Under test: load with PP sharding (tie_word_embeddings=False: last rank owns lm_head).
+        # Under test: load with PP sharding and tied embeddings.
         pp_model = AutoModelForCausalLM.from_pretrained(
             model_dir,
             distributed_config=DistributedConfig(pp_size=pp_size),
-            tie_word_embeddings=False,  # TODO(3outeille): should test with tie_word_embeddings=True later
             torch_dtype=torch.float32,
         )
         dist.barrier()
 
         # Check if the model is split correctly
-        _verify_pp_split(pp_model)
+        _verify_pp_split(pp_model, tie_word_embeddings=config.tie_word_embeddings)
+
+        if rank == pp_size - 1 and config.tie_word_embeddings:
+            assert pp_model.lm_head.weight.data_ptr() == pp_model.model.embed_tokens.weight.data_ptr()
 
         # Check that each local weight matches the reference.
+        embed_ref_key = f"{pp_model.base_model_prefix}.embed_tokens.weight"
         for name, param in pp_model.named_parameters():
+            ref_key = embed_ref_key if name == "lm_head.weight" and name not in ref_state else name
             torch.testing.assert_close(
                 param.detach().cpu(),
-                ref_state[name],
+                ref_state[ref_key],
                 rtol=0,
                 atol=0,
                 msg=f"weight mismatch for {name} on rank {rank}",
@@ -213,7 +222,6 @@ def _pp_generation(rank, config_dict, pp_size, port, max_new_tokens):
         pp_model = AutoModelForCausalLM.from_pretrained(
             model_dir,
             distributed_config=DistributedConfig(pp_size=pp_size),
-            tie_word_embeddings=False,
             torch_dtype=torch.float32,
         )
         pp_model.eval()
@@ -257,7 +265,7 @@ def _pp_generation(rank, config_dict, pp_size, port, max_new_tokens):
     dist.destroy_process_group()
 
 
-def _tiny_qwen2_config(num_hidden_layers):
+def _tiny_qwen2_config(num_hidden_layers, tie_word_embeddings: bool = True):
     return Qwen2Config(
         num_hidden_layers=num_hidden_layers,
         hidden_size=64,
@@ -265,6 +273,7 @@ def _tiny_qwen2_config(num_hidden_layers):
         num_attention_heads=4,
         num_key_value_heads=4,
         vocab_size=128,
+        tie_word_embeddings=tie_word_embeddings,
     )
 
 
@@ -277,22 +286,35 @@ class TestPipelineStageFromDeviceMesh(unittest.TestCase):
 
 @require_torch_greater_or_equal("2.5")
 class TestPipelineParallelLoadReport(TestCasePlus):
-    def test_pp_loading_report_table(self):
-        config = _tiny_qwen2_config(num_hidden_layers=12)
+    @parameterized.expand(
+        [
+            (pp_size, tie_word_embeddings)
+            for pp_size in [2]
+            for tie_word_embeddings in [True, False]
+        ]
+    )
+    def test_pp_loading_report_table(self, pp_size, tie_word_embeddings):
+        config = _tiny_qwen2_config(num_hidden_layers=12, tie_word_embeddings=tie_word_embeddings)
 
         mp.spawn(
             _pp_load_report,
-            args=(config.to_dict(), 2, _find_free_port()),
-            nprocs=2,
+            args=(config.to_dict(), pp_size, _find_free_port()),
+            nprocs=pp_size,
             join=True,
         )
 
 
 @require_torch_greater_or_equal("2.5")
 class TestPipelineParallelSplit(TestCasePlus):
-    @parameterized.expand([(pp_size,) for pp_size in [2]])
-    def test_pp_split(self, pp_size):
-        config = _tiny_qwen2_config(num_hidden_layers=12)
+    @parameterized.expand(
+        [
+            (pp_size, tie_word_embeddings)
+            for pp_size in [2]
+            for tie_word_embeddings in [True, False]
+        ]
+    )
+    def test_pp_split(self, pp_size, tie_word_embeddings):
+        config = _tiny_qwen2_config(num_hidden_layers=12, tie_word_embeddings=tie_word_embeddings)
 
         mp.spawn(
             _pp_split,
