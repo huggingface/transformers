@@ -854,6 +854,7 @@ class Qwen2_5OmniModelIntegrationTest(unittest.TestCase):
             ("cuda", None): "system\nYou are a helpful assistant.\nuser\nWhat's that sound and what kind of dog is this?\nassistant\nThe sound is glass shattering, and the dog appears to be a Labrador Retriever.",
             ("cuda", (8, 6)): "system\nYou are a helpful assistant.\nuser\nWhat's that sound and what kind of dog is this?\nassistant\nThe sound is glass shattering, and the dog is a Labrador Retriever.",
             ("rocm", (9, 4)): "system\nYou are a helpful assistant.\nuser\nWhat's that sound and what kind of dog is this?\nassistant\nThe sound is glass shattering, and the dog is a Labrador Retriever.",
+            ("rocm", (12, 5)): "system\nYou are a helpful assistant.\nuser\nWhat's that sound and what kind of dog is this?\nassistant\nThe sound is a glass shattering. The dog in the picture is a Labrador Retriever.",
         }).get_expectation()  # fmt: skip
 
         decoded_texts = self.processor.batch_decode(output, skip_special_tokens=True)
