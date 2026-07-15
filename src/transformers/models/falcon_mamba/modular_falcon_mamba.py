@@ -203,7 +203,7 @@ class FalconMambaMixer(MambaMixer):
             if is_decoding:
                 hidden_states = causal_conv1d_update(
                     hidden_states.squeeze(-1),
-                    cache_params.layers[self.layer_idx].conv_states,
+                    cache_params.layers[self.layer_idx].conv_states[0],
                     conv_weights,
                     self.conv1d.bias,
                     self.activation,
@@ -245,7 +245,7 @@ class FalconMambaMixer(MambaMixer):
             time_proj_bias = self.dt_proj.bias.float() if hasattr(self.dt_proj, "bias") else None
             if is_decoding:
                 scan_outputs = selective_state_update(
-                    cache_params.layers[self.layer_idx].recurrent_states,
+                    cache_params.layers[self.layer_idx].recurrent_states[0],
                     hidden_states[..., 0],
                     discrete_time_step[..., 0],
                     A,
@@ -292,7 +292,7 @@ class FalconMambaMixer(MambaMixer):
             hidden_states = hidden_states * attention_mask.unsqueeze(1)
 
         if cache_params is not None and cache_params.has_previous_state(self.layer_idx):
-            ssm_state = cache_params.layers[self.layer_idx].recurrent_states.clone()
+            ssm_state = cache_params.layers[self.layer_idx].recurrent_states[0].clone()
         else:
             ssm_state = torch.zeros(
                 (batch_size, self.intermediate_size, self.ssm_state_size), device=hidden_states.device, dtype=dtype
@@ -308,7 +308,9 @@ class FalconMambaMixer(MambaMixer):
                     self.conv1d(hidden_states)[..., :seq_len]
                 )  # [batch, intermediate_size, seq_len]
             else:
-                conv_state = cache_params.update_conv_state(hidden_states, self.layer_idx)
+                conv_state = cache_params.update_conv_state(hidden_states, self.layer_idx)[
+                    ..., -self.conv_kernel_size :
+                ]
                 conv_state = conv_state.to(self.conv1d.weight.device)
                 hidden_states = torch.sum(conv_state * self.conv1d.weight[:, 0, :], dim=-1)
                 if self.use_conv_bias:

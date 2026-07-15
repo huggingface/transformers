@@ -128,7 +128,7 @@ class Chunk(ConversionOps):
         tensor = tensors[0] if isinstance(tensors, list) else tensors
         targets = target_patterns
         sizes = len(targets)
-        chunks = torch.chunk(tensor, sizes, dim=self.dim)
+        chunks = tuple(chunk.contiguous() for chunk in torch.chunk(tensor, sizes, dim=self.dim))
         if len(input_dict) > 1 or len(target_patterns) == 1 or len(chunks) != len(target_patterns):
             raise ValueError(f"Failed to convert {kwargs.get('full_layer_name')}")
         return dict(zip(targets, chunks))
@@ -179,6 +179,33 @@ class Concatenate(ConversionOps):
     @property
     def reverse_op(self) -> ConversionOps:
         return Chunk(self.dim)
+
+
+class Interleave(ConversionOps):
+    """Deinterleaves a tensor along `dim` by splitting in two and transposing. Reshapes param back to its original size."""
+
+    def __init__(self, dim: int = 0, inverse: bool = False):
+        self.dim = dim
+        self.inverse = inverse
+
+    def convert(self, input_dict, source_patterns, target_patterns, **kwargs):
+        tensor = next(iter(input_dict.values()))
+        tensor = tensor[0] if isinstance(tensor, list) else tensor
+
+        # Split into two in given dim and transpose to interleave along it
+        shape = list(tensor.shape)
+        if self.inverse:
+            shape[self.dim : self.dim + 1] = [2, shape[self.dim] // 2]
+        else:
+            shape[self.dim : self.dim + 1] = [shape[self.dim] // 2, 2]
+
+        tensor = tensor.reshape(shape).transpose(self.dim, self.dim + 1).reshape(tensor.shape).contiguous()
+        return {target_patterns[0]: tensor}
+
+    @property
+    def reverse_op(self) -> ConversionOps:
+        # can use the same dim and it will inverse it back
+        return Interleave(self.dim, inverse=not self.inverse)
 
 
 class MergeModulelist(ConversionOps):

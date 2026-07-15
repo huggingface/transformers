@@ -1353,6 +1353,45 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin, Heterogeneous
 
         return config_to_return
 
+    def get_mtp_config(self) -> "PreTrainedConfig":
+        """
+        Returns the mtp text config to be used to create the MTP model. Since the MTP layers are created by instantiating
+        the same classes as the main model, we need to overwrite index-specific properties of the config such as `layer_types`
+        or `mtp_layer_types` to create the correct mtp layers and avoid indexing issues in the layers (because MTP layers restart
+        the indexing of layers at 0).
+        """
+        # Start from the text config
+        text_config = copy.deepcopy(self.get_text_config(decoder=True))
+        num_mtp_layers = getattr(text_config, "num_mtp_layers", None)
+        # In this case, raise
+        if num_mtp_layers is None:
+            raise ValueError("Calling `get_mtp_config` on a config without `num_mtp_layers`")
+
+        layer_types = getattr(text_config, "layer_types", None)
+        mtp_layer_types = getattr(text_config, "mtp_layer_types", None)
+        mlp_layer_types = getattr(text_config, "mlp_layer_types", None)
+        mtp_mlp_layer_types = getattr(text_config, "mtp_mlp_layer_types", None)
+
+        # Replace the index-based fields so that we can call `XXXDecoderLayer(config, layer_idx)` with the mtp config, and create
+        # the correct layers
+        if layer_types is not None:
+            if mtp_layer_types is None:
+                raise ValueError(
+                    "Calling `get_mtp_config` on a config containing `layer_types` without `mtp_layer_types` is ambiguous"
+                )
+            text_config.layer_types = mtp_layer_types
+        if mlp_layer_types is not None:
+            if mtp_mlp_layer_types is None:
+                raise ValueError(
+                    "Calling `get_mtp_config` on a config containing `mlp_layer_types` without `mtp_mlp_layer_types` is ambiguous"
+                )
+            text_config.mlp_layer_types = mtp_mlp_layer_types
+
+        # This is needed to be correct in several places, e.g. when creating the cache
+        text_config.num_hidden_layers = num_mtp_layers
+
+        return text_config
+
 
 def get_configuration_file(configuration_files: list[str]) -> str:
     """
