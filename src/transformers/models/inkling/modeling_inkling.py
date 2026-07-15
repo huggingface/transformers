@@ -635,6 +635,14 @@ class InklingPreTrainedModel(PreTrainedModel):
             init.normal_(module.gate_proj, mean=0.0, std=std)
             init.normal_(module.up_proj, mean=0.0, std=std)
             init.normal_(module.down_proj, mean=0.0, std=std)
+        elif isinstance(module, InklingAudioModelEmbeddings):
+            # `_init_weights` runs with `self` being either the top model (`InklingConfig`) or the audio
+            # sub-model (`InklingAudioConfig`), so resolve the audio config from whichever we have.
+            audio_config = getattr(self.config, "audio_config", self.config)
+            init.copy_(
+                module.audio_tokens_offsets,
+                torch.arange(audio_config.n_mel_bins) * audio_config.mel_vocab_size,
+            )
 
 
 @auto_docstring
@@ -716,31 +724,29 @@ class InklingTextModel(InklingPreTrainedModel):
         )
 
 
+class InklingAudioModelEmbeddings(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.embed_audio_tokens = nn.Embedding((config.num_codebooks * config.codebook_size), config.hidden_size)
+        self.register_buffer(
+            "audio_tokens_offsets", torch.arange(config.num_codebooks) * config.codebook_size, persistent=False
+        )
+
+    def forward(self, input_ids):
+        inputs_embeds = self.embed_audio_tokens(input_ids + self.audio_tokens_offsets)
+        inputs_embeds = inputs_embeds.sum(dim=-2)
+        return inputs_embeds
+
+
 class InklingAudioModel(InklingPreTrainedModel):
     def __init__(self, config: InklingAudioConfig):
         super().__init__(config)
-        self.n_mel_bins = config.n_mel_bins
-        self.mel_vocab_size = config.mel_vocab_size
-        self.encoder = nn.Embedding(config.n_mel_bins * config.mel_vocab_size, config.text_hidden_size)
-        self.final_norm = InklingRMSNorm(config.text_hidden_size, eps=1e-6)
+        self.embed_audio_tokens = InklingAudioModelEmbeddings(config)
+        self.norm = InklingRMSNorm(config.text_hidden_size, eps=1e-6)
 
-        embedding_indices = torch.arange(self.n_mel_bins) * self.mel_vocab_size
-        self.register_buffer("embedding_indices", embedding_indices.unsqueeze(0), persistent=False)
-
-    def forward(self, input_features: torch.Tensor) -> torch.Tensor:
-        if input_features.shape[1] != self.n_mel_bins:
-            raise ValueError("`input_features` have to have exactly `num_mel_bin` length!")
-
-        input_features = input_features.to(torch.int32)
-        embedding_indices = self.embedding_indices.to(input_features.device) + input_features
-
-        hidden_states = (
-            self.encoder(embedding_indices.reshape(-1))
-            .reshape(input_features.shape[0], self.n_mel_bins - 1)
-            .sum(axis=1)
-        )
-
-        hidden_states = self.final_norm(hidden_states)
+    def forward(self, audio_input_ids: torch.Tensor) -> torch.Tensor:
+        hidden_states = self.embed_audio_tokens(audio_input_ids)
+        hidden_states = self.norm(hidden_states)
         return BaseModelOutputWithPooling(
             last_hidden_state=hidden_states,
             pooler_output=hidden_states,
@@ -933,29 +939,52 @@ class InklingModel(InklingPreTrainedModel):
     ) -> tuple | BaseModelOutputWithPooling:
         return self.vision_tower(pixel_values=pixel_values, **kwargs)
 
+    def get_audio_features(
+        self,
+        audio_input_ids: torch.LongTensor,
+        audio_input_ids_mask: torch.Tensor | None = None,
+    ) -> torch.FloatTensor:
+        r"""
+        Projects discretized dMel bin tokens into the language model space.
+
+        audio_input_ids (`torch.LongTensor` of shape `(num_audios, max_num_frames, n_mel_bins)`):
+            Batch of (padded) dMel bin tokens produced by [`InklingProcessor`].
+        audio_input_ids_mask (`torch.Tensor` of shape `(num_audios, max_num_frames)`, *optional*):
+            Mask marking valid (non-padding) frames. When provided, only valid frames are encoded so that the
+            number of returned audio embeddings matches the number of audio placeholder tokens.
+        """
+        if audio_input_ids_mask is not None:
+            audio_input_ids = audio_input_ids[audio_input_ids_mask.bool()]
+        else:
+            audio_input_ids = audio_input_ids.reshape(-1, audio_input_ids.shape[-1])
+        return self.audio_tower(audio_input_ids).last_hidden_state
+
     def get_placeholder_mask(
-        self, input_ids: torch.LongTensor, inputs_embeds: torch.FloatTensor, image_features: torch.FloatTensor
+        self,
+        input_ids: torch.LongTensor,
+        inputs_embeds: torch.FloatTensor,
+        features: torch.FloatTensor,
+        token_id: int,
     ):
         """
-        Obtains multimodal placeholder mask from `input_ids` or `inputs_embeds`, and checks that the placeholder token count is
-        equal to the length of multimodal features. If the lengths are different, an error is raised.
+        Obtains a multimodal placeholder mask from `input_ids` or `inputs_embeds` for the given `token_id`, and checks
+        that the placeholder token count matches the length of `features`. If the lengths differ, an error is raised.
         """
         if input_ids is None:
-            special_image_mask = inputs_embeds == self.get_input_embeddings()(
-                torch.tensor(self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
+            special_mask = inputs_embeds == self.get_input_embeddings()(
+                torch.tensor(token_id, dtype=torch.long, device=inputs_embeds.device)
             )
-            special_image_mask = special_image_mask.all(-1)
+            special_mask = special_mask.all(-1)
         else:
-            special_image_mask = input_ids == self.config.image_token_id
+            special_mask = input_ids == token_id
 
-        n_image_tokens = special_image_mask.sum()
-        n_image_features = image_features.shape[0] * image_features.shape[1]
-        special_image_mask = special_image_mask.unsqueeze(-1).to(inputs_embeds.device)
+        n_tokens = special_mask.sum()
+        special_mask = special_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
         torch_compilable_check(
-            n_image_tokens * inputs_embeds.shape[-1] == image_features.numel(),
-            f"Image features and image tokens do not match, tokens: {n_image_tokens}, features: {n_image_features}",
+            inputs_embeds[special_mask].numel() == features.numel(),
+            f"Multimodal features and placeholder tokens do not match, tokens: {n_tokens}, features: {features.shape[0]}",
         )
-        return special_image_mask
+        return special_mask
 
     @can_return_tuple
     @auto_docstring
@@ -963,6 +992,8 @@ class InklingModel(InklingPreTrainedModel):
         self,
         input_ids: torch.LongTensor | None = None,
         pixel_values: torch.FloatTensor | None = None,
+        audio_input_ids: torch.LongTensor | None = None,
+        audio_input_ids_mask: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
@@ -973,6 +1004,10 @@ class InklingModel(InklingPreTrainedModel):
         **lm_kwargs: Unpack[TransformersKwargs],
     ) -> tuple | InklingModelOutputWithPast:
         r"""
+        audio_input_ids (`torch.LongTensor` of shape `(num_audios, max_num_frames, n_mel_bins)`, *optional*):
+            Batch of (padded) discretized dMel bin tokens produced by [`InklingProcessor`].
+        audio_input_ids_mask (`torch.Tensor` of shape `(num_audios, max_num_frames)`, *optional*):
+            Mask marking valid (non-padding) audio frames in `audio_input_ids`.
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
             config.text_config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
@@ -1012,9 +1047,19 @@ class InklingModel(InklingPreTrainedModel):
             image_features = self.get_image_features(pixel_values).pooler_output
             image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
             special_image_mask = self.get_placeholder_mask(
-                input_ids, inputs_embeds=inputs_embeds, image_features=image_features
+                input_ids, inputs_embeds, image_features, self.config.image_token_id
             )
             inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, image_features)
+
+        # Merge text and audio
+        audio_features = None
+        if audio_input_ids is not None:
+            audio_features = self.get_audio_features(audio_input_ids, audio_input_ids_mask)
+            audio_features = audio_features.to(inputs_embeds.device, inputs_embeds.dtype)
+            special_audio_mask = self.get_placeholder_mask(
+                input_ids, inputs_embeds, audio_features, self.config.audio_token_id
+            )
+            inputs_embeds = inputs_embeds.masked_scatter(special_audio_mask, audio_features)
 
         # It may already have been prepared by e.g. `generate`
         if not isinstance(causal_mask_mapping := attention_mask, dict):
@@ -1084,7 +1129,8 @@ class InklingForConditionalGeneration(InklingPreTrainedModel, GenerationMixin):
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
-        input_features: torch.LongTensor | None = None,
+        audio_input_ids: torch.LongTensor | None = None,
+        audio_input_ids_mask: torch.Tensor | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
@@ -1092,6 +1138,10 @@ class InklingForConditionalGeneration(InklingPreTrainedModel, GenerationMixin):
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | InklingCausalLMOutputWithPast:
         r"""
+        audio_input_ids (`torch.LongTensor` of shape `(num_audios, max_num_frames, n_mel_bins)`, *optional*):
+            Batch of (padded) discretized dMel bin tokens produced by [`InklingProcessor`].
+        audio_input_ids_mask (`torch.Tensor` of shape `(num_audios, max_num_frames)`, *optional*):
+            Mask marking valid (non-padding) audio frames in `audio_input_ids`.
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
             config.text_config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
@@ -1139,7 +1189,8 @@ class InklingForConditionalGeneration(InklingPreTrainedModel, GenerationMixin):
         outputs = self.model(
             input_ids=input_ids,
             pixel_values=pixel_values,
-            input_features=input_features,
+            audio_input_ids=audio_input_ids,
+            audio_input_ids_mask=audio_input_ids_mask,
             attention_mask=attention_mask,
             position_ids=position_ids,
             past_key_values=past_key_values,
@@ -1178,14 +1229,15 @@ class InklingForConditionalGeneration(InklingPreTrainedModel, GenerationMixin):
         position_ids=None,
         pixel_values=None,
         attention_mask=None,
-        input_features=None,
+        audio_input_ids=None,
+        audio_input_ids_mask=None,
         use_cache=True,
         logits_to_keep=None,
         labels=None,
         is_first_iteration=False,
         **kwargs,
     ):
-        # Overwritten -- custom `pixel_values/input_features` handling
+        # Overwritten -- custom `pixel_values/audio_input_ids` handling
         model_inputs = super().prepare_inputs_for_generation(
             input_ids,
             past_key_values=past_key_values,
@@ -1200,7 +1252,8 @@ class InklingForConditionalGeneration(InklingPreTrainedModel, GenerationMixin):
 
         if is_first_iteration or not use_cache:
             model_inputs["pixel_values"] = pixel_values
-            model_inputs["input_features"] = input_features
+            model_inputs["audio_input_ids"] = audio_input_ids
+            model_inputs["audio_input_ids_mask"] = audio_input_ids_mask
 
         return model_inputs
 

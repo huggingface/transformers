@@ -14,58 +14,119 @@
 
 
 from ...processing_utils import ProcessingKwargs, ProcessorMixin
-from ...utils import auto_docstring, logging
+from ...utils import auto_docstring, is_torch_available, logging
+from ...utils.import_utils import requires
+
+
+if is_torch_available():
+    import torch
 
 
 logger = logging.get_logger(__name__)
 
 
 class InklingProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {}
+    _defaults = {
+        "audio_kwargs": {
+            "load_audio_backend": "torchaudio",  # sglang ref uses torchaudio resampling
+        },
+    }
 
 
 @auto_docstring
+@requires(backends=("torch",))
 class InklingProcessor(ProcessorMixin):
     valid_processor_kwargs = InklingProcessorKwargs
 
     def __init__(
         self,
-        feature_extractor,
-        image_processor,
-        tokenizer,
+        feature_extractor=None,
+        image_processor=None,
+        tokenizer=None,
         chat_template=None,
+        image_token="<|unused_200007|>",
+        audio_token="<|unused_200021|>",
+        image_bos_token="<|content_image|>",
+        audio_bos_token="<|content_audio_input|>",
+        num_dmel_bins=16,
+        dmel_min_value=-7.0,
+        dmel_max_value=2.0,
         **kwargs,
     ):
-        self.image_token = "<|content_image|>"  # tokenizer.image_token
-        self.image_token_id = tokenizer.encode(self.image_token, add_special_tokens=False)[
-            0
-        ]  # tokenizer.image_token_id
-        self.audio_token = "<|content_audio|>"  # tokenizer.audio_token
-        self.audio_token_id = tokenizer.encode(self.audio_token, add_special_tokens=False)[
-            0
-        ]  # tokenizer.audio_token_id
-        self.eoa_token_id = "<|audio_end|>"  # tokenizer.eoa_token_id  # where is it used???
+        r"""
+        image_token (`str`, *optional*, defaults to `"<|unused_200007|>"`):
+            Placeholder token for each image soft-token slot (replaced by image features).
+        audio_token (`str`, *optional*, defaults to `"<|unused_200021|>"`):
+            Placeholder token for each audio soft-token slot (replaced by audio features).
+        image_bos_token (`str`, *optional*, defaults to `"<|content_image|>"`):
+            Marker token that begins an image span (kept as an ordinary embedded token).
+        audio_bos_token (`str`, *optional*, defaults to `"<|content_audio_input|>"`):
+            Marker token that begins an audio span (kept as an ordinary embedded token).
+        num_dmel_bins (`int`, *optional*, defaults to 16):
+            Number of discrete bins each (clamped) log-mel value is quantized into.
+        dmel_min_value (`float`, *optional*, defaults to -7.0):
+            Lower clamp bound, in log10 space, used for dMel quantization.
+        dmel_max_value (`float`, *optional*, defaults to 2.0):
+            Upper clamp bound, in log10 space, used for dMel quantization.
+        """
+        self.image_token = tokenizer.image_token if hasattr(tokenizer, "image_token") else image_token
+        self.image_token_id = tokenizer.encode(self.image_token, add_special_tokens=False)[0]
+        self.audio_token = tokenizer.audio_token if hasattr(tokenizer, "audio_token") else audio_token
+        self.audio_token_id = tokenizer.encode(self.audio_token, add_special_tokens=False)[0]
+        self.image_bos_token = image_bos_token
+        self.image_bos_token_id = tokenizer.encode(self.image_bos_token, add_special_tokens=False)[0]
+        self.audio_bos_token = audio_bos_token
+        self.audio_bos_token_id = tokenizer.encode(self.audio_bos_token, add_special_tokens=False)[0]
 
-        super().__init__(
-            feature_extractor=feature_extractor,
-            image_processor=image_processor,
-            tokenizer=tokenizer,
-            chat_template=chat_template,
-            **kwargs,
-        )
+        # dMel
+        self.num_dmel_bins = num_dmel_bins
+        self.dmel_min_value = dmel_min_value
+        self.dmel_max_value = dmel_max_value
+        self.bin_centers = torch.linspace(dmel_min_value, dmel_max_value, num_dmel_bins, dtype=torch.float64)
+
+        super().__init__(feature_extractor, image_processor, tokenizer, chat_template=chat_template)
+
+    def _extract_dmel_bins(self, input_features: "torch.Tensor") -> "torch.Tensor":
+        bin_centers = self.bin_centers.to(input_features.device)
+        mel = input_features.to(torch.float64).clamp(min=self.dmel_min_value, max=self.dmel_max_value)
+        return (mel.unsqueeze(-1) - bin_centers).abs().argmin(dim=-1).to(torch.int32)
+
+    def _process_audio(self, audio, **kwargs):
+        audio_inputs = self.feature_extractor(audio, **kwargs)
+
+        processed_audio = {
+            "audio_input_ids": self._extract_dmel_bins(audio_inputs["input_features"]),
+            "audio_input_ids_mask": audio_inputs.get("input_features_mask"),
+        }
+        audio_replacements = [self.replace_audio_token(processed_audio, audio_idx=idx) for idx in range(len(audio))]
+        return processed_audio, audio_replacements
 
     def replace_image_token(self, image_inputs: dict, image_idx: int) -> str:
         num_soft_tokens = image_inputs["num_patches"][image_idx]
         return self.image_token * num_soft_tokens
 
     def replace_audio_token(self, audio_inputs: dict, audio_idx: int) -> str:
-        num_soft_tokens = audio_inputs["num_audio_tokens"][audio_idx]
+        audio_input_ids_mask = audio_inputs.get("audio_input_ids_mask")
+
+        if audio_input_ids_mask is not None:
+            num_soft_tokens = int(audio_input_ids_mask[audio_idx].sum())
+        else:
+            num_soft_tokens = int(audio_inputs["audio_input_ids"][audio_idx].shape[-1])
         return self.audio_token * num_soft_tokens
 
     @property
     def unused_input_names(self) -> list[str]:
-        "Input names returned always by subprocessors but not used in model's `forward`"
-        return ["num_patches", "num_audio_tokens"]
+        return ["num_patches"]
+
+    @property
+    def model_input_names(self) -> list[str]:
+        names = [
+            "audio_input_ids",
+            "audio_input_ids_mask",
+            *self.image_processor.model_input_names,
+            *self.tokenizer.model_input_names,
+        ]
+        return [name for name in dict.fromkeys(names) if name not in self.unused_input_names]
 
 
 __all__ = ["InklingProcessor"]

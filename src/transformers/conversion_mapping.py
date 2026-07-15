@@ -166,6 +166,17 @@ def _build_checkpoint_conversion_mapping():
                 source_patterns=r"vision_tower.layers.norm_(\d+)",
                 target_patterns=r"vision_tower.encoder_layers.\1.layer_norm",
             ),
+            # Audio tower internals. These run AFTER the generic `model.audio.` -> `model.audio_tower.`
+            # rename above and substring-match its output. The audio dMel embedding moved from
+            # `audio.encoder` to an `InklingAudioModelEmbeddings` submodule, and `final_norm` was
+            # renamed to `norm`.
+            WeightRenaming(
+                source_patterns=r"audio_tower.encoder.weight",
+                target_patterns=r"audio_tower.embed_audio_tokens.embed_audio_tokens.weight",
+            ),
+            WeightRenaming(
+                source_patterns=r"audio_tower.final_norm.weight", target_patterns=r"audio_tower.norm.weight"
+            ),
             # MoE and MLP
             # no Transpose ops here: the TP loader shards the raw tensor but validates the shard
             # shape on the target param, so dim-permuting conversions break sharded loads cc @cyril

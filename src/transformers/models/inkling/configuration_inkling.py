@@ -136,6 +136,11 @@ class InklingTextConfig(PreTrainedConfig):
 class InklingAudioConfig(PreTrainedConfig):
     model_type = "inkling_audio"
     base_config_key = "audio_config"
+    attribute_map = {
+        "num_codebooks": "n_mel_bins",
+        "codebook_size": "mel_vocab_size",
+        "hidden_size": "text_hidden_size",
+    }
 
     n_mel_bins: int = 80
     mel_vocab_size: int = 256
@@ -173,9 +178,10 @@ class InklingConfig(PreTrainedConfig):
     text_config: InklingTextConfig | dict | None = None
     audio_config: InklingAudioConfig | dict | None = None
     vision_config: InklingVisionConfig | dict | None = None
-    # `<|content_image|>` / `<|content_audio_input|>` in the inkling tokenizer
-    image_token_id: int = 200005
-    audio_token_id: int = 200020
+    image_token_id: int = 200007
+    audio_token_id: int = 200021
+    image_bos_token_id: int = 200005
+    audio_bos_token_id: int = 200020
 
     def __post_init__(self, **kwargs):
         # checkpoints carry the MTP fields in a top-level `mtp_config` block
