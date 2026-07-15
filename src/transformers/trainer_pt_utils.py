@@ -823,19 +823,12 @@ class BatchRebalanceSampler(Sampler):
 
         base = n // K
         remainder = n % K
-        counts = [max(min_per_group, base + (1 if i < remainder else 0)) for i in range(K)]
-
-        total = sum(counts)
-        while total > n:
-            max_idx = counts.index(max(counts))
-            if counts[max_idx] > min_per_group:
-                counts[max_idx] -= 1
-                total -= 1
-            else:
-                break
-        while total < n:
-            counts[counts.index(min(counts))] += 1
-            total += 1
+        if n < K * min_per_group:
+            raise ValueError(
+                f"Not enough samples ({n}) to fill {K} groups with at least {min_per_group} sample(s) each. "
+                f"Reduce effective_batch_size or increase the dataset size."
+            )
+        counts = [base + (1 if i < remainder else 0) for i in range(K)]
 
         def group_start_index(cts, gi):
             return sum(cts[:gi])
