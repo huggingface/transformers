@@ -189,7 +189,6 @@ class LoadStateDictConfig:
     dtype_plan: dict = field(default_factory=dict)
     hf_quantizer: HfQuantizer | None = None
     device_mesh: "DeviceMeshLike | None" = None
-    tp_plan: dict[str, str] | None = None
     weights_only: bool = True
     weight_mapping: list[WeightConverter | WeightRenaming] | None = None
     disable_mmap: bool | None = None
@@ -4341,8 +4340,6 @@ class PreTrainedModel(
         if device_map is not None:
             device_map = _get_device_map(model, device_map, max_memory, hf_quantizer)
 
-        tp_plan = model.tp_plan if distributed_config is not None and distributed_config.tp_size > 1 else {}
-
         # Finalize model weight initialization
         load_config = LoadStateDictConfig(
             pretrained_model_name_or_path=pretrained_model_name_or_path,
@@ -4355,7 +4352,6 @@ class PreTrainedModel(
             dtype_plan=dtype_plan,
             hf_quantizer=hf_quantizer,
             device_mesh=device_mesh,
-            tp_plan=tp_plan,
             weights_only=weights_only,
             weight_mapping=weight_conversions,
             use_safetensors=use_safetensors,
@@ -4501,6 +4497,7 @@ class PreTrainedModel(
                 model=model,
                 state_dict=merged_state_dict,
                 load_config=load_config,
+                tp_plan=model.tp_plan,
                 disk_offload_index=disk_offload_index,
             )
 
@@ -4528,7 +4525,6 @@ class PreTrainedModel(
                 load_config.device_map,
                 load_config.device_mesh,
                 load_config.hf_quantizer,
-                load_config.tp_plan,
             )
 
             # Correctly initialize the missing (and potentially mismatched) keys (all parameters without the `_is_hf_initialized` flag)
@@ -4746,7 +4742,6 @@ class PreTrainedModel(
         device_map: dict | None,
         device_mesh: "DeviceMeshLike | None",
         hf_quantizer: HfQuantizer | None,
-        tp_plan: dict[str, str] | None = None,
     ) -> None:
         """Move the missing keys (keys that are part of the model parameters, but were NOT found in the loaded state dicts)
         back from meta device to their device according to the `device_map` if any, else cpu. Takes care of sharding those
@@ -4777,7 +4772,7 @@ class PreTrainedModel(
             param_device = get_device(device_map, key, valid_torch_device=True)
             value = torch.empty_like(param, device=param_device)
             # For TP, we may need to shard the param
-            if device_mesh is not None and tp_plan:
+            if device_mesh is not None and "tp" in device_mesh.mesh_dim_names:
                 shard_and_distribute_module(
                     self, value, param, key, None, False, device_mesh.get_local_rank(), device_mesh
                 )

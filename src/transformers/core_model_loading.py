@@ -1468,6 +1468,7 @@ def convert_and_load_state_dict_in_model(
     model: PreTrainedModel,
     state_dict: dict[str, Any],
     load_config: LoadStateDictConfig,
+    tp_plan: dict[str, str] | None = None,
     disk_offload_index: dict | None = None,
 ):
     r"""
@@ -1557,7 +1558,7 @@ def convert_and_load_state_dict_in_model(
 
     """
     base_model_prefix = model.base_model_prefix
-    tp_plan = load_config.tp_plan or {}
+    tp_plan = tp_plan or {}
     device_map = load_config.device_map or {"": "cpu"}
     hf_quantizer = load_config.hf_quantizer
     dtype = load_config.dtype
@@ -1682,7 +1683,7 @@ def convert_and_load_state_dict_in_model(
 
             if isinstance(empty_param, DTensor):
                 sharding_op = DtensorShardOperation(empty_param)
-            elif device_mesh and tp_plan:
+            elif device_mesh is not None and "tp" in device_mesh.mesh_dim_names:
                 if matched_tp_pattern := tp_plan_alt.search(renamed_key):
                     matched_tp_pattern = tp_plan_by_group_name[matched_tp_pattern.lastgroup]
                     if getattr(mapping, "distributed_operation", None) is None:

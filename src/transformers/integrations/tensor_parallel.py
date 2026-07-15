@@ -108,7 +108,7 @@ def initialize_tensor_parallelism(
             tp_device = torch.device(device_type)
             device_map = device_type or {}
 
-        device_mesh = torch.distributed.init_device_mesh(tp_device.type, (tp_size,))
+        device_mesh = torch.distributed.init_device_mesh(tp_device.type, (tp_size,), mesh_dim_names=("tp",))
     else:
         if device_mesh.ndim > 1:
             if "tp" not in device_mesh.mesh_dim_names:
