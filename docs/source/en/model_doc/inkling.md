@@ -94,9 +94,9 @@ The original code can be found [here](<INSERT LINK TO GITHUB REPO HERE>).
 
 [[autodoc]] InklingImageProcessor
 
-## InklingAudioFeatureExtractor
+## InklingFeatureExtractor
 
-[[autodoc]] InklingAudioFeatureExtractor
+[[autodoc]] InklingFeatureExtractor
 
 ## InklingProcessor
 

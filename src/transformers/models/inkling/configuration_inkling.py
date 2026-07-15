@@ -19,9 +19,12 @@
 # limitations under the License.
 # coding=utf-8
 
+from huggingface_hub.dataclasses import strict
+
 from ...configuration_utils import PreTrainedConfig
 
 
+@strict
 class InklingTextConfig(PreTrainedConfig):
     model_type = "inkling_text"
     base_config_key = "text_config"
@@ -146,6 +149,7 @@ class InklingTextConfig(PreTrainedConfig):
         return None
 
 
+@strict
 class InklingAudioConfig(PreTrainedConfig):
     model_type = "inkling_audio"
     base_config_key = "audio_config"
@@ -162,6 +166,7 @@ class InklingAudioConfig(PreTrainedConfig):
     initializer_range: float = 0.02
 
 
+@strict
 class InklingVisionConfig(PreTrainedConfig):
     model_type = "inkling_vision"
     base_config_key = "vision_config"

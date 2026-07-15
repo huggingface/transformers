@@ -19,6 +19,7 @@ from collections.abc import Callable
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from huggingface_hub.dataclasses import strict
 
 from ... import initialization as init
 from ...activations import ACT2FN
@@ -56,6 +57,7 @@ from ..qwen3_next.modeling_qwen3_next import apply_mask_to_padding_states
 logger = logging.get_logger(__name__)
 
 
+@strict
 class InklingTextConfig(PreTrainedConfig):
     model_type = "inkling_text"
     base_config_key = "text_config"
@@ -180,6 +182,7 @@ class InklingTextConfig(PreTrainedConfig):
         return None
 
 
+@strict
 class InklingAudioConfig(PreTrainedConfig):
     model_type = "inkling_audio"
     base_config_key = "audio_config"
@@ -196,6 +199,7 @@ class InklingAudioConfig(PreTrainedConfig):
     initializer_range: float = 0.02
 
 
+@strict
 class InklingVisionConfig(PreTrainedConfig):
     model_type = "inkling_vision"
     base_config_key = "vision_config"
