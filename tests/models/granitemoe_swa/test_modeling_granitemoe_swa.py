@@ -1,4 +1,4 @@
-# Copyright 2025 IBM and the HuggingFace Inc. team. All rights reserved.
+# Copyright 2026 IBM and the HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -20,9 +20,12 @@ import pytest
 
 from transformers import is_torch_available
 from transformers.testing_utils import (
+    Expectations,
     require_kernels,
     require_torch,
+    require_torch_accelerator,
     require_torch_gpu,
+    slow,
     torch_device,
 )
 
@@ -32,7 +35,7 @@ from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 if is_torch_available():
     import torch
 
-    from transformers import GraniteMoeSWAModel
+    from transformers import AutoTokenizer, GraniteMoeSWAForCausalLM, GraniteMoeSWAModel
 
 
 class GraniteMoeSWAModelTester(CausalLMModelTester):
@@ -84,34 +87,8 @@ class GraniteMoeSWAModelTest(CausalLMModelTest, unittest.TestCase):
             output = model(**inputs_dict)
         self.assertIsNotNone(output)
 
-    @unittest.skip("GraniteMoeSWA forcefully disables SDPA due to the attention sink.")
-    def test_sdpa_can_dispatch_non_composite_models(self):
-        pass
-
-    @unittest.skip("GraniteMoeSWA eager and SDPA attention outputs are expected to differ (sink).")
-    def test_eager_matches_sdpa_generate(self):
-        pass
-
     @unittest.skip("GraniteMoeSWA does not support FlashAttention-2 (only FA3/FA4).")
     def test_flash_attn_2_equivalence(self):
-        pass
-
-    # The tensor-parallel test mixin hardcodes `attn_implementation="sdpa"`, which GraniteMoeSWA disables
-    # because of the attention sink. The model still ships a valid `base_model_tp_plan` for real TP usage.
-    @unittest.skip("TP test mixin forces attn_implementation='sdpa', unsupported by GraniteMoeSWA (sink).")
-    def test_tp_forward(self):
-        pass
-
-    @unittest.skip("TP test mixin forces attn_implementation='sdpa', unsupported by GraniteMoeSWA (sink).")
-    def test_tp_backward(self):
-        pass
-
-    @unittest.skip("TP test mixin forces attn_implementation='sdpa', unsupported by GraniteMoeSWA (sink).")
-    def test_tp_generation(self):
-        pass
-
-    @unittest.skip("TP test mixin forces attn_implementation='sdpa', unsupported by GraniteMoeSWA (sink).")
-    def test_tp_generation_quantized(self):
         pass
 
     # Skipped for consistency with the prior Granite MoE models (granitemoe, granitemoeshared), which
@@ -123,3 +100,55 @@ class GraniteMoeSWAModelTest(CausalLMModelTest, unittest.TestCase):
     @unittest.skip("EP test path not exercised by the prior Granite MoE models; skipped for consistency.")
     def test_ep_backward(self):
         pass
+
+
+@slow
+@require_torch_accelerator
+class GraniteMoeSWAIntegrationTest(unittest.TestCase):
+    model_id = "ibm-granite/granite-swash-3b-a600m"
+    input_text = "The capital of France is"
+
+    def test_model_logits_bf16(self):
+        model = GraniteMoeSWAForCausalLM.from_pretrained(
+            self.model_id, device_map="auto", dtype=torch.bfloat16, attn_implementation="eager"
+        )
+        tokenizer = AutoTokenizer.from_pretrained(self.model_id)
+        input_ids = tokenizer(self.input_text, return_tensors="pt").input_ids.to(torch_device)
+
+        with torch.no_grad():
+            out = model(input_ids)
+
+        # fmt: off
+        EXPECTED_MEANS = Expectations(
+            {
+                ("cuda", 8): torch.tensor([[-1.3594, -2.0156, -1.3594, -1.4922, -2.5156]]),
+            }
+        )
+        EXPECTED_SLICES = Expectations(
+            {
+                ("cuda", 8): torch.tensor([[0.4883, 4.4062, -0.0430, -0.2637, 1.8750, 1.3438, 2.3438, -0.7266, 3.6250, 2.0000, 1.5078, 3.7188, 1.8125, 3.5938, 2.8281]]),
+            }
+        )
+        # fmt: on
+        torch.testing.assert_close(
+            EXPECTED_MEANS.get_expectation().to(torch_device), out.logits.mean(-1).float(), rtol=1e-2, atol=1e-2
+        )
+        torch.testing.assert_close(
+            EXPECTED_SLICES.get_expectation().to(torch_device), out.logits[0, 0, :15].float(), rtol=1e-3, atol=1e-3
+        )
+
+    def test_model_generation(self):
+        model = GraniteMoeSWAForCausalLM.from_pretrained(
+            self.model_id, device_map="auto", dtype=torch.bfloat16, attn_implementation="eager"
+        )
+        tokenizer = AutoTokenizer.from_pretrained(self.model_id)
+        inputs = tokenizer(self.input_text, return_tensors="pt").to(torch_device)
+
+        generated_ids = model.generate(**inputs, max_new_tokens=20, do_sample=False)
+        generated_text = tokenizer.decode(generated_ids[0], skip_special_tokens=True)
+
+        EXPECTED_TEXT = (
+            "The capital of France is Paris.\nThe capital of France is also known as the City of "
+            "Light.\nThe capital of France is"
+        )
+        self.assertEqual(generated_text, EXPECTED_TEXT)

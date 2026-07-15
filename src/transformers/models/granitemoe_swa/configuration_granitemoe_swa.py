@@ -4,7 +4,7 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_granitemoe_swa.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
-# Copyright 2025 IBM and the HuggingFace Inc. team. All rights reserved.
+# Copyright 2026 IBM and the HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -24,7 +24,7 @@ from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring
 
 
-@auto_docstring(checkpoint="ibm-research/granite-swash-3b-a600m")
+@auto_docstring(checkpoint="ibm-granite/granite-swash-3b-a600m")
 @strict
 class GraniteMoeSWAConfig(PreTrainedConfig):
     r"""
@@ -92,6 +92,20 @@ class GraniteMoeSWAConfig(PreTrainedConfig):
     output_router_logits: bool | None = False
     router_aux_loss_coef: float | None = 0.001
     shared_intermediate_size: int = 0
+    # Attention shards like Granite (+ per-head `sinks` colwise to track the head-sharding); the
+    # routed experts shard tensor-parallel (packed gate/up colwise, down rowwise, `moe_tp_experts`)
+    # with the router replicated. The optional shared expert (`shared_mlp`, off by default) is left
+    # replicated -- it is small and its full output sums consistently with the all-reduced MoE output.
+    base_model_tp_plan = {
+        "layers.*.self_attn.q_proj": "colwise",
+        "layers.*.self_attn.k_proj": "colwise",
+        "layers.*.self_attn.v_proj": "colwise",
+        "layers.*.self_attn.o_proj": "rowwise",
+        "layers.*.self_attn.sinks": "colwise",
+        "layers.*.block_sparse_moe.experts.gate_up_proj": "packed_colwise",
+        "layers.*.block_sparse_moe.experts.down_proj": "rowwise",
+        "layers.*.block_sparse_moe.experts": "moe_tp_experts",
+    }
 
     sliding_window: int | None = 128
     layer_types: list[str] | None = None

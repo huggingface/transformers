@@ -4,7 +4,7 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_granite_swa.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
-# Copyright 2025 IBM and the HuggingFace Inc. team. All rights reserved.
+# Copyright 2026 IBM and the HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -24,7 +24,7 @@ from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring
 
 
-@auto_docstring(checkpoint="ibm-research/granite-swash-2b")
+@auto_docstring(checkpoint="ibm-granite/granite-swash-2b")
 @strict
 class GraniteSWAConfig(PreTrainedConfig):
     r"""
@@ -54,12 +54,14 @@ class GraniteSWAConfig(PreTrainedConfig):
 
     model_type = "granite_swa"
     keys_to_ignore_at_inference = ["past_key_values"]
-    # Default tensor parallel plan for base model `GraniteSWAModel`
+    # Extends Granite's plan with the learnable per-head `sinks`, sharded across heads (colwise)
+    # to match the q/k/v head-sharding so TP keeps each rank's sink slice aligned with its heads.
     base_model_tp_plan = {
         "layers.*.self_attn.q_proj": "colwise",
         "layers.*.self_attn.k_proj": "colwise",
         "layers.*.self_attn.v_proj": "colwise",
         "layers.*.self_attn.o_proj": "rowwise",
+        "layers.*.self_attn.sinks": "colwise",
         "layers.*.mlp.gate_proj": "colwise",
         "layers.*.mlp.up_proj": "colwise",
         "layers.*.mlp.down_proj": "rowwise",

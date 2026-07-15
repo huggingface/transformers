@@ -1,4 +1,4 @@
-<!--Copyright 2025 The HuggingFace Team. All rights reserved.
+<!--Copyright 2026 The HuggingFace Team. All rights reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
 the License. You may obtain a copy of the License at
@@ -30,7 +30,9 @@ GraniteSWA is a [Granite](./granite) variant that adds two changes for more memo
 - **Learnable per-head attention sinks.** Each head learns a scalar sink that rescales its attention output by `sigmoid(logsumexp(attn_logits) - sink)`. This is mathematically equivalent to appending a single extra learnable logit to the softmax denominator (the attention-sink mechanism used by GPT-OSS).
 
 > [!TIP]
-> SDPA is not supported because the attention sink cannot be expressed through `torch.nn.functional.scaled_dot_product_attention`. Use `attn_implementation="eager"`, `"flash_attention_3"`, or `"flash_attention_4"` instead.
+> SDPA is not supported because the attention sink cannot be expressed through `torch.nn.functional.scaled_dot_product_attention`. Supported backends are:
+> - **Training + inference:** `"eager"`, `"flex_attention"` (preferred for training)
+> - **Inference:** `"flash_attention_3"` (via vLLM FA3 ['hub'](https://github.com/huggingface/kernels) kernel — also the fallback when FlashAttention-3 is not installed but `kernels` is), `"flash_attention_4"`
 
 The example below demonstrates how to generate text with [`Pipeline`] or the [`AutoModelForCausalLM`] class.
 
@@ -43,8 +45,7 @@ from transformers import pipeline
 
 pipe = pipeline(
     task="text-generation",
-    model="ibm-research/granite-swash-2b",
-    device=0,
+    model="ibm-granite/granite-swash-2b",
 )
 pipe("Explain quantum computing in simple terms", max_new_tokens=50)
 ```
@@ -56,10 +57,11 @@ pipe("Explain quantum computing in simple terms", max_new_tokens=50)
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
 
-tokenizer = AutoTokenizer.from_pretrained("ibm-research/granite-swash-2b")
+tokenizer = AutoTokenizer.from_pretrained("ibm-granite/granite-swash-2b")
 model = AutoModelForCausalLM.from_pretrained(
-    "ibm-research/granite-swash-2b",
+    "ibm-granite/granite-swash-2b",
     device_map="auto",
+    # eager default, also supports "flex_attention", "flash_attention_3", "flash_attention_4"
     attn_implementation="eager",
 )
 

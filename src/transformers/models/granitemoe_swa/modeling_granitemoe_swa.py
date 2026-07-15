@@ -4,7 +4,7 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_granitemoe_swa.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
-# Copyright 2025 IBM and the HuggingFace Inc. team. All rights reserved.
+# Copyright 2026 IBM and the HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -124,7 +124,8 @@ def eager_attention_forward(
 
 @use_kernelized_func(apply_rotary_pos_emb)
 class GraniteMoeSWAAttention(nn.Module):
-    """Granite attention with per-layer sliding window and a learnable per-head attention sink."""
+    """Granite attention with per-layer sliding window and a learnable per-head attention sink.
+    RoPE is applied only when the model passes ``position_embeddings`` (NoPE uses ``None``)."""
 
     def __init__(self, config: GraniteMoeSWAConfig, layer_idx: int | None = None):
         super().__init__()
@@ -150,7 +151,6 @@ class GraniteMoeSWAAttention(nn.Module):
         )
         self.layer_type = config.layer_types[layer_idx]
         self.sliding_window = config.sliding_window if self.layer_type == "sliding_attention" else None
-        self.use_rope = bool(config.no_rope_layers[layer_idx])
 
         # Learnable per-head attention sink (applied as an auxiliary softmax logit).
         self.sinks = nn.Parameter(torch.zeros(config.num_attention_heads))
@@ -158,7 +158,7 @@ class GraniteMoeSWAAttention(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        position_embeddings: tuple[torch.Tensor, torch.Tensor],
+        position_embeddings: tuple[torch.Tensor, torch.Tensor] | None,
         attention_mask: torch.Tensor | None,
         past_key_values: Cache | None = None,
         **kwargs: Unpack[TransformersKwargs],
@@ -170,7 +170,7 @@ class GraniteMoeSWAAttention(nn.Module):
         key_states = self.k_proj(hidden_states).view(hidden_shape).transpose(1, 2)
         value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
 
-        if self.use_rope:
+        if position_embeddings is not None:
             cos, sin = position_embeddings
             query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
@@ -190,7 +190,7 @@ class GraniteMoeSWAAttention(nn.Module):
             dropout=0.0 if not self.training else self.attention_dropout,
             scaling=self.scaling,
             sliding_window=self.sliding_window,
-            s_aux=self.sinks,  # diff with Granite: learnable attention sink (FA3/FA4 backends)
+            s_aux=self.sinks,
             **kwargs,
         )
 
@@ -409,7 +409,7 @@ class GraniteMoeSWAPreTrainedModel(PreTrainedModel):
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = True
     _supports_sdpa = False
-    _supports_flex_attn = False
+    _supports_flex_attn = True
     _can_compile_fullgraph = True
     _supports_attention_backend = True
     _can_record_outputs = {
@@ -561,13 +561,15 @@ class GraniteMoeSWAModel(GraniteMoeSWAPreTrainedModel):
         position_embeddings = self.rotary_emb(hidden_states, position_ids)
 
         for i, decoder_layer in enumerate(self.layers[: self.config.num_hidden_layers]):
+            # NoPE layers (`no_rope_layers[i] == 0`) receive `None`, so attention skips RoPE.
+            layer_position_embeddings = position_embeddings if self.config.no_rope_layers[i] else None
             hidden_states = decoder_layer(
                 hidden_states,
                 attention_mask=causal_mask_mapping[self.config.layer_types[i]],
                 position_ids=position_ids,
                 past_key_values=past_key_values,
                 use_cache=use_cache,
-                position_embeddings=position_embeddings,
+                position_embeddings=layer_position_embeddings,
                 **kwargs,
             )
 

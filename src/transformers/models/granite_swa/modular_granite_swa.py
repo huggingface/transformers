@@ -1,4 +1,4 @@
-# Copyright 2025 IBM and the HuggingFace Inc. team. All rights reserved.
+# Copyright 2026 IBM and the HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -20,8 +20,8 @@ GraniteSWA augments the Granite architecture with two changes:
 The sink rescales the attention output by ``sigmoid(logsumexp(attn_logits) - sink)``. This is
 mathematically equivalent to adding a single extra (learnable) logit to the softmax denominator
 -- i.e. the ``s_aux`` auxiliary-logit mechanism used by GPT-OSS. The eager path computes the
-``sigmoid``-scaling explicitly, while the FlashAttention-3 and FlashAttention-4 backends apply
-the same sink through the shared attention dispatch by passing ``s_aux``.
+``sigmoid``-scaling explicitly, while the FlexAttention, FlashAttention-3 and FlashAttention-4
+backends apply the same sink through the shared attention dispatch by passing ``s_aux``.
 """
 
 from collections.abc import Callable
@@ -53,7 +53,7 @@ from ..llama.modeling_llama import LlamaAttention, apply_rotary_pos_emb, repeat_
 logger = logging.get_logger(__name__)
 
 
-@auto_docstring(checkpoint="ibm-research/granite-swash-2b")
+@auto_docstring(checkpoint="ibm-granite/granite-swash-2b")
 @strict
 class GraniteSWAConfig(GraniteConfig):
     r"""
@@ -82,6 +82,18 @@ class GraniteSWAConfig(GraniteConfig):
     ```"""
 
     model_type = "granite_swa"
+    # Extends Granite's plan with the learnable per-head `sinks`, sharded across heads (colwise)
+    # to match the q/k/v head-sharding so TP keeps each rank's sink slice aligned with its heads.
+    base_model_tp_plan = {
+        "layers.*.self_attn.q_proj": "colwise",
+        "layers.*.self_attn.k_proj": "colwise",
+        "layers.*.self_attn.v_proj": "colwise",
+        "layers.*.self_attn.o_proj": "rowwise",
+        "layers.*.self_attn.sinks": "colwise",
+        "layers.*.mlp.gate_proj": "colwise",
+        "layers.*.mlp.up_proj": "colwise",
+        "layers.*.mlp.down_proj": "rowwise",
+    }
 
     vocab_size: int = 100352
     hidden_size: int = 2560
@@ -143,14 +155,14 @@ def eager_attention_forward(
 
 
 class GraniteSWAAttention(LlamaAttention):
-    """Granite attention with per-layer sliding window and a learnable per-head attention sink."""
+    """Granite attention with per-layer sliding window and a learnable per-head attention sink.
+    RoPE is applied only when the model passes ``position_embeddings`` (NoPE uses ``None``)."""
 
     def __init__(self, config: GraniteSWAConfig, layer_idx: int | None = None):
         super().__init__(config, layer_idx)
         self.scaling = config.attention_multiplier
         self.layer_type = config.layer_types[layer_idx]
         self.sliding_window = config.sliding_window if self.layer_type == "sliding_attention" else None
-        self.use_rope = bool(config.no_rope_layers[layer_idx])
 
         # Learnable per-head attention sink (applied as an auxiliary softmax logit).
         self.sinks = nn.Parameter(torch.zeros(config.num_attention_heads))
@@ -158,7 +170,7 @@ class GraniteSWAAttention(LlamaAttention):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        position_embeddings: tuple[torch.Tensor, torch.Tensor],
+        position_embeddings: tuple[torch.Tensor, torch.Tensor] | None,
         attention_mask: torch.Tensor | None,
         past_key_values: Cache | None = None,
         **kwargs: Unpack[TransformersKwargs],
@@ -170,7 +182,7 @@ class GraniteSWAAttention(LlamaAttention):
         key_states = self.k_proj(hidden_states).view(hidden_shape).transpose(1, 2)
         value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
 
-        if self.use_rope:
+        if position_embeddings is not None:
             cos, sin = position_embeddings
             query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
@@ -190,7 +202,7 @@ class GraniteSWAAttention(LlamaAttention):
             dropout=0.0 if not self.training else self.attention_dropout,
             scaling=self.scaling,
             sliding_window=self.sliding_window,
-            s_aux=self.sinks,  # diff with Granite: learnable attention sink (FA3/FA4 backends)
+            s_aux=self.sinks,
             **kwargs,
         )
 
@@ -207,7 +219,7 @@ class GraniteSWADecoderLayer(GraniteDecoderLayer):
 
 class GraniteSWAPreTrainedModel(GranitePreTrainedModel):
     _supports_sdpa = False
-    _supports_flex_attn = False
+    _supports_flex_attn = True
     _compatible_flash_implementations = ["kernels-community/vllm-flash-attn3", "flash_attention_4"]
     _can_record_outputs = {
         "hidden_states": GraniteSWADecoderLayer,
@@ -275,13 +287,15 @@ class GraniteSWAModel(GraniteModel):
         position_embeddings = self.rotary_emb(hidden_states, position_ids=position_ids)
 
         for i, decoder_layer in enumerate(self.layers[: self.config.num_hidden_layers]):
+            # NoPE layers (`no_rope_layers[i] == 0`) receive `None`, so attention skips RoPE.
+            layer_position_embeddings = position_embeddings if self.config.no_rope_layers[i] else None
             hidden_states = decoder_layer(
                 hidden_states,
                 attention_mask=causal_mask_mapping[self.config.layer_types[i]],
                 position_ids=position_ids,
                 past_key_values=past_key_values,
                 use_cache=use_cache,
-                position_embeddings=position_embeddings,
+                position_embeddings=layer_position_embeddings,
                 **kwargs,
             )
 

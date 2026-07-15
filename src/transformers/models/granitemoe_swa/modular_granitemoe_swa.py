@@ -1,4 +1,4 @@
-# Copyright 2025 IBM and the HuggingFace Inc. team. All rights reserved.
+# Copyright 2026 IBM and the HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -15,9 +15,9 @@
 
 GraniteMoeSWA combines the mixture-of-experts blocks (with optional shared experts, disabled by
 default via ``shared_intermediate_size=0``) of GraniteMoeShared with the per-layer sliding-window
-attention and learnable per-head attention sinks of GraniteSWA. The sink is applied through the
-standard ``s_aux`` attention dispatch, so the supported backends are eager, FlashAttention-3 and
-FlashAttention-4.
+attention and learnable per-head attention sinks of GraniteSWA. The eager path computes the
+``sigmoid``-scaling explicitly, while the FlexAttention, FlashAttention-3 and FlashAttention-4
+backends apply the same sink through the shared attention dispatch by passing ``s_aux``.
 """
 
 import torch
@@ -45,7 +45,7 @@ from ..granitemoeshared.modeling_granitemoeshared import (
 logger = logging.get_logger(__name__)
 
 
-@auto_docstring(checkpoint="ibm-research/granite-swash-3b-a600m")
+@auto_docstring(checkpoint="ibm-granite/granite-swash-3b-a600m")
 @strict
 class GraniteMoeSWAConfig(GraniteMoeSharedConfig):
     r"""
@@ -84,6 +84,20 @@ class GraniteMoeSWAConfig(GraniteMoeSharedConfig):
     ```"""
 
     model_type = "granitemoe_swa"
+    # Attention shards like Granite (+ per-head `sinks` colwise to track the head-sharding); the
+    # routed experts shard tensor-parallel (packed gate/up colwise, down rowwise, `moe_tp_experts`)
+    # with the router replicated. The optional shared expert (`shared_mlp`, off by default) is left
+    # replicated -- it is small and its full output sums consistently with the all-reduced MoE output.
+    base_model_tp_plan = {
+        "layers.*.self_attn.q_proj": "colwise",
+        "layers.*.self_attn.k_proj": "colwise",
+        "layers.*.self_attn.v_proj": "colwise",
+        "layers.*.self_attn.o_proj": "rowwise",
+        "layers.*.self_attn.sinks": "colwise",
+        "layers.*.block_sparse_moe.experts.gate_up_proj": "packed_colwise",
+        "layers.*.block_sparse_moe.experts.down_proj": "rowwise",
+        "layers.*.block_sparse_moe.experts": "moe_tp_experts",
+    }
 
     sliding_window: int | None = 128
     layer_types: list[str] | None = None
@@ -116,7 +130,7 @@ class GraniteMoeSWADecoderLayer(GraniteMoeSharedDecoderLayer):
 class GraniteMoeSWAPreTrainedModel(GraniteMoeSharedPreTrainedModel):
     _no_split_modules = ["GraniteMoeSWADecoderLayer"]
     _supports_sdpa = False
-    _supports_flex_attn = False
+    _supports_flex_attn = True
     _compatible_flash_implementations = ["kernels-community/vllm-flash-attn3", "flash_attention_4"]
     _can_record_outputs = {
         "hidden_states": GraniteMoeSWADecoderLayer,
@@ -184,13 +198,15 @@ class GraniteMoeSWAModel(GraniteMoeSharedModel):
         position_embeddings = self.rotary_emb(hidden_states, position_ids)
 
         for i, decoder_layer in enumerate(self.layers[: self.config.num_hidden_layers]):
+            # NoPE layers (`no_rope_layers[i] == 0`) receive `None`, so attention skips RoPE.
+            layer_position_embeddings = position_embeddings if self.config.no_rope_layers[i] else None
             hidden_states = decoder_layer(
                 hidden_states,
                 attention_mask=causal_mask_mapping[self.config.layer_types[i]],
                 position_ids=position_ids,
                 past_key_values=past_key_values,
                 use_cache=use_cache,
-                position_embeddings=position_embeddings,
+                position_embeddings=layer_position_embeddings,
                 **kwargs,
             )
 
@@ -203,11 +219,7 @@ class GraniteMoeSWAModel(GraniteMoeSharedModel):
 
 
 class GraniteMoeSWAForCausalLM(GraniteMoeSharedForCausalLM):
-    def __init__(self, config: GraniteMoeSWAConfig):
-        super().__init__(config)
-        self.model = GraniteMoeSWAModel(config)
-        # Initialize weights and apply final processing
-        self.post_init()
+    pass
 
 
 __all__ = [
