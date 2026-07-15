@@ -27,7 +27,7 @@ from transformers.distributed.configuration_utils import DistributedConfig
 from transformers.distributed.pipeline_parallel import PipelineIdentityLayer, PipelineStage, apply_pipeline_parallelism
 from transformers.modeling_utils import LoadStateDictConfig
 from transformers.core_model_loading import convert_and_load_state_dict_in_model
-from transformers.testing_utils import TestCasePlus, is_pipeline_parallel_test, require_torch_greater_or_equal
+from transformers.testing_utils import TestCasePlus, require_torch_greater_or_equal
 from transformers.utils.loading_report import log_state_dict_report
 
 
@@ -275,7 +275,6 @@ class TestPipelineStageFromDeviceMesh(unittest.TestCase):
         self.assertIsNone(PipelineStage.from_device_mesh(_FakeDeviceMesh(ndim=1, size=2, mesh_dim_names=None)))
         self.assertIsNone(PipelineStage.from_device_mesh(_FakeDeviceMesh(ndim=1, size=1, mesh_dim_names=("pp",))))
 
-@is_pipeline_parallel_test
 @require_torch_greater_or_equal("2.5")
 class TestPipelineParallelLoadReport(TestCasePlus):
     def test_pp_loading_report_table(self):
@@ -289,7 +288,6 @@ class TestPipelineParallelLoadReport(TestCasePlus):
         )
 
 
-@is_pipeline_parallel_test
 @require_torch_greater_or_equal("2.5")
 class TestPipelineParallelSplit(TestCasePlus):
     @parameterized.expand([(pp_size,) for pp_size in [2]])
@@ -304,7 +302,6 @@ class TestPipelineParallelSplit(TestCasePlus):
         )
 
 
-@is_pipeline_parallel_test
 @require_torch_greater_or_equal("2.5")
 class TestPipelineParallelWeightLoading(TestCasePlus):
     @parameterized.expand([(pp_size,) for pp_size in [2]])
@@ -319,7 +316,6 @@ class TestPipelineParallelWeightLoading(TestCasePlus):
         )
 
 
-@is_pipeline_parallel_test
 @require_torch_greater_or_equal("2.5")
 class TestPipelineParallelGeneration(TestCasePlus):
     @parameterized.expand([(pp_size,) for pp_size in [2]])
