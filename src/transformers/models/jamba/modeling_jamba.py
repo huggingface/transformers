@@ -302,7 +302,7 @@ class JambaMambaMixer(nn.Module):
         if use_precomputed_states:
             hidden_states = causal_conv1d_update(
                 hidden_states.squeeze(-1),
-                cache_params.layers[self.layer_idx].conv_states,
+                cache_params.layers[self.layer_idx].conv_states[0],
                 conv_weights,
                 self.conv1d.bias,
                 self.activation,
@@ -346,7 +346,7 @@ class JambaMambaMixer(nn.Module):
         time_proj_bias = time_proj_bias.float() if time_proj_bias is not None else None
         if use_precomputed_states:
             scan_outputs = selective_state_update(
-                cache_params.layers[self.layer_idx].recurrent_states,
+                cache_params.layers[self.layer_idx].recurrent_states[0],
                 hidden_states[..., 0],
                 discrete_time_step[..., 0],
                 A,
@@ -391,7 +391,7 @@ class JambaMambaMixer(nn.Module):
 
         if cache_params is not None and cache_params.has_previous_state(self.layer_idx):
             # In training mode, we don't want to perform in-place operations on ssm_state so we can compute the backwards pass
-            ssm_state = cache_params.layers[self.layer_idx].recurrent_states.clone()
+            ssm_state = cache_params.layers[self.layer_idx].recurrent_states[0].clone()
         else:
             ssm_state = torch.zeros(
                 (batch_size, self.intermediate_size, self.ssm_state_size),

@@ -851,12 +851,6 @@ class LinearAttentionCacheLayerMixin(ABC):
         self.batch_size = None
         self.record_past = False
 
-    def __getattribute__(self, name):
-        """Small simple wrapper to ensure BC when trying to get `conv_states` and `recurrent_states` when `number_of_states==1`"""
-        if name in ("conv_states", "recurrent_states") and self.number_of_states == 1:
-            return super().__getattribute__(name)[0]
-        return super().__getattribute__(name)
-
     def __repr__(self):
         return f"{self.__class__.__name__}"
 
@@ -894,7 +888,7 @@ class LinearAttentionCacheLayerMixin(ABC):
         """Resets the cache values while preserving the objects"""
         for i in range(self.number_of_states):
             if self.is_conv_states_initialized[i]:
-                self.conv_state[i].zero_()
+                self.conv_states[i].zero_()
             if self.is_recurrent_states_initialized[i]:
                 self.recurrent_states[i].zero_()
             self.has_previous_state[i] = False

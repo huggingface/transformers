@@ -425,7 +425,7 @@ class Lfm2MoeShortConv(nn.Module):
         if past_key_values is not None and past_key_values.has_previous_state(self.layer_idx):
             conv_out = causal_conv1d_update(
                 Bx.squeeze(-1),
-                past_key_values.layers[self.layer_idx].conv_states,
+                past_key_values.layers[self.layer_idx].conv_states[0],
                 conv_weights,
                 self.conv.bias,
                 None,
