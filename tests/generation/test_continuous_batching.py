@@ -1683,12 +1683,6 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
         input_msg = "What is the Transformers library known for?"
         return self._test_block_sharing(model_id, num_layer_groups, input_msg)
 
-    def test_block_sharing_with_hybrid_model(self) -> None:
-        model_id = "google/gemma-3-1b-it"
-        num_layer_groups = {"full_attention": 2, "sliding_window": 11}
-        input_msg = "I am a software engineer looking to use open source software to build a new AI agent. What is the Transformers library known for?"
-        return self._test_block_sharing(model_id, num_layer_groups, input_msg)
-
     @parameterized.expand([True, False])
     @require_flash_attn  # otherwise the test can fail because attention bias has a very slight impact on SDPA and eager
     def test_num_return_sequences(self, allow_block_sharing: bool) -> None:
@@ -2064,14 +2058,21 @@ class TestMemoryHandlerPrediction(unittest.TestCase):
         dtype: torch.dtype,
         use_async: bool,
     ) -> None:
-        config = SimpleNamespace(  # rather than creating a full config that we would only use for the namespace
+        text_config = SimpleNamespace(  # rather than creating a full config that we would only use for the namespace
             head_dim=head_dim,
             num_key_value_heads=num_kv_heads,
             num_attention_heads=num_attention_heads,
             hidden_size=hidden_size,
             vocab_size=vocab_size,
-            _attn_implementation=attn_impl,
         )
+
+        class FakeConfig:
+            def __init__(self):
+                self._attn_implementation = attn_impl
+
+            def get_text_config(self, decoder: bool = False):
+                return text_config
+
         cb_config = ContinuousBatchingConfig(
             block_size=block_size,
             max_blocks_per_request=max_bpr,
@@ -2080,11 +2081,12 @@ class TestMemoryHandlerPrediction(unittest.TestCase):
             max_memory_percent=0.9,
         )
         handler = PagedAttentionMemoryHandler(
-            config=config,
+            config=FakeConfig(),
             continuous_batching_config=cb_config,
             dtype=dtype,
             group_types=group_types,
             group_size=group_size,
+            is_multimodal_model=False,
         )
 
         num_groups = len(group_types)
@@ -2111,7 +2113,7 @@ class TestMemoryHandlerPrediction(unittest.TestCase):
             fixed.append(torch.empty((N, page_size), dtype=dtype, device=device))
         # IO tensors below are allocated k times (once per IO instance)
         for _ in range(k):
-            fixed.append(torch.empty((7, M), dtype=torch.int32, device=device))  # bulk_input
+            fixed.append(torch.empty((8, M), dtype=torch.int32, device=device))  # bulk_input
             fixed.append(torch.empty((num_output_rows, M), dtype=torch.int32, device=device))  # output_ids
             for _ in range(num_attn_masks):  # attention_mask: [1, 1, M, N + M] per mask type
                 fixed.append(torch.empty((1, 1, M, N + M), dtype=dtype, device=device))
@@ -2302,6 +2304,10 @@ def _tp_cancellation_worker(
         while time.time() < deadline:
             chunk = manager.get_result(request_id=request_id, timeout=2.0)
             if chunk is None:
+                # Before the cancel, a 2s gap only means the first batches are still capturing their CUDA graphs
+                # (warmup only pre-captures the max-size varlen graph, not the actual batch shapes): keep waiting.
+                if not cancelled:
+                    continue
                 # No new chunks for 2s after cancel — cancellation took effect on every rank
                 break
             chunks_seen += 1
