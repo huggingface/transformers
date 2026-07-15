@@ -703,7 +703,6 @@ class TrainerSamplerTest(unittest.TestCase):
         grad_accum = 2
         effective_batch_size = 8
 
-        results = {}
         for rank in range(dp_size):
             s1 = BatchRebalanceSampler(
                 lengths=lengths, effective_batch_size=effective_batch_size,
