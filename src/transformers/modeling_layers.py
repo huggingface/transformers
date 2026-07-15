@@ -337,8 +337,12 @@ class MtpLayer(nn.Module):
         past_key_values: Cache | None,
         **kwargs,
     ) -> tuple[torch.Tensor, torch.Tensor]:
-        eh_cat = torch.cat([self.enorm(inputs_embeds), self.hnorm(previous_hidden_state)], dim=-1)
-        hidden_states = self.eh_proj(eh_cat)
+        # Some checkpoints (e.g. Inkling :eyes:) order the projection input as [hidden, embeds] instead
+        if getattr(self.config, "mtp_hidden_states_first", False):
+            projection_input = torch.cat([self.hnorm(previous_hidden_state), self.enorm(inputs_embeds)], dim=-1)
+        else:
+            projection_input = torch.cat([self.enorm(inputs_embeds), self.hnorm(previous_hidden_state)], dim=-1)
+        hidden_states = self.eh_proj(projection_input)
         hidden_states = self.mtp_block(
             hidden_states,
             attention_mask=attention_mask,
@@ -370,7 +374,7 @@ class MtpModel(PreTrainedModel):
         self.loss_type = "ForCausalLM"
         self.num_mtp_layers = num_mtp_layers
         # Infer the type of the layers based on the main model
-        base_model = getattr(main_model.base_model, "language_model", main_model.base_model)
+        base_model = main_model.get_decoder()
         layer_cls = type(base_model.layers[-1])
         norm_cls = next(
             type(module)
@@ -404,9 +408,21 @@ class MtpModel(PreTrainedModel):
         # The embeddings and head are shared between main model and MTP layers
         self.embed_tokens = main_model.get_input_embeddings()
         self.shared_head = main_model.lm_head
-        # Use the same rotary class (it only has non-persistent buffers)
-        base_model = getattr(main_model.base_model, "language_model", main_model.base_model)
-        self.rotary_emb = base_model.rotary_emb
+        # Use the same rotary class (it only has non-persistent buffers); models with learned
+        # position biases (e.g. Inkling) have none
+        base_model = main_model.get_decoder()
+        self.rotary_emb = getattr(base_model, "rotary_emb", None)
+
+    def _project_to_logits(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        """Apply the shared head the same way the main model does (muP scaling, unpadded vocab slice)."""
+        multiplier = getattr(self.config, "logits_mup_width_multiplier", None)
+        if multiplier is not None:
+            hidden_states = hidden_states / multiplier
+        logits = self.shared_head(hidden_states)
+        unpadded_vocab_size = getattr(self.config, "unpadded_vocab_size", None)
+        if unpadded_vocab_size is not None and unpadded_vocab_size < logits.shape[-1]:
+            logits = logits[..., :unpadded_vocab_size]
+        return logits
 
     def forward(
         self,
@@ -440,12 +456,17 @@ class MtpModel(PreTrainedModel):
         for i, mtp_layer in enumerate(self.layers):
             # We need to recompute those every layer since they change
             inputs_embeds = self.embed_tokens(input_ids).to(last_hidden_states.device)
-            position_embeddings = self.rotary_emb(inputs_embeds, position_ids=position_ids)
+            position_embeddings = (
+                self.rotary_emb(inputs_embeds, position_ids=position_ids) if self.rotary_emb is not None else None
+            )
+            # `_assisted_decoding` raises on batch_size > 1, so there is no padding to fold into the mask
             causal_mask = create_causal_mask(
-                config=self.config,
-                inputs_embeds=inputs_embeds,
-                attention_mask=attention_mask,
+                self.config,
+                inputs_embeds,
+                attention_mask=None,
                 past_key_values=mtp_cache,
+                position_ids=position_ids,
+                layer_idx=self.config.num_hidden_layers + i,
             )
 
             last_hidden_states = mtp_layer(
@@ -462,7 +483,7 @@ class MtpModel(PreTrainedModel):
 
             # If we are not computing the loss, only compute logits for the next drafted token to save memory
             slice_indices = slice(-1, None) if labels is None else slice(None, None)
-            logits = self.shared_head(last_hidden_states[:, slice_indices, :])
+            logits = self._project_to_logits(last_hidden_states[:, slice_indices, :])
 
             # Compute loss for current mtp layer if needed
             if labels is not None:
@@ -541,12 +562,17 @@ class MtpModel(PreTrainedModel):
         for i, mtp_layer in enumerate(self.layers):
             # We need to recompute those every layer since they change
             inputs_embeds = self.embed_tokens(input_ids).to(last_hidden_states.device)
-            position_embeddings = self.rotary_emb(inputs_embeds, position_ids=position_ids)
+            position_embeddings = (
+                self.rotary_emb(inputs_embeds, position_ids=position_ids) if self.rotary_emb is not None else None
+            )
+            # `_assisted_decoding` raises on batch_size > 1, so there is no padding to fold into the mask
             causal_mask = create_causal_mask(
-                config=self.config,
-                inputs_embeds=inputs_embeds,
-                attention_mask=attention_mask,
+                self.config,
+                inputs_embeds,
+                attention_mask=None,
                 past_key_values=mtp_cache,
+                position_ids=position_ids,
+                layer_idx=self.config.num_hidden_layers + i,
             )
 
             last_hidden_states = mtp_layer(
@@ -566,7 +592,7 @@ class MtpModel(PreTrainedModel):
                 next_mtp_token = full_input_ids[:, -n_last_matches - 1 + i].unsqueeze(1)
             # In this case, we did not validate enough tokens previously, and need to re-draft!
             else:
-                logits = self.shared_head(last_hidden_states[:, -1:, :])
+                logits = self._project_to_logits(last_hidden_states[:, -1:, :])
                 # Decode one token
                 next_token_logits = logits[:, -1, :].to(device=input_ids.device)
                 if logits_processor is not None and full_input_ids is not None:
@@ -668,6 +694,14 @@ class MtpModel(PreTrainedModel):
 
         # Maybe remove the shared head/embedding from unexpected
         mtp_model._adjust_missing_and_unexpected_keys(loading_info)
+
+        # The model is initialized on meta and missing keys are never materialized: they would crash
+        # with a cryptic device error at first forward, so fail at load time instead
+        if loading_info.missing_keys:
+            raise RuntimeError(
+                f"The following {cls.__name__} weights are missing from {pretrained_model_name_or_path} "
+                f"(checkpoint keys not matching the conversion mapping?): {sorted(loading_info.missing_keys)}"
+            )
 
         # Retie the embedding/head/rotary with the external main model
         mtp_model.tie_with_main_model(main_model)

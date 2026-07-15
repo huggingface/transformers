@@ -237,15 +237,17 @@ class InklingAttention(nn.Module):
         q_length = query_states.shape[2]
         if past_key_values is not None:
             # Important to get those values before updating the cache to be correct
-            kv_length, kv_offset = past_key_values.get_mask_sizes(q_length, self.layer_idx)
+            kv_length, _ = past_key_values.get_mask_sizes(q_length, self.layer_idx)
             q_offset = past_key_values.get_seq_length(self.layer_idx)
             # Update the cache
             key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
         else:
             kv_length = key_states.shape[2]
-            q_offset, kv_offset = 0, 0
+            q_offset = 0
 
-        kv_positions = torch.arange(kv_length, device=hidden_states.device) + kv_offset
+        # The first cached key sits `kv_length - q_length` positions before the current query, so q and kv
+        # share one absolute frame for any query offset (fill, sliding, or MtpCache)
+        kv_positions = torch.arange(kv_length, device=hidden_states.device) + (q_offset + q_length - kv_length)
         q_positions = torch.arange(q_length, device=hidden_states.device) + q_offset
         relative_states = relative_states.view(*input_shape, self.num_heads, -1)
         position_bias = self.rel_logits_proj(relative_states, q_positions, kv_positions)
@@ -609,6 +611,10 @@ class InklingPreTrainedModel(PreTrainedModel):
     _supports_attention_backend = False
     _keys_to_ignore_on_load_unexpected = [r"model\.mtp\..*"]
     _keep_in_fp32_modules_strict = ["attn_sconv", "mlp_sconv", "k_sconv", "v_sconv"]
+    _can_record_outputs = {
+        "hidden_states": InklingDecoderLayer,
+        "attentions": InklingAttention,
+    }
 
     @torch.no_grad()
     def _init_weights(self, module):

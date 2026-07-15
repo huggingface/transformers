@@ -1445,7 +1445,8 @@ class MTPCandidateGenerator(AssistedCandidateGenerator):
             )
 
         # Heuristic: use the device of the last layer of the main model for the MTP layers
-        self.device = next(x.device for x in main_model.base_model.layers[-1].parameters())  # type: ignore
+        base_model = main_model.get_decoder()
+        self.device = next(x.device for x in base_model.layers[-1].parameters())  # type: ignore
         self.mtp_model = MtpModel.from_pretrained(main_model, device_map={"": self.device})
 
         # Create the mtp cache and allow it to keep its past before we crop it
@@ -1455,6 +1456,10 @@ class MTPCandidateGenerator(AssistedCandidateGenerator):
         # Save those to know how to decode mtp tokens
         self.do_sample = generation_config.do_sample
         self.logits_processor = logits_processor
+
+        # Drafting consumes the main model's last hidden states at every step
+        # not sure if we could e.g. use decorators here
+        model_kwargs["output_hidden_states"] = True
 
         self.is_main_model_prefill = True
 
@@ -1503,7 +1508,7 @@ class MTPCandidateGenerator(AssistedCandidateGenerator):
                     [self.full_seq_last_hidden_states, last_hidden_states], dim=1
                 )
                 # This is the very tricky part: invalidate and recreate the mtp cache for wrong positions if necessary
-                self.correct_mtp_cache_for_decode(
+                self.mtp_model.correct_mtp_cache_for_decode(
                     n_last_matches=n_last_matches,
                     full_input_ids=input_ids,
                     full_attention_mask=model_kwargs["attention_mask"],
