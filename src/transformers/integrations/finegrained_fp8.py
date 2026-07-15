@@ -95,6 +95,10 @@ def _load_finegrained_fp8_kernel() -> None:
     single opaque node instead of tracing into it; it returns `None` (proxyable) and populates the
     global, which `load_finegrained_fp8_kernel` then returns.
 
+    Under NO circumstances may this function return a value: an `@allow_in_graph` fx node's
+    return must be proxyable, and returning the bundle (e.g. from the warm-cache
+    short-circuit) breaks torch.compile with `Unsupported: torch.* op returned non-Tensor`.
+
     Raises `ImportError` if the `kernels` package is missing, or the kernel or required
     symbols cannot be found.
     """

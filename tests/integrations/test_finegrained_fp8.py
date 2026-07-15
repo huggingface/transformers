@@ -97,7 +97,24 @@ class FinegrainedFp8LoaderTest(unittest.TestCase):
         with self._env():
             torch.compiler.reset()
 
-            @torch.compile(backend="aot_eager", fullgraph=True)
+            @torch.compile(fullgraph=True)
+            def run(x):
+                return fg.load_finegrained_fp8_kernel().matmul(x)
+
+            out = run(torch.zeros(3))
+        self.assertTrue(torch.equal(out, torch.ones(3)))
+
+    def test_loader_is_compile_safe_when_warm(self):
+        # Warm the loader BEFORE compiling: Dynamo then executes the opaque loader node's
+        # warm-cache short-circuit at trace time — the path that must return None, not the
+        # bundle (a leaked bundle is `Unsupported: torch.* op returned non-Tensor`). The
+        # production sequence (eager warmup, then compile) always traces warm; the cold
+        # test above cannot catch a leak on this path.
+        with self._env():
+            fg.load_finegrained_fp8_kernel()
+            torch.compiler.reset()
+
+            @torch.compile(fullgraph=True)
             def run(x):
                 return fg.load_finegrained_fp8_kernel().matmul(x)
 

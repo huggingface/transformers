@@ -151,7 +151,10 @@ _DEEPGEMM: DeepGEMM | None = None
 @torch._dynamo.allow_in_graph
 def _load_deepgemm_kernel(requires_sm100: bool = False) -> None:
     """Load DeepGEMM once into the `_DEEPGEMM` module global, raising `ImportError` if the env or any
-    required symbol is missing.
+    required symbol is missing. Under NO circumstances may this function return a value: it rides
+    through `@allow_in_graph` as an opaque fx node, whose return must be proxyable — returning the
+    bundle (e.g. from the warm-cache short-circuit) breaks torch.compile with
+    `Unsupported: torch.* op returned non-Tensor`. Callers read `_DEEPGEMM` back from the global.
 
     `@allow_in_graph` makes `torch.compile` treat the untraceable cold path (hub download + dynamic
     import via `lazy_load_kernel`) as a single opaque node instead of tracing into it; it returns `None`
@@ -214,7 +217,7 @@ def _load_deepgemm_kernel(requires_sm100: bool = False) -> None:
         )
 
     if _DEEPGEMM is not None:
-        return _DEEPGEMM
+        return
 
     kernel = lazy_load_kernel("deep-gemm")
     if kernel is None:

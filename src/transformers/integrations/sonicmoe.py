@@ -68,6 +68,10 @@ def _load_sonicmoe_kernel() -> None:
     single opaque node instead of tracing into it; it returns `None` (proxyable) and populates the
     global, which `load_sonicmoe_kernel` then returns.
 
+    Under NO circumstances may this function return a value: an `@allow_in_graph` fx node's
+    return must be proxyable, and returning the bundle (e.g. from the warm-cache
+    short-circuit) breaks torch.compile with `Unsupported: torch.* op returned non-Tensor`.
+
     Raises `ImportError` if CUDA/hardware requirements are not met, or if the kernel or
     required symbols are not found.
     """
