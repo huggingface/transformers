@@ -1,0 +1,91 @@
+{
+  "language": "English",
+  "text": "Mr. Quilter is the apostle of the middle classes, and we are glad to welcome his gospel.",
+  "time_stamps": [
+    {
+      "text": "Mr",
+      "start_time": 0.56,
+      "end_time": 0.8
+    },
+    {
+      "text": "Quilter",
+      "start_time": 0.8,
+      "end_time": 1.28
+    },
+    {
+      "text": "is",
+      "start_time": 1.28,
+      "end_time": 1.44
+    },
+    {
+      "text": "the",
+      "start_time": 1.44,
+      "end_time": 1.52
+    },
+    {
+      "text": "apostle",
+      "start_time": 1.52,
+      "end_time": 2.08
+    },
+    {
+      "text": "of",
+      "start_time": 2.08,
+      "end_time": 2.32
+    },
+    {
+      "text": "the",
+      "start_time": 2.32,
+      "end_time": 2.32
+    },
+    {
+      "text": "middle",
+      "start_time": 2.32,
+      "end_time": 2.56
+    },
+    {
+      "text": "classes",
+      "start_time": 2.56,
+      "end_time": 3.28
+    },
+    {
+      "text": "and",
+      "start_time": 3.36,
+      "end_time": 3.52
+    },
+    {
+      "text": "we",
+      "start_time": 3.52,
+      "end_time": 3.6
+    },
+    {
+      "text": "are",
+      "start_time": 3.6,
+      "end_time": 3.68
+    },
+    {
+      "text": "glad",
+      "start_time": 3.68,
+      "end_time": 4.08
+    },
+    {
+      "text": "to",
+      "start_time": 4.16,
+      "end_time": 4.16
+    },
+    {
+      "text": "welcome",
+      "start_time": 4.16,
+      "end_time": 4.64
+    },
+    {
+      "text": "his",
+      "start_time": 4.64,
+      "end_time": 4.8
+    },
+    {
+      "text": "gospel",
+      "start_time": 4.8,
+      "end_time": 5.44
+    }
+  ]
+}

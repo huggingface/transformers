@@ -35,11 +35,31 @@ if is_torch_available():
 @require_torchvision
 class MiniCPMV4_6ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = MiniCPMV4_6Processor
-    model_id = "openbmb/MiniCPM-V-4_6"
+    # Use tiny repos to avoid loading the full 248k-vocab tokenizer (~308 MB)
+    # Tiny processor created with make_tiny_processor.py from "openbmb/MiniCPM-V-4_6"
+    tiny_model_id = "hf-internal-testing/tiny-processor-minicpmv4_6"
 
     video_text_kwargs_max_length = 600
     video_text_kwargs_override_max_length = 550
     video_unstructured_max_length = 600
+    # Default 76 is too small: MiniCPM expands <image> to ~70 tokens, then with surrounding text tokens
+    # we exceed 76, truncation cuts through image tokens, and _check_special_mm_tokens raises a mismatch error.
+    image_unstructured_max_length = 100
+
+    @classmethod
+    def _setup_image_processor(cls):
+        image_processor_class = cls._get_component_class_from_processor("image_processor")
+        # Default scale_resolution=448 with max_slice_nums=9 produces up to 21 MB pixel_values per image.
+        # Use scale_resolution=64 with max_slice_nums=1 for tests — shape[0]==1 assertion still passes.
+        return image_processor_class.from_pretrained(cls.tiny_model_id, scale_resolution=64, max_slice_nums=1)
+
+    @classmethod
+    def _setup_video_processor(cls):
+        video_processor_class = cls._get_component_class_from_processor("video_processor")
+        # Default scale_resolution=448 with max_slice_nums=9 produces >14 KB per frame.
+        # Use scale_resolution=64 with max_slice_nums=1; shape assertions in
+        # test_apply_chat_template_video_frame_sampling are updated to match.
+        return video_processor_class.from_pretrained(cls.tiny_model_id, scale_resolution=64, max_slice_nums=1)
 
     @classmethod
     def _setup_test_attributes(cls, processor):
@@ -238,7 +258,7 @@ class MiniCPMV4_6ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
                         {
                             "type": "video",
                             "url": url_to_local_path(
-                                "https://huggingface.co/datasets/raushan-testing-hf/videos-test/resolve/main/tiny_video.mp4"
+                                "https://huggingface.co/datasets/hf-internal-testing/test-videos/resolve/main/tiny_video_320x240.mp4"
                             ),
                         },
                         {"type": "text", "text": "What is shown in this video?"},
@@ -272,8 +292,9 @@ class MiniCPMV4_6ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         )
         self.assertTrue(self.videos_input_name in out_dict_with_video)
         self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 1)
-        # 3 frames are inferred from input video's length and FPS, so can be hardcoded
-        self.assertEqual(out_dict_with_video[self.videos_input_name].shape[-1], 129472)
+        # 1 frame is inferred from input video's length and FPS, so can be hardcoded
+        # (224 = 56*56/14 with scale_resolution=64; was 14112 = 392*504/14 at default scale_resolution=448)
+        self.assertEqual(out_dict_with_video[self.videos_input_name].shape[-1], 224)
 
         # When `do_sample_frames=False` no sampling is done and whole video is loaded, even if number of frames is passed
         fps = 10
@@ -290,7 +311,8 @@ class MiniCPMV4_6ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         )
         self.assertTrue(self.videos_input_name in out_dict_with_video)
         self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 1)
-        self.assertEqual(out_dict_with_video[self.videos_input_name].shape[-1], 1424192)
+        # 2464 = 11 frames * 224 per frame (56*56/14); was 155232 = 11 * 14112 at default scale_resolution=448
+        self.assertEqual(out_dict_with_video[self.videos_input_name].shape[-1], 2464)
 
         # Load without any arg should load the whole video
         out_dict_with_video = processor.apply_chat_template(
@@ -301,7 +323,8 @@ class MiniCPMV4_6ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         )
         self.assertTrue(self.videos_input_name in out_dict_with_video)
         self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 1)
-        self.assertEqual(out_dict_with_video[self.videos_input_name].shape[-1], 129472)
+        # 224 per frame (56*56/14 at scale_resolution=64); was 14112 = 392*504/14 at scale_resolution=448
+        self.assertEqual(out_dict_with_video[self.videos_input_name].shape[-1], 224)
 
         # Load video as a list of frames (i.e. images).
         # NOTE: each frame should have same size because we assume they come from one video
@@ -323,7 +346,9 @@ class MiniCPMV4_6ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         )
         self.assertTrue(self.videos_input_name in out_dict_with_video)
         self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 1)
-        self.assertEqual(out_dict_with_video[self.videos_input_name].shape[-1], 203392)
+        # 448 = 2 frames * 224 per frame (56*56/14 at scale_resolution=64, no slicing);
+        # was 203392 = 2 frames * (source 15680 + 6 slices * 14336) at scale_resolution=448
+        self.assertEqual(out_dict_with_video[self.videos_input_name].shape[-1], 448)
 
     @require_torch
     def test_apply_chat_template_tool_calls_no_content(self):

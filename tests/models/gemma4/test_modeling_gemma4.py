@@ -54,6 +54,7 @@ if is_torch_available():
         Gemma4Processor,
         Gemma4TextModel,
     )
+    from transformers.models.gemma4.modeling_gemma4 import create_masks_for_vision_model
 
 
 GEMMA4_RANDOM_MOE_FA2_SKIP_REASON = (
@@ -248,7 +249,7 @@ class Gemma4Audio2TextModelTester:
 
     def prepare_config_and_inputs(self):
         input_features = floats_tensor([self.batch_size, self.audio_seq_length, self.audio_num_channels])
-        input_features_mask = torch.ones(self.batch_size, self.audio_seq_length, dtype=torch.bool)
+        input_features_mask = torch.ones(self.batch_size, self.audio_seq_length, dtype=torch.bool, device=torch_device)
         config = self.get_config()
         return config, input_features, input_features_mask
 
@@ -292,8 +293,8 @@ class Gemma4Audio2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unittes
     def test_get_image_features_attentions(self):
         pass
 
-    @unittest.skip("The tester has no image in input dict")
     @parameterized.expand([True, False, None])
+    @unittest.skip("The tester has no image in input dict")
     def test_get_image_features_output(self, return_dict: bool | None):
         pass
 
@@ -305,8 +306,8 @@ class Gemma4Audio2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unittes
     def test_get_video_features_attentions(self):
         pass
 
-    @unittest.skip("The tester has no videos in input dict")
     @parameterized.expand([True, False, None])
+    @unittest.skip("The tester has no videos in input dict")
     def test_get_video_features_output(self, return_dict: bool | None):
         pass
 
@@ -468,7 +469,7 @@ class Gemma4Vision2TextModelTester:
 class Gemma4Vision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     all_model_classes = (Gemma4Model, Gemma4ForConditionalGeneration) if is_torch_available() else ()
     all_generative_model_classes = (Gemma4ForConditionalGeneration,) if is_torch_available() else ()
-    additional_model_inputs = ["mm_token_type_ids"]
+    additional_model_inputs = ["mm_token_type_ids", "image_position_ids"]
     model_split_percents = [0.85, 0.9]
 
     def setUp(self):
@@ -514,8 +515,8 @@ class Gemma4Vision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unitte
     def test_get_audio_features_attentions(self):
         pass
 
-    @unittest.skip("The tester has no audios in input dict")
     @parameterized.expand([True, False, None])
+    @unittest.skip("The tester has no audios in input dict")
     def test_get_audio_features_output(self, return_dict: bool | None):
         pass
 
@@ -527,8 +528,8 @@ class Gemma4Vision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unitte
     def test_get_video_features_attentions(self):
         pass
 
-    @unittest.skip("The tester has no videos in input dict")
     @parameterized.expand([True, False, None])
+    @unittest.skip("The tester has no videos in input dict")
     def test_get_video_features_output(self, return_dict: bool | None):
         pass
 
@@ -600,6 +601,56 @@ class Gemma4Vision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unitte
         with count_get_per_layer_inputs_calls() as counter:
             _ = model(inputs_embeds=inputs_embeds)
             self.assertEqual(counter["call_count"], 1)
+
+    def test_attention_mask_composition(self):
+        config = self.model_tester.get_config()
+        config.text_config._attn_implementation = "eager"
+
+        # Override sliding window to a known small value to test truncation
+        sliding_window = 4
+        config.text_config.sliding_window = sliding_window
+
+        # Create a sequence of 13 tokens: 0..4 text, 5..11 image (7 tokens), 12 text
+        # block_sequence_ids maps image tokens to group 0, and text tokens to -1
+        block_sequence_ids = torch.tensor([[-1, -1, -1, -1, -1, 0, 0, 0, 0, 0, 0, 0, -1]], dtype=torch.long)
+        attention_mask = torch.ones((1, 13), dtype=torch.bool)
+        position_ids = torch.arange(13).unsqueeze(0)
+        inputs_embeds = torch.randn(1, 13, config.text_config.hidden_size)
+
+        mask_dict = create_masks_for_vision_model(
+            config=config.text_config,
+            inputs_embeds=inputs_embeds,
+            attention_mask=attention_mask,
+            past_key_values=None,
+            position_ids=position_ids,
+            block_sequence_ids=block_sequence_ids,
+        )
+
+        full_mask = mask_dict["full_attention"]
+        sliding_mask = mask_dict["sliding_attention"]
+
+        # In full_attention (global layers), Gemma 4 uses causal-only masking —
+        # no bidirectional attention on vision tokens. This matches the internal
+        # Gemax/Gemini3 transformer which sets bidirectional_segment_ids=None
+        # for GLOBAL layers.
+        # Token 5 looking ahead at token 11 -> MASKED (causal prevents look-ahead)
+        self.assertLess(full_mask[0, 0, 5, 11].item(), -1000)
+        # Token 11 looking back at token 5 -> VISIBLE (causal allows look-back)
+        self.assertEqual(full_mask[0, 0, 11, 5].item(), 0.0)
+
+        # In sliding_attention (local layers), bidirectional IS applied within the window.
+        # Token 8 looking back at 5 (dist 3 < 4) -> VISIBLE
+        self.assertEqual(sliding_mask[0, 0, 8, 5].item(), 0.0)
+        # Token 5 looking ahead at 8 (dist 3 < 4, same image block) -> VISIBLE (bidirectional)
+        self.assertEqual(sliding_mask[0, 0, 5, 8].item(), 0.0)
+
+        # In sliding_attention, look-back outside the sliding window is strictly masked
+        # Token 11 looking back at 5 (dist 6 > 4) -> MASKED
+        self.assertLess(sliding_mask[0, 0, 11, 5].item(), -1000)
+
+        # Verify that causal masking still applies correctly to text
+        # Token 11 (image) looking ahead at Token 12 (text) -> MASKED
+        self.assertLess(full_mask[0, 0, 11, 12].item(), -1000)
 
 
 @slow
@@ -696,6 +747,10 @@ class Gemma4IntegrationTest(unittest.TestCase):
                     "This image shows a **brown and white cow** standing on a **sandy beach** with the **ocean and a blue sky** in the background",
                     "No, these images are not identical.\n\nThe first image is a photograph of a **brown and white cow standing on a beach** under a blue",
                 ],
+                ("cuda", (9, 0)): [
+                    "This image shows a **brown and white cow** standing on a **sandy beach** with the **ocean and a blue sky** in the background",
+                    "No, these images are **not identical**.\n\nHere's a breakdown of the differences:\n\n1.  **Image 1 (Cow on",
+                ],
                 ("xpu", 3): [
                     "This image shows a **brown and white cow** standing on a **sandy beach** with the **ocean and a blue sky** in the background",
                     "No, these images are **not identical**.\n\nHere's a breakdown of the differences:\n\n1.  **Image 1 (Cow on",
@@ -735,6 +790,7 @@ class Gemma4IntegrationTest(unittest.TestCase):
         EXPECTED_TEXTS = Expectations(
             {
                 ("cuda", 8): ['Based on the image, here is a description of what I see:\n\n**Foreground & Street Scene:**\n* **Traffic Sign:** The most prominent'],
+                ("cuda", (9, 0)): ['Based on the image, here is a description of what I see:\n\n**Foreground & Street Scene:**\n* **Roadway:** There is an'],
                 ("xpu", 3): ['Based on the image, here is a description of what I see:\n\n**Foreground & Street Scene:**\n* **Roadway:** There is an'],
             }
         )  # fmt: skip
@@ -764,6 +820,7 @@ class Gemma4IntegrationTest(unittest.TestCase):
             {
                 ("cuda", (8, 0)): ['## The Algorithmic Mind\n\nA whisper starts, a seed unseen,\nOf data vast, a vibrant sheen.\nA sea of numbers,'],
                 ("cuda", (8, 6)): ['## The Algorithmic Mind\n\nA tapestry of data, vast and deep,\nWhere silent numbers in their slumber sleep.\nA sea of text'],
+                ("cuda", (9, 0)): ['## The Algorithmic Mind\n\nA whisper starts, a seed unseen,\nOf data vast, a vibrant sheen.\nA sea of numbers,'],
             }
         )  # fmt: skip
         EXPECTED_TEXT = EXPECTED_TEXTS.get_expectation()
@@ -788,7 +845,8 @@ class Gemma4IntegrationTest(unittest.TestCase):
         EXPECTED_TEXTS = Expectations(
             {
                 ("cuda", (8, 0)): ['## The Algorithmic Mind\n\nA whisper starts, a seed unseen,\nOf data vast, a vibrant sheen.\nA sea of numbers,'],
-                ("cuda", (8, 6)): ['## The Algorithmic Mind\n\nA tapestry of data, vast and deep,\nWhere silent numbers in their slumber sleep.\nA sea of text'],
+                ("cuda", (8, 6)): ['## The Algorithmic Bloom\n\nFrom silent data, a whisper starts to rise,\nA sea of numbers beneath intelligent skies.\nNo flesh and'],
+                ("cuda", (9, 0)): ['## The Algorithmic Mind\n\nA whisper starts, a seed unseen,\nOf data vast, a vibrant sheen.\nA sea of numbers,'],
                 ("xpu", 3): ['## The Algorithmic Mind\n\nA whisper starts in silicon deep,\nWhere data streams in endless sweep.\nNo flesh and blood, no beating'],
             }
         )  # fmt: skip
