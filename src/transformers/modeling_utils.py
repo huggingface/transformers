@@ -2461,13 +2461,10 @@ class PreTrainedModel(
         #   or the FSDP path in _initialize_missing_keys (param._is_hf_initialized = True).
         # Without this, non-remote-code models would still go through expensive
         # _init_weights → normal_ re-initialization despite all params being marked.
-        if (
-            all(getattr(param, "_is_hf_initialized", False) for param in module.parameters(recurse=False))
-            and all(
-                getattr(buffer, "_is_hf_initialized", False)
-                for buffer in module.buffers(recurse=False)
-                if buffer is not None
-            )
+        if all(getattr(param, "_is_hf_initialized", False) for param in module.parameters(recurse=False)) and all(
+            getattr(buffer, "_is_hf_initialized", False)
+            for buffer in module.buffers(recurse=False)
+            if buffer is not None
         ):
             module._is_hf_initialized = True
             return
