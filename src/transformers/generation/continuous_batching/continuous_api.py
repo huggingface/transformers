@@ -639,7 +639,7 @@ class ContinuousBatchingManager:
         is_flash = is_flash_attention_requested(requested_attention_implementation=target_implem)
         is_paged = "paged|" in target_implem
         if not is_flash and not is_paged and model._supports_flash_attn:
-            # Try to use use FA3, then FA2, then give up. Both regular package or kernels is fine.
+            # Try to use FA3, then FA2, then give up. Both regular package or kernels is fine.
             if is_flash_attn_3_available(kernels_fallback_ok=True):
                 version = 3
             elif is_flash_attn_2_available(kernels_fallback_ok=True):

@@ -590,7 +590,7 @@ class ContinuousBatchingNoAcceleratorTest(unittest.TestCase):
                 self.assertFalse(is_torch_xpu_available())
                 self.assertFalse(torch.backends.mps.is_available())
 
-                tokenizer, model = get_tokenizer_and_model(model_id, "sdpa", "cpu")
+                tokenizer, model = get_tokenizer_and_model(model_id, "paged|sdpa", "cpu")
                 user_messages = _DEFAULT_USER_MESSAGES[:1]
                 input_ids = get_generation_inputs(user_messages, tokenizer, for_continuous_batching=True)
 
@@ -749,8 +749,9 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
         # continuous batching but not in generate
         dtype = "auto" if is_fa else torch.float32
 
-        # Prepare inputs
-        tokenizer, model = get_tokenizer_and_model(model_id, attn_implementation, torch_device, dtype)
+        # Prepare inputs (add paged| prefix so that eager or sdpa is not overridden by flash)
+        paged_attn_implem = ("paged|" if "paged|" not in attn_implementation else "") + attn_implementation
+        tokenizer, model = get_tokenizer_and_model(model_id, paged_attn_implem, torch_device, dtype)
         if (
             attn_implementation == "flash_attention_2"
             and torch_device == "cpu"
@@ -781,7 +782,8 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
             flush_memory(flush_compile=True)
 
         # Generation without continuous batching (reload model to avoid any state contamination)
-        _, model = get_tokenizer_and_model(model_id, attn_implementation, torch_device, dtype)
+        non_paged_attn_implem = attn_implementation.replace("paged|", "")
+        _, model = get_tokenizer_and_model(model_id, non_paged_attn_implem, torch_device, dtype)
         model.generation_config.max_new_tokens = max_new_tokens
         model.generation_config.do_sample = False
         model.generation_config.use_cuda_graph = continuous_batching_config.use_cuda_graph
@@ -934,7 +936,7 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
         max_memory_percent = 0.5
         tolerance = 0.05
 
-        tokenizer, model = get_tokenizer_and_model(model_id, "sdpa", torch_device, torch.float16)
+        tokenizer, model = get_tokenizer_and_model(model_id, "paged|sdpa", torch_device, torch.float16)
         input_ids = get_generation_inputs(_DEFAULT_USER_MESSAGES, tokenizer, for_continuous_batching=True)
         model.generation_config.max_new_tokens = 20
         model.generation_config.do_sample = False
@@ -982,7 +984,7 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
         model_id = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
 
         # Retrieve tokenizer, model and eos_token_id (required otherwise logits will be misaligned)
-        tokenizer, model = get_tokenizer_and_model(model_id, "sdpa", torch_device, torch.float32)
+        tokenizer, model = get_tokenizer_and_model(model_id, "paged|sdpa", torch_device, torch.float32)
         eos_token_id = model.config.eos_token_id  # type: ignore[attr-defined]
 
         # Run CB generation
@@ -1065,7 +1067,7 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
         model_id = "Qwen/Qwen2.5-0.5B-Instruct"
         max_new_tokens = 3
 
-        tokenizer, model = get_tokenizer_and_model(model_id, "sdpa", torch_device)
+        tokenizer, model = get_tokenizer_and_model(model_id, "paged|sdpa", torch_device)
         manager = model.init_continuous_batching()
         manager.logit_processor.clear()
         manager.start()
@@ -1113,7 +1115,7 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
         model_id = "Qwen/Qwen2.5-0.5B-Instruct"
         max_new_tokens = 3
 
-        tokenizer, model = get_tokenizer_and_model(model_id, "sdpa", torch_device)
+        tokenizer, model = get_tokenizer_and_model(model_id, "paged|sdpa", torch_device)
         manager = model.init_continuous_batching()
         manager.logit_processor.clear()
         manager.start()
@@ -1149,8 +1151,10 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
     #                     Various tests that don't fit into the other categories                    #
     # --------------------------------------------------------------------------------------------- #
     def _test_block_sharing(self, model_id: str, expected_layer_types: dict[str, int], input_msg: str) -> None:
-        # Use float32 for SDPA to handle precision differences from attention masks (same as parity test)
+        # Use float32 for SDPA to handle precision differences from attention masks (same as parity test). Load plain
+        # sdpa (regular_generate runs on this model) and disable flash so the CB switch stays on paged|sdpa.
         tokenizer, model = get_tokenizer_and_model(model_id, "sdpa", torch_device, dtype=torch.float32)
+        model._supports_flash_attn = False
 
         # Configure generation for parity: disable processors not supported by CB (like repetition_penalty)
         model.generation_config.max_new_tokens = 32
@@ -1897,7 +1901,7 @@ class ContinuousBatchingTensorParallelTest(unittest.TestCase):
         """Spawn `_tp_continuous_batching_worker` on `tp_size` NCCL processes with sensible defaults."""
         defaults = {
             "model_id": "TinyLlama/TinyLlama-1.1B-Chat-v1.0",
-            "attn_implementation": "sdpa",
+            "attn_implementation": "paged|sdpa",
             "max_new_tokens": max_new_tokens,
             "do_sample": False,
             "seed": 42,
@@ -1943,7 +1947,7 @@ class ContinuousBatchingTensorParallelTest(unittest.TestCase):
         it to non-driver ranks via `tp_broadcast_object`, and generation stops well before `max_new_tokens`."""
         _init_distributed(tp=self.tp_size, backend="nccl")(_tp_cancellation_worker)(
             model_id="TinyLlama/TinyLlama-1.1B-Chat-v1.0",
-            attn_implementation="sdpa",
+            attn_implementation="paged|sdpa",
         )
 
     @slow
@@ -1952,7 +1956,7 @@ class ContinuousBatchingTensorParallelTest(unittest.TestCase):
         it to non-driver ranks via `tp_broadcast_object`, and generation stops well before `max_new_tokens`."""
         _init_distributed(tp=self.tp_size, backend="nccl")(_tp_cancellation_worker)(
             model_id="TinyLlama/TinyLlama-1.1B-Chat-v1.0",
-            attn_implementation="sdpa",
+            attn_implementation="paged|sdpa",
             use_async_batching=True,
             use_cuda_graph=True,
         )
