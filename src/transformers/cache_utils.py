@@ -1518,6 +1518,13 @@ class Cache:
 
         return self.layers[layer_idx].get_mask_sizes(query_length)
 
+    def get_query_offset(self, layer_idx: int) -> int:
+        """Returns the current offset of the query for the given `layer_idx`. It's always equal to the cache length, i.e.
+        `get_seq_length(layer_idx)`, except for MTP layers.
+        """
+        # It's simply equal to the length of the past states, except in very specific cases, see `MtpCache`
+        return self.get_seq_length(layer_idx=layer_idx)
+
     def reset(self):
         """Recursively reset all layers tensors"""
         for layer_idx in range(len(self.layers)):
@@ -2015,10 +2022,10 @@ SlidingWindowCache = StaticCache
 
 
 class MtpCache(DynamicCache):
-    def get_seq_length(self, layer_idx=0):
+    def get_query_offset(self, layer_idx=0):
         # Queries of MTP depth k run k+1 tokens ahead of the main_model, i.e. they have an offset of k+1
         mtp_offset = layer_idx + 1
-        return super().get_seq_length(layer_idx) + mtp_offset
+        return super().get_query_offset(layer_idx) + mtp_offset
 
     def get_mask_sizes(self, query_length: int, layer_idx: int) -> tuple[int, int]:
         mtp_offset = layer_idx + 1

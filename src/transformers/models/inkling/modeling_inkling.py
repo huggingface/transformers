@@ -238,7 +238,7 @@ class InklingAttention(nn.Module):
         if past_key_values is not None:
             # Important to get those values before updating the cache to be correct
             kv_length, kv_offset = past_key_values.get_mask_sizes(q_length, self.layer_idx)
-            q_offset = past_key_values.get_seq_length(self.layer_idx)
+            q_offset = past_key_values.get_query_offset(self.layer_idx)
             # Update the cache
             key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
         else:

@@ -833,7 +833,7 @@ def _preprocess_mask_arguments(
     q_length = inputs_embeds.shape[1]
     # If using a cache, it can give all information about mask sizes based on seen tokens
     if past_key_values is not None:
-        q_offset = past_key_values.get_seq_length(layer_idx)
+        q_offset = past_key_values.get_query_offset(layer_idx)
         # To avoid graph breaks, StaticLayer returns a tensor instead of an int -> this has no impact on the ops, but
         # we need the correct device
         q_offset = q_offset.to(inputs_embeds.device) if isinstance(q_offset, torch.Tensor) else q_offset
