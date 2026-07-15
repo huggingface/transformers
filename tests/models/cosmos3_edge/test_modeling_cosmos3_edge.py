@@ -288,7 +288,7 @@ class Cosmos3EdgeModelTest(VLMModelTest, unittest.TestCase):
 
 @slow
 @require_torch_accelerator
-@unittest.skip(reason="Enable after release and fill the expected outputs")
+@unittest.skip(reason="Enable after release")
 class Cosmos3EdgeForConditionalGenerationIntegrationTest(unittest.TestCase):
     model_id = "nvidia/Cosmos3-Edge"
 
@@ -324,7 +324,10 @@ class Cosmos3EdgeForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         output = model.generate(**inputs, max_new_tokens=40, do_sample=False)
         generated_text = self.processor.decode(output[0, inputs.input_ids.shape[1] :], skip_special_tokens=True)
-        expected_text = ""  # TODO: Fill after release.
+        expected_text = (
+            "The main subject of this image is a large white flower, likely a daffodil, positioned centrally in the "
+            "foreground."
+        )
         self.assertEqual(generated_text, expected_text)
 
     def test_video_generation(self):
@@ -354,5 +357,8 @@ class Cosmos3EdgeForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         output = model.generate(**inputs, max_new_tokens=40, do_sample=False)
         generated_text = self.processor.decode(output[0, inputs.input_ids.shape[1] :], skip_special_tokens=True)
-        expected_text = ""  # TODO: Fill after release.
+        expected_text = (
+            "A man wearing a white t-shirt and black pants holds a baby wrapped in a white towel. The baby makes "
+            "small movements, and the man rubs its head and back while smiling."
+        )
         self.assertEqual(generated_text, expected_text)
