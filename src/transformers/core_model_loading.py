@@ -128,7 +128,7 @@ class Chunk(ConversionOps):
         tensor = tensors[0] if isinstance(tensors, list) else tensors
         targets = target_patterns
         sizes = len(targets)
-        chunks = torch.chunk(tensor, sizes, dim=self.dim)
+        chunks = tuple(chunk.contiguous() for chunk in torch.chunk(tensor, sizes, dim=self.dim))
         if len(input_dict) > 1 or len(target_patterns) == 1 or len(chunks) != len(target_patterns):
             raise ValueError(f"Failed to convert {kwargs.get('full_layer_name')}")
         return dict(zip(targets, chunks))
