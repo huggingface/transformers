@@ -117,6 +117,7 @@ from transformers.utils import (
     SAFE_WEIGHTS_NAME,
     ModelOutput,
     is_kernels_available,
+    is_rocm_platform,
     is_torch_bf16_available_on_device,
     is_torch_fp16_available_on_device,
 )
@@ -3433,6 +3434,10 @@ class ModelTesterMixin(ExportTesterMixin):
     @slow
     @is_flaky()
     def test_flash_attn_kernels_inference_equivalence(self):
+        if is_rocm_platform():
+            self.skipTest(
+                "No hub flash-attn kernel (flash-attn3) builds for ROCm gfx1250; skipping to avoid the long kernel-fetch hang."
+            )
         self.flash_attn_inference_equivalence(attn_implementation="kernels-community/flash-attn3", padding_side="left")
 
     @require_torch_mps
