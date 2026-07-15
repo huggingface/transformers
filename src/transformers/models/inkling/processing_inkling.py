@@ -44,8 +44,8 @@ class InklingProcessor(ProcessorMixin):
         image_processor=None,
         tokenizer=None,
         chat_template=None,
-        image_token="<|unused_200007|>",
-        audio_token="<|unused_200021|>",
+        image_token="<|unused_200054|>",
+        audio_token="<|unused_200053|>",
         image_bos_token="<|content_image|>",
         audio_bos_token="<|content_audio_input|>",
         num_dmel_bins=16,
@@ -54,9 +54,9 @@ class InklingProcessor(ProcessorMixin):
         **kwargs,
     ):
         r"""
-        image_token (`str`, *optional*, defaults to `"<|unused_200007|>"`):
+        image_token (`str`, *optional*, defaults to `"<|unused_200054|>"`):
             Placeholder token for each image soft-token slot (replaced by image features).
-        audio_token (`str`, *optional*, defaults to `"<|unused_200021|>"`):
+        audio_token (`str`, *optional*, defaults to `"<|unused_200053|>"`):
             Placeholder token for each audio soft-token slot (replaced by audio features).
         image_bos_token (`str`, *optional*, defaults to `"<|content_image|>"`):
             Marker token that begins an image span (kept as an ordinary embedded token).
