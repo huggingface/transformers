@@ -33,7 +33,7 @@ import torch
 
 import transformers.integrations.sonicmoe as sm
 from transformers.integrations.sonicmoe import sonicmoe_experts_forward
-from transformers.testing_utils import require_torch, require_torch_gpu
+from transformers.testing_utils import require_torch, require_torch_gpu, torch_device
 
 
 class _FakeActivationType:
@@ -115,8 +115,8 @@ class SonicMoeLoaderTest(unittest.TestCase):
                 out, _ = sm.load_sonicmoe_kernel().moe_general_routing_inputs(x)
                 return out
 
-            out = run(torch.zeros(3))
-        self.assertTrue(torch.equal(out, torch.ones(3)))
+            out = run(torch.zeros(3, device=torch_device))
+        self.assertTrue(torch.equal(out, torch.ones(3, device=torch_device)))
 
     def test_loader_is_compile_safe_when_warm(self):
         # Warm the loader BEFORE compiling: Dynamo then executes the opaque loader node's
@@ -133,8 +133,8 @@ class SonicMoeLoaderTest(unittest.TestCase):
                 out, _ = sm.load_sonicmoe_kernel().moe_general_routing_inputs(x)
                 return out
 
-            out = run(torch.zeros(3))
-        self.assertTrue(torch.equal(out, torch.ones(3)))
+            out = run(torch.zeros(3, device=torch_device))
+        self.assertTrue(torch.equal(out, torch.ones(3, device=torch_device)))
 
 
 def _make_experts(
@@ -147,7 +147,7 @@ def _make_experts(
     is_concatenated=True,
     hidden_act="silu",
     dtype=torch.bfloat16,
-    device="cuda",
+    device=torch_device,
 ):
     if is_transposed:
         gate_up = torch.randn(num_experts, hidden, 2 * inter, dtype=dtype, device=device)
@@ -220,11 +220,11 @@ class SonicMoeExpertsForwardTest(unittest.TestCase):
     def _run(self, experts, *, top_k_index=None, top_k_weights=None, num_tokens=3, top_k=2):
         # gate_up_proj is (E, H, 2I) when transposed else (E, 2I, H) — hidden is axis 1 or 2 accordingly.
         hidden = experts.gate_up_proj.shape[1] if experts.is_transposed else experts.gate_up_proj.shape[2]
-        hidden_states = torch.randn(num_tokens, hidden, dtype=torch.bfloat16, device="cuda")
+        hidden_states = torch.randn(num_tokens, hidden, dtype=torch.bfloat16, device=torch_device)
         if top_k_index is None:
-            top_k_index = torch.randint(0, experts.num_experts, (num_tokens, top_k), device="cuda")
+            top_k_index = torch.randint(0, experts.num_experts, (num_tokens, top_k), device=torch_device)
         if top_k_weights is None:
-            top_k_weights = torch.rand(top_k_index.shape, dtype=torch.bfloat16, device="cuda")
+            top_k_weights = torch.rand(top_k_index.shape, dtype=torch.bfloat16, device=torch_device)
         with self._mocked_kernel() as captured:
             out = sonicmoe_experts_forward(experts, hidden_states, top_k_index, top_k_weights)
         return out, captured, hidden_states, top_k_index, top_k_weights
@@ -238,7 +238,7 @@ class SonicMoeExpertsForwardTest(unittest.TestCase):
         self.assertEqual(out.dtype, hidden_states.dtype)
 
         # token_idx is int32 and repeats each token index top_k times, ascending: [0,0,1,1,2,2].
-        expected_token_idx = torch.arange(3, device="cuda").repeat_interleave(2)
+        expected_token_idx = torch.arange(3, device=torch_device).repeat_interleave(2)
         self.assertEqual(captured["token_idx"].dtype, torch.int32)
         self.assertTrue(torch.equal(captured["token_idx"], expected_token_idx.int()))
 
@@ -263,7 +263,7 @@ class SonicMoeExpertsForwardTest(unittest.TestCase):
         # EP sentinels (expert_ids >= num_experts) must reach the kernel unclamped — unlike the eager
         # path, sonic-moe drops them in its metadata stage. Regression guard against a stray clamp.
         experts = _make_experts(num_experts=4, hidden=8, inter=16)
-        top_k_index = torch.tensor([[0, 4], [1, 4], [2, 4]], device="cuda")  # 4 == num_experts -> sentinel
+        top_k_index = torch.tensor([[0, 4], [1, 4], [2, 4]], device=torch_device)  # 4 == num_experts -> sentinel
         _, captured, _, _, _ = self._run(experts, top_k_index=top_k_index)
         self.assertTrue(torch.equal(captured["expert_ids"], top_k_index.reshape(-1).int()))
         self.assertEqual(int(captured["expert_ids"].max()), 4)

@@ -40,7 +40,7 @@ from transformers.integrations.finegrained_fp8 import (
     fp8_batched_mm_experts_forward,
     fp8_grouped_mm_experts_forward,
 )
-from transformers.testing_utils import require_torch, require_torch_gpu
+from transformers.testing_utils import require_torch, require_torch_gpu, torch_device
 
 
 def _add_one(x, *args, **kwargs):
@@ -131,7 +131,7 @@ def _make_fp8_experts(
     activation_scheme="dynamic",
     block_size=(128, 128),
     dtype=torch.float8_e4m3fn,
-    device="cuda",
+    device=torch_device,
 ):
     """A minimal stand-in for `FP8Experts` carrying exactly what the experts forwards read.
 
@@ -234,9 +234,9 @@ class FinegrainedFp8ForwardTest(unittest.TestCase):
     # ── finegrained_fp8_linear ────────────────────────────────────────────────────────────────────
 
     def test_linear_marshals_args_and_defaults_output_dtype(self):
-        input = torch.randn(3, 8, dtype=torch.bfloat16, device="cuda")
-        weight = torch.randn(16, 8, device="cuda").to(torch.float8_e4m3fn)
-        weight_scale_inv = torch.randn(1, 1, dtype=torch.float32, device="cuda")
+        input = torch.randn(3, 8, dtype=torch.bfloat16, device=torch_device)
+        weight = torch.randn(16, 8, device=torch_device).to(torch.float8_e4m3fn)
+        weight_scale_inv = torch.randn(1, 1, dtype=torch.float32, device=torch_device)
         block_size = [128, 128]
         with self._mocked_kernel() as calls:
             out = finegrained_fp8_linear(input, weight, weight_scale_inv, block_size)
@@ -252,13 +252,13 @@ class FinegrainedFp8ForwardTest(unittest.TestCase):
         # No bias -> the kernel output is returned untouched.
         self.assertEqual(out.shape, (3, 16))
         self.assertEqual(out.dtype, torch.bfloat16)
-        self.assertTrue(torch.equal(out, torch.full((3, 16), 3.0, dtype=torch.bfloat16, device="cuda")))
+        self.assertTrue(torch.equal(out, torch.full((3, 16), 3.0, dtype=torch.bfloat16, device=torch_device)))
 
     def test_linear_forwards_explicit_output_dtype_and_activation_scale(self):
-        input = torch.randn(3, 8, dtype=torch.bfloat16, device="cuda")
-        weight = torch.randn(16, 8, device="cuda").to(torch.float8_e4m3fn)
-        weight_scale_inv = torch.randn(1, 1, dtype=torch.float32, device="cuda")
-        activation_scale = torch.tensor(2.0, device="cuda")
+        input = torch.randn(3, 8, dtype=torch.bfloat16, device=torch_device)
+        weight = torch.randn(16, 8, device=torch_device).to(torch.float8_e4m3fn)
+        weight_scale_inv = torch.randn(1, 1, dtype=torch.float32, device=torch_device)
+        activation_scale = torch.tensor(2.0, device=torch_device)
         with self._mocked_kernel() as calls:
             out = finegrained_fp8_linear(
                 input,
@@ -275,22 +275,22 @@ class FinegrainedFp8ForwardTest(unittest.TestCase):
         self.assertEqual(out.dtype, torch.float32)
 
     def test_linear_adds_bias_in_place(self):
-        input = torch.randn(3, 8, dtype=torch.bfloat16, device="cuda")
-        weight = torch.randn(16, 8, device="cuda").to(torch.float8_e4m3fn)
-        weight_scale_inv = torch.randn(1, 1, dtype=torch.float32, device="cuda")
-        bias = torch.randn(16, dtype=torch.bfloat16, device="cuda")
+        input = torch.randn(3, 8, dtype=torch.bfloat16, device=torch_device)
+        weight = torch.randn(16, 8, device=torch_device).to(torch.float8_e4m3fn)
+        weight_scale_inv = torch.randn(1, 1, dtype=torch.float32, device=torch_device)
+        bias = torch.randn(16, dtype=torch.bfloat16, device=torch_device)
         with self._mocked_kernel():
             out = finegrained_fp8_linear(input, weight, weight_scale_inv, [128, 128], bias=bias)
         # The kernel returned a 3.0-filled (3, 16) tensor; bias is broadcast-added onto it.
-        self.assertTrue(torch.equal(out, torch.full((3, 16), 3.0, dtype=torch.bfloat16, device="cuda") + bias))
+        self.assertTrue(torch.equal(out, torch.full((3, 16), 3.0, dtype=torch.bfloat16, device=torch_device) + bias))
 
     # ── fp8_batched_mm_experts_forward ──────────────────────────────────────────────────────────────
 
     def test_batched_mm_kernel_inputs_and_output(self):
         experts = _make_fp8_experts(num_experts=4, hidden=8, inter=16)
-        hidden_states = torch.randn(3, 8, dtype=torch.bfloat16, device="cuda")
-        top_k_index = torch.randint(0, 4, (3, 2), device="cuda")
-        top_k_weights = torch.rand(3, 2, dtype=torch.bfloat16, device="cuda")
+        hidden_states = torch.randn(3, 8, dtype=torch.bfloat16, device=torch_device)
+        top_k_index = torch.randint(0, 4, (3, 2), device=torch_device)
+        top_k_weights = torch.rand(3, 2, dtype=torch.bfloat16, device=torch_device)
         with self._mocked_kernel() as calls:
             out = fp8_batched_mm_experts_forward(experts, hidden_states, top_k_index, top_k_weights)
 
@@ -318,9 +318,9 @@ class FinegrainedFp8ForwardTest(unittest.TestCase):
 
     def test_batched_mm_non_gated_uses_up_proj_and_activation(self):
         experts = _make_fp8_experts(num_experts=4, hidden=8, inter=16, has_gate=False)
-        hidden_states = torch.randn(3, 8, dtype=torch.bfloat16, device="cuda")
-        top_k_index = torch.randint(0, 4, (3, 2), device="cuda")
-        top_k_weights = torch.rand(3, 2, dtype=torch.bfloat16, device="cuda")
+        hidden_states = torch.randn(3, 8, dtype=torch.bfloat16, device=torch_device)
+        top_k_index = torch.randint(0, 4, (3, 2), device=torch_device)
+        top_k_weights = torch.rand(3, 2, dtype=torch.bfloat16, device=torch_device)
         with self._mocked_kernel() as calls:
             out = fp8_batched_mm_experts_forward(experts, hidden_states, top_k_index, top_k_weights)
         up, down = calls["batched_matmul"]
@@ -335,9 +335,9 @@ class FinegrainedFp8ForwardTest(unittest.TestCase):
         # EP sentinels (expert_ids >= num_experts) reach the kernel unclamped; the post-mask zeroes the
         # matching output rows before the per-token reduction (the kernel leaves them uninitialized).
         experts = _make_fp8_experts(num_experts=4, hidden=8, inter=16)
-        hidden_states = torch.randn(3, 8, dtype=torch.bfloat16, device="cuda")
-        top_k_index = torch.tensor([[0, 4], [1, 4], [2, 4]], device="cuda")  # 4 == num_experts -> sentinel
-        top_k_weights = torch.rand(3, 2, dtype=torch.bfloat16, device="cuda")
+        hidden_states = torch.randn(3, 8, dtype=torch.bfloat16, device=torch_device)
+        top_k_index = torch.tensor([[0, 4], [1, 4], [2, 4]], device=torch_device)  # 4 == num_experts -> sentinel
+        top_k_weights = torch.rand(3, 2, dtype=torch.bfloat16, device=torch_device)
         with self._mocked_kernel() as calls:
             out = fp8_batched_mm_experts_forward(experts, hidden_states, top_k_index, top_k_weights)
         self.assertTrue(torch.equal(calls["batched_matmul"][0]["expert_ids"], top_k_index.reshape(-1)))
@@ -351,9 +351,9 @@ class FinegrainedFp8ForwardTest(unittest.TestCase):
         # Static activation quant needs a per-tensor activation scale the batched kernel can't consume;
         # this guards a genuine unsupported-config path, not a trivial type/device check.
         experts = _make_fp8_experts(activation_scheme="static")
-        hidden_states = torch.randn(3, 8, dtype=torch.bfloat16, device="cuda")
-        top_k_index = torch.randint(0, 4, (3, 2), device="cuda")
-        top_k_weights = torch.rand(3, 2, dtype=torch.bfloat16, device="cuda")
+        hidden_states = torch.randn(3, 8, dtype=torch.bfloat16, device=torch_device)
+        top_k_index = torch.randint(0, 4, (3, 2), device=torch_device)
+        top_k_weights = torch.rand(3, 2, dtype=torch.bfloat16, device=torch_device)
         with self._mocked_kernel(), self.assertRaisesRegex(NotImplementedError, "activation_scheme='static'"):
             fp8_batched_mm_experts_forward(experts, hidden_states, top_k_index, top_k_weights)
 
@@ -361,9 +361,9 @@ class FinegrainedFp8ForwardTest(unittest.TestCase):
 
     def test_grouped_mm_kernel_inputs_and_output(self):
         experts = _make_fp8_experts(num_experts=4, hidden=8, inter=16)
-        hidden_states = torch.randn(3, 8, dtype=torch.bfloat16, device="cuda")
-        top_k_index = torch.randint(0, 4, (3, 2), device="cuda")
-        top_k_weights = torch.rand(3, 2, dtype=torch.bfloat16, device="cuda")
+        hidden_states = torch.randn(3, 8, dtype=torch.bfloat16, device=torch_device)
+        top_k_index = torch.randint(0, 4, (3, 2), device=torch_device)
+        top_k_weights = torch.rand(3, 2, dtype=torch.bfloat16, device=torch_device)
         with self._mocked_kernel() as calls:
             out = fp8_grouped_mm_experts_forward(experts, hidden_states, top_k_index, top_k_weights)
 
@@ -398,23 +398,23 @@ class FinegrainedFp8ForwardTest(unittest.TestCase):
         # Sentinels are left unclamped so the sort pushes them to the tail and histc(max=num_experts-1)
         # drops them from tokens_per_expert -> no wasted GEMM rows; the post-mask zeroes their output.
         experts = _make_fp8_experts(num_experts=4, hidden=8, inter=16)
-        hidden_states = torch.randn(3, 8, dtype=torch.bfloat16, device="cuda")
-        top_k_index = torch.tensor([[0, 4], [1, 4], [2, 4]], device="cuda")  # three sentinels (== num_experts)
-        top_k_weights = torch.rand(3, 2, dtype=torch.bfloat16, device="cuda")
+        hidden_states = torch.randn(3, 8, dtype=torch.bfloat16, device=torch_device)
+        top_k_index = torch.tensor([[0, 4], [1, 4], [2, 4]], device=torch_device)  # three sentinels (== num_experts)
+        top_k_weights = torch.rand(3, 2, dtype=torch.bfloat16, device=torch_device)
         with self._mocked_kernel() as calls:
             out = fp8_grouped_mm_experts_forward(experts, hidden_states, top_k_index, top_k_weights)
         tpe = calls["grouped_matmul"][0]["tokens_per_expert"]
         # Only experts 0,1,2 got one token each; the 3 sentinels are absent from the histogram.
-        self.assertTrue(torch.equal(tpe, torch.tensor([1.0, 1.0, 1.0, 0.0], device="cuda")))
+        self.assertTrue(torch.equal(tpe, torch.tensor([1.0, 1.0, 1.0, 0.0], device=torch_device)))
         self.assertEqual(int(tpe.sum()), 3)
         expected = self._expected_experts_output(hidden_states, top_k_index, top_k_weights, experts.num_experts)
         self.assertTrue(torch.equal(out, expected))
 
     def test_grouped_mm_rejects_static_activation_scheme(self):
         experts = _make_fp8_experts(activation_scheme="static")
-        hidden_states = torch.randn(3, 8, dtype=torch.bfloat16, device="cuda")
-        top_k_index = torch.randint(0, 4, (3, 2), device="cuda")
-        top_k_weights = torch.rand(3, 2, dtype=torch.bfloat16, device="cuda")
+        hidden_states = torch.randn(3, 8, dtype=torch.bfloat16, device=torch_device)
+        top_k_index = torch.randint(0, 4, (3, 2), device=torch_device)
+        top_k_weights = torch.rand(3, 2, dtype=torch.bfloat16, device=torch_device)
         with self._mocked_kernel(), self.assertRaisesRegex(NotImplementedError, "activation_scheme='static'"):
             fp8_grouped_mm_experts_forward(experts, hidden_states, top_k_index, top_k_weights)
 

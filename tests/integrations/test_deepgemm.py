@@ -34,6 +34,8 @@ the actual silicon.
 """
 
 import contextlib
+import os
+import tempfile
 import types
 import unittest
 from unittest import mock
@@ -47,7 +49,7 @@ from transformers.integrations.deepgemm import (
     deepgemm_fp8_fp4_linear,
     deepgemm_fp8_fp4_megamoe_experts_forward,
 )
-from transformers.testing_utils import require_torch, require_torch_gpu
+from transformers.testing_utils import require_torch, require_torch_gpu, torch_device
 
 
 def _add_one(x, *args, **kwargs):
@@ -90,18 +92,27 @@ class DeepGemmLoaderTest(unittest.TestCase):
         kernels_available=True,
         cuda_available=True,
         capability=(9, 0),
-        cuda_home="/fake/cuda",
+        toolkit_present=True,
         nvcc_present=True,
         nvcc_version=(12, 9),
         kernel=_FakeDeepGemmKernel,
     ):
         stack = contextlib.ExitStack()
+        # a REAL fake toolkit on disk (bin/nvcc touched iff nvcc_present) — faking the
+        # filesystem state instead of file APIs keeps global machinery untouched
+        # (patching `os.path.isfile` corrupts e.g. setuptools' distutils import shim
+        # under torch.compile).
+        cuda_home = None
+        if toolkit_present:
+            cuda_home = stack.enter_context(tempfile.TemporaryDirectory())
+            if nvcc_present:
+                os.makedirs(os.path.join(cuda_home, "bin"), exist_ok=True)
+                open(os.path.join(cuda_home, "bin", "nvcc"), "w").close()
         stack.enter_context(mock.patch.object(dg, "is_kernels_available", return_value=kernels_available))
         stack.enter_context(mock.patch.object(torch.cuda, "is_available", return_value=cuda_available))
         stack.enter_context(mock.patch.object(torch.cuda, "get_device_capability", return_value=capability))
         stack.enter_context(mock.patch.object(dg, "_get_cuda_home", return_value=cuda_home))
         stack.enter_context(mock.patch.object(dg, "_get_nvcc_version", return_value=nvcc_version))
-        stack.enter_context(mock.patch("transformers.integrations.deepgemm.os.path.isfile", return_value=nvcc_present))
         stack.enter_context(mock.patch.object(dg, "lazy_load_kernel", return_value=kernel))
         return stack
 
@@ -136,7 +147,7 @@ class DeepGemmLoaderTest(unittest.TestCase):
             dg.load_deepgemm_kernel(requires_sm100=True)
 
     def test_raises_without_cuda_toolkit(self):
-        with self._env(cuda_home=None), self.assertRaisesRegex(ImportError, "needs a CUDA toolkit"):
+        with self._env(toolkit_present=False), self.assertRaisesRegex(ImportError, "needs a CUDA toolkit"):
             dg.load_deepgemm_kernel()
 
     def test_raises_without_nvcc(self):
@@ -170,8 +181,8 @@ class DeepGemmLoaderTest(unittest.TestCase):
             def run(x):
                 return dg.load_deepgemm_kernel().per_token_cast_to_fp8(x)
 
-        out = run(torch.zeros(3))
-        self.assertTrue(torch.equal(out, torch.ones(3)))
+            out = run(torch.zeros(3, device=torch_device))
+            self.assertTrue(torch.equal(out, torch.ones(3, device=torch_device)))
 
     def test_loader_is_compile_safe_when_warm(self):
         # Warm the loader BEFORE compiling: Dynamo then executes the opaque loader node's
@@ -187,8 +198,8 @@ class DeepGemmLoaderTest(unittest.TestCase):
             def run(x):
                 return dg.load_deepgemm_kernel().per_token_cast_to_fp8(x)
 
-        out = run(torch.zeros(3))
-        self.assertTrue(torch.equal(out, torch.ones(3)))
+            out = run(torch.zeros(3, device=torch_device))
+            self.assertTrue(torch.equal(out, torch.ones(3, device=torch_device)))
 
 
 # ── Capturing fake DeepGEMM bundle ─────────────────────────────────────────────
@@ -261,10 +272,10 @@ def _make_bundle(captured):
         }
         buf = types.SimpleNamespace(
             num_max_tokens_per_rank=num_max_tokens_per_rank,
-            x=torch.zeros(num_max_tokens_per_rank, hidden, dtype=torch.float8_e4m3fn, device="cuda"),
-            x_sf=torch.zeros(num_max_tokens_per_rank, -(-hidden // 32), dtype=torch.float32, device="cuda"),
-            topk_idx=torch.zeros(num_max_tokens_per_rank, num_topk, dtype=torch.long, device="cuda"),
-            topk_weights=torch.zeros(num_max_tokens_per_rank, num_topk, dtype=torch.float32, device="cuda"),
+            x=torch.zeros(num_max_tokens_per_rank, hidden, dtype=torch.float8_e4m3fn, device=torch_device),
+            x_sf=torch.zeros(num_max_tokens_per_rank, -(-hidden // 32), dtype=torch.float32, device=torch_device),
+            topk_idx=torch.zeros(num_max_tokens_per_rank, num_topk, dtype=torch.long, device=torch_device),
+            topk_weights=torch.zeros(num_max_tokens_per_rank, num_topk, dtype=torch.float32, device=torch_device),
         )
         captured["symm_buffer"] = buf
         return buf
@@ -307,7 +318,7 @@ def _make_experts(
     activation_scheme="dynamic",
     block_size=(128, 128),
     fp8_experts=True,
-    device="cuda",
+    device=torch_device,
 ):
     """A minimal stand-in for an FP8/BF16 experts module carrying exactly the attributes the forwards
     read. Weights are `(E, 2I, H)` (non-transposed) or `(E, H, 2I)` (transposed) for gate_up and
@@ -376,9 +387,9 @@ class DeepGemmForwardTest(unittest.TestCase):
     def test_linear_fp8_sm90_kernel_inputs(self):
         # FP8 weights + float32 block SF on SM90: recipe stays None, SFs are handed over row-major
         # float32 (SM90 dispatch transforms SFA itself and only checks SFB — see `_coerce_sf_for_kernel`).
-        input = torch.randn(2, 3, 128, dtype=torch.bfloat16, device="cuda")  # 3D -> flatten to (6, 128)
-        weight = torch.randn(256, 128, device="cuda").to(torch.float8_e4m3fn)
-        weight_scale = torch.ones(2, 1, dtype=torch.float32, device="cuda")  # (N/128, K/128)
+        input = torch.randn(2, 3, 128, dtype=torch.bfloat16, device=torch_device)  # 3D -> flatten to (6, 128)
+        weight = torch.randn(256, 128, device=torch_device).to(torch.float8_e4m3fn)
+        weight_scale = torch.ones(2, 1, dtype=torch.float32, device=torch_device)  # (N/128, K/128)
         with self._bundle(is_sm100=False) as captured:
             out = deepgemm_fp8_fp4_linear(input, weight, weight_scale, block_size=(128, 128))
 
@@ -403,9 +414,11 @@ class DeepGemmForwardTest(unittest.TestCase):
     def test_linear_fp4_sm100_packs_ue8m0_scales(self):
         # FP4 weights (int8): SM100-only. Scales arrive UE8M0 and must reach the kernel packed into
         # int32 (4 K-bytes -> 1 int32) with the `(1, 1, gran_k=32)` recipe.
-        input = torch.randn(4, 128, dtype=torch.bfloat16, device="cuda")
-        weight = torch.randint(-8, 8, (256, 64), dtype=torch.int8, device="cuda")
-        weight_scale = torch.ones(256, 4, dtype=torch.float32, device="cuda").to(torch.float8_e8m0fnu)  # (N, K/32)
+        input = torch.randn(4, 128, dtype=torch.bfloat16, device=torch_device)
+        weight = torch.randint(-8, 8, (256, 64), dtype=torch.int8, device=torch_device)
+        weight_scale = torch.ones(256, 4, dtype=torch.float32, device=torch_device).to(
+            torch.float8_e8m0fnu
+        )  # (N, K/32)
         with self._bundle(is_sm100=True) as captured:
             out = deepgemm_fp8_fp4_linear(input, weight, weight_scale)
 
@@ -423,10 +436,10 @@ class DeepGemmForwardTest(unittest.TestCase):
         self.assertEqual(out.shape, (4, 256))
 
     def test_linear_adds_bias_and_honours_output_dtype(self):
-        input = torch.randn(4, 128, dtype=torch.bfloat16, device="cuda")
-        weight = torch.randn(16, 128, device="cuda").to(torch.float8_e4m3fn)
-        weight_scale = torch.ones(1, 1, dtype=torch.float32, device="cuda")
-        bias = torch.randn(16, dtype=torch.float32, device="cuda")
+        input = torch.randn(4, 128, dtype=torch.bfloat16, device=torch_device)
+        weight = torch.randn(16, 128, device=torch_device).to(torch.float8_e4m3fn)
+        weight_scale = torch.ones(1, 1, dtype=torch.float32, device=torch_device)
+        bias = torch.randn(16, dtype=torch.float32, device=torch_device)
         with self._bundle(is_sm100=False):
             out = deepgemm_fp8_fp4_linear(
                 input, weight, weight_scale, bias=bias, block_size=(128, 128), output_dtype=torch.float32
@@ -439,9 +452,9 @@ class DeepGemmForwardTest(unittest.TestCase):
 
     def _bf16_hidden(self, experts, *, num_tokens=3, top_k=2):
         hidden = experts.gate_up_proj.shape[-1] if experts.is_transposed else experts.gate_up_proj.shape[-1]
-        hidden_states = torch.randn(num_tokens, hidden, dtype=torch.bfloat16, device="cuda")
-        top_k_index = torch.tensor([[0, 1], [1, 2], [0, 3]], device="cuda")[:num_tokens, :top_k]
-        top_k_weights = torch.rand(top_k_index.shape, dtype=torch.bfloat16, device="cuda")
+        hidden_states = torch.randn(num_tokens, hidden, dtype=torch.bfloat16, device=torch_device)
+        top_k_index = torch.tensor([[0, 1], [1, 2], [0, 3]], device=torch_device)[:num_tokens, :top_k]
+        top_k_weights = torch.rand(top_k_index.shape, dtype=torch.bfloat16, device=torch_device)
         return hidden_states, top_k_index, top_k_weights
 
     def test_bf16_experts_kernel_inputs_sm90(self):
@@ -521,18 +534,18 @@ class DeepGemmForwardTest(unittest.TestCase):
 
     def test_bf16_experts_rejects_non_bf16_hidden_states(self):
         experts = _make_experts(weight_dtype=torch.bfloat16, fp8_experts=False)
-        hidden_states = torch.randn(3, 8, dtype=torch.float16, device="cuda")
-        top_k_index = torch.zeros(3, 2, dtype=torch.long, device="cuda")
-        top_k_weights = torch.rand(3, 2, dtype=torch.bfloat16, device="cuda")
+        hidden_states = torch.randn(3, 8, dtype=torch.float16, device=torch_device)
+        top_k_index = torch.zeros(3, 2, dtype=torch.long, device=torch_device)
+        top_k_weights = torch.rand(3, 2, dtype=torch.bfloat16, device=torch_device)
         with self.assertRaisesRegex(ValueError, "requires bfloat16 hidden states"):
             deepgemm_bf16_experts_forward(experts, hidden_states, top_k_index, top_k_weights)
 
     # ── deepgemm_fp8_fp4_experts_forward ───────────────────────────────────────
 
     def _fp8_hidden(self, num_tokens=3, hidden=8, top_k=2):
-        hidden_states = torch.randn(num_tokens, hidden, dtype=torch.bfloat16, device="cuda")
-        top_k_index = torch.tensor([[0, 1], [1, 2], [0, 3]], device="cuda")[:num_tokens, :top_k]
-        top_k_weights = torch.rand(top_k_index.shape, dtype=torch.bfloat16, device="cuda")
+        hidden_states = torch.randn(num_tokens, hidden, dtype=torch.bfloat16, device=torch_device)
+        top_k_index = torch.tensor([[0, 1], [1, 2], [0, 3]], device=torch_device)[:num_tokens, :top_k]
+        top_k_weights = torch.rand(top_k_index.shape, dtype=torch.bfloat16, device=torch_device)
         return hidden_states, top_k_index, top_k_weights
 
     def test_fp8_experts_kernel_inputs_sm90(self):
@@ -585,7 +598,7 @@ class DeepGemmForwardTest(unittest.TestCase):
         # as-is) and for any SF on SM90 (float32 SFs are consumed directly). Checked on the guard itself
         # rather than a full forward — the SM100 UE8M0 path needs realistically wide SFs (last dim
         # divisible by 4 to pack into int32) that a toy expert shape can't provide.
-        f32 = torch.ones(4, 1, device="cuda", dtype=torch.float32)
+        f32 = torch.ones(4, 1, device=torch_device, dtype=torch.float32)
         ue8m0 = f32.to(torch.float8_e8m0fnu)
         with mock.patch.object(dg, "_is_sm100", return_value=True):
             dg._assert_sm100_scales_are_ue8m0(ue8m0)  # no raise
@@ -595,8 +608,10 @@ class DeepGemmForwardTest(unittest.TestCase):
     # ── deepgemm_fp8_fp4_megamoe_experts_forward ───────────────────────────────
 
     def _make_megamoe(self, *, num_experts=4, hidden_dim=64, inter=32, swiglu_limit=None):
-        gate_up = torch.randint(-8, 8, (num_experts, 2 * inter, hidden_dim // 2), dtype=torch.int8, device="cuda")
-        down = torch.randint(-8, 8, (num_experts, hidden_dim, inter // 2), dtype=torch.int8, device="cuda")
+        gate_up = torch.randint(
+            -8, 8, (num_experts, 2 * inter, hidden_dim // 2), dtype=torch.int8, device=torch_device
+        )
+        down = torch.randint(-8, 8, (num_experts, hidden_dim, inter // 2), dtype=torch.int8, device=torch_device)
         return types.SimpleNamespace(
             num_experts=num_experts,
             hidden_dim=hidden_dim,
@@ -604,11 +619,11 @@ class DeepGemmForwardTest(unittest.TestCase):
             gate_up_proj=torch.nn.Parameter(gate_up, requires_grad=False),
             down_proj=torch.nn.Parameter(down, requires_grad=False),
             gate_up_proj_scale_inv=torch.nn.Parameter(
-                torch.ones(num_experts, 2 * inter, hidden_dim // 32, device="cuda").to(torch.float8_e8m0fnu),
+                torch.ones(num_experts, 2 * inter, hidden_dim // 32, device=torch_device).to(torch.float8_e8m0fnu),
                 requires_grad=False,
             ),
             down_proj_scale_inv=torch.nn.Parameter(
-                torch.ones(num_experts, hidden_dim, inter // 32, device="cuda").to(torch.float8_e8m0fnu),
+                torch.ones(num_experts, hidden_dim, inter // 32, device=torch_device).to(torch.float8_e8m0fnu),
                 requires_grad=False,
             ),
             config=types.SimpleNamespace(swiglu_limit=swiglu_limit),
@@ -617,9 +632,9 @@ class DeepGemmForwardTest(unittest.TestCase):
     def test_megamoe_transforms_weights_and_marshals_symm_buffer(self):
         module = self._make_megamoe(num_experts=4, hidden_dim=64, inter=32, swiglu_limit=7.0)
         num_tokens, num_top_k = 3, 2
-        hidden_states = torch.randn(num_tokens, 64, dtype=torch.bfloat16, device="cuda")
-        top_k_index = torch.randint(0, 4, (num_tokens, num_top_k), dtype=torch.long, device="cuda")
-        top_k_weights = torch.rand(num_tokens, num_top_k, dtype=torch.float32, device="cuda")
+        hidden_states = torch.randn(num_tokens, 64, dtype=torch.bfloat16, device=torch_device)
+        top_k_index = torch.randint(0, 4, (num_tokens, num_top_k), dtype=torch.long, device=torch_device)
+        top_k_weights = torch.rand(num_tokens, num_top_k, dtype=torch.float32, device=torch_device)
         pg = types.SimpleNamespace(size=lambda: 2)
 
         with self._bundle(is_sm100=True) as captured:
@@ -667,9 +682,9 @@ class DeepGemmForwardTest(unittest.TestCase):
         self.assertEqual(out.dtype, torch.bfloat16)
 
     def test_megamoe_requires_fp4_weights_and_process_group(self):
-        hidden_states = torch.randn(3, 64, dtype=torch.bfloat16, device="cuda")
-        top_k_index = torch.randint(0, 4, (3, 2), dtype=torch.long, device="cuda")
-        top_k_weights = torch.rand(3, 2, dtype=torch.float32, device="cuda")
+        hidden_states = torch.randn(3, 64, dtype=torch.bfloat16, device=torch_device)
+        top_k_index = torch.randint(0, 4, (3, 2), dtype=torch.long, device=torch_device)
+        top_k_weights = torch.rand(3, 2, dtype=torch.float32, device=torch_device)
 
         # Non-FP4 (non-int8) expert weights are rejected — Mega MoE is FP4-packed only.
         module = self._make_megamoe()
