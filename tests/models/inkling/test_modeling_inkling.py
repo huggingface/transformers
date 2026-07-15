@@ -46,7 +46,6 @@ if is_torch_available():
     import torch
 
     from transformers import (
-        InklingForCausalLM,
         InklingForConditionalGeneration,
         InklingModel,
         InklingTextModel,
@@ -62,7 +61,7 @@ class InklingTextModelTester(CausalLMModelTester):
     if is_torch_available():
         config_class = InklingTextConfig
         base_model_class = InklingTextModel
-        causal_lm_class = InklingForCausalLM
+        causal_lm_class = InklingForConditionalGeneration
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -492,7 +491,7 @@ class InklingIntegrationTest(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        cls.checkpoint_name = "eustlb/dummy-model"
+        cls.checkpoint_name = "hf-internal-testing/tiny-inkling"
         cls.bucket = "hf-internal-testing/tml-integration-tests"
         cls.processor = AutoProcessor.from_pretrained(cls.checkpoint_name)
         cls.model = InklingForConditionalGeneration.from_pretrained(cls.checkpoint_name, device_map=torch_device)
@@ -516,16 +515,15 @@ class InklingIntegrationTest(unittest.TestCase):
             tokenize=True,
             return_dict=True,
             return_tensors="pt",
-        )
+        ).to(self.model.device, dtype=self.model.dtype)
         with torch.no_grad():
-            logits = self.model(**inputs.to(self.model.device)).logits[0, -1].float().cpu()
+            logits = self.model(**inputs).logits[0, -1].float().cpu()
         logprobs = torch.log_softmax(logits, dim=-1)
 
         expected_logprobs = self._load_expected_logprobs(case)
 
         self.assertEqual(tuple(logprobs.shape), tuple(expected_logprobs.shape))
-        self.assertEqual(int(logprobs.argmax()), int(expected_logprobs.argmax()))
-        torch.testing.assert_close(logprobs.exp(), expected_logprobs.exp(), rtol=1e-3, atol=5e-4)
+        torch.testing.assert_close(logprobs.exp(), expected_logprobs.exp(), rtol=1e-3, atol=1e-4)
 
     def test_text_next_token_logprobs(self):
         messages = [{"role": "user", "content": [{"type": "text", "text": "What is the capital of France?"}]}]
