@@ -19,13 +19,14 @@ import unittest
 
 import numpy as np
 from huggingface_hub import download_bucket_files
+from parameterized import parameterized
 from safetensors.torch import load_file
 
 from transformers import AutoProcessor, InklingProcessor, is_torch_available
-from transformers.testing_utils import get_tests_dir, require_vision, slow
+from transformers.testing_utils import get_tests_dir, require_librosa, require_vision, slow
 from transformers.utils import is_vision_available
 
-from ...test_processing_common import ProcessorTesterMixin
+from ...test_processing_common import MODALITY_INPUT_DATA, ProcessorTesterMixin
 
 
 if is_torch_available():
@@ -225,6 +226,20 @@ class InklingProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     @unittest.skip("This test seems to be loading a different video, check for all models and fix")
     def test_apply_chat_template_video_frame_sampling(self):
+        pass
+
+    @require_librosa
+    @parameterized.expand([(1, "np"), (1, "pt"), (2, "np"), (2, "pt")])
+    def test_apply_chat_template_audio(self, batch_size: int, return_tensors: str):
+        if return_tensors == "np":
+            self.skipTest("Inkling audio quantization requires PyTorch tensors")
+        self._test_apply_chat_template(
+            "audio", batch_size, return_tensors, "audio_input_name", "feature_extractor", MODALITY_INPUT_DATA["audio"]
+        )
+
+    @parameterized.expand([(1, "np"), (1, "pt"), (2, "np"), (2, "pt")])
+    @unittest.skip("Inkling packs image patches across the batch instead of keeping one tensor per image")
+    def test_apply_chat_template_image(self, batch_size: int, return_tensors: str):
         pass
 
 
