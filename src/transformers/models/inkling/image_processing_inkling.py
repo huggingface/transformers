@@ -63,7 +63,6 @@ class InklingImageProcessor(TorchvisionBackend):
     image_std = OPENAI_CLIP_STD
     default_to_square = False
     do_convert_rgb = True
-    do_resize = True
     do_rescale = True
     do_normalize = True
     size = {"height": 40, "width": 40}
