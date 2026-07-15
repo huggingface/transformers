@@ -25,6 +25,7 @@ import copy
 import torch
 from huggingface_hub.dataclasses import strict
 from torch import nn
+from torch.nn import functional as F
 
 from ... import initialization as init
 from ...cache_utils import Cache, DynamicCache
@@ -35,6 +36,7 @@ from ...utils import TransformersKwargs, auto_docstring, logging
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..granite_swa.modeling_granite_swa import GraniteSWAAttention
+from ..granitemoe.modeling_granitemoe import GraniteMoeMoE, GraniteMoeTopKRouter
 from ..granitemoeshared.configuration_granitemoeshared import GraniteMoeSharedConfig
 from ..granitemoeshared.modeling_granitemoeshared import (
     GraniteMoeSharedDecoderLayer,
@@ -125,6 +127,26 @@ class GraniteMoeSWAConfig(GraniteMoeSharedConfig):
         # Per-layer RoPE base theta (0 => NoPE). Default: global rope_theta
         if self.layer_rope_theta is None:
             self.layer_rope_theta = [self.rope_parameters["rope_theta"]] * self.num_hidden_layers
+
+
+class GraniteMoeSWATopKRouter(GraniteMoeTopKRouter):
+    def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        # Identical to GraniteMoeTopKRouter, but returns (router_logits, router_scores, router_indices)
+        # as expected by 'base_model_ep_plan' from `ep_router``. Enables native HF EP.
+        router_logits = F.linear(hidden_states, self.weight).float()  # (num_tokens, num_experts)
+        top_k_logits, top_k_index = router_logits.topk(self.top_k, dim=-1)  # (num_tokens, top_k)
+        top_k_weights = torch.softmax(top_k_logits, dim=-1).type_as(hidden_states)  # (num_tokens, top_k)
+        return router_logits, top_k_weights, top_k_index
+
+
+class GraniteMoeSWAMoE(GraniteMoeMoE):
+    def forward(self, layer_input: torch.Tensor) -> torch.Tensor:
+        bsz, length, emb_size = layer_input.size()
+        hidden_states = layer_input.reshape(-1, emb_size)
+        # Router now returns (router_logits, top_k_weights, top_k_index).
+        _, top_k_weights, top_k_index = self.router(hidden_states)
+        layer_output = self.experts(hidden_states, top_k_index, top_k_weights)
+        return layer_output.view(bsz, length, self.input_size)
 
 
 class GraniteMoeSWAAttention(GraniteSWAAttention):

@@ -107,10 +107,11 @@ def eager_attention_forward(
         attn_weights = attn_weights + attention_mask
 
     # Sink scaling: sigmoid(logsumexp(logits) - sink), equivalent to an extra softmax-denominator logit.
+    # We compute it this way, with forced fp32 precision, for performance/stability.
     lse = torch.logsumexp(attn_weights, dim=-1)  # (batch, num_heads, q_len)
-    sink_scale = torch.sigmoid((lse - module.sinks.view(1, -1, 1)).to(torch.float32))
+    sink_scale = (lse - module.sinks.view(1, -1, 1)).to(torch.float32).sigmoid()  # Force sink scaling to fp32
 
-    attn_weights = F.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
+    attn_weights = F.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)  # Force softmax to fp32
     attn_weights = F.dropout(attn_weights, p=dropout, training=module.training)
     attn_output = torch.matmul(attn_weights, value_states)
     attn_output = attn_output * sink_scale.unsqueeze(-1).to(attn_output.dtype)
