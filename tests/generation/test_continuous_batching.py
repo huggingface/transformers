@@ -885,10 +885,9 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
         self, attn_implementation: str, supports_flash_attn: bool, expect_flash_after_switch: bool
     ) -> None:
         """Continuous batching switches to a paged (ideally flash) attention and restores the original on stop."""
-        flash_available = (
-            is_flash_attn_2_available(kernels_fallback_ok=True) or
-            is_flash_attn_3_available(kernels_fallback_ok=True)
-        )
+        flash_available = is_flash_attn_2_available(kernels_fallback_ok=True)
+        flash_available |= is_flash_attn_3_available(kernels_fallback_ok=True)
+
         if expect_flash_after_switch and not flash_available:
             self.skipTest("Flash attention is unavailable, cannot test the auto-switch to flash.")
 
