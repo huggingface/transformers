@@ -551,8 +551,8 @@ def deepgemm_fp8_fp4_linear(
     weight_scale_inv: torch.Tensor,
     bias: torch.Tensor | None = None,
     block_size: tuple[int, int] | None = None,
-    activation_scale: torch.Tensor | None = None,
     output_dtype: torch.dtype | None = None,
+    activation_scale: torch.Tensor | None = None,
 ) -> torch.Tensor:
     """End-to-end DeepGEMM linear: per-token activation quant + FP8/FP4 matmul.
 
