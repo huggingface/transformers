@@ -171,6 +171,6 @@ class NeuCodecFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest
             pt_processed = feature_extractor.pad([{"input_features": inputs}], return_tensors="pt")
             self.assertTrue(pt_processed.input_features.dtype == torch.float32)
 
-    @unittest.skip("Xcodec2 doesn't support stereo input")
+    @unittest.skip("NeuCodec doesn't support stereo input")
     def test_integration_stereo(self):
         pass
