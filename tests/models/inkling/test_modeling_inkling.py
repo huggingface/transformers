@@ -445,6 +445,7 @@ class InklingVision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unitt
     def test_disk_offload_safetensors(self):
         pass
 
+
 @slow
 @require_torch_accelerator
 class InklingIntegrationTest(unittest.TestCase):

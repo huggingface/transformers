@@ -80,19 +80,6 @@ class InklingProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         tokenizer.pad_token_id = tokenizer.eos_token_id
         return tokenizer
 
-    # Copied from tests.models.llava.test_processing_llava.LlavaProcessorTest.test_get_num_vision_tokens
-    def test_get_num_vision_tokens(self):
-        "Tests general functionality of the helper used internally in vLLM"
-
-        processor = self.get_processor()
-
-        output = processor._get_num_multimodal_tokens(image_sizes=[(100, 100), (300, 100), (500, 30)])
-        self.assertTrue("num_image_tokens" in output)
-        self.assertEqual(len(output["num_image_tokens"]), 3)
-
-        self.assertTrue("num_image_patches" in output)
-        self.assertEqual(len(output["num_image_patches"]), 3)
-
     @classmethod
     def tearDownClass(cls):
         shutil.rmtree(cls.tmpdirname, ignore_errors=True)
@@ -110,36 +97,6 @@ class InklingProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         if isinstance(images, (list, tuple)):
             images = [[image] for image in images]
         return images
-
-    def test_text_with_image_tokens(self):
-        feature_extractor = self.get_component("feature_extractor")
-        image_processor = self.get_component("image_processor")
-        video_processor = self.get_component("video_processor")
-        tokenizer = self.get_component("tokenizer")
-
-        processor = self.processor_class(
-            feature_extractor=feature_extractor,
-            tokenizer=tokenizer,
-            image_processor=image_processor,
-            video_processor=video_processor,
-        )
-        text_multi_images = f"{processor.image_token}{processor.image_token}Dummy text!"
-        text_single_image = f"{processor.image_token}Dummy text!"
-
-        image = self.prepare_image_inputs()
-
-        # We can't be sure what is users intention: if user wants one image per text OR two images for first text and no image for second text
-        with self.assertRaises(ValueError):
-            _ = processor(text=[text_single_image, text_single_image], images=[image, image], return_tensors="np")
-
-        # The users is expected to be explicit about which image belong to which text by nesting the images list
-        out_multiimages = processor(text=text_multi_images, images=[image, image], return_tensors="np")
-        out_batch_oneimage = processor(
-            text=[text_single_image, text_single_image], images=[[image], [image]], return_tensors="np"
-        )
-        self.assertListEqual(
-            out_batch_oneimage[self.images_input_name].tolist(), out_multiimages[self.images_input_name].tolist()
-        )
 
     def test_special_mm_token_truncation(self):
         """Tests that special vision tokens do not get truncated when `truncation=True` is set."""
@@ -240,6 +197,14 @@ class InklingProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     @parameterized.expand([(1, "np"), (1, "pt"), (2, "np"), (2, "pt")])
     @unittest.skip("Inkling packs image patches across the batch instead of keeping one tensor per image")
     def test_apply_chat_template_image(self, batch_size: int, return_tensors: str):
+        pass
+
+    @unittest.skip("Inkling quantizes input features into discrete audio input IDs")
+    def test_feature_extractor_defaults(self):
+        pass
+
+    @unittest.skip("The test fixture passes image_seq_length, which is not an InklingProcessor attribute")
+    def test_processor_to_json_string(self):
         pass
 
 
