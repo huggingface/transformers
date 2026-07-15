@@ -21,6 +21,7 @@ from ...audio_utils import mel_filter_bank
 from ...feature_extraction_sequence_utils import SequenceFeatureExtractor
 from ...feature_extraction_utils import BatchFeature
 from ...utils import PaddingStrategy, TensorType, logging
+from ...utils.import_utils import requires
 
 
 logger = logging.get_logger(__name__)
@@ -33,6 +34,7 @@ def _to_exact_int(value: float, name: str, tolerance: float = 1e-6) -> int:
     return int(rounded)
 
 
+@requires(backends=("torch",))
 class InklingFeatureExtractor(SequenceFeatureExtractor):
     r"""
     Constructs a TML audio feature extractor, which converts raw audio waveforms into log-mel spectrogram

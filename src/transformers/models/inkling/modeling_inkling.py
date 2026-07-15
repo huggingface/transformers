@@ -821,7 +821,7 @@ class InklingAudioModel(InklingPreTrainedModel):
         self.embed_audio_tokens = InklingAudioModelEmbeddings(config)
         self.norm = InklingRMSNorm(config.text_hidden_size, eps=1e-6)
 
-    def forward(self, audio_input_ids: torch.Tensor) -> torch.Tensor:
+    def forward(self, audio_input_ids: torch.Tensor, **kwargs) -> torch.Tensor:
         hidden_states = self.embed_audio_tokens(audio_input_ids)
         hidden_states = self.norm(hidden_states)
         return BaseModelOutputWithPooling(
