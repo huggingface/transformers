@@ -268,7 +268,7 @@ class Kimi_K25VisionAttention(VisionAttention):
         if is_flash_attention_requested(self.config):
             # Flash Attention: Use cu_seqlens for variable length attention
             if max_seqlen is None:
-                max_seqlen = (cu_seqlens[1:] - cu_seqlens[:-1]).max()
+                raise ValueError("`max_seqlen` must be provided when using Flash Attention.")
             attn_output, _ = attention_interface(
                 self,
                 query_states,
@@ -421,9 +421,7 @@ class Kimi_K25VisionModel(Kimi_K25PreTrainedModel):
         )
 
         cu_seqlens = lengths.cumsum(dim=0, dtype=torch.int32)
-        max_seqlen = None
-        if is_flash_attention_requested(self.config):
-            max_seqlen = get_vision_max_seqlen(cu_seqlens, kwargs=kwargs)
+        max_seqlen = get_vision_max_seqlen(cu_seqlens, self.config, kwargs=kwargs)
 
         for block in self.layers:
             hidden_states = block(

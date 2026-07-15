@@ -35,7 +35,7 @@ from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, loggi
 from ...utils.generic import accepts_precomputed_kwargs, is_flash_attention_requested, merge_with_config_defaults
 from ...utils.import_utils import requires
 from ...utils.output_capturing import capture_outputs
-from ...vision_utils import get_vision_cu_seqlens, get_vision_max_seqlen, get_vision_position_ids
+from ...vision_utils import get_vision_attention_seqlens, get_vision_position_ids
 from ..chameleon.modeling_chameleon import ChameleonVQVAE, ChameleonVQVAEModelOutput, ChameleonVQVAEVectorQuantizer
 from ..glm4v.configuration_glm4v import Glm4vTextConfig, Glm4vVisionConfig
 from ..glm4v.modeling_glm4v import (
@@ -230,7 +230,7 @@ class GlmImageVisionAttention(Glm4vVisionAttention):
         if is_flash_attention_requested(self.config):
             # Flash Attention: Use cu_seqlens for variable length attention
             if max_seqlen is None:
-                max_seqlen = (cu_seqlens[1:] - cu_seqlens[:-1]).max()
+                raise ValueError("`max_seqlen` must be provided when using Flash Attention.")
             attn_output, _ = attention_interface(
                 self,
                 query_states,
@@ -307,14 +307,11 @@ class GlmImageVisionBlock(Glm4vVisionBlock):
         self,
         hidden_states: torch.Tensor,
         cu_seqlens: torch.Tensor,
-        max_seqlen: int | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
         r"""
         cu_seqlens (`torch.Tensor` of shape `(num_images_or_videos + 1,)`):
             The cumulative sequence lengths of each image or video feature.
-        max_seqlen (`int`, *optional*):
-            Maximum sequence length for packed variable-length attention in Flash Attention kernels.
         """
         residual = hidden_states
 
@@ -322,7 +319,6 @@ class GlmImageVisionBlock(Glm4vVisionBlock):
         hidden_states = self.attn(
             hidden_states,
             cu_seqlens=cu_seqlens,
-            max_seqlen=max_seqlen,
             **kwargs,
         )
         hidden_states = residual + hidden_states
@@ -459,10 +455,7 @@ class GlmImageVisionModel(Glm4vVisionModel):
             `torch.Tensor` of shape `(total_patches, hidden_size)`: Hidden states.
         """
         position_ids = get_vision_position_ids(grid_thw, self.spatial_merge_size, kwargs=kwargs)
-        cu_seqlens = get_vision_cu_seqlens(grid_thw, kwargs=kwargs)
-        max_seqlen = None
-        if is_flash_attention_requested(self.config):
-            max_seqlen = get_vision_max_seqlen(cu_seqlens, kwargs=kwargs)
+        cu_seqlens, max_seqlen = get_vision_attention_seqlens(grid_thw, self.config, kwargs=kwargs)
 
         hidden_states = self.patch_embed(pixel_values)
         seqlens = cu_seqlens[1:] - cu_seqlens[:-1]

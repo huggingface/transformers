@@ -153,7 +153,7 @@ class Exaone4_5_VisionAttention(Qwen2_5_VLVisionAttention):
 
         if is_flash_attention_requested(self.config):
             if max_seqlen is None:
-                max_seqlen = (cu_seqlens[1:] - cu_seqlens[:-1]).max()
+                raise ValueError("`max_seqlen` must be provided when using Flash Attention.")
             attn_output, _ = attention_interface(
                 self,
                 query_states,

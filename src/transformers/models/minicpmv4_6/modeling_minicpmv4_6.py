@@ -178,7 +178,7 @@ class MiniCPMV4_6VisionAttention(nn.Module):
         self,
         hidden_states: torch.Tensor,
         cu_seqlens: torch.Tensor,
-        max_seqlen: int,
+        max_seqlen: int | None = None,
         attention_mask: torch.Tensor | None = None,
         **kwargs,
     ) -> torch.Tensor:
@@ -196,6 +196,8 @@ class MiniCPMV4_6VisionAttention(nn.Module):
 
         if is_flash_attention_requested(self.config):
             # Flash Attention: Use cu_seqlens for variable length attention
+            if max_seqlen is None:
+                raise ValueError("`max_seqlen` must be provided when using Flash Attention.")
             attn_output, _ = attention_interface(
                 self,
                 query_states,
@@ -428,11 +430,12 @@ class MiniCPMV4_6VisionModel(MiniCPMV4_6VisionPreTrainedModel):
         self.post_init()
 
     def get_downsampled_inputs(
-        self, target_sizes: torch.Tensor, max_seqlens: int, device: torch.device, **kwargs
+        self, target_sizes: torch.Tensor, max_seqlens: int | None, device: torch.device, **kwargs
     ) -> tuple[dict[str, Any], torch.Tensor, torch.Tensor]:
         # NOTE: intentionally not checking for shapes as this is expensive to call `.any()`
         target_sizes = target_sizes // 2
-        max_seqlens = max_seqlens // 4
+        if max_seqlens is not None:
+            max_seqlens = max_seqlens // 4
 
         cu_seqlens = F.pad(
             torch.cumsum(target_sizes[:, 0] * target_sizes[:, 1], dim=0, dtype=torch.int32).to(device), (1, 0)
@@ -469,10 +472,7 @@ class MiniCPMV4_6VisionModel(MiniCPMV4_6VisionPreTrainedModel):
             torch.cumsum(target_sizes[:, 0] * target_sizes[:, 1], dim=0, dtype=torch.int32).to(hidden_states.device),
             (1, 0),
         )
-        if is_flash_attention_requested(self.config):
-            max_seqlens = get_vision_max_seqlen(cu_seqlens, kwargs=kwargs)
-        else:
-            max_seqlens = torch.max(cu_seqlens[1:] - cu_seqlens[:-1])
+        max_seqlens = get_vision_max_seqlen(cu_seqlens, self.config, kwargs=kwargs)
 
         attn_kwargs = {
             "attention_mask": None,

@@ -30,6 +30,7 @@ from torch import nn
 from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache
+from ...configuration_utils import PreTrainedConfig
 from ...generation import GenerationMixin
 from ...modeling_layers import GenericForTokenClassification, GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, ModelOutput
@@ -151,7 +152,7 @@ class Qwen3ASRAudioAttention(nn.Module):
         if is_flash_attention_requested(self.config):
             # Flash Attention: Use cu_seqlens for variable length attention
             if max_seqlen is None:
-                max_seqlen = (cu_seqlens[1:] - cu_seqlens[:-1]).max()
+                raise ValueError("`max_seqlen` must be provided when using Flash Attention.")
             attn_output, _ = attention_interface(
                 self,
                 query_states,
@@ -212,7 +213,6 @@ class Qwen3ASRAudioEncoderLayer(GradientCheckpointingLayer):
         self,
         hidden_states: torch.Tensor,
         cu_seqlens: torch.Tensor,
-        max_seqlen: int | None = None,
         **kwargs,
     ) -> torch.Tensor:
         """
@@ -226,7 +226,6 @@ class Qwen3ASRAudioEncoderLayer(GradientCheckpointingLayer):
         hidden_states = self.self_attn(
             hidden_states=hidden_states,
             cu_seqlens=cu_seqlens,
-            max_seqlen=max_seqlen,
             **kwargs,
         )
         hidden_states = residual + hidden_states
@@ -277,10 +276,12 @@ def _get_feat_extract_output_lengths(input_lengths, n_window=50):
     return ((feat_lengths - 1) // 2 + 1 - 1) // 2 + 1 + (input_lengths // chunk_len) * 13
 
 
-def get_audio_max_seqlen(cu_seqlens: torch.Tensor, kwargs: dict | None = None) -> int:
+def get_audio_max_seqlen(cu_seqlens: torch.Tensor, config: PreTrainedConfig, kwargs: dict | None = None) -> int | None:
     """Get the maximum packed audio sequence length, or pop it from `kwargs` if precomputed."""
     if kwargs is not None and (max_seqlen := kwargs.pop("max_seqlen", None)) is not None:
         return max_seqlen
+    if not is_flash_attention_requested(config):
+        return None
     return int((cu_seqlens[1:] - cu_seqlens[:-1]).max().item())
 
 
@@ -406,9 +407,7 @@ class Qwen3ASREncoder(Qwen3ASRPreTrainedModel):
         cu_seqlens = get_audio_cu_seqlens(
             chunk_lengths, feature_lens, self.n_window_infer, self.n_window, kwargs=kwargs
         )
-        max_seqlen = None
-        if is_flash_attention_requested(self.config):
-            max_seqlen = get_audio_max_seqlen(cu_seqlens, kwargs=kwargs)
+        max_seqlen = get_audio_max_seqlen(cu_seqlens, self.config, kwargs=kwargs)
 
         # Chunk and process through CNN
         chunked = (

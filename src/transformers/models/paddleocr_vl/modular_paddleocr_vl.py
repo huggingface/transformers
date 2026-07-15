@@ -55,12 +55,11 @@ from ...utils import (
     torch_compilable_check,
 )
 from ...utils.deprecation import deprecate_kwarg
-from ...utils.generic import accepts_precomputed_kwargs, is_flash_attention_requested, merge_with_config_defaults
+from ...utils.generic import accepts_precomputed_kwargs, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ...vision_utils import (
+    get_vision_attention_seqlens,
     get_vision_bilinear_indices_and_weights,
-    get_vision_cu_seqlens,
-    get_vision_max_seqlen,
     get_vision_position_ids,
 )
 from ..ernie4_5.configuration_ernie4_5 import Ernie4_5Config
@@ -795,10 +794,7 @@ class PaddleOCRVisionEncoder(VideoLlama3VisionEncoder):
         # Use merge_size=1: PaddleOCR merges patches in the projector (after the encoder),
         # unlike Qwen which merges inside the encoder, so rotary positions here are simple (row, col).
         position_ids = get_vision_position_ids(grid_thw, 1, kwargs=kwargs)
-        cu_seqlens = get_vision_cu_seqlens(grid_thw, kwargs=kwargs)
-        max_seqlen = None
-        if is_flash_attention_requested(self.config):
-            max_seqlen = get_vision_max_seqlen(cu_seqlens, kwargs=kwargs)
+        cu_seqlens, max_seqlen = get_vision_attention_seqlens(grid_thw, self.config, kwargs=kwargs)
 
         hidden_states = inputs_embeds
         attention_mask = create_bidirectional_mask(

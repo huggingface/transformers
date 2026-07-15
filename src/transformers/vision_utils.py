@@ -31,6 +31,9 @@ from __future__ import annotations
 import torch
 import torch.nn.functional as F
 
+from .configuration_utils import PreTrainedConfig
+from .utils.generic import is_flash_attention_requested
+
 
 def get_vision_cu_seqlens(grid_thw: torch.Tensor, kwargs: dict | None = None) -> torch.Tensor:
     """Get cumulative sequence lengths from vision grid info, or pop from `kwargs` if precomputed.
@@ -50,20 +53,39 @@ def get_vision_cu_seqlens(grid_thw: torch.Tensor, kwargs: dict | None = None) ->
     return F.pad(cu_seqlens, (1, 0), value=0)
 
 
-def get_vision_max_seqlen(cu_seqlens: torch.Tensor, kwargs: dict | None = None, kwarg_name: str = "max_seqlen") -> int:
+def get_vision_max_seqlen(
+    cu_seqlens: torch.Tensor,
+    config: PreTrainedConfig,
+    kwargs: dict | None = None,
+    kwarg_name: str = "max_seqlen",
+) -> int | None:
     """Get the maximum packed sequence length, or pop it from `kwargs` if precomputed.
 
     Args:
         cu_seqlens: `(num_sequences + 1,)` cumulative sequence boundaries.
+        config: model configuration used to determine the attention implementation.
         kwargs: optional caller kwargs containing a precomputed maximum sequence length.
         kwarg_name: key used to pop the precomputed value from `kwargs`.
 
     Returns:
-        Maximum packed sequence length as a Python integer.
+        Maximum packed sequence length as a Python integer, or `None` when Flash Attention is not requested.
     """
     if kwargs is not None and (max_seqlen := kwargs.pop(kwarg_name, None)) is not None:
         return max_seqlen
+    if not is_flash_attention_requested(config):
+        return None
     return int((cu_seqlens[1:] - cu_seqlens[:-1]).max().item())
+
+
+def get_vision_attention_seqlens(
+    grid_thw: torch.Tensor,
+    config: PreTrainedConfig,
+    kwargs: dict | None = None,
+) -> tuple[torch.Tensor, int | None]:
+    """Get cumulative and maximum sequence lengths for packed vision attention."""
+    cu_seqlens = get_vision_cu_seqlens(grid_thw, kwargs=kwargs)
+    max_seqlen = get_vision_max_seqlen(cu_seqlens, config, kwargs=kwargs)
+    return cu_seqlens, max_seqlen
 
 
 def get_vision_position_ids(

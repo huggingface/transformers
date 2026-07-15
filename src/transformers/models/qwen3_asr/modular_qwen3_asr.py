@@ -25,7 +25,6 @@ from ...modeling_outputs import BaseModelOutputWithPooling
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
-from ...utils.generic import is_flash_attention_requested
 from ...utils.output_capturing import capture_outputs
 from ..audioflamingo3.modeling_audioflamingo3 import AudioFlamingo3ForConditionalGeneration, AudioFlamingo3Model
 from ..auto import CONFIG_MAPPING, AutoConfig
@@ -208,9 +207,7 @@ class Qwen3ASREncoder(Qwen3OmniMoeAudioEncoder):
         cu_seqlens = get_audio_cu_seqlens(
             chunk_lengths, feature_lens, self.n_window_infer, self.n_window, kwargs=kwargs
         )
-        max_seqlen = None
-        if is_flash_attention_requested(self.config):
-            max_seqlen = get_audio_max_seqlen(cu_seqlens, kwargs=kwargs)
+        max_seqlen = get_audio_max_seqlen(cu_seqlens, self.config, kwargs=kwargs)
 
         # Chunk and process through CNN
         chunked = (
