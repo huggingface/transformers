@@ -409,11 +409,11 @@ model = AutoModelForCausalLM.from_pretrained(
 )
 ```
 
-Also, continuous batching works much better with flash attention rather than eager or SDPA, mostly because FLash does not require an attention mask.
-Hence, when flash attention is available, if a model uses `attn_implementation="eager"`or `attn_implementation="sdpa"`, the attention implementation will be replaced by flash.
-This works if flash is accessible through the `flash_attention` package or the `kernels` package.  
+Also, continuous batching works much better with flash attention rather than eager or SDPA, mostly because Flash does not require an attention mask.
+Hence, when flash attention is available, if a model uses `attn_implementation="eager"` or `attn_implementation="sdpa"`, the attention implementation will be replaced by flash.
+This works if flash is accessible through the `flash_attn` package or the `kernels` package.  
 To avoid this, you may set `attn_implementation="paged|eager"` or `attn_implementation="paged|sdpa"`, and continuous batching will interpret this as the user 
-specifically requesting those implementations. This can be usefull in the context of testing or in a setting where flash attention is hard to enable (although, thanks
+specifically requesting those implementations. This can be useful in the context of testing or in a setting where flash attention is hard to enable (although, thanks
 to the `kernels` package, this is becoming rare).
 
 

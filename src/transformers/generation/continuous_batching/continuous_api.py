@@ -647,7 +647,7 @@ class ContinuousBatchingManager:
             else:
                 version = None
             # Change and warn
-            msg = "Continuous batching is much better when using flash attention. "
+            msg = "Continuous batching is much better when using flash attention."
             if version is not None:
                 target_implem = f"flash_attention_{version}"  # no "paged|" prefix here to enter the branch below
                 logger.warning(
