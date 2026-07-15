@@ -1,4 +1,4 @@
-# Copyright 2026 Biohub. All rights reserved.
+# Copyright 2026 BioHub and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -29,7 +29,7 @@ from ...masking_utils import create_bidirectional_mask
 from ...modeling_outputs import ModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs
+from ...utils import TransformersKwargs, auto_docstring
 from ..auto import AutoModel
 from .configuration_esmfold2 import ESMFold2Config
 
@@ -2061,9 +2061,8 @@ class ESMFold2MSAEncoder(nn.Module):
         return x_pair
 
 
+@auto_docstring
 class ESMFold2PreTrainedModel(PreTrainedModel):
-    """Base class for ESMFold2 — declares the loading and weight-initialization behaviour."""
-
     config_class = ESMFold2Config
     base_model_prefix = "esmfold2"
     main_input_name = "token_index"
@@ -2114,29 +2113,14 @@ class ESMFold2PreTrainedModel(PreTrainedModel):
             init.zeros_(module.base_z_combine)
 
 
-class ESMFold2Model(ESMFold2PreTrainedModel):
-    """ESMFold2 — all-atom structure prediction with an ESMC PLM backbone.
-
-    This is the standard released ESMFold2 architecture (uses a linear-
-    recurrent trunk, internally referred to as "parcae").
-
-    Forward kwargs that callers commonly override:
-
-    * ``num_loops`` (default ``config.num_loops``): trunk refinement
-      loops.
-    * ``num_diffusion_samples`` (default ``config.num_diffusion_samples``):
-      parallel structure samples; the confidence head re-runs once per
-      sample, so memory scales linearly. Pass ``1`` for cheap inference.
-    * ``num_sampling_steps`` (default ``config.structure_head_inference_num_steps``):
-      diffusion ODE solver steps. Lower for speed, higher for quality.
-
-    Memory / perf knobs:
-
-    * ``model.set_chunk_size(int|None)``: caps L² ops (triangle / OPM /
-      pair transition) at this token-axis chunk. Default 64 — fits
-      L≈2k on an 80 GB GPU. Pass ``None`` for faster inference at L<600.
+@auto_docstring(
+    custom_intro="""
+    ESMFold2 all-atom protein structure predictor with a bundled ESMC protein-language-model backbone. This is the
+    standard released ESMFold2 architecture, whose trunk is a linear-recurrent stack (internally referred to as
+    "parcae").
     """
-
+)
+class ESMFold2Model(ESMFold2PreTrainedModel):
     def __init__(self, config: ESMFold2Config) -> None:
         super().__init__(config)
         d_inputs = config.single_inputs_size
@@ -2462,6 +2446,7 @@ class ESMFold2Model(ESMFold2PreTrainedModel):
 
         return z
 
+    @auto_docstring
     def forward(
         self,
         token_index: Tensor,
@@ -2493,6 +2478,65 @@ class ESMFold2Model(ESMFold2PreTrainedModel):
         num_sampling_steps: int | None = None,
         **kwargs,
     ) -> ESMFold2Output:
+        r"""
+        token_index (`torch.Tensor` of shape `(batch_size, num_tokens)`):
+            Per-token positional index within the full complex; feeds the relative-position encoding.
+        residue_index (`torch.Tensor` of shape `(batch_size, num_tokens)`):
+            Residue index within each chain; feeds the relative-position encoding.
+        asym_id (`torch.Tensor` of shape `(batch_size, num_tokens)`):
+            Asymmetric-unit (chain) ID for each token.
+        sym_id (`torch.Tensor` of shape `(batch_size, num_tokens)`):
+            Symmetry-copy ID distinguishing identical chains of a homomer.
+        entity_id (`torch.Tensor` of shape `(batch_size, num_tokens)`):
+            Entity ID grouping tokens that belong to the same molecular entity.
+        mol_type (`torch.Tensor` of shape `(batch_size, num_tokens)`):
+            Molecule-type code for each token (``0`` = protein).
+        res_type (`torch.Tensor` of shape `(batch_size, num_tokens)`):
+            Residue-type (amino-acid identity) index for each token.
+        token_bonds (`torch.Tensor` of shape `(batch_size, num_tokens, num_tokens, 1)`):
+            Pairwise inter-token covalent-bond feature.
+        token_attention_mask (`torch.Tensor` of shape `(batch_size, num_tokens)`):
+            Mask marking valid tokens (``1``) versus padding (``0``). Inputs must be right-padded.
+        ref_pos (`torch.Tensor` of shape `(batch_size, num_atoms, 3)`):
+            Reference-conformer Cartesian coordinates for each atom.
+        ref_element (`torch.Tensor` of shape `(batch_size, num_atoms)`):
+            Atomic number of each atom.
+        ref_charge (`torch.Tensor` of shape `(batch_size, num_atoms)`):
+            Formal charge of each atom.
+        ref_atom_name_chars (`torch.Tensor` of shape `(batch_size, num_atoms, 4)`):
+            Encoded four-character atom name for each atom.
+        ref_space_uid (`torch.Tensor` of shape `(batch_size, num_atoms)`):
+            Per-atom group ID (the atom's token index), used by the atom-encoder 3D RoPE.
+        atom_attention_mask (`torch.Tensor` of shape `(batch_size, num_atoms)`):
+            Mask marking valid atoms (``1``) versus padding (``0``).
+        atom_to_token (`torch.Tensor` of shape `(batch_size, num_atoms)`):
+            Index of the token each atom belongs to (a token's atoms are contiguous).
+        distogram_atom_idx (`torch.Tensor` of shape `(batch_size, num_tokens)`):
+            Index of the representative atom (Cβ, or Cα for glycine) of each token, used by the distogram head.
+        deletion_mean (`torch.Tensor` of shape `(batch_size, num_tokens)`, *optional*):
+            Mean MSA deletion count per column. Defaults to zeros (no MSA).
+        msa (`torch.Tensor` of shape `(batch_size, msa_depth, num_tokens)`, *optional*):
+            MSA residue-type tokens (row 0 is the query sequence). Defaults to a single-sequence MSA.
+        has_deletion (`torch.Tensor` of shape `(batch_size, msa_depth, num_tokens)`, *optional*):
+            Boolean flag marking MSA positions preceded by a deletion.
+        deletion_value (`torch.Tensor` of shape `(batch_size, msa_depth, num_tokens)`, *optional*):
+            Per-position MSA deletion counts.
+        msa_attention_mask (`torch.Tensor` of shape `(batch_size, msa_depth, num_tokens)`, *optional*):
+            Validity mask for the MSA rows/columns.
+        input_ids (`torch.Tensor` of shape `(batch_size, num_tokens)`, *optional*):
+            ESMC-vocabulary token ids for the sequence. Fed to the bundled ESMC backbone to produce
+            `lm_hidden_states` when those are not passed directly; ignored when `lm_hidden_states` is given.
+        lm_hidden_states (`torch.Tensor` of shape `(batch_size, num_tokens, hidden_size)`, *optional*):
+            Precomputed ESMC backbone hidden states. When provided, the backbone is not run and `input_ids`
+            is unused.
+        num_loops (`int`, *optional*):
+            Number of trunk refinement loops. Defaults to `config.num_loops`.
+        num_diffusion_samples (`int`, *optional*):
+            Number of parallel structure samples to draw; the confidence head re-runs once per sample.
+            Defaults to `config.num_diffusion_samples`.
+        num_sampling_steps (`int`, *optional*):
+            Number of diffusion sampling steps. Defaults to `config.structure_head_inference_num_steps`.
+        """
         tok_mask = token_attention_mask
         atm_mask = atom_attention_mask
         disto_idx = distogram_atom_idx

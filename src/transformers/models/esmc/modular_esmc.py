@@ -1,4 +1,4 @@
-# Copyright 2026 Biohub. All rights reserved.
+# Copyright 2026 BioHub and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -121,9 +121,11 @@ class ESMCConfig(LlamaConfig):
     qk_layernorm: bool | None = True
     scale_residue: bool | None = True
 
-    # Llama fields that do not apply to ESMC (LayerNorm, not RMSNorm; no tensor-parallel pretraining).
+    # Llama fields that do not apply to ESMC
     rms_norm_eps = AttributeError()
     pretraining_tp = AttributeError()
+    use_cache = AttributeError()
+    keys_to_ignore_at_inference = AttributeError()
 
     def __post_init__(self, **kwargs):
         super().__post_init__(**kwargs)

@@ -4,7 +4,7 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_esmc.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
-# Copyright 2026 Biohub. All rights reserved.
+# Copyright 2026 BioHub and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -59,7 +59,6 @@ class ESMCConfig(PreTrainedConfig):
     """
 
     model_type = "esmc"
-    keys_to_ignore_at_inference = ["past_key_values"]
     # Default tensor parallel plan for base model `ESMCModel`
     base_model_tp_plan = {
         "layers.*.self_attn.q_proj": "colwise",
@@ -86,7 +85,6 @@ class ESMCConfig(PreTrainedConfig):
     hidden_act: str = "silu"
     max_position_embeddings: int = 2048
     initializer_range: float = 0.02
-    use_cache: bool = True
     pad_token_id: int | None = 1
     bos_token_id: int | None = None
     eos_token_id: int | list[int] | None = None
