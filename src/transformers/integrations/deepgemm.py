@@ -73,6 +73,11 @@ class DeepGEMM:
     # (bench showed kernel-recommended 240 is slower and 256 doesn't even compile).
     # Same stance as vLLM, which caches and never sets it.
     m_alignment: int
+    # Blackwell (SM100+), resolved once at load. The forwards branch on this instead
+    # of querying the device capability per call: an attribute on this frozen bundle
+    # is free in eager and folds to a constant under dynamo (the capability getter is
+    # an untraceable pybind).
+    is_sm100: bool
 
 
 @functools.cache
@@ -273,6 +278,7 @@ def _load_deepgemm_kernel(requires_sm100: bool = False) -> None:
         get_symm_buffer_for_mega_moe=get_symm_buffer_for_mega_moe,
         fp8_fp4_mega_moe=fp8_fp4_mega_moe,
         m_alignment=get_mk_alignment(),
+        is_sm100=torch.cuda.get_device_capability()[0] >= 10,
     )
 
 
@@ -284,22 +290,14 @@ def load_deepgemm_kernel(requires_sm100: bool = False) -> DeepGEMM:
 # ── Scale-factor helpers ───────────────────────────────────────────────────────
 
 
-@functools.cache
-def _is_sm100(device: torch.device) -> bool:
-    """``True`` for Blackwell (SM100+). Cached: device capability is fixed for the
-    process lifetime and this gets hit on every linear/expert forward.
-    """
-    return torch.cuda.get_device_capability(device)[0] >= 10
-
-
-def _assert_sm100_scales_are_ue8m0(scale: torch.Tensor) -> None:
+def _assert_sm100_scales_are_ue8m0(scale: torch.Tensor, is_sm100: bool) -> None:
     """On B200 (SM100) DeepGEMM only supports UE8M0 (power-of-two) scales; the float32 scales
     that work on H100 (SM90) have no SM100 path. UE8M0 scales load as ``float8_e8m0fnu`` (the
     loader normalizes even float32-container checkpoints like dsv4-flash-base), so a plain
     ``float32`` scale here means a genuine non-UE8M0 checkpoint — fail loud rather than let
     ``_coerce_sf_for_kernel`` silently round it and corrupt the output.
     """
-    if not _is_sm100(scale.device):
+    if not is_sm100:
         return  # SM90 consumes float32 SFs directly (no UE8M0 round).
     if scale.dtype != torch.float32:
         return  # already UE8M0 (`float8_e8m0fnu`) — kernel-ready as-is.
@@ -327,7 +325,9 @@ def _ceil_to_ue8m0(sf: torch.Tensor) -> torch.Tensor:
     return (int_view + ((1 << 23) - 1)).bitwise_and_(~((1 << 23) - 1)).view(torch.float)
 
 
-def _coerce_sf_for_kernel(sf: torch.Tensor, expected_mn: int | None = None) -> torch.Tensor:
+def _coerce_sf_for_kernel(
+    sf: torch.Tensor, is_sm100: bool, expected_mn: int | None = None
+) -> torch.Tensor:
     """Lay out `sf` as DeepGEMM's dispatch expects, per arch.
 
     On SM100 the int-SF path only *checks* the SF (`tma_stride_check`) and never
@@ -355,7 +355,6 @@ def _coerce_sf_for_kernel(sf: torch.Tensor, expected_mn: int | None = None) -> t
     DeepGEMM kernel branch is the only UE8M0 path on SM100; for `gran_mn > 1`
     the kernel only handles FP32 SFs and would otherwise reject our INT SF here.
     """
-    is_sm100 = _is_sm100(sf.device)
     if sf.dtype == torch.float8_e8m0fnu:
         if expected_mn is not None and sf.size(-2) < expected_mn:
             gran_mn = expected_mn // sf.size(-2)
@@ -563,7 +562,7 @@ def deepgemm_fp8_fp4_linear(
         raise ValueError(f"DeepGEMM linear requires FP16 or BF16 activations, got {input.dtype}")
 
     deepgemm = load_deepgemm_kernel(requires_sm100=weight.dtype == torch.int8)
-    cast_kwargs = _select_fp8_cast_kwargs(weight, weight_scale_inv, block_size, _is_sm100(input.device))
+    cast_kwargs = _select_fp8_cast_kwargs(weight, weight_scale_inv, block_size, deepgemm.is_sm100)
 
     input_2d = input.view(-1, input.shape[-1])
     qinput_2d, scale_2d = deepgemm.per_token_cast_to_fp8(input_2d, **cast_kwargs)
@@ -574,8 +573,8 @@ def deepgemm_fp8_fp4_linear(
     # (the default `(1, 1, 128)` mismatches FP4's gran_k=32). Float-SF leaves it None.
     sf_recipe = (1, 1, cast_kwargs["gran_k"]) if cast_kwargs.get("use_packed_ue8m0") else None
     deepgemm.fp8_fp4_matmul(
-        (qinput_2d, _coerce_sf_for_kernel(scale_2d, expected_mn=qinput_2d.size(0))),
-        (weight, _coerce_sf_for_kernel(weight_scale_inv, expected_mn=weight.size(0))),
+        (qinput_2d, _coerce_sf_for_kernel(scale_2d, deepgemm.is_sm100, expected_mn=qinput_2d.size(0))),
+        (weight, _coerce_sf_for_kernel(weight_scale_inv, deepgemm.is_sm100, expected_mn=weight.size(0))),
         output,
         recipe=sf_recipe,
     )
@@ -613,7 +612,7 @@ def deepgemm_bf16_experts_forward(
         grouped_layout,
         total_padded_rows,
     ) = _dispatch_routed_input(
-        hidden_states, top_k_index, top_k_weights, self.num_experts, deepgemm.m_alignment, _is_sm100(device)
+        hidden_states, top_k_index, top_k_weights, self.num_experts, deepgemm.m_alignment, deepgemm.is_sm100
     )
 
     weight_up = to_local(self.gate_up_proj if self.has_gate else self.up_proj)
@@ -625,7 +624,7 @@ def deepgemm_bf16_experts_forward(
     up_out_dim = weight_up.shape[-1] if self.is_transposed else weight_up.shape[1]
     act = _pad_for_deepgemm(sorted_hidden, sorted_to_padded, total_padded_rows)
     proj_out = torch.empty(total_padded_rows, up_out_dim, device=device, dtype=hidden_states.dtype)
-    grouped_bf16_matmul(act, weight_up, proj_out, grouped_layout, use_psum_layout=_is_sm100(device))
+    grouped_bf16_matmul(act, weight_up, proj_out, grouped_layout, use_psum_layout=deepgemm.is_sm100)
     if self.has_bias:
         proj_out.index_add_(0, sorted_to_padded, up_bias[expert_ids_g])
 
@@ -633,7 +632,7 @@ def deepgemm_bf16_experts_forward(
 
     # Down projection.
     out = torch.empty(total_padded_rows, hidden_dim, device=device, dtype=hidden_states.dtype)
-    grouped_bf16_matmul(proj_out, weight_down, out, grouped_layout, use_psum_layout=_is_sm100(device))
+    grouped_bf16_matmul(proj_out, weight_down, out, grouped_layout, use_psum_layout=deepgemm.is_sm100)
     if self.has_bias:
         out.index_add_(0, sorted_to_padded, down_bias[expert_ids_g])
 
@@ -665,14 +664,13 @@ def deepgemm_fp8_fp4_experts_forward(
             "`experts_implementation='grouped_mm'`, or run one device per process (TP/EP)."
         )
 
-    _assert_sm100_scales_are_ue8m0(self.down_proj_scale_inv)
+    deepgemm = load_deepgemm_kernel(requires_sm100=self.down_proj.dtype == torch.int8)
+    _assert_sm100_scales_are_ue8m0(self.down_proj_scale_inv, deepgemm.is_sm100)
 
     if self.activation_scheme == "static":
         raise NotImplementedError("DeepGEMM experts dispatch does not support static activation quantization.")
     if hidden_states.dtype != torch.bfloat16:
         raise ValueError(f"DeepGEMM experts path requires bfloat16 hidden states, got {hidden_states.dtype}")
-
-    deepgemm = load_deepgemm_kernel(requires_sm100=self.down_proj.dtype == torch.int8)
     grouped_fp8_fp4_matmul = (
         deepgemm.grouped_fp8_fp4_matmul_nn if self.is_transposed else deepgemm.grouped_fp8_fp4_matmul_nt
     )
@@ -687,7 +685,7 @@ def deepgemm_fp8_fp4_experts_forward(
     weight_down = to_local(self.down_proj)
     weight_scale_down = to_local(self.down_proj_scale_inv)
 
-    cast_kwargs = _select_fp8_cast_kwargs(weight_up, weight_scale_up, self.block_size, _is_sm100(device))
+    cast_kwargs = _select_fp8_cast_kwargs(weight_up, weight_scale_up, self.block_size, deepgemm.is_sm100)
     (
         sorted_hidden,
         sorted_weights,
@@ -698,7 +696,7 @@ def deepgemm_fp8_fp4_experts_forward(
         grouped_layout,
         total_padded_rows,
     ) = _dispatch_routed_input(
-        hidden_states, top_k_index, top_k_weights, self.num_experts, deepgemm.m_alignment, _is_sm100(device)
+        hidden_states, top_k_index, top_k_weights, self.num_experts, deepgemm.m_alignment, deepgemm.is_sm100
     )
     sf_recipe = (1, 1, cast_kwargs["gran_k"]) if cast_kwargs.get("use_packed_ue8m0") else None
 
@@ -708,12 +706,12 @@ def deepgemm_fp8_fp4_experts_forward(
     act_scales = _pad_for_deepgemm(act_scales, sorted_to_padded, total_padded_rows)
     proj_out = torch.empty(total_padded_rows, weight_up.shape[1], device=device, dtype=torch.bfloat16)
     grouped_fp8_fp4_matmul(
-        (act_fp8, _coerce_sf_for_kernel(act_scales, expected_mn=total_padded_rows)),
-        (weight_up, _coerce_sf_for_kernel(weight_scale_up, expected_mn=weight_up.size(-2))),
+        (act_fp8, _coerce_sf_for_kernel(act_scales, deepgemm.is_sm100, expected_mn=total_padded_rows)),
+        (weight_up, _coerce_sf_for_kernel(weight_scale_up, deepgemm.is_sm100, expected_mn=weight_up.size(-2))),
         proj_out,
         grouped_layout,
         recipe=sf_recipe,
-        use_psum_layout=_is_sm100(device),
+        use_psum_layout=deepgemm.is_sm100,
     )
     proj_out = self._apply_gate(proj_out) if self.has_gate else self.act_fn(proj_out)
 
@@ -721,12 +719,12 @@ def deepgemm_fp8_fp4_experts_forward(
     proj_fp8, proj_scales = deepgemm.per_token_cast_to_fp8(proj_out, **cast_kwargs)
     out = torch.empty(total_padded_rows, hidden_dim, device=device, dtype=torch.bfloat16)
     grouped_fp8_fp4_matmul(
-        (proj_fp8, _coerce_sf_for_kernel(proj_scales, expected_mn=total_padded_rows)),
-        (weight_down, _coerce_sf_for_kernel(weight_scale_down, expected_mn=weight_down.size(-2))),
+        (proj_fp8, _coerce_sf_for_kernel(proj_scales, deepgemm.is_sm100, expected_mn=total_padded_rows)),
+        (weight_down, _coerce_sf_for_kernel(weight_scale_down, deepgemm.is_sm100, expected_mn=weight_down.size(-2))),
         out,
         grouped_layout,
         recipe=sf_recipe,
-        use_psum_layout=_is_sm100(device),
+        use_psum_layout=deepgemm.is_sm100,
     )
 
     return _combine_routed_output(
@@ -825,7 +823,8 @@ def deepgemm_fp8_fp4_megamoe_experts_forward(
       `transform_weights_for_mega_moe((gate_up, gate_up_sf), (down, down_sf))`.
       - `config.swiglu_limit` (optional): SwiGLU clamp; absent → unclamped.
     """
-    _assert_sm100_scales_are_ue8m0(self.down_proj_scale_inv)
+    deepgemm = load_deepgemm_kernel(requires_sm100=True)
+    _assert_sm100_scales_are_ue8m0(self.down_proj_scale_inv, deepgemm.is_sm100)
 
     if self.gate_up_proj.dtype != torch.int8:
         raise RuntimeError(
@@ -838,8 +837,6 @@ def deepgemm_fp8_fp4_megamoe_experts_forward(
             "DeepGEMM Mega MoE requires a `process_group` for the EP group. The TP wrapping "
             "(MoeTensorParalellMegaMoeExperts) supplies it automatically; pass it explicitly otherwise."
         )
-
-    deepgemm = load_deepgemm_kernel(requires_sm100=True)
 
     # First-forward one-shot: pack UE8M0 SFs and interleave the L1/L2 weights for UTCCP.
     # Kept lazy here (instead of in a quantizer load-time hook) so the megamoe-specific
