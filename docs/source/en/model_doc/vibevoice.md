@@ -374,7 +374,11 @@ model_id = "bezzam/VibeVoice-1.5B-hf"   # "bezzam/VibeVoice-7B-hf"
 
 # Load model and processor
 processor = AutoProcessor.from_pretrained(model_id)
-model = AutoModelForTextToWaveform.from_pretrained(model_id, device_map="auto")
+model = AutoModelForTextToWaveform.from_pretrained(
+    model_id,
+    diffusion_loss_weight=0.75,  # by default, equal weigthing (0.5) of language modeling loss (CE) and diffusion loss is applied
+    device_map="auto"
+)
 model.train()
 
 # Prepare batch of 2
@@ -419,18 +423,10 @@ inputs = processor.apply_chat_template(
 
 # Forward pass
 outputs = model(**inputs, ddpm_batch_multiplier=2, num_diffusion_steps=2)
-
-# Compute loss as simple sum, but they can be weighted differently
-lm_loss = outputs.loss
-diffusion_loss = outputs.diffusion_loss
-total_loss = lm_loss + diffusion_loss
-
-print(f"LM loss: {lm_loss.item():.4f}")
-print(f"Diffusion loss: {diffusion_loss.item():.4f}")
-print(f"Total loss: {total_loss.item():.4f}")
+print(f"Total loss: {outputs.loss.item():.4f}")
 
 # Backward pass
-total_loss.backward()
+outputs.loss.backward()
 ```
 
 ### Torch compile

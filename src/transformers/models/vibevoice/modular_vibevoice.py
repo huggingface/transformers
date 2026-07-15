@@ -53,6 +53,9 @@ class VibeVoiceConfig(PreTrainedConfig):
         The size of the sinusoidal frequency embedding for timestep encoding in the diffusion head.
     diffusion_max_period (`int`, *optional*, defaults to 10000):
         The maximum period for the sinusoidal frequency embedding in the diffusion head.
+    diffusion_loss_weight (`float`, *optional*, defaults to 0.5):
+        The weight of the diffusion loss in the overall loss computation. The cross entropy loss for the language
+        modeling head is weighted by `(1 - diffusion_loss_weight)`.
 
     ```python
     >>> from transformers import VibeVoiceForConditionalGeneration, VibeVoiceConfig
@@ -89,6 +92,7 @@ class VibeVoiceConfig(PreTrainedConfig):
     frequency_embedding_size: int = 256
     diffusion_max_period: int = 10000
     mlp_bias: bool = False
+    diffusion_loss_weight: float = 0.5
 
     def __post_init__(self, **kwargs):
         if isinstance(self.audio_config, dict):
@@ -135,8 +139,6 @@ class VibeVoiceCausalLMOutputWithPast(BaseModelOutputWithPast):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
         Language modeling loss (for next-token prediction).
-    diffusion_loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` for diffusion are provided):
-        Diffusion head loss (for acoustic token prediction).
     logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
         Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
     audio_features (`torch.FloatTensor` of shape `(batch_size, sequence_length, feature_size)`, *optional*):
@@ -144,7 +146,6 @@ class VibeVoiceCausalLMOutputWithPast(BaseModelOutputWithPast):
     """
 
     loss: torch.FloatTensor | None = None
-    diffusion_loss: torch.FloatTensor | None = None
     logits: torch.FloatTensor | None = None
     audio_features: torch.FloatTensor | None = None
 
@@ -473,8 +474,11 @@ class VibeVoiceForConditionalGeneration(VibeVoicePreTrainedModel, VibeVoiceGener
         if labels is not None:
             loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.vocab_size, **kwargs)
 
-        diffusion_loss = None
-        if acoustic_loss_mask is not None and outputs.audio_features is not None:
+        if (
+            acoustic_loss_mask is not None
+            and outputs.audio_features is not None
+            and self.config.diffusion_loss_weight > 0.0
+        ):
             if noise_scheduler is None:
                 # use helper from VibeVoiceGenerationMixin
                 noise_scheduler = self._build_default_noise_scheduler(self.generation_config)
@@ -484,8 +488,11 @@ class VibeVoiceForConditionalGeneration(VibeVoicePreTrainedModel, VibeVoiceGener
             diffusion_loss = self.compute_diffusion_loss(
                 audio_features, condition_features, noise_scheduler, ddpm_batch_multiplier, num_diffusion_steps
             )
+            loss = (
+                1 - self.config.diffusion_loss_weight
+            ) * loss + self.config.diffusion_loss_weight * diffusion_loss.to(loss.device)
 
-        return VibeVoiceCausalLMOutputWithPast(loss=loss, diffusion_loss=diffusion_loss, logits=logits, **outputs)
+        return VibeVoiceCausalLMOutputWithPast(loss=loss, logits=logits, **outputs)
 
 
 __all__ = [

@@ -41,6 +41,9 @@ class VibeVoiceConfig(PreTrainedConfig):
         The size of the sinusoidal frequency embedding for timestep encoding in the diffusion head.
     diffusion_max_period (`int`, *optional*, defaults to 10000):
         The maximum period for the sinusoidal frequency embedding in the diffusion head.
+    diffusion_loss_weight (`float`, *optional*, defaults to 0.5):
+        The weight of the diffusion loss in the overall loss computation. The cross entropy loss for the language
+        modeling head is weighted by `(1 - diffusion_loss_weight)`.
 
     ```python
     >>> from transformers import VibeVoiceForConditionalGeneration, VibeVoiceConfig
@@ -77,6 +80,7 @@ class VibeVoiceConfig(PreTrainedConfig):
     frequency_embedding_size: int = 256
     diffusion_max_period: int = 10000
     mlp_bias: bool = False
+    diffusion_loss_weight: float = 0.5
 
     def __post_init__(self, **kwargs):
         if isinstance(self.audio_config, dict):

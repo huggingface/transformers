@@ -53,8 +53,6 @@ class VibeVoiceCausalLMOutputWithPast(BaseModelOutputWithPast):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
         Language modeling loss (for next-token prediction).
-    diffusion_loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` for diffusion are provided):
-        Diffusion head loss (for acoustic token prediction).
     logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
         Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
     audio_features (`torch.FloatTensor` of shape `(batch_size, sequence_length, feature_size)`, *optional*):
@@ -62,7 +60,6 @@ class VibeVoiceCausalLMOutputWithPast(BaseModelOutputWithPast):
     """
 
     loss: torch.FloatTensor | None = None
-    diffusion_loss: torch.FloatTensor | None = None
     logits: torch.FloatTensor | None = None
     audio_features: torch.FloatTensor | None = None
 
@@ -462,7 +459,11 @@ class VibeVoiceForConditionalGeneration(VibeVoicePreTrainedModel, VibeVoiceGener
             loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.vocab_size, **kwargs)
 
         diffusion_loss = None
-        if acoustic_loss_mask is not None and outputs.audio_features is not None:
+        if (
+            acoustic_loss_mask is not None
+            and outputs.audio_features is not None
+            and self.config.diffusion_loss_weight > 0.0
+        ):
             if noise_scheduler is None:
                 # use helper from VibeVoiceGenerationMixin
                 noise_scheduler = self._build_default_noise_scheduler(self.generation_config)
@@ -472,8 +473,11 @@ class VibeVoiceForConditionalGeneration(VibeVoicePreTrainedModel, VibeVoiceGener
             diffusion_loss = self.compute_diffusion_loss(
                 audio_features, condition_features, noise_scheduler, ddpm_batch_multiplier, num_diffusion_steps
             )
+            loss = (
+                1 - self.config.diffusion_loss_weight
+            ) * loss + self.config.diffusion_loss_weight * diffusion_loss.to(loss.device)
 
-        return VibeVoiceCausalLMOutputWithPast(loss=loss, diffusion_loss=diffusion_loss, logits=logits, **outputs)
+        return VibeVoiceCausalLMOutputWithPast(loss=loss, logits=logits, **outputs)
 
 
 __all__ = ["VibeVoiceForConditionalGeneration", "VibeVoicePreTrainedModel", "VibeVoiceModel"]
