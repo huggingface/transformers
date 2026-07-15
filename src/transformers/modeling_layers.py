@@ -498,18 +498,29 @@ class MtpModel(PreTrainedModel):
         for i, mtp_layer in enumerate(self.layers):
             # We need to recompute those every layer since they change
             inputs_embeds = self.embed_tokens(input_ids).to(last_hidden_states.device)
+
+            # Support both 2D position_ids and MRoPE-style nD ids (e.g. Qwen3.5 uses [4, B, L])
+            if position_ids.ndim == 2:
+                text_position_ids = position_ids
+                rope_position_ids = position_ids
+            else:
+                text_position_ids = position_ids[0]  # first component is text positions
+                rope_position_ids = position_ids[1:] if position_ids.shape[0] > 1 else position_ids
+
             position_embeddings = (
-                self.rotary_emb(inputs_embeds, position_ids=position_ids) if self.rotary_emb is not None else None
+                self.rotary_emb(inputs_embeds, position_ids=rope_position_ids)
+                if self.rotary_emb is not None
+                else None
             )
 
             # In full generality, we may need to recompute masks for every layer due to the position offset of each layer
-            masks = self.create_masks_for_mtp_layer(i, inputs_embeds, mtp_cache, position_ids)
+            masks = self.create_masks_for_mtp_layer(i, inputs_embeds, mtp_cache, text_position_ids)
 
             last_hidden_states = mtp_layer(
                 inputs_embeds,
                 last_hidden_states,
                 position_embeddings=position_embeddings,
-                position_ids=position_ids,
+                position_ids=text_position_ids,
                 past_key_values=mtp_cache,
                 **masks,
                 **kwargs,
@@ -545,7 +556,8 @@ class MtpModel(PreTrainedModel):
             # Roll by 1 and append for next layer
             input_ids = torch.cat([input_ids[:, 1:], next_mtp_token], dim=-1)
             attention_mask = torch.cat([attention_mask[:, 1:], attention_mask.new_ones(batch_size, 1)], dim=-1)  # type: ignore
-            position_ids = torch.cat([position_ids[:, 1:], position_ids[:, -1:] + 1], dim=-1)
+            next_position_ids = position_ids[..., -1:] + 1
+            position_ids = torch.cat([position_ids[..., 1:], next_position_ids], dim=-1)
 
             # Need to cat ful_ids as well for the processors
             if full_input_ids is not None:
@@ -560,12 +572,15 @@ class MtpModel(PreTrainedModel):
         pretrained_model_name_or_path = main_model.config.name_or_path
         num_hidden_layers = main_model.config.get_text_config().num_hidden_layers
         # Heuristic: the main model should have the mtp layer patterns under `_keys_to_ignore_on_load_unexpected` to avoid
-        # loading them by default, so use it to later load the correct keys from the checkpoints
+        # loading them by default, so use it to later load the correct keys from the checkpoints.
+        # Filter out non-MTP patterns (e.g. vision tower weights for multimodal models like Qwen3.5).
         mtp_patterns = main_model._keys_to_ignore_on_load_unexpected.copy()  # type: ignore
-        # Due to different released checkpoints, only keep the ones with layer number >= num_hidden_layers - otherwise
-        # mtp layers in a smaller checkpoints could be wrongly added as a 2nd mtp layer of a bigger checkpoint
         final_mtp_patterns = []
         for pattern in mtp_patterns:
+            has_mtp_keyword = "mtp" in pattern.lower()
+            has_layer_pattern = re.search(r"layers?\.\d+", pattern, re.IGNORECASE) is not None
+            if not has_mtp_keyword and not has_layer_pattern:
+                continue
             match_object = re.search(r"\.(\d+)", pattern)
             if match_object is not None and int(match_object.group(1)) < num_hidden_layers:
                 continue
