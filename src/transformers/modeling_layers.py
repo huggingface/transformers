@@ -25,7 +25,7 @@ from safetensors import safe_open
 from .cache_utils import Cache
 from .conversion_mapping import get_model_conversion_mapping
 from .core_model_loading import WeightRenaming, convert_and_load_state_dict_in_model
-from .masking_utils import create_causal_mask
+from .masking_utils import LAYER_PATTERN_TO_MASK_FUNCTION_MAPPING, create_causal_mask
 from .modeling_outputs import (
     BaseModelOutputWithPast,
     QuestionAnsweringModelOutput,
@@ -421,6 +421,51 @@ class MtpModel(PreTrainedModel):
             logits = logits[..., :unpadded_vocab_size]
         return logits
 
+    def create_masks_for_mtp_layer(
+        self, layer_idx: int, inputs_embeds: torch.Tensor, mtp_cache: MtpCache, position_ids: torch.Tensor
+    ):
+        """
+        Create the (potentially several) masks required for layer `layer_idx`. This relies on the `layer_type`
+        attribute of the mtp layer if any, otherwise simply create a causal mask for full attention.
+        """
+        # Note that `_assisted_decoding` raises on batch_size > 1, so there is no padding mask to add
+        mask_kwargs = {
+            "config": self.config,
+            "inputs_embeds": inputs_embeds,
+            "attention_mask": None,
+            "past_key_values": mtp_cache,
+            "position_ids": position_ids,
+            # Force the mask function to look at this current idx in the mtp_cache to account for positions offset of mtp layers
+            "layer_idx": layer_idx,
+        }
+
+        mtp_layer_type = getattr(self.layers[layer_idx], "layer_type", None)
+        masks = {}
+        if mtp_layer_type is not None and mtp_layer_type in LAYER_PATTERN_TO_MASK_FUNCTION_MAPPING:
+            mask_function = LAYER_PATTERN_TO_MASK_FUNCTION_MAPPING[mtp_layer_type]
+            # Some `mtp_layer_type` may point to several needed mask, e.g. `hybrid`
+            if isinstance(mask_function, dict):
+                for actual_pattern, actual_function in mask_function.items():
+                    masks[actual_pattern] = actual_function(**mask_kwargs)
+            else:
+                masks[mtp_layer_type] = mask_function(**mask_kwargs)
+        else:
+            masks["full_attention"] = create_causal_mask(**mask_kwargs)
+
+        if len(masks) > 2:
+            raise ValueError("You should have at most 2 masks, 1 for attention, and 1 for linear attention")
+
+        # Remap to kwargs that the mtp_layer will understand
+        internal_layer_expected_kwarg_mapping = {
+            "full_attention": "attention_mask",
+            "sliding_attention": "attention_mask",
+            "linear_attention": "conv_mask",
+        }
+        # Remap so that we can feed diretcly into the layer
+        masks = {internal_layer_expected_kwarg_mapping[k]: v for k, v in masks.items()}
+
+        return masks
+
     def forward(
         self,
         input_ids: torch.Tensor,
@@ -456,23 +501,17 @@ class MtpModel(PreTrainedModel):
             position_embeddings = (
                 self.rotary_emb(inputs_embeds, position_ids=position_ids) if self.rotary_emb is not None else None
             )
-            # `_assisted_decoding` raises on batch_size > 1, so there is no padding to fold into the mask
-            causal_mask = create_causal_mask(
-                self.config,
-                inputs_embeds,
-                attention_mask=None,
-                past_key_values=mtp_cache,
-                position_ids=position_ids,
-                layer_idx=i,
-            )
+
+            # In full generality, we may need to recompute masks for every layer due to the position offset of each layer
+            masks = self.create_masks_for_mtp_layer(i, inputs_embeds, mtp_cache, position_ids)
 
             last_hidden_states = mtp_layer(
                 inputs_embeds,
                 last_hidden_states,
                 position_embeddings=position_embeddings,
-                attention_mask=causal_mask,
                 position_ids=position_ids,
                 past_key_values=mtp_cache,
+                **masks,
                 **kwargs,
             )
             if self.use_shared_post_norm:
@@ -562,23 +601,17 @@ class MtpModel(PreTrainedModel):
             position_embeddings = (
                 self.rotary_emb(inputs_embeds, position_ids=position_ids) if self.rotary_emb is not None else None
             )
-            # `_assisted_decoding` raises on batch_size > 1, so there is no padding to fold into the mask
-            causal_mask = create_causal_mask(
-                self.config,
-                inputs_embeds,
-                attention_mask=None,
-                past_key_values=mtp_cache,
-                position_ids=position_ids,
-                layer_idx=i,
-            )
+
+            # In full generality, we may need to recompute masks for every layer due to the position offset of each layer
+            masks = self.create_masks_for_mtp_layer(i, inputs_embeds, mtp_cache, position_ids)
 
             last_hidden_states = mtp_layer(
                 inputs_embeds,
                 last_hidden_states,
                 position_embeddings=position_embeddings,
-                attention_mask=causal_mask,
                 position_ids=position_ids,
                 past_key_values=mtp_cache,
+                **masks,
                 **kwargs,
             )
             if self.use_shared_post_norm:
