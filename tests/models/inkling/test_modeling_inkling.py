@@ -124,7 +124,7 @@ class InklingAudio2TextModelTester:
         self.encoder_seq_length = seq_length
 
     def get_config(self):
-        return InklingConfig(
+        config = InklingConfig(
             text_config=self.text_config,
             vision_config={"patch_size": 5, "num_hidden_layers": 2, "num_channels": 3},
             audio_config=self.audio_config,
@@ -134,6 +134,8 @@ class InklingAudio2TextModelTester:
             audio_token_id=self.audio_token_id,
             video_token_id=self.video_token_id,
         )
+        config.num_hidden_layers = config.text_config.num_hidden_layers
+        return config
 
     def prepare_config_and_inputs(self):
         audio_input_ids = ids_tensor([self.batch_size, self.audio_num_frames, self.n_mel_bins], self.mel_vocab_size)
@@ -213,6 +215,10 @@ class InklingAudio2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unitte
 
     @unittest.skip("Inkling needs correct embeddings for per-layer-input computation, random won't work!")
     def test_generate_from_random_inputs_embeds(self):
+        pass
+
+    @unittest.skip("Inkling requires an explicit prompt for generation")
+    def test_generate_without_input_ids(self):
         pass
 
     @unittest.skip(GEMMA4_RANDOM_MOE_FA2_SKIP_REASON)
