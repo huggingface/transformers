@@ -200,8 +200,11 @@ def apply_pipeline_parallelism(model: nn.Module, pp_mesh: torch.distributed.devi
     num_layers = len(layers)
 
     start_layer, end_layer = stage.layer_range_for_rank(stage.pp_rank, num_layers)
+    tied = getattr(model.config, "tie_word_embeddings", False)
 
-    if not stage.pp_is_first_stage:
+    # When tied, keep embed_tokens on the last stage too so _finalize_model_loading in modeling_utils.py can tie lm_head locally.
+    keep_embed_tokens = stage.pp_is_first_stage or (tied and stage.pp_is_last_stage)
+    if not keep_embed_tokens:
         base_model.embed_tokens = PipelineIdentityLayer()
 
     for layer_idx in range(num_layers):
@@ -211,6 +214,11 @@ def apply_pipeline_parallelism(model: nn.Module, pp_mesh: torch.distributed.devi
     if not stage.pp_is_last_stage:
         base_model.norm = PipelineIdentityLayer()
         model.lm_head = PipelineIdentityLayer()
+
+
+    # let _finalize_model_loading know that we want to tie the lm_head only in the last rank
+    if tied and not stage.pp_is_last_stage:
+        model.all_tied_weights_keys = {}
 
     _wrap_forward_for_pipeline_parallel(model)
     return model

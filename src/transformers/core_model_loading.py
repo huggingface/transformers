@@ -1458,7 +1458,9 @@ def _add_unmatched_checkpoint_key(
     owner_rank = stage.find_rank_for_key(key, len(base_model.layers), model.base_model_prefix)
     owned_by_another_stage = owner_rank is not None and owner_rank != stage.pp_rank
 
-    if owned_by_another_stage:
+    if getattr(model.config, "tie_word_embeddings", False) and key.startswith("lm_head."):
+        loading_info.skipped_pp_keys.add(key)
+    elif owned_by_another_stage:
         loading_info.skipped_pp_keys.add(key)
     else:
         loading_info.unexpected_keys.add(key)
