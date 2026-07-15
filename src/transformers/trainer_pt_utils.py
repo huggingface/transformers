@@ -833,11 +833,14 @@ class BatchRebalanceSampler(Sampler):
         def group_start_index(cts, gi):
             return sum(cts[:gi])
 
-        def can_increase(cts, gi):
+        def can_transfer(cts, from_idx, to_idx):
             if self.max_tokens <= 0:
                 return True
-            gs = group_start_index(cts, gi)
-            return self._within_token_limit(cts[gi] + 1, sorted_pairs, gs)
+            new_cts = list(cts)
+            new_cts[from_idx] -= 1
+            new_cts[to_idx] += 1
+            gs = sum(new_cts[:to_idx])
+            return self._within_token_limit(new_cts[to_idx], sorted_pairs, gs)
 
         if self.max_tokens > 0:
             for gi in range(K):
@@ -846,13 +849,11 @@ class BatchRebalanceSampler(Sampler):
                     if not self._within_token_limit(counts[gi], sorted_pairs, gs):
                         donor_found = False
                         for r in range(K):
-                            if r != gi:
-                                gs_r = group_start_index(counts, r)
-                                if self._within_token_limit(counts[r] + 1, sorted_pairs, gs_r):
-                                    counts[gi] -= 1
-                                    counts[r] += 1
-                                    donor_found = True
-                                    break
+                            if r != gi and can_transfer(counts, gi, r):
+                                counts[gi] -= 1
+                                counts[r] += 1
+                                donor_found = True
+                                break
                         if not donor_found:
                             logger.warning_once(
                                 "BatchRebalanceSampler: unable to satisfy `max_tokens` constraint for one or more "
@@ -898,49 +899,58 @@ class BatchRebalanceSampler(Sampler):
                 best_counts = list(counts)
 
             hi_idx = max(active, key=lambda i: costs[i])
-            lo_idx = min(active, key=lambda i: costs[i])
 
-            if hi_idx == lo_idx or costs[hi_idx] == costs[lo_idx]:
+            if costs[hi_idx] == costs[min(active, key=lambda i: costs[i])]:
                 break
 
-            if counts[hi_idx] > min_per_group and can_increase(counts, lo_idx):
-                counts[hi_idx] -= 1
-                counts[lo_idx] += 1
-            elif counts[hi_idx] <= min_per_group:
-                cap_cost = costs[hi_idx]
+            lo_candidates = sorted(active, key=lambda i: costs[i])
+            transferred = False
+            for lo_idx in lo_candidates:
+                if lo_idx == hi_idx or costs[lo_idx] == costs[hi_idx]:
+                    continue
+                if counts[hi_idx] > min_per_group and can_transfer(counts, hi_idx, lo_idx):
+                    counts[hi_idx] -= 1
+                    counts[lo_idx] += 1
+                    transferred = True
+                    break
+            if not transferred:
+                if counts[hi_idx] <= min_per_group:
+                    cap_cost = costs[hi_idx]
 
-                cost_ranking = sorted(range(K), key=lambda i: costs[i], reverse=True)
-                hi_rank = cost_ranking.index(hi_idx)
-                slot_num = hi_rank // dp_size
-                slot_start = slot_num * dp_size
-                slot_end = min(slot_start + dp_size, K)
-                slot_members = set(cost_ranking[slot_start:slot_end])
+                    cost_ranking = sorted(range(K), key=lambda i: costs[i], reverse=True)
+                    hi_rank = cost_ranking.index(hi_idx)
+                    slot_num = hi_rank // dp_size
+                    slot_start = slot_num * dp_size
+                    slot_end = min(slot_start + dp_size, K)
+                    slot_members = set(cost_ranking[slot_start:slot_end])
 
-                for gi in slot_members:
-                    if gi in frozen or gi == hi_idx:
-                        continue
-                    while True:
-                        _, costs_now = compute_groups_costs(counts)
-                        idx_start = sum(counts[:gi])
-                        gi_max_len = sorted_pairs[idx_start][1] if counts[gi] > 0 else 0
-                        projected = self._cost(counts[gi] + 1, gi_max_len)
-                        projected_tokens = self._padded_tokens(counts[gi] + 1, sorted_pairs, idx_start)
-                        if projected > cap_cost:
-                            break
-                        if self.max_tokens > 0 and projected_tokens > self.max_tokens:
-                            break
-                        donors = [
-                            i
-                            for i in range(K)
-                            if i not in frozen and i not in slot_members and counts[i] > min_per_group
-                        ]
-                        if not donors:
-                            break
-                        donor = min(donors, key=lambda i: costs_now[i])
-                        counts[gi] += 1
-                        counts[donor] -= 1
+                    for gi in slot_members:
+                        if gi in frozen or gi == hi_idx:
+                            continue
+                        while True:
+                            _, costs_now = compute_groups_costs(counts)
+                            idx_start = sum(counts[:gi])
+                            gi_max_len = sorted_pairs[idx_start][1] if counts[gi] > 0 else 0
+                            projected = self._cost(counts[gi] + 1, gi_max_len)
+                            projected_tokens = self._padded_tokens(counts[gi] + 1, sorted_pairs, idx_start)
+                            if projected > cap_cost:
+                                break
+                            if self.max_tokens > 0 and projected_tokens > self.max_tokens:
+                                break
+                            donors = [
+                                i
+                                for i in range(K)
+                                if i not in frozen and i not in slot_members and counts[i] > min_per_group
+                            ]
+                            if not donors:
+                                break
+                            donor = min(donors, key=lambda i: costs_now[i])
+                            counts[gi] += 1
+                            counts[donor] -= 1
 
-                frozen.update(slot_members)
+                    frozen.update(slot_members)
+                else:
+                    break
 
         groups, _ = compute_groups_costs(best_counts)
         return groups
