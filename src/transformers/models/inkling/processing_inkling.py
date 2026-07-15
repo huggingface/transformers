@@ -111,7 +111,7 @@ class InklingProcessor(ProcessorMixin):
         if audio_input_ids_mask is not None:
             num_soft_tokens = int(audio_input_ids_mask[audio_idx].sum())
         else:
-            num_soft_tokens = int(audio_inputs["audio_input_ids"][audio_idx].shape[-1])
+            num_soft_tokens = int(audio_inputs["audio_input_ids"][audio_idx].shape[-2])
         return self.audio_token * num_soft_tokens
 
     @property

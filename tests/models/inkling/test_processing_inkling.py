@@ -380,3 +380,40 @@ class InklingProcessingIntegrationTest(unittest.TestCase):
             }
         ]
         self._assert_matches_sglang("multi_audio", messages, has_audio=True)
+
+    def test_apply_chat_template_audio_without_attention_mask(self):
+        messages = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": "What is said in this clip?"},
+                    {"type": "audio", "url": self.AUDIO_URL},
+                ],
+            }
+        ]
+        common = {
+            "add_generation_prompt": True,
+            "tokenize": True,
+            "return_dict": True,
+            "return_tensors": "pt",
+        }
+
+        with_mask = self.processor.apply_chat_template(messages, **common)
+        # TODO: @eustlb, return_attention_mask is not best API and should be changed
+        # with audio processors (#44394)
+        without_mask = self.processor.apply_chat_template(
+            messages, audio_kwargs={"return_attention_mask": False}, **common
+        )
+
+        self.assertIsNotNone(with_mask.get("audio_input_ids_mask"))
+        self.assertIsNone(without_mask.get("audio_input_ids_mask"))
+
+        audio_id = self.processor.audio_token_id
+        num_frames = with_mask["audio_input_ids"].shape[-2]
+        n_mel_bins = with_mask["audio_input_ids"].shape[-1]
+        n_placeholders_with = int((with_mask["input_ids"] == audio_id).sum())
+        n_placeholders_without = int((without_mask["input_ids"] == audio_id).sum())
+
+        # One audio soft token per frame, mask on or off
+        self.assertEqual(n_placeholders_with, num_frames)
+        self.assertEqual(n_placeholders_without, num_frames)
