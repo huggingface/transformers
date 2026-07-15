@@ -27,10 +27,10 @@ Two layers, both mocking only what needs a Hopper/Blackwell GPU + a JIT CUDA too
   then asserts the tensors handed to the kernel are what the kernel expects (packed int32 UE8M0 SFs,
   int32 grouped layout, `(qtensor, sf)` operand tuples, recipes, transformed Mega MoE weights, ...).
 
-The box is SM80 (Ampere), so paths that gate on `_is_sm100` are exercised by patching `dg._is_sm100`:
-the SF-packing / TMA-alignment / psum-layout code it selects is pure tensor arithmetic that runs on any
-CUDA device — only the loader's real arch check (bypassed here by mocking `load_deepgemm_kernel`) needs
-the actual silicon.
+Arch-gated paths are exercised via the fake bundle's `is_sm100` flag (the loader resolves it once from
+the device at load time; these tests bypass the loader by mocking `load_deepgemm_kernel`): the
+SF-packing / TMA-alignment / psum-layout code it selects is pure tensor arithmetic that runs on any
+CUDA device — only the loader's real arch check needs the actual silicon.
 """
 
 import contextlib
@@ -210,7 +210,7 @@ class DeepGemmLoaderTest(unittest.TestCase):
 # `float32` — so `_coerce_sf_for_kernel`'s dtype-driven branches execute for real.
 
 
-def _make_bundle(captured):
+def _make_bundle(captured, is_sm100):
     def per_token_cast_to_fp8(x, *, use_ue8m0=False, gran_k=128, use_packed_ue8m0=False):
         cols = -(-x.size(-1) // gran_k)
         sf_dtype = torch.float8_e8m0fnu if use_ue8m0 else torch.float32
@@ -302,6 +302,7 @@ def _make_bundle(captured):
         get_symm_buffer_for_mega_moe=get_symm_buffer_for_mega_moe,
         fp8_fp4_mega_moe=fp8_fp4_mega_moe,
         m_alignment=128,
+        is_sm100=is_sm100,
     )
 
 
@@ -373,13 +374,10 @@ class DeepGemmForwardTest(unittest.TestCase):
         self.addCleanup(setattr, dg, "_DEEPGEMM", None)
 
     @contextlib.contextmanager
-    def _bundle(self, *, is_sm100=None):
+    def _bundle(self, *, is_sm100):
         captured = {}
-        stack = contextlib.ExitStack()
-        stack.enter_context(mock.patch.object(dg, "load_deepgemm_kernel", return_value=_make_bundle(captured)))
-        if is_sm100 is not None:
-            stack.enter_context(mock.patch.object(dg, "_is_sm100", return_value=is_sm100))
-        with stack:
+        bundle = _make_bundle(captured, is_sm100)
+        with mock.patch.object(dg, "load_deepgemm_kernel", return_value=bundle):
             yield captured
 
     # ── deepgemm_fp8_fp4_linear ────────────────────────────────────────────────
@@ -600,10 +598,8 @@ class DeepGemmForwardTest(unittest.TestCase):
         # divisible by 4 to pack into int32) that a toy expert shape can't provide.
         f32 = torch.ones(4, 1, device=torch_device, dtype=torch.float32)
         ue8m0 = f32.to(torch.float8_e8m0fnu)
-        with mock.patch.object(dg, "_is_sm100", return_value=True):
-            dg._assert_sm100_scales_are_ue8m0(ue8m0)  # no raise
-        with mock.patch.object(dg, "_is_sm100", return_value=False):
-            dg._assert_sm100_scales_are_ue8m0(f32)  # no raise
+        dg._assert_sm100_scales_are_ue8m0(ue8m0, is_sm100=True)  # no raise
+        dg._assert_sm100_scales_are_ue8m0(f32, is_sm100=False)  # no raise
 
     # ── deepgemm_fp8_fp4_megamoe_experts_forward ───────────────────────────────
 
