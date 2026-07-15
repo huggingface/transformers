@@ -574,39 +574,46 @@ class ContinuousBatchingNoAcceleratorTest(unittest.TestCase):
         """Test continuous batching generation when no accelerator is available. It uses a simulated CPU-only PyTorch
         environment by mocking all acceleratoravailability checks to return False"""
         model_id = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
+        # `is_torch_xpu_available` is lru-cached, so clear it before mocking `torch.xpu.is_available` to ensure the
+        # CPU-only simulation observes the mocked value.
+        is_torch_xpu_available.cache_clear()
 
         # Mock all accelerator availability checks to simulate CPU-only PyTorch
-        with (
-            patch("torch.cuda.is_available", return_value=False),
-            patch("transformers.utils.is_torch_xpu_available", return_value=False),
-            patch("torch.backends.mps.is_available", return_value=False),
-        ):
-            # Verify patches work
-            self.assertFalse(torch.cuda.is_available())
-            self.assertFalse(is_torch_xpu_available())
-            self.assertFalse(torch.backends.mps.is_available())
+        try:
+            with (
+                patch("torch.cuda.is_available", return_value=False),
+                patch("torch.xpu.is_available", return_value=False),
+                patch("torch.backends.mps.is_available", return_value=False),
+            ):
+                # Verify patches work
+                self.assertFalse(torch.cuda.is_available())
+                self.assertFalse(is_torch_xpu_available())
+                self.assertFalse(torch.backends.mps.is_available())
 
-            tokenizer, model = get_tokenizer_and_model(model_id, "sdpa", "cpu")
-            user_messages = _DEFAULT_USER_MESSAGES[:1]
-            input_ids = get_generation_inputs(user_messages, tokenizer, for_continuous_batching=True)
+                tokenizer, model = get_tokenizer_and_model(model_id, "sdpa", "cpu")
+                user_messages = _DEFAULT_USER_MESSAGES[:1]
+                input_ids = get_generation_inputs(user_messages, tokenizer, for_continuous_batching=True)
 
-            model.generation_config.max_new_tokens = 10
-            model.generation_config.do_sample = False
+                model.generation_config.max_new_tokens = 10
+                model.generation_config.do_sample = False
 
-            continuous_batching_config = ContinuousBatchingConfig(use_cuda_graph=False, use_async_batching=False)
+                continuous_batching_config = ContinuousBatchingConfig(use_cuda_graph=False, use_async_batching=False)
 
-            # This should not crash even with all accelerators unavailable
-            outputs = model.generate_batch(
-                inputs=input_ids,
-                generation_config=model.generation_config,
-                continuous_batching_config=continuous_batching_config,
-            )
+                # This should not crash even with all accelerators unavailable
+                outputs = model.generate_batch(
+                    inputs=input_ids,
+                    generation_config=model.generation_config,
+                    continuous_batching_config=continuous_batching_config,
+                )
 
-            # Verify we got outputs
-            self.assertEqual(len(outputs), len(input_ids))
-            for output in outputs.values():
-                self.assertIsNotNone(output.generated_tokens)
-                self.assertGreater(len(output.generated_tokens), 0)
+                # Verify we got outputs
+                self.assertEqual(len(outputs), len(input_ids))
+                for output in outputs.values():
+                    self.assertIsNotNone(output.generated_tokens)
+                    self.assertGreater(len(output.generated_tokens), 0)
+        finally:
+            # Clear the lru_cache again so the mocked XPU availability does not leak into subsequent tests.
+            is_torch_xpu_available.cache_clear()
 
     def test_output_router_deliver_to_queue(self):
         """Test that OutputRouter.deliver places outputs on the queue when no handler is registered."""
