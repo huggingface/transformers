@@ -41,10 +41,37 @@ from transformers.utils.network_logging import register_network_debug_plugin
 
 
 _ci_fallback_cache_dir = None
-# Records the repo/file id for every call that was retried through the read-only cache
-# fallback. Surfaced in the pytest terminal summary so CI logs show whether (and how
-# often) the fallback actually fired during a run.
-_ci_fallback_events = []
+# Directory holding one append-only file per process recording the repo/file id for every
+# call retried through the read-only cache fallback. A directory (rather than an in-memory
+# list) is used so the count survives `pytest-xdist`: tests run in worker subprocesses, but
+# `pytest_terminal_summary` runs on the controller, which aggregates all the files. The path
+# is shared with workers via an env var (they inherit it at spawn, like DISABLE_SAFETENSORS_CONVERSION).
+_ci_fallback_events_dir = None
+
+
+def _record_fallback_event(repo_id):
+    """Append `repo_id` to this process's fallback-event file (xdist-safe, best-effort)."""
+    if not _ci_fallback_events_dir:
+        return
+    worker = os.environ.get("PYTEST_XDIST_WORKER", "main")
+    try:
+        with open(os.path.join(_ci_fallback_events_dir, f"{worker}-{os.getpid()}.log"), "a", encoding="utf-8") as fh:
+            fh.write(f"{repo_id}\n")
+    except OSError:
+        pass
+
+
+def _collect_fallback_events():
+    """Aggregate fallback events recorded by every process (controller + xdist workers)."""
+    events = []
+    if _ci_fallback_events_dir and os.path.isdir(_ci_fallback_events_dir):
+        for name in sorted(os.listdir(_ci_fallback_events_dir)):
+            try:
+                with open(os.path.join(_ci_fallback_events_dir, name), encoding="utf-8") as fh:
+                    events.extend(line.strip() for line in fh if line.strip())
+            except OSError:
+                pass
+    return events
 
 
 # Rust's `std::io::Error` renders OS-level failures as ``"<strerror> (os error <N>)"``
@@ -102,8 +129,9 @@ def _with_tmpdir_cache_fallback(fn):
             global _ci_fallback_cache_dir
             if _ci_fallback_cache_dir is None:
                 _ci_fallback_cache_dir = tempfile.mkdtemp(prefix="ci_fallback_tmpdir_cache_dir_")
-            repo_id = kwargs.get("path_or_repo_id") or (args[0] if args else "?")
-            _ci_fallback_events.append(str(repo_id))
+            # `cached_files` names it `path_or_repo_id`; `hf_hub_download` names it `repo_id`.
+            repo_id = kwargs.get("path_or_repo_id") or kwargs.get("repo_id") or (args[0] if args else "?")
+            _record_fallback_event(str(repo_id))
             # Emit a marker as well; captured per-test by pytest, but the guaranteed-visible
             # count is reported in `pytest_terminal_summary` at the end of the run.
             print(
@@ -174,9 +202,44 @@ warnings.simplefilter(action="ignore", category=FutureWarning)
 
 
 def pytest_configure(config):
+    # Shared directory for the read-only cache fallback events. The controller creates it and
+    # exports the path; xdist workers (spawned later) inherit the env var and write into the
+    # same directory, so `pytest_terminal_summary` on the controller can aggregate all of them.
+    global _ci_fallback_events_dir
+    _ci_fallback_events_dir = os.environ.get("CI_FALLBACK_EVENTS_DIR")
+    if _ci_fallback_events_dir is None:
+        _ci_fallback_events_dir = tempfile.mkdtemp(prefix="ci_fallback_events_")
+        os.environ["CI_FALLBACK_EVENTS_DIR"] = _ci_fallback_events_dir
+
     import transformers.utils.hub as _hub
 
     _hub.cached_files = _with_tmpdir_cache_fallback(_hub.cached_files)
+
+    # `cached_files` is transformers' entry point, but libraries such as PEFT call
+    # `huggingface_hub.hf_hub_download` directly (e.g. PeftConfig.from_pretrained fetching
+    # adapter_config.json), bypassing it. Wrap that too and re-bind it wherever it has already
+    # been imported via `from huggingface_hub import hf_hub_download`; modules imported later
+    # (peft.config is loaded lazily during the test) pick up the wrapped version automatically.
+    import huggingface_hub
+
+    _original_hf_hub_download = huggingface_hub.hf_hub_download
+    if not getattr(_original_hf_hub_download, "_ci_fallback_wrapped", False):
+        _wrapped_hf_hub_download = _with_tmpdir_cache_fallback(_original_hf_hub_download)
+        _wrapped_hf_hub_download._ci_fallback_wrapped = True
+        huggingface_hub.hf_hub_download = _wrapped_hf_hub_download
+        # Re-bind already-imported *third-party* consumers (e.g. peft). Skip transformers and
+        # huggingface_hub themselves: transformers funnels downloads through the already-wrapped
+        # `cached_files`, and huggingface_hub's own `snapshot_download` calls `hf_hub_download`
+        # internally -- wrapping either inner call would redirect only the download to the tmp dir
+        # while the caller still resolves the file against the original (read-only) cache_dir,
+        # producing a spurious "missing file". Consumers imported later (peft.config is loaded
+        # lazily during the test) pick up the wrapped function via the package attribute above.
+        for _mod in list(sys.modules.values()):
+            _name = getattr(_mod, "__name__", "") or ""
+            if _name.split(".", 1)[0] in ("transformers", "huggingface_hub"):
+                continue
+            if getattr(_mod, "hf_hub_download", None) is _original_hf_hub_download:
+                _mod.hf_hub_download = _wrapped_hf_hub_download
 
     config.addinivalue_line("markers", "is_pipeline_test: mark test to run only when pipelines are tested")
     config.addinivalue_line("markers", "is_staging_test: mark test to run only in the staging environment")
@@ -218,15 +281,14 @@ def pytest_runtest_logreport(report):
 def pytest_terminal_summary(terminalreporter):
     # Always report whether the read-only cache fallback fired, so CI logs give an
     # unambiguous signal that the fallback path was (or was not) exercised this run.
-    if _ci_fallback_events:
+    # Events are aggregated across processes (xdist workers write to a shared directory).
+    events = _collect_fallback_events()
+    if events:
         from collections import Counter
 
         terminalreporter.write_sep("=", "CI READ-ONLY CACHE FALLBACK", yellow=True, bold=True)
-        terminalreporter.write_line(
-            f"Read-only cache fallback fired {len(_ci_fallback_events)} time(s); "
-            f"tmp cache_dir={_ci_fallback_cache_dir}"
-        )
-        for repo_id, count in sorted(Counter(_ci_fallback_events).items()):
+        terminalreporter.write_line(f"Read-only cache fallback fired {len(events)} time(s):")
+        for repo_id, count in sorted(Counter(events).items()):
             terminalreporter.write_line(f"  - {repo_id} (x{count})")
     else:
         terminalreporter.write_sep("=", "CI READ-ONLY CACHE FALLBACK: not triggered", bold=True)
