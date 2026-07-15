@@ -29,7 +29,8 @@ from tqdm.contrib.logging import logging_redirect_tqdm
 
 from ...configuration_utils import PretrainedConfig
 from ...generation.configuration_utils import ContinuousBatchingConfig, GenerationConfig
-from ...utils.import_utils import is_flash_attn_2_available, is_flash_attn_3_available, is_kernels_available
+from ...utils.generic import is_flash_attention_requested
+from ...utils.import_utils import is_flash_attn_2_available, is_flash_attn_3_available
 from ...utils.logging import logging
 from ..logits_process import LogitsProcessorList
 from .cache import PagedAttentionCache
@@ -635,21 +636,23 @@ class ContinuousBatchingManager:
         target_implem = original_attn_impl
 
         # Check if flash attention is supported and available
-        if "flash" not in target_implem and model._supports_flash_attn:
-            # Try to use use FA3, then FA2 native or kernels, then give up
-            if is_flash_attn_3_available():
+        is_flash = is_flash_attention_requested(requested_attention_implementation=target_implem)
+        is_paged = "paged|" in target_implem
+        if not is_flash and not is_paged and model._supports_flash_attn:
+            # Try to use use FA3, then FA2, then give up. Both regular package or kernels is fine.
+            if is_flash_attn_3_available(kernels_fallback_ok=True):
                 version = 3
-            elif is_flash_attn_2_available() or is_kernels_available():
+            elif is_flash_attn_2_available(kernels_fallback_ok=True):
                 version = 2
             else:
                 version = None
             # Change and warn
             msg = "Continuous batching is much better when using flash attention. "
             if version is not None:
-                target_implem = f"flash_attention_{version}"
+                target_implem = f"flash_attention_{version}"  # no "paged|" prefix here to enter the branch below
                 logger.warning(
                     f"{msg} Switching from {self._original_attn_impl} to {target_implem}. "
-                    "If you need to use eager or sdpa, set `model._supports_flash_attn` to False to avoid this."
+                    "If you need to use eager or sdpa, use paged|eager or paged|sdpa as the `attn_implementation`."
                 )
             else:
                 logger.warning(f"{msg} Consider using a flash `attn_implementation` when loading the model.")
