@@ -302,6 +302,9 @@ IGNORE_NON_TESTED = (
         "Kimi_K25VisionModel",
         "HunYuanVLTextModel",
         "HunYuanVLVisionTransformer",
+        "InklingForCausalLM",  # Building part of bigger (tested) model. Tested implicitly through InklingForConditionalGeneration.
+        "InklingAudioModel",  # Building part of bigger (tested) model. Tested implicitly through InklingForConditionalGeneration.
+        "InklingVisionModel",  # Building part of bigger (tested) model. Tested implicitly through InklingForConditionalGeneration.
     ]
 )
 
