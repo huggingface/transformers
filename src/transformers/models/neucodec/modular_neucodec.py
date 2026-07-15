@@ -55,10 +55,10 @@ class NeuCodecConfig(Xcodec2Config):
         Dimension for the vector quantization codebook.
     quantization_levels (`list[int]`, *optional*, defaults to `[4, 4, 4, 4, 4, 4, 4, 4]`):
         Levels for the vector quantization codebook.
-    output_sampling_rate (`int`, *optional*, defaults to 24000):
-        Sampling rate, in hertz (Hz), of the decoder's output audio waveform. NeuCodec encodes audio sampled at
-        `sampling_rate` (16kHz) but its decoder upsamples the reconstruction to a higher-fidelity
-        `output_sampling_rate` (24kHz), while keeping the same 50Hz code frame rate.
+    input_sampling_rate (`int`, *optional*, defaults to 24000):
+        Sampling rate, in hertz (Hz), of the decoder's input audio waveform. NeuCodec encodes audio sampled at
+        `input_sampling_rate` (16kHz) but its decoder upsamples the reconstruction to a higher-fidelity
+        `sampling_rate` (24kHz), while keeping the same 50Hz code frame rate.
 
     Example:
 
@@ -76,7 +76,7 @@ class NeuCodecConfig(Xcodec2Config):
     ```"""
 
     model_type = "neucodec"
-    output_sampling_rate: int = 24000
+    input_sampling_rate: int = 16_000
 
     @property
     def encoder_hop_length(self) -> int:
@@ -86,8 +86,8 @@ class NeuCodecConfig(Xcodec2Config):
     @property
     def hop_length(self) -> int:
         # The ISTFT head (which reads `hop_length`/`n_fft` off the config) synthesizes audio at
-        # `output_sampling_rate`, so the encoder's native hop_length is rescaled into that domain.
-        return int(self.encoder_hop_length * self.output_sampling_rate / self.sampling_rate)
+        # `sampling_rate`, so the encoder's native hop_length is rescaled into that domain.
+        return int(self.encoder_hop_length * self.sampling_rate / self.input_sampling_rate)
 
 
 @auto_docstring
@@ -154,14 +154,8 @@ class NeuCodecModel(Xcodec2Model, NeuCodecPreTrainedModel):
 
         # Acoustic embedding
         acoustic_hidden_states = self.acoustic_encoder(input_values)
-
-        # Unlike xcodec2's feature extractor, NeuCodec's mel windowing (see `NeuCodecFeatureExtractor`) can yield
-        # one fewer frame than the acoustic branch for the same input; the reference implementation truncates both
-        # branches to the shorter one before concatenating: https://github.com/neuphonic/neucodec/blob/main/neucodec/model.py#L150
-        min_length = min(acoustic_hidden_states.shape[-1], semantic_hidden_states.shape[-1])
-        acoustic_hidden_states = acoustic_hidden_states[..., :min_length]
-        semantic_hidden_states = semantic_hidden_states[..., :min_length]
-
+        
+        # Concat embeddings
         hidden_states = torch.cat([semantic_hidden_states, acoustic_hidden_states], dim=1)
         hidden_states = self.fc_encoder(hidden_states.transpose(1, 2))
 
@@ -226,10 +220,10 @@ class NeuCodecModel(Xcodec2Model, NeuCodecPreTrainedModel):
         >>> audio_codes = outputs.audio_codes
         >>> audio_values = outputs.audio_values  # sampled at 24kHz
         ```"""
-        # NeuCodec's decoder outputs audio at `output_sampling_rate`, which differs from the `sampling_rate` of
+        # NeuCodec's decoder outputs audio at `sampling_rate`, which differs from the `input_sampling_rate` of
         # `input_values`, so the truncation length must be rescaled accordingly.
         input_length = input_values.shape[-1]
-        output_length = int(input_length * self.config.output_sampling_rate / self.config.sampling_rate)
+        output_length = int(input_length * self.config.sampling_rate / self.config.input_sampling_rate)
 
         encoder_outputs = self.encode(
             input_values,

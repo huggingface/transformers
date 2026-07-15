@@ -1016,13 +1016,7 @@ class NeuCodecModel(NeuCodecPreTrainedModel):
         # Acoustic embedding
         acoustic_hidden_states = self.acoustic_encoder(input_values)
 
-        # Unlike xcodec2's feature extractor, NeuCodec's mel windowing (see `NeuCodecFeatureExtractor`) can yield
-        # one fewer frame than the acoustic branch for the same input; the reference implementation truncates both
-        # branches to the shorter one before concatenating: https://github.com/neuphonic/neucodec/blob/main/neucodec/model.py#L150
-        min_length = min(acoustic_hidden_states.shape[-1], semantic_hidden_states.shape[-1])
-        acoustic_hidden_states = acoustic_hidden_states[..., :min_length]
-        semantic_hidden_states = semantic_hidden_states[..., :min_length]
-
+        # Concat embeddings
         hidden_states = torch.cat([semantic_hidden_states, acoustic_hidden_states], dim=1)
         hidden_states = self.fc_encoder(hidden_states.transpose(1, 2))
 
@@ -1112,10 +1106,10 @@ class NeuCodecModel(NeuCodecPreTrainedModel):
         >>> audio_codes = outputs.audio_codes
         >>> audio_values = outputs.audio_values  # sampled at 24kHz
         ```"""
-        # NeuCodec's decoder outputs audio at `output_sampling_rate`, which differs from the `sampling_rate` of
+        # NeuCodec's decoder outputs audio at `sampling_rate`, which differs from the `input_sampling_rate` of
         # `input_values`, so the truncation length must be rescaled accordingly.
         input_length = input_values.shape[-1]
-        output_length = int(input_length * self.config.output_sampling_rate / self.config.sampling_rate)
+        output_length = int(input_length * self.config.sampling_rate / self.config.input_sampling_rate)
 
         encoder_outputs = self.encode(
             input_values,

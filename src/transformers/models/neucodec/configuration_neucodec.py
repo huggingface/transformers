@@ -40,10 +40,10 @@ class NeuCodecConfig(PreTrainedConfig):
         Dimension for the vector quantization codebook.
     quantization_levels (`list[int]`, *optional*, defaults to `[4, 4, 4, 4, 4, 4, 4, 4]`):
         Levels for the vector quantization codebook.
-    output_sampling_rate (`int`, *optional*, defaults to 24000):
-        Sampling rate, in hertz (Hz), of the decoder's output audio waveform. NeuCodec encodes audio sampled at
-        `sampling_rate` (16kHz) but its decoder upsamples the reconstruction to a higher-fidelity
-        `output_sampling_rate` (24kHz), while keeping the same 50Hz code frame rate.
+    input_sampling_rate (`int`, *optional*, defaults to 24000):
+        Sampling rate, in hertz (Hz), of the decoder's input audio waveform. NeuCodec encodes audio sampled at
+        `input_sampling_rate` (16kHz) but its decoder upsamples the reconstruction to a higher-fidelity
+        `sampling_rate` (24kHz), while keeping the same 50Hz code frame rate.
 
     Example:
 
@@ -86,7 +86,7 @@ class NeuCodecConfig(PreTrainedConfig):
     activation_dropout: float = 0.1
     quantization_dim: int = 2048
     quantization_levels: list[int] | tuple[int, ...] = (4, 4, 4, 4, 4, 4, 4, 4)
-    output_sampling_rate: int = 24000
+    input_sampling_rate: int = 16_000
 
     def __post_init__(self, **kwargs):
         if isinstance(self.semantic_model_config, dict):
@@ -114,8 +114,8 @@ class NeuCodecConfig(PreTrainedConfig):
     @property
     def hop_length(self) -> int:
         # The ISTFT head (which reads `hop_length`/`n_fft` off the config) synthesizes audio at
-        # `output_sampling_rate`, so the encoder's native hop_length is rescaled into that domain.
-        return int(self.encoder_hop_length * self.output_sampling_rate / self.sampling_rate)
+        # `sampling_rate`, so the encoder's native hop_length is rescaled into that domain.
+        return int(self.encoder_hop_length * self.sampling_rate / self.input_sampling_rate)
 
     @property
     def n_fft(self) -> int:
