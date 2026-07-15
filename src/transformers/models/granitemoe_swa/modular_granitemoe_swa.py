@@ -20,6 +20,8 @@ attention and learnable per-head attention sinks of GraniteSWA. The eager path c
 backends apply the same sink through the shared attention dispatch by passing ``s_aux``.
 """
 
+import copy
+
 import torch
 from huggingface_hub.dataclasses import strict
 from torch import nn
@@ -66,9 +68,10 @@ class GraniteMoeSWAConfig(GraniteMoeSharedConfig):
         Per-layer attention type, each either `"full_attention"` or `"sliding_attention"`. When
         `None`, every fourth layer (`i % 4 == 0`) uses full attention and the rest use sliding
         window attention.
-    no_rope_layers (`list[int]`, *optional*):
-        Per-layer flag for rotary position embeddings, `1` to apply RoPE and `0` for NoPE (no
-        positional embedding). When `None`, defaults to all-RoPE (`1` for every layer).
+    layer_rope_theta (`list[float]`, *optional*):
+        Per-layer RoPE base (`theta`) frequency. `0` sets NoPE (no positional embedding) for
+        that layer. Overrides global `rope_parameters["rope_theta"]`, which is only used when
+        this list is not provided or specified (`layer_rope_theta = None`).
 
     ```python
     >>> from transformers import GraniteMoeSWAModel, GraniteMoeSWAConfig
@@ -98,10 +101,18 @@ class GraniteMoeSWAConfig(GraniteMoeSharedConfig):
         "layers.*.block_sparse_moe.experts.down_proj": "rowwise",
         "layers.*.block_sparse_moe.experts": "moe_tp_experts",
     }
+    # Expert-parallel plan: shard the routed experts across ranks (each rank owns a slice of the
+    # experts) with the router driving the dispatch. The optional shared expert is left replicated.
+    base_model_ep_plan = {
+        "layers.*.block_sparse_moe.router": "ep_router",
+        "layers.*.block_sparse_moe.experts.gate_up_proj": "grouped_gemm",
+        "layers.*.block_sparse_moe.experts.down_proj": "grouped_gemm",
+        "layers.*.block_sparse_moe.experts": "moe_tp_experts",
+    }
 
     sliding_window: int | None = 128
     layer_types: list[str] | None = None
-    no_rope_layers: list[int] | None = None
+    layer_rope_theta: list[float] | None = None
 
     def __post_init__(self, **kwargs):
         if self.layer_types is None:
@@ -109,12 +120,11 @@ class GraniteMoeSWAConfig(GraniteMoeSharedConfig):
                 "full_attention" if i % 4 == 0 else "sliding_attention" for i in range(self.num_hidden_layers)
             ]
 
-        # Per-layer RoPE vs NoPE (1 = apply RoPE, 0 = NoPE). Default is all-RoPE;
-        # set `no_rope_layers` explicitly to make specific layers NoPE.
-        if self.no_rope_layers is None:
-            self.no_rope_layers = [1] * self.num_hidden_layers
-
         super().__post_init__(**kwargs)
+
+        # Per-layer RoPE base theta (0 => NoPE). Default: global rope_theta
+        if self.layer_rope_theta is None:
+            self.layer_rope_theta = [self.rope_parameters["rope_theta"]] * self.num_hidden_layers
 
 
 class GraniteMoeSWAAttention(GraniteSWAAttention):
@@ -150,6 +160,16 @@ class GraniteMoeSWAModel(GraniteMoeSharedModel):
         self.layers = nn.ModuleList(
             [GraniteMoeSWADecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
+
+        # Per-layer RoPE: one rotary embedding per unique non-zero theta (`theta == 0` => NoPE).
+        self.rotary_embs = nn.ModuleList()
+        for theta in sorted({theta for theta in config.layer_rope_theta if theta}):
+            if theta == config.rope_parameters["rope_theta"]:
+                self.rotary_embs.append(self.rotary_emb)
+            else:
+                theta_config = copy.deepcopy(config)
+                theta_config.rope_parameters = {**config.rope_parameters, "rope_theta": theta}
+                self.rotary_embs.append(type(self.rotary_emb)(theta_config))
 
     @merge_with_config_defaults
     @capture_outputs
@@ -195,11 +215,16 @@ class GraniteMoeSWAModel(GraniteMoeSharedModel):
             }
 
         hidden_states = inputs_embeds
-        position_embeddings = self.rotary_emb(hidden_states, position_ids)
+        # Compute (cos, sin) once per unique non-zero base theta; layers with theta 0 (NoPE) receive
+        # `None` and skip RoPE in attention.
+        position_embeddings_by_theta = {
+            rotary_emb.config.rope_parameters["rope_theta"]: rotary_emb(hidden_states, position_ids)
+            for rotary_emb in self.rotary_embs
+        }
 
         for i, decoder_layer in enumerate(self.layers[: self.config.num_hidden_layers]):
-            # NoPE layers (`no_rope_layers[i] == 0`) receive `None`, so attention skips RoPE.
-            layer_position_embeddings = position_embeddings if self.config.no_rope_layers[i] else None
+            theta = self.config.layer_rope_theta[i]
+            layer_position_embeddings = position_embeddings_by_theta[theta] if theta else None
             hidden_states = decoder_layer(
                 hidden_states,
                 attention_mask=causal_mask_mapping[self.config.layer_types[i]],

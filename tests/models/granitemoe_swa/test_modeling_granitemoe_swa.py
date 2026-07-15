@@ -91,16 +91,6 @@ class GraniteMoeSWAModelTest(CausalLMModelTest, unittest.TestCase):
     def test_flash_attn_2_equivalence(self):
         pass
 
-    # Skipped for consistency with the prior Granite MoE models (granitemoe, granitemoeshared), which
-    # do not exercise the expert-parallel test path.
-    @unittest.skip("EP test path not exercised by the prior Granite MoE models; skipped for consistency.")
-    def test_ep_forward(self):
-        pass
-
-    @unittest.skip("EP test path not exercised by the prior Granite MoE models; skipped for consistency.")
-    def test_ep_backward(self):
-        pass
-
 
 @slow
 @require_torch_accelerator

@@ -24,6 +24,7 @@ mathematically equivalent to adding a single extra (learnable) logit to the soft
 backends apply the same sink through the shared attention dispatch by passing ``s_aux``.
 """
 
+import copy
 from collections.abc import Callable
 
 import torch
@@ -64,9 +65,10 @@ class GraniteSWAConfig(GraniteConfig):
         Per-layer attention type, each either `"full_attention"` or `"sliding_attention"`. When
         `None`, every fourth layer (`i % 4 == 0`) uses full attention and the rest use sliding
         window attention.
-    no_rope_layers (`list[int]`, *optional*):
-        Per-layer flag for rotary position embeddings, `1` to apply RoPE and `0` for NoPE (no
-        positional embedding). When `None`, defaults to all-RoPE (`1` for every layer).
+    layer_rope_theta (`list[float]`, *optional*):
+        Per-layer RoPE base (`theta`) frequency. `0` sets NoPE (no positional embedding) for
+        that layer. Overrides global `rope_parameters["rope_theta"]`, which is only used when
+        this list is not provided or specified (`layer_rope_theta = None`).
 
     ```python
     >>> from transformers import GraniteSWAModel, GraniteSWAConfig
@@ -108,7 +110,7 @@ class GraniteSWAConfig(GraniteConfig):
     tie_word_embeddings: bool = True
     sliding_window: int | None = 128
     layer_types: list[str] | None = None
-    no_rope_layers: list[int] | None = None
+    layer_rope_theta: list[float] | None = None
 
     def __post_init__(self, **kwargs):
         if self.layer_types is None:
@@ -116,12 +118,11 @@ class GraniteSWAConfig(GraniteConfig):
                 "full_attention" if i % 4 == 0 else "sliding_attention" for i in range(self.num_hidden_layers)
             ]
 
-        # Per-layer RoPE vs NoPE (1 = apply RoPE, 0 = NoPE). Default is all-RoPE;
-        # set `no_rope_layers` explicitly to make specific layers NoPE.
-        if self.no_rope_layers is None:
-            self.no_rope_layers = [1] * self.num_hidden_layers
-
         super().__post_init__(**kwargs)
+
+        # Per-layer RoPE base theta (0 => NoPE). Default: global rope_theta
+        if self.layer_rope_theta is None:
+            self.layer_rope_theta = [self.rope_parameters["rope_theta"]] * self.num_hidden_layers
 
 
 def eager_attention_forward(
@@ -143,10 +144,11 @@ def eager_attention_forward(
         attn_weights = attn_weights + attention_mask
 
     # Sink scaling: sigmoid(logsumexp(logits) - sink), equivalent to an extra softmax-denominator logit.
+    # We compute it this way, with forced fp32 precision, for performance/stability.
     lse = torch.logsumexp(attn_weights, dim=-1)  # (batch, num_heads, q_len)
-    sink_scale = torch.sigmoid((lse - module.sinks.view(1, -1, 1)).to(torch.float32))
+    sink_scale = (lse - module.sinks.view(1, -1, 1)).to(torch.float32).sigmoid()  # Force sink scaling to fp32
 
-    attn_weights = F.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
+    attn_weights = F.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)  # Force softmax to fp32
     attn_weights = F.dropout(attn_weights, p=dropout, training=module.training)
     attn_output = torch.matmul(attn_weights, value_states)
     attn_output = attn_output * sink_scale.unsqueeze(-1).to(attn_output.dtype)
@@ -240,6 +242,16 @@ class GraniteSWAModel(GraniteModel):
             [GraniteSWADecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
 
+        # Per-layer RoPE: one rotary embedding per unique non-zero theta (`theta == 0` => NoPE).
+        self.rotary_embs = nn.ModuleList()
+        for theta in sorted({theta for theta in config.layer_rope_theta if theta}):
+            if theta == config.rope_parameters["rope_theta"]:
+                self.rotary_embs.append(self.rotary_emb)
+            else:
+                theta_config = copy.deepcopy(config)
+                theta_config.rope_parameters = {**config.rope_parameters, "rope_theta": theta}
+                self.rotary_embs.append(type(self.rotary_emb)(theta_config))
+
     @merge_with_config_defaults
     @capture_outputs
     @auto_docstring
@@ -284,11 +296,16 @@ class GraniteSWAModel(GraniteModel):
             }
 
         hidden_states = inputs_embeds
-        position_embeddings = self.rotary_emb(hidden_states, position_ids=position_ids)
+        # Compute (cos, sin) once per unique non-zero base theta; layers with theta 0 (NoPE) receive
+        # `None` and skip RoPE in attention.
+        position_embeddings_by_theta = {
+            rotary_emb.config.rope_parameters["rope_theta"]: rotary_emb(hidden_states, position_ids=position_ids)
+            for rotary_emb in self.rotary_embs
+        }
 
         for i, decoder_layer in enumerate(self.layers[: self.config.num_hidden_layers]):
-            # NoPE layers (`no_rope_layers[i] == 0`) receive `None`, so attention skips RoPE.
-            layer_position_embeddings = position_embeddings if self.config.no_rope_layers[i] else None
+            theta = self.config.layer_rope_theta[i]
+            layer_position_embeddings = position_embeddings_by_theta[theta] if theta else None
             hidden_states = decoder_layer(
                 hidden_states,
                 attention_mask=causal_mask_mapping[self.config.layer_types[i]],

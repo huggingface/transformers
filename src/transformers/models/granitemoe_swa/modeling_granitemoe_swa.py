@@ -18,6 +18,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import copy
 from collections.abc import Callable
 from typing import Optional, TypedDict
 
@@ -511,6 +512,16 @@ class GraniteMoeSWAModel(GraniteMoeSWAPreTrainedModel):
         self.gradient_checkpointing = False
         self.embedding_multiplier = config.embedding_multiplier
 
+        # Per-layer RoPE: one rotary embedding per unique non-zero theta (`theta == 0` => NoPE).
+        self.rotary_embs = nn.ModuleList()
+        for theta in sorted({theta for theta in config.layer_rope_theta if theta}):
+            if theta == config.rope_parameters["rope_theta"]:
+                self.rotary_embs.append(self.rotary_emb)
+            else:
+                theta_config = copy.deepcopy(config)
+                theta_config.rope_parameters = {**config.rope_parameters, "rope_theta": theta}
+                self.rotary_embs.append(type(self.rotary_emb)(theta_config))
+
         # Initialize weights and apply final processing
         self.post_init()
 
@@ -558,11 +569,16 @@ class GraniteMoeSWAModel(GraniteMoeSWAPreTrainedModel):
             }
 
         hidden_states = inputs_embeds
-        position_embeddings = self.rotary_emb(hidden_states, position_ids)
+        # Compute (cos, sin) once per unique non-zero base theta; layers with theta 0 (NoPE) receive
+        # `None` and skip RoPE in attention.
+        position_embeddings_by_theta = {
+            rotary_emb.config.rope_parameters["rope_theta"]: rotary_emb(hidden_states, position_ids)
+            for rotary_emb in self.rotary_embs
+        }
 
         for i, decoder_layer in enumerate(self.layers[: self.config.num_hidden_layers]):
-            # NoPE layers (`no_rope_layers[i] == 0`) receive `None`, so attention skips RoPE.
-            layer_position_embeddings = position_embeddings if self.config.no_rope_layers[i] else None
+            theta = self.config.layer_rope_theta[i]
+            layer_position_embeddings = position_embeddings_by_theta[theta] if theta else None
             hidden_states = decoder_layer(
                 hidden_states,
                 attention_mask=causal_mask_mapping[self.config.layer_types[i]],

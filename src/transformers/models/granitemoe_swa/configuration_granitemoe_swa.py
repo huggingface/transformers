@@ -45,9 +45,10 @@ class GraniteMoeSWAConfig(PreTrainedConfig):
         Per-layer attention type, each either `"full_attention"` or `"sliding_attention"`. When
         `None`, every fourth layer (`i % 4 == 0`) uses full attention and the rest use sliding
         window attention.
-    no_rope_layers (`list[int]`, *optional*):
-        Per-layer flag for rotary position embeddings, `1` to apply RoPE and `0` for NoPE (no
-        positional embedding). When `None`, defaults to all-RoPE (`1` for every layer).
+    layer_rope_theta (`list[float]`, *optional*):
+        Per-layer RoPE base (`theta`) frequency. `0` sets NoPE (no positional embedding) for
+        that layer. Overrides global `rope_parameters["rope_theta"]`, which is only used when
+        this list is not provided or specified (`layer_rope_theta = None`).
 
     ```python
     >>> from transformers import GraniteMoeSWAModel, GraniteMoeSWAConfig
@@ -106,25 +107,32 @@ class GraniteMoeSWAConfig(PreTrainedConfig):
         "layers.*.block_sparse_moe.experts.down_proj": "rowwise",
         "layers.*.block_sparse_moe.experts": "moe_tp_experts",
     }
+    # Expert-parallel plan: shard the routed experts across ranks (each rank owns a slice of the
+    # experts) with the router driving the dispatch. The optional shared expert is left replicated.
+    base_model_ep_plan = {
+        "layers.*.block_sparse_moe.router": "ep_router",
+        "layers.*.block_sparse_moe.experts.gate_up_proj": "grouped_gemm",
+        "layers.*.block_sparse_moe.experts.down_proj": "grouped_gemm",
+        "layers.*.block_sparse_moe.experts": "moe_tp_experts",
+    }
 
     sliding_window: int | None = 128
     layer_types: list[str] | None = None
-    no_rope_layers: list[int] | None = None
+    layer_rope_theta: list[float] | None = None
 
     def __post_init__(self, **kwargs):
         if self.layer_types is None:
             self.layer_types = [
                 "full_attention" if i % 4 == 0 else "sliding_attention" for i in range(self.num_hidden_layers)
             ]
-
-        # Per-layer RoPE vs NoPE (1 = apply RoPE, 0 = NoPE). Default is all-RoPE;
-        # set `no_rope_layers` explicitly to make specific layers NoPE.
-        if self.no_rope_layers is None:
-            self.no_rope_layers = [1] * self.num_hidden_layers
         if self.num_key_value_heads is None:
             self.num_key_value_heads = self.num_attention_heads
 
         super().__post_init__(**kwargs)
+
+        # Per-layer RoPE base theta (0 => NoPE). Default: global rope_theta
+        if self.layer_rope_theta is None:
+            self.layer_rope_theta = [self.rope_parameters["rope_theta"]] * self.num_hidden_layers
 
 
 __all__ = ["GraniteMoeSWAConfig"]

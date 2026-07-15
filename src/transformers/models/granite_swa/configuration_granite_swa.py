@@ -35,9 +35,10 @@ class GraniteSWAConfig(PreTrainedConfig):
         Per-layer attention type, each either `"full_attention"` or `"sliding_attention"`. When
         `None`, every fourth layer (`i % 4 == 0`) uses full attention and the rest use sliding
         window attention.
-    no_rope_layers (`list[int]`, *optional*):
-        Per-layer flag for rotary position embeddings, `1` to apply RoPE and `0` for NoPE (no
-        positional embedding). When `None`, defaults to all-RoPE (`1` for every layer).
+    layer_rope_theta (`list[float]`, *optional*):
+        Per-layer RoPE base (`theta`) frequency. `0` sets NoPE (no positional embedding) for
+        that layer. Overrides global `rope_parameters["rope_theta"]`, which is only used when
+        this list is not provided or specified (`layer_rope_theta = None`).
 
     ```python
     >>> from transformers import GraniteSWAModel, GraniteSWAConfig
@@ -97,22 +98,21 @@ class GraniteSWAConfig(PreTrainedConfig):
     attention_multiplier: float | int = 1.0
     sliding_window: int | None = 128
     layer_types: list[str] | None = None
-    no_rope_layers: list[int] | None = None
+    layer_rope_theta: list[float] | None = None
 
     def __post_init__(self, **kwargs):
         if self.layer_types is None:
             self.layer_types = [
                 "full_attention" if i % 4 == 0 else "sliding_attention" for i in range(self.num_hidden_layers)
             ]
-
-        # Per-layer RoPE vs NoPE (1 = apply RoPE, 0 = NoPE). Default is all-RoPE;
-        # set `no_rope_layers` explicitly to make specific layers NoPE.
-        if self.no_rope_layers is None:
-            self.no_rope_layers = [1] * self.num_hidden_layers
         if self.num_key_value_heads is None:
             self.num_key_value_heads = self.num_attention_heads
 
         super().__post_init__(**kwargs)
+
+        # Per-layer RoPE base theta (0 => NoPE). Default: global rope_theta
+        if self.layer_rope_theta is None:
+            self.layer_rope_theta = [self.rope_parameters["rope_theta"]] * self.num_hidden_layers
 
 
 __all__ = ["GraniteSWAConfig"]
