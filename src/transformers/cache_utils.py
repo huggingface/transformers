@@ -848,7 +848,6 @@ class LinearAttentionCacheLayerMixin(ABC):
         self.conv_kernel_size = dict.fromkeys(range(number_of_states))
         self.device = None
         self.dtype = None
-        self.batch_size = None
         self.record_past = False
 
     def __repr__(self):
@@ -947,14 +946,13 @@ class LinearAttentionLayer(LinearAttentionCacheLayerMixin):
         if conv_states is not None:
             if self.device is None:
                 self.dtype, self.device = conv_states.dtype, conv_states.device
-                self.batch_size = conv_states.shape[0]
             # Even if prefill is larger/shorter than the conv_size, the tensor is usually either padded or truncated, except if
             # self.record_past is true and conv_kernel_size is provided explicitly
             conv_kernel_size = conv_states.shape[-1] if conv_kernel_size is None else conv_kernel_size
             self.conv_kernel_size[state_idx] = conv_kernel_size
             # The shape is always static, so we init as such
             self.conv_states[state_idx] = torch.zeros(
-                (self.batch_size, conv_states.shape[1], conv_kernel_size),
+                (*conv_states.shape[:-1], conv_kernel_size),
                 dtype=conv_states.dtype,
                 device=conv_states.device,
             )
