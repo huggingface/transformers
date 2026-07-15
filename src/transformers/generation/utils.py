@@ -2011,10 +2011,21 @@ class GenerationMixin(ContinuousMixin):
             cache = DynamicCache(**dynamic_cache_kwargs)
             # Replace sliding by full
             if generation_config.cache_implementation == "dynamic_full":
-                from ..cache_utils import DynamicLayer, DynamicSlidingWindowLayer
+                from ..cache_utils import (
+                    DynamicLayer,
+                    DynamicSlidingWindowLayer,
+                    LinearAttentionAndFullAttentionLayer,
+                    LinearAttentionAndSlidingWindowAttentionLayer,
+                )
 
                 cache.layers = [
                     DynamicLayer() if type(layer) is DynamicSlidingWindowLayer else layer for layer in cache.layers
+                ]
+                cache.layers = [
+                    LinearAttentionAndFullAttentionLayer(number_of_states=layer.number_of_states)
+                    if type(layer) is LinearAttentionAndSlidingWindowAttentionLayer
+                    else layer
+                    for layer in cache.layers
                 ]
 
             model_kwargs[cache_name] = cache
