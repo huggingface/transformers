@@ -216,6 +216,7 @@ class InklingVisionConfig(PreTrainedConfig):
     initializer_range: float = 0.02
 
 
+@strict
 class InklingConfig(PreTrainedConfig):
     """Top-level multimodal config (`InklingMMConfig` in the SGLang source)."""
 
@@ -652,7 +653,6 @@ class InklingDecoderLayer(GradientCheckpointingLayer):
         self.input_layernorm = InklingRMSNorm(config.hidden_size, config.rms_norm_eps)
         self.post_attention_layernorm = InklingRMSNorm(config.hidden_size, config.rms_norm_eps)
         self.layer_type = config.layer_types[layer_idx]
-        self.attention_type = "full_attention" if self.layer_type == "hybrid" else "sliding_attention"
         self.attn_sconv = InklingShortConvolution(
             config.hidden_size, config.conv_kernel_size, layer_idx=layer_idx, conv_idx=2
         )
@@ -801,10 +801,11 @@ class InklingTextModel(InklingPreTrainedModel):
             }
 
         hidden_states = inputs_embeds
-        for decoder_layer in self.layers:
+        for i, decoder_layer in enumerate(self.layers):
+            attention_type = "full_attention" if self.config.layer_types[i] == "hybrid" else "sliding_attention"
             hidden_states = decoder_layer(
                 hidden_states,
-                attention_mask=causal_mask_mapping[decoder_layer.attention_type],
+                attention_mask=causal_mask_mapping[attention_type],
                 conv_mask=causal_mask_mapping["linear_attention"],
                 past_key_values=past_key_values,
                 **kwargs,
