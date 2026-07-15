@@ -697,7 +697,7 @@ class FalconH1Mixer(nn.Module):
 
         # 2. Convolution sequence transformation
         if use_precomputed_states and seq_len == 1:
-            conv_states = cache_params.update_conv_state(hidden_states_B_C, self.layer_idx)
+            conv_states = cache_params.update_conv_state(hidden_states_B_C, self.layer_idx)[..., -self.conv_kernel_size:]
             # We need to guarantee that anything regarding the cache is on the same device
             conv_states = conv_states.to(device=self.conv1d.weight.device)
 

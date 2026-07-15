@@ -264,7 +264,9 @@ class ZayaModelTest(CausalLMModelTest, unittest.TestCase):
             ).view(2, config.num_key_value_heads * config.head_dim // 2),
             0,
         )
-        self.assertEqual(cache.layers[0].recurrent_states[0].shape[-1], config.num_key_value_heads * config.head_dim // 2)
+        self.assertEqual(
+            cache.layers[0].recurrent_states[0].shape[-1], config.num_key_value_heads * config.head_dim // 2
+        )
 
         cache.reorder_cache(torch.tensor([1, 0], device=torch_device))
         self.assertEqual(cache.layers[0].conv_states[0].shape[0], 2)

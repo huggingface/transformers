@@ -172,6 +172,7 @@ class InklingFeatureExtractor(SequenceFeatureExtractor):
             )
 
         cls_name = self.__class__.__name__
+
         def _to_mono(clip: "np.ndarray | torch.Tensor | list") -> torch.Tensor:
             tensor = clip if isinstance(clip, torch.Tensor) else torch.as_tensor(np.asarray(clip))
             tensor = tensor.to(torch.float32)

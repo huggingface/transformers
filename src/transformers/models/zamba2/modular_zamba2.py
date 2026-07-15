@@ -492,7 +492,7 @@ class Zamba2MambaMixer(nn.Module):
 
         # Convolution sequence transformation
         if use_precomputed_state and seq_len == 1:
-            conv_states = cache_params.update_conv_state(hidden_states, self.layer_idx)
+            conv_states = cache_params.update_conv_state(hidden_states, self.layer_idx)[..., -self.conv_kernel_size:]
             hidden_states = torch.sum(conv_states * self.conv1d.weight[:, 0, :], dim=-1)
             if self.use_conv_bias:
                 hidden_states += self.conv1d.bias
@@ -506,7 +506,7 @@ class Zamba2MambaMixer(nn.Module):
                     hidden_states,
                     (self.conv_kernel_size - hidden_states.shape[-1], 0)
                 )
-                conv_states = cache_params.update_conv_state(conv_states, self.layer_idx)
+                conv_states = cache_params.update_conv_state(conv_states, self.layer_idx)[..., -self.conv_kernel_size:]
 
             hidden_states = self.act(self.conv1d(hidden_states)[..., :hidden_states.shape[-1]].transpose(1, 2))
             if use_precomputed_state:

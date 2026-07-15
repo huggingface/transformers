@@ -672,7 +672,7 @@ class BambaMixer(nn.Module):
 
         # 2. Convolution sequence transformation
         if use_precomputed_states and seq_len == 1:
-            conv_states = cache_params.update_conv_state(hidden_states_B_C, self.layer_idx)
+            conv_states = cache_params.update_conv_state(hidden_states_B_C, self.layer_idx)[..., -self.conv_kernel_size:]
 
             hidden_states_B_C = torch.sum(
                 conv_states * self.conv1d.weight.squeeze(1), dim=-1
