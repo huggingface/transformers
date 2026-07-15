@@ -266,7 +266,7 @@ def pipeline_parallel_naive_forward(model: nn.Module, original_forward, *args, *
     device = next(model.parameters()).device
     dtype = next(model.parameters()).dtype
 
-    # Bind the forward function to the arguments so that we can easily access them regardless of the number of arguments
+    # Bind the forward function to the arguments so that we can easily access them regardless of the number of arguments or the way we called the forward function.
     caller_kwargs = _bind_forward_kwargs(original_forward, args, kwargs)
     fwd_kwargs = caller_kwargs
 
