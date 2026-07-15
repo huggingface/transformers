@@ -24,7 +24,6 @@ from unittest.mock import patch
 import torch
 from parameterized import parameterized
 
-import transformers.utils as transformers_utils
 from transformers import (
     AutoConfig,
     AutoModelForCausalLM,
