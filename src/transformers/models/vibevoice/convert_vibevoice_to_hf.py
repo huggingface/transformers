@@ -293,16 +293,15 @@ def convert_checkpoint(checkpoint, output_dir, push_to_hub, bfloat16, max_shard_
         acoustic_config_dict["vae_std"] = acoustic_config_dict.pop("fix_std") / 0.8
 
     # Process diffusion head config
-    diffusion_config = model_config["diffusion_head_config"]
-    model_config["intermediate_size"] = int(diffusion_config.pop("head_ffn_ratio") * diffusion_config["hidden_size"])
-    diffusion_config["num_head_layers"] = diffusion_config.pop("head_layers")
-    if diffusion_config["ddpm_beta_schedule"] == "cosine":
-        diffusion_config["ddpm_beta_schedule"] = "squaredcos_cap_v2"
-    for key in ["speech_vae_dim", "diffusion_type", "ddpm_batch_mul", "latent_size", "hidden_size"]:
-        diffusion_config.pop(key, None)
-    # Flatten diffusion config into main config
-    model_config.update(diffusion_config)
-    del model_config["diffusion_head_config"]
+    # Build the diffusion head sub-config
+    diffusion_config = model_config.pop("diffusion_head_config")
+    model_config["diffusion_head_config"] = {
+        "hidden_size": diffusion_config["hidden_size"],
+        "latent_size": acoustic_config_dict["hidden_size"],
+        "num_hidden_layers": diffusion_config["head_layers"],
+        "intermediate_size": int(diffusion_config["head_ffn_ratio"] * diffusion_config["hidden_size"]),
+        "rms_norm_eps": diffusion_config["rms_norm_eps"],
+    }
 
     # Process language model config
     model_config["text_config"] = model_config.pop("decoder_config")

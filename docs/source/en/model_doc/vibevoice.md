@@ -502,6 +502,10 @@ print(f"Saved output to {fn}")
 
 [[autodoc]] VibeVoiceConfig
 
+## VibeVoiceDiffusionHeadConfig
+
+[[autodoc]] VibeVoiceDiffusionHeadConfig
+
 ## VibeVoiceProcessor
 
 [[autodoc]] VibeVoiceProcessor
@@ -516,3 +520,7 @@ print(f"Saved output to {fn}")
 ## VibeVoiceModel
 
 [[autodoc]] VibeVoiceModel
+
+## VibeVoiceDiffusionHead
+
+[[autodoc]] VibeVoiceDiffusionHead

@@ -109,9 +109,9 @@ class VibeVoiceDiffusionHeadSinusoidalEmbedding(nn.Module):
 class VibeVoiceDiffusionHeadMLP(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.layer_1 = nn.Linear(config.frequency_embedding_size, config.text_config.hidden_size, bias=False)
+        self.layer_1 = nn.Linear(config.frequency_embedding_size, config.hidden_size, bias=False)
         self.act = ACT2FN[config.hidden_act]
-        self.layer_2 = nn.Linear(config.text_config.hidden_size, config.text_config.hidden_size, bias=False)
+        self.layer_2 = nn.Linear(config.hidden_size, config.hidden_size, bias=False)
 
     def forward(self, hidden_states):
         return self.layer_2(self.act(self.layer_1(hidden_states)))
@@ -121,7 +121,7 @@ class VibeVoiceMLP(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.config = config
-        self.hidden_size = config.text_config.hidden_size
+        self.hidden_size = config.hidden_size
         self.intermediate_size = config.intermediate_size
         self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=config.mlp_bias)
         self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=config.mlp_bias)
@@ -138,11 +138,9 @@ class VibeVoiceDiffusionHeadAdaLayerNorm(nn.Module):
         super().__init__()
         self.num_chunks = 3
         self.ffn = VibeVoiceMLP(config)
-        self.norm = VibeVoiceRMSNorm(config.text_config.hidden_size, eps=config.rms_norm_eps)
+        self.norm = VibeVoiceRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.act_fn = ACT2FN[config.hidden_act]
-        self.linear = nn.Linear(
-            config.text_config.hidden_size, config.text_config.hidden_size * self.num_chunks, bias=False
-        )
+        self.linear = nn.Linear(config.hidden_size, config.hidden_size * self.num_chunks, bias=False)
 
     def forward(self, hidden_states, condition):
         shift_ffn, scale_ffn, gate_ffn = self.linear(self.act_fn(condition)).chunk(self.num_chunks, dim=-1)
@@ -157,11 +155,9 @@ class VibeVoiceDiffusionHeadFinalLayer(nn.Module):
         self.num_chunks = 2
         # Inline RMS normalization since there is no weight scaling (unlike `VibeVoiceRMSNorm`)
         self.norm_eps = config.rms_norm_eps
-        self.linear_1 = nn.Linear(
-            config.text_config.hidden_size, self.num_chunks * config.text_config.hidden_size, bias=False
-        )
+        self.linear_1 = nn.Linear(config.hidden_size, self.num_chunks * config.hidden_size, bias=False)
         self.act_fn = ACT2FN[config.hidden_act]
-        self.linear_2 = nn.Linear(config.text_config.hidden_size, output_size, bias=False)
+        self.linear_2 = nn.Linear(config.hidden_size, output_size, bias=False)
 
     def forward(self, hidden_states, condition):
         shift, scale = self.linear_1(self.act_fn(condition)).chunk(self.num_chunks, dim=-1)
@@ -174,14 +170,14 @@ class VibeVoiceDiffusionHeadFinalLayer(nn.Module):
 class VibeVoiceDiffusionHead(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.noisy_images_proj = nn.Linear(config.audio_config.hidden_size, config.text_config.hidden_size, bias=False)
-        self.cond_proj = nn.Linear(config.text_config.hidden_size, config.text_config.hidden_size, bias=False)
+        self.noisy_images_proj = nn.Linear(config.latent_size, config.hidden_size, bias=False)
+        self.cond_proj = nn.Linear(config.hidden_size, config.hidden_size, bias=False)
         self.timestep_embedding = VibeVoiceDiffusionHeadSinusoidalEmbedding(config)
         self.timestep_proj = VibeVoiceDiffusionHeadMLP(config)
         self.layers = nn.ModuleList(
-            [VibeVoiceDiffusionHeadAdaLayerNorm(config) for _ in range(config.num_head_layers)]
+            [VibeVoiceDiffusionHeadAdaLayerNorm(config) for _ in range(config.num_hidden_layers)]
         )
-        self.final_layer = VibeVoiceDiffusionHeadFinalLayer(config, output_size=config.audio_config.hidden_size)
+        self.final_layer = VibeVoiceDiffusionHeadFinalLayer(config, output_size=config.latent_size)
 
     def forward(self, noisy_images, timesteps, condition):
         """
@@ -223,7 +219,7 @@ class VibeVoicePreTrainedModel(PreTrainedModel):
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True
-    _supports_cache_class = False
+    _supports_cache_class = True
     _supports_attention_backend = True
     _can_compile_fullgraph = False
 
@@ -254,7 +250,7 @@ class VibeVoiceModel(VibeVoicePreTrainedModel):
         self.semantic_connector = VibeVoiceMultiModalProjector(
             config.semantic_model_config.hidden_size, config.text_config.hidden_size
         )
-        self.diffusion_head = VibeVoiceDiffusionHead(config)
+        self.diffusion_head = VibeVoiceDiffusionHead(config.diffusion_head_config)
         self.latent_scaling_factor = nn.Parameter(torch.tensor(1.0))
         self.latent_bias_factor = nn.Parameter(torch.tensor(0.0))
         self.post_init()
@@ -458,7 +454,6 @@ class VibeVoiceForConditionalGeneration(VibeVoicePreTrainedModel, VibeVoiceGener
         if labels is not None:
             loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.vocab_size, **kwargs)
 
-        diffusion_loss = None
         if (
             acoustic_loss_mask is not None
             and outputs.audio_features is not None
@@ -480,4 +475,4 @@ class VibeVoiceForConditionalGeneration(VibeVoicePreTrainedModel, VibeVoiceGener
         return VibeVoiceCausalLMOutputWithPast(loss=loss, logits=logits, **outputs)
 
 
-__all__ = ["VibeVoiceForConditionalGeneration", "VibeVoicePreTrainedModel", "VibeVoiceModel"]
+__all__ = ["VibeVoiceDiffusionHead", "VibeVoiceForConditionalGeneration", "VibeVoicePreTrainedModel", "VibeVoiceModel"]

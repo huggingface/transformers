@@ -506,6 +506,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("vibevoice_acoustic_tokenizer_decoder", "VibeVoiceAcousticTokenizerDecoderModel"),
         ("vibevoice_acoustic_tokenizer_encoder", "VibeVoiceAcousticTokenizerEncoderModel"),
         ("vibevoice_asr", "VibeVoiceAsrModel"),
+        ("vibevoice_diffusion_head", "VibeVoiceDiffusionHead"),
         ("video_llama_3", "VideoLlama3Model"),
         ("video_llama_3_vision", "VideoLlama3VisionModel"),
         ("video_llava", "VideoLlavaModel"),

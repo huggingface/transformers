@@ -81,9 +81,6 @@ class VibeVoiceModelTester:
         seq_length=3,
         is_training=True,
         use_cache=True,
-        num_head_layers=2,
-        frequency_embedding_size=8,
-        intermediate_size=16,
         text_config={
             "model_type": "qwen2",
             "intermediate_size": 36,
@@ -117,6 +114,13 @@ class VibeVoiceModelTester:
             "downsampling_ratios": [2],
             "depths": [1, 1],
         },
+        diffusion_head_config={
+            "num_hidden_layers": 2,
+            "frequency_embedding_size": 8,
+            "intermediate_size": 16,
+            "hidden_size": 32,  # Should match text_config hidden_size
+            "latent_size": 16,  # Should match audio_config hidden_size
+        },
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -126,9 +130,7 @@ class VibeVoiceModelTester:
         self.text_config = text_config
         self.audio_config = audio_config
         self.semantic_model_config = semantic_model_config
-        self.num_head_layers = num_head_layers
-        self.frequency_embedding_size = frequency_embedding_size
-        self.intermediate_size = intermediate_size
+        self.diffusion_head_config = diffusion_head_config
 
         # Extract common attributes for testing
         self.vocab_size = text_config["vocab_size"]
@@ -142,9 +144,7 @@ class VibeVoiceModelTester:
             text_config=self.text_config,
             audio_config=self.audio_config,
             semantic_model_config=self.semantic_model_config,
-            num_head_layers=self.num_head_layers,
-            frequency_embedding_size=self.frequency_embedding_size,
-            intermediate_size=self.intermediate_size,
+            diffusion_head_config=self.diffusion_head_config,
             use_cache=self.use_cache,
             pad_token_id=self.text_config["pad_token_id"],
             eos_token_id=self.text_config["eos_token_id"],
