@@ -152,17 +152,13 @@ class Cosmos3EdgeProjectorConfig(PreTrainedConfig):
     """
 
     model_type = "cosmos3_edge_projector"
+    attribute_map = {"hidden_size": "input_hidden_size"}
 
     input_hidden_size: int = 1152
     merger_intermediate_size: int = 11520
     out_hidden_size: int = 2048
     spatial_merge_size: int = 2
     use_postshuffle_norm: bool = False
-
-    @property
-    def hidden_size(self) -> int:
-        """The unmerged visual hidden size expected by the shared patch merger."""
-        return self.input_hidden_size
 
 
 @auto_docstring(checkpoint="nvidia/Cosmos3-Edge-Reasoner")

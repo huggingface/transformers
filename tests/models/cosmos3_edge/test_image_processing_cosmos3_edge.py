@@ -55,6 +55,7 @@ class Cosmos3EdgeImageProcessingTester:
         self.merge_size = merge_size
 
     def prepare_image_processor_dict(self):
+        """Return the Edge resize and patch-packing configuration used by the tests."""
         return {
             "do_resize": self.do_resize,
             "size": self.size,
@@ -67,6 +68,7 @@ class Cosmos3EdgeImageProcessingTester:
         }
 
     def prepare_image_inputs(self, equal_resolution=False, numpify=False, torchify=False):
+        """Wrap one image per sample to exercise Edge's nested multimodal input form."""
         images = prepare_image_inputs(
             batch_size=self.batch_size,
             num_channels=self.num_channels,
@@ -92,6 +94,7 @@ class Cosmos3EdgeImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase
         return self.image_processor_tester.prepare_image_processor_dict()
 
     def assert_packed_output(self, output, batch_size):
+        """Check Edge's flattened patch matrix against its per-image THW grids."""
         expected_num_patches = int(output.image_grid_thw.prod(dim=-1).sum())
         expected_patch_width = self.image_processor_tester.num_channels * self.image_processor_tester.patch_size**2
 
@@ -99,6 +102,7 @@ class Cosmos3EdgeImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase
         self.assertEqual(tuple(output.pixel_values.shape), (expected_num_patches, expected_patch_width))
 
     def test_image_processor_properties(self):
+        """Cover the patch and merge settings added by the Edge image processor."""
         for image_processing_class in self.image_processing_classes.values():
             image_processor = image_processing_class(**self.image_processor_dict)
             for attribute in (
@@ -114,6 +118,7 @@ class Cosmos3EdgeImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase
                 self.assertTrue(hasattr(image_processor, attribute))
 
     def test_image_processor_from_dict_with_kwargs(self):
+        """Ensure Edge's pixel-budget size dictionary can be overridden on loading."""
         for image_processing_class in self.image_processing_classes.values():
             image_processor = image_processing_class.from_dict(self.image_processor_dict)
             self.assertEqual(image_processor.size, {"shortest_edge": 32 * 32, "longest_edge": 64 * 64})
@@ -125,6 +130,7 @@ class Cosmos3EdgeImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase
             self.assertEqual(image_processor.size, {"shortest_edge": 64 * 64, "longest_edge": 96 * 96})
 
     def test_call_pil(self):
+        """Adapt the shared PIL test to Edge's packed patch output layout."""
         for image_processing_class in self.image_processing_classes.values():
             image_processor = image_processing_class(**self.image_processor_dict)
             image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=True)
@@ -136,6 +142,7 @@ class Cosmos3EdgeImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase
             self.assert_packed_output(output, batch_size=self.image_processor_tester.batch_size)
 
     def test_call_numpy(self):
+        """Adapt the shared NumPy test to Edge's packed patch output layout."""
         for image_processing_class in self.image_processing_classes.values():
             image_processor = image_processing_class(**self.image_processor_dict)
             image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=True, numpify=True)
@@ -149,6 +156,7 @@ class Cosmos3EdgeImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase
             self.assert_packed_output(output, batch_size=self.image_processor_tester.batch_size)
 
     def test_call_pytorch(self):
+        """Adapt the shared PyTorch test to Edge's packed patch output layout."""
         for image_processing_class in self.image_processing_classes.values():
             image_processor = image_processing_class(**self.image_processor_dict)
             image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=True, torchify=True)
@@ -164,6 +172,7 @@ class Cosmos3EdgeImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase
         pass
 
     def test_per_image_resize_overrides_are_preserved_across_backends(self):
+        """Ensure each sample retains its own pixel budget before batch packing."""
         images = [np.zeros((8, 8, 3), dtype=np.uint8), np.zeros((8, 8, 3), dtype=np.uint8)]
         processor_kwargs = {
             "do_rescale": False,

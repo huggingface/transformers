@@ -63,6 +63,7 @@ class Cosmos3EdgeProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     @classmethod
     def _setup_tokenizer(cls):
+        """Build a manual `tokenizers` WordLevel tokenizer for Edge placeholders."""
         vocab = {
             "<unk>": 0,
             "<pad>": 1,
@@ -102,6 +103,7 @@ class Cosmos3EdgeProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     @classmethod
     def _setup_image_processor(cls):
+        """Use lightweight resize bounds aligned to the 32-pixel patch-merging factor."""
         image_processor_class = cls._get_component_class_from_processor("image_processor")
         return image_processor_class(
             size={"shortest_edge": 32 * 32, "longest_edge": 96 * 96},
@@ -111,6 +113,7 @@ class Cosmos3EdgeProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     @classmethod
     def _setup_video_processor(cls):
+        """Use lightweight aligned videos while retaining Edge's frame-wise packing."""
         video_processor_class = cls._get_component_class_from_processor("video_processor")
         return video_processor_class(
             size={"shortest_edge": 32 * 32, "longest_edge": 8 * 96 * 96},
@@ -123,11 +126,13 @@ class Cosmos3EdgeProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     @classmethod
     def _setup_test_attributes(cls, processor):
+        """Expose the Edge placeholder tokens expected by the shared processor tests."""
         cls.image_token = processor.image_token
         cls.video_token = processor.video_token
 
     @staticmethod
     def prepare_processor_dict():
+        """Provide a minimal chat template containing Edge's image and video wrappers."""
         return {
             "chat_template": (
                 "{% for message in messages %}{{ message['role'] + ': ' }}"
@@ -143,6 +148,11 @@ class Cosmos3EdgeProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         }
 
     def prepare_image_inputs(self, batch_size: int | None = None, nested: bool = False):
+        """Create small 64x96 inputs aligned to patch_size * merge_size (32).
+
+        The fixed size keeps the processor tests lightweight and valid for patch
+        merging; it is unrelated to testing per-image keyword arguments.
+        """
         image = Image.fromarray(np.random.randint(255, size=(64, 96, 3), dtype=np.uint8))
         if batch_size is None:
             return image
@@ -151,6 +161,11 @@ class Cosmos3EdgeProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         return [image] * batch_size
 
     def prepare_video_inputs(self, batch_size: int | None = None):
+        """Create four 64x96 frames aligned to patch_size * merge_size (32).
+
+        The fixed shape keeps frame-wise packing tests lightweight and valid; it
+        is unrelated to testing per-video keyword arguments.
+        """
         video = np.random.randint(255, size=(4, 64, 96, 3), dtype=np.uint8)
         if batch_size is None:
             return video
@@ -166,6 +181,7 @@ class Cosmos3EdgeProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         processor_name: str,
         input_data: list,
     ):
+        """Adapt shared chat-template coverage to Edge's packed patch outputs."""
         if modality == "video" and any(isinstance(item, str) for item in input_data[:batch_size]):
             if not is_torchcodec_available():
                 self.skipTest("torchcodec is required to decode video URLs")
@@ -257,9 +273,11 @@ class Cosmos3EdgeProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     @require_torchcodec
     def test_apply_chat_template_video_frame_sampling(self):
+        """Run the shared URL decoding test only when Edge's decoder dependency exists."""
         super().test_apply_chat_template_video_frame_sampling()
 
     def test_video_processor_defaults(self):
+        """Ensure the processor wrapper preserves all video-processor defaults."""
         video_processor = self.get_component("video_processor")
         components = self.prepare_components()
         processor = self.processor_class(**components)
@@ -288,6 +306,7 @@ class Cosmos3EdgeProcessorTest(ProcessorTesterMixin, unittest.TestCase):
                 torch.testing.assert_close(video_processor_output[key], processor_output[key])
 
     def test_image_processor_emits_packed_patches_and_thw_grid(self):
+        """Verify that an image is flattened into patches with its THW grid metadata."""
         processor = Cosmos3EdgeImageProcessor(
             do_resize=False,
             do_rescale=False,
@@ -304,6 +323,7 @@ class Cosmos3EdgeProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertEqual(processed["image_grid_thw"].tolist(), [[1, 2, 4]])
 
     def test_image_processor_uses_projector_block_major_patch_order(self):
+        """Protect the 2x2 block-major patch order expected by the Edge projector."""
         processor = Cosmos3EdgeImageProcessor(
             do_resize=False,
             do_rescale=False,
@@ -324,6 +344,7 @@ class Cosmos3EdgeProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertEqual(processed["pixel_values"][:, 0].tolist(), [0, 1, 4, 5, 2, 3, 6, 7])
 
     def test_video_processor_emits_packed_patches_and_thw_grid(self):
+        """Verify frame-wise packed patches and the corresponding video THW grid."""
         processor = Cosmos3EdgeVideoProcessor(
             do_resize=False,
             do_rescale=False,
@@ -345,6 +366,7 @@ class Cosmos3EdgeProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertIn("video_metadata", processed)
 
     def test_video_processor_uses_projector_block_major_patch_order_per_frame(self):
+        """Protect projector block-major ordering independently within every frame."""
         processor = Cosmos3EdgeVideoProcessor(
             do_resize=False,
             do_rescale=False,
@@ -376,9 +398,11 @@ class Cosmos3EdgeProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         )
 
     def test_public_processor_name_is_cosmos_specific(self):
+        """Guard the public class name stored in released processor configurations."""
         self.assertEqual(Cosmos3EdgeProcessor.__name__, "Cosmos3EdgeProcessor")
 
     def test_processor_returns_multimodal_token_types_by_default(self):
+        """Check the Edge default while allowing an explicit tokenizer override."""
         processor = object.__new__(Cosmos3EdgeProcessor)
         processor.tokenizer = SimpleNamespace()
         merged_kwargs = processor._merge_kwargs(
@@ -395,9 +419,7 @@ class Cosmos3EdgeProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertFalse(overridden_kwargs["text_kwargs"]["return_mm_token_type_ids"])
 
     def test_video_placeholder_uses_one_timestamped_vision_span_per_frame(self):
-        # This isolates placeholder expansion from tokenizer loading. The checkpoint
-        # records raw frames (temporal_patch_size=1), so each frame needs its own
-        # timestamp and vision wrapper instead of one wrapper around the full video.
+        """Require one timestamped vision wrapper for each unmerged video frame."""
         processor = object.__new__(Cosmos3EdgeProcessor)
         processor.video_token = "<|video_pad|>"
         processor.vision_start_token = "<|vision_start|>"
@@ -421,6 +443,7 @@ class Cosmos3EdgeProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertEqual(replacement, f"<0.0 seconds>{frame_span}<1.0 seconds>{frame_span}")
 
     def test_video_replacement_consumes_the_template_vision_wrapper_as_one_unit(self):
+        """Ensure frame spans replace the full template wrapper without nested markers."""
         processor = object.__new__(Cosmos3EdgeProcessor)
         processor.image_token = "<|image_pad|>"
         processor.video_token = "<|video_pad|>"

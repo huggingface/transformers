@@ -45,7 +45,6 @@ from ...utils import (
     can_return_tuple,
     is_torchvision_available,
     logging,
-    no_inherit_decorator,
     torch_compilable_check,
 )
 from ...utils.generic import (
@@ -66,7 +65,7 @@ from ..llama.modeling_llama import (
     LlamaModel,
     LlamaRMSNorm,
     LlamaRotaryEmbedding,
-    repeat_kv,
+    eager_attention_forward,
 )
 from ..qwen2_vl.image_processing_qwen2_vl import smart_resize
 from ..qwen2_vl.modeling_qwen2_vl import (
@@ -184,17 +183,13 @@ class Cosmos3EdgeProjectorConfig(PreTrainedConfig):
     """
 
     model_type = "cosmos3_edge_projector"
+    attribute_map = {"hidden_size": "input_hidden_size"}
 
     input_hidden_size: int = 1152
     merger_intermediate_size: int = 11520
     out_hidden_size: int = 2048
     spatial_merge_size: int = 2
     use_postshuffle_norm: bool = False
-
-    @property
-    def hidden_size(self) -> int:
-        """The unmerged visual hidden size expected by the shared patch merger."""
-        return self.input_hidden_size
 
 
 @auto_docstring(checkpoint="nvidia/Cosmos3-Edge-Reasoner")
@@ -295,8 +290,6 @@ class Cosmos3EdgeTextRotaryEmbedding(LlamaRotaryEmbedding):
 
     @torch.no_grad()
     def forward(self, x, position_ids):
-        if position_ids.shape[0] == 1:
-            position_ids = position_ids.expand(3, -1, -1)
         position_ids = position_ids.permute(1, 2, 0).float()
         device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
         with maybe_autocast(device_type=device_type, enabled=False):
@@ -305,51 +298,6 @@ class Cosmos3EdgeTextRotaryEmbedding(LlamaRotaryEmbedding):
             cos = emb.cos() * self.attention_scaling
             sin = emb.sin() * self.attention_scaling
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
-
-
-def eager_attention_forward(
-    module: nn.Module,
-    query: torch.Tensor,
-    key: torch.Tensor,
-    value: torch.Tensor,
-    attention_mask: torch.Tensor | None,
-    scaling: float,
-    dropout: float = 0.0,
-    **kwargs,
-):
-    """Llama's grouped-query eager attention fallback used by the Edge text tower."""
-    key_states = repeat_kv(key, module.num_key_value_groups)
-    value_states = repeat_kv(value, module.num_key_value_groups)
-
-    attn_weights = torch.matmul(query, key_states.transpose(2, 3)) * scaling
-    if attention_mask is not None:
-        attn_weights = attn_weights + attention_mask
-
-    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
-    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
-    attn_output = torch.matmul(attn_weights, value_states)
-    return attn_output.transpose(1, 2).contiguous(), attn_weights
-
-
-def siglip2_eager_attention_forward(
-    module: nn.Module,
-    query: torch.Tensor,
-    key: torch.Tensor,
-    value: torch.Tensor,
-    attention_mask: torch.Tensor | None,
-    scaling: float,
-    dropout: float = 0.0,
-    **kwargs,
-):
-    """SigLIP2's eager attention fallback used by the packed Edge vision tower."""
-    attn_weights = torch.matmul(query, key.transpose(-1, -2)) * scaling
-    if attention_mask is not None:
-        attn_weights = attn_weights + attention_mask
-
-    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
-    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
-    attn_output = torch.matmul(attn_weights, value)
-    return attn_output.transpose(1, 2).contiguous(), attn_weights
 
 
 class Cosmos3EdgeTextAttention(LlamaAttention):
@@ -392,95 +340,14 @@ _COSMOS3_EDGE_DROPPED_GENERATOR_KEYS = [
 ]
 
 
-class Cosmos3EdgePreTrainedModel(Qwen2VLPreTrainedModel):
-    config_class = Cosmos3EdgeConfig
-    input_modalities = ("image", "video", "text")
-    # Packed, variable-length visual inputs use Python-level per-grid reshaping and cannot be compiled fullgraph.
-    _can_compile_fullgraph = False
-    _no_split_modules = ["Cosmos3EdgeTextDecoderLayer", "Cosmos3EdgeVisionEncoderLayer"]
-    _can_record_outputs = {
-        "hidden_states": Cosmos3EdgeTextDecoderLayer,
-        "attentions": Cosmos3EdgeTextAttention,
-    }
-    _keys_to_ignore_on_load_unexpected = _COSMOS3_EDGE_DROPPED_GENERATOR_KEYS
-
-
-class Cosmos3EdgeTextModel(LlamaModel, Cosmos3EdgePreTrainedModel):
-    config_class = Cosmos3EdgeTextConfig
-    input_modalities = ("text",)
-
-    def __init__(self, config: Cosmos3EdgeTextConfig):
-        super().__init__(config)
-        self.layers = nn.ModuleList(
-            [Cosmos3EdgeTextDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
-        )
-        self.norm = Cosmos3EdgeTextRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.rotary_emb = Cosmos3EdgeTextRotaryEmbedding(config)
-
-    @merge_with_config_defaults
-    @capture_outputs
-    @auto_docstring
-    def forward(
-        self,
-        input_ids: torch.LongTensor | None = None,
-        attention_mask: torch.Tensor | None = None,
-        position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
-        use_cache: bool | None = None,
-        **kwargs,
-    ) -> tuple | BaseModelOutputWithPast:
-        if (input_ids is None) ^ (inputs_embeds is not None):
-            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
-
-        # torch.jit.trace() doesn't support cache objects in the output.
-        if use_cache and past_key_values is None and not torch.jit.is_tracing():
-            past_key_values = DynamicCache(config=self.config)
-
-        if inputs_embeds is None:
-            inputs_embeds = self.embed_tokens(input_ids)
-
-        if position_ids is None:
-            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
-            position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
-            position_ids = position_ids.view(1, 1, -1).expand(3, inputs_embeds.shape[0], -1)
-        elif position_ids.ndim == 2:
-            position_ids = position_ids.unsqueeze(0).expand(3, -1, -1)
-
-        text_position_ids = position_ids[0]
-        causal_mask = create_causal_mask(
-            config=self.config,
-            inputs_embeds=inputs_embeds,
-            attention_mask=attention_mask,
-            past_key_values=past_key_values,
-            position_ids=text_position_ids,
-        )
-
-        hidden_states = inputs_embeds
-        position_embeddings = self.rotary_emb(hidden_states, position_ids)
-        for layer in self.layers[: self.config.num_hidden_layers]:
-            hidden_states = layer(
-                hidden_states,
-                attention_mask=causal_mask,
-                position_embeddings=position_embeddings,
-                position_ids=text_position_ids,
-                past_key_values=past_key_values,
-                use_cache=use_cache,
-                **kwargs,
-            )
-        hidden_states = self.norm(hidden_states)
-
-        return BaseModelOutputWithPast(
-            last_hidden_state=hidden_states, past_key_values=past_key_values if use_cache else None
-        )
-
-
 class Cosmos3EdgeVisionEmbeddings(Siglip2VisionEmbeddings):
     """SigLIP2 patch and learned-position embeddings for packed Edge vision inputs."""
 
-    @no_inherit_decorator
+    @staticmethod
     def resize_positional_embeddings(
-        self, positional_embeddings: torch.Tensor, grid_thw: torch.LongTensor
+        positional_embeddings: torch.Tensor,
+        grid_thw: torch.LongTensor,
+        spatial_merge_size: int,
     ) -> torch.Tensor:
         """Resize a learned reference grid independently for every packed image or video frame.
 
@@ -489,6 +356,8 @@ class Cosmos3EdgeVisionEmbeddings(Siglip2VisionEmbeddings):
                 Learned positional embeddings of shape `(height, width, hidden_size)`.
             grid_thw (`torch.LongTensor`):
                 Temporal, height, and width patch-grid dimensions for every packed image or video.
+            spatial_merge_size (`int`):
+                Number of patches merged along each spatial axis by the projector.
 
         Returns:
             `torch.Tensor`: Positional embeddings packed in the same block-major order as the input patches.
@@ -496,11 +365,11 @@ class Cosmos3EdgeVisionEmbeddings(Siglip2VisionEmbeddings):
         # The checkpoint uses a learned square reference grid, interpolated independently for every packed frame.
         positional_embeddings = positional_embeddings.permute(2, 0, 1).unsqueeze(0)
         source_dtype = positional_embeddings.dtype
+        # Upcast to float32 on CPU because antialias is not supported for bfloat16/float16 on CPU.
         if positional_embeddings.device.type == "cpu":
             positional_embeddings = positional_embeddings.float()
 
         position_chunks = []
-        merge_size = self.config.spatial_merge_size
         for temporal, height, width in grid_thw.tolist():
             resized_embeddings = F.interpolate(
                 positional_embeddings,
@@ -511,10 +380,10 @@ class Cosmos3EdgeVisionEmbeddings(Siglip2VisionEmbeddings):
             )
             resized_embeddings = resized_embeddings.squeeze(0).permute(1, 2, 0).to(source_dtype)
             resized_embeddings = resized_embeddings.reshape(
-                height // merge_size,
-                merge_size,
-                width // merge_size,
-                merge_size,
+                height // spatial_merge_size,
+                spatial_merge_size,
+                width // spatial_merge_size,
+                spatial_merge_size,
                 -1,
             )
             # Preserve the processor's block-major 2x2 patch order before the projector groups adjacent patches.
@@ -532,7 +401,9 @@ class Cosmos3EdgeVisionEmbeddings(Siglip2VisionEmbeddings):
         positional_embeddings = self.position_embedding.weight.reshape(
             self.position_embedding_size, self.position_embedding_size, -1
         )
-        position_embeddings = self.resize_positional_embeddings(positional_embeddings, grid_thw)
+        position_embeddings = self.resize_positional_embeddings(
+            positional_embeddings, grid_thw, self.config.spatial_merge_size
+        )
         torch_compilable_check(
             patch_embeds.shape[0] == position_embeddings.shape[0],
             "The packed visual patch count does not match `grid_thw`.",
@@ -542,6 +413,10 @@ class Cosmos3EdgeVisionEmbeddings(Siglip2VisionEmbeddings):
 
 class Cosmos3EdgeVisionAttention(Siglip2Attention):
     """Packed non-causal SigLIP2 attention with one sequence per image or video frame."""
+
+    def __init__(self, config: Cosmos3EdgeVisionConfig):
+        super().__init__(config)
+        self.num_key_value_groups = 1
 
     def forward(self, hidden_states: torch.Tensor, cu_seqlens: torch.Tensor, **kwargs) -> torch.Tensor:
         sequence_length = hidden_states.shape[0]
@@ -554,7 +429,7 @@ class Cosmos3EdgeVisionAttention(Siglip2Attention):
         value_states = value_states.transpose(0, 1).unsqueeze(0)
 
         attention_interface = ALL_ATTENTION_FUNCTIONS.get_interface(
-            self.config._attn_implementation, siglip2_eager_attention_forward
+            self.config._attn_implementation, eager_attention_forward
         )
 
         if is_flash_attention_requested(self.config):
@@ -650,17 +525,95 @@ class Cosmos3EdgeEncoder(Siglip2Encoder):
         return BaseModelOutput(last_hidden_state=hidden_states)
 
 
+class Cosmos3EdgePreTrainedModel(Qwen2VLPreTrainedModel):
+    config_class = Cosmos3EdgeConfig
+    input_modalities = ("image", "video", "text")
+    # Packed, variable-length visual inputs use Python-level per-grid reshaping and cannot be compiled fullgraph.
+    _can_compile_fullgraph = False
+    _no_split_modules = ["Cosmos3EdgeTextDecoderLayer", "Cosmos3EdgeVisionEncoderLayer"]
+    _can_record_outputs = {
+        "hidden_states": [Cosmos3EdgeTextDecoderLayer, Cosmos3EdgeVisionEncoderLayer],
+        "attentions": "self_attn",
+    }
+    _keys_to_ignore_on_load_unexpected = _COSMOS3_EDGE_DROPPED_GENERATOR_KEYS
+
+
+class Cosmos3EdgeTextModel(LlamaModel, Cosmos3EdgePreTrainedModel):
+    config_class = Cosmos3EdgeTextConfig
+    input_modalities = ("text",)
+
+    def __init__(self, config: Cosmos3EdgeTextConfig):
+        super().__init__(config)
+        self.layers = nn.ModuleList(
+            [Cosmos3EdgeTextDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+        )
+        self.norm = Cosmos3EdgeTextRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.rotary_emb = Cosmos3EdgeTextRotaryEmbedding(config)
+
+    @merge_with_config_defaults
+    @capture_outputs
+    @auto_docstring
+    def forward(
+        self,
+        input_ids: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: Cache | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        use_cache: bool | None = None,
+        **kwargs,
+    ) -> tuple | BaseModelOutputWithPast:
+        if (input_ids is None) ^ (inputs_embeds is not None):
+            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
+
+        # torch.jit.trace() doesn't support cache objects in the output.
+        if use_cache and past_key_values is None and not torch.jit.is_tracing():
+            past_key_values = DynamicCache(config=self.config)
+
+        if inputs_embeds is None:
+            inputs_embeds = self.embed_tokens(input_ids)
+
+        if position_ids is None:
+            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+            position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
+            position_ids = position_ids.view(1, 1, -1)
+        elif position_ids.ndim == 2:
+            position_ids = position_ids.unsqueeze(0)
+        if position_ids.shape[0] == 1:
+            position_ids = position_ids.expand(3, inputs_embeds.shape[0], -1)
+
+        text_position_ids = position_ids[0]
+        causal_mask = create_causal_mask(
+            config=self.config,
+            inputs_embeds=inputs_embeds,
+            attention_mask=attention_mask,
+            past_key_values=past_key_values,
+            position_ids=text_position_ids,
+        )
+
+        hidden_states = inputs_embeds
+        position_embeddings = self.rotary_emb(hidden_states, position_ids)
+        for layer in self.layers[: self.config.num_hidden_layers]:
+            hidden_states = layer(
+                hidden_states,
+                attention_mask=causal_mask,
+                position_embeddings=position_embeddings,
+                position_ids=text_position_ids,
+                past_key_values=past_key_values,
+                use_cache=use_cache,
+                **kwargs,
+            )
+        hidden_states = self.norm(hidden_states)
+
+        return BaseModelOutputWithPast(last_hidden_state=hidden_states, past_key_values=past_key_values)
+
+
 class Cosmos3EdgeVisionModel(Cosmos3EdgePreTrainedModel):
     """Packed variable-resolution SigLIP2 vision tower used by Cosmos3 Edge."""
 
     config_class = Cosmos3EdgeVisionConfig
     main_input_name = "pixel_values"
     input_modalities = ("image", "video")
-    _no_split_modules = ["Cosmos3EdgeVisionEncoderLayer"]
-    _can_record_outputs = {
-        "hidden_states": Cosmos3EdgeVisionEncoderLayer,
-        "attentions": Cosmos3EdgeVisionAttention,
-    }
 
     def __init__(self, config: Cosmos3EdgeVisionConfig):
         super().__init__(config)

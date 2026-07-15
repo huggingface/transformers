@@ -73,6 +73,7 @@ class Cosmos3EdgeVideoProcessingTester:
         self.merge_size = merge_size
 
     def prepare_video_processor_dict(self):
+        """Return Edge's frame-wise patch-packing configuration for shared tests."""
         return {
             "do_resize": self.do_resize,
             "size": self.size,
@@ -87,6 +88,7 @@ class Cosmos3EdgeVideoProcessingTester:
         }
 
     def prepare_video_inputs(self, equal_resolution=False, return_tensors="pil"):
+        """Create short four-frame fixtures so packed-video tests remain lightweight."""
         return prepare_video_inputs(
             batch_size=self.batch_size,
             num_frames=self.num_frames,
@@ -98,6 +100,7 @@ class Cosmos3EdgeVideoProcessingTester:
         )
 
     def prepare_video_metadata(self, videos):
+        """Attach deterministic timing metadata for frame sampling and timestamps."""
         return [{"fps": 2, "total_num_frames": len(video), "duration": len(video) / 2} for video in videos]
 
 
@@ -116,6 +119,7 @@ class Cosmos3EdgeVideoProcessingTest(VideoProcessingTestMixin, unittest.TestCase
         return self.video_processor_tester.prepare_video_processor_dict()
 
     def assert_packed_output(self, output, batch_size):
+        """Check Edge's flattened frame patches against its per-video THW grids."""
         expected_num_patches = int(output.video_grid_thw.prod(dim=-1).sum())
         expected_patch_width = self.video_processor_tester.num_channels * self.video_processor_tester.patch_size**2
 
@@ -123,6 +127,7 @@ class Cosmos3EdgeVideoProcessingTest(VideoProcessingTestMixin, unittest.TestCase
         self.assertEqual(tuple(output.pixel_values_videos.shape), (expected_num_patches, expected_patch_width))
 
     def test_video_processor_properties(self):
+        """Cover the temporal, spatial, and merge settings added by Edge."""
         video_processor = self.fast_video_processing_class(**self.video_processor_dict)
         for attribute in (
             "do_resize",
@@ -138,6 +143,7 @@ class Cosmos3EdgeVideoProcessingTest(VideoProcessingTestMixin, unittest.TestCase
             self.assertTrue(hasattr(video_processor, attribute))
 
     def test_video_processor_from_dict_with_kwargs(self):
+        """Ensure Edge's frame-aware pixel budget can be overridden on loading."""
         video_processor = self.fast_video_processing_class.from_dict(self.video_processor_dict)
         self.assertEqual(
             video_processor.size,
@@ -151,6 +157,7 @@ class Cosmos3EdgeVideoProcessingTest(VideoProcessingTestMixin, unittest.TestCase
         self.assertEqual(video_processor.size, {"shortest_edge": 64 * 64, "longest_edge": 8 * 96 * 96})
 
     def test_call_pil(self):
+        """Adapt the shared PIL test to Edge's packed frame-patch layout."""
         for video_processing_class in self.video_processor_list:
             video_processor = video_processing_class(**self.video_processor_dict)
             video_inputs = self.video_processor_tester.prepare_video_inputs(equal_resolution=True)
@@ -164,6 +171,7 @@ class Cosmos3EdgeVideoProcessingTest(VideoProcessingTestMixin, unittest.TestCase
             self.assert_packed_output(output, batch_size=self.video_processor_tester.batch_size)
 
     def test_call_numpy(self):
+        """Adapt the shared NumPy test to Edge's packed frame-patch layout."""
         for video_processing_class in self.video_processor_list:
             video_processor = video_processing_class(**self.video_processor_dict)
             video_inputs = self.video_processor_tester.prepare_video_inputs(equal_resolution=True, return_tensors="np")
@@ -175,6 +183,7 @@ class Cosmos3EdgeVideoProcessingTest(VideoProcessingTestMixin, unittest.TestCase
             self.assert_packed_output(output, batch_size=self.video_processor_tester.batch_size)
 
     def test_call_pytorch(self):
+        """Adapt the shared PyTorch test to Edge's packed frame-patch layout."""
         for video_processing_class in self.video_processor_list:
             video_processor = video_processing_class(**self.video_processor_dict)
             video_inputs = self.video_processor_tester.prepare_video_inputs(
@@ -188,6 +197,7 @@ class Cosmos3EdgeVideoProcessingTest(VideoProcessingTestMixin, unittest.TestCase
             self.assert_packed_output(output, batch_size=self.video_processor_tester.batch_size)
 
     def test_nested_input(self):
+        """Adapt nested-frame coverage to Edge's packed frame-patch layout."""
         for video_processing_class in self.video_processor_list:
             video_processor = video_processing_class(**self.video_processor_dict)
             video_inputs = self.video_processor_tester.prepare_video_inputs(equal_resolution=True, return_tensors="np")
@@ -200,6 +210,7 @@ class Cosmos3EdgeVideoProcessingTest(VideoProcessingTestMixin, unittest.TestCase
             self.assert_packed_output(output, batch_size=self.video_processor_tester.batch_size)
 
     def test_call_sample_frames(self):
+        """Verify sampled frames remain individually represented in the THW grid."""
         video_processor = self.fast_video_processing_class(**self.video_processor_dict)
         video_inputs = self.video_processor_tester.prepare_video_inputs(equal_resolution=True, return_tensors="torch")
         metadata = self.video_processor_tester.prepare_video_metadata(video_inputs)
@@ -221,10 +232,12 @@ class Cosmos3EdgeVideoProcessingTest(VideoProcessingTestMixin, unittest.TestCase
         pass
 
     def test_temporal_patch_size_is_fixed_to_one(self):
+        """Protect the checkpoint requirement that frames are never temporally merged."""
         with self.assertRaisesRegex(ValueError, "temporal_patch_size=1"):
             Cosmos3EdgeVideoProcessor(temporal_patch_size=2)
 
     def test_samples_two_frames_per_second_by_default(self):
+        """Protect the checkpoint's default two-frame-per-second sampling policy."""
         processor = Cosmos3EdgeVideoProcessor()
         metadata = VideoMetadata(total_num_frames=8, fps=4, duration=2.0)
 
@@ -233,6 +246,7 @@ class Cosmos3EdgeVideoProcessingTest(VideoProcessingTestMixin, unittest.TestCase
         self.assertEqual(indices.tolist(), [0, 2, 5, 7])
 
     def test_video_processor_preserves_one_grid_step_per_frame(self):
+        """Ensure each source frame contributes exactly one temporal grid step."""
         processor = Cosmos3EdgeVideoProcessor(
             do_resize=False,
             do_rescale=False,
