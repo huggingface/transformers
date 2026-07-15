@@ -492,7 +492,7 @@ class InklingIntegrationTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.checkpoint_name = "hf-internal-testing/tiny-inkling"
-        cls.bucket = "hf-internal-testing/tml-integration-tests"
+        cls.bucket = "hf-internal-testing/inkling-integration-test"
         cls.processor = AutoProcessor.from_pretrained(cls.checkpoint_name)
         cls.model = InklingForConditionalGeneration.from_pretrained(cls.checkpoint_name, device_map=torch_device)
 
