@@ -27,6 +27,7 @@ from dataclasses import dataclass
 import torch
 
 from ..utils import logging
+from ..utils.versions import require_version
 from .hub_kernels import lazy_load_kernel
 from .tensor_parallel import to_local
 
@@ -35,6 +36,10 @@ logger = logging.get_logger(__name__)
 
 # Map activation function names from HF config to SonicMoE epilogue names
 ACT_MAP = {"silu": "swiglu", "gelu": "geglu", "relu": "reglu"}
+
+# Maximum supported versions of the sonic-moe build dependencies. Newer releases have not been
+# validated against the kernel and may break its CuteDSL / TVM FFI dispatch, so we refuse to load.
+DEPENDENCY_REQUIREMENTS = ["nvidia-cutlass-dsl<=4.5.2", "apache-tvm-ffi<=0.1.9"]
 
 
 @dataclass(frozen=True)
@@ -65,6 +70,19 @@ def _load_sonicmoe_kernel() -> SonicMoE:
         raise ImportError(
             f"sonic-moe requires a Hopper (SM90+) or newer GPU, but the current device "
             f"has compute capability {major}.x. Use a different `experts_implementation`."
+        )
+
+    problems = []
+    for requirement in DEPENDENCY_REQUIREMENTS:
+        try:
+            require_version(requirement)
+        except ImportError as e:
+            problems.append(str(e))
+    if problems:
+        raise ImportError(
+            "sonic-moe dependency requirements are not met:\n"
+            + "\n".join(f"- {p}" for p in problems)
+            + "\nFix the versions above, or use a different `experts_implementation`."
         )
 
     kernel = lazy_load_kernel("sonic-moe")
