@@ -19,10 +19,10 @@ from math import ceil
 
 import torch
 
-from ... import utils
 from ...configuration_utils import PretrainedConfig
 from ...generation.configuration_utils import CompileConfig, ContinuousBatchingConfig
 from ...modeling_flash_attention_utils import lazy_import_paged_flash_attention
+from ...utils import is_torch_xpu_available
 from ...utils.generic import is_flash_attention_requested
 from .requests import logger
 from .utils import WorkloadHints
@@ -121,7 +121,7 @@ def ensure_decode_fast_path_is_available(
         cuda_available = torch.cuda.is_available()
         fa_cuda = is_flash_attention_requested(config, version=[2, 3]) and cuda_available
         # XPU support is given through its kernel variation `kernels-community/flash-attn2`
-        xpu_available = utils.is_torch_xpu_available()
+        xpu_available = is_torch_xpu_available()
         fa_xpu = is_flash_attention_requested(config, version=2) and xpu_available
         if fa_cuda or fa_xpu:  # Block table is only supported on these
             flash_attn_with_kvcache = lazy_import_paged_flash_attention(config._attn_implementation)[1]
