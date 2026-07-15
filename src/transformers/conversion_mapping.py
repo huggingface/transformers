@@ -921,10 +921,6 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(r"lm_head\.2\.", "lm_head.layer_norm."),
             WeightRenaming(r"lm_head\.3\.", "lm_head.decoder."),
         ],
-        # NOTE: ESMFold2 has no entry here on purpose — all weight porting (SwiGLU consolidation,
-        # SWA q/k/v split, de-Sequentialized blocks, LM-shim renames + the module-cleanup wrapper
-        # inlines) is done once in the conversion script (bundle_esmfold2_checkpoint.py), so the
-        # published checkpoint is already canonical and loads with no runtime conversion.
         "dinov3_convnext": [WeightRenaming(r"(?<!model\.)stages", r"model.stages")],
         "dinov3_vit": [WeightRenaming(r"(?<!model\.)layer.", r"model.layer.")],
         "timesfm2_5": [

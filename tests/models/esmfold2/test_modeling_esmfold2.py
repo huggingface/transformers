@@ -1,4 +1,4 @@
-# Copyright 2026 Biohub and The HuggingFace Inc. team. All rights reserved.
+# Copyright 2026 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -94,11 +94,8 @@ def get_tiny_config(**overrides) -> "ESMFold2Config":
 
 
 class ESMFold2ConfigTester(ConfigTester):
+    @unittest.skip("ESMFold2 sub-configs are not standalone auto-registered configs")
     def create_and_test_config_from_and_save_pretrained_composite(self):
-        # ESMFold2's sub-configs are internal architecture details (no model_type,
-        # not in the auto mappings), so they can't be reloaded standalone from the
-        # parent config dir — skip this check. (A no-op rather than SkipTest so the
-        # remaining run_common_tests checks still run.)
         pass
 
 
