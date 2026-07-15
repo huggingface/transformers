@@ -36,9 +36,42 @@ The abstract from the paper is the following:
 
 *Language models have been effectively applied to modeling natural signals, such as images, video, speech, and audio. A crucial component of these models is the codec tokenizer, which compresses high-dimensional natural signals into lower-dimensional discrete tokens. In this paper, we introduce WavTokenizer, which offers several advantages over previous SOTA acoustic codec models in the audio domain: 1) extreme compression. By compressing the layers of quantizers and the temporal dimension of the discrete codec, one-second audio of 24kHz sampling rate requires only a single quantizer with 40 or 75 tokens. 2) improved subjective quality. Despite the reduced number of tokens, WavTokenizer achieves state-of-the-art reconstruction quality with outstanding UTMOS scores and inherently contains richer semantic information.*
 
-The original code (MIT license) can be found [here](https://github.com/jishengpeng/WavTokenizer), with original
-checkpoints available [here](https://huggingface.co/novateur/WavTokenizer-large-unify-40token). This port was
-contributed as part of the Apertus 1.5 integration by the [SwissAI initiative](https://huggingface.co/swiss-ai).
+The original code (MIT license) can be found [here](https://github.com/jishengpeng/WavTokenizer). The released raw
+PyTorch Lightning checkpoints use one of two temporal configurations:
+
+| Token rate | `upsampling_ratios` | Hop length | ISTFT FFT size |
+|---:|:---:|---:|---:|
+| 40 tokens/s | `[6, 5, 5, 4]` | 600 | 2400 |
+| 75 tokens/s | `[8, 5, 4, 2]` | 320 | 1280 |
+
+The small, medium, large, domain-specific, and v2 releases share the remaining inference architecture. Original
+checkpoints must first be converted to Transformers format; the conversion script infers the temporal configuration
+from checkpoint tensor shapes and saves it in `config.json`. Subsequent `from_pretrained` calls construct the model
+from that saved configuration and do not infer architecture from the weights.
+
+```bash
+python src/transformers/models/wavtokenizer/convert_wavtokenizer_checkpoint.py \
+    --checkpoint_path /path/to/original.ckpt \
+    --output_dir /path/to/converted-model
+```
+
+For development, parity against the original implementation can be checked for one named release or for the full
+released checkpoint matrix:
+
+```bash
+python scripts/check_wavtokenizer_parity.py \
+    --original_repo /path/to/WavTokenizer \
+    --checkpoint medium-speech-75-v2 \
+    --output_dir /tmp/wavtokenizer-medium-speech-75-v2
+
+python scripts/check_wavtokenizer_parity.py \
+    --original_repo /path/to/WavTokenizer \
+    --all-checkpoints \
+    --output_dir /tmp/wavtokenizer-parity-matrix
+```
+
+This port was contributed as part of the Apertus 1.5 integration by the
+[SwissAI initiative](https://huggingface.co/swiss-ai).
 
 ## Usage example
 
@@ -61,7 +94,7 @@ with torch.no_grad():
 ```
 
 Decoded audio is always returned in `float32` (the ISTFT head upcasts internally). A single code is supported and
-decodes to one hop (600 samples, or 25 ms at 40 tokens/s).
+decodes to one configuration-dependent hop (600 samples for 40 tokens/s or 320 samples for 75 tokens/s).
 
 > [!WARNING]
 > Load and run the tokenizer in `float32` (the default). Code assignment is a nearest-neighbour argmin over the
