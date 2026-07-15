@@ -1502,16 +1502,15 @@ class MTPCandidateGenerator(AssistedCandidateGenerator):
         # right to take the new token as well. Say the main model just had token positions [2, 3] as input, the tensors
         # contains the data for position [0, 1, 2, 3, 4], i.e. full inputs + new drafted token from last position 3 that was processed.
         # We want to slice to get data for positions [3, 4] for the 1st mtp layer, i.e. same as main model, shifted by 1 to the right.
+        # On the other hand, the `full_seq_last_hidden_states` contains data for only already processed positions by the main_model, i.e.
+        # one less than `input_ids`/`positions_ids`/`attention_mask`
         num_last_main_model_tokens = n_last_matches + 1 if not self.is_main_model_prefill else input_ids.shape[1] - 1
-        mtp_input_ids = input_ids[:, -num_last_main_model_tokens:]
-        mtp_position_ids = model_kwargs["position_ids"][:, -num_last_main_model_tokens:]
-        mtp_attention_mask = model_kwargs["attention_mask"][:, -num_last_main_model_tokens:]
 
         # The hidden states have seq_len equal to the last main model's forward pass on all the candidates. We need the
         # last hidden states of only the last validated tokens
         last_hidden_states = last_hidden_states[:, :num_last_main_model_tokens].to(self.device)
 
-        # Potentially correct the mtp cache based on validated tokens
+        # We need to cache the full last_hidden_states from the main model to be able to correct the mtp cache based on validated tokens
         if self.num_mtp_layers > 1:
             # To correct the mtp cache based on validated tokens, we need to keep all previous last_hidden_states
             if self.is_main_model_prefill:
@@ -1520,18 +1519,28 @@ class MTPCandidateGenerator(AssistedCandidateGenerator):
                 self.full_seq_last_hidden_states = torch.cat(
                     [self.full_seq_last_hidden_states, last_hidden_states], dim=1
                 )
-                # This is the very tricky part: invalidate and recreate the mtp cache for wrong positions if necessary
-                self.mtp_model.correct_mtp_cache_for_decode(
-                    n_last_matches=n_last_matches,
-                    full_input_ids=input_ids,
-                    full_attention_mask=model_kwargs["attention_mask"],
-                    full_position_ids=model_kwargs["position_ids"],
-                    full_last_hidden_states=self.full_seq_last_hidden_states,
-                    mtp_cache=self.mtp_cache,
-                    do_sample=self.do_sample,
-                    logits_processor=self.logits_processor,
-                    **kwargs,
-                )
+
+        # This is the tricky part: potentially invalidate and recreate the mtp cache for wrong positions if necessary
+        # With one layer, or if validating enough tokens, the cache is always correct since the first mtp layer sees the token
+        # drafted directly from main model, which is necessarily correct, so we don't need any correction
+        if self.num_mtp_layers > 1 and n_last_matches < self.num_mtp_layers - 1 and not self.is_main_model_prefill:
+            # Invalidate the full chains of layers before recomputing with the validated tokens, even if the first layers may
+            # have a valid cache, because we need to have the same sequence length for all MTP layers due to the cat of tokens
+            # and prev hidden_states
+            self.mtp_cache.crop(-self.num_mtp_layers)
+
+            # We need the last invalidated tokens, as well as the new one in a single passcfor efficiency
+            mtp_input_ids = input_ids[:, -num_last_main_model_tokens - self.num_mtp_layers :]
+            mtp_position_ids = model_kwargs["position_ids"][:, -num_last_main_model_tokens - self.num_mtp_layers :]
+            mtp_attention_mask = model_kwargs["attention_mask"][:, -num_last_main_model_tokens - self.num_mtp_layers :]
+            last_hidden_states = self.full_seq_last_hidden_states[
+                :, -num_last_main_model_tokens - self.num_mtp_layers :, :
+            ]
+        # If we have a single layer, or validated enough, we can simply pass the new tokens
+        else:
+            mtp_input_ids = input_ids[:, -num_last_main_model_tokens:]
+            mtp_position_ids = model_kwargs["position_ids"][:, -num_last_main_model_tokens:]
+            mtp_attention_mask = model_kwargs["attention_mask"][:, -num_last_main_model_tokens:]
 
         candidate_ids, candidate_logits, _ = self.mtp_model(
             input_ids=mtp_input_ids,
