@@ -315,29 +315,30 @@ class Zamba2ModelTester:
         """
         Regression test for the inter-chunk recurrence of the Mamba2 slow (torch) path: a
         single chunked forward over a multi-chunk sequence must reproduce a token-by-token
-        recurrent decode.
+        recurrent decode. Forced onto CPU so the slow (`torch_forward`) path is exercised.
 
-        The mixer is fed a large-magnitude input so the SSM state is O(1). With a normal
-        activation scale the inter-chunk contribution is ~1e-7, i.e. below any tolerance,
-        which is why neither `create_and_check_zamba2_slow_vs_fast_forward` (single chunk,
-        needs the kernels) nor a plain `prepare_config_and_inputs` input surfaces the bug.
-        A small `chunk_size` lets a short sequence span several chunks. Runs on CPU without
-        the fast-path kernels.
+        A small `chunk_size` lets the short `prepare_config_and_inputs` sequence span several
+        chunks, and the embedded input is rescaled so the SSM state is O(1) -- at the natural
+        activation scale the inter-chunk contribution is ~1e-7 (below any tolerance), which is
+        why the single-chunk `slow_vs_fast` check does not surface this regression.
         """
         config = copy.deepcopy(config)
-        config.chunk_size = 8
-        model = Zamba2Model(config).eval().to(torch_device)
+        config.chunk_size = 2
+        torch.manual_seed(0)
+        model = Zamba2Model(config).eval().to("cpu")
         mixer = next(layer.mamba for layer in model.layers if hasattr(layer, "mamba"))
 
-        seq_len = 4 * config.chunk_size + 1
-        torch.manual_seed(0)
-        hidden_states = 100.0 * torch.randn(1, seq_len, config.hidden_size, device=torch_device)
+        embeds = model.embed_tokens(input_ids[:1].to("cpu"))
+        hidden_states = 100.0 * embeds / embeds.std()
 
         with torch.no_grad():
             chunked = mixer.torch_forward(hidden_states)
             cache = DynamicCache(config=config)
             recurrent = torch.cat(
-                [mixer.torch_forward(hidden_states[:, t : t + 1], cache_params=cache) for t in range(seq_len)],
+                [
+                    mixer.torch_forward(hidden_states[:, t : t + 1], cache_params=cache)
+                    for t in range(hidden_states.shape[1])
+                ],
                 dim=1,
             )
 
