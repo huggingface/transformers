@@ -30,10 +30,13 @@ class WavTokenizerFeatureExtractor(SequenceFeatureExtractor):
     This feature extractor inherits from [`~feature_extraction_sequence_utils.SequenceFeatureExtractor`] which contains
     most of the main methods. Users should refer to this superclass for more information regarding those methods.
 
+    This feature extractor does not resample or downmix audio. Input must already be mono and sampled at the configured
+    `sampling_rate`; pass `sampling_rate` to [`__call__`] so it can validate the input rate.
+
     Note that [`WavTokenizerModel`] pads internally and accepts arbitrary lengths, so single inputs are returned
     unpadded — this keeps the produced audio codes bit-identical to the original WavTokenizer pipeline. Batches of
     different lengths are zero-padded to the longest sample (`padding_mask` marks the valid part); zero-padding can
-    perturb the codes of shorter samples near the end, so encode clips individually when bit-exact codes matter.
+    perturb the codes of shorter samples near the end, so encode each clip individually when bit-exact codes matter.
 
     Args:
         feature_size (`int`, *optional*, defaults to 1):
@@ -81,7 +84,8 @@ class WavTokenizerFeatureExtractor(SequenceFeatureExtractor):
         Args:
             audio (`np.ndarray`, `list[float]`, `list[np.ndarray]`, `list[list[float]]`):
                 The sequence or batch of sequences to be processed. Each sequence must be a numpy array of shape
-                `(num_samples,)` (mono audio).
+                `(num_samples,)` containing mono audio already sampled at this feature extractor's `sampling_rate`.
+                Audio is not resampled or downmixed.
             padding (`bool`, `str` or [`~utils.PaddingStrategy`], *optional*, defaults to `True`):
                 Select a strategy to pad the returned sequences (according to the model's padding side and padding
                 index) among:
