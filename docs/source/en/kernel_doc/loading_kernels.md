@@ -110,7 +110,10 @@ model = AutoModelForCausalLM.from_pretrained(
 
 ### FlashAttention fallback
 
-Requesting `attn_implementation="flash_attention_2"` (or `"flash_attention_3"`) falls back to the matching Hub kernel when the compiled `flash-attn` package isn't installed or your device isn't CUDA.
+Requesting `attn_implementation="flash_attention_2"`, `"flash_attention_3"`, or `"flash_attention_4"` falls back to the matching Hub kernel when the compiled `flash-attn` package isn't installed or your device isn't CUDA.
+
+> [!NOTE]
+> FlashAttention-4 support is in beta. APIs and behavior may change.
 
 ```py
 from transformers import AutoModelForCausalLM
