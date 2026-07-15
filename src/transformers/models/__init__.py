@@ -138,6 +138,8 @@ if TYPE_CHECKING:
     from .ernie4_5_moe import *
     from .ernie4_5_vl_moe import *
     from .esm import *
+    from .esmc import *
+    from .esmfold2 import *
     from .evolla import *
     from .exaone4 import *
     from .exaone4_5 import *

@@ -63,6 +63,7 @@ SPECIAL_CASES_TO_ALLOW = {
     "NougatConfig": ["decoder", "encoder"],
     "PI0Config": ["vlm_projection_dim"],
     "EuroBertConfig": ["is_causal"],  # not used directly, allows causal-bidirectional switch
+    "ESMCConfig": ["expansion_ratio"],  # consumed in __post_init__ to derive intermediate_size
     "Ernie4_5_VL_MoeConfig": ["args"],  # BC Alias
     "Ernie4_5_VL_MoeTextConfig": ["args"],  # BC Alias
     "Ernie4_5_VL_MoeVisionConfig": ["args"],  # BC Alias
@@ -165,6 +166,12 @@ SPECIAL_CASES_TO_ALLOW = {
     "GlmMoeDsaConfig": ["head_dim", "layer_types", "mlp_bias", "first_k_dense_replace", "n_routed_experts"],
     "EsmFoldConfig": ["esm_ablate_pairwise", "esm_ablate_sequence", "esm_input_dropout", "esm_type"],
     "TrunkConfig": ["cpu_grad_checkpoint", "layer_drop"],
+    "ESMFold2Config": [
+        "type",
+        "transition_expansion_ratio",
+        "atom_encoder_expansion_ratio",
+        "diffusion_atom_expansion_ratio",
+    ],
     "SeamlessM4TConfig": True,
     "SeamlessM4Tv2Config": True,
     "ConditionalDetrConfig": True,
