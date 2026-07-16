@@ -42,6 +42,8 @@ from .integrations import (
 
 # ruff: isort: on
 
+import torch_neuronx
+
 import numpy as np
 import safetensors.torch
 import torch
@@ -247,6 +249,11 @@ OPTIMIZER_NAME_BIN = "optimizer.bin"
 SCHEDULER_NAME = "scheduler.pt"
 FSDP_MODEL_NAME = "pytorch_model_fsdp"
 
+PROFILE_STEP_START = int(os.environ.get("PROFILE_STEP_START", "0"))
+PROFILE_NUM_STEPS = int(os.environ.get("PROFILE_NUM_STEPS", "0"))
+PROFILE_OUTPUT_DIR = os.environ.get("PROFILE_OUTPUT_DIR", "./pt-profile")
+PROFILE_MAX_EVENTS_PER_NC = int(os.environ.get("PROFILE_MAX_EVENTS_PER_NC", "4000000"))
+
 
 @requires(
     backends=(
@@ -396,6 +403,23 @@ class Trainer:
         #   9. Hub & output              – repo init, output directory
         #  10. Training state            – TrainerState, TrainerControl, internal bookkeeping
         #  11. Finalize                  – use_cache, XLA FSDPv2 mesh, memory tracker stop
+
+        ## TEMP: profiling:
+
+        from torch_neuronx.profiling import NeuronConfig, NeuronProfiler, ProfileMode
+
+        self.neuron_config = NeuronConfig(
+            modes=[
+                ProfileMode.DEVICE,
+                ProfileMode.RUNTIME,
+                ProfileMode.CPU_UTIL,
+                ProfileMode.HOST_MEMORY
+            ],
+            profile_output_dir=PROFILE_OUTPUT_DIR,
+            capture_enabled_for_nc="0,1",
+            max_events_per_nc=PROFILE_MAX_EVENTS_PER_NC,
+        )
+        self.exporter = NeuronProfiler(self.neuron_config)
 
         # ---- 1. Args & seed --------------------------------------------------------
         if args is None:
@@ -1744,7 +1768,18 @@ class Trainer:
                 else:
                     sync_context = functools.partial(self.accelerator.no_sync, model=model)
                 with sync_context():
-                    tr_loss_step = self.training_step(model, inputs, num_items_in_batch)
+                    if PROFILE_STEP_START <= step // self.args.gradient_accumulation_steps <= PROFILE_STEP_START + PROFILE_NUM_STEPS:
+                        with torch.profiler.profile(
+                            activities=[torch.profiler.ProfilerActivity.CPU, torch.profiler.ProfilerActivity.PrivateUse1],
+                            experimental_config=self.neuron_config,
+                            with_stack=True,
+                            on_trace_ready=self.exporter.export_trace,
+                        ) as prof, torch.profiler.record_function("model_training_step"):
+                            tr_loss_step = self.training_step(model, inputs, num_items_in_batch)
+                            torch_neuronx.synchronize()
+
+                    else:
+                        tr_loss_step = self.training_step(model, inputs, num_items_in_batch)
 
                 if (
                     self.args.logging_nan_inf_filter

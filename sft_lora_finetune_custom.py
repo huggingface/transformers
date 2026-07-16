@@ -19,6 +19,8 @@ from torch.distributed.tensor.parallel import (
     RowwiseParallel,
     parallelize_module,
 )
+from torch.profiler import profile, ProfilerActivity
+from torch_neuronx.profiling import NeuronConfig, ProfileMode, NeuronProfiler
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from peft import LoraConfig, get_peft_model, TaskType
 
@@ -149,6 +151,10 @@ def main():
     parser.add_argument("--bf16", action="store_true")
     parser.add_argument("--trust_remote_code", action="store_true")
     parser.add_argument("--compile", action="store_true")
+    parser.add_argument("--profile_step_start", type=int, default=0, help="Global step to start profiling at (0 disables)")
+    parser.add_argument("--profile_num_steps", type=int, default=0, help="Number of steps to profile (0 disables)")
+    parser.add_argument("--profile_output_dir", default="./pt-profile")
+    parser.add_argument("--profile_max_events_per_nc", type=int, default=4_000_000)
     args = parser.parse_args()
 
     # Initialize distributed training
@@ -266,13 +272,35 @@ def main():
     dp_rank = dp_mesh.get_local_rank() if dp_mesh else rank
     local_data = packed[dp_rank * rows_per_dp : (dp_rank + 1) * rows_per_dp]
 
+    # PyTorch/Neuron profiler window (disabled unless --profile_num_steps > 0)
+    neuron_config = None
+    exporter = None
+    if args.profile_num_steps > 0:
+        log(f"Profiling steps {args.profile_step_start}-{args.profile_step_start + args.profile_num_steps - 1}")
+        neuron_config = NeuronConfig(
+            modes=[ProfileMode.DEVICE, ProfileMode.RUNTIME],
+            profile_output_dir=args.profile_output_dir,
+            max_events_per_nc=args.profile_max_events_per_nc,
+            capture_enabled_for_nc=os.environ.get("NEURON_RT_VISIBLE_CORES"),
+        )
+        exporter = NeuronProfiler(neuron_config)
+
     # Training loop
     step = 0
     _last_shape = None
+    profiler_ctx = None
     for epoch in range(args.num_train_epochs):
         batch_stride = args.per_device_train_batch_size * args.gradient_accumulation_steps
 
         for i in range(0, rows_per_dp, batch_stride):
+            if neuron_config is not None and step + 1 == args.profile_step_start:
+                profiler_ctx = profile(
+                    activities=[ProfilerActivity.CPU, ProfilerActivity.PrivateUse1],
+                    experimental_config=neuron_config,
+                    on_trace_ready=exporter.export_trace,
+                )
+                profiler_ctx.__enter__()
+
             t0 = time.perf_counter()
             optimizer.zero_grad()
             total_loss = 0.0
@@ -308,6 +336,12 @@ def main():
             optimizer.step()
             scheduler.step()
             step += 1
+
+            if profiler_ctx is not None:
+                torch.neuron.synchronize()  # Neuron is async; ensure the device finishes before export
+                if step == args.profile_step_start + args.profile_num_steps - 1:
+                    profiler_ctx.__exit__(None, None, None)
+                    profiler_ctx = None
 
             # Logging
             if step % args.logging_steps == 0:

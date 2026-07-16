@@ -608,30 +608,47 @@ class _ReduceScatter(torch.autograd.Function):
 # Convenience wrappers
 # =============================================================================
 
+import torch_neuronx
+device = torch.device("neuron")
+cc_stream = torch_neuronx.Stream(device)
 
 def all_reduce_backward(x, device_mesh):
     """Identity forward, all-reduce backward. Use before colwise layers."""
-    return _AllReduceBackward.apply(x, device_mesh)
-
+    with torch_neuronx.stream(cc_stream):
+        output = _AllReduceBackward.apply(x, device_mesh)
+    torch_neuronx.synchronize()
+    return output
 
 def all_reduce_forward(x, device_mesh):
     """All-reduce forward, identity backward. Use after rowwise layers."""
-    return _AllReduceForward.apply(x, device_mesh)
+    with torch_neuronx.stream(cc_stream):
+        output = _AllReduceForward.apply(x, device_mesh)
+    torch_neuronx.synchronize()
+    return output
 
 
 def all_gather(x, device_mesh):
     """All-gather forward, split backward."""
-    return _AllGather.apply(x, device_mesh)
+    with torch_neuronx.stream(cc_stream):
+        output = _AllGather.apply(x, device_mesh)
+    torch_neuronx.synchronize()
+    return output
 
 
 def split(x, device_mesh):
     """Split forward, all-gather backward."""
-    return _Split.apply(x, device_mesh)
+    with torch_neuronx.stream(cc_stream):
+        output = _Split.apply(x, device_mesh)
+    torch_neuronx.synchronize()
+    return output
 
 
 def reduce_scatter(x, device_mesh):
     """Reduce-scatter forward, all-gather backward."""
-    return _ReduceScatter.apply(x, device_mesh)
+    with torch_neuronx.stream(cc_stream):
+        output = _ReduceScatter.apply(x, device_mesh)
+    torch_neuronx.synchronize()
+    return output
 
 
 def distribute_module(

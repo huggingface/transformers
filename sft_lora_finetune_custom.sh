@@ -13,24 +13,23 @@ NUM_PROC=${NUM_PROC:-2}
 # ---------------------------------------------------------------------------
 # Neuron runtime environment
 # ---------------------------------------------------------------------------
-export TORCH_NEURONX_ENABLE_STABLEHLO=0
+# export TORCH_NEURONX_ENABLE_STABLEHLO=0
 export ON_NEURON_EAGER=1
-export TORCH_NEURONX_MLIR_ATEN_OPS=1
-export ON_NEURON=1
+# export TORCH_NEURONX_MLIR_ATEN_OPS=1
 export TORCH_NEURONX_FALLBACK_ONLY_FOR_UNIMPLEMENTED_OPS=1
-export NEURON_RT_MAP_HBM=0
-export NEURON_RT_DBG_ZEROCOPY=0
-export NEURON_EAGER_MODEL_CACHE_SIZE=128
-# export NEURON_RT_NUM_CORES=1  # incompatible with TP_SIZE > 1
+export NEURON_EAGER_MODEL_CACHE_SIZE=10000
+export NEURON_RT_VISIBLE_CORES=2,3
 export OMP_NUM_THREADS=128
 export HF_DEACTIVATE_ASYNC_LOAD=1
 
 # Profiling
 export NEURON_FRAMEWORK_DEBUG=1
-export NEURON_RT_INSPECT_ENABLE=1
-export NEURON_RT_INSPECT_OUTPUT_DIR="./profiler-custom"
-export NEURON_RT_INSPECT_SYSTEM_PROFILE=1
-export NEURON_RT_INSPECT_DEVICE_PROFILE=1
+
+# PyTorch/Neuron profiler window (private beta API). 0 disables.
+PROFILE_STEP_START=${PROFILE_STEP_START:-10}
+PROFILE_NUM_STEPS=${PROFILE_NUM_STEPS:-5}
+PROFILE_OUTPUT_DIR=${PROFILE_OUTPUT_DIR:-./pt-profile-custom}
+PROFILE_MAX_EVENTS_PER_NC=${PROFILE_MAX_EVENTS_PER_NC:-4000000}
 
 # ---------------------------------------------------------------------------
 # Model / data / hyperparameters
@@ -89,6 +88,10 @@ torchrun --nproc_per_node="${NUM_PROC}" \
     --lora_alpha $LORA_ALPHA \
     --lora_dropout $LORA_DROPOUT \
     --lora_target_modules "$LORA_TARGET_MODULES" \
+    --profile_step_start $PROFILE_STEP_START \
+    --profile_num_steps $PROFILE_NUM_STEPS \
+    --profile_output_dir "$PROFILE_OUTPUT_DIR" \
+    --profile_max_events_per_nc "$PROFILE_MAX_EVENTS_PER_NC" \
     $( [ "$COMPILE" = "1" ] && echo "--compile" )
 
 echo "=========================================="

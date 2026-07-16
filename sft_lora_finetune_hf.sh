@@ -13,24 +13,23 @@ NUM_PROC=${NUM_PROC:-2}
 # ---------------------------------------------------------------------------
 # Neuron runtime environment
 # ---------------------------------------------------------------------------
-export TORCH_NEURONX_ENABLE_STABLEHLO=0
+# export TORCH_NEURONX_ENABLE_STABLEHLO=0
 export ON_NEURON_EAGER=1
-export TORCH_NEURONX_MLIR_ATEN_OPS=1
-export ON_NEURON=1
+# export TORCH_NEURONX_MLIR_ATEN_OPS=1
 export TORCH_NEURONX_FALLBACK_ONLY_FOR_UNIMPLEMENTED_OPS=1
-export NEURON_RT_MAP_HBM=0
-export NEURON_RT_DBG_ZEROCOPY=0
-export NEURON_EAGER_MODEL_CACHE_SIZE=128
-export NEURON_RT_NUM_CORES=1
+export NEURON_EAGER_MODEL_CACHE_SIZE=10000
+export NEURON_RT_VISIBLE_CORES=0,1
 export OMP_NUM_THREADS=128
 export HF_DEACTIVATE_ASYNC_LOAD=1
 
 # Profiling
 export NEURON_FRAMEWORK_DEBUG=1
-export NEURON_RT_INSPECT_ENABLE=1
-export NEURON_RT_INSPECT_OUTPUT_DIR="./profiler-trl"
-export NEURON_RT_INSPECT_SYSTEM_PROFILE=1
-export NEURON_RT_INSPECT_DEVICE_PROFILE=1
+
+# PyTorch/Neuron profiler window (private beta API), read via env vars in sft_lora_finetune_hf.py. 0 disables.
+export PROFILE_STEP_START=${PROFILE_STEP_START:-3}
+export PROFILE_NUM_STEPS=${PROFILE_NUM_STEPS:-10}
+export PROFILE_OUTPUT_DIR=${PROFILE_OUTPUT_DIR:-./pt-profile-hf}
+export PROFILE_MAX_EVENTS_PER_NC=${PROFILE_MAX_EVENTS_PER_NC:-4000000}
 
 # ---------------------------------------------------------------------------
 # Model / data / hyperparameters
@@ -78,6 +77,7 @@ torchrun --nproc_per_node="${NUM_PROC}" \
     --pad_to_multiple_of $MAX_SEQ_LENGTH \
     --per_device_train_batch_size $BATCH_SIZE \
     --gradient_accumulation_steps $GRAD_ACCUM_STEPS \
+    --max_steps 15 \
     --torch_compile \
     --eos_token '<|im_end|>' \
     --eval_strategy no \
@@ -86,6 +86,10 @@ torchrun --nproc_per_node="${NUM_PROC}" \
     --warmup_steps 100 \
     --weight_decay 0.01 \
     --max_grad_norm 1.0 \
+    --lr_scheduler_type cosine \
+    --adam_beta1 0.9 \
+    --adam_beta2 0.95 \
+    --gradient_checkpointing true \
     --use_peft true \
     --lora_r $LORA_R \
     --lora_alpha $LORA_ALPHA \
