@@ -15,30 +15,30 @@
 Modular EfficientViT-SAM configuration and modeling components.
 """
 
-import math
 import contextlib
-from typing import Any, Callable, Optional, Union, Tuple, List, Dict
+from typing import Any, Union
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
 from ...modeling_utils import PreTrainedModel
 from ...utils import auto_docstring, logging
-from huggingface_hub.dataclasses import strict
-from ..sam.configuration_sam import SamPromptEncoderConfig, SamMaskDecoderConfig, SamConfig
+from ..sam.configuration_sam import SamConfig, SamMaskDecoderConfig, SamPromptEncoderConfig
+from ..sam.image_processing_pil_sam import SamImageProcessorPil
+from ..sam.image_processing_sam import SamImageProcessor
 from ..sam.modeling_sam import (
-    SamVisionEncoderOutput,
-    SamPromptEncoder,
+    SamImageSegmentationOutput,
     SamMaskDecoder,
     SamModel,
     SamPositionalEmbedding,
-    SamImageSegmentationOutput,
+    SamPromptEncoder,
+    SamVisionEncoderOutput,
 )
-from ..sam.image_processing_sam import SamImageProcessor
-from ..sam.image_processing_pil_sam import SamImageProcessorPil
 from ..sam.processing_sam import SamProcessor
+
 
 logger = logging.get_logger(__name__)
 
@@ -46,6 +46,7 @@ logger = logging.get_logger(__name__)
 # =============================================================================
 # 1. Configuration Classes
 # =============================================================================
+
 
 @auto_docstring(checkpoint="mit-han-lab/efficientvit-sam-l1")
 @strict
@@ -148,8 +149,8 @@ class EfficientViTSamVisionConfig(PreTrainedConfig):
         self.middle_op = middle_op
         self.out_dim = out_dim
         self.image_size = image_size
-        self.num_pos_feats = 128
-        self.scale = 128.0
+        self.num_pos_feats = kwargs.get("num_pos_feats", 128)
+        self.scale = kwargs.get("scale", 128.0)
 
 
 @auto_docstring(checkpoint="mit-han-lab/efficientvit-sam-l1")
@@ -204,12 +205,13 @@ class EfficientViTSamConfig(SamConfig):
         elif self.mask_decoder_config is None:
             self.mask_decoder_config = EfficientViTSamMaskDecoderConfig()
 
-        PreTrainedConfig.__post_init__(self)
+        super().__post_init__(**kwargs)
 
 
 # =============================================================================
 # 1.5. Output and Auxiliary Classes from SAM
 # =============================================================================
+
 
 class EfficientViTSamVisionEncoderOutput(SamVisionEncoderOutput):
     pass
@@ -235,20 +237,21 @@ class EfficientViTSamMaskDecoder(SamMaskDecoder):
 # 2. Helpers and Basic Layers
 # =============================================================================
 
-def val2list(x: Union[List, Tuple, Any], repeat_time: int = 1) -> List:
+
+def val2list(x: list | tuple | Any, repeat_time: int = 1) -> list:
     if isinstance(x, (list, tuple)):
         return list(x)
     return [x for _ in range(repeat_time)]
 
 
-def val2tuple(x: Union[List, Tuple, Any], min_len: int = 1, idx_repeat: int = -1) -> Tuple:
+def val2tuple(x: list | tuple | Any, min_len: int = 1, idx_repeat: int = -1) -> tuple:
     x = val2list(x)
     if len(x) > 0:
         x[idx_repeat:idx_repeat] = [x[idx_repeat] for _ in range(min_len - len(x))]
     return tuple(x)
 
 
-def get_same_padding(kernel_size: Union[int, Tuple[int, ...]]) -> Union[int, Tuple[int, ...]]:
+def get_same_padding(kernel_size: int | tuple[int, ...]) -> int | tuple[int, ...]:
     if isinstance(kernel_size, tuple):
         return tuple([get_same_padding(ks) for ks in kernel_size])
     else:
@@ -276,7 +279,7 @@ def build_norm(name: str, num_features: int, **kwargs) -> nn.Module:
         return nn.Identity()
 
 
-def build_act(name: Optional[str]) -> nn.Module:
+def build_act(name: str | None) -> nn.Module:
     if name == "relu":
         return nn.ReLU()
     elif name == "relu6":
@@ -302,8 +305,8 @@ class ConvLayer(nn.Module):
         groups: int = 1,
         use_bias: bool = False,
         dropout: float = 0.0,
-        norm: Optional[str] = "bn2d",
-        act_func: Optional[str] = "relu",
+        norm: str | None = "bn2d",
+        act_func: str | None = "relu",
     ):
         super().__init__()
         padding = get_same_padding(kernel_size)
@@ -341,7 +344,7 @@ class UpSampleLayer(nn.Module):
     def __init__(
         self,
         mode: str = "bicubic",
-        size: Optional[Union[int, Tuple[int, int]]] = None,
+        size: int | tuple[int, int] | None = None,
         factor: int = 2,
         align_corners: bool = False,
     ):
@@ -373,13 +376,14 @@ class UpSampleLayer(nn.Module):
 # 3. Model Architecture Blocks
 # =============================================================================
 
+
 class ResidualBlock(nn.Module):
     def __init__(
         self,
-        main: Optional[nn.Module],
-        shortcut: Optional[nn.Module],
-        post_act: Optional[str] = None,
-        pre_norm: Optional[nn.Module] = None,
+        main: nn.Module | None,
+        shortcut: nn.Module | None,
+        post_act: str | None = None,
+        pre_norm: nn.Module | None = None,
     ):
         super().__init__()
         self.pre_norm = pre_norm
@@ -412,9 +416,9 @@ class DSConv(nn.Module):
         out_channels: int,
         kernel_size: int = 3,
         stride: int = 1,
-        use_bias: Union[bool, Tuple[bool, ...]] = False,
-        norm: Tuple[Optional[str], Optional[str]] = ("bn2d", "bn2d"),
-        act_func: Tuple[Optional[str], Optional[str]] = ("relu6", None),
+        use_bias: bool | tuple[bool, ...] = False,
+        norm: tuple[str | None, str | None] = ("bn2d", "bn2d"),
+        act_func: tuple[str | None, str | None] = ("relu6", None),
     ):
         super().__init__()
         use_bias = val2tuple(use_bias, 2)
@@ -453,11 +457,11 @@ class MBConv(nn.Module):
         out_channels: int,
         kernel_size: int = 3,
         stride: int = 1,
-        mid_channels: Optional[int] = None,
+        mid_channels: int | None = None,
         expand_ratio: float = 6.0,
-        use_bias: Union[bool, Tuple[bool, ...]] = False,
-        norm: Tuple[Optional[str], ...] = ("bn2d", "bn2d", "bn2d"),
-        act_func: Tuple[Optional[str], ...] = ("relu6", "relu6", None),
+        use_bias: bool | tuple[bool, ...] = False,
+        norm: tuple[str | None, ...] = ("bn2d", "bn2d", "bn2d"),
+        act_func: tuple[str | None, ...] = ("relu6", "relu6", None),
     ):
         super().__init__()
         use_bias = val2tuple(use_bias, 3)
@@ -507,12 +511,12 @@ class FusedMBConv(nn.Module):
         out_channels: int,
         kernel_size: int = 3,
         stride: int = 1,
-        mid_channels: Optional[int] = None,
+        mid_channels: int | None = None,
         expand_ratio: float = 6.0,
         groups: int = 1,
-        use_bias: Union[bool, Tuple[bool, ...]] = False,
-        norm: Tuple[Optional[str], Optional[str]] = ("bn2d", "bn2d"),
-        act_func: Tuple[Optional[str], Optional[str]] = ("relu6", None),
+        use_bias: bool | tuple[bool, ...] = False,
+        norm: tuple[str | None, str | None] = ("bn2d", "bn2d"),
+        act_func: tuple[str | None, str | None] = ("relu6", None),
     ):
         super().__init__()
         use_bias = val2tuple(use_bias, 2)
@@ -552,11 +556,11 @@ class ResBlock(nn.Module):
         out_channels: int,
         kernel_size: int = 3,
         stride: int = 1,
-        mid_channels: Optional[int] = None,
+        mid_channels: int | None = None,
         expand_ratio: float = 1.0,
-        use_bias: Union[bool, Tuple[bool, ...]] = False,
-        norm: Tuple[Optional[str], Optional[str]] = ("bn2d", "bn2d"),
-        act_func: Tuple[Optional[str], Optional[str]] = ("relu6", None),
+        use_bias: bool | tuple[bool, ...] = False,
+        norm: tuple[str | None, str | None] = ("bn2d", "bn2d"),
+        act_func: tuple[str | None, str | None] = ("relu6", None),
     ):
         super().__init__()
         use_bias = val2tuple(use_bias, 2)
@@ -596,14 +600,14 @@ class LiteMLA(nn.Module):
         self,
         in_channels: int,
         out_channels: int,
-        heads: Optional[int] = None,
+        heads: int | None = None,
         heads_ratio: float = 1.0,
         dim: int = 8,
-        use_bias: Union[bool, Tuple[bool, ...]] = False,
-        norm: Tuple[Optional[str], Optional[str]] = (None, "bn2d"),
-        act_func: Tuple[Optional[str], Optional[str]] = (None, None),
+        use_bias: bool | tuple[bool, ...] = False,
+        norm: tuple[str | None, str | None] = (None, "bn2d"),
+        act_func: tuple[str | None, str | None] = (None, None),
         kernel_func: str = "relu",
-        scales: Tuple[int, ...] = (5,),
+        scales: tuple[int, ...] = (5,),
         eps: float = 1.0e-15,
     ):
         super().__init__()
@@ -654,7 +658,11 @@ class LiteMLA(nn.Module):
     def relu_linear_att(self, qkv: torch.Tensor) -> torch.Tensor:
         B, _, H, W = list(qkv.size())
         device_type = qkv.device.type
-        autocast_context = torch.autocast(device_type=device_type, enabled=False) if device_type in {"cuda", "cpu"} else contextlib.nullcontext()
+        autocast_context = (
+            torch.autocast(device_type=device_type, enabled=False)
+            if device_type in {"cuda", "cpu"}
+            else contextlib.nullcontext()
+        )
 
         with autocast_context:
             if qkv.dtype in [torch.float16, torch.bfloat16]:
@@ -692,7 +700,11 @@ class LiteMLA(nn.Module):
     def relu_quadratic_att(self, qkv: torch.Tensor) -> torch.Tensor:
         B, _, H, W = list(qkv.size())
         device_type = qkv.device.type
-        autocast_context = torch.autocast(device_type=device_type, enabled=False) if device_type in {"cuda", "cpu"} else contextlib.nullcontext()
+        autocast_context = (
+            torch.autocast(device_type=device_type, enabled=False)
+            if device_type in {"cuda", "cpu"}
+            else contextlib.nullcontext()
+        )
 
         with autocast_context:
             if qkv.dtype in [torch.float16, torch.bfloat16]:
@@ -731,7 +743,7 @@ class LiteMLA(nn.Module):
         qkv = torch.cat(multi_scale_qkv, dim=1)
 
         H, W = list(qkv.size())[-2:]
-        if H * W > self.dim:
+        if self.dim < H * W:
             out = self.relu_linear_att(qkv).to(qkv.dtype)
         else:
             out = self.relu_quadratic_att(qkv).to(qkv.dtype)
@@ -747,7 +759,7 @@ class EfficientViTBlock(nn.Module):
         heads_ratio: float = 1.0,
         dim: int = 32,
         expand_ratio: float = 4.0,
-        scales: Tuple[int, ...] = (5,),
+        scales: tuple[int, ...] = (5,),
         norm: str = "bn2d",
         act_func: str = "hswish",
     ):
@@ -785,14 +797,15 @@ class EfficientViTBlock(nn.Module):
 # 4. Backbone and Neck Assembly
 # =============================================================================
 
+
 class EfficientViTLargeBackbone(nn.Module):
     def __init__(
         self,
-        width_list: List[int],
-        depth_list: List[int],
-        block_list: Optional[List[str]] = None,
-        expand_list: Optional[List[float]] = None,
-        fewer_norm_list: Optional[List[bool]] = None,
+        width_list: list[int],
+        depth_list: list[int],
+        block_list: list[str] | None = None,
+        expand_list: list[float] | None = None,
+        fewer_norm_list: list[bool] | None = None,
         in_channels: int = 3,
         qkv_dim: int = 32,
         norm: str = "bn2d",
@@ -918,7 +931,7 @@ class EfficientViTLargeBackbone(nn.Module):
         else:
             raise ValueError(f"Unknown block type: {block}")
 
-    def forward(self, x: torch.Tensor) -> Dict[str, torch.Tensor]:
+    def forward(self, x: torch.Tensor) -> dict[str, torch.Tensor]:
         output_dict = {"input": x}
         for stage_id, stage in enumerate(self.stages):
             output_dict[f"stage{stage_id}"] = x = stage(x)
@@ -929,8 +942,8 @@ class EfficientViTLargeBackbone(nn.Module):
 class SamNeck(nn.Module):
     def __init__(
         self,
-        fid_list: List[str],
-        in_channel_list: List[int],
+        fid_list: list[str],
+        in_channel_list: list[int],
         head_width: int,
         head_depth: int,
         expand_ratio: float,
@@ -989,7 +1002,7 @@ class SamNeck(nn.Module):
             act_func=None,
         )
 
-    def forward(self, features: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
+    def forward(self, features: dict[str, torch.Tensor]) -> dict[str, torch.Tensor]:
         projected = [self.proj_layers[fid](features[fid]) for fid in self.fid_list]
         fused = sum(projected)
         fused = self.middle(fused)
@@ -1003,9 +1016,10 @@ class EfficientViTSamPreTrainedModel(PreTrainedModel):
     base_model_prefix = "efficientvitsam"
     main_input_name = "pixel_values"
     input_modalities = ("image",)
-    supports_gradient_checkpointing = True
+    supports_gradient_checkpointing = False
 
     def _init_weights(self, module: nn.Module):
+        super()._init_weights(module)
         if isinstance(module, nn.Conv2d):
             nn.init.kaiming_normal_(module.weight, mode="fan_out", nonlinearity="relu")
             if module.bias is not None:
@@ -1048,12 +1062,30 @@ class EfficientViTSamImageEncoder(EfficientViTSamPreTrainedModel):
             norm=config.norm,
             act_func=config.act_func,
         )
+        self.norm = build_norm("ln2d", config.out_dim)
+        self.gradient_checkpointing = False
         self.post_init()
 
-    def forward(self, pixel_values: torch.Tensor) -> EfficientViTSamVisionEncoderOutput:
+    def forward(
+        self,
+        pixel_values: torch.Tensor,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
+        **kwargs,
+    ) -> tuple | EfficientViTSamVisionEncoderOutput:
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
         features = self.backbone(pixel_values)
         features = self.neck(features)
-        return EfficientViTSamVisionEncoderOutput(last_hidden_state=features["sam_encoder"])
+        output = self.norm(features["sam_encoder"])
+
+        if not return_dict:
+            return (output,)
+
+        return EfficientViTSamVisionEncoderOutput(last_hidden_state=output)
 
 
 class EfficientViTSamVisionModel(EfficientViTSamPreTrainedModel):
@@ -1093,8 +1125,12 @@ class EfficientViTSamImageProcessorPil(SamImageProcessorPil):
     pad_size = {"height": 512, "width": 512}
 
 
+NestedList = list[Union[float, int, None, "NestedList"]]
+
+
 class EfficientViTSamProcessor(SamProcessor):
-    pass
+    # Dummy reference to NestedList to ensure modular compiler includes its definition
+    _nested_list_type = NestedList
 
 
 __all__ = [
@@ -1113,4 +1149,5 @@ __all__ = [
     "EfficientViTSamImageProcessor",
     "EfficientViTSamImageProcessorPil",
     "EfficientViTSamProcessor",
+    "NestedList",
 ]

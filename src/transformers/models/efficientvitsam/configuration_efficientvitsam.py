@@ -18,7 +18,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
 from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
@@ -169,8 +168,8 @@ class EfficientViTSamVisionConfig(PreTrainedConfig):
         self.middle_op = middle_op
         self.out_dim = out_dim
         self.image_size = image_size
-        self.num_pos_feats = 128
-        self.scale = 128.0
+        self.num_pos_feats = kwargs.get("num_pos_feats", 128)
+        self.scale = kwargs.get("scale", 128.0)
 
 
 @auto_docstring(checkpoint="mit-han-lab/efficientvit-sam-l1")
@@ -224,8 +223,22 @@ class EfficientViTSamConfig(PreTrainedConfig):
             self.mask_decoder_config = EfficientViTSamMaskDecoderConfig(**self.mask_decoder_config)
         elif self.mask_decoder_config is None:
             self.mask_decoder_config = EfficientViTSamMaskDecoderConfig()
+        if isinstance(self.vision_config, dict):
+            self.vision_config = EfficientViTSamVisionConfig(**self.vision_config)
+        elif self.vision_config is None:
+            self.vision_config = EfficientViTSamVisionConfig()
 
-        super().__post_init__()
+        if isinstance(self.prompt_encoder_config, dict):
+            self.prompt_encoder_config = EfficientViTSamPromptEncoderConfig(**self.prompt_encoder_config)
+        elif self.prompt_encoder_config is None:
+            self.prompt_encoder_config = EfficientViTSamPromptEncoderConfig()
+
+        if isinstance(self.mask_decoder_config, dict):
+            self.mask_decoder_config = EfficientViTSamMaskDecoderConfig(**self.mask_decoder_config)
+        elif self.mask_decoder_config is None:
+            self.mask_decoder_config = EfficientViTSamMaskDecoderConfig()
+
+        super().__post_init__(**kwargs)
 
 
 __all__ = [

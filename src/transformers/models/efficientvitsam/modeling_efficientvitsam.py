@@ -17,6 +17,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+
 import contextlib
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -1451,9 +1452,10 @@ class EfficientViTSamPreTrainedModel(PreTrainedModel):
     base_model_prefix = "efficientvitsam"
     main_input_name = "pixel_values"
     input_modalities = ("image",)
-    supports_gradient_checkpointing = True
+    supports_gradient_checkpointing = False
 
     def _init_weights(self, module: nn.Module):
+        super()._init_weights(module)
         if isinstance(module, nn.Conv2d):
             nn.init.kaiming_normal_(module.weight, mode="fan_out", nonlinearity="relu")
             if module.bias is not None:
@@ -1496,12 +1498,30 @@ class EfficientViTSamImageEncoder(EfficientViTSamPreTrainedModel):
             norm=config.norm,
             act_func=config.act_func,
         )
+        self.norm = build_norm("ln2d", config.out_dim)
+        self.gradient_checkpointing = False
         self.post_init()
 
-    def forward(self, pixel_values: torch.Tensor) -> EfficientViTSamVisionEncoderOutput:
+    def forward(
+        self,
+        pixel_values: torch.Tensor,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
+        **kwargs,
+    ) -> tuple | EfficientViTSamVisionEncoderOutput:
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
         features = self.backbone(pixel_values)
         features = self.neck(features)
-        return EfficientViTSamVisionEncoderOutput(last_hidden_state=features["sam_encoder"])
+        output = self.norm(features["sam_encoder"])
+
+        if not return_dict:
+            return (output,)
+
+        return EfficientViTSamVisionEncoderOutput(last_hidden_state=output)
 
 
 class EfficientViTSamVisionModel(EfficientViTSamPreTrainedModel):

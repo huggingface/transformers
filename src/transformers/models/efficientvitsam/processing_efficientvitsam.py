@@ -17,8 +17,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
 from copy import deepcopy
+from typing import Union
 
 import numpy as np
 import torch
@@ -75,8 +75,14 @@ class EfficientViTSamProcessorKwargs(ProcessingKwargs, total=False):
     }
 
 
+NestedList = list[Union[float | int | None, "NestedList"]]
+
+
 @auto_docstring
 class EfficientViTSamProcessor(ProcessorMixin):
+    # Dummy reference to NestedList to ensure modular compiler includes its definition
+    _nested_list_type = NestedList
+
     def __init__(self, image_processor):
         super().__init__(image_processor)
         self.target_size = self.image_processor.size["longest_edge"]
@@ -286,4 +292,4 @@ class EfficientViTSamProcessor(ProcessorMixin):
         return self.image_processor.post_process_masks(*args, **kwargs)
 
 
-__all__ = ["EfficientViTSamProcessor"]
+__all__ = ["EfficientViTSamProcessor", "NestedList"]
