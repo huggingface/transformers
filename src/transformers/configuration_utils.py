@@ -361,9 +361,10 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin, Heterogeneous
         self._name_or_path = str(value)  # Make sure that name_or_path is a string (for JSON encoding)
 
     @property
-    def num_labels(self) -> int:
+    def num_labels(self) -> int | None:
         """
-        `int`: The number of labels for classification models.
+        `int` or `None`: The number of labels for classification models, or
+        `None` when `id2label` is not set.
         """
         return len(self.id2label) if self.id2label is not None else None
 
