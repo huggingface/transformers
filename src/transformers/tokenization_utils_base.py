@@ -1409,7 +1409,9 @@ class PreTrainedTokenizerBase(PushToHubMixin):
         """
         return self.convert_tokens_to_ids(self.all_special_tokens)
 
-    def _set_model_specific_special_tokens(self, special_tokens: dict[str, str | AddedToken]):
+    def _set_model_specific_special_tokens(
+        self, special_tokens: dict[str, str | AddedToken] | list[str | AddedToken] | tuple[str | AddedToken, ...]
+    ):
         """
         Adds new model-specific special tokens (e.g., for multimodal models).
 
@@ -1417,8 +1419,24 @@ class PreTrainedTokenizerBase(PushToHubMixin):
         For example: if the model tokenizer is multimodal, we can support special image or audio tokens.
 
         Args:
-            special_tokens: Dictionary of {token_name: token_value}
+            special_tokens: Dictionary of {token_name: token_value}. A legacy list/tuple of token
+                strings is also accepted and routed to `extra_special_tokens` (unnamed specials).
         """
+        # Legacy configs / callers sometimes pass a bare list of special token strings. Lists have no
+        # `.keys()`, which used to raise AttributeError (see #47110). Unnamed tokens belong on
+        # `extra_special_tokens`.
+        if isinstance(special_tokens, (list, tuple)):
+            existing = {str(t) for t in self._extra_special_tokens}
+            for token in special_tokens:
+                if str(token) not in existing:
+                    self._extra_special_tokens.append(token)
+                    existing.add(str(token))
+            return
+        if not isinstance(special_tokens, dict):
+            raise TypeError(
+                "`special_tokens` must be a dict of attribute names to token values, "
+                f"or a list/tuple of tokens, got {type(special_tokens).__name__}."
+            )
         self.SPECIAL_TOKENS_ATTRIBUTES = self.SPECIAL_TOKENS_ATTRIBUTES + list(special_tokens.keys())
         for key, value in special_tokens.items():
             if isinstance(value, (str, AddedToken)):

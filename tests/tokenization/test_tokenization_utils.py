@@ -394,3 +394,37 @@ class TokenizerUtilsTest(unittest.TestCase):
                     raise ValueError("real error")
                 except import_protobuf_decode_error():
                     pass
+
+    def test_set_model_specific_special_tokens_accepts_legacy_list(self):
+        """Legacy list payloads must not crash on .keys() (issue #47110)."""
+        from transformers.tokenization_utils_base import PreTrainedTokenizerBase
+
+        class _Stub:
+            SPECIAL_TOKENS_ATTRIBUTES = ["bos_token", "eos_token", "unk_token"]
+
+            def __init__(self):
+                self._special_tokens_map = {}
+                self._extra_special_tokens = []
+
+        stub = _Stub()
+        legacy = ["<s>NOTUSED", "</s>NOTUSED", "<unk>NOTUSED"]
+        PreTrainedTokenizerBase._set_model_specific_special_tokens(stub, legacy)
+        self.assertEqual(stub._extra_special_tokens, legacy)
+        # Named dict path still works
+        PreTrainedTokenizerBase._set_model_specific_special_tokens(stub, {"image_token": "<image>"})
+        self.assertIn("image_token", stub.SPECIAL_TOKENS_ATTRIBUTES)
+        self.assertEqual(stub._special_tokens_map["image_token"], "<image>")
+
+    def test_set_model_specific_special_tokens_rejects_invalid_type(self):
+        from transformers.tokenization_utils_base import PreTrainedTokenizerBase
+
+        class _Stub:
+            SPECIAL_TOKENS_ATTRIBUTES = ["bos_token"]
+
+            def __init__(self):
+                self._special_tokens_map = {}
+                self._extra_special_tokens = []
+
+        stub = _Stub()
+        with self.assertRaises(TypeError):
+            PreTrainedTokenizerBase._set_model_specific_special_tokens(stub, "not-a-mapping")
