@@ -3,8 +3,8 @@ name: Nvidia CI
 # =============================================================================
 # TEST BRANCH (run_nvidia_ci_otel_pilot) — OTEL instrumentation smoke test.
 #
-# Trimmed to the `model-ci` family only, and limited to a couple of model
-# folders via `subdirs`, to cheaply validate that daily model-test results
+# Trimmed to the `model-ci` family only, and limited to 10 model folders via
+# `subdirs`, to cheaply validate that daily model-test results
 # flow through the OTEL-instrumented transformers-ci reusable workflow and land
 # on the pytest-observability (branch) dashboard, while still exercising the
 # full Slack-report + new-failure-detection path.
@@ -71,8 +71,8 @@ jobs:
     uses: huggingface/transformers-ci/.github/workflows/daily-ci_reusable.yml@main
     with:
       job: run_models_gpu
-      # TEST-ONLY: limit to a couple of model folders to keep the smoke test cheap.
-      subdirs: "['bert', 'gpt2']"
+      # TEST-ONLY: limit to 10 model folders to keep the smoke test cheap.
+      subdirs: "['bert', 'blip', 'clip', 'gpt2', 'llama', 'qwen2', 't5', 'vit', 'wav2vec2', 'whisper']"
       slack_report_channel: "#transformers-ci-daily-models"
       docker: huggingface/transformers-all-latest-gpu
       ci_event: Daily CI
