@@ -11,7 +11,7 @@ def get_daily_ci_runs(token, num_runs=7, workflow_id=None):
     This only selects the runs triggered by the `schedule` event on the `main` branch.
     """
     headers = None
-    if token is not None:
+    if token:
         headers = {"Accept": "application/vnd.github+json", "Authorization": f"Bearer {token}"}
 
     # The id of a workflow (not of a workflow run).
@@ -42,7 +42,7 @@ def get_daily_ci_runs(token, num_runs=7, workflow_id=None):
 def get_last_daily_ci_run(token, workflow_run_id=None, workflow_id=None, commit_sha=None):
     """Get the last completed workflow run id of the scheduled (daily) CI."""
     headers = None
-    if token is not None:
+    if token:
         headers = {"Accept": "application/vnd.github+json", "Authorization": f"Bearer {token}"}
 
     workflow_run = None
