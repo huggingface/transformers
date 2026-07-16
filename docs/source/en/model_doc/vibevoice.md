@@ -376,7 +376,7 @@ model_id = "bezzam/VibeVoice-1.5B-hf"   # "bezzam/VibeVoice-7B-hf"
 processor = AutoProcessor.from_pretrained(model_id)
 model = AutoModelForTextToWaveform.from_pretrained(
     model_id,
-    diffusion_loss_weight=0.75,  # by default, equal weigthing (0.5) of language modeling loss (CE) and diffusion loss is applied
+    diffusion_loss_weight=0.75,  # by default, equal weighting (0.5) of language modeling loss (CE) and diffusion loss is applied
     device_map="auto"
 )
 model.train()

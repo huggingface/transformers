@@ -27,7 +27,7 @@ from ...generation import (
 )
 from ...generation.stopping_criteria import StoppingCriteriaList
 from ...generation.utils import ALL_CACHE_NAMES, GenerateNonBeamOutput
-from ...utils import is_diffusers_available, logging
+from ...utils import add_start_docstrings, is_diffusers_available, logging
 from ..vibevoice_acoustic_tokenizer.modeling_vibevoice_acoustic_tokenizer import (
     VibeVoiceAcousticTokenizerConv1dPaddingCache,
 )
@@ -38,6 +38,20 @@ if TYPE_CHECKING:
 
 
 logger = logging.get_logger(__name__)
+
+
+LOGITS_PROCESSOR_INPUTS_DOCSTRING = r"""
+    Args:
+        input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
+            Indices of input sequence tokens in the vocabulary. [What are input IDs?](../glossary#input-ids)
+        scores (`torch.FloatTensor` of shape `(batch_size, config.vocab_size)`):
+            Prediction scores of a language modeling head. These can be logits for each vocabulary when not using beam
+            search or log softmax for each vocabulary token when using beam search
+
+    Return:
+        `torch.FloatTensor` of shape `(batch_size, config.vocab_size)`: The processed prediction scores.
+
+"""
 
 
 @dataclass
@@ -68,6 +82,7 @@ class VibeVoiceTokenConstraintProcessor(LogitsProcessor):
         logits_mask[valid_token_ids] = 0.0
         self.logits_mask = logits_mask.to(device)
 
+    @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
         return scores + self.logits_mask
 
