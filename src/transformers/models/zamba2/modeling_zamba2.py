@@ -33,7 +33,7 @@ from ...generation import GenerationMixin
 from ...integrations import use_kernel_func_from_hub
 from ...integrations.accelerate import force_accelerate_hooks
 from ...integrations.hub_kernels import lazy_load_kernel
-from ...masking_utils import create_causal_mask
+from ...masking_utils import create_causal_mask, create_recurrent_attention_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast, SequenceClassifierOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
@@ -1209,6 +1209,16 @@ class Zamba2Model(Zamba2PreTrainedModel):
             past_key_values=past_key_values,
             position_ids=position_ids,
         )
+        # The mamba mixers consume the 2D padding mask sized to the current forward's tokens: a
+        # cached continuation resends the full-history mask, whose extra columns would otherwise be
+        # multiplied against the local hidden states (shape error on the post-conv masking). Padding
+        # inside a continued segment still gets zeroed out of the recurrent state this way.
+        mamba_mask = create_recurrent_attention_mask(
+            config=self.config,
+            inputs_embeds=inputs_embeds,
+            attention_mask=attention_mask,
+            past_key_values=past_key_values,
+        )
 
         # create position embeddings to be shared across the decoder layers
         if self.config.use_mem_rope:
@@ -1221,7 +1231,7 @@ class Zamba2Model(Zamba2PreTrainedModel):
                 hidden_states,
                 original_hidden_states,
                 layer_idx,
-                attention_mask,
+                mamba_mask,
                 causal_mask,
                 past_key_values=past_key_values,
                 use_cache=use_cache,

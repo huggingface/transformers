@@ -1381,23 +1381,16 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
         first forward plus a cached continuation must therefore match the single full forward.
         Regression test for #47086.
         """
-        # Hybrid models mix recurrent layers with regular attention and build the recurrent-layer mask via
-        # `create_recurrent_attention_mask` (the path under test). Purely recurrent models (only recurrent
-        # layer types, e.g. Mamba/RWKV) mask padding on their own inline path and are out of scope here.
+        # Any model with recurrent layer types keeps padding-sensitive state, whether it is a hybrid
+        # (whose recurrent layers get the mask via `create_recurrent_attention_mask`) or a purely
+        # recurrent model (Mamba-family models slice/apply the same padding mask on their own path).
         recurrent_layer_types = {"linear_attention", "conv", "hybrid", "hybrid_sliding"}
-        attention_layer_types = {
-            "full_attention",
-            "sliding_attention",
-            "chunked_attention",
-            "hybrid",
-            "hybrid_sliding",
-        }
 
         for model_class in self.all_generative_model_classes:
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
             layer_types = set(getattr(config.get_text_config(), "layer_types", None) or ())
-            if not (layer_types & recurrent_layer_types and layer_types & attention_layer_types):
-                self.skipTest(reason=f"{model_class.__name__} is not a hybrid attention/recurrent model")
+            if not (layer_types & recurrent_layer_types):
+                self.skipTest(reason=f"{model_class.__name__} has no recurrent layers")
 
             model = model_class(config).to(torch_device).eval()
             input_ids = inputs_dict["input_ids"][:2].to(torch_device)
@@ -1429,12 +1422,16 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
                     position_ids=position_ids[:, :turn1_len],
                     use_cache=True,
                 )
+                # Mamba-family models expose their state as `cache_params` instead of `past_key_values`
+                cache_kwarg, cache = "past_key_values", getattr(out1, "past_key_values", None)
+                if cache is None and getattr(out1, "cache_params", None) is not None:
+                    cache_kwarg, cache = "cache_params", out1.cache_params
                 out2 = model(
                     input_ids=turn2,
                     attention_mask=attention_mask,
                     position_ids=position_ids[:, turn1_len:],
-                    past_key_values=out1.past_key_values,
                     use_cache=True,
+                    **{cache_kwarg: cache},
                 )
 
             # Tight tolerance on purpose: the fixed residual is fp-floor (~1e-7) while the unmasked-padding

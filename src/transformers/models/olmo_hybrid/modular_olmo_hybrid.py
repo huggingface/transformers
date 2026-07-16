@@ -287,6 +287,11 @@ class OlmoHybridDynamicCache:
         kv_length = query_length + past_seen_tokens
         return kv_length, kv_offset
 
+    def get_query_offset(self, layer_idx: int) -> int:
+        """Returns the current offset of the query for the given `layer_idx` — the number of already-seen
+        tokens, like `Cache.get_query_offset` (mask creation queries it on cached forwards)."""
+        return self.get_seq_length(layer_idx=layer_idx)
+
     def has_previous_state(self):
         """We have a previous state if the last linear (conv) layer was already updated."""
         return self.conv_states_q[self.last_linear_layer] is not None

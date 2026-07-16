@@ -356,16 +356,6 @@ class Zamba2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
         pass
 
     @unittest.skip(
-        "Zamba2's mamba layers receive the raw full-history padding mask on cached continued forwards (they "
-        "do not route it through create_recurrent_attention_mask), which crashes the unguarded post-conv "
-        "masking multiply with a shape RuntimeError before any comparison — pre-existing on both the torch "
-        "and cuda paths. Plumbing the current-tokens slice into the mixer (which also cures that crash) is "
-        "a separate fix."
-    )
-    def test_recurrent_layers_mask_padding_on_continued_forward(self):
-        pass
-
-    @unittest.skip(
         "Offloading corrupts a linear projection weight and changes its shape [16, 104] -> [16]. Note that the test passes with a smaller model with 2 layers"
     )
     def test_disk_offload_bin(self):
