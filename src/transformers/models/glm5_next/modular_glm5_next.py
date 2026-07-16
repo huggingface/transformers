@@ -36,6 +36,7 @@ from ...utils.output_capturing import OutputRecorder
 from ..deepseek_v3.modeling_deepseek_v3 import DeepseekV3MoE
 from ..glm4.modeling_glm4 import apply_rotary_pos_emb
 from ..glm_moe_dsa.modeling_glm_moe_dsa import GlmMoeDsaAttention, GlmMoeDsaDecoderLayer, GlmMoeDsaIndexer
+from ..inkling.modeling_inkling import causal_conv1d_fn, causal_conv1d_update
 from ..llama.modeling_llama import (
     LlamaRMSNorm,
     LlamaRotaryEmbedding,
@@ -115,54 +116,6 @@ class Glm5NextMoE(DeepseekV3MoE):
 
 class Glm5NextRotaryEmbedding(LlamaRotaryEmbedding):
     pass
-
-
-# We reimplement it to use it via kernels, we need BC for the other models to rely on lazy load kernels
-@use_kernel_func_from_hub("causal_conv1d_update")
-def causal_conv1d_update(
-    hidden_states,
-    conv_state,
-    weight,
-    bias=None,
-    activation=None,
-):
-    _, hidden_size, seq_len = hidden_states.shape
-    state_len = conv_state.shape[-1]
-
-    hidden_states_new = torch.cat([conv_state, hidden_states], dim=-1).to(weight.dtype)
-    conv_state.copy_(hidden_states_new[:, :, -state_len:])
-    out = F.conv1d(hidden_states_new, weight.unsqueeze(1), bias, padding=0, groups=hidden_size)
-    out = out[:, :, -seq_len:]
-
-    if activation is not None:
-        out = ACT2FN[activation](out)
-
-    return out.to(hidden_states.dtype)
-
-
-@use_kernel_func_from_hub("causal_conv1d_fn")
-def causal_conv1d_fn(
-    hidden_states,
-    weight,
-    bias=None,
-    activation=None,
-    **kwargs,
-):
-    _, hidden_size, seq_len = hidden_states.shape
-    padding = weight.shape[-1] - 1
-
-    out = F.conv1d(
-        hidden_states.to(weight.dtype),
-        weight=weight.unsqueeze(1),
-        bias=bias,
-        padding=padding,
-        groups=hidden_size,
-    )[:, :, :seq_len]
-
-    if activation is not None:
-        out = ACT2FN[activation](out)
-
-    return out.to(hidden_states.dtype)
 
 
 def l2norm(x: torch.FloatTensor, dim: int = -1, eps: float = 1e-6):
@@ -436,8 +389,8 @@ class Glm5NextLinearAttention(nn.Module):
         # Acts for normal prefill but also for multi-token prefill continue
         use_precomputed_states = cache_params is not None and cache_params.has_previous_state(self.layer_idx)
         if use_precomputed_states:
-            conv_state = cache_params.layers[self.layer_idx].conv_states
-            recurrent_state = cache_params.layers[self.layer_idx].recurrent_states
+            conv_state = cache_params.layers[self.layer_idx].conv_states[0]
+            recurrent_state = cache_params.layers[self.layer_idx].recurrent_states[0]
 
         # Single token decode path
         if use_precomputed_states and seq_len == 1:
@@ -455,8 +408,9 @@ class Glm5NextLinearAttention(nn.Module):
                 mixed_qkv = torch.cat([conv_state.to(mixed_qkv.dtype), mixed_qkv], dim=-1)
 
             if cache_params is not None:
-                new_conv_state = F.pad(mixed_qkv, (self.conv_kernel_size - mixed_qkv.shape[-1], 0))
-                cache_params.update_conv_state(new_conv_state, self.layer_idx)
+                mixed_qkv = cache_params.update_conv_state(
+                    mixed_qkv, self.layer_idx, conv_kernel_size=self.conv_kernel_size
+                )
 
             mixed_qkv = causal_conv1d_fn(
                 mixed_qkv,
@@ -745,7 +699,9 @@ class Glm5NextIndexer(GlmMoeDsaIndexer):
         # Learn a weighted average over the tokens inside each complete pool
         logits = grouped_gate_scores.float() + self.index_kpool_compress_ape.float()[None, None]
         logits = logits.masked_fill(~grouped_valid_keys[..., None], float("-inf"))
-        probabilities = torch.nan_to_num(logits.softmax(dim=2)).to(grouped_keys.dtype)  # nan to num for full invalid pools
+        probabilities = torch.nan_to_num(logits.softmax(dim=2)).to(
+            grouped_keys.dtype
+        )  # nan to num for full invalid pools
         pool_keys = (probabilities * grouped_keys).sum(dim=2)
 
         # Avoids static cache allocated positions
@@ -907,7 +863,7 @@ class Glm5NextAttention(GlmMoeDsaAttention):
         selected_counts = torch.zeros(
             topk_indices.shape[0],  # batch size
             topk_indices.shape[1],  # q_length
-            kv_length,              # kv_length
+            kv_length,  # kv_length
             dtype=torch.int32,
             device=topk_indices.device,
         )
@@ -1072,7 +1028,7 @@ class Glm5NextModel(MixtralModel):
             causal_mask_mapping = {
                 # The model creates its mask based on the topk indices so we only need to know where the padding is
                 "deepseek_sparse_attention": attention_mask,
-                "linear_attention": attention_mask
+                "linear_attention": attention_mask,
             }
 
         topk_indices = None

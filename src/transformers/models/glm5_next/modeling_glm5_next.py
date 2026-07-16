@@ -330,14 +330,13 @@ def apply_mask_to_padding_states(hidden_states, attention_mask):
     return hidden_states
 
 
-# We reimplement it to use it via kernels, we need BC for the other models to rely on lazy load kernels
 @use_kernel_func_from_hub("causal_conv1d_update")
 def causal_conv1d_update(
-    hidden_states,
-    conv_state,
-    weight,
-    bias=None,
-    activation=None,
+    hidden_states: torch.Tensor,
+    conv_state: torch.Tensor,
+    weight: nn.Parameter,
+    bias: nn.Parameter | None = None,
+    activation: str | None = None,
 ):
     _, hidden_size, seq_len = hidden_states.shape
     state_len = conv_state.shape[-1]
@@ -346,19 +345,17 @@ def causal_conv1d_update(
     conv_state.copy_(hidden_states_new[:, :, -state_len:])
     out = F.conv1d(hidden_states_new, weight.unsqueeze(1), bias, padding=0, groups=hidden_size)
     out = out[:, :, -seq_len:]
-
     if activation is not None:
         out = ACT2FN[activation](out)
-
     return out.to(hidden_states.dtype)
 
 
 @use_kernel_func_from_hub("causal_conv1d_fn")
 def causal_conv1d_fn(
-    hidden_states,
-    weight,
-    bias=None,
-    activation=None,
+    hidden_states: torch.Tensor,
+    weight: nn.Parameter,
+    bias: nn.Parameter | None = None,
+    activation: str | None = None,
     **kwargs,
 ):
     _, hidden_size, seq_len = hidden_states.shape
@@ -371,10 +368,8 @@ def causal_conv1d_fn(
         padding=padding,
         groups=hidden_size,
     )[:, :, :seq_len]
-
     if activation is not None:
         out = ACT2FN[activation](out)
-
     return out.to(hidden_states.dtype)
 
 
@@ -616,8 +611,8 @@ class Glm5NextLinearAttention(nn.Module):
         # Acts for normal prefill but also for multi-token prefill continue
         use_precomputed_states = cache_params is not None and cache_params.has_previous_state(self.layer_idx)
         if use_precomputed_states:
-            conv_state = cache_params.layers[self.layer_idx].conv_states
-            recurrent_state = cache_params.layers[self.layer_idx].recurrent_states
+            conv_state = cache_params.layers[self.layer_idx].conv_states[0]
+            recurrent_state = cache_params.layers[self.layer_idx].recurrent_states[0]
 
         # Single token decode path
         if use_precomputed_states and seq_len == 1:
@@ -635,8 +630,9 @@ class Glm5NextLinearAttention(nn.Module):
                 mixed_qkv = torch.cat([conv_state.to(mixed_qkv.dtype), mixed_qkv], dim=-1)
 
             if cache_params is not None:
-                new_conv_state = F.pad(mixed_qkv, (self.conv_kernel_size - mixed_qkv.shape[-1], 0))
-                cache_params.update_conv_state(new_conv_state, self.layer_idx)
+                mixed_qkv = cache_params.update_conv_state(
+                    mixed_qkv, self.layer_idx, conv_kernel_size=self.conv_kernel_size
+                )
 
             mixed_qkv = causal_conv1d_fn(
                 mixed_qkv,

@@ -135,34 +135,6 @@ if is_kernels_available():
                     trust_remote_code=True,
                 ),
             },
-            "causal_conv1d_fn": {
-                "cuda": {
-                    Mode.TRAINING: LayerRepository(
-                        repo_id="kernels-community/mamba-ssm",
-                        layer_name="causal_conv1d_fn",
-                        version=1,
-                    ),
-                    Mode.INFERENCE: LayerRepository(
-                        repo_id="kernels-community/mamba-ssm",
-                        layer_name="causal_conv1d_fn",
-                        version=1,
-                    ),
-                },
-            },
-            "causal_conv1d_update": {
-                "cuda": {
-                    Mode.TRAINING: LayerRepository(
-                        repo_id="kernels-community/mamba-ssm",
-                        layer_name="causal_conv1d_update",
-                        version=1,
-                    ),
-                    Mode.INFERENCE: LayerRepository(
-                        repo_id="kernels-community/mamba-ssm",
-                        layer_name="causal_conv1d_update",
-                        version=1,
-                    ),
-                },
-            },
             "SwiGLUMLP": {
                 "cuda": {
                     Mode.INFERENCE | Mode.TORCH_COMPILE: LayerRepository(
