@@ -13,8 +13,6 @@
 # limitations under the License.
 from __future__ import annotations
 
-import json
-import os
 import re
 import warnings
 from typing import TYPE_CHECKING
@@ -22,23 +20,12 @@ from typing import TYPE_CHECKING
 from ..integrations.tensor_parallel import (
     ALL_PARALLEL_STYLES,
     apply_tensor_parallelism,
-    gather_state_dict_for_save,
     initialize_tensor_parallelism,
 )
-from ..utils import SAFE_WEIGHTS_INDEX_NAME, is_torch_available, is_torch_greater_or_equal, logging
-from ..utils.hub import create_and_tag_model_card
+from ..utils import is_torch_available
 from .configuration_utils import DistributedConfig
-from .fsdp import apply_fully_sharded_data_parallelism, is_fsdp_managed_module
-from .utils import (
-    _get_torch_distributed_rank,
-    _is_torch_distributed_initialized,
-    gather_full_state_dict,
-    initialize_fully_sharded_data_parallelism,
-    save_model_checkpoint_distributed,
-)
-
-
-logger = logging.get_logger(__name__)
+from .fsdp import apply_fully_sharded_data_parallelism
+from .utils import initialize_fully_sharded_data_parallelism
 
 
 if TYPE_CHECKING:
@@ -53,7 +40,7 @@ else:
 
 
 class DistributedMixin:
-    """Distributed save/load hooks for [`PreTrainedModel`].
+    """Distributed orchestration hooks for [`PreTrainedModel`].
 
     Stateless heavy lifting stays in `transformers.distributed.*` and
     `integrations.tensor_parallel`. This mixin owns orchestration and instance state.
@@ -181,107 +168,3 @@ class DistributedMixin:
                 fsdp_mesh = device_mesh["fsdp"] if device_mesh.ndim > 1 else device_mesh
                 model = apply_fully_sharded_data_parallelism(model, fsdp_mesh)
         return model
-
-    def should_save_on_this_rank(self, is_main_process: bool) -> bool:
-        """Return whether this rank should write checkpoint files."""
-        save_on_this_rank = is_main_process
-        if _is_torch_distributed_initialized():
-            save_on_this_rank = save_on_this_rank and _get_torch_distributed_rank() == 0
-        return save_on_this_rank
-
-    def save_distributed_checkpoint(
-        self,
-        model_to_save,
-        save_directory: str | os.PathLike,
-        *,
-        push_to_hub: bool = False,
-        save_on_this_rank: bool = True,
-        repo_id: str | None = None,
-        files_timestamps: dict | None = None,
-        commit_message: str | None = None,
-        token: str | bool | None = None,
-        create_pr: bool = False,
-    ) -> None:
-        """Save an FSDP-wrapped model via DCP and optionally push to the Hub."""
-        if not is_torch_greater_or_equal("2.7"):
-            raise OSError("save_pretrained(..., distributed_checkpoint=True) requires torch>=2.7.")
-        if not is_fsdp_managed_module(model_to_save):
-            raise ValueError(
-                "save_pretrained(..., distributed_checkpoint=True) is only supported for FSDP-wrapped models."
-            )
-        if getattr(model_to_save, "_device_mesh", None) is None:
-            raise ValueError(
-                "save_pretrained(..., distributed_checkpoint=True) requires the model to have been "
-                "initialized with a distributed_config (_device_mesh is None)."
-            )
-        save_model_checkpoint_distributed(model_to_save, save_directory)
-
-        if push_to_hub and save_on_this_rank:
-            model_card = create_and_tag_model_card(repo_id, self.model_tags, token=token)
-            model_card.save(os.path.join(save_directory, "README.md"))
-            self._upload_modified_files(
-                save_directory,
-                repo_id,
-                files_timestamps,
-                commit_message=commit_message,
-                token=token,
-                create_pr=create_pr,
-            )
-
-    def save_gathered_checkpoint_index(
-        self,
-        save_directory: str | os.PathLike,
-        *,
-        state_dict_split,
-        weight_map: dict | None,
-        weights_name: str,
-        variant: str | None,
-        max_shard_size: int | str,
-    ) -> None:
-        """Write sharded safetensors index after a gathered state-dict save."""
-        # Save index if sharded
-        index = None
-        if state_dict_split.is_sharded:
-            index = {
-                "metadata": {"total_parameters": self.num_parameters(), **state_dict_split.metadata},
-                "weight_map": weight_map,
-            }
-
-        if index is None:
-            path_to_weights = os.path.join(save_directory, weights_name)
-            logger.info(f"Model weights saved in {path_to_weights}")
-        else:
-            from ..modeling_utils import _add_variant
-
-            save_index_file = SAFE_WEIGHTS_INDEX_NAME
-            save_index_file = os.path.join(save_directory, _add_variant(save_index_file, variant))
-            # Save the index as well
-            with open(save_index_file, "w", encoding="utf-8") as f:
-                content = json.dumps(index, indent=2, sort_keys=True) + "\n"
-                f.write(content)
-            logger.info(
-                f"The model is bigger than the maximum size per checkpoint ({max_shard_size}) and is going to be "
-                f"split in {len(state_dict_split.filename_to_tensors)} checkpoint shards. You can find where each parameters has been saved in the "
-                f"index located at {save_index_file}."
-            )
-
-    def _gather_tp_state_dict_for_save(
-        self,
-        local_state_dict: dict,
-        *,
-        is_checkpoint_writer: bool = True,
-    ) -> tuple[dict, bool]:
-        """All-gather TP-sharded weights for checkpoint writing."""
-        full_state_dict = gather_state_dict_for_save(local_state_dict, self._tp_plan, self._device_mesh, self._tp_size)
-        if not is_checkpoint_writer:
-            full_state_dict = {}
-        return full_state_dict, True
-
-    def _gather_fsdp_state_dict_for_save(self, model_to_save) -> tuple[dict, bool]:
-        """Gather FSDP-sharded weights to full CPU tensors on rank 0."""
-        if not _is_torch_distributed_initialized():
-            raise ValueError(
-                "Saving an FSDP-wrapped model requires torch.distributed to be initialized. "
-                "Call save_pretrained from every rank after init_process_group."
-            )
-        return gather_full_state_dict(model_to_save), True
