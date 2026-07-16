@@ -5,15 +5,23 @@ import requests
 from get_ci_error_statistics import download_artifact, get_artifacts_links
 
 
+def get_github_json(url, token=None):
+    headers = None
+    if token:
+        headers = {"Accept": "application/vnd.github+json", "Authorization": f"Bearer {token}"}
+
+    response = requests.get(url, headers=headers)
+    if headers is not None and response.status_code in {401, 403, 404}:
+        response = requests.get(url)
+
+    return response.json()
+
+
 def get_daily_ci_runs(token, num_runs=7, workflow_id=None):
     """Get the workflow runs of the scheduled (daily) CI.
 
     This only selects the runs triggered by the `schedule` event on the `main` branch.
     """
-    headers = None
-    if token:
-        headers = {"Accept": "application/vnd.github+json", "Authorization": f"Bearer {token}"}
-
     # The id of a workflow (not of a workflow run).
     # From a given workflow run (where we have workflow run id), we can get the workflow id by going to
     # https://api.github.com/repos/huggingface/transformers/actions/runs/{workflow_run_id}
@@ -21,19 +29,19 @@ def get_daily_ci_runs(token, num_runs=7, workflow_id=None):
 
     if not workflow_id:
         workflow_run_id = os.environ["GITHUB_RUN_ID"]
-        workflow_run = requests.get(
-            f"https://api.github.com/repos/huggingface/transformers/actions/runs/{workflow_run_id}", headers=headers
-        ).json()
+        workflow_run = get_github_json(
+            f"https://api.github.com/repos/huggingface/transformers/actions/runs/{workflow_run_id}", token=token
+        )
         workflow_id = workflow_run["workflow_id"]
 
     url = f"https://api.github.com/repos/huggingface/transformers/actions/workflows/{workflow_id}/runs"
     # On `main` branch + event being `schedule` + not returning PRs + only `num_runs` results
     url += f"?branch=main&exclude_pull_requests=true&per_page={num_runs}"
 
-    result = requests.get(f"{url}&event=schedule", headers=headers).json()
+    result = get_github_json(f"{url}&event=schedule", token=token)
     workflow_runs = result["workflow_runs"]
     if len(workflow_runs) == 0:
-        result = requests.get(f"{url}&event=workflow_run", headers=headers).json()
+        result = get_github_json(f"{url}&event=workflow_run", token=token)
         workflow_runs = result["workflow_runs"]
 
     return workflow_runs
@@ -41,15 +49,11 @@ def get_daily_ci_runs(token, num_runs=7, workflow_id=None):
 
 def get_last_daily_ci_run(token, workflow_run_id=None, workflow_id=None, commit_sha=None):
     """Get the last completed workflow run id of the scheduled (daily) CI."""
-    headers = None
-    if token:
-        headers = {"Accept": "application/vnd.github+json", "Authorization": f"Bearer {token}"}
-
     workflow_run = None
     if workflow_run_id is not None and workflow_run_id != "":
-        workflow_run = requests.get(
-            f"https://api.github.com/repos/huggingface/transformers/actions/runs/{workflow_run_id}", headers=headers
-        ).json()
+        workflow_run = get_github_json(
+            f"https://api.github.com/repos/huggingface/transformers/actions/runs/{workflow_run_id}", token=token
+        )
         return workflow_run
 
     workflow_runs = get_daily_ci_runs(token, workflow_id=workflow_id)
