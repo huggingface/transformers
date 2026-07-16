@@ -38,8 +38,11 @@ class Qwen3_5TextConfig(PreTrainedConfig):
         Number of key heads used in linear attention layers.
     linear_num_value_heads (`int`, *optional*, defaults to 32):
         Number of value heads used in linear attention layers.
-    num_mtp_layers (`int`, *optional*, defaults to 0):
+    mtp_num_hidden_layers (`int`, *optional*, defaults to 0):
         Number of Multi-Token Prediction (MTP) layers. When set to 0, MTP is disabled.
+        This field is exposed as `num_mtp_layers` via `attribute_map`.
+    mtp_layer_types (`list[str]`, *optional*):
+        Layer types for the MTP layers. Defaults to `["full_attention"] * mtp_num_hidden_layers`.
 
     ```python
     >>> from transformers import Qwen3_5TextModel, Qwen3_5TextConfig
@@ -107,8 +110,14 @@ class Qwen3_5TextConfig(PreTrainedConfig):
     bos_token_id: int | None = None
     eos_token_id: int | list[int] | None = None
     base_config_key = "text_config"
+
+    attribute_map = {
+        **Qwen3NextConfig.attribute_map,
+        "num_mtp_layers": "mtp_num_hidden_layers",
+    }
     ignore_keys_at_rope_validation = {"mrope_section", "mrope_interleaved"}
-    num_mtp_layers: int = 0
+    mtp_num_hidden_layers: int = 0
+    mtp_layer_types: list[str] | None = None
 
     def __post_init__(self, **kwargs):
         kwargs.setdefault("partial_rotary_factor", 0.25)  # assign default for BC
@@ -122,6 +131,8 @@ class Qwen3_5TextConfig(PreTrainedConfig):
             self.layer_types = remap_legacy_layer_types(self.layer_types)
 
         super().__post_init__(**kwargs)
+        if self.mtp_layer_types is None:
+            self.mtp_layer_types = ["full_attention"] * self.mtp_num_hidden_layers
 
 
 @auto_docstring(checkpoint="Qwen/Qwen3.5-27B")
@@ -155,8 +166,11 @@ class Qwen3_5VisionConfig(PreTrainedConfig):
 @strict
 class Qwen3_5Config(PreTrainedConfig):
     r"""
-    num_mtp_layers (`int`, *optional*, defaults to 0):
+    mtp_num_hidden_layers (`int`, *optional*, defaults to 0):
         Number of Multi-Token Prediction (MTP) layers. When set to 0, MTP is disabled.
+        This field is exposed as `num_mtp_layers` via `attribute_map`.
+    mtp_layer_types (`list[str]`, *optional*):
+        Layer types for the MTP layers. Defaults to `["full_attention"] * mtp_num_hidden_layers`.
 
     Example:
 
@@ -185,7 +199,14 @@ class Qwen3_5Config(PreTrainedConfig):
     vision_start_token_id: int = 248053
     vision_end_token_id: int = 248054
     tie_word_embeddings: bool = False
-    num_mtp_layers: int = 0
+
+    attribute_map = {
+        **Qwen3VLConfig.attribute_map,
+        "num_mtp_layers": "mtp_num_hidden_layers",
+    }
+
+    mtp_num_hidden_layers: int = 0
+    mtp_layer_types: list[str] | None = None
 
     def __post_init__(self, **kwargs):
         if isinstance(self.vision_config, dict):
@@ -202,6 +223,8 @@ class Qwen3_5Config(PreTrainedConfig):
             self.text_config = self.sub_configs["text_config"]()
 
         super().__post_init__(**kwargs)
+        if self.mtp_layer_types is None:
+            self.mtp_layer_types = ["full_attention"] * self.mtp_num_hidden_layers
 
 
 __all__ = ["Qwen3_5Config", "Qwen3_5TextConfig", "Qwen3_5VisionConfig"]

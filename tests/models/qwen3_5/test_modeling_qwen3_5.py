@@ -48,6 +48,7 @@ if is_torch_available():
         AutoModelForImageTextToText,
         DynamicCache,
         Qwen3_5Config,
+        Qwen3_5DecoderLayer,
         Qwen3_5ForCausalLM,
         Qwen3_5ForConditionalGeneration,
         Qwen3_5ForSequenceClassification,
@@ -996,3 +997,22 @@ class Qwen3_5IntegrationTest(unittest.TestCase):
         self.assertIn("Describe the video in short.", decoded_text[1])
         self.assertIn("seconds>", decoded_text[1])
         self.assertIn("tennis", decoded_text[1].lower())
+
+
+@require_torch
+class Qwen3_5MtpConfigTest(unittest.TestCase):
+    def test_mtp_config_layer_types(self):
+        """MTP config must provide valid layer_types so Qwen3_5DecoderLayer does not index out of range."""
+        config = Qwen3_5TextConfig(mtp_num_hidden_layers=2)
+        mtp_config = config.get_mtp_config()
+        self.assertEqual(mtp_config.num_hidden_layers, 2)
+        self.assertEqual(mtp_config.layer_types, ["full_attention", "full_attention"])
+        layer = Qwen3_5DecoderLayer(mtp_config, 0)
+        self.assertEqual(layer.block_type, "full_attention")
+
+    def test_attribute_map_num_mtp_layers(self):
+        """`num_mtp_layers` should alias `mtp_num_hidden_layers` for checkpoint compatibility."""
+        config = Qwen3_5TextConfig(num_mtp_layers=3)
+        self.assertEqual(config.mtp_num_hidden_layers, 3)
+        self.assertEqual(config.num_mtp_layers, 3)
+        self.assertEqual(config.mtp_layer_types, ["full_attention", "full_attention", "full_attention"])
