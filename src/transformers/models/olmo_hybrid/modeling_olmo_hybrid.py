@@ -158,6 +158,9 @@ class OlmoHybridDynamicCache:
         """We have a previous state if the last linear (conv) layer was already updated."""
         return self.conv_states_q[self.last_linear_layer] is not None
 
+    def get_query_offset(self, layer_idx: int = 0) -> int:
+        return self.get_seq_length(layer_idx=layer_idx)
+
 
 class OlmoHybridRMSNormGated(nn.Module):
     def __init__(self, hidden_size, eps=1e-6, **kwargs):
@@ -920,7 +923,7 @@ class OlmoHybridPreTrainedModel(PreTrainedModel):
     _supports_sdpa = True
     _keys_to_ignore_on_load_unexpected = [r"^mtp.*"]
     _can_record_outputs = {
-        "hidden_states": (OlmoHybridAttentionDecoderLayer, OlmoHybridLinearAttentionDecoderLayer),
+        "hidden_states": [OlmoHybridAttentionDecoderLayer, OlmoHybridLinearAttentionDecoderLayer],
         "attentions": OlmoHybridAttention,
     }
     _is_stateful = True
