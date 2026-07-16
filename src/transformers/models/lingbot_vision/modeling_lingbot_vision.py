@@ -300,6 +300,30 @@ class LingbotVisionSwiGLUFFN(nn.Module):
         return self.w3(F.silu(self.w1(hidden_states)) * self.w2(hidden_states))
 
 
+class LingbotVisionDropPath(nn.Module):
+    """Stochastic depth (DropPath) per sample, for residual blocks.
+
+    Identity when ``drop_prob`` is 0 or outside training. See `Deep Networks with Stochastic Depth
+    <https://arxiv.org/abs/1603.09382>`_.
+    """
+
+    def __init__(self, drop_prob: float = 0.0) -> None:
+        super().__init__()
+        self.drop_prob = drop_prob
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        if self.drop_prob == 0.0 or not self.training:
+            return hidden_states
+        keep_prob = 1 - self.drop_prob
+        shape = (hidden_states.shape[0],) + (1,) * (hidden_states.ndim - 1)
+        random_tensor = torch.rand(shape, dtype=hidden_states.dtype, device=hidden_states.device)
+        random_tensor = torch.floor(random_tensor + keep_prob)
+        return hidden_states.div(keep_prob) * random_tensor
+
+    def extra_repr(self) -> str:
+        return f"p={self.drop_prob}"
+
+
 _FFN_MAPPING = {
     "mlp": LingbotVisionMlp,
     "swiglu": LingbotVisionSwiGLUFFN,
@@ -311,7 +335,7 @@ _FFN_MAPPING = {
 
 def _get_norm(config: LingbotVisionConfig) -> nn.Module:
     if config.norm_layer == "layernorm":
-        return nn.LayerNorm(config.hidden_size, eps=1e-6)
+        return nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
     if config.norm_layer == "layernormbf16":
         return nn.LayerNorm(config.hidden_size, eps=1e-5)
     if config.norm_layer == "rmsnorm":
@@ -329,6 +353,7 @@ class LingbotVisionLayer(GradientCheckpointingLayer):
             if config.layer_scale_init_value is not None
             else nn.Identity()
         )
+        self.drop_path = LingbotVisionDropPath(config.drop_path_rate) if config.drop_path_rate > 0.0 else nn.Identity()
         self.norm2 = _get_norm(config)
         self.mlp = _FFN_MAPPING[config.ffn_layer](config)
         self.layer_scale2 = (
@@ -342,10 +367,10 @@ class LingbotVisionLayer(GradientCheckpointingLayer):
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
         residual = hidden_states
         attention_output, attention_probs = self.attention(self.norm1(hidden_states), rope, output_attentions)
-        hidden_states = residual + self.layer_scale1(attention_output)
+        hidden_states = residual + self.drop_path(self.layer_scale1(attention_output))
 
         residual = hidden_states
-        hidden_states = residual + self.layer_scale2(self.mlp(self.norm2(hidden_states)))
+        hidden_states = residual + self.drop_path(self.layer_scale2(self.mlp(self.norm2(hidden_states))))
         return hidden_states, attention_probs
 
 

@@ -30,6 +30,7 @@ from ...utils import TransformersKwargs, auto_docstring
 from ...utils.generic import can_return_tuple
 from ..llama.modeling_llama import LlamaRMSNorm
 from ..pixtral.modeling_pixtral import rotate_half
+from ..swin.modeling_swin import SwinDropPath
 from .configuration_lingbot_vision import LingbotVisionConfig
 
 
@@ -285,12 +286,16 @@ _FFN_MAPPING = {
 
 def _get_norm(config: LingbotVisionConfig) -> nn.Module:
     if config.norm_layer == "layernorm":
-        return nn.LayerNorm(config.hidden_size, eps=1e-6)
+        return nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
     if config.norm_layer == "layernormbf16":
         return nn.LayerNorm(config.hidden_size, eps=1e-5)
     if config.norm_layer == "rmsnorm":
         return LingbotVisionRMSNorm(config.hidden_size)
     raise ValueError(f"Unknown LingBot-Vision norm layer: {config.norm_layer}")
+
+
+class LingbotVisionDropPath(SwinDropPath):
+    pass
 
 
 class LingbotVisionLayer(GradientCheckpointingLayer):
@@ -303,6 +308,7 @@ class LingbotVisionLayer(GradientCheckpointingLayer):
             if config.layer_scale_init_value is not None
             else nn.Identity()
         )
+        self.drop_path = LingbotVisionDropPath(config.drop_path_rate) if config.drop_path_rate > 0.0 else nn.Identity()
         self.norm2 = _get_norm(config)
         self.mlp = _FFN_MAPPING[config.ffn_layer](config)
         self.layer_scale2 = (
@@ -316,10 +322,10 @@ class LingbotVisionLayer(GradientCheckpointingLayer):
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
         residual = hidden_states
         attention_output, attention_probs = self.attention(self.norm1(hidden_states), rope, output_attentions)
-        hidden_states = residual + self.layer_scale1(attention_output)
+        hidden_states = residual + self.drop_path(self.layer_scale1(attention_output))
 
         residual = hidden_states
-        hidden_states = residual + self.layer_scale2(self.mlp(self.norm2(hidden_states)))
+        hidden_states = residual + self.drop_path(self.layer_scale2(self.mlp(self.norm2(hidden_states))))
         return hidden_states, attention_probs
 
 
