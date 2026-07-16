@@ -448,6 +448,7 @@ class Mask2FormerImageProcessor(TorchvisionBackend):
         return_tensors: str | TensorType | None,
         **kwargs,
     ) -> BatchFeature:
+
         if segmentation_maps is not None and len(images) != len(segmentation_maps):
             raise ValueError("Images and segmentation maps must have the same length.")
 
