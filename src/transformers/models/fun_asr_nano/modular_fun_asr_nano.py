@@ -95,6 +95,14 @@ class FunAsrNanoEncoderConfig(PreTrainedConfig):
     def input_size(self) -> int:
         return self.num_mel_bins * self.num_stacked_frames
 
+    def __post_init__(self, **kwargs):
+        legacy_input_size = kwargs.pop("input_size", None)
+        if legacy_input_size is not None and legacy_input_size != self.input_size:
+            raise ValueError(
+                f"`input_size={legacy_input_size}` does not match `num_mel_bins * num_stacked_frames={self.input_size}`."
+            )
+        super().__post_init__(**kwargs)
+
 
 @auto_docstring(checkpoint="FunAudioLLM/Fun-ASR-Nano-2512-hf")
 @strict
@@ -135,6 +143,11 @@ class FunAsrNanoConfig(PreTrainedConfig):
     tie_word_embeddings: bool = True
 
     def __post_init__(self, **kwargs):
+        audio_config = kwargs.pop("audio_config", None)
+        audio_encoder_config = kwargs.pop("audio_encoder_config", None)
+        if self.encoder_config is None:
+            self.encoder_config = audio_encoder_config if audio_encoder_config is not None else audio_config
+
         if isinstance(self.encoder_config, dict):
             self.encoder_config["model_type"] = self.encoder_config.get("model_type", "fun_asr_nano_encoder")
             self.encoder_config = CONFIG_MAPPING[self.encoder_config["model_type"]](**self.encoder_config)
