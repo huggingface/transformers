@@ -141,8 +141,9 @@ def sdpa_attention_forward(
     if is_causal and attention_mask is None and q_length > 1 and kv_length > q_length:
         key = key[:, :, :q_length, :]
         value = value[:, :, :q_length, :]
+        # If we have a position_bias, we need to crop it as well (on last dim, which is the kv seq_len dim)
         if position_bias is not None:
-            position_bias = position_bias[:, :, :q_length, :]
+            position_bias = position_bias[:, :, :, :q_length]
 
     # If we have a position_bias, create the correct floating-point mask by combining it with the existing mask, or a causal mask
     # if `is_causal=True`
