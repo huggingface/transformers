@@ -122,6 +122,26 @@ class WavTokenizerFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unit
         self.assertEqual(processed.input_values.shape[-1], max(lengths))
         self.assertEqual(processed.padding_mask.sum(-1).tolist(), lengths)
 
+    def test_batch_truncated_and_padded(self):
+        feat_extract = self.feature_extraction_class(**self.feat_extract_tester.prepare_feat_extract_dict())
+        max_length = 1000
+        lengths = [1200, 800]
+        batch = [np.arange(length, dtype=np.float32) for length in lengths]
+        processed = feat_extract(
+            batch,
+            padding=True,
+            truncation=True,
+            max_length=max_length,
+            sampling_rate=feat_extract.sampling_rate,
+            return_tensors="np",
+        )
+
+        self.assertEqual(processed.input_values.shape, (len(batch), 1, max_length))
+        self.assertEqual(processed.padding_mask.sum(-1).tolist(), [max_length, lengths[1]])
+        np.testing.assert_array_equal(processed.input_values[0, 0], batch[0][:max_length])
+        np.testing.assert_array_equal(processed.input_values[1, 0, : lengths[1]], batch[1])
+        np.testing.assert_array_equal(processed.input_values[1, 0, lengths[1] :], 0.0)
+
     def test_rejects_empty_audio(self):
         feat_extract = self.feature_extraction_class(**self.feat_extract_tester.prepare_feat_extract_dict())
         with self.assertRaises(ValueError):
