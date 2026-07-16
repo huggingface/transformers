@@ -61,6 +61,7 @@ class DistributedMixin:
 
     _device_mesh = None
     _tp_plan: dict[str, str] | None = None
+    _ep_plan: dict[str, str] | None = None
     _tp_size = None
     _pp_plan: dict[str, tuple[str, str]] = None
     _fsdp_plan: dict[str, str] | None = None
