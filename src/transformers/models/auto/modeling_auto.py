@@ -948,7 +948,6 @@ MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
             "levit",
             ("LevitForImageClassification", "LevitForImageClassificationWithTeacher"),
         ),
-        ("lingbot_vision", "LingbotVisionForImageClassification"),
         ("metaclip_2", "MetaClip2ForImageClassification"),
         ("mobilenet_v1", "MobileNetV1ForImageClassification"),
         ("mobilenet_v2", "MobileNetV2ForImageClassification"),

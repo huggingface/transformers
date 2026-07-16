@@ -43,11 +43,6 @@ last_hidden_state = outputs.last_hidden_state
 [[autodoc]] LingbotVisionModel
     - forward
 
-## LingbotVisionForImageClassification
-
-[[autodoc]] LingbotVisionForImageClassification
-    - forward
-
 ## LingbotVisionBackbone
 
 [[autodoc]] LingbotVisionBackbone

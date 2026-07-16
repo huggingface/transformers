@@ -15,16 +15,16 @@
 
 import unittest
 
-from transformers import AutoBackbone, AutoModel, AutoModelForImageClassification, LingbotVisionConfig
+from transformers import AutoBackbone, AutoModel, LingbotVisionConfig
 from transformers.testing_utils import require_torch, torch_device
 from transformers.utils import is_torch_available
 
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import floats_tensor, ids_tensor
+from ...test_modeling_common import floats_tensor
 
 
 if is_torch_available():
-    from transformers import LingbotVisionBackbone, LingbotVisionForImageClassification, LingbotVisionModel
+    from transformers import LingbotVisionBackbone, LingbotVisionModel
 
 
 class LingbotVisionModelTester:
@@ -40,7 +40,6 @@ class LingbotVisionModelTester:
         num_attention_heads=4,
         mlp_ratio=2.0,
         num_storage_tokens=2,
-        num_labels=7,
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -52,7 +51,6 @@ class LingbotVisionModelTester:
         self.num_attention_heads = num_attention_heads
         self.mlp_ratio = mlp_ratio
         self.num_storage_tokens = num_storage_tokens
-        self.num_labels = num_labels
         self.num_patches = (image_size // patch_size) ** 2
         self.seq_length = self.num_patches + 1 + num_storage_tokens
 
@@ -67,13 +65,11 @@ class LingbotVisionModelTester:
             mlp_ratio=self.mlp_ratio,
             num_storage_tokens=self.num_storage_tokens,
             rope_dtype="fp32",
-            num_labels=self.num_labels,
         )
 
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
-        labels = ids_tensor([self.batch_size], self.num_labels)
-        return self.get_config(), pixel_values, labels
+        return self.get_config(), pixel_values
 
 
 @require_torch
@@ -86,7 +82,7 @@ class LingbotVisionModelTest(unittest.TestCase):
         self.config_tester.run_common_tests()
 
     def test_model(self):
-        config, pixel_values, _ = self.model_tester.prepare_config_and_inputs()
+        config, pixel_values = self.model_tester.prepare_config_and_inputs()
         model = LingbotVisionModel(config).to(torch_device)
         model.eval()
 
@@ -99,7 +95,7 @@ class LingbotVisionModelTest(unittest.TestCase):
         self.assertEqual(result.pooler_output.shape, (self.model_tester.batch_size, self.model_tester.hidden_size))
 
     def test_model_with_output_hidden_states_and_attentions(self):
-        config, pixel_values, _ = self.model_tester.prepare_config_and_inputs()
+        config, pixel_values = self.model_tester.prepare_config_and_inputs()
         model = LingbotVisionModel(config).to(torch_device)
         model.eval()
 
@@ -118,7 +114,7 @@ class LingbotVisionModelTest(unittest.TestCase):
         )
 
     def test_backbone(self):
-        config, pixel_values, _ = self.model_tester.prepare_config_and_inputs()
+        config, pixel_values = self.model_tester.prepare_config_and_inputs()
         model = LingbotVisionBackbone(config).to(torch_device)
         model.eval()
 
@@ -131,19 +127,8 @@ class LingbotVisionModelTest(unittest.TestCase):
             (self.model_tester.batch_size, self.model_tester.hidden_size, expected_size, expected_size),
         )
 
-    def test_image_classification(self):
-        config, pixel_values, labels = self.model_tester.prepare_config_and_inputs()
-        model = LingbotVisionForImageClassification(config).to(torch_device)
-        model.eval()
-
-        result = model(pixel_values, labels=labels)
-
-        self.assertEqual(result.logits.shape, (self.model_tester.batch_size, self.model_tester.num_labels))
-        self.assertIsNotNone(result.loss)
-
     def test_auto_classes(self):
         config = self.model_tester.get_config()
 
         self.assertIsInstance(AutoModel.from_config(config), LingbotVisionModel)
         self.assertIsInstance(AutoBackbone.from_config(config), LingbotVisionBackbone)
-        self.assertIsInstance(AutoModelForImageClassification.from_config(config), LingbotVisionForImageClassification)
