@@ -41,6 +41,11 @@ if is_vision_available():
     from PIL import Image
 
 
+TEST_BOS_ID = 2
+TEST_EOS_ID = 3
+TEST_PAD_ID = 4
+
+
 class LocateAnythingVisionText2TextModelTester:
     def __init__(
         self,
@@ -62,9 +67,9 @@ class LocateAnythingVisionText2TextModelTester:
             "num_key_value_heads": 2,
             "max_position_embeddings": 512,
             "rope_theta": 10000,
-            "bos_token_id": 2,
-            "eos_token_id": 3,
-            "pad_token_id": 4,
+            "bos_token_id": TEST_BOS_ID,
+            "eos_token_id": TEST_EOS_ID,
+            "pad_token_id": TEST_PAD_ID,
         },
         vision_config={
             "model_type": "moonvit",
@@ -193,6 +198,7 @@ class LocateAnythingModelTest(ModelTesterMixin, unittest.TestCase):
 @require_torch
 class LocateAnythingIntegrationTest(unittest.TestCase):
     model_id = "nvidia/LocateAnything-3B"
+    revision = "c32291ca5e996f5a7a485845b4f57a233936bba0"
 
     def tearDown(self):
         cleanup(torch_device, gc_collect=True)
@@ -204,10 +210,10 @@ class LocateAnythingIntegrationTest(unittest.TestCase):
         # (transformers==4.57.1) on the same inputs. The original remote code does not import on
         # current Transformers, so instead of comparing at runtime we guard numerical equivalence of
         # the ported model in pure auto-regressive ("slow") decoding against those captured outputs.
-        processor = AutoProcessor.from_pretrained(self.model_id, trust_remote_code=False)
+        processor = AutoProcessor.from_pretrained(self.model_id, revision=self.revision, trust_remote_code=False)
         dtype = torch.bfloat16
         model = LocateAnythingForConditionalGeneration.from_pretrained(
-            self.model_id, trust_remote_code=False, torch_dtype=dtype
+            self.model_id, revision=self.revision, trust_remote_code=False, torch_dtype=dtype
         ).to(torch_device)
         model.eval()
 

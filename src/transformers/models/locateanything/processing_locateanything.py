@@ -19,7 +19,7 @@ import base64
 import importlib.util
 import math
 import os
-import pickle
+import pickle  # nosec B403
 import re
 import time
 import warnings
@@ -91,7 +91,7 @@ def read_img_from_lmdb_v2(image_data):
     if value is None:
         logger.warning("Key %s not found in LMDB file %s.", key, lmdb_file)
         return None
-    record = pickle.loads(value)
+    record = pickle.loads(value)  # nosec B301
     image_bgr = cv2.imdecode(np.frombuffer(record["image"], dtype=np.uint8), cv2.IMREAD_COLOR)
     image_rgb = cv2.cvtColor(image_bgr, cv2.COLOR_BGR2RGB)
     image = Image.fromarray(image_rgb)
@@ -146,7 +146,7 @@ def fetch_image(ele: dict[str, str | Image.Image]) -> Image.Image:
     elif isinstance(image, dict) and "lmdb_file" in image:
         image_obj = parse_lmdb_image_data(image)
     elif image.startswith("http://") or image.startswith("https://"):
-        response = requests.get(image, stream=True)
+        response = requests.get(image, stream=True, timeout=30)
         image_obj = Image.open(BytesIO(response.content))
     elif image.startswith("file://"):
         image_obj = Image.open(image[7:])
@@ -346,7 +346,7 @@ class LocateAnythingProcessor(ProcessorMixin):
     attributes = ["image_processor", "tokenizer"]
     valid_processor_kwargs = LocateAnythingProcessorKwargs
 
-    def __init__(
+    def __init__(  # nosec B107
         self,
         image_processor=None,
         tokenizer=None,

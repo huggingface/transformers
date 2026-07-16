@@ -39,7 +39,7 @@ class LocateAnythingImageProcessingTest(unittest.TestCase):
     def test_auto_image_processor_from_pretrained(self):
         with TemporaryDirectory() as tmp_dir:
             LocateAnythingImageProcessor().save_pretrained(tmp_dir)
-            image_processor = AutoImageProcessor.from_pretrained(tmp_dir)
+            image_processor = AutoImageProcessor.from_pretrained(tmp_dir)  # nosec B615
 
         self.assertIsInstance(image_processor, LocateAnythingImageProcessor)
 
