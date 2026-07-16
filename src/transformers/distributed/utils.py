@@ -16,14 +16,10 @@ from __future__ import annotations
 import os
 from typing import TYPE_CHECKING
 
-from ..integrations.tensor_parallel import apply_tensor_parallelism
 from ..utils import is_torch_available, is_torch_greater_or_equal
-from .fsdp import apply_fully_sharded_data_parallelism
 
 
 if TYPE_CHECKING:
-    import torch.nn as nn
-
     from .configuration_utils import DistributedConfig
 
 if is_torch_available():
@@ -151,29 +147,6 @@ def initialize_fully_sharded_data_parallelism(distributed_config: DistributedCon
         mesh._flatten("_".join(names))
 
     return device_map, mesh
-
-
-def distribute_model(
-    model,
-    distributed_config: DistributedConfig,
-    device_mesh,
-) -> nn.Module:
-    """Apply TP or FSDP2 to `model` based on ``distributed_config`` (mutually exclusive for now)."""
-    model.config.distributed_config = distributed_config
-    model._device_mesh = device_mesh
-
-    if distributed_config.tp_size > 1:
-        model = apply_tensor_parallelism(
-            model,
-            distributed_config.tp_plan,
-            distributed_config,
-            device_mesh,
-        )
-    elif distributed_config.fsdp_size > 1:
-        fsdp_mesh = device_mesh["fsdp"] if device_mesh.ndim > 1 else device_mesh
-        model = apply_fully_sharded_data_parallelism(model, fsdp_mesh)
-
-    return model
 
 
 def gather_full_state_dict(model) -> dict[str, torch.Tensor]:

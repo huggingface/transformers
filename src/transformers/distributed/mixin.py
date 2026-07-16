@@ -21,17 +21,17 @@ from typing import TYPE_CHECKING
 
 from ..integrations.tensor_parallel import (
     ALL_PARALLEL_STYLES,
+    apply_tensor_parallelism,
     gather_state_dict_for_save,
     initialize_tensor_parallelism,
 )
 from ..utils import SAFE_WEIGHTS_INDEX_NAME, is_torch_available, is_torch_greater_or_equal, logging
 from ..utils.hub import create_and_tag_model_card
 from .configuration_utils import DistributedConfig
-from .fsdp import is_fsdp_managed_module
+from .fsdp import apply_fully_sharded_data_parallelism, is_fsdp_managed_module
 from .utils import (
     _get_torch_distributed_rank,
     _is_torch_distributed_initialized,
-    distribute_model,
     gather_full_state_dict,
     initialize_fully_sharded_data_parallelism,
     save_model_checkpoint_distributed,
@@ -167,7 +167,19 @@ class DistributedMixin:
     ):
         """Apply TP or FSDP2 after model init, before weight loading."""
         if _torch_distributed_available and device_mesh is not None:
-            return distribute_model(model, distributed_config, device_mesh)
+            model.config.distributed_config = distributed_config
+            model._device_mesh = device_mesh
+
+            if distributed_config.tp_size > 1:
+                model = apply_tensor_parallelism(
+                    model,
+                    distributed_config.tp_plan,
+                    distributed_config,
+                    device_mesh,
+                )
+            elif distributed_config.fsdp_size > 1:
+                fsdp_mesh = device_mesh["fsdp"] if device_mesh.ndim > 1 else device_mesh
+                model = apply_fully_sharded_data_parallelism(model, fsdp_mesh)
         return model
 
     def should_save_on_this_rank(self, is_main_process: bool) -> bool:
