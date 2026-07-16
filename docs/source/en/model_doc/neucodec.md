@@ -24,7 +24,15 @@ rendered properly in your Markdown viewer.
 
 The NeuCodec model was proposed in [Finite Scalar Quantization Enables Redundant and Transmission-Robust Neural Audio Compression at Low Bit-rates](https://arxiv.org/abs/2509.09550).
 
-NeuCodec is a neural audio codec based on XCodec2.
+NeuCodec is a neural audio codec extending on XCodec2. It takes advantage of the following features:
+
+- FSQ quantisation resulting in a **single codebook**, making it ideal for downstream modeling with Speech Language Models.
+- Trained with CC data such that there are **no Non-Commercial data restrictions**.
+- At 50 tokens/sec and 16 bits per token, the overall bit-rate is **0.8kbps**.
+- The codec takes in 16kHz input and outputs **24kHz** using an **upsampling decoder**.
+- The FSQ encoding scheme allows for bit-level error resistance suitable for unreliable and noisy channels.
+
+The original modelling code can be found [here](https://github.com/neuphonic/neucodec).
 
 ## Usage example 
 
