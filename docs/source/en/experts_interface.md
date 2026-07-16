@@ -31,8 +31,11 @@ The [`ExpertsInterface`] provides optimized experts backends. It decouples the e
 
 The `"batched_mm"` and `"grouped_mm"` backends also run FP8 and FP4 (`int8`-packed) quantized experts through the Triton finegrained-fp8 kernel, reading either `float32` or UE8M0 scales. They act as the fallback for quantized checkpoints when the `"deepgemm"` backend is unavailable.
 
-> [!NOTE]
-> When using `experts_implementation="grouped_mm"` on GPU, the model automatically switches to `"batched_mm"` during the decode stage of generation (after prefill). This is because `batched_mm` is significantly faster on lower token count during autoregressive decoding on GPU. On CPU, `grouped_mm` remains active throughout generation as it is more efficient for all input sizes.
+## Decode-stage switching
+
+On GPU, a model loaded with `experts_implementation="grouped_mm"` automatically switches to `"batched_mm"` for the decode stage of generation, which is significantly faster on lower token counts. The original backend is restored once generation finishes. On CPU, `grouped_mm` stays active throughout generation because it's more efficient at every input size.
+
+The switch reaches MoE layers in the top-level model and in any sub-config backbone, such as the `text_config` of a vision-language model. Only `grouped_mm` entries switch to `batched_mm`. Experts running any other backend keep it.
 
 ## Set an experts backend
 
@@ -52,6 +55,13 @@ Switch between experts backends at runtime without reloading the model using [`~
 
 ```py
 model.set_experts_implementation("eager")
+```
+
+Read the backend that's currently running with [`~PreTrainedModel.get_experts_implementation`]. It returns a `dict` with one entry for the model, and one entry per sub-config.
+
+```py
+model.get_experts_implementation()
+# {"": "grouped_mm", "text_config": "grouped_mm", "vision_config": "eager"}
 ```
 
 ## Backbone-specific experts backend
@@ -90,8 +100,7 @@ The `"deepgemm"` backend routes expert matmuls through the [DeepGEMM](https://gi
 The `"deepgemm"` backend requires:
 
 - CUDA GPU with compute capability ≥ 9.0 (Hopper or newer).
-- CUDA runtime 12.3 or later on Hopper, 12.9 or later on Blackwell.
-- `nvcc`/`nvrtc` available on the system for the kernel's JIT compilation.
+- A full CUDA toolkit with `nvcc` for the kernel's JIT compilation, version 12.3 or later on Hopper and 12.9 or later on Blackwell. A runtime-only install has no `nvcc` and is rejected. Transformers locates the toolkit through `CUDA_HOME`, `CUDA_PATH`, `nvcc` on `PATH`, then `/usr/local/cuda`.
 - The [kernels](https://github.com/huggingface/kernels) package.
 
 ```py
@@ -142,7 +151,7 @@ On Blackwell (SM100+), set `experts_implementation="deepgemm_megamoe"` to run a 
 
 This backend requires:
 
-- A Blackwell GPU (compute capability ≥ 10.0) with CUDA runtime 12.9 or later.
+- A Blackwell GPU (compute capability ≥ 10.0) with a CUDA toolkit (`nvcc`) 12.9 or later.
 - FP4-packed expert weights paired with UE8M0 weight scales (the pre-quantized checkpoint typically declares `expert_dtype="fp4"` and `scale_fmt="ue8m0"` in its config).
 - A `torch.distributed` process group for the expert-parallel group, which the tensor-parallel wrapping supplies automatically.
 
