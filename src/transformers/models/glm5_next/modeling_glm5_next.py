@@ -1363,18 +1363,14 @@ class Glm5NextPreTrainedModel(PreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
-        # if isinstance(module, Glm5NextTopkRouter):
-        #    nn.init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
-        #    nn.init.zeros_(module.e_score_correction_bias)
-        # elif isinstance(module, Glm5NextForgetGate):
-        #    nn.init.normal_(module.A_log, mean=0.0, std=0.02)
-        #    nn.init.zeros_(module.dt_bias)
-        # elif isinstance(module, Glm5NextLinearAttention):
-        #    nn.init.ones_(module.o_norm.weight)
-        # elif isinstance(module, Glm5NextHyperConnection):
-        #    nn.init.normal_(module.fn, mean=0.0, std=0.02)
-        #    nn.init.zeros_(module.base)
-        #    nn.init.ones_(module.scale)
+        if isinstance(module, Glm5NextForgetGate):
+            nn.init.normal_(module.A_log, mean=0.0, std=0.02)
+            nn.init.zeros_(module.dt_bias)
+        elif isinstance(module, Glm5NextLinearAttention):
+            nn.init.ones_(module.o_norm.weight)
+        elif isinstance(module, Glm5NextExperts):
+            nn.init.normal_(module.gate_up_proj, mean=0.0, std=self.config.initializer_range)
+            nn.init.normal_(module.down_proj, mean=0.0, std=self.config.initializer_range)
 
 
 @auto_docstring

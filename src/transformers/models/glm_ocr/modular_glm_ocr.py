@@ -60,8 +60,8 @@ class GlmOcrVisionConfig(Glm4vVisionConfig):
     r"""
     out_hidden_size (`int`, *optional*, defaults to 4096):
         The output hidden size of the vision model.
-    context_size (`int`, *optional*, defaults to `out_hidden_size * in_channels`):
-        The context size for the vision patch merger.
+    projection_intermediate_size (`int`, *optional*, defaults to `out_hidden_size * in_channels`):
+        The projection_intermediate_size size for the vision patch merger.
     """
 
     hidden_size: int = 1024
@@ -69,11 +69,11 @@ class GlmOcrVisionConfig(Glm4vVisionConfig):
     num_heads: int = 16
     out_hidden_size: int = 1536
     intermediate_size: int = 4096
-    context_size: int | None = None
+    projection_intermediate_size: int | None = None
 
     def __post_init__(self, **kwargs):
-        if self.context_size is None:
-            self.context_size = self.out_hidden_size * self.in_channels
+        if self.projection_intermediate_size is None:
+            self.projection_intermediate_size = self.out_hidden_size * self.in_channels
 
         PreTrainedConfig.__post_init__(self, **kwargs)
 
@@ -257,7 +257,7 @@ class GlmOcrVisionModel(Glm4vVisionModel):
         del self.post_conv_layernorm
         self.merger = GlmOcrVisionPatchMerger(
             dim=config.out_hidden_size,
-            context_dim=config.context_size,
+            context_dim=config.projection_intermediate_size,
             hidden_act=config.hidden_act,
         )
 

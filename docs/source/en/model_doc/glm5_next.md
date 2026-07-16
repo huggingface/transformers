@@ -16,8 +16,7 @@ limitations under the License.
 ⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be rendered properly in your Markdown viewer.
 
 -->
-*This model was contributed to Hugging Face Transformers on 2026-07-08.*
-*This model was released on {release_date} and added to Hugging Face Transformers on 2026-06-29.*
+*This model was contributed to Hugging Face Transformers on 2026-07-16.*
 
 
 # Glm5Next

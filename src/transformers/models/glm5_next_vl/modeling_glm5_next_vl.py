@@ -19,6 +19,7 @@
 # limitations under the License.
 
 from collections.abc import Callable
+from typing import Any
 
 import torch
 import torch.nn as nn
@@ -37,11 +38,16 @@ from ...integrations.accelerate import force_accelerate_hooks
 from ...masking_utils import create_causal_mask, create_recurrent_attention_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast, MoeModelOutputWithPast
+from ...modeling_outputs import (
+    BaseModelOutputWithPast,
+    BaseModelOutputWithPooling,
+    CausalLMOutputWithPast,
+    MoeModelOutputWithPast,
+)
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring
-from ...utils.generic import is_flash_attention_requested, merge_with_config_defaults
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, torch_compilable_check
+from ...utils.generic import accepts_precomputed_kwargs, is_flash_attention_requested, merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ..auto.modeling_auto import AutoModel
 from .configuration_glm5_next_vl import Glm5NextVLConfig, Glm5NextVLTextConfig
@@ -329,7 +335,7 @@ class Glm5NextVLTextRMSNormGated(nn.Module):
         super().__init__()
         self.weight = nn.Parameter(torch.ones(hidden_size))
         self.variance_epsilon = eps
-        self.activation = "sigmoid"  # TODO: config value?
+        self.activation = "sigmoid"
 
     def forward(self, hidden_states, gate=None):
         input_dtype = hidden_states.dtype
@@ -358,19 +364,13 @@ def apply_mask_to_padding_states(hidden_states, attention_mask):
     return hidden_states
 
 
-# =============================================================================
-# KDA Linear Attention
-# =============================================================================
-
-
-# We reimplement it to use it via kernels, we need BC for the other models to rely on lazy load kernels
 @use_kernel_func_from_hub("causal_conv1d_update")
 def causal_conv1d_update(
-    hidden_states,
-    conv_state,
-    weight,
-    bias=None,
-    activation=None,
+    hidden_states: torch.Tensor,
+    conv_state: torch.Tensor,
+    weight: nn.Parameter,
+    bias: nn.Parameter | None = None,
+    activation: str | None = None,
 ):
     _, hidden_size, seq_len = hidden_states.shape
     state_len = conv_state.shape[-1]
@@ -378,17 +378,18 @@ def causal_conv1d_update(
     hidden_states_new = torch.cat([conv_state, hidden_states], dim=-1).to(weight.dtype)
     conv_state.copy_(hidden_states_new[:, :, -state_len:])
     out = F.conv1d(hidden_states_new, weight.unsqueeze(1), bias, padding=0, groups=hidden_size)
-    out = ACT2FN[activation](out[:, :, -seq_len:])
-    out = out.to(hidden_states.dtype)
-    return out
+    out = out[:, :, -seq_len:]
+    if activation is not None:
+        out = ACT2FN[activation](out)
+    return out.to(hidden_states.dtype)
 
 
 @use_kernel_func_from_hub("causal_conv1d_fn")
 def causal_conv1d_fn(
-    hidden_states,
-    weight,
-    bias=None,
-    activation=None,
+    hidden_states: torch.Tensor,
+    weight: nn.Parameter,
+    bias: nn.Parameter | None = None,
+    activation: str | None = None,
     **kwargs,
 ):
     _, hidden_size, seq_len = hidden_states.shape
@@ -401,8 +402,9 @@ def causal_conv1d_fn(
         padding=padding,
         groups=hidden_size,
     )[:, :, :seq_len]
-
-    return ACT2FN[activation](out).to(hidden_states.dtype)
+    if activation is not None:
+        out = ACT2FN[activation](out)
+    return out.to(hidden_states.dtype)
 
 
 def l2norm(x: torch.FloatTensor, dim: int = -1, eps: float = 1e-6):
@@ -604,7 +606,6 @@ class Glm5NextVLTextLinearAttention(nn.Module):
             kernel_size=self.conv_kernel_size,
             groups=self.conv_dim,
             padding=self.conv_kernel_size - 1,
-            dtype=torch.float32,  # TODO: check if this was intended --> keep strict flag fp32
         )
         self.forget_gate = Glm5NextVLTextForgetGate(config)
         self.b_proj = nn.Linear(self.hidden_size, self.num_heads, bias=False)
@@ -643,8 +644,8 @@ class Glm5NextVLTextLinearAttention(nn.Module):
         # Acts for normal prefill but also for multi-token prefill continue
         use_precomputed_states = cache_params is not None and cache_params.has_previous_state(self.layer_idx)
         if use_precomputed_states:
-            conv_state = cache_params.layers[self.layer_idx].conv_states
-            recurrent_state = cache_params.layers[self.layer_idx].recurrent_states
+            conv_state = cache_params.layers[self.layer_idx].conv_states[0]
+            recurrent_state = cache_params.layers[self.layer_idx].recurrent_states[0]
 
         # Single token decode path
         if use_precomputed_states and seq_len == 1:
@@ -662,8 +663,9 @@ class Glm5NextVLTextLinearAttention(nn.Module):
                 mixed_qkv = torch.cat([conv_state.to(mixed_qkv.dtype), mixed_qkv], dim=-1)
 
             if cache_params is not None:
-                new_conv_state = F.pad(mixed_qkv, (self.conv_kernel_size - mixed_qkv.shape[-1], 0))
-                cache_params.update_conv_state(new_conv_state, self.layer_idx)
+                mixed_qkv = cache_params.update_conv_state(
+                    mixed_qkv, self.layer_idx, conv_kernel_size=self.conv_kernel_size
+                )
 
             mixed_qkv = causal_conv1d_fn(
                 mixed_qkv,
@@ -949,23 +951,43 @@ class Glm5NextVLTextDecoderLayer(GradientCheckpointingLayer):
 class Glm5NextVLPreTrainedModel(PreTrainedModel):
     config: Glm5NextVLConfig
     base_model_prefix = "model"
-    supports_gradient_checkpointing = True
     _no_split_modules = ["Glm5NextTextDecoderLayer"]
     _skip_keys_device_placement = ["past_key_values"]
-    _supports_flash_attn = True
-    _supports_sdpa = True
-    _supports_flex_attn = True
 
-    _can_compile_fullgraph = True
+    # needs index based kernel
+    _supports_flash_attn = False
+    _supports_sdpa = True
+    # needs per layer creation, too expensive
+    _supports_flex_attn = False
     _supports_attention_backend = True
+
+    supports_gradient_checkpointing = True
+    _can_compile_fullgraph = True
+
     _can_record_outputs = {
         "attentions": Glm5NextVLTextAttention,
         "hidden_states": Glm5NextVLTextDecoderLayer,
         "router_logits": OutputRecorder(Glm5NextVLTextTopkRouter, index=0),  # noqa: F821
     }
-
-    _keep_in_fp32_modules_strict = ["e_score_correction_bias"]  # TODO: add conv there
+    _keep_in_fp32_modules_strict = ["e_score_correction_bias", "conv1d"]
     _keys_to_ignore_on_load_unexpected = [r"layers\.45\.", r"layers\.\d+\.shared_head\."]
+
+    @torch.no_grad()
+    def _init_weights(self, module):
+        super()._init_weights(module)
+
+        if isinstance(module, Glm5NextVLTextForgetGate):
+            nn.init.normal_(module.A_log, mean=0.0, std=0.02)
+            nn.init.zeros_(module.dt_bias)
+        elif isinstance(module, Glm5NextVLTextLinearAttention):
+            nn.init.ones_(module.o_norm.weight)
+        elif isinstance(module, Glm5NextVLTextHyperConnection):
+            nn.init.normal_(module.fn, mean=0.0, std=0.02)
+            nn.init.zeros_(module.base)
+            nn.init.ones_(module.scale)
+        elif isinstance(module, Glm5NextVLTextExperts):
+            nn.init.normal_(module.gate_up_proj, mean=0.0, std=self.config.initializer_range)
+            nn.init.normal_(module.down_proj, mean=0.0, std=self.config.initializer_range)
 
 
 @auto_docstring
@@ -1015,6 +1037,7 @@ class Glm5NextVLTextModel(Glm5NextVLPreTrainedModel):
             position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen
             position_ids = position_ids.unsqueeze(0)
 
+        # TODO: masks change based on the indexer or not
         if not isinstance(causal_mask_mapping := attention_mask, dict):
             # Prepare mask arguments
             mask_kwargs = {
@@ -1048,47 +1071,38 @@ class Glm5NextVLTextModel(Glm5NextVLPreTrainedModel):
         return MoeModelOutputWithPast(last_hidden_state=hidden_states, past_key_values=past_key_values)
 
 
-# =============================================================================
-# Composite VLM (vision tower + text model)
-# =============================================================================
-
-
-# TODO: inherit -> auto
+@auto_docstring
 class Glm5NextVLModel(Glm5NextVLPreTrainedModel):
     base_model_prefix = "model"
+    # Reference: fix gemma3 grad acc #37208
     accepts_loss_kwargs = False
+    config: Glm5NextVLConfig
 
     def __init__(self, config):
         super().__init__(config)
         self.visual = AutoModel._from_config(config.vision_config)
         self.language_model = Glm5NextVLTextModel._from_config(config.text_config)
+
+        # Initialize weights and apply final processing
         self.post_init()
 
-    def get_input_embeddings(self):
-        return self.language_model.get_input_embeddings()
-
-    def set_input_embeddings(self, value):
-        self.language_model.set_input_embeddings(value)
-
-    def get_image_features(
-        self,
-        pixel_values: torch.FloatTensor,
-        image_grid_thw: torch.LongTensor | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPast:
-        pixel_values = pixel_values.type(self.visual.dtype)
-        vision_outputs = self.visual(pixel_values, grid_thw=image_grid_thw, **kwargs)
-        split_sizes = (image_grid_thw.prod(-1) // self.visual.spatial_merge_size**2).tolist()
-        vision_outputs.pooler_output = torch.split(vision_outputs.pooler_output, split_sizes)
-        return vision_outputs
-
+    @accepts_precomputed_kwargs(modality="video")
+    @can_return_tuple
+    @auto_docstring
     def get_video_features(
         self,
         pixel_values_videos: torch.FloatTensor,
         video_grid_thw: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPast:
+        r"""
+        pixel_values_videos (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
+            The tensors corresponding to the input videos.
+        video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
+            The temporal, height and width of feature shape of each video in LLM.
+        """
         pixel_values_videos = pixel_values_videos.type(self.visual.dtype)
+        # TODO: let the processor return a flattened grid instead --> fully inherit here
         t = video_grid_thw[:, 0]
         hw = video_grid_thw[:, 1:]
         flattened_hw = torch.repeat_interleave(hw, t, dim=0)
@@ -1099,6 +1113,29 @@ class Glm5NextVLModel(Glm5NextVLPreTrainedModel):
         vision_outputs.pooler_output = torch.split(vision_outputs.pooler_output, split_sizes)
         return vision_outputs
 
+    @accepts_precomputed_kwargs(modality="image")
+    @can_return_tuple
+    @auto_docstring
+    def get_image_features(
+        self,
+        pixel_values: torch.FloatTensor,
+        image_grid_thw: torch.LongTensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutputWithPooling:
+        r"""
+        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
+            The tensors corresponding to the input images.
+        image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
+            The temporal, height and width of feature shape of each image in LLM.
+        """
+        pixel_values = pixel_values.type(self.visual.dtype)
+        vision_outputs = self.visual(pixel_values, grid_thw=image_grid_thw, **kwargs)
+        split_sizes = (image_grid_thw.prod(-1) // self.visual.spatial_merge_size**2).tolist()
+        image_embeds = torch.split(vision_outputs.pooler_output, split_sizes)
+        vision_outputs.pooler_output = image_embeds
+
+        return vision_outputs
+
     def get_placeholder_mask(
         self,
         input_ids: torch.LongTensor,
@@ -1106,6 +1143,10 @@ class Glm5NextVLModel(Glm5NextVLPreTrainedModel):
         image_features: torch.FloatTensor | None = None,
         video_features: torch.FloatTensor | None = None,
     ):
+        """
+        Obtains multimodal placeholder mask from `input_ids` or `inputs_embeds`, and checks that the placeholder token count is
+        equal to the length of multimodal features. If the lengths are different, an error is raised.
+        """
         if input_ids is None:
             special_image_mask = inputs_embeds == self.get_input_embeddings()(
                 torch.tensor(self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
@@ -1120,22 +1161,23 @@ class Glm5NextVLModel(Glm5NextVLPreTrainedModel):
             special_video_mask = input_ids == self.config.video_token_id
 
         n_image_tokens = special_image_mask.sum()
-        special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
-        if image_features is not None and inputs_embeds[special_image_mask].numel() != image_features.numel():
-            raise ValueError(
-                f"Image features and image tokens do not match: tokens: {n_image_tokens}, "
-                f"features {image_features.shape[0]}"
+        special_image_mask = special_image_mask.unsqueeze(-1).to(inputs_embeds.device)
+        if image_features is not None:
+            torch_compilable_check(
+                n_image_tokens * inputs_embeds.shape[-1] == image_features.numel(),
+                f"Image features and image tokens do not match, tokens: {n_image_tokens}, features: {image_features.shape[0]}",
             )
 
         n_video_tokens = special_video_mask.sum()
-        special_video_mask = special_video_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
-        if video_features is not None and inputs_embeds[special_video_mask].numel() != video_features.numel():
-            raise ValueError(
-                f"Video features and video tokens do not match: tokens: {n_video_tokens}, "
-                f"features {video_features.shape[0]}"
+        special_video_mask = special_video_mask.unsqueeze(-1).to(inputs_embeds.device)
+        if video_features is not None:
+            torch_compilable_check(
+                n_video_tokens * inputs_embeds.shape[-1] == video_features.numel(),
+                f"Video features and video tokens do not match, tokens: {n_video_tokens}, features: {video_features.shape[0]}",
             )
         return special_image_mask, special_video_mask
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -1144,13 +1186,13 @@ class Glm5NextVLModel(Glm5NextVLPreTrainedModel):
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
+        use_cache: bool | None = None,
         pixel_values: torch.Tensor | None = None,
         pixel_values_videos: torch.FloatTensor | None = None,
         image_grid_thw: torch.LongTensor | None = None,
         video_grid_thw: torch.LongTensor | None = None,
-        use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> BaseModelOutputWithPast:
+    ) -> tuple | BaseModelOutputWithPast:
         r"""
         image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
             The temporal, height and width of feature shape of each image in LLM.
@@ -1166,24 +1208,35 @@ class Glm5NextVLModel(Glm5NextVLPreTrainedModel):
         if pixel_values is not None:
             image_embeds = self.get_image_features(pixel_values, image_grid_thw, **kwargs).pooler_output
             image_embeds = torch.cat(image_embeds, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
-            image_mask, _ = self.get_placeholder_mask(input_ids, inputs_embeds, image_features=image_embeds)
+            image_mask, _ = self.get_placeholder_mask(
+                input_ids, inputs_embeds=inputs_embeds, image_features=image_embeds
+            )
             inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_embeds)
 
         if pixel_values_videos is not None:
             video_embeds = self.get_video_features(pixel_values_videos, video_grid_thw, **kwargs).pooler_output
             video_embeds = torch.cat(video_embeds, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
-            _, video_mask = self.get_placeholder_mask(input_ids, inputs_embeds, video_features=video_embeds)
+            _, video_mask = self.get_placeholder_mask(
+                input_ids, inputs_embeds=inputs_embeds, video_features=video_embeds
+            )
             inputs_embeds = inputs_embeds.masked_scatter(video_mask, video_embeds)
+
+        # Differ from Qwen: vision encoder uses 2D rotary positional embeddings (2D-RoPE)
+        if position_ids is None:
+            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+            position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
+            position_ids = position_ids.unsqueeze(0)
 
         outputs = self.language_model(
             input_ids=None,
-            attention_mask=attention_mask,
             position_ids=position_ids,
+            attention_mask=attention_mask,
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
             **kwargs,
         )
+
         return BaseModelOutputWithPast(
             last_hidden_state=outputs.last_hidden_state,
             past_key_values=outputs.past_key_values,
@@ -1192,30 +1245,53 @@ class Glm5NextVLModel(Glm5NextVLPreTrainedModel):
         )
 
 
-# TODO: prepare inputs and expand input functions are missing
-# TODO: possibly inherit here as well
 class Glm5NextVLForConditionalGeneration(Glm5NextVLPreTrainedModel, GenerationMixin):
+    """
+    Main Glm5NextVL conditional generation class.
+    """
+
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
+    # Reference: fix gemma3 grad acc #37208
     accepts_loss_kwargs = False
 
     def __init__(self, config):
         super().__init__(config)
         self.model = Glm5NextVLModel(config)
         self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
+
         self.post_init()
 
-    def get_input_embeddings(self):
-        return self.model.get_input_embeddings()
-
-    def set_input_embeddings(self, value):
-        self.model.set_input_embeddings(value)
-
-    def get_image_features(self, pixel_values, image_grid_thw=None, **kwargs):
-        return self.model.get_image_features(pixel_values, image_grid_thw, **kwargs)
-
-    def get_video_features(self, pixel_values_videos, video_grid_thw=None, **kwargs):
+    @auto_docstring
+    def get_video_features(
+        self,
+        pixel_values_videos: torch.FloatTensor,
+        video_grid_thw: torch.LongTensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutputWithPooling:
+        r"""
+        pixel_values_videos (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
+            The tensors corresponding to the input videos.
+        video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
+            The temporal, height and width of feature shape of each video in LLM.
+        """
         return self.model.get_video_features(pixel_values_videos, video_grid_thw, **kwargs)
 
+    @auto_docstring
+    def get_image_features(
+        self,
+        pixel_values: torch.FloatTensor,
+        image_grid_thw: torch.LongTensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutputWithPooling:
+        r"""
+        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
+            The tensors corresponding to the input images.
+        image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
+            The temporal, height and width of feature shape of each image in LLM.
+        """
+        return self.model.get_image_features(pixel_values, image_grid_thw, **kwargs)
+
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -1225,30 +1301,59 @@ class Glm5NextVLForConditionalGeneration(Glm5NextVLPreTrainedModel, GenerationMi
         past_key_values: Cache | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         labels: torch.LongTensor | None = None,
+        use_cache: bool | None = None,
         pixel_values: torch.Tensor | None = None,
         pixel_values_videos: torch.FloatTensor | None = None,
         image_grid_thw: torch.LongTensor | None = None,
         video_grid_thw: torch.LongTensor | None = None,
-        use_cache: bool | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> CausalLMOutputWithPast:
+    ) -> tuple | CausalLMOutputWithPast:
         r"""
+        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
+            config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
+            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
         image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
             The temporal, height and width of feature shape of each image in LLM.
         video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
             The temporal, height and width of feature shape of each video in LLM.
+
+        Example:
+
+        ```python
+        >>> from transformers import AutoProcessor, Glm5NextVL_ForConditionalGeneration
+        >>> import torch
+
+        >>> model = Glm5NextVL_ForConditionalGeneration.from_pretrained("LGAI-EXAONE/EXAONE-4.5-33B")
+        >>> processor = AutoProcessor.from_pretrained("LGAI-EXAONE/EXAONE-4.5-33B")
+
+        >>> messages = [
+        ...     {
+        ...         "role": "user",
+        ...         "content": [
+        ...             {"type": "image", "image": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"},
+        ...             {"type": "text", "text": "Describe the image."},
+        ...         ],
+        ...     }
+        ... ]
+        >>> inputs = processor.apply_chat_template(
+        ...     messages, tokenize=True, add_generation_prompt=True, return_dict=True, return_tensors="pt"
+        ... )
+        >>> inputs = {k: v.to(model.device) if isinstance(v, torch.Tensor) else v for k, v in inputs.items()}
+        >>> generated_ids = model.generate(**inputs, max_new_tokens=64)
+        ```
         """
         outputs = self.model(
             input_ids=input_ids,
-            attention_mask=attention_mask,
-            position_ids=position_ids,
-            past_key_values=past_key_values,
-            inputs_embeds=inputs_embeds,
             pixel_values=pixel_values,
             pixel_values_videos=pixel_values_videos,
             image_grid_thw=image_grid_thw,
             video_grid_thw=video_grid_thw,
+            position_ids=position_ids,
+            attention_mask=attention_mask,
+            past_key_values=past_key_values,
+            inputs_embeds=inputs_embeds,
             use_cache=use_cache,
             **kwargs,
         )
@@ -1259,7 +1364,9 @@ class Glm5NextVLForConditionalGeneration(Glm5NextVLPreTrainedModel, GenerationMi
 
         loss = None
         if labels is not None:
-            loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.text_config.vocab_size)
+            loss = self.loss_function(
+                logits=logits, labels=labels, vocab_size=self.config.text_config.vocab_size, **kwargs
+            )
 
         return CausalLMOutputWithPast(
             loss=loss,
@@ -1268,6 +1375,167 @@ class Glm5NextVLForConditionalGeneration(Glm5NextVLPreTrainedModel, GenerationMi
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+    def prepare_inputs_for_generation(
+        self,
+        input_ids,
+        past_key_values=None,
+        attention_mask=None,
+        inputs_embeds=None,
+        position_ids=None,
+        use_cache=True,
+        pixel_values=None,
+        pixel_values_videos=None,
+        image_grid_thw=None,
+        video_grid_thw=None,
+        is_first_iteration=False,
+        **kwargs,
+    ):
+        model_inputs = super().prepare_inputs_for_generation(
+            input_ids,
+            past_key_values=past_key_values,
+            attention_mask=attention_mask,
+            inputs_embeds=inputs_embeds,
+            position_ids=position_ids,
+            pixel_values=pixel_values,
+            pixel_values_videos=pixel_values_videos,
+            image_grid_thw=image_grid_thw,
+            video_grid_thw=video_grid_thw,
+            use_cache=use_cache,
+            is_first_iteration=is_first_iteration,
+            **kwargs,
+        )
+        # Force recomputation of 2D-RoPE and ignore rope_deltas
+        model_inputs["position_ids"] = None
+        if not is_first_iteration and use_cache:
+            model_inputs["pixel_values"] = None
+            model_inputs["pixel_values_videos"] = None
+        return model_inputs
+
+    def _get_image_nums_and_video_nums(
+        self,
+        input_ids: torch.LongTensor | None,
+        inputs_embeds: torch.Tensor | None = None,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        """
+        Returns per-sample counts of image and video placeholder tokens.
+
+        If `inputs_embeds` are provided, placeholder positions are inferred by comparing against
+        the embedding vectors of `image_token_id` and `video_token_id`. Otherwise, counts are
+        computed directly from `input_ids`.
+        """
+        image_token_id = self.config.image_token_id
+        video_token_id = self.config.video_token_id
+
+        if inputs_embeds is not None:
+            image_mask = (
+                inputs_embeds
+                == self.get_input_embeddings()(
+                    torch.tensor(image_token_id, dtype=torch.long, device=inputs_embeds.device)
+                )
+            )[..., 0]
+            video_mask = (
+                inputs_embeds
+                == self.get_input_embeddings()(
+                    torch.tensor(video_token_id, dtype=torch.long, device=inputs_embeds.device)
+                )
+            )[..., 0]
+        else:
+            image_mask = input_ids == image_token_id
+            video_mask = input_ids == video_token_id
+
+        image_nums = torch.sum(image_mask, dim=1)
+        video_nums = torch.sum(video_mask, dim=1)
+
+        return image_nums, video_nums
+
+    def _expand_inputs_for_generation(
+        self,
+        expand_size: int = 1,
+        is_encoder_decoder: bool = False,
+        input_ids: torch.LongTensor | None = None,
+        **model_kwargs,
+    ) -> tuple[torch.LongTensor, dict[str, Any]]:
+        # Overwritten -- Support for expanding tensors without a batch size dimension
+        # e.g., pixel_values, image_grid_thw, pixel_values_videos, video_grid_thw, second_per_grid_t
+        # pixel_values.shape[0] is sum(seqlen_images for samples)
+        # image_grid_thw.shape[0] is sum(num_images for samples)
+
+        if expand_size == 1:
+            return input_ids, model_kwargs
+
+        visual_keys = ["pixel_values", "image_grid_thw", "pixel_values_videos", "video_grid_thw", "second_per_grid_ts"]
+
+        def _expand_dict_for_generation_visual(dict_to_expand):
+            image_grid_thw = model_kwargs.get("image_grid_thw", None)
+            video_grid_thw = model_kwargs.get("video_grid_thw", None)
+            image_nums, video_nums = self._get_image_nums_and_video_nums(
+                input_ids, inputs_embeds=model_kwargs.get("inputs_embeds", None)
+            )
+
+            def _repeat_interleave_samples(x, lengths, repeat_times):
+                samples = torch.split(x, lengths)
+                repeat_args = [repeat_times] + [1] * (x.dim() - 1)
+                result = torch.cat([sample.repeat(*repeat_args) for sample in samples], dim=0)
+                return result
+
+            for key in dict_to_expand:
+                if key == "pixel_values":
+                    # split images into samples
+                    samples = torch.split(image_grid_thw, list(image_nums))
+                    # compute the sequence length of images for each sample
+                    lengths = [torch.prod(sample, dim=1).sum() for sample in samples]
+                    dict_to_expand[key] = _repeat_interleave_samples(
+                        dict_to_expand[key], lengths=lengths, repeat_times=expand_size
+                    )
+                elif key == "image_grid_thw":
+                    # get the num of images for each sample
+                    lengths = list(image_nums)
+                    dict_to_expand[key] = _repeat_interleave_samples(
+                        dict_to_expand[key], lengths=lengths, repeat_times=expand_size
+                    )
+                elif key == "pixel_values_videos":
+                    samples = torch.split(video_grid_thw, list(video_nums))
+                    lengths = [torch.prod(sample, dim=1).sum() for sample in samples]
+                    dict_to_expand[key] = _repeat_interleave_samples(
+                        dict_to_expand[key], lengths=lengths, repeat_times=expand_size
+                    )
+                elif key == "video_grid_thw":
+                    lengths = list(video_nums)
+                    dict_to_expand[key] = _repeat_interleave_samples(
+                        dict_to_expand[key], lengths=lengths, repeat_times=expand_size
+                    )
+                elif key == "second_per_grid_ts":
+                    dict_to_expand[key] = _repeat_interleave_samples(
+                        dict_to_expand[key], lengths=list(video_nums), repeat_times=expand_size
+                    )
+            return dict_to_expand
+
+        def _expand_dict_for_generation(dict_to_expand):
+            for key in dict_to_expand:
+                if key == "position_ids" and dict_to_expand[key].ndim == 3:
+                    dict_to_expand[key] = dict_to_expand[key].repeat_interleave(expand_size, dim=1)
+                elif (
+                    dict_to_expand[key] is not None
+                    and isinstance(dict_to_expand[key], torch.Tensor)
+                    and key not in visual_keys
+                ):
+                    dict_to_expand[key] = dict_to_expand[key].repeat_interleave(expand_size, dim=0)
+            return dict_to_expand
+
+        model_kwargs = _expand_dict_for_generation_visual(model_kwargs)
+
+        if input_ids is not None:
+            input_ids = input_ids.repeat_interleave(expand_size, dim=0)
+
+        model_kwargs = _expand_dict_for_generation(model_kwargs)
+
+        if is_encoder_decoder:
+            if model_kwargs.get("encoder_outputs") is None:
+                raise ValueError("If `is_encoder_decoder` is True, make sure that `encoder_outputs` is defined.")
+            model_kwargs["encoder_outputs"] = _expand_dict_for_generation(model_kwargs["encoder_outputs"])
+
+        return input_ids, model_kwargs
 
 
 __all__ = ["Glm5NextVLPreTrainedModel", "Glm5NextVLTextModel", "Glm5NextVLModel", "Glm5NextVLForConditionalGeneration"]

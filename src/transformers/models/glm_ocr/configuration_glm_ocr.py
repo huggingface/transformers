@@ -31,8 +31,8 @@ class GlmOcrVisionConfig(PreTrainedConfig):
     r"""
     out_hidden_size (`int`, *optional*, defaults to 4096):
         The output hidden size of the vision model.
-    context_size (`int`, *optional*, defaults to `out_hidden_size * in_channels`):
-        The context size for the vision patch merger.
+    projection_intermediate_size (`int`, *optional*, defaults to `out_hidden_size * in_channels`):
+        The projection_intermediate_size size for the vision patch merger.
     """
 
     model_type = "glm_ocr_vision"
@@ -54,11 +54,11 @@ class GlmOcrVisionConfig(PreTrainedConfig):
     out_hidden_size: int = 1536
     intermediate_size: int = 4096
     initializer_range: float = 0.02
-    context_size: int | None = None
+    projection_intermediate_size: int | None = None
 
     def __post_init__(self, **kwargs):
-        if self.context_size is None:
-            self.context_size = self.out_hidden_size * self.in_channels
+        if self.projection_intermediate_size is None:
+            self.projection_intermediate_size = self.out_hidden_size * self.in_channels
 
         super().__post_init__(**kwargs)
 
