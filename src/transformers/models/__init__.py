@@ -202,6 +202,7 @@ if TYPE_CHECKING:
     from .hiera import *
     from .higgs_audio_v2 import *
     from .higgs_audio_v2_tokenizer import *
+    from .beats import *
     from .hubert import *
     from .hunyuan_v1_dense import *
     from .hunyuan_v1_moe import *
