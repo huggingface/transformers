@@ -30,21 +30,18 @@ if is_torch_available():
 @require_vision
 class Florence2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = Florence2Processor
+    # Tiny processor created with make_tiny_processor.py from "microsoft/Florence-2-base"
+    tiny_model_id = "hf-internal-testing/tiny-processor-florence2"
 
     @classmethod
     def _setup_image_processor(cls):
+        # Florence2Processor reads image_processor.image_seq_length at construction time
+        # (processing_florence2.py line 99) to set num_image_tokens. Use a small value (2)
+        # to avoid large token sequences in tests.
         image_processor_class = cls._get_component_class_from_processor("image_processor")
-        image_processor = image_processor_class.from_pretrained("florence-community/Florence-2-base")
+        image_processor = image_processor_class.from_pretrained(cls.tiny_model_id)
         image_processor.image_seq_length = 2
         return image_processor
-
-    @classmethod
-    def _setup_tokenizer(cls):
-        tokenizer_class = cls._get_component_class_from_processor("tokenizer")
-        tokenizer = tokenizer_class.from_pretrained("florence-community/Florence-2-base")
-        tokenizer.image_token = "<image>"
-        tokenizer.image_token_id = tokenizer.encode(tokenizer.image_token, add_special_tokens=False)[0]
-        return tokenizer
 
     @classmethod
     def _setup_test_attributes(cls, processor):

@@ -84,8 +84,8 @@ class ZayaModelTest(CausalLMModelTest, unittest.TestCase):
             self.assertIs(type(layer), expected_layer_class)
             self.assertEqual(layer.keys.shape, attention_shape)
             self.assertEqual(layer.values.shape, attention_shape)
-            self.assertEqual(layer.conv_states.shape, conv_shape)
-            self.assertEqual(layer.recurrent_states.shape, recurrent_shape)
+            self.assertEqual(layer.conv_states[0].shape, conv_shape)
+            self.assertEqual(layer.recurrent_states[0].shape, recurrent_shape)
 
     def test_attention_outputs(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -264,15 +264,17 @@ class ZayaModelTest(CausalLMModelTest, unittest.TestCase):
             ).view(2, config.num_key_value_heads * config.head_dim // 2),
             0,
         )
-        self.assertEqual(cache.layers[0].recurrent_states.shape[-1], config.num_key_value_heads * config.head_dim // 2)
+        self.assertEqual(
+            cache.layers[0].recurrent_states[0].shape[-1], config.num_key_value_heads * config.head_dim // 2
+        )
 
         cache.reorder_cache(torch.tensor([1, 0], device=torch_device))
-        self.assertEqual(cache.layers[0].conv_states.shape[0], 2)
+        self.assertEqual(cache.layers[0].conv_states[0].shape[0], 2)
 
         cache.reset()
         self.assertFalse(cache.has_previous_state(0))
-        self.assertEqual(cache.layers[0].conv_states.sum().item(), 0)
-        self.assertEqual(cache.layers[0].recurrent_states.sum().item(), 0)
+        self.assertEqual(cache.layers[0].conv_states[0].sum().item(), 0)
+        self.assertEqual(cache.layers[0].recurrent_states[0].sum().item(), 0)
 
 
 @require_torch

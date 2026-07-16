@@ -23,12 +23,14 @@ from ...test_processing_common import ProcessorTesterMixin
 @require_vision
 class GotOcr2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = GotOcr2Processor
+    # Tiny processor created with make_tiny_processor.py from "stepfun-ai/GOT-OCR-2.0-hf"
+    tiny_model_id = "hf-internal-testing/tiny-processor-got_ocr2"
 
     @classmethod
-    def _setup_tokenizer(cls):
-        tokenizer_class = cls._get_component_class_from_processor("tokenizer")
-        tokenizer = tokenizer_class.from_pretrained("stepfun-ai/GOT-OCR-2.0-hf")
-        return tokenizer
+    def _setup_image_processor(cls):
+        # Instantiate directly to avoid loading the full 384×384 image processor from Hub.
+        image_processor_class = cls._get_component_class_from_processor("image_processor")
+        return image_processor_class()
 
     @unittest.skip("GotOcr2Processor pop the image processor output 'num_patches'")
     def test_image_processor_defaults(self):
@@ -38,27 +40,27 @@ class GotOcr2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         processor = self.get_processor()
         image_input = self.prepare_image_inputs()
         inputs = processor(image_input, return_tensors="pt")
-        self.assertEqual(inputs["input_ids"].shape, (1, 286))
+        self.assertEqual(inputs["input_ids"].shape, (1, 324))
         self.assertEqual(inputs["pixel_values"].shape, (1, 3, 384, 384))
 
         inputs = processor(image_input, return_tensors="pt", format=True)
-        self.assertEqual(inputs["input_ids"].shape, (1, 288))
+        self.assertEqual(inputs["input_ids"].shape, (1, 328))
         self.assertEqual(inputs["pixel_values"].shape, (1, 3, 384, 384))
 
         inputs = processor(image_input, return_tensors="pt", color="red")
-        self.assertEqual(inputs["input_ids"].shape, (1, 290))
+        self.assertEqual(inputs["input_ids"].shape, (1, 329))
         self.assertEqual(inputs["pixel_values"].shape, (1, 3, 384, 384))
 
         inputs = processor(image_input, return_tensors="pt", box=[0, 0, 100, 100])
-        self.assertEqual(inputs["input_ids"].shape, (1, 303))
+        self.assertEqual(inputs["input_ids"].shape, (1, 341))
         self.assertEqual(inputs["pixel_values"].shape, (1, 3, 384, 384))
 
         inputs = processor([image_input, image_input], return_tensors="pt", multi_page=True, format=True)
-        self.assertEqual(inputs["input_ids"].shape, (1, 547))
+        self.assertEqual(inputs["input_ids"].shape, (1, 595))
         self.assertEqual(inputs["pixel_values"].shape, (2, 3, 384, 384))
 
         inputs = processor(image_input, return_tensors="pt", crop_to_patches=True, max_patches=6)
-        self.assertEqual(inputs["input_ids"].shape, (1, 1826))
+        self.assertEqual(inputs["input_ids"].shape, (1, 1872))
         self.assertEqual(inputs["pixel_values"].shape, (7, 3, 384, 384))
 
     def test_processor_text_has_no_visual(self):

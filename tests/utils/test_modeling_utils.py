@@ -860,6 +860,66 @@ class ModelUtilsTest(TestCasePlus):
                 for p1, p2 in zip(model.parameters(), new_model.parameters()):
                     torch.testing.assert_close(p1, p2)
 
+    def test_transformers_weights_config_field_rejects_path_traversal(self):
+        config = BertConfig(
+            vocab_size=16,
+            hidden_size=8,
+            num_hidden_layers=1,
+            num_attention_heads=1,
+            intermediate_size=8,
+            max_position_embeddings=8,
+        )
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            repo = os.path.join(tmp_dir, "repo")
+            outside_dir = os.path.join(tmp_dir, "outside")
+            BertModel(config).save_pretrained(repo)
+            BertModel(config).save_pretrained(outside_dir)
+
+            config_file = os.path.join(repo, "config.json")
+            with open(config_file, encoding="utf-8") as f:
+                repo_config = json.load(f)
+
+            for bad in [
+                os.path.join("..", "outside", "model.safetensors"),
+                os.path.join(outside_dir, "model.safetensors"),
+            ]:
+                repo_config["transformers_weights"] = bad
+                with open(config_file, "w", encoding="utf-8") as f:
+                    json.dump(repo_config, f)
+                with self.assertRaises(ValueError):
+                    BertModel.from_pretrained(repo)
+
+            repo_config["transformers_weights"] = "model.safetensors"
+            with open(config_file, "w", encoding="utf-8") as f:
+                json.dump(repo_config, f)
+            self.assertIsInstance(BertModel.from_pretrained(repo), BertModel)
+
+    def test_transformers_weights_allows_symlinked_snapshot_file(self):
+        if os.name == "nt":
+            self.skipTest("creating symlinks requires privileges on Windows")
+        config = BertConfig(
+            vocab_size=16,
+            hidden_size=8,
+            num_hidden_layers=1,
+            num_attention_heads=1,
+            intermediate_size=8,
+            max_position_embeddings=8,
+        )
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            blobs = os.path.join(tmp_dir, "blobs")
+            snapshot = os.path.join(tmp_dir, "snapshot")
+            os.makedirs(blobs)
+            os.makedirs(snapshot)
+            BertModel(config).save_pretrained(blobs, safe_serialization=True)
+
+            config_dict = config.to_dict()
+            config_dict["transformers_weights"] = "model.safetensors"
+            with open(os.path.join(snapshot, "config.json"), "w", encoding="utf-8") as f:
+                json.dump(config_dict, f)
+            os.symlink(os.path.join(blobs, "model.safetensors"), os.path.join(snapshot, "model.safetensors"))
+
+            self.assertIsInstance(BertModel.from_pretrained(snapshot), BertModel)
+
     def test_checkpoint_sharding_from_hub(self):
         model = BertModel.from_pretrained("hf-internal-testing/tiny-random-bert-sharded")
         # the model above is the same as the model below, just a sharded version.
@@ -3112,6 +3172,10 @@ class TestAttentionImplementation(unittest.TestCase):
     def test_can_set_attn_returns_false_when_module_missing(self):
         # Simulate the "module cleared from sys.modules" case (test cleanup, REPL).
         from transformers.models.llama.modeling_llama import LlamaModel
+
+        # The method _can_set_attn_implementation caches the result on a succesful call, so we need to clear the cache
+        if hasattr(LlamaModel, "_can_set_attn_implementation_cached_value"):
+            delattr(LlamaModel, "_can_set_attn_implementation_cached_value")
 
         original = sys.modules.pop(LlamaModel.__module__)
         try:

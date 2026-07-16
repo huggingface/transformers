@@ -237,8 +237,8 @@ class Qwen3_5GatedDeltaNet(Qwen3NextGatedDeltaNet):
 
         # getting projected states from cache if it exists
         if use_precomputed_states:
-            conv_state = cache_params.layers[self.layer_idx].conv_states
-            recurrent_state = cache_params.layers[self.layer_idx].recurrent_states
+            conv_state = cache_params.layers[self.layer_idx].conv_states[0]
+            recurrent_state = cache_params.layers[self.layer_idx].recurrent_states[0]
 
         mixed_qkv = self.in_proj_qkv(hidden_states)
         mixed_qkv = mixed_qkv.transpose(1, 2)

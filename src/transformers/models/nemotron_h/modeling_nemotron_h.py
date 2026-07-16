@@ -239,8 +239,8 @@ class NemotronHMamba2Mixer(nn.Module):
 
         use_precomputed_states = cache_params is not None and cache_params.has_previous_state(self.layer_idx)
         if use_precomputed_states:
-            conv_state = cache_params.layers[self.layer_idx].conv_states
-            recurrent_state = cache_params.layers[self.layer_idx].recurrent_states
+            conv_state = cache_params.layers[self.layer_idx].conv_states[0]
+            recurrent_state = cache_params.layers[self.layer_idx].recurrent_states[0]
 
         # Single-step decoding via cache (one new token only)
         if use_precomputed_states and seq_len == 1:
@@ -412,11 +412,11 @@ class NemotronHMamba2Mixer(nn.Module):
 
         use_precomputed_state = cache_params is not None and cache_params.has_previous_state(self.layer_idx)
         if use_precomputed_state:
-            conv_state = cache_params.layers[self.layer_idx].conv_states
+            conv_state = cache_params.layers[self.layer_idx].conv_states[0]
 
         # Convolution sequence transformation
         if use_precomputed_state and seq_len == 1:
-            conv_states = cache_params.update_conv_state(hidden_states, self.layer_idx)
+            conv_states = cache_params.update_conv_state(hidden_states, self.layer_idx)[..., -self.conv_kernel_size:]
             hidden_states = torch.sum(conv_states * self.conv1d.weight[:, 0, :], dim=-1)
             if self.use_conv_bias:
                 hidden_states += self.conv1d.bias
@@ -430,7 +430,7 @@ class NemotronHMamba2Mixer(nn.Module):
                     hidden_states,
                     (self.conv_kernel_size - hidden_states.shape[-1], 0)
                 )
-                conv_states = cache_params.update_conv_state(conv_states, self.layer_idx)
+                conv_states = cache_params.update_conv_state(conv_states, self.layer_idx)[..., -self.conv_kernel_size:]
 
             hidden_states = self.act(self.conv1d(hidden_states)[..., :hidden_states.shape[-1]].transpose(1, 2))
             if use_precomputed_state:
@@ -471,7 +471,7 @@ class NemotronHMamba2Mixer(nn.Module):
             dBx = dB * hidden_states[..., None]
 
             # State calculation
-            ssm_states = cache_params.layers[self.layer_idx].recurrent_states.clone()
+            ssm_states = cache_params.layers[self.layer_idx].recurrent_states[0].clone()
             ssm_states = ssm_states * dA + dBx
             ssm_states = cache_params.update_recurrent_state(ssm_states, self.layer_idx)
 
@@ -544,7 +544,7 @@ class NemotronHMamba2Mixer(nn.Module):
             # permute back B * decay states
             states = (B_decay_contraction.permute(0, 1, 3, 2, 4)[..., None]  * hidden_states.permute(0, 1, 3, 2, 4)[..., None, :]).sum(dim=3).permute(0, 1, 2, 4, 3)
             previous_states = (
-                cache_params.layers[self.layer_idx].recurrent_states[:, None].to(dtype=states.dtype, device=states.device)
+                cache_params.layers[self.layer_idx].recurrent_states[0][:, None].to(dtype=states.dtype, device=states.device)
                 if use_precomputed_state
                 else torch.zeros_like(states[:, :1])
             )

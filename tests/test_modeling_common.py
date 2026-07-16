@@ -46,6 +46,7 @@ from transformers import (
 from transformers.conversion_mapping import get_model_conversion_mapping
 from transformers.core_model_loading import PrefixChange, WeightRenaming, process_target_pattern
 from transformers.integrations import HfDeepSpeedConfig
+from transformers.integrations.deepgemm import _get_nvcc_version
 from transformers.integrations.deepspeed import (
     is_deepspeed_available,
     is_deepspeed_zero3_enabled,
@@ -119,8 +120,7 @@ from transformers.utils import (
     is_torch_bf16_available_on_device,
     is_torch_fp16_available_on_device,
 )
-from transformers.utils.import_utils import get_cuda_runtime_version
-from transformers.utils.output_capturing import CompileableContextVar
+from transformers.utils.output_capturing import CompileableContextVar, OutputRecorder
 
 from .exporters.test_export import ExportTesterMixin
 from .generation.test_utils import GenerationTesterMixin
@@ -610,14 +610,15 @@ def _test_eager_matches_batched_and_grouped_inference(self, name, dtype):
             mocks["sonicmoe"] = Mock(wraps=sonicmoe_experts_forward)
             implementations.append("sonicmoe")
 
+        nvcc_version = _get_nvcc_version() or (0, 0)
+        device_major = torch.cuda.get_device_capability()[0] if torch.cuda.is_available() else 0
+        # DeepGEMM ships kernels only for Hopper (SM90, needs nvcc 12.3+) and Blackwell (SM100, needs 12.9+).
         if (
             dtype == torch.bfloat16
             and is_kernels_available()
-            and torch.cuda.is_available()
-            and torch.cuda.get_device_capability() >= (9, 0)
-            and get_cuda_runtime_version() >= (12, 3)
+            and ((device_major == 9 and nvcc_version >= (12, 3)) or (device_major == 10 and nvcc_version >= (12, 9)))
         ):
-            # DeepGEMM BF16 grouped forward requires Hopper+, CUDA runtime 12.3+, and bf16 hidden states
+            # DeepGEMM BF16 grouped forward requires Hopper+, a new-enough nvcc toolkit, and bf16 hidden states
             mocks["deepgemm"] = Mock(wraps=deepgemm_bf16_experts_forward)
             implementations.append("deepgemm")
 
@@ -5580,6 +5581,36 @@ class ModelTesterMixin(ExportTesterMixin):
                     with patch.object(CompileableContextVar, "reset", new=new_reset):
                         with torch.no_grad():
                             _ = model(**all_inputs)
+
+    def test_format_of_can_record_outputs(self):
+        """Test that that the attribute `_can_record_outputs` is correctly set for a model. It must either be "None" or
+        a dictionnary with output names as keys and a recorder or list of recorders as values. A recorder can be an
+        OutputRecorder instance, a module class we want to record outputs of or the name of this module class (a str).
+        """
+        config = self.model_tester.prepare_config_and_inputs_for_common()[0]
+
+        for model_class in self.all_model_classes:
+            # Each individual model is a subtest
+            with self.subTest(model_class.__name__):
+                model = model_class(copy.deepcopy(config)).to(device=torch_device)
+                model.eval()
+
+                recordable_output_dicts = [
+                    (module._can_record_outputs or {})
+                    for module in model.modules()
+                    if isinstance(module, PreTrainedModel)
+                ]
+
+                # Check that the values of _can_record_outputs are a correct recorder or a list of them
+                for recordable_output_dict in recordable_output_dicts:
+                    for key, value in recordable_output_dict.items():
+                        # Check format of the keys
+                        self.assertIsInstance(key, str, f"_can_record_outputs should have str keys, but got {key = }")
+                        # Check format of the values
+                        recorders = value if isinstance(value, list) else [value]
+                        for recorder in recorders:
+                            is_valid_recorder = isinstance(recorder, (str, type, OutputRecorder))
+                            self.assertTrue(is_valid_recorder, f"Invalid recorder: {recorder}")
 
     @require_kernels
     @require_torch_accelerator

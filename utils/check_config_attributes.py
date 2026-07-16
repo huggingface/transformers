@@ -81,6 +81,16 @@ SPECIAL_CASES_TO_ALLOW = {
     "XcodecConfig": ["sample_rate", "audio_channels"],
     "RecurrentGemmaConfig": ["block_types", "attention_window_size"],
     "MambaConfig": ["expand"],
+    "InklingTextConfig": [
+        # Consumed by config logic (build `layer_types`) or carried for checkpoint round-trip (MTP/MoE block),
+        # not referenced directly by the modeling forward.
+        "local_layer_ids",
+        "mtp_local_layer_ids",
+        "chain_hidden_post_norm",
+        "mtp_hidden_states_first",
+        "rms_norm_eps_moe_gate",
+        "shared_expert_sink",
+    ],
     "FalconMambaConfig": ["expand"],
     "FSMTConfig": ["langs", "common_kwargs", "early_stopping", "length_penalty", "max_length", "num_beams"],
     "GPTNeoConfig": ["attention_types"],
@@ -292,6 +302,7 @@ ATTRIBUTES_TO_ALLOW = (
     "vision_feature_layer",
     "vision_feature_select_strategy",
     "vision_aspect_ratio",
+    "num_mtp_layers",  # for MTP, not used by main model architecture
     # used by GenericForTokenClassification in modeling_layers.py via getattr
     "token_classification_bias",
 )

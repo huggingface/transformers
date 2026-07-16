@@ -272,7 +272,9 @@ class ZambaMambaMixer(nn.Module):
         self, hidden_states: torch.Tensor, cache_params: Cache | None = None, attention_mask=None
     ):
         batch_size, seq_len, _ = hidden_states.shape
-        use_precomputed_states = cache_params is not None and cache_params.has_previous_state and seq_len == 1
+        use_precomputed_states = (
+            cache_params is not None and cache_params.has_previous_state(self.layer_idx) and seq_len == 1
+        )
 
         # 1. Gated linear projection
         projected_states = self.in_proj(hidden_states).transpose(1, 2)
@@ -287,7 +289,7 @@ class ZambaMambaMixer(nn.Module):
         if use_precomputed_states:
             hidden_states = causal_conv1d_update(
                 hidden_states.squeeze(-1),
-                cache_params.layers[self.layer_idx].conv_states,
+                cache_params.layers[self.layer_idx].conv_states[0],
                 conv_weights,
                 self.conv1d.bias,
                 self.activation,
@@ -298,7 +300,9 @@ class ZambaMambaMixer(nn.Module):
                 hidden_states = hidden_states * attention_mask.unsqueeze(1)
             if cache_params is not None:
                 conv_states = nn.functional.pad(hidden_states, (self.conv_kernel_size - hidden_states.shape[-1], 0))
-                conv_states = cache_params.update_conv_state(conv_states, self.layer_idx)
+                conv_states = cache_params.update_conv_state(conv_states, self.layer_idx)[
+                    ..., -self.conv_kernel_size :
+                ]
             hidden_states = causal_conv1d_fn(hidden_states, conv_weights, self.conv1d.bias, activation=self.activation)
             if attention_mask is not None and not torch.all(attention_mask == 1):
                 hidden_states = hidden_states * attention_mask.unsqueeze(1)
@@ -324,7 +328,7 @@ class ZambaMambaMixer(nn.Module):
         if use_precomputed_states:
             for n in range(self.n_mamba_heads):
                 scan_outputs_ = selective_state_update(
-                    cache_params.layers[self.layer_idx].recurrent_states[:, n],
+                    cache_params.layers[self.layer_idx].recurrent_states[0][:, n],
                     hidden_states[n, ..., 0],
                     discrete_time_step[n, ..., 0],
                     A[n],
@@ -378,7 +382,7 @@ class ZambaMambaMixer(nn.Module):
 
         if cache_params is not None and cache_params.has_previous_state(self.layer_idx):
             # In training mode, we don't want to perform in-place operations on ssm_state so we can compute the backwards pass
-            ssm_state = cache_params.layers[self.layer_idx].recurrent_states.clone()
+            ssm_state = cache_params.layers[self.layer_idx].recurrent_states[0].clone()
         else:
             ssm_state = torch.zeros(
                 (batch_size, self.n_mamba_heads, self.mamba_head_dim, self.ssm_state_size),
@@ -389,7 +393,9 @@ class ZambaMambaMixer(nn.Module):
         # 2. Convolution sequence transformation
         if cache_params is not None:
             if cache_params.has_previous_state(self.layer_idx) and seq_len == 1:
-                conv_state = cache_params.update_conv_state(hidden_states, self.layer_idx)
+                conv_state = cache_params.update_conv_state(hidden_states, self.layer_idx)[
+                    ..., -self.conv_kernel_size :
+                ]
                 hidden_states = torch.sum(conv_state * self.conv1d.weight[:, 0, :], dim=-1)
                 if self.use_conv_bias:
                     hidden_states += self.conv1d.bias
@@ -398,7 +404,7 @@ class ZambaMambaMixer(nn.Module):
                 if attention_mask is not None:
                     hidden_states = hidden_states * attention_mask[:, -hidden_states.shape[-1] :].unsqueeze(1)
                 conv_state = nn.functional.pad(hidden_states, (self.conv_kernel_size - hidden_states.shape[-1], 0))
-                conv_state = cache_params.update_conv_state(conv_state, self.layer_idx)
+                conv_state = cache_params.update_conv_state(conv_state, self.layer_idx)[..., -self.conv_kernel_size :]
                 hidden_states = self.act(self.conv1d(hidden_states)[..., :seq_len])
                 if attention_mask is not None:
                     hidden_states = hidden_states * attention_mask[:, -hidden_states.shape[-1] :].unsqueeze(1)

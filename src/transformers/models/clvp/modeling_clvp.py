@@ -765,7 +765,7 @@ class ClvpPreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
     _skip_keys_device_placement = ["past_key_values"]
     _can_record_outputs = {
-        "hidden_states": (ClvpEncoderLayer, ClvpDecoderLayer),
+        "hidden_states": [ClvpEncoderLayer, ClvpDecoderLayer],
         "attentions": ClvpSelfAttention,
     }
 

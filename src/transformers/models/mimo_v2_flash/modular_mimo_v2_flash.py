@@ -61,6 +61,7 @@ class MiMoV2FlashConfig(Glm4MoeConfig):
     """
 
     model_type = "mimo_v2_flash"
+    attribute_map = {"num_local_experts": "n_routed_experts"}
 
     base_model_tp_plan = {
         "layers.*.self_attn.q_proj": "colwise",
@@ -103,6 +104,7 @@ class MiMoV2FlashConfig(Glm4MoeConfig):
     first_k_dense_replace = AttributeError()
     n_shared_experts = AttributeError()
     use_qk_norm = AttributeError()
+    num_mtp_layers = AttributeError()
 
     def __post_init__(self, **kwargs):
         # Full attention for the first layer and every 6th layer; SWA for the rest.

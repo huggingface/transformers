@@ -532,9 +532,8 @@ class ExportTesterMixin:
         """Export each model class to ExecuTorch (xnnpack on CPU, cuda on GPU) and verify no errors."""
 
         self._skip_if_not_exportable()
-        backend = "cuda" if torch_device == "cuda" else "xnnpack"
         exporter = ExecutorchExporter()
-        config = ExecutorchConfig(backend=backend, dynamic=dynamic)
+        config = ExecutorchConfig(dynamic=dynamic)
 
         for model_class in self.all_model_classes:
             if self._should_skip(model_class, dynamic=dynamic, backend="executorch"):
@@ -657,9 +656,8 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
         """Export prefill and decode stages to ExecuTorch and verify no errors."""
 
         self._skip_if_not_exportable()
-        backend = "cuda" if torch_device == "cuda" else "xnnpack"
         exporter = ExecutorchExporter()
-        config = ExecutorchConfig(backend=backend, dynamic=dynamic)
+        config = ExecutorchConfig(dynamic=dynamic)
 
         for model_class in self.all_generative_model_classes:
             if self._should_skip(model_class, generate=True, dynamic=dynamic, backend="executorch"):

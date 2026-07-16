@@ -410,6 +410,9 @@ class AudioKwargs(TypedDict, total=False):
             If set, will return tensors of a particular framework. Acceptable values are:
             - `'pt'`: Return PyTorch `torch.Tensor` objects.
             - `'np'`: Return NumPy `np.ndarray` objects.
+        load_audio_backend (`str`, *optional*):
+            Backend used by [`~audio_utils.load_audio`] to decode/resample audio referenced by URL/path
+            in `apply_chat_template`. One of `"auto"`, `"torchcodec"`, `"librosa"`, `"torchaudio"`.
     """
 
     sampling_rate: Annotated[int | None, positive_int()]
@@ -420,6 +423,7 @@ class AudioKwargs(TypedDict, total=False):
     pad_to_multiple_of: Annotated[int | None, positive_int()]
     return_attention_mask: bool | None
     return_tensors: Annotated[str | TensorType | None, tensor_type_validator()]
+    load_audio_backend: str | None
 
 
 class ProcessingKwargs(TypedDict, total=False):
@@ -2072,6 +2076,11 @@ class ProcessorMixin(PushToHubMixin):
             else:
                 sampling_rate = 16_000
 
+        load_audio_backend = kwargs.get("load_audio_backend", processor_kwargs.get("load_audio_backend"))
+        if load_audio_backend is None:
+            default_audio_kwargs = self.valid_processor_kwargs._defaults.get("audio_kwargs", {})
+            load_audio_backend = default_audio_kwargs.get("load_audio_backend", "auto")
+
         if isinstance(conversation, (list, tuple)) and (
             isinstance(conversation[0], (list, tuple)) or hasattr(conversation[0], "content")
         ):
@@ -2134,13 +2143,17 @@ class ProcessorMixin(PushToHubMixin):
                     # Audio models do not accept nested list of audios (yet!) so we construct a flat input audio list
                     if not load_audio_from_video:
                         for fname in audio_fnames:
-                            batch_audios.append(load_audio(fname, sampling_rate=sampling_rate))
+                            batch_audios.append(
+                                load_audio(fname, sampling_rate=sampling_rate, backend=load_audio_backend)
+                            )
                     else:
                         for fname in video_fnames:
                             # This updates the template in-place and adds audio entry
                             # to ensure `audio` token is added by jinja
                             message["content"].append({"type": "audio"})
-                            batch_audios.append(load_audio(fname, sampling_rate=sampling_rate))
+                            batch_audios.append(
+                                load_audio(fname, sampling_rate=sampling_rate, backend=load_audio_backend)
+                            )
 
                 # Currently all processors can accept nested list of batches, but not flat list of visuals
                 # So we'll make a batched list of images and let the processor handle it

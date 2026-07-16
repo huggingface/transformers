@@ -17,7 +17,12 @@ import unittest
 
 import numpy as np
 
-from transformers import MODEL_FOR_MULTIMODAL_LM_MAPPING, is_vision_available
+from transformers import (
+    MODEL_FOR_MULTIMODAL_LM_MAPPING,
+    AutoProcessor,
+    Qwen2_5OmniForConditionalGeneration,
+    is_vision_available,
+)
 from transformers.pipelines import AnyToAnyPipeline, pipeline
 from transformers.testing_utils import (
     Expectations,
@@ -173,6 +178,26 @@ class AnyToAnyPipelineTests(unittest.TestCase):
                     ],
                 ],
             )
+
+    def test_qwen_omni_batched_text_only_outputs_all_rows(self):
+        model_id = "hf-internal-testing/tiny-random-Qwen2_5OmniForConditionalGeneration"
+        processor = AutoProcessor.from_pretrained(model_id)
+        model = Qwen2_5OmniForConditionalGeneration.from_pretrained(model_id).eval()
+        pipe = pipeline("any-to-any", model=model, processor=processor)
+
+        outputs = pipe(
+            text=["hello", "world"],
+            return_full_text=False,
+            generate_kwargs={
+                "generation_mode": "text",
+                "thinker_do_sample": False,
+                "thinker_max_new_tokens": 1,
+            },
+        )
+
+        self.assertEqual(len(outputs), 2)
+        self.assertEqual([output["input_text"] for output in outputs], ["hello", "world"])
+        self.assertTrue(all("generated_text" in output for output in outputs))
 
     @slow
     def test_small_model_pt_token_text_only(self):

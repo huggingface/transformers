@@ -32,12 +32,12 @@ class DistributedConfig:
         tp_size (`int`, *optional*):
             Number of devices for tensor parallelism. If `None` and `fsdp_size` is set, defaults to 1.
         tp_plan (`dict`, *optional*):
-            Tensor parallel sharding plan. Leave as `None` to select the model's SP/TP and EP plan
-            (see ``select_parallel_plan``). Set explicitly to override.
+            Tensor parallel sharding plan. Leave as `None` to use the model's `base_model_tp_plan`.
+            Set explicitly to override.
         enable_sequence_parallel (`bool`, *optional*, defaults to `False`):
-            Select ``base_model_sp_plan`` (dense-only) or ``base_model_sp_ep_plan`` (with EP).
+            Reserved for sequence parallelism. Not wired up yet.
         enable_expert_parallel (`bool`, *optional*, defaults to `False`):
-            Select ``base_model_tp_ep_plan`` or ``base_model_sp_ep_plan`` when combined with SP flag.
+            Route MoE models through the expert-parallel path (``base_model_ep_plan``).
         fsdp_size (`int`, *optional*):
             Number of devices for FSDP (data parallelism). If `None` and `tp_size` is set, defaults to 1.
         fsdp_cpu_offload (`bool`, *optional*, defaults to `False`):

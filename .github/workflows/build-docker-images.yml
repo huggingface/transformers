@@ -217,7 +217,7 @@ jobs:
     name: "Cache Latest Pytorch (AMD) Image"
     needs: latest-pytorch-amd
     runs-on:
-      group: amd-mi325-1gpu
+      group: amd-mi300-1gpu
     steps:
       -
         name: Login to DockerHub
