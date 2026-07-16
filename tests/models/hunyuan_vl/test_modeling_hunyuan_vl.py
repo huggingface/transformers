@@ -477,9 +477,9 @@ class HunYuanVLForConditionalGenerationIntegrationTest(unittest.TestCase):
         expected_texts = Expectations(
             {
                 ("cuda", None): [
-                    "OCR (Optical Character Recognition) is a computer technology that uses **Optical Character Recognition (OCR)** to extract text from images or documents. It is a powerful tool for automating tasks like text extraction, image analysis, and document processing.\n\n### Brief Explanation:\n1. **Purpose**: OCR is used to recognize and extract",
-                    "To determine the answer, we analyze the radar chart:  \n\n1. **First image**: The first image shows a hand with multiple colored candy beads. The top - most bead is teal, and the second bead from the top is green. The third bead from the top is orange. The fourth bead from the",
-                    "The image is a radar chart that compares the performance of four different models or methods across various benchmarks. The chart is labeled with the names of the benchmarks on the axes, and each model is represented by a different colored line. The models are labeled as BLIP-2, InstructBLIP, Qwen-VL",
+                    "It is a software tool that allows you to extract text from a document.",
+                    "To determine what is shown in the first image and what animal is on the candy in the second image, we analyze the radar chart:  \n\n1. **First Image**: The first radar chart has a green - colored region. The legend shows that the green color corresponds to “InstructBLIP”. Thus, the",
+                    "To determine what is shown in the image, we analyze the context of the radar chart. A radar chart is a type of chart where each axis represents a variable (here, different models or tasks), and data points are plotted along these axes.  \n\nIn the image, the axes are labeled with model names (e",
                 ]
             }
         )  # fmt: skip

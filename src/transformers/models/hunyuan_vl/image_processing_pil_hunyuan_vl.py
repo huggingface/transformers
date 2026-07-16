@@ -175,7 +175,7 @@ class HunYuanVLImageProcessorPil(PilBackend):
                 image = self.resize(
                     image,
                     size=SizeDict(height=resized_height, width=resized_width),
-                    resample=resample if resample is not None else PILImageResampling.BICUBIC,
+                    resample=resample,
                 )
             else:
                 resized_height, resized_width = height, width
