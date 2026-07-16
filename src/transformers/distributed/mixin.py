@@ -50,8 +50,32 @@ class DistributedMixin:
     _tp_plan: dict[str, str] | None = None
     _ep_plan: dict[str, str] | None = None
     _tp_size = None
-    _pp_plan: dict[str, tuple[str, str]] = None
+    _pp_plan: dict[str, tuple[str, str]] | None = None
     _fsdp_plan: dict[str, str] | None = None
+
+    def init_parallel_plans(self) -> None:
+        """Copy class-level plans onto the instance and merge config/children contributions."""
+        model_cls = type(self)
+        self._tp_plan = dict(getattr(model_cls, "_tp_plan", None) or {})
+        self._ep_plan = dict(getattr(model_cls, "_ep_plan", None) or {})
+        self._pp_plan = dict(getattr(model_cls, "_pp_plan", None) or {})
+        self._fsdp_plan = dict(getattr(model_cls, "_fsdp_plan", None) or {})
+
+        if self.base_model is self:
+            self._pp_plan.update(self.config.base_model_pp_plan or {})
+            self._tp_plan.update(self.config.base_model_tp_plan or {})
+            self._ep_plan.update(self.config.base_model_ep_plan or {})
+            self._fsdp_plan.update(self.config.base_model_fsdp_plan or {})
+
+        for name, module in self.named_children():
+            if plan := getattr(module, "_ep_plan", None):
+                self._ep_plan.update({f"{name}.{k}": v for k, v in plan.copy().items()})
+            if plan := getattr(module, "_tp_plan", None):
+                self._tp_plan.update({f"{name}.{k}": v for k, v in plan.copy().items()})
+            if plan := getattr(module, "_pp_plan", None):
+                self._pp_plan.update({f"{name}.{k}": v for k, v in plan.copy().items()})
+            if plan := getattr(module, "_fsdp_plan", None):
+                self._fsdp_plan.update({f"{name}.{k}": v for k, v in plan.copy().items()})
 
     @property
     def tp_plan(self) -> dict[str, str]:
