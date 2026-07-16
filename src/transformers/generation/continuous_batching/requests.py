@@ -146,6 +146,8 @@ class RequestState:
     # Required fields
     request_id: str
     initial_tokens: list[int]  # Initial prompt tokens # TODO: rename this as prefill tokens
+    # This field is None for text-only requests. For MM requests, the dict is emptied once the embeddings are computed
+    multimodal_inputs: dict | None = None
 
     # Optional fields (CB parameters)
     streaming: bool = False  # Whether to stream tokens as they're generated
@@ -323,10 +325,20 @@ class RequestState:
             "logit_processor_kwargs": deepcopy(self.logit_processor_kwargs),
         }
 
+    @property
+    def mm_inputs_consumed(self) -> bool:
+        """True if this request carried multimodal inputs that have already been encoded (the dict was emptied) and can
+        no longer be retrieved. False for text-only requests and for multimodal requests not yet encoded."""
+        return self.multimodal_inputs is not None and len(self.multimodal_inputs) == 0
+
     def create_equivalent_initial_request(self) -> "RequestState":
         """Creates an equivalent new request by removing the generated tokens and adding them to the initial prompt. The
         created request has THE SAME request_id. Notably, we can retrieve the original request from the created one with
         the _true_initial_tokens attribute. The logprobs of the generated tokens are kept in the new request."""
+
+        # A request whose multimodal inputs were consumed cannot be recreated: the embeddings cannot be recomputed
+        if self.mm_inputs_consumed:
+            raise RuntimeError(f"Cannot soft reset a request that consumed its multimodal inputs: {self.request_id}")
 
         request_config = self.get_request_config()
         # If there is a number of max new tokens, we update it to account for the already generated tokens
@@ -338,6 +350,7 @@ class RequestState:
             initial_tokens=self.initial_tokens + self.generated_tokens,
             logprobs=self.logprobs[:],
             _true_initial_tokens=self._true_initial_tokens + len(self.initial_tokens),
+            multimodal_inputs=self.multimodal_inputs,
             **request_config,
         )
         # If the request has been soft reset once already, this stays the same
@@ -347,6 +360,12 @@ class RequestState:
         else:
             new_state._true_initial_tokens = len(self.initial_tokens)
         return new_state
+
+    def count_mm_embeddings(self, special_token_id: int) -> int:
+        """Count the number of multimodal embeddings in the initial tokens."""
+        input_ids = torch.tensor(self.initial_tokens, device="cpu", dtype=torch.int32)
+        num_mm_embeddings = (input_ids == special_token_id).sum().item()
+        return num_mm_embeddings
 
 
 class FutureRequestState:

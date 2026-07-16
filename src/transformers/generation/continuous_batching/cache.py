@@ -22,35 +22,10 @@ from ...generation.configuration_utils import ContinuousBatchingConfig
 from ...utils.generic import is_flash_attention_requested
 from .cache_manager import BlockManager, CacheAllocator, FullAttentionCacheAllocator, SlidingAttentionCacheAllocator
 from .distributed import DistributedHelper
+from .embeddings_cache import EmbeddingsCache
 from .initialization import resolve_max_memory_percent
 from .requests import RequestState, RequestStatus, get_device_and_memory_breakdown, logger
-
-
-def find_num_kv_heads(config: PreTrainedConfig) -> int:
-    """Finds the number of key-value heads for the given config."""
-    # If the model supports GQA, we leverage it by using the num_key_value_heads attribute
-    kv_heads = getattr(config, "num_key_value_heads", None)
-    if kv_heads is not None:
-        return kv_heads
-    # Otherwise, the number of KV heads is the same as the number of attention heads
-    kv_heads = getattr(config, "num_attention_heads", None)
-    if kv_heads is not None:
-        return kv_heads
-    raise ValueError(f"num_key_value_heads or num_attention_heads could not be found in the config:\n{config}")
-
-
-def find_head_dim(config: PreTrainedConfig) -> int:
-    """Finds the head dimension for the given config."""
-    # If the model has the head_dim attribute, there is nothing to do but return it
-    head_dim = getattr(config, "head_dim", None)
-    if head_dim is not None:
-        return head_dim
-    # If it is missing, we may reconstruct it from the hidden size and the number of attention heads
-    hidden_size = getattr(config, "hidden_size", None)
-    num_attention_heads = getattr(config, "num_attention_heads", None)
-    if hidden_size is not None and num_attention_heads is not None:
-        return hidden_size // num_attention_heads
-    raise ValueError(f"head_dim or (hidden_size and num_attention_heads) could not be found in the config:\n{config}")
+from .utils import find_head_dim, find_num_kv_heads
 
 
 def group_layers_by_attn_type(config: PreTrainedConfig) -> tuple[list[list[int]], list[str]]:
@@ -149,7 +124,8 @@ class PagedAttentionCache:
         self,
         config: PreTrainedConfig,
         continuous_batching_config: ContinuousBatchingConfig,
-        device: torch.device | str,
+        mm_modality: str | None,
+        device: torch.device | str,  # TODO: add PP support
         distributed_helper: DistributedHelper,
         tp_plan: dict[str, Any],
         dtype: torch.dtype = torch.float16,
@@ -160,36 +136,40 @@ class PagedAttentionCache:
         Args:
             config: Model configuration
             continuous_batching_config: Continuous batching configuration containing cache parameters
+            mm_modality: The modality of the multimodal inputs
             device: Device for the cache tensors
             distributed_helper: TP-aware helper. Used to dispatch attention heads and ensure coherent cache size
             tp_plan: Tensor parallelism plan
             dtype: Data type of the activation and the cache (for now, these are the same)
         """
-        self.config = config
         self.dtype = dtype
         self.device = device
 
-        # Extract model dimensions
-        self.num_key_value_heads: int = find_num_kv_heads(config)
-        self.head_dim: int = find_head_dim(config)
+        # For most attributes, the relevant values are inside the text model (LLM) config, not the main config
+        is_multimodal_model = mm_modality is not None
+        text_config = config.get_text_config(decoder=True)
 
-        # Extract cache dimensions. Default used to be 32, now it's 256 to be compatible with flash_with_kvcache.
+        # Extract model dimensions
+        self.num_key_value_heads = find_num_kv_heads(text_config)
+        self.head_dim = find_head_dim(text_config)
+        # Extract cache dimensions
         self.block_size = continuous_batching_config.block_size
         if self.block_size < self._min_block_size:
             raise ValueError(f"Block size must be at least {self._min_block_size}, but got {self.block_size}")
 
         # Group layers depending on the attention mix
-        layer_groups, group_types = group_layers_by_attn_type(config)
+        layer_groups, group_types = group_layers_by_attn_type(text_config)
         group_size = len(layer_groups[0])
         self.num_groups = len(layer_groups)
 
-        self.sliding_windows = {}
+        self.sliding_windows = {}  # TODO: can this attribute be removed there is only one sliding window size so far
         self.layer_index_to_group_indices = {}
         for i, group in enumerate(layer_groups):
-            sliding_window = config.sliding_window if group_types[i] == "sliding_attention" else 1
+            sliding_window = text_config.sliding_window if group_types[i] == "sliding_attention" else 1
             for j, layer in enumerate(group):
                 self.layer_index_to_group_indices[layer] = (i, j)
                 self.sliding_windows[layer] = sliding_window
+        self.max_sliding_window = max(self.sliding_windows.values())
 
         # Check if the KV heads are part of the TP plan. If they are not, the cache does not need plan for TP.
         # TODO: this is fragile. If your model fails to TP properly because of this, please open an issue.
@@ -219,6 +199,7 @@ class PagedAttentionCache:
             dtype=self.dtype,
             group_types=group_types,
             group_size=group_size,
+            is_multimodal_model=is_multimodal_model,
         ).infer_max_batch_tokens_and_num_blocks()
 
         # For TP, align max_batch_tokens and num_blocks to the minimal value across the TP group
@@ -232,12 +213,6 @@ class PagedAttentionCache:
         self.num_blocks = num_blocks
         self.num_pages = self.num_blocks * self.block_size
         logger.info(f"Paged cache initialized: {self.max_batch_tokens = }, {self.num_blocks = }, {self.block_size = }")
-
-        # If max_blocks_per_request is not set, initialize it to the non-zero fallback value
-        max_blocks_per_request = continuous_batching_config.max_blocks_per_request
-        if max_blocks_per_request is None:
-            max_blocks_per_request = continuous_batching_config.fallback_max_blocks_per_request
-        self.max_blocks_per_request = max_blocks_per_request
 
         # Initialize the cache
         self.key_cache: list[torch.Tensor] = []
@@ -278,7 +253,7 @@ class PagedAttentionCache:
                 self.num_full_attention_groups += 1
             elif group_type == "sliding_attention":
                 cm = SlidingAttentionCacheAllocator(
-                    i, self.block_size, config.sliding_window, self.sentinel_index, self.write_trash_index
+                    i, self.block_size, text_config.sliding_window, self.sentinel_index, self.write_trash_index
                 )
                 self.num_sliding_attention_groups += 1
                 self.max_sliding_window_blocks_per_request = cm._max_blocks_per_request
@@ -286,8 +261,38 @@ class PagedAttentionCache:
                 raise ValueError(f"Invalid group type: {group_type}")
             self.group_cache_managers.append(cm)
 
-        # We only use prefix sharing if the whole model has only full attention layers and block sharing is allowed
-        self.use_prefix_sharing = self.allow_block_sharing and group_types == ["full_attention"]
+        max_blocks_per_request = continuous_batching_config.max_blocks_per_request
+        # If there are sliding window attention groups, we need to set the max blocks per request to 0 (TODO)
+        if self.num_sliding_attention_groups > 0:
+            # Throw a warning if the user provided a non-zero value
+            if max_blocks_per_request is not None and max_blocks_per_request > 0:
+                logger.warning("Sliding window attention groups detected: disabling block table support.")
+            continuous_batching_config.max_blocks_per_request = 0
+            max_blocks_per_request = 0
+        # Otherwise, make sure to use the user-provided value or the fallback value
+        if max_blocks_per_request is None:
+            max_blocks_per_request = continuous_batching_config.fallback_max_blocks_per_request
+        self.max_blocks_per_request = max_blocks_per_request
+
+        # If there is one, initialize the embeddings cache
+        if is_multimodal_model:
+            self.embeddings_cache = EmbeddingsCache(
+                config=config,
+                modality=mm_modality,
+                max_batch_tokens=max_batch_tokens,
+                model_dtype=self.dtype,
+                device=self.device,
+            )
+        else:
+            self.embeddings_cache = None
+
+        # We only use prefix sharing if the model is text-only, sharing available for all groups and allowed by user
+        # TODO: support prefix sharing for multimodal models using content hashing
+        self.use_prefix_sharing = (
+            self.allow_block_sharing and
+            group_types == ["full_attention"] and
+            not is_multimodal_model
+        )
         self._block_manager = BlockManager(num_blocks, self.block_size, tp_on=tp_size > 1)
         self._total_prefix_length: int = 0  # a counter to measure the impact of prefix sharing, also used in tests
 
@@ -338,9 +343,11 @@ class PagedAttentionCache:
 
     def free_blocks(self, request_id: str) -> None:
         """Free all allocated cache blocks for a given request across all layer groups. Actual deallocation is done
-        by the cache managers."""
+        by the cache managers. Also releases the embeddings cache for the request."""
         for cm in self.group_cache_managers:
             cm.free_blocks(request_id, self._block_manager)
+        if self.embeddings_cache is not None:
+            self.embeddings_cache.release_cache_for_requests({request_id})
 
     def get_num_free_blocks(self) -> int:
         """Get the current number of unallocated blocks available for new requests."""
@@ -379,7 +386,7 @@ class PagedAttentionCache:
         if self.num_full_attention_groups > 0:
             seqlens_k["full_attention"] = past_length + query_length
         if self.num_sliding_attention_groups > 0:
-            seqlens_k["sliding_attention"] = query_length + min(past_length, self.config.sliding_window - 1)
+            seqlens_k["sliding_attention"] = query_length + min(past_length, self.max_sliding_window - 1)
         # NOTE: when we add more attention types / different sliding windows, we can go back to looping over CMs
         return seqlens_k
 
@@ -553,6 +560,8 @@ class PagedAttentionCache:
             all_request_ids.update(cm.block_table.keys())
         for request_id in all_request_ids:
             self.free_blocks(request_id)
+        if self.embeddings_cache is not None:
+            self.embeddings_cache.free_all_requests()
 
 
 class PagedAttentionMemoryHandler:
@@ -578,6 +587,7 @@ class PagedAttentionMemoryHandler:
         dtype: torch.dtype,
         group_types: list[str],
         group_size: int,
+        is_multimodal_model: bool,
     ) -> None:
         """Initialize the memory handler. Args:
         - config: the model configuration
@@ -586,21 +596,23 @@ class PagedAttentionMemoryHandler:
         - group_types: the list of all attention group types, formatted as strings
         - group_size: the size (in layers) of an attention group
         """
-        self.config = config
+        self.text_config = config.get_text_config(decoder=True)
         self.cb_config = continuous_batching_config
         self.cache_dtype = dtype
         self.activation_dtype = dtype
+        self.vocab_size = self.text_config.vocab_size
         self.block_size = continuous_batching_config.block_size
-        self.page_size = find_head_dim(config) * find_num_kv_heads(config)
+        self.page_size = find_head_dim(self.text_config) * find_num_kv_heads(self.text_config)
         self.num_groups = len(group_types)
         self.group_size = group_size
 
         # TODO: when we generalize to allow for block-attn, we can use `num_attention_masks=sum(set(group_types))`
-        if is_flash_attention_requested(self.config):
+        if is_flash_attention_requested(config):
             self.num_attention_masks = 0
         else:
             self.num_attention_masks = 2 if "sliding_attention" in group_types else 1
 
+        self.is_multimodal_model = is_multimodal_model
         self.max_blocks_per_request = continuous_batching_config.max_blocks_per_request
         if self.max_blocks_per_request is None:
             self.max_blocks_per_request = continuous_batching_config.fallback_max_blocks_per_request
@@ -608,22 +620,25 @@ class PagedAttentionMemoryHandler:
         self.num_output_rows = 2 if continuous_batching_config.return_logprobs else 1
         # This account for the set of 2 IOs if async batching is used
         self.io_multiplier = 2 if continuous_batching_config.use_async_batching else 1
+        # Calculate available memory for cache allocation (less if there is an encoder cache)
         self.available_memory = self.get_available_memory()
+        if self.is_multimodal_model:  # embeddings_cache: [max(M, 16384), hidden_size] * activation_dtype
+            self.available_memory -= 16384 * self.text_config.hidden_size * self.activation_dtype.itemsize
 
     @property
     def activation_peak(self) -> dict[str, tuple[int, ...]]:
-        mem_per_q_token = self.config.num_attention_heads * find_head_dim(self.config)
+        mem_per_q_token = self.text_config.num_attention_heads * find_head_dim(self.text_config)
         mem_per_k_or_v_token = self.page_size
         peaks = {}
 
         # LM head peak: this is when we turn the hidden states into logits
-        delta_m = self.config.hidden_size * self.activation_dtype.itemsize  # hidden_shape, shape [M, hidden_size]
-        delta_m += self.config.vocab_size * torch.float32.itemsize  # logits, shape [M, V], always in fp32
+        delta_m = self.text_config.hidden_size * self.activation_dtype.itemsize  # hidden_shape, shape [M, hidden_size]
+        delta_m += self.vocab_size * torch.float32.itemsize  # logits, shape [M, V], always in fp32
         peaks["lm_head"] = (delta_m, 0, 0, 0)
 
         # Attention peak: this is when we read the key and value states from the cache
         delta_m = self.activation_dtype.itemsize * (
-            self.config.hidden_size  # hidden state, shape [M, hidden_size]
+            self.text_config.hidden_size  # hidden state, shape [M, hidden_size]
             + mem_per_q_token  # q_projection, shape [M, mem_per_q_token]
             + 2 * mem_per_k_or_v_token  # new K and V, shape [M, page_size]
         )
@@ -761,6 +776,7 @@ class PagedAttentionMemoryHandler:
         a = self.activation_dtype.itemsize             # for now, the cache and the activation have the same dtype
         c = self.cache_dtype.itemsize
         k = self.io_multiplier               # 1 sync, 2 async (IO tensors only)
+        mm = self.is_multimodal_model         # 1 if multimodal model, 0 otherwise
 
         # -- N terms: cost per cache page --------------------------------------------------
         coeff_n = (
@@ -770,13 +786,14 @@ class PagedAttentionMemoryHandler:
         )
         # -- M terms: cost per batch token -------------------------------------------------
         coeff_m = (
-            delta_m                                    # activation peak: M-proportional part
-            + k * 7 * i                                # bulk_input: [7, M] int32, packed as 7 rows
-            + k * self.num_output_rows * i             # output_ids: [num_output_rows, M] int32
-            + k * self.num_groups                      # block_table: [bt_groups, M, max_blocks_per_req] int32
-            * self.max_blocks_per_request * i          #   (zero when fast-decode is off)
-            + k * self.num_groups * 8                  # write_index: [num_groups, M] int64
-            + k * self.num_groups * 8                  # read_index: [num_groups, N + M] (M part only, int64)
+            delta_m                                     # activation peak: M-proportional part
+            + k * 8 * i                                 # bulk_input: [8, M] int32, packed as 8 rows
+            + k * self.num_output_rows * i              # output_ids: [num_output_rows, M] int32
+            + k * self.num_groups                       # block_table: [bt_groups, M, max_blocks_per_req] int32
+            * self.max_blocks_per_request * i           #   (zero when fast-decode is off)
+            + k * self.num_groups * 8                   # write_index: [num_groups, M] int64
+            + k * self.num_groups * 8                   # read_index: [num_groups, N + M] (M part only, int64)
+            + k * mm * self.text_config.hidden_size * a # input_embeds: [M, hidden_size] * activation_dtype
         )
         # TODO: the above could be refined by introducing the max_requests_per_batch, but then there is a min() and this
         # is no longer a simple polynomial. Could be worth checking into.
