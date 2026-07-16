@@ -112,15 +112,16 @@ class MiniMaxCache(DynamicCache):
         raise RuntimeError("MiniMaxCache doesnot support `crop` method")
 
 
-def apply_mask_to_padding_states(value_states, attention_mask):
+def apply_mask_to_padding_states(hidden_states, attention_mask):
     """
-    Tunes out the value states for padding tokens, see https://github.com/state-spaces/mamba/issues/66
+    Tunes out the hidden states for padding tokens, see https://github.com/state-spaces/mamba/issues/66
     """
-    if attention_mask is not None:
-        attention_mask = attention_mask.to(dtype=torch.bool)  # Ensure it's a boolean tensor
-        value_states = value_states.masked_fill(~attention_mask.unsqueeze(1).unsqueeze(-1), 0)
+    # NOTE: attention mask is a 2D boolean tensor
+    if attention_mask is not None and attention_mask.shape[1] > 1 and attention_mask.shape[0] > 1:
+        dtype = hidden_states.dtype
+        hidden_states = (hidden_states * attention_mask[:, :, None]).to(dtype)
 
-    return value_states
+    return hidden_states
 
 
 class MiniMaxLightningAttention(nn.Module):
@@ -185,6 +186,7 @@ class MiniMaxLightningAttention(nn.Module):
         num_blocks = (seq_len + self.block_size - 1) // self.block_size
 
         qkv_states = self.act_fn(self.qkv_proj(hidden_states))
+        qkv_states = apply_mask_to_padding_states(qkv_states, attention_mask)
         qkv_states = qkv_states.reshape(batch_size, seq_len, self.num_attention_heads, 3 * self.head_dim)
 
         query_states, key_states, value_states = torch.split(qkv_states, self.head_dim, dim=3)
@@ -202,8 +204,6 @@ class MiniMaxLightningAttention(nn.Module):
             attn_weights_inter = torch.zeros(batch_size, self.num_attention_heads, self.head_dim, self.head_dim).to(
                 value_states
             )
-
-            value_states = apply_mask_to_padding_states(value_states, attention_mask)
 
             attn_output = []
             for i in range(num_blocks):
@@ -238,8 +238,6 @@ class MiniMaxLightningAttention(nn.Module):
                 attn_weights_inter = attn_weights_inter * block_decay + next_attn_weights_inter
 
         else:
-            value_states = apply_mask_to_padding_states(value_states, attention_mask)
-
             ratio = torch.exp(-self.slope_rate)
             attn_output = []
             for i in range(seq_len):
@@ -900,24 +898,6 @@ class MiniMaxForCausalLM(MiniMaxPreTrainedModel, GenerationMixin):
             attentions=outputs.attentions,
             router_logits=outputs.router_logits,
         )
-
-    @staticmethod
-    def create_masks_for_generate(config, inputs_embeds, attention_mask, past_key_values, position_ids=None, **_):
-        # MiniMax interleaves full-attention and lightning (linear) attention layers; return both
-        # masks the layers need as a dict, keyed like `config.layer_types`.
-        text_config = config.get_text_config()
-        mask_function = create_causal_mask if text_config.sliding_window is None else create_sliding_window_causal_mask
-        mask_kwargs = {
-            "config": text_config,
-            "inputs_embeds": inputs_embeds,
-            "attention_mask": attention_mask,
-            "past_key_values": past_key_values,
-            "position_ids": position_ids,
-        }
-        return {
-            "full_attention": mask_function(**mask_kwargs),
-            "linear_attention": create_recurrent_attention_mask(**mask_kwargs),
-        }
 
 
 class MiniMaxForSequenceClassification(GenericForSequenceClassification, MiniMaxPreTrainedModel):
