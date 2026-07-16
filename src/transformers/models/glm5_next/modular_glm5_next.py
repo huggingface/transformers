@@ -286,8 +286,8 @@ def chunk_kimi_delta_attention(
 class Glm5NextForgetGate(nn.Module):
     def __init__(self, config: Glm5NextConfig):
         super().__init__()
-        self.head_dim = config.linear_attn_config["head_dim"]
-        self.num_heads = config.linear_attn_config["num_heads"]
+        self.head_dim = config.linear_head_dim
+        self.num_heads = config.linear_num_heads
         self.qkv_dim = self.head_dim * self.num_heads
 
         self.f_a_proj = nn.Linear(config.hidden_size, self.head_dim, bias=False)
@@ -295,7 +295,7 @@ class Glm5NextForgetGate(nn.Module):
         self.dt_bias = nn.Parameter(torch.empty(self.qkv_dim, dtype=torch.float32))
         self.A_log = nn.Parameter(torch.empty(self.num_heads, dtype=torch.float32))
 
-        self.safe_gate_lower_bound = config.linear_attn_config.get("lower_bound", None)
+        self.safe_gate_lower_bound = config.linear_lower_bound
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         hidden_shape = (*hidden_states.shape[:2], -1, self.head_dim)
@@ -329,11 +329,11 @@ class Glm5NextLinearAttention(nn.Module):
     ):
         super().__init__()
         self.hidden_size = config.hidden_size
-        self.num_heads = config.linear_attn_config["num_heads"]
-        self.head_dim = config.linear_attn_config["head_dim"]
+        self.num_heads = config.linear_num_heads
+        self.head_dim = config.linear_head_dim
         self.qkv_dim = self.head_dim * self.num_heads
 
-        self.conv_kernel_size = config.linear_attn_config.get("short_conv_kernel_size", 4)
+        self.conv_kernel_size = config.linear_conv_kernel_dim
         self.layer_idx = layer_idx
         self.activation = config.hidden_act
         self.layer_norm_epsilon = config.rms_norm_eps

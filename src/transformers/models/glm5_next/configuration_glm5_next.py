@@ -16,9 +16,13 @@ from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import RopeParameters
-from ...utils import auto_docstring
+from ...utils import auto_docstring, logging
 
 
+logger = logging.get_logger(__name__)
+
+
+# TODO: docstring + modular
 @auto_docstring(checkpoint="zai-org/GLM-5-Next")
 @strict
 class Glm5NextConfig(PreTrainedConfig):
@@ -27,42 +31,24 @@ class Glm5NextConfig(PreTrainedConfig):
         Number of routed expert groups.
     swiglu_limit (`float`, *optional*, defaults to 10.0):
         Clamp limit applied to SwiGLU gate/up projections.
-    linear_attn_config (`dict`, *optional*):
-        KDA linear attention layout and dimensions. Layers listed in
-        `kda_layers` use KDA; layers listed in `full_attn_layers` use MLA.
-    mhc (`bool`, *optional*, defaults to `False`):
-        Enables MHC residual streams. Older checkpoints without this field use
-        the standard single-stream residual path.
-    hc_mult (`int`, *optional*, defaults to 4):
-        Number of MHC residual streams.
-    hc_eps (`float`, *optional*, defaults to 1e-6):
-        Numerical floor used by MHC Sinkhorn normalization.
-    hc_sinkhorn_iters (`int`, *optional*, defaults to 20):
-        Number of Sinkhorn iterations used by MHC routing.
+    linear_conv_kernel_dim (`int`, *optional*, defaults to 4):
+        Kernel size of the convolution used in linear attention layers.
+    linearhead_dim (`int`, *optional*, defaults to 64):
+        Dimension of each head in linear attention.
+    linear_num_heads (`int`, *optional*, defaults to 40):
+        Number of heads used in linear attention layers.
+    linear_lower_bound (`float`, *optional*, defaults to None):
+        Whether the forget gate has a lower bound to apply to the decay.
     index_head_dim (`int`, *optional*, defaults to 128):
         DSA indexer projection head dimension.
-    index_n_heads (`int`, *optional*, defaults to 32):
+    index_n_heads (`int`, *optional*, defaults to 16):
         Number of DSA indexer heads.
     index_topk (`int`, *optional*, defaults to 2048):
         Number of sparse-attention positions selected by the DSA indexer.
-    index_kpool (`int`, *optional*, defaults to 1):
-        DSA serving-cache key pooling factor. Values greater than 1 enable
-        checkpoint-compatible index-pool compression parameters.
-    index_kpool_compress (`bool`, *optional*, defaults to `False`):
-        Whether DSA index-pool compression parameters are present.
-    index_kpool_always_select_tail (`bool`, *optional*, defaults to `False`):
+    index_kpool (`int`, *optional*, defaults to 16):
+        TODO
+    index_kpool_always_select_tail (`bool`, *optional*, defaults to `True`):
         Whether the incomplete KPool tail is always included in sparse attention.
-    indexer_rope_interleave (`bool`, *optional*, defaults to `False`):
-        Whether DSA indexer RoPE uses interleaved pairs instead of NeoX half rotation.
-    index_dsa_use_layernorm (`bool`, *optional*):
-        Whether DSA indexer keys include `indexer.k_norm.*`. If this field is
-        absent, GLM5-Next keeps the legacy no-indexer path.
-    index_skip_topk_offset (`int`, *optional*, defaults to 1):
-        Offset used when deriving the default DSA indexer shared/full pattern.
-    index_topk_freq (`int`, *optional*, defaults to 1):
-        Frequency used when deriving the default DSA indexer shared/full pattern.
-    index_topk_pattern (`str` or `list[str]`, *optional*):
-        Explicit DSA indexer shared/full pattern.
     indexer_types (`list[str]`, *optional*):
         Per-layer DSA indexer mode. Values are `"full"` or `"shared"`.
     mlp_layer_types (`list[str]`, *optional*):
@@ -104,12 +90,12 @@ class Glm5NextConfig(PreTrainedConfig):
     }
 
     vocab_size: int = 154880
-    hidden_size: int = 4096
-    intermediate_size: int = 12288
+    hidden_size: int = 2048
+    intermediate_size: int = 6144
     num_hidden_layers: int = 45
-    num_attention_heads: int = 64
-    num_key_value_heads: int = 64
-    max_position_embeddings: int = 1104096
+    num_attention_heads: int = 32
+    num_key_value_heads: int = 32
+    max_position_embeddings: int = 1048676
     initializer_range: float = 0.02
     hidden_act = "silu"
     rms_norm_eps: float = 1e-5
@@ -118,36 +104,29 @@ class Glm5NextConfig(PreTrainedConfig):
     rope_parameters: RopeParameters | dict | None = None
     attention_bias: bool = False
     attention_dropout: float | int = 0.0
-    q_lora_rank: int | None = 1536
+    q_lora_rank: int = 1024
     kv_lora_rank: int = 512
-    qk_nope_head_dim: int = 256
-    qk_rope_head_dim: int = 0
+    qk_nope_head_dim: int = 192
+    qk_rope_head_dim: int = 64
     v_head_dim: int = 256
-    moe_intermediate_size: int = 2048
-    num_experts_per_tok: int = 8
+    moe_intermediate_size: int = 1024
+    num_experts_per_tok: int = 6
     n_shared_experts: int = 1
-    n_routed_experts: int = 288
+    n_routed_experts: int = 256
     routed_scaling_factor: float = 2.5
     n_group: int = 1
     topk_group: int = 1
     norm_topk_prob: bool = True
     swiglu_limit: float | None = None
-    linear_attn_config: dict | None = None
-    mhc: bool = False
-    hc_mult: int = 4
-    hc_eps: float = 1e-6
-    hc_sinkhorn_iters: int = 20
+    linear_head_dim: int = 64
+    linear_num_heads: int = 40
+    linear_conv_kernel_dim: int = 4
+    linear_lower_bound: float | None = None
     index_head_dim: int = 128
-    index_n_heads: int = 32
+    index_n_heads: int = 16
     index_topk: int | None = 2048
-    index_kpool: int = 1
-    index_kpool_compress: bool = False
-    index_kpool_always_select_tail: bool = False
-    indexer_rope_interleave: bool = False
-    index_dsa_use_layernorm: bool | None = None
-    index_skip_topk_offset: int | None = 1
-    index_topk_freq: int | None = 1
-    index_topk_pattern: str | list[str] | None = None
+    index_kpool: int = 16
+    index_kpool_always_select_tail: bool = True
     indexer_types: list[str] | None = None
     bos_token_id: int | None = None
     eos_token_id: int | list[int] | None = None
@@ -161,62 +140,56 @@ class Glm5NextConfig(PreTrainedConfig):
         if self.num_key_value_heads is None:
             self.num_key_value_heads = self.num_attention_heads
 
-        if self.rope_parameters is None:
-            self.rope_parameters = {
-                "rope_type": "default",
-                "rope_theta": 10000.0,
-                "partial_rotary_factor": 1.0,
-            }
-
         if self.mlp_layer_types is None:
             self.mlp_layer_types = ["dense"] * min(3, self.num_hidden_layers) + ["sparse"] * (
                 self.num_hidden_layers - 3
             )
 
-        if self.linear_attn_config is None:
-            kda_layers = [idx for idx in range(self.num_hidden_layers) if idx % 4 != 3]
-            full_attn_layers = [idx for idx in range(self.num_hidden_layers) if idx % 4 == 3]
-            self.linear_attn_config = {
-                "full_attn_layers": full_attn_layers,
-                "head_dim": 128,
-                "kda_layers": kda_layers,
-                "num_heads": 64,
-                "short_conv_kernel_size": 4,
-                "lower_bound": None,
-                "safe_gate": False,
-            }
-
         if self.layer_types is None:
-            kda_layers = set(self.linear_attn_config.get("kda_layers", []))
+            kda_layers = [idx for idx in range(self.num_hidden_layers) if idx % 4 != 3]
             self.layer_types = [
-                "linear_attention" if layer_idx in kda_layers else "full_attention"
+                "linear_attention" if layer_idx in kda_layers else "deepseek_sparse_attention"
                 for layer_idx in range(self.num_hidden_layers)
             ]
 
-        if self.indexer_types is None:
-            pattern = self.index_topk_pattern
-            freq = self.index_topk_freq
-            offset = self.index_skip_topk_offset
-            if isinstance(pattern, str):
-                self.indexer_types = [{"F": "full", "S": "shared"}[char] for char in pattern]
-            elif pattern is not None:
-                self.indexer_types = list(pattern)
-            else:
-                self.indexer_types = [
-                    "full" if (max(layer_idx - offset, 0) % freq) == 0 else "shared"
-                    for layer_idx in range(self.num_hidden_layers)
-                ]
-
-        super().__post_init__(**kwargs)
-
-        # TODO: Proper alias and checking/validating
-        self.head_dim = self.qk_rope_head_dim
-        self.qk_head_dim = self.qk_rope_head_dim + self.qk_nope_head_dim
-        # Remap for cache layer type matching
+        # Convert to dsa layer from full attention
         self.layer_types = [
             "deepseek_sparse_attention" if layer_type == "full_attention" else layer_type
             for layer_type in self.layer_types
         ]
+
+        # Per-layer indexer mode: a pattern (e.g. `"FSSF..."`) overrides the freq/offset schedule.
+        if self.indexer_types is None:
+            pattern = kwargs.get("index_topk_pattern")
+            if pattern is not None:
+                self.indexer_types = (
+                    [{"F": "full", "S": "shared"}[c] for c in pattern] if isinstance(pattern, str) else list(pattern)
+                )
+            else:
+                freq = max(kwargs.get("index_topk_freq", 1), 1)
+                offset = kwargs.get("index_skip_topk_offset", 2)
+                self.indexer_types = [
+                    "full" if (max(i - offset + 1, 0) % freq) == 0 else "shared" for i in range(self.num_hidden_layers)
+                ]
+
+        # Convert dict to attributes (if given)
+        linear_attn_dict = kwargs.pop("linear_attn_config", None)
+        if linear_attn_dict is not None:
+            self.linear_head_dim = linear_attn_dict.get("head_dim", self.linear_head_dim)
+            self.linear_num_heads = linear_attn_dict.get("num_heads", self.linear_num_heads)
+            self.linear_conv_kernel_dim = linear_attn_dict.get("short_conv_kernel_size", self.linear_conv_kernel_dim)
+            self.linear_lower_bound = linear_attn_dict.get("lower_bound", self.linear_lower_bound)
+
+        # TODO: maybe not even warn?
+        if (_head_dim := kwargs.pop("head_dim", None)) is not None:
+            logger.warning_once(
+                f"`head_dim` ({_head_dim}) was passed but we set it to `qk_rope_head_dim` to align with our RoPE standards."
+            )
+
+        self.head_dim = self.qk_rope_head_dim
+        self.qk_head_dim = self.qk_rope_head_dim + self.qk_nope_head_dim
+
+        super().__post_init__(**kwargs)
 
     def validate_architecture(self):
         """Part of `@strict`-powered validation. Validates the architecture of the config."""
@@ -228,16 +201,12 @@ class Glm5NextConfig(PreTrainedConfig):
 
         if self.index_kpool < 1:
             raise ValueError(f"index_kpool must be positive, got {self.index_kpool}.")
-        if self.index_kpool > 1 and self.index_kpool_compress:
-            if self.index_topk is None or self.index_topk <= 0:
-                raise ValueError("Active KPool requires index_topk to be a positive integer.")
-            if self.index_topk % self.index_kpool != 0:
-                raise ValueError(
-                    f"index_topk ({self.index_topk}) must be divisible by index_kpool ({self.index_kpool})."
-                )
+
+        if self.index_topk % self.index_kpool != 0:
+            raise ValueError(f"index_topk ({self.index_topk}) must be divisible by index_kpool ({self.index_kpool}).")
 
         if self.q_lora_rank is None:
-            raise ValueError("For DSA usage in hte attention layers, the `q_lora_rank` is strictly required!")
+            raise ValueError("For DSA usage in the attention layers, the `q_lora_rank` is strictly required!")
 
 
 __all__ = ["Glm5NextConfig"]
