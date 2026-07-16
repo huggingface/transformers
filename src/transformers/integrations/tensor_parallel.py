@@ -609,11 +609,14 @@ class _ReduceScatter(torch.autograd.Function):
 # =============================================================================
 
 import torch_neuronx
-device = torch.device("neuron")
-cc_stream = torch_neuronx.Stream(device)
+cc_stream = None
 
 def all_reduce_backward(x, device_mesh):
     """Identity forward, all-reduce backward. Use before colwise layers."""
+    global cc_stream
+    if cc_stream is None:
+        device = torch.device("neuron")
+        cc_stream = torch_neuronx.Stream(device)
     with torch_neuronx.stream(cc_stream):
         output = _AllReduceBackward.apply(x, device_mesh)
     torch_neuronx.synchronize()
@@ -621,30 +624,43 @@ def all_reduce_backward(x, device_mesh):
 
 def all_reduce_forward(x, device_mesh):
     """All-reduce forward, identity backward. Use after rowwise layers."""
+    global cc_stream
+    if cc_stream is None:
+        device = torch.device("neuron")
+        cc_stream = torch_neuronx.Stream(device)
     with torch_neuronx.stream(cc_stream):
         output = _AllReduceForward.apply(x, device_mesh)
     torch_neuronx.synchronize()
     return output
 
-
 def all_gather(x, device_mesh):
     """All-gather forward, split backward."""
+    global cc_stream
+    if cc_stream is None:
+        device = torch.device("neuron")
+        cc_stream = torch_neuronx.Stream(device)
     with torch_neuronx.stream(cc_stream):
         output = _AllGather.apply(x, device_mesh)
     torch_neuronx.synchronize()
     return output
 
-
 def split(x, device_mesh):
     """Split forward, all-gather backward."""
+    global cc_stream
+    if cc_stream is None:
+        device = torch.device("neuron")
+        cc_stream = torch_neuronx.Stream(device)
     with torch_neuronx.stream(cc_stream):
         output = _Split.apply(x, device_mesh)
     torch_neuronx.synchronize()
     return output
 
-
 def reduce_scatter(x, device_mesh):
     """Reduce-scatter forward, all-gather backward."""
+    global cc_stream
+    if cc_stream is None:
+        device = torch.device("neuron")
+        cc_stream = torch_neuronx.Stream(device)
     with torch_neuronx.stream(cc_stream):
         output = _ReduceScatter.apply(x, device_mesh)
     torch_neuronx.synchronize()
