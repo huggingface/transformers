@@ -23,6 +23,7 @@ from .core_model_loading import (
     Concatenate,
     ErnieFuseAndSplitTextVisionExperts,
     GroupWeightRename,
+    Interleave,
     MergeModulelist,
     PrefixChange,
     Transpose,
@@ -140,6 +141,83 @@ _MODEL_TO_CONVERSION_PATTERN = {
 
 def _build_checkpoint_conversion_mapping():
     mapping = {
+        "inkling_mm_model": [
+            WeightRenaming(source_patterns=r"model\.llm\.layers", target_patterns=r"model.language_model.layers"),
+            WeightRenaming(
+                source_patterns=r"model\.llm\.embed_norm\.weight",
+                target_patterns=r"model.language_model.embed_norm.weight",
+            ),
+            WeightRenaming(
+                source_patterns=r"model\.llm\.embed\.weight",
+                target_patterns=r"model.language_model.embed_tokens.weight",
+            ),
+            WeightRenaming(
+                source_patterns=r"model\.llm\.norm\.weight", target_patterns=r"model.language_model.norm.weight"
+            ),
+            WeightRenaming(source_patterns=r"model\.llm\.unembed\.weight", target_patterns=r"lm_head.weight"),
+            WeightRenaming(source_patterns=r"model\.audio\.", target_patterns=r"model.audio_tower."),
+            WeightRenaming(source_patterns=r"model\.visual", target_patterns=r"model.vision_tower"),
+            # Vision encoder internals (run after the tower namespace renames)
+            WeightRenaming(
+                source_patterns=r"vision_tower.layers.linear_(\d+)",
+                target_patterns=r"vision_tower.encoder_layers.\1.projection",
+            ),
+            WeightRenaming(
+                source_patterns=r"vision_tower.layers.norm_(\d+)",
+                target_patterns=r"vision_tower.encoder_layers.\1.layer_norm",
+            ),
+            # Audio tower internals. These run AFTER the generic `model.audio.` -> `model.audio_tower.`
+            # rename above and substring-match its output. The audio dMel embedding moved from
+            # `audio.encoder` to an `InklingAudioModelEmbeddings` submodule, and `final_norm` was
+            # renamed to `norm`.
+            WeightRenaming(
+                source_patterns=r"audio_tower.encoder.weight",
+                target_patterns=r"audio_tower.embed_audio_tokens.embed_audio_tokens.weight",
+            ),
+            WeightRenaming(
+                source_patterns=r"audio_tower.final_norm.weight", target_patterns=r"audio_tower.norm.weight"
+            ),
+            # MoE and MLP
+            # no Transpose ops here: the TP loader shards the raw tensor but validates the shard
+            # shape on the target param, so dim-permuting conversions break sharded loads cc @cyril
+            WeightConverter(
+                source_patterns="shared_w13_weight",
+                target_patterns=["gate_proj", "up_proj"],
+                operations=[Interleave(dim=1), Chunk(dim=1)],
+            ),
+            WeightRenaming(source_patterns=r"shared_w2_weight", target_patterns=r"down_proj"),
+            WeightConverter(
+                source_patterns="mlp.experts.w13_weight",
+                target_patterns=["mlp.experts.gate_up_proj"],
+                operations=[Interleave(dim=1)],
+            ),
+            WeightRenaming(source_patterns=r"mlp.experts.w2_weight", target_patterns=r"mlp.experts.down_proj"),
+            WeightConverter(
+                source_patterns="mlp.w13_dn.weight",
+                target_patterns=["mlp.gate_proj.weight", "mlp.up_proj.weight"],
+                operations=[Interleave(dim=0), Chunk(dim=0)],
+            ),
+            WeightRenaming(source_patterns=r"mlp.w2_md.weight", target_patterns=r"mlp.down_proj.weight"),
+            WeightRenaming(source_patterns=r"mlp.gate.bias", target_patterns=r"mlp.gate.e_score_correction_bias"),
+            # Attn
+            WeightRenaming(source_patterns=r"attn\.wq_du", target_patterns=r"self_attn.q_proj"),
+            WeightRenaming(source_patterns=r"attn\.wk_dv", target_patterns=r"self_attn.k_proj"),
+            WeightRenaming(source_patterns=r"attn\.wv_dv", target_patterns=r"self_attn.v_proj"),
+            WeightRenaming(source_patterns=r"attn\.wr_du", target_patterns=r"self_attn.r_proj"),
+            WeightRenaming(source_patterns=r"attn\.wo_ud", target_patterns=r"self_attn.o_proj"),
+            WeightRenaming(source_patterns=r"\.attn\.q_norm", target_patterns=r".self_attn.q_norm"),
+            WeightRenaming(source_patterns=r"\.attn\.k_norm", target_patterns=r".self_attn.k_norm"),
+            WeightRenaming(source_patterns=r"\.attn\.k_sconv", target_patterns=r".self_attn.k_sconv.conv1d"),
+            WeightRenaming(source_patterns=r"\.attn\.v_sconv", target_patterns=r".self_attn.v_sconv.conv1d"),
+            WeightRenaming(source_patterns=r"\.attn\.rel_logits_proj", target_patterns=r".self_attn.rel_logits_proj"),
+            WeightRenaming(source_patterns=r"attn_sconv\.weight$", target_patterns=r"attn_sconv.conv1d.weight"),
+            WeightRenaming(source_patterns=r"mlp_sconv\.weight$", target_patterns=r"mlp_sconv.conv1d.weight"),
+            WeightRenaming(source_patterns=r"mlp_norm", target_patterns=r"post_attention_layernorm"),
+            WeightRenaming(source_patterns=r"attn_norm", target_patterns=r"input_layernorm"),
+        ],
+        "GPTNeoXForCausalLM": [
+            WeightRenaming(source_patterns=r"^embed_out\.", target_patterns="lm_head."),
+        ],
         "gemma4_unified": [
             WeightRenaming(source_patterns=r"vision_embedder\.patch_ln1", target_patterns="embed_vision.patch_ln1"),
             WeightRenaming(
@@ -1714,6 +1792,24 @@ def _build_checkpoint_conversion_mapping():
     mapping["laguna"] += [
         WeightRenaming("mlp.experts.e_score_correction_bias", "mlp.gate.e_score_correction_bias"),
         WeightRenaming("mlp.shared_expert.", "mlp.shared_experts."),
+    ]
+
+    mapping["MtpModel"] = [
+        PrefixChange(prefix_to_remove="model"),
+        PrefixChange(prefix_to_remove="mtp"),
+        WeightRenaming(source_patterns=".shared_head.norm.", target_patterns=".post_norm."),
+        WeightRenaming(source_patterns=".mtp_block.enorm.", target_patterns=".enorm."),
+        WeightRenaming(source_patterns=".mtp_block.hnorm.", target_patterns=".hnorm."),
+        WeightRenaming(source_patterns=".mtp_block.eh_proj.", target_patterns=".eh_proj."),
+        WeightRenaming(source_patterns=".mtp_block.post_norm.", target_patterns=".post_norm."),
+        # Inkling checkpoint layout: per-depth extras sit at `layers.{k}.` while the decoder block
+        # is nested under `layers.{k}.transformer_block.`; the main-model conversions (applied after)
+        # rename the block internals
+        WeightRenaming(source_patterns=r"\.hidden_norm\.", target_patterns=r".hnorm."),
+        WeightRenaming(source_patterns=r"\.embed_norm\.", target_patterns=r".enorm."),
+        WeightRenaming(source_patterns=r"\.input_proj\.", target_patterns=r".eh_proj."),
+        WeightRenaming(source_patterns=r"^chain_norm\.", target_patterns=r"shared_post_norm."),
+        WeightRenaming(source_patterns=r"layers\.(\d+)\.transformer_block\.", target_patterns=r"layers.\1.mtp_block."),
     ]
 
     for model_type, base_pattern in _MODEL_TO_CONVERSION_PATTERN.items():
