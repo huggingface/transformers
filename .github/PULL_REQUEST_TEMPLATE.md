@@ -17,18 +17,18 @@ Fixes # (issue)
 ## Code Agent Policy
 
 The Transformers repo is currently being overwhelmed by a large number of PRs and issue comments written by
-code agents. We are currently bottlenecked by our ability to review and respond to them. As a result, 
-**we ask that new users do not submit pure code agent PRs** at this time. 
-You may use code agents in drafting or to help you diagnose issues. We'd also ask autonomous "OpenClaw"-like agents
-not to open any PRs or issues for the moment.
+code agents. These often are low-quality, or fix extremely minor issues that occur rarely or never in practice.
+As a result, we're instituting a rule that **first-time contributors should not use code agents to submit PRs or issues**.
+We'd also ask autonomous "OpenClaw"-like agents not to open any PRs or issues.
 
-PRs that appear to be fully agent-written will probably be closed without review, and we may block users who do this
-repeatedly or maliciously. 
+Issues/PRs from first-time contributors that violate this rule will probably just be closed without review, and we
+might block you, especially if you open more than one or appear to be deliberately ignoring this. We especially do not
+want new contributors to jump in on random issues to contribute an agent-written fix. This creates lots of noise
+for reviewers and other users and will almost certainly get you blocked.
 
-This is a rapidly-evolving situation that's causing significant shockwaves in the open-source community. As a result, 
-this policy is likely to be updated regularly in the near future. For more information, please read [`CONTRIBUTING.md`](https://github.com/huggingface/transformers/blob/main/CONTRIBUTING.md).
+For more information, please read [`CONTRIBUTING.md`](https://github.com/huggingface/transformers/blob/main/CONTRIBUTING.md).
 
-- [ ] I confirm that this is not a pure code agent PR.
+- [ ] (First-time contributors only): I confirm that this PR description and code is not written by an LLM or code agent
 
 ## Before submitting
 - [ ] This PR fixes a typo or improves the docs (you can dismiss the other checks if that's the case).

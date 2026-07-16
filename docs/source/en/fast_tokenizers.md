@@ -1,17 +1,16 @@
 <!--Copyright 2026 The HuggingFace Team. All rights reserved.
-
-Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance 
+with
 the License. You may obtain a copy of the License at
-
 http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on
-an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
+Unless required by applicable law or agreed to in writing, software distributed under the License is 
+distributed on
+an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for 
+the
 specific language governing permissions and limitations under the License.
-
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that 
+may not be
 rendered properly in your Markdown viewer.
-
 -->
 
 # Tokenizers
@@ -107,7 +106,7 @@ tokenizer.decode(outputs["input_ids"])
 ```py
 tokenizer.decode(outputs["input_ids"], skip_special_tokens=True)
 ['Sphinx of black quartz, judge my vow.']
-``` 
+```
 
 ## Special tokens
 
@@ -224,12 +223,13 @@ tokenizer(
 
 Each model tokenizer is defined in a single file and supports four tokenization backends.
 
-| backend | implementation | description |
-|---|---|---|
-| [`TokenizersBackend`] | [Tokenizers](https://huggingface.co/docs/tokenizers) | default for most models |
-| [`SentencePieceBackend`] | [SentencePiece](https://github.com/google/sentencepiece) | models requiring SentencePiece |
-| [`PythonBackend`] | Python | models requiring specialized custom tokenizers |
-| [`MistralCommonBackend`] | [mistral-common](https://mistralai.github.io/mistral-common/) | Mistral and Pixtral models |
+
+| backend                  | implementation                                                | description                                    |
+| ------------------------ | ------------------------------------------------------------- | ---------------------------------------------- |
+| [`TokenizersBackend`]    | [Tokenizers](https://huggingface.co/docs/tokenizers)          | default for most models                        |
+| [`SentencePieceBackend`] | [SentencePiece](https://github.com/google/sentencepiece)      | models requiring SentencePiece                 |
+| [`PythonBackend`]        | Python                                                        | models requiring specialized custom tokenizers |
+| [`MistralCommonBackend`] | [mistral-common](https://mistralai.github.io/mistral-common/) | Mistral and Pixtral models                     |
 
 All backends inherit from [`PreTrainedTokenizerBase`] and share the same APIs for encoding, decoding, padding, truncation, saving, and loading. The difference is which tokenization pipeline runs underneath.
 
@@ -237,25 +237,25 @@ All backends inherit from [`PreTrainedTokenizerBase`] and share the same APIs fo
 
 1. It reads the `tokenizer_config.json` file for the `tokenizer_class` field.
 2. The registry matches `tokenizer_class` to a class name. The resolved class inherits from one of the four backends. For example, [`GemmaTokenizer`] inherits from [`TokenizersBackend`], and [`SiglipTokenizer`] inherits from [`SentencePieceBackend`].
-
-    Some models, like GLM, map directly to [`TokenizersBackend`] because the `tokenizer.json` file fully describes the pipeline. [`GemmaTokenizer`] exists as a subclass since it defines additional model-specific settings in Python that `tokenizer.json` doesn't capture.
-
-    ```py
-    TOKENIZER_MAPPING_NAMES = OrderedDict([
-        ("gemma2", "GemmaTokenizer" if is_tokenizers_available() else None),
-        ("glm", "TokenizersBackend" if is_tokenizers_available() else None),
-        (
-            "mistral",
-            "MistralCommonBackend"
-            if is_mistral_common_available()
-            else ("TokenizersBackend" if is_tokenizers_available() else None),
-        ),
-        ("siglip", "SiglipTokenizer" if is_sentencepiece_available() else None),
-        ...
-    ]
-    ```
-    
+  Some models, like GLM, map directly to [`TokenizersBackend`] because the `tokenizer.json` file fully describes the pipeline. [`GemmaTokenizer`] exists as a subclass since it defines additional model-specific settings in Python that `tokenizer.json` doesn't capture.
     When a backend like mistral-common isn't installed, [`AutoTokenizer`] falls back to [`TokenizersBackend`].
+
+### Fallback to TokenizersBackend
+
+Some models do not a dedicated tokenizer class, and some checkpoints have a `tokenizer_class` that doesn't match their actual `tokenizer.json` file. [`AutoTokenizer`] handles both cases by loading the pipeline from `tokenizer.json` through the generic [`TokenizersBackend`]. It prioritizes the serialized tokenizer over the class name from the Hub, which fixes issues like when a mismatched `tokenizer_class` produces incorrect token ids.
+
+A checkpoint resolves to a generic `TokenizersBackend` for one of three reasons.
+
+
+| Reason                              | Behavior                                                                                                                                 | Examples                                                                       |
+| ----------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
+| No dedicated tokenizer class        | The model type maps straight to `TokenizersBackend` because `tokenizer.json` fully describes the pipeline.                               | GLM, Granite, OLMo 2, GPT BigCode                                              |
+| Known-incorrect Hub tokenizer class | The `tokenizer_class` recorded on the Hub is wrong for the model type, so `AutoTokenizer` ignores it and loads `tokenizer.json` instead. | DeepSeek V3, LLaVA, Qwen2, ModernBERT                                          |
+| Specific checkpoint override        | A checkpoint whose Hub config still needs a fix is matched by its model id and forced to the backend.                                    | `deepseek-ai/DeepSeek-R1-Distill-*`, `Salesforce/blip2-*`, `google/umt5-small` |
+
+The affected model types and checkpoints grow as configs are corrected on the Hub. For the current set, see the `MODELS_WITH_INCORRECT_HUB_TOKENIZER_CLASS` and `MODEL_IDS_TO_TOKENIZERS_BACKEND` definitions in [tokenization_auto.py](https://github.com/huggingface/transformers/blob/main/src/transformers/models/auto/tokenization_auto.py).
+
+The fallback is automatic and doesn't change how you call [`~AutoTokenizer.from_pretrained`]. The resulting tokenizer encodes and decodes exactly as `tokenizer.json` specifies. To override the choice, pass `backend="tokenizers"` or `backend="sentencepiece"`.
 
 Check which backend a tokenizer is using with the `backend` property.
 
