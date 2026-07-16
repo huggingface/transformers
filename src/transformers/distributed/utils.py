@@ -106,8 +106,8 @@ def initialize_fully_sharded_data_parallelism(distributed_config: DistributedCon
     if not is_torch_greater_or_equal("2.5"):
         raise OSError("Distributed training with DistributedConfig requires `torch>=2.5`.")
 
-    if distributed_config.fsdp_size > 1 and not is_torch_greater_or_equal("2.7"):
-        raise OSError("FSDP2 requires `torch>=2.7`.")
+    if distributed_config.fsdp_size > 1 and not is_torch_greater_or_equal("2.6"):
+        raise OSError("FSDP2 requires `torch>=2.6`.")
 
     device_type = torch._C._get_accelerator().type
     _ensure_torch_distributed(device_type)
