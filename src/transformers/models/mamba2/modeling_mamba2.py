@@ -817,10 +817,6 @@ class Mamba2Model(Mamba2PreTrainedModel):
         if use_cache and cache_params is None:
             cache_params = DynamicCache(config=self.config)
 
-        # Size the 2D padding mask to the current forward's tokens (and drop it when it carries no
-        # signal): a cached continuation resends the full-history mask, whose extra columns would
-        # otherwise be multiplied against the local hidden states. Padding inside the new segment
-        # still gets zeroed out of the recurrent state, on the first forward and on continued ones.
         attention_mask = create_recurrent_attention_mask(
             config=self.config,
             inputs_embeds=inputs_embeds,

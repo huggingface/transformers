@@ -112,6 +112,17 @@ class MiniMaxCache(DynamicCache):
         raise RuntimeError("MiniMaxCache doesnot support `crop` method")
 
 
+def apply_mask_to_padding_states(value_states, attention_mask):
+    """
+    Tunes out the value states for padding tokens, see https://github.com/state-spaces/mamba/issues/66
+    """
+    if attention_mask is not None:
+        attention_mask = attention_mask.to(dtype=torch.bool)  # Ensure it's a boolean tensor
+        value_states = value_states.masked_fill(~attention_mask.unsqueeze(1).unsqueeze(-1), 0)
+
+    return value_states
+
+
 class MiniMaxLightningAttention(nn.Module):
     def __init__(self, config: MiniMaxConfig, layer_idx: int):
         super().__init__()
@@ -192,10 +203,7 @@ class MiniMaxLightningAttention(nn.Module):
                 value_states
             )
 
-            # apply attention_mask
-            if attention_mask is not None:
-                attention_mask = attention_mask.to(dtype=torch.bool)  # Ensure it's a boolean tensor
-                value_states = value_states.masked_fill(~attention_mask.unsqueeze(1).unsqueeze(-1), 0)
+            value_states = apply_mask_to_padding_states(value_states, attention_mask)
 
             attn_output = []
             for i in range(num_blocks):
@@ -230,13 +238,7 @@ class MiniMaxLightningAttention(nn.Module):
                 attn_weights_inter = attn_weights_inter * block_decay + next_attn_weights_inter
 
         else:
-            # apply attention_mask on continued forwards too: an unmasked padding position would
-            # accumulate its K^T V into the linear cache. Zeroing the value rows keeps its
-            # contribution out while the decay still ticks per position, matching the first-forward
-            # block path above (which also masks values only).
-            if attention_mask is not None:
-                attention_mask = attention_mask.to(dtype=torch.bool)  # Ensure it's a boolean tensor
-                value_states = value_states.masked_fill(~attention_mask.unsqueeze(1).unsqueeze(-1), 0)
+            value_states = apply_mask_to_padding_states(value_states, attention_mask)
 
             ratio = torch.exp(-self.slope_rate)
             attn_output = []
@@ -677,38 +679,29 @@ class MiniMaxModel(MiniMaxPreTrainedModel):
             position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
             position_ids = position_ids.unsqueeze(0)
 
-        mask_function = create_causal_mask if self.config.sliding_window is None else create_sliding_window_causal_mask
-        causal_mask = mask_function(
-            config=self.config,
-            inputs_embeds=inputs_embeds,
-            attention_mask=attention_mask,
-            past_key_values=past_key_values,
-            position_ids=position_ids,
-        )
+        if not isinstance(causal_mask_mapping := attention_mask, dict):
+            mask_function = (
+                create_causal_mask if self.config.sliding_window is None else create_sliding_window_causal_mask
+            )
+            mask_kwargs = {
+                "config": self.config,
+                "inputs_embeds": inputs_embeds,
+                "attention_mask": attention_mask,
+                "past_key_values": past_key_values,
+                "position_ids": position_ids,
+            }
+            causal_mask_mapping = {
+                "full_attention": mask_function(**mask_kwargs),
+                "linear_attention": create_recurrent_attention_mask(**mask_kwargs),
+            }
 
         hidden_states = inputs_embeds
         position_embeddings = self.rotary_emb(hidden_states, position_ids)
 
-        # Lightning-attention layers consume the 2D padding mask sized to the current forward's
-        # tokens: a cached continuation resends the full-history mask, whose extra columns would not
-        # broadcast against the local value states. Padding inside a continued segment still gets
-        # zeroed out of the linear cache this way.
-        lightning_mask = create_recurrent_attention_mask(
-            config=self.config,
-            inputs_embeds=inputs_embeds,
-            attention_mask=attention_mask,
-            past_key_values=past_key_values,
-        )
-
         for i, decoder_layer in enumerate(self.layers):
-            if self.config.layer_types[i] == "full_attention":
-                input_attention_mask = causal_mask
-            else:
-                input_attention_mask = lightning_mask
-
             hidden_states = decoder_layer(
                 hidden_states,
-                attention_mask=input_attention_mask,
+                attention_mask=causal_mask_mapping[self.config.layer_types[i]],
                 position_embeddings=position_embeddings,
                 position_ids=position_ids,
                 past_key_values=past_key_values,
@@ -907,6 +900,24 @@ class MiniMaxForCausalLM(MiniMaxPreTrainedModel, GenerationMixin):
             attentions=outputs.attentions,
             router_logits=outputs.router_logits,
         )
+
+    @staticmethod
+    def create_masks_for_generate(config, inputs_embeds, attention_mask, past_key_values, position_ids=None, **_):
+        # MiniMax interleaves full-attention and lightning (linear) attention layers; return both
+        # masks the layers need as a dict, keyed like `config.layer_types`.
+        text_config = config.get_text_config()
+        mask_function = create_causal_mask if text_config.sliding_window is None else create_sliding_window_causal_mask
+        mask_kwargs = {
+            "config": text_config,
+            "inputs_embeds": inputs_embeds,
+            "attention_mask": attention_mask,
+            "past_key_values": past_key_values,
+            "position_ids": position_ids,
+        }
+        return {
+            "full_attention": mask_function(**mask_kwargs),
+            "linear_attention": create_recurrent_attention_mask(**mask_kwargs),
+        }
 
 
 class MiniMaxForSequenceClassification(GenericForSequenceClassification, MiniMaxPreTrainedModel):
