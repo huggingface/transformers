@@ -40,7 +40,7 @@ The example below demonstrates how to generate text based on an image with [`Pip
 from transformers import pipeline
 
 model_id = "thinkingmachines/Inkling-NVFP4"
-pipe = pipeline("any-to-any", model=model_id)
+pipe = pipeline("image-text-to-text", model=model_id)
 
 image_url = (
     "https://huggingface.co/datasets/merve/vl-test-suite/"
@@ -197,6 +197,36 @@ outputs = model.generate(**inputs, max_new_tokens=512)
 response = processor.decode(outputs[0][input_len:], skip_special_tokens=False)
 
 processor.parse_response(response)
+```
+
+- Serving with `transformers serve`:
+
+```shell
+transformers serve thinkingmachines/Inkling-NVFP4
+```
+
+```py
+from openai import OpenAI
+
+client = OpenAI(base_url="http://localhost:8000/v1", api_key="<random_string>")
+completion = client.chat.completions.create(
+    model="thinkingmachines/Inkling-NVFP4",
+    messages=[
+        {
+            "role": "user",
+            "content": [
+                {"type": "text", "text": "What is in this image?"},
+                {
+                    "type": "image_url",
+                    "image_url": {
+                        "url": "https://huggingface.co/datasets/merve/vl-test-suite/resolve/main/pills.jpg"
+                    },
+                },
+            ],
+        }
+    ],
+)
+print(completion.choices[0].message.content)
 ```
 
 ## InklingAudioConfig
