@@ -688,7 +688,7 @@ def flex_attention_mask(
             An optional device to create the mask on.
     """
     # Potentially add the padding 2D mask
-    if attention_mask is not None:
+    if attention_mask is not None and not fast_all(attention_mask):
         # Older torch (2.5.x) cannot handle sequences not in multiples of 128 (default block size)
         # Hence we pad to multiples of this as a minimum to ensure this
         pad_len = ((attention_mask.shape[1] // flex_default_block_size) + 1) * flex_default_block_size
@@ -833,7 +833,7 @@ def _preprocess_mask_arguments(
     q_length = inputs_embeds.shape[1]
     # If using a cache, it can give all information about mask sizes based on seen tokens
     if past_key_values is not None:
-        q_offset = past_key_values.get_seq_length()
+        q_offset = past_key_values.get_query_offset(layer_idx)
         # To avoid graph breaks, StaticLayer returns a tensor instead of an int -> this has no impact on the ops, but
         # we need the correct device
         q_offset = q_offset.to(inputs_embeds.device) if isinstance(q_offset, torch.Tensor) else q_offset
@@ -877,6 +877,7 @@ def create_causal_mask(
     or_mask_function: Callable | None = None,
     and_mask_function: Callable | None = None,
     block_sequence_ids: torch.Tensor | None = None,
+    layer_idx: int | None = None,
 ) -> torch.Tensor | BlockMask | None:
     """
     Create a standard causal mask based on the attention implementation used (stored in the config). If `past_key_values`
@@ -908,6 +909,10 @@ def create_causal_mask(
             A tensor of same shape as input IDs indicating to which block or group each token belongs to. Tokens from
             the same block will keep a bidirectional mask within the block, attending causally to the past. Index `-1`
             can be used for blocks that have to keep complete causality within itself.
+        layer_idx (`int`, *optional*):
+            The cache layer to size the mask against. By default, the first "full_attention" layer is used, which is
+            correct whenever all layers of a given mask type have seen the same tokens. Pass it explicitly for caches
+            where layers of the same type hold different lengths (e.g. per-depth MTP streams).
     """
     # Power feature: if `is_causal` is False, then fallback to bi-directional mask for bi-directional attention.
     # It allows to use decoder-only models with bi-directional attention as well
@@ -922,10 +927,11 @@ def create_causal_mask(
         )
 
     # If we have an hybrid cache structure, here we want to create the mask for the full layers
-    if hasattr(past_key_values, "is_sliding") and False in past_key_values.is_sliding:
-        layer_idx = past_key_values.is_sliding.index(False)
-    else:
-        layer_idx = 0
+    if layer_idx is None:
+        if hasattr(past_key_values, "is_sliding") and False in past_key_values.is_sliding:
+            layer_idx = past_key_values.is_sliding.index(False)
+        else:
+            layer_idx = 0
 
     early_exit, attention_mask, packed_sequence_mask, q_length, kv_length, q_offset, kv_offset = (
         _preprocess_mask_arguments(config, inputs_embeds, attention_mask, past_key_values, position_ids, layer_idx)
@@ -1098,6 +1104,7 @@ def create_sliding_window_causal_mask(
     or_mask_function: Callable | None = None,
     and_mask_function: Callable | None = None,
     block_sequence_ids: torch.Tensor | None = None,
+    layer_idx: int | None = None,
 ) -> torch.Tensor | BlockMask | None:
     """
     Create a sliding window causal mask based on the attention implementation used (stored in the config). This type
@@ -1130,6 +1137,10 @@ def create_sliding_window_causal_mask(
             A tensor of same shape as input IDs indicating to which block or group each token belongs to. Tokens from
             the same block will keep a bidirectional mask within the block, attending causally to the past. Index `-1`
             can be used for blocks that have to keep complete causality within itself.
+        layer_idx (`int`, *optional*):
+            The cache layer to size the mask against. By default, the first "full_attention" layer is used, which is
+            correct whenever all layers of a given mask type have seen the same tokens. Pass it explicitly for caches
+            where layers of the same type hold different lengths (e.g. per-depth MTP streams).
     """
     # Power feature: if `is_causal` is False, then fallback to bi-directional mask for bi-directional attention
     # It allows to use decoder-only models with bi-directional attention as well
@@ -1144,10 +1155,11 @@ def create_sliding_window_causal_mask(
         )
 
     # If we have an hybrid cache structure, here we want to create the mask for the sliding layers
-    if hasattr(past_key_values, "is_sliding") and True in past_key_values.is_sliding:
-        layer_idx = past_key_values.is_sliding.index(True)
-    else:
-        layer_idx = 0
+    if layer_idx is None:
+        if hasattr(past_key_values, "is_sliding") and True in past_key_values.is_sliding:
+            layer_idx = past_key_values.is_sliding.index(True)
+        else:
+            layer_idx = 0
 
     early_exit, attention_mask, packed_sequence_mask, q_length, kv_length, q_offset, kv_offset = (
         _preprocess_mask_arguments(config, inputs_embeds, attention_mask, past_key_values, position_ids, layer_idx)
@@ -1315,6 +1327,7 @@ def create_chunked_causal_mask(
     position_ids: torch.Tensor | None = None,
     or_mask_function: Callable | None = None,
     and_mask_function: Callable | None = None,
+    layer_idx: int | None = None,
 ) -> torch.Tensor | BlockMask | None:
     """
     Create a chunked attention causal mask based on the attention implementation used (stored in the config). This type
@@ -1343,12 +1356,17 @@ def create_chunked_causal_mask(
         and_mask_function (`Callable`, optional):
             An optional mask function to combine with the chunked causal mask function (by doing the intersection of both). This is
             useful to easily overlay another mask on top of the chunked causal one, for example for image tokens handling.
+        layer_idx (`int`, *optional*):
+            The cache layer to size the mask against. By default, the first "full_attention" layer is used, which is
+            correct whenever all layers of a given mask type have seen the same tokens. Pass it explicitly for caches
+            where layers of the same type hold different lengths (e.g. per-depth MTP streams).
     """
-    # If we have an hybrid cache structure, here we want to create the mask for the sliding layers
-    if hasattr(past_key_values, "is_sliding") and True in past_key_values.is_sliding:
-        layer_idx = past_key_values.is_sliding.index(True)
-    else:
-        layer_idx = 0
+    if layer_idx is None:
+        # If we have an hybrid cache structure, here we want to create the mask for the sliding layers
+        if hasattr(past_key_values, "is_sliding") and True in past_key_values.is_sliding:
+            layer_idx = past_key_values.is_sliding.index(True)
+        else:
+            layer_idx = 0
 
     early_exit, attention_mask, packed_sequence_mask, q_length, kv_length, q_offset, kv_offset = (
         _preprocess_mask_arguments(config, inputs_embeds, attention_mask, past_key_values, position_ids, layer_idx)
@@ -1465,6 +1483,8 @@ LAYER_PATTERN_TO_MASK_FUNCTION_MAPPING = {
     "deepseek_sparse_attention": create_causal_mask,
     "linear_attention": create_recurrent_attention_mask,
     "conv": create_recurrent_attention_mask,
+    "hybrid": {"full_attention": create_causal_mask, "linear_attention": create_recurrent_attention_mask},
+    "hybrid_sliding": {"sliding_attention": create_causal_mask, "linear_attention": create_recurrent_attention_mask},
 }
 
 
@@ -1529,7 +1549,15 @@ def create_masks_for_generate(
             return attention_mask
         causal_masks = {}
         for layer_pattern in layer_patterns:
-            causal_masks[layer_pattern] = LAYER_PATTERN_TO_MASK_FUNCTION_MAPPING[layer_pattern](**mask_kwargs)
+            mask_function = LAYER_PATTERN_TO_MASK_FUNCTION_MAPPING[layer_pattern]
+            # Some layer_pattern may point to several needed mask, e.g. `hybrid`
+            if isinstance(mask_function, dict):
+                for actual_pattern, actual_function in mask_function.items():
+                    # It may already be present depending on the layer_types configuration
+                    if actual_pattern not in causal_masks:
+                        causal_masks[actual_pattern] = actual_function(**mask_kwargs)
+            else:
+                causal_masks[layer_pattern] = mask_function(**mask_kwargs)
         return causal_masks
     # In this case, all layers are sliding
     elif getattr(effective_config, "sliding_window", None) is not None:
