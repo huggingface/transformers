@@ -64,7 +64,6 @@ from transformers import AutoModelForSpeechSeq2Seq, AutoProcessor
 
 model_id = "FunAudioLLM/Fun-ASR-Nano-2512-hf"
 processor = AutoProcessor.from_pretrained(model_id)
-processor.tokenizer.padding_side = "left"
 model = AutoModelForSpeechSeq2Seq.from_pretrained(model_id, dtype=torch.bfloat16, device_map="auto")
 
 audio_urls = [
@@ -79,12 +78,41 @@ generated_ids = generated_ids[:, inputs.input_ids.shape[1]:]
 print(processor.decode(generated_ids, skip_special_tokens=True))
 ```
 
+### Custom prompts and hotwords
+
+Passing `prompt` replaces the processor's default `"Transcribe the audio:"` prompt, so include the complete
+transcription instruction together with any hotwords.
+
+```python
+import torch
+from transformers import AutoModelForSpeechSeq2Seq, AutoProcessor
+
+model_id = "FunAudioLLM/Fun-ASR-Nano-2512-hf"
+processor = AutoProcessor.from_pretrained(model_id)
+model = AutoModelForSpeechSeq2Seq.from_pretrained(model_id, dtype=torch.bfloat16, device_map="auto")
+
+audio_url = "https://huggingface.co/FunAudioLLM/Fun-ASR-Nano-2512/resolve/main/example/zh.mp3"
+hotword_prompt = (
+    "请结合上下文信息，更加准确地完成语音转写任务。如果没有相关信息，我们会留空。\n\n\n"
+    "**上下文信息：**\n\n\n"
+    "热词列表：[开放时间]\n"
+    "语音转写成中文："
+)
+inputs = processor.apply_transcription_request(
+    audio=audio_url,
+    prompt=hotword_prompt,
+    return_tensors="pt",
+).to(model.device)
+
+generated_ids = model.generate(**inputs, max_new_tokens=200)
+generated_ids = generated_ids[:, inputs.input_ids.shape[1]:]
+print(processor.decode(generated_ids, skip_special_tokens=True)[0])
+```
+
 ### Training
 
 ```python
 import torch
-import librosa
-from huggingface_hub import hf_hub_download
 from transformers import AutoModelForSpeechSeq2Seq, AutoProcessor
 
 model_id = "FunAudioLLM/Fun-ASR-Nano-2512-hf"
@@ -92,19 +120,32 @@ processor = AutoProcessor.from_pretrained(model_id)
 model = AutoModelForSpeechSeq2Seq.from_pretrained(model_id, dtype=torch.bfloat16, device_map="auto")
 model.train()
 
-audio_path = hf_hub_download("FunAudioLLM/Fun-ASR-Nano-2512", "example/en.mp3")
-audio, _ = librosa.load(audio_path, sr=16000)
+audio_url = "https://huggingface.co/FunAudioLLM/Fun-ASR-Nano-2512/resolve/main/example/en.mp3"
 conversation = [
-    {"role": "user", "content": [{"type": "text", "text": "Transcribe the audio:"}, {"type": "audio"}]},
+    {
+        "role": "user",
+        "content": [
+            {"type": "text", "text": "Transcribe the audio:"},
+            {"type": "audio", "path": audio_url},
+        ],
+    },
     {
         "role": "assistant",
-        "content": "The tribal chieftain called for the boy, and presented him with fifty pieces of gold.",
+        "content": [
+            {
+                "type": "text",
+                "text": "The tribal chieftain called for the boy, and presented him with fifty pieces of gold.",
+            }
+        ],
     },
 ]
-text = processor.apply_chat_template(conversation, tokenize=False)
-inputs = processor(text=text, audio=audio, sampling_rate=16000, return_tensors="pt").to(model.device)
-# Build labels from the input ids (mask out the prompt positions with -100 in your data pipeline).
-inputs["labels"] = inputs["input_ids"].clone()
+inputs = processor.apply_chat_template(
+    conversation,
+    tokenize=True,
+    add_generation_prompt=True,
+    return_dict=True,
+    processor_kwargs={"output_labels": True},
+).to(model.device)
 
 loss = model(**inputs).loss
 loss.backward()
@@ -114,17 +155,22 @@ loss.backward()
 
 ```python
 import torch
-from transformers import AutoModelForSpeechSeq2Seq, AutoProcessor
+from transformers import AutoModelForSpeechSeq2Seq, AutoProcessor, CompileConfig
 
 model_id = "FunAudioLLM/Fun-ASR-Nano-2512-hf"
 processor = AutoProcessor.from_pretrained(model_id)
 model = AutoModelForSpeechSeq2Seq.from_pretrained(model_id, dtype=torch.bfloat16, device_map="auto")
-model.forward = torch.compile(model.forward)
 
 audio_url = "https://huggingface.co/FunAudioLLM/Fun-ASR-Nano-2512/resolve/main/example/en.mp3"
 inputs = processor.apply_transcription_request(audio=audio_url, return_tensors="pt").to(model.device)
 
-generated_ids = model.generate(**inputs, max_new_tokens=200)
+with torch.inference_mode():
+    generated_ids = model.generate(
+        **inputs,
+        max_new_tokens=200,
+        cache_implementation="static",
+        compile_config=CompileConfig(),
+    )
 generated_ids = generated_ids[:, inputs.input_ids.shape[1]:]
 print(processor.decode(generated_ids, skip_special_tokens=True)[0])
 ```

@@ -18,20 +18,17 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from collections.abc import Callable
 from dataclasses import dataclass
 
-import numpy as np
 import torch.nn as nn
-import torch.nn.functional as F
 
 from ... import initialization as init
+from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...generation import GenerationMixin
-from ...integrations import use_kernel_func_from_hub
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPast, BaseModelOutputWithPooling, ModelOutput
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, is_torch_available, torch_compilable_check
 from ..auto import AutoModel
@@ -51,610 +48,10 @@ if is_torch_available():
 class FunAsrNanoModelOutputWithPast(BaseModelOutputWithPast):
     r"""
     audio_hidden_states (`torch.FloatTensor`, *optional*):
-        Projected audio embeddings produced by the audio encoder and adaptor.
+        Projected audio hidden states.
     """
 
     audio_hidden_states: torch.FloatTensor | None = None
-
-
-class SinusoidsPositionEmbedding(nn.Module):
-    def __init__(self, length, channels, max_timescale=10000):
-        super().__init__()
-        self.length = length
-        self.channels = channels
-        self.max_timescale = max_timescale
-        if channels % 2 != 0:
-            raise ValueError("SinusoidsPositionEmbedding needs even channels input")
-        position_embedding = self.compute_default_singular_positional_embedding()
-        self.register_buffer("positional_embedding", position_embedding, persistent=False)
-
-    def compute_default_singular_positional_embedding(self):
-        log_timescale_increment = np.log(self.max_timescale) / (self.channels // 2 - 1)
-        inv_timescales = torch.exp(-log_timescale_increment * torch.arange(self.channels // 2).float())
-        scaled_time = torch.arange(self.length)[:, np.newaxis] * inv_timescales[np.newaxis, :]
-        return torch.cat([torch.sin(scaled_time), torch.cos(scaled_time)], dim=1)
-
-    def forward(self, seqlen: int):
-        return self.positional_embedding[:seqlen, :]
-
-
-class FunAsrNanoSinusoidalPositionEncoder(nn.Module):
-    """Fun-ASR-Nano sinusoidal positional encoding.
-
-    The shared helper starts at position 0, while the original FunASR encoder starts at position 1.
-    """
-
-    def __init__(self, channels: int, length: int = 2049, max_timescale: int = 10000):
-        super().__init__()
-        self.length = length
-        self.channels = channels
-        self.max_timescale = max_timescale
-        if channels % 2 != 0:
-            raise ValueError("FunAsrNanoSinusoidalPositionEncoder needs even channels input")
-        position_embedding = self.compute_default_singular_positional_embedding()
-        self.register_buffer("positional_embedding", position_embedding, persistent=False)
-
-    def compute_default_singular_positional_embedding(self):
-        log_timescale_increment = np.log(self.max_timescale) / (self.channels // 2 - 1)
-        inv_timescales = torch.exp(-log_timescale_increment * torch.arange(self.channels // 2).float())
-        scaled_time = torch.arange(self.length)[:, np.newaxis] * inv_timescales[np.newaxis, :]
-        return torch.cat([torch.sin(scaled_time), torch.cos(scaled_time)], dim=1)
-
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        _, timesteps, input_dim = x.size()
-        if input_dim != self.channels:
-            raise ValueError(f"Expected input dimension {self.channels}, but received {input_dim}.")
-        if timesteps + 1 > self.length:
-            self._resize(timesteps + 1)
-
-        encoding = self.positional_embedding[: timesteps + 1][1:].to(device=x.device, dtype=x.dtype)
-        return x + encoding.unsqueeze(0)
-
-    def _resize(self, length: int):
-        expanded = SinusoidsPositionEmbedding(length, self.channels, self.max_timescale)
-        self.length = length
-        self.register_buffer(
-            "positional_embedding",
-            expanded.positional_embedding.to(
-                device=self.positional_embedding.device, dtype=self.positional_embedding.dtype
-            ),
-            persistent=False,
-        )
-
-
-def rotate_half(x):
-    """Rotates half the hidden dims of the input."""
-    x1 = x[..., : x.shape[-1] // 2]
-    x2 = x[..., x.shape[-1] // 2 :]
-    return torch.cat((-x2, x1), dim=-1)
-
-
-@use_kernel_func_from_hub("rotary_pos_emb")
-def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
-    """Applies Rotary Position Embedding to the query and key tensors.
-
-    Args:
-        q (`torch.Tensor`): The query tensor.
-        k (`torch.Tensor`): The key tensor.
-        cos (`torch.Tensor`): The cosine part of the rotary embedding.
-        sin (`torch.Tensor`): The sine part of the rotary embedding.
-        unsqueeze_dim (`int`, *optional*, defaults to 1):
-            The 'unsqueeze_dim' argument specifies the dimension along which to unsqueeze cos[position_ids] and
-            sin[position_ids] so that they can be properly broadcasted to the dimensions of q and k. For example, note
-            that cos[position_ids] and sin[position_ids] have the shape [batch_size, seq_len, head_dim]. Then, if q and
-            k have the shape [batch_size, heads, seq_len, head_dim], then setting unsqueeze_dim=1 makes
-            cos[position_ids] and sin[position_ids] broadcastable to the shapes of q and k. Similarly, if q and k have
-            the shape [batch_size, seq_len, heads, head_dim], then set unsqueeze_dim=2.
-    Returns:
-        `tuple(torch.Tensor)` comprising of the query and key tensors rotated using the Rotary Position Embedding.
-    """
-    cos = cos.unsqueeze(unsqueeze_dim)
-    sin = sin.unsqueeze(unsqueeze_dim)
-    q_embed = (q * cos) + (rotate_half(q) * sin)
-    k_embed = (k * cos) + (rotate_half(k) * sin)
-    return q_embed, k_embed
-
-
-def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
-    """
-    This is the equivalent of torch.repeat_interleave(x, dim=1, repeats=n_rep). The hidden states go from (batch,
-    num_key_value_heads, seqlen, head_dim) to (batch, num_attention_heads, seqlen, head_dim)
-    """
-    batch, num_key_value_heads, slen, head_dim = hidden_states.shape
-    if n_rep == 1:
-        return hidden_states
-    hidden_states = hidden_states[:, :, None, :, :].expand(batch, num_key_value_heads, n_rep, slen, head_dim)
-    return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
-
-
-def eager_attention_forward(
-    module: nn.Module,
-    query: torch.Tensor,
-    key: torch.Tensor,
-    value: torch.Tensor,
-    attention_mask: torch.Tensor | None,
-    scaling: float,
-    dropout: float = 0.0,
-    **kwargs: Unpack[TransformersKwargs],
-):
-    key_states = repeat_kv(key, module.num_key_value_groups)
-    value_states = repeat_kv(value, module.num_key_value_groups)
-
-    attn_weights = torch.matmul(query, key_states.transpose(2, 3)) * scaling
-    if attention_mask is not None:
-        attn_weights = attn_weights + attention_mask
-
-    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
-    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
-    attn_output = torch.matmul(attn_weights, value_states)
-    attn_output = attn_output.transpose(1, 2).contiguous()
-
-    return attn_output, attn_weights
-
-
-class FunAsrNanoAttention(nn.Module):
-    """Multi-headed attention from 'Attention Is All You Need' paper"""
-
-    def __init__(self, config: FunAsrNanoConfig, layer_idx: int):
-        super().__init__()
-        self.config = config
-        self.layer_idx = layer_idx
-        self.head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
-        self.num_key_value_groups = config.num_attention_heads // config.num_key_value_heads
-        self.scaling = self.head_dim**-0.5
-        self.attention_dropout = config.attention_dropout
-        self.is_causal = True
-
-        self.q_proj = nn.Linear(
-            config.hidden_size, config.num_attention_heads * self.head_dim, bias=config.attention_bias
-        )
-        self.k_proj = nn.Linear(
-            config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.attention_bias
-        )
-        self.v_proj = nn.Linear(
-            config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.attention_bias
-        )
-        self.o_proj = nn.Linear(
-            config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
-        )
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
-        attention_mask: torch.Tensor | None = None,
-        past_key_values: Cache | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.Tensor, torch.Tensor]:
-        input_shape = hidden_states.shape[:-1]
-        hidden_shape = (*input_shape, -1, self.head_dim)
-
-        query_states = self.q_proj(hidden_states).view(hidden_shape).transpose(1, 2)
-        key_states = self.k_proj(hidden_states).view(hidden_shape).transpose(1, 2)
-        value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
-
-        cos, sin = position_embeddings
-        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
-
-        if past_key_values is not None:
-            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
-
-        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
-            self.config._attn_implementation, eager_attention_forward
-        )
-
-        attn_output, attn_weights = attention_interface(
-            self,
-            query_states,
-            key_states,
-            value_states,
-            attention_mask,
-            dropout=0.0 if not self.training else self.attention_dropout,
-            scaling=self.scaling,
-            **kwargs,
-        )
-
-        attn_output = attn_output.reshape(*input_shape, -1).contiguous()
-        attn_output = self.o_proj(attn_output)
-        return attn_output, attn_weights
-
-
-def _prepare_4d_attention_mask(mask: torch.Tensor, dtype: torch.dtype) -> torch.Tensor:
-    return (1.0 - mask.unsqueeze(1).to(dtype=dtype)) * torch.finfo(dtype).min
-
-
-class FunAsrNanoSANMAttention(FunAsrNanoAttention):
-    """Self-Attention with FSMN Memory (SANM).
-
-    State dict keys:
-        self_attn.linear_q_k_v.{weight,bias}
-        self_attn.linear_out.{weight,bias}
-        self_attn.fsmn_block.weight  (Conv1d depthwise, no bias)
-    """
-
-    def __init__(
-        self,
-        in_features: int,
-        hidden_size: int,
-        num_heads: int,
-        attention_dropout_rate: float = 0.0,
-        kernel_size: int = 11,
-        sanm_shift: int = 0,
-    ):
-        nn.Module.__init__(self)
-        if hidden_size % num_heads != 0:
-            raise ValueError(f"hidden_size ({hidden_size}) must be divisible by num_heads ({num_heads}).")
-        self.d_k = hidden_size // num_heads
-        self.num_heads = num_heads
-        self.hidden_size = hidden_size
-        self.num_key_value_groups = 1
-        self.scaling = self.d_k**-0.5
-
-        self.linear_q_k_v = nn.Linear(in_features, hidden_size * 3)
-        self.linear_out = nn.Linear(hidden_size, hidden_size)
-
-        # FSMN depthwise conv (key: self_attn.fsmn_block.weight)
-        self.fsmn_block = nn.Conv1d(
-            hidden_size, hidden_size, kernel_size, stride=1, padding=0, groups=hidden_size, bias=False
-        )
-        left_padding = (kernel_size - 1) // 2
-        if sanm_shift > 0:
-            left_padding = left_padding + sanm_shift
-        right_padding = kernel_size - 1 - left_padding
-        self.pad_fn = nn.ConstantPad1d((left_padding, right_padding), 0.0)
-
-        self.dropout = nn.Dropout(p=attention_dropout_rate)
-
-    def forward(self, x: torch.Tensor, mask: torch.Tensor | None = None) -> torch.Tensor:
-        b, t, _ = x.size()
-
-        q_k_v = self.linear_q_k_v(x)
-        q, k, v = torch.split(q_k_v, self.hidden_size, dim=-1)
-
-        # FSMN memory path
-        if mask is not None:
-            mask_expanded = mask.view(b, -1, 1)
-            v_masked = v * mask_expanded
-        else:
-            v_masked = v
-
-        fsmn_out = v_masked.transpose(1, 2)
-        fsmn_out = self.pad_fn(fsmn_out)
-        fsmn_out = self.fsmn_block(fsmn_out)
-        fsmn_out = fsmn_out.transpose(1, 2)
-        fsmn_memory = fsmn_out + v_masked
-        fsmn_memory = self.dropout(fsmn_memory)
-        if mask is not None:
-            fsmn_memory = fsmn_memory * mask_expanded
-
-        # Multi-head attention path
-        q = q.view(b, t, self.num_heads, self.d_k).transpose(1, 2)
-        k = k.view(b, t, self.num_heads, self.d_k).transpose(1, 2)
-        v_heads = v.view(b, t, self.num_heads, self.d_k).transpose(1, 2)
-
-        attention_mask = _prepare_4d_attention_mask(mask, q.dtype) if mask is not None else None
-        attn_output, _ = eager_attention_forward(
-            self,
-            q,
-            k,
-            v_heads,
-            attention_mask,
-            scaling=self.scaling,
-            dropout=self.dropout.p if self.training else 0.0,
-        )
-        attn_output = attn_output.view(b, t, self.hidden_size)
-        attn_output = self.linear_out(attn_output)
-
-        return attn_output + fsmn_memory
-
-
-class FunAsrNanoFeedForward(nn.Module):
-    """Positionwise feed-forward using the Parakeet encoder implementation."""
-
-    def __init__(self, hidden_size: int, linear_units: int, dropout_rate: float = 0.1):
-        super().__init__()
-        self.linear1 = nn.Linear(hidden_size, linear_units)
-        self.activation = nn.ReLU()
-        self.linear2 = nn.Linear(linear_units, hidden_size)
-        self.activation_dropout = dropout_rate
-
-    def forward(self, hidden_states):
-        hidden_states = self.activation(self.linear1(hidden_states))
-        hidden_states = nn.functional.dropout(hidden_states, p=self.activation_dropout, training=self.training)
-        hidden_states = self.linear2(hidden_states)
-        return hidden_states
-
-
-class FunAsrNanoEncoderLayer(GradientCheckpointingLayer):
-    """SANM encoder layer. State dict keys: norm1, norm2, self_attn.*, feed_forward.*"""
-
-    def __init__(
-        self,
-        in_size: int,
-        hidden_size: int,
-        num_heads: int,
-        linear_units: int,
-        dropout_rate: float = 0.1,
-        attention_dropout_rate: float = 0.0,
-        kernel_size: int = 11,
-        sanm_shift: int = 0,
-    ):
-        super().__init__()
-        self.in_size = in_size
-        self.hidden_size = hidden_size
-
-        self.norm1 = nn.LayerNorm(in_size)
-        self.norm2 = nn.LayerNorm(hidden_size)
-
-        self.self_attn = FunAsrNanoSANMAttention(
-            in_features=in_size,
-            hidden_size=hidden_size,
-            num_heads=num_heads,
-            attention_dropout_rate=attention_dropout_rate,
-            kernel_size=kernel_size,
-            sanm_shift=sanm_shift,
-        )
-
-        self.feed_forward = FunAsrNanoFeedForward(hidden_size, linear_units, dropout_rate)
-        self.dropout = nn.Dropout(dropout_rate)
-
-    def forward(self, x: torch.Tensor, mask: torch.Tensor | None = None) -> torch.Tensor:
-        residual = x
-        x = self.norm1(x)
-        attn_out = self.self_attn(x, mask)
-
-        if self.in_size == self.hidden_size:
-            x = residual + self.dropout(attn_out)
-        else:
-            x = self.dropout(attn_out)
-
-        residual = x
-        x = self.norm2(x)
-        x = residual + self.dropout(self.feed_forward(x))
-
-        return x
-
-
-@auto_docstring(
-    custom_intro="""
-    The Fun-ASR-Nano audio encoder (SenseVoice SAN-M architecture), without any head on top.
-    """
-)
-class FunAsrNanoEncoder(PreTrainedModel):
-    config_class = FunAsrNanoEncoderConfig
-    main_input_name = "input_features"
-
-    def __init__(self, config: FunAsrNanoEncoderConfig):
-        super().__init__(config)
-
-        self.embed = FunAsrNanoSinusoidalPositionEncoder(config.input_size)
-
-        self.encoders0 = nn.ModuleList(
-            [
-                FunAsrNanoEncoderLayer(
-                    in_size=config.input_size,
-                    hidden_size=config.output_dim,
-                    num_heads=config.num_attention_heads,
-                    linear_units=config.intermediate_size,
-                    dropout_rate=config.dropout,
-                    attention_dropout_rate=config.attention_dropout,
-                    kernel_size=config.kernel_size,
-                    sanm_shift=config.sanm_shift,
-                )
-            ]
-        )
-
-        self.encoders = nn.ModuleList(
-            [
-                FunAsrNanoEncoderLayer(
-                    in_size=config.output_dim,
-                    hidden_size=config.output_dim,
-                    num_heads=config.num_attention_heads,
-                    linear_units=config.intermediate_size,
-                    dropout_rate=config.dropout,
-                    attention_dropout_rate=config.attention_dropout,
-                    kernel_size=config.kernel_size,
-                    sanm_shift=config.sanm_shift,
-                )
-                for _ in range(config.encoder_layers - 1)
-            ]
-        )
-
-        self.tp_encoders = nn.ModuleList(
-            [
-                FunAsrNanoEncoderLayer(
-                    in_size=config.output_dim,
-                    hidden_size=config.output_dim,
-                    num_heads=config.num_attention_heads,
-                    linear_units=config.intermediate_size,
-                    dropout_rate=config.dropout,
-                    attention_dropout_rate=config.attention_dropout,
-                    kernel_size=config.kernel_size,
-                    sanm_shift=config.sanm_shift,
-                )
-                for _ in range(config.tp_blocks)
-            ]
-        )
-
-        self.after_norm = nn.LayerNorm(config.output_dim)
-        self.tp_norm = nn.LayerNorm(config.output_dim)
-
-        self.post_init()
-
-    def _init_weights(self, module):
-        super()._init_weights(module)
-        if isinstance(module, FunAsrNanoSinusoidalPositionEncoder):
-            expanded = SinusoidsPositionEmbedding(module.length, module.channels, module.max_timescale)
-            init.copy_(
-                module.positional_embedding,
-                expanded.positional_embedding.to(
-                    device=module.positional_embedding.device, dtype=module.positional_embedding.dtype
-                ),
-            )
-
-    def forward(
-        self,
-        input_features: torch.Tensor,
-        feature_lengths: torch.Tensor | None = None,
-        output_hidden_states: bool = False,
-        return_dict: bool = True,
-        **kwargs,
-    ) -> BaseModelOutput | tuple:
-        hidden_states = input_features.to(dtype=self.after_norm.weight.dtype)
-        batch_size, max_len, _ = hidden_states.shape
-
-        if feature_lengths is not None:
-            mask = torch.arange(max_len, device=hidden_states.device)[None, :] < feature_lengths[:, None]
-            mask = mask[:, None, :].to(dtype=hidden_states.dtype)
-        else:
-            mask = None
-
-        hidden_states = hidden_states * (self.config.output_dim**0.5)
-        hidden_states = self.embed(hidden_states)
-
-        all_hidden_states = () if output_hidden_states else None
-
-        for layer in self.encoders0:
-            hidden_states = layer(hidden_states, mask)
-            if output_hidden_states:
-                all_hidden_states += (hidden_states,)
-
-        for layer in self.encoders:
-            hidden_states = layer(hidden_states, mask)
-            if output_hidden_states:
-                all_hidden_states += (hidden_states,)
-
-        hidden_states = self.after_norm(hidden_states)
-
-        for layer in self.tp_encoders:
-            hidden_states = layer(hidden_states, mask)
-            if output_hidden_states:
-                all_hidden_states += (hidden_states,)
-
-        hidden_states = self.tp_norm(hidden_states)
-
-        if not return_dict:
-            return (hidden_states,) + ((all_hidden_states,) if output_hidden_states else ())
-
-        return BaseModelOutput(last_hidden_state=hidden_states, hidden_states=all_hidden_states)
-
-
-class FunAsrNanoAdaptorAttention(FunAsrNanoAttention):
-    """Adaptor attention with separate Q/K/V projections matching checkpoint keys."""
-
-    def __init__(self, hidden_size: int, num_heads: int, dropout_rate: float = 0.0):
-        nn.Module.__init__(self)
-        self.num_heads = num_heads
-        self.head_dim = hidden_size // num_heads
-        self.hidden_size = hidden_size
-        self.num_key_value_groups = 1
-        self.scaling = self.head_dim**-0.5
-
-        self.linear_q = nn.Linear(hidden_size, hidden_size)
-        self.linear_k = nn.Linear(hidden_size, hidden_size)
-        self.linear_v = nn.Linear(hidden_size, hidden_size)
-        self.linear_out = nn.Linear(hidden_size, hidden_size)
-        self.dropout = nn.Dropout(dropout_rate)
-
-    def forward(self, x: torch.Tensor, mask: torch.Tensor | None = None) -> torch.Tensor:
-        b, t, _ = x.size()
-
-        q = self.linear_q(x).view(b, t, self.num_heads, self.head_dim).transpose(1, 2)
-        k = self.linear_k(x).view(b, t, self.num_heads, self.head_dim).transpose(1, 2)
-        v = self.linear_v(x).view(b, t, self.num_heads, self.head_dim).transpose(1, 2)
-
-        attention_mask = _prepare_4d_attention_mask(mask, q.dtype) if mask is not None else None
-        out, _ = eager_attention_forward(
-            self,
-            q,
-            k,
-            v,
-            attention_mask,
-            scaling=self.scaling,
-            dropout=self.dropout.p if self.training else 0.0,
-        )
-        out = out.view(b, t, self.hidden_size)
-        return self.linear_out(out)
-
-
-class FunAsrNanoAdaptorLayer(GradientCheckpointingLayer):
-    """Adaptor transformer layer matching checkpoint structure."""
-
-    def __init__(self, hidden_size: int, num_heads: int, dropout_rate: float = 0.0):
-        super().__init__()
-        self.self_attn = FunAsrNanoAdaptorAttention(hidden_size, num_heads, dropout_rate)
-        self.feed_forward = FunAsrNanoFeedForward(hidden_size, hidden_size // 4, dropout_rate)
-        self.norm1 = nn.LayerNorm(hidden_size)
-        self.norm2 = nn.LayerNorm(hidden_size)
-        self.dropout = nn.Dropout(dropout_rate)
-
-    def forward(self, x: torch.Tensor, mask: torch.Tensor | None = None) -> torch.Tensor:
-        residual = x
-        x = self.norm1(x)
-        x = self.self_attn(x, mask)
-        x = residual + self.dropout(x)
-
-        residual = x
-        x = self.norm2(x)
-        x = residual + self.dropout(self.feed_forward(x))
-
-        return x
-
-
-class FunAsrNanoMultiModalProjector(nn.Module):
-    """Audio adaptor projecting encoder output to the language-model dimension."""
-
-    def __init__(self, config: FunAsrNanoConfig):
-        super().__init__()
-        self.config = config
-        self.downsample_rate = config.adaptor_downsample_rate
-
-        encoder_dim = config.audio_encoder_config.output_dim
-        llm_dim = config.text_config.hidden_size
-
-        self.linear_1 = nn.Linear(encoder_dim * config.adaptor_downsample_rate, config.adaptor_intermediate_size)
-        self.act = nn.Sequential(nn.ReLU(), nn.Dropout(config.adaptor_dropout))
-        self.linear_2 = nn.Linear(config.adaptor_intermediate_size, llm_dim)
-
-        if config.adaptor_num_hidden_layers > 0:
-            self.blocks = nn.ModuleList(
-                [
-                    FunAsrNanoAdaptorLayer(
-                        hidden_size=llm_dim,
-                        num_heads=config.adaptor_num_attention_heads,
-                        dropout_rate=config.adaptor_dropout,
-                    )
-                    for _ in range(config.adaptor_num_hidden_layers)
-                ]
-            )
-        else:
-            self.blocks = None
-
-    def forward(self, encoder_out: torch.Tensor, encoder_out_lens: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
-        batch_size, seq_len, dim = encoder_out.size()
-        k = self.downsample_rate
-
-        chunk_num = (seq_len - 1) // k + 1
-        pad_num = chunk_num * k - seq_len
-        if pad_num > 0:
-            encoder_out = F.pad(encoder_out, (0, 0, 0, pad_num, 0, 0), value=0.0)
-
-        encoder_out = encoder_out.contiguous().view(batch_size, chunk_num, dim * k)
-        x = self.linear_1(encoder_out)
-        x = self.act(x)
-        x = self.linear_2(x)
-
-        output_lens = (encoder_out_lens - 1) // k + 1
-
-        if self.blocks is not None:
-            max_len = x.size(1)
-            mask = torch.arange(max_len, device=x.device)[None, :] < output_lens[:, None]
-            mask = mask[:, None, :].float()  # (batch, 1, time)
-
-            for block in self.blocks:
-                x = block(x, mask)
-
-        return x, output_lens
 
 
 @auto_docstring
@@ -663,11 +60,441 @@ class FunAsrNanoPreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
     input_modalities = ("audio", "text")
     supports_gradient_checkpointing = True
-    _no_split_modules = ["FunAsrNanoEncoderLayer", "FunAsrNanoAdaptorLayer"]
+    _no_split_modules = ["FunAsrNanoEncoderStem", "FunAsrNanoEncoderLayer", "FunAsrNanoAdaptorLayer"]
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_attention_backend = True
+
+    def _init_weights(self, module):
+        super()._init_weights(module)
+        from ..qwen3_omni_moe.modeling_qwen3_omni_moe import SinusoidsPositionEmbedding
+
+        if isinstance(module, SinusoidsPositionEmbedding):
+            position_embeddings = module.compute_default_singular_positional_embedding()
+            init.copy_(module.positional_embedding, position_embeddings)
+
+
+def eager_attention_forward(
+    module: nn.Module,
+    query: torch.Tensor,
+    key: torch.Tensor,
+    value: torch.Tensor,
+    attention_mask: torch.Tensor | None,
+    scaling: float | None = None,
+    dropout: float = 0.0,
+    **kwargs,
+):
+    if scaling is None:
+        scaling = query.size(-1) ** -0.5
+
+    attn_weights = torch.matmul(query, key.transpose(2, 3)) * scaling
+    if attention_mask is not None:
+        attn_weights = attn_weights + attention_mask
+
+    attn_weights = nn.functional.softmax(attn_weights, dim=-1)
+
+    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
+    attn_output = torch.matmul(attn_weights, value)
+    attn_output = attn_output.transpose(1, 2).contiguous()
+
+    return attn_output, attn_weights
+
+
+class FunAsrNanoAttention(nn.Module):
+    """Whisper attention with checkpoint-compatible K bias and projection input size."""
+
+    def __init__(self, config: FunAsrNanoEncoderConfig, input_dim: int | None = None):
+        super().__init__()
+        input_dim = input_dim if input_dim is not None else config.d_model
+        self.embed_dim = config.d_model
+        self.num_heads = config.encoder_attention_heads
+        self.dropout = config.attention_dropout
+        self.head_dim = self.embed_dim // self.num_heads
+        if self.head_dim * self.num_heads != self.embed_dim:
+            raise ValueError(
+                f"`d_model` must be divisible by `encoder_attention_heads`, got {self.embed_dim} and {self.num_heads}."
+            )
+        self.scaling = self.head_dim**-0.5
+        self.is_decoder = False
+        self.is_causal = False
+        self.layer_idx = None
+        self.config = config
+        self.q_proj = nn.Linear(input_dim, config.d_model, bias=True)
+        self.k_proj = nn.Linear(input_dim, config.d_model, bias=True)
+        self.v_proj = nn.Linear(input_dim, config.d_model, bias=True)
+        self.out_proj = nn.Linear(config.d_model, config.d_model, bias=True)
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: torch.Tensor | None = None,
+        output_attentions: bool = False,
+        **kwargs,
+    ) -> tuple[torch.Tensor, torch.Tensor | None]:
+        """Input shape: Batch x Time x Channel"""
+        batch_size, sequence_length, _ = hidden_states.shape
+        target_shape = (batch_size, sequence_length, self.num_heads, self.head_dim)
+
+        query_states = self.q_proj(hidden_states).view(target_shape).transpose(1, 2)
+        key_states = self.k_proj(hidden_states).view(target_shape).transpose(1, 2)
+        value_states = self.v_proj(hidden_states).view(target_shape).transpose(1, 2)
+        attn_output, attn_weights = eager_attention_forward(
+            self,
+            query_states,
+            key_states,
+            value_states,
+            attention_mask,
+            scaling=self.scaling,
+            dropout=self.dropout if self.training else 0.0,
+            **kwargs,
+        )
+        attn_output = attn_output.reshape(batch_size, sequence_length, self.embed_dim)
+        attn_output = self.out_proj(attn_output)
+        return attn_output, attn_weights if output_attentions else None
+
+
+class FunAsrNanoFSMN(nn.Module):
+    """Depthwise feedforward sequential memory network used alongside self-attention."""
+
+    def __init__(self, config: FunAsrNanoEncoderConfig):
+        super().__init__()
+        self.conv = nn.Conv1d(
+            config.d_model,
+            config.d_model,
+            config.kernel_size,
+            stride=1,
+            padding=0,
+            groups=config.d_model,
+            bias=False,
+        )
+        left_padding = (config.kernel_size - 1) // 2
+        right_padding = config.kernel_size - 1 - left_padding
+        self.pad = nn.ConstantPad1d((left_padding, right_padding), 0.0)
+        self.dropout = config.attention_dropout
+
+    def forward(self, value_states: torch.Tensor, attention_mask: torch.Tensor | None = None) -> torch.Tensor:
+        if attention_mask is not None:
+            if attention_mask.ndim == 3:
+                attention_mask = attention_mask[:, 0]
+            expanded_mask = attention_mask.unsqueeze(-1).to(dtype=value_states.dtype)
+            value_states = value_states * expanded_mask
+        else:
+            expanded_mask = None
+
+        hidden_states = self.conv(self.pad(value_states.transpose(1, 2))).transpose(1, 2)
+        hidden_states = hidden_states + value_states
+        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
+        if expanded_mask is not None:
+            hidden_states = hidden_states * expanded_mask
+        return hidden_states
+
+
+def _prepare_4d_attention_mask(mask: torch.Tensor, dtype: torch.dtype) -> torch.Tensor:
+    if mask.ndim == 3:
+        mask = mask[:, 0]
+    return (1.0 - mask[:, None, None, :].to(dtype=dtype)) * torch.finfo(dtype).min
+
+
+class FunAsrNanoEncoderLayer(GradientCheckpointingLayer):
+    """SAN-M encoder layer combining standard self-attention with a separate FSMN branch."""
+
+    def __init__(self, config: FunAsrNanoEncoderConfig):
+        super().__init__()
+        self.embed_dim = config.d_model
+        self.self_attn = FunAsrNanoAttention(config)
+        self.self_attn_layer_norm = nn.LayerNorm(self.embed_dim)
+        self.dropout = config.dropout
+        self.activation_fn = ACT2FN[config.activation_function]
+        self.activation_dropout = config.activation_dropout
+        self.fc1 = nn.Linear(self.embed_dim, config.encoder_ffn_dim)
+        self.fc2 = nn.Linear(config.encoder_ffn_dim, self.embed_dim)
+        self.final_layer_norm = nn.LayerNorm(self.embed_dim)
+        self.fsmn = FunAsrNanoFSMN(config)
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: torch.Tensor | None = None,
+        **kwargs,
+    ) -> torch.Tensor:
+        """
+        Args:
+            hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
+            attention_mask (`torch.FloatTensor`): attention mask of size
+                `(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
+        """
+        hidden_states = self._forward_attention(
+            hidden_states,
+            attention_mask,
+            residual=hidden_states,
+            **kwargs,
+        )
+        return self._forward_feed_forward(hidden_states)
+
+    def _forward_attention(
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: torch.Tensor | None,
+        residual: torch.Tensor | None,
+        **kwargs,
+    ) -> torch.Tensor:
+        hidden_states = self.self_attn_layer_norm(hidden_states)
+        value_states = self.self_attn.v_proj(hidden_states)
+        additive_attention_mask = (
+            _prepare_4d_attention_mask(attention_mask, hidden_states.dtype) if attention_mask is not None else None
+        )
+        attention_output, _ = self.self_attn(
+            hidden_states=hidden_states,
+            attention_mask=additive_attention_mask,
+            **kwargs,
+        )
+        fsmn_output = self.fsmn(value_states, attention_mask)
+        hidden_states = nn.functional.dropout(attention_output + fsmn_output, p=self.dropout, training=self.training)
+        return hidden_states if residual is None else residual + hidden_states
+
+    def _forward_feed_forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        residual = hidden_states
+        hidden_states = self.final_layer_norm(hidden_states)
+        hidden_states = self.activation_fn(self.fc1(hidden_states))
+        hidden_states = nn.functional.dropout(hidden_states, p=self.activation_dropout, training=self.training)
+        hidden_states = self.fc2(hidden_states)
+        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
+        hidden_states = residual + hidden_states
+        if hidden_states.dtype == torch.float16:
+            clamp_value = torch.finfo(hidden_states.dtype).max - 1000
+            hidden_states = torch.clamp(hidden_states, min=-clamp_value, max=clamp_value)
+        return hidden_states
+
+
+class FunAsrNanoEncoderStem(FunAsrNanoEncoderLayer):
+    """Position encoding and the first heterogeneous SAN-M layer."""
+
+    @staticmethod
+    def _create_position_embeddings(length: int, channels: int, max_timescale: int = 10000):
+        from ..qwen3_omni_moe.modeling_qwen3_omni_moe import SinusoidsPositionEmbedding
+
+        return SinusoidsPositionEmbedding(length, channels, max_timescale)
+
+    def __init__(self, config: FunAsrNanoEncoderConfig):
+        super().__init__(config)
+        self.position_embeddings = self._create_position_embeddings(2049, config.input_size)
+        self.self_attn_layer_norm = nn.LayerNorm(config.input_size)
+        self.self_attn = FunAsrNanoAttention(config, input_dim=config.input_size)
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: torch.Tensor | None = None,
+        **kwargs,
+    ) -> torch.Tensor:
+        hidden_states = hidden_states * (self.self_attn.embed_dim**0.5)
+        sequence_length = hidden_states.shape[1]
+        if sequence_length + 1 > self.position_embeddings.length:
+            self.position_embeddings = self._create_position_embeddings(
+                sequence_length + 1,
+                self.position_embeddings.channels,
+                self.position_embeddings.max_timescale,
+            ).to(hidden_states.device)
+        positions = self.position_embeddings(sequence_length + 1)[1:].to(
+            device=hidden_states.device, dtype=hidden_states.dtype
+        )
+        hidden_states = hidden_states + positions.unsqueeze(0)
+        hidden_states = self._forward_attention(
+            hidden_states,
+            attention_mask,
+            residual=None,
+            **kwargs,
+        )
+        return self._forward_feed_forward(hidden_states)
+
+
+@auto_docstring(
+    custom_intro="""
+    The Fun-ASR-Nano audio encoder (SenseVoice SAN-M architecture), without any head on top.
+    """
+)
+class FunAsrNanoEncoder(FunAsrNanoPreTrainedModel):
+    """
+    Transformer encoder consisting of *config.encoder_layers* self attention layers. Each layer is a
+    [`FunAsrNanoEncoderLayer`].
+
+    Args:
+        config: FunAsrNanoConfig
+    """
+
+    _can_record_outputs = {
+        "hidden_states": FunAsrNanoEncoderLayer,
+        "attentions": FunAsrNanoAttention,
+    }
+    input_modalities = ("audio",)
+    config_class = FunAsrNanoEncoderConfig
+    main_input_name = "input_features"
+
+    def __init__(self, config: FunAsrNanoEncoderConfig):
+        super().__init__(config)
+        self.stem = FunAsrNanoEncoderStem(config)
+        self.layers = nn.ModuleList([FunAsrNanoEncoderLayer(config) for _ in range(config.encoder_layers - 1)])
+        self.layer_norm = nn.LayerNorm(config.d_model)
+        self.timestamp_prediction_layers = nn.ModuleList(
+            [FunAsrNanoEncoderLayer(config) for _ in range(config.num_timestamp_prediction_blocks)]
+        )
+        self.timestamp_prediction_layer_norm = nn.LayerNorm(config.d_model)
+
+        self.post_init()
+
+    def _freeze_parameters(self):
+        for param in self.parameters():
+            param.requires_grad = False
+        self._requires_grad = False
+
+    def get_input_embeddings(self) -> nn.Module:
+        return self.stem
+
+    def set_input_embeddings(self, value: nn.Module):
+        self.stem = value
+
+    @can_return_tuple
+    def forward(
+        self,
+        input_features: torch.Tensor,
+        input_features_mask: torch.Tensor | None = None,
+        output_hidden_states: bool = False,
+        **kwargs,
+    ) -> BaseModelOutput:
+        r"""
+        Args:
+            input_features (`torch.LongTensor` of shape `(batch_size, feature_size, sequence_length)`):
+                Float values of mel features extracted from the raw speech waveform. Raw speech waveform can be
+                obtained by loading a `.flac` or `.wav` audio file into an array of type `list[float]`, a
+                `numpy.ndarray` or a `torch.Tensor`, *e.g.* via the torchcodec library (`pip install torchcodec`) or
+                the soundfile library (`pip install soundfile`). To prepare the array into
+                `input_features`, the [`AutoFeatureExtractor`] should be used for extracting the mel features, padding
+                and conversion into a tensor of type `torch.FloatTensor`. See [`~FunAsrNanoFeatureExtractor.__call__`]
+            attention_mask (`torch.Tensor`)`, *optional*):
+                FunAsrNano does not support masking of the `input_features`, this argument is preserved for compatibility,
+                but it is not used. By default the silence in the input log mel spectrogram are ignored.
+        """
+        hidden_states = input_features.to(dtype=self.layer_norm.weight.dtype)
+
+        all_hidden_states = () if output_hidden_states else None
+        hidden_states = self.stem(hidden_states, input_features_mask, **kwargs)
+        if output_hidden_states:
+            all_hidden_states += (hidden_states,)
+
+        for layer in self.layers:
+            hidden_states = layer(hidden_states, input_features_mask, **kwargs)
+            if output_hidden_states:
+                all_hidden_states += (hidden_states,)
+
+        hidden_states = self.layer_norm(hidden_states)
+
+        for layer in self.timestamp_prediction_layers:
+            hidden_states = layer(hidden_states, input_features_mask, **kwargs)
+            if output_hidden_states:
+                all_hidden_states += (hidden_states,)
+
+        hidden_states = self.timestamp_prediction_layer_norm(hidden_states)
+        return BaseModelOutput(last_hidden_state=hidden_states, hidden_states=all_hidden_states)
+
+
+class FunAsrNanoAdaptorAttention(FunAsrNanoAttention):
+    pass
+
+
+class FunAsrNanoAdaptorLayer(GradientCheckpointingLayer):
+    """Bidirectional self-attention adaptor layer."""
+
+    def __init__(self, config: FunAsrNanoEncoderConfig):
+        super().__init__()
+        self.embed_dim = config.d_model
+        self.self_attn = FunAsrNanoAdaptorAttention(config)
+        self.self_attn_layer_norm = nn.LayerNorm(self.embed_dim)
+        self.dropout = config.dropout
+        self.activation_fn = ACT2FN[config.activation_function]
+        self.activation_dropout = config.activation_dropout
+        self.fc1 = nn.Linear(self.embed_dim, config.encoder_ffn_dim)
+        self.fc2 = nn.Linear(config.encoder_ffn_dim, self.embed_dim)
+        self.final_layer_norm = nn.LayerNorm(self.embed_dim)
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: torch.Tensor,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> torch.Tensor:
+        """
+        Args:
+            hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
+            attention_mask (`torch.FloatTensor`): attention mask of size
+                `(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
+        """
+        residual = hidden_states
+        hidden_states = self.self_attn_layer_norm(hidden_states)
+        hidden_states, _ = self.self_attn(
+            hidden_states=hidden_states,
+            attention_mask=attention_mask,
+            **kwargs,
+        )
+        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
+        hidden_states = residual + hidden_states
+
+        residual = hidden_states
+        hidden_states = self.final_layer_norm(hidden_states)
+        hidden_states = self.activation_fn(self.fc1(hidden_states))
+        hidden_states = nn.functional.dropout(hidden_states, p=self.activation_dropout, training=self.training)
+        hidden_states = self.fc2(hidden_states)
+        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
+        hidden_states = residual + hidden_states
+
+        if hidden_states.dtype == torch.float16:
+            clamp_value = torch.finfo(hidden_states.dtype).max - 1000
+            hidden_states = torch.clamp(hidden_states, min=-clamp_value, max=clamp_value)
+
+        return hidden_states
+
+
+class FunAsrNanoMultiModalProjector(nn.Module):
+    """Audio adaptor projecting encoder output to the language-model dimension."""
+
+    def __init__(self, config: FunAsrNanoConfig):
+        nn.Module.__init__(self)
+        self.config = config
+
+        encoder_dim = config.encoder_config.d_model
+        llm_dim = config.text_config.hidden_size
+
+        self.linear_1 = nn.Linear(encoder_dim, config.adaptor_intermediate_size)
+        self.act = ACT2FN[config.activation_function]
+        self.linear_2 = nn.Linear(config.adaptor_intermediate_size, llm_dim)
+
+        adaptor_config = FunAsrNanoEncoderConfig(
+            num_mel_bins=1,
+            num_stacked_frames=1,
+            d_model=llm_dim,
+            encoder_attention_heads=config.adaptor_num_attention_heads,
+            encoder_ffn_dim=llm_dim // 4,
+            encoder_layers=config.adaptor_num_hidden_layers,
+            num_timestamp_prediction_blocks=0,
+            dropout=0.0,
+            attention_dropout=0.0,
+            activation_dropout=0.0,
+            activation_function=config.activation_function,
+        )
+        adaptor_config._attn_implementation = config.encoder_config._attn_implementation
+        self.blocks = nn.ModuleList(
+            [FunAsrNanoAdaptorLayer(adaptor_config) for _ in range(config.adaptor_num_hidden_layers)]
+        )
+
+    def forward(self, encoder_out: torch.Tensor, input_features_mask: torch.Tensor) -> torch.Tensor:
+        x = self.linear_1(encoder_out)
+        x = self.act(x)
+        x = self.linear_2(x)
+
+        attention_mask = _prepare_4d_attention_mask(input_features_mask, x.dtype)
+        for block in self.blocks:
+            x = block(x, attention_mask)
+        return x
 
 
 @auto_docstring(
@@ -696,7 +523,6 @@ class FunAsrNanoModel(FunAsrNanoPreTrainedModel):
         self,
         input_features: torch.FloatTensor,
         input_features_mask: torch.Tensor | None = None,
-        output_hidden_states: bool | None = None,
         **kwargs,
     ) -> BaseModelOutputWithPooling:
         r"""
@@ -710,30 +536,20 @@ class FunAsrNanoModel(FunAsrNanoPreTrainedModel):
             `pooler_output` holds the projected audio embeddings (flattened over valid positions), and
             `hidden_states` holds the per-layer encoder states.
         """
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-
         batch_size, max_len, _ = input_features.shape
         if input_features_mask is None:
-            feature_lengths = torch.full((batch_size,), max_len, dtype=torch.long, device=input_features.device)
-        else:
-            feature_lengths = input_features_mask.sum(-1).to(torch.long)
+            input_features_mask = torch.ones((batch_size, max_len), dtype=torch.bool, device=input_features.device)
 
         encoder_outputs = self.audio_tower(
             input_features=input_features,
-            feature_lengths=feature_lengths,
-            output_hidden_states=output_hidden_states,
+            input_features_mask=input_features_mask,
+            return_dict=True,
+            **kwargs,
         )
         encoder_out = encoder_outputs.last_hidden_state
 
-        audio_embeds, audio_embed_lens = self.multi_modal_projector(encoder_out, feature_lengths)
-
-        # Flatten audio embeddings over valid positions so they can directly replace placeholder tokens.
-        valid_mask = (
-            torch.arange(audio_embeds.shape[1], device=audio_embeds.device)[None, :] < audio_embed_lens[:, None]
-        )
-        pooler_output = audio_embeds[valid_mask]
+        audio_embeds = self.multi_modal_projector(encoder_out, input_features_mask)
+        pooler_output = audio_embeds[input_features_mask.to(device=audio_embeds.device, dtype=torch.bool)]
 
         return BaseModelOutputWithPooling(
             last_hidden_state=encoder_out,
@@ -855,7 +671,7 @@ class FunAsrNanoForConditionalGeneration(FunAsrNanoPreTrainedModel, GenerationMi
         self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
         self.post_init()
 
-    def get_audio_features(self, input_features, input_features_mask=None, **kwargs):
+    def get_audio_features(self, input_features, input_features_mask, **kwargs):
         return self.model.get_audio_features(input_features, input_features_mask, **kwargs)
 
     @can_return_tuple
@@ -883,9 +699,9 @@ class FunAsrNanoForConditionalGeneration(FunAsrNanoPreTrainedModel, GenerationMi
         Example:
 
         ```python
-        >>> from transformers import AutoProcessor, FunAsrNanoForConditionalGeneration
+        >>> from transformers import FunAsrNanoForConditionalGeneration, AutoProcessor
 
-        >>> model_id = "FunAudioLLM/Fun-ASR-Nano-2512-hf"
+        >>> model_id = "nvidia/audio-flamingo-3-hf"
         >>> processor = AutoProcessor.from_pretrained(model_id)
         >>> model = FunAsrNanoForConditionalGeneration.from_pretrained(model_id, device_map="auto")
         ```"""

@@ -28,130 +28,92 @@ from ..auto import CONFIG_MAPPING, AutoConfig
 @strict
 class FunAsrNanoEncoderConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`FunAsrNanoEncoder`]. It is used to instantiate a
-    Fun-ASR-Nano audio encoder (a SenseVoice SAN-M encoder) according to the specified arguments, defining the model
-    architecture.
-
-    input_size (`int`, *optional*, defaults to 560):
-        Input feature dimension (after LFR: 80 mel bins * 7 frames = 560).
-    output_dim (`int`, *optional*, defaults to 512):
-        Hidden size of the encoder layers.
-    num_attention_heads (`int`, *optional*, defaults to 4):
-        Number of attention heads in each SANM layer.
-    intermediate_size (`int`, *optional*, defaults to 2048):
-        Dimension of the feedforward layer.
-    encoder_layers (`int`, *optional*, defaults to 50):
-        Number of main encoder blocks.
-    tp_blocks (`int`, *optional*, defaults to 20):
+    num_stacked_frames (`int`, *optional*, defaults to 7):
+        Number of consecutive mel frames stacked by low-frame-rate feature extraction.
+    num_timestamp_prediction_blocks (`int`, *optional*, defaults to 20):
         Number of timestamp prediction encoder blocks.
-    dropout (`float`, *optional*, defaults to 0.1):
-        Dropout rate.
-    attention_dropout (`float`, *optional*, defaults to 0.0):
-        Attention dropout rate.
     kernel_size (`int`, *optional*, defaults to 11):
         Kernel size for the FSMN convolution.
-    sanm_shift (`int`, *optional*, defaults to 0):
-        Shift for asymmetric padding in FSMN.
-    Example:
-
-    ```python
-    >>> from transformers import FunAsrNanoEncoderConfig, FunAsrNanoEncoder
-
-    >>> configuration = FunAsrNanoEncoderConfig()
-    >>> model = FunAsrNanoEncoder(configuration)
-    >>> configuration = model.config
-    ```
     """
 
     model_type = "fun_asr_nano_encoder"
     attribute_map = {
-        "output_size": "output_dim",
-        "attention_heads": "num_attention_heads",
-        "linear_units": "intermediate_size",
+        "output_size": "d_model",
+        "output_dim": "d_model",
+        "attention_heads": "encoder_attention_heads",
+        "num_attention_heads": "encoder_attention_heads",
+        "linear_units": "encoder_ffn_dim",
+        "intermediate_size": "encoder_ffn_dim",
         "num_blocks": "encoder_layers",
+        "tp_blocks": "num_timestamp_prediction_blocks",
         "dropout_rate": "dropout",
         "attention_dropout_rate": "attention_dropout",
     }
 
-    input_size: int = 560
-    output_dim: int = 512
-    num_attention_heads: int = 4
-    intermediate_size: int = 2048
+    num_mel_bins: int = 80
+    num_stacked_frames: int = 7
+    d_model: int = 512
+    encoder_attention_heads: int = 4
+    encoder_ffn_dim: int = 2048
     encoder_layers: int = 50
-    tp_blocks: int = 20
+    num_timestamp_prediction_blocks: int = 20
     dropout: float = 0.1
-    attention_dropout: float = 0.0
+    attention_dropout: float = 0.1
+    activation_dropout: float = 0.1
+    activation_function: str = "relu"
     kernel_size: int = 11
-    sanm_shift: int = 0
+
+    @property
+    def input_size(self) -> int:
+        return self.num_mel_bins * self.num_stacked_frames
 
 
 @auto_docstring(checkpoint="FunAudioLLM/Fun-ASR-Nano-2512-hf")
 @strict
 class FunAsrNanoConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`FunAsrNanoForConditionalGeneration`]. It is used
-    to instantiate a Fun-ASR-Nano model according to the specified arguments, defining the model architecture.
-
-    audio_encoder_config (`dict` or `FunAsrNanoEncoderConfig`, *optional*):
+    encoder_config (`dict` or `PreTrainedConfig`, *optional*):
         Configuration for the audio encoder.
     text_config (`dict` or `PreTrainedConfig`, *optional*):
         Configuration for the language model (Qwen3).
-    audio_token_index (`int`, *optional*, defaults to 151646):
-        Token ID used as placeholder for audio features.
-    adaptor_downsample_rate (`int`, *optional*, defaults to 1):
-        Downsampling factor applied to the encoder sequence before projecting to the language model.
     adaptor_intermediate_size (`int`, *optional*, defaults to 2048):
         Hidden size of the adaptor feed-forward projection.
     adaptor_num_hidden_layers (`int`, *optional*, defaults to 2):
         Number of adaptor transformer layers.
     adaptor_num_attention_heads (`int`, *optional*, defaults to 8):
         Number of attention heads in the adaptor transformer layers.
-    adaptor_dropout (`float`, *optional*, defaults to 0.0):
-        Dropout probability used in the adaptor.
-    Example:
-
-    ```python
-    >>> from transformers import FunAsrNanoConfig, FunAsrNanoForConditionalGeneration
-
-    >>> configuration = FunAsrNanoConfig()
-    >>> model = FunAsrNanoForConditionalGeneration(configuration)
-    >>> configuration = model.config
-    ```
     """
 
     model_type = "fun_asr_nano"
     attribute_map = {
-        "audio_config": "audio_encoder_config",
-        "audio_token_id": "audio_token_index",
+        "audio_config": "encoder_config",
+        "audio_encoder_config": "encoder_config",
+        "audio_token_index": "audio_token_id",
         "adaptor_ffn_dim": "adaptor_intermediate_size",
         "adaptor_num_layers": "adaptor_num_hidden_layers",
         "adaptor_attention_heads": "adaptor_num_attention_heads",
-        "adaptor_dropout_rate": "adaptor_dropout",
     }
     sub_configs = {
+        "encoder_config": AutoConfig,
         "text_config": AutoConfig,
-        "audio_encoder_config": FunAsrNanoEncoderConfig,
     }
 
-    audio_encoder_config: dict | FunAsrNanoEncoderConfig | None = None
+    encoder_config: dict | PreTrainedConfig | None = None
     text_config: dict | PreTrainedConfig | None = None
-    audio_token_index: int = 151646
-    adaptor_downsample_rate: int = 1
+    audio_token_id: int = 151646
     adaptor_intermediate_size: int = 2048
     adaptor_num_hidden_layers: int = 2
     adaptor_num_attention_heads: int = 8
-    adaptor_dropout: float = 0.0
+    activation_function: str = "relu"
     initializer_range: float = 0.02
     tie_word_embeddings: bool = True
 
     def __post_init__(self, **kwargs):
-        if isinstance(self.audio_encoder_config, dict):
-            self.audio_encoder_config["model_type"] = self.audio_encoder_config.get(
-                "model_type", "fun_asr_nano_encoder"
-            )
-            self.audio_encoder_config = FunAsrNanoEncoderConfig(**self.audio_encoder_config)
-        elif self.audio_encoder_config is None:
-            self.audio_encoder_config = FunAsrNanoEncoderConfig()
+        if isinstance(self.encoder_config, dict):
+            self.encoder_config["model_type"] = self.encoder_config.get("model_type", "fun_asr_nano_encoder")
+            self.encoder_config = CONFIG_MAPPING[self.encoder_config["model_type"]](**self.encoder_config)
+        elif self.encoder_config is None:
+            self.encoder_config = CONFIG_MAPPING["fun_asr_nano_encoder"]()
 
         if isinstance(self.text_config, dict):
             text_config_model_type = self.text_config.get("model_type", "qwen3")
