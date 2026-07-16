@@ -140,6 +140,7 @@ class Tipsv2VisionModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
 
     all_model_classes = (Tipsv2VisionModel,) if is_torch_available() else ()
     pipeline_model_mapping = {"image-feature-extraction": Tipsv2VisionModel} if is_torch_available() else {}
+    model_split_percents = [0.5, 0.9]
 
     test_resize_embeddings = False
     has_attentions = False

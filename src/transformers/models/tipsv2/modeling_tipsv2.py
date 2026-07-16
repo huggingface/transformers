@@ -187,30 +187,19 @@ class Tipsv2VisionEmbeddings(nn.Module):
 
         if bool_masked_pos is not None:
             embeddings = torch.where(
-                bool_masked_pos.unsqueeze(-1),
-                self.mask_token.to(device=embeddings.device, dtype=embeddings.dtype).unsqueeze(0),
-                embeddings,
+                bool_masked_pos.unsqueeze(-1), self.mask_token.to(embeddings.dtype).unsqueeze(0), embeddings
             )
 
         # add the [CLS] token to the embedded patch tokens
-        cls_tokens = self.cls_token.to(device=embeddings.device, dtype=embeddings.dtype).expand(batch_size, -1, -1)
+        cls_tokens = self.cls_token.expand(batch_size, -1, -1)
         embeddings = torch.cat((cls_tokens, embeddings), dim=1)
 
         # add positional encoding to each token
-        embeddings = embeddings + self.interpolate_pos_encoding(embeddings, height, width).to(
-            device=embeddings.device, dtype=embeddings.dtype
-        )
+        embeddings = embeddings + self.interpolate_pos_encoding(embeddings, height, width)
 
         # add register tokens
         embeddings = torch.cat(
-            (
-                embeddings[:, :1],
-                self.register_tokens.to(device=embeddings.device, dtype=embeddings.dtype).expand(
-                    embeddings.shape[0], -1, -1
-                ),
-                embeddings[:, 1:],
-            ),
-            dim=1,
+            (embeddings[:, :1], self.register_tokens.expand(embeddings.shape[0], -1, -1), embeddings[:, 1:]), dim=1
         )
 
         embeddings = self.dropout(embeddings)
@@ -454,7 +443,7 @@ class Tipsv2VisionPreTrainedModel(PreTrainedModel):
     main_input_name = "pixel_values"
     input_modalities = ("image",)
     supports_gradient_checkpointing = True
-    _no_split_modules = ["Tipsv2VisionLayer"]
+    _no_split_modules = ["Tipsv2VisionEmbeddings", "Tipsv2VisionLayer"]
     _supports_sdpa = True
     _supports_flash_attn = True
     _supports_flex_attn = True

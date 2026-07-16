@@ -366,47 +366,11 @@ class Tipsv2VisionEmbeddings(Dinov2WithRegistersEmbeddings):
         # Combine class and patch embeddings
         return torch.cat((class_pos_embed.unsqueeze(0), patch_pos_embed), dim=1)
 
-    def forward(self, pixel_values: torch.Tensor, bool_masked_pos: torch.Tensor | None = None) -> torch.Tensor:
-        batch_size, _, height, width = pixel_values.shape
-        target_dtype = self.patch_embeddings.projection.weight.dtype
-        embeddings = self.patch_embeddings(pixel_values.to(dtype=target_dtype))
-
-        if bool_masked_pos is not None:
-            embeddings = torch.where(
-                bool_masked_pos.unsqueeze(-1),
-                self.mask_token.to(device=embeddings.device, dtype=embeddings.dtype).unsqueeze(0),
-                embeddings,
-            )
-
-        # add the [CLS] token to the embedded patch tokens
-        cls_tokens = self.cls_token.to(device=embeddings.device, dtype=embeddings.dtype).expand(batch_size, -1, -1)
-        embeddings = torch.cat((cls_tokens, embeddings), dim=1)
-
-        # add positional encoding to each token
-        embeddings = embeddings + self.interpolate_pos_encoding(embeddings, height, width).to(
-            device=embeddings.device, dtype=embeddings.dtype
-        )
-
-        # add register tokens
-        embeddings = torch.cat(
-            (
-                embeddings[:, :1],
-                self.register_tokens.to(device=embeddings.device, dtype=embeddings.dtype).expand(
-                    embeddings.shape[0], -1, -1
-                ),
-                embeddings[:, 1:],
-            ),
-            dim=1,
-        )
-
-        embeddings = self.dropout(embeddings)
-
-        return embeddings
-
 
 class Tipsv2VisionPreTrainedModel(Dinov2WithRegistersPreTrainedModel):
     config: Tipsv2VisionConfig
     base_model_prefix = "vision_model"
+    _no_split_modules = ["Tipsv2VisionEmbeddings", "Tipsv2VisionLayer"]
     _keys_to_ignore_on_load_unexpected = {"text_encoder"}
 
 
