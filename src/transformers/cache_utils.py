@@ -2002,6 +2002,9 @@ class EncoderDecoderCache(Cache):
     def is_compileable(self) -> bool:
         return self.self_attention_cache.is_compileable
 
+    def activate_past_recording(self):
+        self.self_attention_cache.activate_past_recording()
+
     def get_max_cache_shape(self, layer_idx: int = 0) -> int:
         logger.warning_once(
             "`get_max_cache_shape` is deprecated, and will be removed in version 5.16. Please use `get_max_length` instead"
