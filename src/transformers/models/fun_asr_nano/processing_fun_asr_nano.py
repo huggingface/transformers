@@ -57,29 +57,20 @@ class FunAsrNanoProcessor(ProcessorMixin):
         tokenizer,
         chat_template=None,
         audio_token="<|object_ref_start|>",
-        audio_downsample_rate=1,
         default_transcription_prompt="Transcribe the audio:",
-        max_audio_len=None,
     ):
         r"""
         audio_token (`str`, *optional*, defaults to `"<|object_ref_start|>"`):
             The token used as a placeholder for audio in the text.
-        audio_downsample_rate (`int`, *optional*, defaults to 1):
-            Downsampling ratio applied by the audio adaptor, used to expand the audio placeholder token to the right
-            number of audio tokens.
         default_transcription_prompt (`str`, *optional*, defaults to `"Transcribe the audio:"`):
             Default prompt to use for transcription tasks when applying transcription requests.
-        max_audio_len (`int`, *optional*):
-            Maximum audio duration in seconds. `None` disables the inherited duration limit.
         """
         if tokenizer.convert_tokens_to_ids(audio_token) is None:
             raise ValueError(f"Audio token {audio_token!r} is not present in the tokenizer vocabulary.")
 
-        self.audio_downsample_rate = audio_downsample_rate
         self.audio_token = audio_token
         self.audio_token_id = tokenizer.convert_tokens_to_ids(audio_token)
         self.default_transcription_prompt = default_transcription_prompt
-        self.max_audio_len = max_audio_len
         super().__init__(feature_extractor, tokenizer, chat_template=chat_template)
 
     @auto_docstring
@@ -123,7 +114,7 @@ class FunAsrNanoProcessor(ProcessorMixin):
             raise ValueError(f"Got {len(text)} text but {len(audio)} audios; they must match 1:1.")
 
     def _get_audio_token_length(self, audio_lengths):
-        return (audio_lengths - 1) // self.audio_downsample_rate + 1
+        return audio_lengths
 
     def _process_audio(self, audio, **kwargs):
         audio_inputs = self.feature_extractor(audio, **kwargs)
@@ -152,10 +143,23 @@ class FunAsrNanoProcessor(ProcessorMixin):
         prompt: str | list[str] | None = None,
         **kwargs: Unpack[FunAsrNanoProcessorKwargs],
     ) -> BatchFeature:
-        r"""
-        prompt (`str` or `list[str]`, *optional*):
-            Custom prompt(s) to include in the user turn. A list must be the same length as the batch. When `None`,
-            each sample uses `"Transcribe the audio:"`.
+        """
+        Prepare inputs for automatic speech recognition without manually writing the default transcription prompt.
+
+        Args:
+            audio (`str`, `list[str]`, `np.ndarray`, `torch.Tensor`, `list[np.ndarray]`, `list[torch.Tensor]`):
+                Audio to transcribe. Strings are interpreted as local paths or URLs and will be loaded automatically by
+                the chat template loader; NumPy arrays and PyTorch tensors are forwarded directly.
+            prompt (`str` or `list[str]`, *optional*):
+                Custom prompt(s) to include in the user turn. A list must be the same length as the batch. When `None`,
+                each sample uses `"Transcribe the input speech."`.
+            **kwargs:
+                Additional keyword arguments forwarded to [`~FunAsrNanoProcessor.apply_chat_template`] (for example
+                `text_kwargs`, `audio_kwargs`, ...).
+
+        Returns:
+            [`BatchFeature`]: Processor outputs ready to be passed to [`FunAsrNanoForConditionalGeneration.generate`].
+
         """
 
         audio_items: list[str | np.ndarray] = list(make_list_of_audio_chat_template(audio))

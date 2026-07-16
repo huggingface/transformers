@@ -60,22 +60,26 @@ class FunAsrNanoProcessorTest(unittest.TestCase):
         self.assertNotIn("feature_extractor_class", ModularFunAsrNanoProcessor.__dict__)
         self.assertNotIn("tokenizer_class", ModularFunAsrNanoProcessor.__dict__)
 
-    def test_constructor_defines_inherited_max_audio_length(self):
-        parameter = inspect.signature(FunAsrNanoProcessor.__init__).parameters["max_audio_len"]
-        self.assertIsNone(parameter.default)
+    def test_constructor_does_not_expose_unused_max_audio_length(self):
+        self.assertNotIn("max_audio_len", inspect.signature(ModularFunAsrNanoProcessor.__init__).parameters)
+        self.assertNotIn("max_audio_len", inspect.signature(FunAsrNanoProcessor.__init__).parameters)
 
-    def test_transcription_request_docs_use_fun_asr_nano_default_prompt(self):
-        docstring = FunAsrNanoProcessor.apply_transcription_request.__doc__
-        self.assertIn("Transcribe the audio:", docstring)
-        self.assertNotIn("Transcribe the input speech.", docstring)
+        tokenizer = SimpleNamespace(convert_tokens_to_ids=lambda token: 151646)
+        with patch.object(ProcessorMixin, "__init__", return_value=None):
+            processor = FunAsrNanoProcessor(object(), tokenizer)
 
-    def test_audio_token_lengths_follow_adaptor_downsampling(self):
+        self.assertFalse(hasattr(processor, "max_audio_len"))
+
+    def test_constructor_defines_fun_asr_nano_default_prompt(self):
+        parameter = inspect.signature(FunAsrNanoProcessor.__init__).parameters["default_transcription_prompt"]
+        self.assertEqual(parameter.default, "Transcribe the audio:")
+        self.assertNotIn("apply_transcription_request", ModularFunAsrNanoProcessor.__dict__)
+
+    def test_audio_token_lengths_match_feature_lengths(self):
         processor = FunAsrNanoProcessor.__new__(FunAsrNanoProcessor)
-        processor.audio_downsample_rate = 2
+        lengths = torch.tensor([1, 2, 3, 4])
 
-        lengths = processor._get_audio_token_length(torch.tensor([1, 2, 3, 4]))
-
-        self.assertTrue(torch.equal(lengths, torch.tensor([1, 1, 2, 2])))
+        self.assertTrue(torch.equal(processor._get_audio_token_length(lengths), lengths))
 
     def test_process_audio_builds_mask_and_replacements(self):
         class FeatureExtractorStub:
@@ -91,14 +95,13 @@ class FunAsrNanoProcessorTest(unittest.TestCase):
         processor = FunAsrNanoProcessor.__new__(FunAsrNanoProcessor)
         processor.feature_extractor = FeatureExtractorStub()
         processor.audio_token = "<audio>"
-        processor.audio_downsample_rate = 2
 
         audio_inputs, replacements = processor._process_audio([torch.zeros(4), torch.zeros(3)])
 
         self.assertNotIn("attention_mask", audio_inputs)
         self.assertIn("input_features_mask", audio_inputs)
-        self.assertTrue(torch.equal(audio_inputs["num_audio_tokens"], torch.tensor([2, 1])))
-        self.assertEqual(replacements, ["<audio><audio>", "<audio>"])
+        self.assertTrue(torch.equal(audio_inputs["num_audio_tokens"], torch.tensor([3, 2])))
+        self.assertEqual(replacements, ["<audio><audio><audio>", "<audio><audio>"])
 
     def test_process_audio_requires_attention_mask(self):
         class FeatureExtractorStub:
@@ -112,7 +115,6 @@ class FunAsrNanoProcessorTest(unittest.TestCase):
 
         processor = FunAsrNanoProcessor.__new__(FunAsrNanoProcessor)
         processor.feature_extractor = FeatureExtractorStub()
-        processor.audio_downsample_rate = 1
 
         with self.assertRaisesRegex(ValueError, "attention mask"):
             processor._process_audio([torch.zeros(4)])

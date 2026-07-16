@@ -74,23 +74,33 @@ from .configuration_fun_asr_nano import (
 from .modeling_fun_asr_nano import FunAsrNanoForConditionalGeneration
 
 
-# fmt: off
-STATE_DICT_MAPPING = {
-    r"^audio_encoder\.(.*\.feed_forward)\.w_1\.": r"model.audio_tower.\1.linear1.",
-    r"^audio_encoder\.(.*\.feed_forward)\.w_2\.": r"model.audio_tower.\1.linear2.",
-    r"^audio_adaptor\.(.*\.feed_forward)\.w_1\.": r"model.multi_modal_projector.\1.linear1.",
-    r"^audio_adaptor\.(.*\.feed_forward)\.w_2\.": r"model.multi_modal_projector.\1.linear2.",
-    r"^audio_adaptor\.linear1\.": r"model.multi_modal_projector.linear_1.",
-    r"^audio_adaptor\.linear2\.": r"model.multi_modal_projector.linear_2.",
-    r"^audio_encoder\.": r"model.audio_tower.",
-    r"^audio_adaptor\.": r"model.multi_modal_projector.",
+ROOT_STATE_DICT_MAPPING = (
+    (r"^audio_encoder\.encoders0\.0\.", "model.audio_tower.stem."),
+    (r"^audio_encoder\.encoders\.", "model.audio_tower.layers."),
+    (r"^audio_encoder\.tp_encoders\.", "model.audio_tower.timestamp_prediction_layers."),
+    (r"^audio_encoder\.after_norm\.", "model.audio_tower.layer_norm."),
+    (r"^audio_encoder\.tp_norm\.", "model.audio_tower.timestamp_prediction_layer_norm."),
+    (r"^audio_adaptor\.blocks\.", "model.multi_modal_projector.blocks."),
+    (r"^audio_adaptor\.linear1\.", "model.multi_modal_projector.linear_1."),
+    (r"^audio_adaptor\.linear2\.", "model.multi_modal_projector.linear_2."),
     # Keep lm_head.weight explicitly. Although tie_word_embeddings=True, this model load path
     # does not retie lm_head from the embeddings, and the source already stores lm_head == embeddings.
     # safetensors deduplicates the shared storage, so this adds no extra disk over the embeddings.
-    r"^llm\.lm_head\.": r"lm_head.",
-    r"^llm\.model\.": r"model.language_model.",
-}
-# fmt: on
+    (r"^llm\.lm_head\.", "lm_head."),
+    (r"^llm\.model\.", "model.language_model."),
+)
+
+COMPONENT_STATE_DICT_MAPPING = (
+    (r"\.feed_forward\.w_1\.", ".fc1."),
+    (r"\.feed_forward\.w_2\.", ".fc2."),
+    (r"\.norm1\.", ".self_attn_layer_norm."),
+    (r"\.norm2\.", ".final_layer_norm."),
+    (r"\.self_attn\.linear_q\.", ".self_attn.q_proj."),
+    (r"\.self_attn\.linear_k\.", ".self_attn.k_proj."),
+    (r"\.self_attn\.linear_v\.", ".self_attn.v_proj."),
+    (r"\.self_attn\.linear_out\.", ".self_attn.out_proj."),
+    (r"\.self_attn\.fsmn_block\.", ".fsmn.conv."),
+)
 
 
 # Chat template stored in the checkpoint so that `processor.apply_chat_template` works without any
@@ -134,25 +144,47 @@ def load_original_checkpoint(checkpoint_path: str) -> dict:
 
 
 def convert_key(key: str) -> str | None:
-    """Map an original FunASR checkpoint key to the HF (split) layout.
-
-    The HF model is split into a base [`FunAsrNanoModel`] (holding the audio encoder, adaptor and the *headless*
-    language model) plus a separate `lm_head`, mirroring AudioFlamingo3 / Voxtral. The mapping is therefore:
-
-        audio_encoder.*       -> model.audio_tower.*
-        audio_adaptor.*       -> model.multi_modal_projector.*
-        *.feed_forward.w_1.*  -> *.feed_forward.linear1.*
-        *.feed_forward.w_2.*  -> *.feed_forward.linear2.*
-        audio_adaptor.linear{1,2}.* -> model.multi_modal_projector.linear_{1,2}.*
-        llm.model.*           -> model.language_model.*
-        llm.lm_head.weight    -> lm_head.weight
-
-    Returns `None` for keys that are not used by the generation path (e.g. the CTC / timestamp branch).
-    """
-    for pattern, replacement in STATE_DICT_MAPPING.items():
+    """Map one original FunASR checkpoint key to the HF layout."""
+    mapped_key = None
+    for pattern, replacement in ROOT_STATE_DICT_MAPPING:
         if re.match(pattern, key):
-            return re.sub(pattern, replacement, key)
-    return None
+            mapped_key = re.sub(pattern, replacement, key)
+            break
+    if mapped_key is None or ".linear_q_k_v." in mapped_key:
+        return None
+
+    for pattern, replacement in COMPONENT_STATE_DICT_MAPPING:
+        mapped_key = re.sub(pattern, replacement, mapped_key)
+    return mapped_key
+
+
+def convert_state_dict(original_state_dict: dict[str, torch.Tensor]) -> tuple[dict[str, torch.Tensor], list[str]]:
+    """Convert checkpoint keys and split each fused encoder QKV projection."""
+    converted_state_dict = {}
+    unconverted_keys = []
+
+    for key, value in original_state_dict.items():
+        if ".self_attn.linear_q_k_v." in key:
+            if value.shape[0] % 3 != 0:
+                raise ValueError(f"Fused QKV tensor must be divisible by 3 along dim 0, got {key}: {value.shape}.")
+            projection_values = value.chunk(3, dim=0)
+            projection_keys = [
+                convert_key(key.replace("linear_q_k_v", f"{projection}_proj")) for projection in ("q", "k", "v")
+            ]
+            if any(projection_key is None for projection_key in projection_keys):
+                unconverted_keys.append(key)
+                continue
+            for projection_key, projection_value in zip(projection_keys, projection_values):
+                converted_state_dict[projection_key] = projection_value.to(torch.bfloat16)
+            continue
+
+        new_key = convert_key(key)
+        if new_key is None:
+            unconverted_keys.append(key)
+        else:
+            converted_state_dict[new_key] = value.to(torch.bfloat16)
+
+    return converted_state_dict, unconverted_keys
 
 
 def build_config_from_yaml(config_yaml_path: str, qwen3_config_path: str) -> FunAsrNanoConfig:
@@ -162,17 +194,19 @@ def build_config_from_yaml(config_yaml_path: str, qwen3_config_path: str) -> Fun
 
     # Audio encoder config (standalone encoder model -> standalone config, Parakeet-style).
     enc_conf = cfg.get("audio_encoder_conf", {})
-    audio_encoder_config = FunAsrNanoEncoderConfig(
-        input_size=enc_conf.get("input_layer_size", 560),  # 80 * 7 (lfr_m)
-        output_dim=enc_conf.get("output_size", 512),
-        num_attention_heads=enc_conf.get("attention_heads", 4),
-        intermediate_size=enc_conf.get("linear_units", 2048),
+    encoder_config = FunAsrNanoEncoderConfig(
+        num_mel_bins=80,
+        num_stacked_frames=7,
+        d_model=enc_conf.get("output_size", 512),
+        encoder_attention_heads=enc_conf.get("attention_heads", 4),
+        encoder_ffn_dim=enc_conf.get("linear_units", 2048),
         encoder_layers=enc_conf.get("num_blocks", 50),
-        tp_blocks=enc_conf.get("tp_blocks", 20),
+        num_timestamp_prediction_blocks=enc_conf.get("tp_blocks", 20),
         dropout=enc_conf.get("dropout_rate", 0.1),
-        attention_dropout=enc_conf.get("attention_dropout_rate", 0.0),
+        attention_dropout=enc_conf.get("attention_dropout_rate", 0.1),
+        activation_dropout=enc_conf.get("dropout_rate", 0.1),
+        activation_function="relu",
         kernel_size=enc_conf.get("kernel_size", 11),
-        sanm_shift=enc_conf.get("sanm_shfit", 0),
     )
 
     # Adaptor params live directly on the main config (the adaptor is not a standalone model).
@@ -184,13 +218,12 @@ def build_config_from_yaml(config_yaml_path: str, qwen3_config_path: str) -> Fun
     text_config = Qwen3Config(**qwen3_cfg)
 
     config = FunAsrNanoConfig(
-        audio_encoder_config=audio_encoder_config,
+        encoder_config=encoder_config,
         text_config=text_config,
-        adaptor_downsample_rate=adp_conf.get("downsample_rate", 1),
         adaptor_intermediate_size=adp_conf.get("ffn_dim", 2048),
         adaptor_num_hidden_layers=adp_conf.get("n_layer", 2),
         adaptor_num_attention_heads=8,
-        adaptor_dropout=0.0,
+        activation_function="relu",
     )
 
     return config
@@ -221,21 +254,10 @@ def convert_checkpoint(
     original_state_dict = load_original_checkpoint(checkpoint_path)
 
     print("Converting state dict keys...")
-    converted_state_dict = {}
-    unconverted_keys = []
-
-    for key, value in original_state_dict.items():
-        new_key = convert_key(key)
-        if new_key is not None:
-            # Cast every weight to bfloat16 so the checkpoint is dtype-consistent with the
-            # bf16 LLM (and the old hub layout); the source SAN-M encoder/adaptor are stored in F32.
-            converted_state_dict[new_key] = value.to(torch.bfloat16)
-        else:
-            # CTC / timestamp branch is not used for the generation path and is intentionally dropped.
-            unconverted_keys.append(key)
+    converted_state_dict, unconverted_keys = convert_state_dict(original_state_dict)
 
     if unconverted_keys:
-        print(f"Skipping {len(unconverted_keys)} keys not used by the HF model (e.g. CTC branch):")
+        print(f"Skipping {len(unconverted_keys)} keys not used by the HF generation model (e.g. CTC branch):")
         for k in unconverted_keys[:20]:
             print(f"  - {k}")
         if len(unconverted_keys) > 20:
@@ -258,6 +280,8 @@ def convert_checkpoint(
         print(f"Unexpected keys ({len(unexpected)}):")
         for k in unexpected[:20]:
             print(f"  - {k}")
+    if missing or unexpected:
+        raise RuntimeError(f"Checkpoint conversion mismatch: missing={missing}, unexpected={unexpected}")
 
     print(f"Saving model to {output_path}...")
     os.makedirs(output_path, exist_ok=True)
@@ -276,7 +300,6 @@ def convert_checkpoint(
         feature_extractor=feature_extractor,
         tokenizer=tokenizer,
         chat_template=CHAT_TEMPLATE,
-        audio_downsample_rate=config.adaptor_downsample_rate,
     )
     processor.save_pretrained(output_path)
 
