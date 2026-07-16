@@ -506,7 +506,7 @@ def load_and_register_attn_kernel(
     except ValueError:
         raise
     except Exception as e:
-        raise ValueError(f"An error occurred while trying to load from '{repo_id}': {e}.")
+        raise ValueError(f"An error occurred while trying to load from '{repo_id}': {e}.") from e
 
     # correctly wrap the kernel
     mask_implementation = "flash_attention_2"
