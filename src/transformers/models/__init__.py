@@ -318,6 +318,7 @@ if TYPE_CHECKING:
     from .olmoe import *
     from .omdet_turbo import *
     from .oneformer import *
+    from .onyx import *
     from .openai import *
     from .openai_privacy_filter import *
     from .opt import *

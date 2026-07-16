@@ -427,6 +427,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("olmoe", "OlmoeConfig"),
         ("omdet-turbo", "OmDetTurboConfig"),
         ("oneformer", "OneFormerConfig"),
+        ("onyx", "OnyxConfig"),
         ("openai-gpt", "OpenAIGPTConfig"),
         ("openai_privacy_filter", "OpenAIPrivacyFilterConfig"),
         ("opt", "OPTConfig"),
