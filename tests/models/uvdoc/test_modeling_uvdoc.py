@@ -17,7 +17,6 @@
 import inspect
 import unittest
 
-import requests
 from parameterized import parameterized
 
 from transformers import (
@@ -28,8 +27,8 @@ from transformers import (
     UVDocImageProcessor,
     UVDocModel,
     is_torch_available,
-    is_vision_available,
 )
+from transformers.image_utils import load_image
 from transformers.testing_utils import (
     require_torch,
     require_torch_accelerator,
@@ -41,13 +40,11 @@ from transformers.testing_utils import (
 from ...test_backbone_common import BackboneTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor
+from ...test_processing_common import url_to_local_path
 
 
 if is_torch_available():
     import torch
-
-if is_vision_available():
-    from PIL import Image
 
 
 class UVDocModelTester:
@@ -310,11 +307,8 @@ class UVDocModelIntegrationTest(unittest.TestCase):
         model_path = "PaddlePaddle/UVDoc_safetensors"
         self.model = AutoModel.from_pretrained(model_path).to(torch_device)
         self.image_processor = UVDocImageProcessor()
-        self.image = Image.open(
-            requests.get(
-                "https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/doc_test.jpg", stream=True
-            ).raw
-        )
+        img_url = url_to_local_path("https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/doc_test.jpg")
+        self.image = load_image(img_url)
 
     def test_inference_document_rectification(self):
         inputs = self.image_processor(images=self.image, return_tensors="pt").to(torch_device)

@@ -30,11 +30,13 @@ from ...utils import (
     is_timm_config_dict,
     is_timm_local_checkpoint,
     is_torchvision_available,
+    is_vision_available,
     logging,
     safe_load_json_file,
 )
-from ...utils.import_utils import requires
+from ...utils.import_utils import is_torchvision_greater_or_equal, requires
 from .auto_factory import _LazyAutoMapping
+from .auto_mappings import IMAGE_PROCESSOR_MAPPING_NAMES
 from .configuration_auto import (
     CONFIG_MAPPING_NAMES,
     AutoConfig,
@@ -45,230 +47,126 @@ from .configuration_auto import (
 
 logger = logging.get_logger(__name__)
 
-# These image processors use Lanczos interpolation, which is not supported by fast image processors.
-# To avoid important differences in outputs, we default to using the PIL backend for these processors.
-DEFAULT_TO_PIL_BACKEND_IMAGE_PROCESSORS = [
+# These image processors use Lanczos interpolation, which is not supported by torchvision < 0.27.
+# To avoid important differences in outputs, we default to using the PIL backend for these processors
+# when running on older torchvision versions. With torchvision >= 0.27, Lanczos is natively supported
+# and these processors can use the torchvision backend directly.
+_LANCZOS_IMAGE_PROCESSORS = [
     "ChameleonImageProcessor",
     "FlavaImageProcessor",
     "Idefics3ImageProcessor",
     "SmolVLMImageProcessor",
 ]
 
+DEFAULT_TO_PIL_BACKEND_IMAGE_PROCESSORS = [] if is_torchvision_greater_or_equal("0.27") else _LANCZOS_IMAGE_PROCESSORS
+
+
 if TYPE_CHECKING:
     # This significantly improves completion suggestion performance when
     # the transformers package is used with Microsoft's Pylance language server.
     IMAGE_PROCESSOR_MAPPING_NAMES: OrderedDict[str, dict[str, str | None]] = OrderedDict()
 else:
-    IMAGE_PROCESSOR_MAPPING_NAMES = OrderedDict(
+    # Merge non-standard mapping names with auto-inferred `IMAGE_PROCESSOR_MAPPING_NAMES`
+    MISSING_IMAGE_PROCESSOR_MAPPING_NAMES = OrderedDict(
         [
             ("aimv2", {"torchvision": "CLIPImageProcessor", "pil": "CLIPImageProcessorPil"}),
             ("aimv2_vision_model", {"torchvision": "CLIPImageProcessor", "pil": "CLIPImageProcessorPil"}),
             ("align", {"torchvision": "EfficientNetImageProcessor", "pil": "EfficientNetImageProcessorPil"}),
             ("altclip", {"torchvision": "CLIPImageProcessor", "pil": "CLIPImageProcessorPil"}),
-            ("aria", {"torchvision": "AriaImageProcessor", "pil": "AriaImageProcessorPil"}),
             ("aya_vision", {"torchvision": "GotOcr2ImageProcessor", "pil": "GotOcr2ImageProcessorPil"}),
-            ("beit", {"torchvision": "BeitImageProcessor", "pil": "BeitImageProcessorPil"}),
-            ("bit", {"torchvision": "BitImageProcessor", "pil": "BitImageProcessorPil"}),
-            ("blip", {"torchvision": "BlipImageProcessor", "pil": "BlipImageProcessorPil"}),
             ("blip-2", {"torchvision": "BlipImageProcessor", "pil": "BlipImageProcessorPil"}),
-            ("bridgetower", {"torchvision": "BridgeTowerImageProcessor", "pil": "BridgeTowerImageProcessorPil"}),
-            ("chameleon", {"torchvision": "ChameleonImageProcessor", "pil": "ChameleonImageProcessorPil"}),
-            ("chinese_clip", {"torchvision": "ChineseCLIPImageProcessor", "pil": "ChineseCLIPImageProcessorPil"}),
-            ("chmv2", {"torchvision": "CHMv2ImageProcessor"}),
-            ("clip", {"torchvision": "CLIPImageProcessor", "pil": "CLIPImageProcessorPil"}),
             ("clipseg", {"torchvision": "ViTImageProcessor", "pil": "ViTImageProcessorPil"}),
-            ("cohere2_vision", {"torchvision": "Cohere2VisionImageProcessor"}),
             ("colpali", {"torchvision": "SiglipImageProcessor", "pil": "SiglipImageProcessorPil"}),
             ("colqwen2", {"torchvision": "Qwen2VLImageProcessor", "pil": "Qwen2VLImageProcessorPil"}),
-            (
-                "conditional_detr",
-                {"torchvision": "ConditionalDetrImageProcessor", "pil": "ConditionalDetrImageProcessorPil"},
-            ),
-            ("convnext", {"torchvision": "ConvNextImageProcessor", "pil": "ConvNextImageProcessorPil"}),
             ("convnextv2", {"torchvision": "ConvNextImageProcessor", "pil": "ConvNextImageProcessorPil"}),
+            ("cosmos3_omni", {"torchvision": "Qwen2VLImageProcessor", "pil": "Qwen2VLImageProcessorPil"}),
             ("cvt", {"torchvision": "ConvNextImageProcessor", "pil": "ConvNextImageProcessorPil"}),
             ("data2vec-vision", {"torchvision": "BeitImageProcessor", "pil": "BeitImageProcessorPil"}),
-            ("deepseek_vl", {"torchvision": "DeepseekVLImageProcessor", "pil": "DeepseekVLImageProcessorPil"}),
-            (
-                "deepseek_vl_hybrid",
-                {"torchvision": "DeepseekVLHybridImageProcessor", "pil": "DeepseekVLHybridImageProcessorPil"},
-            ),
-            (
-                "deformable_detr",
-                {"torchvision": "DeformableDetrImageProcessor", "pil": "DeformableDetrImageProcessorPil"},
-            ),
-            ("deit", {"torchvision": "DeiTImageProcessor", "pil": "DeiTImageProcessorPil"}),
+            ("deimv2", {"torchvision": "RTDetrImageProcessor", "pil": "RTDetrImageProcessorPil"}),
             ("depth_anything", {"torchvision": "DPTImageProcessor", "pil": "DPTImageProcessorPil"}),
-            ("depth_pro", {"torchvision": "DepthProImageProcessor"}),
-            ("detr", {"torchvision": "DetrImageProcessor", "pil": "DetrImageProcessorPil"}),
             ("dinat", {"torchvision": "ViTImageProcessor", "pil": "ViTImageProcessorPil"}),
             ("dinov2", {"torchvision": "BitImageProcessor", "pil": "BitImageProcessorPil"}),
-            ("dinov3_vit", {"torchvision": "DINOv3ViTImageProcessor"}),
             ("donut-swin", {"torchvision": "DonutImageProcessor", "pil": "DonutImageProcessorPil"}),
-            ("dpt", {"torchvision": "DPTImageProcessor", "pil": "DPTImageProcessorPil"}),
             ("edgetam", {"torchvision": "Sam2ImageProcessor"}),
-            (
-                "efficientloftr",
-                {"torchvision": "EfficientLoFTRImageProcessor", "pil": "EfficientLoFTRImageProcessorPil"},
-            ),
-            ("efficientnet", {"torchvision": "EfficientNetImageProcessor", "pil": "EfficientNetImageProcessorPil"}),
             ("emu3", {"pil": "Emu3ImageProcessor"}),
-            ("eomt", {"torchvision": "EomtImageProcessor", "pil": "EomtImageProcessorPil"}),
             ("eomt_dinov3", {"torchvision": "EomtImageProcessor", "pil": "EomtImageProcessorPil"}),
-            (
-                "ernie4_5_vl_moe",
-                {"torchvision": "Ernie4_5_VLMoeImageProcessor", "pil": "Ernie4_5_VLMoeImageProcessorPil"},
-            ),
-            ("flava", {"torchvision": "FlavaImageProcessor", "pil": "FlavaImageProcessorPil"}),
+            ("exaone4_5", {"torchvision": "Qwen2VLImageProcessor", "pil": "Qwen2VLImageProcessorPil"}),
             ("florence2", {"torchvision": "CLIPImageProcessor", "pil": "CLIPImageProcessorPil"}),
             ("focalnet", {"torchvision": "BitImageProcessor", "pil": "BitImageProcessorPil"}),
-            ("fuyu", {"torchvision": "FuyuImageProcessor", "pil": "FuyuImageProcessorPil"}),
-            ("gemma3", {"torchvision": "Gemma3ImageProcessor", "pil": "Gemma3ImageProcessorPil"}),
             ("gemma3n", {"torchvision": "SiglipImageProcessor", "pil": "SiglipImageProcessorPil"}),
-            ("gemma4", {"torchvision": "Gemma4ImageProcessor", "pil": "Gemma4ImageProcessorPil"}),
             ("git", {"torchvision": "CLIPImageProcessor", "pil": "CLIPImageProcessorPil"}),
-            ("glm46v", {"torchvision": "Glm46VImageProcessor", "pil": "Glm46VImageProcessorPil"}),
-            ("glm4v", {"torchvision": "Glm4vImageProcessor", "pil": "Glm4vImageProcessorPil"}),
-            ("glm_image", {"torchvision": "GlmImageImageProcessor", "pil": "GlmImageImageProcessorPil"}),
-            ("glpn", {"torchvision": "GLPNImageProcessor", "pil": "GLPNImageProcessorPil"}),
-            ("got_ocr2", {"torchvision": "GotOcr2ImageProcessor", "pil": "GotOcr2ImageProcessorPil"}),
-            (
-                "grounding-dino",
-                {"torchvision": "GroundingDinoImageProcessor", "pil": "GroundingDinoImageProcessorPil"},
-            ),
+            ("granite4_vision", {"torchvision": "LlavaNextImageProcessor", "pil": "LlavaNextImageProcessorPil"}),
             ("groupvit", {"torchvision": "CLIPImageProcessor", "pil": "CLIPImageProcessorPil"}),
             ("hiera", {"torchvision": "BitImageProcessor", "pil": "BitImageProcessorPil"}),
-            ("idefics", {"torchvision": "IdeficsImageProcessor", "pil": "IdeficsImageProcessorPil"}),
-            ("idefics2", {"torchvision": "Idefics2ImageProcessor", "pil": "Idefics2ImageProcessorPil"}),
-            ("idefics3", {"torchvision": "Idefics3ImageProcessor", "pil": "Idefics3ImageProcessorPil"}),
             ("ijepa", {"torchvision": "ViTImageProcessor", "pil": "ViTImageProcessorPil"}),
-            ("imagegpt", {"torchvision": "ImageGPTImageProcessor", "pil": "ImageGPTImageProcessorPil"}),
+            ("inkling_mm_model", {"torchvision": "InklingImageProcessor"}),
             ("instructblip", {"torchvision": "BlipImageProcessor", "pil": "BlipImageProcessorPil"}),
             ("internvl", {"torchvision": "GotOcr2ImageProcessor", "pil": "GotOcr2ImageProcessorPil"}),
-            ("janus", {"torchvision": "JanusImageProcessor", "pil": "JanusImageProcessorPil"}),
             ("kosmos-2", {"torchvision": "CLIPImageProcessor", "pil": "CLIPImageProcessorPil"}),
             ("kosmos-2.5", {"torchvision": "Kosmos2_5ImageProcessor", "pil": "Kosmos2_5ImageProcessorPil"}),
-            ("layoutlmv2", {"torchvision": "LayoutLMv2ImageProcessor", "pil": "LayoutLMv2ImageProcessorPil"}),
-            ("layoutlmv3", {"torchvision": "LayoutLMv3ImageProcessor", "pil": "LayoutLMv3ImageProcessorPil"}),
             ("layoutxlm", {"torchvision": "LayoutLMv2ImageProcessor", "pil": "LayoutLMv2ImageProcessorPil"}),
-            ("levit", {"torchvision": "LevitImageProcessor", "pil": "LevitImageProcessorPil"}),
-            ("lfm2_vl", {"torchvision": "Lfm2VlImageProcessor"}),
-            ("lightglue", {"torchvision": "LightGlueImageProcessor", "pil": "LightGlueImageProcessorPil"}),
             ("lighton_ocr", {"torchvision": "PixtralImageProcessor", "pil": "PixtralImageProcessorPil"}),
-            ("llama4", {"torchvision": "Llama4ImageProcessor"}),
-            ("llava", {"torchvision": "LlavaImageProcessor", "pil": "LlavaImageProcessorPil"}),
-            ("llava_next", {"torchvision": "LlavaNextImageProcessor", "pil": "LlavaNextImageProcessorPil"}),
             ("llava_next_video", {"torchvision": "LlavaNextImageProcessor", "pil": "LlavaNextImageProcessorPil"}),
-            (
-                "llava_onevision",
-                {"torchvision": "LlavaOnevisionImageProcessor", "pil": "LlavaOnevisionImageProcessorPil"},
-            ),
             ("lw_detr", {"torchvision": "DeformableDetrImageProcessor", "pil": "DeformableDetrImageProcessorPil"}),
-            ("mask2former", {"torchvision": "Mask2FormerImageProcessor", "pil": "Mask2FormerImageProcessorPil"}),
-            ("maskformer", {"torchvision": "MaskFormerImageProcessor", "pil": "MaskFormerImageProcessorPil"}),
             ("metaclip_2", {"torchvision": "CLIPImageProcessor", "pil": "CLIPImageProcessorPil"}),
             ("mgp-str", {"torchvision": "ViTImageProcessor", "pil": "ViTImageProcessorPil"}),
             ("mistral3", {"torchvision": "PixtralImageProcessor", "pil": "PixtralImageProcessorPil"}),
             ("mlcd", {"torchvision": "CLIPImageProcessor", "pil": "CLIPImageProcessorPil"}),
-            ("mllama", {"torchvision": "MllamaImageProcessor", "pil": "MllamaImageProcessorPil"}),
             (
                 "mm-grounding-dino",
-                {"torchvision": "GroundingDinoImageProcessor", "pil": "GroundingDinoImageProcessorPil"},
+                {
+                    "torchvision": "GroundingDinoImageProcessor",
+                    "pil": "GroundingDinoImageProcessorPil",
+                },
             ),
-            ("mobilenet_v1", {"torchvision": "MobileNetV1ImageProcessor", "pil": "MobileNetV1ImageProcessorPil"}),
-            ("mobilenet_v2", {"torchvision": "MobileNetV2ImageProcessor", "pil": "MobileNetV2ImageProcessorPil"}),
-            ("mobilevit", {"torchvision": "MobileViTImageProcessor", "pil": "MobileViTImageProcessorPil"}),
             ("mobilevitv2", {"torchvision": "MobileViTImageProcessor", "pil": "MobileViTImageProcessorPil"}),
-            ("nougat", {"torchvision": "NougatImageProcessor", "pil": "NougatImageProcessorPil"}),
             ("omdet-turbo", {"torchvision": "DetrImageProcessor", "pil": "DetrImageProcessorPil"}),
-            ("oneformer", {"torchvision": "OneFormerImageProcessor", "pil": "OneFormerImageProcessorPil"}),
-            ("ovis2", {"torchvision": "Ovis2ImageProcessor", "pil": "Ovis2ImageProcessorPil"}),
-            ("owlv2", {"torchvision": "Owlv2ImageProcessor", "pil": "Owlv2ImageProcessorPil"}),
-            ("owlvit", {"torchvision": "OwlViTImageProcessor", "pil": "OwlViTImageProcessorPil"}),
-            ("paddleocr_vl", {"torchvision": "PaddleOCRVLImageProcessor", "pil": "PaddleOCRVLImageProcessorPil"}),
             ("paligemma", {"torchvision": "SiglipImageProcessor", "pil": "SiglipImageProcessorPil"}),
-            ("perceiver", {"torchvision": "PerceiverImageProcessor", "pil": "PerceiverImageProcessorPil"}),
-            ("perception_lm", {"torchvision": "PerceptionLMImageProcessor"}),
-            ("phi4_multimodal", {"torchvision": "Phi4MultimodalImageProcessor"}),
-            ("pi0", {"torchvision": "PI0ImageProcessor"}),
-            ("pix2struct", {"torchvision": "Pix2StructImageProcessor", "pil": "Pix2StructImageProcessorPil"}),
             ("pixio", {"torchvision": "BitImageProcessor", "pil": "BitImageProcessorPil"}),
-            ("pixtral", {"torchvision": "PixtralImageProcessor", "pil": "PixtralImageProcessorPil"}),
-            ("poolformer", {"torchvision": "PoolFormerImageProcessor", "pil": "PoolFormerImageProcessorPil"}),
-            (
-                "pp_chart2table",
-                {"torchvision": "PPChart2TableImageProcessor", "pil": "PPChart2TableImageProcessorPil"},
-            ),
-            ("pp_doclayout_v2", {"torchvision": "PPDocLayoutV2ImageProcessor"}),
-            ("pp_doclayout_v3", {"torchvision": "PPDocLayoutV3ImageProcessor"}),
-            ("pp_lcnet", {"torchvision": "PPLCNetImageProcessor"}),
             ("pp_ocrv5_mobile_det", {"torchvision": "PPOCRV5ServerDetImageProcessor"}),
             ("pp_ocrv5_mobile_rec", {"torchvision": "PPOCRV5ServerRecImageProcessor"}),
-            ("pp_ocrv5_server_det", {"torchvision": "PPOCRV5ServerDetImageProcessor"}),
-            ("pp_ocrv5_server_rec", {"torchvision": "PPOCRV5ServerRecImageProcessor"}),
-            (
-                "prompt_depth_anything",
-                {"torchvision": "PromptDepthAnythingImageProcessor", "pil": "PromptDepthAnythingImageProcessorPil"},
-            ),
-            ("pvt", {"torchvision": "PvtImageProcessor", "pil": "PvtImageProcessorPil"}),
+            ("pp_ocrv6_medium_det", {"torchvision": "PPOCRV5ServerDetImageProcessor"}),
+            ("pp_ocrv6_small_det", {"torchvision": "PPOCRV5ServerDetImageProcessor"}),
+            ("pp_ocrv6_tiny_rec", {"torchvision": "PPOCRV6SmallRecImageProcessor"}),
             ("pvt_v2", {"torchvision": "PvtImageProcessor", "pil": "PvtImageProcessorPil"}),
+            ("qianfan_ocr", {"torchvision": "GotOcr2ImageProcessor", "pil": "GotOcr2ImageProcessorPil"}),
             ("qwen2_5_omni", {"torchvision": "Qwen2VLImageProcessor", "pil": "Qwen2VLImageProcessorPil"}),
             ("qwen2_5_vl", {"torchvision": "Qwen2VLImageProcessor", "pil": "Qwen2VLImageProcessorPil"}),
-            ("qwen2_vl", {"torchvision": "Qwen2VLImageProcessor", "pil": "Qwen2VLImageProcessorPil"}),
             ("qwen3_5", {"torchvision": "Qwen2VLImageProcessor", "pil": "Qwen2VLImageProcessorPil"}),
             ("qwen3_5_moe", {"torchvision": "Qwen2VLImageProcessor", "pil": "Qwen2VLImageProcessorPil"}),
             ("qwen3_omni_moe", {"torchvision": "Qwen2VLImageProcessor", "pil": "Qwen2VLImageProcessorPil"}),
             ("qwen3_vl", {"torchvision": "Qwen2VLImageProcessor", "pil": "Qwen2VLImageProcessorPil"}),
             ("regnet", {"torchvision": "ConvNextImageProcessor", "pil": "ConvNextImageProcessorPil"}),
             ("resnet", {"torchvision": "ConvNextImageProcessor", "pil": "ConvNextImageProcessorPil"}),
-            ("rt_detr", {"torchvision": "RTDetrImageProcessor", "pil": "RTDetrImageProcessorPil"}),
-            ("sam", {"torchvision": "SamImageProcessor", "pil": "SamImageProcessorPil"}),
-            ("sam2", {"torchvision": "Sam2ImageProcessor"}),
             ("sam2_video", {"torchvision": "Sam2ImageProcessor"}),
-            ("sam3", {"torchvision": "Sam3ImageProcessor"}),
+            ("sam3_lite_text", {"torchvision": "Sam3ImageProcessor"}),
             ("sam3_tracker", {"torchvision": "Sam3ImageProcessor"}),
             ("sam3_tracker_video", {"torchvision": "Sam3ImageProcessor"}),
             ("sam3_video", {"torchvision": "Sam3ImageProcessor"}),
             ("sam_hq", {"torchvision": "SamImageProcessor", "pil": "SamImageProcessorPil"}),
-            ("segformer", {"torchvision": "SegformerImageProcessor", "pil": "SegformerImageProcessorPil"}),
-            ("seggpt", {"torchvision": "SegGptImageProcessor", "pil": "SegGptImageProcessorPil"}),
             ("shieldgemma2", {"torchvision": "Gemma3ImageProcessor", "pil": "Gemma3ImageProcessorPil"}),
-            ("siglip", {"torchvision": "SiglipImageProcessor", "pil": "SiglipImageProcessorPil"}),
-            ("siglip2", {"torchvision": "Siglip2ImageProcessor", "pil": "Siglip2ImageProcessorPil"}),
-            ("slanext", {"torchvision": "SLANeXtImageProcessor"}),
-            ("smolvlm", {"torchvision": "SmolVLMImageProcessor", "pil": "SmolVLMImageProcessorPil"}),
-            ("superglue", {"torchvision": "SuperGlueImageProcessor", "pil": "SuperGlueImageProcessorPil"}),
-            ("superpoint", {"torchvision": "SuperPointImageProcessor", "pil": "SuperPointImageProcessorPil"}),
+            ("slanet", {"torchvision": "SLANeXtImageProcessor"}),
             ("swiftformer", {"torchvision": "ViTImageProcessor", "pil": "ViTImageProcessorPil"}),
             ("swin", {"torchvision": "ViTImageProcessor", "pil": "ViTImageProcessorPil"}),
-            ("swin2sr", {"torchvision": "Swin2SRImageProcessor", "pil": "Swin2SRImageProcessorPil"}),
             ("swinv2", {"torchvision": "ViTImageProcessor", "pil": "ViTImageProcessorPil"}),
             ("t5gemma2", {"torchvision": "Gemma3ImageProcessor", "pil": "Gemma3ImageProcessorPil"}),
             ("t5gemma2_encoder", {"torchvision": "Gemma3ImageProcessor", "pil": "Gemma3ImageProcessorPil"}),
             ("table-transformer", {"torchvision": "DetrImageProcessor", "pil": "DetrImageProcessorPil"}),
-            ("textnet", {"torchvision": "TextNetImageProcessor", "pil": "TextNetImageProcessorPil"}),
             ("timesformer", {"pil": "VideoMAEImageProcessorPil", "torchvision": "VideoMAEImageProcessor"}),
             ("timm_wrapper", {"pil": "TimmWrapperImageProcessor"}),
             ("trocr", {"torchvision": "ViTImageProcessor", "pil": "ViTImageProcessorPil"}),
-            ("tvp", {"torchvision": "TvpImageProcessor", "pil": "TvpImageProcessorPil"}),
             ("udop", {"torchvision": "LayoutLMv3ImageProcessor", "pil": "LayoutLMv3ImageProcessorPil"}),
             ("upernet", {"torchvision": "SegformerImageProcessor", "pil": "SegformerImageProcessorPil"}),
-            ("uvdoc", {"torchvision": "UVDocImageProcessor"}),
-            ("video_llama_3", {"torchvision": "VideoLlama3ImageProcessor", "pil": "VideoLlama3ImageProcessorPil"}),
             ("video_llava", {"pil": "VideoLlavaImageProcessor"}),
-            ("videomae", {"torchvision": "VideoMAEImageProcessor", "pil": "VideoMAEImageProcessorPil"}),
-            ("vilt", {"torchvision": "ViltImageProcessor", "pil": "ViltImageProcessorPil"}),
             ("vipllava", {"torchvision": "CLIPImageProcessor", "pil": "CLIPImageProcessorPil"}),
-            ("vit", {"torchvision": "ViTImageProcessor", "pil": "ViTImageProcessorPil"}),
             ("vit_mae", {"torchvision": "ViTImageProcessor", "pil": "ViTImageProcessorPil"}),
             ("vit_msn", {"torchvision": "ViTImageProcessor", "pil": "ViTImageProcessorPil"}),
-            ("vitmatte", {"torchvision": "VitMatteImageProcessor", "pil": "VitMatteImageProcessorPil"}),
-            ("vitpose", {"torchvision": "VitPoseImageProcessor", "pil": "VitPoseImageProcessorPil"}),
+            ("vivit", {"torchvision": "VivitImageProcessor"}),
             ("xclip", {"torchvision": "CLIPImageProcessor", "pil": "CLIPImageProcessorPil"}),
-            ("yolos", {"torchvision": "YolosImageProcessor", "pil": "YolosImageProcessorPil"}),
-            ("zoedepth", {"torchvision": "ZoeDepthImageProcessor", "pil": "ZoeDepthImageProcessorPil"}),
         ]
     )
+
+    IMAGE_PROCESSOR_MAPPING_NAMES.update(MISSING_IMAGE_PROCESSOR_MAPPING_NAMES)
 
 IMAGE_PROCESSOR_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, IMAGE_PROCESSOR_MAPPING_NAMES)
 
@@ -425,8 +323,8 @@ def _resolve_backend(backend: str | None, use_fast: bool | None, base_class_name
       explicit backend is given.
     - Explicit backend string: returned as-is.
     - None resolution: forces 'pil' for processors in DEFAULT_TO_PIL_BACKEND_IMAGE_PROCESSORS
-      (Lanczos interpolation, unsupported by torchvision); otherwise picks 'torchvision' when
-      available, falling back to 'pil'.
+      (Lanczos interpolation, unsupported by torchvision < 0.27); otherwise picks 'torchvision'
+      when available, falling back to 'pil'.
     """
     if use_fast is not None:
         logger.warning_once(
@@ -484,6 +382,30 @@ def _load_class_with_fallback(mapping, backend):
         return processor_class
 
     return None
+
+
+def _format_unavailable_image_processor_error(pretrained_model_name_or_path, mapping):
+    """Format the error when auto resolution found backend candidates but none could be imported."""
+    available_backends = {backend: class_name for backend, class_name in mapping.items() if class_name is not None}
+    missing_dependencies = []
+    if "torchvision" in available_backends and not is_torchvision_available():
+        missing_dependencies.append("torchvision")
+    if "pil" in available_backends and not is_vision_available():
+        missing_dependencies.append("Pillow")
+
+    processor_options = ", ".join(f"{backend}: {class_name}" for backend, class_name in available_backends.items())
+    error_message = (
+        f"Could not load any image processor class for {pretrained_model_name_or_path}. "
+        f"The model configuration resolves to the following image processor classes: {processor_options}. "
+        "None of these classes could be imported."
+    )
+    if missing_dependencies:
+        error_message += (
+            f" Missing optional dependencies: {', '.join(missing_dependencies)}. "
+            "Please install the missing dependencies or select a backend that is available in your environment."
+        )
+
+    return error_message
 
 
 def _find_mapping_for_image_processor(base_class_name: str) -> dict | None:
@@ -698,16 +620,20 @@ class AutoImageProcessor:
                 image_processor_auto_map = feature_extractor_auto_map.replace("FeatureExtractor", "ImageProcessor")
 
         # If not in image processor config, try the model config
-        if image_processor_type is None and image_processor_auto_map is None:
-            if not isinstance(config, PreTrainedConfig):
-                config = AutoConfig.from_pretrained(
-                    pretrained_model_name_or_path,
-                    trust_remote_code=trust_remote_code,
-                    **kwargs,
-                )
-            image_processor_type = getattr(config, "image_processor_type", None)
-            if hasattr(config, "auto_map") and "AutoImageProcessor" in config.auto_map:
-                image_processor_auto_map = config.auto_map["AutoImageProcessor"]
+        if image_processor_type is None:
+            try:
+                if not isinstance(config, PreTrainedConfig):
+                    config = AutoConfig.from_pretrained(
+                        pretrained_model_name_or_path, trust_remote_code=trust_remote_code, **kwargs
+                    )
+
+                image_processor_type = getattr(config, "image_processor_type", None)
+                if hasattr(config, "auto_map") and "AutoImageProcessor" in config.auto_map:
+                    image_processor_auto_map = config.auto_map["AutoImageProcessor"]
+            except ValueError:
+                # Config loading failed (unrecognized model_type, invalid config, etc.)
+                # Continue to fallback logic below (AutoTokenizer, AutoImageProcessor, etc.)
+                pass
 
         # Derive base_class_name from image_processor_type
         is_legacy_fast = False
@@ -725,10 +651,16 @@ class AutoImageProcessor:
         # Handle remote code
         has_remote_code = image_processor_auto_map is not None
         has_local_code = image_processor_class is not None or type(config) in IMAGE_PROCESSOR_MAPPING
-        explicit_local_code = has_local_code and not (
-            image_processor_class or _load_class_with_fallback(IMAGE_PROCESSOR_MAPPING[type(config)], backend)
-        ).__module__.startswith("transformers.")
+        explicit_local_code = False
         if has_remote_code:
+            if has_local_code:
+                local_image_processor_class = image_processor_class or _load_class_with_fallback(
+                    IMAGE_PROCESSOR_MAPPING[type(config)], backend
+                )
+                explicit_local_code = (
+                    local_image_processor_class is not None
+                    and not local_image_processor_class.__module__.startswith("transformers.")
+                )
             class_ref = _resolve_auto_map_class_ref(image_processor_auto_map, backend)
             upstream_repo = class_ref.split("--")[0] if "--" in class_ref else None
             trust_remote_code = resolve_trust_remote_code(
@@ -750,8 +682,13 @@ class AutoImageProcessor:
             if image_processor_class is not None:
                 return image_processor_class.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
 
-            available = [k for k, v in image_processor_mapping.items() if v is not None]
-            raise ValueError(f"Could not find image processor class. Available backends: {', '.join(available)}")
+            raise ValueError(
+                _format_unavailable_image_processor_error(pretrained_model_name_or_path, image_processor_mapping)
+            )
+        elif base_class_name is not None:
+            mapping = _find_mapping_for_image_processor(base_class_name)
+            if mapping is not None:
+                raise ValueError(_format_unavailable_image_processor_error(pretrained_model_name_or_path, mapping))
         raise ValueError(
             f"Unrecognized image processor in {pretrained_model_name_or_path}. Should have a "
             f"`image_processor_type` key in its {IMAGE_PROCESSOR_NAME} of {CONFIG_NAME}, or one of the following "

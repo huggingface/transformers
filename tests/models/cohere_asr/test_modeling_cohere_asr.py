@@ -18,7 +18,7 @@ import unittest
 
 from transformers import AutoProcessor, CohereAsrConfig, CohereAsrForConditionalGeneration, is_torch_available
 from transformers.audio_utils import load_audio
-from transformers.testing_utils import cleanup, require_torch, slow, torch_device
+from transformers.testing_utils import Expectations, cleanup, require_torch, slow, torch_device
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
@@ -175,15 +175,9 @@ class CohereAsrModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
     def test_config(self):
         self.config_tester.run_common_tests()
 
-    def test_reverse_loading_mapping(self, check_keys_were_modified=True):
+    def test_reverse_loading_mapping(self):
         # proj_out conversion only applies to ForConditionalGeneration, not the base model
-        try:
-            self.all_model_classes = (CohereAsrForConditionalGeneration,) if is_torch_available() else ()
-            super().test_reverse_loading_mapping(check_keys_were_modified)
-        finally:
-            self.all_model_classes = (
-                (CohereAsrModel, CohereAsrForConditionalGeneration) if is_torch_available() else ()
-            )
+        super().test_reverse_loading_mapping(skip_base_model=True)
 
     # Copied from tests.models.moonshine_streaming.test_modeling_moonshine_streaming.MoonshineStreamingModelTest.test_resize_tokens_embeddings
     def test_resize_tokens_embeddings(self):
@@ -328,9 +322,16 @@ class CohereAsrIntegrationTest(unittest.TestCase):
         outputs = model.generate(**inputs, max_new_tokens=256)
         text = self.processor.decode(outputs, skip_special_tokens=True)
 
-        EXPECTED_OUTPUT = [
-            " Yesterday it was thirty-five degrees in Barcelona, but today the temperature will go down to minus twenty degrees."
-        ]
+        EXPECTED_OUTPUT = Expectations(
+            {
+                ("xpu", None): [
+                    " Yesterday it was 35 degrees in Barcelona, but today the temperature will go down to minus 20 degrees."
+                ],
+                ("cuda", None): [
+                    " Yesterday it was 35 degrees in Barcelona, but today the temperature will go down to minus 20 degrees."
+                ],
+            }
+        ).get_expectation()
         self.assertEqual(text, EXPECTED_OUTPUT)
 
     @slow
@@ -359,12 +360,26 @@ class CohereAsrIntegrationTest(unittest.TestCase):
         text_pnc = self.processor.decode(outputs_pnc, skip_special_tokens=True)
         text_nopnc = self.processor.decode(outputs_nopnc, skip_special_tokens=True)
 
-        EXPECTED_OUTPUT_PNC = [
-            " Yesterday it was thirty-five degrees in Barcelona, but today the temperature will go down to minus twenty degrees."
-        ]
-        EXPECTED_OUTPUT_NOPNC = [
-            " yesterday it was thirty-five degrees in barcelona but today the temperature will go down to minus twenty degrees"
-        ]
+        EXPECTED_OUTPUT_PNC = Expectations(
+            {
+                ("xpu", None): [
+                    " Yesterday it was 35 degrees in Barcelona, but today the temperature will go down to minus 20 degrees."
+                ],
+                ("cuda", None): [
+                    " Yesterday it was 35 degrees in Barcelona, but today the temperature will go down to minus 20 degrees."
+                ],
+            }
+        ).get_expectation()
+        EXPECTED_OUTPUT_NOPNC = Expectations(
+            {
+                ("xpu", None): [
+                    " yesterday it was 35 degrees in barcelona but today the temperature will go down to minus 20 degrees"
+                ],
+                ("cuda", None): [
+                    " yesterday it was 35 degrees in barcelona but today the temperature will go down to minus 20 degrees"
+                ],
+            }
+        ).get_expectation()
         self.assertEqual(text_pnc, EXPECTED_OUTPUT_PNC)
         self.assertEqual(text_nopnc, EXPECTED_OUTPUT_NOPNC)
 
@@ -422,10 +437,18 @@ class CohereAsrIntegrationTest(unittest.TestCase):
         )
 
         # fmt: off
-        EXPECTED_OUTPUT = [
-            " Yesterday it was thirty-five degrees in Barcelona, but today the temperature will go down to minus twenty degrees.",
-            " This week, I traveled to Chicago to deliver my final farewell address to the nation, following in the tradition of presidents before me. It was an opportunity to say thank you. Whether we've seen eye to eye or rarely agreed at all, my conversations with you, the American people, in living rooms and schools, at farms and on factory floors, at diners and on distant military outposts, all these conversations are what have kept me honest, kept me inspired, and kept me going. Every day I learned from you. You made me a better president and you made me a better man. Over the course of these eight years, I've seen the goodness, the resilience, and the hope of the American.",
-        ]
+        EXPECTED_OUTPUT = Expectations(
+            {
+                ("xpu", None): [
+                    " Yesterday it was 35 degrees in Barcelona, but today the temperature will go down to minus 20 degrees.",
+                    " This week, I traveled to Chicago to deliver my final farewell address to the nation, following in the tradition of presidents before me. It was an opportunity to say thank you. Whether we've seen eye to eye or rarely agreed at all, my conversations with you, the American people, in living rooms and schools, at farms and on factory floors, at diners and on distant military outposts, all these conversations are what have kept me honest, kept me inspired, and kept me going. Every day I learned from you. You made me a better president and you made me a better man. Over the course of these eight years, I've seen the goodness, the resilience, and the hope of the American.",
+                ],
+                ("cuda", None): [
+                    " Yesterday it was 35 degrees in Barcelona, but today the temperature will go down to minus 20 degrees.",
+                    " This week, I traveled to Chicago to deliver my final farewell address to the nation, following in the tradition of presidents before me. It was an opportunity to say thank you. Whether we've seen eye to eye or rarely agreed at all, my conversations with you, the American people, in living rooms and schools, at farms and on factory floors, at diners and on distant military outposts, all these conversations are what have kept me honest, kept me inspired, and kept me going. Every day I learned from you. You made me a better president and you made me a better man. Over the course of these eight years, I've seen the goodness, the resilience, and the hope of the American."
+                ],
+            }
+        ).get_expectation()
         # fmt: on
         self.assertEqual(text, EXPECTED_OUTPUT)
 

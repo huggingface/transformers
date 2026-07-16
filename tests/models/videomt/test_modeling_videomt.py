@@ -110,7 +110,6 @@ class VideomtForUniversalSegmentationTest(ModelTesterMixin, PipelineTesterMixin,
     pipeline_model_mapping = {}
     is_encoder_decoder = False
     test_missing_keys = False
-    test_torch_exportable = False
 
     def setUp(self):
         self.model_tester = VideomtForUniversalSegmentationTester(self)
@@ -256,6 +255,23 @@ class VideomtForUniversalSegmentationIntegrationTest(unittest.TestCase):
                     ],
                     device=results[0]["segmentation"].device,
                 ),
+                ("xpu", None): torch.tensor(
+                    [
+                        [-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1],
+                        [-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1],
+                        [-1, -1, 1, 1, 1, 1, 1, 1, 1, 1, -1, -1],
+                        [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+                        [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+                        [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+                        [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+                        [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+                        [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+                        [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+                        [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+                        [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+                    ],
+                    device=results[0]["segmentation"].device,
+                ),
             }
         ).get_expectation()
         torch.testing.assert_close(results[0]["segmentation"][24:36, 473:485], expected_slice)
@@ -296,6 +312,23 @@ class VideomtForUniversalSegmentationIntegrationTest(unittest.TestCase):
                     ],
                     device=results[1]["segmentation"].device,
                 ),
+                ("xpu", None): torch.tensor(
+                    [
+                        [-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1],
+                        [-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1],
+                        [-1, -1, 0, 1, 1, 1, 1, 1, 1, 1, 1, 0],
+                        [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+                        [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+                        [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+                        [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+                        [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+                        [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+                        [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+                        [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+                        [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+                    ],
+                    device=results[1]["segmentation"].device,
+                ),
             }
         ).get_expectation()
         torch.testing.assert_close(results[1]["segmentation"][24:36, 472:484], expected_slice)
@@ -315,6 +348,23 @@ class VideomtForUniversalSegmentationIntegrationTest(unittest.TestCase):
         expected_slice = Expectations(
             {
                 ("cuda", None): torch.tensor(
+                    [
+                        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                        [0, 0, 13, 13, 13, 13, 13, 13, 13, 0, 0, 0],
+                        [13, 13, 13, 13, 13, 13, 13, 13, 13, 13, 13, 0],
+                        [13, 13, 13, 13, 13, 13, 13, 13, 13, 13, 13, 0],
+                        [13, 13, 13, 13, 13, 13, 13, 13, 13, 13, 13, 13],
+                        [13, 13, 13, 13, 13, 13, 13, 13, 13, 13, 13, 13],
+                        [13, 13, 13, 13, 13, 13, 13, 13, 13, 13, 13, 13],
+                        [13, 13, 13, 13, 13, 13, 13, 13, 13, 13, 13, 13],
+                        [13, 13, 13, 13, 13, 13, 13, 13, 13, 13, 13, 13],
+                        [13, 13, 13, 13, 13, 13, 13, 13, 13, 13, 13, 13],
+                        [13, 13, 13, 13, 13, 13, 13, 13, 13, 13, 13, 13],
+                    ],
+                    device=semantic_results[0].device,
+                ),
+                ("xpu", None): torch.tensor(
                     [
                         [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
                         [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
@@ -371,6 +421,23 @@ class VideomtForUniversalSegmentationIntegrationTest(unittest.TestCase):
                     ],
                     device=semantic_results[1].device,
                 ),
+                ("xpu", None): torch.tensor(
+                    [
+                        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                        [0, 0, 13, 13, 13, 13, 13, 13, 0, 0, 0, 0],
+                        [0, 13, 13, 13, 13, 13, 13, 13, 13, 0, 0, 0],
+                        [13, 13, 13, 13, 13, 13, 13, 13, 13, 0, 0, 0],
+                        [13, 13, 13, 13, 13, 13, 13, 13, 13, 13, 0, 0],
+                        [13, 13, 13, 13, 13, 13, 13, 13, 13, 13, 0, 0],
+                        [0, 0, 13, 13, 13, 13, 13, 13, 13, 13, 0, 0],
+                        [0, 0, 0, 0, 13, 13, 13, 13, 13, 13, 13, 0],
+                        [0, 0, 0, 0, 0, 0, 0, 13, 13, 13, 0, 0],
+                        [0, 0, 0, 0, 0, 0, 0, 0, 0, 13, 0, 0],
+                        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                    ],
+                    device=semantic_results[1].device,
+                ),
             }
         ).get_expectation()
         torch.testing.assert_close(semantic_results[1][2:14, 488:500], expected_slice)
@@ -388,6 +455,23 @@ class VideomtForUniversalSegmentationIntegrationTest(unittest.TestCase):
         expected_slice = Expectations(
             {
                 ("cuda", None): torch.tensor(
+                    [
+                        [-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1],
+                        [-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1],
+                        [-1, -1, 0, 0, 0, 0, 0, 0, 0, 0, -1, -1],
+                        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                    ],
+                    device=panoptic_results[1]["segmentation"].device,
+                ),
+                ("xpu", None): torch.tensor(
                     [
                         [-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1],
                         [-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1],
@@ -432,6 +516,23 @@ class VideomtForUniversalSegmentationIntegrationTest(unittest.TestCase):
                         [-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1],
                         [-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1],
                         [-1, -1, 0, 0, 0, 0, 0, 0, 0, 0, 0, -1],
+                        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                    ],
+                    device=panoptic_results[1]["segmentation"].device,
+                ),
+                ("xpu", None): torch.tensor(
+                    [
+                        [-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1],
+                        [-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1],
+                        [-1, -1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
                         [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
                         [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
                         [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],

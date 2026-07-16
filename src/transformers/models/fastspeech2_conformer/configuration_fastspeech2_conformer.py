@@ -262,7 +262,7 @@ class FastSpeech2ConformerConfig(PreTrainedConfig):
             raise ValueError("Either use_masking or use_weighted_masking can be True, but not both.")
 
 
-@auto_docstring(checkpoint="espnet/fastspeech2_conformer")
+@auto_docstring(checkpoint="espnet/fastspeech2_conformer_with_hifigan")
 @strict
 class FastSpeech2ConformerHifiGanConfig(PreTrainedConfig):
     r"""
@@ -304,7 +304,7 @@ class FastSpeech2ConformerHifiGanConfig(PreTrainedConfig):
     >>> configuration = model.config
     ```"""
 
-    model_type = "hifigan"
+    model_type = "fastspeech2_conformer_hifigan"
     base_config_key = "vocoder_config"
 
     model_in_dim: int = 80
@@ -323,7 +323,7 @@ class FastSpeech2ConformerHifiGanConfig(PreTrainedConfig):
         super().__post_init__(**kwargs)
 
 
-@auto_docstring(checkpoint="espnet/fastspeech2_conformer")
+@auto_docstring(checkpoint="espnet/fastspeech2_conformer_with_hifigan")
 @strict
 class FastSpeech2ConformerWithHifiGanConfig(PreTrainedConfig):
     r"""

@@ -51,38 +51,6 @@ def generate_without_cb(
     return decoded_outputs
 
 
-def maybe_setup_metrics(use_metrics: bool) -> None:
-    if not use_metrics:
-        return
-    try:
-        from opentelemetry import metrics, trace
-        from opentelemetry.exporter.otlp.proto.http.metric_exporter import OTLPMetricExporter
-        from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
-        from opentelemetry.sdk.metrics import MeterProvider
-        from opentelemetry.sdk.metrics.export import PeriodicExportingMetricReader
-        from opentelemetry.sdk.resources import Resource
-        from opentelemetry.sdk.trace import TracerProvider
-        from opentelemetry.sdk.trace.export import BatchSpanProcessor
-
-        resource = Resource.create({"service.name": "transformers"})
-        metrics_exporter = PeriodicExportingMetricReader(
-            OTLPMetricExporter(
-                endpoint="http://localhost:9090/api/v1/otlp/v1/metrics"
-            ),  # Uses OTEL_EXPORTER_OTLP_METRICS_ENDPOINT env var
-            export_interval_millis=1000,
-        )
-        meter_provider = MeterProvider(resource=resource, metric_readers=[metrics_exporter])
-        metrics.set_meter_provider(meter_provider)
-        trace_exporter = OTLPSpanExporter(
-            endpoint="http://localhost:4318/v1/traces"
-        )  # Uses OTEL_EXPORTER_OTLP_TRACES_ENDPOINT env var
-        tracer_provider = TracerProvider(resource=resource)
-        tracer_provider.add_span_processor(BatchSpanProcessor(trace_exporter))
-        trace.set_tracer_provider(tracer_provider)
-    except Exception as e:
-        print(f"Error setting up metrics: {e}")
-
-
 def batch_generate(
     model: AutoModelForCausalLM,
     simple_batch_inputs: list,
@@ -150,7 +118,7 @@ def batch_generate(
         "max_blocks_per_request": cb_config.max_blocks_per_request,
         "use_cuda_graph": cb_config.use_cuda_graph,
         "use_async_batching": cb_config.use_async_batching,
-        "use_default_compile_configs": cb_config.use_default_compile_configs,
+        "default_compile_level": cb_config.default_compile_level,
         "gen_time": gen_time,
         "token_count": token_count,
         "tok_per_sec": tok_per_sec,
@@ -181,7 +149,9 @@ if __name__ == "__main__":
     # Performance parameters
     parser.add_argument("--matmul-precision", "-mp", type=str, default="high")  # set to "none" to disable
     parser.add_argument("--cuda-graph", "-cg", help="Use cuda graphs", type=str, default=None)
-    parser.add_argument("--compile", action="store_true", help="Compile the model using torch.compile")
+    parser.add_argument(
+        "--compile", type=int, default=0, help="Compile level (0: no compile, 1-3: more perf, longer warmup time)"
+    )
     parser.add_argument("--use-async", action=argparse.BooleanOptionalAction, help="Use asynchronous batching")
     parser.add_argument(
         "--block-table", "-bt", type=int, default=0, help="Block table size, ie. number of blocks / request"
@@ -202,7 +172,6 @@ if __name__ == "__main__":
     parser.add_argument("--add-prefix", action="store_true", help="Add a prefix to the samples")
     parser.add_argument("--compare", action="store_true", help="Compare CB generation with classic generate")
     parser.add_argument("--profile", type=str, default=None)
-    parser.add_argument("--metrics", action="store_true")
     parser.add_argument("--seed", type=int, default=None, help="Random seed")
 
     # Display parameters
@@ -233,7 +202,6 @@ if __name__ == "__main__":
 
     # Set up diagnostics
     logger.setLevel(args.log_level.upper())
-    maybe_setup_metrics(args.metrics)
 
     # Set up performance
     if args.matmul_precision != "none":
@@ -309,7 +277,7 @@ if __name__ == "__main__":
         max_blocks_per_request=args.block_table,
         use_cuda_graph=use_cuda_graph,
         use_async_batching=args.use_async,
-        use_default_compile_configs=args.compile,
+        default_compile_level=args.compile,
     )
 
     # If we need to compare, we need to generate the reference outputs

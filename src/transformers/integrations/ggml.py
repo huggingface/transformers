@@ -89,6 +89,21 @@ GGUF_CONFIG_MAPPING = {
         "expert_count": "num_experts",
         "expert_used_count": "num_experts_per_tok",
     },
+    "gpt_oss": {
+        "context_length": "max_position_embeddings",
+        "block_count": "num_hidden_layers",
+        "feed_forward_length": "intermediate_size",
+        "embedding_length": "hidden_size",
+        "rope.dimension_count": None,
+        "rope.freq_base": "rope_theta",
+        "attention.head_count": "num_attention_heads",
+        "attention.head_count_kv": "num_key_value_heads",
+        "attention.layer_norm_rms_epsilon": "rms_norm_eps",
+        "vocab_size": "vocab_size",
+        "expert_count": "num_local_experts",
+        "expert_used_count": "num_experts_per_tok",
+        "sliding_window": "sliding_window",
+    },
     "lfm2": {
         "context_length": "max_position_embeddings",
         "block_count": "num_hidden_layers",
@@ -256,6 +271,23 @@ GGUF_CONFIG_MAPPING = {
         # NOTE: Gemma3 has key_length==value_length==head_dim
         # See: https://github.com/ggml-org/llama.cpp/blob/fe5b78c89670b2f37ecb216306bed3e677b49d9f/convert_hf_to_gguf.py#L3495-L3496
         "attention.key_length": "head_dim",
+        "attention.head_count": "num_attention_heads",
+        "attention.head_count_kv": "num_key_value_heads",
+        "attention.layer_norm_rms_epsilon": "rms_norm_eps",
+        "attention.sliding_window": "sliding_window",
+        "vocab_size": "vocab_size",
+    },
+    "gemma4": {
+        "context_length": "max_position_embeddings",
+        "block_count": "num_hidden_layers",
+        "feed_forward_length": "intermediate_size",
+        "embedding_length": "hidden_size",
+        "rope.dimension_count": None,
+        "rope.freq_base": None,
+        # Gemma4 has mixed attention: sliding (head_dim=256) and full (global_head_dim=512)
+        # GGUF stores the full attention head dimension in attention.key_length
+        # We want to preserve the default head_dim=256 and only set global_head_dim from GGUF
+        "attention.key_length": "global_head_dim",
         "attention.head_count": "num_attention_heads",
         "attention.head_count_kv": "num_key_value_heads",
         "attention.layer_norm_rms_epsilon": "rms_norm_eps",
@@ -787,6 +819,7 @@ GGUF_TO_FAST_CONVERTERS = {
     "nemotron": GGUFGPTConverter,
     "gemma2": GGUFGemmaConverter,
     "gemma3_text": GGUFGemmaConverter,
+    "gemma4_text": GGUFGemmaConverter,
     "umt5": GGUFT5Converter,
     "deci": GGUFLlamaConverter,
     "decilm": GGUFLlamaConverter,

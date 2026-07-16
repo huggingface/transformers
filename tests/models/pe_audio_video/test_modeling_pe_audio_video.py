@@ -210,7 +210,7 @@ class PeAudioVideoEncoderTest(ModelTesterMixin, unittest.TestCase):
     additional_model_inputs = ["pixel_values_videos", "padding_mask_videos"]
     test_resize_embeddings = False
     _is_composite = True
-    test_torch_exportable = False
+    test_torch_exportable = False  # data-dependent audio-video alignment
 
     def setUp(self):
         self.model_tester = PeAudioVideoEncoderTester(self)
@@ -257,10 +257,6 @@ class PeAudioVideoEncoderTest(ModelTesterMixin, unittest.TestCase):
 
     @unittest.skip("#TODO @eustlb this should be fixed tho")
     def test_save_load(self):
-        pass
-
-    @unittest.skip(reason="TimmWrapperModel does not support model parallelism")
-    def test_model_parallelism(self):
         pass
 
     @unittest.skip(reason="@eustlb this is not really expected")

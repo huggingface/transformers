@@ -14,11 +14,11 @@
 """Testing suite for the PyTorch SAM3 model."""
 
 import gc
+import math
 import tempfile
 import unittest
 
-import requests
-
+from transformers.image_utils import load_image
 from transformers.testing_utils import (
     backend_empty_cache,
     require_deterministic_for_xpu,
@@ -26,11 +26,12 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
-from transformers.utils import is_torch_available, is_vision_available
+from transformers.utils import is_torch_available
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
+from ...test_processing_common import url_to_local_path
 
 
 if is_torch_available():
@@ -48,10 +49,6 @@ if is_torch_available():
     )
     from transformers.models.sam3.modeling_sam3 import Sam3Model, Sam3VisionModel
     from transformers.models.sam3.processing_sam3 import Sam3Processor
-
-
-if is_vision_available():
-    from PIL import Image
 
 
 class Sam3VisionModelTester:
@@ -91,6 +88,7 @@ class Sam3VisionModelTester:
         self.scale_factors = scale_factors
         self.batch_size = batch_size
         self.is_training = is_training
+        self.encoder_seq_length = 256
 
     def get_config(self):
         backbone_config = Sam3ViTConfig(
@@ -176,42 +174,6 @@ class Sam3VisionModelTest(ModelTesterMixin, unittest.TestCase):
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
-
-    def test_attention_outputs(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        config.return_dict = True
-        # Force eager attention to support output attentions
-        config._attn_implementation = "eager"
-
-        for model_class in self.all_model_classes:
-            inputs_dict["output_attentions"] = True
-            inputs_dict["output_hidden_states"] = False
-            config.return_dict = True
-            model = model_class._from_config(config, attn_implementation="eager")
-            model.to(torch_device)
-            model.eval()
-            with torch.no_grad():
-                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
-            attentions = outputs.attentions
-            self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
-
-            # Check that output_attentions also work using config
-            del inputs_dict["output_attentions"]
-            config.output_attentions = True
-            config.backbone_config.output_attentions = True
-
-            model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-            with torch.no_grad():
-                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
-            attentions = outputs.attentions
-            self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
-
-            # For windowed attention, check the attention shape
-            # Attention shape: (batch_size, num_heads, seq_len, seq_len) for global attention
-            # or windowed shape for local attention
-            self.assertIsNotNone(attentions[0])
 
     def test_hidden_states_output(self):
         def check_hidden_states_output(inputs_dict, config, model_class):
@@ -769,7 +731,7 @@ class Sam3ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             with torch.no_grad():
                 text_embeds = model.get_text_features(
                     input_ids=inputs_dict["input_ids"], attention_mask=inputs_dict["attention_mask"], return_dict=True
-                ).pooler_output
+                )
 
             # Forward with text_embeds (remove input_ids)
             inputs_with_embeds = {
@@ -1008,16 +970,14 @@ class Sam3ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
 def prepare_coco_cat_image():
     """Prepare COCO cat and laptop image (from batched inference notebook)."""
-    img_url = "http://images.cocodataset.org/val2017/000000077595.jpg"
-    raw_image = Image.open(requests.get(img_url, stream=True).raw).convert("RGB")
-    return raw_image
+    img_url = url_to_local_path("http://images.cocodataset.org/val2017/000000077595.jpg")
+    return load_image(img_url).convert("RGB")
 
 
 def prepare_coco_kitchen_image():
     """Prepare COCO kitchen scene image (from batched inference notebook)."""
-    img_url = "http://images.cocodataset.org/val2017/000000136466.jpg"
-    raw_image = Image.open(requests.get(img_url, stream=True).raw).convert("RGB")
-    return raw_image
+    img_url = url_to_local_path("http://images.cocodataset.org/val2017/000000136466.jpg")
+    return load_image(img_url).convert("RGB")
 
 
 @slow
@@ -1585,3 +1545,29 @@ class Sam3ModelIntegrationTest(unittest.TestCase):
         torch.testing.assert_close(outputs_with_embeds.pred_logits, outputs_direct.pred_logits, atol=1e-5, rtol=1e-5)
         torch.testing.assert_close(outputs_with_embeds.pred_boxes, outputs_direct.pred_boxes, atol=1e-5, rtol=1e-5)
         torch.testing.assert_close(outputs_with_embeds.pred_masks, outputs_direct.pred_masks, atol=1e-5, rtol=1e-5)
+
+
+@require_torch
+class Sam3SinePositionEmbeddingTest(unittest.TestCase):
+    def test_compiled_build_keeps_requested_dtype(self):
+        """Regression test for #47228: the cumsum-on-bool-ones formulation matched an
+        inductor rewrite that dropped the requested dtype, so half-precision models
+        crashed under torch.compile with a Float/BFloat16 matmul mismatch."""
+        from transformers.models.sam3.modeling_sam3 import Sam3SinePositionEmbedding
+
+        def build(pixel_values):
+            return Sam3SinePositionEmbedding.build_sine_position_embedding(
+                pixel_values.shape,
+                pixel_values.device,
+                pixel_values.dtype,
+                num_position_features=32,
+                normalize=True,
+                scale=2 * math.pi,
+            )
+
+        pixel_values = torch.zeros(1, 3, 8, 8, device=torch_device, dtype=torch.bfloat16)
+        eager = build(pixel_values)
+        compiled = torch.compile(build)(pixel_values)
+
+        self.assertEqual(compiled.dtype, torch.bfloat16)
+        torch.testing.assert_close(compiled, eager, atol=2e-2, rtol=2e-2)

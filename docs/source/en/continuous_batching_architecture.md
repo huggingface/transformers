@@ -62,10 +62,11 @@ When a new request's prompt exceeds the available token budget (set by `max_batc
 
 ## Scheduler
 
-The scheduler decides which requests join each forward pass based on two budgets.
+The scheduler decides which requests join each forward pass based on two budgets and a request cap.
 
 - Token budget — the maximum number of query tokens processed in a single forward pass, set by `max_batch_tokens` in [`ContinuousBatchingConfig`].
 - Cache budget — the total number of KV pages that can be read in a single pass, which is bounded by the total cache size.
+- Request cap — the maximum number of requests in a single forward pass, set by `max_requests_per_batch`. The logits tensor scales with the vocabulary size, so this cap bounds peak memory for large-vocabulary models.
 
 ### FIFO
 
@@ -81,6 +82,61 @@ Set the scheduler in [`ContinuousBatchingConfig`].
 cb_config = ContinuousBatchingConfig(scheduler_type="prefill_first")
 ```
 
+## Memory management
+
+The KV cache is paged so requests of different lengths can share a fixed memory pool without fragmentation. The cache divides memory into fixed-size blocks, and each request holds a list of block IDs that the attention kernel reads from and writes to.
+
+```text
+Paged KV cache (num_blocks × block_size tokens per block)
+
+    0   1   2   3   4   5   6   7   8   9   …
+  ┌───┬───┬───┬───┬───┬───┬───┬───┬───┬───┐
+  │ B │ · │ A │ B │ · │ A │ · │ A │ · │ · │
+  └───┴───┴───┴───┴───┴───┴───┴───┴───┴───┘
+  A  request A: 2, 5, 7   B  request B: 0, 3   ·  free: 1, 4, 6, 8, 9, …
+```
+
+A page holds the key/value state for one token in one layer. A block is a span of `block_size` pages (default 256) and is the unit of allocation. Blocks are allocated per layer group. Layers within a group share a block ID, which keeps bookkeeping uniform for mixed-attention models.
+
+The cache reserves two extra blocks on top of `num_blocks` for padding tokens to read from and write to, plus a sentinel index for sliding window groups. This reservation requires `block_size` to be at least 4, so the manager rejects smaller values.
+
+### Cache sizing
+
+The manager infers the number of blocks at startup from free GPU memory. The manager solves an equation that accounts for KV tensors, attention masks, activations, and bookkeeping indices, then sizes the pool to fit inside `max_memory_percent` (default 0.9) of the available memory.
+
+You can pin the values explicitly in [`ContinuousBatchingConfig`].
+
+```py
+cb_config = ContinuousBatchingConfig(
+    block_size=256,
+    num_blocks=4096,
+    max_batch_tokens=512,
+    max_memory_percent=0.8,
+)
+```
+
+### Admission
+
+Before a request joins the batch, the scheduler checks that enough free blocks exist for every layer group. If any group would fall short, the request is rejected and nothing is allocated.
+
+To avoid filling the cache until [offloading](#offloading) is the only option, the scheduler enforces a `safety_margin`. Once free blocks fall below `safety_margin * num_blocks`, new prefills are held back and only active decodes continue. The FIFO scheduler defaults to `0.15` (15% of blocks held in reserve), while `prefill_first` defaults to `0.0`. Set `safety_margin` in [`ContinuousBatchingConfig`] to tune it, where `0` disables the margin.
+
+### Prefix caching
+
+When two requests share a prompt prefix, they can share the blocks that hold the KV for that prefix. Each completed block is content-hashed. A later request with a matching prefix reuses the block and skips the prefill for those tokens. Shared blocks are reference-counted and only return to the free pool once every request using them has finished.
+
+Prefix caching is enabled by default and is active only when a model has exclusively full-attention layers. Set `allow_block_sharing=False` in [`ContinuousBatchingConfig`] for workloads with short prompts and long generations, where the bookkeeping outweighs the savings.
+
+### Eviction
+
+Freed blocks aren't wiped and they stay "initialized" with their content and hash intact so a later prefix match can reuse them. When the uninitialized pool runs low, the manager lazily demotes the most recent initialized block back to uninitialized, dropping their hash. The prefix cache is a best-effort layer that the allocator discards to keep serving new requests.
+
+### Soft reset
+
+A soft reset is the fallback path for [offloading](#offloading). When the manager can't copy a request's KV cache to the CPU swap pool, because CPU offloading is disabled or the pool is full, it soft resets the request instead. It appends the request's generated tokens to its original prompt, frees its cache blocks, and adds it back to the queue. The [Offloading](#offloading) section covers which requests are chosen.
+
+When the cache has space again, the request resumes from where it left off with its generation history encoded in the prompt.
+
 ## CUDA graphs
 
 Every generation step involves CPU overhead, from assembling the batch to dispatching GPU kernels and reading the results. CUDA graphs eliminate the overhead by recording the full GPU execution sequence once and replaying it for batches with matching shapes.
@@ -89,7 +145,7 @@ Because the batch shapes change every step, the continuous batching system handl
 
 1. Query lengths are padded to the nearest multiple of `q_padding_interval_size`.
 2. KV lengths are padded to the nearest multiple of `kv_padding_interval_size`.
-3. Recorded graphs are stored in an LRU cache of up to `max_cached_graphs` entries.
+3. Recorded graphs are stored in a cache.
 
 When a batch's padded shape matches a cached graph, the graph replays without any CPU dispatch. New shapes trigger a new graph capture.
 
@@ -113,11 +169,18 @@ While the GPU computes batch N, the CPU prepares batch N+1. However, overlapping
 
 Async batching requires CUDA graphs to be active, since graph replay provides the stable tensor addresses needed for stream overlap to be correct.
 
-## Soft reset
+## Offloading
 
-If the KV cache fills completely during a long session, because requests are generating very long outputs, the manager triggers a soft reset rather than crashing. It selects the oldest active request (or the newest, if a previous soft reset already blocked new requests from joining), appends its generated tokens to its original prompt, frees its cache blocks, and adds it back to the queue.
+Requests that generate long outputs can grow until the KV cache has no room to allocate the next block. Rather than crash, the manager offloads active requests back to the waiting queue to free blocks for the requests that remain.
 
-When the cache has space again, the request resumes from where it left off with its generation history encoded in the prompt.
+Offloading is demand-driven. The scheduler reports the *stalled* requests, the active requests that failed to allocate the blocks they need, along with how many blocks each one demands. The manager offloads the fewest requests needed to free enough blocks to cover that demand. It offloads newest first, so requests already scheduled into the current batch keep their cache, and the last remaining active request is never offloaded.
+
+Two situations trigger offloading.
+
+- A batch is scheduled, but some active requests stalled. The manager offloads enough of the stalled requests that the next batch can allocate blocks for the rest.
+- The cache is full and no batch can be scheduled at all. The manager offloads requests and retries scheduling in a loop within the same step, until a batch fits or no request can be offloaded. It no longer waits for the next forward pass to recover.
+
+An offloaded request takes one of two paths. When `cpu_offload_space` is greater than `0.0`, the manager copies the request's KV cache blocks to a pre-allocated pinned CPU buffer, batching every request that fits the swap pool into a single transfer. After GPU cache space becomes available, the manager copies the blocks back to the GPU and resumes the request without recomputing its prompt and generated tokens. Requests that don't fit the pool, or every offloaded request when CPU offloading is disabled, fall back to a [soft reset](#soft-reset).
 
 ## Next steps
 

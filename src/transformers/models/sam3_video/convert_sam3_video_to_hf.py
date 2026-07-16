@@ -26,7 +26,7 @@ import torch
 
 from transformers import CLIPTokenizerFast
 from transformers.models.sam2_video.video_processing_sam2_video import Sam2VideoVideoProcessor
-from transformers.models.sam3.image_processing_sam3_fast import Sam3ImageProcessorFast
+from transformers.models.sam3.image_processing_sam3 import Sam3ImageProcessor
 from transformers.models.sam3.modeling_sam3 import Sam3Model
 from transformers.models.sam3_tracker.modeling_sam3_tracker import Sam3TrackerModel
 from transformers.models.sam3_tracker_video.modeling_sam3_tracker_video import Sam3TrackerVideoModel
@@ -232,7 +232,7 @@ def adapt_internal_ckpt(ov_sd):
     # Replace values instead of keys, and remove any isinstance checks
     sam2_sd = {k: v.replace("backbone.vision_backbone.trunk", "image_encoder.trunk") for k, v in ov_sd.items()}
     sam2_sd = {k: v.replace("backbone.vision_backbone.convs", "image_encoder.neck.convs") for k, v in sam2_sd.items()}
-    # rename components to be consitent with paper and public release
+    # rename components to be consistent with paper and public release
     sam2_sd = {k: v.replace("transformer.encoder", "memory_attention") for k, v in sam2_sd.items()}
     sam2_sd = {k: v.replace("maskmem_backbone", "memory_encoder") for k, v in sam2_sd.items()}
     sam2_sd = {
@@ -664,7 +664,7 @@ def convert_sam3_checkpoint(
 
     # Save processor
     print("Creating and saving processor...")
-    image_processor = Sam3ImageProcessorFast()
+    image_processor = Sam3ImageProcessor()
     video_processor = Sam2VideoVideoProcessor(
         image_mean=[0.5, 0.5, 0.5], image_std=[0.5, 0.5, 0.5], size={"height": 1008, "width": 1008}
     )

@@ -44,14 +44,20 @@ from transformers import (
     set_seed,
 )
 from transformers.conversion_mapping import get_model_conversion_mapping
-from transformers.core_model_loading import WeightRenaming, process_target_pattern
+from transformers.core_model_loading import PrefixChange, WeightRenaming, process_target_pattern
 from transformers.integrations import HfDeepSpeedConfig
+from transformers.integrations.deepgemm import _get_nvcc_version
 from transformers.integrations.deepspeed import (
     is_deepspeed_available,
     is_deepspeed_zero3_enabled,
     unset_hf_deepspeed_config,
 )
-from transformers.integrations.moe import batched_mm_experts_forward, grouped_mm_experts_forward
+from transformers.integrations.moe import (
+    batched_mm_experts_forward,
+    deepgemm_bf16_experts_forward,
+    grouped_mm_experts_forward,
+    sonicmoe_experts_forward,
+)
 from transformers.modeling_layers import GradientCheckpointingLayer
 from transformers.modeling_utils import FLASH_ATTN_KERNEL_FALLBACK, _get_tied_weight_keys
 from transformers.models.auto import get_values
@@ -110,11 +116,13 @@ from transformers.utils import (
     GENERATION_CONFIG_NAME,
     SAFE_WEIGHTS_NAME,
     ModelOutput,
+    is_kernels_available,
     is_torch_bf16_available_on_device,
     is_torch_fp16_available_on_device,
 )
-from transformers.utils.output_capturing import CompileableContextVar
+from transformers.utils.output_capturing import CompileableContextVar, OutputRecorder
 
+from .exporters.test_export import ExportTesterMixin
 from .generation.test_utils import GenerationTesterMixin
 
 
@@ -328,6 +336,13 @@ def _test_eager_matches_sdpa_inference(
                         seqlen = inputs_dict.get("decoder_input_ids", processed_inputs[model.main_input_name]).shape[
                             -1
                         ]
+                    elif model.main_input_name in ("pixel_values", "input_values") and hasattr(
+                        self.model_tester, "seq_length"
+                    ):
+                        # For models where the main input's last dimension is not the token sequence length
+                        # (e.g. pixel_values.shape[-1] is image width, input_values.shape[-1] is num_mel_bins).
+                        # Use model_tester.seq_length (num_patches + 1/2 for ViT/DeiT/AST) instead.
+                        seqlen = self.model_tester.seq_length
                     else:
                         seqlen = processed_inputs[model.main_input_name].shape[-1]
                     dummy_attention_mask = torch.ones(batch_size, seqlen).to(torch.int64).to(torch_device)
@@ -433,6 +448,10 @@ def _test_eager_matches_sdpa_inference(
             elif "language_model_outputs" in outputs_eager and "blip" in model_class.__name__.lower():
                 outputs_eager = outputs_eager["language_model_outputs"]
                 outputs_sdpa = outputs_sdpa["language_model_outputs"]
+                key = "hidden_states" if "hidden_states" in outputs_eager else "decoder_hidden_states"
+            elif "decoder_output" in outputs_eager and "clipseg" in model_class.__name__.lower():
+                outputs_eager = outputs_eager["decoder_output"]
+                outputs_sdpa = outputs_sdpa["decoder_output"]
                 key = "hidden_states" if "hidden_states" in outputs_eager else "decoder_hidden_states"
             else:
                 key = "hidden_states"
@@ -572,59 +591,61 @@ def _test_eager_matches_batched_and_grouped_inference(self, name, dtype):
             model.save_pretrained(tmpdirname)
             model = model_class.from_pretrained(tmpdirname).eval().to(torch_device).to(dtype)
 
-        with torch.no_grad():
-            inputs_dict = {k: v.to(dtype) if torch.is_floating_point(v) else v for k, v in inputs_dict.items()}
-            prepared_inputs = self._prepare_for_class(inputs_dict, model_class)
+        inputs_dict = {k: v.to(dtype) if torch.is_floating_point(v) else v for k, v in inputs_dict.items()}
+        prepared_inputs = self._prepare_for_class(inputs_dict, model_class)
 
-            mock_batched_mm_forward = Mock(wraps=batched_mm_experts_forward)
-            mock_grouped_mm_forward = Mock(wraps=grouped_mm_experts_forward)
-            with (
-                # This is needed because we call the functions through the interface's global mapping
-                patch.dict(
-                    "transformers.integrations.moe.ALL_EXPERTS_FUNCTIONS._global_mapping",
-                    {"batched_mm": mock_batched_mm_forward, "grouped_mm": mock_grouped_mm_forward},
-                ),
-            ):
-                model.set_experts_implementation("eager")
-                self.assertEqual(model.config._experts_implementation, "eager")
-                outputs_eager = model(**prepared_inputs)
-                mock_batched_mm_forward.assert_not_called()
-                mock_grouped_mm_forward.assert_not_called()
+        implementations = ["eager", "batched_mm", "grouped_mm"]
+        mocks = {
+            "batched_mm": Mock(wraps=batched_mm_experts_forward),
+            "grouped_mm": Mock(wraps=grouped_mm_experts_forward),
+        }
 
-                mock_batched_mm_forward.reset_mock()
-                mock_grouped_mm_forward.reset_mock()
+        if (
+            dtype != torch.float32
+            and is_kernels_available()
+            and torch.cuda.is_available()
+            and torch.cuda.get_device_capability() >= (9, 0)
+        ):
+            # we also need nvidia-cutlass-dsl and apache-tvm-ffi
+            mocks["sonicmoe"] = Mock(wraps=sonicmoe_experts_forward)
+            implementations.append("sonicmoe")
 
-                model.set_experts_implementation("batched_mm")
-                self.assertEqual(model.config._experts_implementation, "batched_mm")
-                outputs_batched_mm = model(**prepared_inputs)
-                mock_grouped_mm_forward.assert_not_called()
-                mock_batched_mm_forward.assert_called()
+        nvcc_version = _get_nvcc_version() or (0, 0)
+        device_major = torch.cuda.get_device_capability()[0] if torch.cuda.is_available() else 0
+        # DeepGEMM ships kernels only for Hopper (SM90, needs nvcc 12.3+) and Blackwell (SM100, needs 12.9+).
+        if (
+            dtype == torch.bfloat16
+            and is_kernels_available()
+            and ((device_major == 9 and nvcc_version >= (12, 3)) or (device_major == 10 and nvcc_version >= (12, 9)))
+        ):
+            # DeepGEMM BF16 grouped forward requires Hopper+, a new-enough nvcc toolkit, and bf16 hidden states
+            mocks["deepgemm"] = Mock(wraps=deepgemm_bf16_experts_forward)
+            implementations.append("deepgemm")
 
-                mock_batched_mm_forward.reset_mock()
-                mock_grouped_mm_forward.reset_mock()
+        outputs = {}
+        # This is needed because we call the functions through the interface's global mapping
+        with patch.dict("transformers.integrations.moe.ALL_EXPERTS_FUNCTIONS._global_mapping", mocks):
+            for impl in implementations:
+                model.set_experts_implementation(impl)
+                self.assertEqual(model.config._experts_implementation, impl)
 
-                model.set_experts_implementation("grouped_mm")
-                self.assertEqual(model.config._experts_implementation, "grouped_mm")
-                outputs_grouped_mm = model(**prepared_inputs)
-                mock_batched_mm_forward.assert_not_called()
-                mock_grouped_mm_forward.assert_called()
+                with torch.no_grad():
+                    outputs[impl] = _get_output_tensors(model(**prepared_inputs))
 
-                mock_batched_mm_forward.reset_mock()
-                mock_grouped_mm_forward.reset_mock()
+                self.assertTrue(outputs[impl], f"No outputs from {impl} implementation")
 
-        # extract output tensors for comparison
-        outputs_eager = _get_output_tensors(outputs_eager)
-        outputs_batched_mm = _get_output_tensors(outputs_batched_mm)
-        outputs_grouped_mm = _get_output_tensors(outputs_grouped_mm)
+                for name, mock in mocks.items():
+                    if name == impl:
+                        mock.assert_called()
+                    else:
+                        mock.assert_not_called()
 
-        # make sure we have collected some tensors from the outputs
-        self.assertTrue(outputs_eager, "No outputs from eager implementation")
-        self.assertTrue(outputs_batched_mm, "No outputs from batched_mm implementation")
-        self.assertTrue(outputs_grouped_mm, "No outputs from grouped_mm implementation")
+                    mock.reset_mock()
 
-        # make sure all implementations give numerically close outputs
-        torch.testing.assert_close(outputs_eager, outputs_batched_mm, rtol=1e-4, atol=1e-4)
-        torch.testing.assert_close(outputs_eager, outputs_grouped_mm, rtol=1e-4, atol=1e-4)
+        # all non-eager implementations must numerically match eager
+        eager_outputs = outputs.pop("eager")
+        for impl, impl_outputs in outputs.items():
+            torch.testing.assert_close(eager_outputs, impl_outputs, rtol=1e-4, atol=1e-4)
 
 
 def _config_zero_init(config):
@@ -686,7 +707,7 @@ def sdpa_kernel(enable_flash, enable_math, enable_mem_efficient):
 
 
 @require_torch
-class ModelTesterMixin:
+class ModelTesterMixin(ExportTesterMixin):
     model_tester = None
     all_model_classes = ()
     test_resize_embeddings = True
@@ -808,6 +829,7 @@ class ModelTesterMixin:
             "Gemma3nVision2TextModelTest": 4,  # need to test KV shared layer for both types: `full_attention` and `sliding_attention`
             "BeitModelTest": 4,  # BeitForSemanticSegmentation requires config.out_indices to be a list of 4 integers
             "ZambaModelTest": 5,  # The minimum number to test beyond the initial ["mamba", "mamba", "hybrid"] in `ZambaConfig._layers_block_type`
+            "Wav2Vec2BertModelTest": 4,
         }
         target_num_hidden_layers = exceptional_num_hidden_layers.get(type(self).__name__, 2)
 
@@ -962,7 +984,7 @@ class ModelTesterMixin:
         for model_class in self.all_model_classes:
             model = model_class(copy.deepcopy(config))
             _keys_to_ignore_on_save = getattr(model, "_keys_to_ignore_on_save", None)
-            if _keys_to_ignore_on_save is None:
+            if _keys_to_ignore_on_save is None or len(_keys_to_ignore_on_save) == 0:
                 continue
 
             # check the keys are in the original state_dict
@@ -1750,7 +1772,10 @@ class ModelTesterMixin:
         """Helper function to recursively set a config attr to a given value"""
         for k in config.sub_configs:
             if (
-                self._is_composite and attribute_name == "output_attentions" and k == "vision_config"
+                self._is_composite
+                and attribute_name == "output_attentions"
+                and k == "vision_config"
+                and "Timm" in getattr(config, k).__class__.__name__
             ):  # skip because it's not needed and causes errors e.g with Timm
                 continue
             if getattr(config, k) is not None:
@@ -2155,7 +2180,10 @@ class ModelTesterMixin:
 
             # Check that the model can still do a forward pass successfully (every parameter should be resized)
             if not is_deepspeed_zero3_enabled():
-                # A distriputed launcher is needed for the forward pass when deepspeed is enabled
+                # Input ids should be expanded to the new maximum size of the vocabulary
+                inputs_dict["input_ids"][:, -2] = new_model_vocab_size - 1
+
+                # A distributed launcher is needed for the forward pass when deepspeed is enabled
                 model_inputs = self._prepare_for_class(inputs_dict, model_class)
                 model(**model_inputs)
 
@@ -2170,11 +2198,11 @@ class ModelTesterMixin:
             # Input ids should be clamped to the maximum size of the vocabulary
             inputs_dict["input_ids"].clamp_(max=model_vocab_size - 15 - 1)
 
-            # make sure that decoder_input_ids are resized as well
+            # adapt other vocab-based inputs accordingly
             if not is_deepspeed_zero3_enabled():
-                # A distriputed launcher is needed for the forward pass when deepspeed is enabled
-                if "decoder_input_ids" in inputs_dict:
-                    inputs_dict["decoder_input_ids"].clamp_(max=model_vocab_size - 15 - 1)
+                for key in ["decoder_input_ids"]:
+                    if key in inputs_dict:
+                        inputs_dict[key].clamp_(max=model_vocab_size - 15 - 1)
                 model_inputs = self._prepare_for_class(inputs_dict, model_class)
                 model(**model_inputs)
 
@@ -3113,11 +3141,12 @@ class ModelTesterMixin:
                 with tempfile.TemporaryDirectory() as tmp_dir:
                     model = model_class(config)
                     model.save_pretrained(tmp_dir)
+                    config.get_text_config().vocab_size = 10
                     # Fails when we don't set ignore_mismatched_sizes=True
                     with self.assertRaises(RuntimeError):
                         new_model = AutoModelForSequenceClassification.from_pretrained(tmp_dir, num_labels=42)
                     with self.assertRaises(RuntimeError):
-                        new_model_without_prefix = AutoModel.from_pretrained(tmp_dir, vocab_size=10)
+                        new_model_without_prefix = AutoModel.from_pretrained(tmp_dir, config=config)
 
                     logger = logging.get_logger("transformers.modeling_utils")
 
@@ -3133,7 +3162,7 @@ class ModelTesterMixin:
 
                     with CaptureLogger(logger) as cl:
                         new_model_without_prefix = AutoModel.from_pretrained(
-                            tmp_dir, vocab_size=10, ignore_mismatched_sizes=True
+                            tmp_dir, config=config, ignore_mismatched_sizes=True
                         )
                     self.assertIn("Reinit due to size mismatch", cl.out)
                     input_ids = ids_tensor((2, 8), 10)
@@ -3280,6 +3309,11 @@ class ModelTesterMixin:
             ):
                 continue
 
+            # Some models only support a sub set of all FA implementations
+            valid_fa_implementations = model._compatible_flash_implementations
+            if valid_fa_implementations is not None and attn_implementation not in valid_fa_implementations:
+                continue
+
             # If we end up here, at least one model class was not skipped
             _has_run_at_least_one_model = True
             with tempfile.TemporaryDirectory() as tmpdirname:
@@ -3307,6 +3341,12 @@ class ModelTesterMixin:
                 # Some VLMs require image_sizes alongside pixel_values, e.g. lighton_ocr, llava_onevision
                 if "image_sizes" in inputs_dict:
                     first_inputs["image_sizes"] = inputs_dict["image_sizes"][:1]
+
+                # Add additional model inputs if there is any
+                for key in getattr(self, "additional_model_inputs", []):
+                    if key in inputs_dict:
+                        first_inputs[key] = inputs_dict[key][:1]
+
                 if model.config.is_encoder_decoder:
                     decoder_input_ids = inputs_dict.get("decoder_input_ids", first_inputs.get("input_ids"))
                     if decoder_input_ids is not None:
@@ -3344,24 +3384,24 @@ class ModelTesterMixin:
                     tmpdirname, dtype=torch.bfloat16, attn_implementation="eager", device_map=torch_device
                 )
 
+                def _get_output_logits(outputs):
+                    if "hidden_states" in outputs:
+                        return outputs.hidden_states[-1]
+                    elif model.config.is_encoder_decoder:
+                        return outputs.decoder_hidden_states[-1]
+                    elif "logits_per_image" in outputs:
+                        return outputs.logits_per_image
+                    elif "logits_per_video" in outputs:
+                        return outputs.logits_per_video
+                    else:
+                        return outputs.logits
+
                 # First run without attention mask
                 outputs = model(**first_inputs)
-                logits_1_eager = (
-                    outputs.hidden_states[-1]
-                    if "hidden_states" in outputs
-                    else outputs.logits_per_image
-                    if not model.config.is_encoder_decoder
-                    else outputs.decoder_hidden_states[-1]
-                )
+                logits_1_eager = _get_output_logits(outputs)
                 # Second run with attention mask and padding
                 outputs = model(**second_inputs)
-                logits_2_eager = (
-                    outputs.hidden_states[-1]
-                    if "hidden_states" in outputs
-                    else outputs.logits_per_image
-                    if not model.config.is_encoder_decoder
-                    else outputs.decoder_hidden_states[-1]
-                )
+                logits_2_eager = _get_output_logits(outputs)
 
                 # Switch to FA
                 del model
@@ -3369,22 +3409,10 @@ class ModelTesterMixin:
                     tmpdirname, dtype=torch.bfloat16, attn_implementation=attn_implementation, device_map=torch_device
                 )
                 outputs = model(**first_inputs)
-                logits_1_fa = (
-                    outputs.hidden_states[-1]
-                    if "hidden_states" in outputs
-                    else outputs.logits_per_image
-                    if not model.config.is_encoder_decoder
-                    else outputs.decoder_hidden_states[-1]
-                )
+                logits_1_fa = _get_output_logits(outputs)
                 # Second run with attention mask and padding
                 outputs = model(**second_inputs)
-                logits_2_fa = (
-                    outputs.hidden_states[-1]
-                    if "hidden_states" in outputs
-                    else outputs.logits_per_image
-                    if not model.config.is_encoder_decoder
-                    else outputs.decoder_hidden_states[-1]
-                )
+                logits_2_fa = _get_output_logits(outputs)
 
                 # Check the results
                 torch.testing.assert_close(logits_1_eager, logits_1_fa, atol=atol, rtol=rtol)
@@ -3588,30 +3616,38 @@ class ModelTesterMixin:
                 model_sdpa = model_class.from_pretrained(tmpdirname)
                 model_sdpa = model_sdpa.base_model
 
-                vision_model_names = {"visual", "image_tower", "vision_tower", "vision_model"}
+                modality_tower_names = {
+                    "visual",
+                    "image_tower",
+                    "vision_tower",
+                    "vision_model",
+                    "audio_tower",
+                    "audio_model",
+                }
                 language_model_names = {"language_model", "model", "text_model"}
-                vision_model_name = [name for name in vision_model_names if hasattr(model_sdpa, name)]
-                vision_model_name = vision_model_name[0] if len(vision_model_name) > 0 else None
+                modality_tower_name = [name for name in modality_tower_names if hasattr(model_sdpa, name)]
+                modality_tower_name = modality_tower_name[0] if len(modality_tower_name) > 0 else None
                 language_model_name = [name for name in language_model_names if hasattr(model_sdpa, name)]
                 language_model_name = language_model_name[0] if len(language_model_name) > 0 else None
-                if language_model_name is None or vision_model_name is None:
+                if language_model_name is None or modality_tower_name is None:
                     self.skipTest(
-                        reason="Model does not have both vision and language sub-models, cannot test composite SDPA dispatch"
+                        reason="Model does not have both a non-text modality tower and a language sub-model, "
+                        "cannot test composite SDPA dispatch"
                     )
-                vision_model_sdpa = getattr(model_sdpa, vision_model_name)
+                modality_tower_sdpa = getattr(model_sdpa, modality_tower_name)
                 language_model_sdpa = getattr(model_sdpa, language_model_name)
                 text_attn = "sdpa" if language_model_sdpa._supports_sdpa else "eager"
-                vision_attn = "sdpa" if vision_model_sdpa._supports_sdpa else "eager"
+                modality_attn = "sdpa" if modality_tower_sdpa._supports_sdpa else "eager"
 
                 # `None` as it is the requested one which will be assigned to each sub-config
                 # Sub-model will dispatch to SDPA if it can (checked below that `SDPA` layers are present)
                 self.assertTrue(language_model_sdpa.config._attn_implementation == text_attn)
-                self.assertTrue(vision_model_sdpa.config._attn_implementation == vision_attn)
+                self.assertTrue(modality_tower_sdpa.config._attn_implementation == modality_attn)
 
                 model_eager = model_class.from_pretrained(tmpdirname, attn_implementation="eager")
                 model_eager = model_eager.base_model
                 self.assertTrue(getattr(model_eager, language_model_name).config._attn_implementation == "eager")
-                self.assertTrue(getattr(model_eager, vision_model_name).config._attn_implementation == "eager")
+                self.assertTrue(getattr(model_eager, modality_tower_name).config._attn_implementation == "eager")
 
                 for name, submodule in model_eager.named_modules():
                     class_name = submodule.__class__.__name__
@@ -3661,7 +3697,7 @@ class ModelTesterMixin:
                     "PaliGemma-like models currently (transformers==4.41.0) requires an attention_mask input"
                 )
             if config.model_type in [
-                "EvollaModel",
+                "evolla",
                 "modernbert",
                 "gemma3",
                 "t5gemma",
@@ -4154,143 +4190,6 @@ class ModelTesterMixin:
         for name, param in model._orig_mod.named_parameters():
             torch.testing.assert_close(param.grad.detach().cpu(), params[name], rtol=1e-4, atol=1e-4)
 
-    @slow
-    @pytest.mark.torch_export_test
-    def test_torch_export(self, atol=1e-4, rtol=1e-4):
-        """
-        Test if model can be exported with torch.export.export()
-
-        Args:
-            atol (`float`, *optional*, defaults to 1e-4): absolute tolerance for output comparison
-            rtol (`float`, *optional*, defaults to 1e-4): relative tolerance for output comparison
-        """
-
-        if not self.test_torch_exportable:
-            self.skipTest(reason="Model architecture is not torch exportable")
-
-        with open(inspect.getfile(self.all_model_classes[0]), "r") as f:
-            source_code = f.read()
-            # Skip model if it uses a chunked attention implementation which is not torch exportable
-            if "for q, k, v in zip(*splits)" in source_code:
-                self.skipTest(reason="Model architecture uses chunked attention which is not torch exportable")
-            # Skip MoEs that don't support batched_mm experts implementation
-            if "for expert" in source_code and "use_experts_implementation" not in source_code:
-                self.skipTest(reason="Model architecture uses eager MoE implementation which is not torch exportable")
-            # Skip models that use get_rope_index which is not torch exportable
-            if "get_rope_index" in source_code:
-                self.skipTest(reason="Model architecture uses get_rope_index which is not torch exportable")
-
-        def _is_pure_python_object(obj) -> bool:
-            if isinstance(obj, (int, float, bool, str)) or obj is None:
-                return True
-            elif isinstance(obj, (list, tuple, set)):
-                return all(_is_pure_python_object(o) for o in obj)
-            elif isinstance(obj, dict):
-                return all(_is_pure_python_object(o) for o in obj.values())
-            else:
-                return False
-
-        def _get_leaf_tensors(obj) -> dict[str, torch.Tensor]:
-            if _is_pure_python_object(obj):
-                return {}
-            elif isinstance(obj, torch.Tensor):
-                return {"": obj}
-            elif isinstance(obj, (list, tuple, set)):
-                return _get_leaf_tensors(dict(enumerate(obj)))
-            elif isinstance(obj, dict):
-                leaf_tensors = {}
-                for key, value in obj.items():
-                    for sub_key, tensor in _get_leaf_tensors(value).items():
-                        full_key = f"{key}.{sub_key}" if sub_key else str(key)
-                        leaf_tensors[full_key] = tensor
-                return leaf_tensors
-            else:
-                raise ValueError(f"Unexpected object type: {type(obj)}")
-
-        def _prepare_for_export(model, inputs_dict):
-            # we don't test outputing a cache class for now
-            inputs_dict.pop("use_cache", None)
-            # we don't test loss computation for now
-            inputs_dict.pop("return_loss", None)
-            # we don't test loss computation for now
-            inputs_dict.pop("future_values", None)
-
-            # set experts implementation to batched_mm for export
-            if model._can_set_experts_implementation():
-                model.set_experts_implementation("batched_mm")
-
-            # set attention implementation to sdpa for export
-            if model._can_set_attn_implementation() and model.config.model_type != "videomae":
-                try:
-                    model.set_attn_implementation("sdpa")
-                except Exception as e:
-                    print(
-                        f"Could not set attention implementation to sdpa for {model} of type {model.config.model_type} : {e}"
-                    )
-
-            for module in model.modules():
-                if hasattr(module, "config"):
-                    # disable cache usage for every submodel
-                    if hasattr(module.config, "use_cache"):
-                        module.config.use_cache = False
-                    # disable returning loss for every submodel
-                    if hasattr(module.config, "return_loss"):
-                        module.config.return_loss = False
-                    # disable mamba kernels for every submodel (mamba, jamba)
-                    if hasattr(module.config, "use_mamba_kernels"):
-                        module.config.use_mamba_kernels = False
-                # disable classifier cast for nllb-moe
-                if hasattr(module, "_cast_classifier"):
-                    module._cast_classifier = lambda *args, **kwargs: None
-                # disable mamba mask update for ssms
-                if hasattr(module, "_update_mamba_mask"):
-                    module._update_mamba_mask = lambda attention_mask, *args, **kwargs: attention_mask
-                if hasattr(module, "_update_linear_attn_mask"):
-                    module._update_linear_attn_mask = lambda attention_mask, *args, **kwargs: attention_mask
-
-            return model, inputs_dict
-
-        for model_class in self.all_model_classes:
-            with self.subTest(model_class.__name__):
-                if model_class.__name__ == "VideoMAEForPreTraining":
-                    # this model computes the loss unconditionally
-                    continue
-
-                if hasattr(self.model_tester, "prepare_config_and_inputs_for_model_class"):
-                    config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_model_class(model_class)
-                else:
-                    config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-                inputs_dict = self._prepare_for_class(inputs_dict, model_class)
-                set_config_for_less_flaky_test(config)
-                model = model_class(config).eval().to(torch_device)
-                set_model_for_less_flaky_test(model)
-
-                # Prepare model and inputs for export
-                model, inputs_dict = _prepare_for_export(model, inputs_dict)
-
-                with torch.no_grad():
-                    # Running the eager inference before the export to catch model/inputs comatibility issues, also sometimes after
-                    # the export, the model used for export will return FakeTensors instead of real ones (torch compiler issue).
-                    # This happens on cuda for example with (codegen, clvp, esm, gptj, levit, wav2vec2_bert and wav2vec2_conformer)
-                    set_seed(1234)
-                    eager_outputs = model(**copy.deepcopy(inputs_dict))
-                    eager_outputs = _get_leaf_tensors(eager_outputs)
-                    self.assertTrue(eager_outputs, "Eager outputs is empty.")
-
-                try:
-                    exported_program = torch.export.export(model, args=(), kwargs=copy.deepcopy(inputs_dict))
-                except Exception as e:
-                    raise e
-
-                with torch.no_grad():
-                    set_seed(1234)
-                    exported_outputs = exported_program.module()(**copy.deepcopy(inputs_dict))
-                    exported_outputs = _get_leaf_tensors(exported_outputs)
-                    self.assertTrue(exported_outputs, "Exported outputs is empty.")
-
-                # Check outputs closeness:
-                torch.testing.assert_close(exported_outputs, eager_outputs, atol=atol, rtol=rtol)
-
     @staticmethod
     def _prepare_config_headdim(config, requested_dim):
         """
@@ -4736,7 +4635,7 @@ class ModelTesterMixin:
                 len(unused_entries) == 0, f"The following entries of the TP-plan are not valid: {unused_entries}"
             )
 
-    def test_reverse_loading_mapping(self, check_keys_were_modified=True):
+    def test_reverse_loading_mapping(self, check_keys_were_modified=True, skip_base_model=False):
         """Make sure we can load and save correctly the models having any weight renaming mapping or weight conversion
         mapping.
         Note that this test would be better if we could start from the serialized keys, and check that the model
@@ -4750,6 +4649,11 @@ class ModelTesterMixin:
             check_keys_were_modified (`bool`, *optional*, defaults to `True`):
                 Whether to expect keys being modified or not. In some cases, models do not change keys but
                 their weights, e.g. via transpose, memory alignment, etc.
+            skip_base_model (`bool`, *optional*, defaults to `False`):
+                Sometimes, mappings are only visible when applied to the model with head, and not visible on the
+                base model. This allows to skip the check on the base model. See e.g. `llava` mapping where this
+                is the case. In practice, the mappings are still coherent and a base model can still be loaded from
+                the head model, thanks to the `base_model_prefix` which will remove the prefix automatically.
         """
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -4762,6 +4666,8 @@ class ModelTesterMixin:
         config_to_set.num_dense_layers = 1  # lfm2_moe
 
         for model_class in self.all_model_classes:
+            if skip_base_model and "For" not in model_class.__name__:
+                continue
             # Each individual model is a subtest
             with self.subTest(model_class.__name__):
                 model = model_class(copy.deepcopy(config))
@@ -4769,6 +4675,11 @@ class ModelTesterMixin:
                 conversions = get_model_conversion_mapping(model, add_legacy=False)
                 if len(conversions) == 0:
                     self.skipTest(f"No conversion found for {model_class}")
+                # The PrefixChange conersions are only there for BC with hub checkpoints, but cannot be tested
+                # for as we skip them automatically if they are not present in loaded checkpoints (we want to
+                # mess up the prefixes only if the loaded checkpoints were doing so as well)
+                if all(isinstance(conversion, PrefixChange) for conversion in conversions):
+                    self.skipTest(f"Only PrefixChange conversions found for {model_class}")
 
                 # Find the model keys, so the targets according to the conversions
                 model_keys = list(model.state_dict().keys())
@@ -4786,7 +4697,25 @@ class ModelTesterMixin:
 
                 # Check that for each conversion entry, we at least map to one key
                 for conversion in conversions:
-                    for source_pattern in conversion.source_patterns:
+                    # The PrefixChange conersions are only there for BC with hub checkpoints, but cannot be tested
+                    # for as we skip them automatically if they are not present in loaded checkpoints (we want to
+                    # mess up the prefixes only if the loaded checkpoints were doing so as well)
+                    if isinstance(conversion, PrefixChange):
+                        continue
+
+                    # Skip if the conversion is scoped to a sub-model, as the conversion is already tested on the sub-model.
+                    # Also, it might be the case that the original/weights model did not include the sub-model (e.g. LlavaForConditionalGeneration)
+                    if conversion.scope_prefix is not None:
+                        continue
+
+                    # Single pass over serialized_keys: the compiled regex already tests all
+                    # pattern branches at once, so one call per key is enough.
+                    matched_groups: set[str] = set()
+                    for key in serialized_keys:
+                        if (match := conversion._scoped_match(key)) is not None:
+                            matched_groups.add(match[2].lastgroup)  # "g0", "g1", ...
+
+                    for pattern_index, source_pattern in enumerate(conversion.source_patterns):
                         # Some patterns are written for gen-model only and won't be applied on base model
                         if "lm_head" in source_pattern and model_class not in [
                             *get_values(MODEL_FOR_CAUSAL_LM_MAPPING_NAMES),
@@ -4803,9 +4732,9 @@ class ModelTesterMixin:
                                 target_pattern_reversed = target_pattern_reversed.replace(r"\1", captured_group)
                             if any(re.search(target_pattern_reversed, k) for k in model.all_tied_weights_keys.keys()):
                                 continue
-                        num_matches = sum(re.search(source_pattern, key) is not None for key in serialized_keys)
+
                         self.assertTrue(
-                            num_matches > 0,
+                            f"g{pattern_index}" in matched_groups,
                             f"`{source_pattern}` in `{conversion}` did not match any of the source keys. "
                             "This indicates whether that the pattern is not properly written, or that it could not be reversed correctly",
                         )
@@ -5363,7 +5292,10 @@ class ModelTesterMixin:
                 elif hasattr(audio_config, "hidden_size"):
                     hidden_size = audio_config.hidden_size
                 elif hasattr(audio_config, "encoder_config"):
-                    hidden_size = audio_config.encoder_config.hidden_dim
+                    if hasattr(audio_config.encoder_config, "hidden_size"):
+                        hidden_size = audio_config.encoder_config.hidden_size
+                    else:
+                        hidden_size = audio_config.encoder_config.hidden_dim
                 elif hasattr(audio_config, "encoder_ffn_dim"):
                     hidden_size = audio_config.encoder_ffn_dim
                 self.assertEqual(
@@ -5650,6 +5582,48 @@ class ModelTesterMixin:
                         with torch.no_grad():
                             _ = model(**all_inputs)
 
+    def test_format_of_can_record_outputs(self):
+        """Test that that the attribute `_can_record_outputs` is correctly set for a model. It must either be "None" or
+        a dictionnary with output names as keys and a recorder or list of recorders as values. A recorder can be an
+        OutputRecorder instance, a module class we want to record outputs of or the name of this module class (a str).
+        """
+        config = self.model_tester.prepare_config_and_inputs_for_common()[0]
+
+        for model_class in self.all_model_classes:
+            # Each individual model is a subtest
+            with self.subTest(model_class.__name__):
+                model = model_class(copy.deepcopy(config)).to(device=torch_device)
+                model.eval()
+
+                recordable_output_dicts = [
+                    (module._can_record_outputs or {})
+                    for module in model.modules()
+                    if isinstance(module, PreTrainedModel)
+                ]
+
+                # Check that the values of _can_record_outputs are a correct recorder or a list of them
+                for recordable_output_dict in recordable_output_dicts:
+                    for key, value in recordable_output_dict.items():
+                        # Check format of the keys
+                        self.assertIsInstance(key, str, f"_can_record_outputs should have str keys, but got {key = }")
+                        # Check format of the values
+                        recorders = value if isinstance(value, list) else [value]
+                        for recorder in recorders:
+                            is_valid_recorder = isinstance(recorder, (str, type, OutputRecorder))
+                            self.assertTrue(is_valid_recorder, f"Invalid recorder: {recorder}")
+
+    @require_kernels
+    @require_torch_accelerator
+    def test_kernels_can_load_without_crashing(self):
+        """Check whether activating kernels leads to an (value) error"""
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            model = model_class(config).to(torch_device)
+
+            # Using kernels should not raise a `ValueError`
+            model.use_kernels = True
+
 
 global_rng = random.Random()
 
@@ -5658,7 +5632,12 @@ def compare_state_dicts(state_dict1, state_dict2) -> bool:
     """Make sure 2 state dicts are the exact same"""
     # Make sure the keys are the exact same
     if sorted(state_dict1.keys()) != sorted(state_dict2.keys()):
-        raise ValueError("The keys of both state dict are not the same")
+        in1_not2 = sorted(set(state_dict1.keys()) - set(state_dict2.keys()))
+        in2_not1 = sorted(set(state_dict2.keys()) - set(state_dict1.keys()))
+        raise ValueError(
+            f"The keys of both state dict are not the same.\nKeys found in the first item but not second: {in1_not2}"
+            f"\nKeys found in the second item but not first: {in2_not1}"
+        )
 
     for k, v1 in state_dict1.items():
         v2 = state_dict2[k]

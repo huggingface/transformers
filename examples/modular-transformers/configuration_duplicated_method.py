@@ -14,7 +14,7 @@ from ...utils.type_validators import interval
 
 
 @auto_docstring(checkpoint="meta-duplicated_method/DuplicatedMethod-2-7b-hf")
-@strict(accept_kwargs=True)
+@strict
 class DuplicatedMethodConfig(PreTrainedConfig):
     r"""
     ```python

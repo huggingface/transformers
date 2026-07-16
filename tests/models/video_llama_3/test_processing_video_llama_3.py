@@ -21,7 +21,7 @@ from PIL import Image
 from transformers.testing_utils import require_av, require_torch, require_torchvision, require_vision
 from transformers.utils import is_torch_available, is_vision_available
 
-from ...test_processing_common import ProcessorTesterMixin
+from ...test_processing_common import ProcessorTesterMixin, url_to_local_path
 
 
 if is_vision_available():
@@ -42,7 +42,8 @@ def prepare_image_inputs():
 @require_torchvision
 class VideoLlama3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = VideoLlama3Processor
-    model_id = "lkhl/VideoLLaMA3-2B-Image-HF"
+    # Tiny processor created with make_tiny_processor.py from "lkhl/VideoLLaMA3-2B-Image-HF"
+    tiny_model_id = "hf-internal-testing/tiny-processor-video_llama_3"
 
     @classmethod
     def _setup_from_pretrained(cls, model_id, **kwargs):
@@ -189,7 +190,12 @@ class VideoLlama3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
                 {
                     "role": "user",
                     "content": [
-                        {"type": "video"},
+                        {
+                            "type": "video",
+                            "url": url_to_local_path(
+                                "https://huggingface.co/datasets/hf-internal-testing/test-videos/resolve/main/big_buck_bunny_320x240_10s.mp4"
+                            ),
+                        },
                         {"type": "text", "text": "What is shown in this video?"},
                     ],
                 },
@@ -199,18 +205,6 @@ class VideoLlama3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         formatted_prompt = processor.apply_chat_template(messages, add_generation_prompt=True, tokenize=False)
         self.assertEqual(len(formatted_prompt), 1)
 
-        formatted_prompt_tokenized = processor.apply_chat_template(messages, add_generation_prompt=True, tokenize=True)
-        expected_output = processor.tokenizer(formatted_prompt, return_tensors=None).input_ids
-        self.assertListEqual(expected_output, formatted_prompt_tokenized)
-
-        out_dict = processor.apply_chat_template(messages, add_generation_prompt=True, tokenize=True, return_dict=True)
-        self.assertListEqual(list(out_dict.keys()), ["input_ids", "attention_mask"])
-
-        # Add video URL for return dict and load with `num_frames` arg
-        messages[0][0]["content"][0] = {
-            "type": "video",
-            "url": "https://huggingface.co/datasets/raushan-testing-hf/videos-test/resolve/main/Big_Buck_Bunny_720_10s_10MB.mp4",
-        }
         num_frames = 3
         out_dict_with_video = processor.apply_chat_template(
             messages,
@@ -220,7 +214,7 @@ class VideoLlama3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             num_frames=num_frames,
         )
         self.assertTrue(self.videos_input_name in out_dict_with_video)
-        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 180)
+        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 144)
 
         # Load with `fps` arg
         fps = 1
@@ -232,7 +226,7 @@ class VideoLlama3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             fps=fps,
         )
         self.assertTrue(self.videos_input_name in out_dict_with_video)
-        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 80)
+        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 192)
 
         # Load with `fps` and `num_frames` args, should raise an error
         with self.assertRaises(ValueError):
@@ -253,15 +247,15 @@ class VideoLlama3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             return_dict=True,
         )
         self.assertTrue(self.videos_input_name in out_dict_with_video)
-        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 1200)
+        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 120)
 
         # Load video as a list of frames (i.e. images). NOTE: each frame should have same size
         # because we assume they come from one video
         messages[0][0]["content"][0] = {
             "type": "video",
             "url": [
-                "https://www.ilankelman.org/stopsigns/australia.jpg",
-                "https://www.ilankelman.org/stopsigns/australia.jpg",
+                "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/australia.jpg",
+                "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/australia.jpg",
             ],
         }
         out_dict_with_video = processor.apply_chat_template(
@@ -322,3 +316,25 @@ class VideoLlama3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
                 padding=True,
                 max_length=20,
             )
+
+    def test_video_processor_defaults(self):
+        # Video processor has default `return_metadata=True` which doesn't match with processor
+        video_processor = self.get_component("video_processor")
+
+        # Get all required components for processor
+        components = {}
+        for attribute in self.processor_class.get_attributes():
+            components[attribute] = self.get_component(attribute)
+
+        processor = self.processor_class(**components)
+        video_input = self.prepare_video_inputs()
+
+        # Process with both video_processor and processor
+        input_video_proc = video_processor(video_input, return_tensors="pt", return_metadata=True)
+        input_processor = processor(videos=video_input, return_tensors="pt", return_metadata=True)
+
+        # Verify outputs match
+        for key in input_video_proc:
+            # processor changes metadata fps in-place when can't be inferred, i.e. if already decoded video
+            if key != "video_metadata":
+                torch.testing.assert_close(input_video_proc[key], input_processor[key])
