@@ -37,6 +37,7 @@ from dataclasses import dataclass
 import torch
 
 from ..utils import logging
+from ..utils.deprecation import deprecate_kwarg
 from ..utils.import_utils import (
     is_kernels_available,
     resolve_internal_import,
@@ -531,14 +532,15 @@ def _combine_routed_output(
 # ── Public dispatches ──────────────────────────────────────────────────────────
 
 
+@deprecate_kwarg("output_dtype", version="v5.16")
 def deepgemm_fp8_fp4_linear(
     input: torch.Tensor,
     weight: torch.Tensor,
     weight_scale_inv: torch.Tensor,
     bias: torch.Tensor | None = None,
     block_size: tuple[int, int] | None = None,
-    activation_scale: torch.Tensor | None = None,
     output_dtype: torch.dtype | None = None,
+    activation_scale: torch.Tensor | None = None,
 ) -> torch.Tensor:
     """End-to-end DeepGEMM linear: per-token activation quant + FP8/FP4 matmul.
 
@@ -555,8 +557,7 @@ def deepgemm_fp8_fp4_linear(
 
     input_2d = input.view(-1, input.shape[-1])
     qinput_2d, scale_2d = deepgemm.per_token_cast_to_fp8(input_2d, **cast_kwargs)
-    out_dtype = output_dtype if output_dtype is not None else input.dtype
-    output = torch.empty(qinput_2d.shape[0], weight.shape[0], device=input.device, dtype=out_dtype)
+    output = torch.empty(qinput_2d.shape[0], weight.shape[0], device=input.device, dtype=input.dtype)
 
     # Pass `(1, 1, gran_k)` for int-SF paths so the kernel uses the right K granularity
     # (the default `(1, 1, 128)` mismatches FP4's gran_k=32). Float-SF leaves it None.

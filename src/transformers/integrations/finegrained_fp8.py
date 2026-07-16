@@ -26,6 +26,7 @@ from ..activations import ACT2FN
 from ..core_model_loading import ConversionOps
 from ..quantizers.quantizers_utils import get_module_from_name, should_convert_module
 from ..utils import logging
+from ..utils.deprecation import deprecate_kwarg
 from ..utils.import_utils import is_kernels_available
 from .deepgemm import (
     deepgemm_fp8_fp4_experts_forward,
@@ -175,6 +176,7 @@ def _alloc_expert_proj(
     return weight, sf
 
 
+@deprecate_kwarg("output_dtype", version="v5.16")
 def finegrained_fp8_linear(
     input: torch.Tensor,
     weight: torch.Tensor,
@@ -197,7 +199,7 @@ def finegrained_fp8_linear(
         weight,
         weight_scale_inv,
         block_size,
-        output_dtype if output_dtype is not None else input.dtype,
+        input.dtype,
         activation_scale=activation_scale,
     )
     if bias is not None:
@@ -205,6 +207,7 @@ def finegrained_fp8_linear(
     return output
 
 
+@deprecate_kwarg("output_dtype", version="v5.16")
 def fp8_linear(
     input: torch.Tensor,
     weight: torch.Tensor,
@@ -234,15 +237,11 @@ def fp8_linear(
         bias: optional bias added to the matmul output.
         activation_scale: pass a per-tensor scalar to use static activation quant; leave `None`
             for dynamic (per-token) quant.
-        output_dtype: output dtype; defaults to ``input.dtype`` when left ``None``.
         allow_deepgemm: set ``False`` to force the Triton fallback for this call. Used when the
             model spans multiple CUDA devices in one process — DeepGEMM's cached kernels are bound
             to a single CUDA context and produce garbage across devices (see the multi-device guard
             in ``quantizer_finegrained_fp8.py``).
     """
-    if output_dtype is None:
-        output_dtype = input.dtype
-
     # DeepGEMM is CUDA-only, dynamic-only, SM90+ only, FP4/FP8-block-128-only.
     # ``TRANSFORMERS_DISABLE_DEEPGEMM_LINEAR=1`` forces the Triton fallback for this single
     # dispatcher (the experts ``"deepgemm"`` impl is unaffected — use ``set_experts_implementation``
@@ -266,7 +265,6 @@ def fp8_linear(
                 weight,
                 weight_scale_inv,
                 block_size=block_size,
-                output_dtype=output_dtype,
                 activation_scale=activation_scale,
                 bias=bias,
             )
@@ -278,12 +276,13 @@ def fp8_linear(
                 "Set `TRANSFORMERS_DISABLE_DEEPGEMM_LINEAR=1` to skip DeepGEMM for FP8 linear entirely."
             )
 
-    return finegrained_fp8_linear(input, weight, weight_scale_inv, block_size, bias, activation_scale, output_dtype)
+    return finegrained_fp8_linear(input, weight, weight_scale_inv, block_size, bias, activation_scale)
 
 
 class FP8Linear(nn.Linear):
-    # Set True at load when the model spans >1 CUDA device in one process; DeepGEMM's
-    # context-bound kernels corrupt across devices (see `quantizer_finegrained_fp8.py`).
+    # Internal, temporary flag — not public API, don't set it directly. `_disable_deepgemm_on_multi_device`
+    # flips it True at load when the model spans >1 CUDA device in one process (DeepGEMM's context-bound
+    # kernels corrupt across devices); removable once the kernel ships a context-free loader.
     _deepgemm_disabled = False
 
     def __init__(
@@ -582,8 +581,9 @@ def fp8_grouped_mm_experts_forward(
 
 
 class FP8Experts(nn.Module):
-    # Set True at load when the model spans >1 CUDA device in one process; DeepGEMM's
-    # context-bound kernels corrupt across devices (see `quantizer_finegrained_fp8.py`).
+    # Internal, temporary flag — not public API, don't set it directly. `_disable_deepgemm_on_multi_device`
+    # flips it True at load when the model spans >1 CUDA device in one process (DeepGEMM's context-bound
+    # kernels corrupt across devices); removable once the kernel ships a context-free loader.
     _deepgemm_disabled = False
 
     # Per-`_experts_implementation` rewrite of parallel-layer kinds in the TP/EP plan.
@@ -759,8 +759,9 @@ class FP8ExpertsInterface(ExpertsInterface):
 ALL_FP8_EXPERTS_FUNCTIONS = FP8ExpertsInterface()
 
 
-def disable_deepgemm_on_multi_device(model: nn.Module) -> None:
-    """Flag every FP8 module to skip DeepGEMM when the model spans >1 CUDA device in one process.
+def _disable_deepgemm_on_multi_device(model: nn.Module) -> None:
+    """Internal, temporary helper (not public API): flag every FP8 module to skip DeepGEMM when the
+    model spans >1 CUDA device in one process.
 
     DeepGEMM loads each kernel via `cuKernelGetFunction`, which binds the `CUfunction` handle to the
     CUDA context live at load time; driving that cached handle from another device launches it against

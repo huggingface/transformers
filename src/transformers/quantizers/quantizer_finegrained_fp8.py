@@ -156,9 +156,9 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
 
         # Single-process multi-device is unsafe for DeepGEMM (its kernels are bound to one CUDA
         # context); route those models through Triton/grouped_mm instead.
-        from ..integrations.finegrained_fp8 import disable_deepgemm_on_multi_device
+        from ..integrations.finegrained_fp8 import _disable_deepgemm_on_multi_device
 
-        disable_deepgemm_on_multi_device(model)
+        _disable_deepgemm_on_multi_device(model)
         return model
 
     def update_tp_plan(self, config):

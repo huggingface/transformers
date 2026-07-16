@@ -251,24 +251,26 @@ class FinegrainedFp8ForwardTest(unittest.TestCase):
         self.assertIsNone(call["activation_scale"])
         self.assertEqual(out.dtype, torch.bfloat16)
 
-    def test_linear_forwards_explicit_output_dtype_and_activation_scale(self):
+    def test_linear_forwards_activation_scale_and_ignores_deprecated_output_dtype(self):
         input = torch.randn(3, 8, dtype=torch.bfloat16, device=torch_device)
         weight = torch.randn(16, 8, device=torch_device).to(torch.float8_e4m3fn)
         weight_scale_inv = torch.randn(1, 1, dtype=torch.float32, device=torch_device)
         activation_scale = torch.tensor(2.0, device=torch_device)
         with self._mocked_kernel() as calls:
-            out = finegrained_fp8_linear(
-                input,
-                weight,
-                weight_scale_inv,
-                block_size=None,
-                activation_scale=activation_scale,
-                output_dtype=torch.float32,
-            )
+            with self.assertWarnsRegex(FutureWarning, "output_dtype"):
+                out = finegrained_fp8_linear(
+                    input,
+                    weight,
+                    weight_scale_inv,
+                    block_size=None,
+                    activation_scale=activation_scale,
+                    output_dtype=torch.float32,  # deprecated + ignored
+                )
         call = calls["matmul"][0]
-        self.assertEqual(call["output_dtype"], torch.float32)
         self.assertIs(call["activation_scale"], activation_scale)
-        self.assertEqual(out.dtype, torch.float32)
+        # output_dtype is deprecated and ignored: the kernel receives input.dtype, not the requested float32.
+        self.assertEqual(call["output_dtype"], torch.bfloat16)
+        self.assertEqual(out.dtype, torch.bfloat16)
 
     def test_linear_adds_bias_in_place(self):
         input = torch.randn(3, 8, dtype=torch.bfloat16, device=torch_device)
