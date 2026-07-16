@@ -4124,8 +4124,6 @@ class PreTrainedModel(
         adapter_name = kwargs.pop("adapter_name", "default")
         generation_config = kwargs.pop("generation_config", None)
         gguf_file = kwargs.pop("gguf_file", None)
-        tp_plan = kwargs.pop("tp_plan", None)
-        tp_size = kwargs.pop("tp_size", None)
         distributed_config: DistributedConfig = kwargs.pop("distributed_config", None)
         device_mesh = kwargs.pop("device_mesh", None)
         trust_remote_code = kwargs.pop("trust_remote_code", None)
@@ -4133,9 +4131,6 @@ class PreTrainedModel(
         use_kernels = kwargs.pop("use_kernels", False)
         kernel_config = kwargs.pop("kernel_config", None)
         key_mapping = kwargs.pop("key_mapping", None)
-
-        if distributed_config is not None and tp_plan is None:
-            tp_plan = "auto"
 
         # Not used anymore -- remove them from the kwargs
         for name in ["mirror", "_fast_init", "low_cpu_mem_usage", "from_tf", "from_flax", "offload_state_dict"]:
@@ -4173,11 +4168,9 @@ class PreTrainedModel(
                 ": PartialState().process_index} where PartialState comes from accelerate library"
             )
 
-        if tp_plan is not None or tp_size is not None:  # TP warnings, and setup
-            if tp_size is None:
-                tp_size = torch.distributed.get_world_size()
-            device_map, device_mesh = initialize_tensor_parallelism(
-                tp_plan, tp_size=tp_size, device_mesh=device_mesh, device_map=device_map
+        if distributed_config is not None:
+            distributed_config, device_map, device_mesh = cls.prepare_distribute_model(
+                distributed_config, device_mesh=device_mesh, device_map=device_map
             )
 
         if gguf_file is not None and not is_accelerate_available():
@@ -4221,6 +4214,9 @@ class PreTrainedModel(
             config = copy.deepcopy(config)
             model_kwargs = kwargs
             commit_hash = getattr(config, "_commit_hash", commit_hash)
+
+        if distributed_config is not None:
+            config.distributed_config = distributed_config
 
         download_kwargs_with_commit["commit_hash"] = commit_hash
 
@@ -4331,10 +4327,7 @@ class PreTrainedModel(
         # Obtain the weight conversion mapping for this model if any are registered and apply to all submodels recursively
         weight_conversions = get_model_conversion_mapping(model, key_mapping, hf_quantizer)
 
-        if _torch_distributed_available and device_mesh is not None:  # add hooks to nn.Modules: no weights
-            if distributed_config is None:
-                distributed_config = DistributedConfig(tp_size=tp_size)
-            model = apply_tensor_parallelism(model, tp_plan, distributed_config, device_mesh)
+        model = cls.maybe_distribute_model(model, distributed_config, device_mesh)
 
         # Prepare the full device map
         if device_map is not None:

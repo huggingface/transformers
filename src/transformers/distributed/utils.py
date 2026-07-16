@@ -18,7 +18,6 @@ from typing import TYPE_CHECKING
 
 from ..utils import is_torch_available, is_torch_greater_or_equal
 
-
 if TYPE_CHECKING:
     from .configuration_utils import DistributedConfig
 
@@ -28,16 +27,6 @@ if is_torch_available():
     _torch_distributed_available = torch.distributed.is_available()
 else:
     _torch_distributed_available = False
-
-if is_torch_available() and is_torch_greater_or_equal("2.7"):
-    import torch.distributed.checkpoint as dcp
-    from torch.distributed.checkpoint.hf_storage import HuggingFaceStorageWriter
-    from torch.distributed.checkpoint.state_dict import (
-        StateDictOptions,
-        get_model_state_dict,
-        get_optimizer_state_dict,
-        set_optimizer_state_dict,
-    )
 
 
 def _is_torch_distributed_initialized() -> bool:
@@ -147,55 +136,3 @@ def initialize_fully_sharded_data_parallelism(distributed_config: DistributedCon
         mesh._flatten("_".join(names))
 
     return device_map, mesh
-
-
-def gather_full_state_dict(model) -> dict[str, torch.Tensor]:
-    """Gather FSDP-sharded params to full plain CPU tensors.
-
-    Only rank 0 accumulates the result; other ranks return ``{}``.
-    """
-    options = StateDictOptions(full_state_dict=True, cpu_offload=True)
-    full_state_dict = get_model_state_dict(model, options=options)
-    if _get_torch_distributed_rank() == 0:
-        return full_state_dict
-    return {}
-
-
-def save_model_checkpoint_distributed(model, checkpoint_dir: str) -> None:
-    """Save model parameters as standard HF-format sharded safetensors using
-    DCP + HuggingFaceStorageWriter with consolidation enabled.
-
-    Every rank first writes its own shard in parallel under
-    `<checkpoint_dir>/sharded/`, then a consolidation pass reads those shards
-    and emits HF-compatible `model-*-of-N.safetensors` (+ index) at
-    `<checkpoint_dir>/`. The result is a directory `from_pretrained` reads
-    through its normal path — no special flag needed at load time.
-    """
-    if not is_torch_greater_or_equal("2.7"):
-        raise OSError("Distributed checkpoint saving requires `torch>=2.7`.")
-
-    state_dict = get_model_state_dict(model)
-    dcp.save(
-        state_dict,
-        storage_writer=HuggingFaceStorageWriter(
-            path=checkpoint_dir,
-            save_distributed=True,
-            enable_consolidation=True,
-        ),
-    )
-    # Wait for rank 0 to finish writing the HF safetensors so other
-    # ranks don't return (and hit `from_pretrained`) before the files exist.
-    _distributed_barrier()
-
-
-def save_optimizer_distributed(model, optimizer, checkpoint_dir: str) -> None:
-    """Save optimizer state via DCP."""
-    optimizer_state_dict = get_optimizer_state_dict(model, optimizer)
-    dcp.save({"optimizer": optimizer_state_dict}, checkpoint_id=checkpoint_dir)
-
-
-def load_optimizer_distributed(model, optimizer, checkpoint_dir: str) -> None:
-    """Load optimizer state via DCP."""
-    optimizer_state_dict = get_optimizer_state_dict(model, optimizer)
-    dcp.load({"optimizer": optimizer_state_dict}, checkpoint_id=checkpoint_dir)
-    set_optimizer_state_dict(model, optimizer, optimizer_state_dict)

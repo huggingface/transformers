@@ -22,11 +22,7 @@ _import_structure = {
     "fsdp": ["is_fsdp_enabled", "is_fsdp_managed_module", "verify_fsdp_plan"],
     "mixin": ["DistributedMixin"],
     "utils": [
-        "gather_full_state_dict",
         "initialize_fully_sharded_data_parallelism",
-        "load_optimizer_distributed",
-        "save_model_checkpoint_distributed",
-        "save_optimizer_distributed",
     ],
 }
 
@@ -38,11 +34,7 @@ if TYPE_CHECKING:
     from .fsdp import is_fsdp_enabled, is_fsdp_managed_module, verify_fsdp_plan
     from .mixin import DistributedMixin
     from .utils import (
-        gather_full_state_dict,
         initialize_fully_sharded_data_parallelism,
-        load_optimizer_distributed,
-        save_model_checkpoint_distributed,
-        save_optimizer_distributed,
     )
 
 else:
