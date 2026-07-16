@@ -102,8 +102,6 @@ class FunAsrNanoConfig(PreTrainedConfig):
     r"""
     encoder_config (`dict` or `PreTrainedConfig`, *optional*):
         Configuration for the audio encoder.
-    text_config (`dict` or `PreTrainedConfig`, *optional*):
-        Configuration for the language model (Qwen3).
     adaptor_intermediate_size (`int`, *optional*, defaults to 2048):
         Hidden size of the adaptor feed-forward projection.
     adaptor_num_hidden_layers (`int`, *optional*, defaults to 2):
