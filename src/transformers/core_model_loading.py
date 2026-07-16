@@ -30,6 +30,7 @@ from typing import TYPE_CHECKING, Any
 
 import torch
 
+from .distributed.sharding_utils import DtensorShardOperation, _dtensor_from_local_like
 from .integrations.accelerate import get_device, offload_weight
 from .integrations.tensor_parallel import ALL_PARALLEL_STYLES
 from .utils import is_env_variable_true
@@ -38,6 +39,8 @@ from .utils.logging import get_logger, tqdm
 
 
 _torch_distributed_available = torch.distributed.is_available()
+if _torch_distributed_available:
+    from torch.distributed.tensor import DTensor
 
 if TYPE_CHECKING:
     from .integrations.tensor_parallel import TensorParallelLayer
@@ -125,7 +128,7 @@ class Chunk(ConversionOps):
         tensor = tensors[0] if isinstance(tensors, list) else tensors
         targets = target_patterns
         sizes = len(targets)
-        chunks = torch.chunk(tensor, sizes, dim=self.dim)
+        chunks = tuple(chunk.contiguous() for chunk in torch.chunk(tensor, sizes, dim=self.dim))
         if len(input_dict) > 1 or len(target_patterns) == 1 or len(chunks) != len(target_patterns):
             raise ValueError(f"Failed to convert {kwargs.get('full_layer_name')}")
         return dict(zip(targets, chunks))
@@ -176,6 +179,33 @@ class Concatenate(ConversionOps):
     @property
     def reverse_op(self) -> ConversionOps:
         return Chunk(self.dim)
+
+
+class Interleave(ConversionOps):
+    """Deinterleaves a tensor along `dim` by splitting in two and transposing. Reshapes param back to its original size."""
+
+    def __init__(self, dim: int = 0, inverse: bool = False):
+        self.dim = dim
+        self.inverse = inverse
+
+    def convert(self, input_dict, source_patterns, target_patterns, **kwargs):
+        tensor = next(iter(input_dict.values()))
+        tensor = tensor[0] if isinstance(tensor, list) else tensor
+
+        # Split into two in given dim and transpose to interleave along it
+        shape = list(tensor.shape)
+        if self.inverse:
+            shape[self.dim : self.dim + 1] = [2, shape[self.dim] // 2]
+        else:
+            shape[self.dim : self.dim + 1] = [shape[self.dim] // 2, 2]
+
+        tensor = tensor.reshape(shape).transpose(self.dim, self.dim + 1).reshape(tensor.shape).contiguous()
+        return {target_patterns[0]: tensor}
+
+    @property
+    def reverse_op(self) -> ConversionOps:
+        # can use the same dim and it will inverse it back
+        return Interleave(self.dim, inverse=not self.inverse)
 
 
 class MergeModulelist(ConversionOps):
@@ -738,7 +768,7 @@ class WeightTransform:
         self._original_target_patterns = self.target_patterns.copy()
 
         # Init fields that will be used during conversion
-        self.distributed_operation: TensorParallelLayer | None = None
+        self.distributed_operation: Any = None
         self.quantization_operation: ConversionOps | None = None
         self.collected_tensors: dict[str, list[Future]] = defaultdict(list)
         self.layer_targets: dict[str, set[str]] = defaultdict(set)
@@ -923,6 +953,8 @@ class WeightTransform:
             # Sync loading
             elif callable(tensors[0]):
                 tensors = [func() for func in tensors]
+                # Some may be None for some distributed setups
+                tensors = [tensor for tensor in tensors if tensor is not None]
             # Add them to the new dictionary
             collected_tensors[key] = tensors
 
@@ -1191,29 +1223,20 @@ def spawn_materialize(
     tensor: torch.Tensor,
     device=None,
     dtype=None,
+    sharding_op: DtensorShardOperation | None = None,
+    tensor_idx: int | None = None,
 ) -> Future | Callable:
-    """Materialize a tensor from file asynchronously if `thread_pool` is provided, or return a Callable that will
-    load the tensor synchronously when called."""
+    """Materialize (and optionally shard) a tensor, asynchronously if a thread pool is provided.
+
+    When ``sharding_op`` is given the tensor is sharded (DTensor placement or legacy TP plan);
+    otherwise it is simply copied to *device*/*dtype*. Without a thread pool a deferred
+    callable is returned instead of a Future.
+    """
 
     def _job():
+        if sharding_op is not None:
+            return sharding_op.shard_tensor(tensor, tensor_idx=tensor_idx, device=device, dtype=dtype)
         return _materialize_copy(tensor, device, dtype)
-
-    if thread_pool is not None:
-        return thread_pool.submit(_job)
-    else:
-        # Return the Callable here, not the Tensor itself, so we actually delay loading to avoid saturating cpu
-        # memory during Conversion
-        return _job
-
-
-def spawn_tp_materialize(
-    thread_pool: ThreadPoolExecutor | None, tensor: torch.Tensor, sharding_method, tensor_idx, device=None, dtype=None
-) -> Future | Callable:
-    """Materialize and shard a tensor (according to the TP-plan) from file asynchronously if `thread_pool` is provided, or
-    return a Callable that will load the tensor synchronously when called."""
-
-    def _job():
-        return sharding_method.shard_tensor(tensor, tensor_idx=tensor_idx, device=device, dtype=dtype)
 
     if thread_pool is not None:
         return thread_pool.submit(_job)
@@ -1286,6 +1309,7 @@ def log_conversion_errors(
         raise SkipParameters()
 
 
+@torch.no_grad()
 def set_param_for_module(
     model: PreTrainedModel,
     target_name: str,
@@ -1306,22 +1330,28 @@ def set_param_for_module(
     if ref is None:
         loading_info.unexpected_keys.add(target_name)
     else:
-        if not isinstance(param_value, torch.nn.Parameter):
+        if not isinstance(param_value, torch.nn.Parameter) and not isinstance(ref, DTensor):
             if param_name not in module_obj._buffers:
                 param_value = torch.nn.Parameter(param_value, requires_grad=param_value.is_floating_point())
 
         # Remove from missing keys (it's either mismatched, or all good)
         loading_info.missing_keys.discard(target_name)
 
-        # Determine expected shape: for TP, use sharded shape; otherwise, use full shape
+        # Determine expected shape: for TP/Dtensor, use sharded shape; otherwise, use full shape
         if distributed_operation is not None:
             expected_shape = torch.Size(distributed_operation.get_expected_sharded_shape(ref.shape))
+        elif isinstance(ref, DTensor):
+            expected_shape = ref._local_tensor.shape
         else:
             expected_shape = ref.shape
 
         if ref is not None and param_value.shape != expected_shape and hf_quantizer is None:
             loading_info.mismatched_keys.add((target_name, param_value.shape, expected_shape))
         else:
+            if isinstance(ref, DTensor):
+                local_param = param_value.detach() if isinstance(param_value, torch.nn.Parameter) else param_value
+                dtensor_param = _dtensor_from_local_like(local_param, ref)
+                param_value = torch.nn.Parameter(dtensor_param, requires_grad=ref.requires_grad)
             # super important otherwise _init_weight will re-init the param
             param_value._is_hf_initialized = True
             setattr(module_obj, param_name, param_value)
@@ -1613,9 +1643,25 @@ def convert_and_load_state_dict_in_model(
             elif empty_param is not None and empty_param.dtype != _dtype:
                 _dtype = empty_param.dtype  # usually correct when initializing
 
-            # 4. Handle TP sharding or device_map placement
-            future_or_tensor = None
-            if device_mesh and tp_plan:
+            # Per-expert sharding (EP) needs `tensor_idx` = the expert index so the
+            # distributed op selects whole experts. The signal is a `MergeModulelist`
+            # in the chain; it isn't always `operations[0]` (e.g. an FP8 quantizer
+            # prepends a scale-decode op), so scan the whole chain rather than just the head.
+            tensor_idx = (
+                len(mapping.collected_tensors.get(source_pattern, []))
+                if isinstance(mapping, WeightConverter)
+                and any(isinstance(op, MergeModulelist) for op in mapping.operations)
+                else None
+            )
+
+            # 4. Handle TP/Dtensor sharding or device_map placement
+            param_device = get_device(device_map, renamed_key, valid_torch_device=True)
+            sharding_op = None
+            materialize_device = param_device
+
+            if isinstance(empty_param, DTensor):
+                sharding_op = DtensorShardOperation(empty_param)
+            elif device_mesh and tp_plan:
                 if matched_tp_pattern := tp_plan_alt.search(renamed_key):
                     matched_tp_pattern = tp_plan_by_group_name[matched_tp_pattern.lastgroup]
                     if getattr(mapping, "distributed_operation", None) is None:
@@ -1623,28 +1669,17 @@ def convert_and_load_state_dict_in_model(
                         mapping.distributed_operation = tp_layer(
                             device_mesh=device_mesh, rank=device_mesh.get_local_rank(), empty_param=empty_param.clone()
                         )
-                    # Per-expert sharding (EP) needs `tensor_idx` = the expert index so the
-                    # distributed op selects whole experts. The signal is a `MergeModulelist`
-                    # in the chain; it isn't always `operations[0]` (e.g. an FP8 quantizer
-                    # prepends a scale-decode op), so scan the whole chain rather than just the head.
-                    shard_index = (
-                        len(mapping.collected_tensors.get(source_pattern, []))
-                        if isinstance(mapping, WeightConverter)
-                        and any(isinstance(op, MergeModulelist) for op in mapping.operations)
-                        else None
-                    )
-                    future_or_tensor = spawn_tp_materialize(
-                        thread_pool,
-                        tensor,
-                        mapping.distributed_operation,
-                        shard_index,
-                        device_map[""],
-                        _dtype,
-                    )
+                    sharding_op = mapping.distributed_operation
+                    materialize_device = device_map[""]
 
-            if future_or_tensor is None:
-                param_device = get_device(device_map, renamed_key, valid_torch_device=True)
-                future_or_tensor = spawn_materialize(thread_pool, tensor, param_device, _dtype)
+            future_or_tensor = spawn_materialize(
+                thread_pool,
+                tensor,
+                materialize_device,
+                _dtype,
+                sharding_op=sharding_op,
+                tensor_idx=tensor_idx,
+            )
 
             mapping.add_tensor(renamed_key, original_key, source_pattern, future_or_tensor)
         elif source_pattern is not None:  # add all target keys as unexpected

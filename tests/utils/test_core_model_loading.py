@@ -17,6 +17,7 @@ from types import SimpleNamespace
 
 import torch
 import torch.nn as nn
+from torch.distributed.tensor.placement_types import Shard
 
 from transformers import PreTrainedConfig, PreTrainedModel
 from transformers.conversion_mapping import (
@@ -42,11 +43,13 @@ from transformers.core_model_loading import (
     convert_and_load_state_dict_in_model,
     rename_source_key,
     revert_weight_conversion,
+    spawn_materialize,
 )
 from transformers.modeling_utils import LoadStateDictConfig
 from transformers.utils.import_utils import is_triton_available
 
 from ..test_modeling_common import compare_state_dicts
+from .test_distributed_sharding_utils import FakeMesh, _make_dtensor_shard_op
 
 
 class TestWeightGlobMatching(unittest.TestCase):
@@ -240,6 +243,97 @@ class DummyRoot(PreTrainedModel):
 
 
 class TestConvertAndLoadStateDict(unittest.TestCase):
+    def test_dtensor_shard_aware_mixtral_conversion_uses_only_local_experts(self):
+        """Integration test: FSDP-sharded expert loading + WeightConverter.
+
+        The problem: Mixtral has 8 experts. The checkpoint stores them separately::
+
+            experts.0.w1.weight  (2x2)
+            experts.0.w3.weight  (2x2)
+            experts.1.w1.weight  (2x2)
+            experts.1.w3.weight  (2x2)
+
+        The model stores them packed into one tensor::
+
+            experts.gate_up_proj.weight  (2, 4, 2)
+                                          ^  ^  ^
+                                          |  |  +-- features
+                                          |  +-- w1 (2) + w3 (2) concatenated
+                                          +-- num_experts
+
+        With FSDP2, params become DTensors and FSDP can shard the same
+        dimension as TP or EP (e.g. expert axis 0). On a 2D (fsdp, tp) mesh
+        the loader must compose both placements either: [Shard(d), Shard(d)] for contiguous double-shard,
+        or [_StridedShard(d), Shard(d)] for fused weights.DtensorShardOperation handles this; the legacy TP path did not.
+
+        What the test checks::
+
+            checkpoint files              shard_tensor              rank 0 gets
+            ----------------              ------------              -----------
+            experts.0.w1  [[0,1],[2,3]]   idx=0 -> kept            [[0,1],[2,3]]
+            experts.1.w1  [[10,11],...]   idx=1 -> None (not owned)
+            experts.0.w3  [[4,5],[6,7]]   idx=0 -> kept            [[4,5],[6,7]]
+            experts.1.w3  [[14,15],...]   idx=1 -> None (not owned)
+
+        WeightConverter then combines only the kept tensors::
+
+            MergeModulelist(dim=0): stack owned experts  -> shape (1, 2, 2) each
+            Concatenate(dim=1):     cat w1 + w3 along dim 1
+
+            gate_up_proj = [[[0,1],[2,3],[4,5],[6,7]]]   shape (1, 4, 2)
+                              ~~~~~~~~~~  ~~~~~~~~~~
+                                  w1          w3
+
+        The key point: DtensorShardOperation.shard_tensor(tensor_idx=1) returns
+        None for rank 0, so the converter never even processes expert 1's data.
+        This saves memory during loading.
+        """
+        shard_op = _make_dtensor_shard_op(
+            FakeMesh(shape=(2,), rank=0),
+            [Shard(0)],
+            param_shape=(2, 4, 2),
+            local_shape=(1, 4, 2),
+        )
+        converter = WeightConverter(
+            ["experts.*.w1.weight", "experts.*.w3.weight"],
+            "experts.gate_up_proj.weight",
+            operations=[MergeModulelist(dim=0), Concatenate(dim=1)],
+        )
+
+        for idx, tensor in enumerate(
+            [
+                torch.tensor([[0.0, 1.0], [2.0, 3.0]]),
+                torch.tensor([[10.0, 11.0], [12.0, 13.0]]),
+            ]
+        ):
+            converter.add_tensor(
+                "model.layers.0.experts.gate_up_proj.weight",
+                f"model.layers.0.experts.{idx}.w1.weight",
+                "experts.*.w1.weight",
+                spawn_materialize(None, tensor, device="cpu", dtype=None, sharding_op=shard_op, tensor_idx=idx),
+            )
+
+        for idx, tensor in enumerate(
+            [
+                torch.tensor([[4.0, 5.0], [6.0, 7.0]]),
+                torch.tensor([[14.0, 15.0], [16.0, 17.0]]),
+            ]
+        ):
+            converter.add_tensor(
+                "model.layers.0.experts.gate_up_proj.weight",
+                f"model.layers.0.experts.{idx}.w3.weight",
+                "experts.*.w3.weight",
+                spawn_materialize(None, tensor, device="cpu", dtype=None, sharding_op=shard_op, tensor_idx=idx),
+            )
+
+        converted = converter.convert("model.layers.0.experts.gate_up_proj.weight")
+
+        self.assertEqual(list(converted), ["model.layers.0.experts.gate_up_proj.weight"])
+        torch.testing.assert_close(
+            converted["model.layers.0.experts.gate_up_proj.weight"],
+            torch.tensor([[[0.0, 1.0], [2.0, 3.0], [4.0, 5.0], [6.0, 7.0]]]),
+        )
+
     def test_moe_and_qkv_conversion(self):
         model = DummyRoot(PreTrainedConfig())
 
