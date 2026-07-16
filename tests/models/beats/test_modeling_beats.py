@@ -29,7 +29,7 @@ class BEATsModelTest(unittest.TestCase):
             embed_dim=64,
             encoder_layers=2,
             encoder_embed_dim=64,
-            encoder_ffn_embed_own=128,
+            encoder_ffn_embed_dim=128,
             encoder_attention_heads=2,
             num_classes=10,
         )

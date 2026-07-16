@@ -32,6 +32,7 @@ if TYPE_CHECKING:
     from .autoformer import *
     from .aya_vision import *
     from .bamba import *
+    from .beats import *
     from .bark import *
     from .bart import *
     from .barthez import *
@@ -202,7 +203,6 @@ if TYPE_CHECKING:
     from .hiera import *
     from .higgs_audio_v2 import *
     from .higgs_audio_v2_tokenizer import *
-    from .beats import *
     from .hubert import *
     from .hunyuan_v1_dense import *
     from .hunyuan_v1_moe import *
