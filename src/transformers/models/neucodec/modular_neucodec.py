@@ -55,7 +55,7 @@ class NeuCodecConfig(Xcodec2Config):
         Dimension for the vector quantization codebook.
     quantization_levels (`list[int]`, *optional*, defaults to `[4, 4, 4, 4, 4, 4, 4, 4]`):
         Levels for the vector quantization codebook.
-    input_sampling_rate (`int`, *optional*, defaults to 24000):
+    input_sampling_rate (`int`, *optional*, defaults to 16000):
         Sampling rate, in hertz (Hz), of the decoder's input audio waveform. NeuCodec encodes audio sampled at
         `input_sampling_rate` (16kHz) but its decoder upsamples the reconstruction to a higher-fidelity
         `sampling_rate` (24kHz), while keeping the same 50Hz code frame rate.
@@ -114,69 +114,13 @@ class NeuCodecPreTrainedModel(Xcodec2PreTrainedModel):
 
 
 @auto_docstring(custom_intro="NeuCodec neural audio codec model.")
-class NeuCodecModel(Xcodec2Model, NeuCodecPreTrainedModel):
+class NeuCodecModel(Xcodec2Model):
     def __init__(self, config: NeuCodecConfig):
         super().__init__(config)
         # `Xcodec2Model.hop_length` mirrors `config.hop_length`, which for NeuCodec is expressed in the decoder's
         # (24kHz) domain. The mask arithmetic in `encode()` operates on `input_values` in the encoder's (16kHz)
         # domain, so it must use the un-rescaled hop length instead.
         self.hop_length = config.encoder_hop_length
-
-    @auto_docstring
-    @can_return_tuple
-    def encode(
-        self,
-        input_values: torch.Tensor,
-        input_features: torch.Tensor,
-        padding_mask: torch.Tensor | None = None,
-        input_features_mask: torch.Tensor | None = None,
-        output_latents: bool = False,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | NeuCodecEncoderOutput:
-        r"""
-        input_values (`torch.Tensor` of shape `(batch_size, 1, sequence_length)`):
-            Input audio waveform.
-        input_features (`torch.Tensor` of shape `(batch_size, mel_bins, time_steps)`):
-            Input audio mel spectrogram for semantic encoding.
-        padding_mask (`torch.Tensor` of shape `(batch_size, 1, sequence_length)`):
-            Padding mask used to pad `input_values`.
-        input_features_mask (`torch.Tensor` of shape `(batch_size, time_steps)`, *optional*):
-            Attention mask for the spectrogram input to the semantic encoder. `1` for valid frames, `0` for padding.
-        output_latents (`bool`, *optional*, defaults to `False`):
-            Whether to return the continuous latent representation from the quantizer.
-        """
-
-        # Semantic embedding
-        with torch.no_grad():
-            semantic_output = self.semantic_encoder(input_features, attention_mask=input_features_mask)
-        semantic_hidden_states = semantic_output.last_hidden_state.transpose(1, 2)
-        semantic_hidden_states = self.semantic_adapter(semantic_hidden_states)
-
-        # Acoustic embedding
-        acoustic_hidden_states = self.acoustic_encoder(input_values)
-        
-        # Concat embeddings
-        hidden_states = torch.cat([semantic_hidden_states, acoustic_hidden_states], dim=1)
-        hidden_states = self.fc_encoder(hidden_states.transpose(1, 2))
-
-        # Quantize
-        latents, audio_codes = self.quantizer(hidden_states)
-        latents = latents.transpose(1, 2)
-        audio_codes = audio_codes.transpose(1, 2)
-
-        # If provided, compute corresponding padding mask for audio codes
-        audio_codes_mask = None
-        if padding_mask is not None:
-            audio_length = padding_mask.sum(dim=-1, keepdim=True)
-            token_length = audio_length // self.hop_length
-            idx = torch.arange(audio_codes.shape[-1], device=padding_mask.device).view(1, -1)
-            audio_codes_mask = (idx < token_length).to(padding_mask.dtype)
-
-        return NeuCodecEncoderOutput(
-            audio_codes=audio_codes,
-            latents=latents if output_latents else None,
-            audio_codes_mask=audio_codes_mask,
-        )
 
     @auto_docstring
     @can_return_tuple
