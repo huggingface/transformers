@@ -51,7 +51,7 @@ if is_vision_available():
 @require_torchvision
 class Cosmos3EdgeProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = Cosmos3EdgeProcessor
-    tiny_model_id = "atharvajoshi10/tiny-processor-cosmos3-edge"
+    tiny_model_id = "hf-internal-testing/tiny-processor-cosmos3-edge"
 
     def prepare_image_inputs(self, batch_size: int | None = None, nested: bool = False):
         """Create small 64x96 inputs aligned to patch_size * merge_size (32).
