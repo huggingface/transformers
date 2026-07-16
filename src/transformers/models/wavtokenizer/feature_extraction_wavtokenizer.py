@@ -34,7 +34,7 @@ class WavTokenizerFeatureExtractor(SequenceFeatureExtractor):
     `sampling_rate`; pass `sampling_rate` to [`__call__`] so it can validate the input rate.
 
     Note that [`WavTokenizerModel`] pads internally and accepts arbitrary lengths, so single inputs are returned
-    unpadded — this keeps the produced audio codes bit-identical to the original WavTokenizer pipeline. Batches of
+    unpadded, which keeps the produced audio codes bit-identical to the original WavTokenizer pipeline. Batches of
     different lengths are zero-padded to the longest sample (`padding_mask` marks the valid part); zero-padding can
     perturb the codes of shorter samples near the end, so encode each clip individually when bit-exact codes matter.
 
@@ -122,9 +122,7 @@ class WavTokenizerFeatureExtractor(SequenceFeatureExtractor):
                 "Failing to do so can result in silent errors that might be hard to debug."
             )
 
-        if padding and truncation:
-            raise ValueError("Both padding and truncation were set. Make sure you only set one.")
-        elif padding is None:
+        if padding is None:
             # by default let's pad the inputs
             padding = True
 
@@ -150,8 +148,8 @@ class WavTokenizerFeatureExtractor(SequenceFeatureExtractor):
 
         input_values = BatchFeature({"input_values": audio})
 
-        # pad the batch to the longest sample; single inputs stay unpadded (the model pads internally),
-        # which keeps codes bit-identical to the original WavTokenizer pipeline
+        # Truncate before padding. By default, batches pad to the longest sample while single inputs stay unpadded
+        # because the model pads internally, which keeps codes bit-identical to the original WavTokenizer pipeline.
         padded_inputs = self.pad(
             input_values,
             max_length=max_length,
