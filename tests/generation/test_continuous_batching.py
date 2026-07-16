@@ -1202,14 +1202,14 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
     # The (use_async, use_cuda_graph) combinations are split across the two tests so that all four are covered
     # without running the full cross-product on each: the cheap single-image test carries the CUDA-graph matrix,
     # the mixed batch covers the async encoder-cache transfer across IO pairs.
-    @slow
     @parameterized.expand([(False, False), (False, True), (True, True)])
+    @slow
     def test_multimodal_parity_single_image(self, use_async: bool, use_cuda_graph: bool) -> None:
         """A single image+text request matches plain generate, across sync/async and with/without CUDA graphs."""
         self._test_multimodal_parity(use_async=use_async, use_cuda_graph=use_cuda_graph, request_specs=[[0]])
 
-    @slow
     @parameterized.expand([(False, False), (True, False)])
+    @slow
     def test_multimodal_parity_mixed_batch(self, use_async: bool, use_cuda_graph: bool) -> None:
         """A batch mixing two image requests and one text-only request matches plain generate, in both sync and async
         batching. Exercises interleaving multimodal and text requests with concurrent encoder-cache entries."""
