@@ -22,6 +22,7 @@ from urllib.request import urlopen
 import librosa
 import pytest
 import requests
+from datasets import Audio, load_dataset
 
 from transformers import (
     AutoProcessor,
@@ -827,6 +828,66 @@ class Qwen2_5OmniModelIntegrationTest(unittest.TestCase):
         decoded_text = self.processor.decode(output[0][0], skip_special_tokens=True)
         self.assertEqual(decoded_text, EXPECTED_DECODED_TEXT)
         self.assertFalse(torch.isnan(output[1]).any().item())
+
+    @slow
+    def test_small_model_integration_test_batch_audio_matches_single(self):
+        model = Qwen2_5OmniForConditionalGeneration.from_pretrained(
+            "Qwen/Qwen2.5-Omni-7B", dtype=torch.bfloat16, device_map="auto"
+        )
+        messages = [
+            {
+                "role": "system",
+                "content": [
+                    {
+                        "type": "text",
+                        "text": "You are Qwen, a virtual human developed by the Qwen Team, Alibaba Group, capable of perceiving auditory and visual inputs, as well as generating text and speech.",
+                    }
+                ],
+            },
+            {
+                "role": "user",
+                "content": [{"type": "audio", "audio": ""}],
+            },
+        ]
+        text = self.processor.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
+        dataset = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+        dataset = dataset.cast_column("audio", Audio(sampling_rate=self.processor.feature_extractor.sampling_rate))
+        audios = [dataset[i]["audio"]["array"] for i in range(2)]
+
+        single_audio_outputs = []
+        for audio in audios:
+            inputs = self.processor(text=[text], audio=[audio], return_tensors="pt", padding=True).to(
+                torch_device, dtype=torch.bfloat16
+            )
+            output = model.generate(
+                **inputs,
+                generation_mode="audio",
+                thinker_temperature=0,
+                thinker_do_sample=False,
+                thinker_max_new_tokens=20,
+                talker_do_sample=False,
+                talker_max_new_tokens=10,
+            )
+            single_audio_outputs.append(output[1][0] if output[1].ndim > 1 else output[1])
+
+        inputs = self.processor(text=[text] * 2, audio=audios, return_tensors="pt", padding=True).to(
+            torch_device, dtype=torch.bfloat16
+        )
+        output = model.generate(
+            **inputs,
+            generation_mode="audio",
+            thinker_temperature=0,
+            thinker_do_sample=False,
+            thinker_max_new_tokens=20,
+            talker_do_sample=False,
+            talker_max_new_tokens=10,
+        )
+        batch_audio_output = output[1]
+
+        self.assertEqual(batch_audio_output.shape[0], len(audios))
+        for batch_audio, single_audio in zip(batch_audio_output, single_audio_outputs):
+            self.assertEqual(batch_audio.shape, single_audio.shape)
+            torch.testing.assert_close(batch_audio, single_audio, rtol=1e-3, atol=1e-3)
 
     @slow
     @require_flash_attn

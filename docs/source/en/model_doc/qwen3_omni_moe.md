@@ -33,7 +33,6 @@ The abstract from the technical report is the following:
 ## Notes
 
 - Use [`Qwen3OmniMoeForConditionalGeneration`] to generate audio and text output. To generate only one output type, use [`Qwen3OmniMoeThinkerForConditionalGeneration`] for text-only and [`Qwen3OmniMoeTalkerForConditionalGeneration`] for audio-only outputs.
-- Audio generation with [`Qwen3OmniMoeForConditionalGeneration`] supports only single batch size at the moment.
 - In case out out-of-memory errors hwen working with video input, decrease `processor.max_pixels`. By default the maximum is set to a very arge value and high resolution visuals will not be resized, unless resolution exceeds `processor.max_pixels`.
 - The processor has its own [`~ProcessorMixin.apply_chat_template`] method to convert chat messages to model inputs.
 
@@ -97,6 +96,59 @@ sf.write(
     samplerate=24000,
 )
 print(text)
+```
+
+### Batch audio generation
+
+[`Qwen3OmniMoeForConditionalGeneration`] supports batched audio output generation.
+
+```python
+import librosa
+import soundfile as sf
+
+from transformers import Qwen3OmniMoeForConditionalGeneration, Qwen3OmniMoeProcessor
+
+
+model = Qwen3OmniMoeForConditionalGeneration.from_pretrained(
+    "Qwen/Qwen3-Omni-30B-A3B-Instruct",
+    device_map="auto",
+)
+processor = Qwen3OmniMoeProcessor.from_pretrained("Qwen/Qwen3-Omni-30B-A3B-Instruct")
+
+system_prompt = "You are Qwen, a virtual human developed by the Qwen Team, Alibaba Group, capable of perceiving auditory and visual inputs, as well as generating text and speech."
+conversations = [
+    [
+        {"role": "system", "content": [{"type": "text", "text": system_prompt}]},
+        {"role": "user", "content": [{"type": "audio", "audio": "/path/to/audio_1.wav"}]},
+    ],
+    [
+        {"role": "system", "content": [{"type": "text", "text": system_prompt}]},
+        {"role": "user", "content": [{"type": "audio", "audio": "/path/to/audio_2.wav"}]},
+    ],
+]
+
+texts = [
+    processor.apply_chat_template(conversation, tokenize=False, add_generation_prompt=True)
+    for conversation in conversations
+]
+audios = [
+    librosa.load("/path/to/audio_1.wav", sr=processor.feature_extractor.sampling_rate)[0],
+    librosa.load("/path/to/audio_2.wav", sr=processor.feature_extractor.sampling_rate)[0],
+]
+
+inputs = processor(text=texts, audio=audios, return_tensors="pt", padding=True).to(model.device, dtype=model.dtype)
+
+text_ids, audio_outputs = model.generate(
+    **inputs,
+    return_audio=True,
+    thinker_do_sample=False,
+    talker_do_sample=False,
+)
+texts = processor.batch_decode(text_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)
+
+for idx, audio in enumerate(audio_outputs):
+    sf.write(f"output_{idx}.wav", audio.detach().cpu().numpy(), samplerate=24000)
+print(texts)
 ```
 
 ### Text-only generation
