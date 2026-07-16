@@ -13,7 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was published in HF papers on 2025-09-17 and contributed to Hugging Face Transformers on 2026-07-09.*
+*This model was published in HF papers on 2025-09-17 and contributed to Hugging Face Transformers on 2026-07-16.*
 
 <div class="flex flex-wrap space-x-1">
 <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
@@ -33,6 +33,8 @@ Canary reuses the [Fast Conformer](https://huggingface.co/papers/2305.05084) enc
 
 The original implementation can be found in [NVIDIA NeMo](https://github.com/NVIDIA/NeMo). A model checkpoint is available at [harshaljanjani/canary-1b-v2-hf](https://huggingface.co/harshaljanjani/canary-1b-v2-hf).
 
+This model was contributed by [Harshal Janjani](https://huggingface.co/harshaljanjani).
+
 ## Usage
 
 ### Transcription
@@ -51,7 +53,7 @@ ds = ds.cast_column("audio", Audio(sampling_rate=processor.feature_extractor.sam
 
 inputs = processor.apply_transcription_request(audio=ds[0]["audio"]["array"], source_language="en").to(model.device)
 generated_ids = model.generate(**inputs, max_new_tokens=128)
-print(processor.batch_decode(generated_ids, skip_special_tokens=True)[0])
+print(processor.decode(generated_ids, skip_special_tokens=True)[0])
 ```
 
 ### Translation
@@ -63,7 +65,7 @@ inputs = processor.apply_transcription_request(
     audio=ds[0]["audio"]["array"], source_language="en", target_language="de"
 ).to(model.device)
 generated_ids = model.generate(**inputs, max_new_tokens=128)
-print(processor.batch_decode(generated_ids, skip_special_tokens=True)[0])
+print(processor.decode(generated_ids, skip_special_tokens=True)[0])
 ```
 
 ### Batch inference
@@ -76,7 +78,7 @@ inputs = processor.apply_transcription_request(
     audio=audios, source_language="en", target_language=["en", "de"]
 ).to(model.device)
 generated_ids = model.generate(**inputs, max_new_tokens=128)
-for text in processor.batch_decode(generated_ids, skip_special_tokens=True):
+for text in processor.decode(generated_ids, skip_special_tokens=True):
     print(text)
 ```
 
@@ -96,7 +98,7 @@ for _ in range(3):
 
 # Apply model
 generated_ids = model.generate(**inputs, max_new_tokens=128, cache_implementation="static", compile_config=compile_config)
-print(processor.batch_decode(generated_ids, skip_special_tokens=True)[0])
+print(processor.decode(generated_ids, skip_special_tokens=True)[0])
 ```
 
 ### Training

@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from ...audio_utils import AudioInput, make_list_of_audio, make_list_of_audio_chat_template
+from ...audio_utils import AudioInput, make_list_of_audio_chat_template
 from ...feature_extraction_utils import BatchFeature
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
@@ -42,7 +42,7 @@ def _prepare_language_inputs(language: str | list[str] | None, batch_size: int) 
     raise TypeError("`language` must be a string, a list of strings, or `None`.")
 
 
-class CanaryProcessorKwargs(ProcessingKwargs, total=False):
+class CanaryProcessorKwargs(ProcessingKwargs, total=False):  # trf-ignore: TRF019
     _defaults = {
         "audio_kwargs": {
             "sampling_rate": 16000,
@@ -66,6 +66,8 @@ class CanaryProcessor(ProcessorMixin):
     the audio and tokenizes the resulting prompt into `decoder_input_ids`.
     """
 
+    valid_processor_kwargs = CanaryProcessorKwargs
+
     def __init__(self, feature_extractor=None, tokenizer=None, chat_template=None):
         super().__init__(feature_extractor, tokenizer, chat_template=chat_template)
 
@@ -86,23 +88,12 @@ class CanaryProcessor(ProcessorMixin):
         if audio is None:
             raise ValueError("You need to specify an `audio` input to process.")
 
-        output_kwargs = self._merge_kwargs(
-            CanaryProcessorKwargs,
-            tokenizer_init_kwargs=self.tokenizer.init_kwargs,
-            **kwargs,
-        )
-        return_tensors = output_kwargs["audio_kwargs"].get("return_tensors")
-
-        audio = make_list_of_audio(audio)
-        data = self.feature_extractor(audio, **output_kwargs["audio_kwargs"])
-
+        model_inputs = super().__call__(audio=audio, text=text, **kwargs)
         if text is not None:
-            encodings = self.tokenizer(text, **output_kwargs["text_kwargs"])
-            data["decoder_input_ids"] = encodings["input_ids"]
+            model_inputs["decoder_input_ids"] = model_inputs.pop("input_ids")
             if output_labels:
-                data["labels"] = encodings["input_ids"]
-
-        return BatchFeature(data=data, tensor_type=return_tensors)
+                model_inputs["labels"] = model_inputs["decoder_input_ids"]
+        return model_inputs
 
     def apply_transcription_request(
         self,
@@ -163,12 +154,6 @@ class CanaryProcessor(ProcessorMixin):
             return_dict=True,
             **kwargs,
         )
-
-    def batch_decode(self, *args, **kwargs):
-        return self.tokenizer.batch_decode(*args, **kwargs)
-
-    def decode(self, *args, **kwargs):
-        return self.tokenizer.decode(*args, **kwargs)
 
     @property
     def model_input_names(self):

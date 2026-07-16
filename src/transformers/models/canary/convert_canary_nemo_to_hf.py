@@ -61,6 +61,26 @@ NEMO_TO_HF_ENCODER_MAPPING = {
     r"linear_pos": r"relative_k_proj",
 }
 
+DECODER_HIDDEN_DIM_INPUT_KEYS = (
+    "embed_tokens.weight",
+    "proj_out.weight",
+    "q_proj.weight",
+    "self_attn.k_proj.weight",
+    "self_attn.v_proj.weight",
+    "fc1.weight",
+)
+
+DECODER_HIDDEN_DIM_OUTPUT_KEYS = (
+    "out_proj.weight",
+    "out_proj.bias",
+    "fc2.weight",
+    "fc2.bias",
+    "layer_norm.weight",
+    "layer_norm.bias",
+    "layernorm_embedding.weight",
+    "layernorm_embedding.bias",
+)
+
 NEMO_TO_HF_DECODER_MAPPING = {
     r"^transf_decoder\._embedding\.token_embedding\.": r"decoder.embed_tokens.",
     r"^transf_decoder\._embedding\.layer_norm\.": r"decoder.layernorm_embedding.",
@@ -108,7 +128,19 @@ def convert_decoder_config(nemo_config) -> CanaryConfig:
     )
 
 
-def load_and_convert_state_dict(model_files):
+def permute_for_sinusoids(tensor, key, d_model):
+    """Permute the weights for the concatenated sin/cos formulation."""
+    permutation = torch.empty(d_model, dtype=torch.long)
+    permutation[: d_model // 2] = torch.arange(0, d_model, 2)
+    permutation[d_model // 2 :] = torch.arange(1, d_model, 2)
+    if key.endswith(DECODER_HIDDEN_DIM_INPUT_KEYS):
+        return tensor[:, permutation]
+    if key.endswith(DECODER_HIDDEN_DIM_OUTPUT_KEYS):
+        return tensor[permutation]
+    return tensor
+
+
+def load_and_convert_state_dict(model_files, d_model):
     """Load the NeMo state dict and convert keys to the HF (`model.encoder.*` / `model.decoder.*`) layout."""
     state_dict = torch.load(model_files["model_weights"], map_location="cpu", weights_only=True)
     converted_state_dict = {}
@@ -119,9 +151,10 @@ def load_and_convert_state_dict(model_files):
         if key.startswith("encoder."):
             converted_state_dict["model." + convert_key(key, NEMO_TO_HF_ENCODER_MAPPING)] = value
         elif key.startswith("transf_decoder."):
-            converted_state_dict["model." + convert_key(key, NEMO_TO_HF_DECODER_MAPPING)] = value
+            converted_key = "model." + convert_key(key, NEMO_TO_HF_DECODER_MAPPING)
+            converted_state_dict[converted_key] = permute_for_sinusoids(value, converted_key, d_model)
         elif key == "log_softmax.mlp.layer0.weight":
-            converted_state_dict["proj_out.weight"] = value
+            converted_state_dict["proj_out.weight"] = permute_for_sinusoids(value, "proj_out.weight", d_model)
         elif key == "log_softmax.mlp.layer0.bias":
             converted_state_dict["proj_out.bias"] = value
         else:
@@ -174,7 +207,7 @@ def main(hf_repo_id, output_dir, push_to_repo_id=None):
 
     config = convert_decoder_config(nemo_config)
     print(f"Converted config:\n{config}")
-    converted_state_dict = load_and_convert_state_dict(model_files)
+    converted_state_dict = load_and_convert_state_dict(model_files, config.d_model)
 
     print("Loading the checkpoint in a Canary model.")
     with torch.device("meta"):

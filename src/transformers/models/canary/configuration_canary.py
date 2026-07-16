@@ -21,7 +21,7 @@ from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
 from ...utils import auto_docstring
-from ..parakeet import ParakeetEncoderConfig
+from ..auto import CONFIG_MAPPING, AutoConfig
 
 
 @auto_docstring(checkpoint="harshaljanjani/canary-1b-v2-hf")
@@ -30,41 +30,8 @@ class CanaryConfig(PreTrainedConfig):
     r"""
     encoder_config (`Union[dict, ParakeetEncoderConfig]`, *optional*):
         The config object or dictionary of the FastConformer encoder ([`ParakeetEncoderConfig`]).
-    vocab_size (`int`, *optional*, defaults to 16384):
-        Vocabulary size of the Canary decoder.
-    d_model (`int`, *optional*, defaults to 1024):
-        Dimensionality of the decoder layers and the pooler layer.
-    decoder_layers (`int`, *optional*, defaults to 8):
-        Number of decoder layers.
-    decoder_attention_heads (`int`, *optional*, defaults to 8):
-        Number of attention heads for each attention layer in the decoder.
-    decoder_ffn_dim (`int`, *optional*, defaults to 4096):
-        Dimensionality of the "intermediate" (often named feed-forward) layer in the decoder.
-    decoder_layerdrop (`float`, *optional*, defaults to 0.0):
-        The LayerDrop probability for the decoder. See the [LayerDrop paper](https://huggingface.co/papers/1909.11556)
-        for more details.
-    activation_function (`str`, *optional*, defaults to `"relu"`):
-        The non-linear activation function in the decoder feed-forward layers.
     max_target_positions (`int`, *optional*, defaults to 1024):
         The maximum sequence length that the decoder might ever be used with.
-    dropout (`float`, *optional*, defaults to 0.1):
-        The dropout probability for the decoder embeddings, attention output, and feed-forward layers.
-    activation_dropout (`float`, *optional*, defaults to 0.1):
-        The dropout ratio for activations inside the decoder feed-forward layer.
-    scale_embedding (`bool`, *optional*, defaults to `False`):
-        Whether to scale the decoder token embeddings by `sqrt(d_model)`.
-    use_cache (`bool`, *optional*, defaults to `True`):
-        Whether the model should return the last key/values attentions.
-    is_encoder_decoder (`bool`, *optional*, defaults to `True`):
-        Whether the model is used as an encoder/decoder model.
-    tie_word_embeddings (`bool`, *optional*, defaults to `True`):
-        Whether to tie the decoder input embeddings and the language modeling head.
-    pad_token_id (`int`, *optional*, defaults to 2):
-        Padding token id.
-    bos_token_id (`int`, *optional*, defaults to 4):
-        Beginning of stream token id (`<|startoftranscript|>`).
-    eos_token_id (`int`, *optional*, defaults to 3):
-        End of stream token id (`<|endoftext|>`).
     decoder_start_token_id (`int`, *optional*, defaults to 7):
         The token id that starts decoding (`<|startofcontext|>`, the first token of the multitask prompt).
 
@@ -86,7 +53,7 @@ class CanaryConfig(PreTrainedConfig):
 
     model_type = "canary"
     keys_to_ignore_at_inference = ["past_key_values"]
-    sub_configs = {"encoder_config": ParakeetEncoderConfig}
+    sub_configs = {"encoder_config": AutoConfig}
     attribute_map = {
         "hidden_size": "d_model",
         "num_attention_heads": "decoder_attention_heads",
@@ -117,9 +84,10 @@ class CanaryConfig(PreTrainedConfig):
 
     def __post_init__(self, **kwargs):
         if isinstance(self.encoder_config, dict):
-            self.encoder_config = ParakeetEncoderConfig(**self.encoder_config)
+            self.encoder_config["model_type"] = self.encoder_config.get("model_type", "parakeet_encoder")
+            self.encoder_config = CONFIG_MAPPING[self.encoder_config["model_type"]](**self.encoder_config)
         elif self.encoder_config is None:
-            self.encoder_config = ParakeetEncoderConfig(
+            self.encoder_config = CONFIG_MAPPING["parakeet_encoder"](
                 num_hidden_layers=32,
                 num_mel_bins=128,
                 scale_input=False,

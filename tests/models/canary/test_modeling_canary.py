@@ -428,7 +428,7 @@ class CanaryIntegrationTest(unittest.TestCase):
         inputs = self._load_datasamples(processor, 1)
         features = processor.apply_transcription_request(audio=inputs, source_language="en").to(torch_device)
         generated = model.generate(**features, max_new_tokens=128)
-        transcriptions = [text.strip() for text in processor.batch_decode(generated, skip_special_tokens=True)]
+        transcriptions = [text.strip() for text in processor.decode(generated, skip_special_tokens=True)]
         self.assertListEqual(transcriptions, expected_transcriptions)
 
     def test_transcription_en_batched(self):
@@ -444,7 +444,7 @@ class CanaryIntegrationTest(unittest.TestCase):
             audio=inputs, source_language="en", target_language=["en", "de"]
         ).to(torch_device)
         generated = model.generate(**features, max_new_tokens=128)
-        transcriptions = [text.strip() for text in processor.batch_decode(generated, skip_special_tokens=True)]
+        transcriptions = [text.strip() for text in processor.decode(generated, skip_special_tokens=True)]
         self.assertListEqual(transcriptions, expected_transcriptions)
 
     def test_translation_en_to_de(self):
@@ -460,5 +460,5 @@ class CanaryIntegrationTest(unittest.TestCase):
             torch_device
         )
         generated = model.generate(**features, max_new_tokens=128)
-        transcriptions = [text.strip() for text in processor.batch_decode(generated, skip_special_tokens=True)]
+        transcriptions = [text.strip() for text in processor.decode(generated, skip_special_tokens=True)]
         self.assertListEqual(transcriptions, expected_transcriptions)

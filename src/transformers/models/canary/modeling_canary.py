@@ -21,6 +21,7 @@
 import math
 from collections.abc import Callable
 
+import numpy as np
 import torch
 from torch import nn
 
@@ -288,33 +289,32 @@ class CanaryDecoderLayer(GradientCheckpointingLayer):
         return hidden_states
 
 
-class CanarySinusoidalPositionalEmbedding(nn.Module):
+class CanaryPositionalEmbedding(nn.Module):
     """
-    Fixed sinusoidal positional embedding from NeMo's `FixedPositionalEncoding`: the standard interleaved sin/cos table
-    of [Attention Is All You Need](https://huggingface.co/papers/1706.03762) scaled by `1 / sqrt(embedding_dim)`. No
-    other sinusoidal positional embedding in the library applies this scaling, so none can be reused here.
+    Identical to [`SinusoidsPositionEmbedding`] except that the timescales and the `1 / sqrt(channels)` scaling match
+    NeMo's `FixedPositionalEncoding` and the table is indexed by `position_ids`. The conversion script permutes the
+    checkpoint from NeMo's interleaved sin/cos layout to this concatenated layout.
     """
 
-    positional_embeddings: torch.Tensor
-
-    def __init__(self, num_positions: int, embedding_dim: int):
+    def __init__(self, length: int, channels: int):
         super().__init__()
-        self.num_positions = num_positions
-        self.embedding_dim = embedding_dim
-        self.register_buffer("positional_embeddings", self._build_table(), persistent=False)
+        max_timescale = 10000 ** ((channels - 2) / channels)
+        self.length = length
+        self.channels = channels
+        self.max_timescale = max_timescale
+        if channels % 2 != 0:
+            raise ValueError("CanaryPositionalEmbedding needs even channels input")
+        position_embedding = self.compute_default_singular_positional_embedding()
+        self.register_buffer("positional_embedding", position_embedding, persistent=False)
 
-    def _build_table(self, device=None) -> torch.Tensor:
-        positional_embeddings = torch.zeros(self.num_positions, self.embedding_dim, device=device)
-        position = torch.arange(0, self.num_positions, dtype=torch.float, device=device).unsqueeze(1)
-        coefficient = -math.log(10000.0) / self.embedding_dim
-        div_term = torch.exp(coefficient * torch.arange(0, self.embedding_dim, 2, dtype=torch.float, device=device))
-        positional_embeddings[:, 0::2] = torch.sin(position * div_term)
-        positional_embeddings[:, 1::2] = torch.cos(position * div_term)
-        positional_embeddings = positional_embeddings / math.sqrt(self.embedding_dim)
-        return positional_embeddings
+    def compute_default_singular_positional_embedding(self) -> torch.Tensor:
+        log_timescale_increment = np.log(self.max_timescale) / (self.channels // 2 - 1)
+        inv_timescales = torch.exp(-log_timescale_increment * torch.arange(self.channels // 2).float())
+        scaled_time = torch.arange(self.length)[:, np.newaxis] * inv_timescales[np.newaxis, :]
+        return torch.cat([torch.sin(scaled_time), torch.cos(scaled_time)], dim=1) / math.sqrt(self.channels)
 
     def forward(self, position_ids: torch.Tensor) -> torch.Tensor:
-        return self.positional_embeddings[position_ids]
+        return self.positional_embedding[position_ids]
 
 
 @auto_docstring
@@ -334,8 +334,9 @@ class CanaryPreTrainedModel(PreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
-        if isinstance(module, CanarySinusoidalPositionalEmbedding):
-            init.copy_(module.positional_embeddings, module._build_table())
+        if isinstance(module, CanaryPositionalEmbedding):
+            position_embeddings = module.compute_default_singular_positional_embedding()
+            init.copy_(module.positional_embedding, position_embeddings)
 
 
 class CanaryDecoder(CanaryPreTrainedModel):
@@ -363,7 +364,7 @@ class CanaryDecoder(CanaryPreTrainedModel):
         self.embed_scale = math.sqrt(config.d_model) if config.scale_embedding else 1.0
 
         self.embed_tokens = nn.Embedding(config.vocab_size, config.d_model, self.padding_idx)
-        self.embed_positions = CanarySinusoidalPositionalEmbedding(self.max_target_positions, config.d_model)
+        self.embed_positions = CanaryPositionalEmbedding(self.max_target_positions, config.d_model)
 
         self.layers = nn.ModuleList(
             [CanaryDecoderLayer(config, layer_idx) for layer_idx in range(config.decoder_layers)]
@@ -415,6 +416,7 @@ class CanaryDecoder(CanaryPreTrainedModel):
             position_ids = position_ids.unsqueeze(0)
 
         positions = self.embed_positions(position_ids).to(inputs_embeds.dtype)
+        # unlike Whisper, NeMo normalizes the summed token and positional embeddings with a LayerNorm
         hidden_states = self.layernorm_embedding(inputs_embeds * self.embed_scale + positions)
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
 
@@ -425,6 +427,7 @@ class CanaryDecoder(CanaryPreTrainedModel):
             past_key_values=past_key_values,
             position_ids=position_ids,
         )
+        # unlike Whisper, the encoder outputs have variable length, so padded frames are masked in cross-attention
         encoder_attention_mask = create_bidirectional_mask(
             config=self.config,
             inputs_embeds=inputs_embeds,
@@ -554,26 +557,24 @@ class CanaryModel(CanaryPreTrainedModel):
     """
 )
 class CanaryForConditionalGeneration(CanaryPreTrainedModel, GenerationMixin):
-    base_model_prefix = "model"
     _tied_weights_keys = {"proj_out.weight": "model.decoder.embed_tokens.weight"}
 
     def __init__(self, config: CanaryConfig):
         super().__init__(config)
         self.model = CanaryModel(config)
         self.proj_out = nn.Linear(config.d_model, config.vocab_size, bias=True)
+
+        # Initialize weights and apply final processing
         self.post_init()
-
-    def get_input_embeddings(self) -> nn.Module:
-        return self.model.get_input_embeddings()
-
-    def set_input_embeddings(self, value):
-        self.model.set_input_embeddings(value)
 
     def get_output_embeddings(self):
         return self.proj_out
 
     def set_output_embeddings(self, new_embeddings):
         self.proj_out = new_embeddings
+
+    def get_input_embeddings(self) -> nn.Module:
+        return self.model.get_input_embeddings()
 
     @can_return_tuple
     @auto_docstring
@@ -615,7 +616,7 @@ class CanaryForConditionalGeneration(CanaryPreTrainedModel, GenerationMixin):
 
         >>> inputs = processor.apply_transcription_request(audio=ds[0]["audio"]["array"], source_language="en")
         >>> generated_ids = model.generate(**inputs)
-        >>> transcription = processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
+        >>> transcription = processor.decode(generated_ids, skip_special_tokens=True)[0]
         ```"""
         outputs = self.model(
             input_features=input_features,

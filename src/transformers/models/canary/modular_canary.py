@@ -15,6 +15,7 @@
 
 import math
 
+import numpy as np
 import torch
 from huggingface_hub.dataclasses import strict
 from torch import nn
@@ -22,7 +23,6 @@ from torch import nn
 from ... import initialization as init
 from ...cache_utils import DynamicCache, EncoderDecoderCache
 from ...configuration_utils import PreTrainedConfig
-from ...generation import GenerationMixin
 from ...masking_utils import create_bidirectional_mask, create_causal_mask
 from ...modeling_outputs import (
     BaseModelOutput,
@@ -35,8 +35,9 @@ from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
-from ..auto import AutoModel
-from ..parakeet import ParakeetEncoderConfig
+from ..auto import CONFIG_MAPPING, AutoConfig, AutoModel
+from ..moonshine.modeling_moonshine import MoonshineForConditionalGeneration
+from ..qwen2_5_omni.modeling_qwen2_5_omni import SinusoidsPositionEmbedding
 from ..whisper.modeling_whisper import (
     WhisperAttention,
     WhisperDecoder,
@@ -55,41 +56,8 @@ class CanaryConfig(PreTrainedConfig):
     r"""
     encoder_config (`Union[dict, ParakeetEncoderConfig]`, *optional*):
         The config object or dictionary of the FastConformer encoder ([`ParakeetEncoderConfig`]).
-    vocab_size (`int`, *optional*, defaults to 16384):
-        Vocabulary size of the Canary decoder.
-    d_model (`int`, *optional*, defaults to 1024):
-        Dimensionality of the decoder layers and the pooler layer.
-    decoder_layers (`int`, *optional*, defaults to 8):
-        Number of decoder layers.
-    decoder_attention_heads (`int`, *optional*, defaults to 8):
-        Number of attention heads for each attention layer in the decoder.
-    decoder_ffn_dim (`int`, *optional*, defaults to 4096):
-        Dimensionality of the "intermediate" (often named feed-forward) layer in the decoder.
-    decoder_layerdrop (`float`, *optional*, defaults to 0.0):
-        The LayerDrop probability for the decoder. See the [LayerDrop paper](https://huggingface.co/papers/1909.11556)
-        for more details.
-    activation_function (`str`, *optional*, defaults to `"relu"`):
-        The non-linear activation function in the decoder feed-forward layers.
     max_target_positions (`int`, *optional*, defaults to 1024):
         The maximum sequence length that the decoder might ever be used with.
-    dropout (`float`, *optional*, defaults to 0.1):
-        The dropout probability for the decoder embeddings, attention output, and feed-forward layers.
-    activation_dropout (`float`, *optional*, defaults to 0.1):
-        The dropout ratio for activations inside the decoder feed-forward layer.
-    scale_embedding (`bool`, *optional*, defaults to `False`):
-        Whether to scale the decoder token embeddings by `sqrt(d_model)`.
-    use_cache (`bool`, *optional*, defaults to `True`):
-        Whether the model should return the last key/values attentions.
-    is_encoder_decoder (`bool`, *optional*, defaults to `True`):
-        Whether the model is used as an encoder/decoder model.
-    tie_word_embeddings (`bool`, *optional*, defaults to `True`):
-        Whether to tie the decoder input embeddings and the language modeling head.
-    pad_token_id (`int`, *optional*, defaults to 2):
-        Padding token id.
-    bos_token_id (`int`, *optional*, defaults to 4):
-        Beginning of stream token id (`<|startoftranscript|>`).
-    eos_token_id (`int`, *optional*, defaults to 3):
-        End of stream token id (`<|endoftext|>`).
     decoder_start_token_id (`int`, *optional*, defaults to 7):
         The token id that starts decoding (`<|startofcontext|>`, the first token of the multitask prompt).
 
@@ -111,7 +79,7 @@ class CanaryConfig(PreTrainedConfig):
 
     model_type = "canary"
     keys_to_ignore_at_inference = ["past_key_values"]
-    sub_configs = {"encoder_config": ParakeetEncoderConfig}
+    sub_configs = {"encoder_config": AutoConfig}
     attribute_map = {
         "hidden_size": "d_model",
         "num_attention_heads": "decoder_attention_heads",
@@ -142,9 +110,10 @@ class CanaryConfig(PreTrainedConfig):
 
     def __post_init__(self, **kwargs):
         if isinstance(self.encoder_config, dict):
-            self.encoder_config = ParakeetEncoderConfig(**self.encoder_config)
+            self.encoder_config["model_type"] = self.encoder_config.get("model_type", "parakeet_encoder")
+            self.encoder_config = CONFIG_MAPPING[self.encoder_config["model_type"]](**self.encoder_config)
         elif self.encoder_config is None:
-            self.encoder_config = ParakeetEncoderConfig(
+            self.encoder_config = CONFIG_MAPPING["parakeet_encoder"](
                 num_hidden_layers=32,
                 num_mel_bins=128,
                 scale_input=False,
@@ -170,33 +139,25 @@ class CanaryDecoderLayer(WhisperDecoderLayer):
     pass
 
 
-class CanarySinusoidalPositionalEmbedding(nn.Module):
+class CanaryPositionalEmbedding(SinusoidsPositionEmbedding):
     """
-    Fixed sinusoidal positional embedding from NeMo's `FixedPositionalEncoding`: the standard interleaved sin/cos table
-    of [Attention Is All You Need](https://huggingface.co/papers/1706.03762) scaled by `1 / sqrt(embedding_dim)`. No
-    other sinusoidal positional embedding in the library applies this scaling, so none can be reused here.
+    Identical to [`SinusoidsPositionEmbedding`] except that the timescales and the `1 / sqrt(channels)` scaling match
+    NeMo's `FixedPositionalEncoding` and the table is indexed by `position_ids`. The conversion script permutes the
+    checkpoint from NeMo's interleaved sin/cos layout to this concatenated layout.
     """
 
-    positional_embeddings: torch.Tensor
+    def __init__(self, length: int, channels: int):
+        max_timescale = 10000 ** ((channels - 2) / channels)
+        super().__init__(length, channels, max_timescale)
 
-    def __init__(self, num_positions: int, embedding_dim: int):
-        super().__init__()
-        self.num_positions = num_positions
-        self.embedding_dim = embedding_dim
-        self.register_buffer("positional_embeddings", self._build_table(), persistent=False)
-
-    def _build_table(self, device=None) -> torch.Tensor:
-        positional_embeddings = torch.zeros(self.num_positions, self.embedding_dim, device=device)
-        position = torch.arange(0, self.num_positions, dtype=torch.float, device=device).unsqueeze(1)
-        coefficient = -math.log(10000.0) / self.embedding_dim
-        div_term = torch.exp(coefficient * torch.arange(0, self.embedding_dim, 2, dtype=torch.float, device=device))
-        positional_embeddings[:, 0::2] = torch.sin(position * div_term)
-        positional_embeddings[:, 1::2] = torch.cos(position * div_term)
-        positional_embeddings = positional_embeddings / math.sqrt(self.embedding_dim)
-        return positional_embeddings
+    def compute_default_singular_positional_embedding(self) -> torch.Tensor:
+        log_timescale_increment = np.log(self.max_timescale) / (self.channels // 2 - 1)
+        inv_timescales = torch.exp(-log_timescale_increment * torch.arange(self.channels // 2).float())
+        scaled_time = torch.arange(self.length)[:, np.newaxis] * inv_timescales[np.newaxis, :]
+        return torch.cat([torch.sin(scaled_time), torch.cos(scaled_time)], dim=1) / math.sqrt(self.channels)
 
     def forward(self, position_ids: torch.Tensor) -> torch.Tensor:
-        return self.positional_embeddings[position_ids]
+        return self.positional_embedding[position_ids]
 
 
 @auto_docstring
@@ -210,8 +171,9 @@ class CanaryPreTrainedModel(WhisperPreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module):
         PreTrainedModel._init_weights(self, module)
-        if isinstance(module, CanarySinusoidalPositionalEmbedding):
-            init.copy_(module.positional_embeddings, module._build_table())
+        if isinstance(module, CanaryPositionalEmbedding):
+            position_embeddings = module.compute_default_singular_positional_embedding()
+            init.copy_(module.positional_embedding, position_embeddings)
 
 
 class CanaryDecoder(WhisperDecoder):
@@ -223,7 +185,6 @@ class CanaryDecoder(WhisperDecoder):
     def __init__(self, config: CanaryConfig):
         super().__init__(config)
         self.max_source_positions = None
-        self.embed_positions = CanarySinusoidalPositionalEmbedding(self.max_target_positions, config.d_model)
         self.layernorm_embedding = nn.LayerNorm(config.d_model)
         self.post_init()
 
@@ -266,6 +227,7 @@ class CanaryDecoder(WhisperDecoder):
             position_ids = position_ids.unsqueeze(0)
 
         positions = self.embed_positions(position_ids).to(inputs_embeds.dtype)
+        # unlike Whisper, NeMo normalizes the summed token and positional embeddings with a LayerNorm
         hidden_states = self.layernorm_embedding(inputs_embeds * self.embed_scale + positions)
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
 
@@ -276,6 +238,7 @@ class CanaryDecoder(WhisperDecoder):
             past_key_values=past_key_values,
             position_ids=position_ids,
         )
+        # unlike Whisper, the encoder outputs have variable length, so padded frames are masked in cross-attention
         encoder_attention_mask = create_bidirectional_mask(
             config=self.config,
             inputs_embeds=inputs_embeds,
@@ -395,27 +358,10 @@ class CanaryModel(WhisperModel):
     speech-to-text translation.
     """
 )
-class CanaryForConditionalGeneration(CanaryPreTrainedModel, GenerationMixin):
-    base_model_prefix = "model"
-    _tied_weights_keys = {"proj_out.weight": "model.decoder.embed_tokens.weight"}
-
+class CanaryForConditionalGeneration(MoonshineForConditionalGeneration):
     def __init__(self, config: CanaryConfig):
         super().__init__(config)
-        self.model = CanaryModel(config)
         self.proj_out = nn.Linear(config.d_model, config.vocab_size, bias=True)
-        self.post_init()
-
-    def get_input_embeddings(self) -> nn.Module:
-        return self.model.get_input_embeddings()
-
-    def set_input_embeddings(self, value):
-        self.model.set_input_embeddings(value)
-
-    def get_output_embeddings(self):
-        return self.proj_out
-
-    def set_output_embeddings(self, new_embeddings):
-        self.proj_out = new_embeddings
 
     @can_return_tuple
     @auto_docstring
@@ -457,7 +403,7 @@ class CanaryForConditionalGeneration(CanaryPreTrainedModel, GenerationMixin):
 
         >>> inputs = processor.apply_transcription_request(audio=ds[0]["audio"]["array"], source_language="en")
         >>> generated_ids = model.generate(**inputs)
-        >>> transcription = processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
+        >>> transcription = processor.decode(generated_ids, skip_special_tokens=True)[0]
         ```"""
         outputs = self.model(
             input_features=input_features,
