@@ -36,7 +36,7 @@ from ...integrations import (
     use_kernel_func_from_hub,
     use_kernelized_func,
 )
-from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
+from ...masking_utils import create_causal_mask, create_recurrent_attention_mask, create_sliding_window_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import (
     GenericForQuestionAnswering,
@@ -230,6 +230,14 @@ class MiniMaxLightningAttention(nn.Module):
                 attn_weights_inter = attn_weights_inter * block_decay + next_attn_weights_inter
 
         else:
+            # apply attention_mask on continued forwards too: an unmasked padding position would
+            # accumulate its K^T V into the linear cache. Zeroing the value rows keeps its
+            # contribution out while the decay still ticks per position, matching the first-forward
+            # block path above (which also masks values only).
+            if attention_mask is not None:
+                attention_mask = attention_mask.to(dtype=torch.bool)  # Ensure it's a boolean tensor
+                value_states = value_states.masked_fill(~attention_mask.unsqueeze(1).unsqueeze(-1), 0)
+
             ratio = torch.exp(-self.slope_rate)
             attn_output = []
             for i in range(seq_len):
@@ -681,12 +689,22 @@ class MiniMaxModel(MiniMaxPreTrainedModel):
         hidden_states = inputs_embeds
         position_embeddings = self.rotary_emb(hidden_states, position_ids)
 
+        # Lightning-attention layers consume the 2D padding mask sized to the current forward's
+        # tokens: a cached continuation resends the full-history mask, whose extra columns would not
+        # broadcast against the local value states. Padding inside a continued segment still gets
+        # zeroed out of the linear cache this way.
+        lightning_mask = create_recurrent_attention_mask(
+            config=self.config,
+            inputs_embeds=inputs_embeds,
+            attention_mask=attention_mask,
+            past_key_values=past_key_values,
+        )
+
         for i, decoder_layer in enumerate(self.layers):
             if self.config.layer_types[i] == "full_attention":
                 input_attention_mask = causal_mask
             else:
-                # lightning attention uses original attention_mask, and uses it only for the first step
-                input_attention_mask = attention_mask
+                input_attention_mask = lightning_mask
 
             hidden_states = decoder_layer(
                 hidden_states,

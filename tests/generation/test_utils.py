@@ -110,7 +110,7 @@ if is_torch_available():
         AssistedCandidateGenerator,
         AssistedCandidateGeneratorDifferentTokenizers,
     )
-    from transformers.generation.utils import _speculative_sampling
+    from transformers.generation.utils import ALL_CACHE_NAMES, _speculative_sampling
     from transformers.modeling_layers import MtpModel
 
 from unittest.mock import patch
@@ -1381,16 +1381,17 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
         first forward plus a cached continuation must therefore match the single full forward.
         Regression test for #47086.
         """
-        # Any model with recurrent layer types keeps padding-sensitive state, whether it is a hybrid
-        # (whose recurrent layers get the mask via `create_recurrent_attention_mask`) or a purely
-        # recurrent model (Mamba-family models slice/apply the same padding mask on their own path).
+        # Any model declaring recurrent layer types keeps padding-sensitive state, whether it is a
+        # hybrid or a purely recurrent model — both size the padding mask for their recurrent layers
+        # via `create_recurrent_attention_mask` (pure Mamba1's own inline path can't run this
+        # scenario at all; those models are skip-listed in their test files).
         recurrent_layer_types = {"linear_attention", "conv", "hybrid", "hybrid_sliding"}
 
         for model_class in self.all_generative_model_classes:
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
             layer_types = set(getattr(config.get_text_config(), "layer_types", None) or ())
             if not (layer_types & recurrent_layer_types):
-                self.skipTest(reason=f"{model_class.__name__} has no recurrent layers")
+                self.skipTest(reason=f"{model_class.__name__} declares no recurrent layer types")
 
             model = model_class(config).to(torch_device).eval()
             input_ids = inputs_dict["input_ids"][:2].to(torch_device)
@@ -1422,10 +1423,11 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
                     position_ids=position_ids[:, :turn1_len],
                     use_cache=True,
                 )
-                # Mamba-family models expose their state as `cache_params` instead of `past_key_values`
-                cache_kwarg, cache = "past_key_values", getattr(out1, "past_key_values", None)
-                if cache is None and getattr(out1, "cache_params", None) is not None:
-                    cache_kwarg, cache = "cache_params", out1.cache_params
+                # Models name their cache output differently (e.g. Mamba-family `cache_params`)
+                cache_kwarg, cache = next(
+                    ((name, getattr(out1, name)) for name in ALL_CACHE_NAMES if getattr(out1, name, None) is not None),
+                    ("past_key_values", None),
+                )
                 out2 = model(
                     input_ids=turn2,
                     attention_mask=attention_mask,
