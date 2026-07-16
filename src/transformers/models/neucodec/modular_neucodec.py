@@ -177,9 +177,7 @@ class NeuCodecModel(Xcodec2Model):
             output_latents=True,
             return_dict=True,
         )
-        audio_values = self.decode(latents=encoder_outputs.latents, return_dict=True, **kwargs)[0][
-            ..., :output_length
-        ]
+        audio_values = self.decode(latents=encoder_outputs.latents, return_dict=True, **kwargs)[0][..., :output_length]
 
         return NeuCodecOutput(
             audio_values=audio_values,

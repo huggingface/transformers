@@ -34,6 +34,7 @@ from transformers.testing_utils import (
 
 if is_torch_available():
     import torch
+
     from transformers import NeuCodecModel
 
 
@@ -143,6 +144,7 @@ class NeuCodecModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (NeuCodecModel,) if is_torch_available() else ()
     is_encoder_decoder = True
     test_resize_embeddings = False
+    test_torch_exportable = False
     pipeline_model_mapping = {"feature-extraction": NeuCodecModel} if is_torch_available() else {}
     additional_model_inputs = ["input_features", "input_features_mask"]
 
@@ -201,19 +203,10 @@ class NeuCodecModelTest(ModelTesterMixin, unittest.TestCase):
     def test_hidden_states_output(self):
         pass
 
-    @unittest.skip(reason="NeuCodecModel relies on complex dtypes that are currently unsupported by executorch")
-    def test_executorch_export_static(self):
-        pass
-
-    @unittest.skip(reason="NeuCodecModel relies on complex dtypes that are currently unsupported by executorch")
-    def test_executorch_export_dynamic(self):
-        pass
-
 
 @slow
 @require_torch
 class NeuCodecIntegrationTest(unittest.TestCase):
-    
     def setUp(self):
         self.fixtures_path = Path(__file__).parent.parent.parent / "fixtures/neucodec"
 

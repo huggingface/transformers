@@ -1013,10 +1013,8 @@ class NeuCodecModel(NeuCodecPreTrainedModel):
         semantic_hidden_states = semantic_output.last_hidden_state.transpose(1, 2)
         semantic_hidden_states = self.semantic_adapter(semantic_hidden_states)
 
-        # Acoustic embedding
+        # Acoustic embedding and concatenate
         acoustic_hidden_states = self.acoustic_encoder(input_values)
-
-        # Concat embeddings
         hidden_states = torch.cat([semantic_hidden_states, acoustic_hidden_states], dim=1)
         hidden_states = self.fc_encoder(hidden_states.transpose(1, 2))
 
