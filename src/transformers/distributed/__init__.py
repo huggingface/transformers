@@ -21,9 +21,7 @@ _import_structure = {
     "configuration_utils": ["DistributedConfig"],
     "fsdp": ["is_fsdp_enabled", "is_fsdp_managed_module", "verify_fsdp_plan"],
     "mixin": ["DistributedMixin"],
-    "utils": [
-        "initialize_fully_sharded_data_parallelism",
-    ],
+    "utils": ["initialize_fully_sharded_data_parallelism"],
 }
 
 

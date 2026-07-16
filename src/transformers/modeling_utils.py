@@ -83,9 +83,7 @@ from .integrations.sdpa_attention import sdpa_attention_forward
 from .integrations.sdpa_paged import sdpa_attention_paged_forward
 from .integrations.tensor_parallel import (
     _get_parameter_tp_plan,
-    apply_tensor_parallelism,
     gather_state_dict_for_save,
-    initialize_tensor_parallelism,
     shard_and_distribute_module,
     verify_tp_plan,
 )

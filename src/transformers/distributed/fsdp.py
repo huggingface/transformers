@@ -200,7 +200,7 @@ def apply_fully_sharded_data_parallelism(
     if not is_torch_available():
         raise ImportError("PyTorch is required for FSDP support")
 
-    #TODO(3outeille): Move to 2.7 when dcp saving/loading will be introduced
+    # TODO(3outeille): Move to 2.7 when dcp saving/loading will be introduced
     if not is_torch_greater_or_equal("2.6"):
         raise OSError("FSDP2 requires torch>=2.6")
 

@@ -18,6 +18,7 @@ from typing import TYPE_CHECKING
 
 from ..utils import is_torch_available, is_torch_greater_or_equal
 
+
 if TYPE_CHECKING:
     from .configuration_utils import DistributedConfig
 
