@@ -19,6 +19,7 @@ from ..utils import _LazyModule
 
 _import_structure = {
     "configuration_utils": ["DistributedConfig"],
+    "fsdp": ["is_fsdp_enabled", "is_fsdp_managed_module", "verify_fsdp_plan"],
 }
 
 
@@ -26,6 +27,7 @@ if TYPE_CHECKING:
     from .configuration_utils import (
         DistributedConfig,
     )
+    from .fsdp import is_fsdp_enabled, is_fsdp_managed_module, verify_fsdp_plan
 
 else:
     import sys
