@@ -674,6 +674,10 @@ class TensorParallelLayer:
     ) -> torch.Tensor:
         raise NotImplementedError
 
+    def validate_module(self, module: nn.Module, device_mesh, layer_name: str = ""):
+        """Raise if the module cannot be sharded with this style on the given mesh."""
+        pass
+
     def prepare_module_tp(self, module: nn.Module, device_mesh, **kwargs) -> nn.Module:
         distribute_module(
             module,
@@ -718,6 +722,16 @@ class ColwiseParallel(TensorParallelLayer):
     def __init__(self, gather_output: bool = False, **kwargs):
         super().__init__(**kwargs)
         self.gather_output = gather_output
+
+    def validate_module(self, module: nn.Module, device_mesh, layer_name: str = ""):
+        out_features = getattr(module, "out_features", None)
+        if self.gather_output and out_features is not None and out_features % device_mesh.size() != 0:
+            raise ValueError(
+                f"`{layer_name}` ({type(module).__name__} with out_features={out_features}) is sharded with "
+                f"'colwise_gather_output', which requires out_features to be divisible by the number of ranks "
+                f"({device_mesh.size()}) to all-gather equal-size shards. Resize the weight (e.g. "
+                f"`model.resize_token_embeddings` for LM heads) or override this module's entry in the tp_plan."
+            )
 
     def _prepare_input_fn(self, mod, inputs, device_mesh):
         input_tensor = inputs[0] if inputs else inputs
@@ -1007,8 +1021,8 @@ class EmbeddingParallel(TensorParallelLayer):
         if self.embedding_dim_sharding == 0 and hasattr(mod, "_input_mask"):
             input_mask = mod._input_mask
             # Use multiplication instead of in-place assignment to preserve gradients
-            mask_expanded = input_mask.unsqueeze(-1).expand_as(outputs)
-            outputs = outputs * (~mask_expanded).to(outputs.dtype)
+            mask = input_mask.unsqueeze(-1)
+            outputs = outputs * (~mask).to(outputs.dtype)
             del mod._input_mask
 
         return all_reduce_forward(outputs, device_mesh)
@@ -1189,7 +1203,8 @@ class RouterParallel(TensorParallelLayer):
                 f"The number of experts must be divisible by number of ep_size: {num_experts} % {ep_size} != 0"
             )
         num_local_experts = num_experts // ep_size
-        router_logits, router_scores, router_indices = outputs
+        # Some routers return extra tensors after the standard logits/scores/indices, e.g. zaya's router state.
+        router_logits, router_scores, router_indices, *extra_outputs = outputs
         non_local_mask = (router_indices // num_local_experts) != ep_rank
         router_scores = router_scores.masked_fill(non_local_mask, 0.0)
         router_indices = router_indices.masked_fill(non_local_mask, -1)
@@ -1199,7 +1214,7 @@ class RouterParallel(TensorParallelLayer):
         else:
             router_indices = router_indices.masked_fill(router_indices > 0, 0).masked_fill(router_indices < 0, -1)
         router_indices = router_indices.masked_fill(router_indices == -1, num_local_experts)
-        return router_logits, router_scores, router_indices
+        return router_logits, router_scores, router_indices, *extra_outputs
 
     def shard_tensor(
         self, param: torch.Tensor, tensor_idx: int | None = None, device=None, dtype=None
@@ -1511,6 +1526,7 @@ def add_tensor_parallel_hooks_to_module(
     """
     if current_module_plan is not None:
         tp_layer = ALL_PARALLEL_STYLES[current_module_plan]
+        tp_layer.validate_module(module, device_mesh, layer_name)
         try:
             tp_layer.prepare_module_tp(module, device_mesh, config=model.config)
         except NotImplementedError as e:

@@ -45,7 +45,7 @@ from ...generation.configuration_utils import (
 )
 from ...generation.streamers import BaseStreamer
 from ...modeling_outputs import ModelOutput
-from ...utils import auto_docstring, logging
+from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
@@ -55,7 +55,7 @@ logger = logging.get_logger(__name__)
 class DiffusionGemmaGenerationConfig(GenerationConfig):
     # no-format
     """
-    A GenerationConfig class with paremeterization custom to DiffusionGemma `generate`.
+    A GenerationConfig class with parameterization customized for [`DiffusionGemmaGenerationMixin.generate`].
 
     Args:
         > Parameters that control the length of the output
@@ -104,6 +104,8 @@ class DiffusionGemmaGenerationConfig(GenerationConfig):
 
         > Special tokens that can be used at generation time
 
+        bos_token_id (`int`, *optional*):
+            The id of the *beginning-of-sequence* token.
         pad_token_id (`int`, *optional*):
             The id of the *padding* token.
         eos_token_id (`Union[int, list[int]]`, *optional*):
@@ -119,6 +121,9 @@ class DiffusionGemmaGenerationConfig(GenerationConfig):
         self.max_new_tokens: int | None = kwargs.pop("max_new_tokens", None)
         self.max_length: int | None = kwargs.pop("max_length", None)
 
+        # Parameter that controls the format of generate
+        self.return_dict_in_generate: bool = kwargs.pop("return_dict_in_generate", True)
+
         # Diffusion parameters
         # There can be only one sampler at a time, but multiple logits processors and/or stopping criteria.
         self.max_denoising_steps: int = kwargs.pop("max_denoising_steps", None)
@@ -131,8 +136,10 @@ class DiffusionGemmaGenerationConfig(GenerationConfig):
         # Parameters that control the cache
         self.cache_implementation: str | None = kwargs.pop("cache_implementation", None)
         self.cache_config: dict[str, Any] | None = kwargs.pop("cache_config", None)
+        self.disable_compile: str | None = kwargs.pop("disable_compile", None)
 
         # Special tokens that can be used at generation time
+        self.bos_token_id: int | None = kwargs.pop("bos_token_id", None)
         self.pad_token_id: int | None = kwargs.pop("pad_token_id", None)
         self.eos_token_id: list[int] | int | None = kwargs.pop("eos_token_id", None)
 
@@ -211,7 +218,7 @@ class DiffusionGemmaGenerationConfig(GenerationConfig):
     def _get_default_generation_params() -> dict[str, Any]:
         """
         Defaults to be applied when unset by the model OR by the user, such that `model.generate()` works with minimal
-        paremeterization.
+        parameterization.
 
         Pretrained checkpoints should set these as appropriate in their `generation_config.json`, to establish
         a better default baseline. Be mindful that tests may use use these values.
@@ -224,8 +231,6 @@ class DiffusionGemmaGenerationConfig(GenerationConfig):
             "t_max": 0.8,
             "stability_threshold": 1,
             "confidence_threshold": 0.005,
-            "eos_token_id": [1, 106, 50],
-            "pad_token_id": 0,
         }
 
     # Overriding GenerationMixin-related functions that are not relevant to DiffusionGemma.
@@ -238,7 +243,6 @@ class DiffusionGemmaGenerationConfig(GenerationConfig):
         raise NotImplementedError("DiffusionGemmaGenerationConfig does not support `from_model_config`")
 
 
-@auto_docstring
 @dataclass
 class DiffusionGemmaGenerationOutput(ModelOutput):
     """
@@ -249,7 +253,7 @@ class DiffusionGemmaGenerationOutput(ModelOutput):
             The generated sequences, including the prompt if `input_ids` was provided to the `generate` method.
         tokens_per_forward (`torch.LongTensor` of shape (`batch_size`)):
             The number of tokens per forward in this `generate` call, for each member in the batch. This is often
-            used as a secundary evaluation metric for text diffusion models.
+            used as a secondary evaluation metric for text diffusion models.
         past_key_values (`Cache`):
             The cache used for generation. It can be passed to subsequent calls to `generate` to speed up generation,
             in multi-turn sessions.
@@ -342,6 +346,7 @@ class EntropyBoundSampler:
     renoises non-accepted tokens.
 
     Here is a rough sketch of how the sampler loop works:
+    ```
               +-----------------------+
               | Canvas initialization |
               | x_T ∈ U(V)            |
@@ -365,6 +370,7 @@ class EntropyBoundSampler:
     |                                       +-------------------------+
     +---------------------------------------| Next canvas x_{t-1}     |
                                             +-------------------------+
+    ```
 
     Args:
         config (`EntropyBoundSamplerConfig`):
@@ -549,12 +555,13 @@ class DiffusionGemmaGenerationMixin:
         logits_processor: LogitsProcessorList | None = None,
         stopping_criteria: StoppingCriteriaList | None = None,
         **kwargs,
-    ) -> DiffusionGemmaGenerationOutput:
+    ) -> torch.LongTensor | DiffusionGemmaGenerationOutput:
         """
         Generates text using the diffusion model.
 
         It contains an outer loop doing autoregressive generation of canvases (blocks of tokens), and an inner
         loop doing diffusion on each canvas. The algorithm works roughly as follows:
+        ```
         1. Autoregressive canvas generation loop:
             a. Encode all previous tokens using the encoder, to get the KV cache.
             b. Prepare data for the new denoising loop
@@ -569,6 +576,7 @@ class DiffusionGemmaGenerationMixin:
             e. Check if any autoregressive stopping criteria are met, and break the outer loop if all sequences have
                met them. Replaces generated tokens in finished sequences by pad.
             f. Prepare tensors for the next block
+        ```
 
         Parameters:
             input_ids (*torch.LongTensor* of shape *(batch_size, sequence_length)*, *optional*):
@@ -600,11 +608,14 @@ class DiffusionGemmaGenerationMixin:
                 used with AR LLMs.
             kwargs (`dict[str, Any]`, *optional*):
                 Ad hoc parametrization of `generation_config` and/or additional model-specific kwargs that will be
-                forwarded to the `forward` function of the model.
+                forwarded to the `forward` function of the model. For instance, you can set the starting canvas with
+                `decoder_input_ids`.
 
         Returns:
-            [`DiffusionGemmaGenerationOutput`]: a `ModelOutput` instance containing the generated text (`sequences`),
-            as well as other optional outputs.
+            `torch.LongTensor` or [`DiffusionGemmaGenerationOutput`]:
+            - `torch.LongTensor`: the generated text in ids.
+            - [`DiffusionGemmaGenerationOutput`]: a `ModelOutput` instance containing the generated text (`sequences`),
+              as well as other optional outputs.
 
         Examples:
 
@@ -612,11 +623,11 @@ class DiffusionGemmaGenerationMixin:
         >>> from transformers import DiffusionGemmaForBlockDiffusion, AutoProcessor, TextDiffusionStreamer
 
         >>> model = DiffusionGemmaForBlockDiffusion.from_pretrained(
-        ...     "CHECKPOINT", device_map="auto",
+        ...     "google/diffusiongemma-26B-A4B-it", device_map="auto",
         >>> )
 
         >>> chat = [{"role": "user", "content": "Why is the sky blue?"},]
-        >>> processor = AutoProcessor.from_pretrained("CHECKPOINT")
+        >>> processor = AutoProcessor.from_pretrained("google/diffusiongemma-26B-A4B-it")
         >>> input_ids = processor.apply_chat_template(chat, tokenize=True, return_tensors="pt")
 
         >>> streamer = TextDiffusionStreamer(tokenizer=processor.tokenizer)
@@ -627,6 +638,7 @@ class DiffusionGemmaGenerationMixin:
         # 0.a. Prepare the generation config, respecting the kwarg-based parameterization from the original AR
         # `generate`
         generation_config, model_kwargs = self._prepare_generation_config(generation_config, **kwargs)
+        return_dict_in_generate = getattr(generation_config, "return_dict_in_generate", True)
 
         # 0.b. Set generation or output control variables. As in AR generation, `max_new_tokens` takes precedence
         # over `max_length` (we check against the default value, 256).
@@ -655,13 +667,14 @@ class DiffusionGemmaGenerationMixin:
         device = input_ids.device
         canvas_length = self.config.canvas_length
         current_canvas = None
+        eos_tensor = None
         finished_sequences = torch.zeros(batch_size, dtype=torch.bool, device=device)
         decoder_forward_passes = torch.zeros(batch_size, dtype=torch.int, device=device)
         if past_key_values is None:
             past_key_values = self._prepare_cache_for_generation(
                 generation_config=generation_config,
                 batch_size=batch_size,
-                max_length=max_length - canvas_length,  # the last generated canvas won't be cached
+                max_length=max_length,
             )
         if generation_config.eos_token_id is not None:
             eos_tensor = torch.tensor(generation_config.eos_token_id, device=input_ids.device)
@@ -679,6 +692,7 @@ class DiffusionGemmaGenerationMixin:
             attention_mask = model_kwargs.pop("attention_mask").bool()
         else:
             attention_mask = torch.ones((batch_size, cur_len), dtype=torch.bool, device=input_ids.device)
+        decoder_attention_mask = torch.nn.functional.pad(attention_mask, (0, canvas_length), value=True)
 
         # 0.e. Initialize samplers, logits processors, and stopping criteria
         sampler = self._prepare_sampler(generation_config)
@@ -689,23 +703,16 @@ class DiffusionGemmaGenerationMixin:
             streamer.put(input_ids.cpu())
 
         # 0.f performance tuning
-        is_compiling = past_key_values is not None and past_key_values.is_compileable
+        is_compiling = (
+            past_key_values is not None and past_key_values.is_compileable and not generation_config.disable_compile
+        )
         if is_compiling:
             encoder_forward_after_prefill, decoder_forward, sampler, diffusion_stopping_criteria = (
                 self._compile_functions(sampler, diffusion_stopping_criteria)
             )
-
-            decoder_attention_mask = torch.zeros(
-                (batch_size, past_key_values.max_cache_len + canvas_length),
-                dtype=torch.bool,
-                device=attention_mask.device,
-            )
-            decoder_attention_mask[:, : attention_mask.shape[1]] = attention_mask
-            decoder_attention_mask[:, -canvas_length:] = 1
         else:
             decoder_forward = self.forward
             encoder_forward_after_prefill = self.model.encoder
-            decoder_attention_mask = torch.nn.functional.pad(attention_mask, (0, canvas_length), value=True)
 
         # 1. Autoregressive canvas generation loop
         # NOTE: please keep the docstring in sync with this section's comments.
@@ -808,16 +815,16 @@ class DiffusionGemmaGenerationMixin:
                     attention_mask=attention_mask,
                     decoder_attention_mask=decoder_attention_mask,
                     decoder_position_ids=decoder_position_ids,
-                    past_key_values=past_key_values,
                     canvas_length=canvas_length,
                     cur_len=cur_len,
-                    is_compiling=is_compiling,
                 )
             )
 
         # 2. Finalize and return
         if streamer is not None:
             streamer.end()
+        if not return_dict_in_generate:
+            return input_ids
 
         tokens_per_forward = self._compute_tokens_per_forward(
             input_ids, decoder_forward_passes, initial_input_ids_len, generation_config.pad_token_id
@@ -863,6 +870,7 @@ class DiffusionGemmaGenerationMixin:
         generation_config = copy.deepcopy(generation_config)
         # apply global defaults to unset parameters
         global_defaults = generation_config._get_default_generation_params()
+        generation_config.update(**self.generation_config.to_dict(), defaults_only=True, allow_custom_entries=True)
         generation_config.update(**global_defaults, defaults_only=True)
         # kwargs rejected from updating the generation config are model_kwargs
         model_kwargs = generation_config.update(**kwargs)
@@ -983,7 +991,7 @@ class DiffusionGemmaGenerationMixin:
         self_conditioning_logits = model_kwargs.pop("self_conditioning_logits", None)
 
         mask_mapping = self.model.decoder.create_diffusion_decoder_attention_mask(
-            config=self.config.text_config,
+            config=self.config,
             inputs_embeds=current_canvas.unsqueeze(-1),  # we only need a dummy tensor with the same shape[:2] here
             past_key_values=past_key_values,
             decoder_attention_mask=decoder_attention_mask,
@@ -1105,18 +1113,12 @@ class DiffusionGemmaGenerationMixin:
         attention_mask: torch.Tensor,
         decoder_attention_mask: torch.Tensor,
         decoder_position_ids: torch.Tensor,
-        past_key_values: Cache,
         canvas_length: int,
         cur_len: int,
-        is_compiling: bool,
     ) -> tuple:
         """Prepares model inputs for the next canvas"""
         cur_len += canvas_length
-        if is_compiling:
-            valid_cache_length = past_key_values.get_seq_length()
-            decoder_attention_mask[:, valid_cache_length : valid_cache_length + canvas_length] = 1
-        else:
-            decoder_attention_mask = torch.nn.functional.pad(decoder_attention_mask, (0, canvas_length), value=True)
+        decoder_attention_mask = torch.nn.functional.pad(decoder_attention_mask, (0, canvas_length), value=True)
         attention_mask = torch.nn.functional.pad(attention_mask, (0, canvas_length), value=True)
         encoder_position_ids = decoder_position_ids
         decoder_position_ids = torch.arange(
@@ -1144,8 +1146,8 @@ class DiffusionGemmaGenerationMixin:
         need_new_cache = (
             cache_to_check is None
             or cache_to_check.offloading != offload_cache
-            or cache_to_check.max_batch_size != batch_size
-            or cache_to_check.max_cache_len < max_length
+            or cache_to_check.batch_size != batch_size
+            or cache_to_check.get_max_length() < max_length
         )
 
         if need_new_cache:

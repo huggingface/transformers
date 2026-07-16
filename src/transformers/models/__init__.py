@@ -110,6 +110,7 @@ if TYPE_CHECKING:
     from .dia import *
     from .dialogpt import *
     from .diffllama import *
+    from .diffusion_gemma import *
     from .dinat import *
     from .dinov2 import *
     from .dinov2_with_registers import *
@@ -213,6 +214,7 @@ if TYPE_CHECKING:
     from .ijepa import *
     from .imagegpt import *
     from .informer import *
+    from .inkling import *
     from .instructblip import *
     from .instructblipvideo import *
     from .internvl import *
@@ -221,6 +223,7 @@ if TYPE_CHECKING:
     from .janus import *
     from .jetmoe import *
     from .jina_embeddings_v3 import *
+    from .kimi_k25 import *
     from .kosmos2 import *
     from .kosmos2_5 import *
     from .kyutai_speech_to_text import *
@@ -264,9 +267,12 @@ if TYPE_CHECKING:
     from .metaclip_2 import *
     from .mgp_str import *
     from .mimi import *
+    from .mimo_v2_flash import *
+    from .minicpm3 import *
     from .minicpmv4_6 import *
     from .minimax import *
     from .minimax_m2 import *
+    from .minimax_m3_vl import *
     from .ministral import *
     from .ministral3 import *
     from .mistral import *
@@ -375,6 +381,7 @@ if TYPE_CHECKING:
     from .qwen3_omni_moe import *
     from .qwen3_vl import *
     from .qwen3_vl_moe import *
+    from .radio import *
     from .rag import *
     from .recurrent_gemma import *
     from .reformer import *
@@ -455,6 +462,7 @@ if TYPE_CHECKING:
     from .video_llava import *
     from .videomae import *
     from .videomt import *
+    from .videoprism import *
     from .vilt import *
     from .vipllava import *
     from .vision_encoder_decoder import *
@@ -481,6 +489,7 @@ if TYPE_CHECKING:
     from .whisper import *
     from .x_clip import *
     from .xcodec import *
+    from .xcodec2 import *
     from .xglm import *
     from .xlm import *
     from .xlm_roberta import *
@@ -493,6 +502,7 @@ if TYPE_CHECKING:
     from .youtu import *
     from .zamba import *
     from .zamba2 import *
+    from .zaya import *
     from .zoedepth import *
 else:
     import sys

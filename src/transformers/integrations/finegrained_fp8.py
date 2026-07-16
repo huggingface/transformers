@@ -26,7 +26,12 @@ from ..activations import ACT2FN
 from ..core_model_loading import ConversionOps
 from ..quantizers.quantizers_utils import get_module_from_name, should_convert_module
 from ..utils import logging
-from ..utils.import_utils import is_kernels_available, is_torchdynamo_compiling
+from ..utils.import_utils import (
+    KERNELS_MAX_VERSION,
+    KERNELS_MIN_VERSION,
+    is_kernels_available,
+    is_torchdynamo_compiling,
+)
 from .deepgemm import (
     deepgemm_fp8_fp4_experts_forward,
     deepgemm_fp8_fp4_linear,
@@ -47,7 +52,11 @@ _FP8_MAX = torch.finfo(_FP8_DTYPE).max
 
 @functools.cache
 def _get_ue8m0_dtype() -> torch.dtype:
-    """Return ``torch.float8_e8m0fnu`` or raise a clear error on torch without FP8 support."""
+    """Return ``torch.float8_e8m0fnu`` or raise a clear error on torch without FP8 support.
+
+    UE8M0 scales are always stored/consumed as this single dtype — the kernels (Triton
+    finegrained + DeepGEMM) read it natively, and supporting the same scales in mixed
+    container dtypes would be a mess — so fail loudly rather than fall back."""
     if not hasattr(torch, "float8_e8m0fnu"):
         raise RuntimeError(
             "scale_fmt='ue8m0' requires torch.float8_e8m0fnu, which is only available in "
@@ -83,7 +92,9 @@ def _load_finegrained_fp8_kernel() -> FineGrainedFP8:
     if not is_torchdynamo_compiling():
         if not is_kernels_available():
             raise ImportError(
-                "finegrained-fp8 kernel requires the `kernels` package. Install it with `pip install -U kernels`."
+                "finegrained-fp8 kernel requires the `kernels` package. "
+                f"Please install a compatible version ({KERNELS_MIN_VERSION} <= version < {KERNELS_MAX_VERSION}), "
+                f"e.g. `pip install kernels=={KERNELS_MIN_VERSION}`"
             )
 
     kernel = lazy_load_kernel("finegrained-fp8")
@@ -93,14 +104,14 @@ def _load_finegrained_fp8_kernel() -> FineGrainedFP8:
             "has a build matching the current torch/CUDA."
         )
 
-    matmul = getattr(kernel, "matmul", None)
+    matmul = getattr(kernel, "matmul_2d", None)
     batched_matmul = getattr(kernel, "matmul_batched", None)
     grouped_matmul = getattr(kernel, "matmul_grouped", None)
 
     missing = [
         name
         for name, attr in [
-            ("matmul", matmul),
+            ("matmul_2d", matmul),
             ("matmul_batched", batched_matmul),
             ("matmul_grouped", grouped_matmul),
         ]
@@ -109,7 +120,8 @@ def _load_finegrained_fp8_kernel() -> FineGrainedFP8:
     if missing:
         raise ImportError(
             f"finegrained-fp8 kernel is missing required symbols: {', '.join(missing)}. "
-            "Please update the `kernels` package (`pip install -U kernels`)."
+            f"Please install a compatible version ({KERNELS_MIN_VERSION} <= version < {KERNELS_MAX_VERSION}), "
+            f"e.g. `pip install kernels=={KERNELS_MIN_VERSION}`"
         )
 
     return FineGrainedFP8(
@@ -257,7 +269,10 @@ def fp8_linear(
         except ImportError as e:
             # Forward the original reason so the user knows whether DeepGEMM is unavailable
             # (env/build issue) or refused this specific input (e.g. multi-device on SM100).
-            logger.warning_once(f"DeepGEMM unavailable for this call, falling back to Triton. Reason: {e}")
+            logger.warning_once(
+                f"DeepGEMM unavailable for this call, falling back to Triton. Reason: {e} "
+                "Set `TRANSFORMERS_DISABLE_DEEPGEMM_LINEAR=1` to skip DeepGEMM for FP8 linear entirely."
+            )
 
     return finegrained_fp8_linear(input, weight, weight_scale_inv, block_size, bias, activation_scale, output_dtype)
 
@@ -286,7 +301,10 @@ class FP8Linear(nn.Linear):
             sf_dtype = _get_ue8m0_dtype() if scale_fmt == "ue8m0" else torch.float32
             scale_out_features = (out_features + self.block_size[0] - 1) // self.block_size[0]
             scale_in_features = (in_features + self.block_size[1] - 1) // self.block_size[1]
-            self.weight_scale_inv = nn.Parameter(torch.empty(scale_out_features, scale_in_features, dtype=sf_dtype))
+            self.weight_scale_inv = nn.Parameter(
+                torch.empty(scale_out_features, scale_in_features, dtype=sf_dtype),
+                requires_grad=sf_dtype.is_floating_point,
+            )
 
         if self.activation_scheme == "static":
             self.activation_scale = nn.Parameter(torch.tensor(1.0, dtype=torch.float32))
@@ -593,6 +611,8 @@ class FP8Experts(nn.Module):
         self.activation_scheme = activation_scheme
         self.num_experts = _first_attr(config, "num_local_experts", "num_experts")
         self.intermediate_dim = _first_attr(config, "moe_intermediate_size", "intermediate_size")
+        self.swiglu_alpha = getattr(config, "swiglu_alpha", None)
+        self.swiglu_limit = getattr(config, "swiglu_limit", None)
         self.act_fn = ACT2FN[_first_attr(config, "hidden_activation", "hidden_act")]
         self.limit = getattr(config, "swiglu_limit", None)
 
@@ -640,7 +660,13 @@ class FP8Experts(nn.Module):
 
     def _apply_gate(self, gate_up: torch.Tensor) -> torch.Tensor:
         gate, up = gate_up.chunk(2, dim=-1)
-        if self.limit is not None:
+        if self.swiglu_alpha is not None:
+            # Clamped SwiGLU-OAI gate (same math as the model's non-quantized experts).
+            gate = gate.clamp(max=self.swiglu_limit)
+            up = up.clamp(min=-self.swiglu_limit, max=self.swiglu_limit)
+            glu = gate * torch.sigmoid(gate * self.swiglu_alpha)
+            return (up + 1.0) * glu
+        elif self.limit is not None:
             gate = gate.clamp(max=self.limit)
             up = up.clamp(min=-self.limit, max=self.limit)
         return self.act_fn(gate) * up
@@ -848,18 +874,18 @@ class Fp8Quantize(ConversionOps):
         # We store inverse scale to match the upstream ``weight_scale_inv`` convention
         scales = _FP8_MAX / safe_max_abs
         scales = torch.where(max_abs > 0, scales, torch.ones_like(scales))  # keep zeros stable
+        inv_scales = (1.0 / scales).to(torch.float32)
+        # ue8m0 stores weight_scale_inv as a power of two. Round it before quantizing and derive the
+        # forward scale from it, so dequant multiplies by the exact scale the weight was divided by.
+        if self.hf_quantizer.quantization_config.scale_fmt == "ue8m0":
+            inv_scales = torch.pow(2.0, torch.ceil(torch.log2(inv_scales.clamp(min=torch.finfo(torch.float32).tiny))))
+            inv_scales = inv_scales.to(_get_ue8m0_dtype())
+            scales = 1.0 / inv_scales.to(torch.float32)  # forward scale = exact reciprocal of the stored inverse
         # Broadcast scales over the block dims and quantize
         scales_broadcast = scales.unsqueeze(-1).unsqueeze(-3)  # (..., rows_tiles, 1, cols_tiles, 1)
         scaled = reshaped * scales_broadcast
         quantized = torch.clamp(scaled, min=_FP8_MIN, max=_FP8_MAX).to(_FP8_DTYPE)
         quantized = quantized.reshape(original_shape)
-        inv_scales = (1.0 / scales).to(torch.float32)
-        # DeepSeek V4-style storage (`scale_fmt="ue8m0"`): round inv_scales to UE8M0-representable
-        # values (powers of 2) and cast to `float8_e8m0fnu` byte storage so the on-disk dtype
-        # matches the parameter allocation in `FP8Linear`/`FP8Experts`.
-        if self.hf_quantizer.quantization_config.scale_fmt == "ue8m0":
-            inv_scales = torch.pow(2.0, torch.ceil(torch.log2(inv_scales.clamp(min=torch.finfo(torch.float32).tiny))))
-            inv_scales = inv_scales.to(_get_ue8m0_dtype())
         scale_key = key.rsplit(".", 1)[0] + ".weight_scale_inv" if key.endswith(".weight") else key + "_scale_inv"
         return {key: quantized, scale_key: inv_scales}
 
@@ -958,10 +984,16 @@ class Fp8Dequantize(ConversionOps):
             output_dtype = (
                 scales.dtype if scales.dtype.is_floating_point and scales.element_size() >= 2 else torch.bfloat16
             )
-
+        # MXFP8 checkpoints ship E8M0 exponents stored as ``torch.uint8`` (one byte per
+        # block) — the actual scale is `2 ** (byte - 127)`. Interpreting the raw bytes
+        # as scalar multipliers would be silently wrong, so unpack to fp32 here.
+        if scales.dtype == torch.uint8:
+            s_fp32 = (scales.to(torch.float32) - 127.0).exp2()
+        else:
+            s_fp32 = scales.to(torch.float32)
         original_shape = quantized_fp32.shape
         q = quantized_fp32.reshape(-1, scale_rows, block_m, scale_cols, block_n)
-        s = scales.to(torch.float32).reshape(-1, scale_rows, scale_cols).unsqueeze(-1).unsqueeze(2)
+        s = s_fp32.reshape(-1, scale_rows, scale_cols).unsqueeze(-1).unsqueeze(2)
         return (q * s).to(output_dtype).reshape(original_shape)
 
     def _get_target_dtype(self, model: torch.nn.Module | None, full_layer_name: str | None) -> torch.dtype | None:

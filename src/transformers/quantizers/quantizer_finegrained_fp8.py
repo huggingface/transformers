@@ -90,9 +90,30 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
     def param_element_size(self, model: "PreTrainedModel", param_name: str, param: "torch.Tensor") -> float:
         "Return the element size (in bytes) for `param_name`."
         if self.param_needs_quantization(model, param_name):
-            # 8 bit, this is neeed as when `pre_quantized`` is False, we don't set the dtype of the FP8Linear in order to correctly load the weights
+            # 8 bit, this is needed as when `pre_quantized`` is False, we don't set the dtype of the FP8Linear in order to correctly load the weights
             return 1
         return super().param_element_size(model, param_name, param)
+
+    def _normalize_modules_to_not_convert(self, model: "PreTrainedModel"):
+        """Rewrite the skip-list to the model's own module tree.
+        For models that were already released, if they have a list of modules to not quantize
+        we need to apply the weight renaming / weight conversion opérations to get the actual
+        layer name of the model in `transformers`.
+        """
+        skip = self.quantization_config.modules_to_not_convert
+        if not skip:
+            return
+
+        from ..conversion_mapping import get_model_conversion_mapping
+
+        renamings = get_model_conversion_mapping(model)
+        remapped = []
+        for name in skip:
+            renamed = name
+            for rename in renamings:
+                renamed, _ = rename.rename_source_key(renamed)
+            remapped.append(renamed)
+        self.quantization_config.modules_to_not_convert = remapped
 
     def _process_model_before_weight_loading(
         self,
@@ -101,6 +122,7 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
     ):
         from ..integrations.finegrained_fp8 import replace_with_fp8_linear
 
+        self._normalize_modules_to_not_convert(model)
         self.modules_to_not_convert = self.get_modules_to_not_convert(
             model, self.quantization_config.modules_to_not_convert, model._keep_in_fp32_modules
         )
@@ -111,6 +133,27 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
             quantization_config=self.quantization_config,
             pre_quantized=self.pre_quantized,
         )
+
+    def _process_model_after_weight_loading(self, model, **kwargs):
+        # dsv4-flash-base stores its (power-of-two) ue8m0 scales in a float32 container under
+        # `.scale`; those renamed keys keep the on-disk float32 dtype, so cast them to the UE8M0
+        # dtype the kernels expect (exact, since the values are powers of two). Checkpoints that
+        # already ship the native float8 E8M0 dtype (e.g. dsv4-flash) are left untouched.
+        if self.quantization_config.scale_fmt == "ue8m0":
+            from ..integrations.finegrained_fp8 import _get_ue8m0_dtype
+
+            ue8m0 = _get_ue8m0_dtype()
+            float32_scales = [
+                name
+                for name, param in model.named_parameters()
+                if name.endswith("_scale_inv") and param.dtype == torch.float32
+            ]
+            for name in float32_scales:
+                module_name, _, attr = name.rpartition(".")
+                module = model.get_submodule(module_name)
+                scale = getattr(module, attr)
+                setattr(module, attr, torch.nn.Parameter(scale.data.to(ue8m0), requires_grad=False))
+        return model
 
     def update_tp_plan(self, config):
         if "Qwen3" in config.__class__.__name__:

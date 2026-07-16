@@ -60,6 +60,7 @@ class QuantizationMethod(str, Enum):
     FPQUANT = "fp_quant"
     AUTOROUND = "auto-round"
     MXFP4 = "mxfp4"
+    MXFP8 = "mxfp8"
     METAL = "metal"
     FOUR_OVER_SIX = "fouroversix"
     SINQ = "sinq"
@@ -904,13 +905,13 @@ class AqlmConfig(QuantizationConfigMixin):
         Safety checker that arguments are correct - also replaces some NoneType arguments with their default values.
         """
         if not isinstance(self.in_group_size, int):
-            raise TypeError("in_group_size must be a float")
+            raise TypeError("in_group_size must be an int")
         if not isinstance(self.out_group_size, int):
-            raise TypeError("out_group_size must be a float")
+            raise TypeError("out_group_size must be an int")
         if not isinstance(self.num_codebooks, int):
-            raise TypeError("num_codebooks must be a float")
+            raise TypeError("num_codebooks must be an int")
         if not isinstance(self.nbits_per_codebook, int):
-            raise TypeError("nbits_per_codebook must be a float")
+            raise TypeError("nbits_per_codebook must be an int")
 
         if self.linear_weights_not_to_quantize is not None and not isinstance(
             self.linear_weights_not_to_quantize, list
@@ -1662,7 +1663,10 @@ class FineGrainedFP8Config(QuantizationConfigMixin):
         scale_fmt: str = "float",
         **kwargs,
     ):
-        self.quant_method = QuantizationMethod.FP8
+        self.quant_method = kwargs.pop("quant_method", QuantizationMethod.FP8)
+        # MiniMax ships the skip-list under ``ignored_layers``; accept it as an alias.
+        if modules_to_not_convert is None and "ignored_layers" in kwargs:
+            modules_to_not_convert = kwargs.pop("ignored_layers")
         self.modules_to_not_convert = modules_to_not_convert
         self.activation_scheme = activation_scheme
         self.weight_block_size = weight_block_size
