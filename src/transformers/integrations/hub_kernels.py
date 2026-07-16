@@ -54,6 +54,10 @@ _MISSING_KERNELS_MESSAGE = (
 )
 
 
+_TRANSFORMERS_USE_HUB_KERNELS = os.environ.get("USE_HUB_KERNELS", "YES").upper()
+_kernels_enabled = _TRANSFORMERS_USE_HUB_KERNELS in ENV_VARS_TRUE_VALUES
+
+
 if is_kernels_available():
     from kernels import (
         CUDAProperties,
@@ -76,9 +80,6 @@ if is_kernels_available():
         use_kernel_forward_from_hub as _kernels_use_kernel_forward_from_hub,
     )
     from kernels import use_kernel_func_from_hub as _kernels_use_kernel_func_from_hub
-
-    _TRANSFORMERS_USE_HUB_KERNELS = os.environ.get("USE_HUB_KERNELS", "YES").upper()
-    _kernels_enabled = _TRANSFORMERS_USE_HUB_KERNELS in ENV_VARS_TRUE_VALUES
 
     def use_kernel_forward_from_hub(layer_name: str):
         if _kernels_enabled:
@@ -133,6 +134,34 @@ if is_kernels_available():
                     # TODO: drop once Atlas-Inference is an allow-listed trusted publisher
                     trust_remote_code=True,
                 ),
+            },
+            "causal_conv1d_fn": {
+                "cuda": {
+                    Mode.TRAINING: LayerRepository(
+                        repo_id="kernels-community/mamba-ssm",
+                        layer_name="causal_conv1d_fn",
+                        version=1,
+                    ),
+                    Mode.INFERENCE: LayerRepository(
+                        repo_id="kernels-community/mamba-ssm",
+                        layer_name="causal_conv1d_fn",
+                        version=1,
+                    ),
+                },
+            },
+            "causal_conv1d_update": {
+                "cuda": {
+                    Mode.TRAINING: LayerRepository(
+                        repo_id="kernels-community/mamba-ssm",
+                        layer_name="causal_conv1d_update",
+                        version=1,
+                    ),
+                    Mode.INFERENCE: LayerRepository(
+                        repo_id="kernels-community/mamba-ssm",
+                        layer_name="causal_conv1d_update",
+                        version=1,
+                    ),
+                },
             },
             "SwiGLUMLP": {
                 "cuda": {
@@ -376,9 +405,17 @@ else:
         def __init__(self, *args, **kwargs):
             raise RuntimeError("LayerRepository requires `kernels` to be installed. Run `pip install kernels`.")
 
+        def load(self):
+            raise NotImplementedError("LayerRepository requires `kernels` to be installed. Run `pip install kernels.")
+
     class LocalLayerRepository:
         def __init__(self, *args, **kwargs):
             raise RuntimeError("LocalLayerRepository requires `kernels` to be installed. Run `pip install kernels`.")
+
+        def load(self):
+            raise NotImplementedError(
+                "LocalLayerRepository requires `kernels` to be installed. Run `pip install kernels."
+            )
 
     class FuncRepository:
         def __init__(self, *args, **kwargs):
@@ -503,7 +540,7 @@ def lazy_load_kernel(kernel_name: str, mapping: dict[str, ModuleType | None] = _
         logger.warning_once(f"Kernel {kernel_name} not found in _HUB_KERNEL_MAPPING")
         mapping[kernel_name] = None
         return None
-    if is_kernels_available():
+    if is_kernels_available() and _kernels_enabled:
         try:
             repo_id = _HUB_KERNEL_MAPPING[kernel_name]["repo_id"]
             revision = _HUB_KERNEL_MAPPING[kernel_name].get("revision", None)
@@ -745,10 +782,8 @@ def register_kernel_replacements_and_fusions(
             raise ValueError(f"Invalid kernel repo string {repo_str!r} for layer {layer_name!r}")
 
         if kernel_config.use_local_kernel:
-            package_name = repo_id.rstrip("/").split("/")[-1]
             repo = LocalLayerRepository(
                 repo_path=Path(repo_id),
-                package_name=package_name,
                 layer_name=layer_name_in_repo,
             )
         else:

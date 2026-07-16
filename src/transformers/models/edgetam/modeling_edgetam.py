@@ -348,10 +348,23 @@ class EdgeTamSinePositionEmbedding(nn.Module):
         temperature: int = 10000,
         mask: torch.Tensor | None = None,
     ) -> torch.Tensor:
+        batch_size, _, height, width = shape
         if mask is None:
-            mask = torch.ones((shape[0], shape[2], shape[3]), device=device, dtype=torch.bool)
-        y_embed = mask.cumsum(1, dtype=dtype)
-        x_embed = mask.cumsum(2, dtype=dtype)
+            # Without a mask this is just a cumsum over ones, written out as arange
+            # instead: inductor's cumsum(ones) rewrite drops the requested dtype
+            # (https://github.com/pytorch/pytorch/issues/189518), which breaks
+            # float16/bfloat16 under torch.compile — don't revert to cumsum here
+            # until that fix is widely released.
+            y_embed = torch.arange(1, height + 1, dtype=dtype, device=device)[None, :, None].expand(
+                batch_size, height, width
+            )
+            x_embed = torch.arange(1, width + 1, dtype=dtype, device=device)[None, None, :].expand(
+                batch_size, height, width
+            )
+        else:
+            embed_mask = mask.to(dtype)
+            y_embed = embed_mask.cumsum(1)
+            x_embed = embed_mask.cumsum(2)
         if normalize:
             eps = 1e-6
             y_embed = y_embed / (y_embed[:, -1:, :] + eps) * scale

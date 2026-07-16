@@ -30,6 +30,7 @@ from typing_extensions import dataclass_transform
 from . import __version__
 from .dynamic_module_utils import custom_object_save
 from .generation.configuration_utils import GenerationConfig
+from .integrations.heterogeneity import HeterogeneousConfigMixin
 from .modeling_gguf_pytorch_utils import load_gguf_checkpoint
 from .modeling_rope_utils import RotaryEmbeddingConfigMixin
 from .utils import (
@@ -136,7 +137,7 @@ def wrap_init_to_accept_kwargs(cls: dataclass):
 @dataclass_transform(kw_only_default=True)
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
+class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin, HeterogeneousConfigMixin):
     # no-format
     r"""
     Base class for all configuration classes. Handles a few parameters common to all models' configurations as well as
@@ -204,6 +205,8 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
             the feed forward layer is not chunked. A chunk size of n means that the feed forward layer processes `n` <
             sequence_length embeddings at a time. For more information on feed forward chunking, see [How does Feed
             Forward Chunking work?](../glossary.html#feed-forward-chunking).
+        per_layer_config (`dict[int | str, dict[str, Any]]`, *optional*):
+            A sparse mapping from layer indices to configuration attribute overrides. Each key is a layer index, and each value contains the attributes that differ from the global config for that layer.
 
         > Parameters for fine-tuning tasks
 
@@ -317,6 +320,9 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
         self._attn_implementation: str | None = kwargs.pop("attn_implementation", None)
         self._experts_implementation: str | None = kwargs.pop("experts_implementation", None)
 
+        # HeterogeneousConfigMixin: `per_layer_config` should be applied last, as heterogeneity needs to have all of the other kwargs set
+        per_layer_config = kwargs.pop("per_layer_config", None)
+
         # Additional attributes without default values
         for key, value in kwargs.items():
             # Check this to avoid deserializing problematic fields from hub configs - they should use the public field
@@ -326,6 +332,10 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
                 except AttributeError as err:
                     logger.error(f"Can't set {key} with value {value} for {self}")
                     raise err
+
+        # HeterogeneousConfigMixin
+        if per_layer_config is not None:
+            self.per_layer_config = per_layer_config
 
     def __init_subclass__(cls, *args, **kwargs):
         super().__init_subclass__(*args, **kwargs)
@@ -495,7 +505,13 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
             layers = getattr(self, layer_types, None)
             if not (layers is not None and hasattr(self, "num_hidden_layers")):
                 return
-            elif not all(layer_type in ALLOWED_LAYER_TYPES for layer_type in layers):
+            if self.is_custom_code():
+                # Custom code may have legacy layer types that need to be remapped
+                if (remapped := remap_legacy_layer_types(layers)) != layers:
+                    # Only try setattr if layers changed in case layer_types is a read-only property
+                    setattr(self, layer_types, remapped)
+                layers = remapped
+            if not all(layer_type in ALLOWED_LAYER_TYPES for layer_type in layers):
                 raise ValueError(f"The `{layer_types}` entries must be in {ALLOWED_LAYER_TYPES} but got {layers}")
             elif self.num_hidden_layers is not None and self.num_hidden_layers != len(layers):
                 raise ValueError(
@@ -962,7 +978,9 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
         return f"{self.__class__.__name__} {self.to_json_string()}"
 
     def __iter__(self):
-        yield from self.__dict__
+        # HeterogeneousConfigMixin: keys of `self.__dict__` that are per-layer attributes
+        # may require hiding when using a heterogeneous config.
+        yield from self._iter_config_keys_with_heterogeneous_adjustment(self.__dict__)
 
     def to_diff_dict(self) -> dict[str, Any]:
         """
@@ -986,13 +1004,16 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
         # Only serialize values that differ from the default config,
         # except always keep the 'config' attribute.
         for key, value in config_dict.items():
+            # HeterogeneousConfigMixin: disable the heterogeneous attribute access validation
+            attr = self._getattr_without_heterogeneous_validation(key, None)
+
             if (
-                isinstance(getattr(self, key, None), PreTrainedConfig)
+                isinstance(attr, PreTrainedConfig)
                 and key in class_config_dict
                 and isinstance(class_config_dict[key], dict)
             ):
                 # For nested configs we need to clean the diff recursively
-                diff = recursive_diff_dict(value, default_config_dict, config_obj=getattr(self, key, None))
+                diff = recursive_diff_dict(value, default_config_dict, config_obj=attr)
                 if "model_type" in value:
                     # Needs to be set even if it's not in the diff
                     diff["model_type"] = value["model_type"]
@@ -1020,6 +1041,9 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
                 else self.quantization_config
             )
         self.dict_dtype_to_str(serializable_config_dict)
+
+        # HeterogeneousConfigMixin: update the serialized output.
+        self._update_heterogeneous_to_dict_output(serializable_config_dict)
 
         return serializable_config_dict
 
@@ -1070,6 +1094,9 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
                 else self.quantization_config
             )
         self.dict_dtype_to_str(output)
+
+        # HeterogeneousConfigMixin: update the serialized output.
+        self._update_heterogeneous_to_dict_output(output)
 
         return output
 
@@ -1221,6 +1248,18 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
 
         cls._auto_class = auto_class
 
+    @classmethod
+    def is_remote_code(cls) -> bool:
+        """Return whether the current config is custom code, i.e. code loaded from the hub, or class that we just
+        registered via `register_for_auto_class`."""
+        return cls._auto_class is not None
+
+    @classmethod
+    def is_custom_code(cls) -> bool:
+        """Return whether the current config is custom code, i.e. either code loaded from the hub, or defined in any
+        user-specific module/session."""
+        return cls.is_remote_code() or not cls.__module__.startswith("transformers.")
+
     def _get_generation_parameters(self) -> dict[str, Any]:
         """
         Checks if there are generation parameters in `PreTrainedConfig` instance. Note that
@@ -1314,6 +1353,45 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
 
         return config_to_return
 
+    def get_mtp_config(self) -> "PreTrainedConfig":
+        """
+        Returns the mtp text config to be used to create the MTP model. Since the MTP layers are created by instantiating
+        the same classes as the main model, we need to overwrite index-specific properties of the config such as `layer_types`
+        or `mtp_layer_types` to create the correct mtp layers and avoid indexing issues in the layers (because MTP layers restart
+        the indexing of layers at 0).
+        """
+        # Start from the text config
+        text_config = copy.deepcopy(self.get_text_config(decoder=True))
+        num_mtp_layers = getattr(text_config, "num_mtp_layers", None)
+        # In this case, raise
+        if num_mtp_layers is None:
+            raise ValueError("Calling `get_mtp_config` on a config without `num_mtp_layers`")
+
+        layer_types = getattr(text_config, "layer_types", None)
+        mtp_layer_types = getattr(text_config, "mtp_layer_types", None)
+        mlp_layer_types = getattr(text_config, "mlp_layer_types", None)
+        mtp_mlp_layer_types = getattr(text_config, "mtp_mlp_layer_types", None)
+
+        # Replace the index-based fields so that we can call `XXXDecoderLayer(config, layer_idx)` with the mtp config, and create
+        # the correct layers
+        if layer_types is not None:
+            if mtp_layer_types is None:
+                raise ValueError(
+                    "Calling `get_mtp_config` on a config containing `layer_types` without `mtp_layer_types` is ambiguous"
+                )
+            text_config.layer_types = mtp_layer_types
+        if mlp_layer_types is not None:
+            if mtp_mlp_layer_types is None:
+                raise ValueError(
+                    "Calling `get_mtp_config` on a config containing `mlp_layer_types` without `mtp_mlp_layer_types` is ambiguous"
+                )
+            text_config.mlp_layer_types = mtp_mlp_layer_types
+
+        # This is needed to be correct in several places, e.g. when creating the cache
+        text_config.num_hidden_layers = num_mtp_layers
+
+        return text_config
+
 
 def get_configuration_file(configuration_files: list[str]) -> str:
     """
@@ -1355,7 +1433,10 @@ def recursive_diff_dict(dict_a, dict_b, config_obj=None):
     diff = {}
     default = config_obj.__class__().to_dict() if config_obj is not None else {}
     for key, value in dict_a.items():
-        obj_value = getattr(config_obj, str(key), None)
+        # HeterogeneousConfigMixin: disable the heterogeneous attribute access validation
+        obj_value = (
+            config_obj._getattr_without_heterogeneous_validation(str(key), None) if config_obj is not None else None
+        )
         if isinstance(obj_value, PreTrainedConfig) and key in dict_b and isinstance(dict_b[key], dict):
             diff_value = recursive_diff_dict(value, dict_b[key], config_obj=obj_value)
             diff[key] = diff_value
