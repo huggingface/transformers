@@ -451,7 +451,8 @@ class Mask2FormerImageProcessor(TorchvisionBackend):
 
         if segmentation_maps is not None and len(images) != len(segmentation_maps):
             raise ValueError("Images and segmentation maps must have the same length.")
-
+        if segmentation_maps is not None and len(images) != len(segmentation_maps):
+            raise ValueError("Images and segmentation maps must have the same length.")
         # Group images by size for batched resizing
         grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
         resized_images_grouped = {}
