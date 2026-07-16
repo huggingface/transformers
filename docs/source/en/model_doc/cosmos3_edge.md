@@ -13,7 +13,7 @@ specific language governing permissions and limitations under the License.
 be rendered properly in your Markdown viewer.
 
 -->
-*This model was contributed to Hugging Face Transformers on 2026-07-13.*
+*This model was contributed to Hugging Face Transformers on 2026-07-16.*
 
 # Cosmos3 Edge
 
@@ -73,10 +73,6 @@ print(processor.batch_decode(generated_ids, skip_special_tokens=True))
 ## Cosmos3EdgeVisionConfig
 
 [[autodoc]] Cosmos3EdgeVisionConfig
-
-## Cosmos3EdgeProjectorConfig
-
-[[autodoc]] Cosmos3EdgeProjectorConfig
 
 ## Cosmos3EdgeProcessor
 

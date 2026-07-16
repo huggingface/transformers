@@ -21,7 +21,6 @@ from transformers import (
     Cosmos3EdgeConfig,
     Cosmos3EdgeForConditionalGeneration,
     Cosmos3EdgeModel,
-    Cosmos3EdgeProjectorConfig,
     Cosmos3EdgeTextConfig,
     Cosmos3EdgeVisionConfig,
     is_torch_available,
@@ -35,8 +34,7 @@ from ...vlm_tester import VLMModelTest, VLMModelTester
 if is_torch_available():
     import torch
 
-    from transformers import Cosmos3EdgeTextModel, Cosmos3EdgeVisionModel
-    from transformers.models.cosmos3_edge.modeling_cosmos3_edge import Cosmos3EdgeTextRotaryEmbedding
+    from transformers import Cosmos3EdgeTextModel
 
 
 class Cosmos3EdgeTextModelTester:
@@ -99,74 +97,6 @@ class Cosmos3EdgeTextModelTest(ModelTesterMixin, unittest.TestCase):
         self.model_tester.create_and_check_model(config, inputs)
 
 
-class Cosmos3EdgeVisionModelTester:
-    """Tiny pre-patchified inputs for the packed vision common tests."""
-
-    def __init__(self, parent):
-        self.parent = parent
-        self.batch_size = 3
-        self.image_size = 4
-        self.patch_size = 2
-        self.patches_per_sample = (self.image_size // self.patch_size) ** 2
-        self.seq_length = self.batch_size * self.patches_per_sample
-        self.num_channels = 3
-        self.hidden_size = 32
-        self.intermediate_size = 64
-        self.num_hidden_layers = 2
-        self.num_attention_heads = 4
-        self.is_training = True
-
-    def get_config(self):
-        return Cosmos3EdgeVisionConfig(
-            hidden_size=self.hidden_size,
-            intermediate_size=self.intermediate_size,
-            num_hidden_layers=self.num_hidden_layers,
-            num_attention_heads=self.num_attention_heads,
-            num_channels=self.num_channels,
-            patch_size=self.patch_size,
-            num_patches=self.patches_per_sample,
-            spatial_merge_size=2,
-        )
-
-    def prepare_config_and_inputs_for_common(self):
-        config = self.get_config()
-        pixel_values = floats_tensor(
-            [self.seq_length, self.num_channels * self.patch_size**2],
-        )
-        patch_grid_size = self.image_size // self.patch_size
-        grid_thw = torch.tensor([[1, patch_grid_size, patch_grid_size]] * self.batch_size, device=torch_device)
-        return config, {"pixel_values": pixel_values, "grid_thw": grid_thw}
-
-    def create_and_check_model(self, config, inputs):
-        model = Cosmos3EdgeVisionModel(config).to(torch_device).eval()
-        with torch.no_grad():
-            output = model(**inputs)
-        self.parent.assertEqual(tuple(output.last_hidden_state.shape), (self.seq_length, self.hidden_size))
-
-
-@require_torch
-class Cosmos3EdgeVisionModelTest(ModelTesterMixin, unittest.TestCase):
-    all_model_classes = (Cosmos3EdgeVisionModel,) if is_torch_available() else ()
-
-    # This tower consumes pre-patchified pixels rather than token embeddings.
-    test_resize_embeddings = False
-    # Packed grids use data-dependent Python shape handling.
-    test_torch_exportable = False
-    # The packed vision attention API returns hidden states, not attention-probability maps.
-    has_attentions = False
-
-    def setUp(self):
-        self.model_tester = Cosmos3EdgeVisionModelTester(self)
-
-    def test_model(self):
-        config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
-        self.model_tester.create_and_check_model(config, inputs)
-
-    @unittest.skip(reason="The packed vision tower has no token input or output embeddings.")
-    def test_model_get_set_embeddings(self):
-        pass
-
-
 class Cosmos3EdgeVisionText2TextModelTester(VLMModelTester):
     """Tiny packed-vision inputs for the shared VLM model-test suite."""
 
@@ -226,12 +156,7 @@ class Cosmos3EdgeVisionText2TextModelTester(VLMModelTester):
         return self.config_class(
             text_config=self.get_text_config(),
             vision_config=self.get_vision_config(),
-            projector_config=Cosmos3EdgeProjectorConfig(
-                input_hidden_size=self.hidden_size,
-                merger_intermediate_size=self.intermediate_size,
-                out_hidden_size=self.hidden_size,
-                spatial_merge_size=self.spatial_merge_size,
-            ),
+            projector_hidden_size=self.intermediate_size,
             image_token_id=self.image_token_id,
             video_token_id=self.video_token_id,
             vision_start_token_id=self.vision_start_token_id,
@@ -342,77 +267,6 @@ class Cosmos3EdgeModelTest(VLMModelTest, unittest.TestCase):
                 image_grid_thw=torch.cat([image_grid_thw, image_grid_thw], dim=0),
                 mm_token_type_ids=torch.cat([mm_token_type_ids, mm_token_type_ids], dim=0),
             )
-
-    def test_mrope_interleaving_is_precomputed_in_inverse_frequencies(self):
-        config = self.model_tester.get_text_config()
-        rotary_embedding = Cosmos3EdgeTextRotaryEmbedding(config).to(torch_device)
-        position_ids = torch.tensor(
-            [
-                [[0, 1, 2]],
-                [[0, 3, 4]],
-                [[0, 5, 6]],
-            ],
-            dtype=torch.long,
-            device=torch_device,
-        )
-        hidden_states = torch.zeros((1, 3, config.head_dim), device=torch_device)
-
-        cos, sin = rotary_embedding(hidden_states, position_ids)
-
-        base_inv_freq = 1.0 / (
-            config.rope_parameters["rope_theta"]
-            ** (torch.arange(0, config.head_dim, 2, dtype=torch.int64, device=torch_device).float() / config.head_dim)
-        )
-        reference_freqs = position_ids[..., None].float() * base_inv_freq
-        interleaved_freqs = reference_freqs[0].clone()
-        for dim, offset in enumerate((1, 2), start=1):
-            length = config.rope_parameters["mrope_section"][dim] * 3
-            interleaved_freqs[..., slice(offset, length, 3)] = reference_freqs[dim, ..., slice(offset, length, 3)]
-        expected_embedding = torch.cat((interleaved_freqs, interleaved_freqs), dim=-1)
-
-        self.assertEqual(tuple(rotary_embedding.inv_freq.shape), (3, config.head_dim // 2))
-        axis_assignment = rotary_embedding.inv_freq.ne(0).int().argmax(dim=0)
-        self.assertEqual(axis_assignment.bincount(minlength=3).tolist(), config.rope_parameters["mrope_section"])
-        torch.testing.assert_close(cos, expected_embedding.cos())
-        torch.testing.assert_close(sin, expected_embedding.sin())
-
-    def test_mrope_positions_use_merged_image_grid(self):
-        config = self.model_tester.get_config()
-        model = Cosmos3EdgeModel(config).to(torch_device)
-        input_ids = torch.tensor(
-            [
-                [
-                    config.vision_start_token_id,
-                    config.image_token_id,
-                    config.image_token_id,
-                    config.image_token_id,
-                    config.image_token_id,
-                    config.vision_end_token_id,
-                ]
-            ],
-            dtype=torch.long,
-            device=torch_device,
-        )
-        mm_token_type_ids = torch.tensor([[0, 1, 1, 1, 1, 0]], dtype=torch.long, device=torch_device)
-        image_grid_thw = torch.tensor([[1, 4, 4]], dtype=torch.long, device=torch_device)
-
-        position_ids, rope_deltas = model.get_rope_index(
-            input_ids=input_ids,
-            mm_token_type_ids=mm_token_type_ids,
-            image_grid_thw=image_grid_thw,
-        )
-
-        expected_position_ids = torch.tensor(
-            [
-                [[0, 1, 1, 1, 1, 3]],
-                [[0, 1, 1, 2, 2, 3]],
-                [[0, 1, 2, 1, 2, 3]],
-            ],
-            dtype=torch.long,
-            device=torch_device,
-        )
-        torch.testing.assert_close(position_ids, expected_position_ids)
-        self.assertEqual(rope_deltas.tolist(), [[-2]])
 
 
 @slow

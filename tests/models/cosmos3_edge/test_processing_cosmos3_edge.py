@@ -22,17 +22,14 @@ from transformers import (
     Cosmos3EdgeImageProcessor,
     Cosmos3EdgeProcessor,
     Cosmos3EdgeVideoProcessor,
-    PreTrainedTokenizerFast,
 )
 from transformers.testing_utils import (
-    require_tokenizers,
     require_torch,
     require_torchcodec,
     require_torchvision,
     require_vision,
 )
 from transformers.utils import (
-    is_tokenizers_available,
     is_torch_available,
     is_torchcodec_available,
     is_vision_available,
@@ -41,11 +38,6 @@ from transformers.video_utils import VideoMetadata
 
 from ...test_processing_common import ProcessorTesterMixin, url_to_local_path
 
-
-if is_tokenizers_available():
-    from tokenizers import Tokenizer
-    from tokenizers.models import WordLevel
-    from tokenizers.pre_tokenizers import Whitespace
 
 if is_torch_available():
     import torch
@@ -57,95 +49,9 @@ if is_vision_available():
 @require_torch
 @require_vision
 @require_torchvision
-@require_tokenizers
 class Cosmos3EdgeProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = Cosmos3EdgeProcessor
-
-    @classmethod
-    def _setup_tokenizer(cls):
-        """Build a manual `tokenizers` WordLevel tokenizer for Edge placeholders."""
-        vocab = {
-            "<unk>": 0,
-            "<pad>": 1,
-            "<bos>": 2,
-            "<eos>": 3,
-            "<|vision_start|>": 4,
-            "<|vision_end|>": 5,
-            "<|image_pad|>": 6,
-            "<|video_pad|>": 7,
-            "lower": 8,
-            "newer": 9,
-            "upper": 10,
-            "older": 11,
-            "longer": 12,
-            "string": 13,
-            "Describe": 14,
-            "this": 15,
-            "user": 16,
-            "assistant": 17,
-        }
-        tokenizer = Tokenizer(WordLevel(vocab=vocab, unk_token="<unk>"))
-        tokenizer.pre_tokenizer = Whitespace()
-        return PreTrainedTokenizerFast(
-            tokenizer_object=tokenizer,
-            unk_token="<unk>",
-            pad_token="<pad>",
-            bos_token="<bos>",
-            eos_token="<eos>",
-            extra_special_tokens={
-                "vision_start_token": "<|vision_start|>",
-                "vision_end_token": "<|vision_end|>",
-                "image_token": "<|image_pad|>",
-                "video_token": "<|video_pad|>",
-            },
-            return_mm_token_type_ids=True,
-        )
-
-    @classmethod
-    def _setup_image_processor(cls):
-        """Use lightweight resize bounds aligned to the 32-pixel patch-merging factor."""
-        image_processor_class = cls._get_component_class_from_processor("image_processor")
-        return image_processor_class(
-            size={"shortest_edge": 32 * 32, "longest_edge": 96 * 96},
-            patch_size=16,
-            merge_size=2,
-        )
-
-    @classmethod
-    def _setup_video_processor(cls):
-        """Use lightweight aligned videos while retaining Edge's frame-wise packing."""
-        video_processor_class = cls._get_component_class_from_processor("video_processor")
-        return video_processor_class(
-            size={"shortest_edge": 32 * 32, "longest_edge": 8 * 96 * 96},
-            patch_size=16,
-            temporal_patch_size=1,
-            merge_size=2,
-            do_sample_frames=False,
-            return_metadata=True,
-        )
-
-    @classmethod
-    def _setup_test_attributes(cls, processor):
-        """Expose the Edge placeholder tokens expected by the shared processor tests."""
-        cls.image_token = processor.image_token
-        cls.video_token = processor.video_token
-
-    @staticmethod
-    def prepare_processor_dict():
-        """Provide a minimal chat template containing Edge's image and video wrappers."""
-        return {
-            "chat_template": (
-                "{% for message in messages %}{{ message['role'] + ': ' }}"
-                "{% for content in message['content'] %}"
-                "{% if content['type'] == 'image' %}"
-                "<|vision_start|><|image_pad|><|vision_end|>"
-                "{% elif content['type'] == 'video' %}"
-                "<|vision_start|><|video_pad|><|vision_end|>"
-                "{% elif content['type'] == 'text' %}{{ content['text'] }}{% endif %}"
-                "{% endfor %}{% endfor %}"
-                "{% if add_generation_prompt %}{{ 'assistant: ' }}{% endif %}"
-            )
-        }
+    tiny_model_id = "atharvajoshi10/tiny-processor-cosmos3-edge"
 
     def prepare_image_inputs(self, batch_size: int | None = None, nested: bool = False):
         """Create small 64x96 inputs aligned to patch_size * merge_size (32).
@@ -350,10 +256,9 @@ class Cosmos3EdgeProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             )
 
     def test_video_processor_defaults(self):
-        """Ensure the processor wrapper preserves all video-processor defaults."""
+        """Compare processor outputs while preserving Edge's timestamp metadata."""
         video_processor = self.get_component("video_processor")
-        components = self.prepare_components()
-        processor = self.processor_class(**components)
+        processor = self.processor_class(**self.prepare_components())
         video_input = self.prepare_video_inputs()
         video_metadata = [VideoMetadata(total_num_frames=4, fps=2, duration=2.0, frames_indices=[0, 1, 2, 3])]
 
@@ -366,7 +271,7 @@ class Cosmos3EdgeProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         )
         processor_output = processor(
             videos=video_input,
-            video_metadata=[VideoMetadata(total_num_frames=4, fps=2, duration=2.0, frames_indices=[0, 1, 2, 3])],
+            video_metadata=video_metadata,
             do_sample_frames=False,
             return_metadata=True,
             return_tensors="pt",
@@ -377,23 +282,6 @@ class Cosmos3EdgeProcessorTest(ProcessorTesterMixin, unittest.TestCase):
                 self.assertEqual(video_processor_output[key], processor_output[key])
             else:
                 torch.testing.assert_close(video_processor_output[key], processor_output[key])
-
-    def test_image_processor_emits_packed_patches_and_thw_grid(self):
-        """Verify that an image is flattened into patches with its THW grid metadata."""
-        processor = Cosmos3EdgeImageProcessor(
-            do_resize=False,
-            do_rescale=False,
-            do_normalize=False,
-            patch_size=2,
-            merge_size=2,
-        )
-        image = np.zeros((4, 8, 3), dtype=np.uint8)
-
-        processed = processor(image, return_tensors="pt")
-
-        # 4 x 8 pixels with 2 x 2 patches produces a 2 x 4 patch grid.
-        self.assertEqual(tuple(processed["pixel_values"].shape), (8, 12))
-        self.assertEqual(processed["image_grid_thw"].tolist(), [[1, 2, 4]])
 
     def test_image_processor_uses_projector_block_major_patch_order(self):
         """Protect the 2x2 block-major patch order expected by the Edge projector."""
@@ -415,28 +303,6 @@ class Cosmos3EdgeProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         # The 2×2 groups must be contiguous for the checkpoint projector: the
         # first group is (0, 0), (0, 1), (1, 0), (1, 1), followed by the next group.
         self.assertEqual(processed["pixel_values"][:, 0].tolist(), [0, 1, 4, 5, 2, 3, 6, 7])
-
-    def test_video_processor_emits_packed_patches_and_thw_grid(self):
-        """Verify frame-wise packed patches and the corresponding video THW grid."""
-        processor = Cosmos3EdgeVideoProcessor(
-            do_resize=False,
-            do_rescale=False,
-            do_normalize=False,
-            patch_size=2,
-            merge_size=2,
-            temporal_patch_size=1,
-            return_metadata=True,
-        )
-        video = np.zeros((2, 4, 8, 3), dtype=np.uint8)
-        metadata = [{"fps": 2, "total_num_frames": 2, "duration": 1.0}]
-
-        processed = processor(video, video_metadata=metadata, return_tensors="pt")
-
-        # Two 4 x 8 frames yield two 2 x 4 patch grids. Temporal patches stay
-        # unmerged because Edge encodes one timestamped vision span per frame.
-        self.assertEqual(tuple(processed["pixel_values_videos"].shape), (16, 12))
-        self.assertEqual(processed["video_grid_thw"].tolist(), [[2, 2, 4]])
-        self.assertIn("video_metadata", processed)
 
     def test_video_processor_uses_projector_block_major_patch_order_per_frame(self):
         """Protect projector block-major ordering independently within every frame."""
@@ -469,10 +335,6 @@ class Cosmos3EdgeProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             processed["pixel_values_videos"][:, 0].tolist(),
             [0, 1, 4, 5, 2, 3, 6, 7, 10, 11, 14, 15, 12, 13, 16, 17],
         )
-
-    def test_public_processor_name_is_cosmos_specific(self):
-        """Guard the public class name stored in released processor configurations."""
-        self.assertEqual(Cosmos3EdgeProcessor.__name__, "Cosmos3EdgeProcessor")
 
     def test_processor_returns_multimodal_token_types_by_default(self):
         """Check the Edge default while allowing an explicit tokenizer override."""

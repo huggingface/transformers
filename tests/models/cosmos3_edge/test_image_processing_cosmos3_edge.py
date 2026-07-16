@@ -170,28 +170,3 @@ class Cosmos3EdgeImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase
     @unittest.skip(reason="Cosmos3EdgeImageProcessor converts inputs to RGB")
     def test_call_numpy_4_channels(self):
         pass
-
-    def test_per_image_resize_overrides_are_preserved_across_backends(self):
-        """Ensure each sample retains its own pixel budget before batch packing."""
-        images = [np.zeros((8, 8, 3), dtype=np.uint8), np.zeros((8, 8, 3), dtype=np.uint8)]
-        processor_kwargs = {
-            "do_rescale": False,
-            "do_normalize": False,
-            "patch_size": 2,
-            "merge_size": 2,
-            "size": {"shortest_edge": 64, "longest_edge": 256},
-        }
-
-        for image_processing_class in self.image_processing_classes.values():
-            with self.subTest(backend=image_processing_class.__name__):
-                output = image_processing_class(**processor_kwargs)(
-                    images,
-                    per_image_kwargs=[
-                        {"min_pixels": 64, "max_pixels": 64},
-                        {"min_pixels": 256, "max_pixels": 256},
-                    ],
-                    return_tensors="pt",
-                )
-
-                self.assertEqual(output.image_grid_thw.tolist(), [[1, 4, 4], [1, 8, 8]])
-                self.assertEqual(tuple(output.pixel_values.shape), (80, 12))

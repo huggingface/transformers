@@ -32,12 +32,7 @@ from ...generation import GenerationMixin
 from ...integrations import use_kernel_forward_from_hub, use_kernel_func_from_hub, use_kernelized_func
 from ...masking_utils import create_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import (
-    BaseModelOutput,
-    BaseModelOutputWithPast,
-    BaseModelOutputWithPooling,
-    CausalLMOutputWithPast,
-)
+from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, CausalLMOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
@@ -55,12 +50,7 @@ from ...utils.generic import (
 )
 from ...utils.output_capturing import capture_outputs
 from ...vision_utils import get_vision_cu_seqlens
-from .configuration_cosmos3_edge import (
-    Cosmos3EdgeConfig,
-    Cosmos3EdgeProjectorConfig,
-    Cosmos3EdgeTextConfig,
-    Cosmos3EdgeVisionConfig,
-)
+from .configuration_cosmos3_edge import Cosmos3EdgeConfig, Cosmos3EdgeTextConfig, Cosmos3EdgeVisionConfig
 
 
 class Cosmos3EdgeTextRotaryEmbedding(nn.Module):
@@ -458,7 +448,9 @@ class Cosmos3EdgeVisionAttention(nn.Module):
         self.out_proj = nn.Linear(self.embed_dim, self.embed_dim)
         self.num_key_value_groups = 1
 
-    def forward(self, hidden_states: torch.Tensor, cu_seqlens: torch.Tensor, **kwargs) -> torch.Tensor:
+    def forward(
+        self, hidden_states: torch.Tensor, cu_seqlens: torch.Tensor, **kwargs
+    ) -> tuple[torch.Tensor, torch.Tensor | None]:
         """Input shape: Batch x Time x Channel"""
         sequence_length = hidden_states.shape[0]
         query_states = self.q_proj(hidden_states).reshape(sequence_length, -1, self.head_dim)
@@ -475,7 +467,7 @@ class Cosmos3EdgeVisionAttention(nn.Module):
 
         if is_flash_attention_requested(self.config):
             max_sequence_length = (cu_seqlens[1:] - cu_seqlens[:-1]).max()
-            attn_output, _ = attention_interface(
+            attn_output, attn_weights = attention_interface(
                 self,
                 query_states,
                 key_states,
@@ -492,28 +484,38 @@ class Cosmos3EdgeVisionAttention(nn.Module):
             )
         else:
             lengths = cu_seqlens[1:] - cu_seqlens[:-1]
-            splits = [
-                torch.split(tensor, lengths.tolist(), dim=2) for tensor in (query_states, key_states, value_states)
+            split_lengths = lengths.tolist()
+            splits = [torch.split(tensor, split_lengths, dim=2) for tensor in (query_states, key_states, value_states)]
+            attention_outputs = [
+                attention_interface(
+                    self,
+                    query,
+                    key,
+                    value,
+                    attention_mask=None,
+                    scaling=self.scale,
+                    dropout=0.0 if not self.training else self.dropout,
+                    is_causal=False,
+                    **kwargs,
+                )
+                for query, key, value in zip(*splits)
             ]
-            attn_output = torch.cat(
-                [
-                    attention_interface(
-                        self,
-                        query,
-                        key,
-                        value,
-                        attention_mask=None,
-                        scaling=self.scale,
-                        dropout=0.0 if not self.training else self.dropout,
-                        is_causal=False,
-                        **kwargs,
-                    )[0]
-                    for query, key, value in zip(*splits)
-                ],
-                dim=1,
-            )
+            attn_output = torch.cat([output for output, _ in attention_outputs], dim=1)
 
-        return self.out_proj(attn_output.reshape(sequence_length, -1).contiguous())
+            attention_weights = [weights for _, weights in attention_outputs]
+            if all(weights is not None for weights in attention_weights):
+                padded_weights = []
+                offset = 0
+                for weights, length in zip(attention_weights, split_lengths):
+                    trailing_padding = sequence_length - offset - length
+                    padded_weights.append(F.pad(weights, (offset, trailing_padding, offset, trailing_padding)))
+                    offset += length
+                attn_weights = torch.stack(padded_weights).sum(dim=0)
+            else:
+                attn_weights = None
+
+        attn_output = self.out_proj(attn_output.reshape(sequence_length, -1).contiguous())
+        return attn_output, attn_weights
 
 
 class Cosmos3EdgeMLP(nn.Module):
@@ -549,7 +551,7 @@ class Cosmos3EdgeVisionEncoderLayer(GradientCheckpointingLayer):
         residual = hidden_states
 
         hidden_states = self.layer_norm1(hidden_states)
-        hidden_states = self.self_attn(
+        hidden_states, _ = self.self_attn(
             hidden_states=hidden_states,
             cu_seqlens=cu_seqlens,
             **kwargs,
@@ -581,7 +583,7 @@ class Cosmos3EdgeEncoder(nn.Module):
 
     # Ignore copy
     @auto_docstring
-    def forward(self, inputs_embeds: torch.Tensor, grid_thw: torch.LongTensor, **kwargs) -> BaseModelOutput:
+    def forward(self, inputs_embeds: torch.Tensor, grid_thw: torch.LongTensor, **kwargs) -> torch.Tensor:
         r"""
         grid_thw (`torch.LongTensor` of shape `(num_images_or_videos, 3)`):
             The temporal, height, and width patch-grid dimensions for every packed image or video.
@@ -595,7 +597,7 @@ class Cosmos3EdgeEncoder(nn.Module):
                 **kwargs,
             )
 
-        return BaseModelOutput(last_hidden_state=hidden_states)
+        return hidden_states
 
 
 class VisionRotaryEmbedding(nn.Module):
@@ -641,7 +643,7 @@ class Cosmos3EdgePreTrainedModel(PreTrainedModel):
     config_class = Cosmos3EdgeConfig
     _can_record_outputs = {
         "hidden_states": [Cosmos3EdgeTextDecoderLayer, Cosmos3EdgeVisionEncoderLayer],
-        "attentions": "self_attn",
+        "attentions": [Cosmos3EdgeTextAttention, Cosmos3EdgeVisionAttention],
     }
     _keys_to_ignore_on_load_unexpected = _COSMOS3_EDGE_DROPPED_GENERATOR_KEYS
 
@@ -756,22 +758,22 @@ class Cosmos3EdgeVisionModel(Cosmos3EdgePreTrainedModel):
             The temporal, height, and width patch-grid dimensions for each packed image or video.
         """
         hidden_states = self.embeddings(pixel_values, grid_thw)
-        encoder_outputs = self.encoder(hidden_states, grid_thw=grid_thw, **kwargs)
-        last_hidden_state = self.post_layernorm(encoder_outputs.last_hidden_state)
+        hidden_states = self.encoder(hidden_states, grid_thw=grid_thw, **kwargs)
+        last_hidden_state = self.post_layernorm(hidden_states)
         return BaseModelOutputWithPooling(last_hidden_state=last_hidden_state)
 
 
 class Cosmos3EdgePatchMerger(nn.Module):
-    def __init__(self, config: Cosmos3EdgeProjectorConfig, use_postshuffle_norm: bool = False) -> None:
+    def __init__(self, config: Cosmos3EdgeConfig) -> None:
         super().__init__()
-        self.hidden_size = config.hidden_size * (config.spatial_merge_size**2)
-        self.use_postshuffle_norm = use_postshuffle_norm
-        self.norm = nn.LayerNorm(self.hidden_size if use_postshuffle_norm else config.hidden_size, eps=1e-6)
-        self.linear_fc1 = nn.Linear(self.hidden_size, config.merger_intermediate_size)
+        self.spatial_merge_size = config.vision_config.spatial_merge_size
+        self.input_hidden_size = config.vision_config.hidden_size
+        self.hidden_size = self.input_hidden_size * self.spatial_merge_size**2
+        self.use_postshuffle_norm = False
+        self.norm = nn.LayerNorm(self.input_hidden_size, eps=1e-6)
+        self.linear_fc1 = nn.Linear(self.hidden_size, config.projector_hidden_size)
         self.act_fn = nn.GELU()
-        self.linear_fc2 = nn.Linear(config.merger_intermediate_size, config.out_hidden_size)
-        self.spatial_merge_size = config.spatial_merge_size
-        self.input_hidden_size = config.input_hidden_size
+        self.linear_fc2 = nn.Linear(config.projector_hidden_size, config.text_config.hidden_size)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         x = x.reshape(-1, self.spatial_merge_size**2, self.input_hidden_size)
@@ -791,9 +793,7 @@ class Cosmos3EdgeModel(Cosmos3EdgePreTrainedModel):
         # multimodal API, but its checkpoint has distinct packed vision and Llama-derived text components.
         super().__init__(config)
         self.visual = Cosmos3EdgeVisionModel._from_config(config.vision_config)
-        self.projector = Cosmos3EdgePatchMerger(
-            config.projector_config, use_postshuffle_norm=config.projector_config.use_postshuffle_norm
-        )
+        self.projector = Cosmos3EdgePatchMerger(config)
         self.language_model = Cosmos3EdgeTextModel._from_config(config.text_config)
         self.rope_deltas = None
         self.post_init()
@@ -1437,7 +1437,8 @@ class Cosmos3EdgeForConditionalGeneration(Cosmos3EdgePreTrainedModel, Generation
         **model_kwargs,
     ) -> tuple[torch.LongTensor, dict[str, Any]]:
         # Video placeholders are emitted once per frame, while `video_grid_thw` has one row per source video.
-        # Convert frame-span counts back to source-video counts before repeating packed visual tensors for beams.
+        # `_get_image_nums_and_video_nums` cannot do this conversion because it does not receive `video_grid_thw`,
+        # so convert frame-span counts back to source-video counts here before repeating packed tensors for beams.
         if expand_size == 1:
             return input_ids, model_kwargs
 

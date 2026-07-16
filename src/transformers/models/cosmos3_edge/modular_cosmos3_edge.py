@@ -31,13 +31,12 @@ from ...image_processing_utils import BatchFeature
 from ...image_utils import ChannelDimension, ImageInput, PILImageResampling, SizeDict, get_image_size
 from ...masking_utils import create_causal_mask
 from ...modeling_outputs import (
-    BaseModelOutput,
     BaseModelOutputWithPast,
     BaseModelOutputWithPooling,
     CausalLMOutputWithPast,
 )
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
-from ...processing_utils import ImagesKwargs, MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack, VideosKwargs
+from ...processing_utils import ImagesKwargs, MultiModalData, ProcessingKwargs, Unpack, VideosKwargs
 from ...utils import (
     TensorType,
     add_start_docstrings,
@@ -170,34 +169,10 @@ class Cosmos3EdgeVisionConfig(Siglip2VisionConfig):
 
 @auto_docstring(checkpoint="nvidia/Cosmos3-Edge-Reasoner")
 @strict
-class Cosmos3EdgeProjectorConfig(PreTrainedConfig):
-    r"""
-    input_hidden_size (`int`, *optional*, defaults to 1152):
-        Hidden size produced by the vision encoder before spatial merging.
-    merger_intermediate_size (`int`, *optional*, defaults to 11520):
-        Intermediate size of the projector MLP.
-    out_hidden_size (`int`, *optional*, defaults to 2048):
-        Hidden size projected into the language model.
-    use_postshuffle_norm (`bool`, *optional*, defaults to `False`):
-        Whether to apply layer normalization after spatial patches are grouped.
-    """
-
-    model_type = "cosmos3_edge_projector"
-    attribute_map = {"hidden_size": "input_hidden_size"}
-
-    input_hidden_size: int = 1152
-    merger_intermediate_size: int = 11520
-    out_hidden_size: int = 2048
-    spatial_merge_size: int = 2
-    use_postshuffle_norm: bool = False
-
-
-@auto_docstring(checkpoint="nvidia/Cosmos3-Edge-Reasoner")
-@strict
 class Cosmos3EdgeConfig(PreTrainedConfig):
     r"""
-    projector_config (`dict` or [`Cosmos3EdgeProjectorConfig`], *optional*):
-        Configuration of the vision-to-language patch merger.
+    projector_hidden_size (`int`, *optional*, defaults to 11520):
+        Intermediate hidden size of the vision-to-language projector MLP.
 
     Example:
 
@@ -213,13 +188,12 @@ class Cosmos3EdgeConfig(PreTrainedConfig):
     sub_configs = {
         "text_config": Cosmos3EdgeTextConfig,
         "vision_config": Cosmos3EdgeVisionConfig,
-        "projector_config": Cosmos3EdgeProjectorConfig,
     }
     keys_to_ignore_at_inference = ["past_key_values"]
 
     text_config: Cosmos3EdgeTextConfig | dict | None = None
     vision_config: Cosmos3EdgeVisionConfig | dict | None = None
-    projector_config: Cosmos3EdgeProjectorConfig | dict | None = None
+    projector_hidden_size: int = 11520
     image_token_id: int = 19
     video_token_id: int = 18
     vision_start_token_id: int = 20
@@ -237,15 +211,6 @@ class Cosmos3EdgeConfig(PreTrainedConfig):
         elif isinstance(self.vision_config, dict):
             self.vision_config = Cosmos3EdgeVisionConfig(**self.vision_config)
 
-        if self.projector_config is None:
-            self.projector_config = Cosmos3EdgeProjectorConfig(
-                input_hidden_size=self.vision_config.hidden_size,
-                out_hidden_size=self.text_config.hidden_size,
-                spatial_merge_size=self.vision_config.spatial_merge_size,
-            )
-        elif isinstance(self.projector_config, dict):
-            self.projector_config = Cosmos3EdgeProjectorConfig(**self.projector_config)
-
         super().__post_init__(**kwargs)
 
     def validate_architecture(self):
@@ -254,8 +219,6 @@ class Cosmos3EdgeConfig(PreTrainedConfig):
             raise TypeError("`text_config` must be a `Cosmos3EdgeTextConfig` or a dictionary.")
         if not isinstance(self.vision_config, Cosmos3EdgeVisionConfig):
             raise TypeError("`vision_config` must be a `Cosmos3EdgeVisionConfig` or a dictionary.")
-        if not isinstance(self.projector_config, Cosmos3EdgeProjectorConfig):
-            raise TypeError("`projector_config` must be a `Cosmos3EdgeProjectorConfig` or a dictionary.")
 
 
 class Cosmos3EdgeTextRotaryEmbedding(LlamaRotaryEmbedding):
@@ -418,7 +381,9 @@ class Cosmos3EdgeVisionAttention(Siglip2Attention):
         super().__init__(config)
         self.num_key_value_groups = 1
 
-    def forward(self, hidden_states: torch.Tensor, cu_seqlens: torch.Tensor, **kwargs) -> torch.Tensor:
+    def forward(
+        self, hidden_states: torch.Tensor, cu_seqlens: torch.Tensor, **kwargs
+    ) -> tuple[torch.Tensor, torch.Tensor | None]:
         sequence_length = hidden_states.shape[0]
         query_states = self.q_proj(hidden_states).reshape(sequence_length, -1, self.head_dim)
         key_states = self.k_proj(hidden_states).reshape(sequence_length, -1, self.head_dim)
@@ -434,7 +399,7 @@ class Cosmos3EdgeVisionAttention(Siglip2Attention):
 
         if is_flash_attention_requested(self.config):
             max_sequence_length = (cu_seqlens[1:] - cu_seqlens[:-1]).max()
-            attn_output, _ = attention_interface(
+            attn_output, attn_weights = attention_interface(
                 self,
                 query_states,
                 key_states,
@@ -451,28 +416,38 @@ class Cosmos3EdgeVisionAttention(Siglip2Attention):
             )
         else:
             lengths = cu_seqlens[1:] - cu_seqlens[:-1]
-            splits = [
-                torch.split(tensor, lengths.tolist(), dim=2) for tensor in (query_states, key_states, value_states)
+            split_lengths = lengths.tolist()
+            splits = [torch.split(tensor, split_lengths, dim=2) for tensor in (query_states, key_states, value_states)]
+            attention_outputs = [
+                attention_interface(
+                    self,
+                    query,
+                    key,
+                    value,
+                    attention_mask=None,
+                    scaling=self.scale,
+                    dropout=0.0 if not self.training else self.dropout,
+                    is_causal=False,
+                    **kwargs,
+                )
+                for query, key, value in zip(*splits)
             ]
-            attn_output = torch.cat(
-                [
-                    attention_interface(
-                        self,
-                        query,
-                        key,
-                        value,
-                        attention_mask=None,
-                        scaling=self.scale,
-                        dropout=0.0 if not self.training else self.dropout,
-                        is_causal=False,
-                        **kwargs,
-                    )[0]
-                    for query, key, value in zip(*splits)
-                ],
-                dim=1,
-            )
+            attn_output = torch.cat([output for output, _ in attention_outputs], dim=1)
 
-        return self.out_proj(attn_output.reshape(sequence_length, -1).contiguous())
+            attention_weights = [weights for _, weights in attention_outputs]
+            if all(weights is not None for weights in attention_weights):
+                padded_weights = []
+                offset = 0
+                for weights, length in zip(attention_weights, split_lengths):
+                    trailing_padding = sequence_length - offset - length
+                    padded_weights.append(F.pad(weights, (offset, trailing_padding, offset, trailing_padding)))
+                    offset += length
+                attn_weights = torch.stack(padded_weights).sum(dim=0)
+            else:
+                attn_weights = None
+
+        attn_output = self.out_proj(attn_output.reshape(sequence_length, -1).contiguous())
+        return attn_output, attn_weights
 
 
 class Cosmos3EdgeVisionEncoderLayer(Siglip2EncoderLayer):
@@ -488,7 +463,7 @@ class Cosmos3EdgeVisionEncoderLayer(Siglip2EncoderLayer):
         residual = hidden_states
 
         hidden_states = self.layer_norm1(hidden_states)
-        hidden_states = self.self_attn(
+        hidden_states, _ = self.self_attn(
             hidden_states=hidden_states,
             cu_seqlens=cu_seqlens,
             **kwargs,
@@ -508,7 +483,7 @@ class Cosmos3EdgeEncoder(Siglip2Encoder):
         super().__init__(config)
         self.layers = nn.ModuleList([Cosmos3EdgeVisionEncoderLayer(config) for _ in range(config.num_hidden_layers)])
 
-    def forward(self, inputs_embeds: torch.Tensor, grid_thw: torch.LongTensor, **kwargs) -> BaseModelOutput:
+    def forward(self, inputs_embeds: torch.Tensor, grid_thw: torch.LongTensor, **kwargs) -> torch.Tensor:
         r"""
         grid_thw (`torch.LongTensor` of shape `(num_images_or_videos, 3)`):
             The temporal, height, and width patch-grid dimensions for every packed image or video.
@@ -522,7 +497,7 @@ class Cosmos3EdgeEncoder(Siglip2Encoder):
                 **kwargs,
             )
 
-        return BaseModelOutput(last_hidden_state=hidden_states)
+        return hidden_states
 
 
 class Cosmos3EdgePreTrainedModel(Qwen2VLPreTrainedModel):
@@ -533,7 +508,7 @@ class Cosmos3EdgePreTrainedModel(Qwen2VLPreTrainedModel):
     _no_split_modules = ["Cosmos3EdgeTextDecoderLayer", "Cosmos3EdgeVisionEncoderLayer"]
     _can_record_outputs = {
         "hidden_states": [Cosmos3EdgeTextDecoderLayer, Cosmos3EdgeVisionEncoderLayer],
-        "attentions": "self_attn",
+        "attentions": [Cosmos3EdgeTextAttention, Cosmos3EdgeVisionAttention],
     }
     _keys_to_ignore_on_load_unexpected = _COSMOS3_EDGE_DROPPED_GENERATOR_KEYS
 
@@ -633,18 +608,22 @@ class Cosmos3EdgeVisionModel(Cosmos3EdgePreTrainedModel):
             The temporal, height, and width patch-grid dimensions for each packed image or video.
         """
         hidden_states = self.embeddings(pixel_values, grid_thw)
-        encoder_outputs = self.encoder(hidden_states, grid_thw=grid_thw, **kwargs)
-        last_hidden_state = self.post_layernorm(encoder_outputs.last_hidden_state)
+        hidden_states = self.encoder(hidden_states, grid_thw=grid_thw, **kwargs)
+        last_hidden_state = self.post_layernorm(hidden_states)
         return BaseModelOutputWithPooling(last_hidden_state=last_hidden_state)
 
 
 class Cosmos3EdgePatchMerger(Qwen3_5MoeVisionPatchMerger):
-    def __init__(self, config: Cosmos3EdgeProjectorConfig, use_postshuffle_norm: bool = False):
-        super().__init__(config, use_postshuffle_norm=use_postshuffle_norm)
-        self.spatial_merge_size = config.spatial_merge_size
-        self.input_hidden_size = config.input_hidden_size
-        self.linear_fc1 = nn.Linear(self.hidden_size, config.merger_intermediate_size)
-        self.linear_fc2 = nn.Linear(config.merger_intermediate_size, config.out_hidden_size)
+    def __init__(self, config: Cosmos3EdgeConfig):
+        nn.Module.__init__(self)
+        self.spatial_merge_size = config.vision_config.spatial_merge_size
+        self.input_hidden_size = config.vision_config.hidden_size
+        self.hidden_size = self.input_hidden_size * self.spatial_merge_size**2
+        self.use_postshuffle_norm = False
+        self.norm = nn.LayerNorm(self.input_hidden_size, eps=1e-6)
+        self.linear_fc1 = nn.Linear(self.hidden_size, config.projector_hidden_size)
+        self.act_fn = nn.GELU()
+        self.linear_fc2 = nn.Linear(config.projector_hidden_size, config.text_config.hidden_size)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         x = x.reshape(-1, self.spatial_merge_size**2, self.input_hidden_size)
@@ -660,9 +639,7 @@ class Cosmos3EdgeModel(Qwen2VLModel, Cosmos3EdgePreTrainedModel):
         # multimodal API, but its checkpoint has distinct packed vision and Llama-derived text components.
         Cosmos3EdgePreTrainedModel.__init__(self, config)
         self.visual = Cosmos3EdgeVisionModel._from_config(config.vision_config)
-        self.projector = Cosmos3EdgePatchMerger(
-            config.projector_config, use_postshuffle_norm=config.projector_config.use_postshuffle_norm
-        )
+        self.projector = Cosmos3EdgePatchMerger(config)
         self.language_model = Cosmos3EdgeTextModel._from_config(config.text_config)
         self.rope_deltas = None
         self.post_init()
@@ -855,7 +832,8 @@ class Cosmos3EdgeForConditionalGeneration(Qwen2VLForConditionalGeneration, Cosmo
         **model_kwargs,
     ) -> tuple[torch.LongTensor, dict[str, Any]]:
         # Video placeholders are emitted once per frame, while `video_grid_thw` has one row per source video.
-        # Convert frame-span counts back to source-video counts before repeating packed visual tensors for beams.
+        # `_get_image_nums_and_video_nums` cannot do this conversion because it does not receive `video_grid_thw`,
+        # so convert frame-span counts back to source-video counts here before repeating packed tensors for beams.
         if expand_size == 1:
             return input_ids, model_kwargs
 
@@ -1030,13 +1008,10 @@ class Cosmos3EdgeImageProcessorKwargs(ImagesKwargs, total=False):
         Spatial patch size of the vision encoder.
     merge_size (`int`, *optional*, defaults to `2`):
         Number of adjacent patches merged along each spatial axis by the projector.
-    per_image_kwargs (`list[dict]`, *optional*):
-        Per-image overrides for `min_pixels` and `max_pixels`.
     """
 
     patch_size: int
     merge_size: int
-    per_image_kwargs: list[dict | None]
 
 
 @auto_docstring
@@ -1088,27 +1063,20 @@ class Cosmos3EdgeImageProcessor(TorchvisionBackend):
         patch_size: int,
         merge_size: int,
         return_tensors: str | TensorType | None,
-        per_image_kwargs: list[dict | None] | None = None,
         **kwargs,
     ) -> BatchFeature:
         pixel_values = []
         image_grids = []
 
-        for image_index, image in enumerate(images):
-            image_kwargs = {}
-            if per_image_kwargs is not None and image_index < len(per_image_kwargs):
-                image_kwargs = per_image_kwargs[image_index] or {}
-
+        for image in images:
             height, width = image.shape[-2:]
             if do_resize:
-                min_pixels = image_kwargs.get("min_pixels", size.shortest_edge)
-                max_pixels = image_kwargs.get("max_pixels", size.longest_edge)
                 resized_height, resized_width = smart_resize(
                     height,
                     width,
                     factor=patch_size * merge_size,
-                    min_pixels=min_pixels,
-                    max_pixels=max_pixels,
+                    min_pixels=size.shortest_edge,
+                    max_pixels=size.longest_edge,
                 )
                 image = self.resize(
                     image=image,
@@ -1178,8 +1146,6 @@ class Cosmos3EdgeImageProcessorPil(PilBackend):
         Spatial patch size of the vision encoder.
     merge_size (`int`, *optional*, defaults to `2`):
         Number of adjacent patches merged along each spatial axis by the projector.
-    per_image_kwargs (`list[dict]`, *optional*):
-        Per-image overrides for `min_pixels` and `max_pixels`.
     """
 
     do_resize = True
@@ -1226,27 +1192,20 @@ class Cosmos3EdgeImageProcessorPil(PilBackend):
         patch_size: int,
         merge_size: int,
         return_tensors: str | TensorType | None,
-        per_image_kwargs: list[dict | None] | None = None,
         **kwargs,
     ) -> BatchFeature:
         pixel_values = []
         image_grids = []
 
-        for image_index, image in enumerate(images):
-            image_kwargs = {}
-            if per_image_kwargs is not None and image_index < len(per_image_kwargs):
-                image_kwargs = per_image_kwargs[image_index] or {}
-
+        for image in images:
             height, width = image.shape[-2:]
             if do_resize:
-                min_pixels = image_kwargs.get("min_pixels", size.shortest_edge)
-                max_pixels = image_kwargs.get("max_pixels", size.longest_edge)
                 resized_height, resized_width = smart_resize(
                     height,
                     width,
                     factor=patch_size * merge_size,
-                    min_pixels=min_pixels,
-                    max_pixels=max_pixels,
+                    min_pixels=size.shortest_edge,
+                    max_pixels=size.longest_edge,
                 )
                 image = self.resize(
                     image=image,
@@ -1679,32 +1638,6 @@ class Cosmos3EdgeProcessor(Qwen3VLProcessor):
             batch_replacement_offsets.append(replacement_offsets)
         return text, batch_replacement_offsets
 
-    def apply_chat_template(self, conversation, *args, processor_kwargs=None, **kwargs):
-        """Route per-image pixel limits in chat content blocks to the image processor."""
-        is_batched = bool(conversation) and isinstance(conversation[0], (list, tuple))
-        conversations = conversation if is_batched else [conversation]
-        per_image_kwargs = []
-        for current_conversation in conversations:
-            for message in current_conversation:
-                content = message.get("content") if isinstance(message, dict) else None
-                if not isinstance(content, list):
-                    continue
-                for item in content:
-                    if not isinstance(item, dict) or item.get("type") not in {"image", "image_url"}:
-                        continue
-                    overrides = {key: item[key] for key in ("min_pixels", "max_pixels") if key in item}
-                    per_image_kwargs.append(overrides or None)
-
-        if any(overrides is not None for overrides in per_image_kwargs):
-            processor_kwargs = dict(processor_kwargs or {})
-            images_kwargs = dict(processor_kwargs.get("images_kwargs", {}))
-            images_kwargs.setdefault("per_image_kwargs", per_image_kwargs)
-            processor_kwargs["images_kwargs"] = images_kwargs
-
-        return ProcessorMixin.apply_chat_template(
-            self, conversation, *args, processor_kwargs=processor_kwargs, **kwargs
-        )
-
     def _get_num_multimodal_tokens(self, image_sizes=None, video_sizes=None, **kwargs):
         """Compute placeholder counts for serving frameworks without materializing pixels."""
         vision_data = {}
@@ -1739,7 +1672,6 @@ __all__ = [
     "Cosmos3EdgeConfig",
     "Cosmos3EdgeTextConfig",
     "Cosmos3EdgeVisionConfig",
-    "Cosmos3EdgeProjectorConfig",
     "Cosmos3EdgeModel",
     "Cosmos3EdgeTextModel",
     "Cosmos3EdgeVisionModel",

@@ -38,13 +38,10 @@ class Cosmos3EdgeImageProcessorKwargs(ImagesKwargs, total=False):
         Spatial patch size of the vision encoder.
     merge_size (`int`, *optional*, defaults to `2`):
         Number of adjacent patches merged along each spatial axis by the projector.
-    per_image_kwargs (`list[dict]`, *optional*):
-        Per-image overrides for `min_pixels` and `max_pixels`.
     """
 
     patch_size: int
     merge_size: int
-    per_image_kwargs: list[dict | None]
 
 
 def smart_resize(
@@ -84,8 +81,6 @@ class Cosmos3EdgeImageProcessorPil(PilBackend):
         Spatial patch size of the vision encoder.
     merge_size (`int`, *optional*, defaults to `2`):
         Number of adjacent patches merged along each spatial axis by the projector.
-    per_image_kwargs (`list[dict]`, *optional*):
-        Per-image overrides for `min_pixels` and `max_pixels`.
     """
 
     do_resize = True
@@ -132,27 +127,20 @@ class Cosmos3EdgeImageProcessorPil(PilBackend):
         patch_size: int,
         merge_size: int,
         return_tensors: str | TensorType | None,
-        per_image_kwargs: list[dict | None] | None = None,
         **kwargs,
     ) -> BatchFeature:
         pixel_values = []
         image_grids = []
 
-        for image_index, image in enumerate(images):
-            image_kwargs = {}
-            if per_image_kwargs is not None and image_index < len(per_image_kwargs):
-                image_kwargs = per_image_kwargs[image_index] or {}
-
+        for image in images:
             height, width = image.shape[-2:]
             if do_resize:
-                min_pixels = image_kwargs.get("min_pixels", size.shortest_edge)
-                max_pixels = image_kwargs.get("max_pixels", size.longest_edge)
                 resized_height, resized_width = smart_resize(
                     height,
                     width,
                     factor=patch_size * merge_size,
-                    min_pixels=min_pixels,
-                    max_pixels=max_pixels,
+                    min_pixels=size.shortest_edge,
+                    max_pixels=size.longest_edge,
                 )
                 image = self.resize(
                     image=image,

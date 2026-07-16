@@ -139,34 +139,10 @@ class Cosmos3EdgeVisionConfig(PreTrainedConfig):
 
 @auto_docstring(checkpoint="nvidia/Cosmos3-Edge-Reasoner")
 @strict
-class Cosmos3EdgeProjectorConfig(PreTrainedConfig):
-    r"""
-    input_hidden_size (`int`, *optional*, defaults to 1152):
-        Hidden size produced by the vision encoder before spatial merging.
-    merger_intermediate_size (`int`, *optional*, defaults to 11520):
-        Intermediate size of the projector MLP.
-    out_hidden_size (`int`, *optional*, defaults to 2048):
-        Hidden size projected into the language model.
-    use_postshuffle_norm (`bool`, *optional*, defaults to `False`):
-        Whether to apply layer normalization after spatial patches are grouped.
-    """
-
-    model_type = "cosmos3_edge_projector"
-    attribute_map = {"hidden_size": "input_hidden_size"}
-
-    input_hidden_size: int = 1152
-    merger_intermediate_size: int = 11520
-    out_hidden_size: int = 2048
-    spatial_merge_size: int = 2
-    use_postshuffle_norm: bool = False
-
-
-@auto_docstring(checkpoint="nvidia/Cosmos3-Edge-Reasoner")
-@strict
 class Cosmos3EdgeConfig(PreTrainedConfig):
     r"""
-    projector_config (`dict` or [`Cosmos3EdgeProjectorConfig`], *optional*):
-        Configuration of the vision-to-language patch merger.
+    projector_hidden_size (`int`, *optional*, defaults to 11520):
+        Intermediate hidden size of the vision-to-language projector MLP.
 
     Example:
 
@@ -182,13 +158,12 @@ class Cosmos3EdgeConfig(PreTrainedConfig):
     sub_configs = {
         "text_config": Cosmos3EdgeTextConfig,
         "vision_config": Cosmos3EdgeVisionConfig,
-        "projector_config": Cosmos3EdgeProjectorConfig,
     }
     keys_to_ignore_at_inference = ["past_key_values"]
 
     text_config: Cosmos3EdgeTextConfig | dict | None = None
     vision_config: Cosmos3EdgeVisionConfig | dict | None = None
-    projector_config: Cosmos3EdgeProjectorConfig | dict | None = None
+    projector_hidden_size: int = 11520
     image_token_id: int = 19
     video_token_id: int = 18
     vision_start_token_id: int = 20
@@ -206,15 +181,6 @@ class Cosmos3EdgeConfig(PreTrainedConfig):
         elif isinstance(self.vision_config, dict):
             self.vision_config = Cosmos3EdgeVisionConfig(**self.vision_config)
 
-        if self.projector_config is None:
-            self.projector_config = Cosmos3EdgeProjectorConfig(
-                input_hidden_size=self.vision_config.hidden_size,
-                out_hidden_size=self.text_config.hidden_size,
-                spatial_merge_size=self.vision_config.spatial_merge_size,
-            )
-        elif isinstance(self.projector_config, dict):
-            self.projector_config = Cosmos3EdgeProjectorConfig(**self.projector_config)
-
         super().__post_init__(**kwargs)
 
     def validate_architecture(self):
@@ -223,8 +189,6 @@ class Cosmos3EdgeConfig(PreTrainedConfig):
             raise TypeError("`text_config` must be a `Cosmos3EdgeTextConfig` or a dictionary.")
         if not isinstance(self.vision_config, Cosmos3EdgeVisionConfig):
             raise TypeError("`vision_config` must be a `Cosmos3EdgeVisionConfig` or a dictionary.")
-        if not isinstance(self.projector_config, Cosmos3EdgeProjectorConfig):
-            raise TypeError("`projector_config` must be a `Cosmos3EdgeProjectorConfig` or a dictionary.")
 
 
-__all__ = ["Cosmos3EdgeConfig", "Cosmos3EdgeTextConfig", "Cosmos3EdgeVisionConfig", "Cosmos3EdgeProjectorConfig"]
+__all__ = ["Cosmos3EdgeConfig", "Cosmos3EdgeTextConfig", "Cosmos3EdgeVisionConfig"]

@@ -228,29 +228,5 @@ class Cosmos3EdgeProcessor(ProcessorMixin):
             batch_replacement_offsets.append(replacement_offsets)
         return text, batch_replacement_offsets
 
-    def apply_chat_template(self, conversation, *args, processor_kwargs=None, **kwargs):
-        """Route per-image pixel limits in chat content blocks to the image processor."""
-        is_batched = bool(conversation) and isinstance(conversation[0], (list, tuple))
-        conversations = conversation if is_batched else [conversation]
-        per_image_kwargs = []
-        for current_conversation in conversations:
-            for message in current_conversation:
-                content = message.get("content") if isinstance(message, dict) else None
-                if not isinstance(content, list):
-                    continue
-                for item in content:
-                    if not isinstance(item, dict) or item.get("type") not in {"image", "image_url"}:
-                        continue
-                    overrides = {key: item[key] for key in ("min_pixels", "max_pixels") if key in item}
-                    per_image_kwargs.append(overrides or None)
-
-        if any(overrides is not None for overrides in per_image_kwargs):
-            processor_kwargs = dict(processor_kwargs or {})
-            images_kwargs = dict(processor_kwargs.get("images_kwargs", {}))
-            images_kwargs.setdefault("per_image_kwargs", per_image_kwargs)
-            processor_kwargs["images_kwargs"] = images_kwargs
-
-        return super().apply_chat_template(conversation, *args, processor_kwargs=processor_kwargs, **kwargs)
-
 
 __all__ = ["Cosmos3EdgeProcessor"]
