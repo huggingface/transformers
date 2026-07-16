@@ -161,11 +161,6 @@ class Glm5NextVLTextConfig(PreTrainedConfig):
                 for layer_idx in range(self.num_hidden_layers)
             ]
 
-        # Convert to dsa layer from full attention
-        self.layer_types = [
-            "deepseek_sparse_attention" if layer_type == "full_attention" else layer_type
-            for layer_type in self.layer_types
-        ]
 
         # Per-layer indexer mode: a pattern (e.g. `"FSSF..."`) overrides the freq/offset schedule.
         if self.indexer_types is None:
