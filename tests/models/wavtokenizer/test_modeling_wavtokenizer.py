@@ -344,7 +344,7 @@ class WavTokenizerIntegrationTest(unittest.TestCase):
     """
 
     # Golden codes for a 0.5 s, 440 Hz, -6 dBFS sine at 24 kHz (first 10 of 20 codes), frozen from the
-    # converted `wavtokenizer_large_unify_600_24k.ckpt` — verified bit-exact against the original
+    # converted `wavtokenizer_large_unify_600_24k.ckpt`, verified bit-exact against the original
     # implementation by scripts/check_wavtokenizer_parity.py (2026-07-14).
     EXPECTED_FIRST_CODES: list[int] | None = [1323, 1442, 3524, 2056, 3229, 1723, 2785, 1389, 3144, 1723]
 
