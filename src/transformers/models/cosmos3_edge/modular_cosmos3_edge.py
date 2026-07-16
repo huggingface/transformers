@@ -381,9 +381,7 @@ class Cosmos3EdgeVisionAttention(Siglip2Attention):
         super().__init__(config)
         self.num_key_value_groups = 1
 
-    def forward(
-        self, hidden_states: torch.Tensor, cu_seqlens: torch.Tensor, **kwargs
-    ) -> tuple[torch.Tensor, torch.Tensor | None]:
+    def forward(self, hidden_states: torch.Tensor, cu_seqlens: torch.Tensor, **kwargs) -> torch.Tensor:
         sequence_length = hidden_states.shape[0]
         query_states = self.q_proj(hidden_states).reshape(sequence_length, -1, self.head_dim)
         key_states = self.k_proj(hidden_states).reshape(sequence_length, -1, self.head_dim)
@@ -399,7 +397,7 @@ class Cosmos3EdgeVisionAttention(Siglip2Attention):
 
         if is_flash_attention_requested(self.config):
             max_sequence_length = (cu_seqlens[1:] - cu_seqlens[:-1]).max()
-            attn_output, attn_weights = attention_interface(
+            attn_output, _ = attention_interface(
                 self,
                 query_states,
                 key_states,
@@ -416,38 +414,28 @@ class Cosmos3EdgeVisionAttention(Siglip2Attention):
             )
         else:
             lengths = cu_seqlens[1:] - cu_seqlens[:-1]
-            split_lengths = lengths.tolist()
-            splits = [torch.split(tensor, split_lengths, dim=2) for tensor in (query_states, key_states, value_states)]
-            attention_outputs = [
-                attention_interface(
-                    self,
-                    query,
-                    key,
-                    value,
-                    attention_mask=None,
-                    scaling=self.scale,
-                    dropout=0.0 if not self.training else self.dropout,
-                    is_causal=False,
-                    **kwargs,
-                )
-                for query, key, value in zip(*splits)
+            splits = [
+                torch.split(tensor, lengths.tolist(), dim=2) for tensor in (query_states, key_states, value_states)
             ]
-            attn_output = torch.cat([output for output, _ in attention_outputs], dim=1)
+            attn_output = torch.cat(
+                [
+                    attention_interface(
+                        self,
+                        query,
+                        key,
+                        value,
+                        attention_mask=None,
+                        scaling=self.scale,
+                        dropout=0.0 if not self.training else self.dropout,
+                        is_causal=False,
+                        **kwargs,
+                    )[0]
+                    for query, key, value in zip(*splits)
+                ],
+                dim=1,
+            )
 
-            attention_weights = [weights for _, weights in attention_outputs]
-            if all(weights is not None for weights in attention_weights):
-                padded_weights = []
-                offset = 0
-                for weights, length in zip(attention_weights, split_lengths):
-                    trailing_padding = sequence_length - offset - length
-                    padded_weights.append(F.pad(weights, (offset, trailing_padding, offset, trailing_padding)))
-                    offset += length
-                attn_weights = torch.stack(padded_weights).sum(dim=0)
-            else:
-                attn_weights = None
-
-        attn_output = self.out_proj(attn_output.reshape(sequence_length, -1).contiguous())
-        return attn_output, attn_weights
+        return self.out_proj(attn_output.reshape(sequence_length, -1).contiguous())
 
 
 class Cosmos3EdgeVisionEncoderLayer(Siglip2EncoderLayer):
@@ -463,7 +451,7 @@ class Cosmos3EdgeVisionEncoderLayer(Siglip2EncoderLayer):
         residual = hidden_states
 
         hidden_states = self.layer_norm1(hidden_states)
-        hidden_states, _ = self.self_attn(
+        hidden_states = self.self_attn(
             hidden_states=hidden_states,
             cu_seqlens=cu_seqlens,
             **kwargs,
@@ -508,7 +496,7 @@ class Cosmos3EdgePreTrainedModel(Qwen2VLPreTrainedModel):
     _no_split_modules = ["Cosmos3EdgeTextDecoderLayer", "Cosmos3EdgeVisionEncoderLayer"]
     _can_record_outputs = {
         "hidden_states": [Cosmos3EdgeTextDecoderLayer, Cosmos3EdgeVisionEncoderLayer],
-        "attentions": [Cosmos3EdgeTextAttention, Cosmos3EdgeVisionAttention],
+        "attentions": Cosmos3EdgeTextAttention,
     }
     _keys_to_ignore_on_load_unexpected = _COSMOS3_EDGE_DROPPED_GENERATOR_KEYS
 

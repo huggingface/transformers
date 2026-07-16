@@ -197,6 +197,14 @@ class Cosmos3EdgeModelTest(VLMModelTest, unittest.TestCase):
     model_tester_class = Cosmos3EdgeVisionText2TextModelTester
     test_torch_exportable = False  # packed patch spans require data-dependent shape handling
 
+    @unittest.skip("Packed vision attention outputs will be added in a follow-up.")
+    def test_get_image_features_attentions(self):
+        pass
+
+    @unittest.skip("Packed vision attention outputs will be added in a follow-up.")
+    def test_get_video_features_attentions(self):
+        pass
+
     def test_reverse_loading_mapping(self):
         # Native conversion mappings target the conditional model's `language_model` subtree, not the bare model.
         super().test_reverse_loading_mapping(skip_base_model=True)
