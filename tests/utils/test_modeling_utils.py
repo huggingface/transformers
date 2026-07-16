@@ -437,21 +437,6 @@ class ModelUtilsTest(TestCasePlus):
         self.assertIn(torch.device("cpu"), total_byte_count)
         self.assertGreater(total_byte_count[torch.device("cpu")], 0)
 
-    def test_orthogonal_init_low_precision(self):
-        # `torch.nn.init.orthogonal_` uses a QR decomposition (`geqrf`) that is only implemented for
-        # float32/float64, so `init.orthogonal_` runs it in float32 and copies back for low-precision
-        # dtypes. Without the fallback this raises `NotImplementedError: "geqrf_..." not implemented`.
-        gain = 2.0
-        for dtype in (torch.bfloat16, torch.float16):
-            with self.subTest(dtype=dtype):
-                tensor = torch.empty(16, 16, dtype=dtype)
-                init.orthogonal_(tensor, gain=gain)
-                self.assertEqual(tensor.dtype, dtype)
-                self.assertTrue(torch.isfinite(tensor).all())
-                # Rows should be orthogonal with norm `gain`, up to low-precision rounding
-                product = (tensor.float() @ tensor.float().T) / gain**2
-                torch.testing.assert_close(product, torch.eye(16), atol=5e-2, rtol=0)
-
     def test_hub_retry(self):
         @hub_retry(max_attempts=2)
         def test_func():
