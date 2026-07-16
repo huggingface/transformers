@@ -1746,13 +1746,14 @@ def _tp_continuous_batching_worker(
     use_cuda_graph: bool,
     use_async_batching: bool,
 ) -> None:
-    """Loads `model_id` with `tp_plan="auto"`, checks three TP-specific paths in the same process: (a) direct
+    """Loads `model_id` with `DistributedConfig(tp_size=...)`, checks three TP-specific paths in the same process: (a) direct
     broadcasts via `DistributedHelper`, (b) per-rank parity of CB-generated tokens via `dist.all_gather_object`, and
     (c) reproducibility across two CB runs sharing the same seed. Rank 0 owns all the assertions; the other ranks
     only need to participate in the collectives."""
     import torch
     import torch.distributed as dist
 
+    from transformers.distributed import DistributedConfig
     from transformers.generation.continuous_batching.distributed import DistributedHelper
 
     tokenizer = AutoTokenizer.from_pretrained(model_id, padding_side="left")
@@ -1760,7 +1761,10 @@ def _tp_continuous_batching_worker(
         tokenizer.pad_token = tokenizer.eos_token
 
     model = AutoModelForCausalLM.from_pretrained(
-        model_id, attn_implementation=attn_implementation, tp_plan="auto", dtype=torch.float32
+        model_id,
+        attn_implementation=attn_implementation,
+        distributed_config=DistributedConfig(tp_size=int(os.environ["WORLD_SIZE"])),
+        dtype=torch.float32,
     ).eval()
 
     # Direct broadcast tests: only rank 0's value should propagate to every TP rank
@@ -1838,6 +1842,8 @@ def _tp_cancellation_worker(
 
     import torch
 
+    from transformers.distributed import DistributedConfig
+
     cb_config = ContinuousBatchingConfig(use_cuda_graph=use_cuda_graph, use_async_batching=use_async_batching)
 
     tokenizer = AutoTokenizer.from_pretrained(model_id, padding_side="left")
@@ -1845,7 +1851,10 @@ def _tp_cancellation_worker(
         tokenizer.pad_token = tokenizer.eos_token
 
     model = AutoModelForCausalLM.from_pretrained(
-        model_id, attn_implementation=attn_implementation, tp_plan="auto", dtype=torch.float32
+        model_id,
+        attn_implementation=attn_implementation,
+        distributed_config=DistributedConfig(tp_size=int(os.environ["WORLD_SIZE"])),
+        dtype=torch.float32,
     ).eval()
 
     chat = [{"role": "user", "content": "Tell me a long story about a robot exploring the galaxy."}]
