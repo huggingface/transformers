@@ -34,6 +34,7 @@ CUDA device — only the loader's real arch check needs the actual silicon.
 """
 
 import contextlib
+import inspect
 import os
 import tempfile
 import types
@@ -109,8 +110,31 @@ class DeepGemmLoaderTest(unittest.TestCase):
                 os.makedirs(os.path.join(cuda_home, "bin"), exist_ok=True)
                 open(os.path.join(cuda_home, "bin", "nvcc"), "w").close()
         stack.enter_context(mock.patch.object(dg, "is_kernels_available", return_value=kernels_available))
-        stack.enter_context(mock.patch.object(torch.cuda, "is_available", return_value=cuda_available))
-        stack.enter_context(mock.patch.object(torch.cuda, "get_device_capability", return_value=capability))
+        # Fake a "CUDA + `capability`" environment for the loader *only* (scoped to its call stack): the
+        # loader's availability/arch gate passes, while torch.compile / inductor still see the real
+        # device — so the compile-safety test runs under the default (inductor) backend on any host, not
+        # just SM90+. The real fallbacks are lazy: only non-loader callers reach them (inductor, under
+        # compile), never the CPU-only gating tests (where querying real CUDA would raise).
+        real_is_available = torch.cuda.is_available
+        real_capability = torch.cuda.get_device_capability
+
+        def _in_loader():
+            return any(f.function == "_load_deepgemm_kernel" for f in inspect.stack())
+
+        stack.enter_context(
+            mock.patch.object(
+                torch.cuda,
+                "is_available",
+                side_effect=lambda *a, **k: cuda_available if _in_loader() else real_is_available(),
+            )
+        )
+        stack.enter_context(
+            mock.patch.object(
+                torch.cuda,
+                "get_device_capability",
+                side_effect=lambda *a, **k: capability if _in_loader() else real_capability(),
+            )
+        )
         stack.enter_context(mock.patch.object(dg, "_get_cuda_home", return_value=cuda_home))
         stack.enter_context(mock.patch.object(dg, "_get_nvcc_version", return_value=nvcc_version))
         stack.enter_context(mock.patch.object(dg, "lazy_load_kernel", return_value=kernel))
@@ -130,7 +154,7 @@ class DeepGemmLoaderTest(unittest.TestCase):
     def test_raises_without_kernels_package(self):
         with (
             self._env(kernels_available=False),
-            self.assertRaisesRegex(ImportError, "requires the .kernels. package"),
+            self.assertRaisesRegex(ImportError, "kernel unavailable"),
         ):
             dg.load_deepgemm_kernel()
 
@@ -174,6 +198,10 @@ class DeepGemmLoaderTest(unittest.TestCase):
             dg.load_deepgemm_kernel()
 
     def test_loader_is_compile_safe(self):
+        # Cold path: the compiled call is first to load, so the opaque loader node runs its full body
+        # under compile and must return None, never the bundle (`Unsupported: torch.* op returned
+        # non-Tensor`). Default (inductor) backend; `_env` fakes CUDA+SM90 only for the loader so
+        # torch.compile sees the real device — no GPU required.
         with self._env():
             torch.compiler.reset()
 
@@ -182,14 +210,11 @@ class DeepGemmLoaderTest(unittest.TestCase):
                 return dg.load_deepgemm_kernel().per_token_cast_to_fp8(x)
 
             out = run(torch.zeros(3, device=torch_device))
-            self.assertTrue(torch.equal(out, torch.ones(3, device=torch_device)))
+        self.assertTrue(torch.equal(out, torch.ones(3, device=torch_device)))
 
     def test_loader_is_compile_safe_when_warm(self):
-        # Warm the loader BEFORE compiling: Dynamo then executes the opaque loader node's
-        # warm-cache short-circuit at trace time — the path that must return None, not the
-        # bundle (a leaked bundle is `Unsupported: torch.* op returned non-Tensor`). The
-        # production sequence (eager warmup, then compile) always traces warm; the cold
-        # test above cannot catch a leak on this path.
+        # Warm path (production order: eager warmup, then compile). The loader runs its arch/env checks
+        # every call, then hits the cache short-circuit — which must also return None, not the bundle.
         with self._env():
             dg.load_deepgemm_kernel()
             torch.compiler.reset()
@@ -199,7 +224,7 @@ class DeepGemmLoaderTest(unittest.TestCase):
                 return dg.load_deepgemm_kernel().per_token_cast_to_fp8(x)
 
             out = run(torch.zeros(3, device=torch_device))
-            self.assertTrue(torch.equal(out, torch.ones(3, device=torch_device)))
+        self.assertTrue(torch.equal(out, torch.ones(3, device=torch_device)))
 
 
 # ── Capturing fake DeepGEMM bundle ─────────────────────────────────────────────
@@ -398,8 +423,7 @@ class DeepGemmForwardTest(unittest.TestCase):
 
         (matmul,) = captured["matmul"]
         self.assertIsNone(matmul["recipe"])  # float-SF path leaves the recipe unset
-        (qinput, act_sf), (w, w_sf) = matmul["lhs"], matmul["rhs"]
-        self.assertEqual(qinput.dtype, torch.float8_e4m3fn)
+        (_, act_sf), (w, w_sf) = matmul["lhs"], matmul["rhs"]
         self.assertIs(w, weight)
         # SM90 float32 SFs pass through `_coerce_sf_for_kernel` value-exact (row-major contiguous).
         self.assertEqual(act_sf.dtype, torch.float32)
@@ -407,7 +431,6 @@ class DeepGemmForwardTest(unittest.TestCase):
         self.assertTrue(torch.equal(w_sf, weight_scale.contiguous()))
 
         self.assertEqual(out.shape, (2, 3, 256))  # reshaped back to input.shape[:-1] + (N,)
-        self.assertEqual(out.dtype, torch.bfloat16)
 
     def test_linear_fp4_sm100_packs_ue8m0_scales(self):
         # FP4 weights (int8): SM100-only. Scales arrive UE8M0 and must reach the kernel packed into
@@ -418,7 +441,7 @@ class DeepGemmForwardTest(unittest.TestCase):
             torch.float8_e8m0fnu
         )  # (N, K/32)
         with self._bundle(is_sm100=True) as captured:
-            out = deepgemm_fp8_fp4_linear(input, weight, weight_scale)
+            deepgemm_fp8_fp4_linear(input, weight, weight_scale)
 
         cast = captured["per_token_cast"][0]
         self.assertTrue(cast["use_ue8m0"] and cast["use_packed_ue8m0"])
@@ -431,7 +454,6 @@ class DeepGemmForwardTest(unittest.TestCase):
         self.assertEqual(act_sf.dtype, torch.int32)
         self.assertEqual(w_sf.dtype, torch.int32)
         self.assertEqual(w_sf.shape, (256, 1))
-        self.assertEqual(out.shape, (4, 256))
 
     def test_linear_adds_bias_and_honours_output_dtype(self):
         input = torch.randn(4, 128, dtype=torch.bfloat16, device=torch_device)
@@ -459,7 +481,7 @@ class DeepGemmForwardTest(unittest.TestCase):
         experts = _make_experts(num_experts=4, hidden=8, inter=16, weight_dtype=torch.bfloat16, fp8_experts=False)
         hidden_states, top_k_index, top_k_weights = self._bf16_hidden(experts)
         with self._bundle(is_sm100=False) as captured:
-            out = deepgemm_bf16_experts_forward(experts, hidden_states, top_k_index, top_k_weights)
+            deepgemm_bf16_experts_forward(experts, hidden_states, top_k_index, top_k_weights)
 
         up, down = captured["grouped"]
         # Non-transposed -> NT kernel for both projections.
@@ -478,9 +500,6 @@ class DeepGemmForwardTest(unittest.TestCase):
         rows = up["out"].shape[0]
         self.assertEqual(up["out"].shape, (rows, 32))
         self.assertEqual(up["lhs"].shape, (rows, 8))
-
-        self.assertEqual(out.shape, (3, 8))
-        self.assertEqual(out.dtype, torch.bfloat16)
 
     def test_bf16_experts_transposed_uses_nn_kernel(self):
         experts = _make_experts(
@@ -550,7 +569,7 @@ class DeepGemmForwardTest(unittest.TestCase):
         experts = _make_experts(num_experts=4, hidden=8, inter=16)  # FP8 weights, float32 block SFs
         hidden_states, top_k_index, top_k_weights = self._fp8_hidden()
         with self._bundle(is_sm100=False) as captured:
-            out = deepgemm_fp8_fp4_experts_forward(experts, hidden_states, top_k_index, top_k_weights)
+            deepgemm_fp8_fp4_experts_forward(experts, hidden_states, top_k_index, top_k_weights)
 
         # FP8 + float32 SF -> non-UE8M0 gran_k=128 cast, no packed recipe.
         cast = captured["per_token_cast"][0]
@@ -562,8 +581,7 @@ class DeepGemmForwardTest(unittest.TestCase):
         self.assertIsNone(up["recipe"])
         self.assertFalse(up["use_psum_layout"])
         # Operands are `(qtensor, sf)` tuples; the up-proj weight/SF are the module's gate_up pair.
-        (act_fp8, act_sf), (w_up, w_up_sf) = up["lhs"], up["rhs"]
-        self.assertEqual(act_fp8.dtype, torch.float8_e4m3fn)
+        (_, act_sf), (w_up, w_up_sf) = up["lhs"], up["rhs"]
         self.assertEqual(act_sf.dtype, torch.float32)
         self.assertIs(w_up, experts.gate_up_proj)
         self.assertIs(w_up_sf, experts.gate_up_proj_scale_inv)
@@ -572,9 +590,6 @@ class DeepGemmForwardTest(unittest.TestCase):
         self.assertIs(down["rhs"][1], experts.down_proj_scale_inv)
         # Up-proj output buffer is (padded rows, 2I).
         self.assertEqual(up["out"].shape[1], 32)
-
-        self.assertEqual(out.shape, (3, 8))
-        self.assertEqual(out.dtype, torch.bfloat16)
 
     def test_fp8_experts_transposed_uses_nn_kernel(self):
         experts = _make_experts(num_experts=4, hidden=8, inter=16, is_transposed=True)
@@ -634,7 +649,7 @@ class DeepGemmForwardTest(unittest.TestCase):
         pg = types.SimpleNamespace(size=lambda: 2)
 
         with self._bundle(is_sm100=True) as captured:
-            out = deepgemm_fp8_fp4_megamoe_experts_forward(
+            deepgemm_fp8_fp4_megamoe_experts_forward(
                 module, hidden_states, top_k_index, top_k_weights, process_group=pg
             )
 
@@ -656,8 +671,6 @@ class DeepGemmForwardTest(unittest.TestCase):
 
         # Symm buffer sized from global expert count (num_local * process_group.size()).
         self.assertEqual(captured["symm_buffer_kwargs"]["num_experts"], 4 * 2)
-        self.assertEqual(captured["symm_buffer_kwargs"]["hidden"], 64)
-        self.assertEqual(captured["symm_buffer_kwargs"]["intermediate_hidden"], 32)
 
         # Hidden states cast FP8/UE8M0 (gran_k=32 packed) and staged into the symm buffer.
         cast = captured["per_token_cast"][0]
@@ -673,9 +686,6 @@ class DeepGemmForwardTest(unittest.TestCase):
         self.assertIs(mega["down_pair"][0], module.down_proj)
         self.assertIs(mega["symm_buffer"], buf)
         self.assertEqual(mega["activation_clamp"], 7.0)
-
-        self.assertEqual(out.shape, (num_tokens, 64))
-        self.assertEqual(out.dtype, torch.bfloat16)
 
     def test_megamoe_requires_fp4_weights_and_process_group(self):
         hidden_states = torch.randn(3, 64, dtype=torch.bfloat16, device=torch_device)

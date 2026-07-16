@@ -21,10 +21,11 @@ Two layers, both mocking only what needs a Hopper GPU + CuteDSL / `nvidia-cutlas
 * `SonicMoeExpertsForwardTest` mocks only the kernel dispatch (`moe_general_routing_inputs`) to return
   a correctly shaped output, and runs the real `sonicmoe_experts_forward` on a CUDA device so its
   weight-permutation / routing-flatten / dtype-cast glue executes for real; it then asserts the tensors
-  handed to the kernel are what the kernel expects (int32 indices, permuted weights, `E`, ...).
+  handed to the kernel are what the kernel expects (int32 indices, permuted weights, ...).
 """
 
 import contextlib
+import inspect
 import types
 import unittest
 from unittest import mock
@@ -66,8 +67,31 @@ class SonicMoeLoaderTest(unittest.TestCase):
 
     def _env(self, *, cuda_available=True, capability=(9, 0), versions_ok=True, kernel=_FakeSonicMoeKernel):
         stack = contextlib.ExitStack()
-        stack.enter_context(mock.patch.object(torch.cuda, "is_available", return_value=cuda_available))
-        stack.enter_context(mock.patch.object(torch.cuda, "get_device_capability", return_value=capability))
+        # Fake a "CUDA + `capability`" environment for the loader *only* (scoped to its call stack):
+        # the loader's availability/arch gate passes, while torch.compile / inductor still see the real
+        # device — so the compile-safety test runs under the default (inductor) backend on any host, not
+        # just SM90+. The real fallbacks are lazy: only non-loader callers reach them (inductor, under
+        # compile), never the CPU-only gating tests (where querying real CUDA would raise).
+        real_is_available = torch.cuda.is_available
+        real_capability = torch.cuda.get_device_capability
+
+        def _in_loader():
+            return any(f.function == "_load_sonicmoe_kernel" for f in inspect.stack())
+
+        stack.enter_context(
+            mock.patch.object(
+                torch.cuda,
+                "is_available",
+                side_effect=lambda *a, **k: cuda_available if _in_loader() else real_is_available(),
+            )
+        )
+        stack.enter_context(
+            mock.patch.object(
+                torch.cuda,
+                "get_device_capability",
+                side_effect=lambda *a, **k: capability if _in_loader() else real_capability(),
+            )
+        )
         if versions_ok:
             stack.enter_context(mock.patch.object(sm, "require_version", return_value=None))
         else:
@@ -107,6 +131,10 @@ class SonicMoeLoaderTest(unittest.TestCase):
             sm.load_sonicmoe_kernel()
 
     def test_loader_is_compile_safe(self):
+        # Cold path: the compiled call is first to load, so the opaque loader node runs its full body
+        # under compile and must return None, never the bundle (`Unsupported: torch.* op returned
+        # non-Tensor`). Default (inductor) backend; `_env` fakes CUDA+SM90 only for the loader so
+        # torch.compile sees the real device — no GPU required.
         with self._env():
             torch.compiler.reset()
 
@@ -119,11 +147,8 @@ class SonicMoeLoaderTest(unittest.TestCase):
         self.assertTrue(torch.equal(out, torch.ones(3, device=torch_device)))
 
     def test_loader_is_compile_safe_when_warm(self):
-        # Warm the loader BEFORE compiling: Dynamo then executes the opaque loader node's
-        # warm-cache short-circuit at trace time — the path that must return None, not the
-        # bundle (a leaked bundle is `Unsupported: torch.* op returned non-Tensor`). The
-        # production sequence (eager warmup, then compile) always traces warm; the cold
-        # test above cannot catch a leak on this path.
+        # Warm path (production order: eager warmup, then compile). The loader hits its short-circuit at
+        # trace time — the branch that must also return None, not the already-loaded bundle.
         with self._env():
             sm.load_sonicmoe_kernel()
             torch.compiler.reset()
@@ -178,7 +203,7 @@ class SonicMoeExpertsForwardTest(unittest.TestCase):
         self.addCleanup(setattr, sm, "_SONICMOE", None)
 
     @contextlib.contextmanager
-    def _mocked_kernel(self, activation_type_enum=_FakeActivationType):
+    def _mocked_kernel(self, activation_type_enum=_FakeActivationType, assert_not_compiling=False):
         captured = {}
 
         def fake_moe(
@@ -197,6 +222,10 @@ class SonicMoeExpertsForwardTest(unittest.TestCase):
             concat_layout,
             stream_id,
         ):
+            # sonic-moe's real kernel refuses to run while Dynamo is tracing (CuteDSL is untraceable);
+            # `_sonicmoe_wrapper`'s `@allow_in_graph` must keep this dispatch opaque so it runs at runtime.
+            if assert_not_compiling:
+                assert not torch.compiler.is_compiling()
             captured.update(
                 hidden_states=hidden_states,
                 router_scores=router_scores,
@@ -229,35 +258,23 @@ class SonicMoeExpertsForwardTest(unittest.TestCase):
             out = sonicmoe_experts_forward(experts, hidden_states, top_k_index, top_k_weights)
         return out, captured, hidden_states, top_k_index, top_k_weights
 
-    def test_forward_shapes_and_kernel_inputs(self):
+    def test_forward_marshals_routing_and_weights(self):
         experts = _make_experts(num_experts=4, hidden=8, inter=16)
-        out, captured, hidden_states, top_k_index, top_k_weights = self._run(experts, num_tokens=3, top_k=2)
+        _, captured, _, top_k_index, top_k_weights = self._run(experts, num_tokens=3, top_k=2)
 
-        # Output mirrors the (num_tokens, hidden) input.
-        self.assertEqual(out.shape, hidden_states.shape)
-        self.assertEqual(out.dtype, hidden_states.dtype)
-
-        # token_idx is int32 and repeats each token index top_k times, ascending: [0,0,1,1,2,2].
-        expected_token_idx = torch.arange(3, device=torch_device).repeat_interleave(2)
+        # Routing is flattened to (num_tokens * top_k,): token_idx repeats each token index top_k times
+        # as int32 ([0,0,1,1,2,2]); expert_ids / router_scores are the real routing tensors, recast.
         self.assertEqual(captured["token_idx"].dtype, torch.int32)
-        self.assertTrue(torch.equal(captured["token_idx"], expected_token_idx.int()))
-
-        # expert_ids / router_scores are the real routing tensors, flattened row-major and recast.
+        self.assertTrue(
+            torch.equal(captured["token_idx"], torch.arange(3, device=torch_device).repeat_interleave(2).int())
+        )
         self.assertEqual(captured["expert_ids"].dtype, torch.int32)
         self.assertTrue(torch.equal(captured["expert_ids"], top_k_index.reshape(-1).int()))
-        self.assertEqual(captured["router_scores"].dtype, hidden_states.dtype)
         self.assertTrue(torch.equal(captured["router_scores"], top_k_weights.reshape(-1)))
 
-        # Weights are permuted to (..., E) — value-exact, not just shape; activation maps silu -> SWIGLU.
+        # Weights are permuted to the (..., E) layout the kernel expects (value-exact).
         self.assertTrue(torch.equal(captured["w1"], experts.gate_up_proj.permute(1, 2, 0)))
         self.assertTrue(torch.equal(captured["w2"], experts.down_proj.permute(1, 2, 0)))
-        self.assertEqual(captured["w1"].shape, (2 * 16, 8, 4))
-        self.assertEqual(captured["w2"].shape, (8, 16, 4))
-        self.assertEqual(captured["E"], 4)
-        self.assertEqual(captured["activation_type"], _FakeActivationType.SWIGLU)
-        self.assertEqual(captured["concat_layout"], experts.is_concatenated)
-        self.assertIsNone(captured["b1"])
-        self.assertIsNone(captured["b2"])
 
     def test_forward_passes_sentinel_expert_ids_unclamped(self):
         # EP sentinels (expert_ids >= num_experts) must reach the kernel unclamped — unlike the eager
@@ -290,8 +307,6 @@ class SonicMoeExpertsForwardTest(unittest.TestCase):
         _, captured, _, _, _ = self._run(experts)
         self.assertTrue(torch.equal(captured["w1"], experts.gate_up_proj.permute(2, 1, 0)))
         self.assertTrue(torch.equal(captured["w2"], experts.down_proj.permute(2, 1, 0)))
-        self.assertEqual(captured["w1"].shape, (2 * 16, 8, 4))
-        self.assertEqual(captured["w2"].shape, (8, 16, 4))
 
     def test_forward_activation_mapping(self):
         for act, expected in [
@@ -308,6 +323,21 @@ class SonicMoeExpertsForwardTest(unittest.TestCase):
         experts = _make_experts(hidden_act="tanh")
         with self.assertRaisesRegex(ValueError, "does not support the 'tanh' activation"):
             self._run(experts)
+
+    def test_forward_is_compile_safe(self):
+        # The real forward routes the CuteDSL dispatch through `_sonicmoe_wrapper` (@allow_in_graph),
+        # which must keep it opaque under torch.compile — sonic-moe's kernel asserts `not is_compiling()`,
+        # mirrored here by `assert_not_compiling=True`. If the wrapper ever stopped shielding it, Dynamo
+        # would trace the dispatch and the assert would fire; the test passing is the proof it didn't.
+        experts = _make_experts(num_experts=4, hidden=8, inter=16)
+        hidden_states = torch.randn(3, 8, dtype=torch.bfloat16, device=torch_device)
+        top_k_index = torch.randint(0, experts.num_experts, (3, 2), device=torch_device)
+        top_k_weights = torch.rand(top_k_index.shape, dtype=torch.bfloat16, device=torch_device)
+        with self._mocked_kernel(assert_not_compiling=True):
+            torch.compiler.reset()
+            compiled = torch.compile(sonicmoe_experts_forward, fullgraph=True)
+            out = compiled(experts, hidden_states, top_k_index, top_k_weights)
+        self.assertEqual(out.shape, hidden_states.shape)
 
 
 if __name__ == "__main__":

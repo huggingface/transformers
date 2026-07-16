@@ -26,17 +26,13 @@ from ..activations import ACT2FN
 from ..core_model_loading import ConversionOps
 from ..quantizers.quantizers_utils import get_module_from_name, should_convert_module
 from ..utils import logging
-from ..utils.import_utils import (
-    KERNELS_MAX_VERSION,
-    KERNELS_MIN_VERSION,
-    is_kernels_available,
-)
+from ..utils.import_utils import is_kernels_available
 from .deepgemm import (
     deepgemm_fp8_fp4_experts_forward,
     deepgemm_fp8_fp4_linear,
     deepgemm_fp8_fp4_megamoe_experts_forward,
 )
-from .hub_kernels import lazy_load_kernel
+from .hub_kernels import _MISSING_KERNELS_MESSAGE, lazy_load_kernel
 from .moe import ExpertsInterface, use_experts_implementation
 from .tensor_parallel import to_local
 
@@ -80,9 +76,9 @@ class FineGrainedFP8:
     grouped_matmul: Callable
 
 
-# Cache only a successful load: a loaded kernel stays valid, but failures aren't cached so the
-# loader can retry as the environment changes between attempts (e.g. a missing dependency gets
-# installed). Retrying is cheap and `lazy_load_kernel` dedupes its warnings via `warning_once`.
+# Cache the loaded kernel but not failures: re-checking each call is cheap and intended, since the env
+# can change between attempts. A module global (not `@functools.cache`) avoids Dynamo warning about
+# tracing a cache-wrapped function on every compile.
 _FINEGRAINED_FP8: FineGrainedFP8 | None = None
 
 
@@ -107,11 +103,7 @@ def _load_finegrained_fp8_kernel() -> None:
         return
 
     if not is_kernels_available():
-        raise ImportError(
-            "finegrained-fp8 kernel requires the `kernels` package. "
-            f"Please install a compatible version ({KERNELS_MIN_VERSION} <= version < {KERNELS_MAX_VERSION}), "
-            f"e.g. `pip install kernels=={KERNELS_MIN_VERSION}`"
-        )
+        raise ImportError(f"finegrained-fp8 kernel unavailable: {_MISSING_KERNELS_MESSAGE}")
 
     kernel = lazy_load_kernel("finegrained-fp8")
     if kernel is None:
@@ -135,9 +127,7 @@ def _load_finegrained_fp8_kernel() -> None:
     ]
     if missing:
         raise ImportError(
-            f"finegrained-fp8 kernel is missing required symbols: {', '.join(missing)}. "
-            f"Please install a compatible version ({KERNELS_MIN_VERSION} <= version < {KERNELS_MAX_VERSION}), "
-            f"e.g. `pip install kernels=={KERNELS_MIN_VERSION}`"
+            f"finegrained-fp8 kernel is missing required symbols: {', '.join(missing)}. {_MISSING_KERNELS_MESSAGE}"
         )
 
     _FINEGRAINED_FP8 = FineGrainedFP8(

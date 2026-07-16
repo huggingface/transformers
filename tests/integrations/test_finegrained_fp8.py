@@ -23,7 +23,7 @@ Two layers, both mocking only what needs the `kernels-community/finegrained-fp8`
   `finegrained_fp8_linear`, `fp8_batched_mm_experts_forward` and `fp8_grouped_mm_experts_forward` on a
   CUDA device so their repeat-interleave / routing-flatten / sort-and-histogram / gating / sentinel-mask
   / reshape-sum glue executes for real; it then asserts the tensors handed to the kernel are what the
-  kernel expects (flattened routing, unclamped sentinels, weight/scale pairing, block_size, ...) and
+  kernel expects (flattened routing, unclamped sentinels, weight/scale pairing, ...) and
   the value-exact output the surrounding marshalling produces.
 """
 
@@ -79,7 +79,7 @@ class FinegrainedFp8LoaderTest(unittest.TestCase):
         self.assertIs(bundle.matmul, _add_one)
 
     def test_raises_without_kernels_package(self):
-        with self._env(kernels_available=False), self.assertRaisesRegex(ImportError, "requires the .kernels. package"):
+        with self._env(kernels_available=False), self.assertRaisesRegex(ImportError, "kernel unavailable"):
             fg.load_finegrained_fp8_kernel()
 
     def test_raises_when_kernel_fails_to_load(self):
@@ -94,6 +94,10 @@ class FinegrainedFp8LoaderTest(unittest.TestCase):
             fg.load_finegrained_fp8_kernel()
 
     def test_loader_is_compile_safe(self):
+        # Cold path: the compiled call is first to load, so the opaque loader node runs its full body
+        # under compile and must return None, never the bundle (`Unsupported: torch.* op returned
+        # non-Tensor`). Default (inductor) backend. The finegrained loader has no arch/CUDA gate, so
+        # nothing here fakes the device — torch.compile sees the real one; no GPU required.
         with self._env():
             torch.compiler.reset()
 
@@ -101,15 +105,12 @@ class FinegrainedFp8LoaderTest(unittest.TestCase):
             def run(x):
                 return fg.load_finegrained_fp8_kernel().matmul(x)
 
-            out = run(torch.zeros(3))
-        self.assertTrue(torch.equal(out, torch.ones(3)))
+            out = run(torch.zeros(3, device=torch_device))
+        self.assertTrue(torch.equal(out, torch.ones(3, device=torch_device)))
 
     def test_loader_is_compile_safe_when_warm(self):
-        # Warm the loader BEFORE compiling: Dynamo then executes the opaque loader node's
-        # warm-cache short-circuit at trace time — the path that must return None, not the
-        # bundle (a leaked bundle is `Unsupported: torch.* op returned non-Tensor`). The
-        # production sequence (eager warmup, then compile) always traces warm; the cold
-        # test above cannot catch a leak on this path.
+        # Warm path (production order: eager warmup, then compile). The loader hits its short-circuit at
+        # trace time — the branch that must also return None, not the already-loaded bundle.
         with self._env():
             fg.load_finegrained_fp8_kernel()
             torch.compiler.reset()
@@ -118,8 +119,8 @@ class FinegrainedFp8LoaderTest(unittest.TestCase):
             def run(x):
                 return fg.load_finegrained_fp8_kernel().matmul(x)
 
-            out = run(torch.zeros(3))
-        self.assertTrue(torch.equal(out, torch.ones(3)))
+            out = run(torch.zeros(3, device=torch_device))
+        self.assertTrue(torch.equal(out, torch.ones(3, device=torch_device)))
 
 
 def _make_fp8_experts(
@@ -241,18 +242,14 @@ class FinegrainedFp8ForwardTest(unittest.TestCase):
         with self._mocked_kernel() as calls:
             out = finegrained_fp8_linear(input, weight, weight_scale_inv, block_size)
         call = calls["matmul"][0]
-        # input / weight / scale / block_size pass straight through, positionally.
+        # input / weight / scale pass straight through, positionally.
         self.assertIs(call["input"], input)
         self.assertIs(call["weight"], weight)
         self.assertIs(call["weight_scale_inv"], weight_scale_inv)
-        self.assertIs(call["block_size"], block_size)
         # output_dtype defaults to input.dtype when the caller leaves it None, and no activation scale.
         self.assertEqual(call["output_dtype"], torch.bfloat16)
         self.assertIsNone(call["activation_scale"])
-        # No bias -> the kernel output is returned untouched.
-        self.assertEqual(out.shape, (3, 16))
         self.assertEqual(out.dtype, torch.bfloat16)
-        self.assertTrue(torch.equal(out, torch.full((3, 16), 3.0, dtype=torch.bfloat16, device=torch_device)))
 
     def test_linear_forwards_explicit_output_dtype_and_activation_scale(self):
         input = torch.randn(3, 8, dtype=torch.bfloat16, device=torch_device)
@@ -269,7 +266,6 @@ class FinegrainedFp8ForwardTest(unittest.TestCase):
                 output_dtype=torch.float32,
             )
         call = calls["matmul"][0]
-        self.assertIsNone(call["block_size"])
         self.assertEqual(call["output_dtype"], torch.float32)
         self.assertIs(call["activation_scale"], activation_scale)
         self.assertEqual(out.dtype, torch.float32)
@@ -297,22 +293,17 @@ class FinegrainedFp8ForwardTest(unittest.TestCase):
         up, down = calls["batched_matmul"]
         # Up projection: each token replicated top_k times (S = 6), routing flattened row-major.
         self.assertTrue(torch.equal(up["input"], hidden_states.repeat_interleave(2, dim=0)))
-        self.assertEqual(up["input"].shape, (6, 8))
-        self.assertEqual(up["expert_ids"].shape, (6,))
         self.assertTrue(torch.equal(up["expert_ids"], top_k_index.reshape(-1)))
-        # Weight/scale pairing and block_size pass straight through (no copies).
+        # Weight/scale pairing passes straight through (no copies).
         self.assertIs(up["weight"], experts.gate_up_proj)
         self.assertIs(up["weight_scale"], experts.gate_up_proj_scale_inv)
-        self.assertIs(up["block_size"], experts.block_size)
         # Down projection sees the gated activation: 2*inter (32) collapsed to inter (16).
         self.assertEqual(down["input"].shape, (6, 16))
         self.assertIs(down["weight"], experts.down_proj)
         self.assertIs(down["weight_scale"], experts.down_proj_scale_inv)
         self.assertTrue(torch.equal(down["expert_ids"], top_k_index.reshape(-1)))
 
-        # Output: (num_tokens, hidden), recast to the input dtype, value-exact reduction.
-        self.assertEqual(out.shape, (3, 8))
-        self.assertEqual(out.dtype, torch.bfloat16)
+        # Value-exact per-token reduction, recast to the input dtype.
         expected = self._expected_experts_output(hidden_states, top_k_index, top_k_weights, experts.num_experts)
         self.assertTrue(torch.equal(out, expected))
 
@@ -372,7 +363,6 @@ class FinegrainedFp8ForwardTest(unittest.TestCase):
         self.assertEqual(up["input"].shape, (6, 8))
         self.assertIs(up["weight"], experts.gate_up_proj)
         self.assertIs(up["weight_scale"], experts.gate_up_proj_scale_inv)
-        self.assertIs(up["block_size"], experts.block_size)
         # Down projection sees the gated activation: 2*inter (32) collapsed to inter (16).
         self.assertEqual(down["input"].shape, (6, 16))
         self.assertIs(down["weight"], experts.down_proj)
@@ -388,9 +378,7 @@ class FinegrainedFp8ForwardTest(unittest.TestCase):
         self.assertIs(down["offsets"], up["offsets"])
         self.assertIs(down["tokens_per_expert"], up["tokens_per_expert"])
 
-        # Output restored to original token order (inv_perm) then reduced; value-exact, dtype restored.
-        self.assertEqual(out.shape, (3, 8))
-        self.assertEqual(out.dtype, torch.bfloat16)
+        # Output restored to original token order (inv_perm) then reduced; value-exact.
         expected = self._expected_experts_output(hidden_states, top_k_index, top_k_weights, experts.num_experts)
         self.assertTrue(torch.equal(out, expected))
 

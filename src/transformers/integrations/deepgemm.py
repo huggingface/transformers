@@ -38,12 +38,10 @@ import torch
 
 from ..utils import logging
 from ..utils.import_utils import (
-    KERNELS_MAX_VERSION,
-    KERNELS_MIN_VERSION,
     is_kernels_available,
     resolve_internal_import,
 )
-from .hub_kernels import lazy_load_kernel
+from .hub_kernels import _MISSING_KERNELS_MESSAGE, lazy_load_kernel
 from .tensor_parallel import to_local
 
 
@@ -146,10 +144,9 @@ def _get_nvcc_version() -> tuple[int, int] | None:
     return None
 
 
-# Cache only a successful load: a loaded kernel stays valid, but failures aren't cached so the
-# loader can retry as the environment changes between attempts (e.g. `CUDA_HOME` gets set). The
-# arch/env checks below run on every call — they're cheap and enforce the per-call `requires_sm100`
-# gate — so only the kernel-bundle resolution is guarded by the cache.
+# Cache the loaded bundle but not failures: the arch/env checks below run every call (cheap, and they
+# enforce the per-call `requires_sm100` gate), so only the kernel-bundle resolution is cached. A module
+# global (not `@functools.cache`) avoids Dynamo warning about tracing a cache-wrapped function.
 _DEEPGEMM: DeepGEMM | None = None
 
 
@@ -171,11 +168,7 @@ def _load_deepgemm_kernel(requires_sm100: bool = False) -> None:
     """
     global _DEEPGEMM
     if not is_kernels_available():
-        raise ImportError(
-            "DeepGEMM kernel requires the `kernels` package. Please install a compatible version ("
-            f"{KERNELS_MIN_VERSION} <= version < {KERNELS_MAX_VERSION}), e.g. `pip install kernels=="
-            f"{KERNELS_MIN_VERSION}`"
-        )
+        raise ImportError(f"DeepGEMM kernel unavailable: {_MISSING_KERNELS_MESSAGE}")
     if not torch.cuda.is_available():
         raise ImportError("DeepGEMM kernel requires CUDA, but CUDA is not available.")
 
@@ -261,9 +254,7 @@ def _load_deepgemm_kernel(requires_sm100: bool = False) -> None:
     ]
     if missing:
         raise ImportError(
-            f"DeepGEMM kernel is missing required symbols: {', '.join(missing)}. "
-            f"Please install a compatible version ({KERNELS_MIN_VERSION} <= version < {KERNELS_MAX_VERSION}), "
-            f"e.g. `pip install kernels=={KERNELS_MIN_VERSION}`"
+            f"DeepGEMM kernel is missing required symbols: {', '.join(missing)}. {_MISSING_KERNELS_MESSAGE}"
         )
 
     _DEEPGEMM = DeepGEMM(
@@ -325,9 +316,7 @@ def _ceil_to_ue8m0(sf: torch.Tensor) -> torch.Tensor:
     return (int_view + ((1 << 23) - 1)).bitwise_and_(~((1 << 23) - 1)).view(torch.float)
 
 
-def _coerce_sf_for_kernel(
-    sf: torch.Tensor, is_sm100: bool, expected_mn: int | None = None
-) -> torch.Tensor:
+def _coerce_sf_for_kernel(sf: torch.Tensor, is_sm100: bool, expected_mn: int | None = None) -> torch.Tensor:
     """Lay out `sf` as DeepGEMM's dispatch expects, per arch.
 
     On SM100 the int-SF path only *checks* the SF (`tma_stride_check`) and never

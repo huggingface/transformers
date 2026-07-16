@@ -49,13 +49,9 @@ class SonicMoE:
     moe_general_routing_inputs: Callable
 
 
-# Cache only a successful load: a loaded kernel stays valid, but failures aren't cached so the
-# loader can retry as the environment changes between attempts (e.g. a missing dependency gets
-# installed). Retrying is cheap and `lazy_load_kernel` dedupes its warnings via `warning_once`.
-# A module global rather than `@functools.cache`: when Dynamo traces into a call to a
-# `functools.cache`-wrapped function it warns ("Dynamo detected a call to a `functools.lru_cache`-
-# wrapped function ... ignores the cache wrapper and directly traces") on every compile; reading a
-# plain global is silent.
+# Cache the loaded kernel but not failures: re-checking each call is cheap and intended, since the env
+# can change between attempts. A module global (not `@functools.cache`) avoids Dynamo warning about
+# tracing a cache-wrapped function on every compile.
 _SONICMOE: SonicMoE | None = None
 
 
