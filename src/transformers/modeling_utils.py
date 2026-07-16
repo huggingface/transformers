@@ -3343,7 +3343,7 @@ class PreTrainedModel(
                 namespace).
             max_shard_size (`int` or `str`, *optional*, defaults to `"50GB"`):
                 The maximum size for a checkpoint before being sharded. Checkpoints shard will then be each of size
-                lower than this size. If expressed as a string, needs be digits followed by a unit (like `"5MB"`).
+                lower than this size. If expressed as a string, needs to be digits followed by a unit (like `"5MB"`).
 
                 <Tip warning={true}>
 
