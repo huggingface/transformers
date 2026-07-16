@@ -4215,9 +4215,6 @@ class PreTrainedModel(
             model_kwargs = kwargs
             commit_hash = getattr(config, "_commit_hash", commit_hash)
 
-        if distributed_config is not None:
-            config.distributed_config = distributed_config
-
         download_kwargs_with_commit["commit_hash"] = commit_hash
 
         # Because some composite configs call super().__init__ before instantiating the sub-configs, we need this call
