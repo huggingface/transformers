@@ -153,6 +153,12 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
                 module = model.get_submodule(module_name)
                 scale = getattr(module, attr)
                 setattr(module, attr, torch.nn.Parameter(scale.data.to(ue8m0), requires_grad=False))
+
+        fusion_config = getattr(model.config, "fusion_config", None)
+        if fusion_config is not None and not self.quantization_config.dequantize:
+            from ..fusion_mapping import apply_after_load_fusions
+
+            model = apply_after_load_fusions(model, fusion_config)
         return model
 
     def update_tp_plan(self, config):

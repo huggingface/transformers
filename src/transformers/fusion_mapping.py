@@ -67,6 +67,36 @@ class ModuleFusionSpec:
         """Build the weight transforms needed to load and save the fused runtime layout."""
         raise NotImplementedError
 
+    def validate_options(self, options: bool | Mapping[str, Any]) -> None:
+        """Validate user options for this fusion family."""
+        return
+
+
+class AfterLoadFusionSpec:
+    """Base recipe for fusions that require loaded weights and buffers."""
+
+    def validate_options(self, options: bool | Mapping[str, Any]) -> None:
+        """Validate user options for this fusion family."""
+        raise NotImplementedError
+
+    def apply(self, model: "PreTrainedModel", options: bool | Mapping[str, Any]) -> "PreTrainedModel":
+        """Apply the fusion after the model weights have been loaded."""
+        raise NotImplementedError
+
+
+class StaticQuantizedMLPAfterLoadFusionSpec(AfterLoadFusionSpec):
+    """Fuse eligible static quantized MLP modules after quantized weights and scales are loaded."""
+
+    def validate_options(self, options: bool | Mapping[str, Any]) -> None:
+        from .integrations.static_quantized_mlp import get_static_quantized_mlp_fusion_spec
+
+        get_static_quantized_mlp_fusion_spec(options)
+
+    def apply(self, model: "PreTrainedModel", options: bool | Mapping[str, Any]) -> "PreTrainedModel":
+        from .integrations.static_quantized_mlp import replace_with_static_quantized_mlp
+
+        return replace_with_static_quantized_mlp(model, options)
+
 
 class _FusedPatchEmbeddingMixin:
     def __init__(self, *args, **kwargs):
@@ -232,7 +262,10 @@ def _register_module_fusion(
     register_checkpoint_conversion_mapping(model_type, converters, overwrite=True)
 
 
-_FUSION_REGISTRY: dict[str, ModuleFusionSpec] = {"patch_embeddings": PatchEmbeddingsFusionSpec()}
+_FUSION_REGISTRY: dict[str, ModuleFusionSpec | AfterLoadFusionSpec] = {
+    "patch_embeddings": PatchEmbeddingsFusionSpec(),
+    "static_quantized_mlp": StaticQuantizedMLPAfterLoadFusionSpec(),
+}
 
 
 def _iter_enabled_fusions(fusion_config: Mapping[str, bool | Mapping[str, Any]]) -> list[str]:
@@ -248,6 +281,7 @@ def _iter_enabled_fusions(fusion_config: Mapping[str, bool | Mapping[str, Any]])
             raise ValueError(
                 f"Invalid fusion config for {fusion_name}: expected `True`, `False`, or a mapping of options."
             )
+        _FUSION_REGISTRY[fusion_name].validate_options(fusion_options)
         enabled_fusions.append(fusion_name)
     return enabled_fusions
 
@@ -267,4 +301,22 @@ def register_fusion_patches(
         return
 
     for fusion_name in _iter_enabled_fusions(fusion_config):
-        _register_module_fusion(cls, config, fusion_name, _FUSION_REGISTRY[fusion_name])
+        spec = _FUSION_REGISTRY[fusion_name]
+        if isinstance(spec, ModuleFusionSpec):
+            _register_module_fusion(cls, config, fusion_name, spec)
+
+
+def apply_after_load_fusions(
+    model: "PreTrainedModel", fusion_config: Mapping[str, bool | Mapping[str, Any]] | None = None
+) -> "PreTrainedModel":
+    """Apply fusions that require loaded weights and buffers."""
+
+    if not fusion_config:
+        return model
+
+    for fusion_name in _iter_enabled_fusions(fusion_config):
+        spec = _FUSION_REGISTRY[fusion_name]
+        if isinstance(spec, AfterLoadFusionSpec):
+            model = spec.apply(model, fusion_config[fusion_name])
+
+    return model
