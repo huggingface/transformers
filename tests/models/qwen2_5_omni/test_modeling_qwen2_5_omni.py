@@ -961,9 +961,10 @@ class Qwen2_5OmniToken2WavMaxPositionEmbeddingsTest(unittest.TestCase):
         """Verify batched Token2Wav sampling works with classifier-free guidance enabled."""
         batch_size = 2
         num_speech_tokens = 4
+        num_frames = 200
 
         conditioning_vector = torch.randn(batch_size, self.config.enc_emb_dim, device=torch_device)
-        reference_mel = torch.randn(batch_size, 200, self.config.mel_dim, device=torch_device)
+        reference_mel = torch.randn(batch_size, num_frames, self.config.mel_dim, device=torch_device)
         quantized_code = torch.randint(0, self.config.num_embeds, (batch_size, num_speech_tokens), device=torch_device)
 
         output = self.model.sample(
