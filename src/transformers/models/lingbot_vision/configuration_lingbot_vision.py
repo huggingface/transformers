@@ -20,7 +20,7 @@ from ...configuration_utils import PreTrainedConfig
 from ...utils import auto_docstring
 
 
-@auto_docstring
+@auto_docstring(checkpoint="robbyant/lingbot-vision-vit-giant-hf")
 @strict
 class LingbotVisionConfig(BackboneConfigMixin, PreTrainedConfig):
     r"""

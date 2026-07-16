@@ -28,6 +28,7 @@ from torch import nn
 from ... import initialization as init
 from ...backbone_utils import BackboneMixin, filter_output_hidden_states
 from ...integrations import use_kernel_forward_from_hub
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BackboneOutput, BaseModelOutputWithPooling
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
@@ -318,7 +319,7 @@ def _get_norm(config: LingbotVisionConfig) -> nn.Module:
     raise ValueError(f"Unknown LingBot-Vision norm layer: {config.norm_layer}")
 
 
-class LingbotVisionLayer(nn.Module):
+class LingbotVisionLayer(GradientCheckpointingLayer):
     def __init__(self, config: LingbotVisionConfig):
         super().__init__()
         self.norm1 = _get_norm(config)
@@ -430,11 +431,17 @@ class LingbotVisionPreTrainedModel(PreTrainedModel):
             init.ones_(module.weight)
             if getattr(module, "bias", None) is not None:
                 init.zeros_(module.bias)
+        elif isinstance(module, LingbotVisionLayerScale):
+            init.constant_(module.gamma, self.config.layer_scale_init_value)
         elif isinstance(module, LingbotVisionEmbeddings):
             init.normal_(module.cls_token, std=self.config.initializer_range)
             if module.num_storage_tokens > 0:
                 init.normal_(module.storage_tokens, std=self.config.initializer_range)
             init.zeros_(module.mask_token)
+        elif isinstance(module, LingbotVisionRotaryEmbedding):
+            # The `periods` buffer is deterministic; recompute it so the module can be
+            # re-initialized from scratch (e.g. when instantiated on the meta device).
+            module._init_weights()
 
 
 @auto_docstring
