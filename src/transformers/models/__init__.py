@@ -215,6 +215,7 @@ if TYPE_CHECKING:
     from .ijepa import *
     from .imagegpt import *
     from .informer import *
+    from .inkling import *
     from .instructblip import *
     from .instructblipvideo import *
     from .internvl import *

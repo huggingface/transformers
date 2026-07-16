@@ -75,6 +75,7 @@ HARDCODED_CONFIG_FOR_MODELS = {
     "x-clip": "XCLIPConfig",
     "kosmos2": "Kosmos2Config",
     "kosmos2-5": "Kosmos2_5Config",
+    "inkling": "InklingConfig",
     "donut": "DonutSwinConfig",
     "esmfold": "EsmConfig",
     "parakeet": "ParakeetCTCConfig",
