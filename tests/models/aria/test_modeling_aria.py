@@ -16,7 +16,6 @@
 import unittest
 
 import pytest
-import requests
 
 from transformers import (
     AriaConfig,
@@ -27,7 +26,6 @@ from transformers import (
     AutoTokenizer,
     BitsAndBytesConfig,
     is_torch_available,
-    is_vision_available,
 )
 from transformers.models.idefics3 import Idefics3VisionConfig
 from transformers.testing_utils import (
@@ -43,15 +41,13 @@ from transformers.testing_utils import (
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
+from ...test_image_processing_common import load_coco_image, load_test_image
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 
 
 if is_torch_available():
     import torch
 
-
-if is_vision_available():
-    from PIL import Image
 
 # Used to be https://aria-vl.github.io/static/images/view.jpg but it was removed, llava-vl has the same image
 IMAGE_OF_VIEW_URL = "https://llava-vl.github.io/static/images/view.jpg"
@@ -246,7 +242,7 @@ class AriaForConditionalGenerationIntegrationTest(unittest.TestCase):
         )
 
         prompt = "<|img|>\nUSER: What are the things I should be cautious about when I visit this place?\nASSISTANT:"
-        raw_image = Image.open(requests.get(IMAGE_OF_VIEW_URL, stream=True).raw)
+        raw_image = load_test_image(IMAGE_OF_VIEW_URL)
         inputs = self.processor(images=raw_image, text=prompt, return_tensors="pt").to(model.device, model.dtype)
 
         non_img_tokens = [
@@ -286,7 +282,7 @@ class AriaForConditionalGenerationIntegrationTest(unittest.TestCase):
         processor = AutoProcessor.from_pretrained(model_id)
 
         prompt = "USER: <|img|>\nWhat are the things I should be cautious about when I visit this place? ASSISTANT:"
-        raw_image = Image.open(requests.get(IMAGE_OF_VIEW_URL, stream=True).raw)
+        raw_image = load_test_image(IMAGE_OF_VIEW_URL)
         inputs = processor(images=raw_image, text=prompt, return_tensors="pt").to(model.device, model.dtype)
 
         output = model.generate(**inputs, max_new_tokens=90, do_sample=False)
@@ -320,8 +316,8 @@ class AriaForConditionalGenerationIntegrationTest(unittest.TestCase):
             "USER: <|img|>\nWhat are the things I should be cautious about when I visit this place? What should I bring with me? ASSISTANT:",
             "USER: <|img|>\nWhat is this? ASSISTANT:",
         ]
-        image1 = Image.open(requests.get(IMAGE_OF_VIEW_URL, stream=True).raw)
-        image2 = Image.open(requests.get("http://images.cocodataset.org/val2017/000000039769.jpg", stream=True).raw)
+        image1 = load_test_image(IMAGE_OF_VIEW_URL)
+        image2 = load_coco_image("000000039769.jpg")
 
         inputs = processor(images=[image1, image2], text=prompts, return_tensors="pt", padding=True).to(
             model.device, model.dtype
@@ -358,8 +354,8 @@ class AriaForConditionalGenerationIntegrationTest(unittest.TestCase):
             "USER: <|img|>\nWhat are the things I should be cautious about when I visit this place? What should I bring with me?\nASSISTANT:",
             "USER: <|img|>\nWhat is this?\nASSISTANT:",
         ]
-        image1 = Image.open(requests.get(IMAGE_OF_VIEW_URL, stream=True).raw)
-        image2 = Image.open(requests.get("http://images.cocodataset.org/val2017/000000039769.jpg", stream=True).raw)
+        image1 = load_test_image(IMAGE_OF_VIEW_URL)
+        image2 = load_coco_image("000000039769.jpg")
 
         inputs = self.processor(images=[image1, image2], text=prompts, return_tensors="pt", padding=True).to(
             model.device, model.dtype
@@ -398,8 +394,8 @@ class AriaForConditionalGenerationIntegrationTest(unittest.TestCase):
             "USER: <|img|>\nWhat are the things I should be cautious about when I visit this place? What should I bring with me?\nASSISTANT:",
             "USER: <|img|>\nWhat is this?\nASSISTANT: Two cats lying on a bed!\nUSER: <|img|>\nAnd this?\nASSISTANT:",
         ]
-        image1 = Image.open(requests.get(IMAGE_OF_VIEW_URL, stream=True).raw)
-        image2 = Image.open(requests.get("http://images.cocodataset.org/val2017/000000039769.jpg", stream=True).raw)
+        image1 = load_test_image(IMAGE_OF_VIEW_URL)
+        image2 = load_coco_image("000000039769.jpg")
 
         inputs = processor(images=[image1, image2, image1], text=prompts, return_tensors="pt", padding=True)
         inputs = inputs.to(model.device, model.dtype)
@@ -431,8 +427,8 @@ class AriaForConditionalGenerationIntegrationTest(unittest.TestCase):
         prompt3 = "<image>\nUSER: Describe the image.\nASSISTANT:"
         url1 = "https://images.unsplash.com/photo-1552053831-71594a27632d?q=80&w=3062&auto=format&fit=crop&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D"
         url2 = "https://images.unsplash.com/photo-1617258683320-61900b281ced?q=80&w=3087&auto=format&fit=crop&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D"
-        image1 = Image.open(requests.get(url1, stream=True).raw)
-        image2 = Image.open(requests.get(url2, stream=True).raw)
+        image1 = load_test_image(url1)
+        image2 = load_test_image(url2)
 
         # Create inputs
         messages = [
