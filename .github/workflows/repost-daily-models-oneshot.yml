@@ -1,0 +1,74 @@
+name: Repost daily models report (one-shot)
+
+# THROWAWAY one-shot workflow. Reposts the Slack report for a specific completed daily CI run
+# using this branch's hardened reporting code, WITHOUT re-running any tests.
+#
+# It is push-triggered (not workflow_dispatch) on purpose: a workflow_dispatch workflow can only
+# be triggered once it lives on the default branch, but this recovery needs to run from a feature
+# branch. Pushing this branch runs it automatically. Delete the branch when done.
+#
+# Target: run 29552413544 (Daily CI, run_models_gpu) whose Slack step failed on GitHub API rate
+# limits. `folder_slices` (the original `setup` matrix) is committed alongside as
+# `_repost_oneshot_slices.txt`.
+
+on:
+  push:
+    branches:
+      - repost-daily-models-oneshot
+
+env:
+  TRANSFORMERS_CI_RESULTS_UPLOAD_TOKEN: ${{ secrets.TRANSFORMERS_CI_RESULTS_UPLOAD_TOKEN }}
+
+permissions:
+  contents: read
+
+jobs:
+  repost:
+    name: Repost Slack report for run 29552413544
+    runs-on: ubuntu-22.04
+    env:
+      ORIG_RUN_ID: "29552413544"
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Set up Python 3.10
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        with:
+          python-version: "3.10"
+
+      # Same chunk-delayed downloader the daily CI uses, to avoid the secondary rate limit when
+      # pulling ~1000 test-report artifacts from the original run.
+      - uses: ydshieh/download-artifact@034d574170fc2fbcc74842d25304666dad52f1ad
+        env:
+          ACTIONS_ARTIFACT_MAX_ARTIFACT_COUNT: 2000
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          run-id: "29552413544"
+          chunk-delay: 1000
+
+      - name: Send message to Slack
+        shell: bash
+        env:
+          CI_SLACK_BOT_TOKEN: ${{ secrets.CI_SLACK_BOT_TOKEN }}
+          CI_SLACK_CHANNEL_ID: ${{ secrets.CI_SLACK_CHANNEL_ID }}
+          CI_SLACK_CHANNEL_ID_DAILY: ${{ secrets.CI_SLACK_CHANNEL_ID_DAILY }}
+          CI_SLACK_CHANNEL_DUMMY_TESTS: ${{ secrets.CI_SLACK_CHANNEL_DUMMY_TESTS }}
+          SLACK_REPORT_CHANNEL: "#transformers-ci-daily-models"
+          ACCESS_REPO_INFO_TOKEN: ${{ secrets.ACCESS_REPO_INFO_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CI_EVENT: "Daily CI"
+          CI_TEST_JOB: "run_models_gpu"
+          SETUP_STATUS: "success"
+          REPORT_REPO_ID: "hf-internal-testing/transformers_daily_ci"
+          PYTHONUNBUFFERED: "1"
+        run: |
+          pip install huggingface_hub
+          pip install slack_sdk
+          pip install requests
+          pip install .
+          # Regenerate the report as if it were the original scheduled run.
+          export GITHUB_RUN_ID="$ORIG_RUN_ID"
+          export GITHUB_EVENT_NAME="schedule"
+          python utils/notification_service.py "$(cat .github/workflows/_repost_oneshot_slices.txt)"
