@@ -1597,6 +1597,19 @@ def convert_and_load_state_dict_in_model(
                 original_key, [], [], base_model_prefix=base_model_prefix, meta_state_dict=meta_model_state_dict
             )
 
+        # One-to-many converters (e.g. SplitModulelist) produce a renamed key containing ".*."
+        # because rename_source_key replaces the source pattern with the first target pattern.
+        # The literal ".*." never exists in meta_model_state_dict, so expand it to the first
+        # concrete key that matches (e.g. "...experts.0.gate_proj.weight").  Each call to
+        # convert() will then produce all the individual target tensors for that layer.
+        if renamed_key not in meta_model_state_dict and source_pattern is not None and ".*." in renamed_key:
+            escaped = re.escape(renamed_key).replace(r"\.\*\.", r"\..*\.")
+            wildcard_re = re.compile(escaped)
+            renamed_key = next(
+                (k for k in meta_model_state_dict if wildcard_re.search(k)),
+                renamed_key,
+            )
+
         # 2. finally, collect the tensor into the proper converter
         if renamed_key in meta_model_state_dict:
             empty_param = meta_model_state_dict.get(renamed_key)
