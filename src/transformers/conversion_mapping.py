@@ -141,6 +141,19 @@ _MODEL_TO_CONVERSION_PATTERN = {
 
 def _build_checkpoint_conversion_mapping():
     mapping = {
+        # Cosmos3 Edge's composite checkpoint stores its dense reasoner text tower as conventional attention + MLP
+        # blocks. The visual/projector tensors already use their native module names and intentionally need no mapping.
+        "cosmos3_edge": [
+            WeightRenaming(r"^embed_tokens\.", "model.language_model.embed_tokens."),
+            WeightRenaming(r"^norm\.", "model.language_model.norm."),
+            WeightRenaming(r"^layers\.", "model.language_model.layers."),
+            WeightRenaming(r"\.self_attn\.to_q\.", ".self_attn.q_proj."),
+            WeightRenaming(r"\.self_attn\.to_k\.", ".self_attn.k_proj."),
+            WeightRenaming(r"\.self_attn\.to_v\.", ".self_attn.v_proj."),
+            WeightRenaming(r"\.self_attn\.to_out\.", ".self_attn.o_proj."),
+            WeightRenaming(r"\.mlp\.up_proj\.", ".mlp.fc1."),
+            WeightRenaming(r"\.mlp\.down_proj\.", ".mlp.fc2."),
+        ],
         "inkling_mm_model": [
             WeightRenaming(source_patterns=r"model\.llm\.layers", target_patterns=r"model.language_model.layers"),
             WeightRenaming(
