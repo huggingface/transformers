@@ -150,7 +150,9 @@ class Step3p7TextConfig(PreTrainedConfig):
         `layer_types=["full_attention", "sliding_attention", "sliding_attention", "sliding_attention", "full_attention"]`
         (5 entries: 4 real layers + 1 MTP layer) is trimmed to
         `["full_attention", "sliding_attention", "sliding_attention", "sliding_attention"]` (the
-        trailing MTP entry is dropped).
+        trailing MTP entry is dropped). Persisted as `self.num_nextn_predict_layers` (rather than
+        only consumed here and discarded) so `Step3p7TextModel` can compute which trailing layer
+        indices are MTP layers at load time, instead of a hardcoded checkpoint-specific range.
     rope_theta (`float | list[float]`, *optional*, defaults to 10000.0):
         Legacy hub-config kwarg. Real checkpoints give one value *per decoder layer* rather than one
         value for the whole model; since it only ever varies by `layer_types[layer_idx]`, this is
@@ -268,6 +270,7 @@ class Step3p7TextConfig(PreTrainedConfig):
         # `num_hidden_layers`. E.g. `num_hidden_layers=4, num_nextn_predict_layers=1`: an incoming
         # 5-entry `layer_types` (4 real layers + 1 MTP) is trimmed to just the 4 real layers.
         num_nextn_predict_layers = kwargs.pop("num_nextn_predict_layers", 0)
+        self.num_nextn_predict_layers = num_nextn_predict_layers
         if num_nextn_predict_layers:
             n, padded = self.num_hidden_layers, self.num_hidden_layers + num_nextn_predict_layers
             trimmed_fields = []
@@ -904,6 +907,8 @@ class Step3p7SharedExpert(Step3p7MLP):
 
 @no_inherit_decorator
 class Step3p7Experts(DeepseekV4Experts):
+    _fp8_experts_clamp_after_activation = True
+
     def __init__(self, config, swiglu_limit=None):
         super().__init__(config)
         self.intermediate_dim = config.moe_intermediate_size
@@ -1026,6 +1031,12 @@ class Step3p7TextModel(Gemma3TextModel):
         self.layers = nn.ModuleList([Step3p7DecoderLayer(config, i) for i in range(config.num_hidden_layers)])
         self.norm = Step3p7RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.rotary_emb = Step3p7RotaryEmbedding(config=config)
+        if config.num_nextn_predict_layers:
+            # Checkpoints append `num_nextn_predict_layers` unmodeled speculative-decoding layers right
+            # after the real ones. Ignore them on load instead of reporting them as unexpected keys.
+            mtp_layers = range(config.num_hidden_layers, config.num_hidden_layers + config.num_nextn_predict_layers)
+            pattern = rf"language_model\.layers\.({'|'.join(map(str, mtp_layers))})\."
+            self._keys_to_ignore_on_load_unexpected = set(self._keys_to_ignore_on_load_unexpected or []) | {pattern}
         self.post_init()
 
 

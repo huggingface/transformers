@@ -24,7 +24,6 @@ from transformers.models.step3p7.configuration_step3p7 import (
 )
 from transformers.testing_utils import (
     require_torch,
-    require_torch_accelerator,
     slow,
 )
 
@@ -32,10 +31,16 @@ from ...vlm_tester import VLMModelTest, VLMModelTester
 
 
 if is_torch_available():
+    import torch
+
     from transformers import Step3p7ForConditionalGeneration, Step3p7Model
 
 
 _REAL_CHECKPOINT = "stepfun-ai/Step-3.7-Flash"
+# FP8-quantized release: ~200GB on disk (vs. ~400GB for the bf16 checkpoint above), and its
+# `config.json` carries a native `quant_method: fp8` block so `from_pretrained` dequantizes/
+# dispatches it automatically, with no hand-built `quantization_config` needed.
+_REAL_CHECKPOINT_FP8 = "stepfun-ai/Step-3.7-Flash-FP8"
 
 
 # Vision: image_size=16, patch_size=4 → 4×4=16 patches → after 2×stride-2 downsampler → 1×1=1 token per image.
@@ -207,18 +212,6 @@ class Step3p7ModelTest(VLMModelTest, unittest.TestCase):
 
 
 @require_torch
-@require_torch_accelerator
-@slow
-class Step3p7IntegrationTest(unittest.TestCase):
-    """Placeholder for a real numerical forward-pass test against the actual (~400GB) checkpoint.
-
-    Needs both an accelerator and enough local disk to hold the weights, so it isn't wired up
-    yet — see `Step3p7ConversionMappingIntegrationTest` below for checkpoint-compatibility checks
-    that don't require downloading any tensor data.
-    """
-
-
-@require_torch
 @slow
 class Step3p7ConversionMappingIntegrationTest(unittest.TestCase):
     """Validate compatibility with the real `stepfun-ai/Step-3.7-Flash` checkpoint without ever
@@ -301,3 +294,132 @@ class Step3p7ConversionMappingIntegrationTest(unittest.TestCase):
         self.assertEqual(shape_mismatches, [], f"Shape mismatches (checkpoint, ours): {shape_mismatches}")
         # Sanity floor so a mapping that accidentally matches nothing doesn't slip through as "0 == 0".
         self.assertGreater(matched_simple_renames, 1000)
+
+
+@require_torch
+@slow
+class Step3p7LocalIntegrationTest(unittest.TestCase):
+    """End-to-end check on a locally built Step3p7 checkpoint.
+
+    The checkpoint is large enough (~290M params) for MoE experts to hit non-trivial gate/up
+    magnitudes and exercise the swiglu clamp, which the tiny unit-test config above never
+    triggers. Expected tokens were cross-checked against the original vendor code by
+    `scripts/step3p7/generate_expected_outputs.py`; rerun that script to regenerate them if the
+    config below or the modeling code changes deliberately.
+    """
+
+    EXPECTED_TEXT_ONLY = [
+        102,
+        411,
+        287,
+        239,
+        467,
+        158,
+        192,
+        56,
+        404,
+        276,
+        271,
+        271,
+        130,
+        183,
+        158,
+        432,
+        190,
+        68,
+        158,
+        159,
+    ]
+    EXPECTED_TEXT_AND_IMAGE = [
+        159, 159, 420, 83, 102, 194, 215, 192, 104, 215, 192, 467, 227, 158, 432, 382, 255, 209, 70, 414,
+    ]  # fmt: skip
+
+    @staticmethod
+    def _build_config() -> Step3p7Config:
+        num_hidden_layers = 6
+        moe_layer_indices = (2, 3, 4, 5)
+        text_config = Step3p7TextConfig(
+            hidden_size=1024,
+            intermediate_size=2048,
+            num_hidden_layers=num_hidden_layers,
+            num_attention_heads=16,
+            num_key_value_heads=4,
+            head_dim=64,
+            vocab_size=512,
+            rms_norm_eps=1e-5,
+            sliding_window=64,
+            moe_intermediate_size=1280,
+            n_routed_experts=16,
+            num_experts_per_tok=4,
+            share_expert_dim=256,
+            norm_expert_weight=True,
+            mlp_layer_types=["dense" if i not in moe_layer_indices else "sparse" for i in range(num_hidden_layers)],
+            moe_router_activation="sigmoid",
+            moe_router_scaling_factor=1.0,
+            use_moe_router_bias=True,
+            use_head_wise_attn_gate=True,
+            need_fp32_gate=True,
+            layer_types=["full_attention"] + ["sliding_attention"] * (num_hidden_layers - 1),
+            rope_theta=[5000000.0] + [10000.0] * (num_hidden_layers - 1),
+            partial_rotary_factors=[0.5] + [1.0] * (num_hidden_layers - 1),
+            max_position_embeddings=512,
+            max_seq_len=512,
+            attention_other_setting={"num_attention_heads": 24, "num_attention_groups": 4, "head_dim": 64},
+            pad_token_id=1,
+            use_rope_layers=[True] * num_hidden_layers,
+            yarn_only_types=["full_attention"],
+            swiglu_limits=[None if i not in moe_layer_indices else 1.0 for i in range(num_hidden_layers)],
+            swiglu_limits_shared=[None if i not in moe_layer_indices else 1.0 for i in range(num_hidden_layers)],
+        )
+        vision_config = Step3p7VisionConfig(
+            hidden_size=64,
+            num_hidden_layers=2,
+            num_attention_heads=4,
+            num_channels=3,
+            image_size=56,
+            patch_size=14,
+            mlp_ratio=4.0,
+            hidden_act="quick_gelu",
+        )
+        return Step3p7Config(
+            text_config=text_config, vision_config=vision_config, projector_bias=False, image_token_id=511
+        )
+
+    @classmethod
+    def setUpClass(cls):
+        config = cls._build_config()
+
+        torch.manual_seed(0)
+        cls.model = Step3p7ForConditionalGeneration(config).eval()
+
+        torch.manual_seed(42)
+        cls.text_input_ids = torch.randint(0, config.text_config.vocab_size, (1, 16))
+
+        torch.manual_seed(42)
+        cls.image_input_ids = torch.randint(0, config.text_config.vocab_size, (1, 16))
+        cls.image_input_ids[0, 8] = config.image_token_id
+        torch.manual_seed(43)
+        cls.pixel_values = torch.randn(
+            1, config.vision_config.num_channels, config.vision_config.image_size, config.vision_config.image_size
+        )
+
+    def test_text_only_generation_matches_original_code(self):
+        with torch.no_grad():
+            output_ids = self.model.generate(
+                input_ids=self.text_input_ids, max_new_tokens=20, do_sample=False, use_cache=True
+            )
+        generated = output_ids[0, self.text_input_ids.shape[1] :].tolist()
+        self.assertEqual(generated, self.EXPECTED_TEXT_ONLY)
+
+    def test_text_and_image_generation_matches_original_code(self):
+        with torch.no_grad():
+            output_ids = self.model.generate(
+                input_ids=self.image_input_ids,
+                pixel_values=self.pixel_values,
+                num_local_patches=[0],
+                max_new_tokens=20,
+                do_sample=False,
+                use_cache=True,
+            )
+        generated = output_ids[0, self.image_input_ids.shape[1] :].tolist()
+        self.assertEqual(generated, self.EXPECTED_TEXT_AND_IMAGE)
