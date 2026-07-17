@@ -122,20 +122,11 @@ class SonicMoeLoaderTest(unittest.TestCase):
         self.assertIsInstance(bundle, sm.SonicMoE)
         self.assertIs(bundle.activation_type_enum, _FakeActivationType)
 
-    def test_raises_without_kernels_package(self):
-        with self._env(kernels_available=False), self.assertRaisesRegex(ImportError, "`kernels` package"):
-            sm.load_sonicmoe_kernel()
-
-    def test_raises_without_cuda(self):
+    def test_loader_surfaces_unloadable(self):
+        # The loader delegates gating to `is_sonicmoe_loadable(raise_error=True)`; confirm an unmet
+        # precondition propagates through `load_sonicmoe_kernel` (exhaustive per-branch coverage lives in
+        # `test_is_sonicmoe_loadable`).
         with self._env(cuda_available=False), self.assertRaisesRegex(ImportError, "requires CUDA"):
-            sm.load_sonicmoe_kernel()
-
-    def test_raises_on_unsupported_arch(self):
-        with self._env(capability=(8, 0)), self.assertRaisesRegex(ImportError, "requires a Hopper"):
-            sm.load_sonicmoe_kernel()
-
-    def test_raises_on_incompatible_dependency_versions(self):
-        with self._env(versions_ok=False), self.assertRaisesRegex(ImportError, "unvalidated"):
             sm.load_sonicmoe_kernel()
 
     def test_raises_when_kernel_fails_to_load(self):
@@ -148,6 +139,23 @@ class SonicMoeLoaderTest(unittest.TestCase):
             self.assertRaisesRegex(ImportError, "missing required symbols"),
         ):
             sm.load_sonicmoe_kernel()
+
+    def test_is_sonicmoe_loadable(self):
+        # The single gating source: valid env -> True; each unmet precondition -> False, or the specific
+        # `ImportError` when `raise_error=True` (what the loader uses).
+        with self._env():
+            self.assertTrue(sm.is_sonicmoe_loadable())
+        for env_kwargs, pattern in [
+            ({"kernels_available": False}, "`kernels` package"),
+            ({"cuda_available": False}, "requires CUDA"),
+            ({"capability": (8, 0)}, "requires a Hopper"),
+            ({"versions_ok": False}, "unvalidated"),
+        ]:
+            with self.subTest(pattern=pattern):
+                with self._env(**env_kwargs):
+                    self.assertFalse(sm.is_sonicmoe_loadable())
+                with self._env(**env_kwargs), self.assertRaisesRegex(ImportError, pattern):
+                    sm.is_sonicmoe_loadable(raise_error=True)
 
     def test_loader_is_compile_safe(self):
         # Cold path: the compiled call is first to load, so the opaque loader node runs its full body
@@ -179,6 +187,39 @@ class SonicMoeLoaderTest(unittest.TestCase):
 
             out = run(torch.zeros(3, device=torch_device))
         self.assertTrue(torch.equal(out, torch.ones(3, device=torch_device)))
+
+
+@require_torch
+class SonicMoeCompileSafetyTest(unittest.TestCase):
+    """`_sonicmoe_wrapper`'s `@allow_in_graph` must keep the CuteDSL dispatch opaque under torch.compile —
+    sonic-moe's kernel asserts `not is_compiling()`. This targets the wrapper directly (not the full
+    forward, which requires a CUDA device); the wrapper has no device dependency, so — like the loader
+    compile-safety tests above — it needs no GPU.
+    """
+
+    def setUp(self):
+        sm._SONICMOE = None
+        self.addCleanup(setattr, sm, "_SONICMOE", None)
+
+    def test_wrapper_shields_kernel_dispatch(self):
+        # The mocked dispatch asserts it isn't tracing; if the wrapper ever lost its `@allow_in_graph`,
+        # Dynamo would trace in, `is_compiling()` would be True, and the assert would fire. Args past
+        # `hidden_states` are dummies — the fake only reads `hidden_states` (for `zeros_like`).
+        def fake_moe(hidden_states, *args, **kwargs):
+            assert not torch.compiler.is_compiling()
+            return torch.zeros_like(hidden_states), None
+
+        bundle = sm.SonicMoE(activation_type_enum=_FakeActivationType, moe_general_routing_inputs=fake_moe)
+        d = torch.zeros(1, device=torch_device)
+        with mock.patch.object(sm, "load_sonicmoe_kernel", return_value=bundle):
+            torch.compiler.reset()
+
+            @torch.compile(fullgraph=True)
+            def run(x):
+                return sm._sonicmoe_wrapper(x, d, d, d, d, None, d, None, "silu", 4, True, True)
+
+            out = run(torch.zeros(6, 8, dtype=torch.bfloat16, device=torch_device))
+        self.assertEqual(out.shape, (6, 8))
 
 
 def _make_experts(
@@ -323,21 +364,6 @@ class SonicMoeExpertsForwardTest(unittest.TestCase):
         experts = _make_experts(hidden_act="tanh")
         with self.assertRaisesRegex(ValueError, "does not support the 'tanh' activation"):
             self._run(experts)
-
-    def test_forward_is_compile_safe(self):
-        # The real forward routes the CuteDSL dispatch through `_sonicmoe_wrapper` (@allow_in_graph),
-        # which must keep it opaque under torch.compile — sonic-moe's kernel asserts `not is_compiling()`,
-        # mirrored here by `assert_not_compiling=True`. If the wrapper ever stopped shielding it, Dynamo
-        # would trace the dispatch and the assert would fire; the test passing is the proof it didn't.
-        experts = _make_experts(num_experts=4, hidden=8, inter=16)
-        hidden_states = torch.randn(3, 8, dtype=torch.bfloat16, device=torch_device)
-        top_k_index = torch.randint(0, experts.num_experts, (3, 2), device=torch_device)
-        top_k_weights = torch.rand(top_k_index.shape, dtype=torch.bfloat16, device=torch_device)
-        with self._mocked_kernel(assert_not_compiling=True):
-            torch.compiler.reset()
-            compiled = torch.compile(sonicmoe_experts_forward, fullgraph=True)
-            out = compiled(experts, hidden_states, top_k_index, top_k_weights)
-        self.assertEqual(out.shape, hidden_states.shape)
 
 
 if __name__ == "__main__":

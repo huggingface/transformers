@@ -148,40 +148,11 @@ class DeepGemmLoaderTest(unittest.TestCase):
         self.assertIsInstance(bundle, dg.DeepGEMM)
         self.assertEqual(bundle.m_alignment, 128)
 
-    def test_loads_on_blackwell(self):
-        with self._env(capability=(10, 0)):
-            bundle = dg.load_deepgemm_kernel()
-        self.assertIsInstance(bundle, dg.DeepGEMM)
-
-    def test_raises_without_kernels_package(self):
-        with (
-            self._env(kernels_available=False),
-            self.assertRaisesRegex(ImportError, "kernel unavailable"),
-        ):
-            dg.load_deepgemm_kernel()
-
-    def test_raises_without_cuda(self):
+    def test_loader_surfaces_unloadable(self):
+        # The loader delegates gating to `is_deepgemm_loadable(raise_error=True)`; confirm an unmet
+        # precondition propagates through `load_deepgemm_kernel` (exhaustive per-branch coverage lives in
+        # `test_is_deepgemm_loadable`, which drives the gate directly).
         with self._env(cuda_available=False), self.assertRaisesRegex(ImportError, "requires CUDA"):
-            dg.load_deepgemm_kernel()
-
-    def test_raises_on_unsupported_arch(self):
-        with self._env(capability=(8, 0)), self.assertRaisesRegex(ImportError, "requires Hopper"):
-            dg.load_deepgemm_kernel()
-
-    def test_raises_without_cuda_toolkit(self):
-        with self._env(toolkit_present=False), self.assertRaisesRegex(ImportError, "needs a CUDA toolkit"):
-            dg.load_deepgemm_kernel()
-
-    def test_raises_without_nvcc(self):
-        with self._env(nvcc_present=False), self.assertRaisesRegex(ImportError, "compiles with nvcc"):
-            dg.load_deepgemm_kernel()
-
-    def test_raises_on_unreadable_nvcc_version(self):
-        with self._env(nvcc_version=None), self.assertRaisesRegex(ImportError, "could not read its CUDA version"):
-            dg.load_deepgemm_kernel()
-
-    def test_raises_on_old_nvcc(self):
-        with self._env(nvcc_version=(12, 0)), self.assertRaisesRegex(ImportError, "too old"):
             dg.load_deepgemm_kernel()
 
     def test_raises_when_kernel_fails_to_load(self):
@@ -195,15 +166,25 @@ class DeepGemmLoaderTest(unittest.TestCase):
         ):
             dg.load_deepgemm_kernel()
 
-    def test_is_deepgemm_loadable_reduces_env_to_bool(self):
-        # The public one-glance gate: True on a valid env, False for any unmet precondition (here a
-        # missing nvcc and an unsupported arch), never raising.
+    def test_is_deepgemm_loadable(self):
+        # The single gating source: valid env -> True; each unmet precondition -> False, or the specific
+        # `ImportError` when `raise_error=True` (what the loader uses).
         with self._env():
             self.assertTrue(dg.is_deepgemm_loadable())
-        with self._env(nvcc_present=False):
-            self.assertFalse(dg.is_deepgemm_loadable())
-        with self._env(capability=(8, 0)):
-            self.assertFalse(dg.is_deepgemm_loadable())
+        for env_kwargs, pattern in [
+            ({"kernels_available": False}, "kernel unavailable"),
+            ({"cuda_available": False}, "requires CUDA"),
+            ({"capability": (8, 0)}, "requires Hopper"),
+            ({"toolkit_present": False}, "needs a CUDA toolkit"),
+            ({"nvcc_present": False}, "compiles with nvcc"),
+            ({"nvcc_version": None}, "could not read its CUDA version"),
+            ({"nvcc_version": (12, 0)}, "too old"),
+        ]:
+            with self.subTest(pattern=pattern):
+                with self._env(**env_kwargs):
+                    self.assertFalse(dg.is_deepgemm_loadable())
+                with self._env(**env_kwargs), self.assertRaisesRegex(ImportError, pattern):
+                    dg.is_deepgemm_loadable(raise_error=True)
 
     def test_loader_is_compile_safe(self):
         # Cold path: the compiled call is first to load, so the opaque loader node runs its full body
@@ -469,25 +450,22 @@ class DeepGemmForwardTest(unittest.TestCase):
         self.assertEqual(w_sf.dtype, torch.int32)
         self.assertEqual(w_sf.shape, (256, 1))
 
-    def test_linear_fp4_requires_sm100(self):
-        # FP4 (int8-packed) weights run only on Blackwell; the loader admits Hopper too (for FP8/BF16), so
-        # the forward guards against the resolved `is_sm100`. Regression guard for the moved SM100 gate.
-        input = torch.randn(4, 128, dtype=torch.bfloat16, device=torch_device)
-        weight = torch.randint(-8, 8, (256, 64), dtype=torch.int8, device=torch_device)
-        weight_scale = torch.ones(256, 4, dtype=torch.float32, device=torch_device).to(torch.float8_e8m0fnu)
-        with self._bundle(is_sm100=False):
+    def test_assert_sm100_requirements(self):
+        # The shared before-load arch guard used by every FP8/FP4 forward: FP4 (int8) weights need
+        # Blackwell; Blackwell has no float32 scale-factor path. Driven directly (faked capability)
+        # instead of re-tested through linear / experts / megamoe.
+        fp8_w = torch.zeros(1, 1, dtype=torch.float8_e4m3fn, device=torch_device)
+        int8_w = torch.zeros(1, 1, dtype=torch.int8, device=torch_device)
+        f32_sf = torch.ones(1, 1, dtype=torch.float32, device=torch_device)
+        ue8m0_sf = f32_sf.to(torch.float8_e8m0fnu)
+        with mock.patch.object(torch.cuda, "get_device_capability", return_value=(9, 0)):  # SM90
             with self.assertRaisesRegex(NotImplementedError, "Blackwell"):
-                deepgemm_fp8_fp4_linear(input, weight, weight_scale)
-
-    def test_linear_rejects_float32_scales_on_sm100(self):
-        # Blackwell has no float32-SF kernel path — rounding to UE8M0 would corrupt the output, so fail
-        # loud (the FP8 dispatcher catches this and falls back to Triton). Float32 SFs are fine on SM90.
-        input = torch.randn(4, 128, dtype=torch.bfloat16, device=torch_device)
-        weight = torch.randn(16, 128, device=torch_device).to(torch.float8_e4m3fn)
-        weight_scale = torch.ones(1, 1, dtype=torch.float32, device=torch_device)
-        with self._bundle(is_sm100=True):
-            with self.assertRaisesRegex(NotImplementedError, "UE8M0"):
-                deepgemm_fp8_fp4_linear(input, weight, weight_scale, block_size=(128, 128))
+                dg._assert_sm100_requirements(int8_w, ue8m0_sf)  # FP4 has no Hopper kernel
+            dg._assert_sm100_requirements(fp8_w, f32_sf)  # float32 SF is fine on SM90 -> no raise
+        with mock.patch.object(torch.cuda, "get_device_capability", return_value=(10, 0)):  # SM100
+            with self.assertRaisesRegex(NotImplementedError, "float32 scale-factor path"):
+                dg._assert_sm100_requirements(fp8_w, f32_sf)  # no float32 SF path on Blackwell
+            dg._assert_sm100_requirements(int8_w, ue8m0_sf)  # UE8M0 on SM100 -> no raise
 
     def test_linear_adds_bias_and_ignores_deprecated_output_dtype(self):
         input = torch.randn(4, 128, dtype=torch.bfloat16, device=torch_device)
@@ -614,27 +592,6 @@ class DeepGemmForwardTest(unittest.TestCase):
         # Up-proj output buffer is (padded rows, 2I).
         self.assertEqual(up["out"].shape[1], 32)
 
-    def test_fp8_experts_asserts_ue8m0_scales_on_sm100(self):
-        # The `_assert_sm100_requirements` loud-failure: on SM100 a plain float32 expert SF means a
-        # non-UE8M0 checkpoint that would be silently corrupted by rounding — fail early and clearly.
-        experts = _make_experts(scale_dtype=torch.float32)
-        hidden_states, top_k_index, top_k_weights = self._fp8_hidden()
-        with self._bundle(is_sm100=True):
-            with self.assertRaisesRegex(NotImplementedError, "float32 scale-factor path"):
-                deepgemm_fp8_fp4_experts_forward(experts, hidden_states, top_k_index, top_k_weights)
-
-        # The converse (no false positives): the guard is a no-op for UE8M0 SFs on SM100 (kernel-ready
-        # as-is) and for any SF on SM90 (float32 SFs are consumed directly). Checked on the guard itself
-        # with a faked capability — the SM100 UE8M0 forward path needs realistically wide SFs (last dim
-        # divisible by 4 to pack into int32) that a toy expert shape can't provide.
-        weight = torch.zeros(1, 1, device=torch_device, dtype=torch.float8_e4m3fn)  # non-FP4, skips the arch branch
-        f32 = torch.ones(4, 1, device=torch_device, dtype=torch.float32)
-        ue8m0 = f32.to(torch.float8_e8m0fnu)
-        with mock.patch.object(torch.cuda, "get_device_capability", return_value=(10, 0)):
-            dg._assert_sm100_requirements(weight, ue8m0)  # UE8M0 scale on SM100 -> no raise
-        with mock.patch.object(torch.cuda, "get_device_capability", return_value=(9, 0)):
-            dg._assert_sm100_requirements(weight, f32)  # float32 scale on SM90 -> no raise
-
     # ── deepgemm_fp8_fp4_megamoe_experts_forward ───────────────────────────────
 
     def _make_megamoe(self, *, num_experts=4, hidden_dim=64, inter=32, swiglu_limit=None):
@@ -729,23 +686,6 @@ class DeepGemmForwardTest(unittest.TestCase):
         with self._bundle(is_sm100=True):
             with self.assertRaisesRegex(ValueError, "requires a .process_group."):
                 deepgemm_fp8_fp4_megamoe_experts_forward(module2, hidden_states, top_k_index, top_k_weights)
-
-    def test_megamoe_requires_sm100(self):
-        # Mega MoE is Blackwell-only and FP4 (int8) — so `_assert_sm100_requirements` rejects it before
-        # load on a non-SM100 device. Regression guard for the before-load SM100 gate.
-        module = self._make_megamoe()
-        hidden_states = torch.randn(3, 64, dtype=torch.bfloat16, device=torch_device)
-        top_k_index = torch.randint(0, 4, (3, 2), dtype=torch.long, device=torch_device)
-        top_k_weights = torch.rand(3, 2, dtype=torch.float32, device=torch_device)
-        with self._bundle(is_sm100=False):
-            with self.assertRaisesRegex(NotImplementedError, "requires a Blackwell"):
-                deepgemm_fp8_fp4_megamoe_experts_forward(
-                    module,
-                    hidden_states,
-                    top_k_index,
-                    top_k_weights,
-                    process_group=types.SimpleNamespace(size=lambda: 1),
-                )
 
     @staticmethod
     def _megamoe_flag_set(module):
