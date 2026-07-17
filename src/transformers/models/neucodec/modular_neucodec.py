@@ -166,8 +166,7 @@ class NeuCodecModel(Xcodec2Model):
         >>> audio_codes = outputs.audio_codes
         >>> audio_values = outputs.audio_values  # sampled at 24kHz
         ```"""
-        # NeuCodec's decoder outputs audio at `sampling_rate`, which differs from the `input_sampling_rate` of
-        # `input_values`, so the truncation length must be rescaled accordingly.
+        # NeuCodec's decoder outputs audio at `output_sampling_rate`, which differs from the `input_sampling_rate` of
         input_length = input_values.shape[-1]
         output_length = int(input_length * self.config.output_sampling_rate / self.config.input_sampling_rate)
 
