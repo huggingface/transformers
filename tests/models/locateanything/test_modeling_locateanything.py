@@ -221,29 +221,44 @@ class LocateAnythingIntegrationTest(unittest.TestCase):
         # sdpa fallback attends per image chunk, so a moderately sized image keeps memory bounded.
         cases = [
             (
+                "coco-cat",
                 "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/coco_sample.png",
                 "Locate all instances that match the following description: cat.",
                 "<ref>cat</ref><box><0><112><494><988></box><|im_end|>",
             ),
+            (
+                "warehouse-industrial-assets",
+                "https://live.staticflickr.com/6061/6097691785_925e4687b4_o.jpg",
+                "Locate all the instances that matches the following description: "
+                "forklift</c>pallet</c>stacked supply boxes</c>warehouse aisle.",
+                "<ref>forklift</ref><box><586><126><979><956></box><ref>pallet</ref><box><388><113><597><951></box>"
+                "<box><588><191><645><831></box><ref>stacked supply boxes</ref><box><322><264><396><826></box>"
+                "<box><388><113><597><951></box><box><588><191><645><831></box>"
+                "<ref>warehouse aisle</ref><box><0><0><1000><1000></box><|im_end|>",
+            ),
         ]
-        for url, prompt, expected in cases:
-            image = Image.open(requests.get(url, stream=True, timeout=30).raw).convert("RGB")
-            messages = [
-                {"role": "user", "content": [{"type": "image", "image": image}, {"type": "text", "text": prompt}]}
-            ]
-            text = processor.py_apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
-            images, videos = processor.process_vision_info(messages)
-            inputs = processor(text=[text], images=images, videos=videos, return_tensors="pt").to(torch_device)
+        for case_name, url, prompt, expected in cases:
+            with self.subTest(case_name=case_name):
+                image = Image.open(requests.get(url, stream=True, timeout=30).raw).convert("RGB")
+                messages = [
+                    {
+                        "role": "user",
+                        "content": [{"type": "image", "image": image}, {"type": "text", "text": prompt}],
+                    }
+                ]
+                text = processor.py_apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
+                images, videos = processor.process_vision_info(messages)
+                inputs = processor(text=[text], images=images, videos=videos, return_tensors="pt").to(torch_device)
 
-            output = model.generate(
-                pixel_values=inputs["pixel_values"].to(dtype),
-                input_ids=inputs["input_ids"],
-                attention_mask=inputs["attention_mask"],
-                image_grid_hws=inputs.get("image_grid_hws", None),
-                tokenizer=processor.tokenizer,
-                max_new_tokens=64,
-                use_cache=True,
-                generation_mode="slow",
-                do_sample=False,
-            )
-            self.assertEqual(output[0], expected)
+                output = model.generate(
+                    pixel_values=inputs["pixel_values"].to(dtype),
+                    input_ids=inputs["input_ids"],
+                    attention_mask=inputs["attention_mask"],
+                    image_grid_hws=inputs.get("image_grid_hws", None),
+                    tokenizer=processor.tokenizer,
+                    max_new_tokens=128,
+                    use_cache=True,
+                    generation_mode="slow",
+                    do_sample=False,
+                )
+                self.assertEqual(output[0], expected)
