@@ -41,7 +41,7 @@ from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
     BaseModelOutputWithPooling,
-    CausalLMOutputWithPast,
+    MoeCausalLMOutputWithPast,
     MoeModelOutputWithPast,
 )
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
@@ -1101,13 +1101,16 @@ class Glm5NextVLModel(Glm5NextVLPreTrainedModel):
         video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
             The temporal, height and width of feature shape of each video in LLM.
         """
-        pixel_values_videos = pixel_values_videos.type(self.visual.dtype)
-        # TODO: let the processor return a flattened grid instead --> fully inherit here
+        # Same as in `Glm46V`
+        # reshape video_grid_thw -> [b, 3] -> [1, h, w] * frames
         t = video_grid_thw[:, 0]
         hw = video_grid_thw[:, 1:]
+        # repeat each (h,w) row `t` times
         flattened_hw = torch.repeat_interleave(hw, t, dim=0)
         prefix_ones = video_grid_thw.new_ones(flattened_hw.shape[0], 1)
         flattened_video_grid_thw = torch.cat([prefix_ones, flattened_hw], dim=1)
+
+        pixel_values_videos = pixel_values_videos.type(self.visual.dtype)
         vision_outputs = self.visual(pixel_values_videos, grid_thw=flattened_video_grid_thw, **kwargs)
         split_sizes = (video_grid_thw.prod(-1) // self.visual.spatial_merge_size**2).tolist()
         vision_outputs.pooler_output = torch.split(vision_outputs.pooler_output, split_sizes)
@@ -1245,6 +1248,88 @@ class Glm5NextVLModel(Glm5NextVLPreTrainedModel):
         )
 
 
+def load_balancing_loss_func(
+    gate_logits: torch.Tensor | tuple[torch.Tensor] | None,
+    num_experts: int | None = None,
+    top_k=2,
+    attention_mask: torch.Tensor | None = None,
+) -> torch.Tensor | int:
+    r"""
+    Computes auxiliary load balancing loss as in Switch Transformer - implemented in Pytorch.
+
+    See Switch Transformer (https://huggingface.co/papers/2101.03961) for more details. This function implements the loss
+    function presented in equations (4) - (6) of the paper. It aims at penalizing cases where the routing between
+    experts is too unbalanced.
+
+    Args:
+        gate_logits:
+            Logits from the `gate`, should be a tuple of model.config.num_hidden_layers tensors of
+            shape [batch_size X sequence_length, num_experts].
+        num_experts:
+            Number of experts
+        top_k:
+            The number of experts to route per-token, can be also interpreted as the `top-k` routing
+            parameter.
+        attention_mask (`torch.Tensor`, *optional*):
+            The attention_mask used in forward function
+            shape [batch_size X sequence_length] if not None.
+
+    Returns:
+        The auxiliary loss.
+    """
+    if gate_logits is None or not isinstance(gate_logits, tuple):
+        return 0
+
+    if isinstance(gate_logits, tuple):
+        compute_device = gate_logits[0].device
+        concatenated_gate_logits = torch.cat([layer_gate.to(compute_device) for layer_gate in gate_logits], dim=0)
+
+    routing_weights = torch.nn.functional.softmax(concatenated_gate_logits, dim=-1)
+
+    _, selected_experts = torch.topk(routing_weights, top_k, dim=-1)
+
+    expert_mask = torch.nn.functional.one_hot(selected_experts, num_experts)
+
+    if attention_mask is None:
+        # Compute the percentage of tokens routed to each experts
+        tokens_per_expert = torch.mean(expert_mask.float(), dim=0)
+
+        # Compute the average probability of routing to these experts
+        router_prob_per_expert = torch.mean(routing_weights, dim=0)
+    else:
+        batch_size, sequence_length = attention_mask.shape
+        num_hidden_layers = concatenated_gate_logits.shape[0] // (batch_size * sequence_length)
+
+        # Compute the mask that masks all padding tokens as 0 with the same shape of expert_mask
+        expert_attention_mask = (
+            attention_mask[None, :, :, None, None]
+            .expand((num_hidden_layers, batch_size, sequence_length, top_k, num_experts))
+            .reshape(-1, top_k, num_experts)
+            .to(compute_device)
+        )
+
+        # Compute the percentage of tokens routed to each experts
+        tokens_per_expert = torch.sum(expert_mask.float() * expert_attention_mask, dim=0) / torch.sum(
+            expert_attention_mask, dim=0
+        )
+
+        # Compute the mask that masks all padding tokens as 0 with the same shape of tokens_per_expert
+        router_per_expert_attention_mask = (
+            attention_mask[None, :, :, None]
+            .expand((num_hidden_layers, batch_size, sequence_length, num_experts))
+            .reshape(-1, num_experts)
+            .to(compute_device)
+        )
+
+        # Compute the average probability of routing to these experts
+        router_prob_per_expert = torch.sum(routing_weights * router_per_expert_attention_mask, dim=0) / torch.sum(
+            router_per_expert_attention_mask, dim=0
+        )
+
+    overall_loss = torch.sum(tokens_per_expert * router_prob_per_expert.unsqueeze(0))
+    return overall_loss * num_experts
+
+
 class Glm5NextVLForConditionalGeneration(Glm5NextVLPreTrainedModel, GenerationMixin):
     """
     Main Glm5NextVL conditional generation class.
@@ -1258,6 +1343,9 @@ class Glm5NextVLForConditionalGeneration(Glm5NextVLPreTrainedModel, GenerationMi
         super().__init__(config)
         self.model = Glm5NextVLModel(config)
         self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
+        self.router_aux_loss_coef = config.router_aux_loss_coef
+        self.num_experts = config.num_local_experts
+        self.num_experts_per_tok = config.num_experts_per_tok
 
         self.post_init()
 
@@ -1306,9 +1394,10 @@ class Glm5NextVLForConditionalGeneration(Glm5NextVLPreTrainedModel, GenerationMi
         pixel_values_videos: torch.FloatTensor | None = None,
         image_grid_thw: torch.LongTensor | None = None,
         video_grid_thw: torch.LongTensor | None = None,
+        output_router_logits: bool | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | CausalLMOutputWithPast:
+    ) -> tuple | MoeCausalLMOutputWithPast:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
@@ -1322,11 +1411,11 @@ class Glm5NextVLForConditionalGeneration(Glm5NextVLPreTrainedModel, GenerationMi
         Example:
 
         ```python
-        >>> from transformers import AutoProcessor, Glm5NextVL_ForConditionalGeneration
+        >>> from transformers import AutoProcessor, Glm5NextVLForConditionalGeneration
         >>> import torch
 
-        >>> model = Glm5NextVL_ForConditionalGeneration.from_pretrained("LGAI-EXAONE/EXAONE-4.5-33B")
-        >>> processor = AutoProcessor.from_pretrained("LGAI-EXAONE/EXAONE-4.5-33B")
+        >>> model = Glm5NextVLForConditionalGeneration.from_pretrained("zai-org/GLM-5-Next-VL")
+        >>> processor = AutoProcessor.from_pretrained("zai-org/GLM-5-Next-VL")
 
         >>> messages = [
         ...     {
@@ -1344,6 +1433,11 @@ class Glm5NextVLForConditionalGeneration(Glm5NextVLPreTrainedModel, GenerationMi
         >>> generated_ids = model.generate(**inputs, max_new_tokens=64)
         ```
         """
+
+        output_router_logits = (
+            output_router_logits if output_router_logits is not None else self.config.output_router_logits
+        )
+
         outputs = self.model(
             input_ids=input_ids,
             pixel_values=pixel_values,
@@ -1355,6 +1449,7 @@ class Glm5NextVLForConditionalGeneration(Glm5NextVLPreTrainedModel, GenerationMi
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
+            output_router_logits=output_router_logits,
             **kwargs,
         )
 
@@ -1368,12 +1463,25 @@ class Glm5NextVLForConditionalGeneration(Glm5NextVLPreTrainedModel, GenerationMi
                 logits=logits, labels=labels, vocab_size=self.config.text_config.vocab_size, **kwargs
             )
 
-        return CausalLMOutputWithPast(
+        aux_loss = None
+        if output_router_logits:
+            aux_loss = load_balancing_loss_func(
+                outputs.router_logits,
+                self.num_experts,
+                self.num_experts_per_tok,
+                attention_mask,
+            )
+            if labels is not None:
+                loss += self.router_aux_loss_coef * aux_loss.to(loss.device)  # make sure to reside in the same device
+
+        return MoeCausalLMOutputWithPast(
             loss=loss,
+            aux_loss=aux_loss,
             logits=logits,
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
+            router_logits=outputs.router_logits,
         )
 
     def prepare_inputs_for_generation(
@@ -1407,9 +1515,11 @@ class Glm5NextVLForConditionalGeneration(Glm5NextVLPreTrainedModel, GenerationMi
         )
         # Force recomputation of 2D-RoPE and ignore rope_deltas
         model_inputs["position_ids"] = None
+
         if not is_first_iteration and use_cache:
             model_inputs["pixel_values"] = None
             model_inputs["pixel_values_videos"] = None
+
         return model_inputs
 
     def _get_image_nums_and_video_nums(
@@ -1418,36 +1528,55 @@ class Glm5NextVLForConditionalGeneration(Glm5NextVLPreTrainedModel, GenerationMi
         inputs_embeds: torch.Tensor | None = None,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """
-        Returns per-sample counts of image and video placeholder tokens.
+        Get the number of images and videos for each sample to calculate the separation length of the sample tensor.
+        These parameters are not passed through the processor to avoid unpredictable impacts from interface modifications.
 
-        If `inputs_embeds` are provided, placeholder positions are inferred by comparing against
-        the embedding vectors of `image_token_id` and `video_token_id`. Otherwise, counts are
-        computed directly from `input_ids`.
+        Args:
+            input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
+                Indices of input sequence tokens in the vocabulary.
+
+        Returns:
+            image_nums (`torch.LongTensor` of shape `(batch_size, num_images_sample)`)
+            video_nums (`torch.LongTensor` of shape `(batch_size, num_videos_sample)`)
         """
-        image_token_id = self.config.image_token_id
-        video_token_id = self.config.video_token_id
 
         if inputs_embeds is not None:
-            image_mask = (
+            is_image = (
                 inputs_embeds
                 == self.get_input_embeddings()(
-                    torch.tensor(image_token_id, dtype=torch.long, device=inputs_embeds.device)
+                    torch.tensor(self.config.image_start_token_id, dtype=torch.long, device=inputs_embeds.device)
                 )
             )[..., 0]
-            video_mask = (
+            is_video_start = (
                 inputs_embeds
                 == self.get_input_embeddings()(
-                    torch.tensor(video_token_id, dtype=torch.long, device=inputs_embeds.device)
+                    torch.tensor(self.config.video_start_token_id, dtype=torch.long, device=inputs_embeds.device)
+                )
+            )[..., 0]
+            is_video_end = (
+                inputs_embeds
+                == self.get_input_embeddings()(
+                    torch.tensor(self.config.video_end_token_id, dtype=torch.long, device=inputs_embeds.device)
                 )
             )[..., 0]
         else:
-            image_mask = input_ids == image_token_id
-            video_mask = input_ids == video_token_id
+            is_image = input_ids == self.config.image_start_token_id
+            is_video_start = input_ids == self.config.video_start_token_id
+            is_video_end = input_ids == self.config.video_end_token_id
 
-        image_nums = torch.sum(image_mask, dim=1)
-        video_nums = torch.sum(video_mask, dim=1)
+        # Cumulative sum to track if we're inside a video span
+        # We'll assume well-formed video tags (i.e. matching starts and ends)
+        video_level = torch.cumsum(is_video_start.int() - is_video_end.int(), dim=1)
+        inside_video = video_level > 0  # shape (batch_size, seq_length)
 
-        return image_nums, video_nums
+        # Mask out image tokens that are inside video spans
+        standalone_images = is_image & (~inside_video)
+
+        # Count per batch
+        image_counts = standalone_images.sum(dim=1)
+        video_counts = is_video_start.sum(dim=1)
+
+        return image_counts, video_counts
 
     def _expand_inputs_for_generation(
         self,

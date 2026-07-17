@@ -21,7 +21,7 @@ import torch.nn.functional as F
 from ...cache_utils import Cache, DynamicCache
 from ...masking_utils import create_causal_mask, create_recurrent_attention_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
-from ...modeling_outputs import BaseModelOutputWithPast, MoeModelOutputWithPast
+from ...modeling_outputs import BaseModelOutputWithPast, MoeCausalLMOutputWithPast, MoeModelOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
@@ -30,7 +30,7 @@ from ...utils.output_capturing import OutputRecorder
 from ..auto.modeling_auto import AutoModel
 from ..deepseek_v2.modeling_deepseek_v2 import DeepseekV2Attention
 from ..deepseek_v4.modeling_deepseek_v4 import DeepseekV4HyperConnection, DeepseekV4Model
-from ..exaone4_5.modeling_exaone4_5 import Exaone4_5_ForConditionalGeneration, Exaone4_5_Model
+from ..exaone4_5.modeling_exaone4_5 import Exaone4_5_Model
 from ..glm5_next.modeling_glm5_next import (
     Glm5NextExperts,
     Glm5NextForgetGate,
@@ -42,8 +42,10 @@ from ..glm5_next.modeling_glm5_next import (
     Glm5NextRMSNormGated,
     Glm5NextTopkRouter,
 )
+from ..glm46v.modeling_glm46v import Glm46VForConditionalGeneration
 from ..glm_moe_dsa.modeling_glm_moe_dsa import GlmMoeDsaDecoderLayer
 from ..llama.modeling_llama import eager_attention_forward
+from ..mixtral.modeling_mixtral import load_balancing_loss_func
 from .configuration_glm5_next_vl import Glm5NextVLConfig, Glm5NextVLTextConfig
 
 
@@ -356,6 +358,7 @@ class Glm5NextVLTextModel(DeepseekV4Model, Glm5NextVLPreTrainedModel):
 # =============================================================================
 
 
+# TODO: `get_placeholder_mask` is likely broken!!! There is some conflict between img and vid token id usage
 class Glm5NextVLModel(Exaone4_5_Model, Glm5NextVLPreTrainedModel):
     config: Glm5NextVLConfig
     _no_split_modules = AttributeError()
@@ -372,13 +375,16 @@ class Glm5NextVLModel(Exaone4_5_Model, Glm5NextVLPreTrainedModel):
         video_grid_thw: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPast:
-        pixel_values_videos = pixel_values_videos.type(self.visual.dtype)
-        # TODO: let the processor return a flattened grid instead --> fully inherit here
+        # Same as in `Glm46V`
+        # reshape video_grid_thw -> [b, 3] -> [1, h, w] * frames
         t = video_grid_thw[:, 0]
         hw = video_grid_thw[:, 1:]
+        # repeat each (h,w) row `t` times
         flattened_hw = torch.repeat_interleave(hw, t, dim=0)
         prefix_ones = video_grid_thw.new_ones(flattened_hw.shape[0], 1)
         flattened_video_grid_thw = torch.cat([prefix_ones, flattened_hw], dim=1)
+
+        pixel_values_videos = pixel_values_videos.type(self.visual.dtype)
         vision_outputs = self.visual(pixel_values_videos, grid_thw=flattened_video_grid_thw, **kwargs)
         split_sizes = (video_grid_thw.prod(-1) // self.visual.spatial_merge_size**2).tolist()
         vision_outputs.pooler_output = torch.split(vision_outputs.pooler_output, split_sizes)
@@ -390,7 +396,7 @@ class Glm5NextVLModel(Exaone4_5_Model, Glm5NextVLPreTrainedModel):
         super().forward(**super_kwargs)
 
 
-class Glm5NextVLForConditionalGeneration(Exaone4_5_ForConditionalGeneration, Glm5NextVLPreTrainedModel):
+class Glm5NextVLForConditionalGeneration(Glm46VForConditionalGeneration, Glm5NextVLPreTrainedModel):
     """
     Main Glm5NextVL conditional generation class.
     """
@@ -398,6 +404,155 @@ class Glm5NextVLForConditionalGeneration(Exaone4_5_ForConditionalGeneration, Glm
     def __init__(self, config):
         super().__init__(config)
         self.model = Glm5NextVLModel(config)
+        self.router_aux_loss_coef = config.router_aux_loss_coef
+        self.num_experts = config.num_local_experts
+        self.num_experts_per_tok = config.num_experts_per_tok
+
+    @can_return_tuple
+    @auto_docstring
+    def forward(
+        self,
+        input_ids: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: Cache | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        labels: torch.LongTensor | None = None,
+        use_cache: bool | None = None,
+        pixel_values: torch.Tensor | None = None,
+        pixel_values_videos: torch.FloatTensor | None = None,
+        image_grid_thw: torch.LongTensor | None = None,
+        video_grid_thw: torch.LongTensor | None = None,
+        output_router_logits: bool | None = None,
+        logits_to_keep: int | torch.Tensor = 0,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | MoeCausalLMOutputWithPast:
+        r"""
+        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
+            config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
+            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
+        image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
+            The temporal, height and width of feature shape of each image in LLM.
+        video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
+            The temporal, height and width of feature shape of each video in LLM.
+
+        Example:
+
+        ```python
+        >>> from transformers import AutoProcessor, Glm5NextVLForConditionalGeneration
+        >>> import torch
+
+        >>> model = Glm5NextVLForConditionalGeneration.from_pretrained("zai-org/GLM-5-Next-VL")
+        >>> processor = AutoProcessor.from_pretrained("zai-org/GLM-5-Next-VL")
+
+        >>> messages = [
+        ...     {
+        ...         "role": "user",
+        ...         "content": [
+        ...             {"type": "image", "image": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"},
+        ...             {"type": "text", "text": "Describe the image."},
+        ...         ],
+        ...     }
+        ... ]
+        >>> inputs = processor.apply_chat_template(
+        ...     messages, tokenize=True, add_generation_prompt=True, return_dict=True, return_tensors="pt"
+        ... )
+        >>> inputs = {k: v.to(model.device) if isinstance(v, torch.Tensor) else v for k, v in inputs.items()}
+        >>> generated_ids = model.generate(**inputs, max_new_tokens=64)
+        ```
+        """
+
+        output_router_logits = (
+            output_router_logits if output_router_logits is not None else self.config.output_router_logits
+        )
+
+        outputs = self.model(
+            input_ids=input_ids,
+            pixel_values=pixel_values,
+            pixel_values_videos=pixel_values_videos,
+            image_grid_thw=image_grid_thw,
+            video_grid_thw=video_grid_thw,
+            position_ids=position_ids,
+            attention_mask=attention_mask,
+            past_key_values=past_key_values,
+            inputs_embeds=inputs_embeds,
+            use_cache=use_cache,
+            output_router_logits=output_router_logits,
+            **kwargs,
+        )
+
+        hidden_states = outputs.last_hidden_state
+        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
+        logits = self.lm_head(hidden_states[:, slice_indices, :])
+
+        loss = None
+        if labels is not None:
+            loss = self.loss_function(
+                logits=logits, labels=labels, vocab_size=self.config.text_config.vocab_size, **kwargs
+            )
+
+        aux_loss = None
+        if output_router_logits:
+            aux_loss = load_balancing_loss_func(
+                outputs.router_logits,
+                self.num_experts,
+                self.num_experts_per_tok,
+                attention_mask,
+            )
+            if labels is not None:
+                loss += self.router_aux_loss_coef * aux_loss.to(loss.device)  # make sure to reside in the same device
+
+        return MoeCausalLMOutputWithPast(
+            loss=loss,
+            aux_loss=aux_loss,
+            logits=logits,
+            past_key_values=outputs.past_key_values,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+            router_logits=outputs.router_logits,
+        )
+
+    def prepare_inputs_for_generation(
+        self,
+        input_ids,
+        past_key_values=None,
+        attention_mask=None,
+        inputs_embeds=None,
+        position_ids=None,
+        use_cache=True,
+        pixel_values=None,
+        pixel_values_videos=None,
+        image_grid_thw=None,
+        video_grid_thw=None,
+        is_first_iteration=False,
+        **kwargs,
+    ):
+        model_inputs = super().prepare_inputs_for_generation(
+            input_ids,
+            past_key_values=past_key_values,
+            attention_mask=attention_mask,
+            inputs_embeds=inputs_embeds,
+            position_ids=position_ids,
+            pixel_values=pixel_values,
+            pixel_values_videos=pixel_values_videos,
+            image_grid_thw=image_grid_thw,
+            video_grid_thw=video_grid_thw,
+            use_cache=use_cache,
+            is_first_iteration=is_first_iteration,
+            **kwargs,
+        )
+        # Force recomputation of 2D-RoPE and ignore rope_deltas
+        model_inputs["position_ids"] = None
+
+        if not is_first_iteration and use_cache:
+            model_inputs["pixel_values"] = None
+            model_inputs["pixel_values_videos"] = None
+
+        return model_inputs
+
+    def _prepare_position_ids_for_generation(self, inputs_tensor, model_kwargs):
+        raise AttributeError()
 
 
 __all__ = [

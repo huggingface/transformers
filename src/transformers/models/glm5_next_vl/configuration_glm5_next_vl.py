@@ -161,7 +161,6 @@ class Glm5NextVLTextConfig(PreTrainedConfig):
                 for layer_idx in range(self.num_hidden_layers)
             ]
 
-
         # Per-layer indexer mode: a pattern (e.g. `"FSSF..."`) overrides the freq/offset schedule.
         if self.indexer_types is None:
             pattern = kwargs.get("index_topk_pattern")
