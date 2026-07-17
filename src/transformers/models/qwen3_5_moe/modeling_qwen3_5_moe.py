@@ -60,6 +60,7 @@ from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ...vision_utils import (
     get_vision_attention_seqlens,
     get_vision_bilinear_indices_and_weights,
+    get_vision_max_seqlen,
     get_vision_position_ids,
 )
 from ..auto.modeling_auto import AutoModel
@@ -1018,8 +1019,8 @@ class Qwen3_5MoeVisionAttention(nn.Module):
         self,
         hidden_states: torch.Tensor,
         cu_seqlens: torch.Tensor,
-        max_seqlen: int | None = None,
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
+        max_seqlen: int | None = None,
         **kwargs,
     ) -> torch.Tensor:
         seq_length = hidden_states.shape[0]
@@ -1040,7 +1041,7 @@ class Qwen3_5MoeVisionAttention(nn.Module):
         if is_flash_attention_requested(self.config):
             # Flash Attention: Use cu_seqlens for variable length attention
             if max_seqlen is None:
-                raise ValueError("`max_seqlen` must be provided when using Flash Attention.")
+                max_seqlen = get_vision_max_seqlen(cu_seqlens, self.config)
             attn_output, _ = attention_interface(
                 self,
                 query_states,

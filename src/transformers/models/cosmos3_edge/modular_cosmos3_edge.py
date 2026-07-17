@@ -55,7 +55,7 @@ from ...utils.generic import (
 from ...utils.output_capturing import capture_outputs
 from ...video_processing_utils import BASE_VIDEO_PROCESSOR_DOCSTRING, BaseVideoProcessor
 from ...video_utils import VideoMetadata, group_videos_by_shape, reorder_videos
-from ...vision_utils import get_vision_cu_seqlens
+from ...vision_utils import get_vision_attention_seqlens, get_vision_max_seqlen
 from ..clip.modeling_clip import CLIPMLP
 from ..llama.configuration_llama import LlamaConfig
 from ..llama.modeling_llama import (
@@ -381,7 +381,9 @@ class Cosmos3EdgeVisionAttention(Siglip2Attention):
         super().__init__(config)
         self.num_key_value_groups = 1
 
-    def forward(self, hidden_states: torch.Tensor, cu_seqlens: torch.Tensor, **kwargs) -> torch.Tensor:
+    def forward(
+        self, hidden_states: torch.Tensor, cu_seqlens: torch.Tensor, max_seqlen: int | None = None, **kwargs
+    ) -> torch.Tensor:
         sequence_length = hidden_states.shape[0]
         query_states = self.q_proj(hidden_states).reshape(sequence_length, -1, self.head_dim)
         key_states = self.k_proj(hidden_states).reshape(sequence_length, -1, self.head_dim)
@@ -396,7 +398,8 @@ class Cosmos3EdgeVisionAttention(Siglip2Attention):
         )
 
         if is_flash_attention_requested(self.config):
-            max_sequence_length = (cu_seqlens[1:] - cu_seqlens[:-1]).max()
+            if max_seqlen is None:
+                max_seqlen = get_vision_max_seqlen(cu_seqlens, self.config)
             attn_output, _ = attention_interface(
                 self,
                 query_states,
@@ -407,8 +410,8 @@ class Cosmos3EdgeVisionAttention(Siglip2Attention):
                 dropout=0.0 if not self.training else self.dropout,
                 cu_seq_lens_q=cu_seqlens,
                 cu_seq_lens_k=cu_seqlens,
-                max_length_q=max_sequence_length,
-                max_length_k=max_sequence_length,
+                max_length_q=max_seqlen,
+                max_length_k=max_seqlen,
                 is_causal=False,
                 **kwargs,
             )
@@ -476,12 +479,13 @@ class Cosmos3EdgeEncoder(Siglip2Encoder):
         grid_thw (`torch.LongTensor` of shape `(num_images_or_videos, 3)`):
             The temporal, height, and width patch-grid dimensions for every packed image or video.
         """
-        cu_seqlens = get_vision_cu_seqlens(grid_thw, kwargs=kwargs)
+        cu_seqlens, max_seqlen = get_vision_attention_seqlens(grid_thw, self.config, kwargs=kwargs)
         hidden_states = inputs_embeds
         for encoder_layer in self.layers:
             hidden_states = encoder_layer(
                 hidden_states,
                 cu_seqlens=cu_seqlens,
+                max_seqlen=max_seqlen,
                 **kwargs,
             )
 

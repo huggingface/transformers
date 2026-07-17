@@ -100,6 +100,15 @@ def eager_attention_forward(
     return attn_output, attn_weights
 
 
+def get_audio_max_seqlen(cu_seqlens: torch.Tensor, config: PreTrainedConfig, kwargs: dict | None = None) -> int | None:
+    """Get the maximum packed audio sequence length, or pop it from `kwargs` if precomputed."""
+    if kwargs is not None and (max_seqlen := kwargs.pop("max_seqlen", None)) is not None:
+        return max_seqlen
+    if not is_flash_attention_requested(config):
+        return None
+    return int((cu_seqlens[1:] - cu_seqlens[:-1]).max().item())
+
+
 class Qwen3ASRAudioAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
@@ -152,7 +161,7 @@ class Qwen3ASRAudioAttention(nn.Module):
         if is_flash_attention_requested(self.config):
             # Flash Attention: Use cu_seqlens for variable length attention
             if max_seqlen is None:
-                raise ValueError("`max_seqlen` must be provided when using Flash Attention.")
+                max_seqlen = get_audio_max_seqlen(cu_seqlens, self.config)
             attn_output, _ = attention_interface(
                 self,
                 query_states,
@@ -274,15 +283,6 @@ def _get_feat_extract_output_lengths(input_lengths, n_window=50):
     input_lengths_leave = input_lengths % chunk_len
     feat_lengths = (input_lengths_leave - 1) // 2 + 1
     return ((feat_lengths - 1) // 2 + 1 - 1) // 2 + 1 + (input_lengths // chunk_len) * 13
-
-
-def get_audio_max_seqlen(cu_seqlens: torch.Tensor, config: PreTrainedConfig, kwargs: dict | None = None) -> int | None:
-    """Get the maximum packed audio sequence length, or pop it from `kwargs` if precomputed."""
-    if kwargs is not None and (max_seqlen := kwargs.pop("max_seqlen", None)) is not None:
-        return max_seqlen
-    if not is_flash_attention_requested(config):
-        return None
-    return int((cu_seqlens[1:] - cu_seqlens[:-1]).max().item())
 
 
 def get_audio_cu_seqlens(

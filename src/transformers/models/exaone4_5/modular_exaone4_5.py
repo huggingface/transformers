@@ -28,6 +28,7 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import ProcessingKwargs, Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
 from ...utils.generic import is_flash_attention_requested
+from ...vision_utils import get_vision_max_seqlen
 from ..auto import CONFIG_MAPPING, AutoConfig, AutoModel
 from ..exaone4.modeling_exaone4 import Exaone4PreTrainedModel
 from ..qwen2_5_vl.configuration_qwen2_5_vl import Qwen2_5_VLVisionConfig
@@ -125,8 +126,8 @@ class Exaone4_5_VisionAttention(Qwen2_5_VLVisionAttention):
         self,
         hidden_states: torch.Tensor,
         cu_seqlens: torch.Tensor,
-        max_seqlen: int | None = None,
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
+        max_seqlen: int | None = None,
         **kwargs,
     ) -> torch.Tensor:
         seq_length = hidden_states.shape[0]
@@ -153,7 +154,7 @@ class Exaone4_5_VisionAttention(Qwen2_5_VLVisionAttention):
 
         if is_flash_attention_requested(self.config):
             if max_seqlen is None:
-                raise ValueError("`max_seqlen` must be provided when using Flash Attention.")
+                max_seqlen = get_vision_max_seqlen(cu_seqlens, self.config)
             attn_output, _ = attention_interface(
                 self,
                 query_states,

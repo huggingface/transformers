@@ -173,7 +173,7 @@ class MiniCPMV4_6VisionAttention(VisionAttention):
         self,
         hidden_states: torch.Tensor,
         cu_seqlens: torch.Tensor,
-        max_seqlen: int | None = None,
+        max_seqlen: int | None,
         attention_mask: torch.Tensor | None = None,
         **kwargs,
     ) -> torch.Tensor:
@@ -192,7 +192,7 @@ class MiniCPMV4_6VisionAttention(VisionAttention):
         if is_flash_attention_requested(self.config):
             # Flash Attention: Use cu_seqlens for variable length attention
             if max_seqlen is None:
-                raise ValueError("`max_seqlen` must be provided when using Flash Attention.")
+                max_seqlen = get_vision_max_seqlen(cu_seqlens, self.config)
             attn_output, _ = attention_interface(
                 self,
                 query_states,

@@ -68,6 +68,7 @@ from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ...vision_utils import (
     get_vision_attention_seqlens,
     get_vision_bilinear_indices_and_weights,
+    get_vision_max_seqlen,
     get_vision_position_ids,
 )
 from .configuration_qwen3_omni_moe import (
@@ -506,6 +507,15 @@ def eager_attention_forward(
     return attn_output, attn_weights
 
 
+def get_audio_max_seqlen(cu_seqlens: torch.Tensor, config: PreTrainedConfig, kwargs: dict | None = None) -> int | None:
+    """Get the maximum packed audio sequence length, or pop it from `kwargs` if precomputed."""
+    if kwargs is not None and (max_seqlen := kwargs.pop("max_seqlen", None)) is not None:
+        return max_seqlen
+    if not is_flash_attention_requested(config):
+        return None
+    return int((cu_seqlens[1:] - cu_seqlens[:-1]).max().item())
+
+
 class Qwen3OmniMoeAudioAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
@@ -558,7 +568,7 @@ class Qwen3OmniMoeAudioAttention(nn.Module):
         if is_flash_attention_requested(self.config):
             # Flash Attention: Use cu_seqlens for variable length attention
             if max_seqlen is None:
-                raise ValueError("`max_seqlen` must be provided when using Flash Attention.")
+                max_seqlen = get_audio_max_seqlen(cu_seqlens, self.config)
             attn_output, _ = attention_interface(
                 self,
                 query_states,
@@ -649,15 +659,6 @@ class Qwen3OmniMoeAudioEncoderLayer(GradientCheckpointingLayer):
         outputs = (hidden_states,)
 
         return outputs
-
-
-def get_audio_max_seqlen(cu_seqlens: torch.Tensor, config: PreTrainedConfig, kwargs: dict | None = None) -> int | None:
-    """Get the maximum packed audio sequence length, or pop it from `kwargs` if precomputed."""
-    if kwargs is not None and (max_seqlen := kwargs.pop("max_seqlen", None)) is not None:
-        return max_seqlen
-    if not is_flash_attention_requested(config):
-        return None
-    return int((cu_seqlens[1:] - cu_seqlens[:-1]).max().item())
 
 
 def chunk_and_pad_features(
@@ -907,8 +908,8 @@ class Qwen3OmniMoeVisionAttention(nn.Module):
         self,
         hidden_states: torch.Tensor,
         cu_seqlens: torch.Tensor,
-        max_seqlen: int | None = None,
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
+        max_seqlen: int | None = None,
         **kwargs,
     ) -> torch.Tensor:
         seq_length = hidden_states.shape[0]
@@ -929,7 +930,7 @@ class Qwen3OmniMoeVisionAttention(nn.Module):
         if is_flash_attention_requested(self.config):
             # Flash Attention: Use cu_seqlens for variable length attention
             if max_seqlen is None:
-                raise ValueError("`max_seqlen` must be provided when using Flash Attention.")
+                max_seqlen = get_vision_max_seqlen(cu_seqlens, self.config)
             attn_output, _ = attention_interface(
                 self,
                 query_states,

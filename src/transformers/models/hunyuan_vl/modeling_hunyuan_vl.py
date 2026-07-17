@@ -46,7 +46,7 @@ from ...utils.generic import (
     merge_with_config_defaults,
 )
 from ...utils.output_capturing import capture_outputs
-from ...vision_utils import get_vision_attention_seqlens
+from ...vision_utils import get_vision_attention_seqlens, get_vision_max_seqlen
 from .configuration_hunyuan_vl import HunYuanVLConfig, HunYuanVLTextConfig, HunYuanVLVisionConfig
 
 
@@ -370,7 +370,7 @@ class HunYuanVLVisionAttention(nn.Module):
         if is_flash_attention_requested(self.config):
             # Flash Attention: Use cu_seqlens for variable length attention
             if max_seqlen is None:
-                raise ValueError("`max_seqlen` must be provided when using Flash Attention.")
+                max_seqlen = get_vision_max_seqlen(cu_seqlens, self.config)
             attn_output, attn_weights = attention_interface(
                 self,
                 query_states,

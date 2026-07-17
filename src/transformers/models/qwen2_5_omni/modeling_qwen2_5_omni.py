@@ -567,6 +567,15 @@ def eager_attention_forward(
     return attn_output, attn_weights
 
 
+def get_audio_max_seqlen(cu_seqlens: torch.Tensor, config: PreTrainedConfig, kwargs: dict | None = None) -> int | None:
+    """Get the maximum packed audio sequence length, or pop it from `kwargs` if precomputed."""
+    if kwargs is not None and (max_seqlen := kwargs.pop("max_seqlen", None)) is not None:
+        return max_seqlen
+    if not is_flash_attention_requested(config):
+        return None
+    return int((cu_seqlens[1:] - cu_seqlens[:-1]).max().item())
+
+
 class Qwen2_5OmniAudioAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
@@ -623,7 +632,7 @@ class Qwen2_5OmniAudioAttention(nn.Module):
         if is_flash_attention_requested(self.config):
             # Flash Attention: Use cu_seqlens for variable length attention
             if max_seqlen is None:
-                raise ValueError("`max_seqlen` must be provided when using Flash Attention.")
+                max_seqlen = get_audio_max_seqlen(cu_seqlens, self.config)
             attn_output, _ = attention_interface(
                 self,
                 query_states,
@@ -789,15 +798,6 @@ def get_audio_cu_seqlens(chunk_lengths: torch.Tensor, kwargs: dict | None = None
         return cu_seqlens
     after_conv1 = (chunk_lengths - 1) // 2 + 1
     return F.pad(after_conv1.cumsum(0), (1, 0), value=0).to(torch.int32)
-
-
-def get_audio_max_seqlen(cu_seqlens: torch.Tensor, config: PreTrainedConfig, kwargs: dict | None = None) -> int | None:
-    """Get the maximum packed audio sequence length, or pop it from `kwargs` if precomputed."""
-    if kwargs is not None and (max_seqlen := kwargs.pop("max_seqlen", None)) is not None:
-        return max_seqlen
-    if not is_flash_attention_requested(config):
-        return None
-    return int((cu_seqlens[1:] - cu_seqlens[:-1]).max().item())
 
 
 def get_valid_indices(chunk_lengths: torch.Tensor, kwargs: dict | None = None) -> torch.Tensor:
@@ -1029,8 +1029,8 @@ class Qwen2_5OmniVisionAttention(nn.Module):
         self,
         hidden_states: torch.Tensor,
         cu_seqlens: torch.Tensor,
-        max_seqlen: int | None = None,
         position_embeddings: torch.Tensor | None = None,
+        max_seqlen: int | None = None,
         **kwargs,
     ) -> torch.Tensor:
         seq_length = hidden_states.shape[0]
@@ -1052,7 +1052,7 @@ class Qwen2_5OmniVisionAttention(nn.Module):
         if is_flash_attention_requested(self.config):
             # Flash Attention 2: Use cu_seqlens for variable length attention
             if max_seqlen is None:
-                raise ValueError("`max_seqlen` must be provided when using Flash Attention.")
+                max_seqlen = get_vision_max_seqlen(cu_seqlens, self.config)
             attn_output, _ = attention_interface(
                 self,
                 query_states,
