@@ -121,7 +121,7 @@ class ExecutorchExporter(DynamoExporter):
     """
 
     required_packages = ["torch", "executorch"]
-    tested_versions = {"torch": "2.11.0", "executorch": "1.2.0"}
+    tested_versions = {"torch": "2.12.0", "executorch": "1.3.1"}
 
     def export(
         self,

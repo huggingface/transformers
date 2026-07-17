@@ -426,6 +426,18 @@ def _path_to_class(path: str) -> type:
     return obj
 
 
+def _maybe_sym_constant(sym: Any) -> Any:
+    """The concrete value a ``Sym*`` has already specialized to, or ``None`` if it's still dynamic.
+    Each ``Sym*`` type has its own accessor (``maybe_as_bool``/``maybe_as_float``/``maybe_as_int``);
+    there is no generic one."""
+    node = sym.node
+    if isinstance(sym, torch.SymBool):
+        return node.maybe_as_bool()
+    if isinstance(sym, torch.SymFloat):
+        return node.maybe_as_float()
+    return node.maybe_as_int()
+
+
 def _flatten_to_context(obj: Any, tensors: list) -> Any:
     """Single-pass: recursively build a JSON-native context while collecting tensors into `tensors`."""
     # --- Pure Python / JSON-native (exact type check — subclasses fall through to stateful objects) ---
@@ -458,12 +470,7 @@ def _flatten_to_context(obj: Any, tensors: list) -> Any:
         # with an off-by-one. deepseek_v4 hits this via two sibling cache layers
         # (DeepseekV4HCACache / DeepseekV4CSACache) sharing a `cumulative_length` counter that one
         # path leaves as a constant SymInt and the other as a python int.
-        if isinstance(obj, torch.SymBool):
-            const = obj.node.maybe_as_bool()
-        elif isinstance(obj, torch.SymFloat):
-            const = obj.node.maybe_as_float()
-        else:
-            const = obj.node.maybe_as_int()
+        const = _maybe_sym_constant(obj)
         if const is not None:
             return const
         idx = len(tensors)
@@ -489,19 +496,13 @@ def _flatten_to_context(obj: Any, tensors: list) -> Any:
             "v": [_flatten_to_context(i, tensors) for i in obj],
         }
     if isinstance(obj, types.MethodType):
-        # Self-bound methods are handled by the `"obj"` branch below (rebound to the
-        # reconstructed instance); a bare bound method has no instance to rebind to.
-        raise TypeError("Cannot flatten a bound method not stored on its own instance for pytree context")
+        # A bound method can't be flattened into pytree context. Models shouldn't bind methods onto
+        # objects they return at forward time (e.g. recurrent_gemma binds `get_seq_length`/
+        # `get_mask_sizes` onto its `DynamicCache`) — that pattern isn't exportable; such a model is
+        # skipped until the binding is refactored away (e.g. into a `Cache` subclass).
+        raise TypeError("Cannot flatten a bound method for pytree context")
     if hasattr(obj, "__dict__"):
-        state = {}
-        for k, v in vars(obj).items():
-            if isinstance(v, types.MethodType) and v.__self__ is obj:
-                # Methods bound onto the instance itself (e.g. recurrent_gemma binds
-                # `get_seq_length` onto its `DynamicCache`) — store the underlying
-                # function's import path; unflatten rebinds it to the new instance.
-                state[k] = {"_t": "method", "f": f"{v.__func__.__module__}:{v.__func__.__qualname__}"}
-            else:
-                state[k] = _flatten_to_context(v, tensors)
+        state = {k: _flatten_to_context(v, tensors) for k, v in vars(obj).items()}
         return {"_t": "obj", "p": _class_to_path(cls), "s": state}
 
     raise TypeError(f"Cannot flatten {type(obj).__name__} for pytree context")
@@ -551,10 +552,7 @@ def _unflatten_from_context(ctx: Any, tensors: list) -> Any:
         cls = _path_to_class(ctx["p"])
         instance = cls.__new__(cls)
         for k, v in ctx["s"].items():
-            if type(v) is dict and v.get("_t") == "method":
-                instance.__dict__[k] = _path_to_class(v["f"]).__get__(instance)
-            else:
-                instance.__dict__[k] = _unflatten_from_context(v, tensors)
+            instance.__dict__[k] = _unflatten_from_context(v, tensors)
         return instance
 
     raise TypeError(f"Unknown tag {t!r} in pytree context")

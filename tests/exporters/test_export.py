@@ -199,23 +199,12 @@ EXPORT_SKIPS: dict[str, dict[str, str]] = {
         "LlavaOnevisionModel": "Same native ExecuTorch crash as `LlavaOnevisionForConditionalGeneration`.",
         "PaddleOCRVLForConditionalGeneration": "Same native ExecuTorch vision-stack crash as `FastVlmForConditionalGeneration`.",
         "PaddleOCRVLModel": "Same native ExecuTorch crash as `PaddleOCRVLForConditionalGeneration`.",
-        "Qwen3NextModel": ("Lowering exceeds the 10-minute test timeout."),
-        "Qwen3NextForCausalLM": "Same `timeout` failure as `Qwen3NextModel`.",
-        "Qwen3NextForQuestionAnswering": "Same `timeout` failure as `Qwen3NextModel`.",
-        "Qwen3NextForSequenceClassification": "Same `timeout` failure as `Qwen3NextModel`.",
-        "Qwen3NextForTokenClassification": "Same `timeout` failure as `Qwen3NextModel`.",
         "Qwen3ASRForConditionalGeneration": (
             "Audio encoder packs valid frames with a data-dependent `.nonzero()`; the unbacked "
             "packed length can't be sized by ExecuTorch's ahead-of-time memory planner "
             "(`GuardOnDataDependentSymNode`). Exports fine on torch.export/ONNX, which carry the "
             "dynamic dim at runtime."
         ),
-        "Qwen3_5Model": "Same `timeout` failure as `Qwen3NextModel`.",
-        "Qwen3_5ForConditionalGeneration": "Same `timeout` failure as `Qwen3NextModel`.",
-        "Qwen3_5ForSequenceClassification": "Same `timeout` failure as `Qwen3NextModel`.",
-        "Qwen3_5ForTokenClassification": "Same `timeout` failure as `Qwen3NextModel`.",
-        "Qwen3_5TextModel": "Same `timeout` failure as `Qwen3NextModel`.",
-        "Qwen3_5ForCausalLM": "Same `timeout` failure as `Qwen3NextModel`.",
     },
     "executorch.generate": {},
     "executorch.dynamic": {
@@ -287,7 +276,7 @@ DYNAMIC_EXPORT_PARAMS = parameterized.expand(
 )
 
 # Maximum time (in seconds) for a single export test before it is killed.
-EXPORT_TEST_TIMEOUT = 10 * 60  # 10 minutes
+EXPORT_TEST_TIMEOUT = 15 * 60  # 15 minutes
 
 # Minimum torch version the exporters target — older releases lack `torch.export` features the
 # exporters rely on, so the export sweep is skipped (not failed) below this. Sourced from the
