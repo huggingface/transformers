@@ -169,7 +169,7 @@ class NeuCodecModel(Xcodec2Model):
         # NeuCodec's decoder outputs audio at `sampling_rate`, which differs from the `input_sampling_rate` of
         # `input_values`, so the truncation length must be rescaled accordingly.
         input_length = input_values.shape[-1]
-        output_length = int(input_length * self.config.sampling_rate / self.config.input_sampling_rate)
+        output_length = int(input_length * self.config.output_sampling_rate / self.config.input_sampling_rate)
 
         encoder_outputs = self.encode(
             input_values,
