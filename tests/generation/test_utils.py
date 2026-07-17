@@ -75,6 +75,8 @@ if is_torch_available():
         BartForConditionalGeneration,
         BartTokenizer,
         DataCollatorWithFlattening,
+        Gemma2Config,
+        Gemma2ForCausalLM,
         GPT2LMHeadModel,
         GPT2Tokenizer,
         ImageGPTForCausalImageModeling,
@@ -3791,6 +3793,37 @@ class GenerationIntegrationTests(unittest.TestCase):
             max_new_tokens=7,
         )
         self.assertTrue(out.shape[-1] <= (input_length + 7))
+
+    def test_assisted_generation_sliding_window_model(self):
+        # Regression test for https://github.com/huggingface/transformers/issues/46629: assisted/prompt-lookup decoding
+        # force `dynamic_full`, which crops the cache. Sliding-window models must then build full (croppable) layers,
+        # not `DynamicSlidingWindowLayer`s, which raise in `crop()` once generation runs past the window.
+        config = Gemma2Config(
+            vocab_size=64,
+            hidden_size=16,
+            intermediate_size=32,
+            num_hidden_layers=2,
+            num_attention_heads=2,
+            num_key_value_heads=1,
+            head_dim=8,
+            sliding_window=4,
+            max_position_embeddings=128,
+        )
+        self.assertIn("sliding_attention", config.layer_types)
+        model = Gemma2ForCausalLM(config).to(torch_device).eval()
+
+        # Prompt exceeds the sliding window and we generate past it; repeated n-grams let prompt-lookup find candidates.
+        input_ids = torch.tensor([[1, 2, 3, 4, 5, 6, 1, 2, 3, 4]], device=torch_device)
+        input_length = input_ids.shape[-1]
+
+        # Assisted decoding.
+        assistant = Gemma2ForCausalLM(config).to(torch_device).eval()
+        out = model.generate(input_ids, assistant_model=assistant, max_new_tokens=15, do_sample=False)
+        self.assertGreater(out.shape[-1], input_length)
+
+        # Prompt-lookup decoding (also assisted generation).
+        out = model.generate(input_ids, prompt_lookup_num_tokens=2, max_new_tokens=15, do_sample=False)
+        self.assertGreater(out.shape[-1], input_length)
 
     def test_model_kwarg_assisted_decoding_decoder_only(self):
         model = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-gpt2").to(torch_device)
