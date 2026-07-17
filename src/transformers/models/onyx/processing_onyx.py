@@ -28,11 +28,11 @@ which ``OnyxProcessor.__call__`` expands into the spans above.
 
 from __future__ import annotations
 
-import torch
-from PIL import Image
-
-from ...feature_extraction_utils import BatchFeature
 from ...processing_utils import ProcessorMixin
+from ...utils import auto_docstring, logging
+
+
+logger = logging.get_logger(__name__)
 
 
 IMAGE_SENTINEL = "<|image|>"
@@ -84,14 +84,8 @@ ONYX_MM_CHAT_TEMPLATE = (
 )
 
 
+@auto_docstring
 class OnyxProcessor(ProcessorMixin):
-    """Bundle ``OnyxImageProcessor`` + ``OnyxVideoProcessor`` + tokenizer.
-
-    Images go through ``image_processor`` and videos through ``video_processor``;
-    ``__call__`` expands per-media sentinels emitted by the chat template into the
-    ``<|image_start|>...<|image_end|>`` / ``<|vid_start|>...<|vid_end|>`` spans.
-    """
-
     def __init__(
         self,
         image_processor=None,
@@ -100,6 +94,14 @@ class OnyxProcessor(ProcessorMixin):
         chat_template=None,
         **kwargs,
     ):
+        self.image_token = "<|patch|>"
+        self.image_start_token = "<|image_start|>"
+        self.image_end_token = "<|image_end|>"
+        self.video_token = "<|video|>"
+        self.videos_sep_token = "<|vid_frame_separator|>"
+        self.video_start_token = "<|vid_start|>"
+        self.video_end_token = "<|vid_end|>"
+
         super().__init__(
             image_processor=image_processor,
             video_processor=video_processor,
@@ -108,91 +110,38 @@ class OnyxProcessor(ProcessorMixin):
             **kwargs,
         )
 
-    def _sid(self, token: str) -> int:
-        return self.tokenizer.convert_tokens_to_ids(token)
+    # maybe chat template should add start-end tokens?
+    def replace_image_token(self, image_inputs: dict, image_idx: int) -> str:
+        merge_length = self.image_processor.downsample_factor**2
+        num_image_tokens = image_inputs["image_grid_thw"][image_idx].prod() // merge_length
+        return self.image_start_token + self.image_token * num_image_tokens + self.image_end_token
 
-    def _image_block(self, n_tokens: int) -> list[int]:
-        return [self._sid("<|image_start|>")] + [self._sid("<|patch|>")] * n_tokens + [self._sid("<|image_end|>")]
+    def replace_video_token(self, video_inputs: dict, video_idx: int) -> str:
+        merge_length = self.video_processor.downsample_factor**2
+        grid_thw = video_inputs["video_grid_thw"][video_idx]
+        n_frames = int(grid_thw[0])
+        tokens_per_group = int(grid_thw[1:].prod() // merge_length)
 
-    def _video_block(
-        self,
-        n_groups: int,
-        tokens_per_group: int,
-        timestamps: list[float] | None = None,
-    ) -> list[int]:
-        """Per-group ``Time: X.Xs`` + <|video|>*P, separated/terminated."""
-        vid = self._sid("<|video|>")
-        sep = self._sid("<|vid_frame_separator|>")
+        metadata = video_inputs["video_metadata"][video_idx]
+        if metadata.fps is None:
+            logger.warning_once(
+                "Onyx requires frame timestamps to construct prompts, but the `fps` of the "
+                "input video could not be inferred. Defaulting to `fps=24`. Please provide "
+                "`video_metadata` for more accurate results."
+            )
+            metadata.fps = 24
+
         pt = self.video_processor.patch_temporal
-        fps = self.video_processor.video_sampling_fps
-        block = [self._sid("<|vid_start|>")]
-        for g in range(n_groups):
-            ts = timestamps[g] if timestamps is not None else g * pt / fps
-            block += self.tokenizer.encode(f"Time: {ts:.1f}s", add_special_tokens=False)
-            block += [vid] * tokens_per_group
-            block.append(sep if g < n_groups - 1 else self._sid("<|vid_end|>"))
-        return block
+        # one timestamp per temporal group -- stride by patch_temporal, pad by repeating last
+        timestamps = list(metadata.timestamps[::pt])[:n_frames]
+        while len(timestamps) < n_frames:
+            timestamps.append(timestamps[-1] if timestamps else 0.0)
 
-    def __call__(
-        self,
-        text: str | list[str] | None = None,
-        images: list[Image.Image] | None = None,
-        videos: list[list[Image.Image] | str] | None = None,
-        video_timestamps: list[list[float]] | None = None,
-        return_tensors: str | None = "pt",
-        **kwargs,
-    ) -> BatchFeature:
-        if text is None:
-            raise ValueError("`text` is required (use apply_chat_template to build it).")
-        if isinstance(text, (list, tuple)):
-            if len(text) != 1:
-                raise ValueError("OnyxProcessor supports a single text sample per call.")
-            text = text[0]
-
-        images = list(images or [])
-        videos = list(videos or [])
-        image_sentinel = self._sid(IMAGE_SENTINEL)
-        video_sentinel = self._sid(VIDEO_SENTINEL)
-
-        prepped_images = [self.image_processor.preprocess_image(im) for im in images]
-        prepped_videos = [
-            self.video_processor.preprocess_one(v, video_timestamps[i] if video_timestamps else None)
-            for i, v in enumerate(videos)
-        ]
-
-        ids = self.tokenizer.encode(text, add_special_tokens=False)
-        n_img = sum(1 for t in ids if t == image_sentinel)
-        n_vid = sum(1 for t in ids if t == video_sentinel)
-        if n_img != len(prepped_images):
-            raise ValueError(f"{n_img} image sentinel(s) in text but {len(prepped_images)} image(s) given.")
-        if n_vid != len(prepped_videos):
-            raise ValueError(f"{n_vid} video sentinel(s) in text but {len(prepped_videos)} video(s) given.")
-
-        out_ids: list[int] = []
-        pixel_values: list[torch.Tensor] = []
-        img_i = vid_i = 0
-        for tid in ids:
-            if tid == image_sentinel:
-                tensor, n_tokens = prepped_images[img_i]
-                img_i += 1
-                out_ids += self._image_block(n_tokens)
-                pixel_values.append(tensor)
-            elif tid == video_sentinel:
-                groups, n_groups, tokens_per_group, ts = prepped_videos[vid_i]
-                vid_i += 1
-                out_ids += self._video_block(n_groups, tokens_per_group, ts or None)
-                pixel_values += groups
-            else:
-                out_ids.append(tid)
-
-        data: dict = {
-            "input_ids": [out_ids],
-            "attention_mask": [[1] * len(out_ids)],
-        }
-        batch = BatchFeature(data=data, tensor_type=return_tensors)
-        if pixel_values:
-            batch["pixel_values"] = pixel_values
-        return batch
+        replacement_str = self.video_start_token
+        for g, ts in enumerate(timestamps):
+            replacement_str += f"Time: {ts:.1f}s" + self.video_token * tokens_per_group
+            replacement_str += self.video_sep_token if g < n_frames - 1 else self.video_end_token
+        return replacement_str
 
 
-__all__ = ["OnyxProcessor", "ONYX_MM_CHAT_TEMPLATE"]
+__all__ = ["OnyxProcessor"]

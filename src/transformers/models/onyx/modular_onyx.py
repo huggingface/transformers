@@ -13,7 +13,6 @@
 # limitations under the License.
 from __future__ import annotations
 
-import math
 from collections.abc import Callable
 
 import torch
@@ -28,7 +27,8 @@ from ...modeling_outputs import BaseModelOutputWithPooling, CausalLMOutputWithPa
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
-from ...vision_utils import get_vision_position_ids
+from ...utils.generic import is_flash_attention_requested
+from ...vision_utils import get_vision_cu_seqlens, get_vision_position_ids, get_vision_window_index
 from ..deepseek_v3.modeling_deepseek_v3 import apply_rotary_pos_emb_interleave
 from ..gemma2.configuration_gemma2 import Gemma2Config
 from ..gemma2.modeling_gemma2 import (
@@ -50,6 +50,7 @@ from ..gemma3.modeling_gemma3 import (
 )
 from ..gemma4.modeling_gemma4 import Gemma4VisionRotaryEmbedding, apply_multidimensional_rope
 from ..llama4.modeling_llama4 import Llama4TextL2Norm
+from ..paddleocr_vl.modeling_paddleocr_vl import PaddleOCRVisionEmbeddings
 
 
 logger = logging.get_logger(__name__)
@@ -331,44 +332,73 @@ class OnyxVisionAttention(nn.Module):
         self,
         hidden_states: torch.Tensor,
         position_embeddings: torch.Tensor | None = None,
-        attention_mask: torch.Tensor | None = None,
+        cu_seqlens: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         **kwargs,
     ) -> torch.Tensor:
-        input_shape = hidden_states.shape[:-1]
+        seq_length = hidden_states.shape[0]
 
-        hidden_shape = (*input_shape, -1, self.head_dim)
-        queries = self.q_proj(hidden_states).view(hidden_shape)
-        keys = self.k_proj(hidden_states).view(hidden_shape)
-        values = self.v_proj(hidden_states).view(hidden_shape)
+        hidden_shape = (1, seq_length, -1, self.head_dim)
+        query_states = self.q_proj(hidden_states).view(hidden_shape)
+        key_states = self.k_proj(hidden_states).view(hidden_shape)
+        value_states = self.v_proj(hidden_states).view(hidden_shape)
 
         cos, sin = position_embeddings
-        queries = apply_multidimensional_rope(queries, cos, sin, position_ids)
-        keys = apply_multidimensional_rope(keys, cos, sin, position_ids)
+        query_states = apply_multidimensional_rope(query_states, cos, sin, position_ids)
+        key_states = apply_multidimensional_rope(key_states, cos, sin, position_ids)
 
-        queries = queries.transpose(1, 2)
-        keys = keys.transpose(1, 2)
-        values = values.transpose(1, 2)
+        query_states = query_states.transpose(1, 2)
+        key_states = key_states.transpose(1, 2)
+        value_states = value_states.transpose(1, 2)
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
         )
 
-        attn_output, attn_weights = attention_interface(
-            self,
-            queries,
-            keys,
-            values,
-            attention_mask,
-            is_causal=self.is_causal,
-            scaling=self.scale,
-            dropout=0.0 if not self.training else self.dropout,
-        )
+        if is_flash_attention_requested(self.config):
+            # Flash Attention: Use cu_seqlens for variable length attention
+            max_seqlen = (cu_seqlens[1:] - cu_seqlens[:-1]).max()
+            attn_output, _ = attention_interface(
+                self,
+                query_states,
+                key_states,
+                value_states,
+                attention_mask=None,
+                scaling=self.scale,
+                dropout=0.0,
+                cu_seq_lens_q=cu_seqlens,
+                cu_seq_lens_k=cu_seqlens,
+                max_length_q=max_seqlen,
+                max_length_k=max_seqlen,
+                is_causal=self.is_causal,
+                **kwargs,
+            )
+        else:
+            # Other implementations: Process each chunk separately
+            lengths = cu_seqlens[1:] - cu_seqlens[:-1]
+            splits = [
+                torch.split(tensor, lengths.tolist(), dim=2) for tensor in (query_states, key_states, value_states)
+            ]
 
-        attn_output = attn_output.reshape(*input_shape, -1).contiguous()
+            attn_outputs = [
+                attention_interface(
+                    self,
+                    q,
+                    k,
+                    v,
+                    attention_mask=None,
+                    scaling=self.scale,
+                    dropout=0.0,
+                    is_causal=self.is_causal,
+                    **kwargs,
+                )[0]
+                for q, k, v in zip(*splits)
+            ]
+            attn_output = torch.cat(attn_outputs, dim=1)
+
+        attn_output = attn_output.reshape(seq_length, -1).contiguous()
         attn_output = self.out_proj(attn_output)
-
-        return attn_output, attn_weights
+        return attn_output
 
 
 class OnyxVisionMLP(nn.Module):
@@ -393,7 +423,7 @@ class OnyxVisionEncoderLayer(nn.Module):
         self,
         hidden_states: torch.Tensor,
         position_embeddings: torch.Tensor | None = None,
-        attention_mask: torch.Tensor | None = None,
+        cu_seqlens: torch.Tensor | None = None,
         position_ids: torch.Tensor | None = None,
     ) -> torch.Tensor:
         bs, s, d = hidden_states.shape
@@ -403,7 +433,7 @@ class OnyxVisionEncoderLayer(nn.Module):
         hidden_states = self.attn(
             hidden_states,
             position_embeddings=position_embeddings,
-            attention_mask=attention_mask,
+            cu_seqlens=cu_seqlens,
             position_ids=position_ids,
         )
         hidden_states = residual + hidden_states
@@ -425,42 +455,18 @@ class OnyxVisionAdapter(nn.Module):
         return F.gelu(self.c_proj(F.gelu(self.c_fc(hidden_states))))
 
 
-class OnyxVisionPatchEmbedder(nn.Module):
+class OnyxVisionPatchEmbedder(PaddleOCRVisionEmbeddings):
     def __init__(self, config: OnyxVisionConfig):
-        super().__init__()
+        # TODO: they use fp32 when adding positions, check if that matters
+        nn.Module.__init__()
         self.config = config
         self.hidden_size = config.hidden_size
         self.patch_size = config.patch_temporal * 3 * config.patch_size**2
 
-        self.input_proj = nn.Linear(self.patch_size, self.hidden_size, bias=False)
+        self.patch_embedding = nn.Linear(self.patch_size, self.hidden_size, bias=False)
         self.position_embedding_table = nn.Parameter(
             torch.zeros(config.pos_emb_grid_h * config.pos_emb_grid_w, self.hidden_size)
         )
-
-    def _position_embeddings(self, pixel_position_ids: torch.Tensor, padding_positions: torch.Tensor) -> torch.Tensor:
-        """Compute 2-D patch position embeddings via embedding lookup.
-
-        ``pixel_position_ids`` has shape ``(batch, num_patches, 2)`` where the
-        last dimension holds (x, y) indices into ``position_embedding_table``
-        (shape ``(2, position_embedding_size, hidden_size)``).  The result is the
-        sum of the x- and y-embeddings for each patch.
-        """
-        clamped_positions = pixel_position_ids.clamp(min=0)
-        x_emb = F.embedding(clamped_positions[..., 0], self.position_embedding_table[0])
-        y_emb = F.embedding(clamped_positions[..., 1], self.position_embedding_table[1])
-        position_embeddings = x_emb + y_emb
-        position_embeddings = torch.where(padding_positions.unsqueeze(-1), 0.0, position_embeddings)
-        return position_embeddings
-
-    def forward(
-        self, pixel_values: torch.Tensor, pixel_position_ids: torch.Tensor, padding_positions: torch.Tensor
-    ) -> torch.Tensor:
-        # Gemma4 applies no normalization and instead scales in model code
-        if (target_dtype := self.input_proj.weight.dtype).is_floating_point:
-            pixel_values = pixel_values.to(target_dtype)
-        hidden_states = self.input_proj(pixel_values)
-        position_embeddings = self._position_embeddings(pixel_position_ids, padding_positions)
-        return hidden_states + position_embeddings
 
 
 class OnyxPreTrainedModel(Gemma2PreTrainedModel):
@@ -476,74 +482,56 @@ class OnyxPreTrainedModel(Gemma2PreTrainedModel):
 
 class OnyxVisionModel(OnyxPreTrainedModel):
     def __init__(self, config: OnyxVisionConfig):
-        super().__init__()
-        self.hidden_size = config.hidden_size
-        self.patch_size = config.patch_size
-        self.patch_temporal = config.patch_temporal
-        self.downsample_factor = config.downsample_factor
-        self.sparse_attention_factor = config.sparse_attention_factor
-        self.pos_emb_grid_h = config.pos_emb_grid_h
-        self.pos_emb_grid_w = config.pos_emb_grid_w
-        self.head_dim = config.hidden_size // config.num_attention_heads
-
+        super().__init__(config)
         self.patch_embedder = OnyxVisionPatchEmbedder(config)
         self.rotary_emb = OnyxVisionRotaryEmbedding(config)
         self.ln_pre = nn.LayerNorm(config.hidden_size)
         self.layers = nn.ModuleList([OnyxVisionEncoderLayer(config) for _ in range(config.num_hidden_layers)])
         self.ln_post = nn.LayerNorm(config.hidden_size)
 
-    def _get_pos_emb(self, grid_h: int, grid_w: int, device: torch.device) -> torch.Tensor:
-        # Interpolate positional embeddings in the encoder's native dtype (bf16);
-        # using float32 here causes a small numerical drift in both image and
-        # video outputs.
-        dtype = self.positional_embedding_vlm.dtype
-        pos_emb = (
-            self.positional_embedding_vlm.view(self.pos_emb_grid_h, self.pos_emb_grid_w, self.hidden_size)
-            .permute(2, 0, 1)
-            .unsqueeze(0)
-        )
-        inv_h = 1.0 / grid_h
-        inv_w = 1.0 / grid_w
-        ys = torch.linspace(-1 + inv_h, 1 - inv_h, grid_h, device=device, dtype=dtype)
-        xs = torch.linspace(-1 + inv_w, 1 - inv_w, grid_w, device=device, dtype=dtype)
-        pos_xy = torch.stack(torch.meshgrid(ys, xs, indexing="xy"), dim=-1).reshape(-1, 2)[None, None]
-        sampled = F.grid_sample(pos_emb, pos_xy, mode="bilinear", align_corners=False)
-        return sampled[0, :, 0, :].T
+    def _pixel_shuffle_downsample(
+        self, hidden_states: torch.Tensor, grid_thw: torch.Tensor
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        """
+        x: (total_tokens, d) - packed, token order matches grid_thw
+        grid_thw: (num_images, 3)
+        Returns: downsampled pixels of size `(new_total_tokens, d * f * f)`
+        """
+        f = self.config.downsample_factor
+        d = hidden_states.shape[-1]
 
-    def _pixel_shuffle_downsample(self, x: torch.Tensor, grid_h: int, grid_w: int) -> torch.Tensor:
-        f = self.downsample_factor
-        n_out = (grid_h // f) * (grid_w // f)
-        device = x.device
-        ds_perm = torch.arange(grid_h * grid_w, device=device)
-        ds_perm = ds_perm.view(grid_h // f, f, grid_w // f, f)
-        ds_perm = ds_perm.permute(0, 2, 1, 3).reshape(-1)
-        x_flat = x.squeeze(0)
-        ds_x = x_flat[ds_perm]
-        d = x_flat.shape[-1]
-        ds_x = ds_x.view(n_out, f * f, d).permute(0, 2, 1).contiguous().view(n_out, d * f * f)
-        return ds_x.unsqueeze(0)
-
-    def _get_sparse_perm_and_mask(self, grid_h: int, grid_w: int, device: torch.device):
-        gh, gw = self.pos_emb_grid_h, self.pos_emb_grid_w
-        pad_h = math.ceil(grid_h / gh) * gh
-        pad_w = math.ceil(grid_w / gw) * gw
-        idx = torch.arange(grid_h * grid_w, device=device).view(grid_h, grid_w)
-        idx = F.pad(idx, (0, pad_w - grid_w, 0, pad_h - grid_h), value=-1).flatten()
-        idx = idx.view(pad_h // gh, gh, pad_w // gw, gw)
-        idx = idx.permute(0, 2, 1, 3).reshape(-1)
-        sp_perm = idx[idx != -1]
-        valid = (idx != -1).view(-1, gh * gw)
-        sp_slens = valid.sum(dim=1).tolist()
-        return sp_perm, sp_slens
-
-    def _make_block_diag_mask(self, slens: list[int], device: torch.device) -> torch.Tensor:
-        total = sum(slens)
-        mask = torch.zeros(total, total, dtype=torch.bool, device=device)
+        output = []
         offset = 0
-        for s in slens:
-            mask[offset : offset + s, offset : offset + s] = True
-            offset += s
-        return mask
+
+        for i, (t, h, w) in enumerate(grid_thw.tolist()):
+            t, h, w = int(t), int(h), int(w)
+            n_tokens = t * h * w
+            assert h % f == 0 and w % f == 0, f"grid_h={h}, grid_w={w} must be divisible by downsample_factor={f}"
+
+            hidden_states_chunk = hidden_states[offset : offset + n_tokens]
+
+            # per-frame downsample (t frames share the same h,w perm)
+            n_out_per_frame = (h // f) * (w // f)
+            ds_perm = torch.arange(h * w, device=hidden_states.device)
+            ds_perm = ds_perm.view(h // f, f, w // f, f).permute(0, 2, 1, 3).reshape(-1)
+
+            if t > 1:
+                # offset the perm per frame so it indexes correctly into the flattened (t*h*w) sequence
+                frame_offsets = (torch.arange(t, device=hidden_states.device) * h * w).view(t, 1)
+                ds_perm_all = (ds_perm.unsqueeze(0) + frame_offsets).reshape(-1)
+            else:
+                ds_perm_all = ds_perm
+
+            hidden_states_downsampled = hidden_states_chunk[ds_perm_all]
+            hidden_states_downsampled = hidden_states_downsampled.view(t * n_out_per_frame, f * f, d)
+            hidden_states_downsampled = (
+                hidden_states_downsampled.permute(0, 2, 1).contiguous().view(t * n_out_per_frame, d * f * f)
+            )
+
+            output.append(hidden_states_downsampled)
+            offset += n_tokens
+
+        return torch.cat(output, dim=0)
 
     def forward(
         self,
@@ -551,51 +539,44 @@ class OnyxVisionModel(OnyxPreTrainedModel):
         grid_thw: torch.LongTensor,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPooling:
+        cu_seqlens = get_vision_cu_seqlens(grid_thw, kwargs=kwargs)
+        window_index, cu_window_seqlens = get_vision_window_index(
+            grid_thw,
+            spatial_merge_size=1,
+            # assumes pos_emb_grid_h==pos_emb_grid_w, adapt to non-square if needed
+            window_size=self.config.pos_emb_grid_h * self.config.patch_size,
+            patch_size=self.config.patch_size,
+            kwargs=kwargs,
+        )
+
+        inputs_embeds = self.patch_embedder(pixel_values, grid_thw)
+        hidden_states = self.ln_pre(inputs_embeds)
+
+        seq_len, _ = hidden_states.size()
+        hidden_states = hidden_states[window_index, :, :]
+        hidden_states = hidden_states.reshape(seq_len, -1)
+
+        # Add `1` because ref implementation's position offset is `1`!
+        # TODO: permute qk proj for RoPE in conversion mapping
         position_ids = get_vision_position_ids(grid_thw, spatial_merge_size=1)
-        position_ids = position_ids.flip(0)  # seq-len, 2, should we flip?
-
-        padding_positions = (position_ids == -1).all(dim=-1)
-        inputs_embeds = self.patch_embedder(pixel_values, position_ids, padding_positions)
-        hidden_states = self.ln_pre(inputs_embeds.view(-1, self.hidden_size))
-        hidden_states = hidden_states.view(len(pixel_values), -1, self.hidden_size)
-
-        sp_perm = None
-        if self.sparse_attention_factor > 1:
-            sp_perm, sp_slens = self._get_sparse_perm_and_mask(grid_thw)
-            hidden_states = hidden_states[:, sp_perm]
-            position_ids = position_ids[sp_perm]
-
+        position_ids = position_ids.flip(0) + 1  # seq-len, 2, should we flip?
+        position_ids = position_ids[window_index, ...]
         position_embeddings = self.rotary_emb(hidden_states, position_ids)
 
-        global_mask = self._make_block_diag_mask() if len(pixel_values) > 1 else None
-        sp_mask = self._make_block_diag_mask() if self.sparse_attention_factor else None
-
         for i, block in enumerate(self.layers):
-            is_global = (i == len(self.layers) - 1) or ((i + 1) % self.sparse_attention_factor == 0)
+            is_global = (i == len(self.layers) - 1) or ((i + 1) % self.config.sparse_attention_factor == 0)
             hidden_states = block(
                 hidden_states,
                 position_ids=position_ids,
                 position_embeddings=position_embeddings,
-                attention_mask=global_mask if is_global or not self.sparse_attention_factor else sp_mask,
+                cu_seqlens=cu_seqlens if is_global or self.config.sparse_attention_factor == 0 else cu_window_seqlens,
             )
 
-        all_features = []
-        offset = 0
-        for _, grid_h, grid_w in grid_thw:
-            n_tokens = grid_h * grid_w
-            img_x = hidden_states[:, offset : offset + n_tokens]
-            offset += n_tokens
+        reverse_indices = torch.argsort(window_index)
+        hidden_states = hidden_states[reverse_indices, :]
 
-            if sp_perm is not None:
-                inv_perm = torch.empty_like(sp_perm)
-                inv_perm[sp_perm] = torch.arange(len(sp_perm), device=hidden_states.device)
-                img_x = img_x[:, inv_perm]
-
-            img_x = self.ln_post(img_x.view(-1, self.hidden_size)).view(1, -1, self.hidden_size)
-            img_x = self._pixel_shuffle_downsample(img_x, grid_h, grid_w)
-            all_features.append(img_x.squeeze(0))
-
-        hidden_states = torch.cat(all_features, dim=0)
+        hidden_states = self.ln_post(hidden_states)
+        hidden_states = self._pixel_shuffle_downsample(hidden_states, grid_thw)
         return BaseModelOutputWithPooling(last_hidden_state=hidden_states)
 
 

@@ -17,20 +17,34 @@ import itertools
 import math
 
 import torch
-from PIL import Image
-from torchvision import transforms as T
+from torchvision.transforms.v2 import functional as tvF
 
-from ...image_processing_utils import BaseImageProcessor
+from ...image_processing_backends import TorchvisionBackend
+from ...image_processing_utils import BatchFeature
+from ...image_transforms import group_images_by_shape, reorder_images
+from ...image_utils import ImageInput, PILImageResampling
+from ...processing_utils import ImagesKwargs, Unpack
+from ...utils import TensorType, auto_docstring, logging
+from ...utils.constants import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD
 
 
-def _grid_size(img_w: int, img_h: int, patch_hw: int, max_tokens: int) -> tuple[int, int, int]:
+logger = logging.get_logger(__name__)
+
+
+# Copied from transformers.models.Onyx.image_processing_Onyx.get_aspect_ratio_preserving_size
+def get_aspect_ratio_preserving_size(
+    height: int,
+    width: int,
+    patch_size: int,
+    max_tokens: int,
+) -> tuple[int, int]:
     """Pick the integer (H, W) grid closest to the aspect ratio under the token cap.
 
     Mirrors ``OnyxVisionEncoder._compute_grid_size`` so the processor needs no
-    torch model import. Returns ``(target_h, target_w, n_tokens)``.
+    torch model import. Returns ``(target_h, target_w)``.
     """
-    i_nph = img_h / patch_hw
-    i_npw = img_w / patch_hw
+    i_nph = height / patch_size
+    i_npw = width / patch_size
     ratio = i_npw / i_nph if i_nph > 0 else 1.0
     if i_nph * i_npw > max_tokens:
         i_nph = (max_tokens / ratio) ** 0.5
@@ -46,54 +60,157 @@ def _grid_size(img_w: int, img_h: int, patch_hw: int, max_tokens: int) -> tuple[
     candidates = [(nph, npw) for nph, npw in candidates if nph >= 1 and npw >= 1 and nph * npw <= max_tokens]
     if not candidates:
         candidates = [(max(1, round(i_nph)), max(1, round(i_npw)))]
-    nph, npw = min(candidates, key=lambda c: abs(c[0] / c[1] - img_h / img_w))
-    return nph * patch_hw, npw * patch_hw, nph * npw
+    nph, npw = min(candidates, key=lambda c: abs(c[0] / c[1] - height / width))
+    return nph * patch_size, npw * patch_size
 
 
-class OnyxImageProcessor(BaseImageProcessor):
-    """Resize + normalize Onyx images and compute patch-token counts.
-
-    Variable-resolution: each image is resized to the grid that best matches its
-    aspect ratio under the per-image token cap, then normalized with mean/std 0.5.
-    Returns per-image tensors (not stacked) because Onyx consumes a list of
-    variable-size images. Video frames are handled by ``OnyxVideoProcessor``.
+class OnyxImageProcessorKwargs(ImagesKwargs, total=False):
+    """
+    patch_size (`int`, *optional*):
+        Size of each image patch in pixels.
+    TODO:
     """
 
-    model_input_names = ["pixel_values"]
+    patch_size: int
+    temporal_patch_size: int
+    max_image_tokens: int
+    downsample_factor: int
 
-    def __init__(
-        self,
-        patch_size: int = 14,
-        downsample_factor: int = 2,
-        max_image_tokens: int = 4096,
-        image_mean: float = 0.5,
-        image_std: float = 0.5,
-        **kwargs,
-    ):
+
+@auto_docstring(custom_intro="Constructs an Onyx image processor.")
+class OnyxImageProcessor(TorchvisionBackend):
+    resample = PILImageResampling.BICUBIC
+    image_mean = IMAGENET_STANDARD_MEAN
+    image_std = IMAGENET_STANDARD_STD
+    size = None
+    default_to_square = True
+    do_convert_rgb = True
+    do_resize = True
+    do_rescale = True
+    do_normalize = False
+    patch_size = 14
+    temporal_patch_size = 2
+    downsample_factor = 2
+    max_image_tokens = 4096
+
+    valid_kwargs = OnyxImageProcessorKwargs
+    model_input_names = ["pixel_values", "image_grid_thw"]
+
+    def __init__(self, **kwargs: Unpack[OnyxImageProcessorKwargs]):
         super().__init__(**kwargs)
-        self.patch_size = patch_size
-        self.downsample_factor = downsample_factor
-        self.max_image_tokens = max_image_tokens
-        self.image_mean = image_mean
-        self.image_std = image_std
 
-    def _to_norm_tensor(self, image: Image.Image) -> torch.Tensor:
-        return T.functional.normalize(
-            T.functional.to_tensor(image),
-            [self.image_mean] * 3,
-            [self.image_std] * 3,
+    def _validate_preprocess_kwargs(self, **kwargs):
+        # Onyx uses aspect_ratio_preserving_resize driven by patch_size,
+        # not the standard `size` parameter. Temporarily disable do_resize so
+        # the base validation doesn't raise an error
+        kwargs["do_resize"] = False
+        super()._validate_preprocess_kwargs(**kwargs)
+
+    def aspect_ratio_preserving_resize(
+        self,
+        image: torch.Tensor,
+        patch_size: int,
+        max_tokens: int,
+        resample: tvF.InterpolationMode,
+    ) -> torch.Tensor:
+        height, width = image.shape[-2], image.shape[-1]
+        target_height, target_width = get_aspect_ratio_preserving_size(
+            height=height,
+            width=width,
+            patch_size=patch_size,
+            max_tokens=max_tokens,
         )
 
-    def compute_image_size(self, img_w: int, img_h: int) -> tuple[int, int, int]:
-        ph = self.patch_size * self.downsample_factor
-        return _grid_size(img_w, img_h, ph, self.max_image_tokens)
+        if target_height == height and target_width == width:
+            return image
 
-    def preprocess_image(self, image: Image.Image) -> tuple[torch.Tensor, int]:
-        """Return ``(pixel tensor [3, H, W], n_patch_tokens)`` for one image."""
-        image = image.convert("RGB")
-        target_h, target_w, n_tokens = self.compute_image_size(image.width, image.height)
-        image = image.resize((target_w, target_h), Image.LANCZOS)
-        return self._to_norm_tensor(image), n_tokens
+        return tvF.resize(
+            image,
+            size=[target_height, target_width],
+            interpolation=resample,
+            antialias=True,
+        )
+
+    def preprocess(
+        self,
+        images: ImageInput,
+        **kwargs: Unpack[OnyxImageProcessorKwargs],
+    ) -> BatchFeature:
+        return super().preprocess(images, **kwargs)
+
+    def _preprocess(
+        self,
+        images: list[torch.Tensor],
+        do_resize: bool,
+        resample: PILImageResampling | tvF.InterpolationMode | int | None,
+        do_rescale: bool,
+        rescale_factor: float,
+        do_normalize: bool,
+        image_mean: float | list[float] | None,
+        image_std: float | list[float] | None,
+        return_tensors: str | TensorType | None,
+        patch_size: int,
+        temporal_patch_size: int,
+        max_image_tokens: int,
+        downsample_factor: int,
+        **kwargs,
+    ) -> BatchFeature:
+        grouped_images, grouped_images_index = group_images_by_shape(images)
+        resized_images_grouped = {}
+        for shape, stacked_images in grouped_images.items():
+            height, width = stacked_images.shape[-2:]
+            if do_resize:
+                stacked_images = self.aspect_ratio_preserving_resize(
+                    image=stacked_images,
+                    patch_size=patch_size * downsample_factor,
+                    max_tokens=max_image_tokens,
+                    resample=resample,
+                )
+            resized_images_grouped[shape] = stacked_images
+        resized_images = reorder_images(resized_images_grouped, grouped_images_index)
+
+        grouped_images, grouped_images_index = group_images_by_shape(resized_images)
+        processed_images_grouped = {}
+        processed_grids = {}
+        for shape, stacked_images in grouped_images.items():
+            resized_height, resized_width = stacked_images.shape[-2:]
+            patches = self.rescale_and_normalize(
+                stacked_images, do_rescale, rescale_factor, do_normalize, image_mean, image_std
+            )
+            if patches.ndim == 4:
+                patches = patches.unsqueeze(1)
+            if patches.shape[1] % temporal_patch_size != 0:
+                repeats = patches[:, -1:].repeat(1, temporal_patch_size - 1, 1, 1, 1)
+                patches = torch.cat([patches, repeats], dim=1)
+
+            batch_size, grid_t, channel = patches.shape[:3]
+            grid_t = grid_t // temporal_patch_size
+            grid_h, grid_w = resized_height // patch_size, resized_width // patch_size
+
+            patches = patches.view(
+                batch_size,
+                grid_t,
+                temporal_patch_size,
+                channel,
+                grid_h,
+                patch_size,
+                grid_w,
+                patch_size,
+            )
+            patches = patches.permute(0, 1, 4, 6, 3, 2, 5, 7)
+            flatten_patches = patches.reshape(batch_size, grid_t * grid_h * grid_w, channel, patch_size, patch_size)
+
+            processed_images_grouped[shape] = flatten_patches
+            processed_grids[shape] = [[grid_t, grid_h, grid_w]] * batch_size
+
+        processed_images = reorder_images(processed_images_grouped, grouped_images_index)
+        processed_grids = reorder_images(processed_grids, grouped_images_index)
+        pixel_values = torch.cat(processed_images, dim=0)
+        image_grid_thw = torch.tensor(processed_grids)
+
+        return BatchFeature(
+            data={"pixel_values": pixel_values, "image_grid_thw": image_grid_thw}, tensor_type=return_tensors
+        )
 
 
 __all__ = ["OnyxImageProcessor"]
