@@ -20,7 +20,7 @@ import string
 import time
 from collections.abc import AsyncIterator, Awaitable
 from typing import Annotated, Any
-from urllib.parse import urljoin, urlparse
+from urllib.parse import urljoin, urlparse, urlunparse
 
 import httpx
 import requests
@@ -103,12 +103,20 @@ If you're a new user, check this basic flag guide: https://huggingface.co/docs/t
 """
 
 
+def _get_management_base_url(base_url: str) -> str:
+    parsed = urlparse(base_url.rstrip("/"))
+    if parsed.path == "/v1":
+        parsed = parsed._replace(path="", params="", query="", fragment="")
+        return urlunparse(parsed).rstrip("/")
+    return base_url.rstrip("/")
+
+
 class RichInterface:
     def __init__(self, model_id: str, user_id: str, base_url: str):
         self._console = Console()
         self.model_id = model_id
         self.user_id = user_id
-        self.base_url = base_url
+        self.base_url = _get_management_base_url(base_url)
 
     async def stream_output(
         self, stream: Awaitable[AsyncIterator[ChatCompletionStreamOutput]]
@@ -338,10 +346,11 @@ class Chat:
     ) -> None:
         """Chat with a model from the command line."""
         self.base_url = base_url
+        self.management_base_url = _get_management_base_url(base_url)
 
         parsed = urlparse(self.base_url)
         if parsed.hostname == DEFAULT_HTTP_ENDPOINT["hostname"] and parsed.port == DEFAULT_HTTP_ENDPOINT["port"]:
-            self.check_health(self.base_url)
+            self.check_health(self.management_base_url)
 
         self.model_id = model_id
         self.system_prompt = system_prompt
@@ -374,7 +383,7 @@ class Chat:
 
     @staticmethod
     def check_health(url):
-        health_url = urljoin(url + "/", "health")
+        health_url = urljoin(_get_management_base_url(url) + "/", "health")
         try:
             output = httpx.get(health_url)
             if output.status_code != 200:
@@ -464,7 +473,7 @@ class Chat:
         return chat, valid_command, config
 
     async def _inner_run(self):
-        interface = RichInterface(model_id=self.model_id, user_id=self.user, base_url=self.base_url)
+        interface = RichInterface(model_id=self.model_id, user_id=self.user, base_url=self.management_base_url)
         interface.clear()
         chat = new_chat_history(self.system_prompt)
 
