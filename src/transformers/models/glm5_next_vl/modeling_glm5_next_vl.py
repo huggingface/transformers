@@ -18,6 +18,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import math
 from collections.abc import Callable
 from typing import Any
 
@@ -25,6 +26,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
@@ -305,8 +307,8 @@ class Glm5NextVLTextForgetGate(nn.Module):
 
         self.f_a_proj = nn.Linear(config.hidden_size, self.head_dim, bias=False)
         self.f_b_proj = nn.Linear(self.head_dim, self.qkv_dim, bias=False)
-        self.dt_bias = nn.Parameter(torch.empty(self.qkv_dim, dtype=torch.float32))
-        self.A_log = nn.Parameter(torch.empty(self.num_heads, dtype=torch.float32))
+        self.dt_bias = nn.Parameter(torch.empty(self.qkv_dim))
+        self.A_log = nn.Parameter(torch.empty(self.num_heads))
 
         self.safe_gate_lower_bound = config.linear_lower_bound
 
@@ -659,9 +661,6 @@ class Glm5NextVLTextLinearAttention(nn.Module):
         # Multi token prefill or simple "full" prefill
         else:
             # Concatenated state for prefill
-            if use_precomputed_states:
-                mixed_qkv = torch.cat([conv_state.to(mixed_qkv.dtype), mixed_qkv], dim=-1)
-
             if cache_params is not None:
                 mixed_qkv = cache_params.update_conv_state(
                     mixed_qkv, self.layer_idx, conv_kernel_size=self.conv_kernel_size
@@ -676,8 +675,7 @@ class Glm5NextVLTextLinearAttention(nn.Module):
             )
 
             # Cut out any tail
-            if use_precomputed_states:
-                mixed_qkv = mixed_qkv[:, :, -seq_len:]
+            mixed_qkv = mixed_qkv[:, :, -seq_len:]
 
         query, key, value = torch.split(
             mixed_qkv.transpose(1, 2),
@@ -951,8 +949,7 @@ class Glm5NextVLTextDecoderLayer(GradientCheckpointingLayer):
 class Glm5NextVLPreTrainedModel(PreTrainedModel):
     config: Glm5NextVLConfig
     base_model_prefix = "model"
-    _no_split_modules = ["Glm5NextTextDecoderLayer"]
-    _skip_keys_device_placement = ["past_key_values"]
+    supports_gradient_checkpointing = True
 
     # needs index based kernel
     _supports_flash_attn = False
@@ -960,8 +957,12 @@ class Glm5NextVLPreTrainedModel(PreTrainedModel):
     # needs per layer creation, too expensive
     _supports_flex_attn = False
     _supports_attention_backend = True
-
-    supports_gradient_checkpointing = True
+    _no_split_modules = ["Glm5NextVLTextDecoderLayer"]
+    _skip_keys_device_placement = ["past_key_values"]
+    # TODO: this can be fixed but is limited by
+    # 1. assuming the cache name
+    # 2. linear attention not being considered atm
+    _is_stateful = True
     _can_compile_fullgraph = True
 
     _can_record_outputs = {
@@ -969,25 +970,47 @@ class Glm5NextVLPreTrainedModel(PreTrainedModel):
         "hidden_states": Glm5NextVLTextDecoderLayer,
         "router_logits": OutputRecorder(Glm5NextVLTextTopkRouter, index=0),  # noqa: F821
     }
-    _keep_in_fp32_modules_strict = ["e_score_correction_bias", "conv1d"]
+    _keep_in_fp32_modules_strict = ["e_score_correction_bias", "conv1d", "dt_bias", "A_log"]
     _keys_to_ignore_on_load_unexpected = [r"layers\.45\.", r"layers\.\d+\.shared_head\."]
 
     @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
-
         if isinstance(module, Glm5NextVLTextForgetGate):
-            nn.init.normal_(module.A_log, mean=0.0, std=0.02)
-            nn.init.zeros_(module.dt_bias)
-        elif isinstance(module, Glm5NextVLTextLinearAttention):
-            nn.init.ones_(module.o_norm.weight)
+            # Following FLA initialization
+            # NOTE: This is incredibly important so keep it this way at all costs
+            if module.safe_gate_lower_bound is not None:
+                init.zeros_(module.A_log)
+            else:
+                init.copy_(
+                    module.A_log,
+                    init.uniform_(module.A_log, a=1.0, b=16.0).log(),
+                )
+
+            init.uniform_(
+                module.dt_bias,
+                a=math.log(1e-3),
+                b=math.log(1e-1),
+            )
+            dt = module.dt_bias.exp().clamp_min(1e-4)
+
+            # (stable) inverse softplus
+            init.copy_(
+                module.dt_bias,
+                dt + torch.log(-torch.expm1(-dt)),
+            )
+        elif isinstance(module, Glm5NextVLTextRMSNormGated):
+            init.ones_(module.weight)
         elif isinstance(module, Glm5NextVLTextHyperConnection):
-            nn.init.normal_(module.fn, mean=0.0, std=0.02)
-            nn.init.zeros_(module.base)
-            nn.init.ones_(module.scale)
+            init.normal_(module.fn, mean=0.0, std=0.02)
+            init.zeros_(module.base)
+            init.ones_(module.scale)
         elif isinstance(module, Glm5NextVLTextExperts):
-            nn.init.normal_(module.gate_up_proj, mean=0.0, std=self.config.initializer_range)
-            nn.init.normal_(module.down_proj, mean=0.0, std=self.config.initializer_range)
+            init.normal_(module.gate_up_proj, mean=0.0, std=self.config.initializer_range)
+            init.normal_(module.down_proj, mean=0.0, std=self.config.initializer_range)
+        elif isinstance(module, Glm5NextVLTextTopkRouter):
+            init.zeros_(module.e_score_correction_bias)
+            init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
 
 
 @auto_docstring

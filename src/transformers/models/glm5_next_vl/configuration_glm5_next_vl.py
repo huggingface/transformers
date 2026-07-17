@@ -23,7 +23,7 @@ from ..auto import AutoConfig
 logger = logging.get_logger(__name__)
 
 
-# TODO: docstring + modular + default values
+# TODO: modular + default values
 @auto_docstring(checkpoint="zai-org/GLM-5-Next")
 @strict
 class Glm5NextVLTextConfig(PreTrainedConfig):
@@ -32,17 +32,16 @@ class Glm5NextVLTextConfig(PreTrainedConfig):
         Number of routed expert groups.
     swiglu_limit (`float`, *optional*, defaults to 10.0):
         Clamp limit applied to SwiGLU gate/up projections.
-    linear_conv_kernel_dim (`int`, *optional*, defaults to 4):
-        Kernel size of the convolution used in linear attention layers.
-    linearhead_dim (`int`, *optional*, defaults to 64):
+    swiglu_limit (`float`, *optional*, defaults to None):
+        Clamp limit applied to SwiGLU gate/up projections.
+    linear_head_dim (`int`, *optional*, defaults to 64):
         Dimension of each head in linear attention.
     linear_num_heads (`int`, *optional*, defaults to 40):
         Number of heads used in linear attention layers.
+    linear_conv_kernel_dim (`int`, *optional*, defaults to 4):
+        Kernel size of the convolution used in linear attention layers.
     linear_lower_bound (`float`, *optional*, defaults to None):
         Whether the forget gate has a lower bound to apply to the decay.
-    mhc (`bool`, *optional*, defaults to `False`):
-        Enables MHC residual streams. Older checkpoints without this field use
-        the standard single-stream residual path.
     hc_mult (`int`, *optional*, defaults to 4):
         Number of MHC residual streams.
     hc_eps (`float`, *optional*, defaults to 1e-6):
@@ -55,9 +54,8 @@ class Glm5NextVLTextConfig(PreTrainedConfig):
         Number of DSA indexer heads.
     index_topk (`int`, *optional*, defaults to 2048):
         Number of sparse-attention positions selected by the DSA indexer.
-    index_kpool (`int`, *optional*, defaults to 1):
-        DSA serving-cache key pooling factor. Values greater than 1 enable
-        checkpoint-compatible index-pool compression parameters.
+    index_kpool (`int`, *optional*, defaults to 16):
+        Pool size of the compressed token groups selected by the DSA indexer.
     index_kpool_always_select_tail (`bool`, *optional*, defaults to `False`):
         Whether the incomplete KPool tail is always included in sparse attention.
     indexer_types (`list[str]`, *optional*):

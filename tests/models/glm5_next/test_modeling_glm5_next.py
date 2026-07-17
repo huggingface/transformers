@@ -118,7 +118,9 @@ class Glm5NextModelTest(CausalLMModelTest, unittest.TestCase):
             with torch.no_grad():
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
             attentions = outputs.attentions
-            self.assertEqual(len(attentions), sum(layer == "deepseek_sparse_attention" for layer in config.layer_types))
+            self.assertEqual(
+                len(attentions), sum(layer == "deepseek_sparse_attention" for layer in config.layer_types)
+            )
 
             # check that output_attentions also work using config
             del inputs_dict["output_attentions"]
@@ -129,7 +131,9 @@ class Glm5NextModelTest(CausalLMModelTest, unittest.TestCase):
             with torch.no_grad():
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
             attentions = outputs.attentions
-            self.assertEqual(len(attentions), sum(layer == "deepseek_sparse_attention" for layer in config.layer_types))
+            self.assertEqual(
+                len(attentions), sum(layer == "deepseek_sparse_attention" for layer in config.layer_types)
+            )
             self.assertListEqual(list(attentions[0].shape[-3:]), [config.num_attention_heads, seq_len, seq_len])
             out_len = len(outputs)
 
@@ -144,7 +148,9 @@ class Glm5NextModelTest(CausalLMModelTest, unittest.TestCase):
                 self_attentions = outputs.attentions
 
             self.assertEqual(out_len + 1, len(outputs))
-            self.assertEqual(len(self_attentions), sum(layer == "deepseek_sparse_attention" for layer in config.layer_types))
+            self.assertEqual(
+                len(self_attentions), sum(layer == "deepseek_sparse_attention" for layer in config.layer_types)
+            )
             self.assertListEqual(list(self_attentions[0].shape[-3:]), [config.num_attention_heads, seq_len, seq_len])
 
     @parameterized.expand([("linear",), ("dynamic",), ("yarn",)])

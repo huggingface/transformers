@@ -22,21 +22,21 @@ from ...utils import auto_docstring, logging
 logger = logging.get_logger(__name__)
 
 
-# TODO: docstring + modular
+# TODO: modular?
 @auto_docstring(checkpoint="zai-org/GLM-5-Next")
 @strict
 class Glm5NextConfig(PreTrainedConfig):
     r"""
     n_group (`int`, *optional*, defaults to 1):
         Number of routed expert groups.
-    swiglu_limit (`float`, *optional*, defaults to 10.0):
+    swiglu_limit (`float`, *optional*, defaults to None):
         Clamp limit applied to SwiGLU gate/up projections.
-    linear_conv_kernel_dim (`int`, *optional*, defaults to 4):
-        Kernel size of the convolution used in linear attention layers.
-    linearhead_dim (`int`, *optional*, defaults to 64):
+    linear_head_dim (`int`, *optional*, defaults to 64):
         Dimension of each head in linear attention.
     linear_num_heads (`int`, *optional*, defaults to 40):
         Number of heads used in linear attention layers.
+    linear_conv_kernel_dim (`int`, *optional*, defaults to 4):
+        Kernel size of the convolution used in linear attention layers.
     linear_lower_bound (`float`, *optional*, defaults to None):
         Whether the forget gate has a lower bound to apply to the decay.
     index_head_dim (`int`, *optional*, defaults to 128):
@@ -46,7 +46,7 @@ class Glm5NextConfig(PreTrainedConfig):
     index_topk (`int`, *optional*, defaults to 2048):
         Number of sparse-attention positions selected by the DSA indexer.
     index_kpool (`int`, *optional*, defaults to 16):
-        TODO
+        Pool size of the compressed token groups selected by the DSA indexer.
     index_kpool_always_select_tail (`bool`, *optional*, defaults to `True`):
         Whether the incomplete KPool tail is always included in sparse attention.
     indexer_types (`list[str]`, *optional*):

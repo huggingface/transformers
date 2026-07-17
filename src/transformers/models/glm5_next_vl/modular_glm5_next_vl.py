@@ -12,12 +12,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import math
 from collections.abc import Callable
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+from ... import initialization as init
 from ...cache_utils import Cache, DynamicCache
 from ...masking_utils import create_causal_mask, create_recurrent_attention_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
@@ -261,7 +263,7 @@ class Glm5NextVLTextDecoderLayer(GlmMoeDsaDecoderLayer):
 @auto_docstring
 class Glm5NextVLPreTrainedModel(Glm5NextPreTrainedModel):
     config: Glm5NextVLConfig
-    _no_split_modules = ["Glm5NextTextDecoderLayer"]
+    _no_split_modules = ["Glm5NextVLTextDecoderLayer"]
 
     _can_record_outputs = {
         "attentions": Glm5NextVLTextAttention,
@@ -272,19 +274,41 @@ class Glm5NextVLPreTrainedModel(Glm5NextPreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module):
         PreTrainedModel._init_weights(self, module)
-
         if isinstance(module, Glm5NextVLTextForgetGate):
-            nn.init.normal_(module.A_log, mean=0.0, std=0.02)
-            nn.init.zeros_(module.dt_bias)
-        elif isinstance(module, Glm5NextVLTextLinearAttention):
-            nn.init.ones_(module.o_norm.weight)
+            # Following FLA initialization
+            # NOTE: This is incredibly important so keep it this way at all costs
+            if module.safe_gate_lower_bound is not None:
+                init.zeros_(module.A_log)
+            else:
+                init.copy_(
+                    module.A_log,
+                    init.uniform_(module.A_log, a=1.0, b=16.0).log(),
+                )
+
+            init.uniform_(
+                module.dt_bias,
+                a=math.log(1e-3),
+                b=math.log(1e-1),
+            )
+            dt = module.dt_bias.exp().clamp_min(1e-4)
+
+            # (stable) inverse softplus
+            init.copy_(
+                module.dt_bias,
+                dt + torch.log(-torch.expm1(-dt)),
+            )
+        elif isinstance(module, Glm5NextVLTextRMSNormGated):
+            init.ones_(module.weight)
         elif isinstance(module, Glm5NextVLTextHyperConnection):
-            nn.init.normal_(module.fn, mean=0.0, std=0.02)
-            nn.init.zeros_(module.base)
-            nn.init.ones_(module.scale)
+            init.normal_(module.fn, mean=0.0, std=0.02)
+            init.zeros_(module.base)
+            init.ones_(module.scale)
         elif isinstance(module, Glm5NextVLTextExperts):
-            nn.init.normal_(module.gate_up_proj, mean=0.0, std=self.config.initializer_range)
-            nn.init.normal_(module.down_proj, mean=0.0, std=self.config.initializer_range)
+            init.normal_(module.gate_up_proj, mean=0.0, std=self.config.initializer_range)
+            init.normal_(module.down_proj, mean=0.0, std=self.config.initializer_range)
+        elif isinstance(module, Glm5NextVLTextTopkRouter):
+            init.zeros_(module.e_score_correction_bias)
+            init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
 
 
 @auto_docstring
