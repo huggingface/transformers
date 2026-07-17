@@ -23,11 +23,11 @@ rendered properly in your Markdown viewer.
 
 ## Overview
 
-TODO.
+PP-OCRv6_medium_det is the largest model in the PP-OCRv6 detection series developed by the PaddleOCR team. It uses LCNetV4 as the backbone and RepLKFPN as the feature pyramid neck, providing accurate text localization across diverse scenarios including handwritten, printed, rotated, curved, and artistic text in multiple languages. The model contains 15.5M parameters.
 
 ## Model Architecture
 
-TODO.
+<img src="https://cdn-uploads.huggingface.co/production/uploads/684ba591e717a30275a1b76a/ofnSGExgJL6K6d8ghh0vl.png" width="600"/>
 
 ## Usage
 
@@ -55,7 +55,14 @@ image = load_image(image_url)
 inputs = image_processor(images=image, return_tensors="pt").to(model.device)
 outputs = model(**inputs)
 
-results = image_processor.post_process_object_detection(outputs, target_sizes=inputs["target_sizes"])
+results = image_processor.post_process_object_detection(
+    outputs, 
+    target_sizes=inputs["target_sizes"],
+    threshold=0.2,
+    box_threshold=0.45,
+    max_candidates=3000,
+    unclip_ratio=1.4,
+)
 
 for result in results:
     print(result)
@@ -88,7 +95,14 @@ image = load_image(image_url)
 inputs = image_processor(images=[image, image], return_tensors="pt").to(model.device)
 outputs = model(**inputs)
 
-results = image_processor.post_process_object_detection(outputs, target_sizes=inputs["target_sizes"])
+results = image_processor.post_process_object_detection(
+    outputs, 
+    target_sizes=inputs["target_sizes"],
+    threshold=0.2,
+    box_threshold=0.45,
+    max_candidates=3000,
+    unclip_ratio=1.4,
+)
 
 for result in results:
     print(result)

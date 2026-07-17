@@ -60,9 +60,11 @@ class QuantizationMethod(str, Enum):
     FPQUANT = "fp_quant"
     AUTOROUND = "auto-round"
     MXFP4 = "mxfp4"
+    MXFP8 = "mxfp8"
     METAL = "metal"
     FOUR_OVER_SIX = "fouroversix"
     SINQ = "sinq"
+    GEMMA = "gemma"
 
 
 class AwqFormat(str, Enum):
@@ -903,13 +905,13 @@ class AqlmConfig(QuantizationConfigMixin):
         Safety checker that arguments are correct - also replaces some NoneType arguments with their default values.
         """
         if not isinstance(self.in_group_size, int):
-            raise TypeError("in_group_size must be a float")
+            raise TypeError("in_group_size must be an int")
         if not isinstance(self.out_group_size, int):
-            raise TypeError("out_group_size must be a float")
+            raise TypeError("out_group_size must be an int")
         if not isinstance(self.num_codebooks, int):
-            raise TypeError("num_codebooks must be a float")
+            raise TypeError("num_codebooks must be an int")
         if not isinstance(self.nbits_per_codebook, int):
-            raise TypeError("nbits_per_codebook must be a float")
+            raise TypeError("nbits_per_codebook must be an int")
 
         if self.linear_weights_not_to_quantize is not None and not isinstance(
             self.linear_weights_not_to_quantize, list
@@ -1647,6 +1649,9 @@ class FineGrainedFP8Config(QuantizationConfigMixin):
             Whether to dequantize the model during loading.
         modules_to_not_convert (`list`, *optional*):
             A list of module names that should not be converted during quantization.
+        scale_fmt (`str`, *optional*, defaults to `"float"`):
+            Storage dtype of the per-block weight scales: `"float"` (fp32, V3-style) or
+            `"ue8m0"` (1-byte `torch.float8_e8m0fnu`, V4-style).
     """
 
     def __init__(
@@ -1655,13 +1660,18 @@ class FineGrainedFP8Config(QuantizationConfigMixin):
         weight_block_size: tuple[int, int] = (128, 128),
         dequantize: bool = False,
         modules_to_not_convert: list | None = None,
+        scale_fmt: str = "float",
         **kwargs,
     ):
-        self.quant_method = QuantizationMethod.FP8
+        self.quant_method = kwargs.pop("quant_method", QuantizationMethod.FP8)
+        # MiniMax ships the skip-list under ``ignored_layers``; accept it as an alias.
+        if modules_to_not_convert is None and "ignored_layers" in kwargs:
+            modules_to_not_convert = kwargs.pop("ignored_layers")
         self.modules_to_not_convert = modules_to_not_convert
         self.activation_scheme = activation_scheme
         self.weight_block_size = weight_block_size
         self.dequantize = dequantize
+        self.scale_fmt = scale_fmt
         self.post_init()
 
     def post_init(self):
@@ -1675,6 +1685,8 @@ class FineGrainedFP8Config(QuantizationConfigMixin):
             raise ValueError("weight_block_size must be a tuple of two integers")
         if self.weight_block_size is not None and (self.weight_block_size[0] <= 0 or self.weight_block_size[1] <= 0):
             raise ValueError("weight_block_size must be a tuple of two positive integers")
+        if self.scale_fmt not in ("float", "ue8m0"):
+            raise ValueError(f"scale_fmt must be 'float' or 'ue8m0'; got {self.scale_fmt!r}")
 
     def get_loading_attributes(self):
         return {"dequantize": self.dequantize, "modules_to_not_convert": self.modules_to_not_convert}
@@ -1961,3 +1973,38 @@ class SinqConfig(QuantizationConfigMixin):
             logger.warning(
                 f"SINQ: group_size={self.group_size} is not a multiple of 8; this may be rejected by the backend."
             )
+
+
+@dataclass
+class GemmaQuantizationConfig(QuantizationConfigMixin):
+    """Quantization config for pre-quantized Gemma checkpoints.
+
+    Args:
+        num_bits (`int`, *optional*, defaults to 4):
+            Bit width applied to modules that don't match any pattern in
+            `module_quant_configs`, and to matched entries that omit `num_bits`.
+        quantize_embeddings (`bool`, *optional*, defaults to `False`):
+            If True, `nn.Embedding` modules are also replaced with quantized
+            counterparts. Off by default since most checkpoints leave them as
+            regular fp embeddings.
+        module_quant_configs (`dict[str, dict]`, *optional*):
+            Ordered mapping from module-name regex (matched with `re.search`) to
+            per-module quantization options. The only key understood today is
+            `"num_bits"` (2, 4, or 8).
+        modules_to_not_convert (`list[str]`, *optional*):
+            Module names to skip during quantized-layer replacement.
+    """
+
+    def __init__(
+        self,
+        num_bits: int = 4,
+        quantize_embeddings: bool = False,
+        module_quant_configs: dict[str, dict] | None = None,
+        modules_to_not_convert: list[str] | None = None,
+        **kwargs,
+    ):
+        self.quant_method = QuantizationMethod.GEMMA
+        self.num_bits = num_bits
+        self.quantize_embeddings = quantize_embeddings
+        self.module_quant_configs = module_quant_configs
+        self.modules_to_not_convert = modules_to_not_convert

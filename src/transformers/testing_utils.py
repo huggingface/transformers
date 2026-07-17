@@ -72,6 +72,7 @@ from .integrations.deepspeed import is_deepspeed_available
 from .utils import (
     ACCELERATE_MIN_VERSION,
     GGUF_MIN_VERSION,
+    MISTRAL_COMMON_MIN_VERSION,
     SAFE_WEIGHTS_INDEX_NAME,
     TRITON_MIN_VERSION,
     WEIGHTS_INDEX_NAME,
@@ -90,6 +91,7 @@ from .utils import (
     is_decord_available,
     is_detectron2_available,
     is_essentia_available,
+    is_executorch_available,
     is_faiss_available,
     is_fbgemm_gpu_available,
     is_flash_attn_2_available,
@@ -123,11 +125,14 @@ from .utils import (
     is_nltk_available,
     is_numba_available,
     is_onnx_available,
+    is_onnxruntime_available,
+    is_onnxscript_available,
     is_openai_available,
     is_optimum_available,
     is_optimum_quanto_available,
     is_pandas_available,
     is_peft_available,
+    is_peft_greater_or_equal,
     is_phonemizer_available,
     is_pretty_midi_available,
     is_psutil_available,
@@ -145,6 +150,7 @@ from .utils import (
     is_sentencepiece_available,
     is_seqio_available,
     is_serve_available,
+    is_soundfile_available,
     is_spacy_available,
     is_speech_available,
     is_spqr_available,
@@ -264,7 +270,7 @@ if is_torch_available():
     import torch
     from safetensors.torch import load_file
 
-    from .modeling_utils import FLASH_ATTN_KERNEL_FALLBACK, PreTrainedModel
+    from .modeling_utils import PreTrainedModel
 
     IS_ROCM_SYSTEM = torch.version.hip is not None
     IS_CUDA_SYSTEM = torch.version.cuda is not None
@@ -608,6 +614,18 @@ def require_onnx(test_case):
     return unittest.skipUnless(is_onnx_available(), "test requires ONNX")(test_case)
 
 
+def require_onnxscript(test_case):
+    return unittest.skipUnless(is_onnxscript_available(), "test requires ONNXScript")(test_case)
+
+
+def require_onnxruntime(test_case):
+    return unittest.skipUnless(is_onnxruntime_available(), "test requires ONNX Runtime")(test_case)
+
+
+def require_executorch(test_case):
+    return unittest.skipUnless(is_executorch_available(), "test requires ExecuTorch")(test_case)
+
+
 def require_timm(test_case):
     """
     Decorator marking a test that requires Timm.
@@ -675,16 +693,8 @@ def require_flash_attn(test_case):
     These tests are skipped when Flash Attention isn't installed.
 
     """
-    flash_attn_available = is_flash_attn_2_available()
-    kernels_available = is_kernels_available()
-    try:
-        from kernels import get_kernel
-
-        get_kernel(FLASH_ATTN_KERNEL_FALLBACK["flash_attention_2"])
-    except Exception as _:
-        kernels_available = False
-
-    return unittest.skipUnless(kernels_available | flash_attn_available, "test requires Flash Attention")(test_case)
+    flash_attn_available = is_flash_attn_2_available(kernels_fallback_ok=True)
+    return unittest.skipUnless(flash_attn_available, "test requires Flash Attention")(test_case)
 
 
 def require_kernels(test_case):
@@ -716,19 +726,12 @@ def require_flash_attn_4(test_case):
 
 
 def require_all_flash_attn(test_case):
-    flash_attn_available = is_flash_attn_2_available()
-    kernels_available = is_kernels_available()
-    try:
-        from kernels import get_kernel
-
-        get_kernel(FLASH_ATTN_KERNEL_FALLBACK["flash_attention_2"])
-    except Exception as _:
-        kernels_available = False
+    flash_attn_available = is_flash_attn_2_available(kernels_fallback_ok=True)
 
     return unittest.skipUnless(
         all(
             (
-                flash_attn_available | kernels_available,
+                flash_attn_available,
                 is_flash_attn_3_available(),
                 is_flash_attn_4_available(),
             )
@@ -771,6 +774,21 @@ def require_peft(test_case):
 
     """
     return unittest.skipUnless(is_peft_available(), "test requires PEFT")(test_case)
+
+
+def require_peft_greater_or_equal(version: str):
+    """
+    Decorator marking a test that requires PEFT version >= `version`.
+
+    These tests are skipped when PEFT version is less than `version`.
+    """
+
+    def decorator(test_case):
+        return unittest.skipUnless(is_peft_greater_or_equal(version), f"test requires PEFT version >= {version}")(
+            test_case
+        )
+
+    return decorator
 
 
 def require_torchvision(test_case):
@@ -901,6 +919,19 @@ def require_torch_multi_accelerator(test_case):
     return unittest.skipUnless(backend_device_count(torch_device) > 1, "test requires multiple accelerators")(
         test_case
     )
+
+
+def require_torch_n_accelerators(n: int):
+    """Decorator marking a test that requires at least `n` accelerators (in PyTorch)."""
+
+    def decorator(test_case):
+        if not is_torch_available():
+            return unittest.skip(reason="test requires PyTorch")(test_case)
+        return unittest.skipUnless(backend_device_count(torch_device) >= n, f"test requires >= {n} accelerators")(
+            test_case
+        )
+
+    return decorator
 
 
 def require_torch_non_multi_gpu(test_case):
@@ -1133,6 +1164,11 @@ def require_torch_mps(test_case):
     return unittest.skipUnless(torch_device == "mps", "test requires MPS")(test_case)
 
 
+def require_rocm(test_case):
+    """Decorator marking a test that requires a ROCm (AMD) GPU and PyTorch."""
+    return unittest.skipUnless(torch_device == "cuda" and IS_ROCM_SYSTEM, "test requires a ROCm (AMD) GPU")(test_case)
+
+
 def require_large_cpu_ram(test_case, memory: float = 80):
     """Decorator marking a test that requires a CPU RAM with more than `memory` GiB of memory."""
     if not is_psutil_available():
@@ -1195,11 +1231,14 @@ def require_fp8(test_case):
 
 
 def require_cuda_capability_at_least(major, minor):
-    """Decorator to skip tests when CUDA capability is below the given version."""
+    """Decorator: when running on CUDA, skip if device capability is below the given
+    threshold. On non-CUDA backends this is a no-op — pair with :func:`require_torch_gpu`
+    if the test is CUDA-only, or leave alone if it should also run on other backends
+    (which won't be capability-gated)."""
     import torch
 
     if not torch.cuda.is_available():
-        return unittest.skip("CUDA not available")
+        return lambda test_case: test_case
     capability = torch.cuda.get_device_capability()
     return unittest.skipIf(capability < (major, minor), f"Requires CUDA capability >= {major}.{minor}")
 
@@ -1486,6 +1525,13 @@ def require_librosa(test_case):
     return unittest.skipUnless(is_librosa_available(), "test requires librosa")(test_case)
 
 
+def require_soundfile(test_case):
+    """
+    Decorator marking a test that requires soundfile
+    """
+    return unittest.skipUnless(is_soundfile_available(), "test requires soundfile")(test_case)
+
+
 def require_multipart(test_case):
     """
     Decorator marking a test that requires python-multipart
@@ -1583,11 +1629,13 @@ def require_serve(test_case):
     return unittest.skipUnless(is_serve_available(), "test requires serving dependencies")(test_case)
 
 
-def require_mistral_common(test_case):
+def require_mistral_common(test_case, min_version: str = MISTRAL_COMMON_MIN_VERSION):
     """
     Decorator marking a test that requires mistral-common. These tests are skipped when mistral-common isn't available.
     """
-    return unittest.skipUnless(is_mistral_common_available(), "test requires mistral-common")(test_case)
+    return unittest.skipUnless(
+        is_mistral_common_available(min_version), f"test requires mistral-common version >= {min_version}"
+    )(test_case)
 
 
 def get_gpu_count():
@@ -2880,7 +2928,7 @@ def preprocess_string(string, skip_cuda_tests):
     cuda stuff is detective (with a heuristic), this method will return an empty string so no doctest will be run for
     `string`.
     """
-    codeblock_pattern = r"(```(?:python|py)\s*\n\s*>>> )(.*?```)"
+    codeblock_pattern = r"(```(?:python|py)[^\S\n]*\n\s*>>> )(.*?```)"
     codeblocks = re.split(codeblock_pattern, string, flags=re.DOTALL)
     is_cuda_found = False
     for i, codeblock in enumerate(codeblocks):

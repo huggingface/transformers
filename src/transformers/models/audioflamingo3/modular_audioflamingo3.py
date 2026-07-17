@@ -273,6 +273,9 @@ class AudioFlamingo3Model(VoxtralModel):
     """
 )
 class AudioFlamingo3ForConditionalGeneration(VoxtralForConditionalGeneration):
+    _keep_in_fp32_modules_strict = AttributeError()
+    _tied_weights_keys = None
+
     def __init__(self, config):
         super().__init__(config)
         self.model = AudioFlamingo3Model(config)

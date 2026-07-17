@@ -465,8 +465,6 @@ Hey how are you doing"""  # noqa: W293
         tokenizer_from_extractor = self.tokenizer_class(
             vocab=vocab,
             merges=merges,
-            do_lower_case=False,
-            keep_accents=True,
             added_tokens_decoder=added_tokens_decoder,
             **extra_kwargs,
             **(self.from_pretrained_kwargs if self.from_pretrained_kwargs is not None else {}),
@@ -850,8 +848,6 @@ Hey how are you doing"""  # noqa: W293
 
         tokenizer_original = self.tokenizer_class.from_pretrained(
             self.from_pretrained_id[0],
-            do_lower_case=False,
-            keep_accents=True,
             **(self.from_pretrained_kwargs if self.from_pretrained_kwargs is not None else {}),
         )
         self._run_integration_checks(tokenizer_original, "original")
@@ -876,8 +872,6 @@ Hey how are you doing"""  # noqa: W293
 
         tokenizer_original = self.tokenizer_class.from_pretrained(
             self.from_pretrained_id[0],
-            do_lower_case=False,
-            keep_accents=True,
             **(self.from_pretrained_kwargs if self.from_pretrained_kwargs is not None else {}),
         )
         tokenizer_from_extractor = self.get_extracted_tokenizer(reference_tokenizer=tokenizer_original)
@@ -1009,6 +1003,13 @@ Hey how are you doing"""  # noqa: W293
         self.assertEqual(output, expected_output)  # Test output is the same after reloading
         # Check that no error raised
         new_tokenizer.apply_chat_template(dummy_conversation, tokenize=True, return_dict=False)
+
+    def test_chat_template_empty_conversation(self):
+        dummy_template = "{% for message in messages %}{{message['role'] + message['content']}}{% endfor %}"
+        tokenizer = self.get_tokenizer()
+        tokenizer.chat_template = dummy_template
+        with self.assertRaises(ValueError, msg="Cannot apply chat template to an empty conversation"):
+            tokenizer.apply_chat_template([], tokenize=False)
 
     @require_jinja
     def test_chat_template_save_loading(self):

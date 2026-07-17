@@ -200,7 +200,9 @@ class TrainingArguments:
         max_steps (`int`, *optional*, defaults to -1):
             Overrides `num_train_epochs`. If set to a positive number, the total number of training steps to perform.
             For a finite dataset, training is reiterated through the dataset (if all data is exhausted) until
-            `max_steps` is reached.
+            `max_steps` is reached. It must be set to a positive value when the training dataset does not implement
+            `__len__` (e.g. a streaming dataset), since the total number of steps cannot then be inferred and is
+            required to bound the training loop and configure the learning rate scheduler.
 
         > Learning Rate & Scheduler
 
@@ -482,7 +484,7 @@ class TrainingArguments:
             Enable Just-In-Time checkpointing on SIGTERM signal for graceful termination on
             preemptible workloads. **Important**: Configure your orchestrator's graceful shutdown
             period to allow sufficient time. For Kubernetes, set `terminationGracePeriodSeconds`
-            (default 30s is usually insufficient). For Slurm, use `--signal=USR1@<seconds>`.
+            (default 30s is usually insufficient). For Slurm, use `--signal=TERM@<seconds>`.
             Required grace period ≥ longest iteration time + checkpoint save time.
 
         > Hugging Face Hub Integration
@@ -756,7 +758,7 @@ class TrainingArguments:
     max_steps: int = field(
         default=-1,
         metadata={
-            "help": "Overrides `num_train_epochs`. If set to a positive number, the total number of training steps to perform."
+            "help": "Overrides `num_train_epochs`. If set to a positive number, the total number of training steps to perform. Must be set when the training dataset does not implement `__len__` (e.g. a streaming dataset)."
         },
     )
 
@@ -1563,6 +1565,8 @@ class TrainingArguments:
         if self.torch_compile and self.torch_compile_backend is None:
             if not self.use_cpu and is_torch_hpu_available():
                 self.torch_compile_backend = "hpu_backend"
+            elif not self.use_cpu and is_torch_neuron_available():
+                self.torch_compile_backend = "neuron"
             else:
                 self.torch_compile_backend = "inductor"
 
@@ -2186,7 +2190,9 @@ class TrainingArguments:
             max_steps (`int`, *optional*, defaults to -1):
                 If set to a positive number, the total number of training steps to perform. Overrides `num_train_epochs`.
                 For a finite dataset, training is reiterated through the dataset (if all data is exhausted) until
-                `max_steps` is reached.
+                `max_steps` is reached. It must be set to a positive value when the training dataset does not
+                implement `__len__` (e.g. a streaming dataset), since the total number of steps cannot then be
+                inferred and is required to bound the training loop and configure the learning rate scheduler.
             gradient_accumulation_steps (`int`, *optional*, defaults to 1):
                 Number of updates steps to accumulate the gradients for, before performing a backward/update pass.
 
@@ -2474,18 +2480,16 @@ class TrainingArguments:
                 Defines the scope of what is pushed to the Hub and when. Possible values are:
 
                 - `"end"`: push the model, its configuration, the processing_class e.g. tokenizer (if passed along to the [`Trainer`]) and a
-                draft of a model card when the [`~Trainer.save_model`] method is called.
+                  draft of a model card when the [`~Trainer.save_model`] method is called.
                 - `"every_save"`: push the model, its configuration, the processing_class e.g. tokenizer (if passed along to the [`Trainer`])
-                  and
-                a draft of a model card each time there is a model save. The pushes are asynchronous to not block
-                training, and in case the save are very frequent, a new push is only attempted if the previous one is
-                finished. A last push is made with the final model at the end of training.
+                  and a draft of a model card each time there is a model save. The pushes are asynchronous to not block
+                  training, and in case the save are very frequent, a new push is only attempted if the previous one is
+                  finished. A last push is made with the final model at the end of training.
                 - `"checkpoint"`: like `"every_save"` but the latest checkpoint is also pushed in a subfolder named
-                last-checkpoint, allowing you to resume training easily with
-                `trainer.train(resume_from_checkpoint="last-checkpoint")`.
+                  last-checkpoint, allowing you to resume training easily with
+                  `trainer.train(resume_from_checkpoint="last-checkpoint")`.
                 - `"all_checkpoints"`: like `"checkpoint"` but all checkpoints are pushed like they appear in the
-                  output
-                folder (so you will get one checkpoint folder per folder in your final repository)
+                  output folder (so you will get one checkpoint folder per folder in your final repository)
 
             token (`str`, *optional*):
                 The token to use to push the model to the Hub. Will default to the token in the cache folder obtained
@@ -2589,7 +2593,9 @@ class TrainingArguments:
             max_steps (`int`, *optional*, defaults to -1):
                 If set to a positive number, the total number of training steps to perform. Overrides `num_train_epochs`.
                 For a finite dataset, training is reiterated through the dataset (if all data is exhausted) until
-                `max_steps` is reached.
+                `max_steps` is reached. It must be set to a positive value when the training dataset does not
+                implement `__len__` (e.g. a streaming dataset), since the total number of steps cannot then be
+                inferred and is required to bound the training loop and configure the learning rate scheduler.
             warmup_steps (`float`, *optional*, defaults to 0):
                 Number of steps used for a linear warmup from 0 to `learning_rate`.  Should be an integer or a float in range `[0,1)`.
                 If smaller than 1, will be interpreted as ratio of steps used for a linear warmup from 0 to `learning_rate`.

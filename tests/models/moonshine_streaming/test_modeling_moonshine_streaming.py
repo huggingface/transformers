@@ -156,6 +156,40 @@ class MoonshineStreamingModelTest(ModelTesterMixin, PipelineTesterMixin, unittes
     def test_config(self):
         self.config_tester.run_common_tests()
 
+    def test_training_loss_no_double_shift(self):
+        # forward shifts labels into decoder_input_ids, so loss must be plain CE against the labels (no second shift)
+        from torch.nn import CrossEntropyLoss
+
+        from transformers.models.moonshine_streaming.modeling_moonshine_streaming import (
+            MoonshineStreamingEncoderModelOutput,
+        )
+
+        config = self.model_tester.get_config()
+        config.pad_token_id = self.model_tester.pad_token_id
+        model = MoonshineStreamingForConditionalGeneration(config).to(torch_device).eval()
+        vocab_size = config.vocab_size
+
+        torch.manual_seed(0)
+        bsz, enc_len, dec_len = 2, 10, 6
+        enc_hidden = torch.randn(bsz, enc_len, config.hidden_size, device=torch_device)
+        encoder_outputs = MoonshineStreamingEncoderModelOutput(last_hidden_state=enc_hidden, attention_mask=None)
+        labels = torch.randint(3, vocab_size, (bsz, dec_len), device=torch_device)
+        padded = labels.clone()
+        padded[0, -1] = -100
+        padded[1, -2:] = -100
+
+        def aligned_ce(logits, lbl):
+            return CrossEntropyLoss()(logits.reshape(-1, vocab_size), lbl.reshape(-1))
+
+        def double_shift_ce(logits, lbl):
+            return CrossEntropyLoss()(logits[..., :-1, :].reshape(-1, vocab_size), lbl[..., 1:].reshape(-1))
+
+        for lbl in (labels, padded):
+            with torch.no_grad():
+                out = model(encoder_outputs=encoder_outputs, labels=lbl, use_cache=False)
+            self.assertTrue(torch.allclose(out.loss, aligned_ce(out.logits, lbl)))
+            self.assertFalse(torch.allclose(out.loss, double_shift_ce(out.logits, lbl)))
+
     def test_can_init_all_missing_weights(self):
         self.skipTest("MoonshineStreaming uses special parameter initialization that conflicts with this test")
 
@@ -558,6 +592,14 @@ class MoonshineStreamingModelIntegrationTests(unittest.TestCase):
                         [-9.9825, -1.4059, 3.5391, -9.4338, -9.4446, -9.4975, -9.4524, -9.4573, -9.4328, -9.4394],
                     ]
                 ),
+                ("cuda", (8, 6)): torch.tensor(
+                    [
+                        [-9.5963, -1.2973, 2.8171, -9.8262, -9.8024, -9.8025, -9.8129, -9.8202, -9.8017, -9.8099],
+                        [-9.6030, 0.3276, 3.0865, -9.7542, -9.8030, -9.8325, -9.7853, -9.7509, -9.8279, -9.8164],
+                        [-10.2473, -0.4238, 3.1180, -9.9895, -10.0012, -10.0405, -9.9965, -10.0520, -9.9861, -10.0361],
+                        [-9.9825, -1.4059, 3.5391, -9.4338, -9.4446, -9.4975, -9.4524, -9.4573, -9.4328, -9.4394],
+                    ]
+                ),
                 (None, None): torch.tensor(
                     [
                         [-9.5963, -1.2973, 2.8171, -9.8262, -9.8024, -9.8025, -9.8129, -9.8202, -9.8017, -9.8099],
@@ -584,6 +626,14 @@ class MoonshineStreamingModelIntegrationTests(unittest.TestCase):
         EXPECTED_LOGITS = Expectations(
             {
                 ("xpu", None): torch.tensor(
+                    [
+                        [-9.4235, -1.6021, 1.3190, -10.0322, -10.0858, -10.0422, -10.0573, -10.0898, -10.1419, -10.0034],
+                        [-9.8914, -2.2688, 2.4474, -10.1934, -10.2570, -10.1845, -10.2231, -10.2922, -10.3259, -10.2566],
+                        [-9.3967, -0.7291, 2.2988, -9.8157, -9.8541, -9.8216, -9.8118, -9.8388, -9.8544, -9.8559],
+                        [-8.9188, -0.6991, 1.3242, -8.9318, -9.0168, -8.9296, -8.9460, -8.9843, -8.9837, -8.9457],
+                    ]
+                ),
+                ("cuda", (8, 6)): torch.tensor(
                     [
                         [-9.4235, -1.6021, 1.3190, -10.0322, -10.0858, -10.0422, -10.0573, -10.0898, -10.1419, -10.0034],
                         [-9.8914, -2.2688, 2.4474, -10.1934, -10.2570, -10.1845, -10.2231, -10.2922, -10.3259, -10.2566],
