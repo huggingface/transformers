@@ -597,6 +597,8 @@ class Step3p7SharedExpert(Step3p7MLP):
 class Step3p7Experts(nn.Module):
     """Collection of expert weights stored as 3D tensors."""
 
+    _fp8_experts_clamp_after_activation = True
+
     def __init__(self, config, swiglu_limit=None):
         super().__init__()
         self.num_experts = config.num_local_experts
@@ -1020,6 +1022,12 @@ class Step3p7TextModel(Step3p7PreTrainedModel):
         self.norm = Step3p7RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.rotary_emb = Step3p7RotaryEmbedding(config=config)
         self.gradient_checkpointing = False
+        if config.num_nextn_predict_layers:
+            # Checkpoints append `num_nextn_predict_layers` unmodeled speculative-decoding layers right
+            # after the real ones. Ignore them on load instead of reporting them as unexpected keys.
+            mtp_layers = range(config.num_hidden_layers, config.num_hidden_layers + config.num_nextn_predict_layers)
+            pattern = rf"language_model\.layers\.({'|'.join(map(str, mtp_layers))})\."
+            self._keys_to_ignore_on_load_unexpected = set(self._keys_to_ignore_on_load_unexpected or []) | {pattern}
 
         # Initialize weights and apply final processing
         self.post_init()
