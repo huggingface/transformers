@@ -310,8 +310,8 @@ class WhisperFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.
         )
 
         def _median_ms(magnitudes, iters=20, warmup=5):
-            # for _ in range(warmup):
-                # mel_filters.T @ magnitudes
+            for _ in range(warmup):
+                mel_filters.T @ magnitudes
             timings = []
             for _ in range(iters):
                 start = time.perf_counter()
