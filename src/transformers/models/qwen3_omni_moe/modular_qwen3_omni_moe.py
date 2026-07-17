@@ -1181,6 +1181,11 @@ class Qwen3OmniMoeThinkerCausalLMOutputWithPast(MoeCausalLMOutputWithPast):
 
 
 class Qwen3OmniMoeThinkerForConditionalGeneration(Qwen2_5OmniThinkerForConditionalGeneration):
+    _no_split_modules = [
+        "Qwen3OmniMoeAudioEncoder",
+        "Qwen3OmniMoeVisionEncoder",
+        "Qwen3OmniMoeThinkerTextDecoderLayer",
+    ]
     _can_record_outputs = {
         "hidden_states": Qwen3OmniMoeThinkerTextDecoderLayer,
         "attentions": Qwen3OmniMoeThinkerTextAttention,

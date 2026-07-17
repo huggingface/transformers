@@ -98,58 +98,6 @@ sf.write(
 print(text)
 ```
 
-### Batch audio generation
-
-[`Qwen2_5OmniForConditionalGeneration`] supports batched audio output generation.
-
-```python
-import librosa
-import soundfile as sf
-
-from transformers import Qwen2_5OmniForConditionalGeneration, Qwen2_5OmniProcessor
-
-
-model = Qwen2_5OmniForConditionalGeneration.from_pretrained(
-    "Qwen/Qwen2.5-Omni-7B",
-    device_map="auto",
-)
-processor = Qwen2_5OmniProcessor.from_pretrained("Qwen/Qwen2.5-Omni-7B")
-
-system_prompt = "You are Qwen, a virtual human developed by the Qwen Team, Alibaba Group, capable of perceiving auditory and visual inputs, as well as generating text and speech."
-conversations = [
-    [
-        {"role": "system", "content": [{"type": "text", "text": system_prompt}]},
-        {"role": "user", "content": [{"type": "audio", "audio": "/path/to/audio_1.wav"}]},
-    ],
-    [
-        {"role": "system", "content": [{"type": "text", "text": system_prompt}]},
-        {"role": "user", "content": [{"type": "audio", "audio": "/path/to/audio_2.wav"}]},
-    ],
-]
-
-texts = [
-    processor.apply_chat_template(conversation, tokenize=False, add_generation_prompt=True)
-    for conversation in conversations
-]
-audios = [
-    librosa.load("/path/to/audio_1.wav", sr=processor.feature_extractor.sampling_rate)[0],
-    librosa.load("/path/to/audio_2.wav", sr=processor.feature_extractor.sampling_rate)[0],
-]
-
-inputs = processor(text=texts, audio=audios, return_tensors="pt", padding=True).to(model.device, dtype=model.dtype)
-
-text_ids, audio_outputs = model.generate(
-    **inputs,
-    generation_mode="audio",
-    thinker_do_sample=False,
-    talker_do_sample=False,
-)
-texts = processor.batch_decode(text_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)
-
-for idx, audio in enumerate(audio_outputs):
-    sf.write(f"output_{idx}.wav", audio.detach().cpu().numpy(), samplerate=24000)
-print(texts)
-```
 
 ### Text-only generation
 
@@ -309,6 +257,59 @@ text = processor.batch_decode(text_ids, skip_special_tokens=True, clean_up_token
 print(text)
 ```
 
+### Batch audio generation
+
+[`Qwen2_5OmniForConditionalGeneration`] supports batched audio output generation.
+
+```python
+import librosa
+import soundfile as sf
+
+from transformers import Qwen2_5OmniForConditionalGeneration, Qwen2_5OmniProcessor
+
+
+model = Qwen2_5OmniForConditionalGeneration.from_pretrained(
+    "Qwen/Qwen2.5-Omni-7B",
+    device_map="auto",
+)
+processor = Qwen2_5OmniProcessor.from_pretrained("Qwen/Qwen2.5-Omni-7B")
+
+system_prompt = "You are Qwen, a virtual human developed by the Qwen Team, Alibaba Group, capable of perceiving auditory and visual inputs, as well as generating text and speech."
+conversations = [
+    [
+        {"role": "system", "content": [{"type": "text", "text": system_prompt}]},
+        {"role": "user", "content": [{"type": "audio", "audio": "/path/to/audio_1.wav"}]},
+    ],
+    [
+        {"role": "system", "content": [{"type": "text", "text": system_prompt}]},
+        {"role": "user", "content": [{"type": "audio", "audio": "/path/to/audio_2.wav"}]},
+    ],
+]
+
+texts = [
+    processor.apply_chat_template(conversation, tokenize=False, add_generation_prompt=True)
+    for conversation in conversations
+]
+audios = [
+    librosa.load("/path/to/audio_1.wav", sr=processor.feature_extractor.sampling_rate)[0],
+    librosa.load("/path/to/audio_2.wav", sr=processor.feature_extractor.sampling_rate)[0],
+]
+
+inputs = processor(text=texts, audio=audios, return_tensors="pt", padding=True).to(model.device, dtype=model.dtype)
+
+text_ids, audio_outputs = model.generate(
+    **inputs,
+    generation_mode="audio",
+    thinker_do_sample=False,
+    talker_do_sample=False,
+)
+texts = processor.batch_decode(text_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)
+
+for idx, audio in enumerate(audio_outputs):
+    sf.write(f"output_{idx}.wav", audio.detach().cpu().numpy(), samplerate=24000)
+print(texts)
+```
+
 ### Usage Tips
 
 #### Image Resolution trade-off
@@ -358,14 +359,14 @@ text_ids = model.generate(**inputs, return_audio=False)
 
 #### Change voice type of output audio
 
-Qwen2.5-Omni supports the ability to change the voice of the output audio. Users can use the `spk` parameter of `generate` function to specify the voice type. The `"Qwen/Qwen2.5-Omni-7B"` checkpoint support two voice types: `Chelsie` and `Ethan`, while `Chelsie` is a female voice and `Ethan` is a male voice. By default, if `spk` is not specified, the default voice type is `Chelsie`.
+Qwen2.5-Omni supports the ability to change the voice of the output audio. Users can use the `speaker` parameter of `generate` function to specify the voice type. The `"Qwen/Qwen2.5-Omni-7B"` checkpoint support two voice types: `Chelsie` and `Ethan`, while `Chelsie` is a female voice and `Ethan` is a male voice. By default, if `speaker` is not specified, the default voice type is `Chelsie`.
 
 ```python
-text_ids, audio = model.generate(**inputs, spk="Chelsie")
+text_ids, audio = model.generate(**inputs, speaker="Chelsie")
 ```
 
 ```python
-text_ids, audio = model.generate(**inputs, spk="Ethan")
+text_ids, audio = model.generate(**inputs, speaker="Ethan")
 ```
 
 #### Flash-Attention 2 to speed up generation
