@@ -14,20 +14,64 @@ import requests
 logger = logging.getLogger(__name__)
 
 
-def get_github_json(url, token=None, max_retries=5):
+def _rate_limit_wait(response, attempt):
+    """Return how many seconds to wait before retrying a rate-limited GitHub response, or ``None``.
+
+    Distinguishes the two GitHub rate limits, which look different on the wire:
+
+      * primary limit: ``X-RateLimit-Remaining: 0`` plus an ``X-RateLimit-Reset`` epoch;
+      * secondary limit: a 403/429 that does *not* touch the primary quota (``X-RateLimit-Remaining``
+        may still be non-zero) and often ships no ``Retry-After`` header, only a body message like
+        "You have exceeded a secondary rate limit". This is the one that breaks daily CI reporting
+        when it walks the ~24 pages of a large run's jobs, so it must be detected by body too.
+    """
+    if response.status_code not in (403, 429):
+        return None
+
+    retry_after = response.headers.get("Retry-After")
+    remaining = response.headers.get("X-RateLimit-Remaining")
+    reset = response.headers.get("X-RateLimit-Reset")
+    body = (response.text or "").lower()
+    # A 429 is always "too many requests"; a 403 only counts as a rate limit if something says so
+    # (a 403 without any rate-limit signal is a genuine permission error and must not be retried).
+    is_rate_limited = response.status_code == 429 or (
+        retry_after is not None
+        or remaining == "0"
+        or "rate limit" in body
+        or "secondary rate" in body
+        or "abuse" in body
+    )
+    if not is_rate_limited:
+        return None
+
+    if retry_after is not None:
+        wait = int(retry_after)
+    elif remaining == "0" and reset is not None:
+        wait = max(0, int(reset) - int(time.time()))
+    else:
+        # Secondary limit without hints: GitHub asks to wait ~1 min; grow it per attempt.
+        wait = 60 * (attempt + 1)
+    # Clamp so a far-off primary reset can't stall CI, but always wait long enough for a secondary
+    # limit (which is measured in tens of seconds) to actually clear.
+    return min(max(wait, 30), 300)
+
+
+def get_github_json(url, token=None, max_retries=8):
     """GET a GitHub REST API URL and return the parsed JSON.
 
-    Hardened against the two failure modes that silently broke daily CI reporting (the reports
-    indexed into the response with e.g. ``result["jobs"]`` / ``workflow_run["created_at"]`` and
-    raised a bare ``KeyError`` when GitHub returned an error payload instead of data):
+    Hardened against the failure modes that silently broke daily CI reporting (the reports indexed
+    into the response with e.g. ``result["jobs"]`` / ``workflow_run["created_at"]`` and raised a
+    bare ``KeyError`` when GitHub returned an error payload instead of data):
 
-      * rate limiting (primary/secondary): retried with a backoff derived from the ``Retry-After``
-        / ``X-RateLimit-Reset`` headers instead of being parsed as data;
+      * primary *and* secondary rate limiting: retried with a backoff (``Retry-After`` /
+        ``X-RateLimit-Reset`` when present, otherwise ~1 min for secondary limits), never parsed
+        as data. Retrying without the token would only lower the limit, so the token is kept.
       * transient 5xx errors: retried with exponential backoff.
 
-    On a 401/403/404 that is *not* a rate limit (e.g. a token lacking scope), the request is
-    retried once without the token, matching the previous behaviour. Raises ``RuntimeError`` if no
-    usable response is obtained, so callers fail loudly instead of indexing into an error payload.
+    Only a genuine 401/404 with a token falls back to an unauthenticated retry; a 403 is treated as
+    a rate limit (above) or a non-retryable error, never as a reason to drop the token. Raises
+    ``RuntimeError`` if no usable response is obtained, so callers fail loudly instead of indexing
+    into an error payload.
     """
     headers = None
     if token:
@@ -38,20 +82,8 @@ def get_github_json(url, token=None, max_retries=5):
         response = requests.get(url, headers=headers)
         status = response.status_code
 
-        # Rate limited: primary limit exposes ``X-RateLimit-Remaining: 0``; secondary limits send
-        # a ``Retry-After`` header. Retrying without the token would only lower the limit, so keep
-        # the same headers and wait it out.
-        is_rate_limited = status in (403, 429) and (
-            response.headers.get("X-RateLimit-Remaining") == "0" or "Retry-After" in response.headers
-        )
-        if is_rate_limited:
-            retry_after = response.headers.get("Retry-After")
-            if retry_after is not None:
-                wait = int(retry_after)
-            else:
-                reset = response.headers.get("X-RateLimit-Reset")
-                wait = max(0, int(reset) - int(time.time())) if reset else 2**attempt
-            wait = min(wait, 120)
+        wait = _rate_limit_wait(response, attempt)
+        if wait is not None:
             print(
                 f"GitHub API rate limited on {url} (status {status}); waiting {wait}s before "
                 f"retry {attempt + 1}/{max_retries}"
@@ -59,8 +91,8 @@ def get_github_json(url, token=None, max_retries=5):
             time.sleep(wait)
             continue
 
-        # Auth/permission/not-found with a token: retry once unauthenticated (previous behaviour).
-        if headers is not None and status in (401, 403, 404):
+        # Genuine auth/not-found with a token: retry once unauthenticated (previous behaviour).
+        if headers is not None and status in (401, 404):
             response = requests.get(url)
             status = response.status_code
 
@@ -93,7 +125,9 @@ def _get_paginated_items(url, key, token=None):
     pages_to_iterate_over = math.ceil((total_count - 50) / 50)
 
     for i in range(pages_to_iterate_over):
-        time.sleep(1)
+        # Space out requests: a large run has ~20+ pages of jobs, and hammering them back-to-back is
+        # what trips GitHub's secondary rate limit in the first place.
+        time.sleep(3)
         result = get_github_json(url + f"&page={i + 2}", token=token)
         items.extend(result[key])
 
