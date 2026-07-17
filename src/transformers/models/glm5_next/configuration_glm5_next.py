@@ -180,12 +180,12 @@ class Glm5NextConfig(PreTrainedConfig):
             self.linear_conv_kernel_dim = linear_attn_dict.get("short_conv_kernel_size", self.linear_conv_kernel_dim)
             self.linear_lower_bound = linear_attn_dict.get("lower_bound", self.linear_lower_bound)
 
-        # TODO: maybe not even warn?
-        if (_head_dim := kwargs.pop("head_dim", None)) is not None:
-            logger.warning_once(
-                f"`head_dim` ({_head_dim}) was passed but we set it to `qk_rope_head_dim` to align with our RoPE standards."
-            )
+            # Additional lower bound logic as per original dict
+            if linear_attn_dict.get("safe_gate", False) and self.linear_lower_bound is None:
+                self.linear_lower_bound = -5.0
 
+        # NOTE: this forces an intentional override as we have the convention of head_dim being the RoPE based dim
+        kwargs.pop("head_dim", None)
         self.head_dim = self.qk_rope_head_dim
         self.qk_head_dim = self.qk_rope_head_dim + self.qk_nope_head_dim
 
