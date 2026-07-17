@@ -137,7 +137,7 @@ class NeuCodecModel(Xcodec2Model):
     ) -> tuple | NeuCodecOutput:
         r"""
         input_values (`torch.Tensor` of shape `(batch_size, 1, sequence_length)`):
-            Input audio waveform, sampled at `config.sampling_rate` (16kHz).
+            Input audio waveform, sampled at `config.input_sampling_rate`.
         input_features (`torch.Tensor` of shape `(batch_size, mel_bins, time_steps)`):
             Input audio mel spectrogram for semantic encoding.
         padding_mask (`torch.Tensor` of shape `(batch_size, 1, sequence_length)`):
