@@ -10,7 +10,7 @@ distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, e
 implied. See the License for the specific language governing permissions and limitations under the
 License.
 -->
-*This model was published in HF papers on 2025-09-15 and contributed to Hugging Face Transformers on 2026-07-13.*
+*This model was published in HF papers on 2025-09-15 and contributed to Hugging Face Transformers on 2026-07-17.*
 
 # Fun-ASR-Nano
 
