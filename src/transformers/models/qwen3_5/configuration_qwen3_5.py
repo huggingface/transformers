@@ -111,10 +111,7 @@ class Qwen3_5TextConfig(PreTrainedConfig):
     eos_token_id: int | list[int] | None = None
     base_config_key = "text_config"
 
-    attribute_map = {
-        **Qwen3NextConfig.attribute_map,
-        "num_mtp_layers": "mtp_num_hidden_layers",
-    }
+    attribute_map = {"num_mtp_layers": "mtp_num_hidden_layers"}
     ignore_keys_at_rope_validation = {"mrope_section", "mrope_interleaved"}
     mtp_num_hidden_layers: int = 0
     mtp_layer_types: list[str] | None = None
@@ -200,10 +197,7 @@ class Qwen3_5Config(PreTrainedConfig):
     vision_end_token_id: int = 248054
     tie_word_embeddings: bool = False
 
-    attribute_map = {
-        **Qwen3VLConfig.attribute_map,
-        "num_mtp_layers": "mtp_num_hidden_layers",
-    }
+    attribute_map = {"num_mtp_layers": "mtp_num_hidden_layers"}
 
     mtp_num_hidden_layers: int = 0
     mtp_layer_types: list[str] | None = None

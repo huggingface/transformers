@@ -98,10 +98,7 @@ class Qwen3_5TextConfig(Qwen3NextConfig):
     model_type = "qwen3_5_text"
     base_config_key = "text_config"
 
-    attribute_map = {
-        **Qwen3NextConfig.attribute_map,
-        "num_mtp_layers": "mtp_num_hidden_layers",
-    }
+    attribute_map = {"num_mtp_layers": "mtp_num_hidden_layers"}
 
     base_model_tp_plan = {
         "layers.*.self_attn.q_proj": "colwise",
@@ -190,10 +187,7 @@ class Qwen3_5Config(Qwen3VLConfig):
     vision_start_token_id: int = 248053
     vision_end_token_id: int = 248054
 
-    attribute_map = {
-        **Qwen3VLConfig.attribute_map,
-        "num_mtp_layers": "mtp_num_hidden_layers",
-    }
+    attribute_map = {"num_mtp_layers": "mtp_num_hidden_layers"}
 
     mtp_num_hidden_layers: int = 0
     mtp_layer_types: list[str] | None = None

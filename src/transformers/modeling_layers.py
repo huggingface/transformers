@@ -508,9 +508,7 @@ class MtpModel(PreTrainedModel):
                 rope_position_ids = position_ids[1:] if position_ids.shape[0] > 1 else position_ids
 
             position_embeddings = (
-                self.rotary_emb(inputs_embeds, position_ids=rope_position_ids)
-                if self.rotary_emb is not None
-                else None
+                self.rotary_emb(inputs_embeds, position_ids=rope_position_ids) if self.rotary_emb is not None else None
             )
 
             # In full generality, we may need to recompute masks for every layer due to the position offset of each layer
