@@ -55,6 +55,9 @@ class OnyxVisionConfig(PreTrainedConfig):
     adapter_dim: int = 4096
     video_num_frames: int = 96
     video_sampling_fps: float = 2.0
+    rope_parameters: dict | None = None
+    max_position_embeddings: int = 32 * 32
+    layer_norm_eps: float = 1e-05
 
 
 @auto_docstring

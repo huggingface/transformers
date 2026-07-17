@@ -92,6 +92,9 @@ class OnyxVisionConfig(PreTrainedConfig):
     adapter_dim: int = 4096
     video_num_frames: int = 96
     video_sampling_fps: float = 2.0
+    rope_parameters: dict | None = None
+    max_position_embeddings: int = 32 * 32
+    layer_norm_eps: float = 1e-05
 
 
 @auto_docstring
@@ -417,7 +420,7 @@ class OnyxVisionEncoderLayer(nn.Module):
         self.ln_1 = nn.LayerNorm(config.hidden_size)
         self.attn = OnyxVisionAttention(config)
         self.ln_2 = nn.LayerNorm(config.hidden_size)
-        self.mlp = OnyxVisionMLP(config.hidden_size, config.hidden_size * config.mlp_ratio)
+        self.mlp = OnyxVisionMLP(config.hidden_size, int(config.hidden_size * config.mlp_ratio))
 
     def forward(
         self,
@@ -620,17 +623,20 @@ class OnyxTextModel(Gemma2Model):
 class OnyxModel(Gemma3Model):
     def __init__(self, config: OnyxConfig):
         super().__init__(config)
+        del self.multi_modal_projector
         self.vision_adapter = OnyxVisionAdapter(config)
         self.vision_projection = nn.Linear(config.vision_adapter_dim, config.hidden_size, bias=False)
-        self.perception_emb_norm = OnyxScalelessRMSNorm(config.hidden_size, config.rms_norm_eps)
+        self.perception_emb_norm = OnyxScalelessRMSNorm(config.rms_norm_eps)
 
     def get_image_features(
         self,
         pixel_values: torch.FloatTensor,
+        image_grid_thw: torch.LongTensor,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPooling:
         vision_outputs = self.vision_tower(
             pixel_values=pixel_values,
+            image_grid_thw=image_grid_thw,
             **kwargs,
         )
         vision_features = self.vision_adapter(vision_outputs.last_hidden_state)
@@ -642,12 +648,13 @@ class OnyxModel(Gemma3Model):
         self,
         input_ids: torch.LongTensor | None = None,
         pixel_values: torch.FloatTensor | None = None,
+        image_grid_thw: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         use_cache: bool | None = None,
-        **lm_kwargs: Unpack[TransformersKwargs],
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | OnyxModelOutputWithPast:
         r"""
         Example:
@@ -663,7 +670,9 @@ class OnyxModel(Gemma3Model):
 
         # Merge text and images
         if pixel_values is not None:
-            image_features = self.get_image_features(pixel_values, return_dict=True).pooler_output
+            image_features = self.get_image_features(
+                pixel_values, image_grid_thw=image_grid_thw, return_dict=True
+            ).pooler_output
             image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
             special_image_mask = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, image_features=image_features
@@ -689,7 +698,7 @@ class OnyxModel(Gemma3Model):
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
             return_dict=True,
-            **lm_kwargs,
+            **kwargs,
         )
 
         return OnyxModelOutputWithPast(
@@ -765,6 +774,7 @@ class OnyxForConditionalGeneration(Gemma3ForConditionalGeneration):
         self,
         input_ids: torch.LongTensor | None = None,
         pixel_values: torch.FloatTensor | None = None,
+        image_grid_thw: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
@@ -777,6 +787,7 @@ class OnyxForConditionalGeneration(Gemma3ForConditionalGeneration):
         outputs = self.model(
             input_ids=input_ids,
             pixel_values=pixel_values,
+            image_grid_thw=image_grid_thw,
             attention_mask=attention_mask,
             position_ids=position_ids,
             past_key_values=past_key_values,
@@ -791,11 +802,11 @@ class OnyxForConditionalGeneration(Gemma3ForConditionalGeneration):
 
         # Onyx pre-scales logits by `output_multiplier` before the Gemma-style tanh softcap.
         # Together with `final_logit_softcapping = T`, this gives `T * tanh(logits * mult / T)`.
-        logits = logits * self.config.output_multiplier
-        if self.config.final_logit_softcapping is not None:
-            logits = logits / self.config.final_logit_softcapping
+        logits = logits * self.config.text_config.output_multiplier
+        if self.config.text_config.final_logit_softcapping is not None:
+            logits = logits / self.config.text_config.final_logit_softcapping
             logits = torch.tanh(logits)
-            logits = logits * self.config.final_logit_softcapping
+            logits = logits * self.config.text_config.final_logit_softcapping
 
         loss = None
         if labels is not None:
@@ -809,6 +820,40 @@ class OnyxForConditionalGeneration(Gemma3ForConditionalGeneration):
             attentions=outputs.attentions,
             image_hidden_states=outputs.image_hidden_states,
         )
+
+    def prepare_inputs_for_generation(
+        self,
+        input_ids,
+        past_key_values=None,
+        inputs_embeds=None,
+        position_ids=None,
+        pixel_values=None,
+        attention_mask=None,
+        image_grid_thw=None,
+        use_cache=True,
+        logits_to_keep=None,
+        labels=None,
+        is_first_iteration=False,
+        **kwargs,
+    ):
+        # Overwritten -- custom `pixel_values` handling
+        model_inputs = super().prepare_inputs_for_generation(
+            input_ids,
+            past_key_values=past_key_values,
+            inputs_embeds=inputs_embeds,
+            attention_mask=attention_mask,
+            position_ids=position_ids,
+            use_cache=use_cache,
+            logits_to_keep=logits_to_keep,
+            is_first_iteration=is_first_iteration,
+            **kwargs,
+        )
+
+        if is_first_iteration or not use_cache:
+            model_inputs["pixel_values"] = pixel_values
+            model_inputs["image_grid_thw"] = image_grid_thw
+
+        return model_inputs
 
     def create_masks_for_generate(**super_kwargs):
         raise NotImplementedError("custom mask not needed for Onyx")

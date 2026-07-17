@@ -154,6 +154,20 @@ def _build_checkpoint_conversion_mapping():
             ),
             WeightRenaming(source_patterns=r"post_ffn_norm", target_patterns=r"post_feedforward_layernorm"),
         ],
+        "onyx_vision": [
+            WeightRenaming(source_patterns=r"attn.o_proj", target_patterns=r"attn.out_proj"),
+        ],
+        "onyx": [
+            WeightRenaming(source_patterns=r"vision_encoder.transformer", target_patterns=r"vision_tower.layers"),
+            WeightRenaming(source_patterns=r"vision_encoder.conv1_linear", target_patterns=r"vision_tower.patch_embedder.patch_embedding"),
+            WeightRenaming(
+                source_patterns=r"vision_encoder.positional_embedding_vlm", target_patterns=r"vision_tower.patch_embedder.position_embedding_table"
+            ),
+            WeightRenaming(source_patterns=r"vision_encoder", target_patterns=r"vision_tower"),
+            WeightRenaming(r"model.layers", r"model.language_model.layers"),
+            WeightRenaming(r"model.embed_tokens", r"model.language_model.embed_tokens"),
+            WeightRenaming(r"model.norm", r"model.language_model.norm"),
+        ],
         "inkling_mm_model": [
             WeightRenaming(source_patterns=r"model\.llm\.layers", target_patterns=r"model.language_model.layers"),
             WeightRenaming(

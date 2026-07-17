@@ -726,7 +726,7 @@ class OnyxVisionEncoderLayer(nn.Module):
         self.ln_1 = nn.LayerNorm(config.hidden_size)
         self.attn = OnyxVisionAttention(config)
         self.ln_2 = nn.LayerNorm(config.hidden_size)
-        self.mlp = OnyxVisionMLP(config.hidden_size, config.hidden_size * config.mlp_ratio)
+        self.mlp = OnyxVisionMLP(config.hidden_size, int(config.hidden_size * config.mlp_ratio))
 
     def forward(
         self,
@@ -1065,40 +1065,6 @@ class OnyxTextModel(OnyxPreTrainedModel):
         )
 
 
-class OnyxMultiModalProjector(nn.Module):
-    def __init__(self, config: OnyxConfig):
-        super().__init__()
-
-        self.mm_input_projection_weight = nn.Parameter(
-            torch.zeros(config.vision_config.hidden_size, config.text_config.hidden_size)
-        )
-
-        self.mm_soft_emb_norm = OnyxRMSNorm(config.vision_config.hidden_size, eps=config.vision_config.layer_norm_eps)
-
-        self.patches_per_image = int(config.vision_config.image_size // config.vision_config.patch_size)
-        self.tokens_per_side = int(config.mm_tokens_per_image**0.5)
-        self.kernel_size = self.patches_per_image // self.tokens_per_side
-        self.avg_pool = nn.AvgPool2d(kernel_size=self.kernel_size, stride=self.kernel_size)
-
-    def forward(self, vision_outputs: torch.Tensor):
-        batch_size, _, hidden_size = vision_outputs.shape
-
-        reshaped_vision_outputs = vision_outputs.transpose(1, 2)
-        reshaped_vision_outputs = reshaped_vision_outputs.reshape(
-            batch_size, hidden_size, self.patches_per_image, self.patches_per_image
-        )
-        reshaped_vision_outputs = reshaped_vision_outputs.contiguous()
-
-        pooled_vision_outputs = self.avg_pool(reshaped_vision_outputs)
-        pooled_vision_outputs = pooled_vision_outputs.flatten(2)
-        pooled_vision_outputs = pooled_vision_outputs.transpose(1, 2)
-
-        normed_vision_outputs = self.mm_soft_emb_norm(pooled_vision_outputs)
-
-        projected_vision_outputs = torch.matmul(normed_vision_outputs, self.mm_input_projection_weight)
-        return projected_vision_outputs.type_as(vision_outputs)
-
-
 @auto_docstring(
     custom_intro="""
     The Base Onyx model which consists of a vision backbone and a language model without language modeling head.,
@@ -1111,14 +1077,13 @@ class OnyxModel(OnyxPreTrainedModel):
     def __init__(self, config: OnyxConfig):
         super().__init__(config)
         self.vision_tower = AutoModel.from_config(config=config.vision_config)
-        self.multi_modal_projector = OnyxMultiModalProjector(config)
         self.vocab_size = config.text_config.vocab_size
 
         language_model = AutoModel.from_config(config=config.text_config)
         self.language_model = language_model
         self.vision_adapter = OnyxVisionAdapter(config)
         self.vision_projection = nn.Linear(config.vision_adapter_dim, config.hidden_size, bias=False)
-        self.perception_emb_norm = OnyxScalelessRMSNorm(config.hidden_size, config.rms_norm_eps)
+        self.perception_emb_norm = OnyxScalelessRMSNorm(config.rms_norm_eps)
         self.post_init()
 
     @can_return_tuple
@@ -1126,10 +1091,12 @@ class OnyxModel(OnyxPreTrainedModel):
     def get_image_features(
         self,
         pixel_values: torch.FloatTensor,
+        image_grid_thw: torch.LongTensor,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPooling:
         vision_outputs = self.vision_tower(
             pixel_values=pixel_values,
+            image_grid_thw=image_grid_thw,
             **kwargs,
         )
         vision_features = self.vision_adapter(vision_outputs.last_hidden_state)
@@ -1167,12 +1134,13 @@ class OnyxModel(OnyxPreTrainedModel):
         self,
         input_ids: torch.LongTensor | None = None,
         pixel_values: torch.FloatTensor | None = None,
+        image_grid_thw: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         use_cache: bool | None = None,
-        **lm_kwargs: Unpack[TransformersKwargs],
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | OnyxModelOutputWithPast:
         r"""
         Example:
@@ -1188,7 +1156,9 @@ class OnyxModel(OnyxPreTrainedModel):
 
         # Merge text and images
         if pixel_values is not None:
-            image_features = self.get_image_features(pixel_values, return_dict=True).pooler_output
+            image_features = self.get_image_features(
+                pixel_values, image_grid_thw=image_grid_thw, return_dict=True
+            ).pooler_output
             image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
             special_image_mask = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, image_features=image_features
@@ -1214,7 +1184,7 @@ class OnyxModel(OnyxPreTrainedModel):
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
             return_dict=True,
-            **lm_kwargs,
+            **kwargs,
         )
 
         return OnyxModelOutputWithPast(
@@ -1335,6 +1305,7 @@ class OnyxForConditionalGeneration(OnyxPreTrainedModel, GenerationMixin):
         self,
         input_ids: torch.LongTensor | None = None,
         pixel_values: torch.FloatTensor | None = None,
+        image_grid_thw: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
@@ -1392,6 +1363,7 @@ class OnyxForConditionalGeneration(OnyxPreTrainedModel, GenerationMixin):
         outputs = self.model(
             input_ids=input_ids,
             pixel_values=pixel_values,
+            image_grid_thw=image_grid_thw,
             attention_mask=attention_mask,
             position_ids=position_ids,
             past_key_values=past_key_values,
@@ -1406,11 +1378,11 @@ class OnyxForConditionalGeneration(OnyxPreTrainedModel, GenerationMixin):
 
         # Onyx pre-scales logits by `output_multiplier` before the Gemma-style tanh softcap.
         # Together with `final_logit_softcapping = T`, this gives `T * tanh(logits * mult / T)`.
-        logits = logits * self.config.output_multiplier
-        if self.config.final_logit_softcapping is not None:
-            logits = logits / self.config.final_logit_softcapping
+        logits = logits * self.config.text_config.output_multiplier
+        if self.config.text_config.final_logit_softcapping is not None:
+            logits = logits / self.config.text_config.final_logit_softcapping
             logits = torch.tanh(logits)
-            logits = logits * self.config.final_logit_softcapping
+            logits = logits * self.config.text_config.final_logit_softcapping
 
         loss = None
         if labels is not None:
@@ -1433,7 +1405,7 @@ class OnyxForConditionalGeneration(OnyxPreTrainedModel, GenerationMixin):
         position_ids=None,
         pixel_values=None,
         attention_mask=None,
-        token_type_ids=None,
+        image_grid_thw=None,
         use_cache=True,
         logits_to_keep=None,
         labels=None,
@@ -1449,20 +1421,13 @@ class OnyxForConditionalGeneration(OnyxPreTrainedModel, GenerationMixin):
             position_ids=position_ids,
             use_cache=use_cache,
             logits_to_keep=logits_to_keep,
-            token_type_ids=token_type_ids,
             is_first_iteration=is_first_iteration,
             **kwargs,
         )
 
-        # Pixel values are used only in the first iteration if available
-        # In subsequent iterations, they are already merged with text and cached
-        # NOTE: first iteration doesn't have to be prefill, it can be the first
-        # iteration with a question and cached system prompt (continue generate from cache). NOTE: use_cache=False needs pixel_values always
         if is_first_iteration or not use_cache:
             model_inputs["pixel_values"] = pixel_values
-        else:
-            # Don't pass to not apply bidirectional mask on top
-            model_inputs["token_type_ids"] = None
+            model_inputs["image_grid_thw"] = image_grid_thw
 
         return model_inputs
 

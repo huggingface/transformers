@@ -31,7 +31,6 @@ from ...utils.constants import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD
 logger = logging.get_logger(__name__)
 
 
-# Copied from transformers.models.Onyx.image_processing_Onyx.get_aspect_ratio_preserving_size
 def get_aspect_ratio_preserving_size(
     height: int,
     width: int,

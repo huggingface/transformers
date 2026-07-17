@@ -11,33 +11,11 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""HuggingFace processor for the Onyx multimodal model (text + image + video).
-
-Reproduces the token layout the model expects:
-
-    image -> <|image_start|> + <|patch|> * N        + <|image_end|>
-    video -> <|vid_start|> ( "Time: X.Xs" + <|video|> * P [+ <|vid_frame_separator|>] )* + <|vid_end|>
-
-where N is chosen by ``OnyxImageProcessor.compute_image_size`` and P by
-``OnyxVideoProcessor.compute_video_frame_size`` (both mirror the encoder's grid
-logic).
-
-The chat template emits one sentinel per media item (``<|image|>`` / ``<|video|>``),
-which ``OnyxProcessor.__call__`` expands into the spans above.
-"""
-
-from __future__ import annotations
-
 from ...processing_utils import ProcessorMixin
 from ...utils import auto_docstring, logging
 
 
 logger = logging.get_logger(__name__)
-
-
-IMAGE_SENTINEL = "<|image|>"
-VIDEO_SENTINEL = "<|video|>"
-
 
 ONYX_MM_CHAT_TEMPLATE = (
     "{{- bos_token -}}"

@@ -13,6 +13,8 @@
 # limitations under the License.
 from __future__ import annotations
 
+import itertools
+import math
 from pathlib import Path
 
 import torch
@@ -21,13 +23,38 @@ from torchvision import transforms as T
 
 from ...feature_extraction_utils import BatchFeature
 from ...video_processing_utils import BaseVideoProcessor
-from .image_processing_onyx import _grid_size
 
 
 try:
     import torchcodec
 except Exception:
     torchcodec = None
+
+
+def _grid_size(img_w: int, img_h: int, patch_hw: int, max_tokens: int) -> tuple[int, int, int]:
+    """Pick the integer (H, W) grid closest to the aspect ratio under the token cap.
+    Replicates OnyxVisionEncoder._compute_grid_size (modeling_onyx.py) so the
+    processor needs no torch model import. Returns (target_h, target_w, n_tokens).
+    """
+    i_nph = img_h / patch_hw
+    i_npw = img_w / patch_hw
+    ratio = i_npw / i_nph if i_nph > 0 else 1.0
+    if i_nph * i_npw > max_tokens:
+        i_nph = (max_tokens / ratio) ** 0.5
+        i_npw = i_nph * ratio
+    candidates = list(
+        set(
+            itertools.product(
+                [math.floor(i_nph), math.ceil(i_nph)],
+                [math.floor(i_npw), math.ceil(i_npw)],
+            )
+        )
+    )
+    candidates = [(nph, npw) for nph, npw in candidates if nph >= 1 and npw >= 1 and nph * npw <= max_tokens]
+    if not candidates:
+        candidates = [(max(1, round(i_nph)), max(1, round(i_npw)))]
+    nph, npw = min(candidates, key=lambda c: abs(c[0] / c[1] - img_h / img_w))
+    return nph * patch_hw, npw * patch_hw, nph * npw
 
 
 class OnyxVideoProcessor(BaseVideoProcessor):
