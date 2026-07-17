@@ -141,6 +141,19 @@ _MODEL_TO_CONVERSION_PATTERN = {
 
 def _build_checkpoint_conversion_mapping():
     mapping = {
+        "onyx_text": [
+            GroupWeightRename(
+                source_patterns=[
+                    r"post_attn_norm",
+                    r"post_attention_layernorm",
+                ],
+                target_patterns=[
+                    r"post_attention_layernorm",
+                    r"pre_feedforward_layernorm",
+                ],
+            ),
+            WeightRenaming(source_patterns=r"post_ffn_norm", target_patterns=r"post_feedforward_layernorm"),
+        ],
         "inkling_mm_model": [
             WeightRenaming(source_patterns=r"model\.llm\.layers", target_patterns=r"model.language_model.layers"),
             WeightRenaming(

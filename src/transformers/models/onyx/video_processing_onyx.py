@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2026 the HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -82,9 +81,7 @@ class OnyxVideoProcessor(BaseVideoProcessor):
         group ``g``; ``len(frames)`` is a whole multiple of ``patch_temporal``.
         """
         if torchcodec is None:
-            raise RuntimeError(
-                "torchcodec is required for video decoding (it matches the training decode path)."
-            )
+            raise RuntimeError("torchcodec is required for video decoding (it matches the training decode path).")
         pt = self.patch_temporal
         reader = torchcodec.decoders.VideoDecoder(video_path)
         total = len(reader)
@@ -98,8 +95,7 @@ class OnyxVideoProcessor(BaseVideoProcessor):
         n = min(n, total)
         if n < pt:
             raise ValueError(
-                f"Video has only {total} decodable frame(s) but needs at least "
-                f"{pt} (one temporal patch): {video_path}"
+                f"Video has only {total} decodable frame(s) but needs at least {pt} (one temporal patch): {video_path}"
             )
         indices = torch.linspace(0, total - 1, n).long().tolist()
         frames: list[Image.Image] = []
@@ -119,17 +115,13 @@ class OnyxVideoProcessor(BaseVideoProcessor):
     def _group_frames(self, frames: list[Image.Image]) -> tuple[list[torch.Tensor], int, int]:
         pt = self.patch_temporal
         if len(frames) < pt or len(frames) % pt != 0:
-            raise ValueError(
-                f"video frame count {len(frames)} must be a positive multiple of patch_temporal={pt}"
-            )
+            raise ValueError(f"video frame count {len(frames)} must be a positive multiple of patch_temporal={pt}")
         first = frames[0].convert("RGB")
         target_h, target_w, n_tokens = self.compute_video_frame_size(first.width, first.height)
         groups: list[torch.Tensor] = []
         for i in range(0, len(frames), pt):
             grp = [
-                self._to_norm_tensor(
-                    frames[i + j].convert("RGB").resize((target_w, target_h), Image.LANCZOS)
-                )
+                self._to_norm_tensor(frames[i + j].convert("RGB").resize((target_w, target_h), Image.LANCZOS))
                 for j in range(pt)
             ]
             groups.append(torch.cat(grp, dim=0))

@@ -4,7 +4,6 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_onyx.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
-# coding=utf-8
 # Copyright 2026 the HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -22,12 +21,45 @@ from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import RopeParameters
-from ...utils import auto_docstring
+from ...utils import auto_docstring, logging
+
+
+logger = logging.get_logger(__name__)
 
 
 @auto_docstring
 @strict
-class OnyxConfig(PreTrainedConfig):
+class OnyxVisionConfig(PreTrainedConfig):
+    r"""
+    TODO
+    """
+
+    model_type = "onyx_vision"
+    attribute_map = {
+        "hidden_size": "hidden_size",
+        "vision_heads": "num_attention_heads",
+        "vision_layers": "num_hidden_layers",
+    }
+
+    hidden_size: int = 1536
+    output_dim: int = 6144
+    num_hidden_layers: int = 50
+    num_attention_heads: int = 16
+    mlp_ratio: float = 8960 / 1536
+    patch_size: int = 14
+    patch_temporal: int = 2
+    downsample_factor: int = 2
+    sparse_attention_factor: int = 4
+    pos_emb_grid_h: int = 32
+    pos_emb_grid_w: int = 32
+    adapter_dim: int = 4096
+    video_num_frames: int = 96
+    video_sampling_fps: float = 2.0
+
+
+@auto_docstring
+@strict
+class OnyxTextConfig(PreTrainedConfig):
     r"""
     qk_scale_factor (`float`, *optional*, defaults to 43.7840518911):
         Multiplier applied to Q after QK-norm, before the standard `1/sqrt(head_dim)` attention scaling.
@@ -47,7 +79,7 @@ class OnyxConfig(PreTrainedConfig):
         Explicit per-layer rotary mask: 1 = apply rotary, 0 = NoPE. Derived from `every_n_layers_nope` if unset.
     """
 
-    model_type = "onyx"
+    model_type = "onyx_text"
     keys_to_ignore_at_inference = ["past_key_values"]
     base_model_tp_plan = {
         "layers.*.self_attn.q_proj": "colwise",
@@ -131,4 +163,41 @@ class OnyxConfig(PreTrainedConfig):
             )
 
 
-__all__ = ["OnyxConfig"]
+@auto_docstring
+@strict
+class OnyxConfig(PreTrainedConfig):
+    r"""
+    TODO
+    """
+
+    model_type = "onyx"
+    sub_configs = {
+        "text_config": OnyxTextConfig,
+        "vision_config": OnyxVisionConfig,
+    }
+
+    text_config: dict | PreTrainedConfig | None = None
+    vision_config: dict | PreTrainedConfig | None = None
+    image_token_id: int = 200092
+    video_token_id: int = 200091
+    video_start_id: int = 200082
+    video_end_id: int = 200083
+    video_frame_sep_id: int = 200087
+
+    def __post_init__(self, **kwargs):
+        if self.text_config is None:
+            self.text_config = OnyxTextConfig()
+            logger.info("text_config is None, using default OnyxTextConfig text config.")
+        elif isinstance(self.text_config, dict):
+            self.text_config = OnyxTextConfig(**self.text_config)
+
+        if isinstance(self.vision_config, dict):
+            self.vision_config = OnyxVisionConfig(**self.vision_config)
+        elif self.vision_config is None:
+            self.vision_config = OnyxVisionConfig()
+            logger.info("vision_config is None, using default OnyxVisionConfig vision config.")
+
+        super().__post_init__(**kwargs)
+
+
+__all__ = ["OnyxTextConfig", "OnyxVisionConfig", "OnyxConfig"]

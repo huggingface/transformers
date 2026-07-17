@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2026 the HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -26,6 +25,7 @@ logic).
 The chat template emits one sentinel per media item (``<|image|>`` / ``<|video|>``),
 which ``OnyxProcessor.__call__`` expands into the spans above.
 """
+
 from __future__ import annotations
 
 import torch
@@ -112,11 +112,7 @@ class OnyxProcessor(ProcessorMixin):
         return self.tokenizer.convert_tokens_to_ids(token)
 
     def _image_block(self, n_tokens: int) -> list[int]:
-        return (
-            [self._sid("<|image_start|>")]
-            + [self._sid("<|patch|>")] * n_tokens
-            + [self._sid("<|image_end|>")]
-        )
+        return [self._sid("<|image_start|>")] + [self._sid("<|patch|>")] * n_tokens + [self._sid("<|image_end|>")]
 
     def _video_block(
         self,
@@ -168,13 +164,9 @@ class OnyxProcessor(ProcessorMixin):
         n_img = sum(1 for t in ids if t == image_sentinel)
         n_vid = sum(1 for t in ids if t == video_sentinel)
         if n_img != len(prepped_images):
-            raise ValueError(
-                f"{n_img} image sentinel(s) in text but {len(prepped_images)} image(s) given."
-            )
+            raise ValueError(f"{n_img} image sentinel(s) in text but {len(prepped_images)} image(s) given.")
         if n_vid != len(prepped_videos):
-            raise ValueError(
-                f"{n_vid} video sentinel(s) in text but {len(prepped_videos)} video(s) given."
-            )
+            raise ValueError(f"{n_vid} video sentinel(s) in text but {len(prepped_videos)} video(s) given.")
 
         out_ids: list[int] = []
         pixel_values: list[torch.Tensor] = []
