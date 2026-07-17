@@ -7,10 +7,8 @@
 import pathlib
 from typing import Any, Optional
 
-import numpy as np
 import torch
 from torch import nn
-from torchvision.io import read_image
 from torchvision.transforms.v2 import functional as tvF
 
 from ...image_processing_backends import TorchvisionBackend
@@ -28,6 +26,7 @@ from ...image_utils import (
     get_image_size,
     get_image_size_for_max_height_width,
     get_max_height_width,
+    read_image_to_tensor,
     validate_annotations,
 )
 from ...processing_utils import ImagesKwargs, Unpack
@@ -220,16 +219,7 @@ def prepare_coco_panoptic_annotation(
     new_target["orig_size"] = torch.as_tensor([image_height, image_width], dtype=torch.int64, device=image.device)
 
     if "segments_info" in target:
-        # Some torchvision builds (e.g. certain ROCm wheels) are compiled without libPNG, so
-        # `read_image` cannot decode PNG masks. Fall back to PIL decoding in that case.
-        try:
-            masks = read_image(annotation_path).permute(1, 2, 0).to(dtype=torch.int32, device=image.device)
-        except RuntimeError:
-            from PIL import Image
-
-            masks = torch.as_tensor(
-                np.array(Image.open(annotation_path).convert("RGB")), dtype=torch.int32, device=image.device
-            )
+        masks = read_image_to_tensor(annotation_path).permute(1, 2, 0).to(dtype=torch.int32, device=image.device)
         masks = rgb_to_id(masks)
 
         ids = torch.as_tensor([segment_info["id"] for segment_info in target["segments_info"]], device=image.device)
