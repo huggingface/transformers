@@ -62,7 +62,7 @@ from .utils import (
     list_repo_templates,
     logging,
 )
-from .utils.chat_template_utils import _get_template_variables, render_jinja_template
+from .utils.chat_template_utils import _get_template_variables, render_jinja_template, sanitize_chat_input
 from .utils.type_validators import (
     device_validator,
     image_size_validator,
@@ -1974,6 +1974,7 @@ class ProcessorMixin(PushToHubMixin):
         continue_final_message: bool | str = False,
         return_assistant_tokens_mask: bool = False,
         tokenize: bool = False,
+        sanitize_special_tokens: bool = False,
         return_tensors: str | TensorType | None = None,
         return_dict: bool = False,
         load_audio_from_video: bool = False,
@@ -2004,6 +2005,9 @@ class ProcessorMixin(PushToHubMixin):
             chat_template (`Optional[str]`, *optional*):
                 The Jinja template to use for formatting the conversation. If not provided, the tokenizer's
                 chat template is used.
+            sanitize_special_tokens (`bool`, defaults to `False`):
+                Whether to sanitize the inputs before passing them to the template. Input sanitization drops
+                special tokens, ensuring that malicious user-supplied content can't interfere with model behavior.
         """
         processor_kwargs = processor_kwargs or {}
 
@@ -2159,6 +2163,12 @@ class ProcessorMixin(PushToHubMixin):
                 # So we'll make a batched list of images and let the processor handle it
                 batch_images.append(images)
                 batch_videos.append(videos)
+
+        if sanitize_special_tokens:
+            conversations = sanitize_chat_input(conversations, self.tokenizer.all_special_tokens)
+            tools = sanitize_chat_input(tools, self.tokenizer.all_special_tokens)
+            documents = sanitize_chat_input(documents, self.tokenizer.all_special_tokens)
+            kwargs = {k: sanitize_chat_input(v, self.tokenizer.all_special_tokens) for k, v in kwargs.items()}
 
         # `kwargs` overwrite special tokens if both are present
         template_kwargs = {**self.tokenizer.special_tokens_map, **kwargs}

@@ -65,7 +65,7 @@ from .utils import (
 from .utils.chat_parsing import ResponseParser
 from .utils.chat_parsing import parse_response as _template_parse_response
 from .utils.chat_parsing_utils import recursive_parse
-from .utils.chat_template_utils import render_jinja_template
+from .utils.chat_template_utils import render_jinja_template, sanitize_chat_input
 
 
 if TYPE_CHECKING:
@@ -3008,6 +3008,7 @@ class PreTrainedTokenizerBase(PushToHubMixin):
         add_generation_prompt: bool = False,
         continue_final_message: bool | str = False,
         tokenize: bool = True,
+        sanitize_special_tokens: bool = False,
         padding: bool | str | PaddingStrategy = False,
         truncation: bool = False,
         max_length: int | None = None,
@@ -3051,6 +3052,9 @@ class PreTrainedTokenizerBase(PushToHubMixin):
                 (e.g. "reasoning_content"). Cannot be used at the same time as `add_generation_prompt`.
             tokenize (`bool`, defaults to `True`):
                 Whether to tokenize the output. If `False`, the output will be a string.
+            sanitize_special_tokens (`bool`, defaults to `False`):
+                Whether to sanitize the inputs before passing them to the template. Input sanitization drops
+                special tokens, ensuring that malicious user-supplied content can't interfere with model behavior.
             padding (`bool`, `str` or [`~utils.PaddingStrategy`], *optional*, defaults to `False`):
                  Select a strategy to pad the returned sequences (according to the model's padding side and padding
                  index) among:
@@ -3116,6 +3120,12 @@ class PreTrainedTokenizerBase(PushToHubMixin):
                 )
             if return_assistant_tokens_mask:
                 raise ValueError("continue_final_message is not compatible with return_assistant_tokens_mask.")
+
+        if sanitize_special_tokens:
+            conversations = sanitize_chat_input(conversations, self.all_special_tokens)
+            tools = sanitize_chat_input(tools, self.all_special_tokens)
+            documents = sanitize_chat_input(documents, self.all_special_tokens)
+            kwargs = {k: sanitize_chat_input(v, self.all_special_tokens) for k, v in kwargs.items()}
 
         template_kwargs = {**self.special_tokens_map, **kwargs}  # kwargs overwrite special tokens if both are present
         rendered_chat, generation_indices = render_jinja_template(
