@@ -43,6 +43,7 @@ from ..granitemoeshared.modeling_granitemoeshared import (
     GraniteMoeSharedForCausalLM,
     GraniteMoeSharedModel,
     GraniteMoeSharedPreTrainedModel,
+    GraniteMoeSharedRotaryEmbedding,
 )
 
 
@@ -162,7 +163,6 @@ class GraniteMoeSWADecoderLayer(GraniteMoeSharedDecoderLayer):
 class GraniteMoeSWAPreTrainedModel(GraniteMoeSharedPreTrainedModel):
     _no_split_modules = ["GraniteMoeSWADecoderLayer"]
     _supports_sdpa = False
-    _supports_flex_attn = True
     _compatible_flash_implementations = ["kernels-community/vllm-flash-attn3", "flash_attention_4"]
     _can_record_outputs = {
         "hidden_states": GraniteMoeSWADecoderLayer,
@@ -176,6 +176,10 @@ class GraniteMoeSWAPreTrainedModel(GraniteMoeSharedPreTrainedModel):
             init.zeros_(module.sinks)
 
 
+class GraniteMoeSWARotaryEmbedding(GraniteMoeSharedRotaryEmbedding):
+    pass
+
+
 class GraniteMoeSWAModel(GraniteMoeSharedModel):
     def __init__(self, config: GraniteMoeSWAConfig):
         super().__init__(config)
@@ -184,14 +188,12 @@ class GraniteMoeSWAModel(GraniteMoeSharedModel):
         )
 
         # Per-layer RoPE: one rotary embedding per unique non-zero theta (`theta == 0` => NoPE).
+        # (`self.rotary_emb`, built by the parent at the global theta, is left in place but unused.)
         self.rotary_embs = nn.ModuleList()
         for theta in sorted({theta for theta in config.layer_rope_theta if theta}):
-            if theta == config.rope_parameters["rope_theta"]:
-                self.rotary_embs.append(self.rotary_emb)
-            else:
-                theta_config = copy.deepcopy(config)
-                theta_config.rope_parameters = {**config.rope_parameters, "rope_theta": theta}
-                self.rotary_embs.append(type(self.rotary_emb)(theta_config))
+            theta_config = copy.deepcopy(config)
+            theta_config.rope_parameters = {**config.rope_parameters, "rope_theta": theta}
+            self.rotary_embs.append(GraniteMoeSWARotaryEmbedding(theta_config))
 
     @merge_with_config_defaults
     @capture_outputs

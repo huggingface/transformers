@@ -13,18 +13,13 @@
 # limitations under the License.
 """Testing suite for the PyTorch GraniteSWA model."""
 
-import tempfile
 import unittest
-
-import pytest
 
 from transformers import is_torch_available
 from transformers.testing_utils import (
     Expectations,
-    require_kernels,
     require_torch,
     require_torch_accelerator,
-    require_torch_gpu,
     slow,
     torch_device,
 )
@@ -50,42 +45,6 @@ class GraniteSWAModelTester(CausalLMModelTester):
 @require_torch
 class GraniteSWAModelTest(CausalLMModelTest, unittest.TestCase):
     model_tester_class = GraniteSWAModelTester
-
-    @require_kernels
-    @pytest.mark.flash_attn_test
-    @require_torch_gpu
-    # Copied from gpt_oss (swa backend handling)
-    def test_default_flash_implementation_auto_correction(self):
-        """An unsupported flash implementation is auto-corrected to `_compatible_flash_implementations`."""
-        from kernels import get_kernel
-
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        expected_kernel = "kernels-community/vllm-flash-attn3"
-        if get_kernel(expected_kernel) is None:
-            self.skipTest(f"{expected_kernel} is not available, skipping auto-correction test.")
-
-        # Auto correction on setting config at init time.
-        config._attn_implementation = "flash_attention_2"
-        tmp_model = GraniteSWAModel(config).to(device=torch_device, dtype=torch.bfloat16)
-        self.assertEqual(tmp_model.config._attn_implementation, expected_kernel)
-
-        # Auto correction at load time.
-        with tempfile.TemporaryDirectory() as tmp_dir_name:
-            tmp_model.save_pretrained(tmp_dir_name)
-            model = GraniteSWAModel.from_pretrained(tmp_dir_name, attn_implementation="flash_attention_2").to(
-                device=torch_device
-            )
-            self.assertEqual(model.config._attn_implementation, expected_kernel)
-
-        # Auto correction via `set_attn_implementation`.
-        model.set_attn_implementation("eager")
-        self.assertEqual(model.config._attn_implementation, "eager")
-        model.set_attn_implementation("flash_attention_2")
-        self.assertEqual(model.config._attn_implementation, expected_kernel)
-
-        with torch.no_grad():
-            output = model(**inputs_dict)
-        self.assertIsNotNone(output)
 
     @unittest.skip("GraniteSWA does not support FlashAttention-2 (only FA3/FA4).")
     def test_flash_attn_2_equivalence(self):

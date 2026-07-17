@@ -47,6 +47,7 @@ from ..granite.modeling_granite import (
     GraniteForCausalLM,
     GraniteModel,
     GranitePreTrainedModel,
+    GraniteRotaryEmbedding,
 )
 from ..llama.modeling_llama import LlamaAttention, apply_rotary_pos_emb, repeat_kv
 
@@ -221,7 +222,6 @@ class GraniteSWADecoderLayer(GraniteDecoderLayer):
 
 class GraniteSWAPreTrainedModel(GranitePreTrainedModel):
     _supports_sdpa = False
-    _supports_flex_attn = True
     _compatible_flash_implementations = ["kernels-community/vllm-flash-attn3", "flash_attention_4"]
     _can_record_outputs = {
         "hidden_states": GraniteSWADecoderLayer,
@@ -235,6 +235,10 @@ class GraniteSWAPreTrainedModel(GranitePreTrainedModel):
             init.zeros_(module.sinks)
 
 
+class GraniteSWARotaryEmbedding(GraniteRotaryEmbedding):
+    pass
+
+
 class GraniteSWAModel(GraniteModel):
     def __init__(self, config: GraniteSWAConfig):
         super().__init__(config)
@@ -243,14 +247,12 @@ class GraniteSWAModel(GraniteModel):
         )
 
         # Per-layer RoPE: one rotary embedding per unique non-zero theta (`theta == 0` => NoPE).
+        # (`self.rotary_emb`, built by the parent at the global theta, is left in place but unused.)
         self.rotary_embs = nn.ModuleList()
         for theta in sorted({theta for theta in config.layer_rope_theta if theta}):
-            if theta == config.rope_parameters["rope_theta"]:
-                self.rotary_embs.append(self.rotary_emb)
-            else:
-                theta_config = copy.deepcopy(config)
-                theta_config.rope_parameters = {**config.rope_parameters, "rope_theta": theta}
-                self.rotary_embs.append(type(self.rotary_emb)(theta_config))
+            theta_config = copy.deepcopy(config)
+            theta_config.rope_parameters = {**config.rope_parameters, "rope_theta": theta}
+            self.rotary_embs.append(GraniteSWARotaryEmbedding(theta_config))
 
     @merge_with_config_defaults
     @capture_outputs
