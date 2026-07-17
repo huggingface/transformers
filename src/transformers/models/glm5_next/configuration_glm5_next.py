@@ -30,6 +30,19 @@ class Glm5NextConfig(PreTrainedConfig):
     r"""
     n_group (`int`, *optional*, defaults to 1):
         Number of routed expert groups.
+    mlp_layer_types (`list[str]`, *optional*):
+        Per-layer feed-forward schedule. Values are `"dense"` or `"sparse"`.
+    index_topk (`int`, *optional*, defaults to 2048):
+        Number of sparse-attention positions selected by the DSA indexer.
+    index_head_dim (`int`, *optional*, defaults to 128):
+        DSA indexer projection head dimension.
+    index_n_heads (`int`, *optional*, defaults to 16):
+        Number of DSA indexer heads.
+    layer_types (`list[str]`, *optional*):
+        Per-layer attention cache schedule. Values are `"linear_attention"` for
+        KDA layers and `"deepseek_sparse_attention"` for MLA layers.
+    indexer_types (`list[str]`, *optional*):
+        Per-layer DSA indexer mode. Values are `"full"` or `"shared"`.
     swiglu_limit (`float`, *optional*, defaults to None):
         Clamp limit applied to SwiGLU gate/up projections.
     linear_head_dim (`int`, *optional*, defaults to 64):
@@ -40,23 +53,10 @@ class Glm5NextConfig(PreTrainedConfig):
         Kernel size of the convolution used in linear attention layers.
     linear_lower_bound (`float`, *optional*, defaults to None):
         Whether the forget gate has a lower bound to apply to the decay.
-    index_head_dim (`int`, *optional*, defaults to 128):
-        DSA indexer projection head dimension.
-    index_n_heads (`int`, *optional*, defaults to 16):
-        Number of DSA indexer heads.
-    index_topk (`int`, *optional*, defaults to 2048):
-        Number of sparse-attention positions selected by the DSA indexer.
     index_kpool (`int`, *optional*, defaults to 16):
         Pool size of the compressed token groups selected by the DSA indexer.
     index_kpool_always_select_tail (`bool`, *optional*, defaults to `True`):
         Whether the incomplete KPool tail is always included in sparse attention.
-    indexer_types (`list[str]`, *optional*):
-        Per-layer DSA indexer mode. Values are `"full"` or `"shared"`.
-    mlp_layer_types (`list[str]`, *optional*):
-        Per-layer feed-forward schedule. Values are `"dense"` or `"sparse"`.
-    layer_types (`list[str]`, *optional*):
-        Per-layer attention cache schedule. Values are `"linear_attention"` for
-        KDA layers and `"deepseek_sparse_attention"` for MLA layers.
     """
 
     model_type = "glm5_next"
@@ -95,7 +95,9 @@ class Glm5NextConfig(PreTrainedConfig):
 
     hidden_size: int = 2048
     intermediate_size: int = 6144
+
     moe_intermediate_size: int = 1024
+
     num_hidden_layers: int = 45
     num_attention_heads: int = 32
     num_key_value_heads: int = 32
@@ -117,6 +119,7 @@ class Glm5NextConfig(PreTrainedConfig):
     rms_norm_eps: float = 1e-5
     use_cache: bool = True
     pad_token_id: int | None = 154820
+
     bos_token_id: int | None = None
     eos_token_id: int | list[int] | None = None
     tie_word_embeddings: bool = False
@@ -126,12 +129,14 @@ class Glm5NextConfig(PreTrainedConfig):
     attention_dropout: float | int = 0.0
     index_topk: int = 2048
     index_head_dim: int = 128
+
     index_n_heads: int = 16
     mlp_bias: bool = False
     head_dim: int = 64
     layer_types: list[str] | None = None
     # `"full"` runs the indexer, `"shared"` reuses the previous full layer's index mask.
     indexer_types: list[str] | None = None
+
     swiglu_limit: float | None = None
     linear_head_dim: int = 64
     linear_num_heads: int = 40

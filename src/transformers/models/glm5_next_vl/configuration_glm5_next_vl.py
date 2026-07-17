@@ -30,8 +30,6 @@ class Glm5NextVLTextConfig(PreTrainedConfig):
     r"""
     n_group (`int`, *optional*, defaults to 1):
         Number of routed expert groups.
-    swiglu_limit (`float`, *optional*, defaults to 10.0):
-        Clamp limit applied to SwiGLU gate/up projections.
     swiglu_limit (`float`, *optional*, defaults to None):
         Clamp limit applied to SwiGLU gate/up projections.
     linear_head_dim (`int`, *optional*, defaults to 64):
