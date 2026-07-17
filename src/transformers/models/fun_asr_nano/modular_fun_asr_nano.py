@@ -444,9 +444,10 @@ class FunAsrNanoEncoderStem(FunAsrNanoEncoderLayer):
 
     def __init__(self, config: FunAsrNanoEncoderConfig):
         super().__init__(config)
-        self.position_embeddings = self._create_position_embeddings(2049, config.input_size)
-        self.self_attn_layer_norm = nn.LayerNorm(config.input_size)
-        self.self_attn = FunAsrNanoAttention(config, input_dim=config.input_size)
+        input_size = config.num_mel_bins * config.num_stacked_frames
+        self.position_embeddings = self._create_position_embeddings(2049, input_size)
+        self.self_attn_layer_norm = nn.LayerNorm(input_size)
+        self.self_attn = FunAsrNanoAttention(config, input_dim=input_size)
 
     def forward(
         self,
