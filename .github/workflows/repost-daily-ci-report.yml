@@ -1,0 +1,108 @@
+name: Repost daily CI report (manual)
+
+# Manual, operator-run workflow to re-post the Slack report for an *already-completed* daily CI
+# run, using this branch's reporting code, WITHOUT re-running any tests.
+#
+# Why this exists: GitHub reruns are pinned to the workflow code from when the run was first
+# created, so rerunning a failed `Slack Report` job cannot pick up a reporting fix. This workflow
+# instead downloads the original run's test-report artifacts and regenerates + reposts the report
+# from the current branch. The original run is left untouched.
+#
+# Typical use: a daily report whose "Send message to Slack" step died on a GitHub API rate limit.
+# Dispatch it from the branch carrying the reporting fix.
+
+on:
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: "Workflow run id whose test artifacts should be reported on"
+        required: true
+        type: string
+      job:
+        description: "CI job name (matches the original caller, e.g. run_models_gpu)"
+        required: true
+        default: "run_models_gpu"
+        type: string
+      ci_event:
+        description: "CI event label shown in the report"
+        required: true
+        default: "Daily CI"
+        type: string
+      slack_report_channel:
+        description: "Slack channel to post the report to"
+        required: true
+        default: "#transformers-ci-daily-models"
+        type: string
+      report_repo_id:
+        description: "HF dataset repo id where reports are uploaded"
+        required: true
+        default: "hf-internal-testing/transformers_daily_ci"
+        type: string
+      folder_slices:
+        description: "The `setup` matrix (folder_slices) string from the original run"
+        required: true
+        type: string
+      setup_status:
+        description: "Status of the original `setup` job"
+        required: false
+        default: "success"
+        type: string
+
+env:
+  TRANSFORMERS_CI_RESULTS_UPLOAD_TOKEN: ${{ secrets.TRANSFORMERS_CI_RESULTS_UPLOAD_TOKEN }}
+
+permissions:
+  contents: read
+
+jobs:
+  repost:
+    name: Repost Slack report for run ${{ inputs.run_id }}
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Set up Python 3.10
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        with:
+          python-version: "3.10"
+
+      # Same forked downloader the daily CI uses: chunk-delay avoids the secondary rate limit when
+      # pulling ~1000 test-report artifacts. `run-id` targets the original completed run.
+      - uses: ydshieh/download-artifact@034d574170fc2fbcc74842d25304666dad52f1ad
+        env:
+          ACTIONS_ARTIFACT_MAX_ARTIFACT_COUNT: 2000
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          run-id: ${{ inputs.run_id }}
+          chunk-delay: 1000
+
+      - name: Send message to Slack
+        shell: bash
+        env:
+          CI_SLACK_BOT_TOKEN: ${{ secrets.CI_SLACK_BOT_TOKEN }}
+          CI_SLACK_CHANNEL_ID: ${{ secrets.CI_SLACK_CHANNEL_ID }}
+          CI_SLACK_CHANNEL_ID_DAILY: ${{ secrets.CI_SLACK_CHANNEL_ID_DAILY }}
+          CI_SLACK_CHANNEL_DUMMY_TESTS: ${{ secrets.CI_SLACK_CHANNEL_DUMMY_TESTS }}
+          SLACK_REPORT_CHANNEL: ${{ inputs.slack_report_channel }}
+          ACCESS_REPO_INFO_TOKEN: ${{ secrets.ACCESS_REPO_INFO_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CI_EVENT: ${{ inputs.ci_event }}
+          CI_TEST_JOB: ${{ inputs.job }}
+          SETUP_STATUS: ${{ inputs.setup_status }}
+          REPORT_REPO_ID: ${{ inputs.report_repo_id }}
+          folder_slices: ${{ inputs.folder_slices }}
+          # Make `notification_service.py` regenerate the report *as if* it were the original
+          # scheduled run: point `GITHUB_RUN_ID` at that run and force the `schedule` code path
+          # (so the report lands in the top-level dated dataset folder, not a `runs/` subfolder).
+          ORIG_RUN_ID: ${{ inputs.run_id }}
+          PYTHONUNBUFFERED: "1"
+        run: |
+          pip install huggingface_hub
+          pip install slack_sdk
+          pip install requests
+          pip install .
+          export GITHUB_RUN_ID="$ORIG_RUN_ID"
+          export GITHUB_EVENT_NAME="schedule"
+          python utils/notification_service.py "$folder_slices"
