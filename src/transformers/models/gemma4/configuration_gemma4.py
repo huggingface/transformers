@@ -23,6 +23,8 @@ from ...utils.type_validators import interval
 
 logger = logging.get_logger(__name__)
 
+DEFAULT_GLOBAL_HEAD_DIM = 512
+
 
 @auto_docstring(checkpoint="google/gemma-4-e2b-it")
 @strict
@@ -98,11 +100,13 @@ class Gemma4TextConfig(PreTrainedConfig):
         `[vocab_size_per_layer_input, num_hidden_layers * hidden_size_per_layer_input]`
         because all layers are packed into a single table. See the [Gemma4](https://huggingface.co/docs/transformers/main/en/model_doc/gemma4#per-layer-embeddings-ple) docs
         for a description of the full PLE pipeline.
-    num_global_key_value_heads (`int`, *optional*):
-        Number of key-value heads for global (full) attention layers. If `None`, defaults
-        to `num_key_value_heads`.
-    global_head_dim (`int`, defaults to 512):
-        Dimension of each attention head in global (full) attention layers.
+    per_layer_config (`dict`, *optional*):
+        Per-layer attribute overrides (see the [heterogeneous configurations](https://huggingface.co/docs/transformers/main/en/heterogeneous_configurations)
+        docs). Global (full) attention layers use a larger `head_dim` than sliding-attention
+        layers, and, when `attention_k_eq_v` is set, fewer `num_key_value_heads`; both are
+        recorded here. When not given, it is derived from the legacy `global_head_dim` and
+        `num_global_key_value_heads` keyword arguments, which are accepted so that checkpoints
+        predating `per_layer_config` keep loading.
     attention_k_eq_v (`bool`, defaults to `False`):
         Whether keys and values share the same projection weights. When `True`, the key
         projection output is reused as the value projection.
@@ -179,8 +183,6 @@ class Gemma4TextConfig(PreTrainedConfig):
     use_bidirectional_attention: Literal["all", "vision"] | None = None
     vocab_size_per_layer_input: int = 262_144
     hidden_size_per_layer_input: int = 256
-    num_global_key_value_heads: int | None = None
-    global_head_dim: int = 512
     attention_k_eq_v: bool = False
     num_kv_shared_layers: int = 0
     enable_moe_block: bool = False
@@ -214,13 +216,15 @@ class Gemma4TextConfig(PreTrainedConfig):
         if self.rope_parameters is None:
             self.rope_parameters = default_rope_params
 
+        global_head_dim = kwargs.pop("global_head_dim", DEFAULT_GLOBAL_HEAD_DIM)
+        num_global_key_value_heads = kwargs.pop("num_global_key_value_heads", None)
         if "per_layer_config" not in kwargs:
             layer_overrides: dict[str, Any] = {}
-            if self.global_head_dim != self.head_dim:
-                layer_overrides["head_dim"] = self.global_head_dim
+            if global_head_dim != self.head_dim:
+                layer_overrides["head_dim"] = global_head_dim
             # `attention_k_eq_v` gates the kv-head override for the models that declare it;
             # models that drop the attribute entirely are ungated, hence the `True` fallback.
-            num_key_value_heads = self.num_global_key_value_heads if getattr(self, "attention_k_eq_v", True) else None
+            num_key_value_heads = num_global_key_value_heads if getattr(self, "attention_k_eq_v", True) else None
             if num_key_value_heads is not None and num_key_value_heads != self.num_key_value_heads:
                 layer_overrides["num_key_value_heads"] = num_key_value_heads
             if layer_overrides:

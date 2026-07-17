@@ -291,6 +291,11 @@ _VISION_DTYPE = flags.DEFINE_enum(
 )
 
 
+def layer_config(config, layer_idx):
+    """The config with attention dims resolved for `layer_idx`, for heterogeneous models."""
+    return config.per_layer_config[layer_idx] if config.is_heterogeneous else config
+
+
 def convert_embedder_weights(
     path: str,
     param: str,
@@ -381,12 +386,7 @@ def convert_transformer_weights(
         elif path.endswith("attn/q_einsum"):
             head_dim = weights.shape[-1]
         else:
-            head_dim = (
-                config.global_head_dim
-                if config.layer_types[layer_idx] == "full_attention" and config.global_head_dim
-                else config.head_dim
-            )
-
+            head_dim = layer_config(config, layer_idx).head_dim
         matrix = weights
 
         if path.endswith("attn/attn_vec_einsum"):
@@ -413,7 +413,7 @@ def convert_transformer_weights(
             converted_paths.append(f"{base_path}.self_attn.k_proj.weight")
             converted_weights.append(
                 matrix.transpose(1, 0, 2)
-                .reshape(config.hidden_size, config.num_global_key_value_heads * head_dim)
+                .reshape(config.hidden_size, layer_config(config, layer_idx).num_key_value_heads * head_dim)
                 .transpose()
             )
         elif path.endswith("attn/q_einsum"):
@@ -464,12 +464,7 @@ def convert_transformer_weights(
         for i, matrix in enumerate(weights):
             layer_idx = _SLIDING_WINDOW_PATTERN * i + attention_type_index
             base_path = f"layers.{layer_idx}"
-            head_dim = (
-                config.global_head_dim
-                if config.layer_types[layer_idx] == "full_attention" and config.global_head_dim
-                else config.head_dim
-            )
-
+            head_dim = layer_config(config, layer_idx).head_dim
             if param == "skip_scale":
                 converted_paths.append(f"{base_path}.layer_scalar")
                 converted_weights.append(matrix)
@@ -497,7 +492,7 @@ def convert_transformer_weights(
                 converted_paths.append(f"{base_path}.self_attn.k_proj.weight")
                 converted_weights.append(
                     matrix.transpose(1, 0, 2)
-                    .reshape(config.hidden_size, config.num_global_key_value_heads * head_dim)
+                    .reshape(config.hidden_size, layer_config(config, layer_idx).num_key_value_heads * head_dim)
                     .transpose()
                 )
             elif path.endswith("attn/q_einsum"):

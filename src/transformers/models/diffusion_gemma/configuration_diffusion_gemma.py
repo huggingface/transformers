@@ -29,6 +29,8 @@ from ..auto import CONFIG_MAPPING, AutoConfig
 
 logger = logging.get_logger(__name__)
 
+DEFAULT_GLOBAL_HEAD_DIM = 512
+
 
 @auto_docstring(checkpoint="google/diffusiongemma-26B-A4B-it")
 @strict
@@ -103,8 +105,6 @@ class DiffusionGemmaTextConfig(PreTrainedConfig):
     layer_types: list[str] | None = None
     final_logit_softcapping = 30.0
     use_bidirectional_attention: Literal["all", "vision"] | None = None
-    num_global_key_value_heads: int | None = None
-    global_head_dim: int = 512
     num_experts: int | None = None
     top_k_experts: int | None = None
     moe_intermediate_size: int | None = None
@@ -134,13 +134,15 @@ class DiffusionGemmaTextConfig(PreTrainedConfig):
         if self.rope_parameters is None:
             self.rope_parameters = default_rope_params
 
+        global_head_dim = kwargs.pop("global_head_dim", DEFAULT_GLOBAL_HEAD_DIM)
+        num_global_key_value_heads = kwargs.pop("num_global_key_value_heads", None)
         if "per_layer_config" not in kwargs:
             layer_overrides: dict[str, Any] = {}
-            if self.global_head_dim != self.head_dim:
-                layer_overrides["head_dim"] = self.global_head_dim
+            if global_head_dim != self.head_dim:
+                layer_overrides["head_dim"] = global_head_dim
             # `attention_k_eq_v` gates the kv-head override for the models that declare it;
             # models that drop the attribute entirely are ungated, hence the `True` fallback.
-            num_key_value_heads = self.num_global_key_value_heads if getattr(self, "attention_k_eq_v", True) else None
+            num_key_value_heads = num_global_key_value_heads if getattr(self, "attention_k_eq_v", True) else None
             if num_key_value_heads is not None and num_key_value_heads != self.num_key_value_heads:
                 layer_overrides["num_key_value_heads"] = num_key_value_heads
             if layer_overrides:
