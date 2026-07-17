@@ -469,15 +469,17 @@ class LabelSmoother:
         nll_loss.masked_fill_(padding_mask, 0.0)
         smoothed_loss.masked_fill_(padding_mask, 0.0)
 
-        # Under gradient accumulation the Trainer passes num_items_in_batch; otherwise reduce over this
-        # micro-batch's active (non-padded) tokens.
+        # The Trainer passes num_items_in_batch when the loss is normalized over the full batch;
+        # otherwise reduce over this micro-batch's active (non-padded) tokens.
         if num_items_in_batch is None:
-            num_items_in_batch = padding_mask.numel() - padding_mask.long().sum()
+            denominator = padding_mask.numel() - padding_mask.long().sum()
         elif torch.is_tensor(num_items_in_batch):
             # The count may be on another device.
-            num_items_in_batch = num_items_in_batch.to(nll_loss.device)
-        nll_loss = nll_loss.sum() / num_items_in_batch
-        smoothed_loss = smoothed_loss.sum() / (num_items_in_batch * log_probs.shape[-1])
+            denominator = num_items_in_batch.to(nll_loss.device)
+        else:
+            denominator = num_items_in_batch
+        nll_loss = nll_loss.sum() / denominator
+        smoothed_loss = smoothed_loss.sum() / (denominator * log_probs.shape[-1])
         return (1 - self.epsilon) * nll_loss + self.epsilon * smoothed_loss
 
 

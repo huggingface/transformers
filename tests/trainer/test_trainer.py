@@ -231,8 +231,7 @@ class TrainerGradientAccumulationTest(TestCasePlus, TrainerIntegrationCommon):
         """
         model_name = self._ga_model_name
         args_kwargs = {"logging_steps": 1, "max_steps": 3, "learning_rate": 1e-4, "max_grad_norm": 0.0}
-        if label_smoothing_factor:
-            args_kwargs["label_smoothing_factor"] = label_smoothing_factor
+        args_kwargs["label_smoothing_factor"] = label_smoothing_factor
         trainer_kwargs = {"train_dataset": self._ga_dataset, "data_collator": self._ga_data_collator}
         if compute_loss_func is not None:
             trainer_kwargs["compute_loss_func"] = compute_loss_func
