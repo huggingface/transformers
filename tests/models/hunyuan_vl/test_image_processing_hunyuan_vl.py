@@ -30,7 +30,7 @@ if is_torch_available():
 if is_vision_available():
     from PIL import Image
 
-    from transformers.models.hunyuan_vl.image_processing_pil_hunyuan_vl import HunYuanVLImageProcessorPil
+    from transformers.models.hunyuan_vl.image_processing_pil_hunyuan_vl import HunYuanVLImageProcessorPil, smart_resize
 
     if is_torchvision_available():
         from transformers.models.hunyuan_vl.image_processing_hunyuan_vl import HunYuanVLImageProcessor
@@ -243,7 +243,7 @@ class HunYuanVLImageProcessorPilTest(unittest.TestCase):
         self.assertEqual(inputs["image_grid_thw"].shape, (1, 3))
         self.assertGreater(inputs["pixel_values"].shape[0], 0)
 
-    def test_pil_image_processor_defaults_to_reference_bicubic_resize(self):
+    def test_pil_image_processor_matches_reference_resize_with_hub_config(self):
         processor = HunYuanVLImageProcessorPil(
             min_pixels=32 * 32,
             max_pixels=32 * 32,
@@ -252,12 +252,17 @@ class HunYuanVLImageProcessorPilTest(unittest.TestCase):
             merge_size=1,
             do_rescale=False,
             do_normalize=False,
+            resample=PILImageResampling.LANCZOS,
         )
         image = (np.arange(3 * 17 * 19, dtype=np.uint16) % 256).astype(np.uint8).reshape(3, 17, 19)
 
-        default_outputs = processor(image, return_tensors="np")
-        bicubic_outputs = processor(image, return_tensors="np", resample=PILImageResampling.BICUBIC)
-        bilinear_outputs = processor(image, return_tensors="np", resample=PILImageResampling.BILINEAR)
+        resized_height, resized_width = smart_resize(
+            image.shape[-2], image.shape[-1], factor=16, min_pixels=32 * 32, max_pixels=32 * 32
+        )
+        reference_image = np.asarray(
+            Image.fromarray(image.transpose(1, 2, 0)).resize((resized_width, resized_height))
+        ).transpose(2, 0, 1)
+        outputs = processor(image, return_tensors="np")
+        reference_outputs = processor(reference_image, do_resize=False, return_tensors="np")
 
-        self.assertTrue(np.array_equal(default_outputs.pixel_values, bicubic_outputs.pixel_values))
-        self.assertFalse(np.array_equal(default_outputs.pixel_values, bilinear_outputs.pixel_values))
+        np.testing.assert_array_equal(outputs.pixel_values, reference_outputs.pixel_values)

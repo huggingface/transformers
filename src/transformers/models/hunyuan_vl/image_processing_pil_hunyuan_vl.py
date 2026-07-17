@@ -175,7 +175,10 @@ class HunYuanVLImageProcessorPil(PilBackend):
                 image = self.resize(
                     image,
                     size=SizeDict(height=resized_height, width=resized_width),
-                    resample=resample,
+                    # The reference HunyuanOCR processor calls `PIL.Image.resize` without a
+                    # resampling argument, which uses BICUBIC for RGB images. Its config has
+                    # `resample=1` (LANCZOS), but the original implementation never uses it.
+                    resample=PILImageResampling.BICUBIC,
                 )
             else:
                 resized_height, resized_width = height, width
