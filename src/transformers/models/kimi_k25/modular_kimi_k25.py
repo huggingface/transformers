@@ -487,8 +487,9 @@ class Kimi_K25Model(Kimi_K25PreTrainedModel):
             The temporal, height and width of feature shape of each image in LLM.
         """
         vision_outputs = self.vision_tower(pixel_values, grid_thw=image_grid_thw, **kwargs)
-        image_embeds = self.mm_projector(vision_outputs.pooler_output)
-        vision_outputs.pooler_output = image_embeds
+        image_embeds = self.mm_projector(vision_outputs.pooler_output).squeeze(1)
+        split_sizes = (image_grid_thw.prod(-1)).tolist()
+        vision_outputs.pooler_output = torch.split(image_embeds, split_sizes)
         return vision_outputs
 
     def get_video_features(
