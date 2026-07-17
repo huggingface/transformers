@@ -403,7 +403,6 @@ class Glm5NextVLForConditionalGeneration(Glm46VForConditionalGeneration, Glm5Nex
 
     def __init__(self, config):
         super().__init__(config)
-        self.model = Glm5NextVLModel(config)
         self.router_aux_loss_coef = config.router_aux_loss_coef
         self.num_experts = config.num_local_experts
         self.num_experts_per_tok = config.num_experts_per_tok
