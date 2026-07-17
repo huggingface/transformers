@@ -1,20 +1,7 @@
 import os
 import zipfile
 
-import requests
-from get_ci_error_statistics import download_artifact, get_artifacts_links
-
-
-def get_github_json(url, token=None):
-    headers = None
-    if token:
-        headers = {"Accept": "application/vnd.github+json", "Authorization": f"Bearer {token}"}
-
-    response = requests.get(url, headers=headers)
-    if headers is not None and response.status_code in {401, 403, 404}:
-        response = requests.get(url)
-
-    return response.json()
+from get_ci_error_statistics import download_artifact, get_artifacts_links, get_github_json
 
 
 def get_daily_ci_runs(token, num_runs=7, workflow_id=None):
@@ -54,6 +41,11 @@ def get_last_daily_ci_run(token, workflow_run_id=None, workflow_id=None, commit_
         workflow_run = get_github_json(
             f"https://api.github.com/repos/huggingface/transformers/actions/runs/{workflow_run_id}", token=token
         )
+        # `get_github_json` already retries transient/rate-limit errors and raises on a failed
+        # request, but guard against an unexpected payload so callers get a clear error instead of
+        # a bare `KeyError` (e.g. `workflow_run["created_at"]`) further down the reporting script.
+        if not isinstance(workflow_run, dict) or "created_at" not in workflow_run:
+            raise RuntimeError(f"Unexpected response when fetching workflow run {workflow_run_id}: {workflow_run!r}")
         return workflow_run
 
     workflow_runs = get_daily_ci_runs(token, workflow_id=workflow_id)

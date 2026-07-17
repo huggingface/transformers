@@ -14,29 +14,100 @@ import requests
 logger = logging.getLogger(__name__)
 
 
+def get_github_json(url, token=None, max_retries=5):
+    """GET a GitHub REST API URL and return the parsed JSON.
+
+    Hardened against the two failure modes that silently broke daily CI reporting (the reports
+    indexed into the response with e.g. ``result["jobs"]`` / ``workflow_run["created_at"]`` and
+    raised a bare ``KeyError`` when GitHub returned an error payload instead of data):
+
+      * rate limiting (primary/secondary): retried with a backoff derived from the ``Retry-After``
+        / ``X-RateLimit-Reset`` headers instead of being parsed as data;
+      * transient 5xx errors: retried with exponential backoff.
+
+    On a 401/403/404 that is *not* a rate limit (e.g. a token lacking scope), the request is
+    retried once without the token, matching the previous behaviour. Raises ``RuntimeError`` if no
+    usable response is obtained, so callers fail loudly instead of indexing into an error payload.
+    """
+    headers = None
+    if token:
+        headers = {"Accept": "application/vnd.github+json", "Authorization": f"Bearer {token}"}
+
+    response = None
+    for attempt in range(max_retries):
+        response = requests.get(url, headers=headers)
+        status = response.status_code
+
+        # Rate limited: primary limit exposes ``X-RateLimit-Remaining: 0``; secondary limits send
+        # a ``Retry-After`` header. Retrying without the token would only lower the limit, so keep
+        # the same headers and wait it out.
+        is_rate_limited = status in (403, 429) and (
+            response.headers.get("X-RateLimit-Remaining") == "0" or "Retry-After" in response.headers
+        )
+        if is_rate_limited:
+            retry_after = response.headers.get("Retry-After")
+            if retry_after is not None:
+                wait = int(retry_after)
+            else:
+                reset = response.headers.get("X-RateLimit-Reset")
+                wait = max(0, int(reset) - int(time.time())) if reset else 2**attempt
+            wait = min(wait, 120)
+            print(
+                f"GitHub API rate limited on {url} (status {status}); waiting {wait}s before "
+                f"retry {attempt + 1}/{max_retries}"
+            )
+            time.sleep(wait)
+            continue
+
+        # Auth/permission/not-found with a token: retry once unauthenticated (previous behaviour).
+        if headers is not None and status in (401, 403, 404):
+            response = requests.get(url)
+            status = response.status_code
+
+        if status >= 500:
+            wait = min(2**attempt, 60)
+            print(f"GitHub API server error {status} on {url}; retrying in {wait}s ({attempt + 1}/{max_retries})")
+            time.sleep(wait)
+            continue
+
+        if status == 200:
+            return response.json()
+
+        # Any other (non-retryable) status: stop and fail loudly below.
+        break
+
+    last_status = response.status_code if response is not None else "no response"
+    raise RuntimeError(f"Could not fetch {url}: last status {last_status} after {max_retries} attempt(s)")
+
+
+def _get_paginated_items(url, key, token=None):
+    """Return all items found under ``key`` across the paginated pages of a GitHub API endpoint.
+
+    ``url`` must already request ``per_page=50``. A missing ``key`` in a page raises ``KeyError``,
+    but only after :func:`get_github_json` has already retried transient/rate-limit errors, so this
+    only fires on a genuinely unexpected payload.
+    """
+    result = get_github_json(url, token=token)
+    items = list(result[key])
+    total_count = result.get("total_count", len(items))
+    pages_to_iterate_over = math.ceil((total_count - 50) / 50)
+
+    for i in range(pages_to_iterate_over):
+        time.sleep(1)
+        result = get_github_json(url + f"&page={i + 2}", token=token)
+        items.extend(result[key])
+
+    return items
+
+
 def get_jobs(workflow_run_id, token=None):
     """Extract jobs in a GitHub Actions workflow run"""
 
-    headers = None
-    if token is not None:
-        headers = {"Accept": "application/vnd.github+json", "Authorization": f"Bearer {token}"}
-
     url = f"https://api.github.com/repos/huggingface/transformers/actions/runs/{workflow_run_id}/jobs?per_page=50"
-    result = requests.get(url, headers=headers).json()
-    jobs = []
-
     try:
-        jobs.extend(result["jobs"])
-        pages_to_iterate_over = math.ceil((result["total_count"] - 50) / 50)
-
-        for i in range(pages_to_iterate_over):
-            time.sleep(1)
-            result = requests.get(url + f"&page={i + 2}", headers=headers).json()
-            jobs.extend(result["jobs"])
-
-        return jobs
+        return _get_paginated_items(url, "jobs", token=token)
     except Exception:
-        print(f"Unknown error, could not fetch links:\n{traceback.format_exc()}")
+        print(f"Unknown error, could not fetch jobs:\n{traceback.format_exc()}")
 
     return []
 
@@ -44,24 +115,10 @@ def get_jobs(workflow_run_id, token=None):
 def get_job_links(workflow_run_id, token=None):
     """Extract job names and their job links in a GitHub Actions workflow run"""
 
-    headers = None
-    if token is not None:
-        headers = {"Accept": "application/vnd.github+json", "Authorization": f"Bearer {token}"}
-
     url = f"https://api.github.com/repos/huggingface/transformers/actions/runs/{workflow_run_id}/jobs?per_page=50"
-    result = requests.get(url, headers=headers).json()
-    job_links = {}
-
     try:
-        job_links.update({job["name"]: job["html_url"] for job in result["jobs"]})
-        pages_to_iterate_over = math.ceil((result["total_count"] - 50) / 50)
-
-        for i in range(pages_to_iterate_over):
-            time.sleep(1)
-            result = requests.get(url + f"&page={i + 2}", headers=headers).json()
-            job_links.update({job["name"]: job["html_url"] for job in result["jobs"]})
-
-        return job_links
+        jobs = _get_paginated_items(url, "jobs", token=token)
+        return {job["name"]: job["html_url"] for job in jobs}
     except Exception:
         print(f"Unknown error, could not fetch links:\n{traceback.format_exc()}")
 
@@ -71,24 +128,10 @@ def get_job_links(workflow_run_id, token=None):
 def get_artifacts_links(workflow_run_id, token=None):
     """Get all artifact links from a workflow run"""
 
-    headers = None
-    if token is not None:
-        headers = {"Accept": "application/vnd.github+json", "Authorization": f"Bearer {token}"}
-
     url = f"https://api.github.com/repos/huggingface/transformers/actions/runs/{workflow_run_id}/artifacts?per_page=50"
-    result = requests.get(url, headers=headers).json()
-    artifacts = {}
-
     try:
-        artifacts.update({artifact["name"]: artifact["archive_download_url"] for artifact in result["artifacts"]})
-        pages_to_iterate_over = math.ceil((result["total_count"] - 50) / 50)
-
-        for i in range(pages_to_iterate_over):
-            time.sleep(1)
-            result = requests.get(url + f"&page={i + 2}", headers=headers).json()
-            artifacts.update({artifact["name"]: artifact["archive_download_url"] for artifact in result["artifacts"]})
-
-        return artifacts
+        artifacts = _get_paginated_items(url, "artifacts", token=token)
+        return {artifact["name"]: artifact["archive_download_url"] for artifact in artifacts}
     except Exception:
         print(f"Unknown error, could not fetch links:\n{traceback.format_exc()}")
 
