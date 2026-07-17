@@ -474,10 +474,12 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin, Heterogeneous
     def validate_architecture(self):
         """Part of `@strict`-powered validation. Validates the architecture of the config."""
         if (
-            hasattr(self, "head_dim")
-            and hasattr(self, "num_heads")
-            and hasattr(self, "embed_dim")
-            and self.head_dim * self.num_heads != self.embed_dim
+            self._hasattr_without_heterogeneous_validation("head_dim")
+            and self._hasattr_without_heterogeneous_validation("num_heads")
+            and self._hasattr_without_heterogeneous_validation("embed_dim")
+            and self._getattr_without_heterogeneous_validation("head_dim")
+            * self._getattr_without_heterogeneous_validation("num_heads")
+            != self._getattr_without_heterogeneous_validation("embed_dim")
         ):
             raise ValueError(
                 f"The embed_dim ({self.embed_dim}) is not a multiple of the number of attention "

@@ -54,6 +54,7 @@ from ..gemma4.modeling_gemma4 import (
     Gemma4TextModelOutputWithPast,
     Gemma4TextRotaryEmbedding,
     Gemma4TextScaledWordEmbedding,
+    config_for_layer_type,
     get_block_sequence_ids_for_mask,
 )
 from ..gemma4.processing_gemma4 import Gemma4Processor, Gemma4ProcessorKwargs
@@ -638,11 +639,8 @@ class Gemma4UnifiedPreTrainedModel(Gemma4PreTrainedModel):
         PreTrainedModel._init_weights(self, module)
         if isinstance(module, Gemma4UnifiedTextRotaryEmbedding):
             for layer_type, rope_init_fn in module.rope_init_fns.items():
-                rope_init_fn_kwargs = {"layer_type": layer_type}
-                if layer_type == "full_attention" and module.rope_type[layer_type] == "proportional":
-                    rope_init_fn_kwargs["head_dim_key"] = "global_head_dim"
-
-                curr_inv_freq, _ = rope_init_fn(module.config, **rope_init_fn_kwargs)
+                rope_config = config_for_layer_type(module.config, layer_type)
+                curr_inv_freq, _ = rope_init_fn(rope_config, layer_type=layer_type)
                 getattr(module, f"{layer_type}_inv_freq").copy_(curr_inv_freq)
                 getattr(module, f"{layer_type}_original_inv_freq").copy_(curr_inv_freq)
         elif isinstance(module, Gemma4UnifiedTextScaledWordEmbedding):

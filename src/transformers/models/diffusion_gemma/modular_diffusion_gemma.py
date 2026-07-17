@@ -60,6 +60,7 @@ from ..gemma4.modeling_gemma4 import (
     Gemma4TextRouter,
     Gemma4TextScaledWordEmbedding,
     apply_rotary_pos_emb,
+    config_for_layer_type,
     eager_attention_forward,
     get_block_sequence_ids_for_mask,
 )
@@ -217,8 +218,9 @@ class DiffusionGemmaEncoderTextAttention(nn.Module):
         self.is_sliding = self.layer_type == "sliding_attention"
         self.sliding_window = config.sliding_window if self.is_sliding else None
 
-        self.head_dim = config.global_head_dim if not self.is_sliding and config.global_head_dim else config.head_dim
-        num_key_value_heads = config.num_global_key_value_heads if not self.is_sliding else config.num_key_value_heads
+        layer_config = config.per_layer_config[layer_idx] if config.is_heterogeneous else config
+        self.head_dim = layer_config.head_dim
+        num_key_value_heads = layer_config.num_key_value_heads
         self.num_key_value_groups = config.num_attention_heads // num_key_value_heads
         self.scaling = 1.0
         self.attention_dropout = self.config.attention_dropout
@@ -319,8 +321,9 @@ class DiffusionGemmaDecoderTextAttention(nn.Module):
         self.is_sliding = self.layer_type == "sliding_attention"
         self.sliding_window = config.sliding_window if self.is_sliding else None
 
-        self.head_dim = config.global_head_dim if not self.is_sliding and config.global_head_dim else config.head_dim
-        num_key_value_heads = config.num_global_key_value_heads if not self.is_sliding else config.num_key_value_heads
+        layer_config = config.per_layer_config[layer_idx] if config.is_heterogeneous else config
+        self.head_dim = layer_config.head_dim
+        num_key_value_heads = layer_config.num_key_value_heads
         self.num_key_value_groups = config.num_attention_heads // num_key_value_heads
         self.scaling = 1.0
         self.attention_dropout = self.config.attention_dropout
@@ -661,11 +664,8 @@ class DiffusionGemmaPreTrainedModel(T5Gemma2PreTrainedModel):
         PreTrainedModel._init_weights(module)
         if isinstance(module, DiffusionGemmaTextRotaryEmbedding):
             for layer_type, rope_init_fn in module.rope_init_fns.items():
-                rope_init_fn_kwargs = {"layer_type": layer_type}
-                if layer_type == "full_attention" and module.rope_type[layer_type] == "proportional":
-                    rope_init_fn_kwargs["head_dim_key"] = "global_head_dim"
-
-                curr_inv_freq, _ = rope_init_fn(module.config, **rope_init_fn_kwargs)
+                rope_config = config_for_layer_type(module.config, layer_type)
+                curr_inv_freq, _ = rope_init_fn(rope_config, layer_type=layer_type)
                 init.copy_(getattr(module, f"{layer_type}_inv_freq"), curr_inv_freq)
                 init.copy_(getattr(module, f"{layer_type}_original_inv_freq"), curr_inv_freq)
 
