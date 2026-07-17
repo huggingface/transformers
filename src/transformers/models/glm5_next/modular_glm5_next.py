@@ -12,12 +12,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import math
 from collections.abc import Callable
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...integrations import (
@@ -292,8 +294,8 @@ class Glm5NextForgetGate(nn.Module):
 
         self.f_a_proj = nn.Linear(config.hidden_size, self.head_dim, bias=False)
         self.f_b_proj = nn.Linear(self.head_dim, self.qkv_dim, bias=False)
-        self.dt_bias = nn.Parameter(torch.empty(self.qkv_dim, dtype=torch.float32))
-        self.A_log = nn.Parameter(torch.empty(self.num_heads, dtype=torch.float32))
+        self.dt_bias = nn.Parameter(torch.empty(self.qkv_dim))
+        self.A_log = nn.Parameter(torch.empty(self.num_heads))
 
         self.safe_gate_lower_bound = config.linear_lower_bound
 
@@ -404,9 +406,6 @@ class Glm5NextLinearAttention(nn.Module):
         # Multi token prefill or simple "full" prefill
         else:
             # Concatenated state for prefill
-            if use_precomputed_states:
-                mixed_qkv = torch.cat([conv_state.to(mixed_qkv.dtype), mixed_qkv], dim=-1)
-
             if cache_params is not None:
                 mixed_qkv = cache_params.update_conv_state(
                     mixed_qkv, self.layer_idx, conv_kernel_size=self.conv_kernel_size
@@ -421,8 +420,7 @@ class Glm5NextLinearAttention(nn.Module):
             )
 
             # Cut out any tail
-            if use_precomputed_states:
-                mixed_qkv = mixed_qkv[:, :, -seq_len:]
+            mixed_qkv = mixed_qkv[:, :, -seq_len:]
 
         query, key, value = torch.split(
             mixed_qkv.transpose(1, 2),
@@ -562,23 +560,19 @@ class Glm5NextIndexer(GlmMoeDsaIndexer):
         weights = self.weights_proj(hidden_states.to(self.weights_proj.weight.dtype)).float() * (self.n_heads**-0.5)
         index_scores = torch.matmul(weights.unsqueeze(-2), scores).squeeze(-2)
 
-        number_of_pools = pool_keys.shape[1]
-        if number_of_pools == 0:
-            # Tail only
-            valid_candidates = pool_valid[:, None].expand(batch_size, seq_len, -1)
-        else:
-            # Some pools exist
-            batch_idx = torch.arange(batch_size, device=hidden_states.device)[:, None, None]
-            query_idx = torch.arange(seq_len, device=hidden_states.device)[None, :, None]
-            # Clamp invalid / static pool ends
-            pool_idx = pool_indices[..., -1].clamp(0, kv_len - 1)[:, None, :]
+        # Clamp invalid / static pool ends
+        pool_end = pool_indices[..., -1].clamp(0, kv_len - 1)
+        pool_visible = visible_tokens.gather(
+            dim=-1,
+            index=pool_end[:, None, :].expand(batch_size, seq_len, -1),
+        )
+        # A pool is selectable only if its final token is visible to the query
+        valid_candidates = pool_visible & pool_valid[:, None]
 
-            # A pool is selectable only if its final token is visible to the query
-            valid_candidates = visible_tokens[batch_idx, query_idx, pool_idx] & pool_valid[:, None]
-            index_scores = index_scores.masked_fill(
-                ~valid_candidates,
-                torch.finfo(index_scores.dtype).min,
-            )
+        index_scores = index_scores.masked_fill(
+            ~valid_candidates,
+            torch.finfo(index_scores.dtype).min,
+        )
 
         # Similar budgeting as in original but compressed by its pool size
         select_k = min(self.index_topk // self.index_kpool, index_scores.shape[-1])
@@ -606,8 +600,7 @@ class Glm5NextIndexer(GlmMoeDsaIndexer):
             output_width += self.index_kpool - 1  # expanded tail size maximum
 
         # Pad so we fill up with invalid entries instead of gathered selections
-        if topk_indices.shape[-1] < output_width:
-            topk_indices = F.pad(topk_indices, (0, output_width - topk_indices.shape[-1]), value=-1)
+        topk_indices = F.pad(topk_indices, (0, output_width - topk_indices.shape[-1]), value=-1)
 
         topk_indices = topk_indices[..., :output_width]
         topk_indices = topk_indices.masked_fill(~attention_mask[..., None], -1)
@@ -942,8 +935,7 @@ class Glm5NextDecoderLayer(GlmMoeDsaDecoderLayer):
 class Glm5NextPreTrainedModel(PreTrainedModel):
     config: Glm5NextConfig
     base_model_prefix = "model"
-    _no_split_modules = ["Glm5NextDecoderLayer"]
-    _skip_keys_device_placement = ["past_key_values"]
+    supports_gradient_checkpointing = True
 
     # needs index based kernel
     _supports_flash_attn = False
@@ -952,7 +944,12 @@ class Glm5NextPreTrainedModel(PreTrainedModel):
     _supports_flex_attn = False
     _supports_attention_backend = True
 
-    supports_gradient_checkpointing = True
+    _no_split_modules = ["Glm5NextDecoderLayer"]
+    _skip_keys_device_placement = ["past_key_values"]
+    # TODO: this can be fixed but is limited by
+    # 1. assuming the cache name
+    # 2. linear attention not being considered atm
+    _is_stateful = True
     _can_compile_fullgraph = True
 
     _can_record_outputs = {
@@ -960,20 +957,46 @@ class Glm5NextPreTrainedModel(PreTrainedModel):
         "hidden_states": Glm5NextDecoderLayer,
         "router_logits": OutputRecorder(Glm5NextTopkRouter, index=0),  # noqa: F821
     }
-    _keep_in_fp32_modules_strict = ["e_score_correction_bias", "conv1d"]
+    _keep_in_fp32_modules_strict = ["e_score_correction_bias", "conv1d", "dt_bias", "A_log"]
     _keys_to_ignore_on_load_unexpected = [r"layers\.45\.", r"layers\.\d+\.shared_head\."]
 
     @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
         if isinstance(module, Glm5NextForgetGate):
-            nn.init.normal_(module.A_log, mean=0.0, std=0.02)
-            nn.init.zeros_(module.dt_bias)
-        elif isinstance(module, Glm5NextLinearAttention):
-            nn.init.ones_(module.o_norm.weight)
+            # Following FLA initialization
+            # NOTE: This is incredibly important so keep it this way at all costs
+            if module.safe_gate_lower_bound is not None:
+                init.zeros_(module.A_log)
+            else:
+                init.copy_(
+                    module.A_log,
+                    init.uniform_(module.A_log, a=1.0, b=16.0).log(),
+                )
+
+            init.uniform_(
+                module.dt_bias,
+                a=math.log(1e-3),
+                b=math.log(1e-1),
+            )
+            dt = module.dt_bias.exp().clamp_min(1e-4)
+
+            # (stable) inverse softplus
+            init.copy_(
+                module.dt_bias,
+                dt + torch.log(-torch.expm1(-dt)),
+            )
+        elif isinstance(module, Glm5NextRMSNormGated):
+            init.ones_(module.weight)
         elif isinstance(module, Glm5NextExperts):
-            nn.init.normal_(module.gate_up_proj, mean=0.0, std=self.config.initializer_range)
-            nn.init.normal_(module.down_proj, mean=0.0, std=self.config.initializer_range)
+            init.normal_(module.gate_up_proj, mean=0.0, std=self.config.initializer_range)
+            init.normal_(module.down_proj, mean=0.0, std=self.config.initializer_range)
+        elif isinstance(module, Glm5NextTopkRouter):  # noqa: F821
+            init.zeros_(module.e_score_correction_bias)
+            init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
+        elif isinstance(module, Glm5NextIndexer):
+            init.zeros_(module.index_kpool_compress_ape)
+            init.ones_(module.index_kpool_compress_gate)
 
 
 @auto_docstring
