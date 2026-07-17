@@ -71,7 +71,9 @@ def is_sonicmoe_loadable(raise_error: bool = False) -> bool:
         try:
             installed = importlib.metadata.version(distribution)
         except importlib.metadata.PackageNotFoundError:
-            return maybe_import_error(f"sonic-moe requires `{distribution}`, but it is not installed.", raise_error=raise_error)
+            return maybe_import_error(
+                f"sonic-moe requires `{distribution}`, but it is not installed.", raise_error=raise_error
+            )
         if version.parse(installed) > version.parse(max_version):
             return maybe_import_error(
                 f"sonic-moe requires `{distribution}` <= {max_version} (newer versions are unvalidated), "
