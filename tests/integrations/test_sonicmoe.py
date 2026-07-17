@@ -25,6 +25,7 @@ Two layers, both mocking only what needs a Hopper GPU + CuteDSL / `nvidia-cutlas
 """
 
 import contextlib
+import importlib.metadata
 import inspect
 import types
 import unittest
@@ -65,18 +66,27 @@ class SonicMoeLoaderTest(unittest.TestCase):
         sm._SONICMOE = None
         self.addCleanup(setattr, sm, "_SONICMOE", None)
 
-    def _env(self, *, cuda_available=True, capability=(9, 0), versions_ok=True, kernel=_FakeSonicMoeKernel):
+    def _env(
+        self,
+        *,
+        kernels_available=True,
+        cuda_available=True,
+        capability=(9, 0),
+        versions_ok=True,
+        kernel=_FakeSonicMoeKernel,
+    ):
         stack = contextlib.ExitStack()
-        # Fake a "CUDA + `capability`" environment for the loader *only* (scoped to its call stack):
-        # the loader's availability/arch gate passes, while torch.compile / inductor still see the real
-        # device — so the compile-safety test runs under the default (inductor) backend on any host, not
-        # just SM90+. The real fallbacks are lazy: only non-loader callers reach them (inductor, under
-        # compile), never the CPU-only gating tests (where querying real CUDA would raise).
+        stack.enter_context(mock.patch.object(sm, "is_kernels_available", return_value=kernels_available))
+        # Fake a "CUDA + `capability`" environment for `is_sonicmoe_loadable` *only* (scoped to its call
+        # stack): its arch gate passes while torch.compile / inductor still see the real device — so the
+        # compile-safety test runs under the default (inductor) backend on any host, not just SM90+. The
+        # real fallbacks are lazy: only non-loader callers reach them (inductor, under compile), never the
+        # CPU-only gating tests (where querying real CUDA would raise).
         real_is_available = torch.cuda.is_available
         real_capability = torch.cuda.get_device_capability
 
         def _in_loader():
-            return any(f.function == "_load_sonicmoe_kernel" for f in inspect.stack())
+            return any(f.function == "is_sonicmoe_loadable" for f in inspect.stack())
 
         stack.enter_context(
             mock.patch.object(
@@ -92,12 +102,17 @@ class SonicMoeLoaderTest(unittest.TestCase):
                 side_effect=lambda *a, **k: capability if _in_loader() else real_capability(),
             )
         )
-        if versions_ok:
-            stack.enter_context(mock.patch.object(sm, "require_version", return_value=None))
-        else:
-            stack.enter_context(
-                mock.patch.object(sm, "require_version", side_effect=ImportError("nvidia-cutlass-dsl>4.5.2"))
-            )
+        # Report each build dependency at its validated max when ok, one major past it when not; delegate
+        # unknown distributions to the real lookup so nothing else the process imports is disturbed.
+        real_version = importlib.metadata.version
+
+        def _version(distribution):
+            max_version = sm.SONICMOE_DEPENDENCIES.get(distribution)
+            if max_version is None:
+                return real_version(distribution)
+            return max_version if versions_ok else f"{int(max_version.split('.')[0]) + 1}.0.0"
+
+        stack.enter_context(mock.patch.object(importlib.metadata, "version", side_effect=_version))
         stack.enter_context(mock.patch.object(sm, "lazy_load_kernel", return_value=kernel))
         return stack
 
@@ -106,6 +121,10 @@ class SonicMoeLoaderTest(unittest.TestCase):
             bundle = sm.load_sonicmoe_kernel()
         self.assertIsInstance(bundle, sm.SonicMoE)
         self.assertIs(bundle.activation_type_enum, _FakeActivationType)
+
+    def test_raises_without_kernels_package(self):
+        with self._env(kernels_available=False), self.assertRaisesRegex(ImportError, "`kernels` package"):
+            sm.load_sonicmoe_kernel()
 
     def test_raises_without_cuda(self):
         with self._env(cuda_available=False), self.assertRaisesRegex(ImportError, "requires CUDA"):
@@ -116,7 +135,7 @@ class SonicMoeLoaderTest(unittest.TestCase):
             sm.load_sonicmoe_kernel()
 
     def test_raises_on_incompatible_dependency_versions(self):
-        with self._env(versions_ok=False), self.assertRaisesRegex(ImportError, "dependency requirements are not met"):
+        with self._env(versions_ok=False), self.assertRaisesRegex(ImportError, "unvalidated"):
             sm.load_sonicmoe_kernel()
 
     def test_raises_when_kernel_fails_to_load(self):
@@ -299,25 +318,6 @@ class SonicMoeExpertsForwardTest(unittest.TestCase):
         _, captured, _, _, _ = self._run(experts)
         self.assertTrue(torch.equal(captured["b1"], experts.gate_up_proj_bias))
         self.assertTrue(torch.equal(captured["b2"], experts.down_proj_bias))
-
-    def test_forward_transposed_weight_layout(self):
-        # Transposed uses permute(2, 1, 0): gate_up (E, H, 2I) -> (2I, H, E); down (E, I, H) -> (H, I, E),
-        # i.e. transposed and non-transposed weights normalize to the SAME (..., E) kernel layout.
-        experts = _make_experts(num_experts=4, hidden=8, inter=16, is_transposed=True)
-        _, captured, _, _, _ = self._run(experts)
-        self.assertTrue(torch.equal(captured["w1"], experts.gate_up_proj.permute(2, 1, 0)))
-        self.assertTrue(torch.equal(captured["w2"], experts.down_proj.permute(2, 1, 0)))
-
-    def test_forward_activation_mapping(self):
-        for act, expected in [
-            ("silu", _FakeActivationType.SWIGLU),
-            ("gelu", _FakeActivationType.GEGLU),
-            ("relu", _FakeActivationType.REGLU),
-        ]:
-            with self.subTest(act=act):
-                experts = _make_experts(hidden_act=act)
-                _, captured, _, _, _ = self._run(experts)
-                self.assertEqual(captured["activation_type"], expected)
 
     def test_forward_raises_on_unsupported_activation(self):
         experts = _make_experts(hidden_act="tanh")

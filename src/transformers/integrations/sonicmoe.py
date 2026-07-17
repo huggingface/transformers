@@ -20,14 +20,16 @@ Requirements: CUDA, `kernels`, `nvidia-cutlass-dsl`, has_gate=True.
 
 from __future__ import annotations
 
+import importlib.metadata
 from collections.abc import Callable
 from dataclasses import dataclass
 
 import torch
+from packaging import version
 
 from ..utils import logging
-from ..utils.versions import require_version
-from .hub_kernels import lazy_load_kernel
+from ..utils.import_utils import is_kernels_available
+from .hub_kernels import lazy_load_kernel, maybe_import_error
 from .tensor_parallel import to_local
 
 
@@ -36,9 +38,47 @@ logger = logging.get_logger(__name__)
 # Map activation function names from HF config to SonicMoE epilogue names
 ACT_MAP = {"silu": "swiglu", "gelu": "geglu", "relu": "reglu"}
 
-# Maximum supported versions of the sonic-moe build dependencies. Newer releases have not been
-# validated against the kernel and may break its CuteDSL / TVM FFI dispatch, so we refuse to load.
-DEPENDENCY_REQUIREMENTS = ["nvidia-cutlass-dsl<=4.5.2", "apache-tvm-ffi<=0.1.9"]
+# Max sonic-moe build-dependency versions: newer CuteDSL / TVM-FFI releases haven't been validated
+# against the kernel and may break its dispatch, so we refuse to load past them.
+SONICMOE_DEPENDENCIES = {"nvidia-cutlass-dsl": "4.5.2", "apache-tvm-ffi": "0.1.9"}
+
+
+def is_sonicmoe_loadable(raise_error: bool = False) -> bool:
+    """Whether the sonic-moe kernel can be loaded in this environment: `kernels` installed, a CUDA GPU on
+    Hopper (SM90) or newer, and `nvidia-cutlass-dsl` / `apache-tvm-ffi` no newer than the versions the
+    kernel was validated against (`SONICMOE_DEPENDENCIES`) — newer releases may break its CuteDSL / TVM
+    FFI dispatch. A one-glance gate for callers, including external stacks. With `raise_error=True` (used
+    by the loader) it re-raises the specific `ImportError` instead of returning `False`.
+    """
+    if not is_kernels_available():
+        return maybe_import_error(
+            "sonic-moe requires the `kernels` package. Use a different `experts_implementation`.",
+            raise_error=raise_error,
+        )
+    if not torch.cuda.is_available():
+        return maybe_import_error(
+            "sonic-moe kernel requires CUDA, but CUDA is not available. Use a different `experts_implementation`.",
+            raise_error=raise_error,
+        )
+    major = torch.cuda.get_device_capability()[0]
+    if major < 9:
+        return maybe_import_error(
+            f"sonic-moe requires a Hopper (SM90+) or newer GPU, but the current device has compute "
+            f"capability {major}.x. Use a different `experts_implementation`.",
+            raise_error=raise_error,
+        )
+    for distribution, max_version in SONICMOE_DEPENDENCIES.items():
+        try:
+            installed = importlib.metadata.version(distribution)
+        except importlib.metadata.PackageNotFoundError:
+            return maybe_import_error(f"sonic-moe requires `{distribution}`, but it is not installed.", raise_error=raise_error)
+        if version.parse(installed) > version.parse(max_version):
+            return maybe_import_error(
+                f"sonic-moe requires `{distribution}` <= {max_version} (newer versions are unvalidated), "
+                f"but {installed} is installed.",
+                raise_error=raise_error,
+            )
+    return True
 
 
 @dataclass(frozen=True)
@@ -74,33 +114,7 @@ def _load_sonicmoe_kernel() -> None:
     global _SONICMOE
     if _SONICMOE is not None:
         return
-
-    if not torch.cuda.is_available():
-        raise ImportError(
-            "sonic-moe kernel requires CUDA, but CUDA is not available. Use a different `experts_implementation`."
-        )
-
-    # sonic-moe requires Hopper (SM90) or newer
-    major = torch.cuda.get_device_capability()[0]
-    if major < 9:
-        raise ImportError(
-            f"sonic-moe requires a Hopper (SM90+) or newer GPU, but the current device "
-            f"has compute capability {major}.x. Use a different `experts_implementation`."
-        )
-
-    problems = []
-    for requirement in DEPENDENCY_REQUIREMENTS:
-        try:
-            require_version(requirement)
-        except ImportError as e:
-            problems.append(str(e))
-    if problems:
-        raise ImportError(
-            "sonic-moe dependency requirements are not met:\n"
-            + "\n".join(f"- {p}" for p in problems)
-            + "\nFix the versions above, or use a different `experts_implementation`."
-        )
-
+    is_sonicmoe_loadable(raise_error=True)
     kernel = lazy_load_kernel("sonic-moe")
     if kernel is None:
         raise ImportError(

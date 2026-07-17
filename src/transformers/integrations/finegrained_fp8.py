@@ -32,6 +32,7 @@ from .deepgemm import (
     deepgemm_fp8_fp4_experts_forward,
     deepgemm_fp8_fp4_linear,
     deepgemm_fp8_fp4_megamoe_experts_forward,
+    is_deepgemm_loadable,
 )
 from .hub_kernels import _MISSING_KERNELS_MESSAGE, lazy_load_kernel
 from .moe import ExpertsInterface, use_experts_implementation
@@ -251,9 +252,8 @@ def fp8_linear(
     # DeepGEMM linear off).
     deepgemm_preferred = (
         allow_deepgemm
+        and is_deepgemm_loadable()
         and activation_scale is None
-        and weight.device.type == "cuda"
-        and torch.cuda.get_device_properties().major >= 9
         and (weight.dtype == torch.int8 or (block_size is not None and block_size[0] == block_size[1] == 128))
         and os.environ.get("TRANSFORMERS_DISABLE_DEEPGEMM_LINEAR", "0") != "1"
     )
@@ -268,11 +268,16 @@ def fp8_linear(
                 activation_scale=activation_scale,
                 bias=bias,
             )
-        except ImportError as e:
-            # Forward the original reason so the user knows whether DeepGEMM is unavailable
-            # (env/build issue) or refused this specific input (e.g. multi-device on SM100).
+        except (ImportError, NotImplementedError, ValueError) as e:
+            # DeepGEMM is loadable but declined this specific input; fall back to Triton, which is more
+            # permissive (handles FP8/FP4 with float32 or UE8M0 scales on any arch, plus input dtypes
+            # DeepGEMM rejects). If Triton can't serve it either, it raises its own error.
+            #   - NotImplementedError: an arch/input combo DeepGEMM has no kernel for (FP4 on Hopper —
+            #     `is_deepgemm_loadable` is dtype-agnostic and passes there — or float32 scales on Blackwell);
+            #   - ValueError: an input DeepGEMM rejects but Triton supports (e.g. activations it won't quantize);
+            #   - ImportError: a symbol/build gap.
             logger.warning_once(
-                f"DeepGEMM unavailable for this call, falling back to Triton. Reason: {e} "
+                f"DeepGEMM declined this call, falling back to Triton. Reason: {e} "
                 "Set `TRANSFORMERS_DISABLE_DEEPGEMM_LINEAR=1` to skip DeepGEMM for FP8 linear entirely."
             )
 

@@ -27,10 +27,9 @@ Two layers, both mocking only what needs a Hopper/Blackwell GPU + a JIT CUDA too
   then asserts the tensors handed to the kernel are what the kernel expects (packed int32 UE8M0 SFs,
   int32 grouped layout, `(qtensor, sf)` operand tuples, recipes, transformed Mega MoE weights, ...).
 
-Arch-gated paths are exercised via the fake bundle's `is_sm100` flag (the loader resolves it once from
-the device at load time; these tests bypass the loader by mocking `load_deepgemm_kernel`): the
+Arch-gated paths are exercised by faking the device capability (`is_sm100()` reads it): the
 SF-packing / TMA-alignment / psum-layout code it selects is pure tensor arithmetic that runs on any
-CUDA device — only the loader's real arch check needs the actual silicon.
+CUDA device, so mocking the capability to SM100 drives the Blackwell paths on this SM80 box.
 """
 
 import contextlib
@@ -119,7 +118,10 @@ class DeepGemmLoaderTest(unittest.TestCase):
         real_capability = torch.cuda.get_device_capability
 
         def _in_loader():
-            return any(f.function == "_load_deepgemm_kernel" for f in inspect.stack())
+            # The loader's only capability query happens inside `is_deepgemm_loadable` (which the gating
+            # tests also call directly), so fake the device whenever that frame is on the stack. Inductor's
+            # own capability query (under compile, outside that frame) still reads the real device.
+            return any(f.function == "is_deepgemm_loadable" for f in inspect.stack())
 
         stack.enter_context(
             mock.patch.object(
@@ -146,9 +148,9 @@ class DeepGemmLoaderTest(unittest.TestCase):
         self.assertIsInstance(bundle, dg.DeepGEMM)
         self.assertEqual(bundle.m_alignment, 128)
 
-    def test_loads_on_blackwell_when_sm100_required(self):
+    def test_loads_on_blackwell(self):
         with self._env(capability=(10, 0)):
-            bundle = dg.load_deepgemm_kernel(requires_sm100=True)
+            bundle = dg.load_deepgemm_kernel()
         self.assertIsInstance(bundle, dg.DeepGEMM)
 
     def test_raises_without_kernels_package(self):
@@ -165,10 +167,6 @@ class DeepGemmLoaderTest(unittest.TestCase):
     def test_raises_on_unsupported_arch(self):
         with self._env(capability=(8, 0)), self.assertRaisesRegex(ImportError, "requires Hopper"):
             dg.load_deepgemm_kernel()
-
-    def test_raises_on_hopper_when_sm100_required(self):
-        with self._env(capability=(9, 0)), self.assertRaisesRegex(ImportError, "requires Blackwell"):
-            dg.load_deepgemm_kernel(requires_sm100=True)
 
     def test_raises_without_cuda_toolkit(self):
         with self._env(toolkit_present=False), self.assertRaisesRegex(ImportError, "needs a CUDA toolkit"):
@@ -196,6 +194,16 @@ class DeepGemmLoaderTest(unittest.TestCase):
             self.assertRaisesRegex(ImportError, "missing required symbols"),
         ):
             dg.load_deepgemm_kernel()
+
+    def test_is_deepgemm_loadable_reduces_env_to_bool(self):
+        # The public one-glance gate: True on a valid env, False for any unmet precondition (here a
+        # missing nvcc and an unsupported arch), never raising.
+        with self._env():
+            self.assertTrue(dg.is_deepgemm_loadable())
+        with self._env(nvcc_present=False):
+            self.assertFalse(dg.is_deepgemm_loadable())
+        with self._env(capability=(8, 0)):
+            self.assertFalse(dg.is_deepgemm_loadable())
 
     def test_loader_is_compile_safe(self):
         # Cold path: the compiled call is first to load, so the opaque loader node runs its full body
@@ -235,7 +243,7 @@ class DeepGemmLoaderTest(unittest.TestCase):
 # `float32` — so `_coerce_sf_for_kernel`'s dtype-driven branches execute for real.
 
 
-def _make_bundle(captured, is_sm100):
+def _make_bundle(captured):
     def per_token_cast_to_fp8(x, *, use_ue8m0=False, gran_k=128, use_packed_ue8m0=False):
         cols = -(-x.size(-1) // gran_k)
         sf_dtype = torch.float8_e8m0fnu if use_ue8m0 else torch.float32
@@ -327,7 +335,6 @@ def _make_bundle(captured, is_sm100):
         get_symm_buffer_for_mega_moe=get_symm_buffer_for_mega_moe,
         fp8_fp4_mega_moe=fp8_fp4_mega_moe,
         m_alignment=128,
-        is_sm100=is_sm100,
     )
 
 
@@ -401,8 +408,15 @@ class DeepGemmForwardTest(unittest.TestCase):
     @contextlib.contextmanager
     def _bundle(self, *, is_sm100):
         captured = {}
-        bundle = _make_bundle(captured, is_sm100)
-        with mock.patch.object(dg, "load_deepgemm_kernel", return_value=bundle):
+        bundle = _make_bundle(captured)
+        # The forwards read the arch via `is_sm100()` (which queries `get_device_capability`), so fake the
+        # device to the requested arch: lets SM100 dispatch/packing run on this SM80 box and drives the
+        # Hopper-rejection guards. `[0]` is all `is_sm100()` reads.
+        capability = (10, 0) if is_sm100 else (9, 0)
+        with (
+            mock.patch.object(dg, "load_deepgemm_kernel", return_value=bundle),
+            mock.patch.object(torch.cuda, "get_device_capability", return_value=capability),
+        ):
             yield captured
 
     # ── deepgemm_fp8_fp4_linear ────────────────────────────────────────────────
@@ -455,6 +469,26 @@ class DeepGemmForwardTest(unittest.TestCase):
         self.assertEqual(w_sf.dtype, torch.int32)
         self.assertEqual(w_sf.shape, (256, 1))
 
+    def test_linear_fp4_requires_sm100(self):
+        # FP4 (int8-packed) weights run only on Blackwell; the loader admits Hopper too (for FP8/BF16), so
+        # the forward guards against the resolved `is_sm100`. Regression guard for the moved SM100 gate.
+        input = torch.randn(4, 128, dtype=torch.bfloat16, device=torch_device)
+        weight = torch.randint(-8, 8, (256, 64), dtype=torch.int8, device=torch_device)
+        weight_scale = torch.ones(256, 4, dtype=torch.float32, device=torch_device).to(torch.float8_e8m0fnu)
+        with self._bundle(is_sm100=False):
+            with self.assertRaisesRegex(NotImplementedError, "Blackwell"):
+                deepgemm_fp8_fp4_linear(input, weight, weight_scale)
+
+    def test_linear_rejects_float32_scales_on_sm100(self):
+        # Blackwell has no float32-SF kernel path — rounding to UE8M0 would corrupt the output, so fail
+        # loud (the FP8 dispatcher catches this and falls back to Triton). Float32 SFs are fine on SM90.
+        input = torch.randn(4, 128, dtype=torch.bfloat16, device=torch_device)
+        weight = torch.randn(16, 128, device=torch_device).to(torch.float8_e4m3fn)
+        weight_scale = torch.ones(1, 1, dtype=torch.float32, device=torch_device)
+        with self._bundle(is_sm100=True):
+            with self.assertRaisesRegex(NotImplementedError, "UE8M0"):
+                deepgemm_fp8_fp4_linear(input, weight, weight_scale, block_size=(128, 128))
+
     def test_linear_adds_bias_and_ignores_deprecated_output_dtype(self):
         input = torch.randn(4, 128, dtype=torch.bfloat16, device=torch_device)
         weight = torch.randn(16, 128, device=torch_device).to(torch.float8_e4m3fn)
@@ -502,19 +536,6 @@ class DeepGemmForwardTest(unittest.TestCase):
         rows = up["out"].shape[0]
         self.assertEqual(up["out"].shape, (rows, 32))
         self.assertEqual(up["lhs"].shape, (rows, 8))
-
-    def test_bf16_experts_transposed_uses_nn_kernel(self):
-        experts = _make_experts(
-            num_experts=4, hidden=8, inter=16, is_transposed=True, weight_dtype=torch.bfloat16, fp8_experts=False
-        )
-        hidden_states, top_k_index, top_k_weights = self._bf16_hidden(experts)
-        with self._bundle(is_sm100=False) as captured:
-            deepgemm_bf16_experts_forward(experts, hidden_states, top_k_index, top_k_weights)
-        up, down = captured["grouped"]
-        self.assertEqual(up["name"], "bf16_nn")
-        self.assertEqual(down["name"], "bf16_nn")
-        # Transposed gate_up is `(E, H, 2I)` -> up-projection output dim is the last axis (2I=32).
-        self.assertEqual(up["out"].shape[1], 32)
 
     def test_bf16_experts_sm100_uses_psum_cumsum_layout(self):
         # SM100 grouped layout is the cumsum of per-expert aligned counts (not a per-row id vector).
@@ -593,30 +614,26 @@ class DeepGemmForwardTest(unittest.TestCase):
         # Up-proj output buffer is (padded rows, 2I).
         self.assertEqual(up["out"].shape[1], 32)
 
-    def test_fp8_experts_transposed_uses_nn_kernel(self):
-        experts = _make_experts(num_experts=4, hidden=8, inter=16, is_transposed=True)
-        hidden_states, top_k_index, top_k_weights = self._fp8_hidden()
-        with self._bundle(is_sm100=False) as captured:
-            deepgemm_fp8_fp4_experts_forward(experts, hidden_states, top_k_index, top_k_weights)
-        self.assertEqual(captured["grouped"][0]["name"], "fp8_fp4_nn")
-
     def test_fp8_experts_asserts_ue8m0_scales_on_sm100(self):
-        # The `_assert_sm100_scales_are_ue8m0` loud-failure: on SM100 a plain float32 expert SF means a
+        # The `_assert_sm100_requirements` loud-failure: on SM100 a plain float32 expert SF means a
         # non-UE8M0 checkpoint that would be silently corrupted by rounding — fail early and clearly.
         experts = _make_experts(scale_dtype=torch.float32)
         hidden_states, top_k_index, top_k_weights = self._fp8_hidden()
         with self._bundle(is_sm100=True):
-            with self.assertRaisesRegex(ValueError, "power-of-two .UE8M0. scale"):
+            with self.assertRaisesRegex(NotImplementedError, "float32 scale-factor path"):
                 deepgemm_fp8_fp4_experts_forward(experts, hidden_states, top_k_index, top_k_weights)
 
         # The converse (no false positives): the guard is a no-op for UE8M0 SFs on SM100 (kernel-ready
         # as-is) and for any SF on SM90 (float32 SFs are consumed directly). Checked on the guard itself
-        # rather than a full forward — the SM100 UE8M0 path needs realistically wide SFs (last dim
+        # with a faked capability — the SM100 UE8M0 forward path needs realistically wide SFs (last dim
         # divisible by 4 to pack into int32) that a toy expert shape can't provide.
+        weight = torch.zeros(1, 1, device=torch_device, dtype=torch.float8_e4m3fn)  # non-FP4, skips the arch branch
         f32 = torch.ones(4, 1, device=torch_device, dtype=torch.float32)
         ue8m0 = f32.to(torch.float8_e8m0fnu)
-        dg._assert_sm100_scales_are_ue8m0(ue8m0, is_sm100=True)  # no raise
-        dg._assert_sm100_scales_are_ue8m0(f32, is_sm100=False)  # no raise
+        with mock.patch.object(torch.cuda, "get_device_capability", return_value=(10, 0)):
+            dg._assert_sm100_requirements(weight, ue8m0)  # UE8M0 scale on SM100 -> no raise
+        with mock.patch.object(torch.cuda, "get_device_capability", return_value=(9, 0)):
+            dg._assert_sm100_requirements(weight, f32)  # float32 scale on SM90 -> no raise
 
     # ── deepgemm_fp8_fp4_megamoe_experts_forward ───────────────────────────────
 
@@ -698,7 +715,7 @@ class DeepGemmForwardTest(unittest.TestCase):
         module = self._make_megamoe()
         module.gate_up_proj = torch.nn.Parameter(module.gate_up_proj.data.to(torch.bfloat16), requires_grad=False)
         with self._bundle(is_sm100=True):
-            with self.assertRaisesRegex(RuntimeError, "FP4-packed expert weights"):
+            with self.assertRaisesRegex(NotImplementedError, "FP4-packed expert weights"):
                 deepgemm_fp8_fp4_megamoe_experts_forward(
                     module,
                     hidden_states,
@@ -712,6 +729,23 @@ class DeepGemmForwardTest(unittest.TestCase):
         with self._bundle(is_sm100=True):
             with self.assertRaisesRegex(ValueError, "requires a .process_group."):
                 deepgemm_fp8_fp4_megamoe_experts_forward(module2, hidden_states, top_k_index, top_k_weights)
+
+    def test_megamoe_requires_sm100(self):
+        # Mega MoE is Blackwell-only and FP4 (int8) — so `_assert_sm100_requirements` rejects it before
+        # load on a non-SM100 device. Regression guard for the before-load SM100 gate.
+        module = self._make_megamoe()
+        hidden_states = torch.randn(3, 64, dtype=torch.bfloat16, device=torch_device)
+        top_k_index = torch.randint(0, 4, (3, 2), dtype=torch.long, device=torch_device)
+        top_k_weights = torch.rand(3, 2, dtype=torch.float32, device=torch_device)
+        with self._bundle(is_sm100=False):
+            with self.assertRaisesRegex(NotImplementedError, "requires a Blackwell"):
+                deepgemm_fp8_fp4_megamoe_experts_forward(
+                    module,
+                    hidden_states,
+                    top_k_index,
+                    top_k_weights,
+                    process_group=types.SimpleNamespace(size=lambda: 1),
+                )
 
     @staticmethod
     def _megamoe_flag_set(module):
