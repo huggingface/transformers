@@ -49,6 +49,16 @@ on:
         required: false
         type: string
         default: main
+      correlation_id:
+        description: "Opaque id echoed into the run name so serge can find this run"
+        required: false
+        type: string
+        default: ""
+
+# The run name embeds the correlation id: a workflow_dispatch run's head_sha is
+# the ref (not serge's candidate commit), so serge correlates the run it just
+# dispatched by matching this id in the run name rather than by sha.
+run-name: "serge verify ${{ inputs.model }} ${{ inputs.machine_type }} [${{ inputs.correlation_id }}]"
 
 # Granted here and bound onto the reusable workflow's job token.
 permissions:
