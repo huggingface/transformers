@@ -150,7 +150,7 @@ class SequenceFeatureExtractor(FeatureExtractionMixin):
         if isinstance(first_element, (list, tuple)):
             # first_element might be an empty list/tuple in some edge cases so we grab the first non empty element.
             index = 0
-            while len(required_input[index]) == 0:
+            while index < len(required_input) and len(required_input[index]) == 0:
                 index += 1
             if index < len(required_input):
                 first_element = required_input[index][0]

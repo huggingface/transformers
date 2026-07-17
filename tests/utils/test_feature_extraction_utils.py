@@ -213,6 +213,25 @@ class BatchFeatureTester(unittest.TestCase):
         self.assertEqual(batch_fp16["tuple_tensors"][0].dtype, torch.float16)
 
 
+class SequenceFeatureExtractorPadTester(unittest.TestCase):
+    """Tests for SequenceFeatureExtractor.pad edge cases."""
+
+    def test_pad_all_empty_batch_does_not_raise(self):
+        # Regression test: when scanning for the first non-empty element, `pad` used an
+        # unbounded `while len(required_input[index]) == 0: index += 1` loop. If *every*
+        # element in the batch was an empty list, the index walked past the end and raised
+        # `IndexError` before the following `if index < len(required_input):` guard could run.
+        feature_extractor = Wav2Vec2FeatureExtractor(
+            feature_size=1, sampling_rate=16000, padding_value=0.0, return_attention_mask=False
+        )
+        input_name = feature_extractor.model_input_names[0]
+        processed_features = BatchFeature({input_name: [[], []]})
+
+        # Previously raised "IndexError: list index out of range".
+        padded = feature_extractor.pad(processed_features, padding="longest")
+        self.assertEqual(len(padded[input_name]), 2)
+
+
 class FeatureExtractorUtilTester(unittest.TestCase):
     def test_cached_files_are_used_when_internet_is_down(self):
         # A mock response for an HTTP head request to emulate server down
