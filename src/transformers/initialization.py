@@ -144,6 +144,13 @@ def orthogonal_(
     generator: torch.Generator | None = None,
 ) -> torch.Tensor:
     if not getattr(tensor, "_is_hf_initialized", False):
+        # The QR decomposition (`geqrf`) used by `torch.nn.init.orthogonal_` is only implemented for
+        # float32/float64, so for lower-precision dtypes we run the init in float32 and copy back
+        if tensor.is_floating_point() and torch.finfo(tensor.dtype).bits < 32:
+            fp32_tensor = torch.empty_like(tensor, dtype=torch.float32)
+            TORCH_INIT_FUNCTIONS["orthogonal_"](fp32_tensor, gain=gain, generator=generator)
+            with torch.no_grad():
+                return tensor.copy_(fp32_tensor)
         return TORCH_INIT_FUNCTIONS["orthogonal_"](tensor, gain=gain, generator=generator)
     return tensor
 
