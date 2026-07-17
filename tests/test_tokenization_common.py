@@ -1012,6 +1012,49 @@ Hey how are you doing"""  # noqa: W293
             tokenizer.apply_chat_template([], tokenize=False)
 
     @require_jinja
+    def test_chat_template_sanitize_special_tokens(self):
+        # This template just concatenates role + content, so it adds no special tokens of its own: any special
+        # token in the output must have come from the (user-supplied) content.
+        dummy_template = "{% for message in messages %}{{message['role'] + message['content']}}{% endfor %}"
+        tokenizer = self.get_tokenizer()
+        special_tokens = tokenizer.all_special_tokens
+        if not special_tokens:
+            self.skipTest("Tokenizer has no special tokens to test sanitization with")
+        special_token = special_tokens[0]
+
+        # Inject a raw special token, plus a nested "smuggle" that reconstructs the token after a single naive
+        # strip (prefix + full token + suffix), which only the fixpoint loop catches.
+        split = len(special_token) // 2
+        smuggled = special_token[:split] + special_token + special_token[split:]
+        conversation = [{"role": "user", "content": f"hello {special_token} {smuggled} world"}]
+
+        unsanitized = tokenizer.apply_chat_template(
+            conversation, chat_template=dummy_template, tokenize=False, return_dict=False
+        )
+        self.assertIn(special_token, unsanitized)  # by default the injected token survives
+
+        sanitized = tokenizer.apply_chat_template(
+            conversation,
+            chat_template=dummy_template,
+            tokenize=False,
+            sanitize_special_tokens=True,
+            return_dict=False,
+        )
+        self.assertNotIn(special_token, sanitized)  # sanitization removes it, including the smuggled copy
+
+        # Batched conversations are each sanitized
+        batched = tokenizer.apply_chat_template(
+            [conversation, conversation],
+            chat_template=dummy_template,
+            tokenize=False,
+            sanitize_special_tokens=True,
+            return_dict=False,
+        )
+        self.assertEqual(len(batched), 2)
+        for rendered in batched:
+            self.assertNotIn(special_token, rendered)
+
+    @require_jinja
     def test_chat_template_save_loading(self):
         tokenizer = self.get_tokenizer()
         signature = inspect.signature(tokenizer.__init__)
