@@ -77,6 +77,8 @@ class NeuCodecConfig(Xcodec2Config):
 
     model_type = "neucodec"
     input_sampling_rate: int = 16_000
+    output_sampling_rate: int = 24_000
+    sampling_rate = AttributeError()
 
     @property
     def encoder_hop_length(self) -> int:
