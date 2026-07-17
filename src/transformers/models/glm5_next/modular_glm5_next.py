@@ -18,10 +18,12 @@ from collections.abc import Callable
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from huggingface_hub.dataclasses import strict
 
 from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
+from ...configuration_utils import PreTrainedConfig
 from ...integrations import (
     use_kernel_forward_from_hub,
     use_kernel_func_from_hub,
@@ -37,6 +39,7 @@ from ...utils import TransformersKwargs, auto_docstring, logging
 from ...utils.output_capturing import OutputRecorder
 from ..deepseek_v3.modeling_deepseek_v3 import DeepseekV3MoE
 from ..glm4.modeling_glm4 import apply_rotary_pos_emb
+from ..glm_moe_dsa.configuration_glm_moe_dsa import GlmMoeDsaConfig
 from ..glm_moe_dsa.modeling_glm_moe_dsa import GlmMoeDsaAttention, GlmMoeDsaDecoderLayer, GlmMoeDsaIndexer
 from ..inkling.modeling_inkling import causal_conv1d_fn, causal_conv1d_update
 from ..llama.modeling_llama import (
@@ -49,10 +52,149 @@ from ..mixtral.modeling_mixtral import MixtralForCausalLM, MixtralModel
 from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeMLP
 from ..qwen3_5.modeling_qwen3_5 import Qwen3_5RMSNormGated
 from ..qwen3_next.modeling_qwen3_next import apply_mask_to_padding_states
-from .configuration_glm5_next import Glm5NextConfig
 
 
 logger = logging.get_logger(__name__)
+
+
+@auto_docstring(checkpoint="zai-org/GLM-5-Next")
+@strict
+class Glm5NextConfig(GlmMoeDsaConfig):
+    r"""
+    n_group (`int`, *optional*, defaults to 1):
+        Number of routed expert groups.
+    swiglu_limit (`float`, *optional*, defaults to None):
+        Clamp limit applied to SwiGLU gate/up projections.
+    linear_head_dim (`int`, *optional*, defaults to 64):
+        Dimension of each head in linear attention.
+    linear_num_heads (`int`, *optional*, defaults to 40):
+        Number of heads used in linear attention layers.
+    linear_conv_kernel_dim (`int`, *optional*, defaults to 4):
+        Kernel size of the convolution used in linear attention layers.
+    linear_lower_bound (`float`, *optional*, defaults to None):
+        Whether the forget gate has a lower bound to apply to the decay.
+    index_head_dim (`int`, *optional*, defaults to 128):
+        DSA indexer projection head dimension.
+    index_n_heads (`int`, *optional*, defaults to 16):
+        Number of DSA indexer heads.
+    index_topk (`int`, *optional*, defaults to 2048):
+        Number of sparse-attention positions selected by the DSA indexer.
+    index_kpool (`int`, *optional*, defaults to 16):
+        Pool size of the compressed token groups selected by the DSA indexer.
+    index_kpool_always_select_tail (`bool`, *optional*, defaults to `True`):
+        Whether the incomplete KPool tail is always included in sparse attention.
+    indexer_types (`list[str]`, *optional*):
+        Per-layer DSA indexer mode. Values are `"full"` or `"shared"`.
+    mlp_layer_types (`list[str]`, *optional*):
+        Per-layer feed-forward schedule. Values are `"dense"` or `"sparse"`.
+    layer_types (`list[str]`, *optional*):
+        Per-layer attention cache schedule. Values are `"linear_attention"` for
+        KDA layers and `"deepseek_sparse_attention"` for MLA layers.
+    """
+
+    model_type = "glm5_next"
+
+    num_hidden_layers: int = 45
+    max_position_embeddings: int = 1_048_676
+
+    hidden_size: int = 2048
+    intermediate_size: int = 6144
+    num_attention_heads: int = 32
+    num_key_value_heads: int = 32
+    q_lora_rank: int = 1024
+
+    swiglu_limit: float | None = None
+    linear_head_dim: int = 64
+    linear_num_heads: int = 40
+    linear_conv_kernel_dim: int = 4
+    linear_lower_bound: float | None = None
+
+    index_n_heads: int = 16
+    index_kpool: int = 16
+    index_kpool_always_select_tail: bool = True
+
+    moe_intermediate_size: int = 1024
+    num_experts_per_tok: int = 6
+    output_router_logits: bool = False
+    router_aux_loss_coef: float = 0.001
+
+    bos_token_id: int | None = None
+    eos_token_id: int | list[int] | None = None
+    pad_token_id: int | None = 154820
+
+    first_k_dense_replace = AttributeError()
+
+    def __post_init__(self, **kwargs):
+        if self.num_key_value_heads is None:
+            self.num_key_value_heads = self.num_attention_heads
+
+        if self.mlp_layer_types is None:
+            self.mlp_layer_types = ["dense"] * min(3, self.num_hidden_layers) + ["sparse"] * (
+                self.num_hidden_layers - 3
+            )
+
+        if self.layer_types is None:
+            kda_layers = [idx for idx in range(self.num_hidden_layers) if idx % 4 != 3]
+            self.layer_types = [
+                "linear_attention" if layer_idx in kda_layers else "deepseek_sparse_attention"
+                for layer_idx in range(self.num_hidden_layers)
+            ]
+
+        # Convert to dsa layer from full attention
+        self.layer_types = [
+            "deepseek_sparse_attention" if layer_type == "full_attention" else layer_type
+            for layer_type in self.layer_types
+        ]
+
+        # Per-layer indexer mode: a pattern (e.g. `"FSSF..."`) overrides the freq/offset schedule.
+        if self.indexer_types is None:
+            pattern = kwargs.get("index_topk_pattern")
+            if pattern is not None:
+                self.indexer_types = (
+                    [{"F": "full", "S": "shared"}[c] for c in pattern] if isinstance(pattern, str) else list(pattern)
+                )
+            else:
+                freq = max(kwargs.get("index_topk_freq", 1), 1)
+                offset = kwargs.get("index_skip_topk_offset", 2)
+                self.indexer_types = [
+                    "full" if (max(i - offset + 1, 0) % freq) == 0 else "shared" for i in range(self.num_hidden_layers)
+                ]
+
+        # Convert dict to attributes (if given)
+        linear_attn_dict = kwargs.pop("linear_attn_config", None)
+        if linear_attn_dict is not None:
+            self.linear_head_dim = linear_attn_dict.get("head_dim", self.linear_head_dim)
+            self.linear_num_heads = linear_attn_dict.get("num_heads", self.linear_num_heads)
+            self.linear_conv_kernel_dim = linear_attn_dict.get("short_conv_kernel_size", self.linear_conv_kernel_dim)
+            self.linear_lower_bound = linear_attn_dict.get("lower_bound", self.linear_lower_bound)
+
+            # Additional lower bound logic as per original dict
+            if linear_attn_dict.get("safe_gate", False) and self.linear_lower_bound is None:
+                self.linear_lower_bound = -5.0
+
+        # NOTE: this forces an intentional override as we have the convention of head_dim being the RoPE based dim
+        kwargs.pop("head_dim", None)
+        self.head_dim = self.qk_rope_head_dim
+        self.qk_head_dim = self.qk_rope_head_dim + self.qk_nope_head_dim
+
+        PreTrainedConfig.__post_init__(self, **kwargs)
+
+    def validate_architecture(self):
+        """Part of `@strict`-powered validation. Validates the architecture of the config."""
+        if self.num_attention_heads % self.num_key_value_heads != 0:
+            raise ValueError(
+                f"num_attention_heads ({self.num_attention_heads}) must be divisible by "
+                f"num_key_value_heads ({self.num_key_value_heads})."
+            )
+
+        if self.index_kpool < 1:
+            raise ValueError(f"index_kpool must be positive, got {self.index_kpool}.")
+
+        if self.index_topk % self.index_kpool != 0:
+            raise ValueError(f"index_topk ({self.index_topk}) must be divisible by index_kpool ({self.index_kpool}).")
+
+        if self.q_lora_rank is None:
+            raise ValueError("For DSA usage in the attention layers, the `q_lora_rank` is strictly required!")
 
 
 class Glm5NextRMSNorm(LlamaRMSNorm):
@@ -1123,6 +1265,7 @@ class Glm5NextForCausalLM(MixtralForCausalLM):
 
 
 __all__ = [
+    "Glm5NextConfig",
     "Glm5NextPreTrainedModel",
     "Glm5NextModel",
     "Glm5NextForCausalLM",
