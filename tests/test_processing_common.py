@@ -59,8 +59,8 @@ MODALITY_INPUT_DATA = {
         "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/coco_sample.png",
     ],
     "videos": [
-        "https://huggingface.co/datasets/raushan-testing-hf/videos-test/resolve/main/Big_Buck_Bunny_720_10s_10MB.mp4",
-        "https://huggingface.co/datasets/raushan-testing-hf/videos-test/resolve/main/sample_demo_1.mp4",
+        "https://huggingface.co/datasets/hf-internal-testing/test-videos/resolve/main/big_buck_bunny_320x240_10s.mp4",
+        "https://huggingface.co/datasets/hf-internal-testing/test-videos/resolve/main/sample_demo_1_320x240.mp4",
     ],
     "audio": [
         "https://huggingface.co/datasets/raushan-testing-hf/audio-test/resolve/main/glass-breaking-151256.mp3",
@@ -79,7 +79,6 @@ def prepare_image_inputs():
     return image_inputs
 
 
-# Copied from tests.models.whisper.test_feature_extraction_whisper.floats_list
 def floats_list(shape, scale=1.0, rng=None, name=None):
     """Creates a random float32 tensor"""
     if rng is None:
@@ -98,9 +97,13 @@ def floats_list(shape, scale=1.0, rng=None, name=None):
 @require_vision
 class ProcessorTesterMixin:
     processor_class = None
-    model_id = (
-        None  # Optional: set this to load from a specific pretrained model instead of creating generic components
-    )
+    # Optional: set this to a real Hub repo containing a complete set of processor files
+    # (tokenizer, image processor, etc.) so all components can be loaded via from_pretrained.
+    model_id = None
+    # Optional: set this to a Hub repo containing a complete set of processor files where some
+    # components represent a tiny version (e.g. a tokenizer with a trimmed vocab) for
+    # memory-sensitive tests. Must be a real Hub repo with all components loadable via from_pretrained.
+    tiny_model_id = None
     text_input_name = "input_ids"
     images_input_name = "pixel_values"
     videos_input_name = "pixel_values_videos"
@@ -139,34 +142,63 @@ class ProcessorTesterMixin:
             )
 
         cls.tmpdirname = tempfile.mkdtemp()
+        cls.full_tmpdirname = None
 
-        # If model_id is specified, load components from that model
-        if cls.model_id is not None:
-            processor = cls._setup_from_pretrained(cls.model_id)
+        if cls.tiny_model_id is not None:
+            # tiny_model_id is set: tmpdirname holds the lightweight processor (used by all tests),
+            # full_tmpdirname holds the full processor (used only by tests that call get_processor(use_tiny_ckpt=False)).
+            tiny_processor = cls._setup_from_pretrained(cls.tiny_model_id)
+            cls._setup_test_attributes(tiny_processor)
+            tiny_processor.save_pretrained(cls.tmpdirname)
+
+            # If model_id is specified, load the full processor into full_tmpdirname.
+            # If model_id is None, no full processor is needed: full_tmpdirname stays None,
+            # and get_processor(use_tiny_ckpt=False) will fall back to tmpdirname (tiny).
+            if cls.model_id is not None:
+                cls.full_tmpdirname = tempfile.mkdtemp()
+                full_processor = cls._setup_from_pretrained(cls.model_id)
+                # TODO: make this more robust. We intentionally do NOT call _setup_test_attributes(full_processor)
+                # here because it would overwrite the class attributes already set from tiny_processor (e.g.
+                # image_token, video_token, audio_token). We assume these special tokens are identical between
+                # the tiny and full processor — but this is not guaranteed: if the tiny tokenizer is built
+                # differently (e.g. missing special tokens or using different token strings), cls.image_token
+                # etc. will silently reflect the wrong values for tests that use the full processor.
+                full_processor.save_pretrained(cls.full_tmpdirname)
         else:
-            # Otherwise, create generic components
-            processor = cls._setup_from_components()
-
-        # setup test attributes
-        cls._setup_test_attributes(processor)
-        processor.save_pretrained(cls.tmpdirname)
+            # No tiny_model_id: tmpdirname holds the only processor.
+            # If model_id is specified, load components from that model
+            if cls.model_id is not None:
+                processor = cls._setup_from_pretrained(cls.model_id)
+            else:
+                # Otherwise, create generic components
+                processor = cls._setup_from_components()
+            # setup test attributes
+            cls._setup_test_attributes(processor)
+            processor.save_pretrained(cls.tmpdirname)
 
     @classmethod
     def _setup_test_attributes(cls, processor):
-        # to override in the child class to define class attributes
-        # such as image_token, video_token, audio_token, etc.
-        pass
+        # can be overriden in the child class to define more class attributes
+        for token_attr in ("image_token", "video_token", "audio_token"):
+            token = getattr(processor, token_attr, None)
+            if token is not None:
+                setattr(cls, token_attr, token)
 
     @classmethod
     def _setup_from_pretrained(cls, model_id, **kwargs):
-        """Load all components from a pretrained model."""
+        """Load all components from model_id to build the processor.
 
+        If any component is provided via a _setup_<attribute>() hook, all remaining components
+        are loaded individually from model_id so that processor_class.__init__ receives a complete
+        set of components (all must be passed together when any one is customized).
+        """
         # check if there are any custom components to setup
         custom_components = {}
         for attribute in cls.processor_class.get_attributes():
             if hasattr(cls, f"_setup_{attribute}"):
                 custom_method = getattr(cls, f"_setup_{attribute}")
                 custom_components[attribute] = custom_method()
+
         # if there is one custom component, we need to add all the other ones (with from_pretrained)
         if custom_components:
             for attribute in cls.processor_class.get_attributes():
@@ -347,19 +379,26 @@ class ProcessorTesterMixin:
         """Clean up the temporary directory."""
         if hasattr(cls, "tmpdirname"):
             shutil.rmtree(cls.tmpdirname, ignore_errors=True)
+        if hasattr(cls, "full_tmpdirname") and cls.full_tmpdirname is not None:
+            shutil.rmtree(cls.full_tmpdirname, ignore_errors=True)
 
     @staticmethod
     def prepare_processor_dict():
         """Override this method to provide custom kwargs for processor initialization."""
         return {}
 
-    def get_component(self, attribute, **kwargs):
+    def get_component(self, attribute, use_tiny_ckpt=True, **kwargs):
+        # use_tiny_ckpt only has effect when tiny_model_id is set. In that case, tmpdirname holds the
+        # lightweight processor and full_tmpdirname holds the full one. If tiny_model_id is not set,
+        # tmpdirname already contains the full processor loaded from cls.model_id, and calling this
+        # function with use_tiny_ckpt=True still returns a full processor.
+        dirpath = self.tmpdirname if (use_tiny_ckpt or self.full_tmpdirname is None) else self.full_tmpdirname
         if attribute not in MODALITY_TO_AUTOPROCESSOR_MAPPING and "tokenizer" in attribute:
             auto_processor_class = MODALITY_TO_AUTOPROCESSOR_MAPPING["tokenizer"]
-            component = auto_processor_class.from_pretrained(self.tmpdirname, subfolder=attribute, **kwargs)  # noqa
+            component = auto_processor_class.from_pretrained(dirpath, subfolder=attribute, **kwargs)  # noqa
         else:
             auto_processor_class = MODALITY_TO_AUTOPROCESSOR_MAPPING[attribute]
-            component = auto_processor_class.from_pretrained(self.tmpdirname, **kwargs)  # noqa
+            component = auto_processor_class.from_pretrained(dirpath, **kwargs)  # noqa
         if "tokenizer" in attribute and not component.pad_token:
             component.pad_token = "[TEST_PAD]"
             if component.pad_token_id is None:
@@ -375,9 +414,14 @@ class ProcessorTesterMixin:
 
         return components
 
-    def get_processor(self):
-        processor = self.processor_class.from_pretrained(self.tmpdirname)
-        return processor
+    def get_processor(self, use_tiny_ckpt=True):
+        # use_tiny_ckpt only has effect when tiny_model_id is set. In that case, tmpdirname holds the
+        # lightweight processor and full_tmpdirname holds the full one. If tiny_model_id is not set,
+        # tmpdirname already contains the full processor loaded from cls.model_id, and calling this
+        # function with use_tiny_ckpt=True still returns a full processor.
+        if not use_tiny_ckpt and self.full_tmpdirname is not None:
+            return self.processor_class.from_pretrained(self.full_tmpdirname)
+        return self.processor_class.from_pretrained(self.tmpdirname)
 
     def prepare_text_inputs(self, batch_size: int | None = None, modalities: str | list | None = None):
         if isinstance(modalities, str):
@@ -1755,7 +1799,7 @@ class ProcessorTesterMixin:
                         {
                             "type": "video",
                             "url": url_to_local_path(
-                                "https://huggingface.co/datasets/raushan-testing-hf/videos-test/resolve/main/tiny_video.mp4"
+                                "https://huggingface.co/datasets/hf-internal-testing/test-videos/resolve/main/tiny_video_320x240.mp4"
                             ),
                         },
                         {"type": "text", "text": "What is shown in this video?"},
@@ -1885,7 +1929,7 @@ class ProcessorTesterMixin:
             self.skipTest(f"feature_extractor attribute not present in {self.processor_class}")
 
         video_file_path = hf_hub_download(
-            repo_id="raushan-testing-hf/videos-test", filename="sample_demo_1.mp4", repo_type="dataset"
+            repo_id="hf-internal-testing/test-videos", filename="sample_demo_1_320x240.mp4", repo_type="dataset"
         )
         messages = [
             {
@@ -2081,7 +2125,8 @@ class ProcessorTesterMixin:
         for h, w in image_sizes:
             image_inputs.append(np.random.randint(255, size=(h, w, 3), dtype=np.uint8))
 
-        text = [f"This is an image {getattr(self, 'image_token', '')}"] * len(image_inputs)
+        image_token = getattr(self, "image_token", "")
+        text = [f"This is an image {image_token}"] * len(image_inputs)
         inputs = processor(
             text=text, images=image_inputs, padding=True, return_mm_token_type_ids=True, return_tensors="pt"
         )
@@ -2092,3 +2137,17 @@ class ProcessorTesterMixin:
         num_image_tokens_from_call = inputs.mm_token_type_ids.sum(-1).tolist()
         num_image_tokens_from_helper = processor._get_num_multimodal_tokens(image_sizes=image_sizes)
         self.assertListEqual(num_image_tokens_from_call, num_image_tokens_from_helper["num_image_tokens"])
+
+        # Test with two images per single text
+        text = [f"These are two images {image_token}{image_token}"] * len(image_inputs)
+        inputs = processor(
+            text=text,
+            images=image_inputs * 2,
+            padding=True,
+            return_mm_token_type_ids=True,
+            return_tensors="pt",
+        )
+
+        num_image_tokens_from_call = inputs.mm_token_type_ids.sum(-1).tolist()
+        num_image_tokens_from_helper = processor._get_num_multimodal_tokens(image_sizes=image_sizes * 2)
+        self.assertEqual(sum(num_image_tokens_from_call), sum(num_image_tokens_from_helper["num_image_tokens"]))

@@ -50,11 +50,13 @@ else:
     MISSING_PROCESSOR_MAPPING_NAMES = OrderedDict(
         [
             ("aimv2", "CLIPProcessor"),
+            ("diffusion_gemma", "Gemma4Processor"),
             ("edgetam", "Sam2Processor"),
             ("glm4v_moe", "Glm4vProcessor"),
             ("granite_speech_plus", "GraniteSpeechProcessor"),
             ("groupvit", "CLIPProcessor"),
             ("hubert", "Wav2Vec2Processor"),
+            ("inkling_mm_model", "InklingProcessor"),
             ("lasr_ctc", "LasrProcessor"),
             ("lasr_encoder", "LasrProcessor"),
             ("metaclip_2", "CLIPProcessor"),
@@ -62,6 +64,9 @@ else:
             ("mm-grounding-dino", "GroundingDinoProcessor"),
             ("modernvbert", "Idefics3Processor"),
             ("moonshine", "Wav2Vec2Processor"),
+            ("parakeet_ctc", "ParakeetProcessor"),
+            ("parakeet_rnnt", "ParakeetProcessor"),
+            ("parakeet_tdt", "ParakeetProcessor"),
             ("qwen3_5", "Qwen3VLProcessor"),
             ("qwen3_5_moe", "Qwen3VLProcessor"),
             ("qwen3_vl_moe", "Qwen3VLProcessor"),
@@ -301,7 +306,7 @@ class AutoProcessor:
         explicit_local_code = has_local_code and not (
             processor_class or PROCESSOR_MAPPING[type(config)]
         ).__module__.startswith("transformers.")
-        if has_remote_code:
+        if not has_local_code and has_remote_code:
             if "--" in processor_auto_map:
                 upstream_repo = processor_auto_map.split("--")[0]
             else:

@@ -77,6 +77,7 @@ def _register_model_output_pytree_node(output_type: type[ModelOutput]) -> None:
         _model_output_flatten,
         partial(_model_output_unflatten, output_type=output_type),
         serialized_type_name=f"{output_type.__module__}.{output_type.__name__}",
+        flatten_with_keys_fn=torch_pytree._dict_flatten_with_keys,
     )
     _registered_model_output_types.add(output_type)
 
@@ -263,10 +264,10 @@ def is_mlx_array(x) -> bool:
 
 
 def is_flash_attention_requested(
-    config=None, requested_attention_implementation: str | None = None, version: int | None = None
+    config=None, requested_attention_implementation: str | None = None, version: int | list[int] | None = None
 ) -> bool:
     """
-    Checks whether some flavor of flash attention is requested or not. Optionally, checks for a specific version of
+    Checks whether some flavor of flash attention is requested or not. Optionally, checks for specific versions of
     flash attention.
 
     This is checked against one of the two arguments, i.e. either the `config` or the directly passed value
@@ -293,7 +294,10 @@ def is_flash_attention_requested(
 
     # If a specific version is requested, look for a pattern of type "flash...{version}"
     if version is not None:
-        return re.match(r".*flash.*" + str(version), checked_attention_implementation) is not None
+        if isinstance(version, int):
+            version = [version]
+        return any(re.match(r".*flash.*" + str(v), checked_attention_implementation) is not None for v in version)
+
     # Otherwise, just check "flash" is in the attention implementation
     return "flash" in checked_attention_implementation
 

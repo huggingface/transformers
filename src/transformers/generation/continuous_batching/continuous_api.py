@@ -19,7 +19,6 @@ import threading
 from abc import abstractmethod
 from collections.abc import Callable, Generator
 from contextlib import contextmanager, nullcontext
-from math import ceil
 from time import perf_counter
 from typing import Any
 
@@ -30,12 +29,14 @@ from tqdm.contrib.logging import logging_redirect_tqdm
 
 from ...configuration_utils import PretrainedConfig
 from ...generation.configuration_utils import ContinuousBatchingConfig, GenerationConfig
+from ...utils.generic import is_flash_attention_requested
+from ...utils.import_utils import is_flash_attn_2_available, is_flash_attn_3_available
 from ...utils.logging import logging
 from ..logits_process import LogitsProcessorList
 from .cache import PagedAttentionCache
 from .cb_logits_processors import ContinuousBatchingLogitsProcessorList
 from .distributed import DistributedHelper
-from .initialization import resolve_continuous_batching_config
+from .initialization import resolve_continuous_batching_config, update_cb_config_after_cache_creation
 from .input_outputs import ContinuousBatchingAsyncIOs, ContinuousBatchingIOs
 from .model_runner import ModelRunner
 from .offloading_manager import OffloadingManager
@@ -61,7 +62,6 @@ memory and time to create, we use an LRU cache with a fixed size to limit memory
 - Q: 64 tokens gives ~4 graphs for max_batch_tokens=256, which is a good balance
 - KV: 8192 tokens (256 blocks at block_size=32) gives reasonable granularity for large caches
 
-The maximum number of cached graphs is controlled by max_cached_graphs (default 32), which uses LRU eviction.
 All defaults are stored in ContinuousBatchingConfig.resolve_sentinel_values().
 """
 
@@ -250,24 +250,19 @@ class ContinuousBatchProcessor:
         self.max_batch_tokens = cache.max_batch_tokens
 
         # Setup inputs and outputs
-        use_cuda_graph_varlen, _ = self.cb_config.cuda_graph_booleans
         io_kwargs = {
             "cache": cache,
             "config": config,
+            "continuous_batching_config": continuous_batching_config,
             "device": model_device,
             "model_dtype": model_dtype,
-            "return_logprobs": self.return_logprobs,
             "logit_processor": self.logit_processor,
-            "use_cuda_graph_varlen": use_cuda_graph_varlen,
         }
         self.use_async_batching = self.cb_config.use_async_batching
 
         if self.use_async_batching:
-            # Since in async there are 2 IO pairs, there are also 2 graph buffers: we divide the max_cached_graphs by 2
-            io_kwargs["max_graphs"] = ceil(self.cb_config.max_cached_graphs / 2)
             self.inputs_and_outputs = ContinuousBatchingAsyncIOs(**io_kwargs)
         else:
-            io_kwargs["max_graphs"] = self.cb_config.max_cached_graphs
             self.inputs_and_outputs = ContinuousBatchingIOs(**io_kwargs)
 
         # Offloading manager: handles CPU offloading, soft reset, and restoration
@@ -277,6 +272,7 @@ class ContinuousBatchProcessor:
             cpu_offload_space_gib=continuous_batching_config.cpu_offload_space,
             safety_threshold=continuous_batching_config.cpu_offload_space_safety_threshold,
             compute_stream=self.inputs_and_outputs.compute_stream,
+            distributed_helper=self.distributed_helper,
         )
 
         # Setup the model runner
@@ -381,32 +377,47 @@ class ContinuousBatchProcessor:
         requests_in_batch, use_decode_fast_path, num_q_tokens, max_kv_read = self.scheduler.schedule_batch(
             self.max_batch_tokens, self.cache.num_pages
         )
-        # If requests_in_batch is None, it means we need to offload some requests if possible
-        if requests_in_batch is None:
-            if len(self.scheduler.active_requests) > 1:
-                self.offloading_manager.offload_one_request()
-                return False
-            else:
-                raise RuntimeError("No requests can be scheduled and no request can be offloaded.")
-        # If it's an empty list, it means we have no requests to process
+
+        # If requests_in_batch is None, it means the cache is full and no requests can be scheduled. We loop over active
+        # requests and offload enough so that the remaining ones can all be scheduled. The loop is necessary because of
+        # prefix sharing: offloading a fully shared request has 0 impact. Its termination is guaranteed.
+        while requests_in_batch is None:
+            # Stop case: no request can be offloaded.
+            if self.offloading_manager.offload_requests() == 0:
+                raise RuntimeError("No requests can be scheduled and no requests can be offloaded.")
+            # Otherwise, the loop has offloaded at least one request, and we try scheduling again.
+            requests_in_batch, use_decode_fast_path, num_q_tokens, max_kv_read = self.scheduler.schedule_batch(
+                self.max_batch_tokens, self.cache.num_pages
+            )
+
+        # If requests_in_batch is an empty list, it means we have no requests to process anymore
         if not requests_in_batch:
             return False
+        # If some active requests could not get new blocks, offload enough of them so it won't happen again next batch
+        if self.scheduler.starved_requests:
+            self.offloading_manager.offload_requests()  # NOTE: this only offload non-scheduled requests
 
         # Restore any CPU-offloaded requests that were just scheduled
         self.offloading_manager.restore_scheduled_requests(requests_in_batch)
 
         # Otherwise, we can continue with the non-empty batch and log in the dimensions before padding
-        logger.debug(
-            f"Scheduled: {len(requests_in_batch)}, Waiting: {len(self.scheduler.waiting_requests)}, "
-            f"Active: {len(self.scheduler.active_requests)}. cum Q: {num_q_tokens}. "
-            f"cum KV: {max_kv_read}, free blocks: {self.cache.get_num_free_blocks()}"
-        )
+        if logger.isEnabledFor(logging.DEBUG):
+            logger.debug(
+                f"Scheduled: {len(requests_in_batch)}, Waiting: {len(self.scheduler.waiting_requests)}, "
+                f"Active: {len(self.scheduler.active_requests)}. cum Q: {num_q_tokens}. "
+                f"cum KV: {max_kv_read}, free blocks: {self.cache.get_num_free_blocks()}"
+            )
 
         # If inputs are static sized, eg. for compile, we find the padded sizes of the queries and keys/values
         num_q_tokens, max_kv_read = self.model_runner.maybe_pad_inputs(num_q_tokens, max_kv_read, use_decode_fast_path)
 
         self.inputs_and_outputs.prepare_batch_tensors(
-            requests_in_batch, self.logit_processor, use_decode_fast_path, num_q_tokens, max_kv_read
+            requests_in_batch=requests_in_batch,
+            logits_processors=self.logit_processor,
+            use_decode_fast_path=use_decode_fast_path,
+            num_q_tokens=num_q_tokens,
+            max_kv_read=max_kv_read,
+            use_padding=self.model_runner.pad_inputs,
         )
         return True
 
@@ -582,7 +593,7 @@ class ContinuousBatchingManager:
 
         # Model-related attributes
         self._original_attn_impl = None  # needs to be set before the model is switched to paged attention
-        self.switch_to_paged_attn(model)
+        self.switch_to_cb_friendly_attn(model)
         self.model = model.eval()
 
         # Generation config related attributes
@@ -617,11 +628,39 @@ class ContinuousBatchingManager:
         # This is an approximation until the cache is created: it will infer the correct value in cache.__init__
         self._use_prefix_sharing = self.continuous_batching_config.allow_block_sharing
 
-    def switch_to_paged_attn(self, model: ProtoPretrainedModel) -> None:
-        """Switch to the paged version of the attention implementation. If the attn is already paged, does nothing."""
-        if "paged|" not in model.config._attn_implementation:
-            self._original_attn_impl = model.config._attn_implementation
-            model.set_attn_implementation(f"paged|{model.config._attn_implementation}")
+    def switch_to_cb_friendly_attn(self, model: ProtoPretrainedModel) -> None:
+        """Switch the attn implementation to one that is CB friendly: try to find a flash implementation if flash is
+        requested and, in any cases, switch to a paged implementation."""
+        # The self._original_attn_impl is set only if the attn implementation is changed (makes this fn idempotent)
+        original_attn_impl = model.config._attn_implementation
+        target_implem = original_attn_impl
+
+        # Check if flash attention is supported and available
+        is_flash = is_flash_attention_requested(requested_attention_implementation=target_implem)
+        is_paged = "paged|" in target_implem
+        if not is_flash and not is_paged and model._supports_flash_attn:
+            # Try to use FA3, then FA2, then give up. Both regular package or kernels is fine.
+            if is_flash_attn_3_available(kernels_fallback_ok=True):
+                version = 3
+            elif is_flash_attn_2_available(kernels_fallback_ok=True):
+                version = 2
+            else:
+                version = None
+            # Change and warn
+            msg = "Continuous batching is much better when using flash attention."
+            if version is not None:
+                target_implem = f"flash_attention_{version}"  # no "paged|" prefix here to enter the branch below
+                logger.warning(
+                    f"{msg} Switching from {original_attn_impl} to {target_implem}. "
+                    "If you need to use eager or sdpa, use paged|eager or paged|sdpa as the `attn_implementation`."
+                )
+            else:
+                logger.warning(f"{msg} Consider using a flash `attn_implementation` when loading the model.")
+
+        # Switch to a paged implementation (always entered if conversion to flash happened)
+        if "paged|" not in target_implem:
+            model.set_attn_implementation(f"paged|{target_implem}")
+            self._original_attn_impl = original_attn_impl
 
     def warmup(self) -> None:
         """Pre-capture CUDA graphs for varlen and decode paths by running dummy batches. Initializes the batch
@@ -967,18 +1006,32 @@ class ContinuousBatchingManager:
             tp_plan=getattr(self.model, "tp_plan", {}),
             dtype=self.model.dtype,
         )
-        self._use_prefix_sharing = paged_attention_cache.use_prefix_sharing  # update the approximation
+        # Update the approximation now that we know if there is prefix sharing
+        self._use_prefix_sharing = paged_attention_cache.use_prefix_sharing
+        # And update continuous batching config now that we have concrete values
+        update_cb_config_after_cache_creation(
+            cb_config=self.continuous_batching_config,
+            num_blocks=paged_attention_cache.num_blocks,
+            max_batch_tokens=paged_attention_cache.max_batch_tokens,
+            use_prefix_sharing=self._use_prefix_sharing,
+        )
 
         # Disable the decode path if the model has sliding window attention (TODO)
         if paged_attention_cache.num_sliding_attention_groups > 0:
             self.continuous_batching_config.max_blocks_per_request = 0
 
-        # Create the scheduler
+        # Retrieve the scheduler class
         scheduler_type = self.continuous_batching_config.scheduler_type
-        scheduler = SCHEDULER_MAPPING.get(scheduler_type, None)
-        if scheduler is None:
+        scheduler_cls = SCHEDULER_MAPPING.get(scheduler_type, None)
+        if scheduler_cls is None:
             logger.warning(f"Scheduler '{scheduler_type}' not found. Defaulting to FIFO.")
-            scheduler = FIFOScheduler
+            scheduler_cls = FIFOScheduler
+        # Instantiate the actual scheduler
+        scheduler = scheduler_cls(
+            cache=paged_attention_cache,
+            safety_margin=self.continuous_batching_config.safety_margin,
+            max_requests_per_batch=self.continuous_batching_config.max_requests_per_batch,
+        )
 
         # Create the batch processor
         batch_processor = ContinuousBatchProcessor(
@@ -993,7 +1046,7 @@ class ContinuousBatchingManager:
             background_thread_status=self.background_thread_status,
             model_device=self.model.device,
             model_dtype=self.model.dtype,
-            scheduler=scheduler(paged_attention_cache),
+            scheduler=scheduler,
             distributed_helper=self.distributed_helper,
         )
         return batch_processor
@@ -1067,7 +1120,7 @@ class ContinuousMixin:
                 "Cached continuous batching manager found: it will be re-used instead of creating a new one. If you"
                 " want to create a new manager, you should call `destroy_cached_continuous_batching_manager` first."
             )
-            cached_manager.switch_to_paged_attn(self)  # might have switched in .stop
+            cached_manager.switch_to_cb_friendly_attn(self)  # might have switched in .stop
             return cached_manager
 
         # Retrieve generation config
@@ -1188,7 +1241,14 @@ class ContinuousMixin:
         workload_hints = WorkloadHints(
             max_prompt_length=max(len(input_ids) for input_ids in inputs),
             max_generated_length=max_new_tokens if max_new_tokens is not None else 0,
+            num_requests=num_requests,
         )
+        if persistent_manager:
+            logger.warning(
+                "Since you passed `persistent_manager=True`, the manager will be kept alive after the generation is "
+                "finished. However, it was sized specifically for the requests passed in `generate_batch`. If you plan "
+                "to reuse the manager for a very different workload, you might want to create a new manager instead."
+            )
 
         # Prepare context managers for the main loop
         manager_cm = self.continuous_batching_context_manager(
