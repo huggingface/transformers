@@ -1,0 +1,79 @@
+name: serge verify (GPU)
+
+# Caller workflow — delegates to the reusable serge-verify-slow workflow in
+# transformers-ci, which runs a serge failure group's targeted @slow tests on a
+# GPU twice (pre-patch baseline, then serge's candidate) and emits a verdict
+# artifact. serge triggers this via workflow_dispatch and polls the
+# `serge-verify-result-*` artifact before deciding whether to open its fix PR.
+#
+# GitHub only lets identities with write access to this repo run
+# workflow_dispatch, so the dispatch permission is itself the maintainer gate —
+# same reasoning as nightly-integration-failure-triage-caller.yml. No extra
+# allow-list is needed. This runs LLM-generated patch code on GPU, exactly like
+# `run-slow` on a PR, and carries only the read-only HF token.
+
+on:
+  workflow_dispatch:
+    inputs:
+      base_sha:
+        description: "Pre-patch commit — targeted tests MUST be red here (baseline-red guard)"
+        required: true
+        type: string
+      commit_sha:
+        description: "serge's candidate commit — targeted tests should be green here"
+        required: true
+        type: string
+      test_nodeids:
+        description: "Space-separated pytest node-ids for the group"
+        required: true
+        type: string
+      model:
+        description: "Model folder for the optional collateral suite, e.g. `whisper`"
+        required: true
+        type: string
+      machine_type:
+        description: "GPU runner group"
+        required: true
+        type: choice
+        options:
+          - aws-g5-4xlarge-cache
+          - aws-g5-12xlarge-cache
+        default: aws-g5-12xlarge-cache
+      run_collateral:
+        description: "Also run the full tests/models/<model> slow suite on both trees"
+        required: false
+        type: boolean
+        default: false
+      transformersci_ref:
+        description: "Ref of transformers-ci to install the verdict tool from"
+        required: false
+        type: string
+        default: main
+      correlation_id:
+        description: "Opaque id echoed into the run name so serge can find this run"
+        required: false
+        type: string
+        default: ""
+
+# The run name embeds the correlation id: a workflow_dispatch run's head_sha is
+# the ref (not serge's candidate commit), so serge correlates the run it just
+# dispatched by matching this id in the run name rather than by sha.
+run-name: "serge verify ${{ inputs.model }} ${{ inputs.machine_type }} [${{ inputs.correlation_id }}]"
+
+# Granted here and bound onto the reusable workflow's job token.
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    if: github.repository == 'huggingface/transformers'
+    uses: huggingface/transformers-ci/.github/workflows/serge-verify-slow.yml@main # main
+    with:
+      base_sha: ${{ inputs.base_sha }}
+      commit_sha: ${{ inputs.commit_sha }}
+      test_nodeids: ${{ inputs.test_nodeids }}
+      model: ${{ inputs.model }}
+      machine_type: ${{ inputs.machine_type }}
+      run_collateral: ${{ inputs.run_collateral }}
+      transformersci_ref: ${{ inputs.transformersci_ref }}
+    secrets: inherit
