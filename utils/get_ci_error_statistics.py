@@ -24,6 +24,8 @@ def _rate_limit_wait(response, attempt):
         may still be non-zero) and often ships no ``Retry-After`` header, only a body message like
         "You have exceeded a secondary rate limit". This is the one that breaks daily CI reporting
         when it walks the ~24 pages of a large run's jobs, so it must be detected by body too.
+
+    see https://docs.github.com/en/rest/using-the-rest-api/rate-limits-for-the-rest-api
     """
     if response.status_code not in (403, 429):
         return None
