@@ -963,7 +963,15 @@ def _build_checkpoint_conversion_mapping():
                 source_patterns=r"\.moe\.router_bias$",
                 target_patterns=".mlp.gate.e_score_correction_bias",
             ),
+            # A plain `WeightRenaming`, so FP8's `update_weight_conversions` won't auto-extend it
+            # with a `weight_scale_inv` sibling the way it does for the `gate_up_proj`
+            # `WeightConverter` below — the explicit rename right after this one covers that instead.
             WeightRenaming(source_patterns=r"\.moe\.down_proj\.weight$", target_patterns=".mlp.experts.down_proj"),
+            # `down_proj`'s FP8 dequant scale; not auto-added since the rename above isn't a `WeightConverter`.
+            WeightRenaming(
+                source_patterns=r"\.moe\.down_proj\.weight_scale_inv$",
+                target_patterns=".mlp.experts.down_proj_scale_inv",
+            ),
             WeightRenaming(source_patterns=r"\.share_expert\.", target_patterns=".mlp.shared_experts."),
             # ---- Tensor operations (run after all renames) ----
             # Vision in_proj_weight → q/k/v split (Chunk dim=0 into 3 equal parts).

@@ -106,7 +106,10 @@ def _run_original_forward(
     missing, unexpected = orig_model.load_state_dict(state_dict, strict=False)
     if missing or unexpected:
         print(f"  [original-code] missing={len(missing)} unexpected={len(unexpected)} keys")
-    orig_model.eval()
+    orig_model.eval().to(input_ids.device)
+
+    if getattr(orig_cfg, "quantization_config", None) is not None:
+        _cast_non_quantized_params_to_bf16(orig_model)
 
     # Non-persistent buffers (e.g. RoPE freqs_cache) are not saved in the
     # checkpoint and may be left as uninitialized memory when from_pretrained
@@ -116,7 +119,7 @@ def _run_original_forward(
 
     for module in orig_model.modules():
         if isinstance(module, EncoderRope2D):
-            cache = module._compute_2d_freqs()
+            cache = module._compute_2d_freqs().to(input_ids.device)
             module.register_buffer("freqs_cache", cache, persistent=False)
 
     with torch.no_grad():
@@ -129,7 +132,24 @@ def _run_original_forward(
         )
         orig_pv = orig_model.lm_head(out.last_hidden_state)
 
-    return {"text_logits": orig_text, "pv_logits": orig_pv}
+    return {"text_logits": orig_text.cpu(), "pv_logits": orig_pv.cpu()}
+
+
+def _cast_non_quantized_params_to_bf16(model) -> None:
+    """Cast every float32 parameter to bf16, except fp8 weights (already fp8, untouched by this
+    dtype check anyway) and their `*scale_inv` buffers (must stay fp32 for dequant precision, as
+    on a real checkpoint).
+
+    Works around two gaps that mean neither model ends up in bf16 on its own for a quantized mini
+    checkpoint: `convert_step3p7_weights_to_hf.convert_checkpoint` doesn't preserve the source
+    `dtype` field (converted config.json always says float32), and separately, `from_pretrained`
+    doesn't appear to honor an explicit `dtype=` for a quantized model's *non*-quantized
+    parameters (they load as float32 regardless). The original-code class has no `from_pretrained`
+    dtype resolution at all, so it needs this unconditionally.
+    """
+    for name, param in model.named_parameters():
+        if param.dtype == torch.float32 and "scale_inv" not in name:
+            param.data = param.data.to(torch.bfloat16)
 
 
 def _compare(label: str, ref: dict[str, torch.Tensor], got: dict[str, torch.Tensor]) -> bool:
@@ -183,15 +203,24 @@ def main() -> None:
 
     print(f"Loading model from {model_dir} ...")
     cfg = Step3p7Config.from_pretrained(model_dir)
-    model = Step3p7ForConditionalGeneration.from_pretrained(model_dir, config=cfg).eval()
+    # FP8 checkpoints (`quantization_config` set) run their matmuls through a Triton/CUDA kernel
+    # that can't operate on CPU tensors, so put everything on GPU whenever one's available and a
+    # quantized checkpoint is being tested; plain-precision mini checkpoints run fine either way.
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    model = Step3p7ForConditionalGeneration.from_pretrained(model_dir, config=cfg, dtype="auto").eval().to(device)
+    if getattr(cfg, "quantization_config", None) is not None:
+        # The FP8 kernel path requires bf16/fp16 activations, but non-quantized parameters load as
+        # float32 regardless of the requested `dtype` for a quantized model -- see
+        # `_cast_non_quantized_params_to_bf16`'s docstring.
+        _cast_non_quantized_params_to_bf16(model)
 
     torch.manual_seed(args.seed)
-    input_ids = torch.randint(0, cfg.text_config.vocab_size, (1, 16))
-    ids_with_image = torch.randint(0, cfg.text_config.vocab_size, (1, 16))
+    input_ids = torch.randint(0, cfg.text_config.vocab_size, (1, 16), device=device)
+    ids_with_image = torch.randint(0, cfg.text_config.vocab_size, (1, 16), device=device)
     ids_with_image[0, 8] = cfg.image_token_id
     torch.manual_seed(args.seed + 1)
     pixel_values = torch.randn(
-        1, cfg.vision_config.num_channels, cfg.vision_config.image_size, cfg.vision_config.image_size
+        1, cfg.vision_config.num_channels, cfg.vision_config.image_size, cfg.vision_config.image_size, device=device
     )
 
     with torch.no_grad():
@@ -200,7 +229,7 @@ def main() -> None:
             input_ids=ids_with_image, pixel_values=pixel_values, num_local_patches=[0], use_cache=False
         ).logits
 
-    current = {"text_logits": new_text, "pv_logits": new_pv}
+    current = {"text_logits": new_text.cpu(), "pv_logits": new_pv.cpu()}
     torch.save(current, debug_path / "logits.pt")
     print(f"Logits saved → {debug_path}/logits.pt")
 

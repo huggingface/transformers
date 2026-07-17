@@ -104,7 +104,9 @@ class Step3p7TextConfig(PreTrainedConfig):
         `layer_types=["full_attention", "sliding_attention", "sliding_attention", "sliding_attention", "full_attention"]`
         (5 entries: 4 real layers + 1 MTP layer) is trimmed to
         `["full_attention", "sliding_attention", "sliding_attention", "sliding_attention"]` (the
-        trailing MTP entry is dropped).
+        trailing MTP entry is dropped). Persisted as `self.num_nextn_predict_layers` (rather than
+        only consumed here and discarded) so `Step3p7TextModel` can compute which trailing layer
+        indices are MTP layers at load time, instead of a hardcoded checkpoint-specific range.
     rope_theta (`float | list[float]`, *optional*, defaults to 10000.0):
         Legacy hub-config kwarg. Real checkpoints give one value *per decoder layer* rather than one
         value for the whole model; since it only ever varies by `layer_types[layer_idx]`, this is
@@ -222,6 +224,7 @@ class Step3p7TextConfig(PreTrainedConfig):
         # `num_hidden_layers`. E.g. `num_hidden_layers=4, num_nextn_predict_layers=1`: an incoming
         # 5-entry `layer_types` (4 real layers + 1 MTP) is trimmed to just the 4 real layers.
         num_nextn_predict_layers = kwargs.pop("num_nextn_predict_layers", 0)
+        self.num_nextn_predict_layers = num_nextn_predict_layers
         if num_nextn_predict_layers:
             n, padded = self.num_hidden_layers, self.num_hidden_layers + num_nextn_predict_layers
             trimmed_fields = []
@@ -324,11 +327,6 @@ class Step3p7Config(PreTrainedConfig):
         if self.vision_config is None:
             self.vision_config = Step3p7VisionConfig()
         elif isinstance(self.vision_config, dict):
-            # Drop a stray `model_type` from the incoming dict (e.g. from a checkpoint built off
-            # the original vendor config, whose vision sub-config class has its own `model_type`)
-            # before constructing — otherwise it overrides `Step3p7VisionConfig`'s own model_type
-            # as a plain instance attribute, breaking the "step3p5_vision"-scoped conversion mapping
-            # lookup used when loading real checkpoints.
             self.vision_config = Step3p7VisionConfig(
                 **{k: v for k, v in self.vision_config.items() if k != "model_type"}
             )
