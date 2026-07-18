@@ -18,6 +18,7 @@ from __future__ import annotations
 import math
 
 import torch
+import torch.nn.functional as F
 from torch import nn
 
 from ... import initialization as init
@@ -31,6 +32,7 @@ from ...modeling_utils import PreTrainedModel
 from ...models.deepseek_v3.modeling_deepseek_v3 import DeepseekV3MoE, DeepseekV3TopkRouter
 from ...models.jamba.modeling_jamba import JambaAttention
 from ...models.llama.modeling_llama import LlamaRMSNorm
+from ...models.mamba2.modeling_mamba2 import pad_tensor_by_size, reshape_into_chunks, segment_sum
 from ...models.nemotron.modeling_nemotron import NemotronMLP
 from ...models.zamba.modeling_zamba import ZambaForCausalLM
 from ...models.zamba2.modeling_zamba2 import Zamba2MambaMixer, Zamba2RMSNormGated
@@ -101,6 +103,215 @@ class NemotronHMamba2Mixer(Zamba2MambaMixer):
 
         return self.torch_forward(hidden_states, cache_params, attention_mask)
 
+    # fmt: off
+    def torch_forward(
+        self,
+        input_states,
+        cache_params: Cache | None = None,
+        attention_mask: torch.Tensor | None = None,
+    ):
+        """
+        Override of Zamba2MambaMixer.torch_forward that fixes two bugs on the slow
+        (no-kernel) path:
+
+        1. **Inter-chunk SSM recurrence** (step 3): the inherited implementation
+           permutes ``states`` to reduce over the wrong axis, producing incorrect
+           output and SSM cache states whenever the sequence spans more than one
+           chunk or when generation continues from a non-empty SSM cache.  The
+           correct form – matching canonical Mamba2 (``modeling_mamba2.py``, fixed
+           in #35154) – transposes ``decay_chunk`` instead and reduces over
+           ``dim=1``.
+
+        2. **``dt`` clamping**: the inherited code calls
+           ``torch.clamp(dt, self.time_step_min)`` (one-sided lower bound only),
+           introducing a spurious floor on the slow path that the CUDA-kernel path
+           does not apply.  The correct call uses ``self.time_step_limit`` (a
+           2-tuple) to match the kernel path.
+
+        See issue #47246 for the full analysis and a self-contained reproduction.
+        """
+        batch_size, seq_len, _ = input_states.shape
+        dtype = input_states.dtype
+
+        # 1. Gated MLP's linear projection
+        if cache_params is not None and cache_params.has_previous_state(self.layer_idx):
+            projected_states = self.in_proj(input_states)
+        else:
+            if attention_mask is not None:
+                # tune out hidden states for pad tokens, see https://github.com/state-spaces/mamba/issues/66
+                input_states = (input_states * attention_mask[:, :, None]).to(dtype)
+            projected_states = self.in_proj(input_states)
+
+        d_mlp = (
+            projected_states.shape[-1]
+            - 2 * self.intermediate_size
+            - 2 * self.n_groups * self.ssm_state_size
+            - self.num_heads
+        ) // 2
+        _, _, gate, hidden_states, dt = projected_states.split(
+            [d_mlp, d_mlp, self.intermediate_size, self.conv_dim, self.num_heads], dim=-1
+        )
+        hidden_states = hidden_states.transpose(1, 2)
+
+        use_precomputed_state = (
+            cache_params is not None and cache_params.has_previous_state(self.layer_idx)
+        )
+        if use_precomputed_state:
+            conv_state = cache_params.layers[self.layer_idx].conv_states[0]
+
+        # 2. Convolution sequence transformation
+        if use_precomputed_state and seq_len == 1:
+            conv_states = cache_params.update_conv_state(hidden_states, self.layer_idx)[..., -self.conv_kernel_size:]
+            hidden_states = torch.sum(conv_states * self.conv1d.weight[:, 0, :], dim=-1)
+            if self.use_conv_bias:
+                hidden_states = hidden_states + self.conv1d.bias
+            hidden_states = self.act(hidden_states).to(dtype)[:, None, ...]  # [batch, 1, intermediate_size]
+        else:
+            if use_precomputed_state:
+                # chunked prefill / speculative verify: prepend cached left context
+                hidden_states = torch.cat([conv_state, hidden_states], dim=-1)
+            if cache_params is not None:
+                conv_states = F.pad(
+                    hidden_states, (self.conv_kernel_size - hidden_states.shape[-1], 0)
+                )
+                conv_states = cache_params.update_conv_state(conv_states, self.layer_idx)[..., -self.conv_kernel_size:]
+            hidden_states = self.act(
+                self.conv1d(hidden_states)[..., :hidden_states.shape[-1]].transpose(1, 2)
+            )
+            if use_precomputed_state:
+                hidden_states = hidden_states[:, -seq_len:, :]
+            if attention_mask is not None:
+                dtype = hidden_states.dtype
+                # tune out hidden states for pad tokens
+                hidden_states = (hidden_states * attention_mask[:, :, None]).to(dtype)
+
+        hidden_states, B, C = torch.split(
+            hidden_states,
+            [self.intermediate_size, self.n_groups * self.ssm_state_size, self.n_groups * self.ssm_state_size],
+            dim=-1,
+        )
+        A = -torch.exp(self.A_log.float())  # [num_heads]
+
+        # 3. SSM transformation
+        if use_precomputed_state and seq_len == 1:
+            # Single-step decode path
+            dt = dt[:, None, ...] if dt.ndim == 2 else dt[:, 0, :][:, None, ...]
+            dt = dt.transpose(1, 2).expand(batch_size, dt.shape[-1], self.head_dim)
+            dt_bias = self.dt_bias[..., None].expand(self.dt_bias.shape[0], self.head_dim)
+            dt = F.softplus(dt + dt_bias.to(dt.dtype))
+            # FIX 2: clamp with full time_step_limit (2-tuple) to match cuda_kernels_forward
+            dt = torch.clamp(dt, self.time_step_limit[0], self.time_step_limit[1])
+            A = A[..., None, None].expand(self.num_heads, self.head_dim, self.ssm_state_size).to(dtype=torch.float32)
+            dA = torch.exp(dt[..., None] * A)
+            # Discretize B
+            B = B.reshape(batch_size, self.n_groups, -1)[..., None, :]
+            B = B.expand(batch_size, self.n_groups, self.num_heads // self.n_groups, B.shape[-1]).contiguous()
+            B = B.reshape(batch_size, -1, B.shape[-1])
+            dB = dt[..., None] * B[..., None, :]
+            # Discretize x into dB
+            hidden_states = hidden_states.reshape(batch_size, -1, self.head_dim)
+            dBx = dB * hidden_states[..., None]
+            # State update
+            ssm_states = cache_params.layers[self.layer_idx].recurrent_states[0].clone()
+            ssm_states = ssm_states * dA + dBx
+            ssm_states = cache_params.update_recurrent_state(ssm_states, self.layer_idx)
+            # Output
+            C = C.reshape(batch_size, self.n_groups, -1)[..., None, :]
+            C = C.expand(batch_size, self.n_groups, self.num_heads // self.n_groups, C.shape[-1]).contiguous()
+            C = C.reshape(batch_size, -1, C.shape[-1])
+            ssm_states = ssm_states.to(C.dtype)
+            ssm_states_reshaped = ssm_states.view(batch_size * self.num_heads, self.head_dim, self.ssm_state_size)
+            C_reshaped = C.view(batch_size * self.num_heads, self.ssm_state_size, 1)
+            y = torch.bmm(ssm_states_reshaped, C_reshaped)
+            y = y.view(batch_size, self.num_heads, self.head_dim)
+            D = self.D[..., None].expand(self.D.shape[0], self.head_dim)
+            y = (y + hidden_states * D).to(y.dtype)
+            y = y.reshape(batch_size, -1)[:, None, ...]
+        else:
+            # Prefill path: chunked SSD naive implementation
+            dt = F.softplus(dt + self.dt_bias)
+            # FIX 2: clamp with full time_step_limit (2-tuple) to match cuda_kernels_forward
+            dt = torch.clamp(dt, self.time_step_limit[0], self.time_step_limit[1])
+            hidden_states = hidden_states.reshape(batch_size, seq_len, -1, self.head_dim).float()
+            B = B.reshape(batch_size, seq_len, -1, self.ssm_state_size).float()
+            C = C.reshape(batch_size, seq_len, -1, self.ssm_state_size).float()
+            B = B.repeat_interleave(self.num_heads // self.n_groups, dim=2, output_size=self.num_heads)
+            C = C.repeat_interleave(self.num_heads // self.n_groups, dim=2, output_size=self.num_heads)
+            pad_size = (self.chunk_size - seq_len % self.chunk_size) % self.chunk_size
+
+            D_residual = self.D[..., None] * pad_tensor_by_size(hidden_states, pad_size)
+
+            # Discretize x and A
+            hidden_states = hidden_states * dt[..., None]
+            A = A.to(hidden_states.dtype) * dt
+
+            # Rearrange into blocks/chunks
+            hidden_states, A, B, C = [
+                reshape_into_chunks(t, pad_size, self.chunk_size)
+                for t in (hidden_states, A, B, C)
+            ]
+
+            # [bsz, -1, chunk_size, num_heads] -> [bsz, num_heads, -1, chunk_size]
+            A = A.permute(0, 3, 1, 2)
+            A_cumsum = torch.cumsum(A, dim=-1)
+
+            # Step 1: Intra-chunk output (diagonal blocks)
+            L = torch.exp(segment_sum(A))
+            G_intermediate = C[:, :, :, None, :, :] * B[:, :, None, :, :, :]  # (b, c, l, s, h, n)
+            G = G_intermediate.sum(dim=-1)  # (b, c, l, s, h)
+            M_intermediate = G[..., None] * L.permute(0, 2, 3, 4, 1)[..., None]
+            M = M_intermediate.sum(dim=-1)
+            Y_diag = (M[..., None] * hidden_states[:, :, None]).sum(dim=3)
+
+            # Step 2: Per-chunk states (right term of off-diagonal factorization; B terms)
+            decay_states = torch.exp(A_cumsum[:, :, :, -1:] - A_cumsum)
+            B_decay_contraction = B * decay_states.permute(0, 2, 3, 1)[..., None]
+            states = (
+                B_decay_contraction.permute(0, 1, 3, 2, 4)[..., None]
+                * hidden_states.permute(0, 1, 3, 2, 4)[..., None, :]
+            ).sum(dim=3).permute(0, 1, 2, 4, 3)
+            previous_states = (
+                cache_params.layers[self.layer_idx].recurrent_states[0][:, None].to(
+                    dtype=states.dtype, device=states.device
+                )
+                if use_precomputed_state
+                else torch.zeros_like(states[:, :1])
+            )
+            states = torch.cat([previous_states, states], dim=1)
+
+            # Step 3: Inter-chunk SSM recurrence (middle term; A terms)
+            # FIX 1: transpose decay_chunk over dim (1,3) and reduce over dim=1,
+            # matching canonical Mamba2 (#35154).  The inherited Zamba2 code
+            # instead permutes `states` (dims 1↔2) and reduces over dim=2, which
+            # collapses the wrong axis and produces incorrect outputs whenever
+            # num_chunks > 1 or the SSM cache is non-zero.
+            decay_chunk = torch.exp(segment_sum(F.pad(A_cumsum[:, :, :, -1], (1, 0))))
+            decay_chunk = decay_chunk.transpose(1, 3)
+            new_states = (decay_chunk[..., None, None] * states[:, :, None, ...]).sum(dim=1)
+            states, ssm_state = new_states[:, :-1], new_states[:, -1]
+
+            # Step 4: State → output (left term of off-diagonal factorization; C terms)
+            state_decay_out = torch.exp(A_cumsum)
+            C_times_states = C[..., None, :] * states[:, :, None, ...]
+            state_decay_out_permuted = state_decay_out.permute(0, 2, 3, 1)
+            Y_off = C_times_states.sum(-1) * state_decay_out_permuted[..., None]
+
+            # Combine intra-chunk and inter-chunk contributions
+            y = Y_diag + Y_off
+            # [bsz, -1, chunk_size, num_heads, head_dim] -> [bsz, (padded) seq_len, num_heads, head_dim]
+            y = y.reshape(batch_size, -1, self.num_heads, self.head_dim)
+            y = y + D_residual
+            if pad_size > 0:
+                y = y[:, :seq_len, :, :]
+            y = y.reshape(batch_size, seq_len, -1)
+            if ssm_state is not None and cache_params is not None:
+                cache_params.update_recurrent_state(ssm_state, self.layer_idx)
+
+        scan_output = self.norm(y, gate)
+        contextualized_states = self.out_proj(scan_output.to(dtype))
+        return contextualized_states
+    # fmt: on
+
 
 class NemotronHRMSNorm(LlamaRMSNorm):
     pass
@@ -108,7 +319,7 @@ class NemotronHRMSNorm(LlamaRMSNorm):
 
 class NemotronHMLP(NemotronMLP, nn.Module):
     def __init__(self, config, intermediate_size=None, **kwargs):
-        nn.Module.__init__()
+        nn.Module.__init__(self)
         self.config = config
         self.hidden_size = config.hidden_size
         self.intermediate_size = intermediate_size or config.intermediate_size
@@ -366,7 +577,7 @@ class NemotronHPreTrainedModel(PreTrainedModel):
         if self.config.rescale_prenorm_residual:
             # Reinitialize selected weights subject to the OpenAI GPT-2 Paper Scheme:
             #   > A modified initialization which accounts for the accumulation on the residual path with model depth. Scale
-            #   > the weights of residual layers at initialization by a factor of 1/√N where N is the # of residual layers.
+            #   > the weights of residual layers at initialization by a factor of 1/sqrt(N) where N is the # of residual layers.
             #   >   -- GPT-2 :: https://openai.com/blog/better-language-models/
             #
             # Reference (Megatron-LM): https://github.com/NVIDIA/Megatron-LM/blob/main/megatron/model/gpt_model.py
