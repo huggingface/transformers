@@ -25,6 +25,8 @@ from transformers.models.glm5_next_vl.configuration_glm5_next_vl import Glm5Next
 from transformers.models.glm_ocr.configuration_glm_ocr import GlmOcrVisionConfig
 from transformers.testing_utils import (
     require_torch,
+    require_torch_accelerator,
+    slow,
     torch_device,
 )
 
@@ -108,7 +110,9 @@ class Glm5NextVLVisionText2TextModelTester(VLMModelTester):
         mm_token_type_ids[:, 1 : 1 + self.num_image_tokens] = 1
         patches_per_side = self.image_size // self.patch_size
         return {
-            "image_grid_thw": torch.tensor([[1, patches_per_side, patches_per_side]] * self.batch_size, device=torch_device),
+            "image_grid_thw": torch.tensor(
+                [[1, patches_per_side, patches_per_side]] * self.batch_size, device=torch_device
+            ),
             "mm_token_type_ids": mm_token_type_ids,
         }
 
@@ -321,3 +325,14 @@ class Glm5NextVLModelTest(VLMModelTest, unittest.TestCase):
                     text_config.hidden_size,
                 ),
             )
+
+    @unittest.skip("MLA creates different head dims which avoids invoking the FA backend")
+    def test_sdpa_can_dispatch_on_flash(self):
+        pass
+
+
+@require_torch_accelerator
+@slow
+@unittest.skip(reason="No model weights yet, add after release")
+class Glm5NextVLIntegrationTest(unittest.TestCase):
+    pass
