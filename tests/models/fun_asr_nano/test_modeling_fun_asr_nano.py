@@ -127,7 +127,7 @@ class FunAsrNanoForConditionalGenerationModelTest(ALMModelTest, unittest.TestCas
 
     model_tester_class = FunAsrNanoModelTester
     pipeline_model_mapping = {}
-    model_split_percents = [0.5, 0.8, 0.9]
+    model_split_percents = [0.5, 0.83, 0.9]
 
     # The adaptor pools/flattens the audio embeddings, so `get_audio_features().pooler_output` is not the standard
     # `(batch, seq, hidden)` shape the common test expects.
