@@ -250,7 +250,7 @@ class Cosmos3EdgeVideoProcessor(BaseVideoProcessor):
                 merge_size,
                 patch_size,
             )
-            patches = patches.permute(0, 1, 3, 6, 4, 7, 2, 5, 8)
+            patches = patches.permute(0, 1, 3, 6, 4, 7, 5, 8, 2)
             processed_videos_grouped[shape] = patches.reshape(
                 batch_size, grid_t * grid_height * grid_width, channels * patch_size * patch_size
             )

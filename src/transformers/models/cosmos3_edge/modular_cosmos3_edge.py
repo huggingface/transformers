@@ -1093,7 +1093,7 @@ class Cosmos3EdgeImageProcessor(TorchvisionBackend):
                 merge_size,
                 patch_size,
             )
-            patches = patches.permute(1, 4, 2, 5, 0, 3, 6).reshape(grid_height * grid_width, -1)
+            patches = patches.permute(1, 4, 2, 5, 3, 6, 0).reshape(grid_height * grid_width, -1)
 
             pixel_values.append(patches)
             image_grids.append((1, grid_height, grid_width))
@@ -1226,7 +1226,7 @@ class Cosmos3EdgeImageProcessorPil(PilBackend):
                 merge_size,
                 patch_size,
             )
-            patches = patches.transpose(1, 4, 2, 5, 0, 3, 6).reshape(grid_height * grid_width, -1)
+            patches = patches.transpose(1, 4, 2, 5, 3, 6, 0).reshape(grid_height * grid_width, -1)
 
             pixel_values.append(patches)
             image_grids.append((1, grid_height, grid_width))
@@ -1471,7 +1471,7 @@ class Cosmos3EdgeVideoProcessor(BaseVideoProcessor):
                 merge_size,
                 patch_size,
             )
-            patches = patches.permute(0, 1, 3, 6, 4, 7, 2, 5, 8)
+            patches = patches.permute(0, 1, 3, 6, 4, 7, 5, 8, 2)
             processed_videos_grouped[shape] = patches.reshape(
                 batch_size, grid_t * grid_height * grid_width, channels * patch_size * patch_size
             )
