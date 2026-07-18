@@ -1028,7 +1028,7 @@ class Glm5NextVLTextModel(Glm5NextVLPreTrainedModel):
         )
         self.norm = Glm5NextVLTextRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.gradient_checkpointing = False
-        self.hc_head = Glm5NextVLTextHyperHead(config)
+        self.hc_head = Glm5NextVLTextHyperHead()
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1103,7 +1103,7 @@ class Glm5NextVLModel(Glm5NextVLPreTrainedModel):
 
     def __init__(self, config):
         super().__init__(config)
-        self.visual = AutoModel._from_config(config.vision_config)
+        self.visual = AutoModel.from_config(config.vision_config)
         self.language_model = Glm5NextVLTextModel._from_config(config.text_config)
 
         # Initialize weights and apply final processing
@@ -1248,12 +1248,6 @@ class Glm5NextVLModel(Glm5NextVLPreTrainedModel):
             )
             inputs_embeds = inputs_embeds.masked_scatter(video_mask, video_embeds)
 
-        # Differ from Qwen: vision encoder uses 2D rotary positional embeddings (2D-RoPE)
-        if position_ids is None:
-            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
-            position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
-            position_ids = position_ids.unsqueeze(0)
-
         outputs = self.language_model(
             input_ids=None,
             position_ids=position_ids,
@@ -1264,11 +1258,13 @@ class Glm5NextVLModel(Glm5NextVLPreTrainedModel):
             **kwargs,
         )
 
-        return BaseModelOutputWithPast(
+        # Only change is the output type to Moe
+        return MoeModelOutputWithPast(
             last_hidden_state=outputs.last_hidden_state,
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
+            router_logits=outputs.router_logits,
         )
 
 
@@ -1367,9 +1363,9 @@ class Glm5NextVLForConditionalGeneration(Glm5NextVLPreTrainedModel, GenerationMi
         super().__init__(config)
         self.model = Glm5NextVLModel(config)
         self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
-        self.router_aux_loss_coef = config.router_aux_loss_coef
-        self.num_experts = config.num_local_experts
-        self.num_experts_per_tok = config.num_experts_per_tok
+        self.router_aux_loss_coef = config.text_config.router_aux_loss_coef
+        self.num_experts = config.text_config.num_local_experts
+        self.num_experts_per_tok = config.text_config.num_experts_per_tok
 
         self.post_init()
 
@@ -1419,6 +1415,7 @@ class Glm5NextVLForConditionalGeneration(Glm5NextVLPreTrainedModel, GenerationMi
         image_grid_thw: torch.LongTensor | None = None,
         video_grid_thw: torch.LongTensor | None = None,
         output_router_logits: bool | None = None,
+        mm_token_type_ids: torch.IntTensor | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | MoeCausalLMOutputWithPast:
@@ -1459,7 +1456,7 @@ class Glm5NextVLForConditionalGeneration(Glm5NextVLPreTrainedModel, GenerationMi
         """
 
         output_router_logits = (
-            output_router_logits if output_router_logits is not None else self.config.output_router_logits
+            output_router_logits if output_router_logits is not None else self.config.text_config.output_router_logits
         )
 
         outputs = self.model(

@@ -22,7 +22,7 @@ from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
 from ...utils import auto_docstring
-from ..auto import AutoConfig
+from ..auto import CONFIG_MAPPING, AutoConfig
 
 
 @auto_docstring(checkpoint="zai-org/GLM-5-Next-VL")
@@ -215,9 +215,10 @@ class Glm5NextVLConfig(PreTrainedConfig):
 
     def __post_init__(self, **kwargs):
         if isinstance(self.vision_config, dict):
-            self.vision_config = self.sub_configs["vision_config"](**self.vision_config)
+            self.vision_config["model_type"] = self.vision_config.get("model_type", "glm_ocr_vision")
+            self.vision_config = CONFIG_MAPPING[self.vision_config["model_type"]](**self.vision_config)
         elif self.vision_config is None:
-            self.vision_config = self.sub_configs["vision_config"]()
+            self.vision_config = CONFIG_MAPPING["glm_ocr_vision"]()
 
         if isinstance(self.text_config, dict):
             self.text_config = self.sub_configs["text_config"](**self.text_config)

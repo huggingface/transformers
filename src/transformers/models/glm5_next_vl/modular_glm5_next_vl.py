@@ -31,7 +31,7 @@ from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging, torch_compilable_check
 from ...utils.generic import is_flash_attention_requested
 from ...utils.output_capturing import OutputRecorder
-from ..auto import AutoConfig
+from ..auto import CONFIG_MAPPING, AutoConfig
 from ..auto.modeling_auto import AutoModel
 from ..deepseek_v2.modeling_deepseek_v2 import DeepseekV2Attention
 from ..deepseek_v4.modeling_deepseek_v4 import DeepseekV4HyperConnection, DeepseekV4Model
@@ -202,9 +202,10 @@ class Glm5NextVLConfig(PreTrainedConfig):
 
     def __post_init__(self, **kwargs):
         if isinstance(self.vision_config, dict):
-            self.vision_config = self.sub_configs["vision_config"](**self.vision_config)
+            self.vision_config["model_type"] = self.vision_config.get("model_type", "glm_ocr_vision")
+            self.vision_config = CONFIG_MAPPING[self.vision_config["model_type"]](**self.vision_config)
         elif self.vision_config is None:
-            self.vision_config = self.sub_configs["vision_config"]()
+            self.vision_config = CONFIG_MAPPING["glm_ocr_vision"]()
 
         if isinstance(self.text_config, dict):
             self.text_config = self.sub_configs["text_config"](**self.text_config)
@@ -449,6 +450,7 @@ class Glm5NextVLTextModel(DeepseekV4Model, Glm5NextVLPreTrainedModel):
 
     def __init__(self, config):
         super().__init__(self, config)
+        self.hc_head = Glm5NextVLTextHyperHead()
         del self.rotary_emb
 
     def forward(
@@ -515,7 +517,7 @@ class Glm5NextVLModel(Exaone4_5_Model, Glm5NextVLPreTrainedModel):
 
     def __init__(self, config):
         super().__init__(config)
-        self.visual = AutoModel._from_config(config.vision_config)
+        self.visual = AutoModel.from_config(config.vision_config)
         self.language_model = Glm5NextVLTextModel._from_config(config.text_config)
         del self.rope_deltas
 
@@ -583,10 +585,66 @@ class Glm5NextVLModel(Exaone4_5_Model, Glm5NextVLPreTrainedModel):
             )
         return special_image_mask, special_video_mask
 
-    @can_return_tuple
-    @auto_docstring
-    def forward(self, **super_kwargs):
-        super().forward(**super_kwargs)
+    def forward(
+        self,
+        input_ids: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: Cache | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        use_cache: bool | None = None,
+        pixel_values: torch.Tensor | None = None,
+        pixel_values_videos: torch.FloatTensor | None = None,
+        image_grid_thw: torch.LongTensor | None = None,
+        video_grid_thw: torch.LongTensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutputWithPast:
+        r"""
+        image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
+            The temporal, height and width of feature shape of each image in LLM.
+        video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
+            The temporal, height and width of feature shape of each video in LLM.
+        """
+        if (input_ids is None) ^ (inputs_embeds is not None):
+            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
+
+        if inputs_embeds is None:
+            inputs_embeds = self.get_input_embeddings()(input_ids)
+
+        if pixel_values is not None:
+            image_embeds = self.get_image_features(pixel_values, image_grid_thw, **kwargs).pooler_output
+            image_embeds = torch.cat(image_embeds, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
+            image_mask, _ = self.get_placeholder_mask(
+                input_ids, inputs_embeds=inputs_embeds, image_features=image_embeds
+            )
+            inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_embeds)
+
+        if pixel_values_videos is not None:
+            video_embeds = self.get_video_features(pixel_values_videos, video_grid_thw, **kwargs).pooler_output
+            video_embeds = torch.cat(video_embeds, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
+            _, video_mask = self.get_placeholder_mask(
+                input_ids, inputs_embeds=inputs_embeds, video_features=video_embeds
+            )
+            inputs_embeds = inputs_embeds.masked_scatter(video_mask, video_embeds)
+
+        outputs = self.language_model(
+            input_ids=None,
+            position_ids=position_ids,
+            attention_mask=attention_mask,
+            past_key_values=past_key_values,
+            inputs_embeds=inputs_embeds,
+            use_cache=use_cache,
+            **kwargs,
+        )
+
+        # Only change is the output type to Moe
+        return MoeModelOutputWithPast(
+            last_hidden_state=outputs.last_hidden_state,
+            past_key_values=outputs.past_key_values,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+            router_logits=outputs.router_logits,
+        )
 
 
 class Glm5NextVLForConditionalGeneration(Glm46VForConditionalGeneration, Glm5NextVLPreTrainedModel):
@@ -596,9 +654,9 @@ class Glm5NextVLForConditionalGeneration(Glm46VForConditionalGeneration, Glm5Nex
 
     def __init__(self, config):
         super().__init__(config)
-        self.router_aux_loss_coef = config.router_aux_loss_coef
-        self.num_experts = config.num_local_experts
-        self.num_experts_per_tok = config.num_experts_per_tok
+        self.router_aux_loss_coef = config.text_config.router_aux_loss_coef
+        self.num_experts = config.text_config.num_local_experts
+        self.num_experts_per_tok = config.text_config.num_experts_per_tok
 
     @can_return_tuple
     @auto_docstring
@@ -616,6 +674,7 @@ class Glm5NextVLForConditionalGeneration(Glm46VForConditionalGeneration, Glm5Nex
         image_grid_thw: torch.LongTensor | None = None,
         video_grid_thw: torch.LongTensor | None = None,
         output_router_logits: bool | None = None,
+        mm_token_type_ids: torch.IntTensor | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | MoeCausalLMOutputWithPast:
@@ -656,7 +715,7 @@ class Glm5NextVLForConditionalGeneration(Glm46VForConditionalGeneration, Glm5Nex
         """
 
         output_router_logits = (
-            output_router_logits if output_router_logits is not None else self.config.output_router_logits
+            output_router_logits if output_router_logits is not None else self.config.text_config.output_router_logits
         )
 
         outputs = self.model(
