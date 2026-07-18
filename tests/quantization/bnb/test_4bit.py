@@ -834,6 +834,20 @@ class Bnb4BitTestBasicConfigTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "load_in_4bit and load_in_8bit are both True"):
             quantization_config.load_in_8bit = True
 
+    def test_bnb_4bit_compute_dtype_override(self):
+        from transformers.quantizers.auto import AutoHfQuantizer
+        saved_config = BitsAndBytesConfig(
+            load_in_4bit=True,
+            bnb_4bit_compute_dtype=torch.bfloat16,
+        )
+        requested_config = BitsAndBytesConfig(
+            load_in_4bit=True,
+            bnb_4bit_compute_dtype=torch.float16,
+        )
+        merged = AutoHfQuantizer.merge_quantization_configs(
+            saved_config, requested_config
+        )
+        self.assertEqual(merged.bnb_4bit_compute_dtype, torch.float16)
 
 @require_bitsandbytes
 @require_accelerate
