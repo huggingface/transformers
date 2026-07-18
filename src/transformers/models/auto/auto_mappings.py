@@ -36,8 +36,8 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("altclip_vision_model", "AltCLIPVisionConfig"),
         ("apertus", "ApertusConfig"),
         ("apertus1p5", "Apertus1p5Config"),
-        ("apertus1p5_text_model", "Apertus1p5TextConfig"),
-        ("apertus1p5_vqgan", "Apertus1p5VQVAEConfig"),
+        ("apertus1p5_text", "Apertus1p5TextConfig"),
+        ("apertus1p5_vision_tokenizer", "Apertus1p5VisionTokenizerConfig"),
         ("arcee", "ArceeConfig"),
         ("aria", "AriaConfig"),
         ("aria_text", "AriaTextConfig"),
@@ -721,8 +721,8 @@ SPECIAL_MODEL_TYPE_TO_MODULE_NAME = OrderedDict(
         ("align_vision_model", "align"),
         ("altclip_text_model", "altclip"),
         ("altclip_vision_model", "altclip"),
-        ("apertus1p5_text_model", "apertus1p5"),
-        ("apertus1p5_vqgan", "apertus1p5"),
+        ("apertus1p5_text", "apertus1p5"),
+        ("apertus1p5_vision_tokenizer", "apertus1p5"),
         ("aria_text", "aria"),
         ("audio-spectrogram-transformer", "audio_spectrogram_transformer"),
         ("audioflamingo3_encoder", "audioflamingo3"),
@@ -1164,6 +1164,7 @@ PROCESSOR_MAPPING_NAMES = OrderedDict(
 
 IMAGE_PROCESSOR_MAPPING_NAMES = OrderedDict(
     [
+        ("apertus1p5", {"torchvision": "Apertus1p5ImageProcessor"}),
         ("aria", {"pil": "AriaImageProcessorPil", "torchvision": "AriaImageProcessor"}),
         ("beit", {"pil": "BeitImageProcessorPil", "torchvision": "BeitImageProcessor"}),
         ("bit", {"pil": "BitImageProcessorPil", "torchvision": "BitImageProcessor"}),

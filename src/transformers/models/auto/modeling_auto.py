@@ -49,6 +49,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("altclip", "AltCLIPModel"),
         ("apertus", "ApertusModel"),
         ("apertus1p5", "Apertus1p5Model"),
+        ("apertus1p5_text", "Apertus1p5TextModel"),
         ("arcee", "ArceeModel"),
         ("aria", "AriaModel"),
         ("aria_text", "AriaTextModel"),
@@ -678,7 +679,7 @@ MODEL_FOR_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
         # Model for Causal LM mapping
         ("afmoe", "AfmoeForCausalLM"),
         ("apertus", "ApertusForCausalLM"),
-        ("apertus1p5", "Apertus1p5ForCausalLM"),
+        ("apertus1p5_text", "Apertus1p5TextForCausalLM"),
         ("arcee", "ArceeForCausalLM"),
         ("aria_text", "AriaTextForCausalLM"),
         ("axk1", "AXK1ForCausalLM"),
@@ -1928,7 +1929,6 @@ MODEL_FOR_KEYPOINT_MATCHING_MAPPING_NAMES = OrderedDict(
 MODEL_FOR_TEXT_ENCODING_MAPPING_NAMES = OrderedDict(
     [
         ("albert", "AlbertModel"),
-        ("apertus1p5", "Apertus1p5TextModel"),
         ("bert", "BertModel"),
         ("big_bird", "BigBirdModel"),
         ("clip_text_model", "CLIPTextModel"),
