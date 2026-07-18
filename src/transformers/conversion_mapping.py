@@ -144,12 +144,12 @@ def _build_checkpoint_conversion_mapping():
         "onyx_text": [
             GroupWeightRename(
                 source_patterns=[
-                    r"post_attn_norm",
                     r"post_attention_layernorm",
+                    r"post_attn_norm",
                 ],
                 target_patterns=[
-                    r"post_attention_layernorm",
                     r"pre_feedforward_layernorm",
+                    r"post_attention_layernorm",
                 ],
             ),
             WeightRenaming(source_patterns=r"post_ffn_norm", target_patterns=r"post_feedforward_layernorm"),
