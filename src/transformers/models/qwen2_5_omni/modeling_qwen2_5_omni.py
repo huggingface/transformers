@@ -2500,7 +2500,11 @@ class Qwen2_5OmniDiTRotaryEmbedding(nn.Module):
         device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
         with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
             freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
-            emb = torch.cat((freqs, freqs), dim=-1)
+            # The DiT applies an interleaved rotary (``rotate_half_codec``, pairing channels
+            # ``(2i, 2i + 1)``), so cos/sin must interleave the frequencies to match. The
+            # half-split ``torch.cat((freqs, freqs))`` layout mismatches the rotate and breaks
+            # RoPE's translation invariance. Regression from #39847; see #47328.
+            emb = torch.repeat_interleave(freqs, 2, dim=-1)
             cos = emb.cos() * self.attention_scaling
             sin = emb.sin() * self.attention_scaling
 

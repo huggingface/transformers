@@ -956,3 +956,61 @@ class Qwen2_5OmniToken2WavMaxPositionEmbeddingsTest(unittest.TestCase):
         self.assertEqual(output.shape[0], batch_size)
         self.assertEqual(output.shape[1], self.config.mel_dim)
         self.assertEqual(output.shape[2], 100)  # 50 tokens * 2 repeats
+
+
+@require_torch
+class Qwen2_5OmniDiTRotaryEmbeddingTest(unittest.TestCase):
+    """
+    Regression tests for the Token2Wav DiT rotary embedding (see issue #47328).
+
+    The DiT applies an interleaved rotate (``rotate_half_codec``, pairing channels
+    ``(2i, 2i + 1)``), so its ``cos``/``sin`` must be built by interleaving the
+    frequencies. A regression in #39847 switched the layout to the half-split
+    ``torch.cat((freqs, freqs))`` used by Llama, which mismatches the rotate and
+    destroys RoPE's translation invariance for head 0 of every DiT attention layer.
+    """
+
+    def _build_rotary(self):
+        from transformers.models.qwen2_5_omni.configuration_qwen2_5_omni import Qwen2_5OmniDiTConfig
+        from transformers.models.qwen2_5_omni.modeling_qwen2_5_omni import Qwen2_5OmniDiTRotaryEmbedding
+
+        config = Qwen2_5OmniDiTConfig(hidden_size=32, num_attention_heads=2, head_dim=16, max_position_embeddings=64)
+        rotary = Qwen2_5OmniDiTRotaryEmbedding(config).to(torch_device).eval()
+        return rotary, config.head_dim
+
+    def test_dit_rotary_uses_interleaved_layout(self):
+        rotary, head_dim = self._build_rotary()
+        seq_len = 32
+        position_ids = torch.arange(seq_len, device=torch_device)[None, :]
+        cos, sin = rotary(torch.zeros(1, seq_len, head_dim, device=torch_device), position_ids)
+
+        # Interleaved layout repeats each frequency into adjacent channels (2i, 2i + 1).
+        self.assertTrue(torch.allclose(cos[..., 0::2], cos[..., 1::2], atol=1e-6))
+        self.assertTrue(torch.allclose(sin[..., 0::2], sin[..., 1::2], atol=1e-6))
+        # It must NOT be the half-split layout (first half == second half), which was the bug.
+        self.assertFalse(torch.allclose(cos[..., : head_dim // 2], cos[..., head_dim // 2 :], atol=1e-6))
+
+    def test_dit_rotary_is_translation_invariant(self):
+        from transformers.models.qwen2_5_omni.modeling_qwen2_5_omni import apply_rotary_pos_emb
+
+        rotary, head_dim = self._build_rotary()
+        seq_len = 32
+        position_ids = torch.arange(seq_len, device=torch_device)[None, :]
+        cos, sin = rotary(torch.zeros(1, seq_len, head_dim, device=torch_device), position_ids)
+
+        # Rotate a single fixed (q, k) pair at every absolute position. RoPE's defining
+        # property is that <R_m q, R_n k> depends only on the offset (m - n), so for a fixed
+        # offset the inner product must stay (near) constant across absolute positions.
+        torch.manual_seed(0)
+        q = torch.randn(head_dim, device=torch_device).expand(1, 1, seq_len, head_dim).clone()
+        k = torch.randn(head_dim, device=torch_device).expand(1, 1, seq_len, head_dim).clone()
+        q_embed, k_embed = apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1)
+
+        # Check several offsets so the gate cannot silently weaken (a near-seq_len offset
+        # would collapse the comparison to a single sample and pass trivially).
+        for offset in (2, 5, 11):
+            inner = torch.stack(
+                [(q_embed[0, 0, m] * k_embed[0, 0, m + offset]).sum() for m in range(seq_len - offset)]
+            )
+            drift = (inner.max() - inner.min()).abs()
+            self.assertLess(drift.item(), 1e-4, msg=f"RoPE not translation-invariant at offset={offset}")
