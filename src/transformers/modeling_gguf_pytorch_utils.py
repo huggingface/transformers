@@ -453,6 +453,29 @@ class MiniMaxM2TensorProcessor(TensorProcessor):
             out.copy_(torch_weights)
 
 
+class PhiTensorProcessor(TensorProcessor):
+    def __init__(self, config=None):
+        super().__init__(config=config)
+
+    def process(self, weights, name, **kwargs):
+        # Phi-2 GGUF checkpoints store a single fused QKV projection (`attn_qkv`), while
+        # transformers' Phi uses separate `q_proj`, `k_proj` and `v_proj`. Split the fused
+        # weight/bias (concatenated as [q, k, v] along dim 0) and write the three tensors
+        # directly, as there is no 1-to-1 GGUF <-> HF name for them.
+        if ".attn_qkv." in name:
+            tensor_key_mapping = kwargs.get("tensor_key_mapping")
+            parsed_parameters = kwargs.get("parsed_parameters")
+            if tensor_key_mapping is not None and parsed_parameters is not None:
+                prefix, suffix = name.split(".attn_qkv.")
+                q, k, v = np.array_split(weights, 3, axis=0)
+                for sub, part in (("attn_q", q), ("attn_k", k), ("attn_v", v)):
+                    hf_name = tensor_key_mapping.get(f"{prefix}.{sub}.{suffix}")
+                    if hf_name is not None:
+                        parsed_parameters["tensors"][hf_name] = torch.from_numpy(np.copy(part))
+                return GGUFTensor(weights, None, {})
+        return GGUFTensor(weights, name, {})
+
+
 TENSOR_PROCESSORS = {
     "llama": LlamaTensorProcessor,
     "qwen2moe": Qwen2MoeTensorProcessor,
@@ -468,6 +491,7 @@ TENSOR_PROCESSORS = {
     "gemma3": Gemma2TensorProcessor,
     "lfm2": Lfm2TensorProcessor,
     "minimax-m2": MiniMaxM2TensorProcessor,
+    "phi2": PhiTensorProcessor,
 }
 
 
@@ -522,6 +546,8 @@ def get_gguf_hf_weights_map(
         model_type = "minimax-m2"
     elif model_type == "gpt_oss":
         model_type = "gpt-oss"
+    elif model_type == "phi":
+        model_type = "phi2"
     arch = None
     for key, value in MODEL_ARCH_NAMES.items():
         if value == model_type:
@@ -704,6 +730,18 @@ def load_gguf_checkpoint(gguf_checkpoint_path, return_tensors=False, model_to_lo
         # EOG tokens to match generation_config.json: <eos>(1),
         # <|tool_response>(50), <turn|>(106).
         parsed_parameters["config"]["eos_token_id"] = [1, 106, 50]
+
+    # Phi-2 GGUF uses architecture name "phi2" while transformers' model_type is "phi".
+    if parsed_parameters["config"].get("model_type") == "phi2":
+        parsed_parameters["config"]["model_type"] = "phi"
+        # Phi-2 uses partial rotary embeddings. GGUF stores the number of rotary dimensions
+        # (`rope.dimension_count`); transformers expects `partial_rotary_factor = rotary_dim / head_dim`.
+        rope_dims = read_field(reader, "phi2.rope.dimension_count")
+        hidden_size = parsed_parameters["config"].get("hidden_size")
+        num_heads = parsed_parameters["config"].get("num_attention_heads")
+        if rope_dims and hidden_size and num_heads:
+            head_dim = hidden_size // num_heads
+            parsed_parameters["config"]["partial_rotary_factor"] = rope_dims[0] / head_dim
 
     # MiniMax-M2: convert expert_gating_func integer to scoring_func string
     if parsed_parameters["config"].get("model_type") == "minimax_m2":
