@@ -995,6 +995,8 @@
         title: LeViT
       - local: model_doc/lightglue
         title: LightGlue
+      - local: model_doc/loma
+        title: LoMa
       - local: model_doc/lw_detr
         title: LW-DETR
       - local: model_doc/mask2former
