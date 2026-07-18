@@ -1209,8 +1209,7 @@ class Qwen2_5OmniAudioAttention(nn.Module):
 
         if is_flash_attention_requested(self.config):
             # Flash Attention: Use cu_seqlens for variable length attention
-            if max_seqlen is None:
-                max_seqlen = get_audio_max_seqlen(cu_seqlens, self.config)
+            max_seqlen = get_audio_max_seqlen(cu_seqlens, self.config, kwargs={"max_seqlen": max_seqlen})
             attn_output, _ = attention_interface(
                 self,
                 query_states,
@@ -1515,8 +1514,7 @@ class Qwen2_5OmniVisionAttention(nn.Module):
 
         if is_flash_attention_requested(self.config):
             # Flash Attention 2: Use cu_seqlens for variable length attention
-            if max_seqlen is None:
-                max_seqlen = get_vision_max_seqlen(cu_seqlens, self.config)
+            max_seqlen = get_vision_max_seqlen(cu_seqlens, self.config, kwargs={"max_seqlen": max_seqlen})
             attn_output, _ = attention_interface(
                 self,
                 query_states,
@@ -1573,10 +1571,6 @@ class Qwen2_5OmniVisionBlock(Qwen2_5_VLVisionBlock):
         position_embeddings: torch.Tensor | None = None,
         **kwargs,
     ) -> torch.Tensor:
-        r"""
-        cu_seqlens (`torch.Tensor`):
-            Cumulative sequence lengths used for packed variable-length attention in Flash Attention kernels.
-        """
         hidden_states = hidden_states + self.attn(
             self.norm1(hidden_states),
             cu_seqlens=cu_seqlens,

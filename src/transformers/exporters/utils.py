@@ -446,8 +446,7 @@ def _prepare_grid_thw_vision_inputs(model: torch.nn.Module, inputs: dict[str, An
 
     cu_seqlens, max_seqlen = get_vision_attention_seqlens(grid_thw, model.config, kwargs=inputs)
     inputs["cu_seqlens"] = cu_seqlens
-    if max_seqlen is not None:
-        inputs["max_seqlen"] = max_seqlen
+    inputs["max_seqlen"] = max_seqlen
     # 3-axis (t, h, w) rotary encoders expose an ``axis_dim`` attr on their rotary_emb
     # (minimax_m3_vl); default 2-axis (h, w) covers qwen2_5_vl / qwen3_vl / glm4v / paddleocr_vl.
     include_temporal = _find_submodule_attr(model, "axis_dim") is not None
@@ -459,11 +458,9 @@ def _prepare_grid_thw_vision_inputs(model: torch.nn.Module, inputs: dict[str, An
         inputs["window_index"], inputs["cu_window_seqlens"] = get_vision_window_index(
             grid_thw, spatial_merge_size, window_size, patch_size
         )
-        max_window_seqlen = get_vision_max_seqlen(
+        inputs["max_window_seqlen"] = get_vision_max_seqlen(
             inputs["cu_window_seqlens"], model.config, kwargs=inputs, kwarg_name="max_window_seqlen"
         )
-        if max_window_seqlen is not None:
-            inputs["max_window_seqlen"] = max_window_seqlen
 
     num_grid_per_side = _find_submodule_attr(model, "num_grid_per_side")
     if num_grid_per_side is not None:
@@ -492,9 +489,7 @@ def _prepare_navit_vision_inputs(model: torch.nn.Module, inputs: dict[str, Any])
         cu_seqlens = torch.nn.functional.pad(
             torch.cumsum(target_sizes[:, 0] * target_sizes[:, 1], dim=0, dtype=torch.int32), (1, 0)
         )
-        max_seqlen = get_vision_max_seqlen(cu_seqlens, model.config, kwargs=inputs)
-        if max_seqlen is not None:
-            inputs["max_seqlen"] = max_seqlen
+        inputs["max_seqlen"] = get_vision_max_seqlen(cu_seqlens, model.config, kwargs=inputs)
 
 
 @register_export_input_preparer("input_features", "feature_lens")
@@ -527,9 +522,7 @@ def _prepare_omni_audio_inputs(model: torch.nn.Module, inputs: dict[str, Any]) -
         inputs["cu_seqlens"] = get_audio_cu_seqlens(chunk_lengths)
         inputs["valid_indices"] = get_valid_indices(chunk_lengths)
         inputs["pool_indices"] = getattr(module, "get_pool_indices")(feature_lens)
-    max_seqlen = getattr(module, "get_audio_max_seqlen")(inputs["cu_seqlens"], model.config, kwargs=inputs)
-    if max_seqlen is not None:
-        inputs["max_seqlen"] = max_seqlen
+    inputs["max_seqlen"] = getattr(module, "get_audio_max_seqlen")(inputs["cu_seqlens"], model.config, kwargs=inputs)
 
 
 @register_export_input_preparer("input_features", "input_features_mask")
@@ -551,9 +544,7 @@ def _prepare_qwen3_asr_audio_inputs(model: torch.nn.Module, inputs: dict[str, An
     feature_lens = input_features_mask.sum(-1).to(torch.long)
     chunk_lengths = input_features_mask.view(batch_size, num_chunks, -1).sum(dim=-1).reshape(-1).to(torch.long)
     inputs["cu_seqlens"] = get_audio_cu_seqlens(chunk_lengths, feature_lens, n_window_infer, n_window)
-    max_seqlen = get_audio_max_seqlen(inputs["cu_seqlens"], model.config, kwargs=inputs)
-    if max_seqlen is not None:
-        inputs["max_seqlen"] = max_seqlen
+    inputs["max_seqlen"] = get_audio_max_seqlen(inputs["cu_seqlens"], model.config, kwargs=inputs)
 
 
 def precompute_export_inputs(model: torch.nn.Module, inputs: dict[str, Any]) -> None:

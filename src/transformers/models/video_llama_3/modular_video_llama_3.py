@@ -199,8 +199,7 @@ class VideoLlama3VisionAttention(SiglipAttention):
 
         if is_flash_attention_requested(self.config):
             # Flash Attention 2: Use cu_seqlens for variable length attention
-            if max_seqlen is None:
-                max_seqlen = get_vision_max_seqlen(cu_seqlens, self.config)
+            max_seqlen = get_vision_max_seqlen(cu_seqlens, self.config, kwargs={"max_seqlen": max_seqlen})
             attn_output, attn_weights = attention_interface(
                 self,
                 query_states,

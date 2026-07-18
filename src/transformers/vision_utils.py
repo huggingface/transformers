@@ -68,7 +68,8 @@ def get_vision_max_seqlen(
         kwarg_name: key used to pop the precomputed value from `kwargs`.
 
     Returns:
-        Maximum packed sequence length as a Python integer, or `None` when Flash Attention is not requested.
+        Maximum packed sequence length as a Python integer, or `None` when Flash Attention is not requested
+        and no precomputed value is provided.
     """
     if kwargs is not None and (max_seqlen := kwargs.pop(kwarg_name, None)) is not None:
         return max_seqlen

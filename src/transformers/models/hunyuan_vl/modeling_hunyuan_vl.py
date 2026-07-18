@@ -369,8 +369,7 @@ class HunYuanVLVisionAttention(nn.Module):
 
         if is_flash_attention_requested(self.config):
             # Flash Attention: Use cu_seqlens for variable length attention
-            if max_seqlen is None:
-                max_seqlen = get_vision_max_seqlen(cu_seqlens, self.config)
+            max_seqlen = get_vision_max_seqlen(cu_seqlens, self.config, kwargs={"max_seqlen": max_seqlen})
             attn_output, attn_weights = attention_interface(
                 self,
                 query_states,
@@ -1017,6 +1016,8 @@ class HunYuanVLModel(HunYuanVLPreTrainedModel):
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
+        Encode images and return the complete vision tower outputs.
+
         pixel_values (`torch.FloatTensor`):
             Flat per-patch pixel features produced by the image processor.
         image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):

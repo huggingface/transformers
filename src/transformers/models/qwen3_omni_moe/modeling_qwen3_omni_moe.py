@@ -567,8 +567,7 @@ class Qwen3OmniMoeAudioAttention(nn.Module):
 
         if is_flash_attention_requested(self.config):
             # Flash Attention: Use cu_seqlens for variable length attention
-            if max_seqlen is None:
-                max_seqlen = get_audio_max_seqlen(cu_seqlens, self.config)
+            max_seqlen = get_audio_max_seqlen(cu_seqlens, self.config, kwargs={"max_seqlen": max_seqlen})
             attn_output, _ = attention_interface(
                 self,
                 query_states,
@@ -929,8 +928,7 @@ class Qwen3OmniMoeVisionAttention(nn.Module):
 
         if is_flash_attention_requested(self.config):
             # Flash Attention: Use cu_seqlens for variable length attention
-            if max_seqlen is None:
-                max_seqlen = get_vision_max_seqlen(cu_seqlens, self.config)
+            max_seqlen = get_vision_max_seqlen(cu_seqlens, self.config, kwargs={"max_seqlen": max_seqlen})
             attn_output, _ = attention_interface(
                 self,
                 query_states,

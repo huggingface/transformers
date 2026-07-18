@@ -196,8 +196,7 @@ class MiniCPMV4_6VisionAttention(nn.Module):
 
         if is_flash_attention_requested(self.config):
             # Flash Attention: Use cu_seqlens for variable length attention
-            if max_seqlen is None:
-                max_seqlen = get_vision_max_seqlen(cu_seqlens, self.config)
+            max_seqlen = get_vision_max_seqlen(cu_seqlens, self.config, kwargs={"max_seqlen": max_seqlen})
             attn_output, _ = attention_interface(
                 self,
                 query_states,
@@ -434,6 +433,7 @@ class MiniCPMV4_6VisionModel(MiniCPMV4_6VisionPreTrainedModel):
     ) -> tuple[dict[str, Any], torch.Tensor, torch.Tensor]:
         # NOTE: intentionally not checking for shapes as this is expensive to call `.any()`
         target_sizes = target_sizes // 2
+        # `max_seqlens` is only computed and used for Flash Attention.
         if max_seqlens is not None:
             max_seqlens = max_seqlens // 4
 
