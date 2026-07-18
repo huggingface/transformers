@@ -16,49 +16,124 @@ limitations under the License.
 ⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be rendered properly in your Markdown viewer.
 
 -->
-*This model was contributed to Hugging Face Transformers on 2026-07-14.*
+*This model was contributed to Hugging Face Transformers on 2026-07-18.*
 
 
 # Apertus 1.5
 
 > [!WARNING]
-> The vision tokenizer (`Apertus1p5VQVAE`) must run in `float32`: code assignment is an argmax over codebook
-> logits, and half precision flips a significant fraction of codes (~8% in bf16 at the 131k codebook). It is
-> kept in `float32` automatically when the model is loaded with `dtype=torch.float16`/`bfloat16`
+> Both bundled tokenizers must run in `float32`: their code assignment is an argmax over codebook scores, and
+> half precision flips a significant fraction of codes (~8% for the vision tokenizer in bf16). They are kept in
+> `float32` automatically when the model is loaded with `dtype=torch.float16`/`bfloat16`
 > (`_keep_in_fp32_modules_strict`).
 
 > [!WARNING]
-> `Apertus1p5VQVAE` is an inference-only vision-tokenizer port. It does not support training the vision tokenizer:
-> the port implements only inference-time codebook scoring and hard `argmax` indices, and omits IBQ's
-> differentiable index-backpropagation path, tokenizer training losses, and decoder. The hard indices also stop
-> gradients from the language-model loss at the tokenizer boundary. Calling `.train()` does not restore the
-> omitted training implementation. This limitation applies to the vision tokenizer; the Apertus language model
-> retains the standard differentiable Transformers forward and loss APIs.
-
-`Apertus1p5VQVAE.encode` intentionally does not force `torch.no_grad`. Public Transformers model methods normally
-respect the caller's ambient gradient mode, so applications retain explicit control over it. This convention does
-not imply training support: use `torch.no_grad()` or `torch.inference_mode()` for standalone tokenization to avoid
-retaining unnecessary encoder activations.
+> `Apertus1p5VisionTokenizerModel` is an inference-only vision-tokenizer port: it implements only inference-time codebook
+> scoring and hard `argmax` indices, and omits IBQ's differentiable training path, tokenizer losses, and decoder.
+> Calling `.train()` does not restore the omitted components, and `encode` (which respects the caller's gradient
+> mode, like all public Transformers methods) returns indices that stop gradients. The Apertus language backbone
+> retains the standard differentiable forward and loss APIs.
 
 ## Overview
 
-The Apertus 1.5 model was proposed in [<INSERT PAPER NAME HERE>](<INSERT PAPER LINK HERE>) by <INSERT AUTHORS HERE>.
-<INSERT SHORT SUMMARY HERE>
+Apertus 1.5 is a multimodal model (image + audio + text → text) by the
+[Swiss AI Initiative](https://huggingface.co/swiss-ai) that extends the [Apertus](./apertus) language model
+([Apertus: Democratizing Open and Compliant LLMs for Global Language Environments](https://huggingface.co/papers/2509.14233))
+with discrete-token early fusion: frozen tokenizers turn images and audio into discrete codes that are mapped
+into an enlarged text vocabulary by fixed offsets, so all modalities share the backbone's embedding table and
+are modeled as a single token stream.
 
-The abstract from the paper is the following:
+The model composes three parts:
 
-<INSERT PAPER ABSTRACT HERE>
+- an **Apertus 1.5 language backbone** (`Apertus1p5TextModel`) with an enlarged input vocabulary covering the
+  text tokens plus 131,072 visual and 4,096 audio codes. Its **output layer is pruned**: checkpoints keep only
+  the text-token rows of the LM head (`output_vocab_size` in the config, 131,072 for the released
+  checkpoints), so the model can embed multimodal tokens as inputs but can only ever generate text ids,
+- **`Apertus1p5VisionTokenizerModel`**, an encode-only port of the
+  [EMU3.5 Vision Tokenizer](https://huggingface.co/BAAI/Emu3.5-VisionTokenizer) by BAAI
+  ([Emu3.5: Native Multimodal Models are World Learners](https://huggingface.co/papers/2510.26583), with
+  [IBQ](https://huggingface.co/papers/2412.02692) quantization): 16× spatial downsampling, one code per 16×16
+  patch,
+- **[WavTokenizer](./wavtokenizer)** ([paper](https://huggingface.co/papers/2408.16532)) as the audio codec:
+  40 codes per second of 24 kHz mono audio.
 
-Tips:
+Images are always encoded one at a time, even in batched inputs, because the vision tokenizer contains global
+attention, so batch padding would change the codes. Each image contributes `(height / 16) · (width / 16)` codes
+of its *resized* dimensions (the processor resizes to multiples of 16 within a pixel-area budget), and each
+audio clip contributes `ceil(samples / 600)` codes.
 
-<INSERT TIPS ABOUT MODEL HERE>
-
-This model was contributed by [INSERT YOUR HF USERNAME HERE](https://huggingface.co/<INSERT YOUR HF USERNAME HERE>).
-The original code can be found [here](<INSERT LINK TO GITHUB REPO HERE>).
+This model was contributed by the [Swiss AI Initiative](https://huggingface.co/swiss-ai).
 
 ## Usage examples
 
-<INSERT SOME NICE EXAMPLES HERE>
+Multimodal chat with the instruction-tuned model: the processor renders the chat template, loads and
+resamples the referenced media, and expands the placeholders into the model's token stream:
+
+```python
+import torch
+from transformers import Apertus1p5ForConditionalGeneration, AutoProcessor
+
+model = Apertus1p5ForConditionalGeneration.from_pretrained(
+    "swiss-ai/Apertus-1.5-8B", dtype=torch.bfloat16, device_map="auto"
+)
+processor = AutoProcessor.from_pretrained("swiss-ai/Apertus-1.5-8B")
+
+messages = [
+    {
+        "role": "user",
+        "content": [
+            {"type": "image", "url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/bee.jpg"},
+            {"type": "text", "text": "What do you see in this image?"},
+        ],
+    }
+]
+inputs = processor.apply_chat_template(
+    messages, add_generation_prompt=True, tokenize=True, return_dict=True, return_tensors="pt"
+).to(model.device)
+
+generated = model.generate(**inputs, max_new_tokens=64)
+print(processor.batch_decode(generated[:, inputs["input_ids"].shape[1] :], skip_special_tokens=True)[0])
+```
+
+For the base model (or full control over the prompt), call the processor directly with rendered text
+containing one `<|image|>` / `<|audio|>` placeholder per media item. Media entries may be loaded objects
+(PIL images, numpy waveforms) or URL / local-path strings: the processor fetches files itself and resamples
+fetched audio to 24 kHz (bare waveform arrays are assumed to already be 24 kHz mono). Flat lists are
+consumed left-to-right by placeholder order; nested lists (one sub-list per batch sample) give explicit
+per-sample ownership with arbitrary counts:
+
+```python
+# `model` and `processor` as in the quick start above; batched generation requires left padding
+# (the shipped tokenizer defaults to `padding_side="left"`)
+import numpy as np
+from transformers.image_utils import load_image
+
+image_a = load_image("https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/bee.jpg")
+image_b = load_image("https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg")
+waveform_24khz = np.sin(2 * np.pi * 440.0 * np.arange(24000) / 24000.0).astype(np.float32)  # 1 s of 24 kHz audio
+
+inputs = processor(
+    text=["<|image|> vs <|image|>: which image is sharper?", "Transcribe: <|audio|>"],
+    images=[[image_a, image_b], []],
+    audio=[[], [waveform_24khz]],
+    padding=True,
+    return_tensors="pt",
+).to(model.device)
+generated = model.generate(**inputs, max_new_tokens=64)
+print(processor.batch_decode(generated[:, inputs["input_ids"].shape[1] :], skip_special_tokens=True))
+```
+
+### Input expectations and validation
+
+- **Images** are expected unscaled: pass PIL images or uint8-range pixel arrays. Per the standard
+  `do_rescale` convention, float images already scaled to `[0, 1]` would be rescaled again. The image
+  processor converts to RGB, resizes to multiples of 16 within the `[256², 1400²]` pixel-area budget, and
+  normalizes to `[-1, 1]`, so the model always receives sizes it can tokenize.
+- **Audio** arrays are assumed to be 24 kHz mono; file or URL inputs are resampled automatically. The
+  absolute scale does not matter, since every clip is peak-normalized to -3 dBFS before encoding. Stereo or
+  empty clips raise an error, as does declaring a `sampling_rate` other than 24000.
+- **Placeholder counts** are validated strictly in both directions: per sample for nested media lists, as
+  totals for flat lists, with a `ValueError` on any mismatch.
 
 ## Apertus1p5Config
 
@@ -68,37 +143,41 @@ The original code can be found [here](<INSERT LINK TO GITHUB REPO HERE>).
 
 [[autodoc]] Apertus1p5TextConfig
 
-## Apertus1p5VQVAEConfig
+## Apertus1p5VisionTokenizerConfig
 
-[[autodoc]] Apertus1p5VQVAEConfig
+[[autodoc]] Apertus1p5VisionTokenizerConfig
 
-## Apertus1p5ForConditionalGeneration
+## Apertus1p5Processor
 
-[[autodoc]] Apertus1p5ForConditionalGeneration
+[[autodoc]] Apertus1p5Processor
+    - __call__
 
-## Apertus1p5ForCausalLM
+## Apertus1p5ImageProcessor
 
-[[autodoc]] Apertus1p5ForCausalLM
+[[autodoc]] Apertus1p5ImageProcessor
+    - preprocess
+
+## Apertus1p5VisionTokenizerModel
+
+[[autodoc]] Apertus1p5VisionTokenizerModel
+    - encode
 
 ## Apertus1p5TextModel
 
 [[autodoc]] Apertus1p5TextModel
     - forward
 
-## Apertus1p5VQVAE
+## Apertus1p5TextForCausalLM
 
-[[autodoc]] Apertus1p5VQVAE
-    - encode
+[[autodoc]] Apertus1p5TextForCausalLM
+    - forward
 
 ## Apertus1p5Model
 
 [[autodoc]] Apertus1p5Model
     - forward
 
-## Apertus1p5ImageProcessor
+## Apertus1p5ForConditionalGeneration
 
-[[autodoc]] Apertus1p5ImageProcessor
-
-## Apertus1p5Processor
-
-[[autodoc]] Apertus1p5Processor
+[[autodoc]] Apertus1p5ForConditionalGeneration
+    - forward
