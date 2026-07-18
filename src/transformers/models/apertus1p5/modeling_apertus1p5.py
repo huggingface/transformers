@@ -4,7 +4,7 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_apertus1p5.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
-# Copyright 2026 The Emu team, BAAI, The SwissAI Initiative and The HuggingFace Inc. team. All rights reserved.
+# Copyright 2026 The SwissAI Initiative, The Emu team, BAAI, and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -20,15 +20,14 @@
 
 from collections.abc import Callable
 from dataclasses import dataclass
-from functools import cached_property
-from typing import Optional
+from typing import Any, Optional
 
 import torch
 import torch.nn.functional as F
 from torch import nn
 
 from ... import initialization as init
-from ...activations import ACT2FN
+from ...activations import ACT2CLS, ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
 from ...integrations import use_kernel_forward_from_hub, use_kernel_func_from_hub, use_kernelized_func
@@ -41,18 +40,333 @@ from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, torch_compilable_check
 from ...utils.generic import maybe_autocast, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
-from .configuration_apertus1p5 import Apertus1p5Config, Apertus1p5TextConfig, Apertus1p5VQVAEConfig
+from ..auto import AutoModel
+from .configuration_apertus1p5 import Apertus1p5Config, Apertus1p5TextConfig, Apertus1p5VisionTokenizerConfig
 
 
 @auto_docstring
 @dataclass
-class Apertus1p5VQVAEModelOutput(BaseModelOutputWithPooling):
+class Apertus1p5VisionTokenizerModelOutput(BaseModelOutputWithPooling):
     r"""
-    image_tokens (`torch.LongTensor` of shape `(batch_size, config.vocab_size`):
-        Indices of the image tokens predicted by the VQ-VAE model.
+    pooler_output (`tuple[torch.FloatTensor]`):
+        One `(num_codes, hidden_size)` tensor of embedded image codes per input image.
+    image_tokens (`list[torch.LongTensor]`):
+        One grid of discrete codebook indices per input image, of shape `(height // factor, width // factor)`
+        where `factor` is `config.spatial_scale_factor` (16 by default).
     """
 
-    image_tokens: torch.LongTensor | None = None
+    image_tokens: list[torch.LongTensor] | None = None
+
+
+@auto_docstring
+@dataclass
+class Apertus1p5AudioTokenizerModelOutput(BaseModelOutputWithPooling):
+    r"""
+    pooler_output (`tuple[torch.FloatTensor]`):
+        One `(num_codes, hidden_size)` tensor of embedded audio codes per input clip.
+    audio_tokens (`list[torch.LongTensor]`):
+        One 1D tensor of `ceil(length / hop)` discrete codebook indices per input clip.
+    """
+
+    audio_tokens: list[torch.LongTensor] | None = None
+
+
+class Apertus1p5VisionTokenizerResnetBlock(nn.Module):
+    def __init__(self, in_channels: int, out_channels: int | None = None, dropout: float = 0.0):
+        super().__init__()
+        self.in_channels = in_channels
+        out_channels = in_channels if out_channels is None else out_channels
+        self.out_channels = out_channels
+
+        self.norm1 = nn.GroupNorm(num_groups=32, num_channels=in_channels, eps=1e-6, affine=True)
+        self.conv1 = nn.Conv2d(in_channels, out_channels, kernel_size=3, stride=1, padding=1)
+        self.norm2 = nn.GroupNorm(num_groups=32, num_channels=out_channels, eps=1e-6, affine=True)
+        self.dropout = nn.Dropout(dropout)
+        self.conv2 = nn.Conv2d(out_channels, out_channels, kernel_size=3, stride=1, padding=1)
+        if in_channels != out_channels:
+            self.nin_shortcut = nn.Conv2d(in_channels, out_channels, kernel_size=1, stride=1, padding=0)
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        residual = hidden_states
+        hidden_states = self.norm1(hidden_states)
+        hidden_states = hidden_states * torch.sigmoid(hidden_states)
+        hidden_states = self.conv1(hidden_states)
+        hidden_states = self.norm2(hidden_states)
+        hidden_states = hidden_states * torch.sigmoid(hidden_states)
+        hidden_states = self.dropout(hidden_states)
+        hidden_states = self.conv2(hidden_states)
+        if self.in_channels != self.out_channels:
+            residual = self.nin_shortcut(residual)
+        return residual + hidden_states
+
+
+class Apertus1p5VisionTokenizerAttnBlock(nn.Module):
+    """Single-head self-attention over spatial positions with 1x1 convolutions.
+
+    The manual `bmm` attention (instead of the library attention interface) preserves bitwise parity with the
+    original tokenizer, whose argmax code assignment is sensitive to tiny numeric differences.
+    """
+
+    def __init__(self, in_channels: int):
+        super().__init__()
+        self.norm = nn.GroupNorm(num_groups=32, num_channels=in_channels, eps=1e-6, affine=True)
+        self.q = nn.Conv2d(in_channels, in_channels, kernel_size=1, stride=1, padding=0)
+        self.k = nn.Conv2d(in_channels, in_channels, kernel_size=1, stride=1, padding=0)
+        self.v = nn.Conv2d(in_channels, in_channels, kernel_size=1, stride=1, padding=0)
+        self.proj_out = nn.Conv2d(in_channels, in_channels, kernel_size=1, stride=1, padding=0)
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        residual = hidden_states
+        hidden_states = self.norm(hidden_states)
+        query = self.q(hidden_states)
+        key = self.k(hidden_states)
+        value = self.v(hidden_states)
+
+        batch_size, channels, height, width = query.shape
+        query = query.reshape(batch_size, channels, height * width).permute(0, 2, 1)
+        key = key.reshape(batch_size, channels, height * width)
+        attn_weights = torch.bmm(query, key) * channels**-0.5
+        attn_weights = F.softmax(attn_weights, dim=2)
+
+        value = value.reshape(batch_size, channels, height * width)
+        hidden_states = torch.bmm(value, attn_weights.permute(0, 2, 1))
+        hidden_states = hidden_states.reshape(batch_size, channels, height, width)
+        return residual + self.proj_out(hidden_states)
+
+
+class Apertus1p5VisionTokenizerDownsample(nn.Module):
+    def __init__(self, in_channels: int):
+        super().__init__()
+        self.conv = nn.Conv2d(in_channels, in_channels, kernel_size=3, stride=2, padding=0)
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        # asymmetric right/bottom padding, as in the original VQGAN-style tokenizer
+        hidden_states = F.pad(hidden_states, (0, 1, 0, 1), mode="constant", value=0)
+        return self.conv(hidden_states)
+
+
+class Apertus1p5VisionTokenizerEncoder(nn.Module):
+    def __init__(self, config: Apertus1p5VisionTokenizerConfig):
+        super().__init__()
+        self.num_resolutions = len(config.channel_multiplier)
+        self.num_res_blocks = config.num_res_blocks
+
+        self.conv_in = nn.Conv2d(config.in_channels, config.base_channels, kernel_size=3, stride=1, padding=1)
+
+        # attention placement is decided statically from the reference `resolution`, as in the original
+        current_resolution = config.resolution
+        in_channel_multiplier = (1,) + tuple(config.channel_multiplier)
+        self.down = nn.ModuleList()
+        for i_level in range(self.num_resolutions):
+            block = nn.ModuleList()
+            attn = nn.ModuleList()
+            block_in = config.base_channels * in_channel_multiplier[i_level]
+            block_out = config.base_channels * config.channel_multiplier[i_level]
+            for _ in range(self.num_res_blocks):
+                block.append(Apertus1p5VisionTokenizerResnetBlock(block_in, block_out, dropout=config.dropout))
+                block_in = block_out
+                if current_resolution in config.attn_resolutions:
+                    attn.append(Apertus1p5VisionTokenizerAttnBlock(block_in))
+
+            down = nn.Module()
+            down.block = block
+            down.attn = attn
+            if i_level != self.num_resolutions - 1:
+                down.downsample = Apertus1p5VisionTokenizerDownsample(block_in)
+                current_resolution = current_resolution // 2
+            self.down.append(down)
+
+        self.mid = nn.Module()
+        self.mid.block_1 = Apertus1p5VisionTokenizerResnetBlock(block_in, block_in, dropout=config.dropout)
+        self.mid.attn_1 = Apertus1p5VisionTokenizerAttnBlock(block_in)
+        self.mid.block_2 = Apertus1p5VisionTokenizerResnetBlock(block_in, block_in, dropout=config.dropout)
+
+        self.norm_out = nn.GroupNorm(num_groups=32, num_channels=block_in, eps=1e-6, affine=True)
+        self.conv_out = nn.Conv2d(block_in, config.latent_channels, kernel_size=3, stride=1, padding=1)
+
+    def forward(self, pixel_values: torch.Tensor) -> torch.Tensor:
+        hidden_states = self.conv_in(pixel_values)
+        for i_level in range(self.num_resolutions):
+            for i_block in range(self.num_res_blocks):
+                hidden_states = self.down[i_level].block[i_block](hidden_states)
+                if len(self.down[i_level].attn) > 0:
+                    hidden_states = self.down[i_level].attn[i_block](hidden_states)
+            if i_level != self.num_resolutions - 1:
+                hidden_states = self.down[i_level].downsample(hidden_states)
+
+        hidden_states = self.mid.block_1(hidden_states)
+        hidden_states = self.mid.attn_1(hidden_states)
+        hidden_states = self.mid.block_2(hidden_states)
+
+        hidden_states = self.norm_out(hidden_states)
+        hidden_states = hidden_states * torch.sigmoid(hidden_states)
+        return self.conv_out(hidden_states)
+
+
+class Apertus1p5VisionTokenizerVectorQuantizer(nn.Module):
+    """
+    IBQ codebook lookup, from *Scalable Image Tokenization with Index Backpropagation Quantization*
+    (https://huggingface.co/papers/2412.02692). IBQ differs from plain VQ in how the codebook is trained; at
+    inference, quantization reduces to a dot-product similarity argmax over the codebook. This class implements
+    only that inference path, not IBQ's differentiable index-backpropagation training path.
+    """
+
+    def __init__(self, config: Apertus1p5VisionTokenizerConfig):
+        super().__init__()
+        self.embedding = nn.Embedding(config.codebook_size, config.embed_dim)
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.LongTensor:
+        # hidden_states: (batch_size, embed_dim, height, width)
+        logits = torch.einsum("bdhw,nd->bnhw", hidden_states, self.embedding.weight)
+        return logits.argmax(dim=1)  # (batch_size, height, width)
+
+
+@auto_docstring(
+    custom_intro="""
+    The Apertus 1.5 vision tokenizer: an encode-only port of the EMU3.5 Vision Tokenizer by BAAI
+    (*Emu3.5: Native Multimodal Models are World Learners*, https://huggingface.co/papers/2510.26583; weights and
+    original code at https://huggingface.co/BAAI/Emu3.5-VisionTokenizer, Apache-2.0), an IBQ image tokenizer with
+    a 131k codebook and 16x spatial downsampling.
+
+    The port is inference-only: Apertus 1.5 generates text only, so it omits IBQ's differentiable training path,
+    tokenizer losses, and decoder, and `encode` returns hard argmax indices that stop gradients (calling
+    `train()` does not restore the omitted components). Run the tokenizer in `float32`: code assignment is an
+    argmax over codebook logits, and half precision flips ~8% of codes (bf16); the weights are kept fp32
+    on half-precision `from_pretrained` loads via `_keep_in_fp32_modules_strict`.
+    """
+)
+class Apertus1p5VisionTokenizerModel(PreTrainedModel):
+    config: Apertus1p5VisionTokenizerConfig
+    base_model_prefix = "vision_tokenizer"
+    main_input_name = "pixel_values"
+    input_modalities = ("image",)
+    _no_split_modules = ["Apertus1p5VisionTokenizerResnetBlock", "Apertus1p5VisionTokenizerAttnBlock"]
+    # code assignment is an argmax over codebook logits: half precision flips ~8% of codes (bf16, 131k codebook),
+    # so the tokenizer is kept in fp32 even when the model is loaded in fp16/bf16
+    _keep_in_fp32_modules_strict = ["encoder", "quant_conv", "quantize"]
+
+    @torch.no_grad()
+    def _init_weights(self, module):
+        super()._init_weights(module)
+        if isinstance(module, nn.Conv2d):
+            init.kaiming_normal_(module.weight, mode="fan_out", nonlinearity="relu")
+        elif isinstance(module, nn.GroupNorm):
+            init.ones_(module.weight)
+            init.zeros_(module.bias)
+        elif isinstance(module, nn.Embedding):
+            init.normal_(module.weight)
+
+    def __init__(self, config: Apertus1p5VisionTokenizerConfig):
+        super().__init__(config)
+        self.config = config
+
+        self.encoder = Apertus1p5VisionTokenizerEncoder(config)
+        self.quantize = Apertus1p5VisionTokenizerVectorQuantizer(config)
+        self.quant_conv = nn.Conv2d(config.latent_channels, config.embed_dim, kernel_size=1)
+
+        self.vision_spatial_factor = config.spatial_scale_factor
+        # The pretrained tokenizer starts in evaluation mode. This does not freeze parameters or add `no_grad`.
+        self.eval()
+
+        self.post_init()
+
+    def encode(self, pixel_values: torch.Tensor) -> torch.LongTensor:
+        """
+        Tokenizes images into a grid of discrete codebook indices.
+
+        The method respects the caller's gradient mode, as public Transformers model methods normally do; use
+        `torch.no_grad()` or `torch.inference_mode()` when calling it for standalone inference.
+
+        Args:
+            pixel_values (`torch.Tensor` of shape `(batch_size, channels, height, width)`):
+                Input images, normalized to `[-1, 1]` with sides that are multiples of the spatial factor (16).
+
+        Returns:
+            `torch.LongTensor` of shape `(batch_size, height // factor, width // factor)` with values in
+            `[0, codebook_size)`, where `factor` is `config.spatial_scale_factor` (16 by default).
+        """
+        # the tokenizer runs in fp32 even inside a half-precision model (`_keep_in_fp32_modules_strict`):
+        # cast the input to the encoder's dtype so callers can pass fp16/bf16 pixel values
+        pixel_values = pixel_values.to(self.encoder.conv_in.weight.dtype)
+        hidden_states = self.encoder(pixel_values)
+        hidden_states = self.quant_conv(hidden_states)
+        return self.quantize(hidden_states)
+
+
+@auto_docstring
+class Apertus1p5PreTrainedModel(PreTrainedModel):
+    config: Apertus1p5Config
+    base_model_prefix = "model"
+    input_modalities = ("image", "audio", "text")
+    supports_gradient_checkpointing = True
+    _skip_keys_device_placement = ["past_key_values"]
+    _supports_flash_attn = True
+    _supports_sdpa = True
+    # per-image / per-clip tokenizer loops are data-dependent control flow
+    _can_compile_fullgraph = False
+    _supports_flex_attn = True
+    _supports_attention_backend = True
+    _no_split_modules = [
+        "Apertus1p5TextDecoderLayer",
+        "ApertusDecoderLayer",  # plain `apertus` text configs remain accepted
+        "Apertus1p5VisionTokenizerResnetBlock",
+        "Apertus1p5VisionTokenizerAttnBlock",
+    ]
+
+    def resize_token_embeddings(
+        self,
+        new_num_tokens: int | None = None,
+        pad_to_multiple_of: int | None = None,
+        mean_resizing: bool = True,
+    ) -> nn.Embedding:
+        # a pruned LM head (fewer rows than the input embeddings) cannot survive the generic resize, which
+        # forces the head to the new embedding size; the no-op getter call (no arguments) stays allowed
+        text_config = self.config.get_text_config()
+        output_vocab_size = getattr(text_config, "output_vocab_size", None)
+        resizes = new_num_tokens is not None or pad_to_multiple_of is not None
+        if resizes and output_vocab_size is not None and output_vocab_size != text_config.vocab_size:
+            raise NotImplementedError(
+                "Resizing token embeddings is not supported for a pruned LM head (`output_vocab_size` is "
+                "set): resize the unpruned checkpoint and prune it again."
+            )
+        return super().resize_token_embeddings(new_num_tokens, pad_to_multiple_of, mean_resizing)
+
+
+class Apertus1p5TextMLP(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.config = config
+        self.hidden_size = config.hidden_size
+        self.intermediate_size = config.intermediate_size
+        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
+        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
+        self.act_fn = ACT2FN[config.hidden_act]
+        if config.hidden_act == "xielu":
+            self.act_fn = ACT2CLS["xielu"](dtype=config.dtype)
+
+    def forward(self, x):
+        return self.down_proj(self.act_fn(self.up_proj(x)))
+
+
+@use_kernel_forward_from_hub("RMSNorm")
+class Apertus1p5TextRMSNorm(nn.Module):
+    def __init__(self, hidden_size, eps: float = 1e-6) -> None:
+        """
+        Apertus1p5TextRMSNorm is equivalent to T5LayerNorm
+        """
+        super().__init__()
+        self.weight = nn.Parameter(torch.ones(hidden_size))
+        self.variance_epsilon = eps
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        input_dtype = hidden_states.dtype
+        hidden_states = hidden_states.to(torch.float32)
+        variance = hidden_states.pow(2).mean(-1, keepdim=True)
+        hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
+        return self.weight * hidden_states.to(input_dtype)
+
+    def extra_repr(self):
+        return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
 
 
 def rotate_half(x):
@@ -126,10 +440,10 @@ def eager_attention_forward(
 
 
 @use_kernelized_func(apply_rotary_pos_emb)
-class Apertus1p5Attention(nn.Module):
+class Apertus1p5TextAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
-    def __init__(self, config: Apertus1p5Config, layer_idx: int):
+    def __init__(self, config: Apertus1p5TextConfig, layer_idx: int | None = None):
         super().__init__()
         self.config = config
         self.layer_idx = layer_idx
@@ -151,12 +465,14 @@ class Apertus1p5Attention(nn.Module):
         self.o_proj = nn.Linear(
             config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
         )
+        self.q_norm = Apertus1p5TextRMSNorm(self.head_dim, config.rms_norm_eps)
+        self.k_norm = Apertus1p5TextRMSNorm(self.head_dim, config.rms_norm_eps)
 
     def forward(
         self,
         hidden_states: torch.Tensor,
-        position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
-        attention_mask: torch.Tensor | None = None,
+        position_embeddings: tuple[torch.Tensor, torch.Tensor],
+        attention_mask: torch.Tensor | None,
         past_key_values: Cache | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor]:
@@ -166,6 +482,8 @@ class Apertus1p5Attention(nn.Module):
         query_states = self.q_proj(hidden_states).view(hidden_shape).transpose(1, 2)
         key_states = self.k_proj(hidden_states).view(hidden_shape).transpose(1, 2)
         value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+        query_states = self.q_norm(query_states)
+        key_states = self.k_norm(key_states)
 
         cos, sin = position_embeddings
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
@@ -193,54 +511,16 @@ class Apertus1p5Attention(nn.Module):
         return attn_output, attn_weights
 
 
-@use_kernel_forward_from_hub("RMSNorm")
-class Apertus1p5RMSNorm(nn.Module):
-    def __init__(self, hidden_size, eps: float = 1e-6) -> None:
-        """
-        Apertus1p5RMSNorm is equivalent to T5LayerNorm
-        """
-        super().__init__()
-        self.weight = nn.Parameter(torch.ones(hidden_size))
-        self.variance_epsilon = eps
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        input_dtype = hidden_states.dtype
-        hidden_states = hidden_states.to(torch.float32)
-        variance = hidden_states.pow(2).mean(-1, keepdim=True)
-        hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
-        return self.weight * hidden_states.to(input_dtype)
-
-    def extra_repr(self):
-        return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
-
-
-class Apertus1p5MLP(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.config = config
-        self.hidden_size = config.hidden_size
-        self.intermediate_size = config.intermediate_size
-        self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=config.mlp_bias)
-        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=config.mlp_bias)
-        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=config.mlp_bias)
-        self.act_fn = ACT2FN[config.hidden_act]
-
-    def forward(self, x):
-        down_proj = self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
-        return down_proj
-
-
-class Apertus1p5DecoderLayer(GradientCheckpointingLayer):
-    def __init__(self, config: Apertus1p5Config, layer_idx: int):
+class Apertus1p5TextDecoderLayer(GradientCheckpointingLayer):
+    def __init__(self, config: Apertus1p5TextConfig, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
 
-        self.self_attn = Apertus1p5Attention(config=config, layer_idx=layer_idx)
+        self.self_attn = Apertus1p5TextAttention(config=config, layer_idx=layer_idx)
 
-        self.mlp = Apertus1p5MLP(config)
-        self.input_layernorm = Apertus1p5RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.post_attention_layernorm = Apertus1p5RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.dropout = nn.Dropout(config.attention_dropout)
+        self.mlp = Apertus1p5TextMLP(config)
+        self.attention_layernorm = Apertus1p5TextRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.feedforward_layernorm = Apertus1p5TextRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
     def forward(
         self,
@@ -253,8 +533,7 @@ class Apertus1p5DecoderLayer(GradientCheckpointingLayer):
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
         residual = hidden_states
-        hidden_states = self.input_layernorm(hidden_states)
-
+        hidden_states = self.attention_layernorm(hidden_states)
         hidden_states, _ = self.self_attn(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
@@ -264,318 +543,39 @@ class Apertus1p5DecoderLayer(GradientCheckpointingLayer):
             position_embeddings=position_embeddings,
             **kwargs,
         )
-        hidden_states = residual + self.dropout(hidden_states)
+        hidden_states = residual + hidden_states
 
+        # Fully Connected
         residual = hidden_states
-        hidden_states = self.post_attention_layernorm(hidden_states)
+        hidden_states = self.feedforward_layernorm(hidden_states)
         hidden_states = self.mlp(hidden_states)
-        hidden_states = residual + self.dropout(hidden_states)
+        hidden_states = residual + hidden_states
         return hidden_states
 
 
-class Apertus1p5VQVAEResnetBlock(nn.Module):
-    def __init__(self, in_channels: int, out_channels: int | None = None, dropout: float = 0.0):
-        super().__init__()
-        self.in_channels = in_channels
-        out_channels = in_channels if out_channels is None else out_channels
-        self.out_channels = out_channels
-
-        self.norm1 = nn.GroupNorm(num_groups=32, num_channels=in_channels, eps=1e-6, affine=True)
-        self.conv1 = nn.Conv2d(in_channels, out_channels, kernel_size=3, stride=1, padding=1)
-        self.norm2 = nn.GroupNorm(num_groups=32, num_channels=out_channels, eps=1e-6, affine=True)
-        self.dropout = nn.Dropout(dropout)
-        self.conv2 = nn.Conv2d(out_channels, out_channels, kernel_size=3, stride=1, padding=1)
-        if in_channels != out_channels:
-            self.nin_shortcut = nn.Conv2d(in_channels, out_channels, kernel_size=1, stride=1, padding=0)
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        residual = hidden_states
-        hidden_states = self.norm1(hidden_states)
-        hidden_states = hidden_states * torch.sigmoid(hidden_states)
-        hidden_states = self.conv1(hidden_states)
-        hidden_states = self.norm2(hidden_states)
-        hidden_states = hidden_states * torch.sigmoid(hidden_states)
-        hidden_states = self.dropout(hidden_states)
-        hidden_states = self.conv2(hidden_states)
-        if self.in_channels != self.out_channels:
-            residual = self.nin_shortcut(residual)
-        return residual + hidden_states
-
-
-class Apertus1p5VQVAEAttnBlock(nn.Module):
-    """Single-head self-attention over spatial positions with 1x1 convolutions."""
-
-    def __init__(self, in_channels: int):
-        super().__init__()
-        self.norm = nn.GroupNorm(num_groups=32, num_channels=in_channels, eps=1e-6, affine=True)
-        self.q = nn.Conv2d(in_channels, in_channels, kernel_size=1, stride=1, padding=0)
-        self.k = nn.Conv2d(in_channels, in_channels, kernel_size=1, stride=1, padding=0)
-        self.v = nn.Conv2d(in_channels, in_channels, kernel_size=1, stride=1, padding=0)
-        self.proj_out = nn.Conv2d(in_channels, in_channels, kernel_size=1, stride=1, padding=0)
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        residual = hidden_states
-        hidden_states = self.norm(hidden_states)
-        query = self.q(hidden_states)
-        key = self.k(hidden_states)
-        value = self.v(hidden_states)
-
-        batch_size, channels, height, width = query.shape
-        query = query.reshape(batch_size, channels, height * width).permute(0, 2, 1)
-        key = key.reshape(batch_size, channels, height * width)
-        attn_weights = torch.bmm(query, key) * channels**-0.5
-        attn_weights = F.softmax(attn_weights, dim=2)
-
-        value = value.reshape(batch_size, channels, height * width)
-        hidden_states = torch.bmm(value, attn_weights.permute(0, 2, 1))
-        hidden_states = hidden_states.reshape(batch_size, channels, height, width)
-        return residual + self.proj_out(hidden_states)
-
-
-class Apertus1p5VQVAEDownsample(nn.Module):
-    def __init__(self, in_channels: int):
-        super().__init__()
-        self.conv = nn.Conv2d(in_channels, in_channels, kernel_size=3, stride=2, padding=0)
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        # asymmetric right/bottom padding, as in the original VQGAN-style tokenizer
-        hidden_states = F.pad(hidden_states, (0, 1, 0, 1), mode="constant", value=0)
-        return self.conv(hidden_states)
-
-
-class Apertus1p5VQVAEEncoder(nn.Module):
-    def __init__(self, config: Apertus1p5VQVAEConfig):
-        super().__init__()
-        self.num_resolutions = len(config.channel_multiplier)
-        self.num_res_blocks = config.num_res_blocks
-
-        self.conv_in = nn.Conv2d(config.in_channels, config.base_channels, kernel_size=3, stride=1, padding=1)
-
-        # attention placement is decided statically from the reference `resolution`, as in the original
-        current_resolution = config.resolution
-        in_channel_multiplier = (1,) + tuple(config.channel_multiplier)
-        self.down = nn.ModuleList()
-        for i_level in range(self.num_resolutions):
-            block = nn.ModuleList()
-            attn = nn.ModuleList()
-            block_in = config.base_channels * in_channel_multiplier[i_level]
-            block_out = config.base_channels * config.channel_multiplier[i_level]
-            for _ in range(self.num_res_blocks):
-                block.append(Apertus1p5VQVAEResnetBlock(block_in, block_out, dropout=config.dropout))
-                block_in = block_out
-                if current_resolution in config.attn_resolutions:
-                    attn.append(Apertus1p5VQVAEAttnBlock(block_in))
-
-            down = nn.Module()
-            down.block = block
-            down.attn = attn
-            if i_level != self.num_resolutions - 1:
-                down.downsample = Apertus1p5VQVAEDownsample(block_in)
-                current_resolution = current_resolution // 2
-            self.down.append(down)
-
-        self.mid = nn.Module()
-        self.mid.block_1 = Apertus1p5VQVAEResnetBlock(block_in, block_in, dropout=config.dropout)
-        self.mid.attn_1 = Apertus1p5VQVAEAttnBlock(block_in)
-        self.mid.block_2 = Apertus1p5VQVAEResnetBlock(block_in, block_in, dropout=config.dropout)
-
-        self.norm_out = nn.GroupNorm(num_groups=32, num_channels=block_in, eps=1e-6, affine=True)
-        self.conv_out = nn.Conv2d(block_in, config.latent_channels, kernel_size=3, stride=1, padding=1)
-
-    def forward(self, pixel_values: torch.Tensor) -> torch.Tensor:
-        hidden_states = self.conv_in(pixel_values)
-        for i_level in range(self.num_resolutions):
-            for i_block in range(self.num_res_blocks):
-                hidden_states = self.down[i_level].block[i_block](hidden_states)
-                if len(self.down[i_level].attn) > 0:
-                    hidden_states = self.down[i_level].attn[i_block](hidden_states)
-            if i_level != self.num_resolutions - 1:
-                hidden_states = self.down[i_level].downsample(hidden_states)
-
-        hidden_states = self.mid.block_1(hidden_states)
-        hidden_states = self.mid.attn_1(hidden_states)
-        hidden_states = self.mid.block_2(hidden_states)
-
-        hidden_states = self.norm_out(hidden_states)
-        hidden_states = hidden_states * torch.sigmoid(hidden_states)
-        return self.conv_out(hidden_states)
-
-
-class Apertus1p5VQVAEVectorQuantizer(nn.Module):
-    """
-    IBQ codebook lookup, from *Scalable Image Tokenization with Index Backpropagation Quantization*
-    (https://huggingface.co/papers/2412.02692). IBQ differs from plain VQ in how the codebook is trained; at
-    inference, quantization reduces to a dot-product similarity argmax over the codebook. This class implements
-    only that inference path, not IBQ's differentiable index-backpropagation training path.
-    """
-
-    def __init__(self, config: Apertus1p5VQVAEConfig):
-        super().__init__()
-        self.embedding = nn.Embedding(config.codebook_size, config.embed_dim)
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.LongTensor:
-        # hidden_states: (batch_size, embed_dim, height, width)
-        logits = torch.einsum("bdhw,nd->bnhw", hidden_states, self.embedding.weight)
-        return logits.argmax(dim=1)  # (batch_size, height, width)
-
-
-@auto_docstring(
-    custom_intro="""
-    The Apertus 1.5 vision tokenizer: an encode-only port of the EMU3.5 Vision Tokenizer by BAAI
-    (*Emu3.5: Native Multimodal Models are World Learners*, https://huggingface.co/papers/2510.26583; weights and
-    original code at https://huggingface.co/BAAI/Emu3.5-VisionTokenizer, Apache-2.0), an IBQ image tokenizer with
-    a 131k codebook and 16x spatial downsampling. Apertus 1.5 generates text only, so the original decoder is not
-    ported. Run the tokenizer in `float32`: code assignment is an argmax over codebook logits, and half precision
-    perturbs a few percent of codes.
-
-    This is an inference-only tokenizer port and does not support tokenizer training. It omits IBQ's
-    differentiable index-backpropagation path, training losses, and decoder, while `encode` returns hard indices
-    whose argmax stops gradients. Calling `train()` does not restore those components. The `encode` method is not
-    decorated with `torch.no_grad`: public Transformers model methods conventionally respect the caller's
-    gradient mode. Callers may use `torch.no_grad()` or `torch.inference_mode()` for standalone inference; the
-    absence of a decorator does not imply that this tokenizer supports training.
-    """
-)
-class Apertus1p5VQVAE(PreTrainedModel):
-    config: Apertus1p5VQVAEConfig
-    base_model_prefix = "visionvq"
-    main_input_name = "pixel_values"
-    input_modalities = ("image",)
-    _no_split_modules = ["Apertus1p5VQVAEResnetBlock", "Apertus1p5VQVAEAttnBlock"]
-    # code assignment is an argmax over codebook logits: half precision flips ~8% of codes (bf16, 131k codebook),
-    # so the tokenizer is kept in fp32 even when the model is loaded in fp16/bf16
-    _keep_in_fp32_modules_strict = ["encoder", "quant_conv", "quantize"]
-
-    @torch.no_grad()
-    def _init_weights(self, module):
-        super()._init_weights(module)
-        if isinstance(module, nn.Conv2d):
-            init.kaiming_normal_(module.weight, mode="fan_out", nonlinearity="relu")
-        elif isinstance(module, nn.GroupNorm):
-            init.ones_(module.weight)
-            init.zeros_(module.bias)
-        elif isinstance(module, nn.Embedding):
-            init.normal_(module.weight)
-
-    def __init__(self, config: Apertus1p5VQVAEConfig):
-        super().__init__(config)
-        self.config = config
-
-        self.encoder = Apertus1p5VQVAEEncoder(config)
-        self.quantize = Apertus1p5VQVAEVectorQuantizer(config)
-        self.quant_conv = nn.Conv2d(config.latent_channels, config.embed_dim, kernel_size=1)
-
-        self.vision_spatial_factor = config.spatial_scale_factor
-        # The pretrained tokenizer starts in evaluation mode. This does not freeze parameters or add `no_grad`.
-        self.eval()
-
-        self.post_init()
-
-    def encode(self, pixel_values: torch.Tensor) -> torch.LongTensor:
-        """
-        Tokenizes images into a grid of discrete codebook indices.
-
-        This method implements inference tokenization only. Its hard argmax output is not differentiable, and
-        this port does not include the IBQ training path or losses needed to train the tokenizer. It deliberately
-        respects the caller's gradient mode, as public Transformers model methods normally do; use
-        `torch.no_grad()` or `torch.inference_mode()` when calling it for standalone inference.
-
-        Args:
-            pixel_values (`torch.Tensor` of shape `(batch_size, channels, height, width)`):
-                Input images, normalized to `[-1, 1]` with sides that are multiples of the spatial factor (16).
-
-        Returns:
-            `torch.LongTensor` of shape `(batch_size, height // 16, width // 16)` with values in
-            `[0, codebook_size)`.
-        """
-        # the tokenizer runs in fp32 even inside a half-precision model (`_keep_in_fp32_modules_strict`):
-        # cast the input to the encoder's dtype so callers can pass fp16/bf16 pixel values
-        pixel_values = pixel_values.to(self.encoder.conv_in.weight.dtype)
-        hidden_states = self.encoder(pixel_values)
-        hidden_states = self.quant_conv(hidden_states)
-        return self.quantize(hidden_states)
-
-
-class Apertus1p5ImageVocabularyMapping:
-    """
-    A class for mapping discrete image tokens from VQGAN to BPE tokens.
-    """
-
-    def __init__(self, vocab_map):
-        self.vocab_map = vocab_map
-        self.eol_token_id = vocab_map.get("<|extra_200|>")
-        self.image_token_id = vocab_map.get("<image>")
-
-    @cached_property
-    def image_tokens(self):
-        return sorted([val for name, val in self.vocab_map.items() if name.startswith("<|visual token")])
-
-    @cached_property
-    def image_tokens_str(self):
-        return sorted([name for name, val in self.vocab_map.items() if name.startswith("<|visual token")])
-
-    @cached_property
-    def img2bpe(self):
-        return {int(token[-8:-2]): self.vocab_map[token] for token in self.image_tokens_str}
-
-    @cached_property
-    def bpe2img(self):
-        return {v: k for k, v in self.img2bpe.items()}
-
-    @cached_property
-    def bpe2img_mapping_tensor(self):
-        mapping = torch.zeros(max(self.bpe2img.keys()) + 1, dtype=torch.int)
-        for k, v in self.bpe2img.items():
-            mapping[k] = v
-        return mapping
-
-    @cached_property
-    def img2bpe_mapping_tensor(self):
-        mapping = torch.zeros(max(self.img2bpe.keys()) + 1, dtype=torch.int)
-        for k, v in self.img2bpe.items():
-            mapping[k] = v
-        return mapping
-
-    def convert_img2bpe(self, img_batch: list[torch.Tensor]) -> torch.Tensor:
-        device = img_batch.device
-        eol_row = torch.ones((img_batch.shape[0], 1), dtype=torch.int) * self.eol_token_id
-        img_tokens = self.img2bpe_mapping_tensor[img_batch.to("cpu")]
-        img_tokens = torch.cat([img_tokens, eol_row], dim=-1)
-        return img_tokens.to(device)
-
-    def convert_bpe2img(self, img_batch: torch.Tensor) -> torch.Tensor:
-        device = img_batch.device
-        img_batch = img_batch[..., :-1]  # remove last row of EOL tokens
-        img_tokens = self.bpe2img_mapping_tensor[img_batch.to("cpu")]
-        return img_tokens.to(device)
-
-
 @auto_docstring
-class Apertus1p5PreTrainedModel(PreTrainedModel):
-    config: Apertus1p5Config
+class Apertus1p5TextPreTrainedModel(PreTrainedModel):
+    config: Apertus1p5TextConfig
     base_model_prefix = "model"
-    input_modalities = ("image", "text")
     supports_gradient_checkpointing = True
-    _no_split_modules = [
-        "Apertus1p5DecoderLayer",
-    ]
-    _skip_keys_device_placement = ["past_key_values", "causal_mask"]
+    _no_split_modules = ["Apertus1p5TextDecoderLayer"]
+    _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = True
     _supports_sdpa = True
+    _supports_flex_attn = True
 
     _can_compile_fullgraph = True
-    _supports_flex_attn = True
     _supports_attention_backend = True
     _can_record_outputs = {
-        "hidden_states": Apertus1p5DecoderLayer,
-        "attentions": Apertus1p5Attention,
+        "hidden_states": Apertus1p5TextDecoderLayer,
+        "attentions": Apertus1p5TextAttention,
     }
 
 
-class Apertus1p5RotaryEmbedding(nn.Module):
+class Apertus1p5TextRotaryEmbedding(nn.Module):
     inv_freq: torch.Tensor  # fix linting for `register_buffer`
 
-    def __init__(self, config: Apertus1p5Config, device=None):
+    def __init__(self, config: Apertus1p5TextConfig, device=None):
         super().__init__()
         self.max_seq_len_cached = config.max_position_embeddings
         self.original_max_seq_len = config.max_position_embeddings
@@ -593,7 +593,7 @@ class Apertus1p5RotaryEmbedding(nn.Module):
 
     @staticmethod
     def compute_default_rope_parameters(
-        config: Apertus1p5Config | None = None,
+        config: Apertus1p5TextConfig | None = None,
         device: Optional["torch.device"] = None,
         seq_len: int | None = None,
     ) -> tuple["torch.Tensor", float]:
@@ -638,7 +638,7 @@ class Apertus1p5RotaryEmbedding(nn.Module):
 
 
 @auto_docstring
-class Apertus1p5TextModel(Apertus1p5PreTrainedModel):
+class Apertus1p5TextModel(Apertus1p5TextPreTrainedModel):
     config: Apertus1p5TextConfig
 
     def __init__(self, config: Apertus1p5TextConfig):
@@ -648,10 +648,10 @@ class Apertus1p5TextModel(Apertus1p5PreTrainedModel):
 
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
         self.layers = nn.ModuleList(
-            [Apertus1p5DecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+            [Apertus1p5TextDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
-        self.norm = Apertus1p5RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.rotary_emb = Apertus1p5RotaryEmbedding(config=config)
+        self.norm = Apertus1p5TextRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.rotary_emb = Apertus1p5TextRotaryEmbedding(config=config)
         self.gradient_checkpointing = False
 
         # Initialize weights and apply final processing
@@ -714,17 +714,23 @@ class Apertus1p5TextModel(Apertus1p5PreTrainedModel):
 
 
 @auto_docstring
-class Apertus1p5ForCausalLM(Apertus1p5PreTrainedModel, GenerationMixin):
+class Apertus1p5TextForCausalLM(Apertus1p5PreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
     _tp_plan = {"lm_head": "colwise_gather_output"}
     _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
     config: Apertus1p5TextConfig
+    # the second base only contributes the pruned-head resize guard; override its composite metadata
+    input_modalities = ("text",)
+    _can_compile_fullgraph = True
+    _no_split_modules = ["Apertus1p5TextDecoderLayer"]
 
     def __init__(self, config):
         super().__init__(config)
         self.model = Apertus1p5TextModel(config)
         self.vocab_size = config.vocab_size
-        self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
+        # the LM head may be pruned to the text-only prefix of the vocabulary; input embeddings keep the
+        # full vocabulary, and retained output ids equal their token ids
+        self.lm_head = nn.Linear(config.hidden_size, config.output_vocab_size or config.vocab_size, bias=False)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -744,23 +750,12 @@ class Apertus1p5ForCausalLM(Apertus1p5PreTrainedModel, GenerationMixin):
         **kwargs: Unpack[TransformersKwargs],
     ) -> CausalLMOutputWithPast:
         r"""
-        Example:
-
-        ```python
-        >>> from transformers import Apertus1p5Processor, Apertus1p5ForConditionalGeneration
-        >>> import torch
-        >>> import httpx
-        >>> from io import BytesIO
-        >>> from PIL import Image
-
-        >>> model = Apertus1p5ForCausalLM.from_pretrained("BAAI/Apertus1p5-Chat-hf", dtype=torch.bfloat16)
-        >>> processor = Apertus1p5Processor.from_pretrained("BAAI/Apertus1p5-Chat-hf")
-
-        >>> inputs = processor(text=["Can you write me a poem about winter."], return_tensors="pt").to(model.device)
-
-        >>> generated_ids = model.generate(**inputs, max_new_tokens=100, do_sample=False)
-        >>> processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
-        ```"""
+        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
+            config.output_vocab_size or config.vocab_size)` or -100; tokens with indices set to `-100` are
+            ignored (masked). With a pruned head, positions holding multimodal ids (`>= output_vocab_size`)
+            must be masked with `-100`, exactly like any other id outside the output range.
+        """
         outputs: BaseModelOutputWithPast = self.model(
             input_ids=input_ids,
             attention_mask=attention_mask,
@@ -778,7 +773,8 @@ class Apertus1p5ForCausalLM(Apertus1p5PreTrainedModel, GenerationMixin):
 
         loss = None
         if labels is not None:
-            loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.vocab_size, **kwargs)
+            # the loss reshapes with the head size, which may be pruned below `vocab_size`
+            loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.lm_head.out_features, **kwargs)
 
         return CausalLMOutputWithPast(
             loss=loss,
@@ -789,95 +785,213 @@ class Apertus1p5ForCausalLM(Apertus1p5PreTrainedModel, GenerationMixin):
         )
 
 
-class Apertus1p5Model(Apertus1p5PreTrainedModel):
-    # keep the vision tokenizer in fp32 when the model is loaded in fp16/bf16: its code assignment is an argmax
-    # over codebook logits and half precision flips a significant fraction of codes
-    _keep_in_fp32_modules_strict = ["vqmodel"]
+@auto_docstring(
+    custom_intro="""
+    The Apertus 1.5 model: an Apertus language backbone whose input embeddings are shared by text tokens and
+    the discrete image/audio codes produced by the bundled vision tokenizer and audio codec.
 
-    def __init__(self, config):
+    Media tensors are flattened over all prompts, independently for images and audio, in batch-sample order and
+    then left-to-right placeholder order within each sample. The model encodes tensor rows in that order and
+    scatters their concatenated features into the corresponding placeholder positions in row-major order. Images
+    and audio may be interleaved arbitrarily because each modality uses its own placeholder mask. The model checks
+    the total feature/placeholder count for each modality, but cannot infer per-sample ownership; callers that
+    bypass `Apertus1p5Processor` must preserve this ordering themselves.
+    """
+)
+class Apertus1p5Model(Apertus1p5PreTrainedModel):
+    # both tokenizers assign codes by argmax, which half precision perturbs (see Apertus1p5VisionTokenizerModel)
+    _keep_in_fp32_modules_strict = ["vision_tokenizer", "audio_tokenizer"]
+
+    def __init__(self, config: Apertus1p5Config):
         super().__init__(config)
-        self.text_model = Apertus1p5TextModel._from_config(config.text_config)
-        self.vqmodel = Apertus1p5VQVAE(config.vq_config)
-        self.vocabulary_mapping = Apertus1p5ImageVocabularyMapping(config.vocabulary_map)
+        self.language_model = AutoModel.from_config(config.text_config)
+        self.vision_tokenizer = Apertus1p5VisionTokenizerModel(config.vision_tokenizer_config)
+        self.audio_tokenizer = AutoModel.from_config(config.audio_tokenizer_config)
 
         # Initialize weights and apply final processing
         self.post_init()
 
     def get_input_embeddings(self):
-        return self.text_model.get_input_embeddings()
+        return self.language_model.get_input_embeddings()
 
     def set_input_embeddings(self, value):
-        self.text_model.set_input_embeddings(value)
+        self.language_model.set_input_embeddings(value)
+
+    @staticmethod
+    def _validate_image_inputs(pixel_values: torch.FloatTensor, image_sizes: torch.LongTensor | None) -> None:
+        if pixel_values.shape[0] == 0:
+            raise ValueError("`pixel_values` contains no images; pass `pixel_values=None` when there are no images.")
+        if image_sizes is None:
+            raise ValueError("`image_sizes` must be provided when `pixel_values` are provided.")
+        if pixel_values.shape[0] != image_sizes.shape[0]:
+            raise ValueError(
+                "The number of images in `pixel_values` must match the number of entries in `image_sizes`, but got "
+                f"{pixel_values.shape[0]} images and {image_sizes.shape[0]} size entries."
+            )
+
+    @staticmethod
+    def _validate_audio_inputs(input_features: torch.FloatTensor, feature_attention_mask: torch.Tensor | None) -> None:
+        if input_features.shape[0] == 0:
+            raise ValueError(
+                "`input_features` contains no audio clips; pass `input_features=None` when there is no audio."
+            )
+        if feature_attention_mask is None:
+            raise ValueError("`feature_attention_mask` must be provided when `input_features` are provided.")
+        if input_features.shape[0] != feature_attention_mask.shape[0]:
+            raise ValueError(
+                "The number of audio clips in `input_features` must match the number of rows in `feature_attention_mask`, "
+                f"but got {input_features.shape[0]} clips and {feature_attention_mask.shape[0]} mask rows."
+            )
 
     def get_image_tokens(self, pixel_values: torch.FloatTensor, image_sizes: torch.LongTensor) -> torch.LongTensor:
         """
-        Tokenizes images into discrete tokens with the vision tokenizer and converts them to BPE tokens.
-        Each image is cropped to its true size and encoded individually: the encoder contains global attention,
-        so batch padding would perturb the codes.
+        Tokenizes images into discrete codes and maps them into the shared text vocabulary via
+        `config.image_token_offset`. Each image is cropped to its true size and encoded individually: the encoder
+        contains global attention, so batch padding would perturb the codes.
 
         Args:
-            pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
-                The tensors corresponding to the input images.
-            image_sizes (`torch.LongTensor` of shape `(batch_size, 2)`):
-                The sizes of the images in the batch, being (height, width) for each image.
+            pixel_values (`torch.FloatTensor` of shape `(num_images, num_channels, height, width)`):
+                The tensors corresponding to the input images, padded to a common size.
+            image_sizes (`torch.LongTensor` of shape `(num_images, 2)`):
+                The true size of each image, being (height, width).
+
+        Returns:
+            `torch.LongTensor`: flat vocabulary ids of all image codes (`sum_i (h_i // 16) * (w_i // 16)` items).
         """
         self._validate_image_inputs(pixel_values, image_sizes)
-        image_tokens_list = []
+        vocab_ids_list = []
         for image, size in zip(pixel_values, image_sizes):
             image = image[None, :, : int(size[0]), : int(size[1])]
-            image_tokens_list.append(self.vqmodel.encode(image)[0])
-        bpe_tokens_list = [self.vocabulary_mapping.convert_img2bpe(tokens).flatten() for tokens in image_tokens_list]
-        return torch.cat(bpe_tokens_list)
+            codes = self.vision_tokenizer.encode(image)[0]
+            vocab_ids_list.append(codes.flatten() + self.config.image_token_offset)
+        return torch.cat(vocab_ids_list)
 
     @can_return_tuple
     @auto_docstring(
         custom_intro="Tokenizes images into discrete tokens with the vision tokenizer and embeds them with the text embeddings layer"
     )
     def get_image_features(
-        self, pixel_values: torch.FloatTensor, image_sizes: torch.LongTensor, **kwargs: Unpack[TransformersKwargs]
-    ) -> tuple | Apertus1p5VQVAEModelOutput:
+        self, pixel_values: torch.FloatTensor, image_sizes: torch.LongTensor
+    ) -> tuple | Apertus1p5VisionTokenizerModelOutput:
         r"""
-        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)):
-            The tensors corresponding to the input images.
+        pixel_values (`torch.FloatTensor` of shape `(num_images, num_channels, height, width)`):
+            The tensors corresponding to the input images, padded to a common size.
+        image_sizes (`torch.LongTensor` of shape `(num_images, 2)`):
+            The true size of each image, being (height, width).
         """
-        self._validate_image_inputs(pixel_values, image_sizes)
-        image_tokens_list = []
-        for image, size in zip(pixel_values, image_sizes):
-            image = image[None, :, : int(size[0]), : int(size[1])]
-            image_tokens_list.append(self.vqmodel.encode(image)[0])
-        split_sizes = [
-            (height // self.vqmodel.vision_spatial_factor) * (width // self.vqmodel.vision_spatial_factor + 1)
-            for height, width in image_sizes
-        ]
-        bpe_tokens_list = [self.vocabulary_mapping.convert_img2bpe(tokens).flatten() for tokens in image_tokens_list]
-        bpe_tokens = torch.cat(bpe_tokens_list)
-        image_embeddings = self.get_input_embeddings()(bpe_tokens)
+        vocab_ids = self.get_image_tokens(pixel_values, image_sizes)
+        factor = self.vision_tokenizer.vision_spatial_factor
+        grid_sizes = [(int(size[0]) // factor, int(size[1]) // factor) for size in image_sizes]
+        split_sizes = [height * width for height, width in grid_sizes]
+        image_embeddings = self.get_input_embeddings()(vocab_ids)
         image_features = torch.split(image_embeddings, split_sizes)
-        return Apertus1p5VQVAEModelOutput(image_tokens=image_tokens_list, pooler_output=image_features)
+        image_tokens = [
+            (ids - self.config.image_token_offset).reshape(grid)
+            for ids, grid in zip(torch.split(vocab_ids, split_sizes), grid_sizes)
+        ]
+        return Apertus1p5VisionTokenizerModelOutput(image_tokens=image_tokens, pooler_output=image_features)
+
+    def get_audio_tokens(
+        self, input_features: torch.FloatTensor, feature_attention_mask: torch.Tensor
+    ) -> torch.LongTensor:
+        """
+        Tokenizes audio clips into discrete codes and maps them into the shared text vocabulary via
+        `config.audio_token_offset`. Each clip is sliced to its true length and encoded individually so the codes
+        are independent of batch padding.
+
+        Args:
+            input_features (`torch.FloatTensor` of shape `(num_clips, 1, max_length)`):
+                Mono 24 kHz waveforms, padded to a common length.
+            feature_attention_mask (`torch.Tensor` of shape `(num_clips, max_length)`):
+                Mask with 1 for valid samples and 0 for padding, as returned by the feature extractor.
+
+        Returns:
+            `torch.LongTensor`: flat vocabulary ids of all audio codes (`sum_i ceil(length_i / hop)` items).
+        """
+        self._validate_audio_inputs(input_features, feature_attention_mask)
+        if input_features.dim() == 2:
+            input_features = input_features.unsqueeze(1)
+        audio_lengths = feature_attention_mask.sum(dim=-1)
+        if (audio_lengths == 0).any():
+            raise ValueError("`feature_attention_mask` marks an audio clip with zero valid samples.")
+        # a 0 -> 1 transition along a row means the mask is not right-padded
+        if (feature_attention_mask.long().diff(dim=-1) > 0).any():
+            raise ValueError(
+                "`feature_attention_mask` must be right-padded (valid samples first), as returned by the feature "
+                "extractor."
+            )
+        vocab_ids_list = []
+        for clip, length in zip(input_features, audio_lengths):
+            clip = clip[None, :, : int(length)].to(self.audio_tokenizer.dtype)
+            codes = self.audio_tokenizer.encode(clip).audio_codes
+            vocab_ids_list.append(codes.flatten() + self.config.audio_token_offset)
+        return torch.cat(vocab_ids_list)
+
+    @can_return_tuple
+    @auto_docstring(
+        custom_intro="Tokenizes audio clips into discrete tokens with the audio codec and embeds them with the text embeddings layer"
+    )
+    def get_audio_features(
+        self, input_features: torch.FloatTensor, feature_attention_mask: torch.Tensor
+    ) -> tuple | Apertus1p5AudioTokenizerModelOutput:
+        r"""
+        input_features (`torch.FloatTensor` of shape `(num_clips, 1, max_length)`):
+            Mono 24 kHz waveforms, padded to a common length.
+        feature_attention_mask (`torch.Tensor` of shape `(num_clips, max_length)`):
+            Mask with 1 for valid samples and 0 for padding, as returned by the feature extractor.
+        """
+        vocab_ids = self.get_audio_tokens(input_features, feature_attention_mask)
+        hop_length = self.audio_tokenizer.config.hop_length
+        split_sizes = [-(-int(length) // hop_length) for length in feature_attention_mask.sum(dim=-1)]
+        audio_embeddings = self.get_input_embeddings()(vocab_ids)
+        audio_features = torch.split(audio_embeddings, split_sizes)
+        audio_tokens = [ids - self.config.audio_token_offset for ids in torch.split(vocab_ids, split_sizes)]
+        return Apertus1p5AudioTokenizerModelOutput(audio_tokens=audio_tokens, pooler_output=audio_features)
 
     def get_placeholder_mask(
-        self, input_ids: torch.LongTensor, inputs_embeds: torch.FloatTensor, image_features: torch.FloatTensor
+        self,
+        input_ids: torch.LongTensor,
+        inputs_embeds: torch.FloatTensor,
+        image_features: torch.FloatTensor | None = None,
+        audio_features: torch.FloatTensor | None = None,
     ):
         """
-        Obtains multimodal placeholder mask from `input_ids` or `inputs_embeds`, and checks that the placeholder token count is
-        equal to the length of multimodal features. If the lengths are different, an error is raised.
+        Obtains multimodal placeholder masks from `input_ids` or `inputs_embeds`, and checks that each
+        placeholder token count equals the length of the corresponding multimodal features. If the lengths are
+        different, an error is raised.
         """
         if input_ids is None:
-            special_image_mask = inputs_embeds == self.get_input_embeddings()(
-                torch.tensor(self.vocabulary_mapping.image_token_id, dtype=torch.long, device=inputs_embeds.device)
+            embedder = self.get_input_embeddings()
+            image_token_embed = embedder(
+                torch.tensor(self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
             )
-            special_image_mask = special_image_mask.all(-1)
+            special_image_mask = (inputs_embeds == image_token_embed).all(-1)
+            audio_token_embed = embedder(
+                torch.tensor(self.config.audio_token_id, dtype=torch.long, device=inputs_embeds.device)
+            )
+            special_audio_mask = (inputs_embeds == audio_token_embed).all(-1)
         else:
-            special_image_mask = input_ids == self.vocabulary_mapping.image_token_id
+            special_image_mask = input_ids == self.config.image_token_id
+            special_audio_mask = input_ids == self.config.audio_token_id
 
-        n_image_tokens = special_image_mask.sum()
-        n_image_features = image_features.shape[0] * image_features.shape[1]
+        if image_features is not None:
+            n_image_tokens = special_image_mask.sum()
+            torch_compilable_check(
+                n_image_tokens * inputs_embeds.shape[-1] == image_features.numel(),
+                f"Image features and image tokens do not match, tokens: {n_image_tokens}, "
+                f"features: {image_features.shape[0]}",
+            )
+        if audio_features is not None:
+            n_audio_tokens = special_audio_mask.sum()
+            torch_compilable_check(
+                n_audio_tokens * inputs_embeds.shape[-1] == audio_features.numel(),
+                f"Audio features and audio tokens do not match, tokens: {n_audio_tokens}, "
+                f"features: {audio_features.shape[0]}",
+            )
+
         special_image_mask = special_image_mask.unsqueeze(-1).to(inputs_embeds.device)
-        torch_compilable_check(
-            n_image_tokens * inputs_embeds.shape[-1] == image_features.numel(),
-            f"Image features and image tokens do not match, tokens: {n_image_tokens}, features: {n_image_features}",
-        )
-        return special_image_mask
+        special_audio_mask = special_audio_mask.unsqueeze(-1).to(inputs_embeds.device)
+        return special_image_mask, special_audio_mask
 
     @can_return_tuple
     @auto_docstring
@@ -886,18 +1000,28 @@ class Apertus1p5Model(Apertus1p5PreTrainedModel):
         input_ids: torch.LongTensor | None = None,
         pixel_values: torch.FloatTensor | None = None,
         image_sizes: torch.Tensor | None = None,
+        input_features: torch.FloatTensor | None = None,
+        feature_attention_mask: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | CausalLMOutputWithPast:
+    ) -> tuple | BaseModelOutputWithPast:
         r"""
-        image_sizes (`torch.LongTensor` of shape `(batch_size, 2)`):
-            The sizes of the images in the batch, being (height, width) for each image. Image sizes can be obtained using
-            [`AutoImageProcessor`]. See [`Apertus1p5ImageProcessor.__call__`] for details ([]`Apertus1p5Processor`] uses
-            [`Apertus1p5ImageProcessor`] for processing images).
+        pixel_values (`torch.FloatTensor` of shape `(num_images, num_channels, max_height, max_width)`, *optional*):
+            Images from all prompts, padded to a common size. Rows must follow image-placeholder order across the
+            text batch: batch-sample order, then left-to-right within each sample.
+        image_sizes (`torch.LongTensor` of shape `(num_images, 2)`, *optional*):
+            The true `(height, width)` of each image in `pixel_values`, in the same row order, used to crop away
+            batch padding.
+        input_features (`torch.FloatTensor` of shape `(num_clips, 1, max_length)`, *optional*):
+            Mono 24 kHz audio waveforms from all prompts, padded to a common length. Rows must independently follow
+            audio-placeholder order across the text batch: batch-sample order, then left-to-right within each
+            sample.
+        feature_attention_mask (`torch.Tensor` of shape `(num_clips, max_length)`, *optional*):
+            Mask with 1 for valid samples and 0 for padding, in the same row order as `input_features`.
         """
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError(
@@ -907,16 +1031,25 @@ class Apertus1p5Model(Apertus1p5PreTrainedModel):
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
+        image_features = None
         if pixel_values is not None:
             image_features = self.get_image_features(pixel_values, image_sizes).pooler_output
             image_features = torch.cat(image_features, dim=0)
-            special_image_mask = self.get_placeholder_mask(
-                input_ids, inputs_embeds=inputs_embeds, image_features=image_features
-            )
-            inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, image_features)
+        audio_features = None
+        if input_features is not None:
+            audio_features = self.get_audio_features(input_features, feature_attention_mask).pooler_output
+            audio_features = torch.cat(audio_features, dim=0)
 
-        # decoder outputs consists of (dec_features, layer_state, dec_hidden, dec_attn)
-        outputs = self.text_model(
+        if image_features is not None or audio_features is not None:
+            special_image_mask, special_audio_mask = self.get_placeholder_mask(
+                input_ids, inputs_embeds=inputs_embeds, image_features=image_features, audio_features=audio_features
+            )
+            if image_features is not None:
+                inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, image_features)
+            if audio_features is not None:
+                inputs_embeds = inputs_embeds.masked_scatter(special_audio_mask, audio_features)
+
+        outputs = self.language_model(
             attention_mask=attention_mask,
             position_ids=position_ids,
             past_key_values=past_key_values,
@@ -927,27 +1060,27 @@ class Apertus1p5Model(Apertus1p5PreTrainedModel):
 
         return outputs
 
-    @staticmethod
-    def _validate_image_inputs(pixel_values: torch.FloatTensor, image_sizes: torch.LongTensor | None) -> None:
-        if image_sizes is None:
-            raise ValueError("`image_sizes` must be provided when `pixel_values` are provided.")
-        if pixel_values.shape[0] != image_sizes.shape[0]:
-            raise ValueError(
-                "The number of images in `pixel_values` must match the number of entries in `image_sizes`, but got "
-                f"{pixel_values.shape[0]} images and {image_sizes.shape[0]} size entries."
-            )
 
-
+@auto_docstring(
+    custom_intro="""
+    The Apertus 1.5 model with a language-modeling head, for text generation conditioned on interleaved
+    image, audio and text inputs.
+    """
+)
 class Apertus1p5ForConditionalGeneration(Apertus1p5PreTrainedModel, GenerationMixin):
     output_modalities = ("text",)
-    _tied_weights_keys = {"lm_head.weight": "model.text_model.embed_tokens.weight"}
-    # keep the vision tokenizer in fp32 when the model is loaded in fp16/bf16 (argmax code assignment)
-    _keep_in_fp32_modules_strict = ["vqmodel"]
+    _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
+    # both tokenizers assign codes by argmax, which half precision perturbs (see Apertus1p5VisionTokenizerModel)
+    _keep_in_fp32_modules_strict = ["vision_tokenizer", "audio_tokenizer"]
 
     def __init__(self, config):
         super().__init__(config)
         self.model = Apertus1p5Model(config)
-        self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
+        # the LM head may be pruned to the text-only prefix of the vocabulary (see Apertus1p5TextConfig)
+        output_vocab_size = getattr(config.text_config, "output_vocab_size", None)
+        self.lm_head = nn.Linear(
+            config.text_config.hidden_size, output_vocab_size or config.text_config.vocab_size, bias=False
+        )
 
         self.post_init()
 
@@ -967,6 +1100,8 @@ class Apertus1p5ForConditionalGeneration(Apertus1p5PreTrainedModel, GenerationMi
         input_ids: torch.LongTensor | None = None,
         pixel_values: torch.FloatTensor | None = None,
         image_sizes: torch.Tensor | None = None,
+        input_features: torch.FloatTensor | None = None,
+        feature_attention_mask: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
@@ -977,17 +1112,25 @@ class Apertus1p5ForConditionalGeneration(Apertus1p5PreTrainedModel, GenerationMi
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | CausalLMOutputWithPast:
         r"""
-        image_sizes (`torch.LongTensor` of shape `(batch_size, 2)`):
-            The sizes of the images in the batch, being (height, width) for each image.
+        image_sizes (`torch.LongTensor` of shape `(num_images, 2)`, *optional*):
+            The true size of each image, being (height, width), used to crop away batch padding.
+        input_features (`torch.FloatTensor` of shape `(num_clips, 1, max_length)`, *optional*):
+            Mono 24 kHz audio waveforms, padded to a common length.
+        feature_attention_mask (`torch.Tensor` of shape `(num_clips, max_length)`, *optional*):
+            Mask with 1 for valid samples and 0 for padding, as returned by the feature extractor.
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
-            config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
-            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
+            text_config.output_vocab_size or text_config.vocab_size)` or -100; tokens with indices set to
+            `-100` are ignored (masked). With a pruned head, positions holding multimodal ids
+            (`>= output_vocab_size`) must be masked with `-100`, exactly like any other id outside the
+            output range.
         """
         outputs = self.model(
             input_ids=input_ids,
             pixel_values=pixel_values,
             image_sizes=image_sizes,
+            input_features=input_features,
+            feature_attention_mask=feature_attention_mask,
             attention_mask=attention_mask,
             position_ids=position_ids,
             past_key_values=past_key_values,
@@ -1003,9 +1146,8 @@ class Apertus1p5ForConditionalGeneration(Apertus1p5PreTrainedModel, GenerationMi
 
         loss = None
         if labels is not None:
-            loss = self.loss_function(
-                logits=logits, labels=labels, vocab_size=self.config.text_config.vocab_size, **kwargs
-            )
+            # the loss reshapes with the head size, which may be pruned below `vocab_size`
+            loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.lm_head.out_features, **kwargs)
 
         return CausalLMOutputWithPast(
             loss=loss,
@@ -1024,10 +1166,11 @@ class Apertus1p5ForConditionalGeneration(Apertus1p5PreTrainedModel, GenerationMi
         position_ids=None,
         use_cache=True,
         pixel_values=None,
+        input_features=None,
         is_first_iteration=False,
         **kwargs,
     ):
-        # Overwritten -- in specific circumstances we don't want to forward image inputs to the model
+        # Overwritten -- multimodal inputs should only be forwarded on the first generation step
 
         model_inputs = super().prepare_inputs_for_generation(
             input_ids,
@@ -1036,6 +1179,7 @@ class Apertus1p5ForConditionalGeneration(Apertus1p5PreTrainedModel, GenerationMi
             inputs_embeds=inputs_embeds,
             position_ids=position_ids,
             pixel_values=pixel_values,
+            input_features=input_features,
             use_cache=use_cache,
             is_first_iteration=is_first_iteration,
             **kwargs,
@@ -1043,15 +1187,128 @@ class Apertus1p5ForConditionalGeneration(Apertus1p5PreTrainedModel, GenerationMi
 
         if not is_first_iteration and use_cache:
             model_inputs["pixel_values"] = None
+            model_inputs["input_features"] = None
 
         return model_inputs
+
+    def _expand_inputs_for_generation(
+        self,
+        expand_size: int = 1,
+        is_encoder_decoder: bool = False,
+        input_ids: torch.LongTensor | None = None,
+        **model_kwargs,
+    ) -> tuple[torch.LongTensor, dict[str, Any]]:
+        """
+        Overwritten -- the media tensors (`pixel_values`/`image_sizes`, `input_features`/`feature_attention_mask`)
+        are flattened over all media items in the batch, so the default row-wise `repeat_interleave` would separate
+        the items belonging to one prompt. Placeholder counts per sample are instead matched against per-item token
+        counts to split the flattened tensors into per-prompt groups, and each complete group is repeated: with two
+        beams and a prompt containing `[img0, img1]`, row-wise expansion would produce `[img0, img0, img1, img1]`,
+        grouped expansion produces `[img0, img1, img0, img1]`, so every beam receives the complete media group of
+        its source prompt in original order. All batch-shaped tensors keep the ordinary `repeat_interleave`.
+        """
+        if expand_size == 1:
+            return input_ids, model_kwargs
+
+        def _get_placeholder_counts(token_id: int) -> list[int]:
+            inputs_embeds = model_kwargs.get("inputs_embeds")
+            if inputs_embeds is not None:
+                token_embed = self.get_input_embeddings()(
+                    torch.tensor(token_id, dtype=torch.long, device=inputs_embeds.device)
+                )
+                placeholder_mask = (inputs_embeds == token_embed).all(dim=-1)
+            elif input_ids is not None:
+                placeholder_mask = input_ids == token_id
+            else:
+                raise ValueError("Either `input_ids` or `inputs_embeds` must be provided for multimodal expansion.")
+            return placeholder_mask.sum(dim=-1).tolist()
+
+        def _get_media_nums(placeholder_counts: list[int], media_token_counts: list[int], modality: str) -> list[int]:
+            media_nums = []
+            media_idx = 0
+            for sample_idx, expected_tokens in enumerate(placeholder_counts):
+                sample_media_idx = media_idx
+                actual_tokens = 0
+                while actual_tokens < expected_tokens and media_idx < len(media_token_counts):
+                    actual_tokens += media_token_counts[media_idx]
+                    media_idx += 1
+                if actual_tokens != expected_tokens:
+                    raise ValueError(
+                        f"Cannot assign flattened {modality} inputs to sample {sample_idx}: found "
+                        f"{expected_tokens} placeholder tokens, but the corresponding media inputs produce "
+                        f"{actual_tokens} tokens."
+                    )
+                media_nums.append(media_idx - sample_media_idx)
+
+            if media_idx != len(media_token_counts):
+                raise ValueError(
+                    f"Cannot assign all flattened {modality} inputs to the batch: {len(media_token_counts) - media_idx} "
+                    f"media inputs remain after matching the per-sample placeholder counts."
+                )
+            return media_nums
+
+        image_nums = None
+        pixel_values = model_kwargs.get("pixel_values")
+        image_sizes = model_kwargs.get("image_sizes")
+        if pixel_values is not None:
+            self.model._validate_image_inputs(pixel_values, image_sizes)
+            factor = self.model.vision_tokenizer.vision_spatial_factor
+            image_token_counts = (image_sizes // factor).prod(dim=-1).tolist()
+            image_nums = _get_media_nums(
+                _get_placeholder_counts(self.config.image_token_id), image_token_counts, "image"
+            )
+
+        audio_nums = None
+        input_features = model_kwargs.get("input_features")
+        feature_attention_mask = model_kwargs.get("feature_attention_mask")
+        if input_features is not None:
+            self.model._validate_audio_inputs(input_features, feature_attention_mask)
+            hop_length = self.model.audio_tokenizer.config.hop_length
+            audio_lengths = feature_attention_mask.sum(dim=-1)
+            audio_token_counts = ((audio_lengths + hop_length - 1) // hop_length).tolist()
+            audio_nums = _get_media_nums(
+                _get_placeholder_counts(self.config.audio_token_id), audio_token_counts, "audio"
+            )
+
+        def _repeat_interleave_samples(tensor: torch.Tensor, lengths: list[int]) -> torch.Tensor:
+            samples = torch.split(tensor, lengths)
+            repeat_args = [expand_size] + [1] * (tensor.dim() - 1)
+            return torch.cat([sample.repeat(*repeat_args) for sample in samples], dim=0)
+
+        image_keys = {"pixel_values", "image_sizes"}
+        audio_keys = {"input_features", "feature_attention_mask"}
+
+        def _expand_dict_for_generation(dict_to_expand):
+            for key, value in dict_to_expand.items():
+                if value is None or not isinstance(value, torch.Tensor):
+                    continue
+                if key in image_keys and image_nums is not None:
+                    dict_to_expand[key] = _repeat_interleave_samples(value, image_nums)
+                elif key in audio_keys and audio_nums is not None:
+                    dict_to_expand[key] = _repeat_interleave_samples(value, audio_nums)
+                else:
+                    dict_to_expand[key] = value.repeat_interleave(expand_size, dim=0)
+            return dict_to_expand
+
+        if input_ids is not None:
+            input_ids = input_ids.repeat_interleave(expand_size, dim=0)
+
+        model_kwargs = _expand_dict_for_generation(model_kwargs)
+
+        if is_encoder_decoder:
+            if model_kwargs.get("encoder_outputs") is None:
+                raise ValueError("If `is_encoder_decoder` is True, make sure that `encoder_outputs` is defined.")
+            model_kwargs["encoder_outputs"] = _expand_dict_for_generation(model_kwargs["encoder_outputs"])
+
+        return input_ids, model_kwargs
 
 
 __all__ = [
     "Apertus1p5ForConditionalGeneration",
-    "Apertus1p5ForCausalLM",
-    "Apertus1p5TextModel",
     "Apertus1p5PreTrainedModel",
-    "Apertus1p5VQVAE",
+    "Apertus1p5TextForCausalLM",
+    "Apertus1p5TextModel",
+    "Apertus1p5TextPreTrainedModel",
+    "Apertus1p5VisionTokenizerModel",
     "Apertus1p5Model",
 ]
