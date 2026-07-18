@@ -19,11 +19,11 @@ limitations under the License.
 *This model was contributed to Hugging Face Transformers on 2026-07-18.*
 
 
-# Glm5Next
+# Glm5NextVL
 
 ## Overview
 
-The Glm5Next model was proposed in [<INSERT PAPER NAME HERE>](<INSERT PAPER LINK HERE>) by <INSERT AUTHORS HERE>.
+The Glm5NextVL model was proposed in [<INSERT PAPER NAME HERE>](<INSERT PAPER LINK HERE>) by <INSERT AUTHORS HERE>.
 <INSERT SHORT SUMMARY HERE>
 
 The abstract from the paper is the following:
@@ -41,21 +41,30 @@ The original code can be found [here](<INSERT LINK TO GITHUB REPO HERE>).
 
 <INSERT SOME NICE EXAMPLES HERE>
 
-## Glm5NextConfig
+## Glm5NextVLConfig
 
-[[autodoc]] Glm5NextConfig
+[[autodoc]] Glm5NextVLConfig
 
-## Glm5NextPreTrainedModel
+## Glm5NextVLTextConfig
 
-[[autodoc]] Glm5NextPreTrainedModel
+[[autodoc]] Glm5NextVLTextConfig
+
+## Glm5NextVLPreTrainedModel
+
+[[autodoc]] Glm5NextVLPreTrainedModel
     - forward
 
-## Glm5NextModel
+## Glm5NextVLTextModel
 
-[[autodoc]] Glm5NextModel
+[[autodoc]] Glm5NextVLTextModel
     - forward
 
-## Glm5NextForCausalLM
+## Glm5NextVLModel
 
-[[autodoc]] Glm5NextForCausalLM
+[[autodoc]] Glm5NextVLModel
+    - forward
+
+## Glm5NextVLForConditionalGeneration
+
+[[autodoc]] Glm5NextVLForConditionalGeneration
     - forward

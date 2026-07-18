@@ -115,7 +115,7 @@ class Glm5NextVLTextConfig(PreTrainedConfig):
     pad_token_id: int | None = 154820
 
     bos_token_id: int | None = None
-    eos_token_id: int | list[int] | None = [154820, 154827, 154829]
+    eos_token_id: int | list[int] | None = None
     tie_word_embeddings: bool = False
     mlp_layer_types: list[str] | None = None
     attention_bias: bool = False

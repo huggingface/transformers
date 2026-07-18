@@ -109,7 +109,6 @@ class Glm5NextVLTextConfig(Glm5NextConfig):
     hc_mult: int = 4
     hc_eps: float = 1e-6
     hc_sinkhorn_iters: int = 20
-    eos_token_id: int | list[int] | None = [154820, 154827, 154829]
 
     # TODO: add when we have an indexer trained
     index_head_dim = AttributeError()
@@ -271,7 +270,6 @@ class Glm5NextVLTextLinearAttention(Glm5NextLinearAttention):
         super().__init__(config, layer_idx)
         self.forget_gate = Glm5NextVLTextForgetGate(config)
         self.o_norm = Glm5NextVLTextRMSNormGated(self.head_dim, eps=self.layer_norm_epsilon)
-
 
 
 # TODO: add indexer if trained
