@@ -574,20 +574,34 @@ def load_offloaded_checkpoint_parameters(
     Returns:
         `dict[str, torch.Tensor]`: Loaded state dict of all weights which map to the source weight
     """
-    from ..core_model_loading import WeightConverter, WeightRenaming, rename_source_key, revert_weight_conversion
+    from ..core_model_loading import WeightConverter, WeightRenaming, rename_source_key, revert_weight_conversion, get_target_keys
 
     # Convert from source key in checkpoint to target key in model
     if meta_state_dict is None:
         meta_state_dict = model.state_dict()  # this can be costly: please pass as arg when possible
     renamings = [entry for entry in model._weight_conversions if isinstance(entry, WeightRenaming)]
     converters = [entry for entry in model._weight_conversions if isinstance(entry, WeightConverter)]
-    param_name = rename_source_key(param_name, renamings, converters, model.base_model_prefix, meta_state_dict)[0]
+    target_keys = get_target_keys(param_name, renamings, converters, model.base_model_prefix, meta_state_dict)
+    # if "model.audio_tower.embed_audio_tokens.embed_audio_tokens.weight" in target_keys:
+    #     breakpoint()
 
-    # load parameter from model
-    tensor = load_offloaded_parameter(model, param_name)
+    target_names = []
+    for target_key in target_keys:
+        if target_key not in meta_state_dict and ".*." in target_key:
+            escaped = re.escape(target_key).replace(r"\.\*\.", r"\..*\.")
+            wildcard_re = re.compile(escaped)
+            target_names.extend([k for k in meta_state_dict if wildcard_re.search(k)])
+        else:
+            target_names.append(target_key)
+
+    # load parameters from model
+    target_values = {
+        target_name: load_offloaded_parameter(model, target_name)
+        for target_name in target_names
+    }
 
     # Convert from target key to source key(s)
-    loaded_state_dict = revert_weight_conversion(model, {param_name: tensor})
+    loaded_state_dict = revert_weight_conversion(model, target_values)
     return loaded_state_dict
 
 

@@ -3650,7 +3650,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 # If the param was offloaded, we need to load it back onto cpu from disk to resave it.
                 # It's a strange pattern, but is necessary to ensure saving into the proper file shard
                 if is_offloaded and tensor.device.type == "meta":
-                    # Note that `load_offloaded_parameter` may load multiple weights for a single tensor.
+                    # Note that `load_offloaded_checkpoint_parameters` may load multiple weights for a single tensor.
                     # While it is possible to overload CPU memory by loading parameters in a bad order,
                     # in practice `split_torch_state_dict_into_shards` preserves weight locality
                     state_dict.update(
