@@ -18,21 +18,25 @@ from collections.abc import Callable
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from huggingface_hub.dataclasses import strict
 
 from ... import initialization as init
 from ...cache_utils import Cache, DynamicCache
+from ...configuration_utils import PreTrainedConfig
 from ...masking_utils import create_causal_mask, create_recurrent_attention_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import BaseModelOutputWithPast, MoeCausalLMOutputWithPast, MoeModelOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging, torch_compilable_check
 from ...utils.generic import is_flash_attention_requested
 from ...utils.output_capturing import OutputRecorder
+from ..auto import AutoConfig
 from ..auto.modeling_auto import AutoModel
 from ..deepseek_v2.modeling_deepseek_v2 import DeepseekV2Attention
 from ..deepseek_v4.modeling_deepseek_v4 import DeepseekV4HyperConnection, DeepseekV4Model
 from ..exaone4_5.modeling_exaone4_5 import Exaone4_5_Model
+from ..glm5_next.configuration_glm5_next import Glm5NextConfig
 from ..glm5_next.modeling_glm5_next import (
     Glm5NextExperts,
     Glm5NextForgetGate,
@@ -48,15 +52,169 @@ from ..glm46v.modeling_glm46v import Glm46VForConditionalGeneration
 from ..glm_moe_dsa.modeling_glm_moe_dsa import GlmMoeDsaDecoderLayer
 from ..llama.modeling_llama import eager_attention_forward
 from ..mixtral.modeling_mixtral import load_balancing_loss_func
-from .configuration_glm5_next_vl import Glm5NextVLConfig, Glm5NextVLTextConfig
 
 
 logger = logging.get_logger(__name__)
 
 
-# =============================================================================
-# RMSNorm(Gated), MLP, MoE, RoPE
-# =============================================================================
+@auto_docstring(checkpoint="zai-org/GLM-5-Next-VL")
+@strict
+class Glm5NextVLTextConfig(Glm5NextConfig):
+    r"""
+    n_group (`int`, *optional*, defaults to 1):
+        Number of routed expert groups.
+    mlp_layer_types (`list[str]`, *optional*):
+        Per-layer feed-forward schedule. Values are `"dense"` or `"sparse"`.
+    layer_types (`list[str]`, *optional*):
+        Per-layer attention cache schedule. Values are `"linear_attention"` for
+        KDA layers and `"deepseek_sparse_attention"` for MLA layers.
+    swiglu_limit (`float`, *optional*, defaults to 10.0):
+        Clamp limit applied to SwiGLU gate/up projections.
+    linear_head_dim (`int`, *optional*, defaults to 128):
+        Dimension of each head in linear attention.
+    linear_num_heads (`int`, *optional*, defaults to 64):
+        Number of heads used in linear attention layers.
+    linear_conv_kernel_dim (`int`, *optional*, defaults to 4):
+        Kernel size of the convolution used in linear attention layers.
+    linear_lower_bound (`float`, *optional*, defaults to -5.0):
+        Whether the forget gate has a lower bound to apply to the decay.
+    hc_mult (`int`, *optional*, defaults to 4):
+        Number of MHC residual streams.
+    hc_eps (`float`, *optional*, defaults to 1e-6):
+        Numerical floor used by MHC Sinkhorn normalization.
+    hc_sinkhorn_iters (`int`, *optional*, defaults to 20):
+        Number of Sinkhorn iterations used by MHC routing.
+    """
+
+    model_type = "glm5_next_vl_text"
+    base_config_key = "text_config"
+
+    hidden_size: int = 4096
+    intermediate_size: int = 12288
+    num_attention_heads: int = 64
+    num_key_value_heads: int = 64
+    head_dim: int = 0
+    max_position_embeddings: int = 4096  # TODO: check this value on relase
+    q_lora_rank: int = 1536
+    kv_lora_rank: int = 512
+    qk_nope_head_dim: int = 256
+    qk_rope_head_dim: int = 0
+    moe_intermediate_size: int = 2048
+    num_experts_per_tok: int = 8
+    n_routed_experts: int = 288
+    swiglu_limit: float | None = 10.0
+    linear_head_dim: int = 128
+    linear_num_heads: int = 64
+    linear_lower_bound: float | None = -5.0
+    hc_mult: int = 4
+    hc_eps: float = 1e-6
+    hc_sinkhorn_iters: int = 20
+    eos_token_id: int | list[int] | None = [154820, 154827, 154829]
+
+    # TODO: add when we have an indexer trained
+    index_head_dim = AttributeError()
+    index_n_heads = AttributeError()
+    index_topk = AttributeError()
+    index_kpool = AttributeError()
+    index_kpool_always_select_tail = AttributeError()
+    indexer_types = AttributeError()
+
+    # TODO: will rope be added?
+    rope_parameters = AttributeError()
+
+    # TODO: Let it be reinherited after indexer
+    def __post_init__(self, **kwargs):
+        if self.num_key_value_heads is None:
+            self.num_key_value_heads = self.num_attention_heads
+
+        if self.mlp_layer_types is None:
+            self.mlp_layer_types = ["dense"] * min(3, self.num_hidden_layers) + ["sparse"] * (
+                self.num_hidden_layers - 3
+            )
+
+        if self.layer_types is None:
+            kda_layers = [idx for idx in range(self.num_hidden_layers) if idx % 4 != 3]
+            self.layer_types = [
+                "linear_attention" if layer_idx in kda_layers else "deepseek_sparse_attention"
+                for layer_idx in range(self.num_hidden_layers)
+            ]
+
+        # Convert dict to attributes (if given)
+        linear_attn_dict = kwargs.pop("linear_attn_config", None)
+        if linear_attn_dict is not None:
+            self.linear_head_dim = linear_attn_dict.get("head_dim", self.linear_head_dim)
+            self.linear_num_heads = linear_attn_dict.get("num_heads", self.linear_num_heads)
+            self.linear_conv_kernel_dim = linear_attn_dict.get("short_conv_kernel_size", self.linear_conv_kernel_dim)
+            self.linear_lower_bound = linear_attn_dict.get("lower_bound", self.linear_lower_bound)
+
+            # Additional lower bound logic as per original dict
+            if linear_attn_dict.get("safe_gate", False) and self.linear_lower_bound is None:
+                self.linear_lower_bound = -5.0
+
+        # NOTE: this forces an intentional override as we have the convention of head_dim being the RoPE based dim
+        kwargs.pop("head_dim", None)
+        self.head_dim = self.qk_rope_head_dim
+        self.qk_head_dim = self.qk_rope_head_dim + self.qk_nope_head_dim
+
+        PreTrainedConfig.__post_init__(self, **kwargs)
+
+    # TODO: Readd along indexer
+    def validate_architecture(self):
+        PreTrainedConfig.validate_architecture(self)
+
+
+@auto_docstring(checkpoint="zai-org/GLM-5-Next-VL")
+@strict
+class Glm5NextVLConfig(PreTrainedConfig):
+    r"""
+    image_token_id (`int`, *optional*, defaults to 154854):
+        The image token index to encode the image prompt.
+    video_token_id (`int`, *optional*, defaults to 154855):
+        The video token index to encode the video prompt.
+    image_start_token_id (`int`, *optional*, defaults to 154830):
+        The image start token index to encode the start of image.
+    image_end_token_id (`int`, *optional*, defaults to 154831):
+        The image end token index to encode the end of image.
+    video_start_token_id (`int`, *optional*, defaults to 154832):
+        The video start token index to encode the start of video.
+    video_end_token_id (`int`, *optional*, defaults to 154833):
+        The video end token index to encode the end of video.
+
+    ```python
+    >>> from transformers import Glm5NextVLConfig
+
+    >>> # Initializing a GLM-5-Next-VL style configuration
+    >>> configuration = Glm5NextVLConfig()
+    ```"""
+
+    model_type = "glm5_next_vl"
+    sub_configs = {"vision_config": AutoConfig, "text_config": Glm5NextVLTextConfig}
+    keys_to_ignore_at_inference = ["past_key_values"]
+
+    text_config: dict | PreTrainedConfig | None = None
+    vision_config: dict | PreTrainedConfig | None = None
+    image_token_id: int = 154854
+    video_token_id: int = 154855
+    image_start_token_id: int = 154830
+    image_end_token_id: int = 154831
+    video_start_token_id: int = 154832
+    video_end_token_id: int = 154833
+    tie_word_embeddings: bool = False
+
+    def __post_init__(self, **kwargs):
+        if isinstance(self.vision_config, dict):
+            self.vision_config = self.sub_configs["vision_config"](**self.vision_config)
+        elif self.vision_config is None:
+            self.vision_config = self.sub_configs["vision_config"]()
+
+        if isinstance(self.text_config, dict):
+            self.text_config = self.sub_configs["text_config"](**self.text_config)
+        elif self.text_config is None:
+            # Flat (text-only) GLM-5-Next checkpoints store the text fields at the
+            # top level; forward them so `text_config` is populated for BC.
+            self.text_config = self.sub_configs["text_config"](**kwargs)
+
+        super().__post_init__(**kwargs)
 
 
 class Glm5NextVLTextRMSNorm(Glm5NextRMSNorm):
@@ -85,11 +243,6 @@ class Glm5NextVLTextMoE(Glm5NextMoE):
         )
 
 
-# =============================================================================
-# MHC (Manifold-Constrained Hyper-Connection) helpers
-# =============================================================================
-
-
 class Glm5NextVLTextHyperConnection(DeepseekV4HyperConnection):
     pass
 
@@ -99,11 +252,6 @@ class Glm5NextVLTextHyperHead(nn.Module):
 
     def forward(self, hidden_streams: torch.Tensor) -> torch.Tensor:
         return hidden_streams.mean(dim=2)
-
-
-# =============================================================================
-# KDA Linear Attention
-# =============================================================================
 
 
 class Glm5NextVLTextForgetGate(Glm5NextForgetGate):
@@ -124,10 +272,6 @@ class Glm5NextVLTextLinearAttention(Glm5NextLinearAttention):
         self.forget_gate = Glm5NextVLTextForgetGate(config)
         self.o_norm = Glm5NextVLTextRMSNormGated(self.head_dim, eps=self.layer_norm_epsilon)
 
-
-# =============================================================================
-# MLA (Multi-head Latent Attention) with optional DSA indexer scaffold
-# =============================================================================
 
 
 # TODO: add indexer if trained
@@ -185,11 +329,6 @@ class Glm5NextVLTextAttention(DeepseekV2Attention):
         attn_output = attn_output.reshape(batch_size, seq_length, -1).contiguous()
         attn_output = self.o_proj(attn_output)
         return attn_output, attn_weights
-
-
-# =============================================================================
-# Decoder Layer
-# =============================================================================
 
 
 class Glm5NextVLTextDecoderLayer(GlmMoeDsaDecoderLayer):
@@ -253,11 +392,6 @@ class Glm5NextVLTextDecoderLayer(GlmMoeDsaDecoderLayer):
         )
 
         return hidden_states
-
-
-# =============================================================================
-# PreTrainedModel, Model, CausalLM
-# =============================================================================
 
 
 @auto_docstring
@@ -377,12 +511,6 @@ class Glm5NextVLTextModel(DeepseekV4Model, Glm5NextVLPreTrainedModel):
         return MoeModelOutputWithPast(last_hidden_state=hidden_states, past_key_values=past_key_values)
 
 
-# =============================================================================
-# Composite VLM (vision tower + text model)
-# =============================================================================
-
-
-# TODO: `get_placeholder_mask` is likely broken!!! There is some conflict between img and vid token id usage
 class Glm5NextVLModel(Exaone4_5_Model, Glm5NextVLPreTrainedModel):
     config: Glm5NextVLConfig
     _no_split_modules = AttributeError()
@@ -413,6 +541,49 @@ class Glm5NextVLModel(Exaone4_5_Model, Glm5NextVLPreTrainedModel):
         split_sizes = (video_grid_thw.prod(-1) // self.visual.spatial_merge_size**2).tolist()
         vision_outputs.pooler_output = torch.split(vision_outputs.pooler_output, split_sizes)
         return vision_outputs
+
+    # TODO: `get_placeholder_mask` is broken for simultaneous img + vid
+    def get_placeholder_mask(
+        self,
+        input_ids: torch.LongTensor,
+        inputs_embeds: torch.FloatTensor,
+        image_features: torch.FloatTensor | None = None,
+        video_features: torch.FloatTensor | None = None,
+    ):
+        """
+        Obtains multimodal placeholder mask from `input_ids` or `inputs_embeds`, and checks that the placeholder token count is
+        equal to the length of multimodal features. If the lengths are different, an error is raised.
+        """
+        if input_ids is None:
+            special_image_mask = inputs_embeds == self.get_input_embeddings()(
+                torch.tensor(self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
+            )
+            special_image_mask = special_image_mask.all(-1)
+            special_video_mask = inputs_embeds == self.get_input_embeddings()(
+                torch.tensor(self.config.video_token_id, dtype=torch.long, device=inputs_embeds.device)
+            )
+            special_video_mask = special_video_mask.all(-1)
+        else:
+            # GLM 5 Next VL special_video_mask is special_image_mask
+            special_image_mask = input_ids == self.config.image_token_id
+            special_video_mask = input_ids == self.config.image_token_id
+
+        n_image_tokens = special_image_mask.sum()
+        special_image_mask = special_image_mask.unsqueeze(-1).to(inputs_embeds.device)
+        if image_features is not None:
+            torch_compilable_check(
+                n_image_tokens * inputs_embeds.shape[-1] == image_features.numel(),
+                f"Image features and image tokens do not match, tokens: {n_image_tokens}, features: {image_features.shape[0]}",
+            )
+
+        n_video_tokens = special_video_mask.sum()
+        special_video_mask = special_video_mask.unsqueeze(-1).to(inputs_embeds.device)
+        if video_features is not None:
+            torch_compilable_check(
+                n_video_tokens * inputs_embeds.shape[-1] == video_features.numel(),
+                f"Video features and video tokens do not match, tokens: {n_video_tokens}, features: {video_features.shape[0]}",
+            )
+        return special_image_mask, special_video_mask
 
     @can_return_tuple
     @auto_docstring
@@ -579,6 +750,8 @@ class Glm5NextVLForConditionalGeneration(Glm46VForConditionalGeneration, Glm5Nex
 
 
 __all__ = [
+    "Glm5NextVLConfig",
+    "Glm5NextVLTextConfig",
     "Glm5NextVLPreTrainedModel",
     "Glm5NextVLTextModel",
     "Glm5NextVLModel",
