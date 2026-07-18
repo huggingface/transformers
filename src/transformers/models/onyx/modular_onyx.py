@@ -309,7 +309,10 @@ class OnyxAttention(Gemma2Attention):
 
 
 class OnyxDecoderLayer(Gemma2DecoderLayer):
-    pass
+    def __init__(self, config: OnyxTextConfig, layer_idx: int):
+        super().__init__(config, layer_idx)
+        self.post_attention_layernorm = OnyxRMSNorm(config.hidden_size, eps=config.post_norm_eps)
+        self.post_feedforward_layernorm = OnyxRMSNorm(config.hidden_size, eps=config.post_norm_eps)
 
 
 class OnyxVisionRotaryEmbedding(Gemma4VisionRotaryEmbedding):

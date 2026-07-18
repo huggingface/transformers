@@ -441,17 +441,17 @@ class OnyxAttention(nn.Module):
 
 
 class OnyxDecoderLayer(GradientCheckpointingLayer):
-    def __init__(self, config: OnyxConfig, layer_idx: int):
+    def __init__(self, config: OnyxTextConfig, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
         self.config = config
         self.self_attn = OnyxAttention(config=config, layer_idx=layer_idx)
         self.mlp = OnyxMLP(config)
         self.input_layernorm = OnyxRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.post_attention_layernorm = OnyxRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_attention_layernorm = OnyxRMSNorm(config.hidden_size, eps=config.post_norm_eps)
 
         self.pre_feedforward_layernorm = OnyxRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.post_feedforward_layernorm = OnyxRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_feedforward_layernorm = OnyxRMSNorm(config.hidden_size, eps=config.post_norm_eps)
 
     def forward(
         self,
