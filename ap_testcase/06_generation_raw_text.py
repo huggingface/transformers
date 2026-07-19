@@ -16,7 +16,13 @@ from PIL import Image
 
 from transformers import Apertus1p5ForConditionalGeneration, AutoProcessor
 
-CHECKPOINT = os.environ.get("APERTUS1P5_CHECKPOINT", "/Users/rkre/swissai_repos/material/Apertus-1.5-8B-composite-hf")
+# local dir, or hub repo id (optionally `repo_id@revision`); default: the published composite
+CHECKPOINT = os.environ.get("APERTUS1P5_CHECKPOINT", "apertus-ai/Apertus-v1.5-8B-integration@refs/pr/2")
+if not os.path.isdir(CHECKPOINT):
+    from huggingface_hub import snapshot_download
+
+    repo_id, _, revision = CHECKPOINT.partition("@")
+    CHECKPOINT = snapshot_download(repo_id, revision=revision or None)
 
 processor = AutoProcessor.from_pretrained(CHECKPOINT)
 tokenizer = processor.tokenizer
