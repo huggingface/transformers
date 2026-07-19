@@ -2372,6 +2372,11 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
             ):
                 self.skipTest("No MTP keys registered")
 
+            # Assisted generation (use_mtp) is blocked for stateful models, whose recurrent state
+            # cannot be rolled back during candidate verification
+            if getattr(model_class, "_is_stateful", False):
+                self.skipTest("MTP generation is not supported for stateful models")
+
             config.get_text_config().num_mtp_layers = 1
             model = model_class(config).to(torch_device).eval()
             mtp_model = MtpModel(model, num_mtp_layers=1)
