@@ -123,6 +123,7 @@ class Glm5NextConfig(GlmMoeDsaConfig):
     pad_token_id: int | None = 154820
 
     first_k_dense_replace = AttributeError()
+    mlp_bias = AttributeError()
 
     def __post_init__(self, **kwargs):
         if self.num_key_value_heads is None:

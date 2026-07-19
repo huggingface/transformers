@@ -120,7 +120,6 @@ class Glm5NextVLTextConfig(PreTrainedConfig):
     mlp_layer_types: list[str] | None = None
     attention_bias: bool = False
     attention_dropout: float | int = 0.0
-    mlp_bias: bool = False
     head_dim: int = 0
     layer_types: list[str] | None = None
     swiglu_limit: float | None = 10.0
