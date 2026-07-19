@@ -4629,6 +4629,25 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
             # Adjust missing and unexpected keys
             model._adjust_missing_and_unexpected_keys(loading_info)
+            # Raise a hard error when compressed-tensors (or similar) packed weights cannot be mapped
+            if load_config.weight_mapping:
+                packed_unexpected = sorted(k for k in loading_info.unexpected_keys if "_packed" in k)
+                if packed_unexpected:
+                    missing_counterparts = sorted(
+                        k for k in packed_unexpected if k.replace("_packed", "") in loading_info.missing_keys
+                    )
+                    if missing_counterparts:
+                        raise ValueError(
+                            "Found unexpected packed weight keys in the checkpoint that could not be mapped to "
+                            "their unpacked counterparts via registered weight conversions. This means the model "
+                            "was silently loaded with randomly initialized weights for the corresponding layers, "
+                            "which produces incorrect outputs. "
+                            f"Unexpected packed keys: {packed_unexpected}. "
+                            f"Missing unpacked keys: {missing_counterparts}. "
+                            "Please ensure the quantizer's weight conversions are properly registered for this "
+                            "model architecture, or load the model with the appropriate quantization "
+                            "configuration (e.g., run_compressed=True if you intend to use compressed-tensors)."
+                        )
         finally:
             log_state_dict_report(
                 model=model,
