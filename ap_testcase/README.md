@@ -8,25 +8,47 @@ Each script is self-contained and prints `[OK]`-style checks.
 ### 1. Clone and install
 
 ```bash
+# one-time: install uv if missing (https://docs.astral.sh/uv)
+curl -LsSf https://astral.sh/uv/install.sh | sh
+
 git clone https://github.com/RaphaelKreft/transformers.git
 cd transformers
 git checkout feature/apertus_1p5_pipeline
 
 uv venv .my-env
 source .my-env/bin/activate
-uv pip install -e ".[testing]"
-uv pip install torchvision librosa   # torchvision: image processor backend; librosa: audio file/URL loading
+# testing: pytest tooling; vision: torchvision image-processing backend;
+# audio: librosa & co. for audio loading (files, URLs, base64) and resampling to 24 kHz
+uv pip install -e ".[testing,vision,audio]"
 ```
 
-Sanity check: `python -c "import transformers, torch; print(transformers.__version__)"` should report a
-`5.x.dev0` version served from `src/`.
+Sanity checks:
+
+```bash
+python -c "import transformers, torch; print(transformers.__version__)"   # 5.x.dev0, served from src/
+python -c "import torchvision, librosa; print('media deps OK')"
+```
+
+All referenced hub repos are currently public, so no `hf auth login` is needed.
 
 ### 2. Prepare the composite checkpoint
 
-The scripts read the checkpoint path from the `APERTUS1P5_CHECKPOINT` environment variable
-(default: `/Users/rkre/swissai_repos/material/Apertus-1.5-8B-composite-hf`). If you already have a composite
-checkpoint, export the variable and skip ahead. Otherwise assemble one from its three weight sources
-(roughly 35 GB of disk during the build, about 17 GB afterwards):
+The scripts read the checkpoint from the `APERTUS1P5_CHECKPOINT` environment variable, which accepts a
+local directory or a hub repo id (optionally `repo_id@revision`).
+
+**Fast path (the default):** with the variable unset, the scripts use the published composite
+`apertus-ai/Apertus-v1.5-8B-integration@refs/pr/2` directly, downloading it into the HF cache on first
+use (the two processor-only scripts skip the 17 GB weight shards and fetch only the small files). To keep
+a persistent local copy instead:
+
+```bash
+hf download apertus-ai/Apertus-v1.5-8B-integration --revision refs/pr/2 \
+  --local-dir ~/Apertus-1.5-8B-composite-hf
+export APERTUS1P5_CHECKPOINT=~/Apertus-1.5-8B-composite-hf
+```
+
+**Build path:** alternatively assemble the composite from its three weight sources
+(roughly 35 GB of disk during the build incl. the HF cache, about 17 GB afterwards):
 
 ```bash
 MATERIAL=~/apertus-material && mkdir -p $MATERIAL
@@ -41,17 +63,12 @@ hf download apertus-ai/Apertus-v1.5-8B-integration --revision refs/pr/1 \
 #    original code, and saves the converted encode-only weights (fp32, ~0.9 GB)
 python scripts/check_apertus1p5_vision_tokenizer_parity.py --save_converted $MATERIAL/apertus1p5-visionvq-hf
 
-# c) audio codec: download the original WavTokenizer checkpoint and convert it
-CKPT=$(python -c "from huggingface_hub import hf_hub_download; \
-print(hf_hub_download('novateur/WavTokenizer-large-unify-40token','wavtokenizer_large_unify_600_24k.ckpt'))")
-python src/transformers/models/wavtokenizer/convert_wavtokenizer_checkpoint.py \
-  --checkpoint_path "$CKPT" --output_dir $MATERIAL/wavtokenizer-large-unify-40token-hf
-
-# d) assemble the composite (writes weights + tokenizer + processor + patched chat template) and verify it
+# c) assemble the composite (writes weights + tokenizer + processor + chat template) and verify it;
+#    each source may be a local dir or a hub repo id (optionally `repo_id@revision`)
 python src/transformers/models/apertus1p5/convert_apertus1p5_weights_to_hf.py \
   --apertus_checkpoint $MATERIAL/Apertus-1.5-8B-pruned \
   --vision_tokenizer_checkpoint $MATERIAL/apertus1p5-visionvq-hf \
-  --audio_tokenizer_checkpoint $MATERIAL/wavtokenizer-large-unify-40token-hf \
+  --audio_tokenizer_checkpoint swiss-ai/wavtokenizer-large-unify-40token \
   --output_dir $MATERIAL/Apertus-1.5-8B-composite-hf --verify
 
 export APERTUS1P5_CHECKPOINT=$MATERIAL/Apertus-1.5-8B-composite-hf
