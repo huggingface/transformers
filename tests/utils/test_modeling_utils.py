@@ -3875,4 +3875,55 @@ class RemoteAndCustomCodeModelTests(unittest.TestCase):
         model = MyNewModel(PreTrainedConfig())
 
         self.assertTrue(model.is_custom_code())
+
+
+class TotalMismatchWithConversionsTest(unittest.TestCase):
+    """A converted checkpoint matching ~none of the loaded class's weights must raise (#47405)."""
+
+    def _tiny(self):
+        from transformers import PretrainedConfig, PreTrainedModel  # local: this file lacks PretrainedConfig
+
+        class TinyMismatchConfig(PretrainedConfig):
+            model_type = "tiny_mismatch_test"
+
+        class TinyMismatchModel(PreTrainedModel):
+            config_class = TinyMismatchConfig
+
+            def __init__(self, config):
+                super().__init__(config)
+                self.lin = torch.nn.Linear(4, 4, bias=False)
+                self.post_init()
+
+        return TinyMismatchModel(TinyMismatchConfig())
+
+    def _info(self, model):
+        from transformers.utils.loading_report import LoadStateDictInfo
+
+        return LoadStateDictInfo(
+            missing_keys=set(model.state_dict()),
+            unexpected_keys={"model.llm.some.converted.weight"},
+            mismatched_keys=set(),
+            error_msgs=[],
+            conversion_errors={},
+        )
+
+    def test_total_mismatch_with_conversions_raises(self):
+        from transformers.core_model_loading import WeightRenaming
+        from transformers.modeling_utils import LoadStateDictConfig
+
+        model = self._tiny()
+        cfg = LoadStateDictConfig(
+            pretrained_model_name_or_path="dummy/path",
+            weight_mapping=[WeightRenaming("a", "b")],
+        )
+        with self.assertRaisesRegex(ValueError, "wrong class"):
+            model.__class__._finalize_model_loading(model, cfg, self._info(model))
+
+    def test_total_mismatch_without_conversions_does_not_raise(self):
+        from transformers.modeling_utils import LoadStateDictConfig
+
+        model = self._tiny()
+        cfg = LoadStateDictConfig(pretrained_model_name_or_path="dummy/path", weight_mapping=None)
+        out = model.__class__._finalize_model_loading(model, cfg, self._info(model))
+        self.assertEqual(out.unexpected_keys, {"model.llm.some.converted.weight"})
         self.assertFalse(model.is_remote_code())
