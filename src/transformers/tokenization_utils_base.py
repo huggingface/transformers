@@ -1426,6 +1426,12 @@ class PreTrainedTokenizerBase(PushToHubMixin):
         Args:
             special_tokens: Dictionary of {token_name: token_value}
         """
+        if not isinstance(special_tokens, dict):
+            raise TypeError(
+                f"special_tokens must be a dict, got {type(special_tokens).__name__}. "
+                "Expected a dict with keys as token attribute names (e.g., 'image_token') "
+                "and values as str or AddedToken."
+            )
         self.SPECIAL_TOKENS_ATTRIBUTES = self.SPECIAL_TOKENS_ATTRIBUTES + list(special_tokens.keys())
         for key, value in special_tokens.items():
             if isinstance(value, (str, AddedToken)):
