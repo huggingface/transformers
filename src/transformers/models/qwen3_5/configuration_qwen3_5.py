@@ -41,8 +41,6 @@ class Qwen3_5TextConfig(PreTrainedConfig):
     mtp_num_hidden_layers (`int`, *optional*, defaults to 0):
         Number of Multi-Token Prediction (MTP) layers. When set to 0, MTP is disabled.
         This field is exposed as `num_mtp_layers` via `attribute_map`.
-    mtp_layer_types (`list[str]`, *optional*):
-        Layer types for the MTP layers. Defaults to `["full_attention"] * mtp_num_hidden_layers`.
 
     ```python
     >>> from transformers import Qwen3_5TextModel, Qwen3_5TextConfig
@@ -114,7 +112,6 @@ class Qwen3_5TextConfig(PreTrainedConfig):
     attribute_map = {"num_mtp_layers": "mtp_num_hidden_layers"}
     ignore_keys_at_rope_validation = {"mrope_section", "mrope_interleaved"}
     mtp_num_hidden_layers: int = 0
-    mtp_layer_types: list[str] | None = None
 
     def __post_init__(self, **kwargs):
         kwargs.setdefault("partial_rotary_factor", 0.25)  # assign default for BC
@@ -128,8 +125,13 @@ class Qwen3_5TextConfig(PreTrainedConfig):
             self.layer_types = remap_legacy_layer_types(self.layer_types)
 
         super().__post_init__(**kwargs)
-        if self.mtp_layer_types is None:
-            self.mtp_layer_types = ["full_attention"] * self.mtp_num_hidden_layers
+
+    # MTP layers always use full attention
+    @property
+    def mtp_layer_types(self):
+        if self.num_mtp_layers is not None:
+            return ["full_attention"] * self.num_mtp_layers
+        return None
 
 
 @auto_docstring(checkpoint="Qwen/Qwen3.5-27B")
@@ -166,8 +168,6 @@ class Qwen3_5Config(PreTrainedConfig):
     mtp_num_hidden_layers (`int`, *optional*, defaults to 0):
         Number of Multi-Token Prediction (MTP) layers. When set to 0, MTP is disabled.
         This field is exposed as `num_mtp_layers` via `attribute_map`.
-    mtp_layer_types (`list[str]`, *optional*):
-        Layer types for the MTP layers. Defaults to `["full_attention"] * mtp_num_hidden_layers`.
 
     Example:
 
@@ -200,7 +200,6 @@ class Qwen3_5Config(PreTrainedConfig):
     attribute_map = {"num_mtp_layers": "mtp_num_hidden_layers"}
 
     mtp_num_hidden_layers: int = 0
-    mtp_layer_types: list[str] | None = None
 
     def __post_init__(self, **kwargs):
         if isinstance(self.vision_config, dict):
@@ -217,8 +216,13 @@ class Qwen3_5Config(PreTrainedConfig):
             self.text_config = self.sub_configs["text_config"]()
 
         super().__post_init__(**kwargs)
-        if self.mtp_layer_types is None:
-            self.mtp_layer_types = ["full_attention"] * self.mtp_num_hidden_layers
+
+    # MTP layers always use full attention
+    @property
+    def mtp_layer_types(self):
+        if self.num_mtp_layers is not None:
+            return ["full_attention"] * self.num_mtp_layers
+        return None
 
 
 __all__ = ["Qwen3_5Config", "Qwen3_5TextConfig", "Qwen3_5VisionConfig"]

@@ -78,8 +78,6 @@ class Qwen3_5TextConfig(Qwen3NextConfig):
     mtp_num_hidden_layers (`int`, *optional*, defaults to 0):
         Number of Multi-Token Prediction (MTP) layers. When set to 0, MTP is disabled.
         This field is exposed as `num_mtp_layers` via `attribute_map`.
-    mtp_layer_types (`list[str]`, *optional*):
-        Layer types for the MTP layers. Defaults to `["full_attention"] * mtp_num_hidden_layers`.
 
     ```python
     >>> from transformers import Qwen3_5TextModel, Qwen3_5TextConfig
@@ -125,7 +123,6 @@ class Qwen3_5TextConfig(Qwen3NextConfig):
     num_hidden_layers: int = 32
     num_key_value_heads: int = 4
     mtp_num_hidden_layers: int = 0
-    mtp_layer_types: list[str] | None = None
 
     decoder_sparse_step = AttributeError()
     norm_topk_prob = AttributeError()
@@ -139,9 +136,14 @@ class Qwen3_5TextConfig(Qwen3NextConfig):
 
     def __post_init__(self, **kwargs):
         super().__post_init__(**kwargs)
-        if self.mtp_layer_types is None:
-            self.mtp_layer_types = ["full_attention"] * self.mtp_num_hidden_layers
         del self.mlp_only_layers
+
+    # MTP layers always use full attention
+    @property
+    def mtp_layer_types(self):
+        if self.num_mtp_layers is not None:
+            return ["full_attention"] * self.num_mtp_layers
+        return None
 
 
 @auto_docstring(checkpoint="Qwen/Qwen3.5-27B")
@@ -164,8 +166,6 @@ class Qwen3_5Config(Qwen3VLConfig):
     mtp_num_hidden_layers (`int`, *optional*, defaults to 0):
         Number of Multi-Token Prediction (MTP) layers. When set to 0, MTP is disabled.
         This field is exposed as `num_mtp_layers` via `attribute_map`.
-    mtp_layer_types (`list[str]`, *optional*):
-        Layer types for the MTP layers. Defaults to `["full_attention"] * mtp_num_hidden_layers`.
 
     Example:
 
@@ -190,12 +190,13 @@ class Qwen3_5Config(Qwen3VLConfig):
     attribute_map = {"num_mtp_layers": "mtp_num_hidden_layers"}
 
     mtp_num_hidden_layers: int = 0
-    mtp_layer_types: list[str] | None = None
 
-    def __post_init__(self, **kwargs):
-        super().__post_init__(**kwargs)
-        if self.mtp_layer_types is None:
-            self.mtp_layer_types = ["full_attention"] * self.mtp_num_hidden_layers
+    # MTP layers always use full attention
+    @property
+    def mtp_layer_types(self):
+        if self.num_mtp_layers is not None:
+            return ["full_attention"] * self.num_mtp_layers
+        return None
 
 
 class Qwen3_5VisionRotaryEmbedding(Qwen3VLVisionRotaryEmbedding):
