@@ -12,7 +12,7 @@ specific language governing permissions and limitations under the License.
 ⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not
 be rendered properly in your Markdown viewer.
 -->
-*This model was contributed to Hugging Face Transformers on 2026-07-12.*
+*This model was contributed to Hugging Face Transformers on 2026-07-19.*
 
 # EfficientViT-SAM
 
