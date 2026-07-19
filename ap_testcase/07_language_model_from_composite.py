@@ -18,7 +18,13 @@ import torch
 
 from transformers import Apertus1p5TextConfig, Apertus1p5TextForCausalLM, Apertus1p5TextModel, AutoTokenizer
 
-CHECKPOINT = os.environ.get("APERTUS1P5_CHECKPOINT", "/Users/rkre/swissai_repos/material/Apertus-1.5-8B-composite-hf")
+# local dir, or hub repo id (optionally `repo_id@revision`); default: the published composite
+CHECKPOINT = os.environ.get("APERTUS1P5_CHECKPOINT", "apertus-ai/Apertus-v1.5-8B-integration@refs/pr/2")
+if not os.path.isdir(CHECKPOINT):
+    from huggingface_hub import snapshot_download
+
+    repo_id, _, revision = CHECKPOINT.partition("@")
+    CHECKPOINT = snapshot_download(repo_id, revision=revision or None)
 
 # --- 1) config extraction from the composite ---------------------------------------------------------
 config = Apertus1p5TextConfig.from_pretrained(CHECKPOINT)
