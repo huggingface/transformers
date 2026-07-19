@@ -1173,6 +1173,13 @@ class PreTrainedTokenizerBase(PushToHubMixin):
         if not special_tokens_dict:
             return 0
 
+        if not isinstance(special_tokens_dict, dict):
+            raise TypeError(
+                f"special_tokens_dict must be a dict, got {type(special_tokens_dict).__name__}. "
+                "Expected a dict with keys from SPECIAL_TOKENS_ATTRIBUTES (e.g., 'cls_token', 'sep_token', etc.) "
+                "or 'extra_special_tokens'."
+            )
+
         # V5: Allowed keys are SPECIAL_TOKENS_ATTRIBUTES + "extra_special_tokens"
         # Backward compatibility: convert "additional_special_tokens" to "extra_special_tokens"
         special_tokens_dict = dict(special_tokens_dict)
