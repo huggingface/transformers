@@ -17,9 +17,9 @@ import unittest
 
 from transformers import (
     EfficientViTSamConfig,
+    EfficientViTSamMaskDecoderConfig,
+    EfficientViTSamPromptEncoderConfig,
     EfficientViTSamVisionConfig,
-    SamMaskDecoderConfig,
-    SamPromptEncoderConfig,
 )
 from transformers.testing_utils import require_torch, slow, torch_device
 from transformers.utils import is_torch_available, is_vision_available
@@ -147,7 +147,7 @@ class SamPromptEncoderTester:
         self.hidden_act = hidden_act
 
     def get_config(self):
-        return SamPromptEncoderConfig(
+        return EfficientViTSamPromptEncoderConfig(
             image_size=self.input_image_size,
             patch_size=self.patch_size,
             mask_input_channels=self.mask_input_channels,
@@ -183,7 +183,7 @@ class SamMaskDecoderTester:
         self.layer_norm_eps = layer_norm_eps
 
     def get_config(self):
-        return SamMaskDecoderConfig(
+        return EfficientViTSamMaskDecoderConfig(
             hidden_size=self.hidden_size,
             hidden_act=self.hidden_act,
             mlp_dim=self.mlp_dim,
@@ -248,6 +248,24 @@ class EfficientViTSamModelTester:
         inputs_dict = {"pixel_values": pixel_values}
         return config, inputs_dict
 
+    def prepare_prompt_inputs(self):
+        input_points = torch.tensor(
+            [
+                [[[4.0, 8.0], [12.0, 16.0]], [[20.0, 24.0], [28.0, 30.0]]],
+                [[[6.0, 10.0], [14.0, 18.0]], [[22.0, 26.0], [27.0, 29.0]]],
+            ],
+            device=torch_device,
+        )
+        input_labels = torch.tensor([[[1, 0], [1, -10]], [[0, 1], [1, 1]]], device=torch_device)
+        input_boxes = torch.tensor(
+            [
+                [[2.0, 4.0, 16.0, 20.0], [10.0, 12.0, 28.0, 30.0]],
+                [[3.0, 5.0, 17.0, 21.0], [11.0, 13.0, 29.0, 31.0]],
+            ],
+            device=torch_device,
+        )
+        return input_points, input_labels, input_boxes
+
 
 @require_torch
 class EfficientViTSamModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
@@ -279,6 +297,18 @@ class EfficientViTSamModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.T
 
     def test_config(self):
         self.config_tester.run_common_tests()
+
+    def test_sub_configs_are_efficientvitsam_configs(self):
+        config = self.model_tester.get_config()
+
+        self.assertIsInstance(config.vision_config, EfficientViTSamVisionConfig)
+        self.assertIsInstance(config.prompt_encoder_config, EfficientViTSamPromptEncoderConfig)
+        self.assertIsInstance(config.mask_decoder_config, EfficientViTSamMaskDecoderConfig)
+
+        config = EfficientViTSamConfig.from_dict(config.to_dict())
+        self.assertIsInstance(config.vision_config, EfficientViTSamVisionConfig)
+        self.assertIsInstance(config.prompt_encoder_config, EfficientViTSamPromptEncoderConfig)
+        self.assertIsInstance(config.mask_decoder_config, EfficientViTSamMaskDecoderConfig)
 
     @unittest.skip(reason="EfficientViT-SAM does not use inputs_embeds")
     def test_inputs_embeds(self):
@@ -324,6 +354,82 @@ class EfficientViTSamModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.T
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_get_image_features(*config_and_inputs)
 
+    def test_precomputed_image_embeddings_match_pixel_values(self):
+        config, pixel_values = self.model_tester.prepare_config_and_inputs()
+        model = EfficientViTSamModel(config).to(torch_device).eval()
+
+        with torch.no_grad():
+            image_embeddings = model.get_image_embeddings(pixel_values)
+            outputs_from_pixels = model(pixel_values=pixel_values)
+            outputs_from_embeddings = model(image_embeddings=image_embeddings)
+
+        torch.testing.assert_close(outputs_from_embeddings.iou_scores, outputs_from_pixels.iou_scores)
+        torch.testing.assert_close(outputs_from_embeddings.pred_masks, outputs_from_pixels.pred_masks)
+
+    def test_point_and_box_prompts_support_multiple_masks_per_image(self):
+        config, pixel_values = self.model_tester.prepare_config_and_inputs()
+        input_points, input_labels, input_boxes = self.model_tester.prepare_prompt_inputs()
+        model = EfficientViTSamModel(config).to(torch_device).eval()
+
+        with torch.no_grad():
+            outputs = model(
+                pixel_values=pixel_values,
+                input_points=input_points,
+                input_labels=input_labels,
+                input_boxes=input_boxes,
+            )
+
+        self.assertEqual(outputs.iou_scores.shape, (self.model_tester.batch_size, 2, 3))
+        self.assertEqual(outputs.pred_masks.shape[:3], (self.model_tester.batch_size, 2, 3))
+
+    def test_point_prompts_default_to_foreground_labels(self):
+        config, pixel_values = self.model_tester.prepare_config_and_inputs()
+        input_points, _, _ = self.model_tester.prepare_prompt_inputs()
+        model = EfficientViTSamModel(config).to(torch_device).eval()
+
+        with torch.no_grad():
+            outputs_without_labels = model(pixel_values=pixel_values, input_points=input_points)
+            outputs_with_labels = model(
+                pixel_values=pixel_values,
+                input_points=input_points,
+                input_labels=torch.ones(input_points.shape[:-1], device=torch_device, dtype=torch.int),
+            )
+
+        torch.testing.assert_close(outputs_without_labels.iou_scores, outputs_with_labels.iou_scores)
+        torch.testing.assert_close(outputs_without_labels.pred_masks, outputs_with_labels.pred_masks)
+
+    def test_multimask_output_returns_single_best_mask(self):
+        config, pixel_values = self.model_tester.prepare_config_and_inputs()
+        input_points, input_labels, _ = self.model_tester.prepare_prompt_inputs()
+        model = EfficientViTSamModel(config).to(torch_device).eval()
+
+        with torch.no_grad():
+            outputs = model(
+                pixel_values=pixel_values,
+                input_points=input_points,
+                input_labels=input_labels,
+                multimask_output=False,
+            )
+
+        self.assertEqual(outputs.iou_scores.shape, (self.model_tester.batch_size, 2, 1))
+        self.assertEqual(outputs.pred_masks.shape[:3], (self.model_tester.batch_size, 2, 1))
+
+    def test_forward_rejects_invalid_prompt_and_image_inputs(self):
+        config, pixel_values = self.model_tester.prepare_config_and_inputs()
+        input_points, _, input_boxes = self.model_tester.prepare_prompt_inputs()
+        model = EfficientViTSamModel(config).to(torch_device).eval()
+
+        with self.assertRaisesRegex(ValueError, "Either pixel_values or image_embeddings"):
+            model()
+        with self.assertRaisesRegex(ValueError, "Only one of pixel_values and image_embeddings"):
+            model(pixel_values=pixel_values, image_embeddings=model.get_image_embeddings(pixel_values))
+        with self.assertRaisesRegex(ValueError, "input_points must be a 4D tensor"):
+            model(pixel_values=pixel_values, input_points=input_points[:, 0])
+        with self.assertRaisesRegex(ValueError, "input_points must be a 3D tensor"):
+            model(pixel_values=pixel_values, input_boxes=input_boxes.unsqueeze(1))
+        with self.assertRaisesRegex(ValueError, "as many bounding boxes as input points"):
+            model(pixel_values=pixel_values, input_points=input_points, input_boxes=input_boxes[:, :1])
+
     @slow
     def test_inference_l0(self):
         model = EfficientViTSamModel.from_pretrained("./test_l0_hf")
@@ -347,9 +453,13 @@ class EfficientViTSamVisionModelTest(ModelTesterMixin, unittest.TestCase):
         self.model_tester = EfficientViTSamVisionModelTester(self)
         self.config_tester = ConfigTester(self, config_class=EfficientViTSamVisionConfig, has_text_modality=False)
 
-    @unittest.skip(reason="EfficientViT-SAM's vision config is custom and doesn't use standard hidden_size")
     def test_config(self):
-        pass
+        config = self.model_tester.get_config()
+        reloaded_config = EfficientViTSamVisionConfig.from_dict(config.to_dict())
+
+        self.assertEqual(reloaded_config.to_dict(), config.to_dict())
+        self.assertEqual(reloaded_config.width_list, self.model_tester.width_list)
+        self.assertEqual(reloaded_config.in_channel_list, self.model_tester.in_channel_list)
 
     @unittest.skip(reason="EfficientViT-SAM's vision encoder does not use inputs_embeds")
     def test_inputs_embeds(self):
