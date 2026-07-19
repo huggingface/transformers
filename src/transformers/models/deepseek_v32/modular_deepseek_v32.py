@@ -157,8 +157,11 @@ class DeepseekV32Config(Glm4MoeLiteConfig, RotaryEmbeddingConfigMixin):
         # Every layer is DSA — drives cache-class dispatch.
         if self.layer_types is None:
             self.layer_types = ["deepseek_sparse_attention"] * self.num_hidden_layers
-        # BC: re-route `num_experts` to `n_routed_experts`
-        if (num_experts := kwargs.get("num_experts")) is not None:
+        # BC: re-route `num_experts` to `n_routed_experts` (legacy key).
+        # Only apply the fallback when n_routed_experts was NOT explicitly provided in the config.
+        # Since n_routed_experts is a dataclass field consumed by __init__ before __post_init__
+        # runs, we check by comparing against the defining class's default.
+        if (num_experts := kwargs.get("num_experts")) is not None and self.n_routed_experts == type(self).n_routed_experts:
             self.n_routed_experts = num_experts
 
         super().__post_init__(**kwargs)

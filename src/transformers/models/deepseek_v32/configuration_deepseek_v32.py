@@ -138,8 +138,9 @@ class DeepseekV32Config(PreTrainedConfig, RotaryEmbeddingConfigMixin):
         # Every layer is DSA — drives cache-class dispatch.
         if self.layer_types is None:
             self.layer_types = ["deepseek_sparse_attention"] * self.num_hidden_layers
-        # BC: re-route `num_experts` to `n_routed_experts`
-        if (num_experts := kwargs.get("num_experts")) is not None:
+        # BC: re-route `num_experts` to `n_routed_experts` (legacy key).
+        # Only apply the fallback when n_routed_experts was NOT explicitly provided in the config.
+        if (num_experts := kwargs.get("num_experts")) is not None and self.n_routed_experts == type(self).n_routed_experts:
             self.n_routed_experts = num_experts
         # Default to MoE from the second layer and on
         if self.mlp_layer_types is None:
