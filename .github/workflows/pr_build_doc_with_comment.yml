@@ -29,7 +29,7 @@ jobs:
     name: Verity PR commit corresponds to a specific event by comparing timestamps
     if: ${{ needs.get-pr-number.outputs.PR_NUMBER != ''}}
     runs-on: ubuntu-22.04
-    needs: get-pr-info
+    needs: [get-pr-number, get-pr-info]
     env:
       COMMENT_DATE: ${{ github.event.comment.created_at }}
       PR_MERGE_COMMIT_DATE: ${{ needs.get-pr-info.outputs.PR_MERGE_COMMIT_DATE }}
@@ -63,11 +63,11 @@ jobs:
           GITHUB_RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
           NEEDS_GET_PR_INFO_OUTPUTS_PR_HEAD_SHA: ${{ needs.get-pr-info.outputs.PR_HEAD_SHA }}
         run: |
-          gh api \
-            --method POST \
-            -H "Accept: application/vnd.github+json" \
-            -H "X-GitHub-Api-Version: 2022-11-28" \
-            repos/${{ github.repository }}/statuses/${NEEDS_GET_PR_INFO_OUTPUTS_PR_HEAD_SHA} \
+          gh api \\
+            --method POST \\
+            -H "Accept: application/vnd.github+json" \\
+            -H "X-GitHub-Api-Version: 2022-11-28" \\
+            repos/${{ github.repository }}/statuses/${NEEDS_GET_PR_INFO_OUTPUTS_PR_HEAD_SHA} \\
             -f "target_url=$GITHUB_RUN_URL" -f "state=pending" -f "description=Custom doc building job" -f "context=custom-doc-build"
 
   reply_to_comment:
@@ -84,11 +84,11 @@ jobs:
           GITHUB_RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
           NEEDS_GET_PR_NUMBER_OUTPUTS_PR_NUMBER: ${{ needs.get-pr-number.outputs.PR_NUMBER }}
         run: |
-          gh api \
-            --method POST \
-            -H "Accept: application/vnd.github+json" \
-            -H "X-GitHub-Api-Version: 2022-11-28" \
-            repos/${{ github.repository }}/issues/${NEEDS_GET_PR_NUMBER_OUTPUTS_PR_NUMBER}/comments \
+          gh api \\
+            --method POST \\
+            -H "Accept: application/vnd.github+json" \\
+            -H "X-GitHub-Api-Version: 2022-11-28" \\
+            repos/${{ github.repository }}/issues/${NEEDS_GET_PR_NUMBER_OUTPUTS_PR_NUMBER}/comments \\
             -f "body=[Building docs for all languages...](${GITHUB_RUN_URL})"
 
   build-doc:
@@ -128,11 +128,11 @@ jobs:
         run: |
           echo "${{ needs.build-doc.result }}"
           echo "${STATUS}"
-          gh api \
-            --method POST \
-            -H "Accept: application/vnd.github+json" \
-            -H "X-GitHub-Api-Version: 2022-11-28" \
-            repos/${{ github.repository }}/statuses/${NEEDS_GET_PR_INFO_OUTPUTS_PR_HEAD_SHA} \
+          gh api \\
+            --method POST \\
+            -H "Accept: application/vnd.github+json" \\
+            -H "X-GitHub-Api-Version: 2022-11-28" \\
+            repos/${{ github.repository }}/statuses/${NEEDS_GET_PR_INFO_OUTPUTS_PR_HEAD_SHA} \\
             -f "target_url=$GITHUB_RUN_URL" -f "state=${STATUS}" -f "description=Custom doc building job" -f "context=custom-doc-build"
         env:
           NEEDS_GET_PR_INFO_OUTPUTS_PR_HEAD_SHA: ${{ needs.get-pr-info.outputs.PR_HEAD_SHA }}
