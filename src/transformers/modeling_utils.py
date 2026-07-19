@@ -4629,6 +4629,26 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
             # Adjust missing and unexpected keys
             model._adjust_missing_and_unexpected_keys(loading_info)
+            # A checkpoint whose tensors matched (almost) nothing, while weight conversions or
+            # quantization were registered, means no conversion mapping applied (e.g. wrong Auto
+            # class, or a compressed checkpoint whose fused-MoE tensors could not be mapped).
+            # The resulting model is fully randomly initialized yet generates fluently -- fail
+            # loudly instead.
+            n_model_keys = len(model.state_dict())
+            if (
+                (load_config.weight_mapping or load_config.hf_quantizer)
+                and loading_info.unexpected_keys
+                and n_model_keys > 0
+                and len(loading_info.missing_keys) >= 0.99 * n_model_keys
+            ):
+                raise ValueError(
+                    f"None of the checkpoint tensors at '{load_config.pretrained_model_name_or_path}' "
+                    f"matched {model.__class__.__name__} ({len(loading_info.missing_keys)}/{n_model_keys} "
+                    f"model keys missing, {len(loading_info.unexpected_keys)} checkpoint keys unused) even "
+                    f"though weight conversions or quantization are registered for this architecture. "
+                    f"You are most likely loading this checkpoint through the wrong class -- "
+                    f"load it via the Auto class registered for its `model_type` instead."
+                )
         finally:
             log_state_dict_report(
                 model=model,
