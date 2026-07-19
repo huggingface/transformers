@@ -16,7 +16,7 @@ limitations under the License.
 ⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be rendered properly in your Markdown viewer.
 
 -->
-*This model was published in HF papers on 2024-08-29 and contributed to Hugging Face Transformers on 2026-07-14.*
+*This model was published in HF papers on 2024-08-29 and contributed to Hugging Face Transformers on 2026-07-19.*
 
 # WavTokenizer
 
@@ -36,7 +36,9 @@ The abstract from the paper is the following:
 
 *Language models have been effectively applied to modeling natural signals, such as images, video, speech, and audio. A crucial component of these models is the codec tokenizer, which compresses high-dimensional natural signals into lower-dimensional discrete tokens. In this paper, we introduce WavTokenizer, which offers several advantages over previous SOTA acoustic codec models in the audio domain: 1) extreme compression. By compressing the layers of quantizers and the temporal dimension of the discrete codec, one-second audio of 24kHz sampling rate requires only a single quantizer with 40 or 75 tokens. 2) improved subjective quality. Despite the reduced number of tokens, WavTokenizer achieves state-of-the-art reconstruction quality with outstanding UTMOS scores and inherently contains richer semantic information.*
 
-The original code (MIT license) can be found [here](https://github.com/jishengpeng/WavTokenizer). The released raw
+This port was contributed as part of the Apertus 1.5 integration by the
+[SwissAI initiative](https://huggingface.co/swiss-ai). The original code (MIT license) can be found
+[here](https://github.com/jishengpeng/WavTokenizer). The released raw
 PyTorch Lightning checkpoints use one of two temporal configurations:
 
 | Token rate | `upsampling_ratios` | Hop length | ISTFT FFT size |
@@ -44,10 +46,29 @@ PyTorch Lightning checkpoints use one of two temporal configurations:
 | 40 tokens/s | `[6, 5, 5, 4]` | 600 | 2400 |
 | 75 tokens/s | `[8, 5, 4, 2]` | 320 | 1280 |
 
-The small, medium, large, domain-specific, and v2 releases share the remaining inference architecture. Original
-checkpoints must first be converted to Transformers format; the conversion script infers the temporal configuration
-from checkpoint tensor shapes and saves it in `config.json`. Subsequent `from_pretrained` calls construct the model
-from that saved configuration and do not infer architecture from the weights.
+The small, medium, large, domain-specific, and v2 releases share the remaining inference architecture.
+
+## Available checkpoints
+
+All released checkpoints are available on the Hub already converted to the Transformers format and can be loaded
+directly with `from_pretrained`:
+
+| Checkpoint | Domain | Token rate | Converted from |
+|---|---|---:|---|
+| [swiss-ai/wavtokenizer-small-speech-40token](https://huggingface.co/swiss-ai/wavtokenizer-small-speech-40token) | speech | 40/s | [novateur/WavTokenizer](https://huggingface.co/novateur/WavTokenizer) |
+| [swiss-ai/wavtokenizer-small-speech-75token](https://huggingface.co/swiss-ai/wavtokenizer-small-speech-75token) | speech | 75/s | [novateur/WavTokenizer](https://huggingface.co/novateur/WavTokenizer) |
+| [swiss-ai/wavtokenizer-medium-speech-75token](https://huggingface.co/swiss-ai/wavtokenizer-medium-speech-75token) | speech | 75/s | [novateur/WavTokenizer-medium-speech-75token](https://huggingface.co/novateur/WavTokenizer-medium-speech-75token) |
+| [swiss-ai/wavtokenizer-medium-speech-75token-v2](https://huggingface.co/swiss-ai/wavtokenizer-medium-speech-75token-v2) | speech | 75/s | [novateur/WavTokenizer-medium-speech-75token](https://huggingface.co/novateur/WavTokenizer-medium-speech-75token) |
+| [swiss-ai/wavtokenizer-medium-music-audio-75token](https://huggingface.co/swiss-ai/wavtokenizer-medium-music-audio-75token) | music/audio | 75/s | [novateur/WavTokenizer-medium-music-audio-75token](https://huggingface.co/novateur/WavTokenizer-medium-music-audio-75token) |
+| [swiss-ai/wavtokenizer-medium-music-audio-75token-v2](https://huggingface.co/swiss-ai/wavtokenizer-medium-music-audio-75token-v2) | music/audio | 75/s | [novateur/WavTokenizer-medium-music-audio-75token](https://huggingface.co/novateur/WavTokenizer-medium-music-audio-75token) |
+| [swiss-ai/wavtokenizer-large-unify-40token](https://huggingface.co/swiss-ai/wavtokenizer-large-unify-40token) | unified | 40/s | [novateur/WavTokenizer-large-unify-40token](https://huggingface.co/novateur/WavTokenizer-large-unify-40token) |
+| [swiss-ai/wavtokenizer-large-speech-75token-v2](https://huggingface.co/swiss-ai/wavtokenizer-large-speech-75token-v2) | speech | 75/s | [novateur/WavTokenizer-large-speech-75token](https://huggingface.co/novateur/WavTokenizer-large-speech-75token) |
+
+## Converting custom checkpoints
+
+Custom or self-trained original-format checkpoints can be converted with the conversion script. It infers the
+temporal configuration from checkpoint tensor shapes and saves it in `config.json`. Subsequent `from_pretrained`
+calls construct the model from that saved configuration and do not infer architecture from the weights.
 
 ```bash
 python src/transformers/models/wavtokenizer/convert_wavtokenizer_checkpoint.py \
@@ -70,9 +91,6 @@ python scripts/check_wavtokenizer_parity.py \
     --output_dir /tmp/wavtokenizer-parity-matrix
 ```
 
-This port was contributed as part of the Apertus 1.5 integration by the
-[SwissAI initiative](https://huggingface.co/swiss-ai).
-
 ## Usage example
 
 ```python
@@ -89,7 +107,7 @@ audio = dataset[0]["audio"]["array"]
 
 inputs = feature_extractor(audio=audio, sampling_rate=feature_extractor.sampling_rate, return_tensors="pt")
 with torch.no_grad():
-    audio_codes = model.encode(inputs["input_values"]).audio_codes  # (batch, 1, ceil(samples / 600))
+    audio_codes = model.encode(**inputs).audio_codes  # (batch, 1, ceil(samples / 600))
     reconstruction = model.decode(audio_codes).audio_values
 ```
 

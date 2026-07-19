@@ -338,8 +338,9 @@ class WavTokenizerIntegrationTest(unittest.TestCase):
     """Integration tests against a converted real checkpoint.
 
     Set `WAVTOKENIZER_HF_CHECKPOINT` to a converted model dir (output of
-    `convert_wavtokenizer_checkpoint.py`) or a Hub repo id. For full bit-parity verification against the
-    ORIGINAL implementation, run `scripts/check_wavtokenizer_parity.py` instead (needs the original repo). Set
+    `convert_wavtokenizer_checkpoint.py`) or a Hub repo id such as `swiss-ai/wavtokenizer-large-unify-40token`.
+    For full bit-parity verification against the ORIGINAL implementation, run
+    `scripts/check_wavtokenizer_parity.py` instead (needs the original repo). Set
     `WAVTOKENIZER_CHECKPOINT_VARIANT=large-unify-40` to additionally check that checkpoint's frozen golden codes.
     """
 
