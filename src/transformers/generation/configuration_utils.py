@@ -468,6 +468,8 @@ class GenerationConfig(PushToHubMixin):
         self.disable_compile = kwargs.pop("disable_compile", None)
 
         self.continuous_batching_config = kwargs.pop("continuous_batching_config", None)
+        if isinstance(self.continuous_batching_config, dict):
+            self.continuous_batching_config = ContinuousBatchingConfig(**self.continuous_batching_config)
 
         # Deprecated (moved to the Hub). TODO remove for v5
         self.low_memory = kwargs.pop("low_memory", None)
@@ -1814,6 +1816,11 @@ class ContinuousBatchingConfig:
     max_cached_graphs: int | None = None
 
     def __post_init__(self):
+        # Rehydrate nested compile configs from dict (round-trip after JSON serialization)
+        if isinstance(self.varlen_compile_config, dict):
+            self.varlen_compile_config = CompileConfig(**self.varlen_compile_config)
+        if isinstance(self.decode_compile_config, dict):
+            self.decode_compile_config = CompileConfig(**self.decode_compile_config)
         # Only turn off graph mixing support if TP is on
         graph_mixing_supported = os.environ.get("NCCL_GRAPH_MIXING_SUPPORT", "1") == "1"
         distributed = int(os.environ.get("WORLD_SIZE", "1")) > 1
@@ -1852,3 +1859,13 @@ class ContinuousBatchingConfig:
     def fallback_max_blocks_per_request(self) -> int:
         """Fallback if no user-hint is given and decode path is available."""
         return 32
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serializes this instance to a Python dictionary."""
+        output = copy.deepcopy(self.__dict__)
+        # If nested compile configs are present, serialize them with their own to_dict()
+        if isinstance(output.get("varlen_compile_config"), CompileConfig):
+            output["varlen_compile_config"] = output["varlen_compile_config"].to_dict()
+        if isinstance(output.get("decode_compile_config"), CompileConfig):
+            output["decode_compile_config"] = output["decode_compile_config"].to_dict()
+        return output

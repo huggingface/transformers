@@ -22,7 +22,14 @@ import warnings
 from huggingface_hub import create_pull_request
 from parameterized import parameterized
 
-from transformers import AutoConfig, GenerationConfig, WatermarkingConfig, is_torch_available
+from transformers import (
+    AutoConfig,
+    CompileConfig,
+    ContinuousBatchingConfig,
+    GenerationConfig,
+    WatermarkingConfig,
+    is_torch_available,
+)
 from transformers import logging as transformers_logging
 
 
@@ -776,6 +783,41 @@ class GenerationConfigSerializationTest(unittest.TestCase):
         self.assertEqual(watermark.hash_key, hashing_key)
         self.assertEqual(watermark.seeding_scheme, seeding_scheme)
         self.assertEqual(watermark.context_width, context_width)
+
+    def test_serialize_generation_continuous_batching_config(self):
+        """Tests that ContinuousBatchingConfig is properly serialized and rehydrated in GenerationConfig."""
+        continuous_batching_config = ContinuousBatchingConfig(
+            block_size=128,
+            default_compile_level=2,
+            varlen_compile_config=CompileConfig(dynamic=True),
+            decode_compile_config=CompileConfig(mode="default"),
+        )
+        generation_config = GenerationConfig(continuous_batching_config=continuous_batching_config)
+
+        with tempfile.TemporaryDirectory("test-generation-config") as tmp_dir:
+            generation_config.save_pretrained(tmp_dir)
+            new_config = GenerationConfig.from_pretrained(tmp_dir)
+
+        # Verify round-trip: ContinuousBatchingConfig is restored as proper type
+        self.assertIsInstance(new_config.continuous_batching_config, ContinuousBatchingConfig)
+        self.assertEqual(new_config.continuous_batching_config.block_size, 128)
+        self.assertEqual(new_config.continuous_batching_config.default_compile_level, 2)
+
+        # Verify nested CompileConfig rehydration
+        self.assertIsInstance(new_config.continuous_batching_config.varlen_compile_config, CompileConfig)
+        self.assertTrue(new_config.continuous_batching_config.varlen_compile_config.dynamic)
+        self.assertIsInstance(new_config.continuous_batching_config.decode_compile_config, CompileConfig)
+        self.assertEqual(new_config.continuous_batching_config.decode_compile_config.mode, "default")
+
+        # Verify that JSON does not contain null for continuous_batching_config
+        json_str = generation_config.to_json_string(use_diff=False)
+        self.assertNotIn("continuous_batching_config: null", json_str)
+        self.assertIn("continuous_batching_config", json_str)
+        self.assertIn("block_size", json_str)
+
+        # Verify _compile_all_devices is NOT leaked through CompileConfig serialization
+        varlen_dict = new_config.continuous_batching_config.varlen_compile_config.to_dict()
+        self.assertNotIn("_compile_all_devices", varlen_dict)
 
 
 @is_staging_test
