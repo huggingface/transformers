@@ -1533,8 +1533,12 @@ class EfficientViTSamVisionModel(EfficientViTSamPreTrainedModel):
         self.vision_encoder = EfficientViTSamImageEncoder(config)
         self.post_init()
 
-    def forward(self, pixel_values: torch.Tensor) -> EfficientViTSamVisionEncoderOutput:
-        return self.vision_encoder(pixel_values)
+    def forward(
+        self,
+        pixel_values: torch.Tensor,
+        **kwargs,
+    ) -> tuple | EfficientViTSamVisionEncoderOutput:
+        return self.vision_encoder(pixel_values, **kwargs)
 
 
 @auto_docstring(
@@ -1803,6 +1807,7 @@ __all__ = [
     "EfficientViTSamPositionalEmbedding",
     "EfficientViTSamPromptEncoder",
     "EfficientViTSamMaskDecoder",
+    "EfficientViTSamPreTrainedModel",
     "EfficientViTSamImageEncoder",
     "EfficientViTSamVisionModel",
     "EfficientViTSamModel",
