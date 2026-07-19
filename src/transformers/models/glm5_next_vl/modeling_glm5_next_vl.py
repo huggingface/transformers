@@ -1534,8 +1534,6 @@ class Glm5NextVLForConditionalGeneration(Glm5NextVLPreTrainedModel, GenerationMi
             is_first_iteration=is_first_iteration,
             **kwargs,
         )
-        # Force recomputation of 2D-RoPE and ignore rope_deltas
-        model_inputs["position_ids"] = None
 
         if not is_first_iteration and use_cache:
             model_inputs["pixel_values"] = None

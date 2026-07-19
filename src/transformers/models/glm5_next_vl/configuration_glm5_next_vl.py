@@ -35,7 +35,7 @@ class Glm5NextVLTextConfig(PreTrainedConfig):
         Per-layer feed-forward schedule. Values are `"dense"` or `"sparse"`.
     layer_types (`list[str]`, *optional*):
         Per-layer attention cache schedule. Values are `"linear_attention"` for
-        KDA layers and `"deepseek_sparse_attention"` for MLA layers.
+        KDA layers and `"full_attention"` for MLA layers.
     swiglu_limit (`float`, *optional*, defaults to 10.0):
         Clamp limit applied to SwiGLU gate/up projections.
     linear_head_dim (`int`, *optional*, defaults to 128):
@@ -146,7 +146,7 @@ class Glm5NextVLTextConfig(PreTrainedConfig):
         if self.layer_types is None:
             kda_layers = [idx for idx in range(self.num_hidden_layers) if idx % 4 != 3]
             self.layer_types = [
-                "linear_attention" if layer_idx in kda_layers else "deepseek_sparse_attention"
+                "linear_attention" if layer_idx in kda_layers else "full_attention"
                 for layer_idx in range(self.num_hidden_layers)
             ]
 
