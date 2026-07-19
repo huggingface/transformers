@@ -13,8 +13,10 @@
 # limitations under the License.
 
 import concurrent.futures
+import copy
 import json
 import os
+import pickle
 import shutil
 import tempfile
 import unittest
@@ -333,19 +335,256 @@ class TokenizerVersioningTest(unittest.TestCase):
 
 @require_tokenizers
 class ReduceMutableBorrowTests(unittest.TestCase):
+    """Thread-safety tests for fast (Rust-backed) tokenizers.
+
+    These tests reproduce the ``RuntimeError: Already borrowed`` race described in
+    https://github.com/huggingface/transformers/issues/47085 and verify that the
+    per-instance ``threading.RLock`` serialises the critical section.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        cls.tmpdirname = tempfile.mkdtemp()
+        # Build a small WordLevel tokenizer for offline use
+        wl_vocab = {"[UNK]": 0, "[PAD]": 1, "hello": 2, "world": 3, "test": 4, "tokenizer": 5, "thread": 6}
+        wl_dir = os.path.join(cls.tmpdirname, "wordlevel")
+        os.makedirs(wl_dir, exist_ok=True)
+        wl_tokenizer = Tokenizer(WordLevel(wl_vocab, unk_token="[UNK]"))
+        wl_tokenizer.pre_tokenizer = pre_tokenizers.Whitespace()
+        fast_wl = PreTrainedTokenizerFast(
+            tokenizer_object=wl_tokenizer,
+            unk_token="[UNK]",
+            pad_token="[PAD]",
+            cls_token="[CLS]",
+            sep_token="[SEP]",
+            mask_token="[MASK]",
+        )
+        fast_wl.save_pretrained(wl_dir)
+        cls.wordlevel_path = wl_dir
+
+        # Build a small BPE tokenizer for offline use
+        bpe_dir = os.path.join(cls.tmpdirname, "bpe")
+        os.makedirs(bpe_dir, exist_ok=True)
+        bpe = Tokenizer(BPE(unk_token="[UNK]"))
+        trainer = trainers.BpeTrainer(
+            special_tokens=["[UNK]", "[CLS]", "[SEP]", "[PAD]", "[MASK]"],
+            vocab_size=50,
+        )
+        corpus = [
+            "hello world",
+            "tokenizer thread safety",
+            "test the tokenizer",
+            "fast tokenization",
+            "concurrent encoding",
+        ]
+        bpe.pre_tokenizer = pre_tokenizers.ByteLevel()
+        bpe.train_from_iterator(corpus, trainer=trainer)
+        bpe.decoder = decoders.ByteLevel()
+        fast_bpe = PreTrainedTokenizerFast(
+            tokenizer_object=bpe,
+            unk_token="[UNK]",
+            pad_token="[PAD]",
+            cls_token="[CLS]",
+            sep_token="[SEP]",
+            mask_token="[MASK]",
+        )
+        fast_bpe.save_pretrained(bpe_dir)
+        cls.bpe_path = bpe_dir
+
+    @classmethod
+    def tearDownClass(cls):
+        shutil.rmtree(cls.tmpdirname, ignore_errors=True)
+
+    def _encode_with_varying_settings(self, tokenizer, text, seed):
+        """Encode with changing truncation/padding to maximise interleaving."""
+        settings = [
+            {"truncation": True, "padding": False, "max_length": 8},
+            {"truncation": True, "padding": True, "max_length": 16},
+            {"truncation": "longest_first", "padding": "longest", "max_length": 12},
+            {"truncation": False, "padding": "max_length", "max_length": 8},
+            {"truncation": "only_first", "padding": True, "max_length": 10},
+            {"truncation": True, "padding": False, "max_length": 6},
+        ]
+        setting = settings[seed % len(settings)]
+        return tokenizer.encode(text, **setting)
+
+    # ------------------------------------------------------------------
+    # Core race-condition reproduction
+    # ------------------------------------------------------------------
+
     def test_async_share_tokenizer(self):
         # See https://github.com/huggingface/transformers/pull/12550
         # and https://github.com/huggingface/tokenizers/issues/537
-        tokenizer = PreTrainedTokenizerFast.from_pretrained("robot-test/dummy-tokenizer-wordlevel")
-        text = "The Matrix is a 1999 science fiction action film."
+        # Extended for issue #47085: all threads use identical settings.
+        tokenizer = PreTrainedTokenizerFast.from_pretrained(self.wordlevel_path)
+        text = "hello world test tokenizer thread"
+        expected = tokenizer.encode(text, truncation="longest_first", padding="longest")
 
-        with concurrent.futures.ThreadPoolExecutor() as executor:
-            futures = [executor.submit(self.fetch, tokenizer, text) for i in range(10)]
+        with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
+            futures = [executor.submit(self.fetch, tokenizer, text) for _ in range(10)]
             return_value = [future.result() for future in futures]
-            self.assertEqual(return_value, [[1, 10, 0, 8, 0, 18, 0, 0, 0, 2] for i in range(10)])
+            self.assertEqual(return_value, [expected for _ in range(10)])
 
     def fetch(self, tokenizer, text):
         return tokenizer.encode(text, truncation="longest_first", padding="longest")
+
+    def test_concurrent_mixed_settings(self):
+        """16 threads, 50 iterations each, varying truncation/padding (original repro)."""
+        tokenizer = PreTrainedTokenizerFast.from_pretrained(self.wordlevel_path)
+        text = "hello world test tokenizer thread safety"
+
+        def worker(tid):
+            for i in range(50):
+                self._encode_with_varying_settings(tokenizer, text, tid * 50 + i)
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=16) as pool:
+            futures = [pool.submit(worker, i) for i in range(16)]
+            for f in concurrent.futures.as_completed(futures, timeout=60):
+                f.result()  # re-raise any exception
+
+    def test_concurrent_encode_with_decode(self):
+        """Interleave encoding and decoding on the same tokenizer."""
+        tokenizer = PreTrainedTokenizerFast.from_pretrained(self.wordlevel_path)
+        texts = ["hello world", "test tokenizer", "thread safety"]
+        encoded = [tokenizer.encode(t) for t in texts]
+
+        def encode_worker():
+            for _ in range(30):
+                for t in texts:
+                    tokenizer.encode(t, truncation=True, padding=True, max_length=8)
+
+        def decode_worker():
+            for _ in range(30):
+                for e in encoded:
+                    tokenizer.decode(e)
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=8) as pool:
+            enc_futures = [pool.submit(encode_worker) for _ in range(4)]
+            dec_futures = [pool.submit(decode_worker) for _ in range(4)]
+            for f in concurrent.futures.as_completed(enc_futures + dec_futures, timeout=60):
+                f.result()
+
+    def test_batch_encode_concurrent(self):
+        """Concurrent batch-encoding with varying padding/truncation."""
+        tokenizer = PreTrainedTokenizerFast.from_pretrained(self.wordlevel_path)
+        batch = ["hello world", "test tokenizer", "thread safety is important", "fast tokenization"]
+
+        def worker(tid):
+            for i in range(30):
+                pad = i % 2 == 0
+                trunc = i % 3 == 0
+                kwargs = {}
+                if pad:
+                    kwargs["padding"] = True
+                if trunc:
+                    kwargs["truncation"] = True
+                kwargs["max_length"] = 8 + (i % 4)
+                tokenizer(batch, **kwargs)
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=12) as pool:
+            futures = [pool.submit(worker, i) for i in range(12)]
+            for f in concurrent.futures.as_completed(futures, timeout=60):
+                f.result()
+
+    def test_bpe_concurrent_mixed_settings(self):
+        """BPE tokenizer with 16 threads and varying settings."""
+        tokenizer = PreTrainedTokenizerFast.from_pretrained(self.bpe_path)
+        text = "hello world tokenizer thread safety"
+
+        def worker(tid):
+            for i in range(40):
+                self._encode_with_varying_settings(tokenizer, text, tid * 40 + i)
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=16) as pool:
+            futures = [pool.submit(worker, i) for i in range(16)]
+            for f in concurrent.futures.as_completed(futures, timeout=60):
+                f.result()
+
+    def test_multiple_tokenizer_instances(self):
+        """Multiple tokenizer instances should not interfere."""
+        tok1 = PreTrainedTokenizerFast.from_pretrained(self.wordlevel_path)
+        tok2 = PreTrainedTokenizerFast.from_pretrained(self.bpe_path)
+        text = "hello world"
+
+        def worker1():
+            for _ in range(30):
+                tok1.encode(text, truncation=True, padding=True, max_length=8)
+
+        def worker2():
+            for _ in range(30):
+                tok2.encode(text, truncation=True, padding=True, max_length=8)
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=8) as pool:
+            futures = [pool.submit(worker1) for _ in range(4)] + [pool.submit(worker2) for _ in range(4)]
+            for f in concurrent.futures.as_completed(futures, timeout=60):
+                f.result()
+
+    def test_stress_many_threads_many_iterations(self):
+        """64 threads, 100 iterations, aggressive truncation toggling."""
+        tokenizer = PreTrainedTokenizerFast.from_pretrained(self.wordlevel_path)
+        text = "hello world test tokenizer thread safety concurrent fast tokenization"
+
+        def worker():
+            for i in range(100):
+                trunc = "longest_first" if i % 2 == 0 else "only_first"
+                pad = i % 3 == 0
+                tokenizer.encode(text, truncation=trunc, padding=pad, max_length=8 + (i % 4))
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=64) as pool:
+            futures = [pool.submit(worker) for _ in range(64)]
+            for f in concurrent.futures.as_completed(futures, timeout=120):
+                f.result()
+
+    # ------------------------------------------------------------------
+    # Pickle / deep copy tests — lock must not break serialization
+    # ------------------------------------------------------------------
+
+    def test_pickle_round_trip(self):
+        """pickle.dumps/loads must round-trip and still encode/decode."""
+        tokenizer = PreTrainedTokenizerFast.from_pretrained(self.wordlevel_path)
+        text = "hello world test tokenizer thread safety"
+        expected_ids = tokenizer.encode(text)
+        expected_decoded = tokenizer.decode(expected_ids, skip_special_tokens=True)
+
+        dumped = pickle.dumps(tokenizer)
+        restored = pickle.loads(dumped)
+
+        self.assertEqual(restored.encode(text), expected_ids)
+        self.assertEqual(
+            restored.decode(expected_ids, skip_special_tokens=True),
+            expected_decoded,
+        )
+
+    def test_deepcopy_round_trip(self):
+        """copy.deepcopy must round-trip and still encode/decode."""
+        tokenizer = PreTrainedTokenizerFast.from_pretrained(self.wordlevel_path)
+        text = "hello world test tokenizer"
+        expected_ids = tokenizer.encode(text)
+        expected_decoded = tokenizer.decode(expected_ids, skip_special_tokens=True)
+
+        copied = copy.deepcopy(tokenizer)
+        self.assertEqual(copied.encode(text), expected_ids)
+        self.assertEqual(
+            copied.decode(expected_ids, skip_special_tokens=True),
+            expected_decoded,
+        )
+
+    def test_pickle_does_not_break_thread_safety(self):
+        """After unpickling, concurrent use must still be race-free."""
+        tokenizer = PreTrainedTokenizerFast.from_pretrained(self.wordlevel_path)
+        text = "hello world test tokenizer thread safety concurrent fast tokenization"
+        restored = pickle.loads(pickle.dumps(tokenizer))
+
+        def worker():
+            for i in range(50):
+                trunc = "longest_first" if i % 2 == 0 else "only_first"
+                pad = i % 3 == 0
+                restored.encode(text, truncation=trunc, padding=pad, max_length=8 + (i % 4))
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=8) as pool:
+            futures = [pool.submit(worker) for _ in range(8)]
+            for f in concurrent.futures.as_completed(futures, timeout=120):
+                f.result()
 
 
 @require_tokenizers

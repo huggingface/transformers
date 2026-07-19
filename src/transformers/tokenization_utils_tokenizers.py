@@ -19,6 +19,7 @@ see tokenization_utils.py
 import copy
 import json
 import os
+import threading
 from collections import defaultdict
 from collections.abc import Iterable
 from shutil import copyfile
@@ -390,6 +391,10 @@ class TokenizersBackend(PreTrainedTokenizerBase):
         if self._tokenizer is None:
             raise ValueError("The backend tokenizer is not correctly initialized.")
 
+        # Per-instance lock for thread-safe access to the Rust-backed tokenizer.
+        # See https://github.com/huggingface/transformers/issues/47085
+        self._lock = threading.RLock()
+
         _truncation = kwargs.pop("tokenizer_truncation", None) or self._tokenizer.truncation or _json_truncation
         if _truncation is not None:
             self._tokenizer.enable_truncation(**_truncation)
@@ -486,6 +491,18 @@ class TokenizersBackend(PreTrainedTokenizerBase):
         )
         if self._should_update_post_processor:
             self.update_post_processor()
+
+    def __getstate__(self):
+        # ``threading.RLock`` is not picklable, so drop it from the serialized state.
+        # It is reconstructed on unpickle via ``__setstate__``.
+        state = self.__dict__.copy()
+        state.pop("_lock", None)
+        return state
+
+    def __setstate__(self, state):
+        self.__dict__.update(state)
+        # Reconstruct the per-instance lock (same logic as ``__init__``).
+        self._lock = threading.RLock()
 
     @property
     def is_fast(self) -> bool:
@@ -938,28 +955,32 @@ class TokenizersBackend(PreTrainedTokenizerBase):
                 f"batch_text_or_text_pairs has to be a list or a tuple (got {type(batch_text_or_text_pairs)})"
             )
 
-        self.set_truncation_and_padding(
-            padding_strategy=padding_strategy,
-            truncation_strategy=truncation_strategy,
-            max_length=max_length,
-            stride=stride,
-            pad_to_multiple_of=pad_to_multiple_of,
-            padding_side=padding_side,
-        )
+        # Lock the critical section: set_truncation_and_padding (Rust &mut self) +
+        # encode_batch (Rust &self, releases GIL) must be atomic per instance to avoid
+        # ``RuntimeError: Already borrowed`` with concurrent threads (issue #47085).
+        with self._lock:
+            self.set_truncation_and_padding(
+                padding_strategy=padding_strategy,
+                truncation_strategy=truncation_strategy,
+                max_length=max_length,
+                stride=stride,
+                pad_to_multiple_of=pad_to_multiple_of,
+                padding_side=padding_side,
+            )
 
-        # Use self.split_special_tokens as default if not explicitly provided
-        if split_special_tokens is None:
-            split_special_tokens = self.split_special_tokens
+            # Use self.split_special_tokens as default if not explicitly provided
+            if split_special_tokens is None:
+                split_special_tokens = self.split_special_tokens
 
-        if self._tokenizer.encode_special_tokens != split_special_tokens:
-            self._tokenizer.encode_special_tokens = split_special_tokens
+            if self._tokenizer.encode_special_tokens != split_special_tokens:
+                self._tokenizer.encode_special_tokens = split_special_tokens
 
-        # Direct rust backend call
-        encodings = self._tokenizer.encode_batch(
-            batch_text_or_text_pairs,
-            add_special_tokens=add_special_tokens,
-            is_pretokenized=is_split_into_words,
-        )
+            # Direct rust backend call
+            encodings = self._tokenizer.encode_batch(
+                batch_text_or_text_pairs,
+                add_special_tokens=add_special_tokens,
+                is_pretokenized=is_split_into_words,
+            )
 
         # Convert encodings to BatchEncoding format
         tokens_and_encodings = [
@@ -1028,7 +1049,8 @@ class TokenizersBackend(PreTrainedTokenizerBase):
             token_ids = [token_ids]
         if isinstance(token_ids, dict):
             token_ids = token_ids["input_ids"]
-        text = self._tokenizer.decode(token_ids, skip_special_tokens=skip_special_tokens)
+        with self._lock:
+            text = self._tokenizer.decode(token_ids, skip_special_tokens=skip_special_tokens)
 
         clean_up_tokenization_spaces = (
             clean_up_tokenization_spaces
