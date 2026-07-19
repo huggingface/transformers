@@ -9,7 +9,7 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+⚠️ Note that this file is in Markdown but ccontains specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 
 -->
@@ -107,7 +107,7 @@ Each pretrained model inherits from three base classes.
 
 | **Class** | **Description** |
 |---|---|
-| [`PreTrainedConfig`] | A file that specifies a models attributes such as the number of attention heads or vocabulary size. |
+| [`PreTrainedConfig`] | A file that specifies a model's attributes such as the number of attention heads or vocabulary size. |
 | [`PreTrainedModel`] | A model (or architecture) defined by the model attributes from the configuration file. A pretrained model only returns the raw hidden states. For a specific task, use the appropriate model head to convert the raw hidden states into a meaningful result (for example, [`LlamaModel`] versus [`LlamaForCausalLM`]). |
 | Preprocessor | A class for converting raw inputs (text, images, audio, multimodal) into numerical inputs to the model. For example, [`PreTrainedTokenizer`] converts text into tensors and [`ImageProcessingMixin`] converts pixels into tensors. |
 
@@ -148,7 +148,7 @@ tokenizer.batch_decode(generated_ids)[0]
 
 ## Pipeline
 
-The [`Pipeline`] class is the most convenient way to inference with a pretrained model. It supports many tasks such as text generation, image segmentation, automatic speech recognition, document question answering, and more.
+The [`Pipeline`] class is the most convenient way to run inference with a pretrained model. It supports many tasks such as text generation, image segmentation, automatic speech recognition, document question answering, and more.
 
 > [!TIP]
 > Refer to the [Pipeline](./main_classes/pipelines) API reference for a complete list of available tasks.
@@ -166,13 +166,13 @@ from accelerate import Accelerator
 
 device = Accelerator().device
 
-pipeline = pipeline("text-generation", model="meta-llama/Llama-2-7b-hf", device=device)
+pipe = pipeline("text-generation", model="meta-llama/Llama-2-7b-hf", device=device)
 ```
 
 Prompt [`Pipeline`] with some initial text to generate more text.
 
 ```py
-pipeline("The secret to baking a good cake is ", max_length=50)
+pipe("The secret to baking a good cake is ", max_length=50)
 [{'generated_text': 'The secret to baking a good cake is 100% in the batter. The secret to a great cake is the icing.\nThis is why we’ve created the best buttercream frosting reci'}]
 ```
 
