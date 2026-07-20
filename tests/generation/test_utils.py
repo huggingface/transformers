@@ -2671,24 +2671,6 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
         # Use the correct config
         config = config.get_text_config(decoder=True)
 
-        # (batch, kv heads, seq_length, head_dim). `num_key_value_heads`/`head_dim` may vary by
-        # layer on a heterogeneous config, so resolve the shape per layer (see `attention_shape`).
-        # Only pure mamba models do not have num_attention_heads defined in config, so it can never be 1 in practice for attention models
-        num_attention_heads = getattr(config, "num_attention_heads", 1)
-
-        def attention_shape(layer_idx):
-            # Cache layers map 1:1 to the leading (non-kv-shared) decoder layers.
-            layer_config = config.per_layer_config[layer_idx]
-            num_kv_heads = getattr(layer_config, "num_key_value_heads", num_attention_heads)
-            hidden_size = getattr(layer_config, "d_model", layer_config.hidden_size)
-            head_dim = getattr(layer_config, "head_dim", hidden_size // num_attention_heads)
-            # For cross attention cache, the seq_length depends on the model, so we remove that dim
-            return (
-                (batch_size, num_kv_heads, seq_length, head_dim)
-                if seq_length is not None
-                else (batch_size, num_kv_heads, head_dim)
-            )
-
         # For mamba layers
         conv_shape = self._get_conv_state_shape(batch_size, config)
         recurrent_shape = self._get_recurrent_state_shape(batch_size, config)
@@ -2706,8 +2688,8 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
                 # Remove the seq_length dim for cross-attention cache (it changes based on the model)
                 keys = layer.keys if seq_length is not None else layer.keys[:, :, 0, :]
                 values = layer.values if seq_length is not None else layer.values[:, :, 0, :]
-                self.assertEqual(keys.shape, attention_shape(layer_idx))
-                self.assertEqual(values.shape, attention_shape(layer_idx))
+                self.assertEqual(keys.shape, self._get_attention_shape(batch_size, seq_length, config, layer_idx))
+                self.assertEqual(values.shape, self._get_attention_shape(batch_size, seq_length, config, layer_idx))
                 self.assertEqual(layer.conv_states[0].shape, conv_shape)
                 # May not be used (e.g. lfm2)
                 if layer.is_recurrent_states_initialized[0]:
@@ -2723,8 +2705,24 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
                 # Remove the seq_length dim for cross-attention cache (it changes based on the model)
                 keys = layer.keys if seq_length is not None else layer.keys[:, :, 0, :]
                 values = layer.values if seq_length is not None else layer.values[:, :, 0, :]
-                self.assertEqual(keys.shape, attention_shape(layer_idx))
-                self.assertEqual(values.shape, attention_shape(layer_idx))
+                self.assertEqual(keys.shape, self._get_attention_shape(batch_size, seq_length, config, layer_idx))
+                self.assertEqual(values.shape, self._get_attention_shape(batch_size, seq_length, config, layer_idx))
+
+    def _get_attention_shape(self, batch_size: int, seq_length: int | None, config, layer_idx: int):
+        # Fields may vary by layer on a heterogeneous config, so resolve the shape per layer.
+        layer_config = config.per_layer_config[layer_idx]
+        # Only pure mamba models do not have num_attention_heads defined in config, so it can never be 1 in practice for attention models
+        num_attention_heads = getattr(layer_config, "num_attention_heads", 1)
+        num_kv_heads = getattr(layer_config, "num_key_value_heads", num_attention_heads)
+        hidden_size = getattr(layer_config, "d_model", layer_config.hidden_size)
+        head_dim = getattr(layer_config, "head_dim", hidden_size // num_attention_heads)
+
+        # For cross attention cache, the seq_length depends on the model, so we remove that dim
+        return (
+            (batch_size, num_kv_heads, seq_length, head_dim)
+            if seq_length is not None
+            else (batch_size, num_kv_heads, head_dim)
+        )
 
     def _check_sequence_inside_sequence(self, tensor_1, tensor_2):
         # check if tensor_1 inside tensor_2 or tensor_2 inside tensor_1.
