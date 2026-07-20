@@ -299,7 +299,7 @@ _COSMOS3_EDGE_DROPPED_GENERATOR_KEYS = [
     r"^(?:model\.language_model\.)?layers\.\d+\.input_layernorm_moe_gen\.",
     r"^(?:model\.language_model\.)?layers\.\d+\.post_attention_layernorm_moe_gen\.",
     r"^(?:model\.language_model\.)?layers\.\d+\.mlp_moe_gen\.",
-    r"^(?:model\.language_model\.)?layers\.\d+\.self_attn\.(?:add_[qkv]_proj|to_add_out|norm_added_[qk])\.",
+    r"^(?:model\.language_model\.)?layers\.\d+\.self_attn\.(?:add_[qkv]_proj|to_add_out|norm_added_[qk]|k_norm_und_for_gen)\.",
 ]
 
 
@@ -1093,7 +1093,9 @@ class Cosmos3EdgeImageProcessor(TorchvisionBackend):
                 merge_size,
                 patch_size,
             )
-            patches = patches.permute(1, 4, 2, 5, 0, 3, 6).reshape(grid_height * grid_width, -1)
+            # The projector expects block-major patches with HWC values within each flattened patch:
+            # (group_h, group_w, merge_h, merge_w, patch_h, patch_w, channel).
+            patches = patches.permute(1, 4, 2, 5, 3, 6, 0).reshape(grid_height * grid_width, -1)
 
             pixel_values.append(patches)
             image_grids.append((1, grid_height, grid_width))
@@ -1226,7 +1228,9 @@ class Cosmos3EdgeImageProcessorPil(PilBackend):
                 merge_size,
                 patch_size,
             )
-            patches = patches.transpose(1, 4, 2, 5, 0, 3, 6).reshape(grid_height * grid_width, -1)
+            # The projector expects block-major patches with HWC values within each flattened patch:
+            # (group_h, group_w, merge_h, merge_w, patch_h, patch_w, channel).
+            patches = patches.transpose(1, 4, 2, 5, 3, 6, 0).reshape(grid_height * grid_width, -1)
 
             pixel_values.append(patches)
             image_grids.append((1, grid_height, grid_width))
@@ -1471,7 +1475,9 @@ class Cosmos3EdgeVideoProcessor(BaseVideoProcessor):
                 merge_size,
                 patch_size,
             )
-            patches = patches.permute(0, 1, 3, 6, 4, 7, 2, 5, 8)
+            # Preserve time-major, block-major patches with HWC values within each flattened patch:
+            # (batch, time, group_h, group_w, merge_h, merge_w, patch_h, patch_w, channel).
+            patches = patches.permute(0, 1, 3, 6, 4, 7, 5, 8, 2)
             processed_videos_grouped[shape] = patches.reshape(
                 batch_size, grid_t * grid_height * grid_width, channels * patch_size * patch_size
             )
