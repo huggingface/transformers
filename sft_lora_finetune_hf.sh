@@ -18,18 +18,18 @@ export ON_NEURON_EAGER=1
 # export TORCH_NEURONX_MLIR_ATEN_OPS=1
 export TORCH_NEURONX_FALLBACK_ONLY_FOR_UNIMPLEMENTED_OPS=1
 export NEURON_EAGER_MODEL_CACHE_SIZE=10000
-export NEURON_RT_VISIBLE_CORES=0,1
 export OMP_NUM_THREADS=128
 export HF_DEACTIVATE_ASYNC_LOAD=1
 
-# Profiling
-export NEURON_FRAMEWORK_DEBUG=1
+export TORCH_NEURONX_ENABLE_HOST_CC=1
+export TORCH_NEURONX_ENABLE_ASYNC_NRT=1
+export NEURON_RT_NUM_CORES=4
+export NEURON_LOGICAL_NC_CONFIG=2
+export NEURON_RT_VIRTUAL_CORE_SIZE=2
 
-# PyTorch/Neuron profiler window (private beta API), read via env vars in sft_lora_finetune_hf.py. 0 disables.
-export PROFILE_STEP_START=${PROFILE_STEP_START:-3}
-export PROFILE_NUM_STEPS=${PROFILE_NUM_STEPS:-10}
-export PROFILE_OUTPUT_DIR=${PROFILE_OUTPUT_DIR:-./pt-profile-hf}
-export PROFILE_MAX_EVENTS_PER_NC=${PROFILE_MAX_EVENTS_PER_NC:-4000000}
+export XLA_IR_DEBUG=1
+export XLA_HLO_DEBUG=1
+export NEURON_FRAMEWORK_DEBUG=1
 
 # ---------------------------------------------------------------------------
 # Model / data / hyperparameters
