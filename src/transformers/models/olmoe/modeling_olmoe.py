@@ -432,6 +432,7 @@ class OlmoePreTrainedModel(PreTrainedModel):
     }
 
     _supports_attention_backend = True
+    _can_compile_fullgraph = True
 
     @torch.no_grad()
     def _init_weights(self, module):

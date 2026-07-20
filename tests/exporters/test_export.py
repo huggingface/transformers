@@ -15,13 +15,14 @@
 import copy
 import functools
 import inspect
+import itertools
 import re
 
 import pytest
 import torch
 from parameterized import parameterized
 
-from transformers import set_seed
+from transformers import GenerationConfig, set_seed
 from transformers.exporters.exporter_dynamo import DynamoConfig, DynamoExporter
 from transformers.exporters.exporter_executorch import ExecutorchConfig, ExecutorchExporter
 from transformers.exporters.exporter_onnx import OnnxConfig, OnnxExporter
@@ -205,6 +206,10 @@ EXPORT_SKIPS: dict[str, dict[str, str]] = {
             "(`GuardOnDataDependentSymNode`). Exports fine on torch.export/ONNX, which carry the "
             "dynamic dim at runtime."
         ),
+        "Qwen3ASRModel": "Same data-dependent audio-encoder `.nonzero()` as `Qwen3ASRForConditionalGeneration`.",
+        "Qwen3ASRForTokenClassification": (
+            "Same data-dependent audio-encoder `.nonzero()` as `Qwen3ASRForConditionalGeneration`."
+        ),
     },
     "executorch.generate": {},
     "executorch.dynamic": {
@@ -220,12 +225,24 @@ EXPORT_SKIPS: dict[str, dict[str, str]] = {
         "BigBirdForTokenClassification": "Same `timeout` failure as `Mask2FormerModel`.",
         "GroundingDinoModel": "Same `timeout` failure as `Mask2FormerModel`.",
         "GroundingDinoForObjectDetection": "Same `timeout` failure as `Mask2FormerModel`.",
+        "MMGroundingDinoModel": "Same `timeout` failure as `Mask2FormerModel`.",
+        "MMGroundingDinoForObjectDetection": "Same `timeout` failure as `Mask2FormerModel`.",
         "Sam2Model": "Same `timeout` failure as `Mask2FormerModel`.",
         "Sam2VisionModel": "Same `timeout` failure as `Mask2FormerModel`.",
         "Swinv2Model": "Same `timeout` failure as `Mask2FormerModel`.",
         "Swinv2ForImageClassification": "Same `timeout` failure as `Mask2FormerModel`.",
         "Swinv2ForMaskedImageModeling": "Same `timeout` failure as `Mask2FormerModel`.",
         "Swinv2Backbone": "Same `timeout` failure as `Mask2FormerModel`.",
+    },
+    "executorch.static": {
+        "Wav2Vec2BertModel": (
+            "ExecuTorch *runtime* execution of the Conformer encoder exceeds the 15-min test timeout "
+            "under static shapes (~1350s in the runtime, not lowering). Dynamic shapes stay under budget."
+        ),
+        "Wav2Vec2BertForCTC": "Same Conformer-encoder runtime `timeout` as `Wav2Vec2BertModel`.",
+        "Wav2Vec2BertForSequenceClassification": "Same Conformer-encoder runtime `timeout` as `Wav2Vec2BertModel`.",
+        "Wav2Vec2BertForAudioFrameClassification": "Same Conformer-encoder runtime `timeout` as `Wav2Vec2BertModel`.",
+        "Wav2Vec2BertForXVector": "Same Conformer-encoder runtime `timeout` as `Wav2Vec2BertModel`.",
     },
 }
 
@@ -274,6 +291,29 @@ DYNAMIC_EXPORT_PARAMS = parameterized.expand(
     [(False,), (True,)],
     name_func=lambda f, _, p: f"{f.__name__}_{'dynamic' if p.args[0] else 'static'}",
 )
+
+# Generation export tests run the cartesian product of two axes: dynamic vs static shapes, and the
+# generation config used for the capture. `generation_config=None` is the model's own config (growing
+# `DynamicCache`); `cache_implementation="static"` exports against a `StaticCache`. Every cache runs
+# under both shape modes — under dynamic shapes a static cache still keeps a symbolic (resizable) size,
+# it just writes at fixed positions. Add a config to `_EXPORT_GENERATION_CONFIGS` to cross it with both.
+_EXPORT_SHAPE_MODES = [False, True]  # dynamic=False (static shapes) / dynamic=True
+_EXPORT_GENERATION_CONFIGS = [None, GenerationConfig(cache_implementation="static")]
+
+GENERATE_EXPORT_PARAMS = parameterized.expand(
+    list(itertools.product(_EXPORT_SHAPE_MODES, _EXPORT_GENERATION_CONFIGS)),
+    name_func=lambda f, _, p: (
+        f"{f.__name__}_{'dynamic' if p.args[0] else 'static'}"
+        + (f"_{p.args[1].cache_implementation}_cache" if p.args[1] is not None else "")
+    ),
+)
+
+
+def _needs_static_cache(generation_config) -> bool:
+    """True if `generation_config` requests a cache the model must explicitly support (a static impl).
+    Such variants only run on models that can (see the `_can_compile_fullgraph` gate in the tests)."""
+    return generation_config is not None and generation_config.cache_implementation is not None
+
 
 # Maximum time (in seconds) for a single export test before it is killed.
 EXPORT_TEST_TIMEOUT = 15 * 60  # 15 minutes
@@ -472,14 +512,17 @@ class ExportTesterMixin:
             if "for expert" in source_code and "use_experts_implementation" not in source_code:
                 self.skipTest(reason="Model architecture uses eager MoE implementation which is not torch exportable")
 
-    def _should_skip(self, model_class, generate=False, dynamic=False, backend=None):
+    def _should_skip(self, model_class, generate=False, dynamic=False, backend=None, generation_config=None):
         """Return True if this model class should be skipped for export tests.
 
         Walks the scopes in ``EXPORT_SKIPS`` from broad to specific that match the current
         ``(backend, generate, dynamic)`` triple — ``"all"`` always applies, ``"generate"`` only
         for generate tests, ``"<backend>"`` for that backend, and ``"<backend>.<variant>"`` for
-        the more-specific intersections.
+        the more-specific intersections. Also skips static-cache variants (a ``generation_config``
+        requesting one) on models that can't compile fullgraph — they don't support a static cache.
         """
+        if _needs_static_cache(generation_config) and not model_class._can_compile_fullgraph:
+            return True
         name = model_class.__name__
         scopes = ["all"]
         if generate:
@@ -488,8 +531,7 @@ class ExportTesterMixin:
             scopes.append(backend)
             if generate:
                 scopes.append(f"{backend}.generate")
-            if dynamic:
-                scopes.append(f"{backend}.dynamic")
+            scopes.append(f"{backend}.dynamic" if dynamic else f"{backend}.static")
         return any(name in EXPORT_SKIPS.get(scope, {}) for scope in scopes)
 
     def _prepare_export_model_and_inputs(self, model_class, device=torch_device):
@@ -659,7 +701,7 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
     stage into individual submodules via :func:`decompose_multimodal`.
     """
 
-    def _prepare_export_generate_model_and_inputs(self, model_class, device=torch_device):
+    def _prepare_export_generate_model_and_inputs(self, model_class, device=torch_device, generation_config=None):
         """Decompose a generative model into exportable components.
 
         For multi-modal models: decomposes the prefill stage into individual submodules plus the decode stage.
@@ -669,6 +711,9 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
         ``generate()`` call inside :func:`decompose_for_generation` runs on CPU — a device-side
         assert there (e.g. a VLM ``masked_scatter`` size mismatch) would otherwise poison the
         xdist worker's CUDA context and cascade to every later test on it.
+
+        ``generation_config`` is forwarded to the ``generate()`` capture (default: the model's own).
+        Pass one with ``cache_implementation="static"`` to export against a fixed-size ``StaticCache``.
 
         Returns:
             Dict of `{name: (model, inputs)}` — one entry per component.
@@ -682,17 +727,17 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
 
         inputs_dict = cast_leaf_tensors(inputs_dict, dtype=module_dtype(model), device=module_device(model))
 
-        return decompose_for_generation(model, inputs_dict)
+        return decompose_for_generation(model, inputs_dict, generation_config=generation_config)
 
     # ──────────────────── torch.export tests ─────────────────────
 
-    @DYNAMIC_EXPORT_PARAMS
+    @GENERATE_EXPORT_PARAMS
     @slow
     @pytest.mark.torch_export_test
     @pytest.mark.timeout(EXPORT_TEST_TIMEOUT)
     @require_torch_greater_or_equal(MIN_EXPORT_TORCH_VERSION)
     @disable_hub_kernels
-    def test_torch_export_generate(self, dynamic, atol=1e-4, rtol=1e-4):
+    def test_torch_export_generate(self, dynamic, generation_config, atol=1e-4, rtol=1e-4):
         """Export prefill and decode stages with ``torch.export`` and verify outputs match eager."""
         self._skip_if_not_exportable()
 
@@ -700,10 +745,13 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
         config = DynamoConfig(dynamic=dynamic)
 
         for model_class in self.all_generative_model_classes:
-            if self._should_skip(model_class, generate=True, dynamic=dynamic, backend="dynamo"):
+            if self._should_skip(
+                model_class, generate=True, dynamic=dynamic, backend="dynamo", generation_config=generation_config
+            ):
                 continue
-
-            components = self._prepare_export_generate_model_and_inputs(model_class)
+            components = self._prepare_export_generate_model_and_inputs(
+                model_class, generation_config=generation_config
+            )
             eager_outputs = self._collect_eager_outputs(components)
 
             for name, (model, inputs) in components.items():
@@ -719,7 +767,7 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
 
     # ──────────────────────── ONNX tests ─────────────────────────
 
-    @DYNAMIC_EXPORT_PARAMS
+    @GENERATE_EXPORT_PARAMS
     @slow
     @require_onnxscript
     @require_onnxruntime
@@ -727,19 +775,23 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
     @pytest.mark.timeout(EXPORT_TEST_TIMEOUT)
     @require_torch_greater_or_equal(MIN_EXPORT_TORCH_VERSION)
     @disable_hub_kernels
-    def test_onnx_export_generate(self, dynamic):
+    def test_onnx_export_generate(self, dynamic, generation_config):
         """Export prefill and decode stages to ONNX and verify output names match eager."""
         self._skip_if_not_exportable()
 
         for model_class in self.all_generative_model_classes:
-            if self._should_skip(model_class, generate=True, dynamic=dynamic, backend="onnx"):
+            if self._should_skip(
+                model_class, generate=True, dynamic=dynamic, backend="onnx", generation_config=generation_config
+            ):
                 continue
 
             optimize = _onnx_optimize_enabled(model_class, dynamic)
             exporter = OnnxExporter()
             config = OnnxConfig(dynamic=dynamic, optimize=optimize)
 
-            components = self._prepare_export_generate_model_and_inputs(model_class)
+            components = self._prepare_export_generate_model_and_inputs(
+                model_class, generation_config=generation_config
+            )
             eager_outputs = self._collect_eager_outputs(components)
 
             for name, (model, inputs) in components.items():
@@ -752,14 +804,14 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
 
     # ──────────────────── ExecuTorch tests ───────────────────────
 
-    @DYNAMIC_EXPORT_PARAMS
+    @GENERATE_EXPORT_PARAMS
     @slow
     @require_executorch
     @pytest.mark.executorch_export_test
     @pytest.mark.timeout(EXPORT_TEST_TIMEOUT)
     @require_torch_greater_or_equal(MIN_EXPORT_TORCH_VERSION)
     @disable_hub_kernels
-    def test_executorch_export_generate(self, dynamic):
+    def test_executorch_export_generate(self, dynamic, generation_config):
         """Export prefill and decode stages to ExecuTorch, run each, and verify output count matches eager."""
 
         self._skip_if_not_exportable()
@@ -767,10 +819,14 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
         config = ExecutorchConfig(dynamic=dynamic)
 
         for model_class in self.all_generative_model_classes:
-            if self._should_skip(model_class, generate=True, dynamic=dynamic, backend="executorch"):
+            if self._should_skip(
+                model_class, generate=True, dynamic=dynamic, backend="executorch", generation_config=generation_config
+            ):
                 continue
 
-            components = self._prepare_export_generate_model_and_inputs(model_class, device="cpu")
+            components = self._prepare_export_generate_model_and_inputs(
+                model_class, device="cpu", generation_config=generation_config
+            )
             eager_outputs = self._collect_eager_outputs(components)
 
             for name, (model, inputs) in components.items():

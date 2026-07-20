@@ -1239,6 +1239,7 @@ class xLSTMPreTrainedModel(PreTrainedModel):
     base_model_prefix = "backbone"
     _no_split_modules = ["xLSTMBlock"]
     supports_gradient_checkpointing = True
+    _can_compile_fullgraph = True
     _is_stateful = True
     _can_record_outputs = {
         "hidden_states": xLSTMBlock,

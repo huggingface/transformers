@@ -802,16 +802,15 @@ class T5Gemma2Decoder(T5Gemma2PreTrainedModel):
             position_ids = position_ids.unsqueeze(0)
 
         if not isinstance(self_attn_mask_mapping := attention_mask, dict):
-            # this masking function does nothing to masking but forces `allow_is_causal_skip` to be False
-            # as we always need a mask during decoding for merged attention.
-            dummy_and_mask_function = lambda *args: torch.tensor(True, dtype=torch.bool)  # noqa
+            # Always materialize the mask (no `is_causal` skip) as it is concatenated with the cross-attention
+            # mask below for merged attention during decoding.
             mask_kwargs = {
                 "config": self.config,
                 "inputs_embeds": inputs_embeds,
                 "attention_mask": attention_mask,
                 "past_key_values": past_key_values.self_attention_cache if past_key_values is not None else None,
                 "position_ids": position_ids,
-                "and_mask_function": dummy_and_mask_function,
+                "allow_is_causal_skip": False,
             }
             self_attn_mask_mapping = {
                 "full_attention": create_causal_mask(**mask_kwargs),
@@ -825,7 +824,7 @@ class T5Gemma2Decoder(T5Gemma2PreTrainedModel):
                     inputs_embeds=inputs_embeds,
                     attention_mask=encoder_attention_mask,
                     encoder_hidden_states=encoder_hidden_states,
-                    and_mask_function=dummy_and_mask_function,
+                    allow_is_bidirectional_skip=False,
                 )
             }
 

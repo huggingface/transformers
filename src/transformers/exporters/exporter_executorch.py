@@ -85,9 +85,10 @@ if is_executorch_available():
         XNode,
     )
     from executorch.backends.xnnpack.utils.utils import get_input_node
-    from executorch.exir.capture._config import EdgeCompileConfig
+    from executorch.exir.capture._config import EdgeCompileConfig, ExecutorchBackendConfig
     from executorch.exir.dialects._ops import ops as exir_ops
     from executorch.exir.passes.executorch_prim_ops_registry import _PYTHON_SYM_OPS_TO_EXECUTORCH_SYM_OPS
+    from executorch.exir.passes.memory_planning_pass import MemoryPlanningPass
     from executorch.exir.passes.replace_view_copy_with_view_pass import _VIEW_OP, _is_view_copy, _ViewSpec
     from executorch.exir.passes.spec_prop_pass import _is_mutable_buffer
     from executorch.exir.program import EdgeProgramManager, ExecutorchProgramManager, to_edge_transform_and_lower
@@ -148,7 +149,9 @@ class ExecutorchExporter(DynamoExporter):
             edge_program_manager: EdgeProgramManager = to_edge_transform_and_lower(
                 exported_program, partitioner=partitioner, compile_config=_get_edge_compile_config()
             )
-            executorch_programs_manager: ExecutorchProgramManager = edge_program_manager.to_executorch()
+            executorch_programs_manager: ExecutorchProgramManager = edge_program_manager.to_executorch(
+                config=_get_backend_config(config)
+            )
 
         return executorch_programs_manager
 
@@ -181,6 +184,24 @@ def _get_edge_compile_config() -> EdgeCompileConfig:
     )
 
 
+def _get_backend_config(config):
+    """Build the ``ExecutorchBackendConfig`` for ``to_executorch``, or ``None`` for defaults.
+
+    Only overrides the memory-planning pass when the caller changed an ``alloc_*`` flag. Turning off
+    ``alloc_graph_input``/``alloc_graph_output`` hands input/output memory ownership to the caller
+    (see [`ExecutorchConfig`]) — the prerequisite for zero-copy in-place ``USER_INPUT_MUTATION``.
+    """
+    if config.alloc_graph_input and config.alloc_graph_output and config.alloc_mutable_buffers:
+        return None
+    return ExecutorchBackendConfig(
+        memory_planning_pass=MemoryPlanningPass(
+            alloc_graph_input=config.alloc_graph_input,
+            alloc_graph_output=config.alloc_graph_output,
+            alloc_mutable_buffers=config.alloc_mutable_buffers,
+        )
+    )
+
+
 # ── Stage 1: Backend preparation ──────────────────────────────────────────────
 # Each prepare_for_* function receives the original model and sample inputs, applies backend-specific preparation,
 # and returns the modified model, the list of partitioners to apply, and the modified sample inputs. Common patterns include:
@@ -188,6 +209,18 @@ def _get_edge_compile_config() -> EdgeCompileConfig:
 # - Cast the model and inputs to the required dtype (e.g., bfloat16 for CUDA).
 # - Build the backend-specific partitioner list passed to to_edge_transform_and_lower.
 # To add a new backend: implement _prepare_for_new_backend and add it to the _BACKEND_PREPARE table.
+
+
+def _contiguate_inputs(sample_inputs: dict[str, Any]) -> dict[str, Any]:
+    """Materialise input tensors to contiguous for ExecuTorch.
+
+    ExecuTorch rejects a 0 (broadcast) stride on any tensor, including graph inputs — a sample input
+    can be a non-contiguous broadcast view (e.g. a batch dim expanded from 1), whose stride-0 is
+    captured on the input placeholder and later rejected by `spec_prop` ("0 in strides is not
+    supported"). `.contiguous()` is a no-op for already-contiguous tensors, so cache buffers keep
+    their identity for in-place static-cache writes.
+    """
+    return torch.utils._pytree.tree_map_only(torch.Tensor, lambda t: t.contiguous(), sample_inputs)
 
 
 def prepare_for_xnnpack(model: PreTrainedModel, sample_inputs: dict[str, Any]):
@@ -205,7 +238,7 @@ def prepare_for_xnnpack(model: PreTrainedModel, sample_inputs: dict[str, Any]):
     if isinstance(model, PreTrainedModel) and model._can_set_experts_implementation():
         model.set_experts_implementation("batched_mm")
     partitioner = [XnnpackPartitioner()]
-    return model, sample_inputs, partitioner
+    return model, _contiguate_inputs(sample_inputs), partitioner
 
 
 def prepare_for_cuda(model: PreTrainedModel, sample_inputs: dict[str, Any]):
@@ -224,7 +257,7 @@ def prepare_for_cuda(model: PreTrainedModel, sample_inputs: dict[str, Any]):
         logger.warning(f"ExecuTorch CUDA backend requires bfloat16; upcasting model from {dtype}.")
         model = model.to(dtype=torch.bfloat16)
     partitioner = [CudaPartitioner([CudaBackend.generate_method_name_compile_spec(model.__class__.__name__)])]
-    return model, sample_inputs, partitioner
+    return model, _contiguate_inputs(sample_inputs), partitioner
 
 
 _BACKEND_PREPARE = {
@@ -1453,16 +1486,28 @@ def _drop_runtime_asserts(exported_program: ExportedProgram) -> None:
     asserts encode survive on ``exported_program.range_constraints`` (further capped by
     ``_fix_range_constraints``), so dropping the nodes (and the now-dead symint feeders) is safe.
     """
+    assert_targets = (
+        torch.ops.aten._assert_tensor_metadata.default,
+        torch.ops.aten._assert_scalar.default,
+    )
     for module in exported_program.graph_module.modules():
         if not isinstance(module, torch.fx.GraphModule):
             continue
-        for node in list(module.graph.nodes):
-            if node.op == "call_function" and node.target in (
-                torch.ops.aten._assert_tensor_metadata.default,
-                torch.ops.aten._assert_scalar.default,
-            ):
-                module.graph.erase_node(node)
-        module.graph.eliminate_dead_code()
+        asserts = [node for node in module.graph.nodes if node.op == "call_function" and node.target in assert_targets]
+        # Erase the asserts and only the symint feeders they leave dead, walking back from each assert's
+        # inputs. We avoid a global `eliminate_dead_code` on purpose: it also visits unrelated dead nodes
+        # and on some graphs (e.g. `minimax_m3_vl` under static shapes) trips an fx `SystemError`/`KeyError`
+        # inside `_update_args_kwargs` erasing an unrelated `expand_as`. Targeted removal only touches the
+        # assert chain, so those unrelated nodes are left for the downstream lowering passes to clean up.
+        stack = [feeder for node in asserts for feeder in node.all_input_nodes]
+        for node in asserts:
+            module.graph.erase_node(node)
+        while stack:
+            feeder = stack.pop()
+            if feeder.op in ("placeholder", "output") or feeder.users or feeder.is_impure():
+                continue
+            stack.extend(feeder.all_input_nodes)
+            module.graph.erase_node(feeder)
         module.recompile()
 
 
