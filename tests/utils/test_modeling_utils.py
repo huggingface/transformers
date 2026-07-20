@@ -3876,3 +3876,46 @@ class RemoteAndCustomCodeModelTests(unittest.TestCase):
 
         self.assertTrue(model.is_custom_code())
         self.assertFalse(model.is_remote_code())
+
+
+@unittest.skipIf(not is_accelerate_available(), "accelerate not installed")
+class GetBalancedMemoryTest(unittest.TestCase):
+    """Test get_balanced_memory handles small models with large layers correctly."""
+
+    def test_get_balanced_memory_small_model_large_layer(self):
+        """
+        Test that get_balanced_memory correctly allocates per_gpu when model is small but has large layers.
+        
+        When model_sizes is very small and max_layer_size is large relative to per_gpu,
+        the function should increase per_gpu to ensure each GPU can accommodate the largest layer.
+        This is a regression test for the fix where per_gpu was too small, making it impossible
+        to fit even the largest layer on a single GPU.
+        """
+        from transformers.integrations.accelerate import get_balanced_memory
+        
+        # Create a simple model with embedding (typically large)
+        model = nn.Sequential(
+            nn.Embedding(1000, 128),
+            nn.Linear(128, 128),
+            nn.Linear(128, 10),
+        )
+        
+        # Simulate small GPU memory constraint
+        max_memory = {0: 2 * 1024**3, 1: 2 * 1024**3, "cpu": 50 * 1024**3}
+        
+        # This should not raise an error and should return valid allocation
+        result = get_balanced_memory(
+            model,
+            max_memory=max_memory,
+            no_split_module_classes=None,
+        )
+        
+        # Verify the result contains allocations for GPUs
+        self.assertIsNotNone(result)
+        self.assertIn(0, result)
+        self.assertIn(1, result)
+        
+        # Each GPU should have positive allocation not exceeding hardware limit
+        for device_id in [0, 1]:
+            self.assertGreater(result[device_id], 0)
+            self.assertLessEqual(result[device_id], max_memory[device_id])
