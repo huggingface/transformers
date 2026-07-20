@@ -31,6 +31,7 @@ from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPool
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, is_torchdynamo_compiling
+from ...utils.deprecation import deprecate_kwarg
 from ..auto import AutoModel
 from .configuration_vibevoice_asr import VibeVoiceAsrConfig
 
@@ -252,12 +253,12 @@ class VibeVoiceAsrPreTrainedModel(PreTrainedModel):
             init.constant_(module.ffn_gamma, self.config.layer_scale_init_value)
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for VibeVoice ASR outputs, with hidden states and attentions.
     """
 )
+@dataclass
 class VibeVoiceAsrModelOutputWithPast(BaseModelOutputWithPast):
     r"""
     past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
@@ -269,12 +270,12 @@ class VibeVoiceAsrModelOutputWithPast(BaseModelOutputWithPast):
     audio_hidden_states: torch.FloatTensor | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for VibeVoice ASR causal language model outputs.
     """
 )
+@dataclass
 class VibeVoiceAsrCausalLMOutputWithPast(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
@@ -316,6 +317,7 @@ class VibeVoiceAsrModel(VibeVoiceAsrPreTrainedModel):
     def set_input_embeddings(self, value):
         self.language_model.set_input_embeddings(value)
 
+    @deprecate_kwarg("acoustic_tokenizer_chunk_size", version="v5.20")
     @can_return_tuple
     @auto_docstring(custom_intro="Encode audio into embeddings that can be used by the language model.")
     def get_audio_features(
@@ -387,6 +389,7 @@ class VibeVoiceAsrModel(VibeVoiceAsrPreTrainedModel):
 
         return BaseModelOutputWithPooling(last_hidden_state=acoustic_latents, pooler_output=combined_features)
 
+    @deprecate_kwarg("acoustic_tokenizer_chunk_size", version="v5.20")
     @can_return_tuple
     @auto_docstring
     def forward(
@@ -444,8 +447,6 @@ class VibeVoiceAsrModel(VibeVoiceAsrPreTrainedModel):
     """
 )
 class VibeVoiceAsrForConditionalGeneration(VibeVoiceAsrPreTrainedModel, GenerationMixin):
-    _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
-
     def __init__(self, config: VibeVoiceAsrConfig):
         super().__init__(config)
         self.model = VibeVoiceAsrModel(config)
@@ -455,6 +456,7 @@ class VibeVoiceAsrForConditionalGeneration(VibeVoiceAsrPreTrainedModel, Generati
     def get_audio_features(self, *args, **kwargs):
         return self.model.get_audio_features(*args, **kwargs)
 
+    @deprecate_kwarg("acoustic_tokenizer_chunk_size", version="v5.20")
     @can_return_tuple
     @auto_docstring
     def forward(

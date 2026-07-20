@@ -19,7 +19,7 @@ requirements:
     - huggingface_hub
     - packaging
     - filelock
-    - tqdm >=4.27
+    - tqdm >=4.60
     - sacremoses
     - regex !=2019.12.17
     - protobuf
@@ -34,7 +34,7 @@ requirements:
     - huggingface_hub
     - packaging
     - filelock
-    - tqdm >=4.27
+    - tqdm >=4.60
     - sacremoses
     - regex !=2019.12.17
     - protobuf

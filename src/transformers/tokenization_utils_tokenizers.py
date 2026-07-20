@@ -201,11 +201,10 @@ class TokenizersBackend(PreTrainedTokenizerBase):
 
         # Tekken converter (Mistral)
         if isinstance(vocab_file, str) and vocab_file.endswith("tekken.json") and os.path.isfile(vocab_file):
-            from .convert_slow_tokenizer import MistralConverter
+            from .integrations.mistral.tokenizer import MistralConverter
 
-            local_kwargs["vocab"], local_kwargs["merges"] = MistralConverter(
-                vocab_file=vocab_file
-            ).extract_vocab_merges_from_model(vocab_file)
+            converter = MistralConverter(vocab_file)
+            local_kwargs["tokenizer_object"] = converter.converted()
             return local_kwargs
 
         # SentencePiece model (with TikToken fallback)
@@ -1296,15 +1295,14 @@ class TokenizersBackend(PreTrainedTokenizerBase):
         import re
         from functools import lru_cache
 
-        from huggingface_hub import model_info
         from packaging import version
 
-        from transformers.utils.hub import cached_file
+        from transformers.utils.hub import cached_file, hf_api
 
         @lru_cache(maxsize=128)
         def is_base_mistral(model_id: str) -> bool:
             try:
-                model = model_info(model_id)
+                model = hf_api().model_info(model_id)
             except Exception:
                 # Never block tokenizer init on a Hub error — assume non-Mistral.
                 return False

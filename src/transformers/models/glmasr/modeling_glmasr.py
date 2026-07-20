@@ -25,7 +25,6 @@ from typing import Optional
 from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...generation import GenerationMixin
-from ...integrations import use_kernelized_func
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
@@ -177,7 +176,6 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
     return q_embed, k_embed
 
 
-@use_kernelized_func(apply_rotary_pos_emb)
 class GlmAsrAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
@@ -490,12 +488,12 @@ class GlmAsrModel(GlmAsrPreTrainedModel):
         )
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for GlmAsr causal language model (or autoregressive) outputs.
     """
 )
+@dataclass
 class GlmAsrCausalLMOutputWithPast(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
@@ -522,7 +520,6 @@ class GlmAsrCausalLMOutputWithPast(ModelOutput):
     """
 )
 class GlmAsrForConditionalGeneration(GlmAsrPreTrainedModel, GenerationMixin):
-    _keep_in_fp32_modules_strict = ["embed_positions"]
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
 
     def __init__(self, config):

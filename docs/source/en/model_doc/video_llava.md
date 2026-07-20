@@ -13,7 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2023-11-16 and added to Hugging Face Transformers on 2024-05-15.*
+*This model was published in HF papers on 2023-11-16 and contributed to Hugging Face Transformers on 2024-05-15.*
 
 # Video-LLaVA
 
@@ -159,7 +159,7 @@ We value your feedback to help identify bugs before the full release! Check out 
 
 </Tip>
 
-Load the quantized model by simply adding [`BitsAndBytesConfig`](../main_classes/quantization#transformers.BitsAndBytesConfig) as shown below:
+Load the quantized model by simply adding [`BitsAndBytesConfig`] as shown below:
 
 ```python
 from transformers import BitsAndBytesConfig, VideoLlavaForConditionalGeneration

@@ -98,11 +98,31 @@ manager.start()
 # submit and retrieve requests...
 ```
 
-Call [`ContinuousBatchingManager.stop`] to terminate the manager.
+### Shutting down the manager
+
+The manager runs a background thread and holds distributed resources. Shutdown happens in two stages so you can choose what to do with in-flight work.
+
+Call [`~ContinuousBatchingManager.stop`] to halt the background thread. By default, the manager stops accepting new submissions and waits for queued and active requests to finish before the thread exits.
 
 ```py
 manager.stop()
 ```
+
+Pass `hard_stop=True` to abandon pending work immediately. Queued and active requests are failed with a `RuntimeError` instead of finishing.
+
+```py
+manager.stop(hard_stop=True)
+```
+
+Once `stop` is called, [`~ContinuousBatchingManager.add_request`] and [`~ContinuousBatchingManager.add_requests`] drop new submissions and log a warning. You can still call `start` again to run another generation session with the same manager.
+
+Call [`~ContinuousBatchingManager.destroy`] to release distributed resources. `destroy` stops the manager first if it's still running, and the manager cannot be restarted afterwards. Use it when you're done with continuous batching for the lifetime of the process.
+
+```py
+manager.destroy()
+```
+
+[`~ContinuousMixin.continuous_batching_context_manager`] handles this process. It calls `stop` on exit and `destroy` unless you pass `persistent_manager=True` to cache the manager on the model for the next session.
 
 ### Adding requests
 
@@ -177,20 +197,24 @@ for chunk in manager.request_id_iter(request_id="streamed"):
 
 [`ContinuousBatchingConfig`] controls the KV cache, scheduling, CUDA graphs, memory usage, and more. Pass it alongside [`GenerationConfig`] to customize continuous batching.
 
-By default, `num_blocks` and `max_batch_tokens` are inferred automatically from available GPU memory. Use the table below to help you pick the appropriate features.
+By default, `max_batch_tokens` is `8192`, bounded by available GPU memory and never below `256`, while `num_blocks` fills the remaining memory. Use the table below to help you pick the appropriate features.
 
 | Feature | Memory | Throughput | Latency |
 |---|---|---|---|
 | `max_memory_percent` / `block_size` | ✓ controls KV budget | | |
+| `max_batch_tokens` | ↑ larger input buffers | ✓ bigger prefill batches | ✓ TTFT when prefill-bound |
 | `scheduler` | | ✓ scheduling policy | ✓ TTFT |
 | CUDA graphs | ↑ graph storage | ✓ less dispatch overhead | ✓ |
 | Async batching | ↑ ~2× I/O buffers | ✓ overlaps CPU/GPU | |
+| Compilation | ↑ warmup-time only | ✓ faster forward passes | ✓ |
 | Decode fast path | ↑ block table per request | ✓ faster decode-only steps | ✓ |
 | CPU offloading | ↑ pinned CPU memory | ✓ skips some re-prefills | |
 | Prefix caching | ↓ shared KV blocks | ✓ skips redundant prefill | ✓ TTFT |
 | Paged attention | ↓ no fragmentation | ✓ dynamic batch membership | |
 | Sliding window | ↓ bounded KV per layer | | |
 | Per-request processors | | ✓ mixed sampling params per batch | |
+| `max_requests_per_batch` | ↓ caps logits buffer | ✓ bounds batch size | |
+| `safety_margin` | | | ✓ protects decode latency |
 
 ```py
 from transformers.generation import ContinuousBatchingConfig
@@ -207,6 +231,42 @@ outputs = model.generate_batch(
     continuous_batching_config=cb_config,
 )
 ```
+
+### KV cache block size
+
+`block_size` sets how many tokens each KV cache block holds. It must be at least 4, and `generate_batch` raises a `ValueError` for any smaller value. The cache reserves two extra blocks for padding and sentinel bookkeeping, so very small blocks spend a large fraction of memory on this fixed overhead. Larger blocks cut bookkeeping but waste space when a sequence doesn't fill its last block. The default of 256 matches the `flash_attn_with_kvcache` decode kernel and works well in most cases. Keep `block_size` well above the minimum for an efficient cache.
+
+```py
+cb_config = ContinuousBatchingConfig(block_size=128)
+```
+
+### Prefill batch size
+
+`max_batch_tokens` sets the token budget for a single forward pass, the maximum number of query tokens the model processes at once. A larger budget packs more prompt tokens into each prefill, which raises prefill throughput and lowers time-to-first-token on prompt-heavy workloads. The scheduler splits prompts that exceed the budget across steps. See [chunked prefill](./continuous_batching_architecture#chunked-prefill) for how oversized prompts are handled.
+
+By default, `max_batch_tokens` is `8192`. The value is bounded by available GPU memory so the per-batch input tensors don't crowd out the KV cache, and it never falls below `256`. On a GPU with little free memory, the bound lowers it below `8192`.
+
+`max_batch_tokens` and `num_blocks` draw from the same memory budget, so they trade off against each other. A larger token budget allocates bigger input buffers and leaves fewer KV cache blocks for concurrent or long requests. Raise `max_batch_tokens` to push prefill throughput when you have more memory available, and lower it to free memory for more KV blocks or to avoid out-of-memory errors.
+
+```py
+cb_config = ContinuousBatchingConfig(max_batch_tokens=16384)
+```
+
+### Batch and scheduling limits
+
+`max_requests_per_batch` caps how many requests run in a single forward pass. The model produces a logits tensor sized by the number of batch tokens and the vocabulary size, and it's cast to `fp32` for sampling, which doubles the footprint. Each request only needs one next-token prediction, so a smaller cap keeps this tensor smaller and avoids out-of-memory errors on prefill-heavy batches with large vocabularies. By default it's set to the number of prompts submitted, with a fallback of 1024, then capped to fit `max_batch_tokens` and `num_blocks`.
+
+```py
+cb_config = ContinuousBatchingConfig(max_requests_per_batch=256)
+```
+
+`safety_margin` reserves a fraction of the KV cache for active requests. When free blocks fall below `safety_margin * num_blocks`, the scheduler stops admitting new prefills and only continues decoding the requests already in progress. This prioritizes finishing active work over starting new requests, which protects decode latency and delays [offloading](./continuous_batching_architecture#offloading). The value must fall between `0` and `1`, where `0` disables the margin.
+
+```py
+cb_config = ContinuousBatchingConfig(safety_margin=0.15)
+```
+
+The default depends on the scheduler. For the FIFO scheduler, it's `0.15` and for `prefill_first`, it's `0.0`. See [Admission](./continuous_batching_architecture#admission) for how the margin interacts with scheduling.
 
 ### Log probabilities
 
@@ -238,7 +298,6 @@ cb_config = ContinuousBatchingConfig(
     use_cuda_graph=True,
     q_padding_interval_size=64,
     kv_padding_interval_size=16384,
-    max_cached_graphs=32,
 )
 ```
 
@@ -252,6 +311,25 @@ cb_config = ContinuousBatchingConfig(
     use_async_batching=True,
 )
 ```
+
+### Compilation
+
+`default_compile_level` applies `torch.compile` to the model's forward passes. Compilation trades a one-time warmup cost for faster forward passes during generation. Higher levels run more aggressive optimization, which improves throughput but lengthens warmup. Keep the level low for tests and benchmark iteration, and raise it for long-running serving workloads where the warmup cost is paid back over many requests.
+
+The level ranges from `0` to `3`. Level `0` is the default and skips compilation entirely.
+
+| Level | `mode` | `dynamic` | Trade-off |
+|---|---|---|---|
+| 0 | — | — | No compilation (default), fastest startup |
+| 1 | `default` | `True` | Modest speedup, short warmup |
+| 2 | `max-autotune-no-cudagraphs` | `True` | More speedup, longer warmup |
+| 3 | `max-autotune-no-cudagraphs` | `False` | Best throughput, longest warmup |
+
+```py
+cb_config = ContinuousBatchingConfig(default_compile_level=1)
+```
+
+The level supplies a default [`CompileConfig`] to the varlen and decode execution paths. It only applies to a path that has no explicit config, so `varlen_compile_config` and `decode_compile_config` take precedence when set. Under FlashAttention, the varlen path skips compilation because `max_seqlen_k` triggers frequent recompilation, so the level affects only the decode path in that case.
 
 ### Decode fast path
 
@@ -271,7 +349,14 @@ Set `max_blocks_per_request=0` to disable the fast path and force every batch th
 cb_config = ContinuousBatchingConfig(max_blocks_per_request=0)
 ```
 
-The fast path requires FlashAttention 3. With other attention implementations, the manager logs a warning and falls back to the varlen path.
+The fast path relies on the `flash_attn_with_kvcache` kernel, which is available for two device and attention implementation combinations.
+
+| Device | `attn_implementation` |
+|---|---|
+| CUDA | `flash_attention_2` or `flash_attention_3` |
+| XPU | [flash_attention_2](https://huggingface.co/kernels-community/flash-attn2) |
+
+For any other combination, or when the kernel can't be imported, the manager falls back to the varlen path. It logs a warning only when you set `max_blocks_per_request` explicitly.
 
 ### CPU offloading
 
@@ -284,6 +369,16 @@ cb_config = ContinuousBatchingConfig(cpu_offload_space=8.0)
 ```
 
 By default, `cpu_offload_space_safety_threshold=0.8` limits the requested space to 80% of available system RAM when `psutil` is installed. Set `cpu_offload_space=None` to size the swap pool from the safety threshold.
+
+### Tensor parallel timeout
+
+Under tensor parallelism, the manager creates a CPU communication group to coordinate request submissions, cancellations, and shutdown across ranks. `cpu_group_timeout` limits how long a collective on this group can block before the process crashes. If one rank stalls, the timeout prevents the others from waiting forever.
+
+Set a longer timeout for workloads that issue infrequent collectives, or pass `None` to disable it.
+
+```py
+cb_config = ContinuousBatchingConfig(cpu_group_timeout=600.0)
+```
 
 ### Prefix caching
 
@@ -313,6 +408,47 @@ model = AutoModelForCausalLM.from_pretrained(
     dtype=torch.bfloat16,
 )
 ```
+
+Also, continuous batching works much better with flash attention rather than eager or SDPA, mostly because Flash does not require an attention mask.
+Hence, when flash attention is available, if a model uses `attn_implementation="eager"` or `attn_implementation="sdpa"`, the attention implementation will be replaced by flash.
+This works if flash is accessible through the `flash_attn` package or the `kernels` package.  
+To avoid this, you may set `attn_implementation="paged|eager"` or `attn_implementation="paged|sdpa"`, and continuous batching will interpret this as the user 
+specifically requesting those implementations. This can be useful in the context of testing or in a setting where flash attention is hard to enable (although, thanks
+to the `kernels` package, this is becoming rare).
+
+
+## Tensor parallelism
+
+For models too large to fit on a single GPU, shard the weights across devices with tensor parallelism. Load the model with `tp_plan="auto"` and continuous batching reads the tensor parallel size from the model to size the paged KV cache per shard. See [Tensor parallelism](./tensor_parallelism) for the list of supported architectures and how sharding works.
+
+```py
+import torch
+from transformers import AutoModelForCausalLM, AutoTokenizer
+from transformers.generation import ContinuousBatchingConfig, GenerationConfig
+
+model = AutoModelForCausalLM.from_pretrained(
+    "Qwen/Qwen3-32B",
+    attn_implementation="paged|flash_attention_2",
+    tp_plan="auto",
+)
+tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen3-32B")
+
+inputs = [tokenizer.encode(p) for p in ["Whats up?", "Name a cat breed."]]
+generation_config = GenerationConfig(max_new_tokens=64, eos_token_id=tokenizer.eos_token_id)
+
+outputs = model.generate_batch(inputs=inputs, generation_config=generation_config)
+```
+
+Launch the script with `torchrun`, setting `--nproc-per-node` to the number of GPUs you want to shard across.
+
+```shell
+torchrun --nproc-per-node 4 cb_tp.py
+```
+
+The tensor parallel size must divide the model's `num_key_value_heads` (check the model config). The paged cache raises an error at startup otherwise, so choose an appropriate `--nproc-per-node`.
+
+> [!WARNING]
+> Don't set `device_map` with `tp_plan`. The two conflict because `device_map` places whole modules on specific GPUs, while `tp_plan` shards those same parameters across all GPUs.
 
 ## Sliding window attention
 

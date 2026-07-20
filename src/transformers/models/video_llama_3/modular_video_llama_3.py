@@ -1331,6 +1331,8 @@ class VideoLlama3VideoProcessor(Qwen2VLVideoProcessor):
         grouped_videos, grouped_videos_index = group_videos_by_shape(videos)
         resized_videos_grouped = {}
         for shape, stacked_videos in grouped_videos.items():
+            if do_convert_rgb:
+                stacked_videos = self.convert_to_rgb(stacked_videos)
             height, width = get_image_size(stacked_videos[0], channel_dim=ChannelDimension.FIRST)
             resized_height, resized_width = height, width
             if do_resize:
@@ -1364,9 +1366,10 @@ class VideoLlama3VideoProcessor(Qwen2VLVideoProcessor):
             patches = stacked_videos
 
             # Check that videos have `num_frames` divisible by `temporal_patch_size`
-            if patches.shape[1] % temporal_patch_size != 0:
-                repeats = patches[:, -1:].repeat(1, self.temporal_patch_size - 1, 1, 1, 1)
-                patches = torch.cat([patches, repeats], dim=1)
+            T = patches.shape[1]
+            if pad := -T % temporal_patch_size:
+                repeats = patches[:, -1:].expand(-1, pad, -1, -1, -1)
+                patches = torch.cat((patches, repeats), dim=1)
 
             batch_size, grid_t, channel = patches.shape[:3]
             grid_t = grid_t // temporal_patch_size

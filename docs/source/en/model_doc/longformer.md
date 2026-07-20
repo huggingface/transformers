@@ -11,7 +11,7 @@ specific language governing permissions and limitations under the License.
 ⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 -->
-*This model was released on 2020-04-10 and added to Hugging Face Transformers on 2020-11-16.*
+*This model was published in HF papers on 2020-04-10 and contributed to Hugging Face Transformers on 2020-11-16.*
 
 
 # Longformer
@@ -75,7 +75,7 @@ tokenizer.decode(predictions).split()
 ## Notes
 
 - Longformer is based on [RoBERTa](https://huggingface.co/docs/transformers/en/model_doc/roberta) and doesn't have `token_type_ids`. You don't need to indicate which token belongs to which segment. You only need to separate the segments with the separation token `</s>` or `tokenizer.sep_token`.
-- You can set which tokens can attend locally and which tokens attend globally with the `global_attention_mask` at inference (see this [example](https://huggingface.co/docs/transformers/en/model_doc/longformer#transformers.LongformerModel.forward.example) for more details). A value of `0` means a token attends locally and a value of `1` means a token attends globally.
+- You can set which tokens can attend locally and which tokens attend globally with the `global_attention_mask` at inference (see this [`~LongformerModel.forward#example`] for more details). A value of `0` means a token attends locally and a value of `1` means a token attends globally.
 - [`LongformerForMaskedLM`] is trained like [`RobertaForMaskedLM`] and should be used as shown below.
 
   ```py
