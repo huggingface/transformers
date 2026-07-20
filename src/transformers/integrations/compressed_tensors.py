@@ -51,11 +51,13 @@ class DecompressExperts(ConversionOps):
         compressor = BaseCompressor.get_value_from_registry(format)
 
         class DummyModule(nn.Module):
-            def __init__(self, weight, scale, shape):
+            def __init__(self, weight, scale, shape, zero_point=None):
                 super().__init__()
                 self.weight_packed = nn.Parameter(weight, requires_grad=False)
                 self.weight_scale = nn.Parameter(scale, requires_grad=False)
                 self.weight_shape = nn.Parameter(shape, requires_grad=False)
+                if zero_point is not None:
+                    self.weight_zero_point = nn.Parameter(zero_point, requires_grad=False)
 
         # `pack_factor` low-bit weights are packed per int32 along the packed dim.
         pack_factor = 32 // quantization_scheme.weights.num_bits
@@ -77,7 +79,14 @@ class DecompressExperts(ConversionOps):
                 # Under TP/EP sharding it leaves the 2-element `weight_shape` empty on most ranks
                 # Packed tensor can be used instead to rebuild `weight_shape`
                 shape = torch.tensor([quant.shape[0], quant.shape[1] * pack_factor])
-                module = DummyModule(quant, scale, shape)
+
+                # Look up zero_point for asymmetric quantization
+                zp_key = key.replace("weight_packed", "weight_zero_point")
+                zero_point = input_dict.get(zp_key, None)
+                if zero_point is not None:
+                    zero_point = zero_point[i]
+
+                module = DummyModule(quant, scale, shape, zero_point)
                 module.quantization_scheme = quantization_scheme
                 compressor.decompress_module(module)
 
