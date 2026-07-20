@@ -36,6 +36,7 @@ from transformers.testing_utils import (
 from transformers.video_utils import load_video
 
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
+from ...test_processing_common import url_to_local_path
 from ...vlm_tester import VLMModelTest, VLMModelTester
 
 
@@ -303,7 +304,9 @@ class Cosmos3EdgeForConditionalGenerationIntegrationTest(unittest.TestCase):
                 "content": [
                     {
                         "type": "image",
-                        "url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/bee.jpg",
+                        "url": url_to_local_path(
+                            "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/bee.jpg"
+                        ),
                     },
                     {"type": "text", "text": "Identify the main subject of this image briefly."},
                 ],
@@ -333,7 +336,9 @@ class Cosmos3EdgeForConditionalGenerationIntegrationTest(unittest.TestCase):
     @require_av
     def test_video_generation(self):
         video, video_metadata = load_video(
-            "https://huggingface.co/datasets/raushan-testing-hf/videos-test/resolve/main/sample_demo_1.mp4",
+            url_to_local_path(
+                "https://huggingface.co/datasets/raushan-testing-hf/videos-test/resolve/main/sample_demo_1.mp4"
+            ),
             num_frames=4,
             backend="pyav",
         )
