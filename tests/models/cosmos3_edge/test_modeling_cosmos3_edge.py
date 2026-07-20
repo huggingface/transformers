@@ -14,6 +14,7 @@
 """Focused tests for the native Cosmos3 Edge reasoner implementation."""
 
 import copy
+import re
 import unittest
 
 from transformers import (
@@ -208,6 +209,14 @@ class Cosmos3EdgeModelTest(VLMModelTest, unittest.TestCase):
     def test_reverse_loading_mapping(self):
         # Native conversion mappings target the conditional model's `language_model` subtree, not the bare model.
         super().test_reverse_loading_mapping(skip_base_model=True)
+
+    def test_generator_k_norm_checkpoint_keys_are_ignored(self):
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        model = Cosmos3EdgeForConditionalGeneration(config)
+        checkpoint_key = "layers.0.self_attn.k_norm_und_for_gen.weight"
+        self.assertTrue(
+            any(re.search(pattern, checkpoint_key) for pattern in model._keys_to_ignore_on_load_unexpected)
+        )
 
     def prepare_config_and_inputs_for_generate(self, batch_size=2):
         """Keep packed visual patches aligned with the corresponding text batch during generation tests."""
