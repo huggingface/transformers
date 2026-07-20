@@ -42,7 +42,13 @@ from transformers.audio_utils import (
     spectrogram_batch,
     window_function,
 )
-from transformers.testing_utils import is_librosa_available, require_librosa, require_torchcodec, slow
+from transformers.testing_utils import (
+    is_librosa_available,
+    require_librosa,
+    require_torchaudio,
+    require_torchcodec,
+    slow,
+)
 from transformers.utils import is_torch_tensor
 
 
@@ -1965,3 +1971,22 @@ class LoadAudioTester(unittest.TestCase):
             audio = load_audio(self._path(name), sampling_rate=16000)
             self.assertIsInstance(audio, np.ndarray, name)
             self.assertGreater(audio.size, 0, name)
+
+    # ---- torchaudio dispatch ------------------------------------------------------------------
+
+    @require_torchaudio
+    def test_torchaudio_decodes_soundfile_formats(self):
+        # backend="torchaudio" decodes with torchaudio.load and resamples with
+        # torchaudio.functional.resample
+        for name, filetype in self._BUCKET_FILETYPES.items():
+            if filetype in TORCHCODEC_ONLY_FILETYPES:
+                continue
+            audio = load_audio(self._path(name), sampling_rate=16000, backend="torchaudio")
+            self.assertIsInstance(audio, np.ndarray, name)
+            self.assertEqual(audio.ndim, 1, name)  # mono
+            self.assertEqual(audio.dtype, np.float32, name)
+            self.assertGreater(audio.size, 0, name)
+
+    def test_unknown_backend_raises(self):
+        with self.assertRaises(ValueError):
+            load_audio(self._path("audio.wav"), sampling_rate=16000, backend="not_a_backend")

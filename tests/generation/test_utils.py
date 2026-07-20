@@ -17,7 +17,9 @@ import collections
 import copy
 import gc
 import inspect
+import os
 import random
+import re
 import tempfile
 import unittest
 import warnings
@@ -62,6 +64,7 @@ from transformers.utils.generic import is_flash_attention_requested
 if is_torch_available():
     import torch
     import torch.nn.functional as F
+    from safetensors.torch import load_file, save_file
     from torch.nn.attention import SDPBackend, sdpa_kernel
 
     from transformers import (
@@ -108,6 +111,7 @@ if is_torch_available():
         AssistedCandidateGeneratorDifferentTokenizers,
     )
     from transformers.generation.utils import _speculative_sampling
+    from transformers.modeling_layers import MtpModel
 
 from unittest.mock import patch
 
@@ -2354,6 +2358,76 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
                 "`position_ids` may be accepted but are expected to produce invalid outputs."
             )
 
+    def test_generate_with_mtp(self):
+        """Test that speculative decoding with mtp works correctly if we have mtp layers in the checkpoints. This checks
+        that layers saved under `mtp.xxx` and `model.layers.{num_hidden_layers+1}` patterns can correctly be reloaded, which
+        correspond to the 2 usual patterns we always have in real checkpoints."""
+        for model_class in self.all_generative_model_classes:
+            config, inputs_dict = self.prepare_config_and_inputs_for_generate(batch_size=1)
+
+            keys_to_ignore_unexpected = model_class._keys_to_ignore_on_load_unexpected or []
+            # If we don't have any mtp patterns, skip
+            if not hasattr(config.get_text_config(), "num_mtp_layers") or not any(
+                "mtp" in x or re.search(r"layers\.\d+", x) is not None for x in keys_to_ignore_unexpected
+            ):
+                self.skipTest("No MTP keys registered")
+
+            config.get_text_config().num_mtp_layers = 1
+            model = model_class(config).to(torch_device).eval()
+            mtp_model = MtpModel(model, num_mtp_layers=1)
+            mtp_non_shared_state_dict = {
+                k: v
+                for k, v in mtp_model.state_dict().items()
+                if k not in ("embed_tokens.weight", "shared_head.weight")
+            }
+
+            # This block tests that keys saved under `mtp.xxx` inside the model weights can be loaded and used correctly
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                model.save_pretrained(tmpdirname)
+                weight_filename = os.path.join(tmpdirname, "model.safetensors")
+                saved_state_dict = load_file(weight_filename)
+                # add mtp weights and resave
+                saved_state_dict.update({f"mtp.{k}": v for k, v in mtp_non_shared_state_dict.items()})
+                save_file(saved_state_dict, weight_filename)
+
+                with patch.object(
+                    model_class, "_keys_to_ignore_on_load_unexpected", keys_to_ignore_unexpected + [r"^mtp."]
+                ):
+                    # Reload model WITHOUT mtp
+                    reloaded_model = model_class.from_pretrained(tmpdirname).to(torch_device)
+
+                    # This will load the mtp weights and use them - check that it does not create any errors (results are random
+                    # since the mtp model was randomly created)
+                    _ = reloaded_model.generate(**inputs_dict, use_mtp=True, do_sample=False, max_new_tokens=10)
+
+            # This block tests that keys saved under `model.layers.{num_hidden_layers+1}.xxx` inside the model weights can be loaded
+            # and used correctly
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                model.save_pretrained(tmpdirname)
+                weight_filename = os.path.join(tmpdirname, "model.safetensors")
+                saved_state_dict = load_file(weight_filename)
+                # add mtp weights and resave
+                layer_mapped_mtp_dict = {
+                    k.replace(".0.", f".{config.num_hidden_layers}.").replace(".mtp_block.", "."): v
+                    for k, v in mtp_non_shared_state_dict.items()
+                }
+                saved_state_dict.update(
+                    {f"{model.base_model_prefix}.{k}": v for k, v in layer_mapped_mtp_dict.items()}
+                )
+                save_file(saved_state_dict, weight_filename)
+
+                with patch.object(
+                    model_class,
+                    "_keys_to_ignore_on_load_unexpected",
+                    keys_to_ignore_unexpected + [f"{model.base_model_prefix}.layers.{config.num_hidden_layers}"],
+                ):
+                    # Reload model WITHOUT mtp
+                    reloaded_model = model_class.from_pretrained(tmpdirname).to(torch_device)
+
+                    # This will load the mtp weights and use them - check that it does not create any errors (results are random
+                    # since the mtp model was randomly created)
+                    _ = reloaded_model.generate(**inputs_dict, use_mtp=True, do_sample=False, max_new_tokens=10)
+
     def _check_generate_outputs(self, output, config, use_cache=False, num_return_sequences=1, num_beams=1):
         input_batch_size = int(output.sequences.shape[0] / num_return_sequences)
         internal_batch_size = (
@@ -2630,16 +2704,16 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
                 values = layer.values if seq_length is not None else layer.values[:, :, 0, :]
                 self.assertEqual(keys.shape, attention_shape)
                 self.assertEqual(values.shape, attention_shape)
-                self.assertEqual(layer.conv_states.shape, conv_shape)
+                self.assertEqual(layer.conv_states[0].shape, conv_shape)
                 # May not be used (e.g. lfm2)
-                if layer.is_recurrent_states_initialized:
-                    self.assertEqual(layer.recurrent_states.shape, recurrent_shape)
+                if layer.is_recurrent_states_initialized[0]:
+                    self.assertEqual(layer.recurrent_states[0].shape, recurrent_shape)
             # Mamba only layer cache
             elif type(layer) is LinearAttentionLayer:
-                self.assertEqual(layer.conv_states.shape, conv_shape)
+                self.assertEqual(layer.conv_states[0].shape, conv_shape)
                 # May not be used (e.g. lfm2)
-                if layer.is_recurrent_states_initialized:
-                    self.assertEqual(layer.recurrent_states.shape, recurrent_shape)
+                if layer.is_recurrent_states_initialized[0]:
+                    self.assertEqual(layer.recurrent_states[0].shape, recurrent_shape)
             # Attention only layer type
             else:
                 # Remove the seq_length dim for cross-attention cache (it changes based on the model)
@@ -2692,19 +2766,19 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
             if type(cache1.layers[idx]) is LinearAttentionAndFullAttentionLayer:
                 torch.testing.assert_close(cache1.layers[idx].keys, cache2.layers[idx].keys)
                 torch.testing.assert_close(cache1.layers[idx].values, cache2.layers[idx].values)
-                torch.testing.assert_close(cache1.layers[idx].conv_states, cache2.layers[idx].conv_states)
+                torch.testing.assert_close(cache1.layers[idx].conv_states[0], cache2.layers[idx].conv_states[0])
                 # May not be used (e.g. lfm2)
-                if cache1.layers[idx].is_recurrent_states_initialized:
+                if cache1.layers[idx].is_recurrent_states_initialized[0]:
                     torch.testing.assert_close(
-                        cache1.layers[idx].recurrent_states, cache2.layers[idx].recurrent_states
+                        cache1.layers[idx].recurrent_states[0], cache2.layers[idx].recurrent_states[0]
                     )
             # Mamba layer
             elif type(cache1.layers[idx]) is LinearAttentionLayer:
-                torch.testing.assert_close(cache1.layers[idx].conv_states, cache2.layers[idx].conv_states)
+                torch.testing.assert_close(cache1.layers[idx].conv_states[0], cache2.layers[idx].conv_states[0])
                 # May not be used (e.g. lfm2)
-                if cache1.layers[idx].is_recurrent_states_initialized:
+                if cache1.layers[idx].is_recurrent_states_initialized[0]:
                     torch.testing.assert_close(
-                        cache1.layers[idx].recurrent_states, cache2.layers[idx].recurrent_states
+                        cache1.layers[idx].recurrent_states[0], cache2.layers[idx].recurrent_states[0]
                     )
             # Attention layer
             else:
@@ -2800,6 +2874,155 @@ class UtilsFunctionsTest(unittest.TestCase):
         last_token_counts = collections.Counter(last_validated_token)
         self.assertTrue(last_token_counts[1] > last_token_counts[3] > last_token_counts[7] > 0)
         self.assertTrue(last_token_counts[8] > last_token_counts[3])
+
+    def test_speculative_sampling_ensemble_weight_none_equals_standard(self):
+        """With `assistant_ensemble_weight=None`, behaviour must be identical to standard speculative sampling."""
+        candidate_input_ids = torch.tensor([[8, 0, 3, 9, 8, 1, 4, 5]])
+        candidate_logits = torch.tensor(
+            [
+                [
+                    [-10.0, 10.0, -10.0, -10.0, -10.0, -10.0, -10.0, -10.0, -10.0, -10.0],
+                    [-10.0, -10.0, -10.0, -10.0, 10.0, -10.0, -10.0, -10.0, -10.0, -10.0],
+                    [-10.0, -10.0, -10.0, -10.0, -10.0, 10.0, -10.0, -10.0, -10.0, -10.0],
+                ]
+            ]
+        )
+        candidate_length = 3
+        inf = float("inf")
+        new_logits = torch.tensor(
+            [
+                [
+                    [-10.0, 10.0, -10.0, -10.0, -10.0, -10.0, -10.0, -10.0, -10.0, -10.0],
+                    [-10.0, -10.0, -10.0, -10.0, 10.0, -10.0, -10.0, -10.0, -10.0, -10.0],
+                    [-inf, -inf, -inf, -inf, -inf, -inf, -inf, -inf, 10.0, -inf],
+                    [-10.0, -10.0, -10.0, -10.0, -10.0, -10.0, -10.0, -10.0, -10.0, -10.0],
+                ]
+            ]
+        )
+        validated_none, n_none = _speculative_sampling(
+            candidate_input_ids,
+            candidate_logits,
+            candidate_length,
+            new_logits,
+            False,
+            assistant_ensemble_weight=None,
+        )
+        # Matches the parent test exactly (i.e. backward compatible with w=None)
+        self.assertEqual(n_none.item(), 2)
+        self.assertEqual(validated_none.tolist()[0], [1, 4, 8])
+
+    def test_speculative_sampling_ensemble_weight_increases_acceptance(self):
+        """Deterministic check: a candidate that vanilla SD rejects is accepted under ensemble weighting.
+
+        With `q_i=0.80, p_i=0.40, r=0.60`:
+        - Standard ratio: `p_i/q_i = 0.50 < 0.60 = r` -> REJECT
+        - Ensemble (w=0.7): `1 - w + w*(p_i/q_i) = 0.65 > 0.60 = r` -> ACCEPT
+        """
+        candidate_length = 1
+        # Draft: token 0 has prob 0.80
+        q_probs = torch.tensor([[[0.80, 0.10, 0.05, 0.05]]])
+        # Target: token 0 has prob 0.40 (+ a second position for the bonus-token slot)
+        p_probs = torch.tensor([[[0.40, 0.30, 0.20, 0.10], [0.25, 0.25, 0.25, 0.25]]])
+
+        candidate_logits = q_probs.log()
+        new_logits = p_probs.log()
+        prefix = torch.zeros(1, 5, dtype=torch.long)
+        candidate_input_ids = torch.cat([prefix, torch.tensor([[0]])], dim=-1)
+
+        fixed_rand = torch.tensor([0.60])
+        with patch("transformers.generation.utils.torch.rand_like", return_value=fixed_rand):
+            _, n_standard = _speculative_sampling(
+                candidate_input_ids,
+                candidate_logits,
+                candidate_length,
+                new_logits,
+                False,
+                assistant_ensemble_weight=None,
+            )
+        with patch("transformers.generation.utils.torch.rand_like", return_value=fixed_rand):
+            _, n_ensemble = _speculative_sampling(
+                candidate_input_ids,
+                candidate_logits,
+                candidate_length,
+                new_logits,
+                False,
+                assistant_ensemble_weight=0.7,
+            )
+
+        self.assertEqual(n_standard.item(), 0)
+        self.assertEqual(n_ensemble.item(), 1)
+
+    def test_speculative_sampling_ensemble_fallback_distribution_finite_and_normalized(self):
+        """The fallback distribution under ensemble weighting must be finite, normalized, and match the
+        standard SD fallback `[p-q]_+/sum([p-q]_+)` (the ensemble residual normalises to the same distribution)."""
+        candidate_length = 1
+        q_probs = torch.tensor([[[0.70, 0.20, 0.05, 0.05]]])
+        p_probs = torch.tensor([[[0.30, 0.40, 0.20, 0.10], [0.25, 0.25, 0.25, 0.25]]])
+
+        candidate_logits = q_probs.log()
+        new_logits = p_probs.log()
+        prefix = torch.zeros(1, 5, dtype=torch.long)
+        candidate_input_ids = torch.cat([prefix, torch.tensor([[0]])], dim=-1)
+
+        fixed_rand = torch.tensor([0.99])  # force rejection
+        captured = []
+
+        def capture_multinomial(input, num_samples, **kwargs):
+            captured.append(input.clone())
+            return torch.zeros(input.shape[0], num_samples, dtype=torch.long)
+
+        with patch("transformers.generation.utils.torch.rand_like", return_value=fixed_rand):
+            with patch("transformers.generation.utils.torch.multinomial", side_effect=capture_multinomial):
+                _speculative_sampling(
+                    candidate_input_ids,
+                    candidate_logits,
+                    candidate_length,
+                    new_logits,
+                    False,
+                    assistant_ensemble_weight=0.7,
+                )
+
+        self.assertEqual(len(captured), 1)
+        p_prime = captured[0]
+        self.assertTrue(torch.isfinite(p_prime).all())
+        self.assertAlmostEqual(p_prime.sum().item(), 1.0, places=5)
+        expected = torch.clamp(p_probs[0, 0, :] - q_probs[0, 0, :], min=0)
+        expected = expected / expected.sum()
+        torch.testing.assert_close(p_prime.squeeze(), expected, atol=1e-5, rtol=1e-5)
+
+    def test_speculative_sampling_ensemble_numerical_stability_near_zero_residual(self):
+        """When `p ≈ q`, the residual `[p-q]_+` is near zero; the fallback must remain finite."""
+        candidate_length = 1
+        q_probs = torch.tensor([[[0.25, 0.25, 0.25, 0.25]]])
+        p_probs = torch.tensor([[[0.25, 0.25, 0.25, 0.25], [0.25, 0.25, 0.25, 0.25]]])
+
+        candidate_logits = q_probs.log()
+        new_logits = p_probs.log()
+        prefix = torch.zeros(1, 5, dtype=torch.long)
+        candidate_input_ids = torch.cat([prefix, torch.tensor([[0]])], dim=-1)
+
+        fixed_rand = torch.tensor([0.99])
+        captured = []
+
+        def capture_multinomial(input, num_samples, **kwargs):
+            captured.append(input.clone())
+            return torch.zeros(input.shape[0], num_samples, dtype=torch.long)
+
+        with patch("transformers.generation.utils.torch.rand_like", return_value=fixed_rand):
+            with patch("transformers.generation.utils.torch.multinomial", side_effect=capture_multinomial):
+                _speculative_sampling(
+                    candidate_input_ids,
+                    candidate_logits,
+                    candidate_length,
+                    new_logits,
+                    False,
+                    assistant_ensemble_weight=0.5,
+                )
+
+        self.assertEqual(len(captured), 1)
+        p_prime = captured[0]
+        self.assertTrue(torch.isfinite(p_prime).all())
+        self.assertAlmostEqual(p_prime.sum().item(), 1.0, places=5)
 
 
 global_rng = random.Random()
