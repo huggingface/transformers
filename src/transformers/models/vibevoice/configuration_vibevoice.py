@@ -38,7 +38,6 @@ class VibeVoiceDiffusionHeadConfig(PreTrainedConfig):
     """
 
     model_type = "vibevoice_diffusion_head"
-    base_config_key = "diffusion_head_config"
 
     hidden_size: int = 1536
     latent_size: int = 64
@@ -85,7 +84,7 @@ class VibeVoiceConfig(PreTrainedConfig):
         "audio_config": AutoConfig,
         "semantic_model_config": AutoConfig,
         "text_config": AutoConfig,
-        "diffusion_head_config": AutoConfig,
+        "diffusion_head_config": VibeVoiceDiffusionHeadConfig,
     }
 
     audio_config: dict | PreTrainedConfig | None = None
@@ -123,14 +122,9 @@ class VibeVoiceConfig(PreTrainedConfig):
             self.text_config = CONFIG_MAPPING["qwen2"]()
 
         if isinstance(self.diffusion_head_config, dict):
-            self.diffusion_head_config["model_type"] = self.diffusion_head_config.get(
-                "model_type", "vibevoice_diffusion_head"
-            )
-            self.diffusion_head_config = CONFIG_MAPPING[self.diffusion_head_config["model_type"]](
-                **self.diffusion_head_config
-            )
+            self.diffusion_head_config = VibeVoiceDiffusionHeadConfig(**self.diffusion_head_config)
         elif self.diffusion_head_config is None:
-            self.diffusion_head_config = CONFIG_MAPPING["vibevoice_diffusion_head"](
+            self.diffusion_head_config = VibeVoiceDiffusionHeadConfig(
                 hidden_size=self.text_config.hidden_size, latent_size=self.audio_config.hidden_size
             )
 

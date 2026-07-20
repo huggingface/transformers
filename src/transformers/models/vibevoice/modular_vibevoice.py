@@ -27,6 +27,7 @@ from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
 from ..auto import CONFIG_MAPPING, AutoConfig, AutoModel
+from ..clip.modeling_clip import CLIPMLP
 from ..llama.modeling_llama import LlamaMLP
 from ..qwen2.modeling_qwen2 import Qwen2RMSNorm
 from ..voxtral.modeling_voxtral import (
@@ -50,7 +51,6 @@ class VibeVoiceDiffusionHeadConfig(PreTrainedConfig):
     """
 
     model_type = "vibevoice_diffusion_head"
-    base_config_key = "diffusion_head_config"
 
     hidden_size: int = 1536
     latent_size: int = 64
@@ -97,7 +97,7 @@ class VibeVoiceConfig(PreTrainedConfig):
         "audio_config": AutoConfig,
         "semantic_model_config": AutoConfig,
         "text_config": AutoConfig,
-        "diffusion_head_config": AutoConfig,
+        "diffusion_head_config": VibeVoiceDiffusionHeadConfig,
     }
 
     audio_config: dict | PreTrainedConfig | None = None
@@ -135,14 +135,9 @@ class VibeVoiceConfig(PreTrainedConfig):
             self.text_config = CONFIG_MAPPING["qwen2"]()
 
         if isinstance(self.diffusion_head_config, dict):
-            self.diffusion_head_config["model_type"] = self.diffusion_head_config.get(
-                "model_type", "vibevoice_diffusion_head"
-            )
-            self.diffusion_head_config = CONFIG_MAPPING[self.diffusion_head_config["model_type"]](
-                **self.diffusion_head_config
-            )
+            self.diffusion_head_config = VibeVoiceDiffusionHeadConfig(**self.diffusion_head_config)
         elif self.diffusion_head_config is None:
-            self.diffusion_head_config = CONFIG_MAPPING["vibevoice_diffusion_head"](
+            self.diffusion_head_config = VibeVoiceDiffusionHeadConfig(
                 hidden_size=self.text_config.hidden_size, latent_size=self.audio_config.hidden_size
             )
 
@@ -164,8 +159,8 @@ class VibeVoiceConfig(PreTrainedConfig):
             )
 
 
-@dataclass
 @auto_docstring(custom_intro="""Base class for VibeVoice outputs, with hidden states and attentions.""")
+@dataclass
 class VibeVoiceBaseModelOutputWithPast(BaseModelOutputWithPast):
     r"""
     audio_features (`torch.FloatTensor` of shape `(batch_size, sequence_length, feature_size)`, *optional*):
@@ -175,8 +170,8 @@ class VibeVoiceBaseModelOutputWithPast(BaseModelOutputWithPast):
     audio_features: torch.FloatTensor | None = None
 
 
-@dataclass
 @auto_docstring(custom_intro="""VibeVoice causal language model outputs.""")
+@dataclass
 class VibeVoiceCausalLMOutputWithPast(BaseModelOutputWithPast):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
@@ -210,22 +205,19 @@ class VibeVoiceDiffusionHeadSinusoidalEmbedding(nn.Module):
         return torch.exp(-math.log(config.diffusion_max_period) * torch.arange(dim, dtype=torch.float32) / dim)
 
     def forward(self, timesteps):
-        args = timesteps[:, None].float() * self.freq[None].to(timesteps.device)
-        embedding = torch.cat([torch.cos(args), torch.sin(args)], dim=-1)
+        freq = timesteps[:, None].float() * self.freq[None].to(timesteps.device)
+        embedding = torch.cat([torch.cos(freq), torch.sin(freq)], dim=-1)
         if self.config.frequency_embedding_size % 2:
             embedding = nn.functional.pad(embedding, (0, 1))
         return embedding
 
 
-class VibeVoiceDiffusionHeadMLP(nn.Module):
+class VibeVoiceDiffusionHeadMLP(CLIPMLP):
     def __init__(self, config):
         super().__init__()
-        self.layer_1 = nn.Linear(config.frequency_embedding_size, config.hidden_size, bias=False)
-        self.act = ACT2FN[config.hidden_act]
-        self.layer_2 = nn.Linear(config.hidden_size, config.hidden_size, bias=False)
-
-    def forward(self, hidden_states):
-        return self.layer_2(self.act(self.layer_1(hidden_states)))
+        self.fc1 = nn.Linear(config.frequency_embedding_size, config.hidden_size, bias=False)
+        self.activation_fn = ACT2FN[config.hidden_act]
+        self.fc2 = nn.Linear(config.hidden_size, config.hidden_size, bias=False)
 
 
 class VibeVoiceMLP(LlamaMLP):
@@ -303,7 +295,6 @@ class VibeVoiceMultiModalProjector(VoxtralMultiModalProjector):
 
 @auto_docstring
 class VibeVoicePreTrainedModel(VoxtralPreTrainedModel):
-    _can_compile_fullgraph = False
     _no_split_modules = ["VibeVoiceDiffusionHead"]
 
     def _init_weights(self, module):
@@ -408,7 +399,7 @@ class VibeVoiceModel(VoxtralModel):
 )
 class VibeVoiceForConditionalGeneration(VibeVoicePreTrainedModel, VibeVoiceGenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
-    _tp_plan = {"lm_head": "colwise_rep"}
+    _tp_plan = {"lm_head": "colwise_gather_output"}
 
     def __init__(self, config):
         super().__init__(config)
@@ -416,8 +407,9 @@ class VibeVoiceForConditionalGeneration(VibeVoicePreTrainedModel, VibeVoiceGener
         self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
         self.post_init()
 
+    @staticmethod
     def compute_diffusion_loss(
-        self,
+        diffusion_head: nn.Module,
         audio_features: torch.FloatTensor,
         condition_features: torch.FloatTensor,
         noise_scheduler: object,
@@ -442,7 +434,7 @@ class VibeVoiceForConditionalGeneration(VibeVoicePreTrainedModel, VibeVoiceGener
         noisy_audio_features = noise_scheduler.add_noise(audio_features_repeated, noise, timesteps)
 
         # Predict noise/velocity using diffusion head
-        model_output = self.model.diffusion_head(
+        model_output = diffusion_head(
             noisy_audio_features, timesteps.type_as(audio_features), condition_features_repeated
         )
 
@@ -519,9 +511,14 @@ class VibeVoiceForConditionalGeneration(VibeVoicePreTrainedModel, VibeVoiceGener
                 noise_scheduler = self._build_default_noise_scheduler(self.generation_config)
 
             audio_features = outputs.audio_features
-            condition_features = hidden_states[acoustic_loss_mask.cpu()].to(audio_features.device)
+            condition_features = hidden_states[acoustic_loss_mask.to(hidden_states.device)].to(audio_features.device)
             diffusion_loss = self.compute_diffusion_loss(
-                audio_features, condition_features, noise_scheduler, ddpm_batch_multiplier, num_diffusion_steps
+                self.model.diffusion_head,
+                audio_features,
+                condition_features,
+                noise_scheduler,
+                ddpm_batch_multiplier,
+                num_diffusion_steps,
             )
             loss = (
                 1 - self.config.diffusion_loss_weight

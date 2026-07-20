@@ -13,7 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was published in HF papers on 2025-08-26 and contributed to Hugging Face Transformers on 2026-07-15.*
+*This model was published in HF papers on 2025-08-26 and contributed to Hugging Face Transformers on 2026-07-20.*
 
 
 # VibeVoice
@@ -493,9 +493,9 @@ print(f"Warmup complete in {time.time() - warmup_start:.2f}s. Ready!")
 with torch.inference_mode():
     torch.compiler.cudagraph_mark_step_begin()
     audio = model.generate(**generate_kwargs)
-fn = f"{os.path.basename(model_id)}_compiled_output.wav"
-processor.save_audio(audio, fn)
-print(f"Saved output to {fn}")
+output_folder = f"{os.path.basename(model_id)}_compiled_output"
+processor.save_audio(audio, output_folder)
+print(f"Saved output to {output_folder}")
 ```
 
 ## VibeVoiceConfig

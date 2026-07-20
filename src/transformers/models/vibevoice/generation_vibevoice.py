@@ -18,6 +18,7 @@ from typing import TYPE_CHECKING, Any, Optional
 
 import torch
 
+from ...cache_utils import DynamicCache, StaticCache
 from ...generation import (
     GenerateDecoderOnlyOutput,
     GenerationConfig,
@@ -25,6 +26,8 @@ from ...generation import (
     LogitsProcessor,
     LogitsProcessorList,
 )
+from ...generation.configuration_utils import ALL_STATIC_CACHE_IMPLEMENTATIONS
+from ...generation.logits_process import LOGITS_PROCESSOR_INPUTS_DOCSTRING
 from ...generation.stopping_criteria import StoppingCriteriaList
 from ...generation.utils import ALL_CACHE_NAMES, GenerateNonBeamOutput
 from ...utils import add_start_docstrings, is_diffusers_available, logging
@@ -38,20 +41,6 @@ if TYPE_CHECKING:
 
 
 logger = logging.get_logger(__name__)
-
-
-LOGITS_PROCESSOR_INPUTS_DOCSTRING = r"""
-    Args:
-        input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
-            Indices of input sequence tokens in the vocabulary. [What are input IDs?](../glossary#input-ids)
-        scores (`torch.FloatTensor` of shape `(batch_size, config.vocab_size)`):
-            Prediction scores of a language modeling head. These can be logits for each vocabulary when not using beam
-            search or log softmax for each vocabulary token when using beam search
-
-    Return:
-        `torch.FloatTensor` of shape `(batch_size, config.vocab_size)`: The processed prediction scores.
-
-"""
 
 
 @dataclass
@@ -88,6 +77,17 @@ class VibeVoiceTokenConstraintProcessor(LogitsProcessor):
 
 
 class VibeVoiceGenerationMixin(GenerationMixin):
+    """
+    Generation mixin for VibeVoice.
+
+    The classifier-free guidance (CFG) logic (the negative/unconditional branch and the diffusion sampling)
+    is adapted from the original VibeVoice implementation, where it all lives inline in a single `generate`
+    method:
+    https://github.com/vibevoice-community/VibeVoice/blob/07cb79feadd2d3fd7f47530d4c964a12857936a0/vibevoice/modular/modeling_vibevoice_inference.py#L327
+    Here it is factored into helpers, and the negative-branch helpers mirror what the positive branch does in
+    `_sample` (prepare inputs -> forward -> update model kwargs -> append the new token).
+    """
+
     def _get_logits_processor(self, *args, **kwargs) -> LogitsProcessorList:
         processors = super()._get_logits_processor(*args, **kwargs)
         valid_tokens = [
@@ -149,6 +149,9 @@ class VibeVoiceGenerationMixin(GenerationMixin):
         generation_config.num_diffusion_steps = (
             num_diffusion_steps or getattr(generation_config, "num_diffusion_steps", None) or 10
         )
+        # Fallback to a default guidance scale of 1.0 if not set
+        if generation_config.guidance_scale is None:
+            generation_config.guidance_scale = 1.0
         return generation_config, model_kwargs
 
     @staticmethod
@@ -186,6 +189,10 @@ class VibeVoiceGenerationMixin(GenerationMixin):
         """
         Set up the unconditional branch used for classifier-free guidance (CFG).
 
+        This mirrors the positive branch's own setup in `generate`/`_sample` (resolve the generation config,
+        prepare the model inputs and KV cache), applied to the negative branch. See the class docstring for the
+        original implementation.
+
         Returns the initial negative `input_ids` and prepared `model_kwargs` for the negative pass.
         The negative sequence starts with a single `audio_bos_token_id` token and its KV cache is
         sized to match the positive generation's maximum length.
@@ -220,22 +227,132 @@ class VibeVoiceGenerationMixin(GenerationMixin):
             inputs_tensor=negative_kwargs["input_ids"],
             input_ids_length=negative_input_ids.shape[1],
         )
-        # `_prepare_cache_for_generation` reads/writes the cache from/to `self._cache`.
-        # So we swap cache of positive and negative branch before calling it.
-        positive_cache = getattr(self, "_cache", None)
-        self._cache = getattr(self, "_negative_cache", None)
-        # Allocate/prepare the negative branch's own KV cache, sized to the positive max length
+        # Allocate/prepare the negative branch's own KV cache, sized to the positive max length. We store it
+        # under `_negative_cache` (rather than the positive branch's `_cache`) via the `cache_attr_name` argument
+        # of our `_prepare_cache_for_generation` override, so the two branches keep independent caches.
         self._prepare_cache_for_generation(
             negative_generation_config,
             negative_model_kwargs,
             None,
             batch_size,
             negative_generation_config.max_length - 1,
+            cache_attr_name="_negative_cache",
         )
-        # Restore the positive cache on `self`
-        self._negative_cache = self._cache
-        self._cache = positive_cache
         return negative_input_ids, negative_model_kwargs
+
+    def _prepare_cache_for_generation(
+        self,
+        generation_config: GenerationConfig,
+        model_kwargs: dict,
+        generation_mode: Any,
+        batch_size: int,
+        max_cache_length: int,
+        cache_attr_name: str = "_cache",
+    ) -> None:
+        """
+        This method overrides [~generation.utils.GenerationMixin._prepare_cache_for_generation].
+
+        The base implementation always persists the generation cache on the fixed `self._cache` attribute.
+        VibeVoice runs a second, independent generation pass for the classifier-free guidance negative branch,
+        which needs its own persistent cache. The added `cache_attr_name` argument lets the caller pick which
+        attribute the cache lives on (`"_cache"` for the positive branch, `"_negative_cache"` for the negative
+        one). Only the code paths exercised by VibeVoice are kept: decoder-only dynamic and static caches.
+        """
+        cache_name = "past_key_values"
+
+        # Quick escape route 1: if the user specifies a cache, we only need to check for conflicting arguments.
+        user_defined_cache = model_kwargs.get(cache_name)
+        if user_defined_cache is not None:
+            if generation_config.cache_implementation is not None:
+                raise ValueError(
+                    f"Passing both `cache_implementation` (used to initialize certain caches) and `{cache_name}` (a "
+                    "Cache object) is unsupported. Please use only one of the two."
+                )
+            if isinstance(user_defined_cache, tuple):
+                raise ValueError(
+                    "Passing a tuple of `past_key_values` is not supported anymore. Please use a `Cache` instance."
+                )
+            return
+
+        # Quick escape route 2: if the user specifies no cache is to be used.
+        if generation_config.use_cache is False:
+            return
+
+        if generation_config.cache_implementation in ALL_STATIC_CACHE_IMPLEMENTATIONS:
+            # `max_cache_len` sizes the static cache for the worst case across calls, so later calls with a longer
+            # prompt or larger `max_new_tokens` (up to that ceiling) reuse the same cache instead of reallocating
+            # (and recompiling under `torch.compile`). See #46424.
+            if generation_config.max_cache_len is not None:
+                max_cache_length = max(max_cache_length, generation_config.max_cache_len)
+            cache_batch_size = max(generation_config.num_beams, generation_config.num_return_sequences) * batch_size
+            model_kwargs[cache_name] = self._prepare_static_cache(
+                cache_implementation=generation_config.cache_implementation,
+                batch_size=cache_batch_size,
+                max_cache_len=max_cache_length,
+                prefill_chunk_size=generation_config.prefill_chunk_size,
+                cache_attr_name=cache_attr_name,
+            )
+        else:
+            # i.e. `cache_implementation` in [None, "dynamic", "offloaded"]
+            dynamic_cache_kwargs = {"config": self.config.get_text_config(decoder=True)}
+            if generation_config.cache_implementation == "offloaded":
+                dynamic_cache_kwargs["offloading"] = True
+            model_kwargs[cache_name] = DynamicCache(**dynamic_cache_kwargs)
+
+    def _prepare_static_cache(
+        self,
+        cache_implementation: str,
+        batch_size: int,
+        max_cache_len: int,
+        prefill_chunk_size: int | None,
+        cache_attr_name: str = "_cache",
+    ) -> StaticCache:
+        """
+        This method overrides [~generation.utils.GenerationMixin._prepare_static_cache].
+
+        Same behavior as the base method (a persistent `StaticCache` reused across `generate` calls, only
+        reallocated when a larger cache or different batch size is required), except the cache is stored under the
+        attribute named by `cache_attr_name` instead of always `self._cache`. This lets the CFG negative branch
+        keep an independent `self._negative_cache`. Only the decoder-only path used by VibeVoice is kept.
+
+        Returns the resulting cache object.
+        """
+        offload_cache = "offloaded" in cache_implementation
+
+        existing_cache = getattr(self, cache_attr_name, None)
+        cache_to_check = existing_cache if isinstance(existing_cache, StaticCache) else None
+
+        need_new_cache = (
+            cache_to_check is None
+            or cache_to_check.offloading != offload_cache
+            or cache_to_check.batch_size != batch_size
+            or cache_to_check.get_max_length() < max_cache_len
+        )
+
+        if need_new_cache:
+            cache = StaticCache(
+                config=self.config.get_text_config(decoder=True),
+                max_cache_len=max_cache_len,
+                offloading=offload_cache,
+            )
+            if prefill_chunk_size is not None:
+                # Chunked prefill compiles the prefill, so eagerly init the fresh cache to avoid a recompile next
+                # call (#46421). Skipped (-> lazy init) when it can't be initialized on a single device.
+                init_shape = self._get_static_cache_init_shape()
+                if init_shape is not None:
+                    num_heads, head_dim = init_shape
+                    cache.early_initialization(
+                        batch_size=batch_size,
+                        num_heads=num_heads,
+                        head_dim=head_dim,
+                        dtype=self.dtype,
+                        device=self.device,
+                    )
+        else:
+            cache = existing_cache
+            cache.reset()
+        setattr(self, cache_attr_name, cache)
+        return cache
 
     def _get_negative_compiled_call(self, compile_config: GenerationConfig | None):
         """
@@ -299,7 +416,14 @@ class VibeVoiceGenerationMixin(GenerationMixin):
         negative_model_kwargs: dict,
         negative_forward: Callable,
     ) -> tuple:
-        """Advance the negative branch state."""
+        """
+        Advance the negative (unconditional) CFG branch by one step.
+
+        This mirrors the positive branch's per-step logic in `_sample`: build the model inputs with
+        `prepare_inputs_for_generation`, run the forward pass, advance the cache/kwargs with
+        `_update_model_kwargs_for_generation`, and append the new token. It is run here as a separate branch with
+        its own `negative_input_ids` and KV cache. See the class docstring for the original implementation.
+        """
         use_cache = negative_model_kwargs.get("use_cache", True)
         next_sequence_length = 1 if use_cache else None
         # Prepare inputs for the negative branch's next forward step
@@ -329,11 +453,13 @@ class VibeVoiceGenerationMixin(GenerationMixin):
         num_diffusion_steps: int,
         guidance_scale: float,
     ) -> torch.FloatTensor:
-        """Run the diffusion denoising loop with classifier-free guidance."""
+        """
+        Run the diffusion denoising loop with classifier-free guidance. Adapted from `sample_speech_tokens` in the
+        original implementation: https://github.com/vibevoice-community/VibeVoice/blob/07cb79feadd2d3fd7f47530d4c964a12857936a0/vibevoice/modular/modeling_vibevoice_inference.py#L700
+        """
         # Stack positive/negative conditions so the diffusion head can compute both in a single forward pass
-        condition = torch.cat([positive_condition, negative_condition], dim=0).to(
-            self.model.diffusion_head.final_layer.linear_2.weight.device
-        )
+        diffusion_head_device = next(self.model.diffusion_head.parameters()).device
+        condition = torch.cat([positive_condition, negative_condition], dim=0).to(diffusion_head_device)
         noisy_audio_latent = torch.randn(condition.shape[0], self.config.audio_config.hidden_size).to(condition)
         noise_scheduler.set_timesteps(num_inference_steps=num_diffusion_steps)
         half = len(noisy_audio_latent) // 2

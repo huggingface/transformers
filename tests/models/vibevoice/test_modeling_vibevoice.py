@@ -18,7 +18,6 @@ import unittest
 from pathlib import Path
 
 import pytest
-from parameterized import parameterized
 
 from transformers import (
     AutoProcessor,
@@ -192,6 +191,29 @@ class VibeVoiceForConditionalGenerationTest(ModelTesterMixin, GenerationTesterMi
     def setUp(self):
         self.model_tester = VibeVoiceModelTester(self)
         self.config_tester = ConfigTester(self, config_class=VibeVoiceConfig, has_text_modality=True)
+        self.skip_unsupported_generate()
+
+    def skip_unsupported_generate(self):
+        # VibeVoice replaces the standard text-token decoding loop with a diffusion-based loop that emits audio.
+        # As a result, the common generation strategies (beam search, sampling, assisted/contrastive decoding, ...)
+        # and the tests that assume standard token outputs / cache handling do not apply.
+        skippable_tests = [
+            "test_assisted",
+            "test_beam",
+            "test_sample_generate",
+            "test_greedy_generate",
+            "test_generate_continue_from_past_key_values",
+            "test_generate_from_random_inputs_embeds",
+            "test_generate_from_inputs_embeds",
+            "test_generate_methods_with_logits_to_keep",
+            "test_model_parallel_beam_search",
+        ]
+        for test in skippable_tests:
+            if self._testMethodName.startswith(test):
+                self.skipTest(
+                    reason="VibeVoice uses a diffusion-based generation loop that emits audio, so standard "
+                    "token-based generation strategies are not supported."
+                )
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -217,92 +239,6 @@ class VibeVoiceForConditionalGenerationTest(ModelTesterMixin, GenerationTesterMi
             )
 
         return inputs_dict
-
-    @parameterized.expand([("random",), ("same",)])
-    @pytest.mark.generate
-    def test_assisted_decoding_matches_greedy_search(self, assistant_type):
-        self.skipTest("VibeVoice generation has unique generation")
-
-    @pytest.mark.generate
-    @unittest.skip(reason="VibeVoice generation has unique generation")
-    def test_assisted_decoding_sample(self):
-        pass
-
-    @pytest.mark.generate
-    @unittest.skip(reason="VibeVoice generation has unique generation")
-    def test_beam_sample_generate(self):
-        pass
-
-    @pytest.mark.generate
-    @unittest.skip(reason="VibeVoice generation has unique generation")
-    def test_beam_search_generate(self):
-        pass
-
-    @pytest.mark.generate
-    @unittest.skip(reason="VibeVoice generation has unique generation")
-    def test_beam_search_generate_dict_output(self):
-        pass
-
-    @pytest.mark.generate
-    @unittest.skip(reason="VibeVoice generation has unique generation")
-    def test_beam_search_generate_dict_outputs_use_cache(self):
-        pass
-
-    @pytest.mark.generate
-    @unittest.skip(reason="VibeVoice generation has unique generation")
-    def test_beam_sample_generate_dict_output(self):
-        pass
-
-    @pytest.mark.generate
-    @unittest.skip(reason="VibeVoice generation requires noise_scheduler parameter.")
-    def test_generate_continue_from_past_key_values(self):
-        pass
-
-    @pytest.mark.generate
-    @unittest.skip(reason="VibeVoice generation requires noise_scheduler parameter.")
-    def test_greedy_generate_dict_outputs_use_cache(self):
-        pass
-
-    @pytest.mark.generate
-    @unittest.skip(reason="VibeVoice generation requires noise_scheduler parameter.")
-    def test_generate_from_random_inputs_embeds(self):
-        pass
-
-    @pytest.mark.generate
-    @unittest.skip(reason="VibeVoice uses diffusion process instead of traditional token sampling")
-    def test_sample_generate(self):
-        pass
-
-    @pytest.mark.generate
-    @unittest.skip(reason="VibeVoice uses diffusion process instead of traditional token sampling")
-    def test_sample_generate_dict_output(self):
-        pass
-
-    @pytest.mark.generate
-    @unittest.skip(reason="VibeVoice generation requires specific audio/text setup.")
-    def test_model_parallel_beam_search(self):
-        pass
-
-    @parameterized.expand([("greedy", 1), ("beam search", 2)])
-    @pytest.mark.generate
-    @unittest.skip(reason="VibeVoice generation performs different type of generation (diffusion process).")
-    def test_generate_from_inputs_embeds(self, _, num_beams):
-        pass
-
-    @pytest.mark.generate
-    @unittest.skip(reason="VibeVoice generation returns audio output, not text tokens.")
-    def test_generate_methods_with_logits_to_keep(self):
-        pass
-
-    @pytest.mark.generate
-    @unittest.skip(reason="VibeVoice generation returns audio output, not standard token sequences.")
-    def test_greedy_generate(self):
-        pass
-
-    @pytest.mark.generate
-    @unittest.skip(reason="VibeVoice generation has attention dimension issues during generation.")
-    def test_greedy_generate_dict_outputs(self):
-        pass
 
     @unittest.skip(reason="VibeVoice has nested PreTrainedModels (audio_tower contains encoder/decoder).")
     def test_internal_model_config_and_subconfig_are_same(self):
@@ -355,6 +291,7 @@ class VibeVoiceForConditionalGenerationIntegrationTest(unittest.TestCase):
     def setUp(self):
         self.model_checkpoint = "bezzam/VibeVoice-1.5B-hf"  # TODO change
         self.sampling_rate = 24000
+        self.fixtures_path = Path(__file__).parent.parent.parent / "fixtures/vibevoice"
 
     def tearDown(self):
         cleanup(torch_device, gc_collect=True)
@@ -367,7 +304,7 @@ class VibeVoiceForConditionalGenerationIntegrationTest(unittest.TestCase):
         diffusers library is needed (ran with `diffusers==0.35.2`)
         """
         set_seed(42)
-        fixtures_path = Path(__file__).parent.parent.parent / "fixtures/vibevoice/expected_results_single_noaudio.json"
+        fixtures_path = self.fixtures_path / "expected_results_single_noaudio.json"
         max_new_tokens = 32
 
         # Load model and processor
@@ -432,7 +369,7 @@ class VibeVoiceForConditionalGenerationIntegrationTest(unittest.TestCase):
         diffusers library is needed (ran with `diffusers==0.35.2`)
         """
         set_seed(42)
-        fixtures_path = Path(__file__).parent.parent.parent / "fixtures/vibevoice/expected_results_single.json"
+        fixtures_path = self.fixtures_path / "expected_results_single.json"
         max_new_tokens = 32
 
         # Load model and processor

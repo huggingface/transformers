@@ -193,8 +193,7 @@ class TextToAudioPipeline(Pipeline):
             if self.model.config.model_type == "dia":
                 text = [f"[S1] {t}" if not t.startswith("[") else t for t in text]
             output = preprocessor(text, **kwargs, return_tensors="pt")
-        model_dtype = next(self.model.parameters()).dtype
-        output = output.to(dtype=model_dtype)
+        output = output.to(dtype=self.model.dtype)
 
         return output
 

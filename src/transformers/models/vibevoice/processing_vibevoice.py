@@ -18,7 +18,8 @@ from ...audio_utils import AudioInput, make_list_of_audio
 from ...feature_extraction_utils import BatchFeature
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
-from ...utils import is_soundfile_available, is_torch_available, logging
+from ...utils import auto_docstring, is_soundfile_available, is_torch_available, logging
+from ...utils.import_utils import requires
 
 
 logger = logging.get_logger(__name__)
@@ -33,12 +34,19 @@ if is_soundfile_available():
 
 class VibeVoiceProcessorKwargs(ProcessingKwargs, total=False):
     _defaults = {
-        "text_kwargs": {"padding": True, "padding_side": "left", "add_special_tokens": False, "return_tensors": "pt"},
+        "text_kwargs": {
+            "padding": True,
+            "padding_side": "left",
+            "add_special_tokens": False,
+        },
         "audio_kwargs": {
             "sampling_rate": 24000,
             "pad_to_multiple_of": 3200,  # audio_tower.hop_length
         },
-        "common_kwargs": {"return_attention_mask": True},
+        "common_kwargs": {
+            "return_attention_mask": True,
+            "return_tensors": "pt",
+        },
     }
 
 
@@ -96,6 +104,8 @@ class VibeVoiceProcessor(ProcessorMixin):
     def replace_audio_token(self, audio_inputs: dict, audio_idx: int) -> str:
         return self.audio_token * self._num_audio_tokens[audio_idx]
 
+    @requires(backends=("torch",))
+    @auto_docstring
     def __call__(
         self,
         text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput],

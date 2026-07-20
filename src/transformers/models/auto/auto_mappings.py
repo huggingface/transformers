@@ -648,7 +648,6 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("vibevoice", "VibeVoiceConfig"),
         ("vibevoice_acoustic_tokenizer", "VibeVoiceAcousticTokenizerConfig"),
         ("vibevoice_asr", "VibeVoiceAsrConfig"),
-        ("vibevoice_diffusion_head", "VibeVoiceDiffusionHeadConfig"),
         ("video_llama_3", "VideoLlama3Config"),
         ("video_llama_3_vision", "VideoLlama3VisionConfig"),
         ("video_llava", "VideoLlavaConfig"),
