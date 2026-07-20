@@ -13,7 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was contributed to Hugging Face Transformers on 2026-07-15.*
+*This model was contributed to Hugging Face Transformers on 2026-07-20.*
 
 # ESMFold2
 
@@ -32,18 +32,18 @@ The model checkpoints are available on the Hugging Face Hub at
 ```python
 import torch
 
-from transformers import ESMFold2Model
+from transformers import EsmFold2Model
 
 # The ESMC backbone is bundled in the checkpoint and loaded with the model.
 # bf16 is the recommended inference precision.
-model = ESMFold2Model.from_pretrained("biohub/ESMFold2", dtype=torch.bfloat16, device_map=0)
+model = EsmFold2Model.from_pretrained("biohub/ESMFold2", dtype=torch.bfloat16, device_map=0)
 
 pdb_string = model.infer_protein_as_pdb("MKTAYIAKQRQISFVKSHFSRQLEERLGLIEVQ")
 print(pdb_string)
 ```
 
 `infer_protein` returns the raw outputs (atom coordinates, distogram logits and confidence metrics) as an
-[`~models.esmfold2.modeling_esmfold2.ESMFold2Output`] if you need them instead of a PDB string. You may get
+[`~models.esmfold2.modeling_esmfold2.EsmFold2Output`] if you need them instead of a PDB string. You may get
 slightly different predictions if you run the same sequence multiple times. Set a manual seed if you want exactly
 reproducible structures.
 
@@ -58,26 +58,26 @@ Make sure the model is on a CUDA device when kernelization happens (e.g. with `d
 ```python
 import torch
 
-from transformers import ESMFold2Model
+from transformers import EsmFold2Model
 
-model = ESMFold2Model.from_pretrained(
+model = EsmFold2Model.from_pretrained(
     "biohub/ESMFold2", dtype=torch.bfloat16, device_map="cuda", use_kernels=True
 )
 
 pdb_string = model.infer_protein_as_pdb("MKTAYIAKQRQISFVKSHFSRQLEERLGLIEVQ")
 ```
 
-## ESMFold2Config
+## EsmFold2Config
 
-[[autodoc]] ESMFold2Config
+[[autodoc]] EsmFold2Config
 
-## ESMFold2PreTrainedModel
+## EsmFold2PreTrainedModel
 
-[[autodoc]] ESMFold2PreTrainedModel
+[[autodoc]] EsmFold2PreTrainedModel
 
-## ESMFold2Model
+## EsmFold2Model
 
-[[autodoc]] ESMFold2Model
+[[autodoc]] EsmFold2Model
     - forward
     - infer_protein
     - infer_protein_as_pdb

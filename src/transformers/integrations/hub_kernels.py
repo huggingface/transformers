@@ -134,10 +134,13 @@ if is_kernels_available():
                     trust_remote_code=True,
                 ),
             },
-            "ESMFold2TriangleMultiplication": {
+            "EsmFold2TriangleMultiplication": {
                 "cuda": {
                     Mode.INFERENCE: LayerRepository(
                         repo_id="Rocketknight1/esmfold2-trimul-kernel",
+                        # NOTE: this is the layer name exported by the *remote* kernel repo above;
+                        # it is independent of the local class name. Update it only if the class is
+                        # renamed inside Rocketknight1/esmfold2-trimul-kernel too.
                         layer_name="ESMFold2TriangleMultiplication",
                         version=1,
                     ),

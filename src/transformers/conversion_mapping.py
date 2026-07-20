@@ -916,7 +916,7 @@ def _build_checkpoint_conversion_mapping():
                 operations=[Chunk(dim=0)],
             ),
         ],
-        "ESMCForMaskedLM": [
+        "EsmcForMaskedLM": [
             WeightRenaming(r"lm_head\.0\.", "lm_head.dense."),
             WeightRenaming(r"lm_head\.2\.", "lm_head.layer_norm."),
             WeightRenaming(r"lm_head\.3\.", "lm_head.decoder."),
