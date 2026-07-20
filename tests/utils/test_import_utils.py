@@ -190,3 +190,59 @@ def test_require_flash_attn_decorators_accept_kernels_fallback():
     with mock_flash_attn_env(kernels_available=True):
         assert require_flash_attn(DummyTest) is not None
         assert require_all_flash_attn(DummyTest) is not None
+
+
+@run_test_using_subprocess
+def test_broken_torchaudio_does_not_break_import():
+    """
+    A torchaudio that is installed but fails to import (e.g. its compiled extension was built against a
+    different torch ABI and raises ``OSError`` on import) must not break ``import transformers``.
+
+    ``loss/loss_rnnt.py`` is imported eagerly from ``modeling_utils``, and ``is_torchaudio_available()``
+    only confirms the distribution is installed -- not that it imports -- so the module guards the import
+    and degrades gracefully. Regression test for the daily quantization CI collapse (Jul 2026), where a
+    floating torchaudio pulled a wheel built for a newer torch and its ``OSError`` broke pytest collection
+    for the whole suite.
+    """
+    import builtins
+    import importlib
+
+    import torch
+
+    import transformers.utils
+
+    # Drop any already-imported torchaudio / loss_rnnt so the guarded import re-runs under our patches.
+    for name in list(sys.modules):
+        if name == "torchaudio" or name.startswith("torchaudio.") or name.endswith("loss.loss_rnnt"):
+            del sys.modules[name]
+
+    real_import = builtins.__import__
+
+    def failing_import(name, *args, **kwargs):
+        if name == "torchaudio" or name.startswith("torchaudio."):
+            raise OSError("_torchaudio.abi3.so: undefined symbol: simulated_abi_mismatch")
+        return real_import(name, *args, **kwargs)
+
+    # Force the availability guard to pass even though the actual `import torchaudio` will fail.
+    with (
+        patch.object(transformers.utils, "is_torchaudio_available", return_value=True),
+        patch.object(builtins, "__import__", failing_import),
+    ):
+        loss_rnnt = importlib.import_module("transformers.loss.loss_rnnt")
+
+    # The module imported despite the broken torchaudio, and recorded it as unavailable.
+    assert loss_rnnt.torchaudio is None
+
+    # Calling the loss surfaces a clear ImportError (not a NameError or the raw OSError).
+    try:
+        loss_rnnt.rnnt_loss(
+            logits=torch.zeros(1, 2, 3, 4),
+            targets=torch.zeros(1, 3),
+            logit_lengths=torch.ones(1),
+            target_lengths=torch.ones(1),
+            blank_token_id=0,
+        )
+    except ImportError:
+        pass
+    else:
+        raise AssertionError("rnnt_loss should raise ImportError when torchaudio cannot be imported")
