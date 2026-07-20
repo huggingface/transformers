@@ -15,7 +15,7 @@
 
 import unittest
 
-from transformers import AutoTokenizer, ESMCConfig, is_torch_available
+from transformers import AutoTokenizer, EsmcConfig, is_torch_available
 from transformers.testing_utils import Expectations, require_torch, slow, torch_device
 
 from ...test_configuration_common import ConfigTester
@@ -27,14 +27,14 @@ if is_torch_available():
     import torch
 
     from transformers import (
-        ESMCForMaskedLM,
-        ESMCForSequenceClassification,
-        ESMCForTokenClassification,
-        ESMCModel,
+        EsmcForMaskedLM,
+        EsmcForSequenceClassification,
+        EsmcForTokenClassification,
+        EsmcModel,
     )
 
 
-class ESMCModelTester:
+class EsmcModelTester:
     def __init__(
         self,
         parent,
@@ -86,7 +86,7 @@ class ESMCModelTester:
         return config, input_ids, input_mask, sequence_labels, token_labels
 
     def get_config(self):
-        return ESMCConfig(
+        return EsmcConfig(
             vocab_size=self.vocab_size,
             d_model=self.d_model,
             n_heads=self.n_heads,
@@ -97,7 +97,7 @@ class ESMCModelTester:
         )
 
     def create_and_check_model(self, config, input_ids, input_mask, sequence_labels, token_labels):
-        model = ESMCModel(config=config)
+        model = EsmcModel(config=config)
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=input_mask)
@@ -105,7 +105,7 @@ class ESMCModelTester:
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.d_model))
 
     def create_and_check_for_masked_lm(self, config, input_ids, input_mask, sequence_labels, token_labels):
-        model = ESMCForMaskedLM(config=config)
+        model = EsmcForMaskedLM(config=config)
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=input_mask, labels=token_labels)
@@ -115,7 +115,7 @@ class ESMCModelTester:
         self, config, input_ids, input_mask, sequence_labels, token_labels
     ):
         config.num_labels = self.num_labels
-        model = ESMCForSequenceClassification(config=config)
+        model = EsmcForSequenceClassification(config=config)
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=input_mask, labels=sequence_labels)
@@ -123,7 +123,7 @@ class ESMCModelTester:
 
     def create_and_check_for_token_classification(self, config, input_ids, input_mask, sequence_labels, token_labels):
         config.num_labels = self.num_labels
-        model = ESMCForTokenClassification(config=config)
+        model = EsmcForTokenClassification(config=config)
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=input_mask, labels=token_labels)
@@ -136,26 +136,26 @@ class ESMCModelTester:
 
 
 @require_torch
-class ESMCModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
+class EsmcModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     test_mismatched_shapes = False
     test_resize_embeddings = False  # ESMC's lm_head decoder is untied (tie_word_embeddings=False)
 
     all_model_classes = (
         (
-            ESMCModel,
-            ESMCForMaskedLM,
-            ESMCForSequenceClassification,
-            ESMCForTokenClassification,
+            EsmcModel,
+            EsmcForMaskedLM,
+            EsmcForSequenceClassification,
+            EsmcForTokenClassification,
         )
         if is_torch_available()
         else ()
     )
     pipeline_model_mapping = (
         {
-            "feature-extraction": ESMCModel,
-            "fill-mask": ESMCForMaskedLM,
-            "text-classification": ESMCForSequenceClassification,
-            "token-classification": ESMCForTokenClassification,
+            "feature-extraction": EsmcModel,
+            "fill-mask": EsmcForMaskedLM,
+            "text-classification": EsmcForSequenceClassification,
+            "token-classification": EsmcForTokenClassification,
         }
         if is_torch_available()
         else {}
@@ -163,8 +163,8 @@ class ESMCModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     test_sequence_classification_problem_types = True
 
     def setUp(self):
-        self.model_tester = ESMCModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=ESMCConfig, common_properties=["d_model", "n_heads"])
+        self.model_tester = EsmcModelTester(self)
+        self.config_tester = ConfigTester(self, config_class=EsmcConfig, common_properties=["d_model", "n_heads"])
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -188,12 +188,12 @@ class ESMCModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
 @slow
 @require_torch
-class ESMCModelIntegrationTest(unittest.TestCase):
+class EsmcModelIntegrationTest(unittest.TestCase):
     checkpoint = "biohub/ESMC-300M"
     sequence = "MKTAYIAKQRQISFVKSHFSRQLEERLGLIEVQ"
 
     def test_inference_masked_lm(self):
-        model = ESMCForMaskedLM.from_pretrained(self.checkpoint, dtype=torch.bfloat16).to(torch_device).eval()
+        model = EsmcForMaskedLM.from_pretrained(self.checkpoint, dtype=torch.bfloat16).to(torch_device).eval()
         tokenizer = AutoTokenizer.from_pretrained(self.checkpoint)
         inputs = tokenizer([self.sequence], return_tensors="pt").to(torch_device)
 
@@ -222,7 +222,7 @@ class ESMCModelIntegrationTest(unittest.TestCase):
         torch.testing.assert_close(logits[0, 1:4, :6].float().cpu(), expected_slice, rtol=1e-2, atol=0.5)
 
     def test_inference_last_hidden_state(self):
-        model = ESMCModel.from_pretrained(self.checkpoint, dtype=torch.bfloat16).to(torch_device).eval()
+        model = EsmcModel.from_pretrained(self.checkpoint, dtype=torch.bfloat16).to(torch_device).eval()
         tokenizer = AutoTokenizer.from_pretrained(self.checkpoint)
         inputs = tokenizer([self.sequence], return_tensors="pt").to(torch_device)
 

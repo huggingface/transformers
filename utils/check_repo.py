@@ -371,7 +371,7 @@ IGNORE_NON_AUTO_CONFIGURED = (
         "CLIPSegVisionModel",
         "CLIPSegTextModel",
         "EsmForProteinFolding",
-        "ESMFold2Model",
+        "EsmFold2Model",
         "GPTSanJapaneseModel",
         "TimeSeriesTransformerForPrediction",
         "InformerForPrediction",

@@ -14,15 +14,15 @@
 
 import unittest
 
-from transformers import AutoTokenizer, ESMCTokenizer
+from transformers import AutoTokenizer, EsmcTokenizer
 from transformers.testing_utils import require_tokenizers, slow
 
 from ...test_tokenization_common import TokenizerTesterMixin
 
 
 @require_tokenizers
-class ESMCTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
-    tokenizer_class = ESMCTokenizer
+class EsmcTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
+    tokenizer_class = EsmcTokenizer
     test_seq2seq = False
 
     @classmethod
@@ -30,10 +30,10 @@ class ESMCTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         super().setUpClass()
         # ESMC is a fast-only tokenizer with a fixed amino-acid vocab built in __init__ (no vocab
         # file), so seed the shared tmpdir with a code-built tokenizer for the common-test battery.
-        ESMCTokenizer().save_pretrained(cls.tmpdirname)
+        EsmcTokenizer().save_pretrained(cls.tmpdirname)
 
-    def get_tokenizer(self, **kwargs) -> ESMCTokenizer:
-        return ESMCTokenizer.from_pretrained(self.tmpdirname, **kwargs)
+    def get_tokenizer(self, **kwargs) -> EsmcTokenizer:
+        return EsmcTokenizer.from_pretrained(self.tmpdirname, **kwargs)
 
     def get_input_output_texts(self, tokenizer):
         # The common harness space-joins vocab tokens, but ESMC has no space token (spaces map to
@@ -96,9 +96,9 @@ class ESMCTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     @slow
     def test_tokenizer_integration(self):
         # The published checkpoint's tokenizer.json must match the code-built tokenizer,
-        # and AutoTokenizer must resolve to ESMCTokenizer.
+        # and AutoTokenizer must resolve to EsmcTokenizer.
         seq = "ACDEFGHIKLMNPQRSTVWY"
         built = self.get_tokenizer()
         auto = AutoTokenizer.from_pretrained("biohub/ESMC-6B")
-        self.assertIsInstance(auto, ESMCTokenizer)
+        self.assertIsInstance(auto, EsmcTokenizer)
         self.assertListEqual(built(seq)["input_ids"], auto(seq)["input_ids"])

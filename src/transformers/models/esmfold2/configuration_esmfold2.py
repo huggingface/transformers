@@ -17,7 +17,7 @@ from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
 from ...utils import auto_docstring, logging
-from ..esmc.configuration_esmc import ESMCConfig
+from ..esmc.configuration_esmc import EsmcConfig
 
 
 logger = logging.get_logger(__name__)
@@ -25,11 +25,8 @@ logger = logging.get_logger(__name__)
 
 @auto_docstring(checkpoint="biohub/ESMFold2")
 @strict
-class ESMFold2Config(PreTrainedConfig):
+class EsmFold2Config(PreTrainedConfig):
     r"""
-    type (`str`, *optional*, defaults to `"release"`):
-        Architecture variant. Only `"release"` is supported in this port (the
-        `"experimental"` variant is deferred to a follow-up).
     hidden_size (`int`, *optional*, defaults to 384):
         Dimensionality of single (per-residue) representations.
     pairwise_hidden_size (`int`, *optional*, defaults to 256):
@@ -144,8 +141,6 @@ class ESMFold2Config(PreTrainedConfig):
         Maximum distance of the confidence-head distance binning.
     confidence_head_distogram_bins (`int`, *optional*, defaults to 128):
         Number of distogram bins consumed by the confidence head.
-    msa_encoder_enabled (`bool`, *optional*, defaults to `False`):
-        Whether to build and run the optional MSA encoder (Large MSA models only).
     msa_encoder_hidden_size (`int`, *optional*, defaults to 128):
         MSA-stream width of the MSA encoder.
     msa_encoder_outer_hidden_size (`int`, *optional*, defaults to 32):
@@ -159,8 +154,6 @@ class ESMFold2Config(PreTrainedConfig):
     msa_encoder_transition_intermediate_size (`int`, *optional*):
         SwiGLU FFN width of the MSA-stream transition. Derived as
         `transition_expansion_ratio * msa_encoder_hidden_size` if not set.
-    lm_encoder_enabled (`bool`, *optional*, defaults to `True`):
-        Whether to build and run the LM-side pair encoder.
     lm_encoder_num_hidden_layers (`int`, *optional*, defaults to 4):
         Number of pairformer layers in the LM-side pair encoder.
     lm_encoder_lm_dropout (`float`, *optional*, defaults to 0.25):
@@ -169,7 +162,7 @@ class ESMFold2Config(PreTrainedConfig):
         If `True`, LM dropout is resampled on every trunk loop (applied even at inference).
     parcae_num_coda_layers (`int`, *optional*, defaults to 2):
         Number of pairformer layers in the parcae coda.
-    esmc_config (`ESMCConfig`, *optional*):
+    esmc_config (`EsmcConfig`, *optional*):
         Configuration of the bundled ESMC language-model backbone. Defaults to the
         ESMC-6B configuration. The backbone weights are part of the ESMFold2
         checkpoint (built with `AutoModel.from_config(esmc_config)`).
@@ -177,13 +170,13 @@ class ESMFold2Config(PreTrainedConfig):
     Examples:
 
     ```python
-    >>> from transformers import ESMFold2Config, ESMFold2Model
+    >>> from transformers import EsmFold2Config, EsmFold2Model
 
     >>> # Initializing an ESMFold2 configuration
-    >>> configuration = ESMFold2Config()
+    >>> configuration = EsmFold2Config()
 
     >>> # Initializing a model (with random weights) from the configuration
-    >>> model = ESMFold2Model(configuration)
+    >>> model = EsmFold2Model(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
@@ -191,9 +184,7 @@ class ESMFold2Config(PreTrainedConfig):
     """
 
     model_type = "esmfold2"
-    sub_configs = {"esmc_config": ESMCConfig}
-
-    type: str | None = "release"
+    sub_configs = {"esmc_config": EsmcConfig}
 
     # Shared / top-level dims
     hidden_size: int | None = 384
@@ -262,7 +253,6 @@ class ESMFold2Config(PreTrainedConfig):
     confidence_head_distogram_bins: int | None = 128
 
     # MSA encoder
-    msa_encoder_enabled: bool | None = False
     msa_encoder_hidden_size: int | None = 128
     msa_encoder_outer_hidden_size: int | None = 32
     msa_encoder_num_hidden_layers: int | None = 4
@@ -271,7 +261,6 @@ class ESMFold2Config(PreTrainedConfig):
     msa_encoder_transition_intermediate_size: int | None = None
 
     # LM-side pair encoder
-    lm_encoder_enabled: bool | None = True
     lm_encoder_num_hidden_layers: int | None = 4
     lm_encoder_lm_dropout: float | None = 0.25
     lm_encoder_per_loop_lm_dropout: bool | None = True
@@ -280,19 +269,13 @@ class ESMFold2Config(PreTrainedConfig):
     parcae_num_coda_layers: int | None = 2
 
     # Bundled ESMC language-model backbone
-    esmc_config: dict | ESMCConfig | None = None
+    esmc_config: dict | EsmcConfig | None = None
 
     def __post_init__(self, **kwargs):
-        if self.type != "release":
-            raise ValueError(
-                "ESMFold2Config.type must be 'release' (the 'experimental' variant "
-                f"is not included in this release), got {self.type!r}"
-            )
-
         if self.esmc_config is None:
-            self.esmc_config = ESMCConfig()
+            self.esmc_config = EsmcConfig()
         elif isinstance(self.esmc_config, dict):
-            self.esmc_config = ESMCConfig(**self.esmc_config)
+            self.esmc_config = EsmcConfig(**self.esmc_config)
 
         # SwiGLU FFN widths that are derived from the stream widths when not set explicitly
         # (matches the reference ESMFold2 feed-forward blocks). The atom-stack FFNs are rounded
@@ -319,4 +302,4 @@ class ESMFold2Config(PreTrainedConfig):
         super().__post_init__(**kwargs)
 
 
-__all__ = ["ESMFold2Config"]
+__all__ = ["EsmFold2Config"]
