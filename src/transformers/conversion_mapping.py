@@ -157,6 +157,9 @@ def _build_checkpoint_conversion_mapping():
         ],
         "onyx_vision": [
             WeightRenaming(source_patterns=r"attn.o_proj", target_patterns=r"attn.out_proj"),
+            WeightRenaming(
+                source_patterns=r"position_embedding_table", target_patterns=r"position_embedding_table.weight"
+            ),
             WeightConverter(
                 source_patterns=[r"attn.q_proj"],
                 target_patterns=[r"attn.q_proj"],

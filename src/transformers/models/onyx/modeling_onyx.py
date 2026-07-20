@@ -773,9 +773,10 @@ class OnyxVisionPatchEmbedder(nn.Module):
         self.patch_size = config.patch_temporal * 3 * config.patch_size**2
 
         self.patch_embedding = nn.Linear(self.patch_size, self.hidden_size, bias=False)
-        self.position_embedding_table = nn.Parameter(
-            torch.zeros(config.pos_emb_grid_h * config.pos_emb_grid_w, self.hidden_size)
-        )
+        self.position_embedding_table = nn.Embedding(config.pos_emb_grid_h * config.pos_emb_grid_w, self.hidden_size)
+        # FIXME: only if square images - vision utils don't yet support non-square
+        # For now assume pos_emb_grid_h == pos_emb_grid_w always, i.e. as in shared ckpt
+        self.num_grid_per_side = config.pos_emb_grid_h
 
     def interpolate_pos_encoding(self, embeddings: torch.Tensor, height: int, width: int) -> torch.Tensor:
         """
@@ -812,17 +813,16 @@ class OnyxVisionPatchEmbedder(nn.Module):
             grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
                 The temporal, height and width of feature shape of each image in LLM.
         """
-        batch_size, sequence_len, channel, height, width = pixel_values.shape
+        batch_sequence_len = pixel_values.shape[0]
         target_dtype = self.patch_embedding.weight.dtype
-        pixel_values = pixel_values.reshape(batch_size * sequence_len, channel, height, width)
-        patch_embeds = self.patch_embedding(pixel_values.to(dtype=target_dtype))  # shape = [*, width, grid, grid]
+        patch_embeds = self.patch_embedding(pixel_values.to(dtype=target_dtype))
         embeddings = patch_embeds.flatten(-2).squeeze(-1)
-        embeddings = embeddings.reshape(batch_size * sequence_len, -1)
+        embeddings = embeddings.reshape(batch_sequence_len, -1)
 
         bilinear_indices, bilinear_weights = get_vision_bilinear_indices_and_weights(
             grid_thw, num_grid_per_side=self.num_grid_per_side, spatial_merge_size=1, kwargs=kwargs
         )
-        pos_embeds = (self.position_embedding(bilinear_indices) * bilinear_weights[:, :, None]).sum(0)
+        pos_embeds = (self.position_embedding_table(bilinear_indices) * bilinear_weights[:, :, None]).sum(0)
         embeddings = embeddings + pos_embeds.to(embeddings.dtype)
 
         return embeddings
@@ -946,16 +946,13 @@ class OnyxVisionModel(OnyxPreTrainedModel):
 
         inputs_embeds = self.patch_embedder(pixel_values, grid_thw)
         hidden_states = self.ln_pre(inputs_embeds)
-
-        seq_len, _ = hidden_states.size()
-        hidden_states = hidden_states[window_index, :, :]
-        hidden_states = hidden_states.reshape(seq_len, -1)
+        hidden_states = hidden_states[window_index, ...][None, ...]  # unsqueeze single batch size
 
         # Add `1` because ref implementation's position offset is `1`!
         # TODO: permute qk proj for RoPE in conversion mapping
         position_ids = get_vision_position_ids(grid_thw, spatial_merge_size=1)
         position_ids = position_ids.flip(0) + 1  # seq-len, 2, should we flip?
-        position_ids = position_ids[window_index, ...]
+        position_ids = position_ids[window_index, ...][None, ...]  # unsqueeze single batch size
         position_embeddings = self.rotary_emb(hidden_states, position_ids)
 
         for i, block in enumerate(self.layers):
@@ -1098,7 +1095,7 @@ class OnyxModel(OnyxPreTrainedModel):
     ) -> BaseModelOutputWithPooling:
         vision_outputs = self.vision_tower(
             pixel_values=pixel_values,
-            image_grid_thw=image_grid_thw,
+            grid_thw=image_grid_thw,
             **kwargs,
         )
         vision_features = self.vision_adapter(vision_outputs.last_hidden_state)

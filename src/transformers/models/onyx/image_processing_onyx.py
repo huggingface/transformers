@@ -152,9 +152,10 @@ class OnyxImageProcessor(TorchvisionBackend):
         temporal_patch_size: int,
         max_image_tokens: int,
         downsample_factor: int,
+        disable_grouping: bool = False,
         **kwargs,
     ) -> BatchFeature:
-        grouped_images, grouped_images_index = group_images_by_shape(images)
+        grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
         resized_images_grouped = {}
         for shape, stacked_images in grouped_images.items():
             height, width = stacked_images.shape[-2:]
@@ -168,7 +169,7 @@ class OnyxImageProcessor(TorchvisionBackend):
             resized_images_grouped[shape] = stacked_images
         resized_images = reorder_images(resized_images_grouped, grouped_images_index)
 
-        grouped_images, grouped_images_index = group_images_by_shape(resized_images)
+        grouped_images, grouped_images_index = group_images_by_shape(resized_images, disable_grouping=disable_grouping)
         processed_images_grouped = {}
         processed_grids = {}
         for shape, stacked_images in grouped_images.items():
@@ -178,6 +179,7 @@ class OnyxImageProcessor(TorchvisionBackend):
             )
             if patches.ndim == 4:
                 patches = patches.unsqueeze(1)
+
             if patches.shape[1] % temporal_patch_size != 0:
                 repeats = patches[:, -1:].repeat(1, temporal_patch_size - 1, 1, 1, 1)
                 patches = torch.cat([patches, repeats], dim=1)
@@ -197,7 +199,9 @@ class OnyxImageProcessor(TorchvisionBackend):
                 patch_size,
             )
             patches = patches.permute(0, 1, 4, 6, 3, 2, 5, 7)
-            flatten_patches = patches.reshape(batch_size, grid_t * grid_h * grid_w, channel, patch_size, patch_size)
+            flatten_patches = patches.reshape(
+                batch_size, grid_t * grid_h * grid_w, channel * temporal_patch_size * patch_size * patch_size
+            )
 
             processed_images_grouped[shape] = flatten_patches
             processed_grids[shape] = [[grid_t, grid_h, grid_w]] * batch_size
@@ -206,6 +210,7 @@ class OnyxImageProcessor(TorchvisionBackend):
         processed_grids = reorder_images(processed_grids, grouped_images_index)
         pixel_values = torch.cat(processed_images, dim=0)
         image_grid_thw = torch.tensor(processed_grids)
+        print(pixel_values.shape)
 
         return BatchFeature(
             data={"pixel_values": pixel_values, "image_grid_thw": image_grid_thw}, tensor_type=return_tensors
