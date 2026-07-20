@@ -20,10 +20,10 @@ import numpy as np
 from transformers import (
     MODEL_FOR_MULTIMODAL_LM_MAPPING,
     AutoProcessor,
+    Qwen2_5OmniForConditionalGeneration,
     is_torch_available,
     is_vision_available,
     logging,
-    Qwen2_5OmniForConditionalGeneration,
 )
 from transformers.pipelines import AnyToAnyPipeline, pipeline
 from transformers.testing_utils import (
