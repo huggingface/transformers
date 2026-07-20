@@ -2678,7 +2678,7 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
 
         def attention_shape(layer_idx):
             # Cache layers map 1:1 to the leading (non-kv-shared) decoder layers.
-            layer_config = config.per_layer_config[layer_idx] if config.is_heterogeneous else config
+            layer_config = config.per_layer_config[layer_idx]
             num_kv_heads = getattr(layer_config, "num_key_value_heads", num_attention_heads)
             hidden_size = getattr(layer_config, "d_model", layer_config.hidden_size)
             head_dim = getattr(layer_config, "head_dim", hidden_size // num_attention_heads)

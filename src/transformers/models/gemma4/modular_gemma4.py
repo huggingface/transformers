@@ -998,14 +998,6 @@ class Gemma4TextMLP(Gemma3MLP):
         self.intermediate_size = config.intermediate_size * (2 if use_double_wide_mlp else 1)
 
 
-def config_for_layer_type(config: Gemma4TextConfig, layer_type: str) -> Gemma4TextConfig:
-    """Returns the per-layer config for a given layer type.
-    Returns `config` unchanged when it is homogeneous."""
-    if not config.is_heterogeneous:
-        return config
-    return config.per_layer_config[config.layer_types.index(layer_type)]
-
-
 class Gemma4TextRotaryEmbedding(Gemma3RotaryEmbedding):
     def __init__(self, config: Gemma4TextConfig, device=None, layer_type=None):
         nn.Module.__init__(self)
@@ -1032,7 +1024,7 @@ class Gemma4TextRotaryEmbedding(Gemma3RotaryEmbedding):
 
             # `inv_freq` depends on the head dim, which varies by layer type, so initialise
             # from a config resolved for this layer type rather than the global one.
-            rope_config = config_for_layer_type(config, layer_type)
+            rope_config = config.per_layer_config[layer_type]
             curr_inv_freq, curr_attention_scaling = rope_init_fn(rope_config, device=device, layer_type=layer_type)
             self.register_buffer(f"{layer_type}_inv_freq", curr_inv_freq, persistent=False)
             self.register_buffer(f"{layer_type}_original_inv_freq", curr_inv_freq.clone(), persistent=False)
@@ -1050,7 +1042,7 @@ class Gemma4TextAttention(nn.Module):
         self.is_sliding = self.layer_type == "sliding_attention"
         self.sliding_window = config.sliding_window if self.is_sliding else None
 
-        layer_config = config.per_layer_config[layer_idx] if config.is_heterogeneous else config
+        layer_config = config.per_layer_config[layer_idx]
         self.head_dim = layer_config.head_dim
         self.use_alternative_attention = config.attention_k_eq_v and not self.is_sliding
         self.num_key_value_groups = config.num_attention_heads // layer_config.num_key_value_heads
@@ -1316,7 +1308,7 @@ class Gemma4PreTrainedModel(Gemma3nPreTrainedModel):
             init.zeros_(module.per_dim_scale)
         elif isinstance(module, Gemma4TextRotaryEmbedding):
             for layer_type, rope_init_fn in module.rope_init_fns.items():
-                rope_config = config_for_layer_type(module.config, layer_type)
+                rope_config = module.config.per_layer_config[layer_type]
                 curr_inv_freq, _ = rope_init_fn(rope_config, layer_type=layer_type)
                 init.copy_(getattr(module, f"{layer_type}_inv_freq"), curr_inv_freq)
                 init.copy_(getattr(module, f"{layer_type}_original_inv_freq"), curr_inv_freq)
