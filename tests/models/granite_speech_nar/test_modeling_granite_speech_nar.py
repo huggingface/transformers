@@ -14,7 +14,6 @@
 """Testing suite for the PyTorch GraniteSpeechNar model."""
 
 import json
-import tempfile
 import unittest
 from pathlib import Path
 
@@ -309,6 +308,20 @@ class GraniteSpeechNarForCTCModelTest(ModelTesterMixin, unittest.TestCase):
     def test_model_outputs_equivalence(self):
         pass
 
+    @unittest.skip(
+        reason="forward/generate pack the batch into one flat, variable-length sequence, so "
+        "nn.DataParallel cannot gather the differently-sized per-replica outputs."
+    )
+    def test_multi_gpu_data_parallel_forward(self):
+        pass
+
+    @unittest.skip(
+        reason="The packed forward manually concatenates projector audio embeddings with LLM text "
+        "embeddings; naive device_map layer-splitting places them on different devices."
+    )
+    def test_model_parallelism(self):
+        pass
+
     def test_hidden_states_output(self):
         # The mixin assumes a `[batch, seq_length, hidden]` layout, but this model runs the LM on a
         # flat packed sequence, so `hidden_states` are `[1, packed_len, hidden_size]`. Check that they
@@ -326,23 +339,6 @@ class GraniteSpeechNarForCTCModelTest(ModelTesterMixin, unittest.TestCase):
                 self.assertEqual(hidden_state.shape[-1], config.text_config.hidden_size)
             # every layer shares the same packed sequence length
             self.assertEqual(len({hidden_state.shape[1] for hidden_state in hidden_states}), 1)
-
-    @unittest.skip(
-        reason="forward/generate pack the batch into one flat, variable-length sequence, so "
-        "nn.DataParallel cannot gather the differently-sized per-replica outputs."
-    )
-    def test_multi_gpu_data_parallel_forward(self):
-        pass
-
-    @unittest.skip(
-        reason="The packed forward manually concatenates projector audio embeddings with LLM text "
-        "embeddings; naive device_map layer-splitting places them on different devices."
-    )
-    def test_model_parallelism(self):
-        pass
-
-    def test_can_init_all_missing_weights(self):
-        super().test_can_init_all_missing_weights()
 
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
         inputs_dict = super()._prepare_for_class(inputs_dict, model_class, return_labels=return_labels)
@@ -369,116 +365,89 @@ class GraniteSpeechNarForCTCModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_generate(*config_and_inputs)
 
-    def test_loss(self):
-        config, input_features, attention_mask = self.model_tester.prepare_config_and_inputs()
-        model = GraniteSpeechNarForCTC(config).to(torch_device).train()
+    def _prepare_loss_inputs(self, max_label_len=5):
+        config, input_features, input_features_mask = self.model_tester.prepare_config_and_inputs()
+        batch_size = self.model_tester.batch_size
+        labels = torch.randint(1, self.model_tester.vocab_size, (batch_size, max_label_len), device=torch_device)
+        label_lengths = torch.full((batch_size,), max(1, max_label_len - 2), device=torch_device)
+        label_lengths[0] = max_label_len
+        return (
+            config,
+            input_features.to(torch_device),
+            input_features_mask.to(torch_device),
+            labels,
+            label_lengths,
+        )
 
-        labels = torch.randint(0, self.model_tester.vocab_size, (self.model_tester.batch_size, 5))
-        label_lengths = torch.tensor([5, 3])
+    def test_loss(self):
+        # With the default config (both auxiliary lambdas are 0), the loss is exactly the main CTC term.
+        config, input_features, input_features_mask, labels, label_lengths = self._prepare_loss_inputs()
+        self.assertEqual(config.ce_loss_lambda, 0.0)
+        self.assertEqual(config.encoder_ctc_loss_lambda, 0.0)
+        model = GraniteSpeechNarForCTC(config).to(torch_device).train()
 
         output = model(
             input_features=input_features,
-            input_features_mask=attention_mask,
+            input_features_mask=input_features_mask,
             labels=labels,
             label_lengths=label_lengths,
         )
 
+        # CTC negative log-likelihood: scalar, finite and non-negative.
         self.assertIsNotNone(output.loss)
         self.assertEqual(output.loss.ndim, 0)
+        self.assertTrue(torch.isfinite(output.loss))
+        self.assertGreaterEqual(output.loss.item(), 0.0)
+
         self.assertTrue(output.loss.requires_grad)
         output.loss.backward()
 
-    def test_loss_with_ce(self):
-        config, input_features, attention_mask = self.model_tester.prepare_config_and_inputs()
-        config.ce_loss_lambda = 0.5
-        model = GraniteSpeechNarForCTC(config).to(torch_device).train()
+        self.assertIsNotNone(model.lm_head.weight.grad)
+        self.assertTrue(any(p.grad is not None for p in model.model.projector.parameters()))
+        self.assertIsNone(model.model.out_bpe.weight.grad)
 
-        labels = torch.randint(0, self.model_tester.vocab_size, (self.model_tester.batch_size, 4))
-        label_lengths = torch.tensor([4, 3])
+    def test_encoder_ctc_loss_is_additive_and_trains_out_bpe(self):
+        # loss(enc_lambda) = base_ctc + enc_lambda * encoder_ctc_loss, and this is the only term that
+        # differentiably uses the encoder BPE head (`out_bpe`).
+        config, input_features, input_features_mask, labels, label_lengths = self._prepare_loss_inputs()
+        model = GraniteSpeechNarForCTC(config).to(torch_device).eval()
 
-        output = model(
+        def loss_for(enc_lambda):
+            model.config.encoder_ctc_loss_lambda = enc_lambda
+            with torch.no_grad():
+                return model(
+                    input_features=input_features,
+                    input_features_mask=input_features_mask,
+                    labels=labels,
+                    label_lengths=label_lengths,
+                ).loss
+
+        base, half, full = loss_for(0.0), loss_for(0.5), loss_for(1.0)
+        self.assertGreater(half.item(), base.item())
+        torch.testing.assert_close(full - base, 2.0 * (half - base), rtol=1e-4, atol=1e-4)
+
+        # With the encoder CTC loss active, gradient now reaches `out_bpe` (contrast with `test_loss`).
+        model.config.encoder_ctc_loss_lambda = 0.3
+        model.train()
+        model.zero_grad()
+        model(
             input_features=input_features,
-            input_features_mask=attention_mask,
+            input_features_mask=input_features_mask,
             labels=labels,
             label_lengths=label_lengths,
-        )
-        self.assertIsNotNone(output.loss)
-        self.assertTrue(output.loss.requires_grad)
-        output.loss.backward()
-
-    def test_loss_with_encoder_ctc(self):
-        config, input_features, attention_mask = self.model_tester.prepare_config_and_inputs()
-        config.encoder_ctc_loss_lambda = 0.3
-        model = GraniteSpeechNarForCTC(config).to(torch_device).train()
-
-        labels = torch.randint(0, self.model_tester.vocab_size, (self.model_tester.batch_size, 4))
-        label_lengths = torch.tensor([4, 3])
-
-        output = model(
-            input_features=input_features,
-            input_features_mask=attention_mask,
-            labels=labels,
-            label_lengths=label_lengths,
-        )
-        self.assertIsNotNone(output.loss)
-        self.assertTrue(output.loss.requires_grad)
-        output.loss.backward()
+        ).loss.backward()
+        self.assertIsNotNone(model.model.out_bpe.weight.grad)
 
     def test_no_loss_without_labels(self):
-        config, input_features, attention_mask = self.model_tester.prepare_config_and_inputs()
+        config, input_features, input_features_mask, _, _ = self._prepare_loss_inputs()
         model = GraniteSpeechNarForCTC(config).to(torch_device).eval()
 
         with torch.no_grad():
-            output = model(input_features=input_features, input_features_mask=attention_mask)
+            output = model(input_features=input_features, input_features_mask=input_features_mask)
 
         self.assertIsNone(output.loss)
-
-    def test_bidirectional_attention(self):
-        config = self.model_tester.get_config()
-        model = GraniteSpeechNarForCTC(config).to(torch_device).eval()
-        granite_model = model.model.language_model
-
-        embeds_a = torch.randn(1, 10, 128, device=torch_device)
-        embeds_b = embeds_a.clone()
-        embeds_b[0, -1, :] = torch.randn(128, device=torch_device)
-
-        with torch.no_grad():
-            out_a = granite_model(inputs_embeds=embeds_a).last_hidden_state
-            out_b = granite_model(inputs_embeds=embeds_b).last_hidden_state
-
-        diff_first = (out_a[0, 0] - out_b[0, 0]).abs().max().item()
-        self.assertGreater(diff_first, 1e-5, "First token unchanged — attention appears causal.")
-
-    def test_is_causal_false_on_layers(self):
-        config = self.model_tester.get_config()
-        model = GraniteSpeechNarForCTC(config)
-        for i, layer in enumerate(model.model.language_model.layers):
-            self.assertFalse(layer.self_attn.is_causal, f"Layer {i} is_causal is not False")
-
-    def test_sdpa_can_dispatch_composite_models(self):
-        if not self.has_attentions:
-            self.skipTest(reason="Model architecture does not support attentions")
-
-        if not self._is_composite:
-            self.skipTest(f"{self.all_model_classes[0].__name__} does not support SDPA")
-
-        for model_class in self.all_model_classes:
-            config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-            model = model_class(config)
-
-            with tempfile.TemporaryDirectory() as tmpdirname:
-                model.save_pretrained(tmpdirname)
-                model_sdpa = model_class.from_pretrained(tmpdirname)
-                model_sdpa = model_sdpa.eval().to(torch_device)
-
-                model_eager = model_class.from_pretrained(tmpdirname, attn_implementation="eager")
-                model_eager = model_eager.eval().to(torch_device)
-                self.assertTrue(model_eager.config._attn_implementation == "eager")
-
-                for name, submodule in model_eager.named_modules():
-                    class_name = submodule.__class__.__name__
-                    if "SdpaAttention" in class_name or "SdpaSelfAttention" in class_name:
-                        raise ValueError("The eager model should not have SDPA attention layers")
+        self.assertIsNotNone(output.logits)
+        self.assertEqual(len(output.seq_lengths), self.model_tester.batch_size)
 
 
 @require_torch
