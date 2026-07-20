@@ -1240,7 +1240,6 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         speech_samples = ds.sort("id")[:num_samples]["audio"]
         return [x["array"] for x in speech_samples]
 
-
     def _feature_tensor_to_model(self, input_features, model):
         return input_features.to(device=model.device, dtype=model.dtype)
 
