@@ -992,22 +992,6 @@ class GenerationMixin(ContinuousMixin):
 
         return model_kwargs
 
-    def _get_generation_vocab_size(self: "GenerativePreTrainedModel") -> int:
-        """Returns the vocabulary size of the scores produced during generation."""
-        # TODO (joao): standardize special cases
-        if self.__class__.__name__ == "MoshiDepthDecoder":
-            return self.config.audio_vocab_size
-        if self.__class__.__name__ in (
-            "ImageGPTForCausalImageModeling",
-            # the Apertus 1.5 LM head may be pruned below `vocab_size` (`output_vocab_size`)
-            "Apertus1p5ForConditionalGeneration",
-            "Apertus1p5TextForCausalLM",
-        ):
-            return self.get_output_embeddings().out_features
-        if self.__class__.__name__ == "BarkSemanticModel":
-            return self.config.output_vocab_size
-        return self.config.get_text_config().vocab_size
-
     def _get_candidate_generator(
         self: "GenerativePreTrainedModel",
         generation_config: GenerationConfig,
@@ -1352,7 +1336,9 @@ class GenerationMixin(ContinuousMixin):
         # Watermarking should be after all logits processing is finished (see #34630)
         if generation_config.watermarking_config is not None:
             processors.append(
-                generation_config.watermarking_config.construct_processor(self._get_generation_vocab_size(), device)
+                generation_config.watermarking_config.construct_processor(
+                    self.config.get_text_config().vocab_size, device
+                )
             )
 
         # `LogitNormalization` should always be the last logit processor, when present
@@ -1525,12 +1511,13 @@ class GenerationMixin(ContinuousMixin):
 
         # 2. reshape scores as [batch_size*vocab_size, # generation steps] with # generation steps being
         # seq_len - input_length
-        vocab_size = scores[0].shape[-1]
         stacked_scores: torch.Tensor = torch.stack(scores).reshape(len(scores), -1).transpose(0, 1)
 
         # 3. Optionally normalize the logits (across the vocab dimension)
         if normalize_logits:
-            stacked_scores = stacked_scores.reshape(-1, vocab_size, stacked_scores.shape[-1])
+            stacked_scores = stacked_scores.reshape(
+                -1, self.config.get_text_config().vocab_size, stacked_scores.shape[-1]
+            )
             stacked_scores = torch.nn.functional.log_softmax(stacked_scores, dim=1)
             stacked_scores = stacked_scores.reshape(-1, stacked_scores.shape[-1])
 
@@ -1544,7 +1531,7 @@ class GenerationMixin(ContinuousMixin):
         beam_indices[beam_indices_mask] = 0
 
         # 6. multiply beam_indices with vocab size to gather correctly from scores
-        beam_sequence_indices = beam_indices * vocab_size
+        beam_sequence_indices = beam_indices * self.config.get_text_config().vocab_size
 
         # 7. Define which indices contributed to scores
         cut_idx = sequences.shape[-1] - max_beam_length
@@ -3289,7 +3276,15 @@ class GenerationMixin(ContinuousMixin):
 
         batch_size_unflattened, cur_len = input_ids.shape[:2]
         batch_size = batch_size_unflattened // num_beams
-        vocab_size = self._get_generation_vocab_size()
+        # TODO (joao): standardize special cases
+        if self.__class__.__name__ == "MoshiDepthDecoder":
+            vocab_size = self.config.audio_vocab_size
+        elif self.__class__.__name__ == "ImageGPTForCausalImageModeling":
+            vocab_size = self.get_output_embeddings().out_features
+        elif self.__class__.__name__ == "BarkSemanticModel":
+            vocab_size = self.config.output_vocab_size
+        else:
+            vocab_size = self.config.get_text_config().vocab_size
         decoder_prompt_len = cur_len
         this_peer_finished = False
 

@@ -380,15 +380,11 @@ class RepetitionPenaltyLogitsProcessor(LogitsProcessor):
                 last_scores = scores[0, last_positions, :]
 
                 # Prepare token mask
-                vocab_size = last_scores.shape[-1]
-                token_mask = last_scores.new_zeros((*last_scores.shape[:-1], vocab_size + 1), dtype=torch.bool)
+                token_mask = torch.zeros_like(last_scores, dtype=torch.bool)
                 cu_seq_lens = self.cu_seq_lens_q
                 lengths = cu_seq_lens[1:] - cu_seq_lens[:-1]
                 seq_indices = torch.repeat_interleave(torch.arange(len(lengths), device=input_ids.device), lengths)
-                valid_input_ids = (input_ids >= 0) & (input_ids < vocab_size)
-                input_ids = torch.where(valid_input_ids, input_ids, vocab_size)
                 token_mask[seq_indices, input_ids] = True
-                token_mask = token_mask[..., :vocab_size]
 
                 # Apply penalty
                 penalty_scores = torch.where(last_scores < 0, last_scores * self.penalty, last_scores / self.penalty)
@@ -396,15 +392,12 @@ class RepetitionPenaltyLogitsProcessor(LogitsProcessor):
             else:
                 batch_size, seq_len, vocab_size = scores.shape
                 last_scores = scores[:, -1, :]
-                token_mask = last_scores.new_zeros((*last_scores.shape[:-1], vocab_size + 1), dtype=torch.bool)
-                valid_input_ids = (input_ids >= 0) & (input_ids < vocab_size)
-                input_ids = torch.where(valid_input_ids, input_ids, vocab_size)
+                token_mask = torch.zeros_like(last_scores, dtype=torch.bool)
                 if input_ids.dim() == 1:
                     unique_tokens = torch.unique(input_ids)
                     token_mask.scatter_(1, unique_tokens.unsqueeze(0), True)
                 else:
                     token_mask.scatter_(1, input_ids, True)
-                token_mask = token_mask[..., :vocab_size]
                 # if last_scores < 0 then repetition penalty has to be multiplied to reduce the token probabilities
                 penalty_scores = torch.where(last_scores < 0, last_scores * self.penalty, last_scores / self.penalty)
                 scores[:, -1, :] = torch.where(token_mask, penalty_scores, last_scores)
@@ -413,17 +406,11 @@ class RepetitionPenaltyLogitsProcessor(LogitsProcessor):
         if input_ids.dim() == 1:
             input_ids = input_ids.unsqueeze(1)
 
-        vocab_size = scores.shape[-1]
-        valid_input_ids = (input_ids >= 0) & (input_ids < vocab_size)
-        zero_is_repeated = (input_ids == 0).any(dim=1, keepdim=True)
-        input_ids = torch.where(valid_input_ids, input_ids, 0)
         score = torch.gather(scores, 1, input_ids)
         # if score < 0 then repetition penalty has to be multiplied to reduce the token probabilities
-        penalty_score = torch.where(score < 0, score * self.penalty, score / self.penalty)
-        # Invalid IDs alias token 0 for the scatter. Make every write to that column agree with token 0's desired
-        # value: penalized if 0 was genuinely repeated, otherwise unchanged.
-        score = torch.where(valid_input_ids | zero_is_repeated, penalty_score, score)
-        return scores.scatter(1, input_ids, score)
+        score = torch.where(score < 0, score * self.penalty, score / self.penalty)
+        scores_processed = scores.scatter(1, input_ids, score)
+        return scores_processed
 
 
 class EncoderRepetitionPenaltyLogitsProcessor(LogitsProcessor):
@@ -474,19 +461,13 @@ class EncoderRepetitionPenaltyLogitsProcessor(LogitsProcessor):
 
     @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
-        vocab_size = scores.shape[-1]
-        valid_input_ids = (self.encoder_input_ids >= 0) & (self.encoder_input_ids < vocab_size)
-        zero_is_repeated = (self.encoder_input_ids == 0).any(dim=1, keepdim=True)
-        encoder_input_ids = torch.where(valid_input_ids, self.encoder_input_ids, 0)
-        score = torch.gather(scores, 1, encoder_input_ids)
+        score = torch.gather(scores, 1, self.encoder_input_ids)
 
         # if score < 0 then hallucination penalty has to be multiplied to increase the token probabilities
-        penalty_score = torch.where(score < 0, score * self.penalty, score / self.penalty)
+        score = torch.where(score < 0, score * self.penalty, score / self.penalty)
 
-        # Invalid IDs alias token 0 for the scatter. Make every write to that column agree with token 0's desired
-        # value: rewarded if 0 was genuinely present in the encoder input, otherwise unchanged.
-        score = torch.where(valid_input_ids | zero_is_repeated, penalty_score, score)
-        return scores.scatter(1, encoder_input_ids, score)
+        scores_processed = scores.scatter(1, self.encoder_input_ids, score)
+        return scores_processed
 
 
 class TopPLogitsWarper(LogitsProcessor):
