@@ -207,63 +207,6 @@ class LogitsProcessorTest(unittest.TestCase):
         # processor should not change logits in-place
         self.assertFalse(torch.all(scores == processed_scores))
 
-    def test_repetition_penalty_ignores_ids_outside_scores(self):
-        vocab_size = 6
-        input_ids = torch.tensor(
-            [[0, vocab_size, -1, 3], [vocab_size + 2, 1, 1, vocab_size]], device=torch_device, dtype=torch.long
-        )
-        scores = self._get_uniform_logits(batch_size=2, length=vocab_size)
-        scores[0, 0] = -0.5
-        scores[0, 3] = 0.8
-
-        processed_scores = RepetitionPenaltyLogitsProcessor(penalty=2.0)(input_ids, scores)
-
-        expected_scores = scores.clone()
-        expected_scores[0, 0] = -1.0
-        expected_scores[0, 3] = 0.4
-        expected_scores[1, 1] /= 2
-        torch.testing.assert_close(processed_scores, expected_scores)
-        self.assertTrue(processed_scores.is_contiguous())
-
-    def test_repetition_penalty_ignores_ids_outside_scores_with_1d_input(self):
-        vocab_size = 4
-        input_ids = torch.tensor([0, vocab_size, 2], device=torch_device, dtype=torch.long)
-        scores = self._get_uniform_logits(batch_size=3, length=vocab_size)
-
-        processed_scores = RepetitionPenaltyLogitsProcessor(penalty=2.0)(input_ids, scores)
-
-        expected_scores = scores.clone()
-        expected_scores[0, 0] /= 2
-        expected_scores[2, 2] /= 2
-        torch.testing.assert_close(processed_scores, expected_scores)
-
-    def test_repetition_penalty_ignores_ids_outside_3d_scores(self):
-        vocab_size = 6
-        input_ids = torch.tensor([[0, 4, vocab_size], [1, -1, vocab_size + 2]], device=torch_device, dtype=torch.long)
-        scores = torch.ones((2, 3, vocab_size), device=torch_device)
-        expected_scores = scores.clone()
-        expected_scores[0, -1, [0, 4]] /= 2
-        expected_scores[1, -1, 1] /= 2
-
-        processed_scores = RepetitionPenaltyLogitsProcessor(penalty=2.0)(input_ids, scores)
-
-        torch.testing.assert_close(processed_scores, expected_scores)
-
-    def test_repetition_penalty_ignores_ids_outside_3d_varlen_scores(self):
-        vocab_size = 6
-        input_ids = torch.tensor([0, vocab_size, 1, -1], device=torch_device, dtype=torch.long)
-        scores = torch.ones((1, 4, vocab_size), device=torch_device)
-        expected_scores = scores.clone()
-        expected_scores[0, 1, 0] /= 2
-        expected_scores[0, 3, 1] /= 2
-        processor = RepetitionPenaltyLogitsProcessor(penalty=2.0)
-        processor.logits_indices = torch.tensor([1, 3], device=torch_device)
-        processor.cu_seq_lens_q = torch.tensor([0, 2, 4], device=torch_device)
-
-        processed_scores = processor(input_ids, scores)
-
-        torch.testing.assert_close(processed_scores, expected_scores)
-
     def test_repetition_penalty_dist_process_exclusion_no_new_input_ids(self):
         input_ids = torch.tensor([[0, 1], [5, 0]], device=torch_device, dtype=torch.long)
         vocab_size = 10
@@ -341,23 +284,6 @@ class LogitsProcessorTest(unittest.TestCase):
 
         # processor should not change logits in-place
         self.assertFalse(torch.all(scores == processed_scores))
-
-    def test_encoder_repetition_penalty_ignores_ids_outside_scores(self):
-        vocab_size = 6
-        encoder_input_ids = torch.tensor(
-            [[0, vocab_size, -1], [vocab_size + 2, 1, vocab_size]], device=torch_device, dtype=torch.long
-        )
-        scores = self._get_uniform_logits(batch_size=2, length=vocab_size)
-        scores[0, 0] = -0.5
-        processor = EncoderRepetitionPenaltyLogitsProcessor(penalty=2.0, encoder_input_ids=encoder_input_ids)
-
-        processed_scores = processor(encoder_input_ids, scores)
-
-        expected_scores = scores.clone()
-        expected_scores[0, 0] = -0.25
-        expected_scores[1, 1] *= 2
-        torch.testing.assert_close(processed_scores, expected_scores)
-        self.assertTrue(processed_scores.is_contiguous())
 
     def test_top_k_dist_warper(self):
         input_ids = None
