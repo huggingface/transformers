@@ -713,6 +713,14 @@ class Apertus1p5TextModel(Apertus1p5TextPreTrainedModel):
         )
 
 
+def _pad_logits_to_vocab_size(logits: torch.Tensor, vocab_size: int) -> torch.Tensor:
+    """Pad a physically pruned LM-head output with non-generatable input-only token scores."""
+    padding = vocab_size - logits.shape[-1]
+    if padding == 0:
+        return logits
+    return F.pad(logits, (0, padding), value=-torch.inf)
+
+
 @auto_docstring
 class Apertus1p5TextForCausalLM(Apertus1p5PreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
@@ -769,12 +777,19 @@ class Apertus1p5TextForCausalLM(Apertus1p5PreTrainedModel, GenerationMixin):
         hidden_states = outputs.last_hidden_state
         # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
         slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(hidden_states[:, slice_indices, :])
+        projected_logits = self.lm_head(hidden_states[:, slice_indices, :])
 
         loss = None
         if labels is not None:
-            # the loss reshapes with the head size, which may be pruned below `vocab_size`
-            loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.lm_head.out_features, **kwargs)
+            # Compute loss on the physical text-only projection. The logical input-only tail would contribute zero
+            # probability and needlessly increase loss memory.
+            loss = self.loss_function(
+                logits=projected_logits, labels=labels, vocab_size=self.lm_head.out_features, **kwargs
+            )
+
+        # Generic generation assumes that prompt ids and returned score indices share `config.vocab_size`. Preserve
+        # the compact physical head while exposing that logical width; the multimodal tail remains input-only.
+        logits = _pad_logits_to_vocab_size(projected_logits, self.config.vocab_size)
 
         return CausalLMOutputWithPast(
             loss=loss,
@@ -1142,12 +1157,19 @@ class Apertus1p5ForConditionalGeneration(Apertus1p5PreTrainedModel, GenerationMi
         hidden_states = outputs[0]
         # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
         slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(hidden_states[:, slice_indices, :])
+        projected_logits = self.lm_head(hidden_states[:, slice_indices, :])
 
         loss = None
         if labels is not None:
-            # the loss reshapes with the head size, which may be pruned below `vocab_size`
-            loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.lm_head.out_features, **kwargs)
+            # Compute loss on the physical text-only projection. The logical input-only tail would contribute zero
+            # probability and needlessly increase loss memory.
+            loss = self.loss_function(
+                logits=projected_logits, labels=labels, vocab_size=self.lm_head.out_features, **kwargs
+            )
+
+        # Generic generation assumes that prompt ids and returned score indices share `text_config.vocab_size`.
+        # Preserve the compact physical head while exposing that logical width; the multimodal tail stays input-only.
+        logits = _pad_logits_to_vocab_size(projected_logits, self.config.text_config.vocab_size)
 
         return CausalLMOutputWithPast(
             loss=loss,
