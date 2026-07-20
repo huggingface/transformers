@@ -91,6 +91,20 @@ RUN python3 -m pip install --no-cache-dir "fouroversix>=1.0.2" --no-build-isolat
 # Add fp-quant for quantization testing
 RUN python3 -m pip install --no-cache-dir "fp-quant>=0.3.2"
 
+# Smoke test: fail the image build immediately if the pinned torch stack was clobbered by a later
+# `pip install`, or if a compiled extension can't load against the pinned torch ABI. This runs after
+# every install above, so a dep that quietly drags in a mismatched torch/torchaudio is caught here.
+# `import transformers` walks the eager `modeling_utils -> loss_utils -> loss_rnnt -> torchaudio`
+# import chain, so a torchaudio ABI mismatch (which otherwise only surfaces as broken pytest
+# collection for every quantization job, see the Jul 2026 daily CI collapse) fails the build instead
+# of shipping a silently-broken image. No GPU is present at build time, so we only exercise imports
+# and the CUDA runtime load, not device availability.
+RUN set -e; \
+    python3 -c "import torch; print('torch version:', torch.__version__); torch.cuda.is_available()"; \
+    python3 -c "import torch, sys; v = torch.__version__.split('+')[0]; sys.exit(0 if v.startswith('${PYTORCH}') else 'ERROR: torch is ' + torch.__version__ + ', expected ${PYTORCH}.* - the pinned CUDA build was clobbered')"; \
+    python3 -c "import torch, torchaudio; print('torchaudio version:', torchaudio.__version__)"; \
+    python3 -c "import transformers; print('transformers imports OK:', transformers.__version__)"
+
 # Low usage or incompatible lib, will enable later on
 
 # # Add aqlm for quantization testing
