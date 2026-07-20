@@ -19,8 +19,18 @@ from ..utils import is_torchaudio_available, logging
 
 logger = logging.get_logger(__name__)
 
+# This module is imported eagerly from `modeling_utils` (via `loss_utils`), so its top-level imports run
+# during `import transformers`. `is_torchaudio_available()` only confirms the distribution is installed; a
+# torchaudio whose compiled extension was built against a different torch ABI is "available" yet raises
+# `OSError` on import. Guarding the import here keeps a broken torchaudio from taking down `import
+# transformers` entirely (and, in CI, breaking pytest collection for the whole suite). `rnnt_loss` reports
+# the failure clearly if it is actually called.
+torchaudio = None
 if is_torchaudio_available():
-    import torchaudio
+    try:
+        import torchaudio
+    except OSError as e:
+        logger.warning(f"torchaudio is installed but could not be imported ({e}); RNN-T loss is unavailable.")
 
 
 def rnnt_loss(
@@ -59,8 +69,11 @@ def rnnt_loss(
 
     """
 
-    if not is_torchaudio_available():
-        raise ImportError("Computing the RNN-T loss requires torchaudio. Install it with `pip install torchaudio`.")
+    if torchaudio is None:
+        raise ImportError(
+            "Computing the RNN-T loss requires a working torchaudio install. Install it with "
+            "`pip install torchaudio`, ensuring the torchaudio version matches your installed torch."
+        )
 
     valid_reductions = ("mean_volume", "mean_batch", "mean", "sum", "none")
     if reduction not in valid_reductions:

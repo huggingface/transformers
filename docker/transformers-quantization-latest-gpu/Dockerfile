@@ -23,8 +23,15 @@ RUN git clone https://github.com/huggingface/transformers && cd transformers && 
 RUN [ ${#PYTORCH} -gt 0 ] && VERSION='torch=='$PYTORCH'.*' ||  VERSION='torch'; echo "export VERSION='$VERSION'" >> ~/.profile
 RUN echo torch=$VERSION
 # `torchvision` and `torchaudio` should be installed along with `torch`, especially for nightly build.
-# Currently, let's just use their latest releases (when `torch` is installed with a release version)
-RUN python3 -m pip install --no-cache-dir -U $VERSION torchvision torchaudio --extra-index-url https://download.pytorch.org/whl/$CUDA
+# `torchaudio` MUST be pinned to the same version as `torch`: torchaudio ships a compiled C extension
+# (`_torchaudio.abi3.so`) built against one exact torch ABI, so a floating torchaudio resolves to the
+# latest release (built for the newest torch) and then fails to load against this image's pinned older
+# torch with `OSError: ... _torchaudio.abi3.so: undefined symbol`. Because `loss/loss_rnnt.py` is
+# imported eagerly from `modeling_utils`, that OSError breaks `import transformers` outright and takes
+# down pytest collection for EVERY quantization job (see the daily quantization CI collapse, Jul 2026).
+# This mirrors the `torchaudio==${PYTORCH}.*` pin already used in transformers-all-latest-gpu.
+RUN [ ${#PYTORCH} -gt 0 ] && TORCHAUDIO='torchaudio=='$PYTORCH'.*' || TORCHAUDIO='torchaudio'; \
+    python3 -m pip install --no-cache-dir -U $VERSION torchvision $TORCHAUDIO --extra-index-url https://download.pytorch.org/whl/$CUDA
 
 RUN python3 -m pip install --no-cache-dir git+https://github.com/huggingface/accelerate@main#egg=accelerate
 
