@@ -2671,10 +2671,6 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
         # Use the correct config
         config = config.get_text_config(decoder=True)
 
-        # For mamba layers
-        conv_shape = self._get_conv_state_shape(batch_size, config)
-        recurrent_shape = self._get_recurrent_state_shape(batch_size, config)
-
         # Check the size is coherent
         num_hidden_layers = config.num_hidden_layers
         if getattr(config, "num_kv_shared_layers", None) is not None:
@@ -2683,13 +2679,18 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
 
         # Check each layer has the correct shape
         for layer_idx, layer in enumerate(past_key_values.layers):
+            # Fields may vary by layer on a heterogeneous config, so resolve the shapes per layer.
+            layer_config = config.per_layer_config[layer_idx]
+            conv_shape = self._get_conv_state_shape(batch_size, layer_config)
+            recurrent_shape = self._get_recurrent_state_shape(batch_size, layer_config)
+            attention_shape = self._get_attention_shape(batch_size, seq_length, layer_config)
             # Mamba + Attention layer cache
             if type(layer) is LinearAttentionAndFullAttentionLayer:
                 # Remove the seq_length dim for cross-attention cache (it changes based on the model)
                 keys = layer.keys if seq_length is not None else layer.keys[:, :, 0, :]
                 values = layer.values if seq_length is not None else layer.values[:, :, 0, :]
-                self.assertEqual(keys.shape, self._get_attention_shape(batch_size, seq_length, config, layer_idx))
-                self.assertEqual(values.shape, self._get_attention_shape(batch_size, seq_length, config, layer_idx))
+                self.assertEqual(keys.shape, attention_shape)
+                self.assertEqual(values.shape, attention_shape)
                 self.assertEqual(layer.conv_states[0].shape, conv_shape)
                 # May not be used (e.g. lfm2)
                 if layer.is_recurrent_states_initialized[0]:
@@ -2705,17 +2706,15 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
                 # Remove the seq_length dim for cross-attention cache (it changes based on the model)
                 keys = layer.keys if seq_length is not None else layer.keys[:, :, 0, :]
                 values = layer.values if seq_length is not None else layer.values[:, :, 0, :]
-                self.assertEqual(keys.shape, self._get_attention_shape(batch_size, seq_length, config, layer_idx))
-                self.assertEqual(values.shape, self._get_attention_shape(batch_size, seq_length, config, layer_idx))
+                self.assertEqual(keys.shape, attention_shape)
+                self.assertEqual(values.shape, attention_shape)
 
-    def _get_attention_shape(self, batch_size: int, seq_length: int | None, config, layer_idx: int):
-        # Fields may vary by layer on a heterogeneous config, so resolve the shape per layer.
-        layer_config = config.per_layer_config[layer_idx]
+    def _get_attention_shape(self, batch_size: int, seq_length: int | None, config):
         # Only pure mamba models do not have num_attention_heads defined in config, so it can never be 1 in practice for attention models
-        num_attention_heads = getattr(layer_config, "num_attention_heads", 1)
-        num_kv_heads = getattr(layer_config, "num_key_value_heads", num_attention_heads)
-        hidden_size = getattr(layer_config, "d_model", layer_config.hidden_size)
-        head_dim = getattr(layer_config, "head_dim", hidden_size // num_attention_heads)
+        num_attention_heads = getattr(config, "num_attention_heads", 1)
+        num_kv_heads = getattr(config, "num_key_value_heads", num_attention_heads)
+        hidden_size = getattr(config, "d_model", config.hidden_size)
+        head_dim = getattr(config, "head_dim", hidden_size // num_attention_heads)
 
         # For cross attention cache, the seq_length depends on the model, so we remove that dim
         return (
