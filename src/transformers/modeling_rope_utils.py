@@ -189,6 +189,7 @@ def _compute_proportional_rope_parameters(
     device: Optional["torch.device"] = None,
     seq_len: int | None = None,
     layer_type: str | None = None,
+    head_dim_key: str = "head_dim",
 ) -> tuple["torch.Tensor", float]:
     """
     Computes the inverse frequencies with proportional RoPE.
@@ -223,7 +224,7 @@ def _compute_proportional_rope_parameters(
     config.standardize_rope_params()
     rope_parameters_dict = config.rope_parameters[layer_type] if layer_type is not None else config.rope_parameters
 
-    head_dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
+    head_dim = getattr(config, head_dim_key, None) or config.hidden_size // config.num_attention_heads
     base = rope_parameters_dict["rope_theta"]
     factor = rope_parameters_dict.get("factor", 1.0)
     rope_proportion = rope_parameters_dict.get("partial_rotary_factor", 1.0)
