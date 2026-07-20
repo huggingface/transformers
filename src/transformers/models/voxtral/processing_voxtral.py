@@ -74,6 +74,7 @@ class VoxtralProcessorKwargs(ProcessingKwargs, total=False):
     }
 
 
+@requires(backends=("torch",))
 @auto_docstring
 class VoxtralProcessor(ProcessorMixin):
     def __init__(
@@ -86,7 +87,6 @@ class VoxtralProcessor(ProcessorMixin):
 
         super().__init__(feature_extractor, tokenizer)
 
-    @requires(backends=("torch",))
     def _retrieve_input_features(self, audio, max_source_positions, **kwargs):
         """
         Handles specific logic of Voxtral expected input features: audio arrays should be padded to next multiple of 480000 (duration is a multiple of 30s), see VoxtralProcessorKwargs' default audio_kwargs.
