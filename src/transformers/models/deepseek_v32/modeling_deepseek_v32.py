@@ -31,7 +31,7 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
 from ...integrations import use_experts_implementation, use_kernel_forward_from_hub, use_kernel_func_from_hub
-from ...masking_utils import create_causal_mask
+from ...masking_utils import create_recurrent_attention_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
@@ -168,10 +168,10 @@ class DeepseekV32Indexer(nn.Module):
     DeepSeek Sparse Attention (DSA) indexer for selecting top-k tokens.
 
     The Indexer has its own lightweight projections (wq_b, wk) separate from the main MLA attention,
-    and returns the additive top-k sparse mask directly (`0` at the selected tokens, `-inf` elsewhere);
-    the raw top-k indices are only ever scattered into that mask, so they are not surfaced.
+    and returns the raw top-k sparse mask directly (`0` at the selected tokens, `-1` elsewhere);
+    the raw top-k indices are scattered into an additive mask, so they are not surfaced.
 
-    **Cache strategy**: the indexer key cache lives on the per-layer `DynamicIndexedLayer` (or the
+    **Cache strategy**: the indexer states cache lives on the per-layer `DynamicIndexedLayer` (or the
     `StaticIndexedLayer` for static caches) inside the shared cache, accessed via
     `past_key_values.update_indexer()`.
     """
@@ -200,10 +200,10 @@ class DeepseekV32Indexer(nn.Module):
         hidden_states: torch.Tensor,
         q_resid: torch.Tensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
-        attention_mask: torch.Tensor | None,
-        position_ids: torch.Tensor,
-        past_key_values: Cache | None = None,
-    ) -> torch.Tensor:
+        attention_mask: torch.BoolTensor,
+        *,
+        past_key_values: Cache | None,
+    ) -> torch.IntTensor:
         """
         Selects the top-k tokens per query for DeepSeek Sparse Attention (DSA).
 
@@ -219,7 +219,7 @@ class DeepseekV32Indexer(nn.Module):
             hidden_states: Input hidden states `[B, S, hidden_size]`.
             q_resid: Query residual from `q_a_layernorm(q_a_proj(x))`, shape `[B, S, q_lora_rank]`.
             position_embeddings: `(cos, sin)` from RotaryEmbedding.
-            attention_mask: Causal mask, broadcastable to `[B, S, T]`.
+            attention_mask: Causal mask, broadcastable to `[B, S]`.
             past_key_values: Cache object containing the indexer key cache for this layer.
 
         Returns:
@@ -240,8 +240,25 @@ class DeepseekV32Indexer(nn.Module):
         q = torch.cat([q_rot, q_pass], dim=-1)  # [B, S, H, D]
         k = torch.cat([k_rot, k_pass], dim=-1).squeeze(2)  # [B, S, D]
 
+        valid_channel = attention_mask.to(k.dtype)[..., None]
+        packed_states = torch.cat([k, valid_channel], dim=-1)
+
+        current_length = seq_len
         if past_key_values is not None:
-            k = past_key_values.update_indexer(k, self.layer_idx)
+            cache_layer = past_key_values.layers[self.layer_idx]
+
+            packed_states = past_key_values.update_indexer(packed_states, self.layer_idx)
+            current_length = cache_layer.get_seq_length()
+
+        # Get pools based on the valid key entries (based on padding / causality)
+        valid_keys = packed_states[..., -1].bool()
+        k = packed_states[..., : self.head_dim]
+
+        visible_tokens = self.get_visible_tokens(
+            valid_keys=valid_keys,
+            q_length=seq_len,
+            current_length=current_length,
+        )
 
         scores = torch.matmul(q.float(), k.transpose(-1, -2).float().unsqueeze(1)) * self.softmax_scale
         scores = F.relu(scores)
@@ -250,16 +267,41 @@ class DeepseekV32Indexer(nn.Module):
         weights = self.weights_proj(hidden_states.to(self.weights_proj.weight.dtype)).float() * (self.n_heads**-0.5)
         index_scores = torch.matmul(weights.unsqueeze(-2), scores).squeeze(-2)
 
-        # Causality needs to be taken into account when computing scores so padding tokens don't affect computation
-        if attention_mask is not None:
-            index_scores = index_scores + attention_mask
-        else:
-            key_positions = torch.arange(index_scores.shape[-1], device=index_scores.device)
-            causal = key_positions[None, None, :] > position_ids[:, :, None]  # [B, S, T]
-            index_scores = index_scores.masked_fill(causal, float("-inf"))
+        # Remove invalid keys
+        index_scores = index_scores.masked_fill(
+            ~visible_tokens,
+            torch.finfo(index_scores.dtype).min,
+        )
 
         topk = min(self.index_topk, index_scores.shape[-1])
-        return index_scores.topk(topk, dim=-1).indices.to(torch.int32)  # [B, S, topk]
+        topk_indices = index_scores.topk(topk, dim=-1).indices  # [B, S, topk]
+
+        # Remove invalids queries and allow masks when valid keys < topk
+        selected_valid = visible_tokens.gather(-1, topk_indices)
+        topk_indices = topk_indices.masked_fill(~selected_valid, -1)
+        topk_indices = topk_indices.masked_fill(~attention_mask[..., None], -1)
+
+        return topk_indices.to(torch.int32)
+
+    def get_visible_tokens(
+        self,
+        valid_keys: torch.BoolTensor,
+        q_length: int,
+        current_length: int,
+    ) -> torch.BoolTensor:
+        """
+        Check whether a token is visible for Q based on
+            - Causality
+            - Padding status
+                - Valid keys which is a (cached) variation of the attention mask
+        """
+        device = valid_keys.device
+
+        kv_positions = torch.arange(valid_keys.shape[-1], device=device)
+        q_positions = current_length - q_length + torch.arange(q_length, device=device)
+
+        causal = kv_positions[None, None, :] <= q_positions[None, :, None]
+        return causal & valid_keys[:, None, :]
 
 
 def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
@@ -297,22 +339,6 @@ def eager_attention_forward(
     attn_output = attn_output.transpose(1, 2).contiguous()
 
     return attn_output, attn_weights
-
-
-def yarn_get_mscale(scale=1, mscale=1):
-    if scale <= 1:
-        return 1.0
-    return 0.1 * mscale * math.log(scale) + 1.0
-
-
-def yarn_apply_mscale(rope_parameters, scaling):
-    if rope_parameters.get("rope_type", "default") != "default":
-        mscale_all_dim = rope_parameters.get("mscale_all_dim", 0)
-        scaling_factor = rope_parameters["factor"]
-        if mscale_all_dim:
-            mscale = yarn_get_mscale(scaling_factor, mscale_all_dim)
-            scaling = scaling * mscale * mscale
-    return scaling
 
 
 def apply_rotary_pos_emb_interleave(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
@@ -354,6 +380,12 @@ def apply_rotary_pos_emb_interleave(q, k, cos, sin, position_ids=None, unsqueeze
     return q_embed, k_embed
 
 
+def yarn_get_mscale(scale=1, mscale=1):
+    if scale <= 1:
+        return 1.0
+    return 0.1 * mscale * math.log(scale) + 1.0
+
+
 class DeepseekV32Attention(nn.Module):
     """
     DeepSeek-V3 MLA, with a DSA indexer whose top-k sparse mask is folded into the attention mask.
@@ -376,12 +408,22 @@ class DeepseekV32Attention(nn.Module):
         self.qk_head_dim = config.qk_head_dim
 
         self.is_causal = True
-        if self.q_lora_rank is None:
-            self.q_proj = nn.Linear(config.hidden_size, self.num_heads * self.qk_head_dim, bias=False)
-        else:
-            self.q_a_proj = nn.Linear(config.hidden_size, config.q_lora_rank, bias=config.attention_bias)
-            self.q_a_layernorm = DeepseekV32RMSNorm(config.q_lora_rank)
-            self.q_b_proj = nn.Linear(config.q_lora_rank, self.num_heads * self.qk_head_dim, bias=False)
+        self.q_proj = (
+            nn.Linear(config.hidden_size, self.num_heads * self.qk_head_dim, bias=False)
+            if self.q_lora_rank is None
+            else None
+        )
+        self.q_a_proj = (
+            nn.Linear(config.hidden_size, config.q_lora_rank, bias=config.attention_bias)
+            if self.q_lora_rank is not None
+            else None
+        )
+        self.q_a_layernorm = DeepseekV32RMSNorm(config.q_lora_rank) if self.q_lora_rank is not None else None
+        self.q_b_proj = (
+            nn.Linear(config.q_lora_rank, self.num_heads * self.qk_head_dim, bias=False)
+            if self.q_lora_rank is not None
+            else None
+        )
 
         self.kv_a_proj_with_mqa = nn.Linear(
             config.hidden_size,
@@ -402,7 +444,12 @@ class DeepseekV32Attention(nn.Module):
         )
 
         self.scaling = self.qk_head_dim ** (-0.5)
-        self.scaling = yarn_apply_mscale(config.rope_parameters, self.scaling)
+        if self.config.rope_parameters.get("rope_type", "default") != "default":
+            mscale_all_dim = self.config.rope_parameters.get("mscale_all_dim", 0)
+            scaling_factor = self.config.rope_parameters["factor"]
+            if mscale_all_dim:
+                mscale = yarn_get_mscale(scaling_factor, mscale_all_dim)
+                self.scaling = self.scaling * mscale * mscale
         self.indexer = DeepseekV32Indexer(config, layer_idx)
 
     def forward(
@@ -411,7 +458,6 @@ class DeepseekV32Attention(nn.Module):
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: torch.Tensor | None,
         past_key_values: Cache | None = None,
-        position_ids: torch.Tensor | None = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
         batch_size, seq_length = hidden_states.shape[:-1]
@@ -438,27 +484,19 @@ class DeepseekV32Attention(nn.Module):
         if past_key_values is not None:
             key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
 
-        # The indexer scores against a 3D `[B, S, T]` mask; the attention mask is 4D `[B, 1, S, T]`.
-        indexer_mask = attention_mask[:, 0, :, :] if attention_mask is not None else None
         topk_indices = self.indexer(
-            hidden_states, q_resid, position_embeddings, indexer_mask, position_ids, past_key_values=past_key_values
-        )  # [B, S, topk]
+            hidden_states=hidden_states,
+            q_resid=q_resid,
+            position_embeddings=position_embeddings,
+            attention_mask=attention_mask,
+            past_key_values=past_key_values,
+        )
 
-        sparse_indices = None
-        if self.config._attn_implementation in ("eager", "sdpa"):
-            # Boolean mask: `True` at keys *not* selected by the indexer (to be masked out).
-            index_mask = (
-                topk_indices.new_ones((batch_size, seq_length, key_states.shape[2]), dtype=torch.bool)
-                .scatter(-1, topk_indices.long(), False)
-                .unsqueeze(1)
-            )  # [B, 1, S, T]; True = masked
-            if attention_mask is None:
-                key_positions = torch.arange(key_states.shape[2], device=hidden_states.device)
-                index_mask = index_mask | (key_positions[None, None, None, :] > position_ids[:, None, :, None])
-                attention_mask = hidden_states.new_zeros((batch_size, 1, seq_length, key_states.shape[2]))
-            attention_mask = attention_mask.masked_fill(index_mask, torch.finfo(hidden_states.dtype).min)
-        else:
-            sparse_indices = topk_indices
+        attention_mask = self.build_attention_mask_from_topk(
+            topk_indices=topk_indices,
+            query_states=query_states,
+            kv_length=key_states.shape[2],
+        )
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
@@ -471,13 +509,52 @@ class DeepseekV32Attention(nn.Module):
             attention_mask,
             dropout=0.0 if not self.training else self.attention_dropout,
             scaling=self.scaling,
-            indices=sparse_indices,
             **kwargs,
         )
 
         attn_output = attn_output.reshape(batch_size, seq_length, -1).contiguous()
         attn_output = self.o_proj(attn_output)
         return attn_output, attn_weights
+
+    def build_attention_mask_from_topk(
+        self,
+        topk_indices: torch.Tensor,
+        query_states: torch.Tensor,
+        kv_length: int,
+    ) -> torch.Tensor | None:
+        """
+        Convert topk_indices into the mask expected by the active backend.
+
+        Only supporting SDPA and Eager as we have a 3D dependency which cannot be mapped to FA
+        without a custom kernel that can select on a per indices bases per row (query -> topk keys).
+        """
+        # -1 is invalid as per convention in the indexer
+        # NOTE: The indexer already took care of also excluding padding tokens and causality
+        topk_valid = topk_indices.ge(0) & topk_indices.lt(kv_length)
+
+        # Clamp only so scatter has a legal index
+        safe_indices = topk_indices.clamp(0, kv_length - 1)
+        selected_counts = torch.zeros(
+            topk_indices.shape[0],  # batch size
+            topk_indices.shape[1],  # q_length
+            kv_length,  # kv_length
+            dtype=torch.int32,
+            device=topk_indices.device,
+        )
+        selected_counts.scatter_add_(-1, safe_indices, topk_valid.to(torch.int32))
+
+        # Final mask 0 == False (not visible), 1 == True (visible)
+        mask = selected_counts.ne(0).unsqueeze(1)
+
+        # SDPA
+        if self.config._attn_implementation == "sdpa":
+            return mask
+
+        # Eager
+        min_dtype = torch.finfo(query_states.dtype).min
+        # we need 0s where the tokens should be taken into account, and -inf otherwise (mask is already of boolean type)
+        mask = torch.where(mask, torch.tensor(0.0, device=query_states.device, dtype=query_states.dtype), min_dtype)
+        return mask
 
 
 class DeepseekV32MLP(nn.Module):
@@ -607,10 +684,7 @@ class DeepseekV32DecoderLayer(GradientCheckpointingLayer):
         self.hidden_size = config.hidden_size
         self.self_attn = DeepseekV32Attention(config, layer_idx)
 
-        if config.mlp_layer_types[layer_idx] == "sparse":
-            self.mlp = DeepseekV32MoE(config)
-        else:
-            self.mlp = DeepseekV32MLP(config)
+        self.mlp = DeepseekV32MoE(config) if config.mlp_layer_types[layer_idx] == "sparse" else DeepseekV32MLP(config)
 
         self.input_layernorm = DeepseekV32RMSNorm(config.hidden_size, config.rms_norm_eps)
         self.post_attention_layernorm = DeepseekV32RMSNorm(config.hidden_size, config.rms_norm_eps)
@@ -726,14 +800,21 @@ class DeepseekV32Model(DeepseekV32PreTrainedModel):
 
         # It may already have been prepared by e.g. `generate`
         if not isinstance(causal_mask_mapping := attention_mask, dict):
-            mask_kwargs = {
-                "config": self.config,
-                "inputs_embeds": inputs_embeds,
-                "attention_mask": attention_mask,
-                "past_key_values": past_key_values,
-                "position_ids": position_ids,
-            }
-            causal_mask_mapping = {"deepseek_sparse_attention": create_causal_mask(**mask_kwargs)}
+            attention_mask = create_recurrent_attention_mask(
+                config=self.config,
+                inputs_embeds=inputs_embeds,
+                attention_mask=attention_mask,
+                past_key_values=past_key_values,
+            )
+            # Guarantee the mask to exist for the indexer
+            if attention_mask is None:
+                attention_mask = torch.ones(
+                    inputs_embeds.shape[0],
+                    inputs_embeds.shape[1],
+                    dtype=torch.bool,
+                    device=inputs_embeds.device,
+                )
+            causal_mask_mapping = {"deepseek_sparse_attention": attention_mask}
 
         hidden_states = inputs_embeds
         position_embeddings = self.rotary_emb(hidden_states, position_ids=position_ids)
@@ -828,6 +909,27 @@ class DeepseekV32ForCausalLM(DeepseekV32PreTrainedModel, GenerationMixin):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+    @staticmethod
+    def create_masks_for_generate(config, inputs_embeds, attention_mask, past_key_values, **_):
+        # We only use the base 2D mask as the indexer is reliant on the padding, not the expanded masks
+        # I.e. 4D masks are build afterwards after subsets have been selected in the indexer
+        attention_mask = create_recurrent_attention_mask(
+            config=config.get_text_config(),
+            inputs_embeds=inputs_embeds,
+            attention_mask=attention_mask,
+            past_key_values=past_key_values,
+        )
+        # Guarantee the mask to exist for the indexer
+        if attention_mask is None:
+            attention_mask = torch.ones(
+                inputs_embeds.shape[0],
+                inputs_embeds.shape[1],
+                dtype=torch.bool,
+                device=inputs_embeds.device,
+            )
+
+        return {"deepseek_sparse_attention": attention_mask}
 
 
 __all__ = ["DeepseekV32PreTrainedModel", "DeepseekV32Model", "DeepseekV32ForCausalLM"]
