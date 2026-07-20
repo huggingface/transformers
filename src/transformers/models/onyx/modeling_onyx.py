@@ -645,7 +645,7 @@ class OnyxVisionAttention(nn.Module):
         position_ids: torch.LongTensor | None = None,
         **kwargs,
     ) -> torch.Tensor:
-        seq_length = hidden_states.shape[0]
+        seq_length = hidden_states.shape[1]
 
         hidden_shape = (1, seq_length, -1, self.head_dim)
         query_states = self.q_proj(hidden_states).view(hidden_shape)
@@ -965,7 +965,7 @@ class OnyxVisionModel(OnyxPreTrainedModel):
             )
 
         reverse_indices = torch.argsort(window_index)
-        hidden_states = hidden_states[reverse_indices, :]
+        hidden_states = hidden_states.squeeze(0)[reverse_indices, :]
 
         hidden_states = self.ln_post(hidden_states)
         hidden_states = self._pixel_shuffle_downsample(hidden_states, grid_thw)

@@ -72,7 +72,7 @@ class OnyxProcessor(ProcessorMixin):
         chat_template=None,
         **kwargs,
     ):
-        self.image_token = "<|patch|>"
+        self.image_token = "<|image|>"
         self.image_start_token = "<|image_start|>"
         self.image_end_token = "<|image_end|>"
         self.video_token = "<|video|>"

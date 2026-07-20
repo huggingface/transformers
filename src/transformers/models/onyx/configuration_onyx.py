@@ -181,7 +181,7 @@ class OnyxConfig(PreTrainedConfig):
 
     text_config: dict | PreTrainedConfig | None = None
     vision_config: dict | PreTrainedConfig | None = None
-    image_token_id: int = 200092
+    image_token_id: int = 200090
     video_token_id: int = 200091
     video_start_id: int = 200082
     video_end_id: int = 200083
