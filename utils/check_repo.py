@@ -75,6 +75,7 @@ PATH_TO_DOC = "docs/source/en"
 
 # Update this list with models that are supposed to be private.
 PRIVATE_MODELS = [
+    "GraniteSpeechNarQFormerModel",
     "AltRobertaModel",
     "DPRSpanPredictor",
     "UdopStack",
@@ -155,6 +156,7 @@ IGNORE_NON_TESTED = (
     PRIVATE_MODELS.copy()
     + [
         # models to ignore for not tested
+        "GraniteSpeechNarTextModel",  # Bidirectional LLM backbone, tested via GraniteSpeechNarForCTC.
         "RecurrentGemmaModel",  # Building part of bigger (tested) model.
         "FuyuForCausalLM",  # Not tested fort now
         "InstructBlipQFormerModel",  # Building part of bigger (tested) model.

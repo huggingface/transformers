@@ -11,38 +11,29 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Processor for Granite Speech NAR."""
 
+from ...feature_extraction_utils import BatchFeature
 from ...processing_utils import ProcessorMixin
 from ...tokenization_utils_base import AudioInput
-from ...utils import is_torch_available
-from .feature_extraction_granite_speech_nar import GraniteSpeechNarFeatureExtractor
+from ...utils import auto_docstring, logging
+from ...utils.import_utils import requires
 
 
-if is_torch_available():
-    import torch
+logger = logging.get_logger(__name__)
 
 
+@requires(backends=("torch",))
+@auto_docstring
 class GraniteSpeechNarProcessor(ProcessorMixin):
-    """Processor combining audio feature extraction and tokenizer for GraniteSpeechNar."""
-
-    tokenizer_class = "AutoTokenizer"
-
-    def __init__(self, feature_extractor: GraniteSpeechNarFeatureExtractor, tokenizer=None, **kwargs):
-        super().__init__(feature_extractor=feature_extractor, tokenizer=tokenizer, **kwargs)
+    def __init__(self, feature_extractor, tokenizer=None, chat_template=None):
+        super().__init__(feature_extractor, tokenizer, chat_template=chat_template)
 
     def __call__(
         self,
-        audios: AudioInput,
-        device: str | None = None,
+        audio: AudioInput,
         **kwargs,
-    ) -> dict:
-        return self.feature_extractor(audios, device=device)
-
-    def batch_decode(self, token_ids_list: list["torch.Tensor"], **kwargs) -> list[str]:
-        if self.tokenizer is None:
-            raise ValueError("Tokenizer not set. Pass tokenizer to GraniteSpeechNarProcessor.")
-        return [self.tokenizer.decode(ids, skip_special_tokens=True) for ids in token_ids_list]
+    ) -> BatchFeature:
+        return self.feature_extractor(audio, **kwargs)
 
 
 __all__ = ["GraniteSpeechNarProcessor"]

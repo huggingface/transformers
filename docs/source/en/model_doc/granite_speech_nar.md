@@ -13,7 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was published in HF papers on 2026-03-09 and contributed to Hugging Face Transformers on 2026-06-22.*
+*This model was published in HF papers on 2026-03-09 and contributed to Hugging Face Transformers on 2026-07-10.*
 *This model was released on 2026-03-09 and added to Hugging Face Transformers on 2026-06-03.*
 
 # GraniteSpeechNar
@@ -34,6 +34,30 @@ The model performs inference in a single pass: the encoder produces initial CTC 
 
 This model was contributed by [Avihu Dekel](https://huggingface.co/Avihu).
 
+## Usage
+
+`GraniteSpeechNarForCTC` transcribes in a single non-autoregressive pass. `generate` returns the CTC-collapsed
+token ids per sample in `output.sequences` (a list of variable-length tensors), which the processor decodes to text.
+
+```python
+from transformers import AutoModel, AutoProcessor
+from transformers.audio_utils import load_audio
+
+model_id = "ibm-granite/granite-speech-4.1-2b-nar"
+revision = "refs/pr/6"  # native-format weights; drop once merged to `main`
+processor = AutoProcessor.from_pretrained(model_id, revision=revision)
+model = AutoModel.from_pretrained(model_id, revision=revision, device_map="auto")
+
+url = "https://huggingface.co/buckets/huggingface/audio-samples/resolve/mister-quilter.mp3"
+audio = load_audio(url, sampling_rate=processor.feature_extractor.sampling_rate)
+
+inputs = processor(audio, sampling_rate=processor.feature_extractor.sampling_rate)
+inputs.to(model.device, dtype=model.dtype)
+output = model.generate(**inputs, return_dict_in_generate=True)
+print(processor.batch_decode(output.sequences, skip_special_tokens=True))
+# ['mrister quilter is the apostle of the middle classes and we are glad to welcome his gospel']
+```
+
 ## GraniteSpeechNarConfig
 
 [[autodoc]] GraniteSpeechNarConfig
@@ -50,7 +74,6 @@ This model was contributed by [Avihu Dekel](https://huggingface.co/Avihu).
 
 [[autodoc]] GraniteSpeechNarProcessor
     - __call__
-    - batch_decode
 
 ## GraniteSpeechNarFeatureExtractor
 
@@ -61,9 +84,9 @@ This model was contributed by [Avihu Dekel](https://huggingface.co/Avihu).
 [[autodoc]] GraniteSpeechNarModel
     - forward
 
-## GraniteSpeechNarLanguageModel
+## GraniteSpeechNarTextModel
 
-[[autodoc]] GraniteSpeechNarLanguageModel
+[[autodoc]] GraniteSpeechNarTextModel
     - forward
 
 ## GraniteSpeechNarForCTC

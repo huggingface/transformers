@@ -13,31 +13,35 @@
 # limitations under the License.
 """Testing suite for the PyTorch GraniteSpeechNar model."""
 
+import json
 import tempfile
 import unittest
+from pathlib import Path
 
 from transformers import is_datasets_available, is_torch_available
-from transformers.testing_utils import cleanup, require_torch, slow, torch_device
+from transformers.testing_utils import cleanup, require_torch, require_torchaudio, slow, torch_device
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor
 
 
 if is_datasets_available():
-    from datasets import load_dataset
+    from datasets import Audio, load_dataset
+
+
+FIXTURES_DIR = Path(__file__).parent.parent.parent / "fixtures/granite_speech_nar"
 
 if is_torch_available():
     import torch
 
     from transformers import (
-        AutoModel,
         AutoProcessor,
-        GraniteConfig,
         GraniteSpeechNarConfig,
     )
     from transformers.models.granite_speech_nar.configuration_granite_speech_nar import (
         GraniteSpeechNarEncoderConfig,
         GraniteSpeechNarProjectorConfig,
+        GraniteSpeechNarTextConfig,
     )
     from transformers.models.granite_speech_nar.modeling_granite_speech_nar import (
         GraniteSpeechNarCTCEncoder,
@@ -97,33 +101,31 @@ class GraniteSpeechNarEncoderModelTester:
             bpe_pooling_window=self.bpe_pooling_window,
             dropout=self.dropout,
             blank_token_id=0,
+            cat_hidden_layers=[1],
         )
 
     def prepare_config_and_inputs(self):
+        # The conformer encoder consumes every frame (it has no attention mask), so no mask is needed.
         input_features = floats_tensor([self.batch_size, self.seq_length, self.input_dim])
-        attention_mask = torch.ones(self.batch_size, self.seq_length, dtype=torch.bool)
-        attention_mask[1, 80:] = False
         config = self.get_config()
-        return config, input_features, attention_mask
+        return config, input_features
 
-    def create_and_check_model(self, config, input_features, attention_mask):
+    def create_and_check_model(self, config, input_features):
         model = GraniteSpeechNarCTCEncoder(config=config)
         model.to(torch_device)
         model.eval()
         with torch.no_grad():
-            result = model(input_features, attention_mask=attention_mask, output_hidden_states=True)
+            result = model(input_features, output_hidden_states=True)
 
-        self.parent.assertIsNotNone(result.logits)
-        self.parent.assertEqual(result.logits.shape[-1], self.bpe_output_dim)
+        self.parent.assertIsNotNone(result.last_hidden_state)
+        self.parent.assertEqual(result.last_hidden_state.shape[0], self.batch_size)
+        self.parent.assertIsNotNone(result.pooled_hidden_states)
         self.parent.assertIsNotNone(result.hidden_states)
         self.parent.assertEqual(len(result.hidden_states), self.num_layers + 1)
 
     def prepare_config_and_inputs_for_common(self):
-        config, input_features, attention_mask = self.prepare_config_and_inputs()
-        inputs_dict = {
-            "input_features": input_features,
-            "attention_mask": attention_mask,
-        }
+        config, input_features = self.prepare_config_and_inputs()
+        inputs_dict = {"input_features": input_features}
         return config, inputs_dict
 
 
@@ -153,15 +155,15 @@ class GraniteSpeechNarForCTCModelTester:
         encoder_config = self.encoder_model_tester.get_config()
         projector_config = GraniteSpeechNarProjectorConfig(
             encoder_dim=self.encoder_model_tester.hidden_dim,
-            llm_dim=128,
             downsample_rate=5,
             num_encoder_layers=2,
             hidden_size=128,
-            num_heads=4,
+            num_attention_heads=4,
             num_layers=1,
+            intermediate_size=256,
             block_size=15,
         )
-        text_config = GraniteConfig(
+        text_config = GraniteSpeechNarTextConfig(
             vocab_size=self.vocab_size,
             hidden_size=128,
             num_hidden_layers=2,
@@ -179,61 +181,49 @@ class GraniteSpeechNarForCTCModelTester:
             encoder_config=encoder_config,
             projector_config=projector_config,
             text_config=text_config.to_dict(),
-            encoder_layer_indices=[1, -1],
-            scale_projected_embeddings=False,
+            blank_token_id=text_config.eos_token_id,
         )
 
     def prepare_config_and_inputs(self):
         input_features = floats_tensor([self.batch_size, self.seq_length, self.encoder_model_tester.input_dim])
-        attention_mask = torch.ones(self.batch_size, self.seq_length, dtype=torch.bool)
-        attention_mask[1, 80:] = False
+        input_features_mask = torch.ones(self.batch_size, self.seq_length, dtype=torch.bool)
+        input_features_mask[1, 80:] = False
         config = self.get_config()
-        return config, input_features, attention_mask
+        return config, input_features, input_features_mask
 
-    def create_and_check_model(self, config, input_features, attention_mask):
+    def create_and_check_model(self, config, input_features, input_features_mask):
         model = GraniteSpeechNarForCTC(config=config)
         model.to(torch_device)
         model.eval()
         with torch.no_grad():
-            result = model(input_features=input_features, attention_mask=attention_mask)
+            result = model(input_features=input_features, input_features_mask=input_features_mask)
 
+        # Logits are packed as `[1, sum(seq_lengths), vocab_size]` (batch folded into a flat sequence).
         self.parent.assertIsNotNone(result.logits)
         self.parent.assertIsInstance(result.logits, torch.Tensor)
-        self.parent.assertEqual(result.logits.ndim, 2)
-        self.parent.assertEqual(result.logits.shape[1], self.vocab_size)
-        self.parent.assertIsNotNone(result.text_lengths)
-        self.parent.assertEqual(len(result.text_lengths), self.batch_size)
-        self.parent.assertEqual(sum(result.text_lengths), result.logits.shape[0])
+        self.parent.assertEqual(result.logits.ndim, 3)
+        self.parent.assertEqual(result.logits.shape[0], 1)
+        self.parent.assertEqual(result.logits.shape[-1], self.vocab_size)
+        self.parent.assertIsNotNone(result.seq_lengths)
+        self.parent.assertEqual(len(result.seq_lengths), self.batch_size)
+        self.parent.assertEqual(sum(result.seq_lengths), result.logits.shape[1])
 
-    def create_and_check_generate(self, config, input_features, attention_mask):
+    def create_and_check_generate(self, config, input_features, input_features_mask):
         model = GraniteSpeechNarForCTC(config=config)
         model.to(torch_device)
         model.eval()
-        output = model.generate(input_features=input_features, attention_mask=attention_mask)
+        sequences = model.generate(input_features=input_features, input_features_mask=input_features_mask)
 
-        self.parent.assertIsNotNone(output.preds)
-        self.parent.assertEqual(len(output.preds), self.batch_size)
-        for pred in output.preds:
-            self.parent.assertIsInstance(pred, torch.Tensor)
-            self.parent.assertEqual(pred.ndim, 1)
-
-    def create_and_check_generate_multi_step(self, config, input_features, attention_mask):
-        model = GraniteSpeechNarForCTC(config=config)
-        model.to(torch_device)
-        model.eval()
-        output = model.generate(input_features=input_features, attention_mask=attention_mask, num_editing_steps=3)
-
-        self.parent.assertIsNotNone(output.preds)
-        self.parent.assertEqual(len(output.preds), self.batch_size)
-        for pred in output.preds:
-            self.parent.assertIsInstance(pred, torch.Tensor)
-            self.parent.assertEqual(pred.ndim, 1)
+        self.parent.assertEqual(len(sequences), self.batch_size)
+        for sequence in sequences:
+            self.parent.assertIsInstance(sequence, torch.Tensor)
+            self.parent.assertEqual(sequence.ndim, 1)
 
     def prepare_config_and_inputs_for_common(self):
-        config, input_features, attention_mask = self.prepare_config_and_inputs()
+        config, input_features, input_features_mask = self.prepare_config_and_inputs()
         inputs_dict = {
             "input_features": input_features,
-            "attention_mask": attention_mask,
+            "input_features_mask": input_features_mask,
         }
         return config, inputs_dict
 
@@ -258,25 +248,30 @@ class GraniteSpeechNarEncoderModelTest(ModelTesterMixin, unittest.TestCase):
     def test_inputs_embeds_matches_input_ids(self):
         pass
 
-    @unittest.skip(reason="Conformer encoder does not expose attention outputs")
-    def test_retain_grad_hidden_states_attentions(self):
+    @unittest.skip(reason="GraniteSpeechNarCTCEncoder is a backbone component with no standalone training loss")
+    def test_training(self):
         pass
 
-    @unittest.skip(reason="Self-conditioning injection between layers causes hidden_states mismatch in tuple vs dict")
-    def test_model_outputs_equivalence(self):
+    @unittest.skip(reason="GraniteSpeechNarCTCEncoder is a backbone component with no standalone training loss")
+    def test_training_gradient_checkpointing(self):
         pass
 
-    def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
-        inputs_dict = super()._prepare_for_class(inputs_dict, model_class, return_labels=return_labels)
-        if return_labels:
-            batch_size = self.model_tester.batch_size
-            inputs_dict["labels"] = torch.arange(1, 6).unsqueeze(0).expand(batch_size, -1)
-            inputs_dict["label_lengths"] = torch.tensor([5] * batch_size)
-        return inputs_dict
+    @unittest.skip(reason="GraniteSpeechNarCTCEncoder is a backbone component with no standalone training loss")
+    def test_training_gradient_checkpointing_use_reentrant_false(self):
+        pass
+
+    @unittest.skip(reason="GraniteSpeechNarCTCEncoder is a backbone component with no standalone training loss")
+    def test_training_gradient_checkpointing_use_reentrant_true(self):
+        pass
 
     def setUp(self):
         self.model_tester = GraniteSpeechNarEncoderModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=GraniteSpeechNarEncoderConfig, has_text_modality=False)
+        self.config_tester = ConfigTester(
+            self,
+            config_class=GraniteSpeechNarEncoderConfig,
+            has_text_modality=False,
+            common_properties=["hidden_dim", "num_layers", "num_heads"],
+        )
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -307,24 +302,57 @@ class GraniteSpeechNarForCTCModelTest(ModelTesterMixin, unittest.TestCase):
     def test_generation_tester_mixin_inheritance(self):
         pass
 
-    @unittest.skip(reason="text_lengths (list[int]) in output breaks recursive tuple/dict comparison")
+    @unittest.skip(
+        reason="Output packs logits as `[1, sum(seq_lengths), vocab]` and carries a `seq_lengths` list, "
+        "which the mixin's recursive tuple/dict equivalence comparison cannot handle."
+    )
     def test_model_outputs_equivalence(self):
         pass
 
-    @unittest.skip(reason="Composite model with flat packed sequences; hidden_states not piped to top-level output")
     def test_hidden_states_output(self):
+        # The mixin assumes a `[batch, seq_length, hidden]` layout, but this model runs the LM on a
+        # flat packed sequence, so `hidden_states` are `[1, packed_len, hidden_size]`. Check that they
+        # are exposed (one per LM layer + the initial embedding) with the packed shape.
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        for model_class in self.all_model_classes:
+            model = model_class(config).to(torch_device).eval()
+            with torch.no_grad():
+                outputs = model(**inputs_dict, output_hidden_states=True)
+
+            hidden_states = outputs.hidden_states
+            self.assertEqual(len(hidden_states), config.text_config.num_hidden_layers + 1)
+            for hidden_state in hidden_states:
+                self.assertEqual(hidden_state.shape[0], 1)
+                self.assertEqual(hidden_state.shape[-1], config.text_config.hidden_size)
+            # every layer shares the same packed sequence length
+            self.assertEqual(len({hidden_state.shape[1] for hidden_state in hidden_states}), 1)
+
+    @unittest.skip(
+        reason="forward/generate pack the batch into one flat, variable-length sequence, so "
+        "nn.DataParallel cannot gather the differently-sized per-replica outputs."
+    )
+    def test_multi_gpu_data_parallel_forward(self):
         pass
 
-    @unittest.skip(reason="Composite model with flat packed sequences; hidden_states not piped to top-level output")
-    def test_retain_grad_hidden_states_attentions(self):
-        pass
-
-    @unittest.skip(reason="Encoder does not have standard embedding layer for gradient checkpointing")
-    def test_enable_input_require_grads_with_gradient_checkpointing(self):
+    @unittest.skip(
+        reason="The packed forward manually concatenates projector audio embeddings with LLM text "
+        "embeddings; naive device_map layer-splitting places them on different devices."
+    )
+    def test_model_parallelism(self):
         pass
 
     def test_can_init_all_missing_weights(self):
         super().test_can_init_all_missing_weights()
+
+    def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
+        inputs_dict = super()._prepare_for_class(inputs_dict, model_class, return_labels=return_labels)
+        if return_labels:
+            # GraniteSpeechNarForCTC's CTC loss needs explicit target lengths alongside `labels`
+            # (unlike CTC models that derive them from a padding id), which the generic harness omits.
+            batch_size = self.model_tester.batch_size
+            inputs_dict["labels"] = torch.randint(1, self.model_tester.vocab_size, (batch_size, 4))
+            inputs_dict["label_lengths"] = torch.tensor([3] * batch_size)
+        return inputs_dict
 
     def setUp(self):
         self.model_tester = GraniteSpeechNarForCTCModelTester(self)
@@ -341,10 +369,6 @@ class GraniteSpeechNarForCTCModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_generate(*config_and_inputs)
 
-    def test_generate_multi_step(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_generate_multi_step(*config_and_inputs)
-
     def test_loss(self):
         config, input_features, attention_mask = self.model_tester.prepare_config_and_inputs()
         model = GraniteSpeechNarForCTC(config).to(torch_device).train()
@@ -354,7 +378,7 @@ class GraniteSpeechNarForCTCModelTest(ModelTesterMixin, unittest.TestCase):
 
         output = model(
             input_features=input_features,
-            attention_mask=attention_mask,
+            input_features_mask=attention_mask,
             labels=labels,
             label_lengths=label_lengths,
         )
@@ -373,7 +397,10 @@ class GraniteSpeechNarForCTCModelTest(ModelTesterMixin, unittest.TestCase):
         label_lengths = torch.tensor([4, 3])
 
         output = model(
-            input_features=input_features, attention_mask=attention_mask, labels=labels, label_lengths=label_lengths
+            input_features=input_features,
+            input_features_mask=attention_mask,
+            labels=labels,
+            label_lengths=label_lengths,
         )
         self.assertIsNotNone(output.loss)
         self.assertTrue(output.loss.requires_grad)
@@ -388,7 +415,10 @@ class GraniteSpeechNarForCTCModelTest(ModelTesterMixin, unittest.TestCase):
         label_lengths = torch.tensor([4, 3])
 
         output = model(
-            input_features=input_features, attention_mask=attention_mask, labels=labels, label_lengths=label_lengths
+            input_features=input_features,
+            input_features_mask=attention_mask,
+            labels=labels,
+            label_lengths=label_lengths,
         )
         self.assertIsNotNone(output.loss)
         self.assertTrue(output.loss.requires_grad)
@@ -399,7 +429,7 @@ class GraniteSpeechNarForCTCModelTest(ModelTesterMixin, unittest.TestCase):
         model = GraniteSpeechNarForCTC(config).to(torch_device).eval()
 
         with torch.no_grad():
-            output = model(input_features=input_features, attention_mask=attention_mask)
+            output = model(input_features=input_features, input_features_mask=attention_mask)
 
         self.assertIsNone(output.loss)
 
@@ -452,9 +482,15 @@ class GraniteSpeechNarForCTCModelTest(ModelTesterMixin, unittest.TestCase):
 
 
 @require_torch
-class GraniteSpeechNarIntegrationTest(unittest.TestCase):
-    checkpoint_name = "ibm-granite/granite-speech-4.1-2b-nar"
+@require_torchaudio
+class GraniteSpeechNarForCTCIntegrationTest(unittest.TestCase):
     _dataset = None
+
+    @classmethod
+    def setUp(cls):
+        cls.checkpoint_name = "ibm-granite/granite-speech-4.1-2b-nar"
+        cls.revision = "refs/pr/6"
+        cls.processor = AutoProcessor.from_pretrained(cls.checkpoint_name, revision=cls.revision)
 
     def tearDown(self):
         cleanup(torch_device, gc_collect=True)
@@ -463,48 +499,50 @@ class GraniteSpeechNarIntegrationTest(unittest.TestCase):
     def _load_dataset(cls):
         if cls._dataset is None:
             cls._dataset = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+            cls._dataset = cls._dataset.cast_column(
+                "audio", Audio(sampling_rate=cls.processor.feature_extractor.sampling_rate)
+            )
 
     def _load_datasamples(self, num_samples):
         self._load_dataset()
-        samples = self._dataset.sort("id")[:num_samples]["audio"]
-        return [torch.tensor(x["array"], dtype=torch.float32) for x in samples]
+        ds = self._dataset
+        speech_samples = ds.sort("id")[:num_samples]["audio"]
+        return [x["array"] for x in speech_samples]
 
     @slow
-    def test_single_sample_transcription(self):
-        model = AutoModel.from_pretrained(
-            self.checkpoint_name,
-            attn_implementation="flash_attention_2",
-            device_map=torch_device,
-            dtype=torch.bfloat16,
-        ).eval()
-        processor = AutoProcessor.from_pretrained(self.checkpoint_name)
+    def test_model_integration(self):
+        """
+        reproducer: https://gist.github.com/eustlb/77deb553184fbc64d3565e8767448c65#file-reproducer_single-py
+        """
+        RESULTS_PATH = FIXTURES_DIR / "expected_results_single.json"
+        with open(RESULTS_PATH, "r") as f:
+            raw_data = json.load(f)
+        EXPECTED_TRANSCRIPTIONS = raw_data["transcriptions"]
 
-        waveforms = self._load_datasamples(1)
-        inputs = processor(waveforms, device=torch_device)
-        output = model.generate(**inputs)
-        transcriptions = processor.batch_decode(output.preds)
+        samples = self._load_datasamples(len(EXPECTED_TRANSCRIPTIONS))
+        model = GraniteSpeechNarForCTC.from_pretrained(self.checkpoint_name, revision=self.revision, device_map="auto")
 
-        expected = "mister quilter is the apostle of the middle classes and we are glad to welcome his gospel"
-        self.assertEqual(transcriptions[0], expected)
+        inputs = self.processor(samples, sampling_rate=self.processor.feature_extractor.sampling_rate)
+        inputs.to(model.device, dtype=model.dtype)
+        output = model.generate(**inputs, return_dict_in_generate=True)
+        predicted_transcripts = self.processor.batch_decode(output.sequences, skip_special_tokens=True)
+        self.assertListEqual(predicted_transcripts, EXPECTED_TRANSCRIPTIONS)
 
     @slow
-    def test_batch_transcription(self):
-        model = AutoModel.from_pretrained(
-            self.checkpoint_name,
-            attn_implementation="flash_attention_2",
-            device_map=torch_device,
-            dtype=torch.bfloat16,
-        ).eval()
-        processor = AutoProcessor.from_pretrained(self.checkpoint_name)
+    def test_model_integration_batched(self):
+        """
+        reproducer: https://gist.github.com/eustlb/77deb553184fbc64d3565e8767448c65#file-reproducer_batch-py
+        """
+        RESULTS_PATH = FIXTURES_DIR / "expected_results_batch.json"
+        with open(RESULTS_PATH, "r") as f:
+            raw_data = json.load(f)
+        EXPECTED_TRANSCRIPTIONS = raw_data["transcriptions"]
 
-        waveforms = self._load_datasamples(2)
-        inputs = processor(waveforms, device=torch_device)
-        output = model.generate(**inputs)
-        transcriptions = processor.batch_decode(output.preds)
+        samples = self._load_datasamples(len(EXPECTED_TRANSCRIPTIONS))
+        model = GraniteSpeechNarForCTC.from_pretrained(self.checkpoint_name, revision=self.revision, device_map="auto")
 
-        expected = [
-            "mister quilter is the apostle of the middle classes and we are glad to welcome his gospel",
-            "nor is mister quilter's manner less interesting than his matter",
-        ]
-        self.assertEqual(len(transcriptions), 2)
-        self.assertEqual(transcriptions, expected)
+        inputs = self.processor(samples, sampling_rate=self.processor.feature_extractor.sampling_rate)
+        inputs.to(model.device, dtype=model.dtype)
+        output = model.generate(**inputs, return_dict_in_generate=True)
+        predicted_transcripts = self.processor.batch_decode(output.sequences, skip_special_tokens=True)
+        self.assertListEqual(predicted_transcripts, EXPECTED_TRANSCRIPTIONS)
