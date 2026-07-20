@@ -29,8 +29,6 @@ from ..auto import CONFIG_MAPPING, AutoConfig
 
 logger = logging.get_logger(__name__)
 
-DEFAULT_GLOBAL_HEAD_DIM = 512
-
 
 @auto_docstring(checkpoint="google/diffusiongemma-26B-A4B-it")
 @strict
@@ -129,7 +127,7 @@ class DiffusionGemmaTextConfig(PreTrainedConfig):
         if self.rope_parameters is None:
             self.rope_parameters = default_rope_params
 
-        global_head_dim = kwargs.pop("global_head_dim", DEFAULT_GLOBAL_HEAD_DIM)
+        global_head_dim = kwargs.pop("global_head_dim", 512)
         num_global_key_value_heads = kwargs.pop("num_global_key_value_heads", None)
         if "per_layer_config" not in kwargs:
             layer_overrides: dict[str, Any] = {}

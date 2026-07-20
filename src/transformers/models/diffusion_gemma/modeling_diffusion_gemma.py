@@ -61,14 +61,6 @@ from .configuration_diffusion_gemma import DiffusionGemmaConfig, DiffusionGemmaT
 from .generation_diffusion_gemma import DiffusionGemmaGenerationConfig, DiffusionGemmaGenerationMixin
 
 
-def config_for_layer_type(config: DiffusionGemmaTextConfig, layer_type: str) -> DiffusionGemmaTextConfig:
-    """Returns the per-layer config for a given layer type.
-    Returns `config` unchanged when it is homogeneous."""
-    if not config.is_heterogeneous:
-        return config
-    return config.per_layer_config[config.layer_types.index(layer_type)]
-
-
 class DiffusionGemmaTextRotaryEmbedding(nn.Module):
     inv_freq: torch.Tensor  # fix linting for `register_buffer`
 
@@ -97,7 +89,7 @@ class DiffusionGemmaTextRotaryEmbedding(nn.Module):
 
             # `inv_freq` depends on the head dim, which varies by layer type, so initialise
             # from a config resolved for this layer type rather than the global one.
-            rope_config = config_for_layer_type(config, layer_type)
+            rope_config = config.per_layer_config[layer_type]
             curr_inv_freq, curr_attention_scaling = rope_init_fn(rope_config, device=device, layer_type=layer_type)
             self.register_buffer(f"{layer_type}_inv_freq", curr_inv_freq, persistent=False)
             self.register_buffer(f"{layer_type}_original_inv_freq", curr_inv_freq.clone(), persistent=False)
@@ -300,7 +292,7 @@ class DiffusionGemmaEncoderTextAttention(nn.Module):
         self.is_sliding = self.layer_type == "sliding_attention"
         self.sliding_window = config.sliding_window if self.is_sliding else None
 
-        layer_config = config.per_layer_config[layer_idx] if config.is_heterogeneous else config
+        layer_config = config.per_layer_config[layer_idx]
         self.head_dim = layer_config.head_dim
         num_key_value_heads = layer_config.num_key_value_heads
         self.num_key_value_groups = config.num_attention_heads // num_key_value_heads
@@ -403,7 +395,7 @@ class DiffusionGemmaDecoderTextAttention(nn.Module):
         self.is_sliding = self.layer_type == "sliding_attention"
         self.sliding_window = config.sliding_window if self.is_sliding else None
 
-        layer_config = config.per_layer_config[layer_idx] if config.is_heterogeneous else config
+        layer_config = config.per_layer_config[layer_idx]
         self.head_dim = layer_config.head_dim
         num_key_value_heads = layer_config.num_key_value_heads
         self.num_key_value_groups = config.num_attention_heads // num_key_value_heads
@@ -858,7 +850,7 @@ class DiffusionGemmaPreTrainedModel(PreTrainedModel):
         super()._init_weights(module)
         if isinstance(module, DiffusionGemmaTextRotaryEmbedding):
             for layer_type, rope_init_fn in module.rope_init_fns.items():
-                rope_config = config_for_layer_type(module.config, layer_type)
+                rope_config = module.config.per_layer_config[layer_type]
                 curr_inv_freq, _ = rope_init_fn(rope_config, layer_type=layer_type)
                 init.copy_(getattr(module, f"{layer_type}_inv_freq"), curr_inv_freq)
                 init.copy_(getattr(module, f"{layer_type}_original_inv_freq"), curr_inv_freq)
