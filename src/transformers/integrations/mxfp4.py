@@ -288,18 +288,22 @@ def _convert_moe_packed_tensors(
         exp = scales[r0:r1]
         sub = out[r0:r1]
 
-        # This vector is only used to index into `lut`, but is hugeee in GPU memory so we delete it immediately
-        idx_lo = (blk & 0x0F).to(torch.int)
-        sub[:, 0::2] = lut[idx_lo]
-        del idx_lo
+        # XPU workaround: with device_map="auto", tensors on a non-current XPU device are not
+        # ordered after their async H2D copy, so the compute below may read garbage and emit
+        # out-of-bounds `lut` indices. Aligning the active device orders it (no-op on CUDA/CPU).
+        with on_device(blk.device):
+            # This vector is only used to index into `lut`, but is hugeee in GPU memory so we delete it immediately
+            idx_lo = (blk & 0x0F).to(torch.int)
+            sub[:, 0::2] = lut[idx_lo]
+            del idx_lo
 
-        # This vector is only used to index into `lut`, but is hugeee in GPU memory so we delete it immediately
-        idx_hi = (blk >> 4).to(torch.int)
-        sub[:, 1::2] = lut[idx_hi]
-        del idx_hi
+            # This vector is only used to index into `lut`, but is hugeee in GPU memory so we delete it immediately
+            idx_hi = (blk >> 4).to(torch.int)
+            sub[:, 1::2] = lut[idx_hi]
+            del idx_hi
 
-        # Perform op
-        torch.ldexp(sub, exp, out=sub)
+            # Perform op
+            torch.ldexp(sub, exp, out=sub)
         del blk, exp, sub
 
     out = out.reshape(*prefix_shape, G, B * 2).view(*prefix_shape, G * B * 2)
