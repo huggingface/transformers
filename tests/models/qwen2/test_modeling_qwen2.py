@@ -192,7 +192,7 @@ class Qwen2IntegrationTest(unittest.TestCase):
             ("rocm", (9, 4)): "My favourite condiment is 100% natural, organic, gluten-free, vegan, and vegetarian. I have been making",
             ("rocm", (12, 5)): "My favourite condiment is 100% natural, organic, gluten-free, vegan, and vegetarian. I have been making",
             ("xpu", 3): "My favourite condiment is 100% natural, organic, gluten-free, vegan, and vegetarian. I have been making",
-        }).get_expectation() # fmt: off
+        }).get_expectation()  # fmt: off
         prompt = "My favourite condiment is "
         tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2-0.5B", use_fast=False)
         model = Qwen2ForCausalLM.from_pretrained("Qwen/Qwen2-0.5B", device_map="auto", dtype=torch.float16)
