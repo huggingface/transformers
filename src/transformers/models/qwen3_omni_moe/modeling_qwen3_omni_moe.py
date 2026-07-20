@@ -3959,18 +3959,47 @@ class Qwen3OmniMoeForConditionalGeneration(Qwen3OmniMoePreTrainedModel, Generati
             ],
             dim=1,
         ).to(input_ids.device)  # [batch_size, sequence_length, hidden_size]
-        im_start_indexes = torch.cat(
-            (
-                torch.nonzero(input_ids[0] == self.config.im_start_token_id).squeeze(),
-                torch.tensor([thinker_result.sequences.shape[-1]], device=input_ids.device, dtype=input_ids.dtype),
-            ),
-            dim=-1,
-        )  # Shape [n_starts + 1]; processor-created batched prompts share the same chat segment layout.
         multimodal_mask = (
             (thinker_result.sequences == self.config.thinker_config.audio_token_id) |
             (thinker_result.sequences == self.config.thinker_config.image_token_id) |
             (thinker_result.sequences == self.config.thinker_config.video_token_id)
         ).to(input_ids.device)  # [1 t] # fmt: skip
+
+        input_attention_mask = kwargs.get("attention_mask")
+        if input_attention_mask is None:
+            input_attention_mask = input_ids.new_ones(input_ids.shape)
+        else:
+            input_attention_mask = input_attention_mask.to(input_ids.device)
+
+        sequence_length = input_ids.shape[1]
+        token_positions = torch.arange(sequence_length, device=input_ids.device).unsqueeze(0).expand_as(input_ids)
+        im_start_positions = torch.where(
+            input_ids == self.config.im_start_token_id, token_positions, token_positions.new_full((), -1)
+        )
+        previous_im_start = torch.cummax(im_start_positions, dim=-1).values.clamp_min(0)
+        role_token_ids = input_ids.gather(1, (previous_im_start + 1).clamp_max(sequence_length - 1))
+        user_mask = (role_token_ids == self.config.user_token_id) & input_attention_mask.bool()
+        user_lengths = user_mask.sum(dim=-1)
+        max_user_length = user_lengths.max().item()
+        user_indices = torch.where(user_mask, token_positions, sequence_length + token_positions).argsort(dim=-1)[
+            :, :max_user_length
+        ]
+
+        full_user_embeds = self._get_talker_user_parts(
+            0, sequence_length, multimodal_mask, thinker_hidden, thinker_embed
+        )
+        talker_user_embeds = full_user_embeds.gather(
+            1, user_indices.unsqueeze(-1).expand(-1, -1, full_user_embeds.shape[-1])
+        )
+        talker_user_ids = thinker_result.sequences[:, :sequence_length].gather(1, user_indices)
+        talker_user_attention_mask = (
+            torch.arange(max_user_length, device=input_ids.device).unsqueeze(0) < user_lengths.unsqueeze(1)
+        ).to(input_attention_mask.dtype)
+
+        assistant_start_mask = (input_ids[:, :-1] == self.config.im_start_token_id) & (
+            input_ids[:, 1:] == self.config.assistant_token_id
+        )
+        assistant_start_index = torch.nonzero(assistant_start_mask[0], as_tuple=False).flatten()[-1].item()
 
         talker_special_tokens = torch.tensor(
             [[self.config.tts_bos_token_id, self.config.tts_eos_token_id, self.config.tts_pad_token_id]],
@@ -3983,48 +4012,30 @@ class Qwen3OmniMoeForConditionalGeneration(Qwen3OmniMoePreTrainedModel, Generati
             .chunk(3, dim=1)
         )  # 3 * [1 1 d]
 
-        talker_input_embeds = []  # [1 t d]
-        talker_input_ids = []
-        # For every chatml parts
-        for i in range(len(im_start_indexes) - 1):
-            im_start_index = im_start_indexes[i]
-            segment_end_index = im_start_indexes[i + 1]
-            role_token = input_ids[0][im_start_index + 1]
-            # Talker should ignore thinker system prompt
-            if role_token == self.config.system_token_id:
-                continue
-            # Talker takes word embeddings for tokens and hidden state from `accept_hidden_layer` for multimodal inputs
-            elif role_token == self.config.user_token_id:
-                talker_user_part = self._get_talker_user_parts(
-                    im_start_index, segment_end_index, multimodal_mask, thinker_hidden, thinker_embed
-                )
-                talker_input_embeds.append(talker_user_part)
-                talker_input_ids.append(thinker_result.sequences[:, im_start_index:segment_end_index])
-            # Take assistant output (for now)
-            elif role_token == self.config.assistant_token_id and i == len(im_start_indexes) - 2:
-                talker_assistant_embeds, talker_assistant_ids, trailing_text_hidden = self._get_talker_assistant_parts(
-                    im_start_index,
-                    segment_end_index,
-                    speaker_id,
-                    thinker_embed,
-                    tts_pad_embed,
-                    tts_bos_embed,
-                    tts_eos_embed,
-                )
-                talker_input_embeds.append(talker_assistant_embeds)
-                talker_input_ids.append(talker_assistant_ids)
-            # History assistant output (ignore for now)
-            elif role_token == self.config.assistant_token_id and i != len(im_start_indexes) - 2:
-                continue
-            else:
-                raise AssertionError("Expect role id after <|im_start|> (assistant, user, system)")
-        talker_input_embed = torch.cat([embed.to(input_ids.device) for embed in talker_input_embeds], dim=1)
-        talker_input_id = torch.cat([embed.to(input_ids.device) for embed in talker_input_ids], dim=1)
+        talker_assistant_embeds, talker_assistant_ids, trailing_text_hidden = self._get_talker_assistant_parts(
+            assistant_start_index,
+            thinker_result.sequences.shape[-1],
+            speaker_id,
+            thinker_embed,
+            tts_pad_embed,
+            tts_bos_embed,
+            tts_eos_embed,
+        )
+        talker_input_embed = torch.cat((talker_user_embeds, talker_assistant_embeds), dim=1)
+        talker_input_id = torch.cat((talker_user_ids, talker_assistant_ids), dim=1)
+        talker_attention_mask = torch.cat(
+            (
+                talker_user_attention_mask,
+                input_attention_mask.new_ones((input_ids.shape[0], talker_assistant_embeds.shape[1])),
+            ),
+            dim=1,
+        )
         talker_result = self.talker.generate(
             inputs_embeds=talker_input_embed,
             trailing_text_hidden=trailing_text_hidden,
             tts_pad_embed=tts_pad_embed.expand(input_ids.shape[0], -1, -1),
             talker_input_ids=talker_input_id,  # Not use input_ids to prevent repetition penalty out of bound
+            attention_mask=talker_attention_mask,
             **talker_kwargs,
         )
         talker_codes = (

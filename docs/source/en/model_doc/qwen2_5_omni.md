@@ -259,55 +259,68 @@ print(text)
 
 ### Batch audio generation
 
-[`Qwen2_5OmniForConditionalGeneration`] supports batched audio output generation.
+[`Qwen2_5OmniForConditionalGeneration`] supports batched audio output generation. For example, below for text-to-speech batch generation.
 
 ```python
-import librosa
 import soundfile as sf
+from transformers import AutoModelForTextToWaveform, AutoProcessor
+import torch
 
-from transformers import Qwen2_5OmniForConditionalGeneration, Qwen2_5OmniProcessor
+model_id = "Qwen/Qwen2.5-Omni-7B"
+model = AutoModelForTextToWaveform.from_pretrained(model_id, device_map="auto")
+processor = AutoProcessor.from_pretrained(model_id)
+sampling_rate = 24000  # output sampling rate
+max_new_tokens = 128  # maximum number of tokens to generate
 
-
-model = Qwen2_5OmniForConditionalGeneration.from_pretrained(
-    "Qwen/Qwen2.5-Omni-7B",
-    device_map="auto",
+system_text = (
+    "You are Qwen, a virtual human developed by the Qwen Team, Alibaba Group, capable of "
+    "perceiving auditory and visual inputs, as well as generating text and speech."
 )
-processor = Qwen2_5OmniProcessor.from_pretrained("Qwen/Qwen2.5-Omni-7B")
-
-system_prompt = "You are Qwen, a virtual human developed by the Qwen Team, Alibaba Group, capable of perceiving auditory and visual inputs, as well as generating text and speech."
-conversations = [
-    [
-        {"role": "system", "content": [{"type": "text", "text": system_prompt}]},
-        {"role": "user", "content": [{"type": "audio", "audio": "/path/to/audio_1.wav"}]},
-    ],
-    [
-        {"role": "system", "content": [{"type": "text", "text": system_prompt}]},
-        {"role": "user", "content": [{"type": "audio", "audio": "/path/to/audio_2.wav"}]},
-    ],
-]
-
 texts = [
-    processor.apply_chat_template(conversation, tokenize=False, add_generation_prompt=True)
-    for conversation in conversations
+    "Hello, I'm Qwen. How can I help you today?",
+    "The weather is nice today. Let's go for a walk.",
 ]
-audios = [
-    librosa.load("/path/to/audio_1.wav", sr=processor.feature_extractor.sampling_rate)[0],
-    librosa.load("/path/to/audio_2.wav", sr=processor.feature_extractor.sampling_rate)[0],
-]
+inputs = processor.apply_chat_template(
+    [
+        [
+            {"role": "system", "content": [{"type": "text", "text": system_text}]},
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "text",
+                        "text": (
+                            "Please read the following text aloud exactly as written, with no "
+                            f"additional commentary:\n\n{text}"
+                        ),
+                    }
+                ],
+            },
+        ]
+        for text in texts
+    ],
+    tokenize=True,
+    add_generation_prompt=True,
+    return_dict=True,
+    return_tensors="pt",
+    processor_kwargs={"padding": True},
+).to(model.device, dtype=model.dtype)
 
-inputs = processor(text=texts, audio=audios, return_tensors="pt", padding=True).to(model.device, dtype=model.dtype)
+gen_kwargs = {
+    "talker_do_sample": False,
+    "talker_temperature": 0.0,
+    "speaker": "Ethan",  # Ethan, Chelsie
+    "thinker_max_new_tokens": max_new_tokens,
+}
+_, pred_waveform = model.generate(**inputs, **gen_kwargs)
 
-text_ids, audio_outputs = model.generate(
-    **inputs,
-    generation_mode="audio",
-    thinker_do_sample=False,
-    talker_do_sample=False,
-)
-texts = processor.batch_decode(text_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)
-
-for idx, audio in enumerate(audio_outputs):
-    sf.write(f"output_{idx}.wav", audio.detach().cpu().numpy(), samplerate=24000)
-print(texts)
+for audio, sample_id in zip(pred_waveform, range(len(texts))):
+    sf.write(
+        f"qwen2_5_omni_output_{sample_id}.wav",
+        audio.reshape(-1).detach().to(torch.float32).cpu().numpy(),
+        sampling_rate,
+    )
+    print(f"Saved audio to qwen2_5_omni_output_{sample_id}.wav")
 ```
 
 ### Usage Tips
