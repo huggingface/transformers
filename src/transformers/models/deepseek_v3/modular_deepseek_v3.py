@@ -15,7 +15,7 @@ from ...utils.generic import is_flash_attention_requested
 from ..deepseek_v2.modeling_deepseek_v2 import (
     DeepseekV2Moe,
     DeepseekV2TopkRouter,
-    yarn_get_mscale,
+    yarn_apply_mscale,
 )
 from ..llama.modeling_llama import (
     LlamaDecoderLayer,
@@ -178,12 +178,7 @@ class DeepseekV3Attention(nn.Module):
         )
 
         self.scaling = self.qk_head_dim ** (-0.5)
-        if self.config.rope_parameters.get("rope_type", "default") != "default":
-            mscale_all_dim = self.config.rope_parameters.get("mscale_all_dim", 0)
-            scaling_factor = self.config.rope_parameters["factor"]
-            if mscale_all_dim:
-                mscale = yarn_get_mscale(scaling_factor, mscale_all_dim)
-                self.scaling = self.scaling * mscale * mscale
+        self.scaling = yarn_apply_mscale(config.rope_parameters, self.scaling)
 
     def forward(
         self,
