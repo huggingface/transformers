@@ -76,6 +76,35 @@ class Wav2Vec2CTCTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
 
         self.assertDictEqual(before_vocab, reloaded.get_vocab())
 
+    def test_word_delimiter_not_masked_or_skipped(self):
+        # Regression for #46552: in v5 the word delimiter is registered as a
+        # special token, but it is real content (a word boundary) and must not
+        # be dropped by the special-token-aware APIs, mirroring _decode. It
+        # should survive save/load too. Genuine special tokens (e.g. pad) must
+        # still be masked/skipped.
+        vocab_path = get_tests_dir("fixtures/vocab.json")
+        for label, tok in (("fresh", self.tokenizer_class(vocab_path, word_delimiter_token="|")),):
+            with tempfile.TemporaryDirectory() as tmp_dir:
+                tok.save_pretrained(tmp_dir)
+                reloaded = self.tokenizer_class.from_pretrained(tmp_dir)
+            for name, tokenizer in ((label, tok), ("reload", reloaded)):
+                ids = tokenizer("hello world")["input_ids"]
+                wdt_id = tokenizer.word_delimiter_token_id
+                self.assertIn(wdt_id, ids, name)
+                mask = tokenizer.get_special_tokens_mask(ids, already_has_special_tokens=True)
+                self.assertEqual(0, mask[ids.index(wdt_id)], f"{name}: delimiter must not be masked")
+                self.assertIn(
+                    tokenizer.word_delimiter_token,
+                    tokenizer.convert_ids_to_tokens(ids, skip_special_tokens=True),
+                    f"{name}: delimiter must survive skip_special_tokens",
+                )
+                # a genuine special token is still masked
+                self.assertEqual(
+                    [1],
+                    tokenizer.get_special_tokens_mask([tokenizer.pad_token_id], already_has_special_tokens=True),
+                    f"{name}: real special tokens must still be masked",
+                )
+
     def test_tokenizer_add_token_chars(self):
         tokenizer = self.tokenizer_class.from_pretrained("facebook/wav2vec2-base-960h")
 

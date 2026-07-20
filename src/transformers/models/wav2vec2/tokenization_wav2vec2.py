@@ -283,7 +283,10 @@ class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
         tokens = []
         for index in ids:
             index = int(index)
-            if skip_special_tokens and index in self.all_special_ids:
+            # The word delimiter is registered as a special token but is real
+            # vocabulary content (a word boundary); skipping it would silently
+            # drop word boundaries, so exempt it here as _decode already does.
+            if skip_special_tokens and index in self.all_special_ids and index != self.word_delimiter_token_id:
                 continue
             if index in self.decoder:
                 tokens.append(self.decoder[index])
@@ -292,6 +295,30 @@ class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
             else:
                 tokens.append(self.unk_token)
         return tokens
+
+    def get_special_tokens_mask(
+        self,
+        token_ids_0: list[int],
+        token_ids_1: list[int] | None = None,
+        already_has_special_tokens: bool = False,
+    ) -> list[int]:
+        """Overridden to exempt the word delimiter from the special-tokens mask.
+
+        The delimiter is registered as a special token but represents a word
+        boundary (real content), so masking it would silently drop word
+        boundaries in label masking / WER filtering (see #46552). Only the
+        ``already_has_special_tokens=True`` path is adjusted; there the mask
+        aligns 1:1 with the input ids.
+        """
+        mask = super().get_special_tokens_mask(
+            token_ids_0, token_ids_1, already_has_special_tokens=already_has_special_tokens
+        )
+        if already_has_special_tokens:
+            wdt_id = self.word_delimiter_token_id
+            ids = list(token_ids_0) + (list(token_ids_1) if token_ids_1 is not None else [])
+            if len(mask) == len(ids):
+                mask = [0 if (m and tid == wdt_id) else m for m, tid in zip(mask, ids)]
+        return mask
 
     def convert_tokens_to_string(
         self,
