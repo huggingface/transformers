@@ -37,8 +37,6 @@ class VibeVoiceDiffusionHeadConfig(PreTrainedConfig):
         The maximum period for the sinusoidal frequency embedding in the diffusion head.
     """
 
-    model_type = "vibevoice_diffusion_head"
-
     hidden_size: int = 1536
     latent_size: int = 64
     num_hidden_layers: int = 4

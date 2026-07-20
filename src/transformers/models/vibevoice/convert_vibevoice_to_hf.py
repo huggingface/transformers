@@ -261,6 +261,8 @@ def convert_checkpoint(checkpoint, output_dir, push_to_hub, bfloat16, max_shard_
         audio_config["target_dB_FS"] = -25
     if "eps" not in audio_config:
         audio_config["eps"] = 1e-6
+    if "pad_to_multiple_of" not in audio_config:
+        audio_config["pad_to_multiple_of"] = 3200  # audio_tower.hop_length
     if language_model_pretrained_name is None:
         if "1.5B" in checkpoint:
             language_model_pretrained_name = "Qwen/Qwen2.5-1.5B"
@@ -328,7 +330,12 @@ def convert_checkpoint(checkpoint, output_dir, push_to_hub, bfloat16, max_shard_
     logger.info("Creating VibeVoice processor")
 
     # Explicitly use Qwen2TokenizerFast to ensure proper class name in config
-    tokenizer = Qwen2TokenizerFast.from_pretrained(language_model_pretrained_name)
+    tokenizer = Qwen2TokenizerFast.from_pretrained(
+        language_model_pretrained_name,
+        padding=True,
+        padding_side="left",
+        return_tensors="pt",
+    )
     processor = VibeVoiceProcessor(
         feature_extractor=feature_extractor,
         tokenizer=tokenizer,

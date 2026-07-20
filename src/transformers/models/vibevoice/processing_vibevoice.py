@@ -33,23 +33,10 @@ if is_soundfile_available():
 
 
 class VibeVoiceProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {
-        "text_kwargs": {
-            "padding": True,
-            "padding_side": "left",
-            "add_special_tokens": False,
-        },
-        "audio_kwargs": {
-            "sampling_rate": 24000,
-            "pad_to_multiple_of": 3200,  # audio_tower.hop_length
-        },
-        "common_kwargs": {
-            "return_attention_mask": True,
-            "return_tensors": "pt",
-        },
-    }
+    _defaults = {}
 
 
+@requires(backends=("torch",))
 class VibeVoiceProcessor(ProcessorMixin):
     valid_processor_kwargs = VibeVoiceProcessorKwargs
 
@@ -91,10 +78,8 @@ class VibeVoiceProcessor(ProcessorMixin):
         super().__init__(feature_extractor, tokenizer, chat_template=chat_template)
 
     def _process_audio(self, audio: AudioInput, **kwargs):
-        pad_to_multiple_of = kwargs.get(
-            "pad_to_multiple_of", VibeVoiceProcessorKwargs._defaults["audio_kwargs"]["pad_to_multiple_of"]
-        )
         processed_audio = self.feature_extractor(audio, **kwargs)
+        pad_to_multiple_of = kwargs.get("pad_to_multiple_of") or self.feature_extractor.pad_to_multiple_of
         self._num_audio_tokens = (
             torch.ceil(processed_audio["padding_mask"].sum(dim=-1) / pad_to_multiple_of).int().tolist()
         )
@@ -104,7 +89,6 @@ class VibeVoiceProcessor(ProcessorMixin):
     def replace_audio_token(self, audio_inputs: dict, audio_idx: int) -> str:
         return self.audio_token * self._num_audio_tokens[audio_idx]
 
-    @requires(backends=("torch",))
     @auto_docstring
     def __call__(
         self,
