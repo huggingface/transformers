@@ -9,7 +9,12 @@ SHELL ["sh", "-lc"]
 # The following `ARG` are mainly used to specify the versions explicitly & directly in this docker file, and not meant
 # to be used as arguments for docker build (so far).
 
-ARG PYTORCH='2.8.0'
+# Keep this in sync with `transformers-all-latest-gpu` (the model CI image). It must also satisfy the
+# quantization backends installed below -- notably `compressed-tensors`, which requires `torch>=2.10`.
+# Pinning an older torch (e.g. 2.8.0) makes `compressed-tensors` uninstall the pinned torch mid-build and
+# pull a newer one, churning the torch stack across RUN layers and leaving `torchaudio` ABI-mismatched
+# (see the Jul 2026 daily quantization CI collapse). The smoke test at the end of this file guards it.
+ARG PYTORCH='2.11.0'
 # Example: `cu102`, `cu113`, etc.
 ARG CUDA='cu126'
 
@@ -24,12 +29,12 @@ RUN [ ${#PYTORCH} -gt 0 ] && VERSION='torch=='$PYTORCH'.*' ||  VERSION='torch'; 
 RUN echo torch=$VERSION
 # `torchvision` and `torchaudio` should be installed along with `torch`, especially for nightly build.
 # `torchaudio` MUST be pinned to the same version as `torch`: torchaudio ships a compiled C extension
-# (`_torchaudio.abi3.so`) built against one exact torch ABI, so a floating torchaudio resolves to the
-# latest release (built for the newest torch) and then fails to load against this image's pinned older
-# torch with `OSError: ... _torchaudio.abi3.so: undefined symbol`. Because `loss/loss_rnnt.py` is
-# imported eagerly from `modeling_utils`, that OSError breaks `import transformers` outright and takes
-# down pytest collection for EVERY quantization job (see the daily quantization CI collapse, Jul 2026).
-# This mirrors the `torchaudio==${PYTORCH}.*` pin already used in transformers-all-latest-gpu.
+# (`_torchaudio.abi3.so`) built against one exact torch ABI, so a floating torchaudio can resolve to a
+# release built for a different torch and then fail to load with `OSError: ... _torchaudio.abi3.so:
+# undefined symbol`. Because `loss/loss_rnnt.py` is imported eagerly from `modeling_utils`, that OSError
+# breaks `import transformers` outright and takes down pytest collection for EVERY quantization job (see
+# the daily quantization CI collapse, Jul 2026). This mirrors the `torchaudio==${PYTORCH}.*` pin already
+# used in transformers-all-latest-gpu.
 RUN [ ${#PYTORCH} -gt 0 ] && TORCHAUDIO='torchaudio=='$PYTORCH'.*' || TORCHAUDIO='torchaudio'; \
     python3 -m pip install --no-cache-dir -U $VERSION torchvision $TORCHAUDIO --extra-index-url https://download.pytorch.org/whl/$CUDA
 
