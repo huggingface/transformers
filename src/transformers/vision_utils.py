@@ -164,6 +164,7 @@ def get_vision_bilinear_indices_and_weights(
     grid_thw: torch.Tensor,
     num_grid_per_side: int,
     spatial_merge_size: int,
+    align_corners: bool = True,
     kwargs: dict | None = None,
 ) -> tuple[torch.Tensor, torch.Tensor]:
     """Get bilinear interpolation indices/weights, or pop `"bilinear_indices"`/`"bilinear_weights"` from `kwargs` if both precomputed.
@@ -193,8 +194,20 @@ def get_vision_bilinear_indices_and_weights(
     for t, h, w in grid_thw.tolist():
         t, h, w = int(t), int(h), int(w)
 
-        h_grid = torch.linspace(0, side - 1, h, device=device)
-        w_grid = torch.linspace(0, side - 1, w, device=device)
+        if align_corners:
+            h_grid = torch.linspace(0, side - 1, h, device=device)
+            w_grid = torch.linspace(0, side - 1, w, device=device)
+            h_valid = torch.ones(h, dtype=torch.bool, device=device)
+            w_valid = torch.ones(w, dtype=torch.bool, device=device)
+        else:
+            # Padding_mode = zeros the default in `F.grid_sample`
+            h_grid = (torch.arange(h, device=device).float() + 0.5) * (side / h) - 0.5
+            w_grid = (torch.arange(w, device=device).float() + 0.5) * (side / w) - 0.5
+            h_valid = (h_grid >= 0) & (h_grid <= side - 1)
+            w_valid = (w_grid >= 0) & (w_grid <= side - 1)
+
+            h_grid = h_grid.clamp(0, side - 1)
+            w_grid = w_grid.clamp(0, side - 1)
 
         h_floor = h_grid.int()
         w_floor = w_grid.int()
@@ -214,10 +227,10 @@ def get_vision_bilinear_indices_and_weights(
             (h_ceil_offset[:, None] + w_ceil[None, :]).flatten(),
         ]
         corner_weights = [
-            ((1 - h_frac)[:, None] * (1 - w_frac)[None, :]).flatten(),
-            ((1 - h_frac)[:, None] * w_frac[None, :]).flatten(),
-            (h_frac[:, None] * (1 - w_frac)[None, :]).flatten(),
-            (h_frac[:, None] * w_frac[None, :]).flatten(),
+            ((1 - h_frac)[:, None] * (1 - w_frac)[None, :] * (h_valid[:, None] & w_valid[None, :])).flatten(),
+            ((1 - h_frac)[:, None] * w_frac[None, :] * (h_valid[:, None] & w_valid[None, :])).flatten(),
+            (h_frac[:, None] * (1 - w_frac)[None, :] * (h_valid[:, None] & w_valid[None, :])).flatten(),
+            (h_frac[:, None] * w_frac[None, :] * (h_valid[:, None] & w_valid[None, :])).flatten(),
         ]
 
         h_idx = torch.arange(h, device=device).view(h // merge_size, merge_size)

@@ -468,7 +468,6 @@ class OnyxVisionAdapter(nn.Module):
 
 class OnyxVisionPatchEmbedder(PaddleOCRVisionEmbeddings):
     def __init__(self, config: OnyxVisionConfig):
-        # TODO: they use fp32 when adding positions, check if that matters
         nn.Module.__init__()
         self.config = config
         self.hidden_size = config.hidden_size
@@ -500,7 +499,11 @@ class OnyxVisionPatchEmbedder(PaddleOCRVisionEmbeddings):
         embeddings = embeddings.reshape(batch_sequence_len, -1)
 
         bilinear_indices, bilinear_weights = get_vision_bilinear_indices_and_weights(
-            grid_thw, num_grid_per_side=self.num_grid_per_side, spatial_merge_size=1, kwargs=kwargs
+            grid_thw,
+            num_grid_per_side=self.num_grid_per_side,
+            spatial_merge_size=1,
+            align_corners=False,
+            kwargs=kwargs,
         )
         pos_embeds = (self.position_embedding_table(bilinear_indices) * bilinear_weights[:, :, None]).sum(0)
         embeddings = embeddings + pos_embeds.to(embeddings.dtype)
@@ -595,7 +598,7 @@ class OnyxVisionModel(OnyxPreTrainedModel):
         # Add `1` because ref implementation's position offset is `1`!
         # TODO: permute qk proj for RoPE in conversion mapping
         position_ids = get_vision_position_ids(grid_thw, spatial_merge_size=1)
-        position_ids = position_ids.flip(0) + 1  # seq-len, 2, should we flip?
+        position_ids = position_ids + 1 # seq-len, 2
         position_ids = position_ids[window_index, ...][None, ...]  # unsqueeze single batch size
         position_embeddings = self.rotary_emb(hidden_states, position_ids)
 
@@ -701,7 +704,8 @@ class OnyxModel(Gemma3Model):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
         if inputs_embeds is None:
-            inputs_embeds = self.get_input_embeddings()(input_ids)
+            # FIXME: not fan of calling norm manually, why not create custom Embed module?
+            inputs_embeds = self.language_model.embed_norm(self.get_input_embeddings()(input_ids))
 
         # Merge text and images
         if pixel_values is not None:
