@@ -1455,17 +1455,21 @@ def create_recurrent_attention_mask(
 
     Returns ``None`` (so the consumer skips masking entirely) when any of:
     - the input mask is missing or is already a custom 4D attention mask (no 2D padding signal);
-    - the recurrent state already covers past tokens (cached forwards);
+    - the current forward is a single-token decode step (a generated token is never padding; this
+      also keeps the growing 2D mask out of the compiled decode graph);
     - the mask is all-ones (un-padded batch — the masking multiply would be a no-op), skipped
       only outside trace/compile so the graph specialisation stays stable.
 
     Otherwise we trim the mask to the trailing ``inputs_embeds.shape[1]`` positions so it aligns
     with the current forward's local sequence and the consumer can multiply directly without
-    further slicing.
+    further slicing. Note that this includes multi-token forwards continuing from a cache (chunked
+    prefill, cache continuation): padding inside the new segment must still be zeroed out, otherwise
+    it leaks into the recurrent state.
     """
     if attention_mask is None or attention_mask.ndim != 2:
         return None
-    if past_key_values is not None and past_key_values.has_previous_state():
+    # Single-token decode never contains padding, and skipping keeps the growing 2D mask out of the graph
+    if inputs_embeds.shape[1] == 1:
         return None
     if not is_tracing(attention_mask) and torch.all(attention_mask == 1):
         return None
