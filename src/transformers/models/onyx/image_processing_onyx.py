@@ -78,7 +78,7 @@ class OnyxImageProcessorKwargs(ImagesKwargs, total=False):
 
 @auto_docstring(custom_intro="Constructs an Onyx image processor.")
 class OnyxImageProcessor(TorchvisionBackend):
-    resample = PILImageResampling.BICUBIC
+    resample = PILImageResampling.LANCZOS
     image_mean = IMAGENET_STANDARD_MEAN
     image_std = IMAGENET_STANDARD_STD
     size = None
@@ -86,7 +86,7 @@ class OnyxImageProcessor(TorchvisionBackend):
     do_convert_rgb = True
     do_resize = True
     do_rescale = True
-    do_normalize = False
+    do_normalize = True
     patch_size = 14
     temporal_patch_size = 2
     downsample_factor = 2

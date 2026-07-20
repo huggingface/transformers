@@ -1151,7 +1151,8 @@ class OnyxModel(OnyxPreTrainedModel):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
         if inputs_embeds is None:
-            inputs_embeds = self.get_input_embeddings()(input_ids)
+            # FIXME: not fan of calling norm manually, why not create custom Embed module?
+            inputs_embeds = self.language_model.embed_norm(self.get_input_embeddings()(input_ids))
 
         # Merge text and images
         if pixel_values is not None:
