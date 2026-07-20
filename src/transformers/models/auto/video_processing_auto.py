@@ -55,7 +55,7 @@ else:
     MISSING_VIDEO_PROCESSOR_MAPPING_NAMES = OrderedDict(
         [
             ("exaone4_5", "Qwen2VLVideoProcessor"),
-            ("hyperclovax_vision_v2", "Qwen2VLVideoProcessor"),
+            ("hyperclovax_vision_v2", "HyperCLOVAXVisionV2VideoProcessor"),
             ("instructblip", "InstructBlipVideoVideoProcessor"),
             ("pe_audio_video", "PeVideoVideoProcessor"),
             ("qwen2_5_omni", "Qwen2VLVideoProcessor"),

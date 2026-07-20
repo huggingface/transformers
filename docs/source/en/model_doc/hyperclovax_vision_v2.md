@@ -240,6 +240,20 @@ processor = HyperCLOVAXVisionV2Processor.from_pretrained("naver-hyperclovax/Hype
 
 [[autodoc]] HyperCLOVAXVisionV2Config
 
+## HyperCLOVAXVisionV2ImageProcessor
+
+[[autodoc]] HyperCLOVAXVisionV2ImageProcessor
+    - preprocess
+
+## HyperCLOVAXVisionV2ImageProcessorPil
+
+[[autodoc]] HyperCLOVAXVisionV2ImageProcessorPil
+    - preprocess
+
+## HyperCLOVAXVisionV2VideoProcessor
+
+[[autodoc]] HyperCLOVAXVisionV2VideoProcessor
+
 ## HyperCLOVAXVisionV2Processor
 
 [[autodoc]] HyperCLOVAXVisionV2Processor
