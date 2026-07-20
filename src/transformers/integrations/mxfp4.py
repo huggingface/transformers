@@ -288,9 +288,10 @@ def _convert_moe_packed_tensors(
         exp = scales[r0:r1]
         sub = out[r0:r1]
 
-        # XPU workaround: with device_map="auto", tensors on a non-current XPU device are not
+        # With device_map="auto", tensors sitting on a non-current accelerator device are not
         # ordered after their async H2D copy, so the compute below may read garbage and emit
-        # out-of-bounds `lut` indices. Aligning the active device orders it (no-op on CUDA/CPU).
+        # out-of-bounds `lut` indices (illegal memory access on CUDA, indexing abort on XPU).
+        # Aligning the active device with the tensor's device orders it correctly (no-op on CPU).
         with on_device(blk.device):
             # This vector is only used to index into `lut`, but is hugeee in GPU memory so we delete it immediately
             idx_lo = (blk & 0x0F).to(torch.int)
