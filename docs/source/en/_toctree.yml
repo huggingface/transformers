@@ -509,6 +509,8 @@
         title: Apertus
       - local: model_doc/arcee
         title: Arcee
+      - local: model_doc/axk1
+        title: A.X-K1
       - local: model_doc/bamba
         title: Bamba
       - local: model_doc/bart
