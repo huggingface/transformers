@@ -286,15 +286,13 @@ class Cosmos3EdgeProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     def test_image_processor_uses_projector_block_major_patch_order(self):
         """Protect the checkpoint's block-major patches and HWC values within each patch."""
-        image = np.arange(4 * 8 * 3, dtype=np.uint8).reshape(4, 8, 3)
-        expected_patches = []
-        for group_height in range(1):
-            for group_width in range(2):
-                for merge_height in range(2):
-                    for merge_width in range(2):
-                        height = (group_height * 2 + merge_height) * 2
-                        width = (group_width * 2 + merge_width) * 2
-                        expected_patches.append(image[height : height + 2, width : width + 2].reshape(-1).tolist())
+        image = np.arange(4 * 4 * 3, dtype=np.uint8).reshape(4, 4, 3)
+        expected_patches = [
+            [0, 1, 2, 3, 4, 5, 12, 13, 14, 15, 16, 17],
+            [6, 7, 8, 9, 10, 11, 18, 19, 20, 21, 22, 23],
+            [24, 25, 26, 27, 28, 29, 36, 37, 38, 39, 40, 41],
+            [30, 31, 32, 33, 34, 35, 42, 43, 44, 45, 46, 47],
+        ]
 
         for image_processor_class in (Cosmos3EdgeImageProcessor, Cosmos3EdgeImageProcessorPil):
             processor = image_processor_class(
@@ -317,18 +315,14 @@ class Cosmos3EdgeProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             merge_size=2,
             temporal_patch_size=1,
         )
-        video = np.arange(2 * 4 * 8 * 3, dtype=np.uint8).reshape(2, 4, 8, 3)
-        expected_patches = []
-        for frame_index in range(2):
-            for group_height in range(1):
-                for group_width in range(2):
-                    for merge_height in range(2):
-                        for merge_width in range(2):
-                            height = (group_height * 2 + merge_height) * 2
-                            width = (group_width * 2 + merge_width) * 2
-                            expected_patches.append(
-                                video[frame_index, height : height + 2, width : width + 2].reshape(-1).tolist()
-                            )
+        video = np.arange(2 * 4 * 4 * 3, dtype=np.uint8).reshape(2, 4, 4, 3)
+        first_frame_patches = [
+            [0, 1, 2, 3, 4, 5, 12, 13, 14, 15, 16, 17],
+            [6, 7, 8, 9, 10, 11, 18, 19, 20, 21, 22, 23],
+            [24, 25, 26, 27, 28, 29, 36, 37, 38, 39, 40, 41],
+            [30, 31, 32, 33, 34, 35, 42, 43, 44, 45, 46, 47],
+        ]
+        expected_patches = first_frame_patches + [[value + 48 for value in patch] for patch in first_frame_patches]
 
         processed = processor(
             video,

@@ -14,7 +14,6 @@
 """Focused tests for the native Cosmos3 Edge reasoner implementation."""
 
 import copy
-import re
 import unittest
 
 from transformers import (
@@ -26,7 +25,15 @@ from transformers import (
     Cosmos3EdgeVisionConfig,
     is_torch_available,
 )
-from transformers.testing_utils import cleanup, require_torch, require_torch_accelerator, slow, torch_device
+from transformers.testing_utils import (
+    cleanup,
+    require_av,
+    require_torch,
+    require_torch_accelerator,
+    slow,
+    torch_device,
+)
+from transformers.video_utils import load_video
 
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 from ...vlm_tester import VLMModelTest, VLMModelTester
@@ -210,14 +217,6 @@ class Cosmos3EdgeModelTest(VLMModelTest, unittest.TestCase):
         # Native conversion mappings target the conditional model's `language_model` subtree, not the bare model.
         super().test_reverse_loading_mapping(skip_base_model=True)
 
-    def test_generator_k_norm_checkpoint_keys_are_ignored(self):
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-        model = Cosmos3EdgeForConditionalGeneration(config)
-        checkpoint_key = "layers.0.self_attn.k_norm_und_for_gen.weight"
-        self.assertTrue(
-            any(re.search(pattern, checkpoint_key) for pattern in model._keys_to_ignore_on_load_unexpected)
-        )
-
     def prepare_config_and_inputs_for_generate(self, batch_size=2):
         """Keep packed visual patches aligned with the corresponding text batch during generation tests."""
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -288,7 +287,6 @@ class Cosmos3EdgeModelTest(VLMModelTest, unittest.TestCase):
 
 @slow
 @require_torch_accelerator
-@unittest.skip(reason="Enable after release")
 class Cosmos3EdgeForConditionalGenerationIntegrationTest(unittest.TestCase):
     model_id = "nvidia/Cosmos3-Edge"
 
@@ -311,33 +309,41 @@ class Cosmos3EdgeForConditionalGenerationIntegrationTest(unittest.TestCase):
                 ],
             }
         ]
-        model = Cosmos3EdgeForConditionalGeneration.from_pretrained(
-            self.model_id, dtype="auto", device_map=torch_device
+        model, loading_info = Cosmos3EdgeForConditionalGeneration.from_pretrained(
+            self.model_id, dtype="auto", device_map=torch_device, output_loading_info=True
         )
+        self.assertFalse(loading_info["unexpected_keys"])
         inputs = self.processor.apply_chat_template(
             messages,
             tokenize=True,
             add_generation_prompt=True,
             return_dict=True,
             return_tensors="pt",
+            enable_thinking=False,
         ).to(torch_device)
 
         output = model.generate(**inputs, max_new_tokens=40, do_sample=False)
         generated_text = self.processor.decode(output[0, inputs.input_ids.shape[1] :], skip_special_tokens=True)
         expected_text = (
-            "The main subject of this image is a large white flower, likely a daffodil, positioned centrally in the "
-            "foreground."
+            "A bumblebee is the main subject of this image, positioned centrally on a vibrant pink flower. The bee "
+            "is captured in a side profile, with its head and thorax clearly visible as it faces"
         )
         self.assertEqual(generated_text, expected_text)
 
+    @require_av
     def test_video_generation(self):
+        video, video_metadata = load_video(
+            "https://huggingface.co/datasets/raushan-testing-hf/videos-test/resolve/main/sample_demo_1.mp4",
+            num_frames=4,
+            backend="pyav",
+        )
         messages = [
             {
                 "role": "user",
                 "content": [
                     {
                         "type": "video",
-                        "url": "https://huggingface.co/datasets/raushan-testing-hf/videos-test/resolve/main/sample_demo_1.mp4",
+                        "video": video,
                     },
                     {"type": "text", "text": "Describe the main subject and action in this video briefly."},
                 ],
@@ -352,13 +358,11 @@ class Cosmos3EdgeForConditionalGenerationIntegrationTest(unittest.TestCase):
             add_generation_prompt=True,
             return_dict=True,
             return_tensors="pt",
-            num_frames=4,
+            enable_thinking=False,
+            processor_kwargs={"videos_kwargs": {"video_metadata": video_metadata, "do_sample_frames": False}},
         ).to(torch_device)
 
         output = model.generate(**inputs, max_new_tokens=40, do_sample=False)
         generated_text = self.processor.decode(output[0, inputs.input_ids.shape[1] :], skip_special_tokens=True)
-        expected_text = (
-            "A man wearing a white t-shirt and black pants holds a baby wrapped in a white towel. The baby makes "
-            "small movements, and the man rubs its head and back while smiling."
-        )
+        expected_text = "A toddler is sitting on a bed reading a book."
         self.assertEqual(generated_text, expected_text)
