@@ -93,7 +93,8 @@ class Apertus1p5TextConfig(PreTrainedConfig):
     output_vocab_size (`int`, *optional*):
         Number of LM-head rows kept after pruning the multimodal token rows from the output projection; the
         retained output ids are `0..output_vocab_size - 1`. `None` means the head is unpruned (`vocab_size`
-        rows). Input embeddings always use `vocab_size`. A pruned head cannot be tied to the input embeddings.
+        rows). Input embeddings always use `vocab_size`, and returned logits are padded to that logical width with
+        `-inf` scores for the input-only tail. A pruned head cannot be tied to the input embeddings.
 
     Example:
 
@@ -189,7 +190,9 @@ class Apertus1p5Config(PreTrainedConfig):
     text_config (`Union[dict, PreTrainedConfig]`, *optional*):
         Configuration of the Apertus language backbone. The extended vocabulary (text + visual + audio tokens)
         lives in `text_config.vocab_size`, which sizes the input embedding table. The LM head uses
-        `text_config.output_vocab_size` when set, otherwise it uses the full `text_config.vocab_size`.
+        `text_config.output_vocab_size` physical rows when set, otherwise it uses the full
+        `text_config.vocab_size`. Model outputs always have `text_config.vocab_size` logits; input-only ids beyond
+        the physical LM head are padded with `-inf` and cannot be selected by normal generation.
     vision_tokenizer_config (`Union[dict, Apertus1p5VisionTokenizerConfig]`, *optional*):
         Configuration of the bundled EMU3.5-derived vision tokenizer.
     audio_tokenizer_config (`Union[dict, PreTrainedConfig]`, *optional*):
