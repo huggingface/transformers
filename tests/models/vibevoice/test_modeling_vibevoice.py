@@ -215,6 +215,12 @@ class VibeVoiceForConditionalGenerationTest(ModelTesterMixin, GenerationTesterMi
                     "token-based generation strategies are not supported."
                 )
 
+    def prepare_config_and_inputs_for_generate(self, batch_size=2):
+        # Pass a dummy noise scheduler to `generate` so that common generation tests don't require `diffusers`
+        config, inputs_dict = super().prepare_config_and_inputs_for_generate(batch_size=batch_size)
+        inputs_dict["noise_scheduler"] = DummyNoiseScheduler()
+        return config, inputs_dict
+
     def test_config(self):
         self.config_tester.run_common_tests()
 
