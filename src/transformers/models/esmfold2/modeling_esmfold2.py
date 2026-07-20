@@ -48,6 +48,32 @@ class EsmFold2AtomInputs:
     atom_to_token: Tensor
 
 
+@dataclass
+class EsmFold2AtomAttention:
+    """Per-fold, layer-invariant inputs for the SWA atom-stack attention: the 3D-RoPE ``cos``/``sin``,
+    the valid-token indices used to zero padded outputs, and the sliding-window attention mask.
+    Computed once in ``EsmFold2AtomEncoder._compute_step_invariants`` and threaded through every
+    atom-stack layer (replaces the old positional ``attention_params`` tuple)."""
+
+    cos: Tensor
+    sin: Tensor
+    valid_indices: Tensor
+    swa_mask: Tensor
+
+
+@dataclass
+class EsmFold2AtomEncoderCache:
+    """Step-invariant atom-encoder tensors cached across diffusion sampling steps (identical for every
+    step of a fold): the atom base embedding, the SWA attention inputs, the expanded atom mask, the
+    token count and the expanded atom->token map. Stored under ``inference_cache['atomencoder']``."""
+
+    c_base: Tensor
+    attention: EsmFold2AtomAttention
+    mask_exp: Tensor
+    n_tokens: int
+    atom_to_token_exp: Tensor
+
+
 class EsmFold2LayerNorm(nn.LayerNorm):
     """LayerNorm that always computes in fp32, with its weight stored at the model dtype.
 
@@ -289,9 +315,9 @@ class EsmFold2SWA3DRoPEAttention(nn.Module):
         self.out_proj = nn.Linear(d_model, d_model, bias=False)
         self.gate_proj = nn.Linear(d_model, d_model, bias=False)
 
-    def forward(self, x: Tensor, attention_params: tuple) -> Tensor:
+    def forward(self, x: Tensor, attention: EsmFold2AtomAttention) -> Tensor:
         B, N = x.shape[:2]
-        cos, sin = attention_params[0], attention_params[1]
+        cos, sin = attention.cos, attention.sin
 
         x_input = x
         q = self.q_proj(x).view(B, N, self.n_heads, self.head_dim)
@@ -312,9 +338,9 @@ class EsmFold2SWA3DRoPEAttention(nn.Module):
         # (it is identical across all atom-stack layers); reuse it here. ``valid`` is still needed to
         # zero out padded-token outputs below.
         valid = torch.zeros(B * N, dtype=torch.bool, device=q.device)
-        valid[attention_params[2]] = True
+        valid[attention.valid_indices] = True
         valid = valid.view(B, N)
-        attn_mask = attention_params[3]
+        attn_mask = attention.swa_mask
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(attn_impl, eager_attention_forward)
         out, _ = attention_interface(
@@ -350,14 +376,14 @@ class EsmFold2SWAAtomLayer(nn.Module):
         self.attn = EsmFold2SWA3DRoPEAttention(config, structure_prediction)
         self.ffn = EsmFold2SwiGLU(d_atom, ffn_intermediate_size, d_atom, bias=False)
 
-    def forward(self, x: Tensor, atom_cond: Tensor, attention_params: tuple) -> Tensor:
+    def forward(self, x: Tensor, atom_cond: Tensor, attention: EsmFold2AtomAttention) -> Tensor:
         modulation = self.adaln_linear(F.silu(atom_cond))
         if modulation.dim() == 2:
             modulation = modulation.unsqueeze(1)
         shift_a, scale_a, gate_a, shift_f, scale_f, gate_f = modulation.chunk(6, dim=-1)
 
         attn_input = F.rms_norm(x, (x.shape[-1],)) * (1 + scale_a) + shift_a
-        attn_out = self.attn(attn_input, attention_params)
+        attn_out = self.attn(attn_input, attention)
         x = x + gate_a * attn_out
 
         ffn_input = F.rms_norm(x, (x.shape[-1],)) * (1 + scale_f) + shift_f
@@ -515,9 +541,9 @@ class EsmFold2AtomEncoder(nn.Module):
             attention_mask=None,
             and_mask_function=_swa_window_mask_function(rank, valid, self.config.sliding_window // 2),
         )
-        attention_params = (cos, sin, indices, swa_mask)
+        attention = EsmFold2AtomAttention(cos, sin, indices, swa_mask)
         n_tokens = int(atom_inputs.atom_to_token.max().item()) + 1
-        return c_base, attention_params, mask_exp, n_tokens
+        return c_base, attention, mask_exp, n_tokens
 
     def forward(
         self,
@@ -525,33 +551,22 @@ class EsmFold2AtomEncoder(nn.Module):
         atom_coords: Tensor | None = None,
         num_diffusion_samples: int = 1,
         inference_cache: dict | None = None,
-    ) -> tuple[Tensor, Tensor, Tensor, tuple]:
-        """Returns (token_acts, atom_queries, atom_cond, attention_params).
+    ) -> tuple[Tensor, Tensor, Tensor, EsmFold2AtomAttention]:
+        """Returns (token_acts, atom_queries, atom_cond, attention).
 
-        ``inference_cache`` caches step-invariant tensors (c_base, 3D RoPE,
-        attention indices, n_tokens) across diffusion steps.
+        ``inference_cache['atomencoder']`` caches the step-invariant tensors (see
+        :class:`EsmFold2AtomEncoderCache`) across diffusion sampling steps.
         """
-        invariant_cache = None
-        if inference_cache is not None:
-            invariant_cache = inference_cache.setdefault("atomencoder", {})
-
-        if invariant_cache is None or len(invariant_cache) == 0:
-            c_base, attention_params, mask_exp, n_tokens = self._compute_step_invariants(
-                atom_inputs, num_diffusion_samples
-            )
-            if invariant_cache is not None:
-                invariant_cache["c_base"] = c_base
-                invariant_cache["attention_params"] = attention_params
-                invariant_cache["mask_exp"] = mask_exp
-                invariant_cache["n_tokens"] = n_tokens
-                invariant_cache["atom_to_token_exp"] = atom_inputs.atom_to_token.repeat_interleave(
-                    num_diffusion_samples, 0
-                )
+        cache = inference_cache.get("atomencoder") if inference_cache is not None else None
+        if cache is None:
+            c_base, attention, mask_exp, n_tokens = self._compute_step_invariants(atom_inputs, num_diffusion_samples)
+            atom_to_token_exp = atom_inputs.atom_to_token.repeat_interleave(num_diffusion_samples, 0)
+            if inference_cache is not None:
+                cache = EsmFold2AtomEncoderCache(c_base, attention, mask_exp, n_tokens, atom_to_token_exp)
+                inference_cache["atomencoder"] = cache
         else:
-            c_base = invariant_cache["c_base"]
-            attention_params = invariant_cache["attention_params"]
-            mask_exp = invariant_cache["mask_exp"]
-            n_tokens = invariant_cache["n_tokens"]
+            c_base, attention, mask_exp, n_tokens = cache.c_base, cache.attention, cache.mask_exp, cache.n_tokens
+            atom_to_token_exp = cache.atom_to_token_exp
 
         atom_cond = c_base
 
@@ -568,16 +583,12 @@ class EsmFold2AtomEncoder(nn.Module):
         atom_cond = atom_cond.repeat_interleave(num_diffusion_samples, 0)
 
         for layer in self.layers:
-            atom_queries = layer(atom_queries, atom_cond, attention_params)
+            atom_queries = layer(atom_queries, atom_cond, attention)
 
         queries_to_acts = F.relu(self.atom_to_token_linear(atom_queries))
-        if invariant_cache is not None and "atom_to_token_exp" in invariant_cache:
-            atom_to_token_exp = invariant_cache["atom_to_token_exp"]
-        else:
-            atom_to_token_exp = atom_inputs.atom_to_token.repeat_interleave(num_diffusion_samples, 0)
         token_acts = scatter_atom_to_token(queries_to_acts, atom_to_token_exp, n_tokens, atom_mask=mask_exp.bool())
 
-        return token_acts, atom_queries, atom_cond, attention_params
+        return token_acts, atom_queries, atom_cond, attention
 
 
 def _gather_along_dim1(source: Tensor, index: Tensor) -> Tensor:
@@ -608,7 +619,7 @@ class EsmFold2AtomDecoder(nn.Module):
         token_acts: Tensor,
         atom_queries: Tensor,
         atom_cond: Tensor,
-        atom_pair: tuple,
+        attention: EsmFold2AtomAttention,
         atom_inputs: EsmFold2AtomInputs,
         num_diffusion_samples: int = 1,
     ) -> Tensor:
@@ -619,7 +630,7 @@ class EsmFold2AtomDecoder(nn.Module):
         atom_queries = atom_queries + a_to_q
 
         for layer in self.layers:
-            atom_queries = layer(atom_queries, atom_cond, atom_pair)
+            atom_queries = layer(atom_queries, atom_cond, attention)
 
         atom_coords = self.output_linear(self.norm(atom_queries))
         return atom_coords
@@ -945,7 +956,7 @@ class EsmFold2DiffusionModule(nn.Module):
         normalized_coords = x_noisy / denominator[:, None, None]
 
         # Step 3: atom encoder
-        token_acts, atom_queries_skip, atom_cond_skip, atom_pair_skip = self.atom_encoder(
+        token_acts, atom_queries_skip, atom_cond_skip, atom_attention = self.atom_encoder(
             atom_inputs,
             atom_coords=normalized_coords,
             num_diffusion_samples=num_diffusion_samples,
@@ -973,7 +984,7 @@ class EsmFold2DiffusionModule(nn.Module):
             token_acts=token_acts,
             atom_queries=atom_queries_skip,
             atom_cond=atom_cond_skip,
-            atom_pair=atom_pair_skip,
+            attention=atom_attention,
             atom_inputs=atom_inputs,
             num_diffusion_samples=num_diffusion_samples,
         )
