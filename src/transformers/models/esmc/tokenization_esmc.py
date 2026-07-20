@@ -102,6 +102,9 @@ class EsmcTokenizer(TokenizersBackend):
     vocab_files_names = VOCAB_FILES_NAMES
     model_input_names = ["input_ids", "attention_mask"]
     model = BPE
+    # ESMC adds one model-specific named special token (the chain-break token) on top of the
+    # standard set, which gives us the ``chain_break_token`` / ``chain_break_token_id`` attributes.
+    SPECIAL_TOKENS_ATTRIBUTES = TokenizersBackend.SPECIAL_TOKENS_ATTRIBUTES + ["chain_break_token"]
 
     def __init__(
         self,
@@ -112,41 +115,28 @@ class EsmcTokenizer(TokenizersBackend):
         eos_token="<eos>",
         bos_token=None,
         chain_break_token="|",
+        extra_special_tokens=None,
         **kwargs,
     ):
         token_to_id = {tok: ind for ind, tok in enumerate(SEQUENCE_VOCAB)}
 
-        # Normalise: always work with plain strings
-        unk_token = self._ensure_str(unk_token)
-        cls_token = self._ensure_str(cls_token)
-        pad_token = self._ensure_str(pad_token)
-        mask_token = self._ensure_str(mask_token)
-        eos_token = self._ensure_str(eos_token)
         # ESMC uses <cls> as the sequence-start token, so `bos_token` defaults to it.
-        bos_token = self._ensure_str(bos_token) if bos_token is not None else cls_token
-        chain_break_token = self._ensure_str(chain_break_token)
+        if bos_token is None:
+            bos_token = cls_token
+        cls_str, eos_str = self._ensure_str(cls_token), self._ensure_str(eos_token)
 
-        self._tokenizer = Tokenizer(BPE(token_to_id, merges=[], unk_token=unk_token))
-        self._tokenizer.add_special_tokens([cls_token, pad_token, mask_token, eos_token, chain_break_token])
-
-        # Automatically wrap every encoded sequence with <cls> … <eos>.
+        self._tokenizer = Tokenizer(BPE(token_to_id, merges=[], unk_token=self._ensure_str(unk_token)))
+        # Wrap every encoded sequence with <cls> … <eos>. The special tokens themselves (including the
+        # chain-break token, passed via ``extra_special_tokens`` below) are registered into the backend
+        # by TokenizersBackend from the special-token kwargs — no need to add them here.
         self._tokenizer.post_processor = TemplateProcessing(
-            single=f"{cls_token} $A {eos_token}",
-            special_tokens=[
-                (cls_token, self._tokenizer.token_to_id(cls_token)),
-                (eos_token, self._tokenizer.token_to_id(eos_token)),
-            ],
+            single=f"{cls_str} $A {eos_str}",
+            special_tokens=[(cls_str, token_to_id[cls_str]), (eos_str, token_to_id[eos_str])],
         )
 
-        # Expose chain-break token as an additional special token so it is
-        # preserved during encode/decode and can be looked up easily.
-        kwargs.setdefault("additional_special_tokens", [])
-        if chain_break_token not in kwargs["additional_special_tokens"]:
-            kwargs["additional_special_tokens"] = list(kwargs["additional_special_tokens"]) + [chain_break_token]
-
-        # Keep reference before super().__init__ so properties below work.
-        self._chain_break_token = chain_break_token
-
+        # ``chain_break_token`` is a named special token (see ``SPECIAL_TOKENS_ATTRIBUTES``), so
+        # TokenizersBackend registers it into the backend and exposes it as an attribute; a generic
+        # ``extra_special_tokens`` list (round-tripped from a saved config) is passed through untouched.
         super().__init__(
             unk_token=unk_token,
             bos_token=bos_token,
@@ -154,27 +144,13 @@ class EsmcTokenizer(TokenizersBackend):
             pad_token=pad_token,
             mask_token=mask_token,
             eos_token=eos_token,
+            chain_break_token=chain_break_token,
+            extra_special_tokens=extra_special_tokens,
             **kwargs,
         )
 
-    # ------------------------------------------------------------------
-    # Chain-break token
-    # ------------------------------------------------------------------
-
-    @property
-    def chain_break_token(self) -> str:
-        return self._chain_break_token
-
-    @property
-    def chain_break_token_id(self) -> int:
-        token_id = self.convert_tokens_to_ids(self._chain_break_token)
-        if not isinstance(token_id, int):
-            raise TypeError(f"Expected a single token id for the chain-break token, got {token_id!r}.")
-        return token_id
-
-    # ------------------------------------------------------------------
-    # Internal utilities
-    # ------------------------------------------------------------------
+    # ``chain_break_token`` / ``chain_break_token_id`` are provided automatically by the
+    # ``extra_special_tokens`` named-token mechanism (SpecialTokensMixin).
 
     @staticmethod
     def _ensure_str(token) -> str:
