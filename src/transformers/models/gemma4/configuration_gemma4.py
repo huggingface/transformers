@@ -100,13 +100,6 @@ class Gemma4TextConfig(PreTrainedConfig):
         `[vocab_size_per_layer_input, num_hidden_layers * hidden_size_per_layer_input]`
         because all layers are packed into a single table. See the [Gemma4](https://huggingface.co/docs/transformers/main/en/model_doc/gemma4#per-layer-embeddings-ple) docs
         for a description of the full PLE pipeline.
-    per_layer_config (`dict`, *optional*):
-        Per-layer attribute overrides (see the [heterogeneous configurations](https://huggingface.co/docs/transformers/main/en/heterogeneous_configurations)
-        docs). Global (full) attention layers use a larger `head_dim` than sliding-attention
-        layers, and, when `attention_k_eq_v` is set, fewer `num_key_value_heads`; both are
-        recorded here. When not given, it is derived from the legacy `global_head_dim` and
-        `num_global_key_value_heads` keyword arguments, which are accepted so that checkpoints
-        predating `per_layer_config` keep loading.
     attention_k_eq_v (`bool`, defaults to `False`):
         Whether keys and values share the same projection weights. When `True`, the key
         projection output is reused as the value projection.

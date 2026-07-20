@@ -40,11 +40,6 @@ class DiffusionGemmaTextConfig(PreTrainedConfig):
         Controls bidirectional attention behavior. When set to `"vision"`, vision tokens
         attend bidirectionally while text tokens use causal attention. When set to `"all"`,
         all tokens use bidirectional attention.
-    num_global_key_value_heads (`int`, *optional*):
-        Number of key-value heads for global (full) attention layers. If `None`, defaults
-        to `num_key_value_heads`.
-    global_head_dim (`int`, defaults to 512):
-        Dimension of each attention head in global (full) attention layers.
     top_k_experts (`int`, *optional*):
         Number of experts activated per token in MoE layers.
     moe_intermediate_size (`int`, *optional*):
