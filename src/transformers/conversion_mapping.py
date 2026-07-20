@@ -25,6 +25,7 @@ from .core_model_loading import (
     GroupWeightRename,
     Interleave,
     MergeModulelist,
+    PermuteForRope,
     PrefixChange,
     Transpose,
     VisionUnfuseAndPermuteForRope,
@@ -156,12 +157,22 @@ def _build_checkpoint_conversion_mapping():
         ],
         "onyx_vision": [
             WeightRenaming(source_patterns=r"attn.o_proj", target_patterns=r"attn.out_proj"),
+            PermuteForRope(
+                source_patterns=r"attn.q_proj", target_patterns=r"attn.q_proj", subconfig_key="vision_config"
+            ),
+            PermuteForRope(
+                source_patterns=r"attn.k_proj", target_patterns=r"attn.k_proj", subconfig_key="vision_config"
+            ),
         ],
         "onyx": [
             WeightRenaming(source_patterns=r"vision_encoder.transformer", target_patterns=r"vision_tower.layers"),
-            WeightRenaming(source_patterns=r"vision_encoder.conv1_linear", target_patterns=r"vision_tower.patch_embedder.patch_embedding"),
             WeightRenaming(
-                source_patterns=r"vision_encoder.positional_embedding_vlm", target_patterns=r"vision_tower.patch_embedder.position_embedding_table"
+                source_patterns=r"vision_encoder.conv1_linear",
+                target_patterns=r"vision_tower.patch_embedder.patch_embedding",
+            ),
+            WeightRenaming(
+                source_patterns=r"vision_encoder.positional_embedding_vlm",
+                target_patterns=r"vision_tower.patch_embedder.position_embedding_table",
             ),
             WeightRenaming(source_patterns=r"vision_encoder", target_patterns=r"vision_tower"),
             WeightRenaming(r"model.layers", r"model.language_model.layers"),

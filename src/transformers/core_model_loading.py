@@ -419,12 +419,15 @@ class PermuteForRope(ConversionOps):
     Applies the permutation required to convert complex RoPE weights to the split sin/cos format.
     """
 
-    def __init__(self):
-        pass
+    def __init__(self, subconfig_key: str | None = None):
+        self.subconfig_key = subconfig_key
 
     def _apply(self, tensor: torch.Tensor) -> torch.Tensor:
         dim1, dim2 = tensor.shape
-        n_heads = self.config.getattr("num_attention_heads", 1)
+        config = self.config
+        if self.subconfig is not None:
+            config = getattr(self.config, self.subconfig)
+        n_heads = config.getattr("num_attention_heads", 1)
 
         tensor = tensor.view(n_heads, dim1 // n_heads // 2, 2, dim2)
         tensor = tensor.transpose(1, 2).reshape(dim1, dim2)

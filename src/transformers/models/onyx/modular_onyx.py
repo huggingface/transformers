@@ -454,8 +454,8 @@ class OnyxVisionEncoderLayer(nn.Module):
 class OnyxVisionAdapter(nn.Module):
     def __init__(self, config: OnyxConfig):
         super().__init__()
-        self.c_fc = nn.Linear(config.vision_output_dim, config.vision_adapter_dim, bias=False)
-        self.c_proj = nn.Linear(config.vision_adapter_dim, config.vision_adapter_dim, bias=False)
+        self.c_fc = nn.Linear(config.output_dim, config.adapter_dim, bias=False)
+        self.c_proj = nn.Linear(config.adapter_dim, config.adapter_dim, bias=False)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         return F.gelu(self.c_proj(F.gelu(self.c_fc(hidden_states))))
@@ -627,9 +627,11 @@ class OnyxModel(Gemma3Model):
     def __init__(self, config: OnyxConfig):
         super().__init__(config)
         del self.multi_modal_projector
-        self.vision_adapter = OnyxVisionAdapter(config)
-        self.vision_projection = nn.Linear(config.vision_adapter_dim, config.hidden_size, bias=False)
-        self.perception_emb_norm = OnyxScalelessRMSNorm(config.rms_norm_eps)
+        self.vision_adapter = OnyxVisionAdapter(config.vision_config)
+        self.vision_projection = nn.Linear(
+            config.vision_config.adapter_dim, config.text_config.hidden_size, bias=False
+        )
+        self.perception_emb_norm = OnyxScalelessRMSNorm(config.text_config.rms_norm_eps)
 
     def get_image_features(
         self,
