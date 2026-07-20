@@ -587,7 +587,7 @@ class Kimi_K25Model(Kimi_K25PreTrainedModel):
 
         if pixel_values_videos is not None:
             video_embeds = self.get_video_features(pixel_values_videos, video_grid_thw).pooler_output
-            video_embeds = video_embeds.to(device=inputs_embeds.device, dtype=inputs_embeds.dtype)
+            video_embeds = torch.cat(video_embeds, dim=0).to(device=inputs_embeds.device, dtype=inputs_embeds.dtype)
             _, video_mask = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, video_features=video_embeds
             )

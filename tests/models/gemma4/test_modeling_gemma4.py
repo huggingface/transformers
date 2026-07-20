@@ -616,6 +616,7 @@ class Gemma4Vision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unitte
 
     @parameterized.expand([True, False, None])
     def test_get_image_features_output(self, return_dict: bool | None):
+        "Override to infer last hidden states' `batch_size` from image position ids"
         for model_class in self.all_model_classes:
             if not hasattr(model_class, "get_image_features"):
                 continue

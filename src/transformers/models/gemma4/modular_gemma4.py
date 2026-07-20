@@ -1938,14 +1938,20 @@ class Gemma4Model(Gemma3nModel):
             Passed through to the vision encoder for positional embedding computation.
         """
         pixel_values_videos = pixel_values_videos.flatten(0, 1)
-        video_position_ids = video_position_ids.flatten(0, 1)
         vision_outputs = self.vision_tower(
             pixel_values=pixel_values_videos,
-            pixel_position_ids=video_position_ids,
+            pixel_position_ids=video_position_ids.flatten(0, 1),
             **kwargs,
         )
         last_hidden_state = vision_outputs.last_hidden_state
-        vision_outputs.pooler_output = self.embed_vision(inputs_embeds=last_hidden_state)
+        pooler_output = self.embed_vision(inputs_embeds=last_hidden_state)
+
+        output_length = pixel_values_videos.shape[-2] // (self.config.vision_config.pooling_kernel_size**2)
+        k_squared = int((pixel_values_videos.shape[-2] // output_length) ** 0.5) ** 2
+        non_pad_mask = (video_position_ids != -1).all(dim=-1)
+        split_sizes = (non_pad_mask.sum(dim=(-2, -1)) // k_squared).tolist()
+
+        vision_outputs.pooler_output = torch.split(pooler_output, split_sizes)
         return vision_outputs
 
     def get_placeholder_mask(
