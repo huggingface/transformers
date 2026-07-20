@@ -924,7 +924,6 @@ SPECIAL_MODEL_TYPE_TO_MODULE_NAME = OrderedDict(
         ("tipsv2_vision_model", "tipsv2"),
         ("unispeech-sat", "unispeech_sat"),
         ("uvdoc_backbone", "uvdoc"),
-        ("vibevoice_diffusion_head", "vibevoice"),
         ("video_llama_3_vision", "video_llama_3"),
         ("videoprism_text_model", "videoprism"),
         ("videoprism_vision_model", "videoprism"),

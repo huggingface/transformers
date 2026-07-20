@@ -520,7 +520,3 @@ print(f"Saved output to {output_folder}")
 ## VibeVoiceModel
 
 [[autodoc]] VibeVoiceModel
-
-## VibeVoiceDiffusionHead
-
-[[autodoc]] VibeVoiceDiffusionHead
