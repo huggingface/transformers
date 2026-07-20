@@ -45,25 +45,27 @@ if is_diffusers_available():
 
 
 class DummyNoiseScheduler:
-    """A simple dummy noise scheduler for testing purposes."""
+    """
+    A simple dummy noise scheduler for testing purposes.
+
+    Contrary to real schedulers, `step` returns a *deterministic* output that does not depend on the (randomly
+    sampled) input latent. The denoised latent is fed back into the language model as the next-step embedding, so a
+    random latent would make generated sequences differ between two `generate` calls (the global RNG state advances),
+    breaking tests that compare two runs (e.g. dynamic vs static cache, eager vs compiled).
+    """
 
     def __init__(self):
         self.num_inference_steps = None
         self.timesteps = None
 
     def step(self, eps, timestep, sample):
-        # Simple dummy step: just subtract a fraction of the noise estimate
-        if self.num_inference_steps is None:
-            step_size = 0.1
-        else:
-            step_size = 1.0 / self.num_inference_steps
-
         # Return an object with prev_sample attribute like real schedulers
         class StepOutput:
             def __init__(self, prev_sample):
                 self.prev_sample = prev_sample
 
-        prev_sample = sample - step_size * eps
+        # Deterministic output: ignore the random input latent and noise estimate (see class docstring)
+        prev_sample = torch.zeros_like(sample) + 0.1 * timestep.to(sample.dtype) / 1000
         return StepOutput(prev_sample)
 
     def set_timesteps(self, num_inference_steps):
