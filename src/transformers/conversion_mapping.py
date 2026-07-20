@@ -157,11 +157,15 @@ def _build_checkpoint_conversion_mapping():
         ],
         "onyx_vision": [
             WeightRenaming(source_patterns=r"attn.o_proj", target_patterns=r"attn.out_proj"),
-            PermuteForRope(
-                source_patterns=r"attn.q_proj", target_patterns=r"attn.q_proj", subconfig_key="vision_config"
+            WeightConverter(
+                source_patterns=[r"attn.q_proj"],
+                target_patterns=[r"attn.q_proj"],
+                operations=[PermuteForRope(subconfig_key="vision_config")],
             ),
-            PermuteForRope(
-                source_patterns=r"attn.k_proj", target_patterns=r"attn.k_proj", subconfig_key="vision_config"
+            WeightConverter(
+                source_patterns=[r"attn.k_proj"],
+                target_patterns=[r"attn.k_proj"],
+                operations=[PermuteForRope(subconfig_key="vision_config")],
             ),
         ],
         "onyx": [
