@@ -291,10 +291,17 @@ class Cosmos3EdgeModelTest(VLMModelTest, unittest.TestCase):
 class Cosmos3EdgeForConditionalGenerationIntegrationTest(unittest.TestCase):
     model_id = "nvidia/Cosmos3-Edge"
 
-    def setUp(self):
-        self.processor = AutoProcessor.from_pretrained(self.model_id)
+    @classmethod
+    def setUpClass(cls):
+        cls.processor = AutoProcessor.from_pretrained(cls.model_id)
+        cls.model, cls.loading_info = Cosmos3EdgeForConditionalGeneration.from_pretrained(
+            cls.model_id, dtype="auto", device_map=torch_device, output_loading_info=True
+        )
 
-    def tearDown(self):
+    @classmethod
+    def tearDownClass(cls):
+        del cls.model
+        del cls.processor
         cleanup(torch_device, gc_collect=True)
 
     def test_image_generation(self):
@@ -312,10 +319,7 @@ class Cosmos3EdgeForConditionalGenerationIntegrationTest(unittest.TestCase):
                 ],
             }
         ]
-        model, loading_info = Cosmos3EdgeForConditionalGeneration.from_pretrained(
-            self.model_id, dtype="auto", device_map=torch_device, output_loading_info=True
-        )
-        self.assertFalse(loading_info["unexpected_keys"])
+        self.assertFalse(self.loading_info["unexpected_keys"])
         inputs = self.processor.apply_chat_template(
             messages,
             tokenize=True,
@@ -325,7 +329,7 @@ class Cosmos3EdgeForConditionalGenerationIntegrationTest(unittest.TestCase):
             enable_thinking=False,
         ).to(torch_device)
 
-        output = model.generate(**inputs, max_new_tokens=40, do_sample=False)
+        output = self.model.generate(**inputs, max_new_tokens=40, do_sample=False)
         generated_text = self.processor.decode(output[0, inputs.input_ids.shape[1] :], skip_special_tokens=True)
         expected_text = (
             "A bumblebee is the main subject of this image, positioned centrally on a vibrant pink flower. The bee "
@@ -354,9 +358,6 @@ class Cosmos3EdgeForConditionalGenerationIntegrationTest(unittest.TestCase):
                 ],
             }
         ]
-        model = Cosmos3EdgeForConditionalGeneration.from_pretrained(
-            self.model_id, dtype="auto", device_map=torch_device
-        )
         inputs = self.processor.apply_chat_template(
             messages,
             tokenize=True,
@@ -367,7 +368,7 @@ class Cosmos3EdgeForConditionalGenerationIntegrationTest(unittest.TestCase):
             processor_kwargs={"videos_kwargs": {"video_metadata": video_metadata, "do_sample_frames": False}},
         ).to(torch_device)
 
-        output = model.generate(**inputs, max_new_tokens=40, do_sample=False)
+        output = self.model.generate(**inputs, max_new_tokens=40, do_sample=False)
         generated_text = self.processor.decode(output[0, inputs.input_ids.shape[1] :], skip_special_tokens=True)
         expected_text = "A toddler is sitting on a bed reading a book."
         self.assertEqual(generated_text, expected_text)
