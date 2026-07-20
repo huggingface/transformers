@@ -156,7 +156,6 @@ IGNORE_NON_TESTED = (
     PRIVATE_MODELS.copy()
     + [
         # models to ignore for not tested
-        "GraniteSpeechNarTextModel",  # Bidirectional LLM backbone, tested via GraniteSpeechNarForCTC.
         "RecurrentGemmaModel",  # Building part of bigger (tested) model.
         "FuyuForCausalLM",  # Not tested fort now
         "InstructBlipQFormerModel",  # Building part of bigger (tested) model.
@@ -301,8 +300,8 @@ IGNORE_NON_TESTED = (
         "DiffusionGemmaDecoderModel",  # TODO(joaogante)
         "DiffusionGemmaEncoderModel",  # TODO(joaogante)
         "DiffusionGemmaEncoderTextModel",  # TODO(joaogante)
-        "GraniteSpeechNarLanguageModel",  # Building part of bigger (tested) model. Tested implicitly through GraniteSpeechNarForCTC.
         "GraniteSpeechNarModel",  # Building part of bigger (tested) model. Tested implicitly through GraniteSpeechNarForCTC.
+        "GraniteSpeechNarTextModel",  # Bidirectional LLM backbone, tested implicitly through GraniteSpeechNarForCTC.
     ]
 )
 
@@ -536,7 +535,6 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "UVDocBridge",  # Building part of a bigger model, tested implicitly through UVDocModel
     "Granite4VisionTextModel",  # Building part of bigger (tested) model.
     "GraniteSpeechNarModel",  # Building part of bigger (tested) model.
-    "GraniteSpeechNarLanguageModel",  # Building part of bigger (tested) model.
 ]
 
 
