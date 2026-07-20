@@ -198,9 +198,9 @@ class OnyxImageProcessor(TorchvisionBackend):
                 grid_w,
                 patch_size,
             )
-            patches = patches.permute(0, 1, 4, 6, 3, 2, 5, 7)
+            patches = patches.permute(0, 1, 4, 6, 2, 3, 5, 7)
             flatten_patches = patches.reshape(
-                batch_size, grid_t * grid_h * grid_w, channel * temporal_patch_size * patch_size * patch_size
+                batch_size, grid_t * grid_h * grid_w, temporal_patch_size * channel * patch_size * patch_size
             )
 
             processed_images_grouped[shape] = flatten_patches
