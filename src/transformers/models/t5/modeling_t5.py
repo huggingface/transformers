@@ -345,7 +345,7 @@ class T5Attention(nn.Module):
                 )
 
             if mask is not None:
-                causal_mask = mask[:, :, :, : key_states.shape[-2]]
+                causal_mask = mask
                 if causal_mask.dtype == torch.bool:
                     # `sdpa` may materialize a boolean mask (True = keep). Turn it into an additive float mask so it
                     # can be folded into the relative position bias, just like the `eager` float mask.
@@ -356,17 +356,9 @@ class T5Attention(nn.Module):
                     )
                 position_bias = position_bias + causal_mask
 
-        # T5 uses a relative attention bias that is added to the attention scores. This is passed as the additive
-        # attention mask so that it works with the different attention implementations. As it is always non-`None`,
-        # `is_causal` is never inferred, so the causal behavior is fully encoded in the bias itself.
-        attention_interface: Callable = eager_attention_forward
-        if self.config._attn_implementation != "eager":
-            if self.config._attn_implementation != "sdpa":
-                raise ValueError(
-                    "T5 adds a relative position bias on top of the attention scores, which is only supported by the "
-                    f"`eager` and `sdpa` attention implementations, but got `{self.config._attn_implementation}`."
-                )
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
 
         attn_output, attn_weights = attention_interface(
             self,
@@ -553,7 +545,9 @@ class T5PreTrainedModel(PreTrainedModel):
     _no_split_modules = ["T5Block"]
     _keep_in_fp32_modules = ["wo"]
 
-    _supports_attention_backend = True
+    # T5 folds its relative position bias into the additive attention mask. `sdpa` accepts such a mask, but flash
+    # attention does not support arbitrary additive masks and flex would need a dedicated score_mod, so both remain
+    # unsupported for now.
     _supports_flash_attn = False
     _supports_flex_attn = False
     _supports_sdpa = True
@@ -686,32 +680,10 @@ class T5Stack(T5PreTrainedModel):
         use_cache=None,
         **kwargs: Unpack[TransformersKwargs],
     ):
-        use_cache = use_cache if use_cache is not None else self.config.use_cache
-
-        if input_ids is not None and inputs_embeds is not None:
-            err_msg_prefix = "decoder_" if self.is_decoder else ""
-            raise ValueError(
-                f"You cannot specify both {err_msg_prefix}input_ids and {err_msg_prefix}inputs_embeds at the same time"
-            )
-        elif input_ids is not None:
-            input_shape = input_ids.size()
-            input_ids = input_ids.view(-1, input_shape[-1])
-        elif inputs_embeds is not None:
-            input_shape = inputs_embeds.size()[:-1]
-        else:
-            err_msg_prefix = "decoder_" if self.is_decoder else ""
-            raise ValueError(f"You have to specify either {err_msg_prefix}input_ids or {err_msg_prefix}inputs_embeds")
-
-        if self.gradient_checkpointing and self.training:
-            if use_cache:
-                logger.warning_once(
-                    "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
-                )
-                use_cache = False
+        if (input_ids is None) ^ (inputs_embeds is not None):
+            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
         if inputs_embeds is None:
-            if self.embed_tokens is None:
-                raise ValueError("You have to initialize the model with valid token embeddings")
             inputs_embeds = self.embed_tokens(input_ids)
 
         if use_cache is True:
@@ -891,8 +863,6 @@ class T5Model(T5PreTrainedModel):
         >>> outputs = model(input_ids=input_ids, decoder_input_ids=decoder_input_ids)
         >>> last_hidden_states = outputs.last_hidden_state
         ```"""
-        use_cache = use_cache if use_cache is not None else self.config.use_cache
-
         # Encode if needed (training, first prediction pass)
         if encoder_outputs is None:
             encoder_outputs = self.encoder(
@@ -1049,8 +1019,6 @@ class T5ForConditionalGeneration(T5PreTrainedModel, GenerationMixin):
         >>> print(tokenizer.decode(outputs[0], skip_special_tokens=True))
         >>> # studies have shown that owning a dog is good for you.
         ```"""
-        use_cache = use_cache if use_cache is not None else self.config.use_cache
-
         # Encode if needed (training, first prediction pass)
         if encoder_outputs is None:
             # Convert encoder inputs in embeddings if needed
@@ -1471,7 +1439,6 @@ class T5ForQuestionAnswering(T5PreTrainedModel):
             Default behavior: generate a tensor that ignores pad tokens in `decoder_input_ids`. Causal mask will also
             be used by default.
         """
-        use_cache = use_cache if use_cache is not None else self.config.use_cache
         if start_positions is not None and end_positions is not None:
             use_cache = False
 

@@ -345,7 +345,7 @@ class UMT5Attention(nn.Module):
             )
 
         if attention_mask is not None:
-            causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
+            causal_mask = attention_mask
             if causal_mask.dtype == torch.bool:
                 causal_mask = torch.where(
                     causal_mask,
@@ -354,15 +354,9 @@ class UMT5Attention(nn.Module):
                 )
             position_bias = position_bias + causal_mask
 
-        attention_interface: Callable = eager_attention_forward
-        if self.config._attn_implementation != "eager":
-            if self.config._attn_implementation != "sdpa":
-                raise ValueError(
-                    "UMT5 adds a relative position bias on top of the attention scores, which is only supported by "
-                    "the `eager` and `sdpa` attention implementations, but got "
-                    f"`{self.config._attn_implementation}`."
-                )
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
 
         attn_output, attn_weights = attention_interface(
             self,
@@ -523,7 +517,9 @@ class UMT5PreTrainedModel(PreTrainedModel):
     _can_compile_fullgraph = True
     _no_split_modules = ["UMT5Block"]
     _keep_in_fp32_modules = ["wo"]
-    _supports_attention_backend = True
+    # UMT5 folds its relative position bias into the additive attention mask. `sdpa` accepts such a mask, but flash
+    # attention does not support arbitrary additive masks and flex would need a dedicated score_mod, so both remain
+    # unsupported for now.
     _supports_flash_attn = False
     _supports_flex_attn = False
     _supports_sdpa = True
@@ -664,32 +660,10 @@ class UMT5Stack(UMT5PreTrainedModel):
         use_cache=None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPastAndCrossAttentions:
-        use_cache = use_cache if use_cache is not None else self.config.use_cache
-
-        if input_ids is not None and inputs_embeds is not None:
-            err_msg_prefix = "decoder_" if self.is_decoder else ""
-            raise ValueError(
-                f"You cannot specify both {err_msg_prefix}input_ids and {err_msg_prefix}inputs_embeds at the same time"
-            )
-        elif input_ids is not None:
-            input_shape = input_ids.size()
-            input_ids = input_ids.view(-1, input_shape[-1])
-        elif inputs_embeds is not None:
-            input_shape = inputs_embeds.size()[:-1]
-        else:
-            err_msg_prefix = "decoder_" if self.is_decoder else ""
-            raise ValueError(f"You have to specify either {err_msg_prefix}input_ids or {err_msg_prefix}inputs_embeds")
-
-        if self.gradient_checkpointing and self.training:
-            if use_cache:
-                logger.warning_once(
-                    "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
-                )
-                use_cache = False
+        if (input_ids is None) ^ (inputs_embeds is not None):
+            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
         if inputs_embeds is None:
-            if self.embed_tokens is None:
-                raise ValueError("You have to initialize the model with valid token embeddings")
             inputs_embeds = self.embed_tokens(input_ids)
 
         if use_cache is True:

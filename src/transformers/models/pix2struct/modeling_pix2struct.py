@@ -151,14 +151,9 @@ class Pix2StructVisionAttention(nn.Module):
 
         # Pix2Struct's vision attention is bidirectional and only relies on the padding mask. As the mask is always
         # passed as an additive `attention_mask`, `is_causal` is never inferred.
-        attention_interface: Callable = eager_attention_forward
-        if self.config._attn_implementation != "eager":
-            if self.config._attn_implementation != "sdpa":
-                raise ValueError(
-                    "Pix2Struct only supports the `eager` and `sdpa` attention implementations, but got "
-                    f"`{self.config._attn_implementation}`."
-                )
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
 
         attn_output, attn_weights = attention_interface(
             self,
@@ -288,7 +283,6 @@ class Pix2StructPreTrainedModel(PreTrainedModel):
     input_modalities = ("image", "text")
 
     _can_compile_fullgraph = False
-    _supports_attention_backend = True
     _supports_sdpa = True
 
     @property
@@ -770,14 +764,9 @@ class Pix2StructTextAttention(nn.Module):
         # Pix2Struct uses a relative attention bias that is added to the attention scores. This is passed as the
         # additive attention mask so that it works with the different attention implementations. As it is always
         # non-`None`, `is_causal` is never inferred, so the causal behavior is fully encoded in the bias itself.
-        attention_interface: Callable = eager_attention_forward
-        if self.config._attn_implementation != "eager":
-            if self.config._attn_implementation != "sdpa":
-                raise ValueError(
-                    "Pix2Struct adds a relative position bias on top of the attention scores, which is only supported "
-                    f"by the `eager` and `sdpa` attention implementations, but got `{self.config._attn_implementation}`."
-                )
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
 
         attn_output, attn_weights = attention_interface(
             self,

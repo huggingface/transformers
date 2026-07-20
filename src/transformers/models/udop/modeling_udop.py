@@ -640,7 +640,7 @@ class UdopAttention(nn.Module):
                 )
 
             if mask is not None:
-                causal_mask = mask[:, :, :, : key_states.shape[-2]]
+                causal_mask = mask
                 if causal_mask.dtype == torch.bool:
                     # `sdpa` may materialize a boolean mask (True = keep). Turn it into an additive float mask so it
                     # can be folded into the relative position bias, just like the `eager` float mask.
@@ -651,17 +651,9 @@ class UdopAttention(nn.Module):
                     )
                 position_bias = position_bias + causal_mask
 
-        # Udop uses a relative attention bias that is added to the attention scores. This is passed as the additive
-        # attention mask so that it works with the different attention implementations. As it is always non-`None`,
-        # `is_causal` is never inferred, so the causal behavior is fully encoded in the bias itself.
-        attention_interface: Callable = eager_attention_forward
-        if self.config._attn_implementation != "eager":
-            if self.config._attn_implementation != "sdpa":
-                raise ValueError(
-                    "Udop adds a relative position bias on top of the attention scores, which is only supported by the "
-                    f"`eager` and `sdpa` attention implementations, but got `{self.config._attn_implementation}`."
-                )
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
 
         attn_output, attn_weights = attention_interface(
             self,
