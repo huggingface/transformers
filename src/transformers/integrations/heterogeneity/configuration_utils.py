@@ -216,7 +216,6 @@ class _PerLayerConfigView(Sequence["PreTrainedConfig"]):
         return self._config.num_hidden_layers
 
     def __getitem__(self, layer_idx: int | slice | str) -> PreTrainedConfig | list[PreTrainedConfig]:
-
         # Return the config for a specific layer type, if the model is homogeneous for that layer type
         if isinstance(layer_idx, str):
             if (layer_types := getattr(self._config, "layer_types", None)) is None:
