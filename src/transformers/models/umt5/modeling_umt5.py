@@ -517,9 +517,8 @@ class UMT5PreTrainedModel(PreTrainedModel):
     _can_compile_fullgraph = True
     _no_split_modules = ["UMT5Block"]
     _keep_in_fp32_modules = ["wo"]
-    # UMT5 folds its relative position bias into the additive attention mask. `sdpa` accepts such a mask, but flash
-    # attention does not support arbitrary additive masks and flex would need a dedicated score_mod, so both remain
-    # unsupported for now.
+    # The relative position bias is folded into the additive mask, which flash/flex can't consume (flex would need a
+    # dedicated score_mod); only eager and sdpa are supported.
     _supports_flash_attn = False
     _supports_flex_attn = False
     _supports_sdpa = True
