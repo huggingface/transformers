@@ -168,6 +168,8 @@ class Cosmos3EdgeImageProcessor(TorchvisionBackend):
                 merge_size,
                 patch_size,
             )
+            # The projector expects block-major patches with HWC values within each flattened patch:
+            # (group_h, group_w, merge_h, merge_w, patch_h, patch_w, channel).
             patches = patches.permute(1, 4, 2, 5, 3, 6, 0).reshape(grid_height * grid_width, -1)
 
             pixel_values.append(patches)

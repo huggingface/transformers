@@ -1093,6 +1093,8 @@ class Cosmos3EdgeImageProcessor(TorchvisionBackend):
                 merge_size,
                 patch_size,
             )
+            # The projector expects block-major patches with HWC values within each flattened patch:
+            # (group_h, group_w, merge_h, merge_w, patch_h, patch_w, channel).
             patches = patches.permute(1, 4, 2, 5, 3, 6, 0).reshape(grid_height * grid_width, -1)
 
             pixel_values.append(patches)
@@ -1226,6 +1228,8 @@ class Cosmos3EdgeImageProcessorPil(PilBackend):
                 merge_size,
                 patch_size,
             )
+            # The projector expects block-major patches with HWC values within each flattened patch:
+            # (group_h, group_w, merge_h, merge_w, patch_h, patch_w, channel).
             patches = patches.transpose(1, 4, 2, 5, 3, 6, 0).reshape(grid_height * grid_width, -1)
 
             pixel_values.append(patches)
@@ -1471,6 +1475,8 @@ class Cosmos3EdgeVideoProcessor(BaseVideoProcessor):
                 merge_size,
                 patch_size,
             )
+            # Preserve time-major, block-major patches with HWC values within each flattened patch:
+            # (batch, time, group_h, group_w, merge_h, merge_w, patch_h, patch_w, channel).
             patches = patches.permute(0, 1, 3, 6, 4, 7, 5, 8, 2)
             processed_videos_grouped[shape] = patches.reshape(
                 batch_size, grid_t * grid_height * grid_width, channels * patch_size * patch_size
