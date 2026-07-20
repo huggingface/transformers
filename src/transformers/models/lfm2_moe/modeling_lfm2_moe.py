@@ -34,6 +34,7 @@ from ...integrations import (
     use_kernel_func_from_hub,
     use_kernelized_func,
 )
+from ...integrations.accelerate import force_accelerate_hooks
 from ...masking_utils import create_causal_mask, create_recurrent_attention_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast, MoeModelOutputWithPast
@@ -424,7 +425,7 @@ class Lfm2MoeShortConv(nn.Module):
         if past_key_values is not None and past_key_values.has_previous_state(self.layer_idx):
             conv_out = causal_conv1d_update(
                 Bx.squeeze(-1),
-                past_key_values.layers[self.layer_idx].conv_states,
+                past_key_values.layers[self.layer_idx].conv_states[0],
                 conv_weights,
                 self.conv.bias,
                 None,
@@ -433,7 +434,7 @@ class Lfm2MoeShortConv(nn.Module):
         else:
             if past_key_values is not None:
                 conv_state = nn.functional.pad(Bx, (self.L_cache - Bx.shape[-1], 0))
-                conv_state = past_key_values.update_conv_state(conv_state, self.layer_idx)
+                conv_state = past_key_values.update_conv_state(conv_state, self.layer_idx)[..., -self.L_cache :]
 
             # `seq_idx` resets conv state at packed-sample boundaries; None = previous behaviour.
             conv_out = causal_conv1d_fn(Bx, conv_weights, self.conv.bias, activation=None, seq_idx=seq_idx)
@@ -458,7 +459,7 @@ class Lfm2MoeShortConv(nn.Module):
         Bx = B * x
 
         if past_key_values is not None and past_key_values.has_previous_state(self.layer_idx):
-            conv_state = past_key_values.update_conv_state(Bx, self.layer_idx)
+            conv_state = past_key_values.update_conv_state(Bx, self.layer_idx)[..., -self.L_cache :]
             conv_out = torch.sum(conv_state.to(Bx.device) * self.conv.weight[:, 0, :], dim=-1)
             if self.bias:
                 conv_out += self.conv.bias
@@ -468,7 +469,7 @@ class Lfm2MoeShortConv(nn.Module):
             # Per-segment conv so the receptive field cannot cross packed-sample boundaries.
             if past_key_values is not None:
                 conv_state = nn.functional.pad(Bx, (self.L_cache - Bx.shape[-1], 0))
-                conv_state = past_key_values.update_conv_state(conv_state, self.layer_idx)
+                conv_state = past_key_values.update_conv_state(conv_state, self.layer_idx)[..., -self.L_cache :]
             si = seq_idx[0]
             change = (si[1:] != si[:-1]).nonzero(as_tuple=True)[0] + 1
             bounds = torch.cat([change.new_zeros(1), change, change.new_full((1,), si.numel())]).tolist()
@@ -481,7 +482,7 @@ class Lfm2MoeShortConv(nn.Module):
         else:
             if past_key_values is not None:
                 conv_state = nn.functional.pad(Bx, (self.L_cache - Bx.shape[-1], 0))
-                conv_state = past_key_values.update_conv_state(conv_state, self.layer_idx)
+                conv_state = past_key_values.update_conv_state(conv_state, self.layer_idx)[..., -self.L_cache :]
 
             conv_out = self.conv(Bx)[..., :seqlen]
 
@@ -490,6 +491,7 @@ class Lfm2MoeShortConv(nn.Module):
         y = self.out_proj(y)
         return y
 
+    @force_accelerate_hooks("conv")
     def forward(
         self,
         hidden_states: torch.Tensor,

@@ -81,6 +81,16 @@ SPECIAL_CASES_TO_ALLOW = {
     "XcodecConfig": ["sample_rate", "audio_channels"],
     "RecurrentGemmaConfig": ["block_types", "attention_window_size"],
     "MambaConfig": ["expand"],
+    "InklingTextConfig": [
+        # Consumed by config logic (build `layer_types`) or carried for checkpoint round-trip (MTP/MoE block),
+        # not referenced directly by the modeling forward.
+        "local_layer_ids",
+        "mtp_local_layer_ids",
+        "chain_hidden_post_norm",
+        "mtp_hidden_states_first",
+        "rms_norm_eps_moe_gate",
+        "shared_expert_sink",
+    ],
     "FalconMambaConfig": ["expand"],
     "FSMTConfig": ["langs", "common_kwargs", "early_stopping", "length_penalty", "max_length", "num_beams"],
     "GPTNeoConfig": ["attention_types"],
@@ -121,6 +131,25 @@ SPECIAL_CASES_TO_ALLOW = {
     "Gemma3nVisionConfig": ["architecture", "do_pooling", "model_args"],
     "HiggsAudioV2Config": ["audio_bos_token", "audio_stream_bos_id", "audio_stream_eos_id"],
     "HiggsAudioV2TokenizerConfig": ["downsample_factor"],
+    "HunYuanVLConfig": ["im_end_id", "im_newline_id", "im_start_id"],
+    "HunYuanVLTextConfig": [
+        "attention_head_dim",
+        "enable_lm_head_fp32",
+        "org_vocab_size",
+        "pad_id",
+        "rope_scaling",
+        "use_cla",
+        "use_qk_norm",
+    ],
+    "HunYuanVLVisionConfig": [
+        "img_max_token_num",
+        "learnable_mlp_pooling_size",
+        "max_vit_seq_len",
+        "out_hidden_size",
+        "remove_prenorm",
+        "resize_resolution",
+        "temporal_patch_size",
+    ],
     "Cohere2MoeConfig": ["rope_scaling", "sliding_window_pattern"],
     "CsmConfig": ["tie_codebooks_embeddings"],
     "DeepseekV2Config": ["norm_topk_prob"],
@@ -273,6 +302,7 @@ ATTRIBUTES_TO_ALLOW = (
     "vision_feature_layer",
     "vision_feature_select_strategy",
     "vision_aspect_ratio",
+    "num_mtp_layers",  # for MTP, not used by main model architecture
     # used by GenericForTokenClassification in modeling_layers.py via getattr
     "token_classification_bias",
 )

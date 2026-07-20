@@ -643,7 +643,9 @@ class Gemma4VisionPatchEmbedder(nn.Module):
     ) -> torch.Tensor:
         # Gemma4 applies no normalization and instead scales in model code
         pixel_values = 2 * (pixel_values - 0.5)
-        hidden_states = self.input_proj(pixel_values.to(self.input_proj.weight.dtype))
+        if (target_dtype := self.input_proj.weight.dtype).is_floating_point:
+            pixel_values = pixel_values.to(target_dtype)
+        hidden_states = self.input_proj(pixel_values)
         position_embeddings = self._position_embeddings(pixel_position_ids, padding_positions)
         return hidden_states + position_embeddings
 
@@ -1595,8 +1597,8 @@ class Gemma4ForCausalLM(Gemma3ForCausalLM):
         ```python
         >>> from transformers import AutoTokenizer, Gemma4ForCausalLM
 
-        >>> model = Gemma4ForCausalLM.from_pretrained("google/gemma-2-9b")
-        >>> tokenizer = AutoTokenizer.from_pretrained("google/gemma-2-9b")
+        >>> model = Gemma4ForCausalLM.from_pretrained("google/gemma-4-E2B-it")
+        >>> tokenizer = AutoTokenizer.from_pretrained("google/gemma-4-E2B-it")
 
         >>> prompt = "What is your favorite condiment?"
         >>> inputs = tokenizer(prompt, return_tensors="pt")
