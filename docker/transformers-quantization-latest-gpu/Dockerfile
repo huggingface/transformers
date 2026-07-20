@@ -89,9 +89,15 @@ RUN python3 -m pip uninstall -y flash-attn
 # this line must be added in order for python to be aware of transformers.
 RUN cd transformers && python3 setup.py develop
 
-# Add fouroversix for quantization testing
+# Add fouroversix for quantization testing.
+# fouroversix only publishes prebuilt wheels for specific torch versions (e.g. cu12torch2.8); for other
+# torch versions (like the 2.11 pinned above) its installer 404s on the wheel URL and falls back to a
+# from-source CUDA build. There is no GPU in the image builder, so torch's arch auto-detection returns
+# an empty list and crashes with `IndexError: list index out of range` in `_get_cuda_arch_flags`.
+# `TORCH_CUDA_ARCH_LIST` supplies the target arches explicitly so the source build succeeds: 8.0 (A100),
+# 8.6 (A10G, the aws-g5 quant CI runner), 9.0 (H100). Drop this once upstream ships a matching wheel.
 RUN python3 -m pip install --no-cache-dir --upgrade setuptools wheel
-RUN python3 -m pip install --no-cache-dir "fouroversix>=1.0.2" --no-build-isolation
+RUN TORCH_CUDA_ARCH_LIST="8.0 8.6 9.0" python3 -m pip install --no-cache-dir "fouroversix>=1.0.2" --no-build-isolation
 
 # Add fp-quant for quantization testing
 RUN python3 -m pip install --no-cache-dir "fp-quant>=0.3.2"
