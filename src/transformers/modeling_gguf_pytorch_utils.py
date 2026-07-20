@@ -454,27 +454,19 @@ class MiniMaxM2TensorProcessor(TensorProcessor):
 
 
 class DeepseekV3TensorProcessor(TensorProcessor):
-    """
-    Tensor processor for DeepSeek-V3 (GGUF arch ``deepseek2``).
-
-    Handles the two DeepSeek MoE tensors that do not map one-to-one via ``gguf``:
-    - the routed experts, stored per-projection in GGUF (``ffn_gate_exps``/``ffn_up_exps``/``ffn_down_exps``)
-      but fused into a single ``mlp.experts.gate_up_proj`` (+ ``down_proj``) parameter in transformers, and
-    - the router bias ``mlp.gate.e_score_correction_bias`` which GGUF stores as ``exp_probs_b.bias``.
-
-    The attention (MLA) and shared-expert tensors are mapped automatically by ``gguf.get_tensor_name_map``.
-    """
+    # NOTE: handles the DeepSeek-V3 (GGUF arch `deepseek2`) tensors that do not map one-to-one via `gguf`:
+    # per-projection routed experts fused into `mlp.experts.gate_up_proj`/`down_proj`, the router bias
+    # stored as `exp_probs_b.bias`, and `kv_b_proj` reassembled from the llama.cpp MLA split
+    # (`attn_k_b` transposed + `attn_v_b`, see DeepseekV2Model.modify_tensors in llama.cpp).
 
     HF_EXPERT_RENAME_PATTERN = re.compile(r"mlp\.experts\.\d+\.")
     HF_MOE_W13_PATTERN = re.compile(r"(?:model\.)?layers\.(?P<bid>\d+)\.mlp\.experts\.gate_up_proj")
     GGUF_MOE_WEIGHTS_PATTERN = re.compile(r"(?P<name>.*\.ffn_(?P<w>gate|down|up)_exps)\.weight$")
     HF_BIAS_PATTERN = re.compile(r"(?:model\.)?layers\.(?P<bid>\d+)\.mlp\.gate\.e_score_correction_bias")
-    # MLA "absorption" split: llama.cpp stores kv_b_proj as separate attn_k_b (transposed) + attn_v_b tensors.
     GGUF_MLA_KV_PATTERN = re.compile(r"blk\.(?P<bid>\d+)\.attn_(?P<w>k|v)_b\.weight$")
 
     def __init__(self, config=None):
         super().__init__(config=config)
-        # Buffers to reassemble kv_b_proj from the attn_k_b / attn_v_b split (per decoder block).
         self._mla_kv_b: dict[str, dict[str, np.ndarray]] = {}
 
     def preprocess_name(self, hf_name: str) -> str:
@@ -483,12 +475,10 @@ class DeepseekV3TensorProcessor(TensorProcessor):
     def perform_fallback_tensor_mapping(
         self, gguf_to_hf_name_map: dict[str, str], suffix: str, qual_name: str, hf_name: str
     ):
-        # Map the fused gate_up_proj to both ffn_gate_exps and ffn_up_exps GGUF tensors.
         if m := re.fullmatch(self.HF_MOE_W13_PATTERN, hf_name):
             full_hf_name = qual_name + hf_name
             gguf_to_hf_name_map[f"blk.{m['bid']}.ffn_gate_exps{suffix}"] = full_hf_name
             gguf_to_hf_name_map[f"blk.{m['bid']}.ffn_up_exps{suffix}"] = full_hf_name
-        # Map e_score_correction_bias to GGUF exp_probs_b.bias.
         elif m := re.fullmatch(self.HF_BIAS_PATTERN, hf_name):
             gguf_to_hf_name_map[f"blk.{m['bid']}.exp_probs_b.bias"] = qual_name + hf_name
 
@@ -512,8 +502,6 @@ class DeepseekV3TensorProcessor(TensorProcessor):
     def _set_mla_kv_b_tensor(
         self, weights: np.ndarray, parsed_parameters: dict[str, dict], hf_name: str, bid: str, w: str
     ):
-        # Reassemble kv_b_proj [num_heads * (qk_nope_head_dim + v_head_dim), kv_lora_rank] from the
-        # llama.cpp MLA split, undoing the k_b transpose. See DeepseekV2Model.modify_tensors in llama.cpp.
         buffers = self._mla_kv_b.setdefault(bid, {})
         buffers[w] = np.copy(weights)
         if "k" not in buffers or "v" not in buffers:
@@ -802,14 +790,33 @@ def load_gguf_checkpoint(gguf_checkpoint_path, return_tensors=False, model_to_lo
     # DeepSeek-V3 shares the GGUF architecture name "deepseek2" with DeepSeek-V2. We resolve it to the
     # transformers `deepseek_v3` model_type and fix up the MLA config values that GGUF stores differently.
     if parsed_parameters["config"]["model_type"] == "deepseek2":
+        config = parsed_parameters["config"]
+        # DeepSeek-V2 checkpoints use softmax expert gating (expert_gating_func == 1, or the key is absent
+        # in old conversions) and lack the `e_score_correction_bias` tensor; the transformers DeepSeek-V3
+        # model hardcodes sigmoid gating with that bias, so those checkpoints cannot be loaded here.
+        gating_func = read_field(reader, "deepseek2.expert_gating_func")
+        if not gating_func or gating_func[0] != 2:  # 2 == sigmoid
+            raise ValueError(
+                "This DeepSeek GGUF checkpoint does not use sigmoid expert gating, which indicates a "
+                "DeepSeek-V2 family model. Only DeepSeek-V3 family GGUF checkpoints are supported."
+            )
         # llama.cpp stores the MLA head dims in `*_mla` keys; derive qk_nope_head_dim = key_length_mla - qk_rope.
-        key_length_mla = read_field(reader, "deepseek2.attention.key_length_mla")
-        qk_rope_head_dim = parsed_parameters["config"].get("qk_rope_head_dim")
+        # Conversions predating the MLA split store the full head dim in `attention.key_length` instead.
+        key_length_mla = read_field(reader, "deepseek2.attention.key_length_mla") or read_field(
+            reader, "deepseek2.attention.key_length"
+        )
+        qk_rope_head_dim = config.get("qk_rope_head_dim")
         if key_length_mla and qk_rope_head_dim is not None:
-            parsed_parameters["config"]["qk_nope_head_dim"] = key_length_mla[0] - qk_rope_head_dim
+            config["qk_nope_head_dim"] = key_length_mla[0] - qk_rope_head_dim
+        # Same for `attention.value_length_mla` (mapped to v_head_dim): conversions predating the MLA
+        # split store the value head dim in `attention.value_length` directly.
+        if "v_head_dim" not in config:
+            value_length = read_field(reader, "deepseek2.attention.value_length")
+            if value_length:
+                config["v_head_dim"] = value_length[0]
         # MLA is exported as MQA (head_count_kv == 1), but the transformers model expects the full head count.
-        parsed_parameters["config"]["num_key_value_heads"] = parsed_parameters["config"]["num_attention_heads"]
-        parsed_parameters["config"]["model_type"] = "deepseek_v3"
+        config["num_key_value_heads"] = config["num_attention_heads"]
+        config["model_type"] = "deepseek_v3"
 
     # MiniMax-M2: convert expert_gating_func integer to scoring_func string
     if parsed_parameters["config"].get("model_type") == "minimax_m2":
