@@ -25,7 +25,7 @@ backends, weight save/load, and a slow real-weight integration test.
 import tempfile
 import unittest
 
-from transformers import ESMFold2Config, is_torch_available
+from transformers import EsmFold2Config, is_torch_available
 from transformers.testing_utils import (
     TestCasePlus,
     require_torch,
@@ -40,8 +40,8 @@ from ...test_configuration_common import ConfigTester
 if is_torch_available():
     import torch
 
-    from transformers import ESMFold2Model
-    from transformers.models.esmfold2.modeling_esmfold2 import ESMFold2SWA3DRoPEAttention
+    from transformers import EsmFold2Model
+    from transformers.models.esmfold2.modeling_esmfold2 import EsmFold2SWA3DRoPEAttention
 
 # TEMP: the public ``biohub/ESMFold2`` snapshot does not yet bundle the ESMC-6B
 # backbone under ``esmc.*`` (it loads random → garbage outputs). Point the slow
@@ -50,7 +50,7 @@ if is_torch_available():
 _INTEGRATION_CKPT = "Rocketknight1/ESMFold2-merged-temp"
 
 
-def get_tiny_config(**overrides) -> "ESMFold2Config":
+def get_tiny_config(**overrides) -> "EsmFold2Config":
     """A minimal but internally consistent ESMFold2 config for CPU testing.
 
     Constraints (see modeling): 3D RoPE needs ``3*n_spatial + n_uid <= head_dim//2``
@@ -90,53 +90,47 @@ def get_tiny_config(**overrides) -> "ESMFold2Config":
         "lm_encoder_num_hidden_layers": 1,
     }
     kwargs.update(overrides)
-    return ESMFold2Config(**kwargs)
+    return EsmFold2Config(**kwargs)
 
 
-class ESMFold2ConfigTester(ConfigTester):
+class EsmFold2ConfigTester(ConfigTester):
     @unittest.skip("ESMFold2 sub-configs are not standalone auto-registered configs")
     def create_and_test_config_from_and_save_pretrained_composite(self):
         pass
 
 
 @require_torch
-class ESMFold2ConfigTest(unittest.TestCase):
+class EsmFold2ConfigTest(unittest.TestCase):
     def setUp(self):
-        # ESMFold2Config is composite (sub_configs) with no vocab/hidden_size.
-        self.config_tester = ESMFold2ConfigTester(
-            self, config_class=ESMFold2Config, has_text_modality=False, num_loops=5
+        # EsmFold2Config is composite (sub_configs) with no vocab/hidden_size.
+        self.config_tester = EsmFold2ConfigTester(
+            self, config_class=EsmFold2Config, has_text_modality=False, num_loops=5
         )
 
     def test_config(self):
         self.config_tester.run_common_tests()
 
-    def test_type_validation(self):
-        # Only the "release" variant is supported in this port.
-        ESMFold2Config(type="release")
-        with self.assertRaises(ValueError):
-            ESMFold2Config(type="experimental")
-
     def test_config_round_trip(self):
-        config = ESMFold2Config(pairwise_hidden_size=72, single_inputs_size=99, atom_encoder_hidden_size=64)
+        config = EsmFold2Config(pairwise_hidden_size=72, single_inputs_size=99, atom_encoder_hidden_size=64)
         with tempfile.TemporaryDirectory() as tmp:
             config.save_pretrained(tmp)
-            reloaded = ESMFold2Config.from_pretrained(tmp)
+            reloaded = EsmFold2Config.from_pretrained(tmp)
 
         self.assertEqual(reloaded.to_dict(), config.to_dict())
         self.assertEqual(reloaded.pairwise_hidden_size, 72)
         self.assertEqual(reloaded.single_inputs_size, 99)
         self.assertEqual(reloaded.atom_encoder_hidden_size, 64)
         # The bundled ESMC backbone round-trips as a PreTrainedConfig sub-config, not a dict.
-        self.assertEqual(type(reloaded.esmc_config).__name__, "ESMCConfig")
+        self.assertEqual(type(reloaded.esmc_config).__name__, "EsmcConfig")
 
     def test_attn_implementation_propagates_to_subconfigs(self):
-        config = ESMFold2Config(attn_implementation="sdpa")
+        config = EsmFold2Config(attn_implementation="sdpa")
         self.assertEqual(config._attn_implementation, "sdpa")
         self.assertEqual(config.esmc_config._attn_implementation, "sdpa")
 
 
 @require_torch
-class ESMFold2ModelTest(unittest.TestCase):
+class EsmFold2ModelTest(unittest.TestCase):
     seq = "MKLVAAG"
 
     # These are pure-PyTorch correctness smoke tests, run on CPU for portability
@@ -145,7 +139,7 @@ class ESMFold2ModelTest(unittest.TestCase):
     def _build(self, attn_implementation="sdpa"):
         torch.manual_seed(0)
         config = get_tiny_config(attn_implementation=attn_implementation)
-        return ESMFold2Model(config).eval()
+        return EsmFold2Model(config).eval()
 
     def test_forward_runs_on_both_backends(self):
         # The ESMC backbone is a bundled (tiny, randomly-initialised) submodule, so this
@@ -165,7 +159,7 @@ class ESMFold2ModelTest(unittest.TestCase):
 
     def test_attention_dispatch_attached(self):
         model = self._build("eager")
-        swa_modules = [m for m in model.modules() if isinstance(m, ESMFold2SWA3DRoPEAttention)]
+        swa_modules = [m for m in model.modules() if isinstance(m, EsmFold2SWA3DRoPEAttention)]
         # Both atom sites (inputs embedder + diffusion decoder) contribute SWA modules.
         self.assertGreaterEqual(len(swa_modules), 1)
         self.assertTrue(all(m.config is model.config for m in swa_modules))
@@ -182,7 +176,7 @@ class ESMFold2ModelTest(unittest.TestCase):
             model.save_pretrained(tmp)
             # The (tiny) ESMC backbone is bundled in the saved checkpoint and reloaded
             # like any other submodule — no separate backbone load.
-            reloaded = ESMFold2Model.from_pretrained(tmp).eval()
+            reloaded = EsmFold2Model.from_pretrained(tmp).eval()
 
         state_after = reloaded.state_dict()
         self.assertEqual(set(state_before), set(state_after))
@@ -195,13 +189,13 @@ class ESMFold2ModelTest(unittest.TestCase):
 
 
 @require_torch
-class ESMFold2IntegrationTest(TestCasePlus):
+class EsmFold2IntegrationTest(TestCasePlus):
     @slow
     @require_torch_accelerator
     def test_inference_protein_folding(self):
         # bf16 is the intended inference regime; the ESMC backbone is bundled in the
         # checkpoint and loaded with the model.
-        model = ESMFold2Model.from_pretrained(_INTEGRATION_CKPT, dtype=torch.bfloat16).to(torch_device).eval()
+        model = EsmFold2Model.from_pretrained(_INTEGRATION_CKPT, dtype=torch.bfloat16).to(torch_device).eval()
 
         # Ubiquitin (PDB 1UBQ), a textbook well-folding 76-residue domain. These
         # diffusion folders draw several samples and the best-ranked is the
@@ -226,7 +220,7 @@ class ESMFold2IntegrationTest(TestCasePlus):
 
     @slow
     def test_inference_deterministic_cpu_fp32(self):
-        model = ESMFold2Model.from_pretrained(_INTEGRATION_CKPT, dtype=torch.float32).eval()
+        model = EsmFold2Model.from_pretrained(_INTEGRATION_CKPT, dtype=torch.float32).eval()
 
         seq = "MQIFVKTLTGKTITLEVEPSDTIENVKAKIQDKEGIPPDQQRLIFAGKQLEDGRTLSDYNIQKESTLHLVLRLRGG"
         torch.manual_seed(0)
@@ -255,7 +249,7 @@ class ESMFold2IntegrationTest(TestCasePlus):
             torch.backends.cudnn.benchmark = False
             torch.backends.cuda.matmul.allow_tf32 = False
 
-            model = ESMFold2Model.from_pretrained(_INTEGRATION_CKPT, dtype=torch.bfloat16).to(torch_device).eval()
+            model = EsmFold2Model.from_pretrained(_INTEGRATION_CKPT, dtype=torch.bfloat16).to(torch_device).eval()
             seq = "MQIFVKTLTGKTITLEVEPSDTIENVKAKIQDKEGIPPDQQRLIFAGKQLEDGRTLSDYNIQKESTLHLVLRLRGG"
             torch.manual_seed(0)
             with torch.no_grad():

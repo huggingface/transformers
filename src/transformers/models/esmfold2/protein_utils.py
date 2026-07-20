@@ -369,10 +369,10 @@ def _encode_atom_name(name: str) -> list[int]:
 
 
 def prepare_protein_features(sequence: str) -> dict[str, Tensor]:
-    """Featurize a single protein sequence for ESMFold2Model.forward.
+    """Featurize a single protein sequence for EsmFold2Model.forward.
 
     Returns the same keys with the same dtypes/shapes as
-    ``ESMFold2InputBuilder.prepare_input(StructurePredictionInput(...))``
+    ``EsmFold2InputBuilder.prepare_input(StructurePredictionInput(...))``
     restricted to a single-chain protein with no MSA, modifications,
     distogram conditioning, or covalent bonds. All tensors have a
     leading batch dim of 1; the caller is responsible for moving them
@@ -486,7 +486,7 @@ def output_to_pdb(output, features: dict) -> str:
     """Convert an ESMFold2 forward output into a PDB string.
 
     Reads the predicted ``sample_atom_coords`` and ``plddt`` from ``output`` (an
-    [`~transformers.models.esmfold2.modeling_esmfold2.ESMFold2Output`]) and the
+    [`~transformers.models.esmfold2.modeling_esmfold2.EsmFold2Output`]) and the
     featurization tensors it needs (``res_type``, ``atom_to_token``,
     ``ref_atom_name_chars``, ``atom_attention_mask``, ``token_attention_mask``,
     ``residue_index``) from the ``features`` dict the model was run on. Builds a

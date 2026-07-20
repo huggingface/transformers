@@ -64,7 +64,7 @@ SEQUENCE_VOCAB = [
 ]
 
 
-class ESMCTokenizer(TokenizersBackend):
+class EsmcTokenizer(TokenizersBackend):
     r"""
     Construct an ESMC tokenizer.
 
@@ -91,9 +91,9 @@ class ESMCTokenizer(TokenizersBackend):
     Examples:
 
     ```python
-    >>> from transformers import ESMCTokenizer
+    >>> from transformers import EsmcTokenizer
 
-    >>> tokenizer = ESMCTokenizer()
+    >>> tokenizer = EsmcTokenizer()
     >>> tokenizer("ACDEFGHIKLMNPQRSTVWY")["input_ids"]
     [0, 5, 23, 13, 9, 18, 6, 21, 12, 15, 4, 20, 17, 14, 16, 10, 8, 11, 7, 22, 19, 2]
     ```
@@ -183,4 +183,4 @@ class ESMCTokenizer(TokenizersBackend):
         return str(token)
 
 
-__all__ = ["ESMCTokenizer"]
+__all__ = ["EsmcTokenizer"]

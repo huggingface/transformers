@@ -26,7 +26,7 @@ from ...utils import auto_docstring
 
 @auto_docstring(checkpoint="biohub/ESMC-6B")
 @strict
-class ESMCConfig(PreTrainedConfig):
+class EsmcConfig(PreTrainedConfig):
     r"""
     mask_token_id (`int`, *optional*, defaults to 32):
         Index of the mask token in the vocabulary (``"<mask>"``), used for masked language modelling.
@@ -36,8 +36,6 @@ class ESMCConfig(PreTrainedConfig):
         Hidden-dim expansion ratio for the SwiGLU feed-forward network. When
         `intermediate_size` is not given it is derived from this as
         `expansion_ratio * hidden_size` rounded up to a multiple of 256.
-    qk_layernorm (`bool`, *optional*, defaults to `True`):
-        Whether to apply LayerNorm to queries and keys before computing attention.
     scale_residue (`bool`, *optional*, defaults to `True`):
         Whether to apply ESM3 residual scaling (`1 / sqrt(num_hidden_layers / 36)`
         per block) to stabilise deep networks.
@@ -45,13 +43,13 @@ class ESMCConfig(PreTrainedConfig):
     Examples:
 
     ```python
-    >>> from transformers import ESMCConfig, ESMCModel
+    >>> from transformers import EsmcConfig, EsmcModel
 
     >>> # Initializing an ESMC biohub/ESMC-6B style configuration
-    >>> configuration = ESMCConfig()
+    >>> configuration = EsmcConfig()
 
     >>> # Initializing a model (with random weights) from the configuration
-    >>> model = ESMCModel(configuration)
+    >>> model = EsmcModel(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
@@ -59,7 +57,7 @@ class ESMCConfig(PreTrainedConfig):
     """
 
     model_type = "esmc"
-    # Default tensor parallel plan for base model `ESMCModel`
+    # Default tensor parallel plan for base model `EsmcModel`
     base_model_tp_plan = {
         "layers.*.self_attn.q_proj": "colwise",
         "layers.*.self_attn.k_proj": "colwise",
@@ -104,7 +102,6 @@ class ESMCConfig(PreTrainedConfig):
     mask_token_id: int | None = 32
     classifier_dropout: float | None = 0.1
     expansion_ratio: float | None = 8 / 3
-    qk_layernorm: bool | None = True
     scale_residue: bool | None = True
 
     def __post_init__(self, **kwargs):
@@ -131,4 +128,4 @@ class ESMCConfig(PreTrainedConfig):
             )
 
 
-__all__ = ["ESMCConfig"]
+__all__ = ["EsmcConfig"]

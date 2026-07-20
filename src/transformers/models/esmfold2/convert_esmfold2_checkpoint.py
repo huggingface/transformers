@@ -22,10 +22,10 @@ import torch
 from huggingface_hub import HfApi, save_torch_state_dict, snapshot_download
 from safetensors.torch import load_file
 
-from transformers import AutoTokenizer, ESMCTokenizer, ESMFold2Config
+from transformers import AutoTokenizer, EsmcTokenizer, EsmFold2Config
 
 
-# Flat ESMFold2Config field -> dotted path in the research checkpoint's nested config.json.
+# Flat EsmFold2Config field -> dotted path in the research checkpoint's nested config.json.
 _LEGACY_FIELD_MAP = {
     "hidden_size": "d_single",
     "pairwise_hidden_size": "d_pair",
@@ -71,13 +71,11 @@ _LEGACY_FIELD_MAP = {
     "confidence_head_min_dist": "confidence_head.min_dist",
     "confidence_head_max_dist": "confidence_head.max_dist",
     "confidence_head_distogram_bins": "confidence_head.distogram_bins",
-    "msa_encoder_enabled": "msa_encoder.enabled",
     "msa_encoder_hidden_size": "msa_encoder.d_msa",
     "msa_encoder_outer_hidden_size": "msa_encoder.d_hidden",
     "msa_encoder_num_hidden_layers": "msa_encoder.n_layers",
     "msa_encoder_num_attention_heads": "msa_encoder.n_heads_msa",
     "msa_encoder_head_width": "msa_encoder.msa_head_width",
-    "lm_encoder_enabled": "lm_encoder.enabled",
     "lm_encoder_num_hidden_layers": "lm_encoder.n_layers",
     "lm_encoder_lm_dropout": "lm_encoder.lm_dropout",
     "lm_encoder_per_loop_lm_dropout": "lm_encoder.per_loop_lm_dropout",
@@ -90,7 +88,7 @@ _LEGACY_DROP_PATHS = {
     "architectures",
     "model_type",
     "transformers_version",
-    "type",  # re-added by flatten_legacy_config; the flat config validates it
+    "type",  # only the release variant is ported, so the field was dropped entirely
     "esmc_id",
     "lm_d_model",
     "lm_num_layers",
@@ -105,6 +103,8 @@ _LEGACY_DROP_PATHS = {
     "structure_head.diffusion_module.c_s_inputs",
     "structure_head.diffusion_module.relpos_r_max",
     "structure_head.diffusion_module.relpos_s_max",
+    "msa_encoder.enabled",  # always built now (every release enables it)
+    "lm_encoder.enabled",  # always built now (every release enables it)
     "confidence_head.enabled",
     "confidence_head.folding_trunk.n_heads",
     "confidence_head.folding_trunk.dropout",
@@ -121,10 +121,16 @@ _WEIGHT_KEY_RENAMES = (
     (".atom_transformer.", "."),
     ("._engine.", "."),
     (".blocks.", ".layers."),
-    (".w_up.", ".w12."),
-    (".w_down.", ".w3."),
-    (".lin_swish.", ".ffn.w12."),
-    (".lin_out.", ".ffn.w3."),
+    (".w_up.", ".gate_up_proj."),
+    (".w_down.", ".down_proj."),
+    (".lin_swish.", ".ffn.gate_up_proj."),
+    (".lin_out.", ".ffn.down_proj."),
+    # pair/msa-transition SwiGLU is already fused as w12/w3 in the research checkpoint (unlike the
+    # w_up/w_down and lin_swish/lin_out blocks above); the port names every SwiGLU gate_up_proj/down_proj.
+    (".ffn.w12.", ".ffn.gate_up_proj."),
+    (".ffn.w3.", ".ffn.down_proj."),
+    ("fourier.w", "fourier.frequencies"),  # fixed Fourier freq/phase buffers
+    ("fourier.b", "fourier.phases"),
     ("output_mlp.0.", "output_fc1."),
     ("output_mlp.2.", "output_fc2."),
     ("adaln_modulation.1.", "adaln_linear."),
@@ -134,9 +140,26 @@ _WEIGHT_KEY_RENAMES = (
     ("base_z_mlp.1.", "base_z_output_norm."),
     ("compute_bias.0.", "bias_norm."),
     ("compute_bias.1.", "bias_proj."),
+    # ConfidenceHead loose input projections grouped under an input_embedder submodule (dotted
+    # suffixes so ``s_to_z.`` does not also match ``s_to_z_transpose.`` / ``s_to_z_prod_*``).
+    ("confidence_head.s_inputs_norm.", "confidence_head.input_embedder.s_inputs_norm."),
+    ("confidence_head.z_norm.", "confidence_head.input_embedder.z_norm."),
+    ("confidence_head.s_to_z.", "confidence_head.input_embedder.s_to_z."),
+    ("confidence_head.s_to_z_transpose.", "confidence_head.input_embedder.s_to_z_transpose."),
+    ("confidence_head.s_to_z_prod_in1.", "confidence_head.input_embedder.s_to_z_prod_in1."),
+    ("confidence_head.s_to_z_prod_in2.", "confidence_head.input_embedder.s_to_z_prod_in2."),
+    ("confidence_head.s_to_z_prod_out.", "confidence_head.input_embedder.s_to_z_prod_out."),
 )
 # The SWA attention packed q/k/v into one Wqkv; the port uses separate projections.
 _PACKED_QKV_SUFFIX = "attn.Wqkv.weight"
+
+# Dead research-checkpoint tensors the port never wired up (vestigial in the fork too — see the PR
+# discussion); the port doesn't allocate them, so drop them rather than emit unexpected keys.
+_WEIGHT_KEY_DROPS = (
+    "confidence_head.s_norm.",
+    "confidence_head.s_inputs_to_single.",
+    "confidence_head.s_input_to_s.",
+)
 
 
 def _read_json(directory: str) -> dict:
@@ -161,9 +184,8 @@ def _leaf_paths(cfg: dict, prefix: str = "") -> set[str]:
 
 def flatten_legacy_config(old: dict) -> dict:
     flat = {flat_key: _get_path(old, old_path) for flat_key, old_path in _LEGACY_FIELD_MAP.items()}
-    for passthrough in ("dtype", "type"):
-        if passthrough in old:
-            flat[passthrough] = old[passthrough]
+    if "dtype" in old:
+        flat["dtype"] = old["dtype"]
     unexpected = _leaf_paths(old) - (set(_LEGACY_FIELD_MAP.values()) | _LEGACY_DROP_PATHS | {"dtype"})
     if unexpected:
         raise ValueError(f"unmapped fields in the source ESMFold2 config: {sorted(unexpected)}")
@@ -184,16 +206,18 @@ def _load_state_dict(directory: str) -> dict[str, torch.Tensor]:
     return state_dict
 
 
-def build_config(esmfold2_dir: str, esmc_dir: str) -> ESMFold2Config:
+def build_config(esmfold2_dir: str, esmc_dir: str) -> EsmFold2Config:
     flat = flatten_legacy_config(_read_json(esmfold2_dir))
-    flat["architectures"] = ["ESMFold2Model"]  # experimental repos ship a now-removed architecture string
+    flat["architectures"] = ["EsmFold2Model"]  # experimental repos ship a now-removed architecture string
     flat["esmc_config"] = _read_json(esmc_dir)
-    return ESMFold2Config.from_dict(flat)
+    return EsmFold2Config.from_dict(flat)
 
 
 def rename_trunk_keys(trunk: dict[str, torch.Tensor]) -> dict[str, torch.Tensor]:
     renamed: dict[str, torch.Tensor] = {}
     for key, tensor in trunk.items():
+        if any(drop in key for drop in _WEIGHT_KEY_DROPS):
+            continue
         for old, new in _WEIGHT_KEY_RENAMES:
             key = key.replace(old, new)
         if key.endswith(_PACKED_QKV_SUFFIX):
@@ -225,7 +249,7 @@ def save_tokenizer(esmc_dir: str, output_dir: str) -> None:
     try:
         tokenizer = AutoTokenizer.from_pretrained(esmc_dir)
     except Exception:  # backbone dir ships no tokenizer files
-        tokenizer = ESMCTokenizer()
+        tokenizer = EsmcTokenizer()
     tokenizer.save_pretrained(output_dir)
 
 

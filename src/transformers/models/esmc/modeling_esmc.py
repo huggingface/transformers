@@ -38,13 +38,13 @@ from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
 from ...utils.generic import is_flash_attention_requested, maybe_autocast, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
-from .configuration_esmc import ESMCConfig
+from .configuration_esmc import EsmcConfig
 
 
-class ESMCRotaryEmbedding(nn.Module):
+class EsmcRotaryEmbedding(nn.Module):
     inv_freq: torch.Tensor  # fix linting for `register_buffer`
 
-    def __init__(self, config: ESMCConfig, device=None):
+    def __init__(self, config: EsmcConfig, device=None):
         super().__init__()
         self.max_seq_len_cached = config.max_position_embeddings
         self.original_max_seq_len = config.max_position_embeddings
@@ -62,7 +62,7 @@ class ESMCRotaryEmbedding(nn.Module):
 
     @staticmethod
     def compute_default_rope_parameters(
-        config: ESMCConfig | None = None,
+        config: EsmcConfig | None = None,
         device: Optional["torch.device"] = None,
         seq_len: int | None = None,
     ) -> tuple["torch.Tensor", float]:
@@ -106,7 +106,7 @@ class ESMCRotaryEmbedding(nn.Module):
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
 
-class ESMCMLP(nn.Module):
+class EsmcMLP(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.config = config
@@ -184,10 +184,10 @@ def eager_attention_forward(
 
 
 @use_kernelized_func(apply_rotary_pos_emb)
-class ESMCAttention(nn.Module):
+class EsmcAttention(nn.Module):
     """Multi-head self-attention with QK-LayerNorm and RoPE."""
 
-    def __init__(self, config: ESMCConfig, layer_idx: int | None = None):
+    def __init__(self, config: EsmcConfig, layer_idx: int | None = None):
         super().__init__()
         self.config = config
         self.layer_idx = layer_idx
@@ -209,8 +209,9 @@ class ESMCAttention(nn.Module):
         self.o_proj = nn.Linear(
             config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
         )
-        self.q_norm = nn.LayerNorm(config.hidden_size, bias=False) if config.qk_layernorm else nn.Identity()
-        self.k_norm = nn.LayerNorm(config.hidden_size, bias=False) if config.qk_layernorm else nn.Identity()
+        # QK-LayerNorm is inherent to ESMC; every released checkpoint carries q_norm/k_norm weights.
+        self.q_norm = nn.LayerNorm(config.hidden_size, bias=False)
+        self.k_norm = nn.LayerNorm(config.hidden_size, bias=False)
 
     def forward(
         self,
@@ -251,16 +252,16 @@ class ESMCAttention(nn.Module):
         return self.o_proj(attn_output), attn_weights
 
 
-class ESMCLayer(GradientCheckpointingLayer):
+class EsmcLayer(GradientCheckpointingLayer):
     """Single transformer block: pre-norm attention + pre-norm FFN with residual scaling."""
 
-    def __init__(self, config: ESMCConfig, layer_idx: int | None = None):
+    def __init__(self, config: EsmcConfig, layer_idx: int | None = None):
         super().__init__()
         self.hidden_size = config.hidden_size
 
-        self.self_attn = ESMCAttention(config=config, layer_idx=layer_idx)
+        self.self_attn = EsmcAttention(config=config, layer_idx=layer_idx)
 
-        self.mlp = ESMCMLP(config)
+        self.mlp = EsmcMLP(config)
         # LayerNorm instead of Llama's RMSNorm.
         self.input_layernorm = nn.LayerNorm(config.hidden_size)
         self.post_attention_layernorm = nn.LayerNorm(config.hidden_size)
@@ -289,8 +290,8 @@ class ESMCLayer(GradientCheckpointingLayer):
 
 
 @auto_docstring
-class ESMCPreTrainedModel(PreTrainedModel):
-    config_class = ESMCConfig
+class EsmcPreTrainedModel(PreTrainedModel):
+    config_class = EsmcConfig
     base_model_prefix = "esmc"
     supports_gradient_checkpointing = True
     _supports_flash_attn = True
@@ -298,22 +299,22 @@ class ESMCPreTrainedModel(PreTrainedModel):
     _supports_flex_attn = True
     _supports_attention_backend = True
     _can_record_outputs = {
-        "hidden_states": ESMCLayer,
-        "attentions": ESMCAttention,
+        "hidden_states": EsmcLayer,
+        "attentions": EsmcAttention,
     }
     # ``inv_freq`` / ``original_inv_freq`` are non-persistent rotary buffers; ``_extra_state``
     # keys come from the published checkpoint's fused TransformerEngine layout.
     _keys_to_ignore_on_load_unexpected = [r"\._extra_state$", r"\.inv_freq$", r"\.original_inv_freq$"]
-    _no_split_modules = ["ESMCLayer"]
+    _no_split_modules = ["EsmcLayer"]
 
 
 @auto_docstring
-class ESMCModel(ESMCPreTrainedModel):
-    def __init__(self, config: ESMCConfig):
+class EsmcModel(EsmcPreTrainedModel):
+    def __init__(self, config: EsmcConfig):
         super().__init__(config)
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size)
-        self.rotary_emb = ESMCRotaryEmbedding(config)
-        self.layers = nn.ModuleList([ESMCLayer(config) for _ in range(config.num_hidden_layers)])
+        self.rotary_emb = EsmcRotaryEmbedding(config)
+        self.layers = nn.ModuleList([EsmcLayer(config) for _ in range(config.num_hidden_layers)])
         self.norm = nn.LayerNorm(config.hidden_size, bias=False)
         self.gradient_checkpointing = False
         self.post_init()
@@ -342,9 +343,9 @@ class ESMCModel(ESMCPreTrainedModel):
         Examples:
 
         ```python
-        >>> from transformers import AutoTokenizer, ESMCModel
+        >>> from transformers import AutoTokenizer, EsmcModel
 
-        >>> model = ESMCModel.from_pretrained("biohub/ESMC-300M")
+        >>> model = EsmcModel.from_pretrained("biohub/ESMC-300M")
         >>> tokenizer = AutoTokenizer.from_pretrained("biohub/ESMC-300M")
         >>> inputs = tokenizer(["MLKNVQVQLV"], return_tensors="pt")
         >>> outputs = model(**inputs)
@@ -389,7 +390,7 @@ class ESMCModel(ESMCPreTrainedModel):
         return BaseModelOutput(last_hidden_state=output)
 
 
-class ESMCMaskedLMHead(nn.Module):
+class EsmcMaskedLMHead(nn.Module):
     def __init__(self, d_model: int, output_dim: int, hidden_dim: int | None = None) -> None:
         super().__init__()
         hidden_dim = hidden_dim if hidden_dim is not None else d_model
@@ -405,11 +406,11 @@ class ESMCMaskedLMHead(nn.Module):
 
 
 @auto_docstring
-class ESMCForMaskedLM(ESMCPreTrainedModel):
-    def __init__(self, config: ESMCConfig):
+class EsmcForMaskedLM(EsmcPreTrainedModel):
+    def __init__(self, config: EsmcConfig):
         super().__init__(config)
-        self.esmc = ESMCModel(config)
-        self.lm_head = ESMCMaskedLMHead(config.hidden_size, config.vocab_size)
+        self.esmc = EsmcModel(config)
+        self.lm_head = EsmcMaskedLMHead(config.hidden_size, config.vocab_size)
         self.post_init()
 
     def get_output_embeddings(self) -> nn.Linear:
@@ -431,7 +432,7 @@ class ESMCForMaskedLM(ESMCPreTrainedModel):
         r"""
         sequence_id (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
             Integer chain-ID tensor forwarded to the encoder for chain-aware
-            attention masking. See :meth:`ESMCModel.forward` for the encoding.
+            attention masking. See :meth:`EsmcModel.forward` for the encoding.
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for masked language modelling loss.  Positions with label ``-100``
             are ignored.  Other positions must be in ``[0, config.vocab_size)``.
@@ -439,10 +440,10 @@ class ESMCForMaskedLM(ESMCPreTrainedModel):
         Examples:
 
         ```python
-        >>> from transformers import AutoTokenizer, ESMCForMaskedLM
+        >>> from transformers import AutoTokenizer, EsmcForMaskedLM
         >>> import torch
 
-        >>> model = ESMCForMaskedLM.from_pretrained("biohub/ESMC-300M")
+        >>> model = EsmcForMaskedLM.from_pretrained("biohub/ESMC-300M")
         >>> tokenizer = AutoTokenizer.from_pretrained("biohub/ESMC-300M")
         >>> inputs = tokenizer(["MLKNVQ<mask>LV"], return_tensors="pt")
         >>> outputs = model(**inputs)
@@ -472,10 +473,10 @@ class ESMCForMaskedLM(ESMCPreTrainedModel):
         )
 
 
-class ESMCClassificationHead(nn.Module):
+class EsmcClassificationHead(nn.Module):
     """Head for sentence-level classification tasks."""
 
-    def __init__(self, config: ESMCConfig):
+    def __init__(self, config: EsmcConfig):
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
         self.dropout = nn.Dropout(config.classifier_dropout)
@@ -497,12 +498,12 @@ class ESMCClassificationHead(nn.Module):
     output) e.g. for GLUE tasks.
     """
 )
-class ESMCForSequenceClassification(ESMCPreTrainedModel):
-    def __init__(self, config: ESMCConfig):
+class EsmcForSequenceClassification(EsmcPreTrainedModel):
+    def __init__(self, config: EsmcConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
-        self.esmc = ESMCModel(config)
-        self.classifier = ESMCClassificationHead(config)
+        self.esmc = EsmcModel(config)
+        self.classifier = EsmcClassificationHead(config)
         self.post_init()
 
     @can_return_tuple
@@ -566,16 +567,16 @@ class ESMCForSequenceClassification(ESMCPreTrainedModel):
         )
 
 
-class ESMCForTokenClassification(GenericForTokenClassification, ESMCPreTrainedModel):
+class EsmcForTokenClassification(GenericForTokenClassification, EsmcPreTrainedModel):
     # ``dropout`` (from ``config.classifier_dropout``) + a ``score`` linear over the
     # per-token hidden states, identical to the ESM token-classification head.
     pass
 
 
 __all__ = [
-    "ESMCModel",
-    "ESMCForMaskedLM",
-    "ESMCForSequenceClassification",
-    "ESMCForTokenClassification",
-    "ESMCPreTrainedModel",
+    "EsmcModel",
+    "EsmcForMaskedLM",
+    "EsmcForSequenceClassification",
+    "EsmcForTokenClassification",
+    "EsmcPreTrainedModel",
 ]
