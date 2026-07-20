@@ -16,7 +16,6 @@ import numpy as np
 import torch
 
 from ...audio_processing_backends import TorchAudioBackend
-from ...audio_processing_base import make_legacy_audio_processor_alias
 from ...audio_utils import MelScaleConfig, SpectrogramConfig, StftConfig
 
 
@@ -93,6 +92,14 @@ class Gemma3nAudioProcessor(TorchAudioBackend):
 
     def _normalize_magnitude(self, features, *, spectrogram_config, **kwargs):
         result = super()._normalize_magnitude(features, spectrogram_config=spectrogram_config, **kwargs)
+        # Per-bin shift/scale is Gemma-family-specific; it lives here rather than in the base
+        # `_apply_post_log_normalization` so non-Gemma models don't need to think about it.
+        if self.per_bin_mean is not None:
+            mean = self.per_bin_mean.to(device=result.device, dtype=result.dtype)
+            result = result - mean
+        if self.per_bin_stddev is not None:
+            stddev = self.per_bin_stddev.to(device=result.device, dtype=result.dtype)
+            result = result / stddev
         return result.to(torch.float32)
 
     def _get_features_lengths(self, audio_lengths, spectrogram_config, include_center_frame=False):
@@ -103,7 +110,4 @@ class Gemma3nAudioProcessor(TorchAudioBackend):
         return (audio_lengths + hop_length - 1) // hop_length
 
 
-Gemma3nAudioFeatureExtractor = make_legacy_audio_processor_alias(Gemma3nAudioProcessor, "Gemma3nAudioFeatureExtractor")
-
-
-__all__ = ["Gemma3nAudioProcessor", "Gemma3nAudioFeatureExtractor"]
+__all__ = ["Gemma3nAudioProcessor"]

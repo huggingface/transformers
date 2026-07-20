@@ -19,8 +19,10 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_gemma4 import *
+    from .audio_processing_gemma4 import *
     from .feature_extraction_gemma4 import *
+    from .audio_processing_numpy_gemma4 import *
+    from .configuration_gemma4 import *
     from .image_processing_gemma4 import *
     from .image_processing_pil_gemma4 import *
     from .modeling_gemma4 import *

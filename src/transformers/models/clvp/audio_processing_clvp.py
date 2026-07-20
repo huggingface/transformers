@@ -15,7 +15,6 @@
 import torch
 
 from ...audio_processing_backends import TorchAudioBackend
-from ...audio_processing_base import make_legacy_audio_processor_alias
 from ...audio_utils import MelScaleConfig, SpectrogramConfig, StftConfig
 
 
@@ -71,7 +70,4 @@ class ClvpAudioProcessor(TorchAudioBackend):
         return features.to(torch.float32)
 
 
-ClvpFeatureExtractor = make_legacy_audio_processor_alias(ClvpAudioProcessor, "ClvpFeatureExtractor")
-
-
-__all__ = ["ClvpAudioProcessor", "ClvpFeatureExtractor"]
+__all__ = ["ClvpAudioProcessor"]

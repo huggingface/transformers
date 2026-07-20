@@ -18,6 +18,7 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
+    from .feature_extraction_voxtral_realtime import *
     from .configuration_voxtral_realtime import *
     from .modeling_voxtral_realtime import *
     from .processing_voxtral_realtime import *

@@ -13,7 +13,6 @@
 # limitations under the License.
 
 from ...audio_processing_backends import TorchAudioBackend
-from ...audio_processing_base import make_legacy_audio_processor_alias
 
 
 class SpeechT5AudioProcessor(TorchAudioBackend):
@@ -21,7 +20,4 @@ class SpeechT5AudioProcessor(TorchAudioBackend):
     force_mono = True
 
 
-SpeechT5FeatureExtractor = make_legacy_audio_processor_alias(SpeechT5AudioProcessor, "SpeechT5FeatureExtractor")
-
-
-__all__ = ["SpeechT5AudioProcessor", "SpeechT5FeatureExtractor"]
+__all__ = ["SpeechT5AudioProcessor"]

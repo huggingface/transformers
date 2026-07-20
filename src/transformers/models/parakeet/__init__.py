@@ -19,7 +19,9 @@ from ...utils.import_utils import define_import_structure
 
 if TYPE_CHECKING:
     from .configuration_parakeet import *
+    from .audio_processing_parakeet import *
     from .feature_extraction_parakeet import *
+    from .audio_processing_numpy_parakeet import *
     from .modeling_parakeet import *
     from .tokenization_parakeet_fast import *
 else:

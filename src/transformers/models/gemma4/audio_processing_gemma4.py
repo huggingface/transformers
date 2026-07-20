@@ -19,7 +19,6 @@ import numpy as np
 import torch
 
 from ...audio_processing_backends import TorchAudioBackend
-from ...audio_processing_base import make_legacy_audio_processor_alias
 from ...audio_utils import MelScaleConfig, SpectrogramConfig, StftConfig, mel_filter_bank
 
 
@@ -273,9 +272,4 @@ class Gemma4AudioProcessor(TorchAudioBackend):
         return lengths
 
 
-Gemma4AudioFeatureExtractor = make_legacy_audio_processor_alias(
-    Gemma4AudioProcessor, "Gemma4AudioFeatureExtractor"
-)
-
-
-__all__ = ["Gemma4AudioProcessor", "Gemma4AudioFeatureExtractor"]
+__all__ = ["Gemma4AudioProcessor"]

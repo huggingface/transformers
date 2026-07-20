@@ -13,7 +13,6 @@
 # limitations under the License.
 
 from ...audio_processing_backends import TorchAudioBackend
-from ...audio_processing_base import make_legacy_audio_processor_alias
 
 
 class PeAudioAudioProcessor(TorchAudioBackend):
@@ -21,7 +20,4 @@ class PeAudioAudioProcessor(TorchAudioBackend):
     force_mono = True
 
 
-PeAudioFeatureExtractor = make_legacy_audio_processor_alias(PeAudioAudioProcessor, "PeAudioFeatureExtractor")
-
-
-__all__ = ["PeAudioAudioProcessor", "PeAudioFeatureExtractor"]
+__all__ = ["PeAudioAudioProcessor"]

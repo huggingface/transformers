@@ -15,7 +15,6 @@
 import torch
 
 from ...audio_processing_backends import TorchAudioBackend
-from ...audio_processing_base import make_legacy_audio_processor_alias
 
 
 class VibevoiceAcousticTokenizerAudioProcessor(TorchAudioBackend):
@@ -36,7 +35,4 @@ class VibevoiceAcousticTokenizerAudioProcessor(TorchAudioBackend):
         return audio_el
 
 
-VibeVoiceAcousticTokenizerFeatureExtractor = make_legacy_audio_processor_alias(VibevoiceAcousticTokenizerAudioProcessor, "VibeVoiceAcousticTokenizerFeatureExtractor")
-
-
-__all__ = ["VibevoiceAcousticTokenizerAudioProcessor", "VibeVoiceAcousticTokenizerFeatureExtractor"]
+__all__ = ["VibevoiceAcousticTokenizerAudioProcessor"]

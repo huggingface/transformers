@@ -15,7 +15,6 @@
 import torch
 
 from ...audio_processing_backends import TorchAudioBackend
-from ...audio_processing_base import make_legacy_audio_processor_alias
 from ...audio_utils import MelScaleConfig, SpectrogramConfig, StftConfig
 
 
@@ -63,7 +62,4 @@ class WhisperAudioProcessor(TorchAudioBackend):
         return torch.clamp(torch.matmul(mel_filters.T, features), min=spectrogram_config.mel_floor)
 
 
-WhisperFeatureExtractor = make_legacy_audio_processor_alias(WhisperAudioProcessor, "WhisperFeatureExtractor")
-
-
-__all__ = ["WhisperAudioProcessor", "WhisperFeatureExtractor"]
+__all__ = ["WhisperAudioProcessor"]

@@ -15,7 +15,6 @@
 import torch
 
 from ...audio_processing_backends import TorchAudioBackend
-from ...audio_processing_base import make_legacy_audio_processor_alias
 from ...audio_utils import MelScaleConfig, SpectrogramConfig, StftConfig, mel_filter_bank
 
 
@@ -125,7 +124,4 @@ class Phi4MultimodalAudioProcessor(TorchAudioBackend):
         return output
 
 
-Phi4MultimodalFeatureExtractor = make_legacy_audio_processor_alias(Phi4MultimodalAudioProcessor, "Phi4MultimodalFeatureExtractor")
-
-
-__all__ = ["Phi4MultimodalAudioProcessor", "Phi4MultimodalFeatureExtractor"]
+__all__ = ["Phi4MultimodalAudioProcessor"]

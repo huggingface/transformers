@@ -19,7 +19,9 @@ from ...utils.import_utils import define_import_structure
 
 if TYPE_CHECKING:
     from .configuration_clap import *
+    from .audio_processing_clap import *
     from .feature_extraction_clap import *
+    from .audio_processing_numpy_clap import *
     from .modeling_clap import *
     from .processing_clap import *
 else:

@@ -15,7 +15,6 @@
 import torch
 
 from ...audio_processing_backends import TorchAudioBackend
-from ...audio_processing_base import make_legacy_audio_processor_alias
 from ...audio_utils import MelScaleConfig, SpectrogramConfig, StftConfig
 
 
@@ -88,12 +87,4 @@ class AudioSpectrogramTransformerAudioProcessor(TorchAudioBackend):
         return output
 
 
-AudioSpectrogramTransformerFeatureExtractor = make_legacy_audio_processor_alias(
-    AudioSpectrogramTransformerAudioProcessor, "AudioSpectrogramTransformerFeatureExtractor"
-)
-
-
-__all__ = [
-    "AudioSpectrogramTransformerAudioProcessor",
-    "AudioSpectrogramTransformerFeatureExtractor",
-]
+__all__ = ["AudioSpectrogramTransformerAudioProcessor"]

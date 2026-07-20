@@ -15,7 +15,6 @@
 import torch
 
 from ...audio_processing_backends import TorchAudioBackend
-from ...audio_processing_base import make_legacy_audio_processor_alias
 from ...audio_utils import MelScaleConfig, SpectrogramConfig, StftConfig
 
 
@@ -104,9 +103,4 @@ class SeamlessM4tAudioProcessor(TorchAudioBackend):
         return output
 
 
-SeamlessM4TFeatureExtractor = make_legacy_audio_processor_alias(
-    SeamlessM4tAudioProcessor, "SeamlessM4TFeatureExtractor"
-)
-
-
-__all__ = ["SeamlessM4tAudioProcessor", "SeamlessM4TFeatureExtractor"]
+__all__ = ["SeamlessM4tAudioProcessor"]

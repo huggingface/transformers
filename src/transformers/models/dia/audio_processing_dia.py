@@ -13,7 +13,6 @@
 # limitations under the License.
 
 from ...audio_processing_backends import TorchAudioBackend
-from ...audio_processing_base import make_legacy_audio_processor_alias
 
 
 class DiaAudioProcessor(TorchAudioBackend):
@@ -23,7 +22,4 @@ class DiaAudioProcessor(TorchAudioBackend):
     pad_to_multiple_of = 512
 
 
-DiaFeatureExtractor = make_legacy_audio_processor_alias(DiaAudioProcessor, "DiaFeatureExtractor")
-
-
-__all__ = ["DiaAudioProcessor", "DiaFeatureExtractor"]
+__all__ = ["DiaAudioProcessor"]

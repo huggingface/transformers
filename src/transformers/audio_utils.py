@@ -134,6 +134,12 @@ class SpectrogramConfig:
     waveform_scale: float | None = None
     computation_dtype: str | None = None
     skip_last_frame: bool = False
+    # Post-log clamp + affine rescale (ADR 0004). Used by Whisper and Voxtral-Realtime.
+    # When set, after log compression the features are clipped at ``max(features) - clip_max_offset``
+    # then shifted by ``post_log_shift`` and scaled by ``post_log_scale``.
+    clip_max_offset: float | None = None
+    post_log_shift: float | None = None
+    post_log_scale: float | None = None
 
     def __getitem__(self, key):
         if hasattr(self, key):
@@ -163,19 +169,12 @@ class SpectrogramConfig:
 
     @classmethod
     def from_dict(cls, d: dict) -> "SpectrogramConfig":
-        stft_config = StftConfig.from_dict(d["stft_config"]) if "stft_config" in d else StftConfig()
-        mel_scale_config = MelScaleConfig.from_dict(d["mel_scale_config"]) if "mel_scale_config" in d else None
-        return cls(
-            stft_config=stft_config,
-            mel_scale_config=mel_scale_config,
-            log_mode=d.get("log_mode", "log10"),
-            chunk_length=d.get("chunk_length"),
-            preemphasis=d.get("preemphasis"),
-            remove_dc_offset=d.get("remove_dc_offset", False),
-            mel_floor=d.get("mel_floor", 1e-10),
-            waveform_scale=d.get("waveform_scale"),
-            skip_last_frame=d.get("skip_last_frame", False),
-        )
+        kwargs = {k: v for k, v in d.items() if k in {f.name for f in fields(cls)}}
+        if "stft_config" in kwargs and isinstance(kwargs["stft_config"], dict):
+            kwargs["stft_config"] = StftConfig.from_dict(kwargs["stft_config"])
+        if "mel_scale_config" in kwargs and isinstance(kwargs["mel_scale_config"], dict):
+            kwargs["mel_scale_config"] = MelScaleConfig.from_dict(kwargs["mel_scale_config"])
+        return cls(**kwargs)
 
 
 @retry(exceptions=(httpx.HTTPError,))

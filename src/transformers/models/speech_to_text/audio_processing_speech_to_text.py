@@ -16,7 +16,6 @@ import numpy as np
 import torch
 
 from ...audio_processing_backends import TorchAudioBackend
-from ...audio_processing_base import make_legacy_audio_processor_alias
 from ...audio_utils import MelScaleConfig, SpectrogramConfig, StftConfig
 
 
@@ -120,7 +119,4 @@ class SpeechToTextAudioProcessor(TorchAudioBackend):
         return output
 
 
-Speech2TextFeatureExtractor = make_legacy_audio_processor_alias(SpeechToTextAudioProcessor, "Speech2TextFeatureExtractor")
-
-
-__all__ = ["SpeechToTextAudioProcessor", "Speech2TextFeatureExtractor"]
+__all__ = ["SpeechToTextAudioProcessor"]

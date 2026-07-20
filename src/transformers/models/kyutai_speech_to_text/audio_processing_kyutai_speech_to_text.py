@@ -15,7 +15,6 @@
 import torch
 
 from ...audio_processing_backends import TorchAudioBackend
-from ...audio_processing_base import make_legacy_audio_processor_alias
 
 
 class KyutaiSpeechToTextAudioProcessor(TorchAudioBackend):
@@ -41,9 +40,4 @@ class KyutaiSpeechToTextAudioProcessor(TorchAudioBackend):
         return output
 
 
-KyutaiSpeechToTextFeatureExtractor = make_legacy_audio_processor_alias(
-    KyutaiSpeechToTextAudioProcessor, "KyutaiSpeechToTextFeatureExtractor"
-)
-
-
-__all__ = ["KyutaiSpeechToTextAudioProcessor", "KyutaiSpeechToTextFeatureExtractor"]
+__all__ = ["KyutaiSpeechToTextAudioProcessor"]

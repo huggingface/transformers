@@ -19,7 +19,9 @@ from ...utils.import_utils import define_import_structure
 
 if TYPE_CHECKING:
     from .configuration_dac import *
+    from .audio_processing_dac import *
     from .feature_extraction_dac import *
+    from .audio_processing_numpy_dac import *
     from .modeling_dac import *
 else:
     import sys

@@ -13,7 +13,6 @@
 # limitations under the License.
 
 from ...audio_processing_backends import TorchAudioBackend
-from ...audio_processing_base import make_legacy_audio_processor_alias
 from ...audio_utils import MelScaleConfig, SpectrogramConfig, StftConfig
 
 
@@ -149,7 +148,4 @@ class ParakeetAudioProcessor(TorchAudioBackend):
         return output
 
 
-ParakeetFeatureExtractor = make_legacy_audio_processor_alias(ParakeetAudioProcessor, "ParakeetFeatureExtractor")
-
-
-__all__ = ["ParakeetAudioProcessor", "ParakeetFeatureExtractor"]
+__all__ = ["ParakeetAudioProcessor"]

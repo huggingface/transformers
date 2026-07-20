@@ -13,7 +13,6 @@
 # limitations under the License.
 
 from ...audio_processing_backends import TorchAudioBackend
-from ...audio_processing_base import make_legacy_audio_processor_alias
 
 
 class EncodecAudioProcessor(TorchAudioBackend):
@@ -22,7 +21,4 @@ class EncodecAudioProcessor(TorchAudioBackend):
     add_channel_dim = True
 
 
-EncodecFeatureExtractor = make_legacy_audio_processor_alias(EncodecAudioProcessor, "EncodecFeatureExtractor")
-
-
-__all__ = ["EncodecAudioProcessor", "EncodecFeatureExtractor"]
+__all__ = ["EncodecAudioProcessor"]

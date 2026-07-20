@@ -16,7 +16,6 @@ import numpy as np
 import torch
 
 from ...audio_processing_backends import TorchAudioBackend
-from ...audio_processing_base import make_legacy_audio_processor_alias
 from ...audio_utils import MelScaleConfig, SpectrogramConfig, StftConfig
 from ...utils import PaddingStrategy
 
@@ -143,7 +142,4 @@ class ClapAudioProcessor(TorchAudioBackend):
         return {"is_longer": [[longer] for longer in is_longer]}
 
 
-ClapFeatureExtractor = make_legacy_audio_processor_alias(ClapAudioProcessor, "ClapFeatureExtractor")
-
-
-__all__ = ["ClapAudioProcessor", "ClapFeatureExtractor"]
+__all__ = ["ClapAudioProcessor"]

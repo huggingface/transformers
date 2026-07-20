@@ -15,7 +15,6 @@
 import torch
 
 from ...audio_processing_backends import TorchAudioBackend
-from ...audio_processing_base import make_legacy_audio_processor_alias
 from ...audio_utils import MelScaleConfig, SpectrogramConfig, StftConfig
 
 
@@ -53,7 +52,4 @@ class LasrAudioProcessor(TorchAudioBackend):
         return (audio_lengths - win_length) // stft_cfg.hop_length + 1
 
 
-LasrFeatureExtractor = make_legacy_audio_processor_alias(LasrAudioProcessor, "LasrFeatureExtractor")
-
-
-__all__ = ["LasrAudioProcessor", "LasrFeatureExtractor"]
+__all__ = ["LasrAudioProcessor"]

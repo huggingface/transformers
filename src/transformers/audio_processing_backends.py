@@ -280,6 +280,29 @@ class NumpyAudioBackend(BaseAudioProcessor):
                 raise ValueError(f"Cannot use log_mel option 'dB' with power {power}")
         else:
             raise ValueError(f"Unknown log_mel option: {log_mel}")
+        if spectrogram_config.skip_last_frame:
+            result = result[..., :-1]
+        return self._apply_post_log_normalization(result, spectrogram_config)
+
+    def _apply_post_log_normalization(self, result, spectrogram_config):
+        """Shared post-log clamp + affine rescale (ADR 0004). The Whisper/Voxtral max-clip
+        pattern is the only widely-shared post-log shape that lives in the base; per-bin
+        normalization is too Gemma-family-specific and stays in each model's own
+        `_normalize_magnitude` override."""
+        if spectrogram_config.clip_max_offset is not None:
+            # Per-utterance amax over (mel, time) axes — matches the torch sibling's
+            # `amax(dim=(-2, -1), keepdim=True)`. A global `result.max()` would diverge on
+            # batched inputs.
+            if result.ndim > 2:
+                max_axes = tuple(range(1, result.ndim))
+                max_vals = result.max(axis=max_axes, keepdims=True)
+            else:
+                max_vals = result.max()
+            result = np.maximum(result, max_vals - spectrogram_config.clip_max_offset)
+        if spectrogram_config.post_log_shift is not None:
+            result = result + spectrogram_config.post_log_shift
+        if spectrogram_config.post_log_scale is not None:
+            result = result * spectrogram_config.post_log_scale
         return result
 
     # ── Kaldi fbank helper ────────────────────────────────────────────────
@@ -610,4 +633,18 @@ class TorchAudioBackend(BaseAudioProcessor):
         if spectrogram_config.skip_last_frame:
             result = result[..., :-1]
 
+        return self._apply_post_log_normalization(result, spectrogram_config)
+
+    def _apply_post_log_normalization(self, result, spectrogram_config):
+        """Shared post-log clamp + affine rescale (ADR 0004). The Whisper/Voxtral max-clip
+        pattern is the only widely-shared post-log shape that lives in the base; per-bin
+        normalization is too Gemma-family-specific and stays in each model's own
+        `_normalize_magnitude` override."""
+        if spectrogram_config.clip_max_offset is not None:
+            max_vals = result.amax(dim=(-2, -1), keepdim=True)
+            result = torch.maximum(result, max_vals - spectrogram_config.clip_max_offset)
+        if spectrogram_config.post_log_shift is not None:
+            result = result + spectrogram_config.post_log_shift
+        if spectrogram_config.post_log_scale is not None:
+            result = result * spectrogram_config.post_log_scale
         return result

@@ -93,12 +93,89 @@ class AudioProcessingMixin(PreprocessingMixin):
     _config_name = FEATURE_EXTRACTOR_NAME
     _type_key = "audio_processor_type"
     _nested_config_keys = ["audio_processor", "feature_extractor"]
-    _auto_class_default = "AutoFeatureExtractor"
+    _auto_class_default = "AutoAudioProcessor"
     _file_type_label = "audio processor"
     _excluded_dict_keys = {"mel_filters", "window"}
     _extra_init_pops = ["feature_extractor_type"]
     _config_filename_kwarg = "audio_processor_filename"
     _subfolder_default = ""
+
+    # Legacy hub-config translation. Hub `preprocessor_config.json` files written by the
+    # old `XxxFeatureExtractor` classes use a flat key schema that doesn't match the new
+    # nested `SpectrogramConfig` API. `from_dict` applies `_legacy_field_mapping_base`
+    # first, then any per-model `legacy_field_mapping` last (highest priority). Values:
+    #
+    #   - str:       dot-path to the nested target (e.g. ``"spectrogram_config.stft_config.hop_length"``)
+    #                — `from_dict` walks/creates intermediate dicts and writes the value.
+    #   - callable:  invoked as ``f(value, config_dict)`` and expected to mutate
+    #                ``config_dict`` in place. Used for non-1:1 mappings such as
+    #                Whisper's ``chunk_length`` → derived ``max_length = chunk_length * sampling_rate``.
+    #   - None:      drop the legacy key with no translation.
+    #
+    # The base mapping covers both universal keys (`sampling_rate`, `return_attention_mask`,
+    # …) and spectrogram-domain keys (`n_fft`, `hop_length`, …). For non-spectrogram models
+    # the spectrogram keys are simply absent from the hub config — translation is a no-op.
+    # See docs/adr/0002-legacy-field-mapping.md.
+    _legacy_field_mapping_base: dict = {
+        # Universal keys (apply to every audio processor)
+        "sampling_rate": "sample_rate",
+        "feature_extractor_type": None,
+        "audio_processor_type": None,
+        "processor_class": None,
+        "return_attention_mask": "return_padding_mask",
+        # Spectrogram-domain keys (no-op for non-spectrogram models since hub configs
+        # for raw-audio models don't carry them)
+        "hop_length": "spectrogram_config.stft_config.hop_length",
+        "n_fft": "spectrogram_config.stft_config.n_fft",
+        "win_length": "spectrogram_config.stft_config.win_length",
+        "window_fn": "spectrogram_config.stft_config.window_fn",
+        "power": "spectrogram_config.stft_config.power",
+        "center": "spectrogram_config.stft_config.center",
+        "pad_mode": "spectrogram_config.stft_config.pad_mode",
+        "f_min": "spectrogram_config.mel_scale_config.f_min",
+        "f_max": "spectrogram_config.mel_scale_config.f_max",
+        "preemphasis": "spectrogram_config.preemphasis",
+        "mel_floor": "spectrogram_config.mel_floor",
+    }
+    legacy_field_mapping: dict | None = None
+
+    @classmethod
+    def _apply_legacy_field_mapping(cls, config_dict: dict) -> dict:
+        """Translate legacy hub-config keys to the new nested schema. Mutates and returns ``config_dict``."""
+        merged = {**cls._legacy_field_mapping_base, **(cls.legacy_field_mapping or {})}
+        for legacy_key, target in merged.items():
+            if legacy_key not in config_dict:
+                continue
+            value = config_dict.pop(legacy_key)
+            if target is None:
+                continue
+            if callable(target):
+                target(value, config_dict)
+                continue
+            # Dot-path target: walk/create intermediate dicts. Don't overwrite an
+            # existing modern value if both legacy and modern keys are present.
+            parts = target.split(".")
+            d = config_dict
+            for part in parts[:-1]:
+                next_d = d.get(part)
+                if next_d is None:
+                    next_d = {}
+                    d[part] = next_d
+                elif not isinstance(next_d, dict):
+                    raise TypeError(
+                        f"Cannot apply legacy mapping {legacy_key!r}→{target!r}: "
+                        f"intermediate key {part!r} is not a dict ({type(next_d).__name__})."
+                    )
+                d = next_d
+            if parts[-1] not in d:
+                d[parts[-1]] = value
+        return config_dict
+
+    @classmethod
+    def from_dict(cls, config_dict: dict[str, Any], **kwargs):
+        config_dict = dict(config_dict)
+        cls._apply_legacy_field_mapping(config_dict)
+        return super().from_dict(config_dict, **kwargs)
 
     @classmethod
     def get_audio_processor_dict(
@@ -139,6 +216,41 @@ class AudioProcessingMixin(PreprocessingMixin):
             return audio_url_or_urls
         else:
             raise TypeError(f"only a single or a list of entries is supported but got type={type(audio_url_or_urls)}")
+
+
+def make_legacy_audio_processor_alias(new_class: type, legacy_name: str) -> type:
+    """Create a deprecated subclass alias for the legacy ``XxxFeatureExtractor`` name.
+
+    Instantiating the alias emits a ``FutureWarning`` directing users to the new class. The
+    alias overrides ``to_dict`` so that saved configs identify themselves under the new
+    class name (``audio_processor_type: "WhisperAudioProcessor"``, not the legacy name) —
+    a `from_pretrained` followed by `save_pretrained` is enough to migrate a checkpoint.
+
+    Removal target: transformers v5.15. See [ADR 0002](docs/adr/0002-legacy-field-mapping.md).
+    """
+    def __init__(self, *args, **kwargs):
+        warnings.warn(
+            f"`{legacy_name}` is deprecated and will be removed in transformers v5.15. "
+            f"Use `{new_class.__name__}` instead.",
+            FutureWarning,
+            stacklevel=2,
+        )
+        new_class.__init__(self, *args, **kwargs)
+
+    def to_dict(self):
+        output = new_class.to_dict(self)
+        output[self._type_key] = new_class.__name__
+        return output
+
+    return type(
+        legacy_name,
+        (new_class,),
+        {
+            "__init__": __init__,
+            "to_dict": to_dict,
+            "__doc__": f"Deprecated alias for [`{new_class.__name__}`]. Removal: transformers v5.15.",
+        },
+    )
 
 
 AudioProcessingMixin.push_to_hub = copy_func(AudioProcessingMixin.push_to_hub)

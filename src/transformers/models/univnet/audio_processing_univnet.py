@@ -15,7 +15,6 @@
 import torch
 
 from ...audio_processing_backends import TorchAudioBackend
-from ...audio_processing_base import make_legacy_audio_processor_alias
 from ...audio_utils import MelScaleConfig, SpectrogramConfig, StftConfig
 
 
@@ -90,7 +89,4 @@ class UnivNetAudioProcessor(TorchAudioBackend):
         return features.transpose(-2, -1)
 
 
-UnivNetFeatureExtractor = make_legacy_audio_processor_alias(UnivNetAudioProcessor, "UnivNetFeatureExtractor")
-
-
-__all__ = ["UnivNetAudioProcessor", "UnivNetFeatureExtractor"]
+__all__ = ["UnivNetAudioProcessor"]

@@ -18,7 +18,6 @@
 # does not implement the complete beat-aligned segmentation pipeline.
 
 from ...audio_processing_backends import TorchAudioBackend
-from ...audio_processing_base import make_legacy_audio_processor_alias
 from ...audio_utils import MelScaleConfig, SpectrogramConfig, StftConfig
 
 
@@ -32,9 +31,4 @@ class Pop2PianoAudioProcessor(TorchAudioBackend):
     )
 
 
-Pop2PianoFeatureExtractor = make_legacy_audio_processor_alias(
-    Pop2PianoAudioProcessor, "Pop2PianoFeatureExtractor"
-)
-
-
-__all__ = ["Pop2PianoAudioProcessor", "Pop2PianoFeatureExtractor"]
+__all__ = ["Pop2PianoAudioProcessor"]

@@ -17,7 +17,6 @@ import math
 import torch
 
 from ...audio_processing_backends import TorchAudioBackend
-from ...audio_processing_base import make_legacy_audio_processor_alias
 
 
 class GraniteSpeechAudioProcessor(TorchAudioBackend):
@@ -83,7 +82,4 @@ class GraniteSpeechAudioProcessor(TorchAudioBackend):
         return output
 
 
-GraniteSpeechFeatureExtractor = make_legacy_audio_processor_alias(GraniteSpeechAudioProcessor, "GraniteSpeechFeatureExtractor")
-
-
-__all__ = ["GraniteSpeechAudioProcessor", "GraniteSpeechFeatureExtractor"]
+__all__ = ["GraniteSpeechAudioProcessor"]

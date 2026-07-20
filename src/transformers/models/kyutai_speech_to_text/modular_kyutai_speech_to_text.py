@@ -25,7 +25,7 @@ from ...generation import GenerationConfig, GenerationMixin
 from ...modeling_utils import PreTrainedModel
 from ...utils import PaddingStrategy, TensorType, logging
 from ..auto import AutoModel
-from ..encodec.feature_extraction_encodec import EncodecFeatureExtractor
+from ..encodec.audio_processing_encodec import EncodecAudioProcessor
 from ..llama.modeling_llama import LlamaForCausalLM
 from ..mimi.modeling_mimi import MimiConv1dPaddingCache
 from ..moshi.modeling_moshi import MoshiModel, MoshiPreTrainedModel
@@ -34,7 +34,7 @@ from ..moshi.modeling_moshi import MoshiModel, MoshiPreTrainedModel
 logger = logging.get_logger(__name__)
 
 
-class KyutaiSpeechToTextFeatureExtractor(EncodecFeatureExtractor):
+class KyutaiSpeechToTextFeatureExtractor(EncodecAudioProcessor):
     r"""
     Constructs an KyutaiSpeechToText feature extractor.
 

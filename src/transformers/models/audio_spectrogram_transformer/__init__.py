@@ -18,8 +18,10 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_audio_spectrogram_transformer import *
+    from .audio_processing_audio_spectrogram_transformer import *
     from .feature_extraction_audio_spectrogram_transformer import *
+    from .audio_processing_numpy_audio_spectrogram_transformer import *
+    from .configuration_audio_spectrogram_transformer import *
     from .modeling_audio_spectrogram_transformer import *
 else:
     import sys

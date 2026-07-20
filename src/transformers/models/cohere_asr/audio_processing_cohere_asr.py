@@ -16,7 +16,6 @@ import numpy as np
 import torch
 
 from ...audio_processing_backends import TorchAudioBackend
-from ...audio_processing_base import make_legacy_audio_processor_alias
 from ...audio_utils import MelScaleConfig, SpectrogramConfig, StftConfig
 
 
@@ -290,9 +289,4 @@ class CohereAsrAudioProcessor(TorchAudioBackend):
         return quietest_idx
 
 
-CohereAsrFeatureExtractor = make_legacy_audio_processor_alias(
-    CohereAsrAudioProcessor, "CohereAsrFeatureExtractor"
-)
-
-
-__all__ = ["CohereAsrAudioProcessor", "CohereAsrFeatureExtractor"]
+__all__ = ["CohereAsrAudioProcessor"]

@@ -195,7 +195,7 @@ class BaseAudioProcessor(AudioProcessingMixin):
         do_batch_spectrogram: bool | None = True,
         **kwargs: Any,
     ) -> BatchFeature:
-        # Per-waveform extraction, then pad features → audio_features
+        # Path 1: per-waveform spectrogram extraction, padded at the feature level.
         if do_extract_spectrogram and not do_batch_spectrogram:
             features = self.extract_spectrogram(audio, spectrogram_config=spectrogram_config, **kwargs)
             feature_lengths = [f.shape[0] for f in features]
@@ -205,12 +205,11 @@ class BaseAudioProcessor(AudioProcessingMixin):
             )
             output = {"audio_features": self._stack_features(features)}
             if self.return_padding_mask:
-                output.update(self._build_feature_mask(feature_ranges, features[0].shape[0]))
+                output["audio_features_mask"] = self._get_mask(feature_ranges, features[0].shape[0])
             output = self._postprocess_output(output, feature_ranges=feature_ranges, **kwargs)
             return BatchFeature(data=output, tensor_type=return_tensors)
 
-        # Pad audio first; then either extract spectrogram on the padded batch → audio_features,
-        # or pass the raw padded audio through → audio_values.
+        # Path 2: pad audio first, then optionally extract a spectrogram on the padded batch.
         audio, audio_ranges = self.pad(audio, padding, max_length, truncation, pad_to_multiple_of)
         padded_length = audio[0].shape[-1]
         batched = self._to_batch(audio)
@@ -223,52 +222,22 @@ class BaseAudioProcessor(AudioProcessingMixin):
             output = {"audio_values": batched}
 
         if self.return_padding_mask:
-            output.update(self._build_mask(
-                audio_ranges, padded_length,
-                do_extract_spectrogram=bool(do_extract_spectrogram),
-                spectrogram_config=spectrogram_config,
-            ))
+            # Features live on the frame axis: map audio ranges → feature ranges via hop_length,
+            # unless ``mask_level="audio"`` forces an audio-sample-level mask.
+            if do_extract_spectrogram and self.mask_level != "audio":
+                spec_cfg = spectrogram_config or self.spectrogram_config
+                audio_lengths = np.array([end - start for start, end in audio_ranges])
+                feature_lengths = self._get_features_lengths(audio_lengths, spec_cfg)
+                mask_ranges = [(0, int(length)) for length in feature_lengths]
+                mask_length = int(self._get_features_lengths(padded_length, spec_cfg, include_center_frame=True))
+            else:
+                mask_ranges = audio_ranges
+                mask_length = padded_length
+            mask_key = "audio_features_mask" if do_extract_spectrogram else "audio_values_mask"
+            output[mask_key] = self._get_mask(mask_ranges, mask_length)
 
         output = self._postprocess_output(output, audio_ranges=audio_ranges, **kwargs)
         return BatchFeature(data=output, tensor_type=return_tensors)
-
-    # ── Masking ──────────────────────────────────────────────────────────
-
-    def _build_mask(
-        self,
-        audio_ranges,
-        padded_length,
-        *,
-        do_extract_spectrogram,
-        spectrogram_config,
-    ) -> dict:
-        """Build the attention-mask dict for an audio-padded output.
-
-        Picks audio-level vs feature-level based on ``do_extract_spectrogram`` and
-        ``self.mask_level``, computes the corresponding ranges, and delegates array
-        creation to the backend ``_get_mask``. Override this for non-standard mask
-        formats (e.g. CLAP's ``is_longer``).
-        """
-        if do_extract_spectrogram and self.mask_level != "audio":
-            ranges, padded_length = self._audio_to_feature_ranges(
-                audio_ranges, padded_length, spectrogram_config,
-            )
-        else:
-            ranges = audio_ranges
-        key = "audio_features_mask" if do_extract_spectrogram else "audio_values_mask"
-        return {key: self._get_mask(ranges, padded_length)}
-
-    def _build_feature_mask(self, feature_ranges, padded_length) -> dict:
-        """Build ``{audio_features_mask: ...}`` from already-computed feature ranges."""
-        return {"audio_features_mask": self._get_mask(feature_ranges, padded_length)}
-
-    def _audio_to_feature_ranges(self, audio_ranges, padded_length, spectrogram_config):
-        """Convert audio sample ranges to feature frame ranges given the STFT config."""
-        spec_cfg = spectrogram_config or self.spectrogram_config
-        audio_lengths = np.array([end - start for start, end in audio_ranges])
-        feature_lengths = self._get_features_lengths(audio_lengths, spec_cfg)
-        n_features = int(self._get_features_lengths(padded_length, spec_cfg, include_center_frame=True))
-        return [(0, int(length)) for length in feature_lengths], n_features
 
     def _get_padding_strategies(self, padding=False, max_length=None):
         """Find the correct padding strategy."""
@@ -498,6 +467,11 @@ class BaseAudioProcessor(AudioProcessingMixin):
         if overrides:
             spectrogram_config = replace(spectrogram_config, **overrides)
 
+        # `_normalize_magnitude` is the pointwise log/dB hook per ADR 0005 — strip batch-level
+        # context (audio_ranges, feature_ranges) from its kwargs so the contract is enforced
+        # at the call site rather than relying on each override to ignore extras.
+        norm_kwargs = {k: v for k, v in kwargs.items() if k not in ("audio_ranges", "feature_ranges")}
+
         if isinstance(audio, list):
             features = [
                 self._extract_spectrogram(a, spectrogram_config=spectrogram_config, **kwargs)
@@ -509,14 +483,14 @@ class BaseAudioProcessor(AudioProcessingMixin):
                     for f in features
                 ]
             features = [
-                self._normalize_magnitude(f, spectrogram_config=spectrogram_config, **kwargs)
+                self._normalize_magnitude(f, spectrogram_config=spectrogram_config, **norm_kwargs)
                 for f in features
             ]
         else:
             features = self._extract_spectrogram(audio, spectrogram_config=spectrogram_config, **kwargs)
             if spectrogram_config.mel_scale_config is not None:
                 features = self._apply_mel_scale(features, spectrogram_config=spectrogram_config, **kwargs)
-            features = self._normalize_magnitude(features, spectrogram_config=spectrogram_config, **kwargs)
+            features = self._normalize_magnitude(features, spectrogram_config=spectrogram_config, **norm_kwargs)
 
         return features
 
@@ -658,8 +632,17 @@ class BaseAudioProcessor(AudioProcessingMixin):
         """Apply mel filterbank to spectrogram features."""
         raise NotImplementedError
 
-    def _normalize_magnitude(self, *args, **kwargs):
-        """Apply magnitude normalization (log, log10, or dB scaling) to spectrogram features."""
+    def _normalize_magnitude(self, features, *, spectrogram_config, **kwargs):
+        """Apply pointwise magnitude normalization (log, log10, or dB scaling) to a single utterance.
+
+        This hook is **pointwise only**: no batch-shape assumptions, no `audio_ranges`/`feature_ranges`
+        kwargs, no cross-frame statistics. Override here for per-utterance log/dB compression and
+        simple element-wise transforms (e.g. Whisper's max-clip + rescale).
+
+        For normalization that needs to know per-utterance ranges across a padded batch (e.g.
+        Parakeet's per-utterance mean/var, Speech2Text's CMVN), override `_postprocess_output`
+        instead. See [ADR 0005](docs/adr/0005-hook-surface-boundary.md).
+        """
         raise NotImplementedError
 
     def _mel_filter_bank(self, spectrogram_config: SpectrogramConfig):

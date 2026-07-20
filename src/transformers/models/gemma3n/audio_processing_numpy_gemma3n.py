@@ -96,6 +96,12 @@ class Gemma3nAudioProcessorNumpy(NumpyAudioBackend):
 
     def _normalize_magnitude(self, features, *, spectrogram_config, **kwargs):
         result = super()._normalize_magnitude(features, spectrogram_config=spectrogram_config, **kwargs)
+        # Per-bin shift/scale is Gemma-family-specific; it lives here rather than in the base
+        # `_apply_post_log_normalization` so non-Gemma models don't need to think about it.
+        if self.per_bin_mean is not None:
+            result = result - self.per_bin_mean
+        if self.per_bin_stddev is not None:
+            result = result / self.per_bin_stddev
         return result.astype(np.float32)
 
     def _get_features_lengths(self, audio_lengths, spectrogram_config, include_center_frame=False):
