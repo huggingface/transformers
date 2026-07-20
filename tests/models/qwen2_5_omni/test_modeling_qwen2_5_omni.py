@@ -14,9 +14,11 @@
 # limitations under the License.
 """Testing suite for the PyTorch Qwen2.5-Omni model."""
 
+import json
 import tempfile
 import unittest
 from io import BytesIO
+from pathlib import Path
 from urllib.request import urlopen
 
 import librosa
@@ -827,6 +829,50 @@ class Qwen2_5OmniModelIntegrationTest(unittest.TestCase):
         decoded_text = self.processor.decode(output[0][0], skip_special_tokens=True)
         self.assertEqual(decoded_text, EXPECTED_DECODED_TEXT)
         self.assertFalse(torch.isnan(output[1]).any().item())
+
+    @slow
+    def test_small_model_integration_test_token2wav_regression(self):
+        """
+        Regression test for #47328: the Token2Wav DiT applies an interleaved rotary embedding
+        (pairing channels `(2i, 2i + 1)`), so its `cos`/`sin` must be applied accordingly; a
+        half-split application silently degrades the generated audio. This test drives the
+        Token2Wav module of the released checkpoint with pre-recorded talker codec tokens and
+        checks that the generated waveform does not regress. The waveform is compared on a
+        strided sample signature spanning the whole utterance (a contiguous head slice would
+        only cover leading silence) plus its overall RMS.
+
+        The fixture was produced with the reproducer script in PR #47403 (deterministic
+        `generate()` run: greedy thinker/talker, `torch.manual_seed(0)`, then the captured
+        talker codes replayed through `model.token2wav` exactly as below).
+        """
+        fixtures_path = Path(__file__).parent.parent.parent / "fixtures/qwen2_5_omni"
+        with open(fixtures_path / "expected_audio_regression.json") as f:
+            raw_data = json.load(f)
+        talker_codes = torch.tensor(raw_data["talker_codes"], device=torch_device)[None, :]
+        stride = raw_data["waveform_stride"]
+        expected_strided = torch.tensor(raw_data["waveform_strided"], dtype=torch.float32)
+        expected_rms = raw_data["waveform_rms"]
+
+        model = Qwen2_5OmniForConditionalGeneration.from_pretrained(
+            "Qwen/Qwen2.5-Omni-7B", dtype=torch.bfloat16, device_map="auto"
+        )
+        speaker_params = model.speaker_map["Chelsie"]
+        # generate() re-floats token2wav before synthesis; mirror it when driving the module directly.
+        model.token2wav.float()
+
+        torch.manual_seed(0)
+        with torch.no_grad():
+            waveform = model.token2wav(
+                talker_codes,
+                conditioning=speaker_params["cond"].to(torch_device).float(),
+                reference_mel=speaker_params["ref_mel"].to(torch_device).float(),
+            )
+        waveform = waveform.float().cpu().squeeze()
+
+        self.assertEqual(waveform.shape[-1], raw_data["waveform_length"])
+        torch.testing.assert_close(waveform[::stride], expected_strided, rtol=1e-3, atol=5e-3)
+        rms = waveform.pow(2).mean().sqrt().item()
+        torch.testing.assert_close(rms, expected_rms, rtol=1e-2, atol=1e-4)
 
     @slow
     @require_flash_attn
