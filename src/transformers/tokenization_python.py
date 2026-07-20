@@ -424,7 +424,8 @@ class PythonBackend(PreTrainedTokenizerBase):
 
         # 3. if a `added_tokens_decoder` is passed, we are loading from a saved tokenizer, we overwrite
         self._added_tokens_decoder.update(kwargs.pop("added_tokens_decoder", {}))
-        self._added_tokens_encoder: dict[str, int] = {k.content: v for v, k in self._added_tokens_decoder.items()}
+        self._added_tokens_sorted_cache: list | None = None
+        self._sync_added_tokens()
 
         # 4. Token type ID configuration for dynamic mask building
         # These can be overridden by subclasses to avoid overriding create_token_type_ids_from_sequences
@@ -454,23 +455,41 @@ class PythonBackend(PreTrainedTokenizerBase):
     def is_fast(self) -> bool:
         return False
 
+    # cached sorted view of `_added_tokens_decoder`; None means it needs rebuilding
+    _added_tokens_sorted_cache: list | None = None
+
+    def _sync_added_tokens(self):
+        """
+        Rebuild `_added_tokens_encoder` from `_added_tokens_decoder` and drop the cached sorted view.
+
+        `_added_tokens_decoder` is the source of truth for added tokens; the encoder dict and the sorted views
+        returned by the `added_tokens_encoder` / `added_tokens_decoder` properties are derived from it. Any code
+        that mutates `_added_tokens_decoder` directly must call this afterwards, otherwise lookups keep serving
+        stale entries.
+        """
+        self._added_tokens_encoder = {k.content: v for v, k in self._added_tokens_decoder.items()}
+        self._added_tokens_sorted_cache = None
+
+    def _sorted_added_tokens(self) -> list:
+        if self._added_tokens_sorted_cache is None:
+            self._added_tokens_sorted_cache = sorted(self._added_tokens_decoder.items(), key=lambda item: item[0])
+        return self._added_tokens_sorted_cache
+
     @property
     def added_tokens_encoder(self) -> dict[str, int]:
         """
-        Returns the sorted mapping from string to index. The added tokens encoder is cached for performance
-        optimisation in `self._added_tokens_encoder` for the slow tokenizers.
+        Returns the mapping from added token string to index, sorted by index. Built from a cached sorted view;
+        a new dict is returned on every call, so mutating it does not affect the tokenizer.
         """
-        return {k.content: v for v, k in sorted(self._added_tokens_decoder.items(), key=lambda item: item[0])}
+        return {k.content: v for v, k in self._sorted_added_tokens()}
 
     @property
     def added_tokens_decoder(self) -> dict[int, AddedToken]:
         """
-        Returns the added tokens in the vocabulary as a dictionary of index to AddedToken.
-
-        Returns:
-            `dict[str, int]`: The added tokens.
+        Returns the added tokens in the vocabulary as a dictionary of index to AddedToken, sorted by index. A new
+        dict is returned on every call, so mutating it does not affect the tokenizer.
         """
-        return dict(sorted(self._added_tokens_decoder.items(), key=lambda item: item[0]))
+        return dict(self._sorted_added_tokens())
 
     @added_tokens_decoder.setter
     def added_tokens_decoder(self, value: dict[int, AddedToken | str]) -> dict[int, AddedToken]:
@@ -483,6 +502,7 @@ class PythonBackend(PreTrainedTokenizerBase):
 
             self._added_tokens_decoder[index] = AddedToken(token) if isinstance(token, str) else token
             self._added_tokens_encoder[str(token)] = index
+        self._added_tokens_sorted_cache = None
         self._update_total_vocab_size()
 
     def get_added_vocab(self) -> dict[str, int]:
@@ -587,6 +607,7 @@ class PythonBackend(PreTrainedTokenizerBase):
             if self.verbose:
                 logger.info(f"Adding {token} to the vocabulary")
 
+        self._added_tokens_sorted_cache = None
         self._update_trie()
         self._update_total_vocab_size()
         return added_tokens

@@ -200,6 +200,7 @@ class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
         for token_id in list(self._added_tokens_decoder.keys()):
             if token_id in self.decoder:
                 del self._added_tokens_decoder[token_id]
+        self._sync_added_tokens()
 
         # make sure that tokens made of several
         # characters are not split at tokenization

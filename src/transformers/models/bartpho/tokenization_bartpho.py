@@ -286,7 +286,7 @@ class BartphoTokenizer(SentencePieceBackend):
             remapped_decoder[new_id] = token_obj
 
         self._added_tokens_decoder = remapped_decoder
-        self._added_tokens_encoder = {token.content: idx for idx, token in remapped_decoder.items()}
+        self._sync_added_tokens()
 
     def save_vocabulary(self, save_directory: str, filename_prefix: str | None = None) -> tuple[str]:
         if not os.path.isdir(save_directory):
