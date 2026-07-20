@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import math
 import unittest
 
 import pytest
@@ -314,6 +315,16 @@ class GPT2ModelTest(CausalLMModelTest, unittest.TestCase):
             (self.model_tester.batch_size, self.model_tester.seq_length, self.model_tester.vocab_size),
         )
         result.loss.backward()
+
+    def test_gpt2_weight_initialization(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        config, *_ = config_and_inputs
+        model = GPT2Model(config)
+        expected_std = config.initializer_range / math.sqrt(2 * config.num_hidden_layers)
+        for key in model.state_dict():
+            if "c_proj" in key and "weight" in key:
+                self.assertLessEqual(abs(torch.std(model.state_dict()[key]) - expected_std), 0.001)
+                self.assertLessEqual(abs(torch.mean(model.state_dict()[key]) - 0.0), 0.01)
 
     def test_training_gradient_checkpointing(self):
         # overwritten: GPT2DoubleHeadsModel fails this test, non-standard class
