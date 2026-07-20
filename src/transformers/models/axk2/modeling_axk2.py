@@ -4,7 +4,7 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_axk2.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
-# Copyright 2025 SK Telecom and the HuggingFace Inc. team. All rights reserved.
+# Copyright 2026 SK Telecom and the HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -27,24 +27,26 @@ from torch import nn
 from ... import initialization as init
 from ...cache_utils import Cache
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
-from ...modeling_layers import (
-    GenericForSequenceClassification, GenericForTokenClassification, GradientCheckpointingLayer)
+from ...modeling_layers import GenericForSequenceClassification, GenericForTokenClassification
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs
-from .configuration_axk2 import AXK2Config
+from ...utils import auto_docstring
+from ...activations import ACT2FN
+from ...masking_utils import create_causal_mask
+from ...modeling_layers import GradientCheckpointingLayer
+from ...utils import (
+    TransformersKwargs)
+from ...utils.generic import can_return_tuple, merge_with_config_defaults
+from ...utils.output_capturing import capture_outputs
 import math
 from typing import Optional
-from ...activations import ACT2FN
 from ...cache_utils import DynamicCache
 from ...generation import GenerationMixin
 from ...integrations import use_experts_implementation, use_kernel_forward_from_hub, use_kernel_func_from_hub
-from ...masking_utils import create_causal_mask
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
-from ...utils import auto_docstring, can_return_tuple
-from ...utils.generic import maybe_autocast, merge_with_config_defaults
-from ...utils.output_capturing import capture_outputs
+from ...utils.generic import maybe_autocast
+from .configuration_axk2 import AXK2Config
 
 
 @use_kernel_forward_from_hub("RMSNorm")
@@ -68,25 +70,41 @@ class AXK2RMSNorm(nn.Module):
         return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
 
 
-class AXK2GatedRMSNorm(nn.Module):
-    """RMSNorm wrapped with a low-rank input-dependent gate (Megatron `GatedNormWrapper`).
+class AXK2GateMLP(nn.Module):
+    """Low-rank gate MLP for `AXK2GatedRMSNorm`: `fc2(silu(fc1(x)))`.
 
-    forward(x):
+    Reuses `CLIPMLP`'s two-linear structure, overriding the projections to be bias-free and sized to the
+    gate bottleneck (`gated_norm_rank`), and the activation to SiLU — matching A.X-K2's trained gate.
+    """
+    def __init__(self, config: "AXK2Config"):
+        super().__init__()
+        self.config = config
+        self.activation_fn = nn.SiLU()
+        self.fc1 = nn.Linear(config.hidden_size, config.gated_norm_rank, bias=False)
+        self.fc2 = nn.Linear(config.gated_norm_rank, config.hidden_size, bias=False)
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        hidden_states = self.fc1(hidden_states)
+        hidden_states = self.activation_fn(hidden_states)
+        hidden_states = self.fc2(hidden_states)
+        return hidden_states
+
+
+class AXK2GatedRMSNorm(nn.Module):
+    """RMSNorm followed by a low-rank input-dependent sigmoid gate (Megatron `GatedNormWrapper`):
+
         y = RMSNorm(x)
-        gate = W_up(silu(W_down(y)))
-        return y * sigmoid(gate.float()).to(y.dtype)
+        return y * sigmoid(gate_mlp(y))
     """
 
-    def __init__(self, hidden_size: int, rank: int, eps: float):
+    def __init__(self, config: "AXK2Config", eps: float):
         super().__init__()
-        self.norm = AXK2RMSNorm(hidden_size, eps=eps)
-        self.W_down = nn.Linear(hidden_size, rank, bias=False)
-        self.W_up = nn.Linear(rank, hidden_size, bias=False)
+        self.norm = AXK2RMSNorm(config.hidden_size, eps=eps)
+        self.mlp = AXK2GateMLP(config)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         y = self.norm(x)
-        raw_gate = self.W_up(F.silu(self.W_down(y)))
-        return (y * torch.sigmoid(raw_gate.float())).to(y.dtype)
+        return (y * torch.sigmoid(self.mlp(y).float())).to(y.dtype)
 
 
 class AXK2RotaryEmbedding(nn.Module):
@@ -154,22 +172,6 @@ class AXK2RotaryEmbedding(nn.Module):
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
 
-class AXK2MLP(nn.Module):
-    def __init__(self, config, intermediate_size=None):
-        super().__init__()
-        self.config = config
-        self.hidden_size = config.hidden_size
-        self.intermediate_size = config.intermediate_size if intermediate_size is None else intermediate_size
-        self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
-        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
-        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
-        self.act_fn = ACT2FN[config.hidden_act]
-
-    def forward(self, x):
-        down_proj = self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
-        return down_proj
-
-
 def rotate_half(x):
     """Rotates half the hidden dims of the input."""
     x1 = x[..., : x.shape[-1] // 2]
@@ -204,14 +206,12 @@ def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
 
 
 class AXK2Indexer(nn.Module):
-    """SGA (Sparse Gated Attention) lightning indexer.
-
-    Identical to DeepSeek-V3.2's DSA indexer except the key `LayerNorm` keeps A.X-K2's training eps
-    (the default `1e-5`, versus DeepSeek's `1e-6`). The indexer key cache lives on the shared
-    `DynamicIndexedLayer` (accessed via `past_key_values.update_indexer`), not on the module.
+    """SGA lightning indexer, identical to DeepSeek-V3.2's DSA indexer except the key `LayerNorm` keeps
+    A.X-K2's training eps (`1e-5`). The indexer key cache lives on the shared `DynamicIndexedLayer` (via
+    `past_key_values.update_indexer`), not on the module.
     """
 
-    def __init__(self, config: AXK2Config, layer_idx: int):
+    def __init__(self, config: "AXK2Config", layer_idx: int):
         super().__init__()
         self.config = config
         self.layer_idx = layer_idx
@@ -225,7 +225,7 @@ class AXK2Indexer(nn.Module):
 
         self.wq_b = nn.Linear(self.q_lora_rank, self.n_heads * self.head_dim, bias=False)
         self.wk = nn.Linear(self.hidden_size, self.head_dim, bias=False)
-        self.k_norm = nn.LayerNorm(self.head_dim)
+        self.k_norm = nn.LayerNorm(self.head_dim, eps=1e-5)
         self.weights_proj = nn.Linear(self.hidden_size, self.n_heads, bias=False)
         self.softmax_scale = self.head_dim**-0.5
 
@@ -365,6 +365,22 @@ class AXK2Experts(nn.Module):
         return final_hidden_states
 
 
+class AXK2MLP(nn.Module):
+    def __init__(self, config, intermediate_size=None):
+        super().__init__()
+        self.config = config
+        self.hidden_size = config.hidden_size
+        self.intermediate_size = config.intermediate_size if intermediate_size is None else intermediate_size
+        self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
+        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
+        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
+        self.act_fn = ACT2FN[config.hidden_act]
+
+    def forward(self, x):
+        down_proj = self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
+        return down_proj
+
+
 class AXK2MoE(nn.Module):
     """
     A mixed expert module containing shared experts.
@@ -472,11 +488,12 @@ def yarn_get_mscale(scale=1, mscale=1):
 
 
 class AXK2Attention(nn.Module):
-    """DeepSeek-V3 MLA + the SGA indexer + an input-dependent sigmoid gate on the attention output.
+    """DeepSeek-V3.2 MLA + SGA indexer, plus an input-dependent sigmoid gate on the attention output.
 
-    The output gate (`linear_gate`) is stored fused into `q_b_proj` in the vLLM-style released
-    checkpoint (`q_b_proj` takes `[q_post | q_pre]` and emits `[q | gate]` per head); the weight
-    converter splits that block-diagonal matrix back into `q_b_proj` (q) + `linear_gate` (gate) at load.
+    The output gate (`g_proj`) is stored fused into `q_b_proj` in the vLLM-style released checkpoint;
+    the weight converter splits that block-diagonal matrix into `q_b_proj` (query) + `g_proj` (gate) at
+    load. The forward mirrors DeepSeek-V3.2's, differing only in: the indexer/output-gate read the
+    pre-norm q bottleneck, and the sigmoid gate is applied before `o_proj`.
     """
 
     def __init__(self, config: AXK2Config, layer_idx: int):
@@ -528,7 +545,7 @@ class AXK2Attention(nn.Module):
                 mscale = yarn_get_mscale(scaling_factor, mscale_all_dim)
                 self.scaling = self.scaling * mscale * mscale
         self.indexer = AXK2Indexer(config, layer_idx)
-        self.linear_gate = nn.Linear(config.q_lora_rank, self.num_heads * self.v_head_dim, bias=False)
+        self.g_proj = nn.Linear(config.q_lora_rank, self.num_heads * self.v_head_dim, bias=False)
 
     def forward(
         self,
@@ -539,12 +556,17 @@ class AXK2Attention(nn.Module):
         position_ids: torch.Tensor | None = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
+        if self.q_lora_rank is None:
+            raise ValueError(
+                "A.X-K2 requires `config.q_lora_rank` to be set: the indexer and the output gate both read "
+                "the pre-norm query LoRA bottleneck."
+            )
         batch_size, seq_length = hidden_states.shape[:-1]
         query_shape = (batch_size, seq_length, -1, self.qk_head_dim)
         key_shape = (batch_size, seq_length, -1, self.qk_nope_head_dim + self.v_head_dim)
 
-        # `q_compressed` (pre-norm) feeds the indexer and the output gate; `q_resid` (post-norm) feeds
-        # the main query projection.
+        # `q_compressed` (pre-norm) feeds the indexer and the output gate; `q_resid` (post-norm) feeds the
+        # main query projection.
         q_compressed = self.q_a_proj(hidden_states)
         q_resid = self.q_a_layernorm(q_compressed)
         q_states = self.q_b_proj(q_resid).view(query_shape).transpose(1, 2)
@@ -566,28 +588,26 @@ class AXK2Attention(nn.Module):
         if past_key_values is not None:
             key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
 
-        # SGA: the indexer scores against a 3D `[B, S, T]` mask; the attention mask is 4D `[B, 1, S, T]`.
+        # The indexer scores against a 3D `[B, S, T]` mask; the attention mask is 4D `[B, 1, S, T]`.
         indexer_mask = attention_mask[:, 0, :, :] if attention_mask is not None else None
         topk_indices = self.indexer(
-            hidden_states,
-            q_compressed,
-            position_embeddings,
-            indexer_mask,
-            position_ids,
-            past_key_values=past_key_values,
+            hidden_states, q_compressed, position_embeddings, indexer_mask, position_ids, past_key_values=past_key_values
         )
 
-        # Fold the indexer top-k into an additive sparse mask; eager and SDPA both consume it.
-        index_mask = (
-            topk_indices.new_ones((batch_size, seq_length, key_states.shape[2]), dtype=torch.bool)
-            .scatter(-1, topk_indices.long(), False)
-            .unsqueeze(1)
-        )  # [B, 1, S, T]; True == masked out
-        if attention_mask is None:
-            key_positions = torch.arange(key_states.shape[2], device=hidden_states.device)
-            index_mask = index_mask | (key_positions[None, None, None, :] > position_ids[:, None, :, None])
-            attention_mask = hidden_states.new_zeros((batch_size, 1, seq_length, key_states.shape[2]))
-        attention_mask = attention_mask.masked_fill(index_mask, torch.finfo(hidden_states.dtype).min)
+        sparse_indices = None
+        if self.config._attn_implementation in ("eager", "sdpa"):
+            index_mask = (
+                topk_indices.new_ones((batch_size, seq_length, key_states.shape[2]), dtype=torch.bool)
+                .scatter(-1, topk_indices.long(), False)
+                .unsqueeze(1)
+            )
+            if attention_mask is None:
+                key_positions = torch.arange(key_states.shape[2], device=hidden_states.device)
+                index_mask = index_mask | (key_positions[None, None, None, :] > position_ids[:, None, :, None])
+                attention_mask = hidden_states.new_zeros((batch_size, 1, seq_length, key_states.shape[2]))
+            attention_mask = attention_mask.masked_fill(index_mask, torch.finfo(hidden_states.dtype).min)
+        else:
+            sparse_indices = topk_indices
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
@@ -600,12 +620,13 @@ class AXK2Attention(nn.Module):
             attention_mask,
             dropout=0.0 if not self.training else self.attention_dropout,
             scaling=self.scaling,
+            indices=sparse_indices,  # consumed by flash_mla_with_kvcache; ignored by eager / SDPA
             **kwargs,
         )
 
         attn_output = attn_output.reshape(batch_size, seq_length, -1).contiguous()
         # Input-dependent sigmoid gate on the attention output.
-        gate = self.linear_gate(q_compressed)
+        gate = self.g_proj(q_compressed)
         attn_output = (attn_output * torch.sigmoid(gate.float())).to(attn_output.dtype)
         attn_output = self.o_proj(attn_output)
         return attn_output, attn_weights
@@ -615,20 +636,17 @@ class AXK2DecoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: AXK2Config, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
-        self.layer_idx = layer_idx
-        self.self_attn = AXK2Attention(config=config, layer_idx=layer_idx)
+        self.self_attn = AXK2Attention(config, layer_idx)
 
-        is_moe_layer = config.mlp_layer_types[layer_idx] == "sparse"
-        self.mlp = AXK2MoE(config) if is_moe_layer else AXK2MLP(config)
-
-        # A.X-K2 gates the norms: `input_layernorm` on every layer, `post_attention_layernorm` on MoE layers.
-        self.input_layernorm = AXK2GatedRMSNorm(config.hidden_size, rank=config.gated_norm_rank, eps=config.rms_norm_eps)
-        if is_moe_layer:
-            self.post_attention_layernorm = AXK2GatedRMSNorm(
-                config.hidden_size, rank=config.gated_norm_rank, eps=config.rms_norm_eps
-            )
+        if config.mlp_layer_types[layer_idx] == "sparse":
+            self.mlp = AXK2MoE(config)
         else:
-            self.post_attention_layernorm = AXK2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+            self.mlp = AXK2MLP(config)
+        # A.X-K2 gates the norms: `input_layernorm` on every layer, `post_attention_layernorm` on MoE layers.
+        self.input_layernorm = AXK2GatedRMSNorm(config, eps=config.rms_norm_eps)
+        self.post_attention_layernorm = AXK2RMSNorm(config.hidden_size, config.rms_norm_eps)
+        if config.mlp_layer_types[layer_idx] == "sparse":
+            self.post_attention_layernorm = AXK2GatedRMSNorm(config, eps=config.rms_norm_eps)
 
     def forward(
         self,
@@ -642,7 +660,7 @@ class AXK2DecoderLayer(GradientCheckpointingLayer):
     ) -> torch.Tensor:
         residual = hidden_states
         hidden_states = self.input_layernorm(hidden_states)
-
+        # Self Attention
         hidden_states, _ = self.self_attn(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
@@ -654,6 +672,7 @@ class AXK2DecoderLayer(GradientCheckpointingLayer):
         )
         hidden_states = residual + hidden_states
 
+        # Fully Connected
         residual = hidden_states
         hidden_states = self.post_attention_layernorm(hidden_states)
         hidden_states = self.mlp(hidden_states)
@@ -668,8 +687,7 @@ class AXK2PreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
     _no_split_modules = ["AXK2DecoderLayer"]
     _skip_keys_device_placement = ["past_key_values"]
-    # The SGA sparse mask is an explicit additive bias, supported by eager and SDPA (not flash / flex).
-    _supports_flash_attn = False
+    _supports_flash_attn = False  # flash-mla kernels need a bit more work in the way we enable them!
     _supports_sdpa = True
     _supports_flex_attn = False
 
@@ -680,7 +698,8 @@ class AXK2PreTrainedModel(PreTrainedModel):
         "attentions": AXK2Attention,
     }
     _keep_in_fp32_modules_strict = ["e_score_correction_bias"]
-    _keys_to_ignore_on_load_unexpected = [r"model\.layers\.\d+\.self_attn\.rotary_emb\.inv_freq"]
+    _keys_to_ignore_on_load_unexpected = ["inv_freq"]
+    _keep_in_fp32_modules = ["indexer.weights_proj"]
 
     @torch.no_grad()
     def _init_weights(self, module):

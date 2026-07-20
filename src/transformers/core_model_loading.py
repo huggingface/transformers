@@ -693,15 +693,15 @@ class ErnieSplitAndDecoupleTextVisionExperts(ConversionOps):
         return ErnieFuseAndSplitTextVisionExperts(stack_dim=self.stack_dim, concat_dim=self.concat_dim)
 
 
-class SplitFusedAttentionGate(ConversionOps):
+class SplitFusedMLAGate(ConversionOps):
     r"""
-    Split A.X-K2's vLLM-style fused ``q_b_proj`` into the canonical ``q_b_proj`` + ``linear_gate``.
+    Split A.X-K2's vLLM-style fused MLA ``q_b_proj`` into the canonical ``q_b_proj`` + output gate ``g_proj``.
 
     The released checkpoint stores a single block-diagonal
     ``[num_heads * (qk_head_dim + v_head_dim), 2 * q_lora_rank]`` matrix. Viewed per head as
     ``[qk_head_dim + v_head_dim, 2 * q_lora_rank]``, the query rows read only the post-norm input half
     and the gate rows read only the pre-norm input half (the off-diagonal blocks are exactly zero). This
-    op extracts the two nonzero blocks into ``q_b_proj`` (post-norm -> query) and ``linear_gate``
+    op extracts the two nonzero blocks into ``q_b_proj`` (post-norm -> query) and ``g_proj``
     (pre-norm -> gate); the extraction is therefore loss-free.
     """
 
@@ -727,13 +727,13 @@ class SplitFusedAttentionGate(ConversionOps):
 
     @property
     def reverse_op(self) -> ConversionOps:
-        return FuseAttentionGate()
+        return FuseMLAGate()
 
 
-class FuseAttentionGate(ConversionOps):
+class FuseMLAGate(ConversionOps):
     r"""
-    Inverse of :class:`SplitFusedAttentionGate`: fuse ``q_b_proj`` + ``linear_gate`` back into the
-    block-diagonal ``q_b_proj`` layout stored in the released checkpoint (used on ``save_pretrained``).
+    Inverse of :class:`SplitFusedMLAGate`: fuse ``q_b_proj`` + ``g_proj`` back into the block-diagonal
+    MLA ``q_b_proj`` layout stored in the released checkpoint (used on ``save_pretrained``).
     """
 
     @torch.no_grad
@@ -762,7 +762,7 @@ class FuseAttentionGate(ConversionOps):
 
     @property
     def reverse_op(self) -> ConversionOps:
-        return SplitFusedAttentionGate()
+        return SplitFusedMLAGate()
 
 
 def process_target_pattern(pattern: str) -> tuple[str, str | None]:

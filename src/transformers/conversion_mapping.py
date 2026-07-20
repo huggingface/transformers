@@ -26,7 +26,7 @@ from .core_model_loading import (
     Interleave,
     MergeModulelist,
     PrefixChange,
-    SplitFusedAttentionGate,
+    SplitFusedMLAGate,
     Transpose,
     VisionUnfuseAndPermuteForRope,
     WeightConverter,
@@ -41,8 +41,6 @@ if TYPE_CHECKING:
 
 
 _MODEL_TO_CONVERSION_PATTERN = {
-    # Checkpoints exported before the snake_case rename ship `model_type: "AXK2"`.
-    "AXK2": "axk2",
     # Mixtral-style MoE
     "minimax": "mixtral",
     "minimax_m2": "mixtral",
@@ -237,18 +235,22 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(source_patterns=r"^embed_out\.", target_patterns="lm_head."),
         ],
         "axk2": [
+            # The gated norms store their low-rank gate MLP as `W_down` / `W_up`; the model reuses `CLIPMLP`
+            # (`fc1` / `fc2`). Bridge the names on load (and back on save).
+            WeightRenaming(source_patterns=r"\.W_down\.", target_patterns=".mlp.fc1."),
+            WeightRenaming(source_patterns=r"\.W_up\.", target_patterns=".mlp.fc2."),
             # The released A.X-K2 checkpoint fuses the attention output gate into `q_b_proj` (vLLM layout):
             # a block-diagonal `[num_heads * (qk_head_dim + v_head_dim), 2 * q_lora_rank]` matrix. Split it
-            # back into the canonical `q_b_proj` (post-norm -> query) + `linear_gate` (pre-norm -> gate) at
-            # load time; the reverse op re-fuses it on save. Experts are already stored stacked, so no MoE
+            # back into the canonical `q_b_proj` (post-norm -> query) + `g_proj` (pre-norm -> gate) at load
+            # time; the reverse op re-fuses it on save. Experts are already stored stacked, so no MoE
             # conversion is needed.
             WeightConverter(
                 source_patterns="self_attn.q_b_proj.weight",
                 target_patterns=[
                     "self_attn.q_b_proj.weight",
-                    "self_attn.linear_gate.weight",
+                    "self_attn.g_proj.weight",
                 ],
-                operations=[SplitFusedAttentionGate()],
+                operations=[SplitFusedMLAGate()],
             ),
         ],
         "gemma4_unified": [
