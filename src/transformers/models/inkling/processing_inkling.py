@@ -78,13 +78,16 @@ class InklingProcessor(ProcessorMixin):
         self.num_dmel_bins = num_dmel_bins
         self.dmel_min_value = dmel_min_value
         self.dmel_max_value = dmel_max_value
-        self.bin_centers = torch.linspace(dmel_min_value, dmel_max_value, num_dmel_bins, dtype=torch.float64)
+        # float64 then cast to float32: reproduces the float64 bins exactly
+        self.bin_centers = torch.linspace(dmel_min_value, dmel_max_value, num_dmel_bins, dtype=torch.float64).to(
+            torch.float32
+        )
 
         super().__init__(feature_extractor, image_processor, tokenizer, chat_template=chat_template)
 
     def _extract_dmel_bins(self, input_features: "torch.Tensor") -> "torch.Tensor":
         bin_centers = self.bin_centers.to(input_features.device)
-        mel = input_features.to(torch.float64).clamp(min=self.dmel_min_value, max=self.dmel_max_value)
+        mel = input_features.to(torch.float32).clamp(min=self.dmel_min_value, max=self.dmel_max_value)
         return (mel.unsqueeze(-1) - bin_centers).abs().argmin(dim=-1).to(torch.int32)
 
     def _process_audio(self, audio, **kwargs):
