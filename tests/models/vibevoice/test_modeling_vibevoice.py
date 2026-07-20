@@ -196,7 +196,8 @@ class VibeVoiceForConditionalGenerationTest(ModelTesterMixin, GenerationTesterMi
         self.skip_unsupported_generate()
 
     def skip_unsupported_generate(self):
-        # VibeVoice replaces the standard text-token decoding loop with a diffusion-based loop that emits audio.
+        # VibeVoice replaces the standard text-token decoding loop with a diffusion-based loop with positive and
+        # negative forward passes (for classifier-free guidance), and does not emit standard text tokens.
         # As a result, the common generation strategies (beam search, sampling, assisted/contrastive decoding, ...)
         # and the tests that assume standard token outputs / cache handling do not apply.
         skippable_tests = [
@@ -209,12 +210,13 @@ class VibeVoiceForConditionalGenerationTest(ModelTesterMixin, GenerationTesterMi
             "test_generate_from_inputs_embeds",
             "test_generate_methods_with_logits_to_keep",
             "test_model_parallel_beam_search",
+            "test_generate_compile_model_forward_fullgraph",
         ]
         for test in skippable_tests:
             if self._testMethodName.startswith(test):
                 self.skipTest(
-                    reason="VibeVoice uses a diffusion-based generation loop that emits audio, so standard "
-                    "token-based generation strategies are not supported."
+                    reason="VibeVoice uses a diffusion-based generation loop with positive and negative forward "
+                    "passes, and standard token-based generation strategies are not supported."
                 )
 
     def prepare_config_and_inputs_for_generate(self, batch_size=2):
