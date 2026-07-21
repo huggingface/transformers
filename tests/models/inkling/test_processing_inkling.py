@@ -235,7 +235,10 @@ class InklingProcessingIntegrationTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.checkpoint_name = "hf-internal-testing/tiny-inkling"
-        cls.processor = AutoProcessor.from_pretrained(cls.checkpoint_name)
+        try:
+            cls.processor = AutoProcessor.from_pretrained(cls.checkpoint_name)
+        except OSError as e:
+            raise unittest.SkipTest(f"Unable to load {cls.checkpoint_name}: {e}")
         cls.bucket = "hf-internal-testing/tml-integration-tests"
 
     def _load_expected(self, case: str) -> dict:

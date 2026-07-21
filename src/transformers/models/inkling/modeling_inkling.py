@@ -959,15 +959,19 @@ class InklingVisionModel(InklingPreTrainedModel):
         # num_hidden_layers - 1 to encoder and the last to proj to text hidden dim
         self.encoder_layers = nn.ModuleList()
         for i, (start_scale, end_scale) in enumerate(zip(self.scales[:-1], self.scales[1:])):
-            shuffle_mult = (
-                (end_scale[0] // start_scale[0]) * (end_scale[1] // start_scale[1]) * (end_scale[2] // start_scale[2])
+            shuffle_mult = int(
+                (
+                    (end_scale[0] // start_scale[0])
+                    * (end_scale[1] // start_scale[1])
+                    * (end_scale[2] // start_scale[2])
+                ).item()
             )
-            output_dim = config.text_hidden_size if i == config.num_hidden_layers - 1 else end_scale[3]
-            hw_fold = end_scale[1] // start_scale[1]
-            t_fold = end_scale[0] // start_scale[0]
+            output_dim = config.text_hidden_size if i == config.num_hidden_layers - 1 else int(end_scale[3].item())
+            hw_fold = int((end_scale[1] // start_scale[1]).item())
+            t_fold = int((end_scale[0] // start_scale[0]).item())
             self.encoder_layers.append(
                 InklingVisionEncoderLayer(
-                    input_dim=start_scale[3] * shuffle_mult,
+                    input_dim=int(start_scale[3].item()) * shuffle_mult,
                     output_dim=output_dim,
                     hw_fold=hw_fold,
                     t_fold=t_fold,
