@@ -377,7 +377,7 @@ class Lfm2ShortConv(nn.Module):
             conv_state = past_key_values.layers[self.layer_idx].conv_states[0]
             # Single-token cached decode: the fused per-step kernel updates the conv state in-place.
             hidden_states = causal_conv1d_update(
-                hidden_states, conv_state, self.conv1d.weight.squeeze(1), self.conv1d.bias
+                hidden_states, conv_state, self.conv.weight.squeeze(1), self.conv.bias
             )
         else:
             if past_key_values is not None:
@@ -386,7 +386,7 @@ class Lfm2ShortConv(nn.Module):
                 )
 
             hidden_states = causal_conv1d_fn(
-                hidden_states, self.conv1d.weight.squeeze(1), self.conv1d.bias, seq_idx=seq_idx
+                hidden_states, self.conv.weight.squeeze(1), self.conv.bias, seq_idx=seq_idx
             )
 
             # Drop the additional previous states
