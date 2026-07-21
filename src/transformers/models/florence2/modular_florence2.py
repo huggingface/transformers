@@ -1553,7 +1553,11 @@ class Florence2ForConditionalGeneration(LlavaForConditionalGeneration):
         loss = None
         if labels is not None:
             loss = self.loss_function(
-                logits=logits, labels=labels, vocab_size=self.config.text_config.vocab_size, **kwargs
+                logits=logits,
+                labels=labels,
+                vocab_size=self.config.text_config.vocab_size,
+                shift_labels=labels,
+                **kwargs,
             )
 
         return Florence2Seq2SeqLMOutput(

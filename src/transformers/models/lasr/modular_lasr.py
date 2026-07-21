@@ -23,7 +23,7 @@ from torch import nn
 
 from ...audio_utils import AudioInput
 from ...masking_utils import create_bidirectional_mask
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...tokenization_utils_tokenizers import TokenizersBackend
@@ -441,7 +441,7 @@ class LasrPreTrainedModel(ParakeetPreTrainedModel):
     _supports_flex_attn = False
 
     def _init_weights(self, module):
-        PreTrainedModel._init_weights(module)
+        raise AttributeError("Normal super call")
 
     def _get_subsampling_output_length(self, input_lengths: torch.Tensor):
         encoder_config = self.config.encoder_config if isinstance(self.config, LasrCTCConfig) else self.config

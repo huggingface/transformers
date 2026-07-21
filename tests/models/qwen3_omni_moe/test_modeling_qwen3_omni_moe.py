@@ -97,7 +97,6 @@ class Qwen3OmniMoeThinkerForConditionalGenerationTester:
             "deepstack_visual_indexes": [1],
         }
         self.audio_config = {
-            "model_type": "qwen_omni_thinker_audio_encoder",
             "d_model": 32,
             "encoder_attention_heads": 4,
             "encoder_ffn_dim": 32,

@@ -108,7 +108,6 @@ def initialize_tensor_parallelism(
             tp_device = torch.device(device_type)
             device_map = device_type or {}
 
-        tp_size = tp_size if tp_size is not None else torch.distributed.get_world_size()
         device_mesh = torch.distributed.init_device_mesh(tp_device.type, (tp_size,))
     else:
         if device_mesh.ndim > 1:
@@ -118,10 +117,9 @@ def initialize_tensor_parallelism(
                     "Please provide a valid `device_mesh`."
                 )
             device_mesh = device_mesh["tp"]
-        tp_size = device_mesh.size()
         device_map = torch.device(f"{device_mesh.device_type}:{int(os.environ['LOCAL_RANK'])}")
 
-    return device_map, device_mesh, tp_size
+    return device_map, device_mesh
 
 
 def replace_layer_number_by_wildcard(name: str) -> str:
@@ -674,6 +672,10 @@ class TensorParallelLayer:
     ) -> torch.Tensor:
         raise NotImplementedError
 
+    def validate_module(self, module: nn.Module, device_mesh, layer_name: str = ""):
+        """Raise if the module cannot be sharded with this style on the given mesh."""
+        pass
+
     def prepare_module_tp(self, module: nn.Module, device_mesh, **kwargs) -> nn.Module:
         distribute_module(
             module,
@@ -718,6 +720,16 @@ class ColwiseParallel(TensorParallelLayer):
     def __init__(self, gather_output: bool = False, **kwargs):
         super().__init__(**kwargs)
         self.gather_output = gather_output
+
+    def validate_module(self, module: nn.Module, device_mesh, layer_name: str = ""):
+        out_features = getattr(module, "out_features", None)
+        if self.gather_output and out_features is not None and out_features % device_mesh.size() != 0:
+            raise ValueError(
+                f"`{layer_name}` ({type(module).__name__} with out_features={out_features}) is sharded with "
+                f"'colwise_gather_output', which requires out_features to be divisible by the number of ranks "
+                f"({device_mesh.size()}) to all-gather equal-size shards. Resize the weight (e.g. "
+                f"`model.resize_token_embeddings` for LM heads) or override this module's entry in the tp_plan."
+            )
 
     def _prepare_input_fn(self, mod, inputs, device_mesh):
         input_tensor = inputs[0] if inputs else inputs
@@ -1189,7 +1201,8 @@ class RouterParallel(TensorParallelLayer):
                 f"The number of experts must be divisible by number of ep_size: {num_experts} % {ep_size} != 0"
             )
         num_local_experts = num_experts // ep_size
-        router_logits, router_scores, router_indices = outputs
+        # Some routers return extra tensors after the standard logits/scores/indices, e.g. zaya's router state.
+        router_logits, router_scores, router_indices, *extra_outputs = outputs
         non_local_mask = (router_indices // num_local_experts) != ep_rank
         router_scores = router_scores.masked_fill(non_local_mask, 0.0)
         router_indices = router_indices.masked_fill(non_local_mask, -1)
@@ -1199,7 +1212,7 @@ class RouterParallel(TensorParallelLayer):
         else:
             router_indices = router_indices.masked_fill(router_indices > 0, 0).masked_fill(router_indices < 0, -1)
         router_indices = router_indices.masked_fill(router_indices == -1, num_local_experts)
-        return router_logits, router_scores, router_indices
+        return router_logits, router_scores, router_indices, *extra_outputs
 
     def shard_tensor(
         self, param: torch.Tensor, tensor_idx: int | None = None, device=None, dtype=None
@@ -1511,6 +1524,7 @@ def add_tensor_parallel_hooks_to_module(
     """
     if current_module_plan is not None:
         tp_layer = ALL_PARALLEL_STYLES[current_module_plan]
+        tp_layer.validate_module(module, device_mesh, layer_name)
         try:
             tp_layer.prepare_module_tp(module, device_mesh, config=model.config)
         except NotImplementedError as e:
@@ -1608,9 +1622,9 @@ def verify_tp_plan(expected_keys: list[str], tp_plan: dict[str, str] | None):
         logger.warning(f"The following layers were not sharded: {', '.join(unsharded_layers)}")
 
 
-def distribute_model(model, tp_plan, distributed_config, device_mesh, tp_size):
-    """Distribute a model according to the TP plan."""
-    model._tp_size = tp_size
+def apply_tensor_parallelism(model, tp_plan, distributed_config, device_mesh):
+    """Apply tensor parallelism to a model according to the TP plan."""
+    model._tp_size = distributed_config.tp_size
     model._device_mesh = device_mesh
     if distributed_config is not None:
         if isinstance(distributed_config, dict):

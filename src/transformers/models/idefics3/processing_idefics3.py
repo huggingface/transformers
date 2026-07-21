@@ -288,12 +288,18 @@ class Idefics3Processor(ProcessorMixin):
 
             base_image_length = self.image_seq_len + 3
             col_length = self.image_seq_len + 2
+            # For split images the global section is preceded by "\n" which together with the
+            # row-trailing "\n" forms "\n\n". Some tokenizers merge "\n\n" into one token; others
+            # (e.g. trimmed/tiny tokenizers) keep them as two. Count accurately so the formula
+            # matches the actual tokenized output regardless of the tokenizer's merge rules.
+            extra_split_newline = len(self.tokenizer("\n\n", add_special_tokens=False)["input_ids"]) - 1
             num_image_tokens = []
             num_image_patches = []
 
             for num_patches, num_rows, num_cols in num_image_row_cols:
                 row_length = col_length * num_cols + 1
-                num_image_tokens.append(base_image_length + (row_length * num_rows))
+                split_extra = extra_split_newline if num_rows > 0 else 0
+                num_image_tokens.append(base_image_length + split_extra + (row_length * num_rows))
                 num_image_patches.append(num_patches)
 
             vision_data.update({"num_image_tokens": num_image_tokens, "num_image_patches": num_image_patches})
