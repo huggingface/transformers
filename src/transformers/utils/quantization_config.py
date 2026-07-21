@@ -1717,7 +1717,7 @@ class QuarkConfig(QuantizationConfigMixin):
         else:
             if version.parse(quark_version) < version.parse("0.12"):
                 raise ImportError(
-                f"Please install the latest version of Quark (>0.12). Current version is {version.parse(quark_version)}. Please refer to https://quark.docs.amd.com/latest/install.html."
+                f"Please install the latest version of Quark (>=0.12). Current version is {version.parse(quark_version)}. Please refer to https://quark.docs.amd.com/latest/install.html."
             )
             self.quant_config = QConfig.from_dict(kwargs)
 
