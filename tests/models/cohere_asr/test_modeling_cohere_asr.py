@@ -15,6 +15,7 @@
 import copy
 import math
 import unittest
+from types import SimpleNamespace
 
 from transformers import AutoProcessor, CohereAsrConfig, CohereAsrForConditionalGeneration, is_torch_available
 from transformers.audio_utils import load_audio
@@ -178,6 +179,42 @@ class CohereAsrModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
     def test_reverse_loading_mapping(self):
         # proj_out conversion only applies to ForConditionalGeneration, not the base model
         super().test_reverse_loading_mapping(skip_base_model=True)
+
+    def test_training_loss_no_double_shift(self):
+        # forward shifts labels into decoder_input_ids, so loss must be
+        # plain CE against the labels (no second shift)
+        from torch.nn import CrossEntropyLoss
+
+        config = self.model_tester.get_config()
+        config.pad_token_id = self.model_tester.pad_token_id
+        model = CohereAsrForConditionalGeneration(config).to(torch_device).eval()
+        vocab_size = config.vocab_size
+
+        torch.manual_seed(0)
+        bsz, enc_len, dec_len = 2, 10, 6
+        enc_hidden = torch.randn(bsz, enc_len, config.hidden_size, device=torch_device)
+        encoder_outputs = SimpleNamespace(
+            last_hidden_state=enc_hidden,
+            attention_mask=None,
+            hidden_states=None,
+            attentions=None,
+        )
+        labels = torch.randint(3, vocab_size, (bsz, dec_len), device=torch_device)
+        padded = labels.clone()
+        padded[0, -1] = -100
+        padded[1, -2:] = -100
+
+        def aligned_ce(logits, lbl):
+            return CrossEntropyLoss()(logits.reshape(-1, vocab_size), lbl.reshape(-1))
+
+        def double_shift_ce(logits, lbl):
+            return CrossEntropyLoss()(logits[..., :-1, :].reshape(-1, vocab_size), lbl[..., 1:].reshape(-1))
+
+        for lbl in (labels, padded):
+            with torch.no_grad():
+                out = model(encoder_outputs=encoder_outputs, labels=lbl, use_cache=False)
+            self.assertTrue(torch.allclose(out.loss, aligned_ce(out.logits, lbl)))
+            self.assertFalse(torch.allclose(out.loss, double_shift_ce(out.logits, lbl)))
 
     # Copied from tests.models.moonshine_streaming.test_modeling_moonshine_streaming.MoonshineStreamingModelTest.test_resize_tokens_embeddings
     def test_resize_tokens_embeddings(self):

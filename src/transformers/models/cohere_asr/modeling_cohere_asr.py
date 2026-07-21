@@ -22,6 +22,7 @@ from collections.abc import Callable
 
 import torch
 import torch.nn as nn
+from torch.nn import CrossEntropyLoss
 
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
@@ -637,7 +638,8 @@ class CohereAsrForConditionalGeneration(CohereAsrPreTrainedModel, GenerationMixi
 
         loss = None
         if labels is not None:
-            loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.vocab_size)
+            loss_fct = CrossEntropyLoss()
+            loss = loss_fct(logits.reshape(-1, self.config.vocab_size), labels.reshape(-1))
 
         return Seq2SeqLMOutput(
             loss=loss,
