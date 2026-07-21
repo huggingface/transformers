@@ -33,7 +33,12 @@ if is_torch_available():
         tiny_llama_config,
     )
     from transformers import LlamaConfig, LlamaForCausalLM, PreTrainedModel
-    from transformers.integrations.heterogeneity import HeterogeneousModelingSpec, SkipDescriptor
+    from transformers.integrations.heterogeneity import (
+        HeterogeneousModelingSpec,
+        SkipDescriptor,
+        get_heterogeneous_modeling_spec,
+    )
+    from transformers.modeling_layers import MtpLayer, MtpModel
 
 
 if is_torch_available():
@@ -52,6 +57,12 @@ if is_torch_available():
     class _BackboneNoOpAttention(_ToyNoOpAttention):
         pass
 
+    class _GenericNestedNoOpAttention(_ToyNoOpAttention):
+        pass
+
+    class _ClassSpecificNestedNoOpAttention(_ToyNoOpAttention):
+        pass
+
     class _ToyDecoderLayer(torch.nn.Module):
         def __init__(self, config, layer_idx):
             super().__init__()
@@ -63,6 +74,11 @@ if is_torch_available():
         def __init__(self, config):
             torch.nn.Module.__init__(self)
             self.intermediate_size = config.intermediate_size
+
+    class _NestedMemberToyLayer(torch.nn.Module):
+        def __init__(self, config, layer_idx):
+            super().__init__()
+            self.block = _ToyDecoderLayer(config, layer_idx)
 
     def _toy_modeling_spec(layer_cls, attention_replacement_cls):
         return HeterogeneousModelingSpec(
@@ -105,6 +121,25 @@ if is_torch_available():
         def __init__(self, config, layer_idx=0):
             super().__init__(config)
             self.layer = _StackLookupToyLayer(config)
+
+    class _NestedMemberToyModel(_ToyPreTrainedModel):
+        _heterogeneous_modeling_spec = HeterogeneousModelingSpec(
+            layer_cls=_NestedMemberToyLayer,
+            layer_idx_variable_name="layer_idx",
+            skip_descriptors={
+                "attention": SkipDescriptor(
+                    replacements={
+                        "block.self_attn": _GenericNestedNoOpAttention,
+                        ("block.self_attn", _ToyAttention): _ClassSpecificNestedNoOpAttention,
+                    },
+                    replaces_kv_cache_updater=True,
+                )
+            },
+        )
+
+        def __init__(self, config):
+            super().__init__(config)
+            self.layer = _NestedMemberToyLayer(config, layer_idx=0)
 
     class _CompositeToyModel(_ToyPreTrainedModel):
         _heterogeneous_modeling_spec = _toy_modeling_spec(_ToyDecoderLayer, _CompositeNoOpAttention)
@@ -213,6 +248,44 @@ class TestHeterogeneousModeling(unittest.TestCase):
         model = _LayerIdxStackLookupToyModel(_toy_config(intermediate_size=64))
 
         self.assertEqual(model.layer.intermediate_size, 64)
+
+    def test_nested_skip_path_prefers_matching_class_specific_replacement(self):
+        model = _NestedMemberToyModel(_toy_config(intermediate_size=64, skip_attention=True))
+
+        self.assertIsInstance(model.layer.block.self_attn, _ClassSpecificNestedNoOpAttention)
+
+    def test_mtp_model_uses_mtp_layer_spec_and_prefixed_skip_paths(self):
+        config = tiny_llama_config(num_hidden_layers=2)
+        config.num_mtp_layers = 2
+        config.mtp_per_layer_config = {
+            0: {"intermediate_size": 64, "rms_norm_eps": 1e-5},
+            1: {"intermediate_size": 96, "skip": ["attention"]},
+        }
+        main_model = build_model(config, LlamaForCausalLM)
+
+        mtp_model = MtpModel(main_model, num_mtp_layers=2)
+
+        self.assertTrue(mtp_model.config.is_heterogeneous)
+        self.assertIs(mtp_model._heterogeneous_modeling_spec.layer_cls, MtpLayer)
+        for descriptor in mtp_model._heterogeneous_modeling_spec.skip_descriptors.values():
+            for replacement_key in descriptor.replacements:
+                member_path = replacement_key[0] if isinstance(replacement_key, tuple) else replacement_key
+                self.assertTrue(member_path.startswith("mtp_block."))
+
+        self.assertEqual(mtp_model.layers[0].mtp_block.mlp.gate_proj.out_features, 64)
+        self.assertEqual(mtp_model.layers[1].mtp_block.mlp.gate_proj.out_features, 96)
+        self.assertEqual(mtp_model.layers[0].enorm.variance_epsilon, 1e-5)
+        self.assertIsNot(
+            type(mtp_model.layers[1].mtp_block.self_attn),
+            type(main_model.model.layers[1].self_attn),
+        )
+        self.assertEqual(mtp_model.config.get_disabled_kv_layer_indices(), (1,))
+
+        main_modeling_spec = get_heterogeneous_modeling_spec(main_model)
+        for descriptor in main_modeling_spec.skip_descriptors.values():
+            for replacement_key in descriptor.replacements:
+                member_path = replacement_key[0] if isinstance(replacement_key, tuple) else replacement_key
+                self.assertNotIn(".", member_path)
 
     @parameterized.expand(
         [

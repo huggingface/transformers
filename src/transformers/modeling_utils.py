@@ -1269,6 +1269,9 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
     # models, this attribute is currently defined in respective model code. For base models, it comes from
     # `config.base_model_pp_plan` during `post_init`.
     _pp_plan: dict[str, tuple[str, str]] = None
+    # An expert parallel plan used instead of `_tp_plan` when expert parallelism is enabled. For base models, it comes
+    # from `config.base_model_ep_plan` during `post_init`.
+    _ep_plan: dict[str, str] = None
     # FSDP2 sharding plan of the form `{"layers.*": "free_full_weight"}`. For top-level models, this attribute is
     # defined on the head class (e.g. `*ForCausalLM`). For base models, it comes from `config.base_model_fsdp_plan`
     # during `post_init`.
@@ -1424,15 +1427,18 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         """
         # Attach the different parallel plans and tied weight keys to the top-most model, so that everything is
         # easily available.
-        self._tp_plan, self._ep_plan, self._pp_plan, self._fsdp_plan = {}, {}, {}, {}
+        # Start from the class-level plans (e.g. `{"lm_head": "colwise_rep"}` on `...ForCausalLM` classes), copying
+        # them as they are mutated below and would otherwise contaminate the class attribute shared by all instances
+        self._tp_plan = dict(self._tp_plan or {})
+        self._ep_plan = dict(self._ep_plan or {})
+        self._pp_plan = dict(self._pp_plan or {})
+        self._fsdp_plan = dict(self._fsdp_plan or {})
         # If current model is a base model, attach `base_model_tp_plan` and `base_model_pp_plan` from config
         if self.base_model is self:
-            self._pp_plan = self.config.base_model_pp_plan.copy() if self.config.base_model_pp_plan is not None else {}
-            self._tp_plan = self.config.base_model_tp_plan.copy() if self.config.base_model_tp_plan is not None else {}
-            self._ep_plan = self.config.base_model_ep_plan.copy() if self.config.base_model_ep_plan is not None else {}
-            self._fsdp_plan = (
-                self.config.base_model_fsdp_plan.copy() if self.config.base_model_fsdp_plan is not None else {}
-            )
+            self._pp_plan.update(self.config.base_model_pp_plan or {})
+            self._tp_plan.update(self.config.base_model_tp_plan or {})
+            self._ep_plan.update(self.config.base_model_ep_plan or {})
+            self._fsdp_plan.update(self.config.base_model_fsdp_plan or {})
         # Current submodel should register its tied weights
         self.all_tied_weights_keys = self.get_expanded_tied_weights_keys(all_submodels=False)
         # Current submodel should register its `_keep_in_fp32_modules`

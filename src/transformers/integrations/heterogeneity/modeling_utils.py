@@ -270,16 +270,13 @@ def _apply_skip_descriptor(
             member_name = key
             cls = None
 
-        if not hasattr(layer, member_name):
-            raise AttributeError(
-                f"Layer {layer_idx} in class {layer.__class__.__name__} has no attribute {member_name}"
-            )
+        _, _, member = _resolve_layer_member(layer=layer, member_path=member_name, layer_idx=layer_idx)
 
         if cls is None:
             generic_replacements[member_name] = replacement_module
             continue
 
-        if not isinstance(getattr(layer, member_name), cls):
+        if not isinstance(member, cls):
             continue
 
         if member_name in class_specific_replacements:
@@ -290,11 +287,34 @@ def _apply_skip_descriptor(
         class_specific_replacements[member_name] = replacement_module
 
     for member_name, replacement_module in class_specific_replacements.items():
-        setattr(layer, member_name, replacement_module())
+        parent, attribute_name, _ = _resolve_layer_member(layer=layer, member_path=member_name, layer_idx=layer_idx)
+        setattr(parent, attribute_name, replacement_module())
 
     for member_name, replacement_module in generic_replacements.items():
         if member_name not in class_specific_replacements:
-            setattr(layer, member_name, replacement_module())
+            parent, attribute_name, _ = _resolve_layer_member(
+                layer=layer, member_path=member_name, layer_idx=layer_idx
+            )
+            setattr(parent, attribute_name, replacement_module())
+
+
+def _resolve_layer_member(*, layer, member_path: str, layer_idx: int):
+    path_parts = member_path.split(".")
+    parent = layer
+    for path_part in path_parts[:-1]:
+        if not hasattr(parent, path_part):
+            raise AttributeError(
+                f"Layer {layer_idx} in class {layer.__class__.__name__} has no attribute path {member_path}"
+            )
+        parent = getattr(parent, path_part)
+
+    attribute_name = path_parts[-1]
+    if not hasattr(parent, attribute_name):
+        raise AttributeError(
+            f"Layer {layer_idx} in class {layer.__class__.__name__} has no attribute path {member_path}"
+        )
+
+    return parent, attribute_name, getattr(parent, attribute_name)
 
 
 def _get_variable_from_passed_arguments(*, func: Callable, args: tuple, kwargs: dict, names: list[str]) -> Any | None:

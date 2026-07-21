@@ -371,7 +371,7 @@ def get_json_schema(func: Callable) -> dict:
         desc = param_descriptions[arg]
         enum_choices = re.search(r"\(choices:\s*(.*?)\)\s*$", desc, flags=re.IGNORECASE)
         if enum_choices:
-            schema["enum"] = [c.strip() for c in json.loads(enum_choices.group(1))]
+            schema["enum"] = [c.strip() if isinstance(c, str) else c for c in json.loads(enum_choices.group(1))]
             desc = enum_choices.string[: enum_choices.start()].strip()
         schema["description"] = desc
 

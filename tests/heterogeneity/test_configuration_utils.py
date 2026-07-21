@@ -31,6 +31,53 @@ from transformers.utils import logging as transformers_logging
 
 
 class TestHeterogeneousConfig(unittest.TestCase):
+    def test_get_mtp_config_drops_main_model_per_layer_config_by_default(self):
+        config = tiny_llama_config(per_layer_config={3: {"intermediate_size": 64}})
+        config.num_mtp_layers = 2
+
+        mtp_config = config.get_mtp_config()
+
+        self.assertEqual(mtp_config.num_hidden_layers, 2)
+        self.assertFalse(mtp_config.is_heterogeneous)
+        self.assertIsNone(mtp_config.per_layer_config)
+        self.assertEqual(mtp_config.intermediate_size, object.__getattribute__(config, "intermediate_size"))
+        self.assertTrue(config.is_heterogeneous)
+
+    def test_get_mtp_config_uses_independent_mtp_per_layer_config(self):
+        config = tiny_llama_config(per_layer_config={3: {"intermediate_size": 64}})
+        config.num_mtp_layers = 2
+        config.mtp_per_layer_config = {
+            0: {"intermediate_size": 80},
+            1: {"num_key_value_heads": 2},
+        }
+
+        mtp_config = config.get_mtp_config()
+
+        self.assertTrue(mtp_config.is_heterogeneous)
+        self.assertEqual(mtp_config.num_hidden_layers, 2)
+        self.assertEqual(mtp_config.per_layer_config[0].intermediate_size, 80)
+        self.assertEqual(
+            mtp_config.per_layer_config[1].intermediate_size,
+            object.__getattribute__(config, "intermediate_size"),
+        )
+        self.assertEqual(mtp_config.per_layer_config[1].num_key_value_heads, 2)
+
+    def test_get_mtp_config_validates_overrides_against_mtp_layer_count(self):
+        config = tiny_llama_config()
+        config.num_mtp_layers = 2
+        config.mtp_per_layer_config = {2: {"intermediate_size": 80}}
+
+        with self.assertRaisesRegex(ValueError, r"range \[0, 2\)"):
+            config.get_mtp_config()
+
+    @parameterized.expand([("none", None), ("empty", {})])
+    def test_get_mtp_config_without_nonempty_mtp_overrides_is_homogeneous(self, _name, mtp_per_layer_config):
+        config = tiny_llama_config()
+        config.num_mtp_layers = 2
+        config.mtp_per_layer_config = mtp_per_layer_config
+
+        self.assertFalse(config.get_mtp_config().is_heterogeneous)
+
     def test_per_layer_config_skip_normalization(self):
         config = tiny_llama_config(per_layer_config={1: {"skip": ["mlp", "attention"]}, 2: {"skip": []}})
 
