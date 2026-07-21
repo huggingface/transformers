@@ -184,7 +184,6 @@ SPECIAL_CASES_TO_ALLOW = {
     "TrunkConfig": ["cpu_grad_checkpoint", "layer_drop"],
     "Zamba2Config": ["use_mamba_kernels", "use_mem_eff_path"],
     "EsmFold2Config": [
-        "type",
         "transition_expansion_ratio",
         "atom_encoder_expansion_ratio",
         "diffusion_atom_expansion_ratio",
