@@ -152,7 +152,7 @@ class UMT5LayerFF(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.bert.modeling_bert.eager_attention_forward
+# Copied from transformers.models.t5.modeling_t5.eager_attention_forward
 def eager_attention_forward(
     module: nn.Module,
     query: torch.Tensor,
@@ -161,6 +161,7 @@ def eager_attention_forward(
     attention_mask: torch.Tensor | None,
     scaling: float | None = None,
     dropout: float = 0.0,
+    position_bias: torch.Tensor | None = None,
     **kwargs: Unpack[TransformersKwargs],
 ):
     if scaling is None:
@@ -168,6 +169,9 @@ def eager_attention_forward(
 
     # Take the dot product between "query" and "key" to get the raw attention scores.
     attn_weights = torch.matmul(query, key.transpose(2, 3)) * scaling
+
+    if position_bias is not None:
+        attn_weights = attn_weights + position_bias
 
     if attention_mask is not None:
         attn_weights = attn_weights + attention_mask
@@ -344,16 +348,6 @@ class UMT5Attention(nn.Module):
                 seq_length, key_length, device=query_states.device, past_seen_tokens=past_seen_tokens
             )
 
-        if attention_mask is not None:
-            causal_mask = attention_mask
-            if causal_mask.dtype == torch.bool:
-                causal_mask = torch.where(
-                    causal_mask,
-                    torch.tensor(0.0, device=causal_mask.device, dtype=position_bias.dtype),
-                    torch.finfo(position_bias.dtype).min,
-                )
-            position_bias = position_bias + causal_mask
-
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
         )
@@ -363,9 +357,10 @@ class UMT5Attention(nn.Module):
             query_states,
             key_states,
             value_states,
-            position_bias,
+            attention_mask,
             dropout=0.0 if not self.training else self.dropout,
             scaling=self.scaling,
+            position_bias=position_bias,
             **kwargs,
         )
 
@@ -514,14 +509,15 @@ class UMT5PreTrainedModel(PreTrainedModel):
     base_model_prefix = "transformer"
     supports_gradient_checkpointing = True
 
-    _can_compile_fullgraph = True
     _no_split_modules = ["UMT5Block"]
     _keep_in_fp32_modules = ["wo"]
-    # The relative position bias is folded into the additive mask, which flash/flex can't consume (flex would need a
-    # dedicated score_mod); only eager and sdpa are supported.
+    # The relative position bias flows through the attention interface as a separate `position_bias` kwarg: eager and
+    # sdpa add it to the scores/mask directly, while flex consumes it in its score_mod. Flash attention can't take an
+    # arbitrary additive bias, so it stays unsupported.
     _supports_flash_attn = False
-    _supports_flex_attn = False
+    _supports_flex_attn = True
     _supports_sdpa = True
+    _can_compile_fullgraph = False
 
     _can_record_outputs = {
         "hidden_states": OutputRecorder(UMT5Block, index=0),
@@ -685,10 +681,6 @@ class UMT5Stack(UMT5PreTrainedModel):
             past_key_values = None
 
         if self.is_decoder:
-            # UMT5 folds the relative position bias into the attention scores and always routes the mask through the
-            # `attention_mask` argument, so `sdpa` must never take its `is_causal` shortcut. The dummy mask function is
-            # a no-op that keeps the causal mask materialized so it can be added to the position bias.
-            dummy_and_mask_function = lambda *args: torch.tensor(True, dtype=torch.bool)  # noqa: E731
             causal_mask = create_causal_mask(
                 config=self.config,
                 inputs_embeds=inputs_embeds,
@@ -696,7 +688,6 @@ class UMT5Stack(UMT5PreTrainedModel):
                 past_key_values=past_key_values.self_attention_cache
                 if isinstance(past_key_values, EncoderDecoderCache)
                 else past_key_values,
-                and_mask_function=dummy_and_mask_function,
             )
         else:
             causal_mask = create_bidirectional_mask(

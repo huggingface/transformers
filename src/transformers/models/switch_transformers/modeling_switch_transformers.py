@@ -223,6 +223,8 @@ class SwitchTransformersLayerFF(nn.Module):
         return output
 
 
+# The relative position bias is added as a separate `position_bias` kwarg so that eager and sdpa can consume it while
+# flex attention handles it in its score_mod; it is therefore not folded into the attention mask.
 def eager_attention_forward(
     module: nn.Module,
     query: torch.Tensor,
@@ -231,6 +233,7 @@ def eager_attention_forward(
     attention_mask: torch.Tensor | None,
     scaling: float | None = None,
     dropout: float = 0.0,
+    position_bias: torch.Tensor | None = None,
     **kwargs: Unpack[TransformersKwargs],
 ):
     if scaling is None:
@@ -238,6 +241,9 @@ def eager_attention_forward(
 
     # Take the dot product between "query" and "key" to get the raw attention scores.
     attn_weights = torch.matmul(query, key.transpose(2, 3)) * scaling
+
+    if position_bias is not None:
+        attn_weights = attn_weights + position_bias
 
     if attention_mask is not None:
         attn_weights = attn_weights + attention_mask
@@ -425,18 +431,6 @@ class SwitchTransformersAttention(nn.Module):
                     input_shape[1], key_length, device=query_states.device, past_seen_tokens=past_seen_tokens
                 )
 
-            if mask is not None:
-                causal_mask = mask
-                if causal_mask.dtype == torch.bool:
-                    # `sdpa` may materialize a boolean mask (True = keep). Turn it into an additive float mask so it
-                    # can be folded into the relative position bias, just like the `eager` float mask.
-                    causal_mask = torch.where(
-                        causal_mask,
-                        torch.tensor(0.0, device=causal_mask.device, dtype=position_bias.dtype),
-                        torch.finfo(position_bias.dtype).min,
-                    )
-                position_bias = position_bias + causal_mask
-
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
         )
@@ -446,9 +440,10 @@ class SwitchTransformersAttention(nn.Module):
             query_states,
             key_states,
             value_states,
-            position_bias,
+            mask,
             dropout=0.0 if not self.training else self.dropout,
             scaling=self.scaling,
+            position_bias=position_bias,
             **kwargs,
         )
 

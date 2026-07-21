@@ -141,7 +141,8 @@ class T5LayerFF(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.bert.modeling_bert.eager_attention_forward
+# The relative position bias is added as a separate `position_bias` kwarg so that eager and sdpa can consume it while
+# flex attention handles it in its score_mod; it is therefore not folded into the attention mask.
 def eager_attention_forward(
     module: nn.Module,
     query: torch.Tensor,
@@ -150,6 +151,7 @@ def eager_attention_forward(
     attention_mask: torch.Tensor | None,
     scaling: float | None = None,
     dropout: float = 0.0,
+    position_bias: torch.Tensor | None = None,
     **kwargs: Unpack[TransformersKwargs],
 ):
     if scaling is None:
@@ -157,6 +159,9 @@ def eager_attention_forward(
 
     # Take the dot product between "query" and "key" to get the raw attention scores.
     attn_weights = torch.matmul(query, key.transpose(2, 3)) * scaling
+
+    if position_bias is not None:
+        attn_weights = attn_weights + position_bias
 
     if attention_mask is not None:
         attn_weights = attn_weights + attention_mask
@@ -344,18 +349,6 @@ class T5Attention(nn.Module):
                     input_shape[1], key_length, device=query_states.device, past_seen_tokens=past_seen_tokens
                 )
 
-            if mask is not None:
-                causal_mask = mask
-                if causal_mask.dtype == torch.bool:
-                    # `sdpa` may materialize a boolean mask (True = keep). Turn it into an additive float mask so it
-                    # can be folded into the relative position bias, just like the `eager` float mask.
-                    causal_mask = torch.where(
-                        causal_mask,
-                        torch.tensor(0.0, device=causal_mask.device, dtype=position_bias.dtype),
-                        torch.finfo(position_bias.dtype).min,
-                    )
-                position_bias = position_bias + causal_mask
-
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
         )
@@ -365,9 +358,10 @@ class T5Attention(nn.Module):
             query_states,
             key_states,
             value_states,
-            position_bias,
+            mask,
             dropout=0.0 if not self.training else self.dropout,
             scaling=self.scaling,
+            position_bias=position_bias,
             **kwargs,
         )
 
@@ -540,16 +534,17 @@ class T5PreTrainedModel(PreTrainedModel):
     config: T5Config
     base_model_prefix = "transformer"
     supports_gradient_checkpointing = True
-    _can_compile_fullgraph = True
 
     _no_split_modules = ["T5Block"]
     _keep_in_fp32_modules = ["wo"]
 
-    # The relative position bias is folded into the additive mask, which flash/flex can't consume (flex would need a
-    # dedicated score_mod); only eager and sdpa are supported.
+    # The relative position bias flows through the attention interface as a separate `position_bias` kwarg: eager and
+    # sdpa add it to the scores/mask directly, while flex consumes it in its score_mod. Flash attention can't take an
+    # arbitrary additive bias, so it stays unsupported.
     _supports_flash_attn = False
-    _supports_flex_attn = False
+    _supports_flex_attn = True
     _supports_sdpa = True
+    _can_compile_fullgraph = False
 
     _can_record_outputs = {
         "hidden_states": OutputRecorder(T5Block, index=0),
@@ -704,10 +699,6 @@ class T5Stack(T5PreTrainedModel):
             past_key_values = None
 
         if self.config.is_decoder:
-            # T5 folds the relative position bias into the attention scores and always feeds it through the
-            # `attention_mask` argument, so `sdpa` can never rely on its `is_causal` shortcut. The dummy mask function
-            # is a no-op but forces the causal mask to always be materialized instead of being skipped.
-            dummy_and_mask_function = lambda *args: torch.tensor(True, dtype=torch.bool)  # noqa: E731
             attention_mask = create_causal_mask(
                 config=self.config,
                 inputs_embeds=inputs_embeds,
@@ -715,7 +706,6 @@ class T5Stack(T5PreTrainedModel):
                 past_key_values=past_key_values.self_attention_cache
                 if isinstance(past_key_values, EncoderDecoderCache)
                 else past_key_values,
-                and_mask_function=dummy_and_mask_function,
             )
         else:
             attention_mask = create_bidirectional_mask(
