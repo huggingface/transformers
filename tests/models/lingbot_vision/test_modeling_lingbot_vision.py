@@ -17,7 +17,7 @@ import unittest
 from functools import cached_property
 
 from transformers import AutoBackbone, AutoModel, LingbotVisionConfig
-from transformers.testing_utils import require_torch, require_vision, slow, torch_device
+from transformers.testing_utils import Expectations, require_torch, require_vision, slow, torch_device
 from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
@@ -35,12 +35,12 @@ if is_torch_available():
 if is_vision_available():
     from PIL import Image
 
-    from transformers import AutoImageProcessor
+    from transformers import AutoImageProcessor, LingbotVisionImageProcessor
 
 
 # HF-format checkpoint of the flagship ViT-g/16 backbone (produced by
 # `convert_lingbot_vision_to_hf.py`). Used only by the `@slow` integration tests.
-LINGBOT_GIANT = "robbyant/lingbot-vision-vit-giant-hf"
+LINGBOT_GIANT = "IMvision12/lingbot-vision-vit-giant-hf"
 
 
 class LingbotVisionModelTester:
@@ -82,6 +82,8 @@ class LingbotVisionModelTester:
 
         self.num_patches = (image_size // patch_size) ** 2
         self.seq_length = self.num_patches + 1 + self.num_storage_tokens
+        self.mask_length = self.num_patches
+        self.num_masks = max(1, self.num_patches // 2)
 
     def get_config(self):
         return LingbotVisionConfig(
@@ -186,6 +188,14 @@ class LingbotVisionModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Tes
         self.assertIsInstance(AutoModel.from_config(config), LingbotVisionModel)
         self.assertIsInstance(AutoBackbone.from_config(config), LingbotVisionBackbone)
 
+    @require_vision
+    def test_image_processor_defaults(self):
+        image_processor = LingbotVisionImageProcessor()
+        self.assertEqual(image_processor.size.height, 512)
+        self.assertEqual(image_processor.size.width, 512)
+        self.assertEqual(image_processor.image_mean, (0.485, 0.456, 0.406))
+        self.assertEqual(image_processor.image_std, (0.229, 0.224, 0.225))
+
     @unittest.skip(reason="LingBot-Vision does not use inputs_embeds")
     def test_inputs_embeds(self):
         pass
@@ -235,9 +245,15 @@ class LingbotVisionModelIntegrationTest(unittest.TestCase):
         expected_shape = torch.Size((1, expected_seq_length, model.config.hidden_size))
         self.assertEqual(outputs.last_hidden_state.shape, expected_shape)
 
-        expected_pooler = torch.tensor([-0.3808, 0.8251, 0.3735, 1.1332, 1.7006], device=torch_device)
+        expected_pooler = torch.tensor(
+            Expectations({(None, None): [-0.3808, 0.8251, 0.3735, 1.1332, 1.7006]}).get_expectation(),
+            device=torch_device,
+        )
         torch.testing.assert_close(outputs.pooler_output[0, :5], expected_pooler, rtol=1e-4, atol=1e-4)
 
         first_patch_token = outputs.last_hidden_state[:, model.config.num_storage_tokens + 1 :]
-        expected_patch = torch.tensor([0.5824, 0.2652, -0.3335, -0.0979, 0.2420], device=torch_device)
+        expected_patch = torch.tensor(
+            Expectations({(None, None): [0.5824, 0.2652, -0.3335, -0.0979, 0.2420]}).get_expectation(),
+            device=torch_device,
+        )
         torch.testing.assert_close(first_patch_token[0, 0, :5], expected_patch, rtol=1e-4, atol=1e-4)

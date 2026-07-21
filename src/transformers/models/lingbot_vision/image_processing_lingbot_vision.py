@@ -11,19 +11,22 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from typing import TYPE_CHECKING
+"""Image processor class for LingBot-Vision."""
 
-from ...utils import _LazyModule
-from ...utils.import_utils import define_import_structure
+from ...image_processing_backends import TorchvisionBackend
+from ...image_utils import IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD, PILImageResampling
+from ...utils import auto_docstring
 
 
-if TYPE_CHECKING:
-    from .configuration_lingbot_vision import *
-    from .image_processing_lingbot_vision import *
-    from .image_processing_pil_lingbot_vision import *
-    from .modeling_lingbot_vision import *
-else:
-    import sys
+@auto_docstring
+class LingbotVisionImageProcessor(TorchvisionBackend):
+    resample = PILImageResampling.BILINEAR
+    image_mean = IMAGENET_DEFAULT_MEAN
+    image_std = IMAGENET_DEFAULT_STD
+    size = {"height": 512, "width": 512}
+    do_resize = True
+    do_rescale = True
+    do_normalize = True
 
-    _file = globals()["__file__"]
-    sys.modules[__name__] = _LazyModule(__name__, _file, define_import_structure(_file), module_spec=__spec__)
+
+__all__ = ["LingbotVisionImageProcessor"]

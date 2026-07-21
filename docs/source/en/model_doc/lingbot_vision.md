@@ -24,13 +24,19 @@ The original code can be found [here](https://github.com/Robbyant/lingbot-vision
 ```python
 import torch
 
-from transformers import AutoModel
+from transformers import AutoImageProcessor, AutoModel
+from transformers.image_utils import load_image
 
 
-model = AutoModel.from_pretrained("robbyant/lingbot-vision-vit-small")
-pixel_values = torch.randn(1, 3, 512, 512)
+model_id = "IMvision12/lingbot-vision-vit-giant-hf"
+image_processor = AutoImageProcessor.from_pretrained(model_id)
+model = AutoModel.from_pretrained(model_id)
 
-outputs = model(pixel_values)
+image = load_image("http://images.cocodataset.org/val2017/000000039769.jpg")
+inputs = image_processor(images=image, return_tensors="pt")
+
+with torch.inference_mode():
+    outputs = model(**inputs)
 last_hidden_state = outputs.last_hidden_state
 ```
 

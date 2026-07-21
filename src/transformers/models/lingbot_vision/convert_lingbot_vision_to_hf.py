@@ -8,7 +8,7 @@ import argparse
 import torch
 from huggingface_hub import hf_hub_download
 
-from transformers import LingbotVisionConfig, LingbotVisionModel
+from transformers import LingbotVisionConfig, LingbotVisionImageProcessor, LingbotVisionModel
 from transformers.utils import logging
 
 
@@ -28,7 +28,6 @@ VARIANT_TO_CONFIG = {
         "hidden_size": 384,
         "num_hidden_layers": 12,
         "num_attention_heads": 6,
-        "intermediate_size": 1536,
         "ffn_layer": "mlp",
         "qkv_bias": True,
     },
@@ -36,7 +35,6 @@ VARIANT_TO_CONFIG = {
         "hidden_size": 768,
         "num_hidden_layers": 12,
         "num_attention_heads": 12,
-        "intermediate_size": 3072,
         "ffn_layer": "mlp",
         "qkv_bias": True,
     },
@@ -44,7 +42,6 @@ VARIANT_TO_CONFIG = {
         "hidden_size": 1024,
         "num_hidden_layers": 24,
         "num_attention_heads": 16,
-        "intermediate_size": 4096,
         "ffn_layer": "mlp",
         "qkv_bias": True,
     },
@@ -52,7 +49,6 @@ VARIANT_TO_CONFIG = {
         "hidden_size": 1536,
         "num_hidden_layers": 40,
         "num_attention_heads": 24,
-        "intermediate_size": 4096,
         "ffn_layer": "swiglu",
         "qkv_bias": False,
     },
@@ -65,7 +61,7 @@ def get_lingbot_vision_config(variant):
         patch_size=16,
         num_channels=3,
         num_storage_tokens=4,
-        rope_theta=100.0,
+        rope_parameters={"rope_theta": 100.0},
         rope_normalize_coords="separate",
         rope_rescale_coords=2.0,
         rope_dtype="fp32",
@@ -80,78 +76,6 @@ def get_lingbot_vision_config(variant):
     )
 
     return config
-
-
-def create_rename_keys(config):
-    rename_keys = [
-        ("cls_token", "embeddings.cls_token"),
-        ("mask_token", "embeddings.mask_token"),
-        ("storage_tokens", "embeddings.storage_tokens"),
-        ("patch_embed.proj.weight", "embeddings.patch_embeddings.projection.weight"),
-        ("patch_embed.proj.bias", "embeddings.patch_embeddings.projection.bias"),
-        ("rope_embed.periods", "rope_embeddings.periods"),
-        ("norm.weight", "layernorm.weight"),
-        ("norm.bias", "layernorm.bias"),
-    ]
-
-    if config.untie_cls_and_patch_norms:
-        rename_keys.extend(
-            [
-                ("cls_norm.weight", "layernorm.weight"),
-                ("cls_norm.bias", "layernorm.bias"),
-            ]
-        )
-
-    for i in range(config.num_hidden_layers):
-        rename_keys.extend(
-            [
-                (f"blocks.{i}.norm1.weight", f"encoder.layers.{i}.norm1.weight"),
-                (f"blocks.{i}.norm1.bias", f"encoder.layers.{i}.norm1.bias"),
-                (f"blocks.{i}.attn.qkv.weight", f"encoder.layers.{i}.attention.qkv.weight"),
-                (f"blocks.{i}.attn.proj.weight", f"encoder.layers.{i}.attention.projection.weight"),
-                (f"blocks.{i}.attn.proj.bias", f"encoder.layers.{i}.attention.projection.bias"),
-                (f"blocks.{i}.ls1.gamma", f"encoder.layers.{i}.layer_scale1.gamma"),
-                (f"blocks.{i}.norm2.weight", f"encoder.layers.{i}.norm2.weight"),
-                (f"blocks.{i}.norm2.bias", f"encoder.layers.{i}.norm2.bias"),
-                (f"blocks.{i}.ls2.gamma", f"encoder.layers.{i}.layer_scale2.gamma"),
-            ]
-        )
-
-        if config.qkv_bias:
-            rename_keys.extend(
-                [
-                    (f"blocks.{i}.attn.qkv.bias", f"encoder.layers.{i}.attention.qkv.bias"),
-                    (f"blocks.{i}.attn.qkv.bias_mask", f"encoder.layers.{i}.attention.qkv.bias_mask"),
-                ]
-            )
-
-        if config.ffn_layer == "mlp":
-            rename_keys.extend(
-                [
-                    (f"blocks.{i}.mlp.fc1.weight", f"encoder.layers.{i}.mlp.fc1.weight"),
-                    (f"blocks.{i}.mlp.fc1.bias", f"encoder.layers.{i}.mlp.fc1.bias"),
-                    (f"blocks.{i}.mlp.fc2.weight", f"encoder.layers.{i}.mlp.fc2.weight"),
-                    (f"blocks.{i}.mlp.fc2.bias", f"encoder.layers.{i}.mlp.fc2.bias"),
-                ]
-            )
-        elif config.ffn_layer == "swiglu":
-            rename_keys.extend(
-                [
-                    (f"blocks.{i}.mlp.w1.weight", f"encoder.layers.{i}.mlp.w1.weight"),
-                    (f"blocks.{i}.mlp.w1.bias", f"encoder.layers.{i}.mlp.w1.bias"),
-                    (f"blocks.{i}.mlp.w2.weight", f"encoder.layers.{i}.mlp.w2.weight"),
-                    (f"blocks.{i}.mlp.w2.bias", f"encoder.layers.{i}.mlp.w2.bias"),
-                    (f"blocks.{i}.mlp.w3.weight", f"encoder.layers.{i}.mlp.w3.weight"),
-                    (f"blocks.{i}.mlp.w3.bias", f"encoder.layers.{i}.mlp.w3.bias"),
-                ]
-            )
-
-    return rename_keys
-
-
-def rename_key(state_dict, old, new):
-    val = state_dict.pop(old)
-    state_dict[new] = val
 
 
 def unwrap_state_dict(checkpoint):
@@ -195,26 +119,20 @@ def convert_lingbot_vision_checkpoint(
     variant,
     pytorch_dump_folder_path,
     checkpoint_path=None,
-    push_to_hub=False,
     verify_shapes=False,
     cache_dir=None,
     revision=None,
 ):
     config = get_lingbot_vision_config(variant)
-    model = LingbotVisionModel(config)
-    model.eval()
-
     state_dict = load_original_state_dict(checkpoint_path, variant, cache_dir=cache_dir, revision=revision)
-
-    for src, dest in create_rename_keys(config):
-        if src in state_dict:
-            rename_key(state_dict, src, dest)
-
-    missing_keys, unexpected_keys = model.load_state_dict(state_dict, strict=False)
-    if missing_keys:
-        raise ValueError(f"Missing keys when loading LingBot-Vision checkpoint: {missing_keys}")
-    if unexpected_keys:
-        raise ValueError(f"Unexpected keys when loading LingBot-Vision checkpoint: {unexpected_keys}")
+    model, loading_info = LingbotVisionModel.from_pretrained(
+        None, config=config, state_dict=state_dict, output_loading_info=True
+    )
+    if loading_info["missing_keys"] or loading_info["unexpected_keys"]:
+        raise ValueError(
+            "LingBot-Vision checkpoint conversion did not load cleanly: "
+            f"missing={loading_info['missing_keys']}, unexpected={loading_info['unexpected_keys']}"
+        )
 
     if verify_shapes:
         pixel_values = torch.zeros(1, config.num_channels, config.image_size, config.image_size)
@@ -228,10 +146,7 @@ def convert_lingbot_vision_checkpoint(
 
     logger.info("Saving model to %s", pytorch_dump_folder_path)
     model.save_pretrained(pytorch_dump_folder_path)
-
-    if push_to_hub:
-        repo_id = VARIANT_TO_REPO_ID[variant].split("/")[-1]
-        model.push_to_hub(repo_id)
+    LingbotVisionImageProcessor().save_pretrained(pytorch_dump_folder_path)
 
 
 def main():
@@ -254,7 +169,6 @@ def main():
         type=str,
         help="Path to the output Transformers checkpoint directory.",
     )
-    parser.add_argument("--push_to_hub", action="store_true", help="Push the converted checkpoint to the Hub.")
     parser.add_argument(
         "--verify_shapes", action="store_true", help="Run a forward pass shape check after conversion."
     )
@@ -270,7 +184,6 @@ def main():
         variant=args.variant,
         pytorch_dump_folder_path=args.pytorch_dump_folder_path,
         checkpoint_path=args.checkpoint_path,
-        push_to_hub=args.push_to_hub,
         verify_shapes=args.verify_shapes,
         cache_dir=args.cache_dir,
         revision=args.revision,

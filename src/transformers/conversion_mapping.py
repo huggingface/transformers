@@ -140,6 +140,21 @@ _MODEL_TO_CONVERSION_PATTERN = {
 
 def _build_checkpoint_conversion_mapping():
     mapping = {
+        "lingbot_vision": [
+            WeightRenaming(r"^cls_token$", "embeddings.cls_token"),
+            WeightRenaming(r"^mask_token$", "embeddings.mask_token"),
+            WeightRenaming(r"^storage_tokens$", "embeddings.storage_tokens"),
+            WeightRenaming(r"^patch_embed\.proj\.", "embeddings.patch_embeddings.projection."),
+            WeightRenaming(r"^rope_embed\.periods$", "rope_embeddings.periods"),
+            WeightRenaming(r"^norm\.", "layernorm."),
+            WeightRenaming(r"^blocks\.(\d+)\.norm1\.", r"encoder.layers.\1.norm1."),
+            WeightRenaming(r"^blocks\.(\d+)\.attn\.qkv\.", r"encoder.layers.\1.attention.qkv."),
+            WeightRenaming(r"^blocks\.(\d+)\.attn\.proj\.", r"encoder.layers.\1.attention.projection."),
+            WeightRenaming(r"^blocks\.(\d+)\.ls1\.gamma$", r"encoder.layers.\1.layer_scale1.gamma"),
+            WeightRenaming(r"^blocks\.(\d+)\.norm2\.", r"encoder.layers.\1.norm2."),
+            WeightRenaming(r"^blocks\.(\d+)\.mlp\.", r"encoder.layers.\1.mlp."),
+            WeightRenaming(r"^blocks\.(\d+)\.ls2\.gamma$", r"encoder.layers.\1.layer_scale2.gamma"),
+        ],
         "gemma4_unified": [
             WeightRenaming(source_patterns=r"vision_embedder\.patch_ln1", target_patterns="embed_vision.patch_ln1"),
             WeightRenaming(

@@ -17,10 +17,11 @@ from huggingface_hub.dataclasses import strict
 
 from ...backbone_utils import BackboneConfigMixin
 from ...configuration_utils import PreTrainedConfig
+from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring
 
 
-@auto_docstring(checkpoint="robbyant/lingbot-vision-vit-giant-hf")
+@auto_docstring(checkpoint="IMvision12/lingbot-vision-vit-giant-hf")
 @strict
 class LingbotVisionConfig(BackboneConfigMixin, PreTrainedConfig):
     r"""
@@ -54,9 +55,8 @@ class LingbotVisionConfig(BackboneConfigMixin, PreTrainedConfig):
         Normalization layer type. Supports `"layernorm"`, `"layernormbf16"` and `"rmsnorm"`.
     mask_k_bias (`bool`, *optional*, defaults to `False`):
         Whether to zero the key-bias slice in the fused QKV projection.
-    rope_base (`float`, *optional*, defaults to 100.0):
-        Base period for axial rotary position embeddings. Mutually exclusive with `rope_min_period` and
-        `rope_max_period`.
+    rope_parameters (`dict`, *optional*):
+        Parameters for axial rotary position embeddings. `rope_theta` sets the base period and defaults to 100.0.
     rope_min_period (`float`, *optional*):
         Minimum period for axial rotary position embeddings.
     rope_max_period (`float`, *optional*):
@@ -80,6 +80,7 @@ class LingbotVisionConfig(BackboneConfigMixin, PreTrainedConfig):
     """
 
     model_type = "lingbot_vision"
+    default_theta = 100.0
 
     image_size: int = 224
     patch_size: int = 16
@@ -101,7 +102,7 @@ class LingbotVisionConfig(BackboneConfigMixin, PreTrainedConfig):
     ffn_layer: str = "mlp"
     norm_layer: str = "layernorm"
     mask_k_bias: bool = False
-    rope_base: float | None = 100.0
+    rope_parameters: RopeParameters | dict | None = None
     rope_min_period: float | None = None
     rope_max_period: float | None = None
     rope_normalize_coords: str = "separate"

@@ -14,6 +14,7 @@
 """PyTorch LingBot-Vision model."""
 
 import math
+from collections.abc import Callable
 from functools import partial
 
 import torch
@@ -24,10 +25,11 @@ from ... import initialization as init
 from ...backbone_utils import BackboneMixin, filter_output_hidden_states
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BackboneOutput, BaseModelOutputWithPooling
-from ...modeling_utils import PreTrainedModel
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring
 from ...utils.generic import can_return_tuple
+from ...utils.output_capturing import capture_outputs
 from ..llama.modeling_llama import LlamaRMSNorm
 from ..pixtral.modeling_pixtral import rotate_half
 from ..swin.modeling_swin import SwinDropPath
@@ -90,12 +92,16 @@ class LingbotVisionRotaryEmbedding(nn.Module):
         if config.hidden_size % (4 * config.num_attention_heads) != 0:
             raise ValueError("`hidden_size` must be divisible by `4 * num_attention_heads` for LingBot-Vision RoPE.")
 
+        rope_parameters = config.rope_parameters or {}
+        base = rope_parameters.get("rope_theta")
         both_periods = config.rope_min_period is not None and config.rope_max_period is not None
-        if (config.rope_base is None and not both_periods) or (config.rope_base is not None and both_periods):
-            raise ValueError("Either `rope_base` or both `rope_min_period` and `rope_max_period` must be set.")
+        if (base is None and not both_periods) or (base is not None and both_periods):
+            raise ValueError(
+                "Either `rope_parameters['rope_theta']` or both `rope_min_period` and `rope_max_period` must be set."
+            )
 
         head_dim = config.hidden_size // config.num_attention_heads
-        self.base = config.rope_base
+        self.base = base
         self.min_period = config.rope_min_period
         self.max_period = config.rope_max_period
         self.head_dim = head_dim
@@ -176,12 +182,36 @@ class LingbotVisionLinearKMaskedBias(nn.Linear):
         return F.linear(input, self.weight, bias)
 
 
+def eager_attention_forward(
+    module: nn.Module,
+    query: torch.Tensor,
+    key: torch.Tensor,
+    value: torch.Tensor,
+    attention_mask: torch.Tensor | None,
+    scaling: float | None = None,
+    dropout: float = 0.0,
+    **kwargs: Unpack[TransformersKwargs],
+) -> tuple[torch.Tensor, torch.Tensor]:
+    if scaling is None:
+        scaling = query.size(-1) ** -0.5
+
+    attention_weights = torch.matmul(query, key.transpose(2, 3)) * scaling
+    if attention_mask is not None:
+        attention_weights = attention_weights + attention_mask
+    attention_weights = nn.functional.softmax(attention_weights, dim=-1)
+    attention_weights = nn.functional.dropout(attention_weights, p=dropout, training=module.training)
+    attention_output = torch.matmul(attention_weights, value).transpose(1, 2).contiguous()
+    return attention_output, attention_weights
+
+
 class LingbotVisionAttention(nn.Module):
     def __init__(self, config: LingbotVisionConfig):
         super().__init__()
+        self.config = config
         self.num_heads = config.num_attention_heads
         self.head_dim = config.hidden_size // config.num_attention_heads
-        self.scale = self.head_dim**-0.5
+        self.scaling = self.head_dim**-0.5
+        self.is_causal = False
         linear_cls = LingbotVisionLinearKMaskedBias if config.mask_k_bias else nn.Linear
         self.qkv = linear_cls(config.hidden_size, config.hidden_size * 3, bias=config.qkv_bias)
         self.attention_dropout = config.attention_probs_dropout_prob
@@ -211,7 +241,11 @@ class LingbotVisionAttention(nn.Module):
         return query, key
 
     def forward(
-        self, hidden_states: torch.Tensor, rope: tuple[torch.Tensor, torch.Tensor], output_attentions: bool = False
+        self,
+        hidden_states: torch.Tensor,
+        rope: tuple[torch.Tensor, torch.Tensor],
+        attention_mask: torch.Tensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
         batch_size, seq_length, hidden_size = hidden_states.shape
         qkv = self.qkv(hidden_states)
@@ -222,22 +256,23 @@ class LingbotVisionAttention(nn.Module):
         value = value.transpose(1, 2)
         query, key = self.apply_rope(query, key, rope)
 
-        if output_attentions:
-            attention_scores = torch.matmul(query, key.transpose(-1, -2)) * self.scale
-            attention_probs = nn.functional.softmax(attention_scores, dim=-1)
-            attention_probs = nn.functional.dropout(attention_probs, p=self.attention_dropout, training=self.training)
-            context_layer = torch.matmul(attention_probs, value)
-        else:
-            attention_probs = None
-            context_layer = F.scaled_dot_product_attention(
-                query,
-                key,
-                value,
-                dropout_p=self.attention_dropout if self.training else 0.0,
-                scale=self.scale,
-            )
+        attention_interface: Callable = (
+            eager_attention_forward
+            if kwargs.get("output_attentions", False)
+            else ALL_ATTENTION_FUNCTIONS.get_interface(self.config._attn_implementation, eager_attention_forward)
+        )
+        context_layer, attention_probs = attention_interface(
+            self,
+            query,
+            key,
+            value,
+            attention_mask,
+            dropout=self.attention_dropout if self.training else 0.0,
+            scaling=self.scaling,
+            **kwargs,
+        )
 
-        context_layer = context_layer.transpose(1, 2).reshape(batch_size, seq_length, hidden_size)
+        context_layer = context_layer.reshape(batch_size, seq_length, hidden_size).contiguous()
         context_layer = self.projection(context_layer)
         context_layer = self.projection_dropout(context_layer)
         return context_layer, attention_probs
@@ -318,10 +353,13 @@ class LingbotVisionLayer(GradientCheckpointingLayer):
         )
 
     def forward(
-        self, hidden_states: torch.Tensor, rope: tuple[torch.Tensor, torch.Tensor], output_attentions: bool = False
+        self,
+        hidden_states: torch.Tensor,
+        rope: tuple[torch.Tensor, torch.Tensor],
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
         residual = hidden_states
-        attention_output, attention_probs = self.attention(self.norm1(hidden_states), rope, output_attentions)
+        attention_output, attention_probs = self.attention(self.norm1(hidden_states), rope, **kwargs)
         hidden_states = residual + self.drop_path(self.layer_scale1(attention_output))
 
         residual = hidden_states
@@ -373,6 +411,7 @@ class LingbotVisionEncoder(nn.Module):
         rope: tuple[torch.Tensor, torch.Tensor],
         output_attentions: bool = False,
         output_hidden_states: bool = False,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, tuple[torch.Tensor, ...] | None, tuple[torch.Tensor, ...] | None]:
         all_hidden_states = () if output_hidden_states else None
         all_attentions = () if output_attentions else None
@@ -380,8 +419,9 @@ class LingbotVisionEncoder(nn.Module):
         if output_hidden_states:
             all_hidden_states = all_hidden_states + (hidden_states,)
 
+        layer_kwargs = {**kwargs, "output_attentions": output_attentions}
         for layer in self.layers:
-            hidden_states, attention_probs = layer(hidden_states, rope, output_attentions=output_attentions)
+            hidden_states, attention_probs = layer(hidden_states, rope, **layer_kwargs)
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
             if output_attentions:
@@ -397,6 +437,11 @@ class LingbotVisionPreTrainedModel(PreTrainedModel):
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True
     _no_split_modules = ["LingbotVisionLayer"]
+    _supports_sdpa = True
+    _can_record_outputs = {
+        "hidden_states": LingbotVisionLayer,
+        "attentions": LingbotVisionAttention,
+    }
 
     def _init_weights(self, module):
         super()._init_weights(module)
@@ -438,7 +483,7 @@ class LingbotVisionModel(LingbotVisionPreTrainedModel):
     def get_input_embeddings(self) -> LingbotVisionPatchEmbeddings:
         return self.embeddings.patch_embeddings
 
-    @can_return_tuple
+    @capture_outputs(tie_last_hidden_states=False)
     @auto_docstring
     def forward(
         self,
@@ -450,17 +495,10 @@ class LingbotVisionModel(LingbotVisionPreTrainedModel):
         bool_masked_pos (`torch.BoolTensor` of shape `(batch_size, num_patches)`, *optional*):
             Boolean masked positions. Indicates which patches should be replaced by the mask token.
         """
-        output_attentions = kwargs.get("output_attentions", self.config.output_attentions)
-        output_hidden_states = kwargs.get("output_hidden_states", self.config.output_hidden_states)
-
         embedding_output, patch_grid = self.embeddings(pixel_values, bool_masked_pos=bool_masked_pos)
         rope = self.rope_embeddings(*patch_grid)
-        sequence_output, hidden_states, attentions = self.encoder(
-            embedding_output,
-            rope=rope,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-        )
+        encoder_kwargs = {key: value for key, value in kwargs.items() if key != "output_hidden_states"}
+        sequence_output, _, _ = self.encoder(embedding_output, rope=rope, **encoder_kwargs)
 
         if self.config.untie_cls_and_patch_norms:
             prefix_length = self.config.num_storage_tokens + 1
@@ -474,8 +512,6 @@ class LingbotVisionModel(LingbotVisionPreTrainedModel):
         return BaseModelOutputWithPooling(
             last_hidden_state=sequence_output,
             pooler_output=pooled_output,
-            hidden_states=hidden_states,
-            attentions=attentions,
         )
 
 
@@ -523,23 +559,25 @@ class LingbotVisionBackbone(BackboneMixin, LingbotVisionPreTrainedModel):
         patch_height = height // self.config.patch_size
         patch_width = width // self.config.patch_size
         for stage, hidden_state in zip(self.stage_names, hidden_states):
-            if stage in self.out_features:
-                if self.config.apply_layernorm:
-                    if self.config.untie_cls_and_patch_norms:
-                        hidden_state = torch.cat(
-                            (
-                                self.cls_norm(hidden_state[:, :prefix_length]),
-                                self.layernorm(hidden_state[:, prefix_length:]),
-                            ),
-                            dim=1,
-                        )
-                    else:
-                        hidden_state = self.layernorm(hidden_state)
-                if self.config.reshape_hidden_states:
-                    hidden_state = hidden_state[:, prefix_length:]
-                    hidden_state = hidden_state.reshape(batch_size, patch_height, patch_width, -1)
-                    hidden_state = hidden_state.permute(0, 3, 1, 2).contiguous()
-                feature_maps.append(hidden_state)
+            if stage not in self.out_features:
+                continue
+
+            if self.config.apply_layernorm:
+                if self.config.untie_cls_and_patch_norms:
+                    hidden_state = torch.cat(
+                        (
+                            self.cls_norm(hidden_state[:, :prefix_length]),
+                            self.layernorm(hidden_state[:, prefix_length:]),
+                        ),
+                        dim=1,
+                    )
+                else:
+                    hidden_state = self.layernorm(hidden_state)
+            if self.config.reshape_hidden_states:
+                hidden_state = hidden_state[:, prefix_length:]
+                hidden_state = hidden_state.reshape(batch_size, patch_height, patch_width, -1)
+                hidden_state = hidden_state.permute(0, 3, 1, 2).contiguous()
+            feature_maps.append(hidden_state)
 
         return BackboneOutput(feature_maps=tuple(feature_maps), hidden_states=hidden_states, attentions=attentions)
 
