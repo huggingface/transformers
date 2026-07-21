@@ -160,13 +160,12 @@ class ImageTextToTextPipeline(Pipeline):
         if generate_kwargs is not None:
             forward_kwargs["generate_kwargs"] = generate_kwargs
         if stop_sequence is not None:
-            stop_sequence_ids = self.processor.tokenizer.encode(stop_sequence, add_special_tokens=False)
-            if len(stop_sequence_ids) > 1:
-                logger.warning_once(
-                    "Stopping on a multiple token sequence is not yet supported on transformers. The first token of"
-                    " the stop sequence will be used as the stop sequence string in the interim."
-                )
-            generate_kwargs["eos_token_id"] = stop_sequence_ids[0]
+            if generate_kwargs is None:
+                generate_kwargs = {}
+            if isinstance(stop_sequence, str):
+                stop_sequence = [stop_sequence]
+            generate_kwargs["stop_strings"] = stop_sequence
+            generate_kwargs["tokenizer"] = self.processor.tokenizer
         if generate_kwargs is not None:
             forward_kwargs["generate_kwargs"] = generate_kwargs
         if max_new_tokens is not None:
@@ -390,6 +389,7 @@ class ImageTextToTextPipeline(Pipeline):
         # User-defined `generation_config` passed to the pipeline call take precedence
         if "generation_config" not in generate_kwargs:
             generate_kwargs["generation_config"] = self.generation_config
+        generate_kwargs["return_dict_in_generate"] = False
 
         generated_sequence = self.model.generate(**model_inputs, **generate_kwargs)
 
@@ -415,7 +415,7 @@ class ImageTextToTextPipeline(Pipeline):
 
         # Decode inputs and outputs the same way to remove input text from generated text if present
         skip_special_tokens = skip_special_tokens if skip_special_tokens is not None else True
-        if getattr(self.tokenizer, "response_schema", False):
+        if getattr(self.tokenizer, "response_template", None) or getattr(self.tokenizer, "response_schema", None):
             skip_special_tokens = False
         generated_texts = self.processor.post_process_image_text_to_text(
             generated_sequence, skip_special_tokens=skip_special_tokens, **postprocess_kwargs
@@ -441,7 +441,7 @@ class ImageTextToTextPipeline(Pipeline):
             generated_texts = new_generated_texts
         if return_type == ReturnType.FULL_TEXT:
             full_texts = []
-            for prompt_text, generated_text in zip(input_texts, generated_texts):
+            for prompt_text, generated_text, decoded_input in zip(input_texts, generated_texts, decoded_inputs):
                 if isinstance(prompt_text, str):
                     generated_text = prompt_text + generated_text
                 elif isinstance(prompt_text, Chat):
@@ -461,7 +461,13 @@ class ImageTextToTextPipeline(Pipeline):
                         ]
                     else:
                         # When we're not starting from a prefill, the output is a new assistant message
-                        if getattr(self.tokenizer, "response_schema", False):
+                        if getattr(self.tokenizer, "response_template", None) is not None:
+                            # New-style templates need to see the prompt as `prefix`, because chat
+                            # templates often pre-write part of the assistant message (e.g. an
+                            # opening <think> tag), which affects parsing.
+                            assistant_message = self.tokenizer.parse_response(generated_text, prefix=decoded_input)
+                        elif getattr(self.tokenizer, "response_schema", None) is not None:
+                            # Legacy schemas parse the generated text alone and don't support `prefix`
                             assistant_message = self.tokenizer.parse_response(generated_text)
                         else:
                             assistant_message = {"role": "assistant", "content": generated_text}
