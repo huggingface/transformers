@@ -87,7 +87,7 @@ class InklingProcessor(ProcessorMixin):
 
     def _extract_dmel_bins(self, input_features: "torch.Tensor") -> "torch.Tensor":
         bin_centers = self.bin_centers.to(input_features.device)
-        mel = input_features.to(torch.float32).clamp(min=self.dmel_min_value, max=self.dmel_max_value)
+        mel = input_features.clamp(min=self.dmel_min_value, max=self.dmel_max_value)
         return (mel.unsqueeze(-1) - bin_centers).abs().argmin(dim=-1).to(torch.int32)
 
     def _process_audio(self, audio, **kwargs):
