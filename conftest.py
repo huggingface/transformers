@@ -145,7 +145,10 @@ def _with_tmpdir_cache_fallback(fn):
             is_ro = _is_readonly_fs_error(e)
             _ci_dbg.debug(
                 "FALLBACK-WRAPPER CAUGHT %s errno=%s is_readonly=%s msg=%r",
-                type(e).__name__, getattr(e, "errno", None), is_ro, str(e)[:200],
+                type(e).__name__,
+                getattr(e, "errno", None),
+                is_ro,
+                str(e)[:200],
             )
             if not is_ro:
                 _ci_dbg.debug("FALLBACK-WRAPPER NOT a read-only FS error — re-raising")
@@ -165,7 +168,9 @@ def _with_tmpdir_cache_fallback(fn):
             )
             _ci_dbg.debug(
                 "FALLBACK-WRAPPER RETRY fn=%r repo=%r fallback_cache_dir=%r",
-                fn.__name__, repo_id, _ci_fallback_cache_dir,
+                fn.__name__,
+                repo_id,
+                _ci_fallback_cache_dir,
             )
             import huggingface_hub.constants as hf_constants
 
@@ -178,7 +183,9 @@ def _with_tmpdir_cache_fallback(fn):
                 result = fn(*args, **{**kwargs, "cache_dir": _ci_fallback_cache_dir})
             _ci_dbg.debug(
                 "FALLBACK-WRAPPER RETRY SUCCESS fn=%r repo=%r result=%r",
-                fn.__name__, repo_id, str(result)[:200],
+                fn.__name__,
+                repo_id,
+                str(result)[:200],
             )
             return result
 
