@@ -292,8 +292,7 @@ class AssistedCandidateGenerator(CandidateGenerator):
         """Update past key values and attention masks for subsequent generation rounds."""
         has_past_key_values = self.assistant_kwargs.get("past_key_values", None) is not None
         if has_past_key_values:
-            new_cache_size = input_ids.shape[-1] - 1 - remove_from_pkv
-            self.assistant_kwargs["past_key_values"].crop(new_cache_size - num_added_tokens)
+            self.assistant_kwargs["past_key_values"].crop(-remove_from_pkv - num_added_tokens)
             self.assistant_kwargs = _prepare_attention_mask(
                 self.assistant_kwargs, input_ids.shape[-1], self.assistant_model.config.is_encoder_decoder
             )
