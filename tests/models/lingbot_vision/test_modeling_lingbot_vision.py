@@ -35,7 +35,7 @@ if is_torch_available():
 if is_vision_available():
     from PIL import Image
 
-    from transformers import AutoImageProcessor, LingbotVisionImageProcessor
+    from transformers import AutoImageProcessor, LingbotVisionImageProcessor, LingbotVisionImageProcessorPil
 
 
 # HF-format checkpoint of the flagship ViT-g/16 backbone (produced by
@@ -196,6 +196,13 @@ class LingbotVisionModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Tes
         self.assertEqual(image_processor.image_mean, (0.485, 0.456, 0.406))
         self.assertEqual(image_processor.image_std, (0.229, 0.224, 0.225))
 
+    @require_vision
+    def test_image_processor_matches_pil_backend(self):
+        image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
+        default_pixel_values = LingbotVisionImageProcessor()(image, return_tensors="pt").pixel_values
+        pil_pixel_values = LingbotVisionImageProcessorPil()(image, return_tensors="pt").pixel_values
+        torch.testing.assert_close(default_pixel_values, pil_pixel_values, rtol=0, atol=1e-6)
+
     @unittest.skip(reason="LingBot-Vision does not use inputs_embeds")
     def test_inputs_embeds(self):
         pass
@@ -245,15 +252,16 @@ class LingbotVisionModelIntegrationTest(unittest.TestCase):
         expected_shape = torch.Size((1, expected_seq_length, model.config.hidden_size))
         self.assertEqual(outputs.last_hidden_state.shape, expected_shape)
 
+        # Values produced by the official LingBot-Vision ViT-g reference with direct PIL bilinear preprocessing.
         expected_pooler = torch.tensor(
-            Expectations({(None, None): [-0.3808, 0.8251, 0.3735, 1.1332, 1.7006]}).get_expectation(),
+            Expectations({(None, None): [-0.3594, 0.8154, 0.3645, 1.1231, 1.7032]}).get_expectation(),
             device=torch_device,
         )
         torch.testing.assert_close(outputs.pooler_output[0, :5], expected_pooler, rtol=1e-4, atol=1e-4)
 
         first_patch_token = outputs.last_hidden_state[:, model.config.num_storage_tokens + 1 :]
         expected_patch = torch.tensor(
-            Expectations({(None, None): [0.5824, 0.2652, -0.3335, -0.0979, 0.2420]}).get_expectation(),
+            Expectations({(None, None): [0.5894, 0.2714, -0.3320, -0.0893, 0.2505]}).get_expectation(),
             device=torch_device,
         )
         torch.testing.assert_close(first_patch_token[0, 0, :5], expected_patch, rtol=1e-4, atol=1e-4)

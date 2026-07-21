@@ -30,11 +30,11 @@ from ... import initialization as init
 from ...backbone_utils import BackboneMixin, filter_output_hidden_states
 from ...integrations import use_kernel_forward_from_hub
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import BackboneOutput, BaseModelOutputWithPooling
+from ...modeling_outputs import BackboneOutput, BaseModelOutput, BaseModelOutputWithPooling
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring
-from ...utils.generic import can_return_tuple
+from ...utils.generic import can_return_tuple, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from .configuration_lingbot_vision import LingbotVisionConfig
 
@@ -402,14 +402,14 @@ class LingbotVisionLayer(GradientCheckpointingLayer):
         hidden_states: torch.Tensor,
         rope: tuple[torch.Tensor, torch.Tensor],
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.Tensor, torch.Tensor | None]:
+    ) -> torch.Tensor:
         residual = hidden_states
-        attention_output, attention_probs = self.attention(self.norm1(hidden_states), rope, **kwargs)
+        attention_output, _ = self.attention(self.norm1(hidden_states), rope, **kwargs)
         hidden_states = residual + self.drop_path(self.layer_scale1(attention_output))
 
         residual = hidden_states
         hidden_states = residual + self.drop_path(self.layer_scale2(self.mlp(self.norm2(hidden_states))))
-        return hidden_states, attention_probs
+        return hidden_states
 
 
 class LingbotVisionEmbeddings(nn.Module):
@@ -442,37 +442,6 @@ class LingbotVisionEmbeddings(nn.Module):
         else:
             embeddings = torch.cat((cls_token.expand(batch_size, -1, -1), embeddings), dim=1)
         return embeddings, patch_grid
-
-
-class LingbotVisionEncoder(nn.Module):
-    def __init__(self, config: LingbotVisionConfig):
-        super().__init__()
-        self.layers = nn.ModuleList([LingbotVisionLayer(config) for _ in range(config.num_hidden_layers)])
-        self.gradient_checkpointing = False
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        rope: tuple[torch.Tensor, torch.Tensor],
-        output_attentions: bool = False,
-        output_hidden_states: bool = False,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.Tensor, tuple[torch.Tensor, ...] | None, tuple[torch.Tensor, ...] | None]:
-        all_hidden_states = () if output_hidden_states else None
-        all_attentions = () if output_attentions else None
-
-        if output_hidden_states:
-            all_hidden_states = all_hidden_states + (hidden_states,)
-
-        layer_kwargs = {**kwargs, "output_attentions": output_attentions}
-        for layer in self.layers:
-            hidden_states, attention_probs = layer(hidden_states, rope, **layer_kwargs)
-            if output_hidden_states:
-                all_hidden_states = all_hidden_states + (hidden_states,)
-            if output_attentions:
-                all_attentions = all_attentions + (attention_probs,)
-
-        return hidden_states, all_hidden_states, all_attentions
 
 
 @auto_docstring
@@ -514,6 +483,26 @@ class LingbotVisionPreTrainedModel(PreTrainedModel):
             module._init_weights()
 
 
+class LingbotVisionEncoder(LingbotVisionPreTrainedModel):
+    def __init__(self, config: LingbotVisionConfig):
+        super().__init__(config)
+        self.layers = nn.ModuleList([LingbotVisionLayer(config) for _ in range(config.num_hidden_layers)])
+        self.post_init()
+
+    @merge_with_config_defaults
+    @capture_outputs(tie_last_hidden_states=False)
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        rope: tuple[torch.Tensor, torch.Tensor],
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> BaseModelOutput:
+        for layer in self.layers:
+            hidden_states = layer(hidden_states, rope, **kwargs)
+
+        return BaseModelOutput(last_hidden_state=hidden_states)
+
+
 @auto_docstring
 class LingbotVisionModel(LingbotVisionPreTrainedModel):
     def __init__(self, config: LingbotVisionConfig):
@@ -528,7 +517,7 @@ class LingbotVisionModel(LingbotVisionPreTrainedModel):
     def get_input_embeddings(self) -> LingbotVisionPatchEmbeddings:
         return self.embeddings.patch_embeddings
 
-    @capture_outputs(tie_last_hidden_states=False)
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -542,8 +531,8 @@ class LingbotVisionModel(LingbotVisionPreTrainedModel):
         """
         embedding_output, patch_grid = self.embeddings(pixel_values, bool_masked_pos=bool_masked_pos)
         rope = self.rope_embeddings(*patch_grid)
-        encoder_kwargs = {key: value for key, value in kwargs.items() if key != "output_hidden_states"}
-        sequence_output, _, _ = self.encoder(embedding_output, rope=rope, **encoder_kwargs)
+        encoder_outputs = self.encoder(embedding_output, rope=rope, **kwargs)
+        sequence_output = encoder_outputs.last_hidden_state
 
         if self.config.untie_cls_and_patch_norms:
             prefix_length = self.config.num_storage_tokens + 1
@@ -557,6 +546,8 @@ class LingbotVisionModel(LingbotVisionPreTrainedModel):
         return BaseModelOutputWithPooling(
             last_hidden_state=sequence_output,
             pooler_output=pooled_output,
+            hidden_states=encoder_outputs.hidden_states,
+            attentions=encoder_outputs.attentions,
         )
 
 
@@ -588,15 +579,11 @@ class LingbotVisionBackbone(BackboneMixin, LingbotVisionPreTrainedModel):
         bool_masked_pos (`torch.BoolTensor` of shape `(batch_size, num_patches)`, *optional*):
             Boolean masked positions. Indicates which patches should be replaced by the mask token.
         """
-        output_attentions = kwargs.get("output_attentions", self.config.output_attentions)
         embedding_output, patch_grid = self.embeddings(pixel_values, bool_masked_pos=bool_masked_pos)
         rope = self.rope_embeddings(*patch_grid)
-        _, hidden_states, attentions = self.encoder(
-            embedding_output,
-            rope=rope,
-            output_attentions=output_attentions,
-            output_hidden_states=True,
-        )
+        kwargs["output_hidden_states"] = True
+        encoder_outputs = self.encoder(embedding_output, rope=rope, **kwargs)
+        hidden_states = encoder_outputs.hidden_states
 
         feature_maps = []
         prefix_length = self.config.num_storage_tokens + 1
@@ -624,7 +611,9 @@ class LingbotVisionBackbone(BackboneMixin, LingbotVisionPreTrainedModel):
                 hidden_state = hidden_state.permute(0, 3, 1, 2).contiguous()
             feature_maps.append(hidden_state)
 
-        return BackboneOutput(feature_maps=tuple(feature_maps), hidden_states=hidden_states, attentions=attentions)
+        return BackboneOutput(
+            feature_maps=tuple(feature_maps), hidden_states=hidden_states, attentions=encoder_outputs.attentions
+        )
 
 
 __all__ = ["LingbotVisionBackbone", "LingbotVisionModel", "LingbotVisionPreTrainedModel"]
