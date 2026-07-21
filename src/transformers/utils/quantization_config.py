@@ -1699,6 +1699,10 @@ class QuarkConfig(QuantizationConfigMixin):
     ):
         if is_torch_available() and is_quark_available():
             from quark import __version__ as quark_version
+            if version.parse(quark_version) < version.parse("0.12"):
+                raise ImportError(
+                f"Please install the latest version of Quark (>=0.12). Current version is {version.parse(quark_version)}. Please refer to https://quark.docs.amd.com/latest/install.html."
+            )
             from quark.torch.export.config.config import JsonExporterConfig
             from quark.torch.export.main_export.quant_config_parser import QuantConfigParser
             from quark.torch.quantization.config.config import QConfig
@@ -1715,10 +1719,6 @@ class QuarkConfig(QuantizationConfigMixin):
             self.quant_config = QuantConfigParser.from_custom_config(kwargs, is_bias_quantized=False)
             self.json_export_config = JsonExporterConfig()
         else:
-            if version.parse(quark_version) < version.parse("0.12"):
-                raise ImportError(
-                f"Please install the latest version of Quark (>=0.12). Current version is {version.parse(quark_version)}. Please refer to https://quark.docs.amd.com/latest/install.html."
-            )
             self.quant_config = QConfig.from_dict(kwargs)
 
             if "export" in kwargs:
