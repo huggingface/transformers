@@ -37,6 +37,7 @@ if is_torch_available():
         AutoProcessor,
         GraniteSpeechNarConfig,
     )
+    from transformers.audio_utils import load_audio
     from transformers.models.granite_speech_nar.configuration_granite_speech_nar import (
         GraniteSpeechNarEncoderConfig,
         GraniteSpeechNarProjectorConfig,
@@ -496,6 +497,41 @@ class GraniteSpeechNarForCTCIntegrationTest(unittest.TestCase):
         output = model.generate(**inputs, return_dict_in_generate=True)
         predicted_transcripts = self.processor.batch_decode(output.sequences, skip_special_tokens=True)
         self.assertListEqual(predicted_transcripts, EXPECTED_TRANSCRIPTIONS)
+
+    @slow
+    def test_model_integration_iterative_editing(self):
+        # expectations are inlined since original hub repo code does not ship this feature
+        # expected values are sourced from the model authors
+        EXPECTED_TRANSCRIPTION_1_STEP = (
+            "puis au milieu d'une foule nombreuse que les débris de la voiture et le bruit de l'événement "
+            "avaient attirée devant la maison ali fit atteler les chevaux au coupé du comte rassembla les "
+            "rênes monta sur le siège et au grand étonnement des assistants qui avaient vu ses chevaux "
+            "emportés comme par un tourbillon"
+        )
+        EXPECTED_TRANSCRIPTION_2_STEPS = (
+            "puis au milieu d'une foule nombreuse que les débris de la voiture et le bruit de l'événement "
+            "avaient attirée devant la maison ali fit atteler les chevaux au coupé du comte rassembla les "
+            "rênes monta sur le siège et au grand étonnement des assistants qui avaient vu ces chevaux "
+            "emportés comme par un tourbillon"
+        )
+
+        audio = load_audio(
+            "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/monte_cristo.flac",
+            sampling_rate=self.processor.feature_extractor.sampling_rate,
+        )
+        model = GraniteSpeechNarForCTC.from_pretrained(self.checkpoint_name, revision=self.revision, device_map="auto")
+
+        inputs = self.processor(audio, sampling_rate=self.processor.feature_extractor.sampling_rate)
+        inputs.to(model.device, dtype=model.dtype)
+
+        one_step = model.generate(**inputs, num_editing_steps=1, return_dict_in_generate=True)
+        two_steps = model.generate(**inputs, num_editing_steps=2, return_dict_in_generate=True)
+
+        transcript_1_step = self.processor.batch_decode(one_step.sequences, skip_special_tokens=True)[0]
+        transcript_2_steps = self.processor.batch_decode(two_steps.sequences, skip_special_tokens=True)[0]
+
+        self.assertEqual(transcript_1_step, EXPECTED_TRANSCRIPTION_1_STEP)
+        self.assertEqual(transcript_2_steps, EXPECTED_TRANSCRIPTION_2_STEPS)
 
     @slow
     def test_model_integration_batched(self):

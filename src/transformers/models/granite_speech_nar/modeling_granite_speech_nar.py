@@ -85,12 +85,16 @@ class GraniteSpeechNarModelOutput(BaseModelOutput):
         BPE CTC logits from the encoder, returned when the encoder CTC loss is active.
     bpe_lengths (`torch.Tensor`, *optional*):
         Number of valid BPE (pooled) windows per sample, `ceil(audio_lengths / bpe_pooling_window)`.
+    audio_embeds (`torch.FloatTensor`, *optional*):
+        Projected, embedding-scaled audio features. Returned so iterative-editing `generate` can reuse
+        them across steps without re-running the encoder and projector.
     """
 
     seq_lengths: list[int] | None = None
     inserted_ctc_token_ids: list[torch.Tensor] | None = None
     bpe_logits: torch.Tensor | None = None
     bpe_lengths: torch.Tensor | None = None
+    audio_embeds: torch.FloatTensor | None = None
 
 
 @auto_docstring(
@@ -1017,29 +1021,58 @@ class GraniteSpeechNarModel(GraniteSpeechNarPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        input_features: torch.FloatTensor,
+        input_features: torch.FloatTensor | None = None,
+        input_ids: list[torch.Tensor] | None = None,
         input_features_mask: torch.Tensor | None = None,
         output_bpe_logits: bool = False,
+        audio_embeds: torch.FloatTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> GraniteSpeechNarModelOutput:
         r"""
+        input_ids (`list[torch.Tensor]`, *optional*):
+            Pre-computed (CTC-collapsed) token ids fed as the text input. Provided together with
+            `audio_embeds` for the cached iterative-editing path; must be omitted on the `input_features`
+            path, where they are derived from the encoder's own CTC predictions.
         input_features_mask (`torch.Tensor` of shape `(batch_size, seq_len)`, *optional*):
-            Mask over the encoder frames (`True` for valid frames, `False` for padding).
+            Mask over the encoder frames (`True` for valid frames, `False` for padding). Defaults to
+            all-ones (no padding) when `input_features` is given; required when passing `audio_embeds`.
         output_bpe_logits (`bool`, *optional*, defaults to `False`):
             Whether to return the encoder BPE CTC logits in `bpe_logits` (needed for the auxiliary
             encoder CTC loss).
+        audio_embeds (`torch.FloatTensor`, *optional*):
+            Pre-computed projected audio features, passed instead of `input_features` to skip the encoder
+            and projector and reuse them directly (used by iterative-editing `generate`). Mutually
+            exclusive with `input_features`; when provided, `input_ids` must be supplied as the text input.
         """
-        audio_outputs = self.get_audio_features(input_features, input_features_mask=input_features_mask)
-        audio_embeds = audio_outputs.pooler_output / self.config.text_config.embedding_multiplier
+        # Exactly two input modes are allowed:
+        #   1. `audio_embeds` + `input_ids`: cached path used by iterative-editing `generate` (inference only).
+        #   2. `input_features`: runs the encoder/projector; the only path compatible with training (`labels`).
+        if (input_features is None) ^ (audio_embeds is not None):
+            raise ValueError("You must specify exactly one of input_features or audio_embeds")
+        if (audio_embeds is None) != (input_ids is None):
+            raise ValueError("audio_embeds and input_ids must be provided together")
+
+        if input_features_mask is None:
+            if input_features is None:
+                # Cached-audio path: per-sample lengths can't be inferred from `audio_embeds` alone.
+                raise ValueError("`input_features_mask` must be provided together with `audio_embeds`.")
+            # No padding information provided: treat every audio frame as valid.
+            input_features_mask = torch.ones(input_features.shape[:-1], dtype=torch.bool, device=input_features.device)
 
         audio_lengths = input_features_mask.sum(dim=1)
-        bpe_logits = self.out_bpe(audio_outputs.pooled_hidden_states)
-        bpe_lengths = -(
-            audio_lengths // -self.config.encoder_config.bpe_pooling_window
-        )  # ceil(audio_lengths / bpe_pooling_window)
-        ctc_token_ids = [self._ctc_greedy_decode(logits[:length]) for logits, length in zip(bpe_logits, bpe_lengths)]
+        bpe_logits, bpe_lengths = None, None
+        if audio_embeds is None:
+            # `input_features` path: derive both audio embeddings and the CTC text input from the encoder.
+            audio_outputs = self.get_audio_features(input_features, input_features_mask=input_features_mask)
+            audio_embeds = audio_outputs.pooler_output / self.config.text_config.embedding_multiplier
 
-        inserted_ctc_token_ids = [self._add_insertion_slots(ids) for ids in ctc_token_ids]
+            bpe_logits = self.out_bpe(audio_outputs.pooled_hidden_states)
+            bpe_lengths = -(
+                audio_lengths // -self.config.encoder_config.bpe_pooling_window
+            )  # ceil(audio_lengths / bpe_pooling_window)
+            input_ids = [self._ctc_greedy_decode(logits[:length]) for logits, length in zip(bpe_logits, bpe_lengths)]
+
+        inserted_ctc_token_ids = [self._add_insertion_slots(ids) for ids in input_ids]
         inputs_embeds, position_ids, text_mask, text_lengths = self.get_merged_audio_embeddings(
             inserted_ctc_token_ids=inserted_ctc_token_ids,
             audio_embeds=audio_embeds,
@@ -1060,6 +1093,7 @@ class GraniteSpeechNarModel(GraniteSpeechNarPreTrainedModel):
             inserted_ctc_token_ids=inserted_ctc_token_ids,
             bpe_logits=bpe_logits if output_bpe_logits else None,
             bpe_lengths=bpe_lengths if output_bpe_logits else None,
+            audio_embeds=audio_embeds,
         )
 
     def _add_insertion_slots(self, ctc_token_ids: torch.Tensor) -> torch.Tensor:
@@ -1195,24 +1229,40 @@ class GraniteSpeechNarForCTC(GraniteSpeechNarPreTrainedModel):
         self,
         input_features: torch.Tensor,
         input_features_mask: torch.Tensor | None = None,
+        num_editing_steps: int = 1,
         return_dict_in_generate: bool = False,
         **kwargs: Unpack[TransformersKwargs],
     ) -> list[torch.LongTensor] | GraniteSpeechNarGenerateOutput:
-        outputs = self(
-            input_features=input_features,
-            input_features_mask=input_features_mask,
-            **kwargs,
-        )
+        r"""
+        num_editing_steps (`int`, *optional*, defaults to 1):
+            Number of non-autoregressive editing passes. The first pass decodes from the encoder's CTC
+            predictions; each subsequent pass collapses the previous LLM output via CTC and feeds it back
+            as the text input for refinement, reusing the cached audio embeddings (so the encoder and
+            projector run only once). `1` reproduces the single-pass behavior.
+        """
+        audio_embeds = None
+        input_ids = None
+        for _ in range(num_editing_steps):
+            model_out = self.model(
+                input_features=input_features,
+                input_features_mask=input_features_mask,
+                audio_embeds=audio_embeds,
+                input_ids=input_ids,
+                **kwargs,
+            )
+            logits = self.lm_head(model_out.last_hidden_state) / self.config.text_config.logits_scaling
+            logits_per_sample = logits.split(model_out.seq_lengths, dim=1)
 
-        logits_per_sample = outputs.logits.split(outputs.seq_lengths, dim=1)
-        sequences = [self.model._ctc_greedy_decode(sample_logits) for sample_logits in logits_per_sample]
+            input_ids = [self.model._ctc_greedy_decode(sample_logits) for sample_logits in logits_per_sample]
+            audio_embeds = model_out.audio_embeds
+            input_features = None
 
         if not return_dict_in_generate:
-            return sequences
+            return input_ids
         return GraniteSpeechNarGenerateOutput(
-            sequences=sequences,
-            logits=outputs.logits,
-            seq_lengths=outputs.seq_lengths,
+            sequences=input_ids,
+            logits=logits,
+            seq_lengths=model_out.seq_lengths,
         )
 
 
