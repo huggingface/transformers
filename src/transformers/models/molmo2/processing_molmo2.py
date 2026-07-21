@@ -207,30 +207,26 @@ class Molmo2Processor(ProcessorMixin):
 
         return "".join(low_res_tokens + high_res_tokens)
 
-    def _process_videos(self, videos, **kwargs):
-        video_inputs = self.video_processor(videos=videos, **kwargs)
-        video_grids = video_inputs["video_grids"]
+    def replace_video_token(self, video_inputs: dict, video_idx: int) -> str:
+        video_grid = video_inputs["video_grids"][video_idx]
         video_metadata = video_inputs.get("video_metadata", [])
-        video_replacements = []
-        for video_idx, video_grid in enumerate(video_grids):
-            metadata = video_metadata[video_idx] if video_idx < len(video_metadata) else None
-            if metadata is not None:
-                if metadata.frames_indices is None:
-                    metadata.frames_indices = list(range(int(video_grid[0].item())))
-                if metadata.fps is None:
-                    metadata.fps = self.video_processor.max_fps or 2
-                    logger.warning_once(
-                        "Molmo2 inserts frame timestamps into video prompts, but the input video's `fps` was not "
-                        f"provided or could not be inferred. Defaulting to `fps={metadata.fps}`. Please provide "
-                        "`video_metadata` for more accurate timestamps."
-                    )
-                timestamps = metadata.timestamps
-            else:
-                fps = self.video_processor.max_fps or 2
-                num_frames = int(video_grid[0].item())
-                timestamps = [i / fps for i in range(num_frames)]
-            video_replacements.append(self.get_video_string(video_grid, timestamps))
-        return video_inputs, video_replacements
+        metadata = video_metadata[video_idx] if video_idx < len(video_metadata) else None
+        if metadata is not None:
+            if metadata.frames_indices is None:
+                metadata.frames_indices = list(range(int(video_grid[0].item())))
+            if metadata.fps is None:
+                metadata.fps = self.video_processor.max_fps or 2
+                logger.warning_once(
+                    "Molmo2 inserts frame timestamps into video prompts, but the input video's `fps` was not "
+                    f"provided or could not be inferred. Defaulting to `fps={metadata.fps}`. Please provide "
+                    "`video_metadata` for more accurate timestamps."
+                )
+            timestamps = metadata.timestamps
+        else:
+            fps = self.video_processor.max_fps or 2
+            num_frames = int(video_grid[0].item())
+            timestamps = [i / fps for i in range(num_frames)]
+        return self.get_video_string(video_grid, timestamps)
 
     def apply_chat_template(
         self,

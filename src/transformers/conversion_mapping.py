@@ -838,9 +838,24 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(
                 source_patterns=r"(?<!image_vit\.)transformer\.ln_f\.", target_patterns="language_model.norm."
             ),
+            WeightRenaming(source_patterns=r"language_model\.blocks\.", target_patterns="language_model.layers."),
+            WeightConverter(
+                source_patterns=["language_model.wte.embedding", "language_model.wte.new_embedding"],
+                target_patterns="language_model.embed_tokens.weight",
+                operations=[Concatenate(dim=0)],
+            ),
             WeightRenaming(
                 source_patterns=r"vision_backbone\.image_vit\.transformer\.resblocks\.",
-                target_patterns="vision_backbone.image_vit.encoder.layers.",
+                target_patterns="vision_tower.encoder.layers.",
+            ),
+            WeightRenaming(source_patterns=r"vision_backbone\.image_vit\.", target_patterns="vision_tower."),
+            WeightRenaming(
+                source_patterns=r"vision_backbone\.image_pooling_2d\.",
+                target_patterns="multi_modal_projector.image_pooling_2d.",
+            ),
+            WeightRenaming(
+                source_patterns=r"vision_backbone\.image_projector\.",
+                target_patterns="multi_modal_projector.image_projector.",
             ),
             WeightRenaming(source_patterns=r"\.attention\.wq", target_patterns=".self_attn.q_proj"),
             WeightRenaming(source_patterns=r"\.attention\.wk", target_patterns=".self_attn.k_proj"),

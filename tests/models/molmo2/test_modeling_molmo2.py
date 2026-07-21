@@ -16,7 +16,6 @@
 import copy
 import unittest
 
-import requests
 from parameterized import parameterized
 
 from transformers import (
@@ -30,7 +29,7 @@ from transformers import (
 from transformers.models.molmo2.configuration_molmo2 import (
     Molmo2AdapterConfig,
     Molmo2TextConfig,
-    Molmo2VitConfig,
+    Molmo2VisionConfig,
 )
 from transformers.testing_utils import (
     Expectations,
@@ -46,6 +45,7 @@ from ...test_modeling_common import (
     _config_zero_init,
     floats_tensor,
 )
+from ...test_processing_common import url_to_local_path
 from ...vlm_tester import VLMModelTest, VLMModelTester
 
 
@@ -62,7 +62,7 @@ class Molmo2VisionText2TextModelTester(VLMModelTester):
     base_model_class = Molmo2Model
     config_class = Molmo2Config
     text_config_class = Molmo2TextConfig
-    vision_config_class = Molmo2VitConfig
+    vision_config_class = Molmo2VisionConfig
     conditional_generation_class = Molmo2ForConditionalGeneration
 
     def __init__(self, parent, **kwargs):
@@ -148,7 +148,7 @@ class Molmo2VisionText2TextModelTester(VLMModelTester):
             tie_word_embeddings=self.tie_word_embeddings,
             layer_norm_eps=1e-6,
         )
-        vit_config = Molmo2VitConfig(
+        vision_config = Molmo2VisionConfig(
             hidden_size=32,
             intermediate_size=37,
             num_hidden_layers=2,
@@ -165,7 +165,6 @@ class Molmo2VisionText2TextModelTester(VLMModelTester):
         )
         adapter_config = Molmo2AdapterConfig(
             vit_layers=[-1],
-            pooling_attention_mask=False,
             hidden_size=32,
             num_attention_heads=4,
             num_key_value_heads=4,
@@ -176,7 +175,7 @@ class Molmo2VisionText2TextModelTester(VLMModelTester):
         )
         return Molmo2Config(
             text_config=text_config,
-            vit_config=vit_config,
+            vision_config=vision_config,
             adapter_config=adapter_config,
             image_start_token_id=self.image_start_token_id,
             image_end_token_id=self.image_end_token_id,
@@ -272,6 +271,16 @@ class Molmo2ModelTest(VLMModelTest, unittest.TestCase):
             with torch.no_grad():
                 model(**inputs)
 
+    def _video_features_prepare_config_and_inputs(self):
+        # The generic helper only renames `pixel_values`; Molmo2's `get_video_features` also needs the
+        # pooling index tensor under its video name.
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        inputs_dict = {
+            "pixel_values_videos": inputs_dict["pixel_values"],
+            "video_token_pooling": inputs_dict["image_token_pooling"],
+        }
+        return config, inputs_dict
+
     # overwrite inputs_embeds tests because we need to delete "pixel_values" for VLMs
     def test_inputs_embeds_matches_input_ids(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -320,44 +329,22 @@ class Molmo2ModelTest(VLMModelTest, unittest.TestCase):
     def test_training_gradient_checkpointing_use_reentrant_true(self):
         pass
 
-    @unittest.skip(reason="VLMs have dynamic control flow in preparing inputs for generation")
-    def test_generate_compile_1_end_to_end(self):
-        pass
-
     # `test_tied_weights_keys` is inherited: Molmo2 sets `_tied_weights_keys = None` (it ties no weights),
     # so the base test passes without a skip (molbap: prefer the flag over skipping).
 
-    def test_model_get_set_embeddings(self):
-        # Molmo2's input embedding is a custom `Molmo2Embedding` (concatenated base + extra-vocab
-        # tables), not an `nn.Embedding`, so the type check is relaxed to `nn.Module` -- but the
-        # get/set round-trip is still verified (the behavior the base test really checks).
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-        for model_class in self.all_model_classes:
-            model = model_class(copy.deepcopy(config))
-            self.assertIsInstance(model.get_input_embeddings(), torch.nn.Module)
-
-            new_input_embedding_layer = torch.nn.Embedding(10, 10)
-            model.set_input_embeddings(new_input_embedding_layer)
-            self.assertEqual(model.get_input_embeddings(), new_input_embedding_layer)
-
-            output_embeds = model.get_output_embeddings()
-            self.assertTrue(output_embeds is None or isinstance(output_embeds, torch.nn.Linear))
-
-    # Resize is intentionally not supported: `Molmo2Embedding` stores the vocab as two tables,
-    # `embedding` [vocab_size, h] and `new_embedding` [additional_vocab_size, h], and looks tokens up in
-    # their concatenation. The special tokens (image_patch/start/end/col) have FIXED absolute ids that sit
-    # in the `new_embedding` range (>= vocab_size). Growing/shrinking `embedding` shifts where that range
-    # begins, so the fixed special-token ids would silently point at the wrong rows -- standard resize is
-    # ill-defined here. (Kept as explicit skips rather than `test_resize_embeddings = False` so the related
-    # `test_resize_embeddings_untied_no_reinit_on_post_init`, which does pass, still runs.)
+    # Resize is intentionally not supported: `embed_tokens` holds `vocab_size + additional_vocab_size` rows
+    # and the multimodal special tokens (image_patch/start/end/col) have FIXED absolute ids in the extra-vocab
+    # range (>= vocab_size). Standard resize is keyed on `config.vocab_size`, so it would drop or shift the
+    # rows those fixed ids point at. (Kept as explicit skips rather than `test_resize_embeddings = False` so
+    # the related `test_resize_embeddings_untied_no_reinit_on_post_init`, which does pass, still runs.)
     @unittest.skip(
-        reason="Molmo2Embedding uses two tables with fixed special-token ids; standard resize is ill-defined"
+        reason="Multimodal special tokens live in the extra-vocab rows beyond `vocab_size`; standard resize is ill-defined"
     )
     def test_resize_tokens_embeddings(self):
         pass
 
     @unittest.skip(
-        reason="Molmo2Embedding uses two tables with fixed special-token ids; standard resize is ill-defined"
+        reason="Multimodal special tokens live in the extra-vocab rows beyond `vocab_size`; standard resize is ill-defined"
     )
     def test_resize_embeddings_untied(self):
         pass
@@ -548,7 +535,7 @@ class Molmo2IntegrationTest(unittest.TestCase):
 
     def setUp(self):
         self.processor = Molmo2Processor.from_pretrained(self.model_id)
-        self.image = Image.open(requests.get(IMAGE_URL, stream=True).raw)
+        self.image = Image.open(url_to_local_path(IMAGE_URL))
         self.messages = [
             {
                 "role": "user",
@@ -656,8 +643,12 @@ class Molmo2IntegrationTest(unittest.TestCase):
 
         input_len = device_inputs["input_ids"].shape[1]
         generated_text = self.processor.batch_decode(generated_ids[:, input_len:], skip_special_tokens=True)[0]
-        EXPECTED_TEXT = "In this captivating image, a large, chubby cat"  # fmt: skip
-        self.assertEqual(generated_text.strip(), EXPECTED_TEXT)
+        expected_texts = Expectations(
+            {
+                ("cuda", (8, 0)): "In this captivating image, a large, chubby cat",
+            }
+        )  # fmt: skip
+        self.assertEqual(generated_text.strip(), expected_texts.get_expectation())
 
 
 @slow
@@ -668,7 +659,7 @@ class Molmo2O7BIntegrationTest(unittest.TestCase):
 
     def setUp(self):
         self.processor = Molmo2Processor.from_pretrained(self.model_id)
-        self.image = Image.open(requests.get(IMAGE_URL, stream=True).raw)
+        self.image = Image.open(url_to_local_path(IMAGE_URL))
         self.messages = [
             {
                 "role": "user",
@@ -765,8 +756,12 @@ class Molmo2O7BIntegrationTest(unittest.TestCase):
 
         input_len = device_inputs["input_ids"].shape[1]
         generated_text = self.processor.batch_decode(generated_ids[:, input_len:], skip_special_tokens=True)[0]
-        EXPECTED_TEXT = "In this captivating image, a small, chubby cat"  # fmt: skip
-        self.assertEqual(generated_text.strip(), EXPECTED_TEXT)
+        expected_texts = Expectations(
+            {
+                ("cuda", (8, 0)): "In this captivating image, a small, chubby cat",
+            }
+        )  # fmt: skip
+        self.assertEqual(generated_text.strip(), expected_texts.get_expectation())
 
 
 @slow
@@ -777,7 +772,7 @@ class Molmo2_8BIntegrationTest(unittest.TestCase):
 
     def setUp(self):
         self.processor = Molmo2Processor.from_pretrained(self.model_id)
-        self.image = Image.open(requests.get(IMAGE_URL, stream=True).raw)
+        self.image = Image.open(url_to_local_path(IMAGE_URL))
         self.messages = [
             {
                 "role": "user",
@@ -874,13 +869,17 @@ class Molmo2_8BIntegrationTest(unittest.TestCase):
 
         input_len = device_inputs["input_ids"].shape[1]
         generated_text = self.processor.batch_decode(generated_ids[:, input_len:], skip_special_tokens=True)[0]
-        EXPECTED_TEXT = "In this captivating image, a snow leopard is captured"  # fmt: skip
-        self.assertEqual(generated_text.strip(), EXPECTED_TEXT)
+        expected_texts = Expectations(
+            {
+                ("cuda", (8, 0)): "In this captivating image, a snow leopard is captured",
+            }
+        )  # fmt: skip
+        self.assertEqual(generated_text.strip(), expected_texts.get_expectation())
 
     def test_generation_video_qa(self):
         """Test video question answering for Molmo2-8B."""
         video_url = "https://storage.googleapis.com/oe-training-public/demo_videos/many_penguins.mp4"
-        video, metadata = load_video(video_url)
+        video, metadata = load_video(url_to_local_path(video_url))
         messages = [
             {
                 "role": "user",
@@ -913,5 +912,9 @@ class Molmo2_8BIntegrationTest(unittest.TestCase):
 
         input_len = device_inputs["input_ids"].shape[1]
         generated_text = self.processor.batch_decode(generated_ids[:, input_len:], skip_special_tokens=True)[0]
-        EXPECTED_TEXT = "Penguins appear in the video."
-        self.assertEqual(generated_text.strip(), EXPECTED_TEXT)
+        expected_texts = Expectations(
+            {
+                ("cuda", (8, 0)): "Penguins appear in the video.",
+            }
+        )  # fmt: skip
+        self.assertEqual(generated_text.strip(), expected_texts.get_expectation())

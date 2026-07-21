@@ -27,14 +27,7 @@ from torch.nn import functional as F
 from ...image_processing_backends import TorchvisionBackend
 from ...image_processing_utils import BatchFeature
 from ...image_transforms import group_images_by_shape, reorder_images
-from ...image_utils import (
-    IMAGENET_STANDARD_MEAN,
-    IMAGENET_STANDARD_STD,
-    ImageInput,
-    PILImageResampling,
-    SizeDict,
-    make_nested_list_of_images,
-)
+from ...image_utils import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD, ImageInput, PILImageResampling, SizeDict
 from ...processing_utils import Unpack
 from ...utils import TensorType, auto_docstring
 from .processing_molmo2 import Molmo2ImagesKwargs
@@ -120,12 +113,6 @@ def resize_and_normalize_image(
         resample=resample,
         antialias=False,
     )
-    # Clip resize-interpolation overshoot for integer inputs; float inputs keep their (user-defined)
-    # range -- we trust `do_rescale` to be set correctly for the scale of float images.
-    if image_chw.dtype == torch.uint8:
-        resized = torch.clip(resized, 0, 255).to(image_chw.dtype)
-    # `rescale_and_normalize` honors `do_rescale`/`do_normalize` for any dtype and builds the
-    # mean/std tensors on the input's device (no uint8-only gating, no CPU round-trip).
     return backend.rescale_and_normalize(resized, do_rescale, rescale_factor, do_normalize, image_mean, image_std)
 
 
@@ -322,14 +309,6 @@ class Molmo2ImageProcessor(TorchvisionBackend):
         # Expand the shared grid / pooling indices to the batch so they reorder per-image.
         return image_grid.expand(n_images, -1), patches, pooling_idx.unsqueeze(0).expand(n_images, -1, -1)
 
-    def _prepare_images_structure(
-        self,
-        images: ImageInput,
-        expected_ndims: int = 3,
-    ) -> ImageInput:
-        images = self.fetch_images(images)
-        return make_nested_list_of_images(images, expected_ndims=expected_ndims)
-
     @auto_docstring
     def preprocess(
         self,
@@ -340,7 +319,7 @@ class Molmo2ImageProcessor(TorchvisionBackend):
 
     def _preprocess(
         self,
-        images: list[list["torch.Tensor"]],
+        images: list["torch.Tensor"],
         do_resize: bool,
         size: SizeDict,
         resample: PILImageResampling,
@@ -365,9 +344,8 @@ class Molmo2ImageProcessor(TorchvisionBackend):
 
         # Group images by shape and process each unique shape as a single batch (the tiling and all
         # patch/pooling indices are shape-dependent only), then restore the original order.
-        flat_images = [image for sample_images in images for image in sample_images]
-        device = flat_images[0].device
-        grouped_images, grouped_index = group_images_by_shape(flat_images, disable_grouping=disable_grouping)
+        device = images[0].device
+        grouped_images, grouped_index = group_images_by_shape(images, disable_grouping=disable_grouping)
 
         grids_grouped: dict = {}
         patches_grouped: dict = {}
@@ -396,24 +374,19 @@ class Molmo2ImageProcessor(TorchvisionBackend):
         patches = reorder_images(patches_grouped, grouped_index)
         pooled = reorder_images(pooled_grouped, grouped_index)
 
-        all_grids: list[torch.Tensor] = []
         all_crops: list[torch.Tensor] = []
         all_pooled: list[torch.Tensor] = []
-        all_num_crops: list[int] = []
         patch_offset = 0
-        for image_grid, crops, pooled_idx in zip(grids, patches, pooled):
-            pooled_idx = torch.where(pooled_idx >= 0, pooled_idx + patch_offset, pooled_idx)
-            patch_offset += crops.shape[0] * crops.shape[1]
-            all_grids.append(image_grid)
+        for crops, pooled_idx in zip(patches, pooled):
+            all_pooled.append(torch.where(pooled_idx >= 0, pooled_idx + patch_offset, pooled_idx))
             all_crops.append(crops)
-            all_pooled.append(pooled_idx)
-            all_num_crops.append(crops.shape[0])
+            patch_offset += crops.shape[0] * crops.shape[1]
 
         data = {
             "pixel_values": torch.cat(all_crops, dim=0),
             "image_token_pooling": torch.cat(all_pooled, dim=0),
-            "image_grids": torch.stack(all_grids, dim=0),
-            "image_num_crops": torch.tensor(all_num_crops, dtype=torch.int64, device=device),
+            "image_grids": torch.stack(grids, dim=0),
+            "image_num_crops": torch.tensor([crops.shape[0] for crops in patches], dtype=torch.int64, device=device),
         }
         return BatchFeature(data=data, tensor_type=return_tensors)
 

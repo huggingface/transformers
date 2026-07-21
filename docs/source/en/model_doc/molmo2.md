@@ -84,7 +84,6 @@ image coordinates.
 import torch
 
 from transformers import Molmo2ForConditionalGeneration, Molmo2Processor
-from transformers.video_utils import load_video
 
 
 model_id = "allenai/Molmo2-8B"
@@ -94,13 +93,12 @@ processor = Molmo2Processor.from_pretrained(model_id)
 model = Molmo2ForConditionalGeneration.from_pretrained(model_id, device_map="auto")
 model.eval()
 
-video, metadata = load_video(video_url)
 messages = [
     {
         "role": "user",
         "content": [
             {"type": "text", "text": "Point to the penguins."},
-            {"type": "video", "video": video},
+            {"type": "video", "video": video_url},
         ],
     }
 ]
@@ -110,7 +108,6 @@ inputs = processor.apply_chat_template(
     add_generation_prompt=True,
     return_tensors="pt",
     return_dict=True,
-    processor_kwargs={"video_metadata": [metadata]},
 ).to(model.device)
 
 with torch.no_grad():
@@ -125,9 +122,9 @@ print(generated_text)
 
 [[autodoc]] Molmo2Config
 
-## Molmo2VitConfig
+## Molmo2VisionConfig
 
-[[autodoc]] Molmo2VitConfig
+[[autodoc]] Molmo2VisionConfig
 
 ## Molmo2AdapterConfig
 
@@ -163,9 +160,9 @@ print(generated_text)
 [[autodoc]] Molmo2TextModel
     - forward
 
-## Molmo2VisionBackbone
+## Molmo2Adapter
 
-[[autodoc]] Molmo2VisionBackbone
+[[autodoc]] Molmo2Adapter
     - forward
 
 ## Molmo2VisionModel

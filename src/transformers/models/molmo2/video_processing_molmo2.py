@@ -93,12 +93,6 @@ def resize_and_normalize_image(
         resample=resample,
         antialias=False,
     )
-    # Clip resize-interpolation overshoot for integer inputs; float inputs keep their (user-defined)
-    # range -- we trust `do_rescale` to be set correctly for the scale of float images.
-    if image_chw.dtype == torch.uint8:
-        resized = torch.clip(resized, 0, 255).to(image_chw.dtype)
-    # `rescale_and_normalize` honors `do_rescale`/`do_normalize` for any dtype and builds the
-    # mean/std tensors on the input's device (no uint8-only gating, no CPU round-trip).
     return backend.rescale_and_normalize(resized, do_rescale, rescale_factor, do_normalize, image_mean, image_std)
 
 
@@ -189,9 +183,9 @@ class Molmo2VideoProcessor(BaseVideoProcessor):
         total = metadata.total_num_frames
         return torch.arange(0, total, total / target_num_frames).int()
 
-    def _build_frame_patches(
+    def _build_video_patches(
         self,
-        frame_chw: torch.Tensor,
+        video_tchw: torch.Tensor,
         base_image_input_size: int,
         resample: PILImageResampling,
         do_rescale: bool,
@@ -203,10 +197,10 @@ class Molmo2VideoProcessor(BaseVideoProcessor):
         image_pooling_h: int,
         image_pooling_w: int,
     ) -> tuple[list[int], torch.Tensor, torch.Tensor]:
-        # `build_resized_image` is batch-native (`[N, C, H, W]`); a frame is a 1-image batch.
+        # `build_resized_image` is batch-native (`[N, C, H, W]`); all frames of a video are one batch.
         hwc, resize_idx = build_resized_image(
             self,
-            frame_chw.unsqueeze(0),
+            video_tchw,
             base_image_input_size,
             resample,
             do_rescale,
@@ -216,11 +210,13 @@ class Molmo2VideoProcessor(BaseVideoProcessor):
             image_std,
             image_patch_size,
         )
-        hwc = hwc[0]
+        # The pooling index grid is shape-dependent only, hence shared by every frame.
         pooling_idx = arange_for_pooling(resize_idx, image_pooling_h, image_pooling_w)
         num_patch_rows, num_patch_cols = pooling_idx.shape[:2]
         pooling_idx = pooling_idx.reshape([-1, image_pooling_h * image_pooling_w])
-        return [num_patch_rows, num_patch_cols], batch_pixels_to_patches(hwc, image_patch_size), pooling_idx
+        # [T, 1, S, S, C] -> [T, n_patch, pixels_per_patch]
+        patches = batch_pixels_to_patches(hwc.squeeze(1), image_patch_size)
+        return [num_patch_rows, num_patch_cols], patches, pooling_idx
 
     def _preprocess(
         self,
@@ -248,25 +244,29 @@ class Molmo2VideoProcessor(BaseVideoProcessor):
         patch_offset = 0
 
         for video in videos:
-            for frame_chw in video:
-                image_grid, crops, pooled_idx = self._build_frame_patches(
-                    frame_chw,
-                    base_image_input_size,
-                    resample,
-                    do_rescale,
-                    rescale_factor,
-                    do_normalize,
-                    image_mean,
-                    image_std,
-                    patch_size,
-                    image_pooling_h,
-                    image_pooling_w,
-                )
-                all_pooled.append(torch.where(pooled_idx >= 0, pooled_idx + patch_offset, pooled_idx))
-                all_crops.append(crops)
-                patch_offset += crops.shape[0] * crops.shape[1]
+            image_grid, patches, pooling_idx = self._build_video_patches(
+                video,
+                base_image_input_size,
+                resample,
+                do_rescale,
+                rescale_factor,
+                do_normalize,
+                image_mean,
+                image_std,
+                patch_size,
+                image_pooling_h,
+                image_pooling_w,
+            )
+            num_frames, patches_per_frame = patches.shape[:2]
+            frame_offsets = (
+                patch_offset + torch.arange(num_frames, device=pooling_idx.device) * patches_per_frame
+            ).view(-1, 1, 1)
+            pooled_idx = torch.where(pooling_idx >= 0, pooling_idx + frame_offsets, pooling_idx)
+            all_pooled.append(pooled_idx.reshape(-1, pooling_idx.shape[-1]))
+            all_crops.append(patches)
+            patch_offset += num_frames * patches_per_frame
 
-            all_grids.append(torch.tensor([len(video), image_grid[0], image_grid[1]], dtype=torch.int64))
+            all_grids.append(torch.tensor([num_frames, image_grid[0], image_grid[1]], dtype=torch.int64))
 
         data = {
             "pixel_values_videos": torch.cat(all_crops, dim=0),

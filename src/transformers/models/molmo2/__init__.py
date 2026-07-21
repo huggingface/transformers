@@ -22,15 +22,15 @@ if TYPE_CHECKING:
         Molmo2AdapterConfig,
         Molmo2Config,
         Molmo2TextConfig,
-        Molmo2VitConfig,
+        Molmo2VisionConfig,
     )
     from .image_processing_molmo2 import Molmo2ImageProcessor
     from .modeling_molmo2 import (
+        Molmo2Adapter,
         Molmo2ForConditionalGeneration,
         Molmo2Model,
         Molmo2PreTrainedModel,
         Molmo2TextModel,
-        Molmo2VisionBackbone,
         Molmo2VisionModel,
     )
     from .processing_molmo2 import Molmo2Processor
