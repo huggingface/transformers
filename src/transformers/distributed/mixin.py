@@ -30,7 +30,6 @@ from .fsdp import apply_fully_sharded_data_parallelism, is_fsdp_managed_module
 from .pipeline_parallel import apply_pipeline_parallelism
 from .utils import (
     _get_torch_distributed_rank,
-    _is_torch_distributed_initialized,
     initialize_fully_sharded_data_parallelism,
     initialize_pipeline_parallelism,
     save_model_checkpoint_distributed,
@@ -210,20 +209,12 @@ class DistributedMixin:
                 model = apply_pipeline_parallelism(model, pp_mesh)
         return model
 
-    def should_save_on_this_rank(self, is_main_process: bool) -> bool:
-        """Return whether this rank should write checkpoint files."""
-        save_on_this_rank = is_main_process
-        if _is_torch_distributed_initialized():
-            save_on_this_rank = save_on_this_rank and _get_torch_distributed_rank() == 0
-        return save_on_this_rank
-
     def save_distributed_checkpoint(
         self,
         model_to_save,
         save_directory: str | os.PathLike,
         *,
         push_to_hub: bool = False,
-        save_on_this_rank: bool = True,
         repo_id: str | None = None,
         files_timestamps: dict | None = None,
         commit_message: str | None = None,
@@ -244,7 +235,7 @@ class DistributedMixin:
             )
         save_model_checkpoint_distributed(model_to_save, save_directory)
 
-        if push_to_hub and save_on_this_rank:
+        if push_to_hub and _get_torch_distributed_rank() == 0:
             model_card = create_and_tag_model_card(repo_id, self.model_tags, token=token)
             model_card.save(os.path.join(save_directory, "README.md"))
             self._upload_modified_files(
