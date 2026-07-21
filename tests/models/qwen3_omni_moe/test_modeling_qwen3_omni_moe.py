@@ -104,6 +104,7 @@ class Qwen3OmniMoeThinkerForConditionalGenerationTester:
             "num_mel_bins": 20,
             "max_source_positions": 1500,
             "initializer_range": 0.02,
+            "downsample_hidden_size": 32,
             "n_window": 50,
             "output_dim": 32,
             "n_window_infer": 100,
@@ -265,7 +266,7 @@ class Qwen3OmniMoeThinkerForConditionalGenerationModelTest(ModelTesterMixin, Gen
     all_generative_model_classes = (Qwen3OmniMoeThinkerForConditionalGeneration,) if is_torch_available() else ()
     skip_test_audio_features_output_shape = True  # Qwen3OmniMoe merges batch_size and audio_output_lengths in index 0
     _is_composite = True
-    model_split_percents = [0.5, 0.9]
+    model_split_percents = [0.5, 0.7]
 
     def setUp(self):
         self.model_tester = Qwen3OmniMoeThinkerForConditionalGenerationTester(self)
@@ -953,6 +954,7 @@ class Qwen3OmniModelIntegrationTest(unittest.TestCase):
             ("cuda", None): "system\nYou are a helpful assistant.\nuser\nWhat's that sound and what kind of dog is this?\nassistant\nThe sound is glass shattering, and the dog appears to be a Labrador Retriever.",
             ("cuda", (8, 6)): "system\nYou are a helpful assistant.\nuser\nWhat's that sound and what kind of dog is this?\nassistant\nThe sound is glass shattering, and the dog is a Labrador Retriever.",
             ("rocm", (9, 4)): "system\nYou are a helpful assistant.\nuser\nWhat's that sound and what kind of dog is this?\nassistant\nThe sound is glass shattering, and the dog is a Labrador Retriever.",
+            ("xpu", 5): "system\nYou are a helpful assistant.\nuser\nWhat's that sound and what kind of dog is this?\nassistant\nThe sound is glass shattering, and the dog is a Labrador Retriever.",
         }).get_expectation()  # fmt: skip
 
         decoded_texts = self.processor.batch_decode(output, skip_special_tokens=True)
