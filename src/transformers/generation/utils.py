@@ -2008,7 +2008,27 @@ class GenerationMixin(ContinuousMixin):
         # i.e. `cache_implementation` in [None, "dynamic", "offloaded", "dynamic_full"]
         # TODO: prepare linear cache from a single API, instead of creating in modeling code
         else:
-            model_kwargs[cache_name] = DynamicCache(**dynamic_cache_kwargs)
+            cache = DynamicCache(**dynamic_cache_kwargs)
+            # Replace sliding by full
+            if generation_config.cache_implementation == "dynamic_full":
+                from ..cache_utils import (
+                    DynamicLayer,
+                    DynamicSlidingWindowLayer,
+                    LinearAttentionAndFullAttentionLayer,
+                    LinearAttentionAndSlidingWindowAttentionLayer,
+                )
+
+                cache.layers = [
+                    DynamicLayer() if type(layer) is DynamicSlidingWindowLayer else layer for layer in cache.layers
+                ]
+                cache.layers = [
+                    LinearAttentionAndFullAttentionLayer(number_of_states=layer.number_of_states)
+                    if type(layer) is LinearAttentionAndSlidingWindowAttentionLayer
+                    else layer
+                    for layer in cache.layers
+                ]
+
+            model_kwargs[cache_name] = cache
 
         if (
             self.config.is_encoder_decoder
@@ -3617,6 +3637,13 @@ class GenerationMixin(ContinuousMixin):
             or type(model_kwargs.get("past_key_values")) is StaticCache
         ):
             raise ValueError("assisted generate is not supported with Static cache classes`")
+
+        # Make sure we can record past on the cache
+        cache = model_kwargs.get("past_key_values")
+        if cache is None:
+            raise RuntimeError("assisted decoding requires a cache")
+        cache.activate_past_recording()
+
         # Get the candidate generator, given the parameterization
         candidate_generator = self._get_candidate_generator(
             generation_config=generation_config,
@@ -3764,6 +3791,13 @@ class GenerationMixin(ContinuousMixin):
                     n_matches -= 1
                 valid_tokens = selected_tokens[:, : n_matches + 1]
 
+            # A partial acceptance plus the correction/bonus token can overshoot the length budget when the
+            # candidate generator does not cap its drafts (e.g. MTP always drafts `num_mtp_layers` tokens)
+            tokens_budget = generation_config.max_length - input_ids.shape[1]
+            if valid_tokens.shape[1] > tokens_budget:
+                valid_tokens = valid_tokens[:, :tokens_budget]
+                n_matches = valid_tokens.shape[1] - 1
+
             # 4. Update variables according to the number of matching assistant tokens. Remember: the token generated
             # by the model after the last candidate match is also valid, as it is generated from a correct sequence.
             # Because of this last token, assisted generation search reduces to a normal greedy search/sample if there
@@ -3775,8 +3809,11 @@ class GenerationMixin(ContinuousMixin):
                 streamer.put(valid_tokens.cpu())
             new_cur_len = input_ids.shape[1]
 
-            # 4.2. Discard past key values relative to unused assistant tokens
-            outputs.past_key_values.crop(new_cur_len - 1)
+            # 4.2. Discard past key values relative to unused assistant tokens. When every candidate was
+            # accepted, `input_ids` also holds the bonus token, which is not in the cache yet: nothing to discard (and we should not crop negative tokens!!)
+            number_of_tokens_to_crop = candidate_length - n_matches
+            if number_of_tokens_to_crop > 0:
+                outputs.past_key_values.crop(-number_of_tokens_to_crop)
 
             # 5. Update the candidate generation strategy if needed
             candidate_generator.update_candidate_strategy(input_ids, new_logits, n_matches)

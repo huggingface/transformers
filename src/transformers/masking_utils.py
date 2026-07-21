@@ -688,7 +688,7 @@ def flex_attention_mask(
             An optional device to create the mask on.
     """
     # Potentially add the padding 2D mask
-    if attention_mask is not None:
+    if attention_mask is not None and not fast_all(attention_mask):
         # Older torch (2.5.x) cannot handle sequences not in multiples of 128 (default block size)
         # Hence we pad to multiples of this as a minimum to ensure this
         pad_len = ((attention_mask.shape[1] // flex_default_block_size) + 1) * flex_default_block_size
@@ -833,7 +833,7 @@ def _preprocess_mask_arguments(
     q_length = inputs_embeds.shape[1]
     # If using a cache, it can give all information about mask sizes based on seen tokens
     if past_key_values is not None:
-        q_offset = past_key_values.get_seq_length()
+        q_offset = past_key_values.get_query_offset(layer_idx)
         # To avoid graph breaks, StaticLayer returns a tensor instead of an int -> this has no impact on the ops, but
         # we need the correct device
         q_offset = q_offset.to(inputs_embeds.device) if isinstance(q_offset, torch.Tensor) else q_offset
@@ -878,6 +878,7 @@ def create_causal_mask(
     and_mask_function: Callable | None = None,
     block_sequence_ids: torch.Tensor | None = None,
     allow_is_causal_skip: bool = True,
+    layer_idx: int | None = None,
 ) -> torch.Tensor | BlockMask | None:
     """
     Create a standard causal mask based on the attention implementation used (stored in the config). If `past_key_values`
@@ -913,6 +914,10 @@ def create_causal_mask(
             Whether to allow returning `None` (and relying on `sdpa`'s `is_causal` argument) when the mask would be a
             plain causal mask. Set to `False` to always materialize the mask, e.g. when it is later concatenated with
             another mask. Defaults to `True`.
+        layer_idx (`int`, *optional*):
+            The cache layer to size the mask against. By default, the first "full_attention" layer is used, which is
+            correct whenever all layers of a given mask type have seen the same tokens. Pass it explicitly for caches
+            where layers of the same type hold different lengths (e.g. per-depth MTP streams).
     """
     # Power feature: if `is_causal` is False, then fallback to bi-directional mask for bi-directional attention.
     # It allows to use decoder-only models with bi-directional attention as well
@@ -928,10 +933,11 @@ def create_causal_mask(
         )
 
     # If we have an hybrid cache structure, here we want to create the mask for the full layers
-    if hasattr(past_key_values, "is_sliding") and False in past_key_values.is_sliding:
-        layer_idx = past_key_values.is_sliding.index(False)
-    else:
-        layer_idx = 0
+    if layer_idx is None:
+        if hasattr(past_key_values, "is_sliding") and False in past_key_values.is_sliding:
+            layer_idx = past_key_values.is_sliding.index(False)
+        else:
+            layer_idx = 0
 
     early_exit, attention_mask, packed_sequence_mask, q_length, kv_length, q_offset, kv_offset = (
         _preprocess_mask_arguments(config, inputs_embeds, attention_mask, past_key_values, position_ids, layer_idx)
@@ -1110,6 +1116,7 @@ def create_sliding_window_causal_mask(
     and_mask_function: Callable | None = None,
     block_sequence_ids: torch.Tensor | None = None,
     allow_is_causal_skip: bool = True,
+    layer_idx: int | None = None,
 ) -> torch.Tensor | BlockMask | None:
     """
     Create a sliding window causal mask based on the attention implementation used (stored in the config). This type
@@ -1146,6 +1153,10 @@ def create_sliding_window_causal_mask(
             Whether to allow returning `None` (and relying on `sdpa`'s `is_causal` argument) when the mask would be a
             plain causal mask. Set to `False` to always materialize the mask, e.g. when it is later concatenated with
             another mask. Defaults to `True`.
+        layer_idx (`int`, *optional*):
+            The cache layer to size the mask against. By default, the first "full_attention" layer is used, which is
+            correct whenever all layers of a given mask type have seen the same tokens. Pass it explicitly for caches
+            where layers of the same type hold different lengths (e.g. per-depth MTP streams).
     """
     # Power feature: if `is_causal` is False, then fallback to bi-directional mask for bi-directional attention
     # It allows to use decoder-only models with bi-directional attention as well
@@ -1161,10 +1172,11 @@ def create_sliding_window_causal_mask(
         )
 
     # If we have an hybrid cache structure, here we want to create the mask for the sliding layers
-    if hasattr(past_key_values, "is_sliding") and True in past_key_values.is_sliding:
-        layer_idx = past_key_values.is_sliding.index(True)
-    else:
-        layer_idx = 0
+    if layer_idx is None:
+        if hasattr(past_key_values, "is_sliding") and True in past_key_values.is_sliding:
+            layer_idx = past_key_values.is_sliding.index(True)
+        else:
+            layer_idx = 0
 
     early_exit, attention_mask, packed_sequence_mask, q_length, kv_length, q_offset, kv_offset = (
         _preprocess_mask_arguments(config, inputs_embeds, attention_mask, past_key_values, position_ids, layer_idx)
@@ -1339,6 +1351,7 @@ def create_chunked_causal_mask(
     or_mask_function: Callable | None = None,
     and_mask_function: Callable | None = None,
     allow_is_causal_skip: bool = True,
+    layer_idx: int | None = None,
 ) -> torch.Tensor | BlockMask | None:
     """
     Create a chunked attention causal mask based on the attention implementation used (stored in the config). This type
@@ -1371,12 +1384,17 @@ def create_chunked_causal_mask(
             Whether to allow returning `None` (and relying on `sdpa`'s `is_causal` argument) when the mask would be a
             plain causal mask. Set to `False` to always materialize the mask, e.g. when it is later concatenated with
             another mask. Defaults to `True`.
+        layer_idx (`int`, *optional*):
+            The cache layer to size the mask against. By default, the first "full_attention" layer is used, which is
+            correct whenever all layers of a given mask type have seen the same tokens. Pass it explicitly for caches
+            where layers of the same type hold different lengths (e.g. per-depth MTP streams).
     """
-    # If we have an hybrid cache structure, here we want to create the mask for the sliding layers
-    if hasattr(past_key_values, "is_sliding") and True in past_key_values.is_sliding:
-        layer_idx = past_key_values.is_sliding.index(True)
-    else:
-        layer_idx = 0
+    if layer_idx is None:
+        # If we have an hybrid cache structure, here we want to create the mask for the sliding layers
+        if hasattr(past_key_values, "is_sliding") and True in past_key_values.is_sliding:
+            layer_idx = past_key_values.is_sliding.index(True)
+        else:
+            layer_idx = 0
 
     early_exit, attention_mask, packed_sequence_mask, q_length, kv_length, q_offset, kv_offset = (
         _preprocess_mask_arguments(config, inputs_embeds, attention_mask, past_key_values, position_ids, layer_idx)
@@ -1467,17 +1485,21 @@ def create_recurrent_attention_mask(
 
     Returns ``None`` (so the consumer skips masking entirely) when any of:
     - the input mask is missing or is already a custom 4D attention mask (no 2D padding signal);
-    - the recurrent state already covers past tokens (cached forwards);
+    - the current forward is a single-token decode step (a generated token is never padding; this
+      also keeps the growing 2D mask out of the compiled decode graph);
     - the mask is all-ones (un-padded batch — the masking multiply would be a no-op), skipped
       only outside trace/compile so the graph specialisation stays stable.
 
     Otherwise we trim the mask to the trailing ``inputs_embeds.shape[1]`` positions so it aligns
     with the current forward's local sequence and the consumer can multiply directly without
-    further slicing.
+    further slicing. Note that this includes multi-token forwards continuing from a cache (chunked
+    prefill, cache continuation): padding inside the new segment must still be zeroed out, otherwise
+    it leaks into the recurrent state.
     """
     if attention_mask is None or attention_mask.ndim != 2:
         return None
-    if past_key_values is not None and past_key_values.has_previous_state():
+    # Single-token decode never contains padding, and skipping keeps the growing 2D mask out of the graph
+    if inputs_embeds.shape[1] == 1:
         return None
     if not is_tracing(attention_mask) and torch.all(attention_mask == 1):
         return None
@@ -1495,6 +1517,8 @@ LAYER_PATTERN_TO_MASK_FUNCTION_MAPPING = {
     "deepseek_sparse_attention": create_causal_mask,
     "linear_attention": create_recurrent_attention_mask,
     "conv": create_recurrent_attention_mask,
+    "hybrid": {"full_attention": create_causal_mask, "linear_attention": create_recurrent_attention_mask},
+    "hybrid_sliding": {"sliding_attention": create_causal_mask, "linear_attention": create_recurrent_attention_mask},
 }
 
 
@@ -1559,7 +1583,15 @@ def create_masks_for_generate(
             return attention_mask
         causal_masks = {}
         for layer_pattern in layer_patterns:
-            causal_masks[layer_pattern] = LAYER_PATTERN_TO_MASK_FUNCTION_MAPPING[layer_pattern](**mask_kwargs)
+            mask_function = LAYER_PATTERN_TO_MASK_FUNCTION_MAPPING[layer_pattern]
+            # Some layer_pattern may point to several needed mask, e.g. `hybrid`
+            if isinstance(mask_function, dict):
+                for actual_pattern, actual_function in mask_function.items():
+                    # It may already be present depending on the layer_types configuration
+                    if actual_pattern not in causal_masks:
+                        causal_masks[actual_pattern] = actual_function(**mask_kwargs)
+            else:
+                causal_masks[layer_pattern] = mask_function(**mask_kwargs)
         return causal_masks
     # In this case, all layers are sliding
     elif getattr(effective_config, "sliding_window", None) is not None:
