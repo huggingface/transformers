@@ -315,19 +315,6 @@ def split_attention_implementation(implementation: str | None) -> tuple[bool, st
     return is_paged, implementation.removeprefix("paged|")
 
 
-def add_metadata(**metadata):
-    """
-    Attach static metadata to a function as attributes.
-    """
-
-    def decorator(fn):
-        for name, value in metadata.items():
-            setattr(fn, name, value)
-        return fn
-
-    return decorator
-
-
 def to_py_obj(obj):
     """
     Convert a PyTorch tensor, Numpy array or python list to a python list.

@@ -196,12 +196,6 @@ class Mistral4Attention(DeepseekV3Attention):
             self.config._attn_implementation, eager_attention_forward
         )
 
-        pad_head_dims = (
-            getattr(attention_interface, "requires_equal_head_dims", False) and self.qk_head_dim != self.v_head_dim
-        )
-        if pad_head_dims:
-            value_states = F.pad(value_states, [0, self.qk_head_dim - self.v_head_dim])
-
         attn_output, attn_weights = attention_interface(
             self,
             query_states,
@@ -212,9 +206,6 @@ class Mistral4Attention(DeepseekV3Attention):
             scaling=self.scaling,
             **kwargs,
         )
-
-        if pad_head_dims:
-            attn_output = attn_output[:, :, :, : self.v_head_dim]
 
         attn_output = attn_output.reshape(batch_size, seq_length, -1).contiguous()
         attn_output = self.o_proj(attn_output)
