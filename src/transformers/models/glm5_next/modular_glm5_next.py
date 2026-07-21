@@ -36,13 +36,13 @@ from ...modeling_outputs import BaseModelOutputWithPast, MoeCausalLMOutputWithPa
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging, torch_compilable_check
-from ...utils.generic import is_flash_attention_requested
-from ...utils.output_capturing import OutputRecorder
+from ...utils.generic import is_flash_attention_requested, merge_with_config_defaults
+from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ..auto import CONFIG_MAPPING, AutoConfig
 from ..auto.modeling_auto import AutoModel
 from ..deepseek_v2.modeling_deepseek_v2 import DeepseekV2Attention
 from ..deepseek_v3.modeling_deepseek_v3 import DeepseekV3MoE, DeepseekV3TopkRouter
-from ..deepseek_v4.modeling_deepseek_v4 import DeepseekV4HyperConnection, DeepseekV4Model
+from ..deepseek_v4.modeling_deepseek_v4 import DeepseekV4HyperConnection
 from ..exaone4_5.modeling_exaone4_5 import Exaone4_5_Model
 from ..glm46v.modeling_glm46v import Glm46VForConditionalGeneration
 from ..glm_moe_dsa.configuration_glm_moe_dsa import GlmMoeDsaConfig
@@ -847,15 +847,30 @@ class Glm5NextPreTrainedModel(PreTrainedModel):
             init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
 
 
+# Do not inherit from DSv4 as it messes modular prefixes up for the PreTrainedModel
 @auto_docstring
-class Glm5NextTextModel(DeepseekV4Model, Glm5NextPreTrainedModel):
+class Glm5NextTextModel(Glm5NextPreTrainedModel):
     config: Glm5NextTextConfig
 
     def __init__(self, config):
-        super().__init__(self, config)
-        self.hc_head = Glm5NextTextHyperHead()
-        del self.rotary_emb
+        super().__init__(config)
+        self.padding_idx = config.pad_token_id
+        self.vocab_size = config.vocab_size
 
+        self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
+        self.layers = nn.ModuleList(
+            [Glm5NextTextDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+        )
+        self.norm = Glm5NextTextRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.gradient_checkpointing = False
+        self.hc_head = Glm5NextTextHyperHead()
+
+        # Initialize weights and apply final processing
+        self.post_init()
+
+    @merge_with_config_defaults
+    @capture_outputs
+    @auto_docstring
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,

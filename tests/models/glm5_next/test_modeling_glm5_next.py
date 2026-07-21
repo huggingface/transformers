@@ -27,7 +27,7 @@ from transformers import (
 )
 from transformers.cache_utils import DynamicCache
 from transformers.generation import CompileConfig
-from transformers.models.glm5_next_vl.configuration_glm5_next_vl import Glm5NextTextConfig
+from transformers.models.glm5_next.configuration_glm5_next import Glm5NextTextConfig
 from transformers.models.glm_ocr.configuration_glm_ocr import GlmOcrVisionConfig
 from transformers.testing_utils import (
     CaptureLogger,
