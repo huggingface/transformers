@@ -27,7 +27,7 @@ on:
     # Push to this branch to trigger the CI. The base commit of this branch should match
     # the commit that the original scheduled run used (see HOW TO USE above).
     branches:
-      - trigger_daily_ci_manually
+      - debug_rate_limit
   workflow_dispatch:
     inputs:
       prev_workflow_run_id:
