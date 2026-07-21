@@ -18,6 +18,7 @@
 import doctest
 import errno
 import functools
+import logging as _stdlib_logging
 import os
 import re
 import sys
@@ -26,10 +27,19 @@ import warnings
 from os.path import abspath, dirname, join
 from unittest import mock
 
-import logging as _stdlib_logging
-
 import _pytest
 import pytest
+
+from transformers.testing_utils import (
+    HfDoctestModule,
+    HfDocTestParser,
+    is_torch_available,
+    patch_testing_methods_to_collect_info,
+    patch_torch_compile_force_graph,
+)
+from transformers.utils import enable_tf32
+from transformers.utils.network_logging import register_network_debug_plugin
+
 
 # Dedicated debug logger for CI read-only cache diagnostics.
 # propagate=False + its own StreamHandler bypass pytest log capture so every
@@ -41,16 +51,6 @@ if not _ci_dbg.handlers:
     _ci_dbg.addHandler(_ci_dbg_handler)
     _ci_dbg.setLevel(_stdlib_logging.DEBUG)
     _ci_dbg.propagate = False
-
-from transformers.testing_utils import (
-    HfDoctestModule,
-    HfDocTestParser,
-    is_torch_available,
-    patch_testing_methods_to_collect_info,
-    patch_torch_compile_force_graph,
-)
-from transformers.utils import enable_tf32
-from transformers.utils.network_logging import register_network_debug_plugin
 
 
 _ci_fallback_cache_dir = None

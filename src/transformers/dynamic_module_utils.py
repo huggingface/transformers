@@ -20,6 +20,7 @@ import importlib
 import importlib.metadata
 import importlib.util
 import keyword
+import logging as _stdlib_logging
 import os
 import re
 import shutil
@@ -46,7 +47,6 @@ from .utils.import_utils import VersionComparison, split_package_version
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 
 # Dedicated debug logger for CI read-only cache diagnostics — bypasses pytest log capture.
-import logging as _stdlib_logging
 _ci_dbg = _stdlib_logging.getLogger("ci_cache_debug.dynmod")
 if not _ci_dbg.handlers:
     _ci_dbg_handler = _stdlib_logging.StreamHandler(sys.stderr)
@@ -413,7 +413,11 @@ def get_cached_module_file(
     """
     _ci_dbg.debug(
         "get_cached_module_file ENTER repo=%r module_file=%r cache_dir=%r revision=%r _commit_hash=%r",
-        pretrained_model_name_or_path, module_file, cache_dir, revision, _commit_hash,
+        pretrained_model_name_or_path,
+        module_file,
+        cache_dir,
+        revision,
+        _commit_hash,
     )
 
     if is_offline_mode() and not local_files_only:
@@ -452,7 +456,8 @@ def get_cached_module_file(
             new_files.append(module_file)
             _ci_dbg.debug(
                 "get_cached_module_file new version detected: cached_module=%r vs resolved=%r",
-                cached_module, resolved_module_file,
+                cached_module,
+                resolved_module_file,
             )
 
     except OSError:
@@ -497,7 +502,8 @@ def get_cached_module_file(
         commit_hash = extract_commit_hash(resolved_module_file, _commit_hash)
         _ci_dbg.debug(
             "get_cached_module_file extracted commit_hash=%r from resolved_module_file=%r",
-            commit_hash, resolved_module_file,
+            commit_hash,
+            resolved_module_file,
         )
 
         # The module file will end up being placed in a subfolder with the git hash of the repo. This way we get the
@@ -510,14 +516,16 @@ def get_cached_module_file(
         already_installed = (submodule_path / module_file).exists()
         _ci_dbg.debug(
             "get_cached_module_file HF_MODULES_CACHE target=%r already_exists=%s",
-            str(submodule_path / module_file), already_installed,
+            str(submodule_path / module_file),
+            already_installed,
         )
         if not already_installed:
             shutil.copyfile(resolved_module_file, submodule_path / module_file)
             importlib.invalidate_caches()
             _ci_dbg.debug(
                 "get_cached_module_file copied %r -> %r",
-                resolved_module_file, str(submodule_path / module_file),
+                resolved_module_file,
+                str(submodule_path / module_file),
             )
         # Make sure we also have every file with relative
         for module_needed in modules_needed:

@@ -16,6 +16,7 @@ Hub utilities: utilities related to download and cache models
 """
 
 import json
+import logging as _stdlib_logging
 import os
 import re
 import sys
@@ -72,7 +73,6 @@ logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 # Dedicated debug logger for CI read-only cache diagnostics.
 # propagate=False + its own StreamHandler bypass pytest log capture so every
 # record always appears in the GitHub Actions raw log unconditionally.
-import logging as _stdlib_logging
 _ci_dbg = _stdlib_logging.getLogger("ci_cache_debug.hub")
 if not _ci_dbg.handlers:
     _ci_dbg_handler = _stdlib_logging.StreamHandler(sys.stderr)
@@ -422,7 +422,11 @@ def cached_files(
 
     _ci_dbg.debug(
         "CACHED_FILES ENTER repo=%r filenames=%r cache_dir=%r revision=%r _commit_hash=%r",
-        path_or_repo_id, full_filenames, cache_dir, revision, _commit_hash,
+        path_or_repo_id,
+        full_filenames,
+        cache_dir,
+        revision,
+        _commit_hash,
     )
 
     existing_files = []
@@ -452,7 +456,8 @@ def cached_files(
     try:
         _ci_dbg.debug(
             "CACHED_FILES calling hf_hub_download/snapshot_download for %r cache_dir=%r",
-            full_filenames, cache_dir,
+            full_filenames,
+            cache_dir,
         )
         if len(full_filenames) == 1:
             # This is slightly better for only 1 file
@@ -489,7 +494,9 @@ def cached_files(
     except Exception as e:
         _ci_dbg.debug(
             "CACHED_FILES hf_hub_download/snapshot_download RAISED %s errno=%s msg=%r",
-            type(e).__name__, getattr(e, "errno", None), str(e)[:300],
+            type(e).__name__,
+            getattr(e, "errno", None),
+            str(e)[:300],
         )
         # We cannot recover from them
         if isinstance(e, RepositoryNotFoundError) and not isinstance(e, GatedRepoError):
@@ -526,9 +533,7 @@ def cached_files(
         ]
         _ci_dbg.debug("CACHED_FILES stale-cache recovery result: %r", resolved_files)
         if all(file is not None for file in resolved_files):
-            _ci_dbg.debug(
-                "CACHED_FILES RETURNING STALE CACHE (exception swallowed!) %r", resolved_files
-            )
+            _ci_dbg.debug("CACHED_FILES RETURNING STALE CACHE (exception swallowed!) %r", resolved_files)
             return resolved_files
 
         # Raise based on the flags. Note that we will raise for missing entries at the very end, even when
