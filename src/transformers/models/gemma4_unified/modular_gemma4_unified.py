@@ -468,6 +468,8 @@ class Gemma4UnifiedTextConfig(Gemma4TextConfig):
     num_experts = AttributeError()
     top_k_experts = AttributeError()
     moe_intermediate_size = AttributeError()
+    output_router_logits = AttributeError()
+    router_aux_loss_coef = AttributeError()
 
 
 @auto_docstring(checkpoint="google/gemma-4-12B-it")

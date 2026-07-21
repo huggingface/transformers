@@ -37,7 +37,12 @@ from ...masking_utils import (
     sliding_window_overlay,
 )
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
-from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling
+from ...modeling_outputs import (
+    BaseModelOutputWithPast,
+    BaseModelOutputWithPooling,
+    MoeCausalLMOutputWithPast,
+    MoeModelOutputWithPast,
+)
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
@@ -62,7 +67,6 @@ from ..gemma3.modeling_gemma3 import (
     Gemma3TextScaledWordEmbedding,
 )
 from ..gemma3n.modeling_gemma3n import (
-    Gemma3nCausalLMOutputWithPast,
     Gemma3nForConditionalGeneration,
     Gemma3nModel,
     Gemma3nModelOutputWithPast,
@@ -73,7 +77,7 @@ from ..gemma3n.modeling_gemma3n import (
     eager_attention_forward,
 )
 from ..llama.modeling_llama import LlamaRotaryEmbedding
-from ..mixtral.modeling_mixtral import MixtralExperts
+from ..mixtral.modeling_mixtral import MixtralExperts, load_balancing_loss_func
 from ..moonshine_streaming.modeling_moonshine_streaming import sliding_window_mask_function
 from .configuration_gemma4 import Gemma4AudioConfig, Gemma4Config, Gemma4TextConfig, Gemma4VisionConfig
 
@@ -161,7 +165,8 @@ class Gemma4ModelOutputWithPast(Gemma3nModelOutputWithPast):
     shared_kv_states: dict[str, tuple[torch.Tensor, torch.Tensor]] | None = None
 
 
-class Gemma4CausalLMOutputWithPast(Gemma3nCausalLMOutputWithPast):
+@dataclass
+class Gemma4CausalLMOutputWithPast(MoeCausalLMOutputWithPast):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
         Language modeling loss (for next-token prediction).
@@ -178,16 +183,23 @@ class Gemma4CausalLMOutputWithPast(Gemma3nCausalLMOutputWithPast):
     audio_hidden_states (`torch.FloatTensor`, *optional*):
         A `torch.FloatTensor` of size `(batch_size, num_images, sequence_length, hidden_size)`.
         audio_hidden_states of the model produced by the audio encoder and after projecting the last hidden state.
+    aux_loss (`torch.FloatTensor`, *optional*, returned when `output_router_logits=True` is passed):
+        Load balancing loss for the MoE experts.
     shared_kv_states (`dict`, *optional*):
         Dictionary mapping layer type strings to tuples of (key_states, value_states) tensors.
         Used to pass shared KV states between layers during KV sharing.
+    router_logits (`tuple(torch.FloatTensor)`, *optional*, returned when `output_router_logits=True` is passed):
+        Tuple of `torch.FloatTensor` (one for each MoE layer) of shape `(batch_size * sequence_length, num_experts)`,
+        i.e. the raw router logits used to compute the load balancing loss.
     """
 
+    image_hidden_states: torch.FloatTensor | None = None
+    audio_hidden_states: torch.FloatTensor | None = None
     shared_kv_states: dict[str, tuple[torch.Tensor, torch.Tensor]] | None = None
 
 
 @dataclass
-class Gemma4TextModelOutputWithPast(BaseModelOutputWithPast):
+class Gemma4TextModelOutputWithPast(MoeModelOutputWithPast):
     """
     BaseModelOutputWithPast extended with shared_kv_states for KV sharing.
 
@@ -195,6 +207,9 @@ class Gemma4TextModelOutputWithPast(BaseModelOutputWithPast):
         shared_kv_states (`dict`, *optional*):
             Dictionary mapping layer type strings to tuples of (key_states, value_states) tensors.
             Used to pass shared KV states between layers during KV sharing.
+        router_logits (`tuple(torch.FloatTensor)`, *optional*, returned when `output_router_logits=True` is passed):
+            Tuple of `torch.FloatTensor` (one for each MoE layer) of shape `(batch_size * sequence_length,
+            num_experts)`, i.e. the raw router logits used to compute the load balancing loss.
     """
 
     shared_kv_states: dict[str, tuple[torch.Tensor, torch.Tensor]] | None = None
@@ -1190,7 +1205,8 @@ class Gemma4TextRouter(nn.Module):
         # Apply per-expert scale directly to the weights
         top_k_weights = top_k_weights * self.per_expert_scale[top_k_index]
 
-        return router_probabilities, top_k_weights, top_k_index
+        # The first element is recorded as `router_logits` for the load balancing loss
+        return expert_scores, top_k_weights, top_k_index
 
 
 class Gemma4TextDecoderLayer(Gemma3DecoderLayer):
@@ -1582,6 +1598,7 @@ class Gemma4ForCausalLM(Gemma3ForCausalLM):
         use_cache: bool | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         per_layer_inputs: torch.Tensor | None = None,
+        output_router_logits: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> Gemma4CausalLMOutputWithPast:
         r"""
@@ -1608,6 +1625,9 @@ class Gemma4ForCausalLM(Gemma3ForCausalLM):
         >>> tokenizer.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
         "What is your favorite condiment?"
         ```"""
+        output_router_logits = (
+            output_router_logits if output_router_logits is not None else self.config.output_router_logits
+        )
         # decoder outputs consists of (dec_features, layer_state, dec_hidden, dec_attn)
         outputs: Gemma4TextModelOutputWithPast = self.model(
             input_ids=input_ids,
@@ -1617,6 +1637,7 @@ class Gemma4ForCausalLM(Gemma3ForCausalLM):
             inputs_embeds=inputs_embeds,
             per_layer_inputs=per_layer_inputs,
             use_cache=use_cache,
+            output_router_logits=output_router_logits,
             **kwargs,
         )
 
@@ -1633,13 +1654,26 @@ class Gemma4ForCausalLM(Gemma3ForCausalLM):
         if labels is not None:
             loss = self.loss_function(logits, labels, self.vocab_size, **kwargs)
 
+        aux_loss = None
+        if output_router_logits:
+            aux_loss = load_balancing_loss_func(
+                outputs.router_logits,
+                self.config.num_experts,
+                self.config.top_k_experts,
+                attention_mask,
+            )
+            if labels is not None:
+                loss += self.config.router_aux_loss_coef * aux_loss.to(loss.device)
+
         return Gemma4CausalLMOutputWithPast(
             loss=loss,
+            aux_loss=aux_loss,
             logits=logits,
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
             shared_kv_states=outputs.shared_kv_states,
+            router_logits=outputs.router_logits,
         )
 
 
