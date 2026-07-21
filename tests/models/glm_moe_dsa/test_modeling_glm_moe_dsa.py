@@ -13,6 +13,7 @@
 # limitations under the License.
 """Testing suite for the PyTorch GlmMoeDsa model."""
 
+import os
 import unittest
 
 import torch
@@ -27,6 +28,7 @@ from transformers import (
     is_torch_available,
     set_seed,
 )
+from transformers.distributed import DistributedConfig
 from transformers.testing_utils import (
     require_torch,
     require_torch_accelerator,
@@ -195,7 +197,7 @@ class GlmMoeDsaIntegrationTest(unittest.TestCase):
         model = AutoModelForCausalLM.from_pretrained(
             model_id,
             quantization_config=quantization_config,
-            tp_plan="auto",
+            distributed_config=DistributedConfig(tp_size=int(os.environ["WORLD_SIZE"])),
             attn_implementation="eager",
         )
 

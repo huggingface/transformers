@@ -34,7 +34,8 @@ from ...integrations import (
     use_kernel_func_from_hub,
     use_kernelized_func,
 )
-from ...masking_utils import create_causal_mask
+from ...integrations.accelerate import force_accelerate_hooks
+from ...masking_utils import create_causal_mask, create_recurrent_attention_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast, MoeModelOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
@@ -405,6 +406,8 @@ class Lfm2MoeShortConv(nn.Module):
         self.in_proj = nn.Linear(config.hidden_size, 3 * config.hidden_size, bias=self.bias)
         self.out_proj = nn.Linear(config.hidden_size, config.hidden_size, bias=self.bias)
 
+        self.layer_type = config.layer_types[layer_idx]
+
     def cuda_kernels_forward(
         self,
         x: torch.Tensor,
@@ -422,7 +425,7 @@ class Lfm2MoeShortConv(nn.Module):
         if past_key_values is not None and past_key_values.has_previous_state(self.layer_idx):
             conv_out = causal_conv1d_update(
                 Bx.squeeze(-1),
-                past_key_values.layers[self.layer_idx].conv_states,
+                past_key_values.layers[self.layer_idx].conv_states[0],
                 conv_weights,
                 self.conv.bias,
                 None,
@@ -431,7 +434,7 @@ class Lfm2MoeShortConv(nn.Module):
         else:
             if past_key_values is not None:
                 conv_state = nn.functional.pad(Bx, (self.L_cache - Bx.shape[-1], 0))
-                conv_state = past_key_values.update_conv_state(conv_state, self.layer_idx)
+                conv_state = past_key_values.update_conv_state(conv_state, self.layer_idx)[..., -self.L_cache :]
 
             # `seq_idx` resets conv state at packed-sample boundaries; None = previous behaviour.
             conv_out = causal_conv1d_fn(Bx, conv_weights, self.conv.bias, activation=None, seq_idx=seq_idx)
@@ -456,7 +459,7 @@ class Lfm2MoeShortConv(nn.Module):
         Bx = B * x
 
         if past_key_values is not None and past_key_values.has_previous_state(self.layer_idx):
-            conv_state = past_key_values.update_conv_state(Bx, self.layer_idx)
+            conv_state = past_key_values.update_conv_state(Bx, self.layer_idx)[..., -self.L_cache :]
             conv_out = torch.sum(conv_state.to(Bx.device) * self.conv.weight[:, 0, :], dim=-1)
             if self.bias:
                 conv_out += self.conv.bias
@@ -466,7 +469,7 @@ class Lfm2MoeShortConv(nn.Module):
             # Per-segment conv so the receptive field cannot cross packed-sample boundaries.
             if past_key_values is not None:
                 conv_state = nn.functional.pad(Bx, (self.L_cache - Bx.shape[-1], 0))
-                conv_state = past_key_values.update_conv_state(conv_state, self.layer_idx)
+                conv_state = past_key_values.update_conv_state(conv_state, self.layer_idx)[..., -self.L_cache :]
             si = seq_idx[0]
             change = (si[1:] != si[:-1]).nonzero(as_tuple=True)[0] + 1
             bounds = torch.cat([change.new_zeros(1), change, change.new_full((1,), si.numel())]).tolist()
@@ -479,7 +482,7 @@ class Lfm2MoeShortConv(nn.Module):
         else:
             if past_key_values is not None:
                 conv_state = nn.functional.pad(Bx, (self.L_cache - Bx.shape[-1], 0))
-                conv_state = past_key_values.update_conv_state(conv_state, self.layer_idx)
+                conv_state = past_key_values.update_conv_state(conv_state, self.layer_idx)[..., -self.L_cache :]
 
             conv_out = self.conv(Bx)[..., :seqlen]
 
@@ -488,6 +491,7 @@ class Lfm2MoeShortConv(nn.Module):
         y = self.out_proj(y)
         return y
 
+    @force_accelerate_hooks("conv")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -559,7 +563,8 @@ class Lfm2MoePreTrainedModel(PreTrainedModel):
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True
-    _can_compile_fullgraph = False  # uses a non-compilable cache class
+
+    _can_compile_fullgraph = True
     _supports_attention_backend = True
     _can_record_outputs = {
         "hidden_states": Lfm2MoeDecoderLayer,
@@ -625,25 +630,27 @@ class Lfm2MoeModel(Lfm2MoePreTrainedModel):
             position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
             position_ids = position_ids.unsqueeze(0)
 
-        causal_mask = create_causal_mask(
-            config=self.config,
-            inputs_embeds=inputs_embeds,
-            attention_mask=attention_mask,
-            past_key_values=past_key_values,
-            position_ids=position_ids,
-        )
-        # Skip masking for decoding stage. We check shape here to be compile-friendly
-        linear_attention = attention_mask if inputs_embeds.shape[1] != 1 else None
+        if not isinstance(causal_mask_mapping := attention_mask, dict):
+            mask_kwargs = {
+                "config": self.config,
+                "inputs_embeds": inputs_embeds,
+                "attention_mask": attention_mask,
+                "past_key_values": past_key_values,
+                "position_ids": position_ids,
+            }
+            causal_mask_mapping = {
+                "full_attention": create_causal_mask(**mask_kwargs),
+                "conv": create_recurrent_attention_mask(**mask_kwargs),
+            }
 
         hidden_states = inputs_embeds
         position_embeddings = self.pos_emb(hidden_states, position_ids=position_ids)
 
         # decoder layers
         for i, decoder_layer in enumerate(self.layers[: self.config.num_hidden_layers]):
-            layer_mask = causal_mask if self.config.layer_types[i] == "full_attention" else linear_attention
             hidden_states = decoder_layer(
                 hidden_states,
-                attention_mask=layer_mask,
+                attention_mask=causal_mask_mapping[self.config.layer_types[i]],
                 position_ids=position_ids,
                 past_key_values=past_key_values,
                 position_embeddings=position_embeddings,

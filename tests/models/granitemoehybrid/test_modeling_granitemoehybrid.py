@@ -30,6 +30,7 @@ from transformers import (
 )
 from transformers.testing_utils import (
     require_flash_attn,
+    require_kernels,
     require_torch,
     require_torch_accelerator,
     slow,
@@ -123,6 +124,16 @@ class GraniteMoeHybridModelTest(ModelTesterMixin, GenerationTesterMixin, Pipelin
     def test_decoder_model_past_with_large_inputs(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_decoder_model_past_large_inputs(*config_and_inputs)
+
+    def test_mamba2_chunked_prefill_cpu(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_mamba_chunked_prefill(*config_and_inputs, device="cpu")
+
+    @require_torch_accelerator
+    @require_kernels
+    def test_mamba2_chunked_prefill_torch_device(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_mamba_chunked_prefill(*config_and_inputs, device=torch_device)
 
     def test_attention_outputs(self):
         r"""
@@ -317,7 +328,7 @@ class GraniteMoeHybridModelTest(ModelTesterMixin, GenerationTesterMixin, Pipelin
         """Ensure forward pass works when all layers are attention (no mamba layers). Regression test for #45507."""
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         config = config_and_inputs[0]
-        config.layers_block_type = ["attention"] * config.num_hidden_layers
+        config.layers_block_type = ["full_attention"] * config.num_hidden_layers
 
         for model_class in self.all_model_classes:
             model = model_class._from_config(config)

@@ -14,15 +14,21 @@
 """Testing suite for the PyTorch VoxtralRealtime model."""
 
 import functools
+import queue
 import unittest
+from threading import Thread
+
+import numpy as np
 
 from parameterized import parameterized
 
 from transformers import (
     AutoProcessor,
+    TextIteratorStreamer,
     VoxtralRealtimeConfig,
     VoxtralRealtimeForConditionalGeneration,
     VoxtralRealtimeModel,
+    VoxtralRealtimeProcessor,
     is_datasets_available,
     is_torch_available,
 )
@@ -354,3 +360,88 @@ class VoxtralRealtimeForConditionalGenerationIntegrationTest(unittest.TestCase):
         ]
 
         self.assertEqual(decoded_outputs, EXPECTED_OUTPUT)
+
+    @slow
+    def test_modeling_integration_streaming(self):
+        """
+        reproducer: https://gist.github.com/eustlb/980bade49311336509985f9a308e80af#file-test_modeling_integration_streaming-py
+        """
+        processor = VoxtralRealtimeProcessor.from_pretrained(self.checkpoint_name)
+        model = VoxtralRealtimeForConditionalGeneration.from_pretrained(self.checkpoint_name, device_map=torch_device)
+
+        sampling_rate = processor.feature_extractor.sampling_rate
+        audio = load_audio(
+            "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/obama_first_45_secs.mp3",
+            sampling_rate,
+        )
+        # Manually pad the audio to account for the right padding tokens required by the model.
+        audio = np.pad(audio, (0, processor.num_right_pad_tokens * processor.raw_audio_length_per_tok))
+
+        first_chunk_inputs = processor(
+            audio[: processor.num_samples_first_audio_chunk],
+            is_streaming=True,
+            is_first_audio_chunk=True,
+            return_tensors="pt",
+        )
+        first_chunk_inputs.to(model.device, dtype=model.dtype)
+
+        def input_features_generator():
+            yield first_chunk_inputs.input_features
+
+            mel_frame_idx = processor.num_mel_frames_first_audio_chunk
+            hop_length = processor.feature_extractor.hop_length
+            win_length = processor.feature_extractor.win_length
+
+            start_idx = mel_frame_idx * hop_length - win_length // 2
+            while (end_idx := start_idx + processor.num_samples_per_audio_chunk) < audio.shape[0]:
+                inputs = processor(
+                    audio[start_idx:end_idx],
+                    is_streaming=True,
+                    is_first_audio_chunk=False,
+                    return_tensors="pt",
+                )
+                inputs.to(model.device, dtype=model.dtype)
+                yield inputs.input_features
+
+                mel_frame_idx += processor.audio_length_per_tok
+                start_idx = mel_frame_idx * hop_length - win_length // 2
+
+        streamer = TextIteratorStreamer(
+            processor.tokenizer, skip_special_tokens=True, clean_up_tokenization_spaces=True, timeout=60
+        )
+        generate_kwargs = {
+            "input_ids": first_chunk_inputs.input_ids,
+            "input_features": input_features_generator(),
+            "num_delay_tokens": first_chunk_inputs.num_delay_tokens,
+            "streamer": streamer,
+        }
+        thread_exception = []
+
+        def generate_and_capture_exception():
+            try:
+                model.generate(**generate_kwargs)
+            except BaseException as e:
+                thread_exception.append(e)
+
+        thread = Thread(target=generate_and_capture_exception)
+        thread.start()
+        try:
+            streamed_text = "".join(streamer)
+        except queue.Empty:
+            # `generate` died before signalling the end of the stream; fall through to re-raise below.
+            streamed_text = None
+        thread.join()
+
+        if thread_exception:
+            raise thread_exception[0]
+
+        # Reference from the vLLM streaming path
+        EXPECTED_TRANSCRIPTION = " This week, I traveled to Chicago to deliver my final farewell address to the nation. Following in the tradition of presidents before me. It was an opportunity to say thank you. Whether we've seen eye to eye or rarely agreed at all, My conversations with you, the American people, in living rooms and schools, at farms and on factory floors, at diners and on distant military outposts, all these conversations are what have kept me honest, kept me inspired, and kept me going. Every day, I learned from you. You made me a better president, and you made me a better man. Over the course of these eight years, I've seen the goodness, the resilience, and the hope of the"
+        # floating point preicision differences
+        EXPECTED_TRANSCRIPTION = (
+            EXPECTED_TRANSCRIPTION.replace("the nation. Following", "the nation, following")
+            .replace("at all, My conversations", "at all, my conversations")
+            .replace("outposts, all these", "outposts, All these")
+        )
+
+        self.assertEqual(streamed_text, EXPECTED_TRANSCRIPTION)
