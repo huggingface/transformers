@@ -235,11 +235,14 @@ class DynamicSlidingWindowLayer(DynamicLayer):
         # Compute the full states
         full_key_states = torch.cat([self.keys, key_states], dim=-2)
         full_value_states = torch.cat([self.values, value_states], dim=-2)
-        # Only cache the last `self.sliding_window - 1` tokens (or all of them if lower than that) - if we record the past, we keep
-        # them all for now, and they'll be restricted to the window size in `crop`
+        # Only cache the last `self.sliding_window - 1` tokens (or all of them if lower than that)
         if not self.record_past:
             self.keys = full_key_states[:, :, -self.sliding_window + 1 :, :]
             self.values = full_value_states[:, :, -self.sliding_window + 1 :, :]
+        # If we record the past, we keep them all for now, and they'll be restricted to the window size in `crop`
+        else:
+            self.keys = full_key_states
+            self.values = full_value_states
 
         # Return the full states
         return full_key_states, full_value_states
