@@ -42,6 +42,10 @@ class EsmFold2Config(PreTrainedConfig):
         coda and MSA encoder). Derived as `transition_expansion_ratio * pairwise_hidden_size` if not set.
     sliding_window (`int`, *optional*, defaults to 128):
         Sliding-window size (in valid tokens) for the atom-encoder SWA attention.
+    chunk_size (`int`, *optional*, defaults to 64):
+        Default chunk size for the memory-heavy pair- and MSA-stream ops (triangle multiplication and
+        transitions) in the folding trunk and encoders; `None` disables chunking. Can be overridden per
+        call via the `chunk_size` argument to [`EsmFold2Model.forward`].
     n_relative_residx_bins (`int`, *optional*, defaults to 32):
         Number of bins for relative residue index encoding.
     n_relative_chain_bins (`int`, *optional*, defaults to 2):
@@ -58,8 +62,17 @@ class EsmFold2Config(PreTrainedConfig):
         Vocabulary size for the per-character atom-name encoding.
     max_chars (`int`, *optional*, defaults to 4):
         Maximum number of characters per atom name.
+    max_atoms_per_token (`int`, *optional*, defaults to 23):
+        Maximum number of atoms per token; sizes the per-atom pLDDT and resolved confidence-head weights.
+    atom_feature_dim (`int`, *optional*):
+        Width of the per-atom input featurization consumed by the atom encoder. Derived as
+        `3 (xyz) + 1 (charge) + 1 (mask) + max_atomic_number + char_vocab_size * max_chars` if not set.
     msa_encoder_overwrite (`bool`, *optional*, defaults to `True`):
         If `True`, MSA encoder output replaces the pair stream; if `False`, it is added.
+    msa_encoder_divide_outer_before_proj (`bool`, *optional*, defaults to `False`):
+        Outer-product-mean ordering. If `False`, `Wout(outer) / n_valid` (projection bias scaled by
+        1/n_valid); if `True`, `Wout(outer / n_valid)` (bias added unscaled, post-divide). Different
+        ESMFold2 checkpoints were trained with different orderings.
     folding_trunk_num_hidden_layers (`int`, *optional*, defaults to 24):
         Number of pairformer layers in the main folding trunk.
     atom_encoder_hidden_size (`int`, *optional*, defaults to 128):
@@ -127,6 +140,9 @@ class EsmFold2Config(PreTrainedConfig):
         Power-law exponent of the inference noise schedule.
     structure_head_inference_num_steps (`int`, *optional*, defaults to 68):
         Default number of sampling steps.
+    structure_head_max_inference_sigma (`float`, *optional*, defaults to 256.0):
+        Cap on the Karras noise schedule: the high-σ tail above the cap is truncated and the cap
+        re-prepended so sampling still starts from it. `None` disables the cap.
     confidence_head_num_hidden_layers (`int`, *optional*, defaults to 4):
         Number of pairformer layers in the confidence head's folding trunk.
     confidence_head_num_plddt_bins (`int`, *optional*, defaults to 50):
@@ -193,6 +209,7 @@ class EsmFold2Config(PreTrainedConfig):
     transition_expansion_ratio: int | None = 4
     pair_transition_intermediate_size: int | None = None
     sliding_window: int | None = 128
+    chunk_size: int | None = 64
     n_relative_residx_bins: int | None = 32
     n_relative_chain_bins: int | None = 2
     num_loops: int | None = 10
@@ -201,7 +218,10 @@ class EsmFold2Config(PreTrainedConfig):
     max_atomic_number: int | None = 128
     char_vocab_size: int | None = 64
     max_chars: int | None = 4
+    max_atoms_per_token: int | None = 23
+    atom_feature_dim: int | None = None
     msa_encoder_overwrite: bool | None = True
+    msa_encoder_divide_outer_before_proj: bool | None = False
 
     # Folding trunk
     folding_trunk_num_hidden_layers: int | None = 24
@@ -242,6 +262,7 @@ class EsmFold2Config(PreTrainedConfig):
     structure_head_inference_s_min: float | None = 4e-4
     structure_head_inference_p: float | None = 8.0
     structure_head_inference_num_steps: int | None = 68
+    structure_head_max_inference_sigma: float | None = 256.0
 
     # Confidence head
     confidence_head_num_hidden_layers: int | None = 4
@@ -276,6 +297,10 @@ class EsmFold2Config(PreTrainedConfig):
             self.esmc_config = EsmcConfig()
         elif isinstance(self.esmc_config, dict):
             self.esmc_config = EsmcConfig(**self.esmc_config)
+
+        # Atom featurization width: 3 (xyz) + 1 (charge) + 1 (mask) + element one-hot + atom-name-char one-hots.
+        if self.atom_feature_dim is None:
+            self.atom_feature_dim = 3 + 1 + 1 + self.max_atomic_number + self.char_vocab_size * self.max_chars
 
         # SwiGLU FFN widths that are derived from the stream widths when not set explicitly
         # (matches the reference ESMFold2 feed-forward blocks). The atom-stack FFNs are rounded

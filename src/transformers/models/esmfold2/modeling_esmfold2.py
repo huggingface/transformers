@@ -14,7 +14,7 @@
 
 import math
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from functools import partial
 
 import torch
@@ -65,13 +65,30 @@ class EsmFold2AtomAttention:
 class EsmFold2AtomEncoderCache:
     """Step-invariant atom-encoder tensors cached across diffusion sampling steps (identical for every
     step of a fold): the atom base embedding, the SWA attention inputs, the expanded atom mask, the
-    token count and the expanded atom->token map. Stored under ``inference_cache['atomencoder']``."""
+    token count and the expanded atom->token map. Stored on ``EsmFold2DiffusionCache.atom_encoder``."""
 
     c_base: Tensor
     attention: EsmFold2AtomAttention
     mask_exp: Tensor
     n_tokens: int
     atom_to_token_exp: Tensor
+
+
+@dataclass
+class EsmFold2DiffusionCache:
+    """Per-fold cache of the diffusion module's step-invariant tensors, reused across every denoising
+    step of the sampler (see ``EsmFold2DiffusionStructureHead.sample``).
+
+    This is **not** a generation/KV cache: it depends only on the fixed inputs and frozen weights (not
+    on the noisy coordinates or noise level that change each step), it is fully populated on the first
+    step and read-only thereafter, and caching is bit-identical to recomputing. It holds the
+    atom-encoder tensors, the conditioning pair representation ``z``, and the diffusion-transformer's
+    per-block attention pair biases (keyed by block index).
+    """
+
+    atom_encoder: EsmFold2AtomEncoderCache | None = None
+    pair_repr: Tensor | None = None
+    token_pair_bias: dict[int, Tensor] = field(default_factory=dict)
 
 
 class EsmFold2LayerNorm(nn.LayerNorm):
@@ -158,12 +175,11 @@ class EsmFold2SwiGLU(nn.Module):
         in_features: int,
         intermediate_size: int,
         out_features: int | None = None,
-        bias: bool = False,
     ) -> None:
         super().__init__()
         out_features = out_features or in_features
-        self.gate_up_proj = nn.Linear(in_features, 2 * intermediate_size, bias=bias)
-        self.down_proj = nn.Linear(intermediate_size, out_features, bias=bias)
+        self.gate_up_proj = nn.Linear(in_features, 2 * intermediate_size, bias=False)
+        self.down_proj = nn.Linear(intermediate_size, out_features, bias=False)
         self.intermediate_size = intermediate_size
 
     def forward(self, x: Tensor) -> Tensor:
@@ -269,16 +285,18 @@ def _resolve_atom_config(config: EsmFold2Config, structure_prediction: bool):
     )
 
 
-def _swa_window_mask_function(rank: Tensor, valid: Tensor, half_window: int) -> Callable:
-    """Sliding-window ``and`` mask over the valid-token rank, with self-attention always allowed.
+def _swa_window_mask_function(valid: Tensor, half_window: int) -> Callable:
+    """Sliding-window ``and`` mask over token index, with self-attention always allowed.
 
-    ``rank[b, i]`` is the cumulative index of position ``i`` among valid (non-padding) tokens, so
-    padding does not count toward the window distance: a token attends to another iff both are
-    valid and their ranks differ by at most ``half_window`` (or it is the diagonal).
+    A token attends to another iff both are valid (non-padding) and their indices differ by at
+    most ``half_window`` (inputs are right-padded, so index distance is the window distance). The
+    diagonal is always allowed so that fully padded query rows keep a single valid key and do not
+    produce ``NaN`` in the softmax — which is why this stays a small ``and`` mask rather than the
+    stock ``create_bidirectional_sliding_window_mask``.
     """
 
     def inner_mask(batch_idx: int, head_idx: int, q_idx: int, kv_idx: int) -> bool:
-        within = (rank[batch_idx, q_idx] - rank[batch_idx, kv_idx]).abs() <= half_window
+        within = abs(q_idx - kv_idx) <= half_window
         in_window = within & valid[batch_idx, q_idx] & valid[batch_idx, kv_idx]
         return in_window | (q_idx == kv_idx)
 
@@ -374,7 +392,7 @@ class EsmFold2SWAAtomLayer(nn.Module):
         self.adaln_linear = nn.Linear(d_atom, 6 * d_atom, bias=False)
 
         self.attn = EsmFold2SWA3DRoPEAttention(config, structure_prediction)
-        self.ffn = EsmFold2SwiGLU(d_atom, ffn_intermediate_size, d_atom, bias=False)
+        self.ffn = EsmFold2SwiGLU(d_atom, ffn_intermediate_size, d_atom)
 
     def forward(self, x: Tensor, atom_cond: Tensor, attention: EsmFold2AtomAttention) -> Tensor:
         modulation = self.adaln_linear(F.silu(atom_cond))
@@ -484,10 +502,10 @@ class EsmFold2AtomEncoder(nn.Module):
         self.d_token = d_token
         self.structure_prediction = structure_prediction
 
-        # Atom feature width = 3 (xyz) + 1 (charge) + 1 (mask) + element + atom-name-char one-hots.
+        # Atom feature width (`config.atom_feature_dim`) = 3 (xyz) + 1 (charge) + 1 (mask) + element +
+        # atom-name-char one-hots; `char_feature_dim` is the atom-name-char slice used by the featurizer.
         self.char_feature_dim = config.char_vocab_size * config.max_chars
-        atom_feature_dim = 3 + 1 + 1 + config.max_atomic_number + self.char_feature_dim
-        self.atom_linear = nn.Linear(atom_feature_dim, d_atom, bias=False)
+        self.atom_linear = nn.Linear(config.atom_feature_dim, d_atom, bias=False)
         self.atom_norm = EsmFold2LayerNorm(d_atom)
 
         if structure_prediction:
@@ -530,16 +548,15 @@ class EsmFold2AtomEncoder(nn.Module):
         sin = sin.repeat_interleave(num_diffusion_samples, 0)
         mask_exp = atom_inputs.atom_attention_mask.repeat_interleave(num_diffusion_samples, 0)
         indices = torch.nonzero(mask_exp.flatten(), as_tuple=False).flatten()
-        # The SWA mask depends only on the (step- and layer-invariant) valid-token rank and window,
+        # The SWA mask depends only on the (step- and layer-invariant) valid-token mask and window,
         # so build it once here rather than in every atom-stack layer's forward. ``cos`` (bf16, same
         # batch/seq as the attention queries) supplies the mask metadata (dtype/device/shape).
         valid = mask_exp.bool()
-        rank = torch.cumsum(valid, dim=1) - 1
         swa_mask = create_bidirectional_mask(
             config=self.config,
             inputs_embeds=cos,
             attention_mask=None,
-            and_mask_function=_swa_window_mask_function(rank, valid, self.config.sliding_window // 2),
+            and_mask_function=_swa_window_mask_function(valid, self.config.sliding_window // 2),
         )
         attention = EsmFold2AtomAttention(cos, sin, indices, swa_mask)
         n_tokens = int(atom_inputs.atom_to_token.max().item()) + 1
@@ -550,20 +567,20 @@ class EsmFold2AtomEncoder(nn.Module):
         atom_inputs: EsmFold2AtomInputs,
         atom_coords: Tensor | None = None,
         num_diffusion_samples: int = 1,
-        inference_cache: dict | None = None,
+        inference_cache: EsmFold2DiffusionCache | None = None,
     ) -> tuple[Tensor, Tensor, Tensor, EsmFold2AtomAttention]:
         """Returns (token_acts, atom_queries, atom_cond, attention).
 
-        ``inference_cache['atomencoder']`` caches the step-invariant tensors (see
+        ``inference_cache.atom_encoder`` caches the step-invariant tensors (see
         :class:`EsmFold2AtomEncoderCache`) across diffusion sampling steps.
         """
-        cache = inference_cache.get("atomencoder") if inference_cache is not None else None
+        cache = inference_cache.atom_encoder if inference_cache is not None else None
         if cache is None:
             c_base, attention, mask_exp, n_tokens = self._compute_step_invariants(atom_inputs, num_diffusion_samples)
             atom_to_token_exp = atom_inputs.atom_to_token.repeat_interleave(num_diffusion_samples, 0)
             if inference_cache is not None:
                 cache = EsmFold2AtomEncoderCache(c_base, attention, mask_exp, n_tokens, atom_to_token_exp)
-                inference_cache["atomencoder"] = cache
+                inference_cache.atom_encoder = cache
         else:
             c_base, attention, mask_exp, n_tokens = cache.c_base, cache.attention, cache.mask_exp, cache.n_tokens
             atom_to_token_exp = cache.atom_to_token_exp
@@ -639,16 +656,13 @@ class EsmFold2AtomDecoder(nn.Module):
 class EsmFold2AttentionPairBias(nn.Module):
     """Gated multi-head attention with pair bias conditioning."""
 
-    def __init__(
-        self,
-        config: EsmFold2Config,
-        d_model: int,
-        d_pair: int,
-        num_heads: int,
-        d_cond: int | None = None,
-    ) -> None:
+    def __init__(self, config: EsmFold2Config) -> None:
         super().__init__()
         self.config = config
+        d_model = config.diffusion_token_hidden_size
+        d_pair = config.pairwise_hidden_size  # the trunk pair rep flows in at this width
+        num_heads = config.diffusion_token_num_heads
+        d_cond = config.diffusion_token_hidden_size
         self.d_model = d_model
         self.num_heads = num_heads
         self.head_dim = d_model // num_heads
@@ -656,7 +670,6 @@ class EsmFold2AttentionPairBias(nn.Module):
         # No grouped-query attention; identity repeat keeps the attention interface happy.
         self.num_key_value_groups = 1
         self.is_causal = False
-        d_cond = d_cond or d_model
 
         self.adaln = EsmFold2AdaptiveLayerNorm(d_model, d_cond)
         self.out_gate = nn.Linear(d_cond, d_model, bias=True)
@@ -666,8 +679,6 @@ class EsmFold2AttentionPairBias(nn.Module):
         self.g_proj = nn.Linear(d_model, d_model, bias=False)
         self.out_proj = nn.Linear(d_model, d_model, bias=False)
 
-        # d_pair is always config.pairwise_hidden_size (> 0) at the single call site, so the pair-bias
-        # projections are always built.
         self.pair_norm = EsmFold2LayerNorm(d_pair)
         self.pair_bias_proj = nn.Linear(d_pair, num_heads, bias=False)
 
@@ -736,19 +747,16 @@ class EsmFold2AttentionPairBias(nn.Module):
 class EsmFold2ConditionedTransitionBlock(nn.Module):
     """Conditioned EsmFold2SwiGLU transition with adaptive layer norm."""
 
-    def __init__(
-        self,
-        d_model: int,
-        intermediate_size: int,
-        d_cond: int | None = None,
-    ) -> None:
+    def __init__(self, config: EsmFold2Config) -> None:
         super().__init__()
-        d_cond = d_cond or d_model
+        d_model = config.diffusion_token_hidden_size
+        d_cond = config.diffusion_token_hidden_size
+        intermediate_size = config.diffusion_token_transition_intermediate_size
 
         self.adaln = EsmFold2AdaptiveLayerNorm(d_model, d_cond)
         self.output_gate = nn.Linear(d_cond, d_model, bias=True)
 
-        self.ffn = EsmFold2SwiGLU(d_model, intermediate_size, d_model, bias=False)
+        self.ffn = EsmFold2SwiGLU(d_model, intermediate_size, d_model)
 
     def forward(self, token_acts: Tensor, single_repr: Tensor) -> Tensor:
         x = self.adaln(token_acts, single_repr)
@@ -761,35 +769,9 @@ class EsmFold2DiffusionTransformer(nn.Module):
 
     def __init__(self, config: EsmFold2Config) -> None:
         super().__init__()
-        d_model = config.diffusion_token_hidden_size
-        d_pair = config.pairwise_hidden_size  # the trunk pair rep flows in at this width
-        num_heads = config.diffusion_token_num_heads
         num_blocks = config.diffusion_token_num_blocks
-        d_cond = config.diffusion_token_hidden_size
-        transition_intermediate_size = config.diffusion_token_transition_intermediate_size
-
-        self.attn_blocks = nn.ModuleList(
-            [
-                EsmFold2AttentionPairBias(
-                    config=config,
-                    d_model=d_model,
-                    d_pair=d_pair,
-                    num_heads=num_heads,
-                    d_cond=d_cond,
-                )
-                for _ in range(num_blocks)
-            ]
-        )
-        self.transition_blocks = nn.ModuleList(
-            [
-                EsmFold2ConditionedTransitionBlock(
-                    d_model=d_model,
-                    intermediate_size=transition_intermediate_size,
-                    d_cond=d_cond,
-                )
-                for _ in range(num_blocks)
-            ]
-        )
+        self.attn_blocks = nn.ModuleList([EsmFold2AttentionPairBias(config) for _ in range(num_blocks)])
+        self.transition_blocks = nn.ModuleList([EsmFold2ConditionedTransitionBlock(config) for _ in range(num_blocks)])
 
     def forward(
         self,
@@ -798,7 +780,7 @@ class EsmFold2DiffusionTransformer(nn.Module):
         pair_repr: Tensor,
         attention_mask: Tensor | None = None,
         num_diffusion_samples: int = 1,
-        inference_cache: dict | None = None,
+        inference_cache: EsmFold2DiffusionCache | None = None,
     ) -> Tensor:
         x = token_acts
         bsz = token_acts.shape[0]
@@ -806,7 +788,7 @@ class EsmFold2DiffusionTransformer(nn.Module):
         # pair repr and fixed weights, so compute it once per block and reuse it
         # across every diffusion sampling step. Bit-identical to recomputing it
         # each step; the cache lives in the sampler's per-fold ``inference_cache``.
-        bias_cache = None if inference_cache is None else inference_cache.setdefault("token_pair_bias", {})
+        bias_cache = None if inference_cache is None else inference_cache.token_pair_bias
         for i, (attn, transition) in enumerate(zip(self.attn_blocks, self.transition_blocks)):
             if bias_cache is None:
                 pair_bias = attn.compute_pair_bias(pair_repr, bsz, num_diffusion_samples)
@@ -862,15 +844,15 @@ class EsmFold2DiffusionConditioning(nn.Module):
         relative_position_encoding: Tensor,
         sigma_data: float | None = None,
         num_diffusion_samples: int = 1,
-        inference_cache: dict[str, Tensor] | None = None,
+        inference_cache: EsmFold2DiffusionCache | None = None,
     ) -> tuple[Tensor, Tensor]:
         sigma = self.sigma_data if sigma_data is None else float(sigma_data)
         base_batch = pair_trunk.shape[0]
         target_batch = base_batch * num_diffusion_samples
 
         # pair conditioning (cached across diffusion steps — independent of t_hat)
-        if inference_cache is not None and "z" in inference_cache:
-            pair_repr = inference_cache["z"]
+        if inference_cache is not None and inference_cache.pair_repr is not None:
+            pair_repr = inference_cache.pair_repr
         else:
             rel_pos = relative_position_encoding.to(dtype=torch.float32)
             pair_repr = torch.cat([pair_trunk.to(dtype=torch.float32), rel_pos], dim=-1)
@@ -880,7 +862,7 @@ class EsmFold2DiffusionConditioning(nn.Module):
             for block in self.z_transitions:
                 pair_repr = pair_repr + block(pair_repr)
             if inference_cache is not None:
-                inference_cache["z"] = pair_repr
+                inference_cache.pair_repr = pair_repr
 
         # single conditioning
         single_inputs_eff = single_inputs
@@ -932,7 +914,7 @@ class EsmFold2DiffusionModule(nn.Module):
         sigma_data: float | None = None,
         token_attention_mask: Tensor | None = None,
         num_diffusion_samples: int = 1,
-        inference_cache: dict[str, Tensor] | None = None,
+        inference_cache: EsmFold2DiffusionCache | None = None,
     ) -> Tensor:
         bsz = x_noisy.shape[0]
         sigma = self.sigma_data if sigma_data is None else float(sigma_data)
@@ -1015,6 +997,7 @@ class EsmFold2DiffusionStructureHead(nn.Module):
         self.inference_s_min = config.structure_head_inference_s_min
         self.inference_p = config.structure_head_inference_p
         self.inference_num_steps = config.structure_head_inference_num_steps
+        self.max_inference_sigma = config.structure_head_max_inference_sigma
 
     def inference_noise_schedule(self, num_steps: int | None = None, device: torch.device | None = None) -> Tensor:
         """Karras power-law noise schedule."""
@@ -1098,16 +1081,15 @@ class EsmFold2DiffusionStructureHead(nn.Module):
         return x_centered @ R.transpose(-1, -2) + centroid_gt
 
     @torch.inference_mode()
-    def _build_noise_schedule(
-        self, num_sampling_steps: int | None, device: torch.device, max_inference_sigma: float | None
-    ) -> tuple[Tensor, Tensor]:
+    def _build_noise_schedule(self, num_sampling_steps: int | None, device: torch.device) -> tuple[Tensor, Tensor]:
         """Karras σ schedule (Algorithm 18) + per-step γ churn factors.
 
-        When ``max_inference_sigma`` caps the schedule, the high-σ tail is truncated and the cap
-        is re-prepended so sampling still starts from the requested σ (see ``sample`` docstring).
+        The schedule is capped at ``self.max_inference_sigma`` (from config): the high-σ tail above
+        the cap is truncated and the cap re-prepended so sampling still starts from it.
         """
         steps = self.inference_num_steps if num_sampling_steps is None else int(num_sampling_steps)
         schedule = self.inference_noise_schedule(steps, device)
+        max_inference_sigma = self.max_inference_sigma
         if max_inference_sigma is not None:
             schedule = schedule[schedule <= float(max_inference_sigma)]
             schedule = F.pad(schedule, (1, 0), value=float(max_inference_sigma))
@@ -1127,29 +1109,23 @@ class EsmFold2DiffusionStructureHead(nn.Module):
         token_attention_mask: Tensor | None = None,
         num_diffusion_samples: int = 1,
         num_sampling_steps: int | None = None,
-        max_inference_sigma: float | None = 256.0,
-        noise_scale: float | None = None,
-        step_scale: float | None = None,
-        use_inference_cache: bool = True,
     ) -> dict[str, Tensor | None]:
         """Diffusion sampling (Algorithm 18).
 
-        ``num_sampling_steps`` is the number of denoising steps actually run.
-        When ``max_inference_sigma`` is set, the Karras schedule built with
-        ``num_sampling_steps`` entries would lose its high-σ tail to the cap,
-        so we inflate the underlying schedule length here to land back at the
-        requested step count post-truncation.
+        ``num_sampling_steps`` is the number of denoising steps actually run. The remaining sampling
+        hyperparameters (noise/step scales, the ``max_inference_sigma`` schedule cap) are read from
+        config; see ``_build_noise_schedule``.
         """
         n_atoms = atom_inputs.atom_to_token.shape[1]
         device = single_inputs.device
         target_batch = single_inputs.shape[0] * num_diffusion_samples
 
-        inference_cache: dict[str, Tensor] | None = {} if use_inference_cache else None
+        inference_cache = EsmFold2DiffusionCache()
 
-        schedule, gammas = self._build_noise_schedule(num_sampling_steps, device, max_inference_sigma)
+        schedule, gammas = self._build_noise_schedule(num_sampling_steps, device)
 
-        lam = self.noise_scale if noise_scale is None else float(noise_scale)
-        eta = self.step_scale if step_scale is None else float(step_scale)
+        lam = self.noise_scale
+        eta = self.step_scale
 
         x = schedule[0] * torch.randn(target_batch, n_atoms, 3, device=device, dtype=torch.float32)
         atom_mask = atom_inputs.atom_attention_mask.repeat_interleave(num_diffusion_samples, 0).float()
@@ -1356,7 +1332,7 @@ class EsmFold2TriangleMultiplicativeUpdate(nn.Module):
 
     _FLOW_TO_EINSUM = {"outgoing": "bikd,bjkd->bijd", "incoming": "bkid,bkjd->bijd"}
 
-    def __init__(self, dim: int, outgoing: bool = True) -> None:
+    def __init__(self, dim: int, outgoing: bool = True, chunk_size: int | None = 64) -> None:
         super().__init__()
         self.dim = dim
         self.flow = "outgoing" if outgoing else "incoming"
@@ -1367,8 +1343,8 @@ class EsmFold2TriangleMultiplicativeUpdate(nn.Module):
         self.proj_emit = nn.Linear(dim, dim, bias=False)
         self.proj_gate = nn.Linear(dim, dim, bias=False)
 
-        # Default chunked for memory on long sequences (set_chunk_size(None) disables).
-        self._chunk_size: int | None = 64
+        # Chunk the O(N^3) contraction for memory on long sequences (chunk_size=None disables).
+        self._chunk_size: int | None = chunk_size
 
     def set_chunk_size(self, chunk_size: int | None) -> None:
         self._chunk_size = chunk_size
@@ -1414,12 +1390,12 @@ class EsmFold2TriangleMultiplicativeUpdate(nn.Module):
 class EsmFold2Transition(nn.Module):
     """LayerNorm + EsmFold2SwiGLU feed-forward residual block, chunked along the token axis."""
 
-    def __init__(self, d_model: int, intermediate_size: int) -> None:
+    def __init__(self, d_model: int, intermediate_size: int, chunk_size: int | None = 64) -> None:
         super().__init__()
         self.norm = EsmFold2LayerNorm(d_model)
-        self.ffn = EsmFold2SwiGLU(d_model, intermediate_size, d_model, bias=False)
-        # Default chunked; set_chunk_size(None) disables.
-        self._chunk_size: int | None = 64
+        self.ffn = EsmFold2SwiGLU(d_model, intermediate_size, d_model)
+        # Chunk along the token axis on long sequences (chunk_size=None disables).
+        self._chunk_size: int | None = chunk_size
 
     def set_chunk_size(self, chunk_size: int | None) -> None:
         self._chunk_size = chunk_size
@@ -1438,11 +1414,11 @@ class EsmFold2Transition(nn.Module):
 class EsmFold2PairUpdateBlock(nn.Module):
     """tri_mul_out, tri_mul_in, pair_transition."""
 
-    def __init__(self, d_pair: int, intermediate_size: int) -> None:
+    def __init__(self, d_pair: int, intermediate_size: int, chunk_size: int | None = 64) -> None:
         super().__init__()
-        self.tri_mul_out = EsmFold2TriangleMultiplicativeUpdate(dim=d_pair, outgoing=True)
-        self.tri_mul_in = EsmFold2TriangleMultiplicativeUpdate(dim=d_pair, outgoing=False)
-        self.pair_transition = EsmFold2Transition(d_pair, intermediate_size)
+        self.tri_mul_out = EsmFold2TriangleMultiplicativeUpdate(dim=d_pair, outgoing=True, chunk_size=chunk_size)
+        self.tri_mul_in = EsmFold2TriangleMultiplicativeUpdate(dim=d_pair, outgoing=False, chunk_size=chunk_size)
+        self.pair_transition = EsmFold2Transition(d_pair, intermediate_size, chunk_size=chunk_size)
 
     def set_chunk_size(self, chunk_size: int | None) -> None:
         self.tri_mul_out.set_chunk_size(chunk_size)
@@ -1460,10 +1436,13 @@ class EsmFold2PairUpdateBlock(nn.Module):
 class EsmFold2FoldingTrunk(nn.Module):
     """ModuleList of PairUpdateBlocks."""
 
-    def __init__(self, n_layers: int, d_pair: int, intermediate_size: int) -> None:
+    def __init__(self, n_layers: int, d_pair: int, intermediate_size: int, chunk_size: int | None = 64) -> None:
         super().__init__()
         self.layers = nn.ModuleList(
-            [EsmFold2PairUpdateBlock(d_pair=d_pair, intermediate_size=intermediate_size) for _ in range(n_layers)]
+            [
+                EsmFold2PairUpdateBlock(d_pair=d_pair, intermediate_size=intermediate_size, chunk_size=chunk_size)
+                for _ in range(n_layers)
+            ]
         )
 
     def set_chunk_size(self, chunk_size: int | None) -> None:
@@ -1738,11 +1717,12 @@ class EsmFold2ConfidenceHead(nn.Module):
             n_layers=config.confidence_head_num_hidden_layers,
             d_pair=d_pair,
             intermediate_size=config.pair_transition_intermediate_size,
+            chunk_size=config.chunk_size,
         )
 
         # Heads.
         self.plddt_ln = EsmFold2LayerNorm(d_single)
-        max_atoms_per_token = 23
+        max_atoms_per_token = config.max_atoms_per_token
         self.plddt_weight = nn.Parameter(
             torch.zeros(max_atoms_per_token, d_single, config.confidence_head_num_plddt_bins)
         )
@@ -1998,15 +1978,27 @@ class EsmFold2MSAEncoderBlock(nn.Module):
         n_heads_msa = config.msa_encoder_num_attention_heads
         msa_head_width = config.msa_encoder_head_width
         self.is_final_block = is_final_block
-        self.outer_product_mean = EsmFold2OuterProductMean(d_msa, d_hidden, d_pair)
+        # Outer-product-mean chunking stays off by default (its chunked einsum is not bit-exact under
+        # bf16); enable it explicitly via ``set_chunk_size`` / the model ``chunk_size`` forward argument.
+        self.outer_product_mean = EsmFold2OuterProductMean(
+            d_msa, d_hidden, d_pair, divide_outer_before_proj=config.msa_encoder_divide_outer_before_proj
+        )
         if not is_final_block:
             self.msa_pair_weighted_averaging = EsmFold2MSAPairWeightedAveraging(
                 d_msa, d_pair, n_heads_msa, msa_head_width
             )
-            self.msa_transition = EsmFold2Transition(d_msa, config.msa_encoder_transition_intermediate_size)
-        self.tri_mul_out = EsmFold2TriangleMultiplicativeUpdate(dim=d_pair, outgoing=True)
-        self.tri_mul_in = EsmFold2TriangleMultiplicativeUpdate(dim=d_pair, outgoing=False)
-        self.pair_transition = EsmFold2Transition(d_pair, config.pair_transition_intermediate_size)
+            self.msa_transition = EsmFold2Transition(
+                d_msa, config.msa_encoder_transition_intermediate_size, chunk_size=config.chunk_size
+            )
+        self.tri_mul_out = EsmFold2TriangleMultiplicativeUpdate(
+            dim=d_pair, outgoing=True, chunk_size=config.chunk_size
+        )
+        self.tri_mul_in = EsmFold2TriangleMultiplicativeUpdate(
+            dim=d_pair, outgoing=False, chunk_size=config.chunk_size
+        )
+        self.pair_transition = EsmFold2Transition(
+            d_pair, config.pair_transition_intermediate_size, chunk_size=config.chunk_size
+        )
 
     def set_chunk_size(self, chunk_size: int | None) -> None:
         self.outer_product_mean.set_chunk_size(chunk_size)
@@ -2158,11 +2150,13 @@ class EsmFold2Model(EsmFold2PreTrainedModel):
             n_layers=config.folding_trunk_num_hidden_layers,
             d_pair=d_pair,
             intermediate_size=config.pair_transition_intermediate_size,
+            chunk_size=config.chunk_size,
         )
         self.lm_encoder = EsmFold2FoldingTrunk(
             n_layers=config.lm_encoder_num_hidden_layers,
             d_pair=d_pair,
             intermediate_size=config.pair_transition_intermediate_size,
+            chunk_size=config.chunk_size,
         )
 
         # parcae linear-recurrence params (allocated here; initialized in _init_weights):
@@ -2176,6 +2170,7 @@ class EsmFold2Model(EsmFold2PreTrainedModel):
             n_layers=config.parcae_num_coda_layers,
             d_pair=d_pair,
             intermediate_size=config.pair_transition_intermediate_size,
+            chunk_size=config.chunk_size,
         )
 
         # Heads --------------------------------------------------------------
@@ -2476,6 +2471,7 @@ class EsmFold2Model(EsmFold2PreTrainedModel):
         num_loops: int | None = None,
         num_diffusion_samples: int | None = None,
         num_sampling_steps: int | None = None,
+        chunk_size: int | None = None,
         **kwargs,
     ) -> EsmFold2Output:
         r"""
@@ -2536,7 +2532,15 @@ class EsmFold2Model(EsmFold2PreTrainedModel):
             Defaults to `config.num_diffusion_samples`.
         num_sampling_steps (`int`, *optional*):
             Number of diffusion sampling steps. Defaults to `config.structure_head_inference_num_steps`.
+        chunk_size (`int`, *optional*):
+            Override for `config.chunk_size`, the chunk size used by the memory-heavy pair-/MSA-stream ops.
+            When given, it is applied to the trunk/encoders for this and subsequent calls (`None` keeps the
+            configured value). Lower it to save memory on long sequences; pass `0` to disable chunking.
         """
+        if chunk_size is not None:
+            # Persisted onto the chunking submodules (mirrors the reference set_chunk_size knob); 0 disables.
+            self.set_chunk_size(chunk_size or None)
+
         tok_mask = token_attention_mask
         atm_mask = atom_attention_mask
         disto_idx = distogram_atom_idx

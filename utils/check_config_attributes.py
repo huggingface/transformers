@@ -167,7 +167,6 @@ SPECIAL_CASES_TO_ALLOW = {
     "EsmFoldConfig": ["esm_ablate_pairwise", "esm_ablate_sequence", "esm_input_dropout", "esm_type"],
     "TrunkConfig": ["cpu_grad_checkpoint", "layer_drop"],
     "EsmFold2Config": [
-        "type",
         "transition_expansion_ratio",
         "atom_encoder_expansion_ratio",
         "diffusion_atom_expansion_ratio",
