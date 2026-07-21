@@ -28,13 +28,19 @@ RUN git clone https://github.com/huggingface/transformers && cd transformers && 
 RUN [ ${#PYTORCH} -gt 0 ] && VERSION='torch=='$PYTORCH'.*' ||  VERSION='torch'; echo "export VERSION='$VERSION'" >> ~/.profile
 RUN echo torch=$VERSION
 # `torchvision` and `torchaudio` should be installed along with `torch`, especially for nightly build.
-# `torchaudio` MUST be pinned to the same version as `torch`: torchaudio ships a compiled C extension
-# (`_torchaudio.abi3.so`) built against one exact torch ABI, so a floating torchaudio can resolve to a
-# release built for a different torch and then fail to load with `OSError: ... _torchaudio.abi3.so:
-# undefined symbol`. Because `loss/loss_rnnt.py` is imported eagerly from `modeling_utils`, that OSError
-# breaks `import transformers` outright and takes down pytest collection for EVERY quantization job (see
-# the daily quantization CI collapse, Jul 2026). This mirrors the `torchaudio==${PYTORCH}.*` pin already
-# used in transformers-all-latest-gpu.
+# `torchaudio` is pinned to the same version as `torch`: torchaudio ships a compiled C extension
+# (`_torchaudio.abi3.so`) built against one exact torch ABI, so a floating/mismatched torchaudio fails to
+# load with `OSError: ... _torchaudio.abi3.so: undefined symbol`. (transformers now imports torchaudio
+# lazily -- see loss/loss_rnnt.py -- so a mismatch no longer breaks `import transformers`, but it would
+# still leave torchaudio unusable and broke the daily quantization CI in Jul 2026. Keep them matched.)
+# Mirrors the `torchaudio==${PYTORCH}.*` pin in transformers-all-latest-gpu.
+#
+# TODO(torchaudio-cap): torchaudio 2.11 is the LAST release -- pytorch/audio has stopped publishing (I/O
+# moved to TorchCodec, see https://github.com/pytorch/audio/issues/3902). 2.11 is marked compatible with
+# future torch, but there is no torchaudio > 2.11, so `torchaudio==${PYTORCH}.*` resolves only while
+# PYTORCH <= 2.11; the next bump past 2.11 fails here with "no matching distribution". At that point this
+# pin (and the torchaudio-backed RNN-T path in loss/loss_rnnt.py) needs a new plan -- cap torchaudio at
+# 2.11, or drop the torchaudio dependency.
 RUN [ ${#PYTORCH} -gt 0 ] && TORCHAUDIO='torchaudio=='$PYTORCH'.*' || TORCHAUDIO='torchaudio'; \
     python3 -m pip install --no-cache-dir -U $VERSION torchvision $TORCHAUDIO --extra-index-url https://download.pytorch.org/whl/$CUDA
 
@@ -92,12 +98,17 @@ RUN cd transformers && python3 setup.py develop
 # Add fouroversix for quantization testing.
 # fouroversix only publishes prebuilt wheels for specific torch versions (e.g. cu12torch2.8); for other
 # torch versions (like the 2.11 pinned above) its installer 404s on the wheel URL and falls back to a
-# from-source CUDA build. There is no GPU in the image builder, so torch's arch auto-detection returns
-# an empty list and crashes with `IndexError: list index out of range` in `_get_cuda_arch_flags`.
-# `TORCH_CUDA_ARCH_LIST` supplies the target arches explicitly so the source build succeeds: 8.0 (A100),
-# 8.6 (A10G, the aws-g5 quant CI runner), 9.0 (H100). Drop this once upstream ships a matching wheel.
-RUN python3 -m pip install --no-cache-dir --upgrade setuptools wheel
-RUN TORCH_CUDA_ARCH_LIST="8.0 8.6 9.0" python3 -m pip install --no-cache-dir "fouroversix>=1.0.2" --no-build-isolation
+# from-source CUDA build. Two things are needed for that source build to succeed and finish quickly:
+#   1. `TORCH_CUDA_ARCH_LIST`: there is no GPU in the image builder, so torch's arch auto-detection
+#      returns an empty list and crashes with `IndexError: list index out of range` in
+#      `_get_cuda_arch_flags`. We target only `8.6+PTX` -- the quant CI runs exclusively on aws-g5
+#      (A10G, sm_86); `+PTX` keeps it forward-compatible on newer GPUs via JIT. Building every arch
+#      would multiply compile time for hardware this image never runs on.
+#   2. `ninja`: without it torch falls back to a serial compile that takes 30+ min; ninja parallelizes
+#      across all cores. It is not otherwise guaranteed to be present in this image, so install it here.
+# Drop this whole block back to a plain `pip install` once upstream ships a matching torch wheel.
+RUN python3 -m pip install --no-cache-dir --upgrade setuptools wheel ninja
+RUN TORCH_CUDA_ARCH_LIST="8.6+PTX" python3 -m pip install --no-cache-dir "fouroversix>=1.0.2" --no-build-isolation
 
 # Add fp-quant for quantization testing
 RUN python3 -m pip install --no-cache-dir "fp-quant>=0.3.2"

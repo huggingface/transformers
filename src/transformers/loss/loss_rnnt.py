@@ -19,19 +19,6 @@ from ..utils import is_torchaudio_available, logging
 
 logger = logging.get_logger(__name__)
 
-# This module is imported eagerly from `modeling_utils` (via `loss_utils`), so its top-level imports run
-# during `import transformers`. `is_torchaudio_available()` only confirms the distribution is installed; a
-# torchaudio whose compiled extension was built against a different torch ABI is "available" yet raises
-# `OSError` on import. Guarding the import here keeps a broken torchaudio from taking down `import
-# transformers` entirely (and, in CI, breaking pytest collection for the whole suite). `rnnt_loss` reports
-# the failure clearly if it is actually called.
-torchaudio = None
-if is_torchaudio_available():
-    try:
-        import torchaudio
-    except OSError as e:
-        logger.warning(f"torchaudio is installed but could not be imported ({e}); RNN-T loss is unavailable.")
-
 
 def rnnt_loss(
     logits: torch.Tensor,
@@ -69,11 +56,22 @@ def rnnt_loss(
 
     """
 
-    if torchaudio is None:
-        raise ImportError(
-            "Computing the RNN-T loss requires a working torchaudio install. Install it with "
-            "`pip install torchaudio`, ensuring the torchaudio version matches your installed torch."
-        )
+    # Import torchaudio lazily rather than at module scope: this module is imported eagerly from
+    # `modeling_utils`, so a top-level `import torchaudio` would run during `import transformers`. A
+    # torchaudio built against a different torch ABI raises `OSError` on import; keeping the import here
+    # means that only surfaces if the RNN-T loss is actually used, at the call site -- it does not break
+    # `import transformers` for every user. We deliberately do not catch that OSError: an ABI-mismatched
+    # install is an environment problem, not something this library should silently mask.
+    #
+    # TODO(torchaudio-cap): torchaudio 2.11 is the last release -- pytorch/audio has stopped publishing
+    # (I/O moved to TorchCodec, see https://github.com/pytorch/audio/issues/3902). 2.11 is marked
+    # compatible with future torch, but there is no torchaudio > 2.11, so once torch moves past 2.11 this
+    # torchaudio-backed RNN-T path will need a different backend (or to be dropped). The docker pins that
+    # keep torchaudio matched to torch (e.g. transformers-quantization-latest-gpu) have the same horizon.
+    if not is_torchaudio_available():
+        raise ImportError("Computing the RNN-T loss requires torchaudio. Install it with `pip install torchaudio`.")
+
+    import torchaudio
 
     valid_reductions = ("mean_volume", "mean_batch", "mean", "sum", "none")
     if reduction not in valid_reductions:
