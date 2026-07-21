@@ -49,6 +49,7 @@ from .generic import (
     TensorType,
     TransformersKwargs,
     _is_tensor_or_array_like,
+    add_metadata,
     can_return_loss,
     can_return_tuple,
     expand_dims,

@@ -2,8 +2,10 @@ import torch
 
 from ..generation.continuous_batching import PagedAttentionCache
 from ..modeling_flash_attention_utils import lazy_import_paged_flash_attention
+from ..utils import add_metadata
 
 
+@add_metadata(requires_equal_head_dims=True)
 def paged_attention_forward(
     module: torch.nn.Module,
     q: torch.Tensor,

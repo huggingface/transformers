@@ -42,7 +42,7 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
-from ...utils.generic import is_flash_attention_requested, maybe_autocast, merge_with_config_defaults
+from ...utils.generic import maybe_autocast, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from .configuration_mistral4 import Mistral4Config
 
@@ -474,12 +474,15 @@ class Mistral4Attention(nn.Module):
         if past_key_values is not None:
             key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
 
-        if is_flash_attention_requested(self.config) and self.qk_head_dim != self.v_head_dim:
-            value_states = F.pad(value_states, [0, self.qk_head_dim - self.v_head_dim])
-
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
         )
+
+        pad_head_dims = (
+            getattr(attention_interface, "requires_equal_head_dims", False) and self.qk_head_dim != self.v_head_dim
+        )
+        if pad_head_dims:
+            value_states = F.pad(value_states, [0, self.qk_head_dim - self.v_head_dim])
 
         attn_output, attn_weights = attention_interface(
             self,
@@ -492,7 +495,7 @@ class Mistral4Attention(nn.Module):
             **kwargs,
         )
 
-        if is_flash_attention_requested(self.config) and self.qk_head_dim != self.v_head_dim:
+        if pad_head_dims:
             attn_output = attn_output[:, :, :, : self.v_head_dim]
 
         attn_output = attn_output.reshape(batch_size, seq_length, -1).contiguous()

@@ -1,7 +1,7 @@
 import torch
 
 from ..modeling_flash_attention_utils import _flash_attention_forward, flash_attn_supports_top_left_mask
-from ..utils import logging
+from ..utils import add_metadata, logging
 
 
 logger = logging.get_logger(__name__)
@@ -23,6 +23,7 @@ def get_target_dtype(query: torch.Tensor, module: torch.nn.Module) -> torch.dtyp
     return None
 
 
+@add_metadata(requires_equal_head_dims=True)
 def flash_attention_forward(
     module: torch.nn.Module,
     query: torch.Tensor,
