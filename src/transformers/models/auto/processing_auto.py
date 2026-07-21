@@ -57,8 +57,6 @@ else:
             ("groupvit", "CLIPProcessor"),
             ("hubert", "Wav2Vec2Processor"),
             ("inkling_mm_model", "InklingProcessor"),
-            ("kosmos-2", "Kosmos2Processor"),
-            ("kosmos-2.5", "Kosmos2_5Processor"),
             ("lasr_ctc", "LasrProcessor"),
             ("lasr_encoder", "LasrProcessor"),
             ("metaclip_2", "CLIPProcessor"),
