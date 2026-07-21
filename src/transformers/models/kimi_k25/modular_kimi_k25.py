@@ -33,7 +33,7 @@ from ...utils import (
     logging,
     torch_compilable_check,
 )
-from ...utils.generic import is_flash_attention_requested, maybe_autocast
+from ...utils.generic import get_max_seqlen, is_flash_attention_requested, maybe_autocast
 from ...utils.output_capturing import capture_outputs
 from ...vision_utils import get_vision_position_ids
 from ..auto import CONFIG_MAPPING, AutoConfig, AutoModel
@@ -245,6 +245,7 @@ class Kimi_K25VisionAttention(VisionAttention):
         hidden_states: torch.Tensor,
         cu_seqlens: torch.Tensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
+        max_seqlen: int | None = None,
         **kwargs,
     ) -> torch.Tensor:
         seq_length = hidden_states.shape[0]
@@ -266,7 +267,7 @@ class Kimi_K25VisionAttention(VisionAttention):
 
         if is_flash_attention_requested(self.config):
             # Flash Attention: Use cu_seqlens for variable length attention
-            max_seqlen = (cu_seqlens[1:] - cu_seqlens[:-1]).max()
+            max_seqlen = get_max_seqlen(cu_seqlens, self.config, kwargs={"max_seqlen": max_seqlen})
             attn_output, _ = attention_interface(
                 self,
                 query_states,
@@ -418,8 +419,8 @@ class Kimi_K25VisionModel(Kimi_K25PreTrainedModel):
             )
         )
 
-        max_seqlen = lengths.max()
         cu_seqlens = lengths.cumsum(dim=0, dtype=torch.int32)
+        max_seqlen = get_max_seqlen(cu_seqlens, self.config, kwargs=kwargs)
 
         for block in self.layers:
             hidden_states = block(

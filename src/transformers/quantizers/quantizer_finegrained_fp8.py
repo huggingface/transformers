@@ -153,6 +153,12 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
                 module = model.get_submodule(module_name)
                 scale = getattr(module, attr)
                 setattr(module, attr, torch.nn.Parameter(scale.data.to(ue8m0), requires_grad=False))
+
+        # Single-process multi-device is unsafe for DeepGEMM (its kernels are bound to one CUDA
+        # context); route those models through Triton/grouped_mm instead.
+        from ..integrations.finegrained_fp8 import _disable_deepgemm_on_multi_device
+
+        _disable_deepgemm_on_multi_device(model)
         return model
 
     def update_tp_plan(self, config):
