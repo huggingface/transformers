@@ -106,9 +106,9 @@ class MiniCPMV4_6ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         inputs = processor(text=text, videos=video_input, do_sample_frames=False, return_tensors="pt")
 
-        self.assertListEqual(list(inputs["input_ids"].shape), [2, 324])
+        self.assertListEqual(list(inputs["input_ids"].shape), [2, 54])
         self.assertIsInstance(inputs["pixel_values_videos"], torch.Tensor)
-        self.assertListEqual(list(inputs["pixel_values_videos"].shape), [1, 3, 14, 72576])
+        self.assertListEqual(list(inputs["pixel_values_videos"].shape), [1, 3, 14, 8064])
         self.assertIn("target_sizes_videos", inputs)
 
     def test_text_only_processing(self):
