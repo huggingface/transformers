@@ -16,6 +16,8 @@
 import copy
 import unittest
 
+from parameterized import parameterized
+
 from transformers import MoonshineConfig, is_torch_available
 from transformers.testing_utils import Expectations, cleanup, require_torch, slow, torch_device
 
@@ -452,6 +454,13 @@ class MoonshineModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
                 inputs_dict["decoder_input_ids"].clamp_(max=model_vocab_size - 15 - 1)
             # Check that the model can still do a forward pass successfully (every parameter should be resized)
             model(**self._prepare_for_class(inputs_dict, model_class))
+
+    @parameterized.expand([("linear",), ("dynamic",), ("yarn",)])
+    @unittest.skip(
+        "Model expects decoder inputs to be of certain shape and thus we cannot test scaling with long inputs"
+    )
+    def test_model_rope_scaling_from_config(self, scaling_type):
+        pass
 
 
 @require_torch

@@ -5758,6 +5758,15 @@ class ModelTesterMixin:
         if not hasattr(text_config, "vocab_size"):
             self.skipTest("This model has no vocab size defined and the test doesn't yet support non-text modalities.")
 
+        n_required_args = sum(
+            p.default is inspect.Parameter.empty
+            and p.kind in (p.POSITIONAL_OR_KEYWORD, p.KEYWORD_ONLY, p.POSITIONAL_ONLY)
+            and p.name != "self"
+            for p in inspect.signature(base_model_class.forward).parameters.values()
+        )
+        if n_required_args > 1:
+            self.skipTest("This model requires more than single main input, skip for now as it's not supported")
+
         short_input = ids_tensor([1, 10], text_config.vocab_size)
         long_input = ids_tensor([1, int(text_config.max_position_embeddings * 1.5)], text_config.vocab_size)
         short_model_kwargs = long_model_kwargs = {}
@@ -5841,11 +5850,16 @@ class ModelTesterMixin:
         ]
         rope_class = None
         for name, module in base_model.named_modules():
-            # FIXME: raushan, vision RoPE layers are not standard and can't be tested here
-            # thus skip if modules doesn't operate on config. See https://github.com/huggingface/transformers/issues/46443
-            if any(potential_name in name for potential_name in possible_rope_attributes) and (
-                len(params := list(inspect.signature(module.__init__).parameters.values())) > 1
-                and params[0].name == "config"
+            if (
+                any(potential_name in name for potential_name in possible_rope_attributes)
+                # skip if module doesn't accept config - old API/model
+                and (
+                    len(params := list(inspect.signature(module.__init__).parameters.values())) > 1
+                    and params[0].name == "config"
+                )
+                # FIXME: raushan, vision RoPE layers are not standard and can't be tested here
+                # thus skip if modules doesn't operate on config. See https://github.com/huggingface/transformers/issues/46443
+                and "Vision" not in module.__class__.__name__
             ):
                 rope_class = type(module)
                 break
@@ -6104,12 +6118,13 @@ def _set_config_rope_params(config: PreTrainedConfig, rope_params: dict) -> bool
     config.rope_parameters = getattr(config, "rope_parameters", {}) or {}
 
     # Nested rope parameters per layer type, not all models with `layer-types` use different RoPE thus we check `issubset`
-    if getattr(config, "layer_types", None) is not None and set(config.rope_parameters.keys()).issubset(
-        config.layer_types
-    ):
-        for layer_type in config.layer_types:
-            config.rope_parameters.setdefault(layer_type, {})
-            config.rope_parameters[layer_type].update(rope_params)
+    layer_types = getattr(config, "_rope_type_labels", getattr(config, "layer_types", None))
+    if layer_types is not None and set(config.rope_parameters.keys()).issubset(layer_types):
+        for layer_type in layer_types:
+            # Don't update gemma4 proportional rope, it is quite special and return `dim // 4` freqs
+            if config.rope_parameters[layer_type].get("rope_type") != "proportional":
+                config.rope_parameters.setdefault(layer_type, {})
+                config.rope_parameters[layer_type].update(rope_params)
     else:
         config.rope_parameters.update(rope_params)
 

@@ -19,6 +19,7 @@ import tempfile
 import unittest
 
 import pytest
+from parameterized import parameterized
 
 from transformers.models.dia import DiaConfig, DiaDecoderConfig, DiaEncoderConfig
 from transformers.testing_utils import (
@@ -521,6 +522,13 @@ class DiaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
 
     @unittest.skip(reason="Encoder-Decoder cache can not be initialized.")
     def test_multi_gpu_data_parallel_forward(self):
+        pass
+
+    @parameterized.expand([("linear",), ("dynamic",), ("yarn",)])
+    @unittest.skip(
+        "Model expects decoder inputs to be of certain shape and thus we cannot test scaling with long inputs"
+    )
+    def test_model_rope_scaling_from_config(self, scaling_type):
         pass
 
 
