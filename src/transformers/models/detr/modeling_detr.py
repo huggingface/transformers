@@ -57,10 +57,6 @@ logger = logging.get_logger(__name__)
 @dataclass
 class DetrDecoderOutput(BaseModelOutputWithCrossAttentions):
     r"""
-    cross_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` and `config.add_cross_attention=True` is passed or when `config.output_attentions=True`):
-        Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-        sequence_length)`. Attentions weights of the decoder's cross-attention layer, after the attention softmax,
-        used to compute the weighted average in the cross-attention heads.
     intermediate_hidden_states (`torch.FloatTensor` of shape `(config.decoder_layers, batch_size, num_queries, hidden_size)`, *optional*, returned when `config.auxiliary_loss=True`):
         Intermediate decoder activations, i.e. the output of each decoder layer, each of them gone through a
         layernorm.
@@ -79,8 +75,6 @@ class DetrDecoderOutput(BaseModelOutputWithCrossAttentions):
 @dataclass
 class DetrModelOutput(Seq2SeqModelOutput):
     r"""
-    last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
-        Sequence of hidden-states at the output of the last layer of the decoder of the model.
     intermediate_hidden_states (`torch.FloatTensor` of shape `(config.decoder_layers, batch_size, sequence_length, hidden_size)`, *optional*, returned when `config.auxiliary_loss=True`):
         Intermediate decoder activations, i.e. the output of each decoder layer, each of them gone through a
         layernorm.
@@ -98,7 +92,7 @@ class DetrModelOutput(Seq2SeqModelOutput):
 class DetrObjectDetectionOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` are provided)):
-        Total loss as a linear combination of a negative log-likehood (cross-entropy) for class prediction and a
+        Total loss as a linear combination of a negative log-likelihood (cross-entropy) for class prediction and a
         bounding box loss. The latter is defined as a linear combination of the L1 loss and the generalized
         scale-invariant IoU loss.
     loss_dict (`Dict`, *optional*):
@@ -141,7 +135,7 @@ class DetrObjectDetectionOutput(ModelOutput):
 class DetrSegmentationOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` are provided)):
-        Total loss as a linear combination of a negative log-likehood (cross-entropy) for class prediction and a
+        Total loss as a linear combination of a negative log-likelihood (cross-entropy) for class prediction and a
         bounding box loss. The latter is defined as a linear combination of the L1 loss and the generalized
         scale-invariant IoU loss.
     loss_dict (`Dict`, *optional*):
@@ -330,10 +324,23 @@ class DetrSinePositionEmbedding(nn.Module):
         temperature: int = 10000,
         mask: torch.Tensor | None = None,
     ) -> torch.Tensor:
+        batch_size, _, height, width = shape
         if mask is None:
-            mask = torch.ones((shape[0], shape[2], shape[3]), device=device, dtype=torch.bool)
-        y_embed = mask.cumsum(1, dtype=dtype)
-        x_embed = mask.cumsum(2, dtype=dtype)
+            # Without a mask this is just a cumsum over ones, written out as arange
+            # instead: inductor's cumsum(ones) rewrite drops the requested dtype
+            # (https://github.com/pytorch/pytorch/issues/189518), which breaks
+            # float16/bfloat16 under torch.compile — don't revert to cumsum here
+            # until that fix is widely released.
+            y_embed = torch.arange(1, height + 1, dtype=dtype, device=device)[None, :, None].expand(
+                batch_size, height, width
+            )
+            x_embed = torch.arange(1, width + 1, dtype=dtype, device=device)[None, None, :].expand(
+                batch_size, height, width
+            )
+        else:
+            embed_mask = mask.to(dtype)
+            y_embed = embed_mask.cumsum(1)
+            x_embed = embed_mask.cumsum(2)
         if normalize:
             eps = 1e-6
             y_embed = y_embed / (y_embed[:, -1:, :] + eps) * scale
@@ -903,7 +910,7 @@ class DetrPreTrainedModel(PreTrainedModel):
 
     @torch.no_grad()
     def _init_weights(self, module):
-        std = self.config.init_std
+        super()._init_weights(module)
         xavier_std = self.config.init_xavier_std
 
         if isinstance(module, DetrMaskHeadSmallConv):
@@ -921,18 +928,6 @@ class DetrPreTrainedModel(PreTrainedModel):
         elif isinstance(module, DetrLearnedPositionEmbedding):
             init.uniform_(module.row_embeddings.weight)
             init.uniform_(module.column_embeddings.weight)
-        elif isinstance(module, (nn.Linear, nn.Conv2d)):
-            init.normal_(module.weight, mean=0.0, std=std)
-            if module.bias is not None:
-                init.zeros_(module.bias)
-        elif isinstance(module, nn.Embedding):
-            init.normal_(module.weight, mean=0.0, std=std)
-            # Here we need the check explicitly, as we slice the weight in the `zeros_` call, so it looses the flag
-            if module.padding_idx is not None and not getattr(module.weight, "_is_hf_initialized", False):
-                init.zeros_(module.weight[module.padding_idx])
-        elif isinstance(module, (nn.LayerNorm, nn.GroupNorm)):
-            init.ones_(module.weight)
-            init.zeros_(module.bias)
 
 
 class DetrEncoder(DetrPreTrainedModel):

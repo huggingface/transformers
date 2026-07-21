@@ -191,10 +191,10 @@ class DeepseekV4HCACache(DynamicSlidingWindowLayer):
         `position_ids` so prefill -> decode -> prefill stays consistent.
     """
 
-    layer_type = "heavily_compressed_attention"
+    _layer_type = "heavily_compressed_attention"
 
-    def __init__(self, config: "DeepseekV4Config"):
-        super().__init__(config)
+    def __init__(self, config: "DeepseekV4Config", **kwargs):
+        super().__init__(sliding_window=config.sliding_window)
         self.compress_rate = config.compress_rates["heavily_compressed_attention"]
         self.buffer_kv: dict[str, torch.Tensor | None] = {"compressor": None}
         self.buffer_gate: dict[str, torch.Tensor | None] = {"compressor": None}
@@ -271,9 +271,9 @@ class DeepseekV4CSACache(DeepseekV4HCACache):
     again. That's what `overlap_kv[name]` / `overlap_gate[name]` persist.
     """
 
-    layer_type = "compressed_sparse_attention"
+    _layer_type = "compressed_sparse_attention"
 
-    def __init__(self, config: "DeepseekV4Config"):
+    def __init__(self, config: "DeepseekV4Config", **kwargs):
         super().__init__(config)
         self.compress_rate = config.compress_rates["compressed_sparse_attention"]
         self.buffer_kv["indexer"] = None
@@ -573,7 +573,7 @@ class DeepseekV4Indexer(nn.Module):
         # to compressed key at position 4, because it compressed info for states at position
         # 12 to 16. Thus we need to make sure that top_k does not land in that range.
         # Picks that still point past `causal_threshold` (early queries with too few ready
-        # blocks) are replaced with a `-1` sentinel that the compresser treats as invalid.
+        # blocks) are replaced with a `-1` sentinel that the compressor treats as invalid.
         if compressed_len > 0:
             causal_threshold = (position_ids + 1) // self.compress_rate  # [B, S]
             entry_indices = torch.arange(compressed_len, device=index_scores.device)
@@ -1295,13 +1295,12 @@ class DeepseekV4Model(DeepseekV4PreTrainedModel):
     ) -> MoeModelOutputWithPast:
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
-        return_cache = past_key_values if use_cache else None
-        if past_key_values is None:
+        if use_cache and past_key_values is None:
             past_key_values = DynamicCache(config=self.config)
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
         if position_ids is None:
-            past_seen = past_key_values.get_seq_length()
+            past_seen = past_key_values.get_seq_length() if past_key_values is not None else 0
             position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen
             position_ids = position_ids.unsqueeze(0)
             # `generate()` may pass a per-layer-type mask dict already built by
@@ -1335,7 +1334,7 @@ class DeepseekV4Model(DeepseekV4PreTrainedModel):
             )
 
         hidden_states = self.norm(self.hc_head(hidden_states))
-        return MoeModelOutputWithPast(last_hidden_state=hidden_states, past_key_values=return_cache)
+        return MoeModelOutputWithPast(last_hidden_state=hidden_states, past_key_values=past_key_values)
 
 
 def load_balancing_loss_func(

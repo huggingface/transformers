@@ -744,6 +744,7 @@ class PPDocLayoutV2PreTrainedModel(PreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
+        super()._init_weights(module)
         if isinstance(module, PPDocLayoutV2ForObjectDetection):
             if module.model.decoder.class_embed is not None:
                 for layer in module.model.decoder.class_embed:
@@ -786,7 +787,7 @@ class PPDocLayoutV2PreTrainedModel(PreTrainedModel):
             init.xavier_uniform_(module.enc_score_head.weight)
             init.constant_(module.enc_score_head.bias, bias)
 
-        elif isinstance(module, (nn.Linear, nn.Conv2d, nn.BatchNorm2d)):
+        elif isinstance(module, nn.BatchNorm2d):
             init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
                 init.zeros_(module.bias)
@@ -795,20 +796,12 @@ class PPDocLayoutV2PreTrainedModel(PreTrainedModel):
                 init.ones_(module.running_var)
                 init.zeros_(module.num_batches_tracked)
 
-        elif isinstance(module, nn.LayerNorm):
-            init.ones_(module.weight)
-            init.zeros_(module.bias)
-
         if hasattr(module, "weight_embedding") and self.config.learn_initial_query:
             init.xavier_uniform_(module.weight_embedding.weight)
         if hasattr(module, "denoising_class_embed") and self.config.num_denoising > 0:
             init.xavier_uniform_(module.denoising_class_embed.weight)
         if isinstance(module, PPDocLayoutV2TextEmbeddings):
             init.copy_(module.position_ids, torch.arange(module.position_ids.shape[-1]).expand((1, -1)))
-        if isinstance(module, nn.Embedding):
-            init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
-            if module.padding_idx is not None:
-                init.zeros_(module.weight.data[module.padding_idx])
         if isinstance(module, PPDocLayoutV2PositionRelationEmbedding):
             inv_freq, _ = module.compute_default_rope_parameters(module.config, module.inv_freq.device)
             module.register_buffer("inv_freq", inv_freq, persistent=False)
@@ -2233,7 +2226,7 @@ class PPDocLayoutV2Model(PPDocLayoutV2PreTrainedModel):
         # Lowest resolution feature maps are obtained via 3x3 stride 2 convolutions on the final stage
         if self.config.num_feature_levels > len(sources):
             _len_sources = len(sources)
-            sources.append(self.decoder_input_proj[_len_sources](encoder_outputs.last_hidden_state)[-1])
+            sources.append(self.decoder_input_proj[_len_sources](encoder_outputs.last_hidden_state[-1]))
             for i in range(_len_sources + 1, self.config.num_feature_levels):
                 sources.append(self.decoder_input_proj[i](encoder_outputs.last_hidden_state[-1]))
 
@@ -2482,7 +2475,7 @@ class PPDocLayoutV2ForObjectDetection(PPDocLayoutV2PreTrainedModel):
         thresholds = class_thresholds[class_ids]
         mask = max_probs >= thresholds
 
-        indices = torch.argsort(mask.to(torch.int8), dim=1, descending=True)
+        indices = torch.argsort(mask.int(), dim=1, descending=True)
 
         sorted_class_ids = torch.take_along_dim(class_ids, indices, dim=1)
         sorted_boxes = torch.take_along_dim(bboxes, indices[..., None].expand(-1, -1, 4), dim=1)

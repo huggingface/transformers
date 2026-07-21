@@ -13,6 +13,7 @@
 # limitations under the License.
 """Testing suite for the PyTorch GlmMoeDsa model."""
 
+import os
 import unittest
 
 import torch
@@ -27,6 +28,7 @@ from transformers import (
     is_torch_available,
     set_seed,
 )
+from transformers.distributed import DistributedConfig
 from transformers.testing_utils import (
     require_torch,
     require_torch_accelerator,
@@ -147,8 +149,8 @@ class GlmMoeDsaModelTest(CausalLMModelTest, unittest.TestCase):
     def test_flash_attn_2_inference_equivalence_right_padding(self):
         self.skipTest(reason="Qwen2Moe flash attention does not support right padding")
 
-    @unittest.skip("DSA indexer mask shape mismatch with assisted decoding")
     @parameterized.expand([("random",), ("same",)])
+    @unittest.skip("DSA indexer mask shape mismatch with assisted decoding")
     def test_assisted_decoding_matches_greedy_search(self, assistant_type):
         pass
 
@@ -204,7 +206,7 @@ class GlmMoeDsaIntegrationTest(unittest.TestCase):
         model = AutoModelForCausalLM.from_pretrained(
             model_id,
             quantization_config=quantization_config,
-            tp_plan="auto",
+            distributed_config=DistributedConfig(tp_size=int(os.environ["WORLD_SIZE"])),
             attn_implementation="eager",
         )
 

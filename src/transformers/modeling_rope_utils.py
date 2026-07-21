@@ -107,7 +107,7 @@ def dynamic_rope_update(rope_forward):
             )
             # TODO joao: may break with compilation
             self.register_buffer(f"{prefix}inv_freq", inv_freq, persistent=False)
-            setattr(self, f"{layer_type}_max_seq_len_cached", seq_len)
+            setattr(self, f"{prefix}max_seq_len_cached", seq_len)
 
         if seq_len < self.original_max_seq_len and max_seq_len_cached > self.original_max_seq_len:  # reset
             # This .to() is needed if the model has been moved to a device after being initialized (because
@@ -115,7 +115,7 @@ def dynamic_rope_update(rope_forward):
             original_inv_freq = original_inv_freq.to(device)
             self.register_buffer(f"{prefix}inv_freq", original_inv_freq, persistent=False)
             setattr(self, f"{prefix}original_inv_freq", original_inv_freq)
-            setattr(self, f"{layer_type}_max_seq_len_cached", self.original_max_seq_len)
+            setattr(self, f"{prefix}max_seq_len_cached", self.original_max_seq_len)
 
     @wraps(rope_forward)
     def wrapper(self, x, position_ids, layer_type=None):
@@ -353,7 +353,7 @@ def _compute_yarn_parameters(
                     (only) in the linear ramp function.
                 *   `factor` (`float`, *optional*): The scaling factor applied when interpolating the position IDs to
                     extend the possible context length. Additionally, if `attention_factor` is None, the log of this
-                    value is used to compute a value for `attention_factor`, possibly in conjunciton with `mscale` and
+                    value is used to compute a value for `attention_factor`, possibly in conjunction with `mscale` and
                     `mscale_all_dim`, if provided.
                 *   `mscale` (`float`, *optional*): If `attention_factor` is None and both `mscale` and
                     `mscale_all_dim` are provided, `mscale` acts scalar augmenting `log(factor)` when computing the
@@ -994,7 +994,7 @@ class RotaryEmbeddingConfigMixin:
             logger.warning(
                 "`rope_parameters`'s partial_rotary_factor is None. This will default to 1.0 in the computation, "
                 "making this equivalent to the linear_scaling RoPE type. Provide a value in the range [0.0, 1.0) to "
-                "make use of the proportional RoPE funcitonality."
+                "make use of the proportional RoPE functionality."
             )
 
     @staticmethod

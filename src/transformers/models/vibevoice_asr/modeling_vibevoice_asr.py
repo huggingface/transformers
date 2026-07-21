@@ -31,6 +31,7 @@ from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPool
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, is_torchdynamo_compiling
+from ...utils.deprecation import deprecate_kwarg
 from ..auto import AutoModel
 from .configuration_vibevoice_asr import VibeVoiceAsrConfig
 
@@ -316,6 +317,7 @@ class VibeVoiceAsrModel(VibeVoiceAsrPreTrainedModel):
     def set_input_embeddings(self, value):
         self.language_model.set_input_embeddings(value)
 
+    @deprecate_kwarg("acoustic_tokenizer_chunk_size", version="v5.20")
     @can_return_tuple
     @auto_docstring(custom_intro="Encode audio into embeddings that can be used by the language model.")
     def get_audio_features(
@@ -387,6 +389,7 @@ class VibeVoiceAsrModel(VibeVoiceAsrPreTrainedModel):
 
         return BaseModelOutputWithPooling(last_hidden_state=acoustic_latents, pooler_output=combined_features)
 
+    @deprecate_kwarg("acoustic_tokenizer_chunk_size", version="v5.20")
     @can_return_tuple
     @auto_docstring
     def forward(
@@ -453,6 +456,7 @@ class VibeVoiceAsrForConditionalGeneration(VibeVoiceAsrPreTrainedModel, Generati
     def get_audio_features(self, *args, **kwargs):
         return self.model.get_audio_features(*args, **kwargs)
 
+    @deprecate_kwarg("acoustic_tokenizer_chunk_size", version="v5.20")
     @can_return_tuple
     @auto_docstring
     def forward(
