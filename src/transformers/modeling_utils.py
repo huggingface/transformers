@@ -16,6 +16,7 @@ import collections
 import copy
 import functools
 import inspect
+import json
 import os
 import re
 import sys
@@ -54,7 +55,6 @@ from .distributed import DistributedConfig
 from .distributed.fsdp import is_fsdp_managed_module
 from .distributed.mixin import DistributedMixin
 from .distributed.utils import (
-    _distributed_barrier,
     _get_torch_distributed_world_size,
     _is_torch_distributed_initialized,
     is_local_dist_rank_0,
@@ -84,6 +84,7 @@ from .integrations.sdpa_attention import sdpa_attention_forward
 from .integrations.sdpa_paged import sdpa_attention_paged_forward
 from .integrations.tensor_parallel import (
     _get_parameter_tp_plan,
+    gather_state_dict_for_save,
     shard_and_distribute_module,
     verify_tp_plan,
 )
@@ -3346,9 +3347,8 @@ class PreTrainedModel(
                 its reverse mapping. The reverse mapping needs to exists even if the model was loaded from a None legacy
                 checkpoint.
             distributed_checkpoint (`bool`, *optional*, defaults to `False`):
-                When saving an FSDP-wrapped model, use the distributed checkpoint (DCP) path instead of gathering weights
-                to CPU first. Every rank must call this method; rank 0 writes the consolidated Hugging Face safetensors.
-                When `False`, FSDP weights are gathered to CPU on rank 0 via `gather_full_state_dict` before writing.
+                When saving an FSDP-wrapped model, set this to `True` to use the distributed checkpoint (DCP) path.
+                Every rank must call this method; rank 0 writes the consolidated Hugging Face safetensors.
                 Native FSDP requires `torch>=2.7`.
             kwargs (`dict[str, Any]`, *optional*):
                 Additional key word arguments passed along to the [`~utils.PushToHubMixin.push_to_hub`] method.
@@ -3465,17 +3465,15 @@ class PreTrainedModel(
             )
             return
 
-        needs_dist_barrier = False
+        if is_fsdp_managed_module(model_to_save):
+            raise ValueError(
+                "FSDP-wrapped models require save_pretrained(..., distributed_checkpoint=True). "
+                "All ranks must call this method."
+            )
+
         # Get the model state_dict
         if state_dict is None:
             state_dict = model_to_save.state_dict()
-
-        if self._tp_size is not None:
-            state_dict, needs_dist_barrier = self._gather_tp_state_dict_for_save(
-                state_dict, is_checkpoint_writer=save_on_this_rank
-            )
-        elif is_fsdp_managed_module(model_to_save):
-            state_dict, needs_dist_barrier = self._gather_fsdp_state_dict_for_save(model_to_save)
 
         # if any model parameters are offloaded, we need to know it for later
         is_offloaded = False
@@ -3500,6 +3498,10 @@ class PreTrainedModel(
             for ignore_key in self._keys_to_ignore_on_save:
                 if ignore_key in state_dict:
                     del state_dict[ignore_key]
+
+        # If model was sharded with TP, gather full tensors for saving
+        if self._tp_size is not None:
+            state_dict = gather_state_dict_for_save(state_dict, self._tp_plan, self._device_mesh, self._tp_size)
 
         # Remove tied weights as safetensors do not handle them
         state_dict = remove_tied_weights_from_state_dict(state_dict, model_to_save)
@@ -3598,14 +3600,29 @@ class PreTrainedModel(
                 # Cleanup the data before next loop (important with offloading, so we don't blowup cpu RAM)
                 del shard_state_dict
 
-            self.save_gathered_checkpoint_index(
-                save_directory,
-                state_dict_split=state_dict_split,
-                weight_map=weight_map,
-                weights_name=weights_name,
-                variant=variant,
-                max_shard_size=max_shard_size,
-            )
+            # Save index if sharded
+            index = None
+            if state_dict_split.is_sharded:
+                index = {
+                    "metadata": {"total_parameters": self.num_parameters(), **state_dict_split.metadata},
+                    "weight_map": weight_map,
+                }
+
+            if index is None:
+                path_to_weights = os.path.join(save_directory, weights_name)
+                logger.info(f"Model weights saved in {path_to_weights}")
+            else:
+                save_index_file = SAFE_WEIGHTS_INDEX_NAME
+                save_index_file = os.path.join(save_directory, _add_variant(save_index_file, variant))
+                # Save the index as well
+                with open(save_index_file, "w", encoding="utf-8") as f:
+                    content = json.dumps(index, indent=2, sort_keys=True) + "\n"
+                    f.write(content)
+                logger.info(
+                    f"The model is bigger than the maximum size per checkpoint ({max_shard_size}) and is going to be "
+                    f"split in {len(state_dict_split.filename_to_tensors)} checkpoint shards. You can find where each parameters has been saved in the "
+                    f"index located at {save_index_file}."
+                )
 
         if push_to_hub and save_on_this_rank:
             # Eventually create an empty model card
@@ -3622,13 +3639,6 @@ class PreTrainedModel(
                 token=token,
                 create_pr=create_pr,
             )
-
-        # `gather_full_state_dict` concentrates the full state on rank 0 only;
-        # other ranks then loop over an empty shard list and would race ahead
-        # of rank 0's safetensors writes. Barrier so any subsequent
-        # `from_pretrained` on this path sees the consolidated files.
-        if needs_dist_barrier:
-            _distributed_barrier()
 
     @wraps(PushToHubMixin.push_to_hub)
     def push_to_hub(self, *args, **kwargs):
