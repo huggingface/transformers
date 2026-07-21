@@ -905,13 +905,13 @@ class AqlmConfig(QuantizationConfigMixin):
         Safety checker that arguments are correct - also replaces some NoneType arguments with their default values.
         """
         if not isinstance(self.in_group_size, int):
-            raise TypeError("in_group_size must be a float")
+            raise TypeError("in_group_size must be an int")
         if not isinstance(self.out_group_size, int):
-            raise TypeError("out_group_size must be a float")
+            raise TypeError("out_group_size must be an int")
         if not isinstance(self.num_codebooks, int):
-            raise TypeError("num_codebooks must be a float")
+            raise TypeError("num_codebooks must be an int")
         if not isinstance(self.nbits_per_codebook, int):
-            raise TypeError("nbits_per_codebook must be a float")
+            raise TypeError("nbits_per_codebook must be an int")
 
         if self.linear_weights_not_to_quantize is not None and not isinstance(
             self.linear_weights_not_to_quantize, list

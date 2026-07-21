@@ -154,6 +154,8 @@ class GenerationConfig(PushToHubMixin):
             Whether or not to use sampling ; use greedy decoding otherwise.
         num_beams (`int`, *optional*):
             Number of beams for beam search. 1 means no beam search.
+        use_mtp: (`bool`):
+            Whether or not to use Multi-Token Prediction (MTP) if the model supports it.
 
         > Parameters that control the cache
 
@@ -348,6 +350,12 @@ class GenerationConfig(PushToHubMixin):
             If set to a positive integer, the re-encodeing process will additionally consider the last `target_lookbehind` target tokens
             to correctly align tokens. Can only be used with different tokenizers in speculative decoding.
             See this [blog](https://huggingface.co/blog/universal_assisted_generation) for more details.
+        assistant_ensemble_weight (`float`, *optional*):
+            Enables static ensemble verification in speculative decoding. If set to a value in `(0.0, 1.0)`,
+            the verifier accepts tokens against the mixture `w * p_target + (1 - w) * q_draft` instead of
+            `p_target`, trading a controlled distributional bias for a higher acceptance rate. Defaults
+            to `None`, which keeps decoding lossless. Requires the assistant model to return logits, so it
+            is not compatible with prompt lookup decoding.
 
         > Parameters related to performances and compilation
 
@@ -389,6 +397,7 @@ class GenerationConfig(PushToHubMixin):
         # Parameters that control the generation strategy used
         self.do_sample = kwargs.pop("do_sample", None)
         self.num_beams = kwargs.pop("num_beams", None)
+        self.use_mtp = kwargs.pop("use_mtp", None)
 
         # Parameters that control the cache
         self.use_cache = kwargs.pop("use_cache", None)
@@ -452,6 +461,7 @@ class GenerationConfig(PushToHubMixin):
         self.assistant_early_exit = kwargs.pop("assistant_early_exit", None)
         self.assistant_lookbehind = kwargs.pop("assistant_lookbehind", None)
         self.target_lookbehind = kwargs.pop("target_lookbehind", None)
+        self.assistant_ensemble_weight = kwargs.pop("assistant_ensemble_weight", None)
 
         # Performance
         self.compile_config = kwargs.pop("compile_config", None)
@@ -550,6 +560,7 @@ class GenerationConfig(PushToHubMixin):
         # Assisted generation may extend some generation modes
         if (
             assistant_model is not None
+            or self.use_mtp
             or self.prompt_lookup_num_tokens is not None
             or self.assistant_early_exit is not None
         ):
@@ -557,7 +568,7 @@ class GenerationConfig(PushToHubMixin):
                 generation_mode = GenerationMode.ASSISTED_GENERATION
             else:
                 logger.warning(
-                    "You've set `assistant_model`, which triggers assisted generate. Currently, assisted generate "
+                    "You've set `assistant_model`or `use_mtp`, which triggers assisted generate. Currently, assisted generate "
                     "is only supported with Greedy Search and Sample. However, the base decoding mode (based on "
                     f"current flags) is {generation_mode} -- some of the set flags will be ignored."
                 )
@@ -646,6 +657,11 @@ class GenerationConfig(PushToHubMixin):
             raise ValueError(f"`early_stopping` must be a boolean or 'never', but is {self.early_stopping}.")
         if self.max_new_tokens is not None and self.max_new_tokens <= 0:
             raise ValueError(f"`max_new_tokens` must be greater than 0, but is {self.max_new_tokens}.")
+        if self.assistant_ensemble_weight is not None and not (0.0 < self.assistant_ensemble_weight < 1.0):
+            raise ValueError(
+                f"`assistant_ensemble_weight` must be in the open interval `(0.0, 1.0)`, "
+                f"but is {self.assistant_ensemble_weight}. Use `None` for standard (lossless) speculative decoding."
+            )
         if self.pad_token_id is not None and self.pad_token_id < 0:
             minor_issues["pad_token_id"] = (
                 f"`pad_token_id` should be positive but got {self.pad_token_id}. This will cause errors when batch "

@@ -30,7 +30,7 @@ from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
-from ...integrations import use_experts_implementation, use_kernel_forward_from_hub, use_kernel_func_from_hub
+from ...integrations import use_experts_implementation, use_kernel_forward_from_hub
 from ...masking_utils import create_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
@@ -130,22 +130,23 @@ class GlmMoeDsaRotaryEmbedding(nn.Module):
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
 
-def rotate_half(x):
-    """Rotates half the hidden dims of the input."""
-    x1 = x[..., : x.shape[-1] // 2]
-    x2 = x[..., x.shape[-1] // 2 :]
-    return torch.cat((-x2, x1), dim=-1)
+def apply_rotary_pos_emb_interleave(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
+    r"""
+    Applies interleaved Rotary Position Embedding to the query and key tensors.
 
-
-@use_kernel_func_from_hub("rotary_pos_emb")
-def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
-    """Applies Rotary Position Embedding to the query and key tensors.
+    DeepSeek lays the rotary dimensions out in interleaved pairs `(x0, x1), (x2, x3), ...`, each rotated by a
+    single frequency. We compute that rotation directly on the even/odd slices instead of de-interleaving with a
+    `view`/`transpose`/`reshape`; the output is bit-identical to the de-interleaved `rotate_half` formulation while
+    avoiding the extra contiguous copy.
 
     Args:
         q (`torch.Tensor`): The query tensor.
         k (`torch.Tensor`): The key tensor.
         cos (`torch.Tensor`): The cosine part of the rotary embedding.
         sin (`torch.Tensor`): The sine part of the rotary embedding.
+        position_ids (`torch.Tensor`):
+            The position indices of the tokens corresponding to the query and key tensors. For example, this can be
+            used to pass offsetted position ids when working with a KV-cache.
         unsqueeze_dim (`int`, *optional*, defaults to 1):
             The 'unsqueeze_dim' argument specifies the dimension along which to unsqueeze cos[position_ids] and
             sin[position_ids] so that they can be properly broadcasted to the dimensions of q and k. For example, note
@@ -156,10 +157,15 @@ def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
     Returns:
         `tuple(torch.Tensor)` comprising of the query and key tensors rotated using the Rotary Position Embedding.
     """
-    cos = cos.unsqueeze(unsqueeze_dim)
-    sin = sin.unsqueeze(unsqueeze_dim)
-    q_embed = (q * cos) + (rotate_half(q) * sin)
-    k_embed = (k * cos) + (rotate_half(k) * sin)
+    # `cos`/`sin` are `cat(freqs, freqs)`; the first half holds the per-pair angle.
+    cos = cos[..., : cos.shape[-1] // 2].unsqueeze(unsqueeze_dim)
+    sin = sin[..., : sin.shape[-1] // 2].unsqueeze(unsqueeze_dim)
+
+    q1, q2 = q[..., 0::2], q[..., 1::2]
+    k1, k2 = k[..., 0::2], k[..., 1::2]
+
+    q_embed = torch.cat([q1 * cos - q2 * sin, q2 * cos + q1 * sin], dim=-1)
+    k_embed = torch.cat([k1 * cos - k2 * sin, k2 * cos + k1 * sin], dim=-1)
     return q_embed, k_embed
 
 
@@ -207,13 +213,8 @@ class GlmMoeDsaIndexer(nn.Module):
         """
         Selects the top-k tokens per query for DeepSeek Sparse Attention (DSA).
 
-        This is the bf16 equivalent of the reference Indexer which uses `rotate_activation` (Hadamard transform)
-        and `fp8_index` (FP8 quantized scoring kernel). Since the Hadamard transform is orthogonal (dot products
-        are preserved: Hq·Hk = q·k), and FP8 quantization is a precision optimization, we skip both and compute
-        scores directly in bf16/fp32.
-
-        The scoring logic computes:
-            index_score[b,s,t] = Σ_h (weight[b,s,h] · softmax_scale · q[b,s,h,:] · k[b,t,:])
+        Same as [`DeepseekV32Indexer.forward`], but the indexer applies **interleaved** RoPE
+        rather than the non-interleaved half-split RoPE used by DeepSeek-V3.2.
 
         Args:
             hidden_states: Input hidden states `[B, S, hidden_size]`.
@@ -235,8 +236,8 @@ class GlmMoeDsaIndexer(nn.Module):
         k = self.k_norm(self.wk(hidden_states)).unsqueeze(2)  # [B, S, 1, D]
         k_rot, k_pass = torch.split(k, [self.qk_rope_head_dim, self.head_dim - self.qk_rope_head_dim], dim=-1)
 
-        # The indexer uses NON-interleaved (half-split) RoPE — unlike the main MLA attention
-        q_rot, k_rot = apply_rotary_pos_emb(q_rot, k_rot, cos, sin, unsqueeze_dim=2)
+        # GLM-MoE-DSA uses interleaved RoPE in the indexer
+        q_rot, k_rot = apply_rotary_pos_emb_interleave(q_rot, k_rot, cos, sin, unsqueeze_dim=2)
         q = torch.cat([q_rot, q_pass], dim=-1)  # [B, S, H, D]
         k = torch.cat([k_rot, k_pass], dim=-1).squeeze(2)  # [B, S, D]
 
@@ -299,49 +300,20 @@ def eager_attention_forward(
     return attn_output, attn_weights
 
 
-def apply_rotary_pos_emb_interleave(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
-    r"""
-    Applies interleaved Rotary Position Embedding to the query and key tensors.
-
-    DeepSeek lays the rotary dimensions out in interleaved pairs `(x0, x1), (x2, x3), ...`, each rotated by a
-    single frequency. We compute that rotation directly on the even/odd slices instead of de-interleaving with a
-    `view`/`transpose`/`reshape`; the output is bit-identical to the de-interleaved `rotate_half` formulation while
-    avoiding the extra contiguous copy.
-
-    Args:
-        q (`torch.Tensor`): The query tensor.
-        k (`torch.Tensor`): The key tensor.
-        cos (`torch.Tensor`): The cosine part of the rotary embedding.
-        sin (`torch.Tensor`): The sine part of the rotary embedding.
-        position_ids (`torch.Tensor`):
-            The position indices of the tokens corresponding to the query and key tensors. For example, this can be
-            used to pass offsetted position ids when working with a KV-cache.
-        unsqueeze_dim (`int`, *optional*, defaults to 1):
-            The 'unsqueeze_dim' argument specifies the dimension along which to unsqueeze cos[position_ids] and
-            sin[position_ids] so that they can be properly broadcasted to the dimensions of q and k. For example, note
-            that cos[position_ids] and sin[position_ids] have the shape [batch_size, seq_len, head_dim]. Then, if q and
-            k have the shape [batch_size, heads, seq_len, head_dim], then setting unsqueeze_dim=1 makes
-            cos[position_ids] and sin[position_ids] broadcastable to the shapes of q and k. Similarly, if q and k have
-            the shape [batch_size, seq_len, heads, head_dim], then set unsqueeze_dim=2.
-    Returns:
-        `tuple(torch.Tensor)` comprising of the query and key tensors rotated using the Rotary Position Embedding.
-    """
-    # `cos`/`sin` are `cat(freqs, freqs)`; the first half holds the per-pair angle.
-    cos = cos[..., : cos.shape[-1] // 2].unsqueeze(unsqueeze_dim)
-    sin = sin[..., : sin.shape[-1] // 2].unsqueeze(unsqueeze_dim)
-
-    q1, q2 = q[..., 0::2], q[..., 1::2]
-    k1, k2 = k[..., 0::2], k[..., 1::2]
-
-    q_embed = torch.cat([q1 * cos - q2 * sin, q2 * cos + q1 * sin], dim=-1)
-    k_embed = torch.cat([k1 * cos - k2 * sin, k2 * cos + k1 * sin], dim=-1)
-    return q_embed, k_embed
-
-
 def yarn_get_mscale(scale=1, mscale=1):
     if scale <= 1:
         return 1.0
     return 0.1 * mscale * math.log(scale) + 1.0
+
+
+def yarn_apply_mscale(rope_parameters, scaling):
+    if rope_parameters.get("rope_type", "default") != "default":
+        mscale_all_dim = rope_parameters.get("mscale_all_dim", 0)
+        scaling_factor = rope_parameters["factor"]
+        if mscale_all_dim:
+            mscale = yarn_get_mscale(scaling_factor, mscale_all_dim)
+            scaling = scaling * mscale * mscale
+    return scaling
 
 
 class GlmMoeDsaAttention(nn.Module):
@@ -396,12 +368,7 @@ class GlmMoeDsaAttention(nn.Module):
         )
 
         self.scaling = self.qk_head_dim ** (-0.5)
-        if self.config.rope_parameters.get("rope_type", "default") != "default":
-            mscale_all_dim = self.config.rope_parameters.get("mscale_all_dim", 0)
-            scaling_factor = self.config.rope_parameters["factor"]
-            if mscale_all_dim:
-                mscale = yarn_get_mscale(scaling_factor, mscale_all_dim)
-                self.scaling = self.scaling * mscale * mscale
+        self.scaling = yarn_apply_mscale(config.rope_parameters, self.scaling)
         # Refer: https://arxiv.org/abs/2603.12201 for more details.
         self.skip_topk = config.indexer_types[layer_idx] == "shared"
         self.indexer = None if self.skip_topk else GlmMoeDsaIndexer(config, layer_idx)
@@ -736,22 +703,25 @@ class GlmMoeDsaModel(GlmMoeDsaPreTrainedModel):
             position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
             position_ids = position_ids.unsqueeze(0)
 
-        causal_mask = create_causal_mask(
-            config=self.config,
-            inputs_embeds=inputs_embeds,
-            attention_mask=attention_mask,
-            past_key_values=past_key_values,
-            position_ids=position_ids,
-        )
+        # It may already have been prepared by e.g. `generate`
+        if not isinstance(causal_mask_mapping := attention_mask, dict):
+            mask_kwargs = {
+                "config": self.config,
+                "inputs_embeds": inputs_embeds,
+                "attention_mask": attention_mask,
+                "past_key_values": past_key_values,
+                "position_ids": position_ids,
+            }
+            causal_mask_mapping = {"deepseek_sparse_attention": create_causal_mask(**mask_kwargs)}
 
         hidden_states = inputs_embeds
         position_embeddings = self.rotary_emb(hidden_states, position_ids=position_ids)
 
         topk_indices = None  # MAIN DIFF with DSV3.2
-        for decoder_layer in self.layers[: self.config.num_hidden_layers]:
+        for i, decoder_layer in enumerate(self.layers[: self.config.num_hidden_layers]):
             hidden_states, topk_indices = decoder_layer(
                 hidden_states,
-                attention_mask=causal_mask,
+                attention_mask=causal_mask_mapping[self.config.layer_types[i]],
                 position_embeddings=position_embeddings,
                 position_ids=position_ids,
                 past_key_values=past_key_values,

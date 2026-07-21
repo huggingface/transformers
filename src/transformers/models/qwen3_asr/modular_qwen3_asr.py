@@ -132,7 +132,7 @@ class Qwen3ASRConfig(PreTrainedConfig):
 
 @auto_docstring
 class Qwen3ASRPreTrainedModel(Qwen2AudioPreTrainedModel):
-    _no_split_modules = ["Qwen3ASREncoderLayer", "Qwen3DecoderLayer"]
+    _no_split_modules = ["Qwen3DecoderLayer"]
     _can_compile_fullgraph = True
     _supports_attention_backend = True
 
@@ -155,6 +155,7 @@ class Qwen3ASRAudioEncoderLayer(Qwen3OmniMoeAudioEncoderLayer):
 )
 class Qwen3ASREncoder(Qwen3OmniMoeAudioEncoder):
     config: Qwen3ASREncoderConfig
+    _no_split_modules = ["Qwen3ASRAudioEncoderLayer"]
 
     def __init__(self, config: Qwen3ASREncoderConfig):
         super().__init__(config)
@@ -202,7 +203,9 @@ class Qwen3ASREncoder(Qwen3OmniMoeAudioEncoder):
         chunk_lengths = (
             input_features_mask.view(batch_size, num_chunks, chunk_len).sum(dim=-1).reshape(-1).to(torch.long)
         )
-        cu_seqlens = get_audio_cu_seqlens(chunk_lengths, feature_lens, self.n_window_infer, self.n_window)
+        cu_seqlens = get_audio_cu_seqlens(
+            chunk_lengths, feature_lens, self.n_window_infer, self.n_window, kwargs=kwargs
+        )
 
         # Chunk and process through CNN
         chunked = (
@@ -275,7 +278,6 @@ class Qwen3ASRModel(AudioFlamingo3Model):
 )
 class Qwen3ASRForConditionalGeneration(AudioFlamingo3ForConditionalGeneration):
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
-    _keep_in_fp32_modules_strict = AttributeError()
 
     def forward(self, **super_kwargs):
         r"""

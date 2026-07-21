@@ -25,6 +25,7 @@ from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...integrations import lazy_load_kernel
+from ...integrations.accelerate import force_accelerate_hooks
 from ...masking_utils import create_causal_mask, create_recurrent_attention_mask
 from ...modeling_layers import GenericForSequenceClassification, GradientCheckpointingLayer
 from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPast
@@ -194,7 +195,7 @@ class JambaMambaMixer(nn.Module):
         if use_precomputed_states:
             hidden_states = causal_conv1d_update(
                 hidden_states.squeeze(-1),
-                cache_params.layers[self.layer_idx].conv_states,
+                cache_params.layers[self.layer_idx].conv_states[0],
                 conv_weights,
                 self.conv1d.bias,
                 self.activation,
@@ -238,7 +239,7 @@ class JambaMambaMixer(nn.Module):
         time_proj_bias = time_proj_bias.float() if time_proj_bias is not None else None
         if use_precomputed_states:
             scan_outputs = selective_state_update(
-                cache_params.layers[self.layer_idx].recurrent_states,
+                cache_params.layers[self.layer_idx].recurrent_states[0],
                 hidden_states[..., 0],
                 discrete_time_step[..., 0],
                 A,
@@ -283,7 +284,7 @@ class JambaMambaMixer(nn.Module):
 
         if cache_params is not None and cache_params.has_previous_state(self.layer_idx):
             # In training mode, we don't want to perform in-place operations on ssm_state so we can compute the backwards pass
-            ssm_state = cache_params.layers[self.layer_idx].recurrent_states.clone()
+            ssm_state = cache_params.layers[self.layer_idx].recurrent_states[0].clone()
         else:
             ssm_state = torch.zeros(
                 (batch_size, self.intermediate_size, self.ssm_state_size),
@@ -293,7 +294,7 @@ class JambaMambaMixer(nn.Module):
         # 2. Convolution sequence transformation
         if cache_params is not None:
             if cache_params.has_previous_state(self.layer_idx) and seq_len == 1:
-                conv_state = cache_params.update_conv_state(hidden_states, self.layer_idx)
+                conv_state = cache_params.update_conv_state(hidden_states, self.layer_idx)[..., -self.conv_kernel_size:]
                 hidden_states = torch.sum(conv_state * self.conv1d.weight[:, 0, :], dim=-1)
                 if self.use_conv_bias:
                     hidden_states += self.conv1d.bias
@@ -303,7 +304,7 @@ class JambaMambaMixer(nn.Module):
                     hidden_states,
                     (self.conv_kernel_size - hidden_states.shape[-1], 0)
                 )
-                conv_state = cache_params.update_conv_state(conv_state, self.layer_idx)
+                conv_state = cache_params.update_conv_state(conv_state, self.layer_idx)[..., -self.conv_kernel_size:]
                 hidden_states = self.act(self.conv1d(hidden_states)[..., :seq_len])
         else:
             hidden_states = self.act(self.conv1d(hidden_states)[..., :seq_len])
@@ -348,6 +349,7 @@ class JambaMambaMixer(nn.Module):
         return contextualized_states
     # fmt: on
 
+    @force_accelerate_hooks("conv1d")
     def forward(
         self,
         hidden_states,

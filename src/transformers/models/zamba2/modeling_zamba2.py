@@ -31,8 +31,9 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
 from ...integrations import use_kernel_func_from_hub
+from ...integrations.accelerate import force_accelerate_hooks
 from ...integrations.hub_kernels import lazy_load_kernel
-from ...masking_utils import create_causal_mask
+from ...masking_utils import create_causal_mask, create_recurrent_attention_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast, SequenceClassifierOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
@@ -402,6 +403,18 @@ def segment_sum(input_tensor):
     return tensor_segsum
 
 
+def apply_mask_to_padding_states(hidden_states, attention_mask):
+    """
+    Tunes out the hidden states for padding tokens, see https://github.com/state-spaces/mamba/issues/66
+    """
+    # NOTE: attention mask is a 2D boolean tensor
+    if attention_mask is not None and attention_mask.shape[1] > 1 and attention_mask.shape[0] > 1:
+        dtype = hidden_states.dtype
+        hidden_states = (hidden_states * attention_mask[:, :, None]).to(dtype)
+
+    return hidden_states
+
+
 class Zamba2MambaMixer(nn.Module):
     """
     Compute ∆, A, B, C, and D the state space parameters and compute the `contextualized_states`.
@@ -526,8 +539,8 @@ class Zamba2MambaMixer(nn.Module):
 
         use_precomputed_states = cache_params is not None and cache_params.has_previous_state(self.layer_idx)
         if use_precomputed_states:
-            conv_state = cache_params.layers[self.layer_idx].conv_states
-            recurrent_state = cache_params.layers[self.layer_idx].recurrent_states
+            conv_state = cache_params.layers[self.layer_idx].conv_states[0]
+            recurrent_state = cache_params.layers[self.layer_idx].recurrent_states[0]
 
         # Single-step decoding via cache (one new token only)
         if use_precomputed_states and seq_len == 1:
@@ -578,10 +591,7 @@ class Zamba2MambaMixer(nn.Module):
             out = self.out_proj(hidden_states.to(self.out_proj.weight.dtype))[:, None, ...]
         # Multi-token forward: fresh prefill, or chunked-prefill / speculative verify with a primed cache
         else:
-            if attention_mask is not None and not torch.all(attention_mask == 1):
-                # tune out hidden states for pad tokens, see https://github.com/state-spaces/mamba/issues/66
-                dtype = hidden_states.dtype
-                hidden_states = (hidden_states * attention_mask[:, :, None]).to(dtype)
+            hidden_states = apply_mask_to_padding_states(hidden_states, attention_mask)
             # 1. Gated MLP's linear projection
             projected_states = self.in_proj(hidden_states)
             A = -torch.exp(self.A_log.float())  # (num_heads) or (intermediate_size, state_size)
@@ -648,10 +658,7 @@ class Zamba2MambaMixer(nn.Module):
                     [self.intermediate_size, groups_time_state_size, groups_time_state_size],
                     dim=-1,
                 )
-                if attention_mask is not None and not torch.all(attention_mask == 1):
-                    # tune out hidden states for pad tokens, see https://github.com/state-spaces/mamba/issues/66
-                    dtype = hidden_states.dtype
-                    hidden_states = (hidden_states * attention_mask[:, :, None]).to(dtype)
+                hidden_states = apply_mask_to_padding_states(hidden_states, attention_mask)
                 scan_output, ssm_state = mamba_chunk_scan_combined(
                     hidden_states.view(batch_size, seq_len, -1, self.head_dim),
                     time_step,
@@ -683,14 +690,9 @@ class Zamba2MambaMixer(nn.Module):
     def torch_forward(self, input_states, cache_params: Cache | None=None, attention_mask: torch.Tensor | None = None):
         batch_size, seq_len, _ = input_states.shape
         dtype = input_states.dtype
-        # Gated MLP's linear projection
-        if cache_params is not None and cache_params.has_previous_state(self.layer_idx):
-            projected_states = self.in_proj(input_states)
-        else:
-            if attention_mask is not None:
-                # tune out hidden states for pad tokens, see https://github.com/state-spaces/mamba/issues/66
-                input_states = (input_states * attention_mask[:, :, None]).to(dtype)
-            projected_states = self.in_proj(input_states)
+        # 1. Gated MLP's linear projection
+        input_states = apply_mask_to_padding_states(input_states, attention_mask)
+        projected_states = self.in_proj(input_states)
         d_mlp = (projected_states.shape[-1] - 2 * self.intermediate_size - 2 * self.n_groups * self.ssm_state_size- self.num_heads) // 2
         _, _, gate, hidden_states, dt = projected_states.split(
                 [d_mlp, d_mlp, self.intermediate_size,  self.conv_dim, self.num_heads], dim=-1
@@ -699,11 +701,11 @@ class Zamba2MambaMixer(nn.Module):
 
         use_precomputed_state = cache_params is not None and cache_params.has_previous_state(self.layer_idx)
         if use_precomputed_state:
-            conv_state = cache_params.layers[self.layer_idx].conv_states
+            conv_state = cache_params.layers[self.layer_idx].conv_states[0]
 
         # Convolution sequence transformation
         if use_precomputed_state and seq_len == 1:
-            conv_states = cache_params.update_conv_state(hidden_states, self.layer_idx)
+            conv_states = cache_params.update_conv_state(hidden_states, self.layer_idx)[..., -self.conv_kernel_size:]
             hidden_states = torch.sum(conv_states * self.conv1d.weight[:, 0, :], dim=-1)
             if self.use_conv_bias:
                 hidden_states += self.conv1d.bias
@@ -717,15 +719,12 @@ class Zamba2MambaMixer(nn.Module):
                     hidden_states,
                     (self.conv_kernel_size - hidden_states.shape[-1], 0)
                 )
-                conv_states = cache_params.update_conv_state(conv_states, self.layer_idx)
+                conv_states = cache_params.update_conv_state(conv_states, self.layer_idx)[..., -self.conv_kernel_size:]
 
             hidden_states = self.act(self.conv1d(hidden_states)[..., :hidden_states.shape[-1]].transpose(1, 2))
             if use_precomputed_state:
                 hidden_states = hidden_states[:, -seq_len:, :]
-            if attention_mask is not None:
-                dtype = hidden_states.dtype
-                # tune out hidden states for pad tokens, see https://github.com/state-spaces/mamba/issues/66
-                hidden_states = (hidden_states * attention_mask[:, :, None]).to(dtype)
+            hidden_states = apply_mask_to_padding_states(hidden_states, attention_mask)
 
         hidden_states, B, C = torch.split(hidden_states, [self.intermediate_size, self.n_groups * self.ssm_state_size, self.n_groups * self.ssm_state_size], dim=-1)
         A = -torch.exp(self.A_log.float())                            # [num_heads]
@@ -758,7 +757,7 @@ class Zamba2MambaMixer(nn.Module):
             dBx = dB * hidden_states[..., None]
 
             # State calculation
-            ssm_states = cache_params.layers[self.layer_idx].recurrent_states.clone()
+            ssm_states = cache_params.layers[self.layer_idx].recurrent_states[0].clone()
             ssm_states = ssm_states * dA + dBx
             ssm_states = cache_params.update_recurrent_state(ssm_states, self.layer_idx)
 
@@ -831,7 +830,7 @@ class Zamba2MambaMixer(nn.Module):
             # permute back B * decay states
             states = (B_decay_contraction.permute(0, 1, 3, 2, 4)[..., None]  * hidden_states.permute(0, 1, 3, 2, 4)[..., None, :]).sum(dim=3).permute(0, 1, 2, 4, 3)
             previous_states = (
-                cache_params.layers[self.layer_idx].recurrent_states[:, None].to(dtype=states.dtype, device=states.device)
+                cache_params.layers[self.layer_idx].recurrent_states[0][:, None].to(dtype=states.dtype, device=states.device)
                 if use_precomputed_state
                 else torch.zeros_like(states[:, :1])
             )
@@ -873,6 +872,7 @@ class Zamba2MambaMixer(nn.Module):
         return contextualized_states
     # fmt: on
 
+    @force_accelerate_hooks("conv1d")
     def forward(
         self,
         hidden_states,
@@ -1198,13 +1198,18 @@ class Zamba2Model(Zamba2PreTrainedModel):
             position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
             position_ids = position_ids.unsqueeze(0)
 
-        causal_mask = create_causal_mask(
-            config=self.config,
-            inputs_embeds=inputs_embeds,
-            attention_mask=attention_mask,
-            past_key_values=past_key_values,
-            position_ids=position_ids,
-        )
+        if not isinstance(causal_mask_mapping := attention_mask, dict):
+            mask_kwargs = {
+                "config": self.config,
+                "inputs_embeds": inputs_embeds,
+                "attention_mask": attention_mask,
+                "past_key_values": past_key_values,
+                "position_ids": position_ids,
+            }
+            causal_mask_mapping = {
+                "full_attention": create_causal_mask(**mask_kwargs),
+                "linear_attention": create_recurrent_attention_mask(**mask_kwargs),
+            }
 
         # create position embeddings to be shared across the decoder layers
         if self.config.use_mem_rope:
@@ -1217,8 +1222,8 @@ class Zamba2Model(Zamba2PreTrainedModel):
                 hidden_states,
                 original_hidden_states,
                 layer_idx,
-                attention_mask,
-                causal_mask,
+                causal_mask_mapping["linear_attention"],
+                causal_mask_mapping["full_attention"],
                 past_key_values=past_key_values,
                 use_cache=use_cache,
                 position_embeddings=position_embeddings,
@@ -1373,6 +1378,22 @@ class Zamba2ForCausalLM(Zamba2PreTrainedModel, GenerationMixin):
         )
 
         return model_inputs
+
+    @staticmethod
+    def create_masks_for_generate(config, inputs_embeds, attention_mask, past_key_values, position_ids=None, **_):
+        # Zamba2 mixes attention and mamba paths inside its hybrid blocks, so the layer-type
+        # dispatch table can't enumerate sub-patterns. Return both masks the layers need as a dict.
+        mask_kwargs = {
+            "config": config.get_text_config(),
+            "inputs_embeds": inputs_embeds,
+            "attention_mask": attention_mask,
+            "past_key_values": past_key_values,
+            "position_ids": position_ids,
+        }
+        return {
+            "full_attention": create_causal_mask(**mask_kwargs),
+            "linear_attention": create_recurrent_attention_mask(**mask_kwargs),
+        }
 
 
 @auto_docstring(

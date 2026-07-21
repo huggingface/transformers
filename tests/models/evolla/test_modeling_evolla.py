@@ -201,7 +201,7 @@ class EvollaModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     test_resize_embeddings = False
     maxDiff = None
-    test_torch_exportable = False
+    test_torch_exportable = False  # data-dependent boolean (`protein_kv_attn_mask.any()`)
 
     def setUp(self):
         self.model_tester = EvollaModelTester(self)

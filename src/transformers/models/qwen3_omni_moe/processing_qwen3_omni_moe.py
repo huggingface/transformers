@@ -337,7 +337,9 @@ class Qwen3OmniMoeProcessor(ProcessorMixin):
         Returns:
             `list[str]`: The decoded text.
         """
-        return self.tokenizer.batch_decode(generated_outputs[0], skip_special_tokens=skip_special_tokens, **kwargs)
+        if isinstance(generated_outputs, (tuple, list)):
+            generated_outputs = generated_outputs[0]
+        return self.tokenizer.batch_decode(generated_outputs, skip_special_tokens=skip_special_tokens, **kwargs)
 
     def post_process_multimodal_output(
         self, generated_outputs, skip_special_tokens=True, generation_mode=None, **kwargs
