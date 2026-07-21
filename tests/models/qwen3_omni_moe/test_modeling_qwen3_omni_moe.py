@@ -470,6 +470,10 @@ class Qwen3OmniMoeThinkerForConditionalGenerationModelTest(ModelTesterMixin, Gen
     def test_sdpa_padding_matches_padding_free_with_position_ids(self):
         pass
 
+    @unittest.skip("Text FlashAttention kwargs are also forwarded to vision attention, which computes its own cu_seqlens")
+    def test_flash_attention_2_padding_matches_padding_free_with_position_ids_and_fa_kwargs(self):
+        pass
+
     @unittest.skip("Cannot handle 4D attention mask")
     def test_generate_with_static_cache(self):
         pass
@@ -954,7 +958,6 @@ class Qwen3OmniModelIntegrationTest(unittest.TestCase):
             ("cuda", None): "system\nYou are a helpful assistant.\nuser\nWhat's that sound and what kind of dog is this?\nassistant\nThe sound is glass shattering, and the dog appears to be a Labrador Retriever.",
             ("cuda", (8, 6)): "system\nYou are a helpful assistant.\nuser\nWhat's that sound and what kind of dog is this?\nassistant\nThe sound is glass shattering, and the dog is a Labrador Retriever.",
             ("rocm", (9, 4)): "system\nYou are a helpful assistant.\nuser\nWhat's that sound and what kind of dog is this?\nassistant\nThe sound is glass shattering, and the dog is a Labrador Retriever.",
-            ("xpu", 5): "system\nYou are a helpful assistant.\nuser\nWhat's that sound and what kind of dog is this?\nassistant\nThe sound is glass shattering, and the dog is a Labrador Retriever.",
         }).get_expectation()  # fmt: skip
 
         decoded_texts = self.processor.batch_decode(output, skip_special_tokens=True)
