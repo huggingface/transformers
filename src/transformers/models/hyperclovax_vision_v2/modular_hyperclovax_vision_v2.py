@@ -168,6 +168,7 @@ class HyperCLOVAXVisionV2Model(HyperCLOVAXVisionV2PreTrainedModel, VideoLlama3Mo
     def compute_3d_position_ids(self):
         raise AttributeError("HyperCLOVAX Vision V2 does not need 3D positions")
 
+    @accepts_precomputed_kwargs(modality="video")
     @can_return_tuple
     @auto_docstring
     def get_video_features(
