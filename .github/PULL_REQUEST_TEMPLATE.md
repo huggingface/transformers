@@ -54,8 +54,8 @@ members/contributors who may be interested in your PR.
 
 Models:
 
-- text models: @ArthurZucker @Cyrilvallez
-- vision models: @yonigozlan @molbap
+- text models: @ArthurZucker @Cyrilvallez @vasqu
+- vision models: @molbap @guarin
 - audio models: @eustlb @ebezzam @vasqu
 - multimodal models: @zucchini-nlp
 - graph models: @clefourrier
