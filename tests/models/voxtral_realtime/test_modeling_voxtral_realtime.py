@@ -19,7 +19,6 @@ import unittest
 from threading import Thread
 
 import numpy as np
-
 from parameterized import parameterized
 
 from transformers import (
