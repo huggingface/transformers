@@ -1034,8 +1034,7 @@ class GraniteSpeechNarModel(GraniteSpeechNarPreTrainedModel):
             `audio_embeds` for the cached iterative-editing path; must be omitted on the `input_features`
             path, where they are derived from the encoder's own CTC predictions.
         input_features_mask (`torch.Tensor` of shape `(batch_size, seq_len)`, *optional*):
-            Mask over the encoder frames (`True` for valid frames, `False` for padding). Defaults to
-            all-ones (no padding) when `input_features` is given; required when passing `audio_embeds`.
+            Mask over the encoder frames (`True` for valid frames, `False` for padding).
         output_bpe_logits (`bool`, *optional*, defaults to `False`):
             Whether to return the encoder BPE CTC logits in `bpe_logits` (needed for the auxiliary
             encoder CTC loss).
@@ -1044,9 +1043,6 @@ class GraniteSpeechNarModel(GraniteSpeechNarPreTrainedModel):
             and projector and reuse them directly (used by iterative-editing `generate`). Mutually
             exclusive with `input_features`; when provided, `input_ids` must be supplied as the text input.
         """
-        # Exactly two input modes are allowed:
-        #   1. `audio_embeds` + `input_ids`: cached path used by iterative-editing `generate` (inference only).
-        #   2. `input_features`: runs the encoder/projector; the only path compatible with training (`labels`).
         if (input_features is None) ^ (audio_embeds is not None):
             raise ValueError("You must specify exactly one of input_features or audio_embeds")
         if (audio_embeds is None) != (input_ids is None):
@@ -1054,15 +1050,12 @@ class GraniteSpeechNarModel(GraniteSpeechNarPreTrainedModel):
 
         if input_features_mask is None:
             if input_features is None:
-                # Cached-audio path: per-sample lengths can't be inferred from `audio_embeds` alone.
                 raise ValueError("`input_features_mask` must be provided together with `audio_embeds`.")
-            # No padding information provided: treat every audio frame as valid.
             input_features_mask = torch.ones(input_features.shape[:-1], dtype=torch.bool, device=input_features.device)
 
         audio_lengths = input_features_mask.sum(dim=1)
         bpe_logits, bpe_lengths = None, None
         if audio_embeds is None:
-            # `input_features` path: derive both audio embeddings and the CTC text input from the encoder.
             audio_outputs = self.get_audio_features(input_features, input_features_mask=input_features_mask)
             audio_embeds = audio_outputs.pooler_output / self.config.text_config.embedding_multiplier
 
@@ -1225,6 +1218,7 @@ class GraniteSpeechNarForCTC(GraniteSpeechNarPreTrainedModel):
         )
 
     @torch.no_grad()
+    @auto_docstring
     def generate(
         self,
         input_features: torch.Tensor,
@@ -1240,8 +1234,7 @@ class GraniteSpeechNarForCTC(GraniteSpeechNarPreTrainedModel):
             as the text input for refinement, reusing the cached audio embeddings (so the encoder and
             projector run only once). `1` reproduces the single-pass behavior.
         """
-        audio_embeds = None
-        input_ids = None
+        input_ids, audio_embeds = None, None
         for _ in range(num_editing_steps):
             model_out = self.model(
                 input_features=input_features,
