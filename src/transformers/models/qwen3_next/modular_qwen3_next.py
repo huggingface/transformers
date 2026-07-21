@@ -409,8 +409,9 @@ class Qwen3NextGatedDeltaNet(nn.Module):
 
         if not is_fast_path_available:
             logger.warning_once(
-                "The fast path is not available because the required library is not installed. Falling back to "
-                "torch implementation. To install follow https://github.com/fla-org/flash-linear-attention#installation"
+                "The fast path is not available because one of the required library is not installed. Falling back to "
+                "torch implementation. To install follow https://github.com/fla-org/flash-linear-attention#installation and"
+                " https://github.com/Dao-AILab/causal-conv1d"
             )
 
         self.layer_type = config.layer_types[layer_idx]
