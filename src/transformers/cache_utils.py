@@ -1510,7 +1510,7 @@ class Cache:
 
         return self.layers[layer_idx].get_mask_sizes(query_length)
 
-    def get_query_offset(self, layer_idx: int) -> int:
+    def get_query_offset(self, layer_idx: int = 0) -> int:
         """Returns the current offset of the query for the given `layer_idx`. It's always equal to the cache length, i.e.
         `get_seq_length(layer_idx)`, except for MTP layers.
         """
@@ -2002,6 +2002,9 @@ class EncoderDecoderCache(Cache):
     def is_compileable(self) -> bool:
         return self.self_attention_cache.is_compileable
 
+    def activate_past_recording(self):
+        self.self_attention_cache.activate_past_recording()
+
     def get_max_cache_shape(self, layer_idx: int = 0) -> int:
         logger.warning_once(
             "`get_max_cache_shape` is deprecated, and will be removed in version 5.16. Please use `get_max_length` instead"
@@ -2014,7 +2017,7 @@ SlidingWindowCache = StaticCache
 
 
 class MtpCache(DynamicCache):
-    def get_query_offset(self, layer_idx=0):
+    def get_query_offset(self, layer_idx: int = 0):
         # Queries of MTP depth k run k+1 tokens ahead of the main_model, i.e. they have an offset of k+1
         mtp_offset = layer_idx + 1
         return super().get_query_offset(layer_idx) + mtp_offset
