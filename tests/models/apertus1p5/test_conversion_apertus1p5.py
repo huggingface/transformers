@@ -31,6 +31,39 @@ if is_torch_available():
 
 @require_torch
 class Apertus1p5ConversionTest(unittest.TestCase):
+    def test_valid_logits_layout(self):
+        tail_min = torch.finfo(torch.float32).min
+        pruned_logits = torch.tensor([[[1.0, -2.0, tail_min, tail_min]]])
+        self.assertTrue(conversion._has_valid_logits_layout(pruned_logits, output_vocab_size=2, vocab_size=4))
+
+        physical_only_logits = pruned_logits[..., :2]
+        self.assertFalse(conversion._has_valid_logits_layout(physical_only_logits, output_vocab_size=2, vocab_size=4))
+
+        oversized_logits = torch.cat((pruned_logits, pruned_logits[..., -1:]), dim=-1)
+        self.assertFalse(conversion._has_valid_logits_layout(oversized_logits, output_vocab_size=2, vocab_size=4))
+
+        finite_tail = pruned_logits.clone()
+        finite_tail[..., -1] = 0
+        self.assertFalse(conversion._has_valid_logits_layout(finite_tail, output_vocab_size=2, vocab_size=4))
+
+        # a -inf tail is the stale pre-finfo.min layout the checker exists to catch
+        neginf_tail = pruned_logits.clone()
+        neginf_tail[..., 2:] = -torch.inf
+        self.assertFalse(conversion._has_valid_logits_layout(neginf_tail, output_vocab_size=2, vocab_size=4))
+
+        nonfinite_prefix = pruned_logits.clone()
+        nonfinite_prefix[..., 0] = torch.inf
+        self.assertFalse(conversion._has_valid_logits_layout(nonfinite_prefix, output_vocab_size=2, vocab_size=4))
+
+        unpruned_logits = torch.tensor([[[1.0, -2.0, 3.0, 4.0]]])
+        self.assertTrue(conversion._has_valid_logits_layout(unpruned_logits, output_vocab_size=4, vocab_size=4))
+
+    def test_fp32_tokenizer_source_check(self):
+        # fp32 floats and integer tensors (e.g. codebook indices) pass
+        conversion._check_fp32_tokenizer_source("vision tokenizer", {"w": torch.ones(2), "idx": torch.arange(2)})
+        with self.assertRaisesRegex(ValueError, "float32"):
+            conversion._check_fp32_tokenizer_source("audio tokenizer", {"w": torch.ones(2, dtype=torch.bfloat16)})
+
     def test_convert_removes_stale_canonical_weight_files(self):
         config = Mock(tie_word_embeddings=False)
         converted_weights = {"lm_head.weight": torch.ones(2, 2)}

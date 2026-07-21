@@ -16,7 +16,7 @@ limitations under the License.
 ⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be rendered properly in your Markdown viewer.
 
 -->
-*This model was contributed to Hugging Face Transformers on 2026-07-18.*
+*This model was contributed to Hugging Face Transformers on 2026-07-21.*
 
 
 # Apertus 1.5
@@ -25,7 +25,8 @@ limitations under the License.
 > Both bundled tokenizers must run in `float32`: their code assignment is an argmax over codebook scores, and
 > half precision flips a significant fraction of codes (~8% for the vision tokenizer in bf16). They are kept in
 > `float32` automatically when the model is loaded with `dtype=torch.float16`/`bfloat16`
-> (`_keep_in_fp32_modules_strict`).
+> (`_keep_in_fp32_modules_strict`). The keep applies to `from_pretrained` only: manually casting the loaded
+> model (`.half()`, `.to(dtype)`) or running the tokenizers under `torch.autocast` re-introduces the flips.
 
 > [!WARNING]
 > `Apertus1p5VisionTokenizerModel` is an inference-only vision-tokenizer port: it implements only inference-time codebook
@@ -56,6 +57,19 @@ The model composes three parts:
   patch,
 - **[WavTokenizer](./wavtokenizer)** ([paper](https://huggingface.co/papers/2408.16532)) as the audio codec:
   40 codes per second of 24 kHz mono audio.
+
+> [!NOTE]
+> Consequences of the pruned output layer: logits returned without `labels` are padded to the full vocabulary
+> width, with `torch.finfo(dtype).min` scores for the input-only multimodal tail, so unconstrained generation
+> (sampling, beam search, classifier-free guidance, ...) works generically and never selects a multimodal id;
+> loss-only calls with `labels` return logits of the physical head width instead. Generation constraints that
+> target input-only ids (`prefix_allowed_tokens_fn`, `force_words_ids`, forced tokens) are unsupported and
+> silently emit ids the head has no learned distribution for. DoLa decoding (`dola_layers`) is also unsupported:
+> it applies the physical LM head directly to intermediate hidden states, whose logits do not have the padded
+> logical vocabulary width. Label positions holding input-only ids must be masked with `-100` (the model raises
+> an explicit error otherwise), and `Trainer`'s `label_smoothing_factor` is unsupported (its loss diverges over
+> the tail). Resizing token embeddings and tying the head to the input embeddings are rejected for pruned
+> checkpoints.
 
 Images are always encoded one at a time, even in batched inputs, because the vision tokenizer contains global
 attention, so batch padding would change the codes. Each image contributes `(height / 16) · (width / 16)` codes

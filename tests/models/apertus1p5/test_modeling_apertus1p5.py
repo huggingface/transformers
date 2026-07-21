@@ -449,7 +449,26 @@ class Apertus1p5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
             logits = model(**inputs_dict).logits
         self.assertEqual(logits.shape[-1], config.text_config.vocab_size)
         self.assertTrue(bool(torch.isfinite(logits[..., :3]).all()))
-        self.assertTrue(bool(torch.isneginf(logits[..., 3:]).all()))
+        # the input-only tail is masked with the dtype minimum (finite, so score arithmetic stays NaN-free)
+        self.assertTrue(bool((logits[..., 3:] == torch.finfo(logits.dtype).min).all()))
+
+        # loss-only calls keep the compact physical width; unmasked input-only labels raise an actionable error
+        labels = torch.full_like(inputs_dict["input_ids"], -100)
+        labels[:, -1] = 0
+        with torch.no_grad():
+            label_outputs = model(**inputs_dict, labels=labels)
+        self.assertEqual(label_outputs.logits.shape[-1], 3)
+        self.assertTrue(bool(torch.isfinite(label_outputs.loss)))
+        bad_labels = labels.clone()
+        bad_labels[0, -1] = config.image_token_id  # a valid input-only id beyond the pruned head
+        with self.assertRaisesRegex(ValueError, "masked with -100"):
+            model(**inputs_dict, labels=bad_labels)
+
+        # the composite carries the same tie guard as the text model
+        model.config.tie_word_embeddings = True
+        with self.assertRaisesRegex(ValueError, "Cannot tie a pruned LM head"):
+            model.tie_weights()
+        model.config.tie_word_embeddings = False  # restore before the generation calls below
 
         prompt = inputs_dict["input_ids"][:2]
         model_inputs = {
@@ -484,7 +503,10 @@ class Apertus1p5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
             output_scores=True,
         )
         self.assertTrue(all(score.shape[-1] == config.text_config.vocab_size for score in outputs.scores))
-        self.assertTrue(all(bool(torch.isneginf(score[..., 3:]).all()) for score in outputs.scores))
+        # processors may shift tail scores slightly (e.g. the watermark bias); they must stay unsampleable
+        self.assertTrue(
+            all(bool((score[..., 3:] <= torch.finfo(score.dtype).min / 2).all()) for score in outputs.scores)
+        )
         transition_scores = model.compute_transition_scores(outputs.sequences, outputs.scores, normalize_logits=True)
         self.assertEqual(transition_scores.shape, (prompt.shape[0], len(outputs.scores)))
         self.assertTrue(bool(torch.isfinite(transition_scores).all()))
@@ -567,10 +589,16 @@ class Apertus1p5TextModelTest(CausalLMModelTest, unittest.TestCase):
         input_ids = ids_tensor([2, 7], config.vocab_size)  # inputs may use the FULL vocabulary
         with torch.no_grad():
             outputs = model(input_ids=input_ids, labels=torch.randint(0, 40, (2, 7), device=torch_device))
-        self.assertEqual(outputs.logits.shape[-1], config.vocab_size)
-        self.assertTrue(bool(torch.isfinite(outputs.logits[..., :40]).all()))
-        self.assertTrue(bool(torch.isneginf(outputs.logits[..., 40:]).all()))
+        # loss-only calls keep the compact physical width
+        self.assertEqual(outputs.logits.shape[-1], 40)
         self.assertTrue(bool(torch.isfinite(outputs.loss)))
+
+        with torch.no_grad():
+            logits = model(input_ids=input_ids).logits
+        self.assertEqual(logits.shape[-1], config.vocab_size)
+        self.assertTrue(bool(torch.isfinite(logits[..., :40]).all()))
+        # the input-only tail is masked with the dtype minimum (finite, so score arithmetic stays NaN-free)
+        self.assertTrue(bool((logits[..., 40:] == torch.finfo(logits.dtype).min).all()))
 
         for generate_kwargs in (
             {"do_sample": False},
@@ -578,10 +606,24 @@ class Apertus1p5TextModelTest(CausalLMModelTest, unittest.TestCase):
             {"num_beams": 2, "do_sample": False},
             {"do_sample": False, "repetition_penalty": 1.2},
             {"do_sample": False, "no_repeat_ngram_size": 1},
+            # classifier-free guidance subtracts two score sets; the finite tail mask must survive it
+            {"do_sample": False, "guidance_scale": 1.5},
+            {"do_sample": True, "guidance_scale": 1.5},
         ):
             with self.subTest(**generate_kwargs):
                 generated = model.generate(input_ids, max_new_tokens=5, **generate_kwargs)
                 self.assertLess(int(generated[:, 7:].max()), 40)
+
+    def test_pruned_head_label_validation(self):
+        """Unmasked input-only ids in `labels` raise an actionable error instead of a bare CE index error."""
+        model = Apertus1p5TextForCausalLM(self._tiny_config(output_vocab_size=40)).to(torch_device).eval()
+        input_ids = ids_tensor([1, 5], 40)
+        labels = input_ids.clone()
+        labels[0, 2] = 60  # a valid input id beyond the pruned head
+        with self.assertRaisesRegex(ValueError, "masked with -100"):
+            model(input_ids=input_ids, labels=labels)
+        labels[0, 2] = -100
+        self.assertTrue(bool(torch.isfinite(model(input_ids=input_ids, labels=labels).loss)))
 
     def test_pruned_head_guards(self):
         with self.assertRaisesRegex(ValueError, "cannot be tied"):
@@ -591,6 +633,15 @@ class Apertus1p5TextModelTest(CausalLMModelTest, unittest.TestCase):
         model = Apertus1p5TextForCausalLM(self._tiny_config(output_vocab_size=40)).to(torch_device)
         with self.assertRaisesRegex(NotImplementedError, "pruned LM head"):
             model.resize_token_embeddings(128)
+        model.resize_token_embeddings()  # the no-argument getter path stays allowed
+        # the bare backbone (no LM head) carries the same guard
+        text_model = Apertus1p5TextModel(self._tiny_config(output_vocab_size=40)).to(torch_device)
+        with self.assertRaisesRegex(NotImplementedError, "pruned LM head"):
+            text_model.resize_token_embeddings(64)
+        # post-hoc config flips must not tie the full-width embeddings onto the pruned head
+        model.config.tie_word_embeddings = True
+        with self.assertRaisesRegex(ValueError, "Cannot tie a pruned LM head"):
+            model.tie_weights()
 
 
 @require_torch
@@ -757,7 +808,7 @@ class Apertus1p5IntegrationTest(unittest.TestCase):
         output_vocab_size = getattr(config.text_config, "output_vocab_size", None) or config.text_config.vocab_size
         self.assertEqual(logits.shape[-1], config.text_config.vocab_size)
         self.assertTrue(torch.isfinite(logits[..., :output_vocab_size]).all())
-        self.assertTrue(torch.isneginf(logits[..., output_vocab_size:]).all())
+        self.assertTrue((logits[..., output_vocab_size:] == torch.finfo(logits.dtype).min).all())
 
     def test_processor_golden_token_sequences(self):
         """The processor must emit the exact reference id sequences against the real vocabulary."""
