@@ -837,6 +837,23 @@ class InklingForCausalLM(Gemma3ForCausalLM):
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
     ) -> InklingCausalLMOutputWithPast:
+        r"""
+        Example:
+
+        ```python
+        >>> from transformers import AutoTokenizer, InklingForCausalLM
+
+        >>> model = InklingForCausalLM.from_pretrained("thinkingmachines/Inkling-NVFP4")
+        >>> tokenizer = AutoTokenizer.from_pretrained("thinkingmachines/Inkling-NVFP4")
+
+        >>> prompt = "What is your favorite condiment?"
+        >>> inputs = tokenizer(prompt, return_tensors="pt")
+
+        >>> # Generate
+        >>> generate_ids = model.generate(**inputs, max_new_tokens=30)
+        >>> tokenizer.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
+        "What is your favorite condiment?"
+        ```"""
         outputs = self.model(
             input_ids=input_ids,
             attention_mask=attention_mask,
@@ -1154,8 +1171,8 @@ class InklingModel(InklingPreTrainedModel):
         >>> from io import BytesIO
         >>> from transformers import AutoProcessor, InklingForConditionalGeneration
 
-        >>> model = InklingForConditionalGeneration.from_pretrained("google/inkling2-3b-mix-224")
-        >>> processor = AutoProcessor.from_pretrained("google/inkling2-3b-mix-224")
+        >>> model = InklingForConditionalGeneration.from_pretrained("thinkingmachines/Inkling-NVFP4")
+        >>> processor = AutoProcessor.from_pretrained("thinkingmachines/Inkling-NVFP4")
 
         >>> prompt = "Where is the cat standing?"
         >>> url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"
@@ -1288,8 +1305,8 @@ class InklingForConditionalGeneration(InklingPreTrainedModel, GenerationMixin):
         >>> from io import BytesIO
         >>> from transformers import AutoProcessor, InklingForConditionalGeneration
 
-        >>> model = InklingForConditionalGeneration.from_pretrained("google/gemma-3-4b-it")
-        >>> processor = AutoProcessor.from_pretrained("google/gemma-3-4b-it")
+        >>> model = InklingForConditionalGeneration.from_pretrained("thinkingmachines/Inkling-NVFP4")
+        >>> processor = AutoProcessor.from_pretrained("thinkingmachines/Inkling-NVFP4")
 
         >>> messages = [
         ...     {
