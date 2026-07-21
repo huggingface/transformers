@@ -44,8 +44,8 @@ from ..deepseek_v2.modeling_deepseek_v2 import DeepseekV2Attention
 from ..deepseek_v3.modeling_deepseek_v3 import DeepseekV3MoE, DeepseekV3TopkRouter
 from ..deepseek_v4.modeling_deepseek_v4 import DeepseekV4HyperConnection, DeepseekV4Model
 from ..exaone4_5.modeling_exaone4_5 import Exaone4_5_Model
-from ..glm5_next.configuration_glm5_next import Glm5NextConfig
 from ..glm46v.modeling_glm46v import Glm46VForConditionalGeneration
+from ..glm_moe_dsa.configuration_glm_moe_dsa import GlmMoeDsaConfig
 from ..glm_moe_dsa.modeling_glm_moe_dsa import GlmMoeDsaDecoderLayer
 from ..inkling.modeling_inkling import causal_conv1d_fn, causal_conv1d_update
 from ..llama.modeling_llama import LlamaRMSNorm, eager_attention_forward
@@ -61,7 +61,7 @@ logger = logging.get_logger(__name__)
 
 @auto_docstring(checkpoint="zai-org/GLM-5-Next")
 @strict
-class Glm5NextVLTextConfig(Glm5NextConfig):
+class Glm5NextVLTextConfig(GlmMoeDsaConfig):
     r"""
     n_group (`int`, *optional*, defaults to 1):
         Number of routed expert groups.
@@ -91,6 +91,7 @@ class Glm5NextVLTextConfig(Glm5NextConfig):
     model_type = "glm5_next_vl_text"
     base_config_key = "text_config"
 
+    num_hidden_layers: int = 45
     hidden_size: int = 4096
     intermediate_size: int = 12288
     num_attention_heads: int = 64
@@ -107,23 +108,30 @@ class Glm5NextVLTextConfig(Glm5NextConfig):
     swiglu_limit: float | None = 10.0
     linear_head_dim: int = 128
     linear_num_heads: int = 64
+    linear_conv_kernel_dim: int = 4
     linear_lower_bound: float | None = -5.0
     hc_mult: int = 4
     hc_eps: float = 1e-6
     hc_sinkhorn_iters: int = 20
+    output_router_logits: bool = False
+    router_aux_loss_coef: float = 0.001
+
+    bos_token_id: int | None = None
+    eos_token_id: int | list[int] | None = None
+    pad_token_id: int | None = 154820
 
     # TODO: add when we have an indexer trained
     index_head_dim = AttributeError()
     index_n_heads = AttributeError()
     index_topk = AttributeError()
-    index_kpool = AttributeError()
-    index_kpool_always_select_tail = AttributeError()
     indexer_types = AttributeError()
 
-    # TODO: will rope be added?
     rope_parameters = AttributeError()
+    first_k_dense_replace = AttributeError()
+    mlp_bias = AttributeError()
 
-    # TODO: Let it be reinherited after indexer
+    # TODO: After indexer: add conversion to dsa layer type + indexer conversion
+    # TODO: Validate arch with indexer specific things
     def __post_init__(self, **kwargs):
         if self.num_key_value_heads is None:
             self.num_key_value_heads = self.num_attention_heads
@@ -158,10 +166,6 @@ class Glm5NextVLTextConfig(Glm5NextConfig):
         self.qk_head_dim = self.qk_rope_head_dim + self.qk_nope_head_dim
 
         PreTrainedConfig.__post_init__(self, **kwargs)
-
-    # TODO: Readd along indexer
-    def validate_architecture(self):
-        PreTrainedConfig.validate_architecture(self)
 
 
 @auto_docstring(checkpoint="zai-org/GLM-5-Next")

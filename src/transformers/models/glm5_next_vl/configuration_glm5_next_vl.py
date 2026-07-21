@@ -87,7 +87,6 @@ class Glm5NextVLTextConfig(PreTrainedConfig):
     attribute_map = {"num_local_experts": "n_routed_experts"}
 
     vocab_size: int = 154880
-
     hidden_size: int = 4096
     intermediate_size: int = 12288
     moe_intermediate_size: int = 2048
@@ -122,17 +121,17 @@ class Glm5NextVLTextConfig(PreTrainedConfig):
     attention_dropout: float | int = 0.0
     head_dim: int = 0
     layer_types: list[str] | None = None
+    base_config_key = "text_config"
     swiglu_limit: float | None = 10.0
     linear_head_dim: int = 128
     linear_num_heads: int = 64
     linear_conv_kernel_dim: int = 4
     linear_lower_bound: float | None = -5.0
-    output_router_logits: bool = False
-    router_aux_loss_coef: float = 0.001
-    base_config_key = "text_config"
     hc_mult: int = 4
     hc_eps: float = 1e-6
     hc_sinkhorn_iters: int = 20
+    output_router_logits: bool = False
+    router_aux_loss_coef: float = 0.001
 
     def __post_init__(self, **kwargs):
         if self.num_key_value_heads is None:
@@ -168,10 +167,6 @@ class Glm5NextVLTextConfig(PreTrainedConfig):
         self.qk_head_dim = self.qk_rope_head_dim + self.qk_nope_head_dim
 
         super().__post_init__(**kwargs)
-
-    def validate_architecture(self):
-        """Part of `@strict`-powered validation. Validates the architecture of the config."""
-        super().validate_architecture()
 
 
 @auto_docstring(checkpoint="zai-org/GLM-5-Next")
