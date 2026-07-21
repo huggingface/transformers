@@ -21,6 +21,7 @@ from typing import TYPE_CHECKING
 from ..integrations.tensor_parallel import (
     ALL_PARALLEL_STYLES,
     apply_tensor_parallelism,
+    gather_state_dict_for_save,
     initialize_tensor_parallelism,
 )
 from ..utils import is_torch_available, is_torch_greater_or_equal, logging
@@ -29,7 +30,10 @@ from .configuration_utils import DistributedConfig
 from .fsdp import apply_fully_sharded_data_parallelism, is_fsdp_managed_module
 from .pipeline_parallel import apply_pipeline_parallelism
 from .utils import (
+    _distributed_barrier,
     _get_torch_distributed_rank,
+    _is_torch_distributed_initialized,
+    gather_full_state_dict,
     initialize_fully_sharded_data_parallelism,
     initialize_pipeline_parallelism,
     save_model_checkpoint_distributed,
@@ -209,12 +213,20 @@ class DistributedMixin:
                 model = apply_pipeline_parallelism(model, pp_mesh)
         return model
 
+    def should_save_on_this_rank(self, is_main_process: bool) -> bool:
+        """Return whether this rank should write checkpoint files."""
+        save_on_this_rank = is_main_process
+        if _is_torch_distributed_initialized():
+            save_on_this_rank = save_on_this_rank and _get_torch_distributed_rank() == 0
+        return save_on_this_rank
+
     def save_distributed_checkpoint(
         self,
         model_to_save,
         save_directory: str | os.PathLike,
         *,
         push_to_hub: bool = False,
+        save_on_this_rank: bool = True,
         repo_id: str | None = None,
         files_timestamps: dict | None = None,
         commit_message: str | None = None,
@@ -235,7 +247,7 @@ class DistributedMixin:
             )
         save_model_checkpoint_distributed(model_to_save, save_directory)
 
-        if push_to_hub and _get_torch_distributed_rank() == 0:
+        if push_to_hub and save_on_this_rank:
             model_card = create_and_tag_model_card(repo_id, self.model_tags, token=token)
             model_card.save(os.path.join(save_directory, "README.md"))
             self._upload_modified_files(
@@ -246,3 +258,38 @@ class DistributedMixin:
                 token=token,
                 create_pr=create_pr,
             )
+
+    def gather_sharded_state_dict_for_save(
+        self,
+        model_to_save,
+        state_dict: dict,
+        distributed_config: DistributedConfig | None,
+        *,
+        save_on_this_rank: bool = True,
+    ) -> dict:
+        """Gather TP- or FSDP-sharded weights to full CPU tensors for checkpoint writing."""
+        if distributed_config is None:
+            return state_dict
+
+        if distributed_config.tp_size > 1:
+            state_dict = gather_state_dict_for_save(state_dict, self._tp_plan, self._device_mesh, self._tp_size)
+            if not save_on_this_rank:
+                state_dict = {}
+            return state_dict
+
+        if distributed_config.fsdp_size > 1:
+            if not _is_torch_distributed_initialized():
+                raise ValueError(
+                    "Saving an FSDP-wrapped model requires torch.distributed to be initialized. "
+                    "Call save_pretrained from every rank after init_process_group."
+                )
+            return gather_full_state_dict(model_to_save)
+
+        return state_dict
+
+    def barrier_after_gathered_checkpoint_save(self, distributed_config: DistributedConfig | None) -> None:
+        """Barrier so non-writer ranks wait for rank 0 to finish gathered checkpoint writes."""
+        if distributed_config is None:
+            return
+        if distributed_config.tp_size > 1 or distributed_config.fsdp_size > 1:
+            _distributed_barrier()
