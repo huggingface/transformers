@@ -19,20 +19,18 @@
 # limitations under the License.
 
 import torch
-from torch import nn
 
 from ... import initialization as init
-from ...cache_utils import Cache
 from ...modeling_layers import GenericForSequenceClassification, GenericForTokenClassification
 from ...modeling_utils import PreTrainedModel
-from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring
+from ...utils import auto_docstring
 import math
 from collections.abc import Callable
 from typing import Optional
 import torch.nn.functional as F
+from torch import nn
 from ...activations import ACT2FN
-from ...cache_utils import DynamicCache
+from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
 from ...integrations import use_experts_implementation, use_kernel_forward_from_hub, use_kernel_func_from_hub
 from ...masking_utils import create_causal_mask
@@ -42,7 +40,8 @@ from ...modeling_layers import (
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
-from ...utils import can_return_tuple
+from ...processing_utils import Unpack
+from ...utils import TransformersKwargs, can_return_tuple
 from ...utils.generic import is_flash_attention_requested, maybe_autocast, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from .configuration_axk1 import AXK1Config
@@ -232,8 +231,10 @@ class AXK1Experts(nn.Module):
 
 
 class AXK1MoE(nn.Module):
-    """
-    A mixed expert module containing shared experts.
+    """DeepSeek-V3 MoE with an extra `post_mlp_layernorm` on the block output (A.X-K1's single delta).
+
+    The released checkpoints store the norm at the decoder-layer level (`post_mlp_layernorm.*`); the
+    checkpoint conversion mapping renames it into `mlp.post_mlp_layernorm.*` at load time.
     """
 
     def __init__(self, config: AXK1Config):
@@ -244,6 +245,7 @@ class AXK1MoE(nn.Module):
         self.shared_experts = AXK1MLP(
             config=config, intermediate_size=config.moe_intermediate_size * config.n_shared_experts
         )
+        self.post_mlp_layernorm = AXK1RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         residuals = hidden_states
@@ -252,7 +254,7 @@ class AXK1MoE(nn.Module):
         hidden_states = hidden_states.view(-1, hidden_states.shape[-1])
         hidden_states = self.experts(hidden_states, topk_indices, topk_weights).view(*orig_shape)
         hidden_states = hidden_states + self.shared_experts(residuals)
-        return hidden_states
+        return self.post_mlp_layernorm(hidden_states)
 
 
 def rotate_half(x):
@@ -489,7 +491,6 @@ class AXK1Attention(nn.Module):
 
 
 class AXK1DecoderLayer(GradientCheckpointingLayer):
-    """DeepSeek-V3 decoder layer with an extra `post_mlp_layernorm` on the MoE block output."""
     def __init__(self, config: AXK1Config, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
@@ -503,12 +504,6 @@ class AXK1DecoderLayer(GradientCheckpointingLayer):
 
         self.input_layernorm = AXK1RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = AXK1RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        # A.X-K1 normalizes the MoE block output before the residual add (dense layers pass through).
-        self.post_mlp_layernorm = (
-            AXK1RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-            if layer_idx >= config.first_k_dense_replace
-            else nn.Identity()
-        )
 
     def forward(
         self,
@@ -522,6 +517,7 @@ class AXK1DecoderLayer(GradientCheckpointingLayer):
     ) -> torch.Tensor:
         residual = hidden_states
         hidden_states = self.input_layernorm(hidden_states)
+        # Self Attention
         hidden_states, _ = self.self_attn(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
@@ -533,10 +529,10 @@ class AXK1DecoderLayer(GradientCheckpointingLayer):
         )
         hidden_states = residual + hidden_states
 
+        # Fully Connected
         residual = hidden_states
         hidden_states = self.post_attention_layernorm(hidden_states)
         hidden_states = self.mlp(hidden_states)
-        hidden_states = self.post_mlp_layernorm(hidden_states)
         hidden_states = residual + hidden_states
         return hidden_states
 

@@ -38,14 +38,11 @@ The example below shows how to generate text with [`Pipeline`] or the [`AutoMode
 <hfoption id="Pipeline">
 
 ```python
-import torch
 from transformers import pipeline
 
 pipe = pipeline(
     task="text-generation",
     model="skt/A.X-K1",
-    dtype=torch.bfloat16,
-    device_map="auto",
 )
 
 print(pipe("대한민국의 수도는", max_new_tokens=32)[0]["generated_text"])
@@ -55,13 +52,11 @@ print(pipe("대한민국의 수도는", max_new_tokens=32)[0]["generated_text"])
 <hfoption id="AutoModel">
 
 ```python
-import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
 tokenizer = AutoTokenizer.from_pretrained("skt/A.X-K1")
 model = AutoModelForCausalLM.from_pretrained(
     "skt/A.X-K1",
-    dtype=torch.bfloat16,
     device_map="auto",
 )
 

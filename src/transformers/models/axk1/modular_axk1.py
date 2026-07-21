@@ -21,14 +21,11 @@ the experts, and the model / causal-LM scaffolding — is inherited unchanged fr
 
 import torch
 from huggingface_hub.dataclasses import strict
-from torch import nn
 
 from ... import initialization as init
-from ...cache_utils import Cache
 from ...modeling_layers import GenericForSequenceClassification, GenericForTokenClassification
 from ...modeling_utils import PreTrainedModel
-from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, logging
+from ...utils import auto_docstring, logging
 from ..deepseek_v3.configuration_deepseek_v3 import DeepseekV3Config
 from ..deepseek_v3.modeling_deepseek_v3 import (
     DeepseekV3Attention,
@@ -122,7 +119,24 @@ class AXK1Experts(DeepseekV3Experts):
 
 
 class AXK1MoE(DeepseekV3MoE):
-    pass
+    """DeepSeek-V3 MoE with an extra `post_mlp_layernorm` on the block output (A.X-K1's single delta).
+
+    The released checkpoints store the norm at the decoder-layer level (`post_mlp_layernorm.*`); the
+    checkpoint conversion mapping renames it into `mlp.post_mlp_layernorm.*` at load time.
+    """
+
+    def __init__(self, config: AXK1Config):
+        super().__init__(config)
+        self.post_mlp_layernorm = AXK1RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        residuals = hidden_states
+        orig_shape = hidden_states.shape
+        _, topk_weights, topk_indices = self.gate(hidden_states)
+        hidden_states = hidden_states.view(-1, hidden_states.shape[-1])
+        hidden_states = self.experts(hidden_states, topk_indices, topk_weights).view(*orig_shape)
+        hidden_states = hidden_states + self.shared_experts(residuals)
+        return self.post_mlp_layernorm(hidden_states)
 
 
 class AXK1Attention(DeepseekV3Attention):
@@ -130,46 +144,7 @@ class AXK1Attention(DeepseekV3Attention):
 
 
 class AXK1DecoderLayer(DeepseekV3DecoderLayer):
-    """DeepSeek-V3 decoder layer with an extra `post_mlp_layernorm` on the MoE block output."""
-
-    def __init__(self, config: AXK1Config, layer_idx: int):
-        super().__init__(config, layer_idx)
-        # A.X-K1 normalizes the MoE block output before the residual add (dense layers pass through).
-        self.post_mlp_layernorm = (
-            AXK1RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-            if layer_idx >= config.first_k_dense_replace
-            else nn.Identity()
-        )
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        attention_mask: torch.Tensor | None = None,
-        position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
-        use_cache: bool | None = False,
-        position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> torch.Tensor:
-        residual = hidden_states
-        hidden_states = self.input_layernorm(hidden_states)
-        hidden_states, _ = self.self_attn(
-            hidden_states=hidden_states,
-            attention_mask=attention_mask,
-            position_ids=position_ids,
-            past_key_values=past_key_values,
-            use_cache=use_cache,
-            position_embeddings=position_embeddings,
-            **kwargs,
-        )
-        hidden_states = residual + hidden_states
-
-        residual = hidden_states
-        hidden_states = self.post_attention_layernorm(hidden_states)
-        hidden_states = self.mlp(hidden_states)
-        hidden_states = self.post_mlp_layernorm(hidden_states)
-        hidden_states = residual + hidden_states
-        return hidden_states
+    pass
 
 
 class AXK1PreTrainedModel(DeepseekV3PreTrainedModel):
