@@ -170,7 +170,7 @@ class GPTQTest(unittest.TestCase):
         Checks also if other models are casted correctly.
         """
         # This should work
-        if self.device_map in (None, "cpu"):
+        if self.device_map is None:
             _ = self.quantized_model.to(0)
 
         with self.assertRaises(ValueError):
@@ -241,7 +241,9 @@ class GPTQTest(unittest.TestCase):
             self.quantized_model.save_pretrained(tmpdirname)
             quantized_model_from_saved = AutoModelForCausalLM.from_pretrained(tmpdirname, device_map=self.device_map)
 
-            if self.device_map == "cpu" or torch_device == "xpu":
+            if self.device_map == "cpu" or torch_device == "cpu":
+                quant_type = "torch_aten_kernel"
+            elif torch_device == "xpu":
                 quant_type = "torch_fused"
             else:
                 quant_type = "exllamav2"
@@ -260,9 +262,8 @@ class GPTQTest(unittest.TestCase):
             self.check_inference_correctness(quantized_model_from_saved)
 
 
-@unittest.skipUnless(torch_device in {"cuda", "xpu"}, "test requires CUDA or XPU")
 class GPTQTestAccelerator(GPTQTest):
-    device_map = {"": 0}
+    device_map = {"": 0} if torch_device != "cpu" else "cpu"
 
     def test_change_loading_attributes(self):
         """
@@ -277,7 +278,7 @@ class GPTQTestAccelerator(GPTQTest):
             )
             self.assertEqual(quantized_model_from_saved.config.quantization_config.bits, self.bits)
             if self.device_map == "cpu":
-                quant_type = "torch"
+                quant_type = "torch_aten_kernel"
             elif torch_device == "xpu":
                 quant_type = "torch_fused"
             else:
