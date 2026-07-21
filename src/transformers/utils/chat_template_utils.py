@@ -632,7 +632,7 @@ class Chat:
 
 
 @lru_cache
-def _compile_special_token_pattern(all_special_tokens: list[str]) -> re.Pattern | None:
+def _compile_special_token_pattern(all_special_tokens: tuple[str, ...]) -> re.Pattern | None:
     if not all_special_tokens:
         return None
     # Match longest-first to catch cases where one token is a substring of another
@@ -649,10 +649,16 @@ def sanitize_chat_input(chat_input: Any, all_special_tokens: list[str]) -> Any:
 def _sanitize_chat_input(chat_input: Any, pattern: re.Pattern | None) -> Any:
     if pattern is None:
         return chat_input
+    if hasattr(chat_input, "messages"):
+        # catches Chat objects
+        chat_input.messages = _sanitize_chat_input(chat_input.messages, pattern)
+        return chat_input
     if isinstance(chat_input, dict):
         return {key: _sanitize_chat_input(value, pattern) for key, value in chat_input.items()}
     elif isinstance(chat_input, list):
         return [_sanitize_chat_input(item, pattern) for item in chat_input]
+    elif isinstance(chat_input, tuple):
+        return tuple(_sanitize_chat_input(item, pattern) for item in chat_input)
     elif isinstance(chat_input, str):
         # Keep repeating until the string stops changing, since a malicious user could nest special tokens
         # inside each other that survive a single sub()

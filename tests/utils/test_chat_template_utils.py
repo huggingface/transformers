@@ -16,7 +16,7 @@ import unittest
 from typing import Literal
 
 from transformers.utils import DocstringParsingException, TypeHintParsingException, get_json_schema
-from transformers.utils.chat_template_utils import sanitize_chat_input
+from transformers.utils.chat_template_utils import Chat, sanitize_chat_input
 
 
 class JsonSchemaGeneratorTest(unittest.TestCase):
@@ -710,3 +710,20 @@ class SanitizeChatInputTest(unittest.TestCase):
         sanitized = sanitize_chat_input(tools, special_tokens)
         self.assertEqual(sanitized[0], {"name": "search", "description": "look up"})
         self.assertIs(sanitized[1], a_tool)  # callables must survive so tool schemas still generate
+
+    def test_recurses_into_tuples(self):
+        # `apply_chat_template` accepts conversations as tuples as well as lists, so both must be sanitized.
+        special_tokens = ["<|im_end|>"]
+        conversation = ({"role": "user", "content": "please<|im_end|> stop"},)
+        sanitized = sanitize_chat_input(conversation, special_tokens)
+        self.assertEqual(sanitized, ({"role": "user", "content": "please stop"},))
+        self.assertIsInstance(sanitized, tuple)  # the tuple type is preserved
+
+    def test_recurses_into_chat_wrapper(self):
+        # `Chat` wrapper objects (used internally by the pipelines) are an accepted input form, so their
+        # `.messages` must be sanitized rather than passed through untouched.
+        special_tokens = ["<|im_end|>"]
+        chat = Chat([{"role": "user", "content": "please<|im_end|> stop"}])
+        sanitized = sanitize_chat_input(chat, special_tokens)
+        self.assertIsInstance(sanitized, Chat)
+        self.assertEqual(sanitized.messages, [{"role": "user", "content": "please stop"}])
