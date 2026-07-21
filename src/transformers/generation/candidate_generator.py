@@ -1434,13 +1434,7 @@ class MTPCandidateGenerator(AssistedCandidateGenerator):
         model_kwargs: dict[str, Any],
         logits_processor: Optional["LogitsProcessorList"] = None,
     ):
-        from ..cache_utils import (
-            DynamicLayer,
-            DynamicSlidingWindowLayer,
-            LinearAttentionAndFullAttentionLayer,
-            LinearAttentionAndSlidingWindowAttentionLayer,
-            MtpCache,
-        )
+        from ..cache_utils import MtpCache
         from ..modeling_layers import MtpModel
 
         self.num_mtp_layers = getattr(main_model.config.get_text_config(), "num_mtp_layers", None)
@@ -1456,18 +1450,7 @@ class MTPCandidateGenerator(AssistedCandidateGenerator):
         self.mtp_model = MtpModel.from_pretrained(main_model, device_map={"": self.device})
 
         # Create the mtp cache and allow it to keep its past before we crop it
-        mtp_cache = MtpCache(config=main_model.config.get_mtp_config())
-        # Use full attention for now on sliding layers, same as main_model cache
-        mtp_cache.layers = [
-            DynamicLayer() if type(layer) is DynamicSlidingWindowLayer else layer for layer in mtp_cache.layers
-        ]
-        mtp_cache.layers = [
-            LinearAttentionAndFullAttentionLayer(number_of_states=layer.number_of_states)
-            if type(layer) is LinearAttentionAndSlidingWindowAttentionLayer
-            else layer
-            for layer in mtp_cache.layers
-        ]
-        self.mtp_cache = mtp_cache
+        self.mtp_cache = MtpCache(config=main_model.config.get_mtp_config())
         self.mtp_cache.activate_past_recording()
 
         # Save those to know how to decode mtp tokens

@@ -1955,20 +1955,7 @@ class GenerationMixin(ContinuousMixin):
             return
 
         # Otherwise we NEED to prepare a cache, based on `generation_config.cache_implementation`
-
-        # Assisted decoding and contrastive search require cache rollback, which is incompatible with sliding layers.
-        # To handle this, we skip passing the model config to DynamicCache (forcing a full-layer cache).
-        # The "dynamic_full" option is a shortcut for generate() users to avoid sliding layers on their own.
-        if generation_mode in (GenerationMode.ASSISTED_GENERATION, GenerationMode.CONTRASTIVE_SEARCH):
-            if generation_config.cache_implementation is not None:
-                logger.warning_once(
-                    "An assistant model is provided, using a dynamic cache instead of a cache of type="
-                    f"'{generation_config.cache_implementation}'."
-                )
-            generation_config.cache_implementation = "dynamic_full"
-
-        dynamic_cache_kwargs = {}
-        dynamic_cache_kwargs["config"] = self.config.get_text_config(decoder=True)
+        dynamic_cache_kwargs = {"config": self.config.get_text_config(decoder=True)}
 
         if generation_config.cache_implementation == "offloaded":
             dynamic_cache_kwargs["offloading"] = True
@@ -2005,30 +1992,9 @@ class GenerationMixin(ContinuousMixin):
             cache_config.setdefault("config", self.config.get_text_config(decoder=True))
             backend = cache_config.pop("backend", "quanto")
             model_kwargs[cache_name] = QuantizedCache(backend=backend, **cache_config)
-        # i.e. `cache_implementation` in [None, "dynamic", "offloaded", "dynamic_full"]
-        # TODO: prepare linear cache from a single API, instead of creating in modeling code
+        # i.e. `cache_implementation` in [None, "dynamic", "offloaded"]
         else:
-            cache = DynamicCache(**dynamic_cache_kwargs)
-            # Replace sliding by full
-            if generation_config.cache_implementation == "dynamic_full":
-                from ..cache_utils import (
-                    DynamicLayer,
-                    DynamicSlidingWindowLayer,
-                    LinearAttentionAndFullAttentionLayer,
-                    LinearAttentionAndSlidingWindowAttentionLayer,
-                )
-
-                cache.layers = [
-                    DynamicLayer() if type(layer) is DynamicSlidingWindowLayer else layer for layer in cache.layers
-                ]
-                cache.layers = [
-                    LinearAttentionAndFullAttentionLayer(number_of_states=layer.number_of_states)
-                    if type(layer) is LinearAttentionAndSlidingWindowAttentionLayer
-                    else layer
-                    for layer in cache.layers
-                ]
-
-            model_kwargs[cache_name] = cache
+            model_kwargs[cache_name] = DynamicCache(**dynamic_cache_kwargs)
 
         if (
             self.config.is_encoder_decoder
