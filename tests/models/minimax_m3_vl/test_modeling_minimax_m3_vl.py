@@ -37,6 +37,7 @@ from transformers.testing_utils import (
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
+from ...test_image_processing_common import load_coco_image, load_test_image
 from ...test_modeling_common import (
     TEST_EAGER_MATCHES_BATCHED_AND_GROUPED_INFERENCE_PARAMETERIZATION,
     ModelTesterMixin,
@@ -651,7 +652,6 @@ class MiniMaxM3VLIntegrationTest(unittest.TestCase):
         * LEFT padding is therefore the side to use for batched ``generate``: every real token's
           continuation stays anchored to the live slots, so each row decodes coherently.
         """
-        import requests
 
         model = self._load_model()
         processor = self._load_processor()
@@ -695,10 +695,8 @@ class MiniMaxM3VLIntegrationTest(unittest.TestCase):
         # Two real, semantically distinct images downloaded from the hub/web (the picsum dog and the
         # canonical COCO two-cats photo), paired with deliberately different-length questions so the
         # batch genuinely needs padding.
-        dog = Image.open(requests.get("https://picsum.photos/id/237/400/300", stream=True).raw).convert("RGB")
-        cats = Image.open(
-            requests.get("http://images.cocodataset.org/val2017/000000039769.jpg", stream=True).raw
-        ).convert("RGB")
+        dog = load_test_image("https://picsum.photos/id/237/400/300").convert("RGB")
+        cats = load_coco_image("000000039769.jpg").convert("RGB")
         texts = [
             self._prompt(processor, "What animal is this? One word."),
             self._prompt(
