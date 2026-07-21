@@ -26,6 +26,7 @@ import torch.nn.functional as F
 from torch import nn
 
 from ... import initialization as init
+from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
 from ...integrations import (
@@ -42,16 +43,9 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
-from ...utils.generic import maybe_autocast, merge_with_config_defaults
-from ...utils.import_utils import is_causal_conv1d_available, is_torchdynamo_compiling
+from ...utils.generic import maybe_autocast, maybe_replace_from_package, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from .configuration_lfm2_moe import Lfm2MoeConfig
-
-
-if is_causal_conv1d_available():
-    from causal_conv1d import causal_conv1d_fn, causal_conv1d_update
-else:
-    causal_conv1d_fn, causal_conv1d_update = None, None
 
 
 @use_kernel_forward_from_hub("RMSNorm")
@@ -379,8 +373,47 @@ def apply_mask_to_padding_states(hidden_states, attention_mask):
     return hidden_states
 
 
-kernel_modules = (causal_conv1d_fn, causal_conv1d_update)
-is_fast_path_available = all(kernel_modules)
+@maybe_replace_from_package("causal_conv1d", "causal_conv1d_update")
+def causal_conv1d_update(
+    hidden_states: torch.Tensor,
+    conv_state: torch.Tensor,
+    weight: nn.Parameter,
+    bias: nn.Parameter | None = None,
+    activation: str | None = None,
+):
+    _, hidden_size, seq_len = hidden_states.shape
+    state_len = conv_state.shape[-1]
+
+    hidden_states_new = torch.cat([conv_state, hidden_states], dim=-1).to(weight.dtype)
+    conv_state.copy_(hidden_states_new[:, :, -state_len:])
+    out = F.conv1d(hidden_states_new, weight.unsqueeze(1), bias, padding=0, groups=hidden_size)
+    out = out[:, :, -seq_len:]
+    if activation is not None:
+        out = ACT2FN[activation](out)
+    return out.to(hidden_states.dtype)
+
+
+@maybe_replace_from_package("causal_conv1d", "causal_conv1d_fn")
+def causal_conv1d_fn(
+    hidden_states: torch.Tensor,
+    weight: nn.Parameter,
+    bias: nn.Parameter | None = None,
+    activation: str | None = None,
+    **kwargs,
+):
+    _, hidden_size, seq_len = hidden_states.shape
+    padding = weight.shape[-1] - 1
+
+    out = F.conv1d(
+        hidden_states.to(weight.dtype),
+        weight=weight.unsqueeze(1),
+        bias=bias,
+        padding=padding,
+        groups=hidden_size,
+    )[:, :, :seq_len]
+    if activation is not None:
+        out = ACT2FN[activation](out)
+    return out.to(hidden_states.dtype)
 
 
 class Lfm2MoeShortConv(nn.Module):
@@ -408,89 +441,6 @@ class Lfm2MoeShortConv(nn.Module):
 
         self.layer_type = config.layer_types[layer_idx]
 
-    def cuda_kernels_forward(
-        self,
-        x: torch.Tensor,
-        past_key_values: Cache | None = None,
-        attention_mask: torch.Tensor | None = None,
-        seq_idx: torch.IntTensor | None = None,
-    ):
-        x = apply_mask_to_padding_states(x, attention_mask)
-        BCx = self.in_proj(x).transpose(-1, -2)
-        B, C, x = BCx.chunk(3, dim=-2)
-
-        Bx = B * x
-
-        conv_weights = self.conv.weight.view(self.conv.weight.size(0), self.conv.weight.size(2))
-        if past_key_values is not None and past_key_values.has_previous_state(self.layer_idx):
-            conv_out = causal_conv1d_update(
-                Bx.squeeze(-1),
-                past_key_values.layers[self.layer_idx].conv_states[0],
-                conv_weights,
-                self.conv.bias,
-                None,
-            )
-            conv_out = conv_out.unsqueeze(-1)
-        else:
-            if past_key_values is not None:
-                conv_state = nn.functional.pad(Bx, (self.L_cache - Bx.shape[-1], 0))
-                conv_state = past_key_values.update_conv_state(conv_state, self.layer_idx)[..., -self.L_cache :]
-
-            # `seq_idx` resets conv state at packed-sample boundaries; None = previous behaviour.
-            conv_out = causal_conv1d_fn(Bx, conv_weights, self.conv.bias, activation=None, seq_idx=seq_idx)
-
-        y = C * conv_out
-        y = self.out_proj(y.transpose(-1, -2).contiguous())
-        return y
-
-    def slow_forward(
-        self,
-        x: torch.Tensor,
-        past_key_values: Cache | None = None,
-        attention_mask: torch.Tensor | None = None,
-        seq_idx: torch.IntTensor | None = None,
-    ):
-        seqlen = x.shape[1]
-
-        x = apply_mask_to_padding_states(x, attention_mask)
-        BCx = self.in_proj(x).transpose(-1, -2)
-        B, C, x = BCx.chunk(3, dim=-2)
-
-        Bx = B * x
-
-        if past_key_values is not None and past_key_values.has_previous_state(self.layer_idx):
-            conv_state = past_key_values.update_conv_state(Bx, self.layer_idx)[..., -self.L_cache :]
-            conv_out = torch.sum(conv_state.to(Bx.device) * self.conv.weight[:, 0, :], dim=-1)
-            if self.bias:
-                conv_out += self.conv.bias
-
-            conv_out = conv_out.unsqueeze(-1)
-        elif seq_idx is not None and x.shape[0] == 1:
-            # Per-segment conv so the receptive field cannot cross packed-sample boundaries.
-            if past_key_values is not None:
-                conv_state = nn.functional.pad(Bx, (self.L_cache - Bx.shape[-1], 0))
-                conv_state = past_key_values.update_conv_state(conv_state, self.layer_idx)[..., -self.L_cache :]
-            si = seq_idx[0]
-            change = (si[1:] != si[:-1]).nonzero(as_tuple=True)[0] + 1
-            bounds = torch.cat([change.new_zeros(1), change, change.new_full((1,), si.numel())]).tolist()
-            parts = []
-            for i in range(len(bounds) - 1):
-                s, e = bounds[i], bounds[i + 1]
-                if e > s:
-                    parts.append(self.conv(Bx[:, :, s:e])[..., : e - s])
-            conv_out = torch.cat(parts, dim=-1)
-        else:
-            if past_key_values is not None:
-                conv_state = nn.functional.pad(Bx, (self.L_cache - Bx.shape[-1], 0))
-                conv_state = past_key_values.update_conv_state(conv_state, self.layer_idx)[..., -self.L_cache :]
-
-            conv_out = self.conv(Bx)[..., :seqlen]
-
-        y = C * conv_out
-        y = y.transpose(-1, -2).contiguous()
-        y = self.out_proj(y)
-        return y
-
     @force_accelerate_hooks("conv")
     def forward(
         self,
@@ -499,9 +449,39 @@ class Lfm2MoeShortConv(nn.Module):
         attention_mask: torch.Tensor | None = None,
         seq_idx: torch.IntTensor | None = None,
     ):
-        if is_fast_path_available and "cuda" in hidden_states.device.type and not is_torchdynamo_compiling():
-            return self.cuda_kernels_forward(hidden_states, past_key_values, attention_mask, seq_idx=seq_idx)
-        return self.slow_forward(hidden_states, past_key_values, attention_mask, seq_idx=seq_idx)
+        seq_len = hidden_states.shape[1]
+
+        hidden_states = apply_mask_to_padding_states(hidden_states, attention_mask)
+        BCx = self.in_proj(hidden_states).transpose(-1, -2)
+        B, C, x = BCx.chunk(3, dim=-2)
+        hidden_states = B * x
+
+        use_precomputed_states = past_key_values is not None and past_key_values.has_previous_state(self.layer_idx)
+
+        if use_precomputed_states and seq_len == 1 and not past_key_values.layers[self.layer_idx].record_past:
+            conv_state = past_key_values.layers[self.layer_idx].conv_states[0]
+            # Single-token cached decode: the fused per-step kernel updates the conv state in-place.
+            hidden_states = causal_conv1d_update(
+                hidden_states, conv_state, self.conv1d.weight.squeeze(1), self.conv1d.bias
+            )
+        else:
+            if past_key_values is not None:
+                hidden_states = past_key_values.update_conv_state(
+                    hidden_states, self.layer_idx, conv_kernel_size=self.conv_kernel_size
+                )
+
+            hidden_states = causal_conv1d_fn(
+                hidden_states, self.conv1d.weight.squeeze(1), self.conv1d.bias, seq_idx=seq_idx
+            )
+
+            # Drop the additional previous states
+            if use_precomputed_states:
+                hidden_states = hidden_states[:, :, -seq_len:]
+
+        y = C * hidden_states
+        y = y.transpose(-1, -2).contiguous()
+        y = self.out_proj(y)
+        return y
 
 
 class Lfm2MoeDecoderLayer(GradientCheckpointingLayer):
