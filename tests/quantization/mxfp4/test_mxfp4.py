@@ -589,3 +589,61 @@ class Mxfp4ModelTest(unittest.TestCase):
 
         # we should at least have 3 times memory reduction in total for this model
         assert model_size[""] > quantized_model_size[""] * 3
+
+
+@require_torch_gpu
+@require_kernels
+@REQUIRE_TRITON_MXFP4
+class Mxfp4TrainingFallbackTest(unittest.TestCase):
+    """The MXFP4 triton kernels are forward-only; training runs an eager
+    dequantize-on-the-fly fallback (see integrations/mxfp4.py::mlp_forward).
+    These tests guard the two properties that matter: gradients actually flow
+    through the quantized experts (not just around them via residuals), and
+    the fallback's forward matches the kernel forward numerically."""
+
+    model_name = "openai/gpt-oss-20b"
+
+    def _load(self):
+        from transformers import AutoModelForCausalLM
+
+        return AutoModelForCausalLM.from_pretrained(self.model_name, dtype="auto", device_map={"": 0})
+
+    def test_mxfp4_expert_output_requires_grad(self):
+        model = self._load()
+        for p in model.parameters():
+            p.requires_grad_(False)
+        model.gradient_checkpointing_enable(gradient_checkpointing_kwargs={"use_reentrant": False})
+        model.enable_input_require_grads()
+        model.train()
+
+        seen = {}
+
+        def hook(module, inputs, output):
+            out = output[0] if isinstance(output, tuple) else output
+            seen["grad_fn"] = out.grad_fn is not None
+
+        handle = model.model.layers[0].mlp.register_forward_hook(hook)
+        input_ids = torch.tensor([[1, 2, 3, 4]], device=0)
+        out = model(input_ids=input_ids, labels=input_ids)
+        out.loss.backward()
+        handle.remove()
+
+        self.assertTrue(seen.get("grad_fn"), "MoE output is an autograd constant — training fallback did not engage")
+
+    def test_mxfp4_dequant_forward_matches_kernel(self):
+        model = self._load()
+        model.eval()
+        mlp = model.model.layers[0].mlp
+        hidden = torch.randn(1, 8, model.config.hidden_size, device=0, dtype=torch.bfloat16)
+
+        with torch.no_grad():
+            kernel_out = mlp(hidden)
+            kernel_out = kernel_out[0] if isinstance(kernel_out, tuple) else kernel_out
+
+        probe = hidden.clone().requires_grad_(True)
+        eager_out = mlp(probe)
+        eager_out = eager_out[0] if isinstance(eager_out, tuple) else eager_out
+
+        cos = torch.nn.functional.cosine_similarity(kernel_out.float().flatten(), eager_out.float().flatten(), dim=0)
+        self.assertGreaterEqual(cos.item(), 0.999)
+        self.assertIsNotNone(eager_out.grad_fn)
