@@ -2006,6 +2006,10 @@ class GenerationMixin(ContinuousMixin):
                 DynamicCache(**dynamic_cache_kwargs),  # cross-attention cache
             )
 
+        # If we just created a cache for an assistant model, mark it for past recording, as we will need to rollback it
+        if generation_config.is_assistant:
+            model_kwargs[cache_name].activate_past_recording()
+
     def _supports_logits_to_keep(self: "GenerativePreTrainedModel") -> bool:
         """
         Return True if the current model supports the keyword argument `logits_to_keep` in forward()
