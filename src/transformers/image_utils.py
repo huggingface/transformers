@@ -347,7 +347,7 @@ def get_channel_dimension_axis(image: np.ndarray, input_data_format: ChannelDime
 
 
 def get_image_size(
-    image: np.ndarray | PIL.Image.Image, channel_dim: ChannelDimension | None = None
+    image: np.ndarray | "PIL.Image.Image", channel_dim: ChannelDimension | None = None
 ) -> tuple[int, int]:
     """
     Returns the (height, width) dimensions of the image.
