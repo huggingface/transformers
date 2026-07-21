@@ -13,7 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on {release_date} and added to Hugging Face Transformers on 2026-05-26.*
+*This model was released on {release_date} and added to Hugging Face Transformers on 2026-07-21.*
 
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
@@ -239,6 +239,20 @@ processor = HyperCLOVAXVisionV2Processor.from_pretrained("naver-hyperclovax/Hype
 ## HyperCLOVAXVisionV2Config
 
 [[autodoc]] HyperCLOVAXVisionV2Config
+
+## HyperCLOVAXVisionV2ImageProcessor
+
+[[autodoc]] HyperCLOVAXVisionV2ImageProcessor
+    - preprocess
+
+## HyperCLOVAXVisionV2ImageProcessorPil
+
+[[autodoc]] HyperCLOVAXVisionV2ImageProcessorPil
+    - preprocess
+
+## HyperCLOVAXVisionV2VideoProcessor
+
+[[autodoc]] HyperCLOVAXVisionV2VideoProcessor
 
 ## HyperCLOVAXVisionV2Processor
 

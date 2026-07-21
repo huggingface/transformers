@@ -154,18 +154,18 @@ class HyperCLOVAXVisionV2Model(HyperCLOVAXVisionV2PreTrainedModel):
             special_video_mask = input_ids == self.config.video_token_id
 
         n_image_tokens = special_image_mask.sum()
-        special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
+        special_image_mask = special_image_mask.unsqueeze(-1).to(inputs_embeds.device)
         if image_features is not None:
             torch_compilable_check(
-                inputs_embeds[special_image_mask].numel() == image_features.numel(),
+                n_image_tokens * inputs_embeds.shape[-1] == image_features.numel(),
                 f"Image features and image tokens do not match, tokens: {n_image_tokens}, features: {image_features.shape[0]}",
             )
 
         n_video_tokens = special_video_mask.sum()
-        special_video_mask = special_video_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
+        special_video_mask = special_video_mask.unsqueeze(-1).to(inputs_embeds.device)
         if video_features is not None:
             torch_compilable_check(
-                inputs_embeds[special_video_mask].numel() == video_features.numel(),
+                n_video_tokens * inputs_embeds.shape[-1] == video_features.numel(),
                 f"Video features and video tokens do not match, tokens: {n_video_tokens}, features: {video_features.shape[0]}",
             )
         return special_image_mask, special_video_mask
@@ -423,11 +423,6 @@ class HyperCLOVAXVisionV2ForConditionalGeneration(HyperCLOVAXVisionV2PreTrainedM
         # HyperCLOVAX Vision V2 uses 1D position_ids — do NOT force None like Exaone4.5 does for 2D-RoPE
         return model_inputs
 
-    def _prepare_position_ids_for_generation(self, inputs_tensor, model_kwargs):
-        # HyperCLOVAX Vision V2 uses 1D position_ids (not Qwen2.5-VL's 3D/4D rope_deltas-based ids)
-
-        return super()._prepare_position_ids_for_generation(inputs_tensor, model_kwargs)
-
     def _get_image_nums_and_video_nums(
         self,
         input_ids: torch.LongTensor | None,
@@ -552,6 +547,11 @@ class HyperCLOVAXVisionV2ForConditionalGeneration(HyperCLOVAXVisionV2PreTrainedM
             model_kwargs["encoder_outputs"] = _expand_dict_for_generation(model_kwargs["encoder_outputs"])
 
         return input_ids, model_kwargs
+
+    def _prepare_position_ids_for_generation(self, inputs_tensor, model_kwargs):
+        # HyperCLOVAX Vision V2 uses 1D position_ids (not Qwen2.5-VL's 3D/4D rope_deltas-based ids)
+
+        return super()._prepare_position_ids_for_generation(inputs_tensor, model_kwargs)
 
 
 class HyperCLOVAXVisionV2ForSequenceClassification(
