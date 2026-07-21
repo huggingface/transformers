@@ -24,7 +24,7 @@ from ...modeling_rope_utils import RopeParameters
 from ...processing_utils import Unpack
 from ...utils import auto_docstring
 from ...utils.generic import TransformersKwargs, can_return_tuple
-from ..llama import LlamaConfig
+from ..llama.configuration_llama import LlamaConfig
 from ..llama.modeling_llama import LlamaAttention, LlamaModel, LlamaPreTrainedModel, LlamaRMSNorm
 
 

@@ -13,12 +13,11 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2024-07-15 and added to Hugging Face Transformers on 2024-08-08.*
+*This model was published in HF papers on 2024-07-15 and contributed to Hugging Face Transformers on 2024-08-08.*
 
 # Qwen2Audio
 
 <div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
 <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
 <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
 </div>
@@ -45,8 +44,11 @@ The abstract from the paper is the following:
 ```python
 from io import BytesIO
 from urllib.request import urlopen
+
 import librosa
+
 from transformers import AutoProcessor, Qwen2AudioForConditionalGeneration
+
 
 model = Qwen2AudioForConditionalGeneration.from_pretrained("Qwen/Qwen2-Audio-7B", trust_remote_code=True, device_map="auto")
 processor = AutoProcessor.from_pretrained("Qwen/Qwen2-Audio-7B", trust_remote_code=True)
@@ -80,8 +82,11 @@ In the voice chat mode, users can freely engage in voice interactions with Qwen2
 ```python
 from io import BytesIO
 from urllib.request import urlopen
+
 import librosa
-from transformers import Qwen2AudioForConditionalGeneration, AutoProcessor
+
+from transformers import AutoProcessor, Qwen2AudioForConditionalGeneration
+
 
 processor = AutoProcessor.from_pretrained("Qwen/Qwen2-Audio-7B-Instruct")
 model = Qwen2AudioForConditionalGeneration.from_pretrained("Qwen/Qwen2-Audio-7B-Instruct", device_map="auto")
@@ -106,7 +111,7 @@ for message in conversation:
                     sr=processor.feature_extractor.sampling_rate)[0]
                 )
 
-inputs = processor(text=text, audio=audios, return_tensors="pt", padding=True)
+inputs = processor(text=text, audio=audios, return_tensors="pt", padding=True).to(model.device)
 inputs.input_ids = inputs.input_ids.to(model.device)
 
 generate_ids = model.generate(**inputs, max_length=256)
@@ -122,8 +127,11 @@ In the audio analysis, users could provide both audio and text instructions for 
 ```python
 from io import BytesIO
 from urllib.request import urlopen
+
 import librosa
-from transformers import Qwen2AudioForConditionalGeneration, AutoProcessor
+
+from transformers import AutoProcessor, Qwen2AudioForConditionalGeneration
+
 
 processor = AutoProcessor.from_pretrained("Qwen/Qwen2-Audio-7B-Instruct")
 model = Qwen2AudioForConditionalGeneration.from_pretrained("Qwen/Qwen2-Audio-7B-Instruct", device_map="auto")
@@ -156,7 +164,7 @@ for message in conversation:
                         sr=processor.feature_extractor.sampling_rate)[0]
                 )
 
-inputs = processor(text=text, audio=audios, return_tensors="pt", padding=True)
+inputs = processor(text=text, audio=audios, return_tensors="pt", padding=True).to(model.device)
 inputs.input_ids = inputs.input_ids.to(model.device)
 
 generate_ids = model.generate(**inputs, max_length=256)
@@ -172,8 +180,11 @@ We also support batch inference:
 ```python
 from io import BytesIO
 from urllib.request import urlopen
+
 import librosa
-from transformers import Qwen2AudioForConditionalGeneration, AutoProcessor
+
+from transformers import AutoProcessor, Qwen2AudioForConditionalGeneration
+
 
 processor = AutoProcessor.from_pretrained("Qwen/Qwen2-Audio-7B-Instruct")
 model = Qwen2AudioForConditionalGeneration.from_pretrained("Qwen/Qwen2-Audio-7B-Instruct", device_map="auto")
@@ -213,7 +224,7 @@ for conversation in conversations:
                             sr=processor.feature_extractor.sampling_rate)[0]
                     )
 
-inputs = processor(text=text, audio=audios, return_tensors="pt", padding=True)
+inputs = processor(text=text, audio=audios, return_tensors="pt", padding=True).to(model.device)
 inputs['input_ids'] = inputs['input_ids'].to(model.device)
 inputs.input_ids = inputs.input_ids.to(model.device)
 
@@ -238,6 +249,11 @@ response = processor.batch_decode(generate_ids, skip_special_tokens=True, clean_
 ## Qwen2AudioEncoder
 
 [[autodoc]] Qwen2AudioEncoder
+    - forward
+
+## Qwen2AudioModel
+
+[[autodoc]] Qwen2AudioModel
     - forward
 
 ## Qwen2AudioForConditionalGeneration

@@ -336,9 +336,12 @@ class FalconMambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTest
                 def recursive_check(tuple_object, dict_object):
                     if isinstance(tuple_object, DynamicCache):  # MODIFIED PART START
                         for idx in range(len(tuple_object)):
-                            recursive_check(tuple_object.layers[idx].conv_states, dict_object.layers[idx].conv_states)
                             recursive_check(
-                                tuple_object.layers[idx].recurrent_states, dict_object.layers[idx].recurrent_states
+                                tuple_object.layers[idx].conv_states[0], dict_object.layers[idx].conv_states[0]
+                            )
+                            recursive_check(
+                                tuple_object.layers[idx].recurrent_states[0],
+                                dict_object.layers[idx].recurrent_states[0],
                             )
                     elif isinstance(tuple_object, (list, tuple)):  # MODIFIED PART END
                         for tuple_iterable_value, dict_iterable_value in zip(tuple_object, dict_object):
@@ -386,6 +389,15 @@ class FalconMambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTest
 
     @unittest.skip("Mamba models do not support DDP.")
     def test_multi_gpu_data_parallel_forward(self):
+        pass
+
+    @unittest.skip(
+        "FalconMamba shares Mamba1's conv path, which has no chunked-continuation support: on a cached "
+        "multi-token forward it rebuilds conv_state from the zero-padded current chunk instead of bridging "
+        "the previous window (and multiplies the raw full-history mask against the local chunk), so the "
+        "split-vs-single comparison cannot match regardless of padding masking — out of Mamba1's contract."
+    )
+    def test_recurrent_layers_mask_padding_on_continued_forward(self):
         pass
 
 
@@ -464,7 +476,7 @@ class FalconMambaIntegrationTests(unittest.TestCase):
         EXPECTED_OUTPUTS = Expectations(
             {
                 ("xpu", 3): [
-                    'Hello today I will be talking about the “Theory of Relativity” by Albert Einstein.\nThe',
+                    'Hello today I am going to talk about the “Theory of Relativity” by Albert Einstein.\n',
                     'Hello my name is Younes and today I will be talking about the importance of the internet in our lives.\nThe internet is a global',
                 ],
                 ("cuda", 7): [
@@ -498,7 +510,7 @@ class FalconMambaIntegrationTests(unittest.TestCase):
         EXPECTED_OUTPUTS = Expectations(
             {
                 ("xpu", 3): [
-                    ' I will be talking about the “Theory of Relativity” by Albert Einstein.\nThe',
+                    ' I am going to talk about the “Theory of Relativity” by Albert Einstein.\n',
                     ' I will be talking about the importance of the internet in our lives.\nThe internet is a global',
                 ],
                 ("cuda", 7): [

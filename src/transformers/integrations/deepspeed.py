@@ -352,7 +352,7 @@ def _apply_weight_conversions_to_state_dict(model, state_dict, weight_mapping):
     # Preserve metadata from the original state dict
     metadata = getattr(state_dict, "_metadata", None)
 
-    prefix = model.base_model_prefix
+    base_model_prefix = model.base_model_prefix
 
     # Build a meta state dict for matching - only keys/shapes, no actual tensor data
     # This minimizes memory since we don't duplicate the model's parameters
@@ -367,7 +367,9 @@ def _apply_weight_conversions_to_state_dict(model, state_dict, weight_mapping):
     if len(converters) == 0:
         new_state_dict = {}
         for original_key, tensor in state_dict.items():
-            renamed_key, _ = rename_source_key(original_key, renamings, [], prefix, model_state_dict)
+            renamed_key, _ = rename_source_key(
+                original_key, renamings, [], base_model_prefix=base_model_prefix, meta_state_dict=model_state_dict
+            )
             if renamed_key in model_state_dict:
                 new_state_dict[renamed_key] = tensor
         # Attach metadata to the new state dict
@@ -386,7 +388,9 @@ def _apply_weight_conversions_to_state_dict(model, state_dict, weight_mapping):
     sorted_keys = sorted(state_dict.keys(), key=lambda k: dot_natural_key(k))
     for original_key in sorted_keys:
         tensor = state_dict.pop(original_key)
-        renamed_key, source_pattern = rename_source_key(original_key, renamings, converters, prefix, model_state_dict)
+        renamed_key, source_pattern = rename_source_key(
+            original_key, renamings, converters, base_model_prefix=base_model_prefix, meta_state_dict=model_state_dict
+        )
 
         # Only process if the renamed key is in the model's state dict
         if renamed_key in model_state_dict:
@@ -491,7 +495,7 @@ def _load_state_dict_into_zero3_model(model_to_load, state_dict, load_config=Non
             for k in named_parameters:
                 if k in state_dict:
                     param = named_parameters[k]
-                    # crutial to not init the weight again
+                    # crucial to not init the weight again
                     param._is_hf_initialized = True
                     params_to_gather.append(param)
                     missing_keys.discard(k)
@@ -503,6 +507,15 @@ def _load_state_dict_into_zero3_model(model_to_load, state_dict, load_config=Non
                 with deepspeed.zero.GatheredParameters(params_to_gather, modifier_rank=0):
                     if torch.distributed.get_rank() == 0:
                         module._load_from_state_dict(*args)
+
+            # Buffers are not partitioned by ZeRO-3, load them directly
+            named_buffers = dict(module.named_buffers(prefix=prefix[:-1], recurse=False))
+            for k, buf in named_buffers.items():
+                if k in state_dict and buf is not None:
+                    missing_keys.discard(k)
+                    with torch.no_grad():
+                        buf.copy_(state_dict[k])
+                    buf._is_hf_initialized = True
 
         for name, child in module._modules.items():
             if child is not None:
@@ -715,19 +728,17 @@ def deepspeed_sp_compute_loss(accelerator, model, inputs, return_outputs, pc):
             "Sequence parallelism is enabled but no SP process group is available. "
             "Ensure torch_device_mesh is initialized or sp_backend='deepspeed' with sp_size > 1."
         )
-    sp_world_size = pc.sp_size
     # differentiable weighted per-shard-loss aggregation across ranks
     losses_per_rank = torch.distributed.nn.functional.all_gather(loss, group=sp_group)
     # special dealing with SFT that has prompt tokens that aren't used in loss computation
     good_tokens = (inputs["shift_labels"] != -100).view(-1).sum()
     good_tokens_per_rank = torch.distributed.nn.functional.all_gather(good_tokens, group=sp_group)
-    # Skip ranks with zero valid tokens
-    total_loss = sum(
-        losses_per_rank[rank] * good_tokens_per_rank[rank]
-        for rank in range(sp_world_size)
-        if good_tokens_per_rank[rank] > 0
-    )
-    total_good_tokens = sum(good_tokens_per_rank)
-    loss = total_loss / max(total_good_tokens, 1)
+    losses_stacked = torch.stack(losses_per_rank)
+    good_tokens_stacked = torch.stack(good_tokens_per_rank)
+    mask = good_tokens_stacked > 0
+    safe_losses = torch.where(mask, losses_stacked, torch.zeros_like(losses_stacked))
+    total_loss = (safe_losses * good_tokens_stacked).sum()
+    total_good_tokens = good_tokens_stacked.sum()
+    loss = total_loss / total_good_tokens.clamp(min=1)
 
     return (loss, outputs) if return_outputs else loss

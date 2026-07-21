@@ -25,12 +25,14 @@ from .utils import (
     is_flash_attn_2_available,
     is_flash_attn_3_available,
     is_flash_attn_4_available,
+    is_rocm_platform,
     is_torch_cuda_available,
     is_torch_mlu_available,
     is_torch_npu_available,
     is_torch_xpu_available,
     logging,
 )
+from .utils.generic import split_attention_implementation
 from .utils.import_utils import PACKAGE_DISTRIBUTION_MAPPING, is_tracing
 
 
@@ -58,10 +60,13 @@ def is_flash_attn_available():
     )
 
 
-# Mapping from flash attention implementations to their kernel fallback repositories
+# Mapping from flash attention implementations to their kernel fallback repositories.
+
 FLASH_ATTN_KERNEL_FALLBACK = {
     "flash_attention_2": "kernels-community/flash-attn2",
-    "flash_attention_3": "kernels-community/vllm-flash-attn3",
+    "flash_attention_3": (
+        "kernels-community/aiter-flash-attn" if is_rocm_platform() else "kernels-community/vllm-flash-attn3"
+    ),
     "flash_attention_4": "kernels-community/flash-attn4",
 }
 
@@ -74,8 +79,10 @@ FLASH_ATTENTION_COMPATIBILITY_MATRIX = {
     2: {
         "flash_attn_version": 2,
         "general_availability_check": is_flash_attn_2_available,
-        "pkg_availability_check": lambda *args, **kwargs: importlib.util.find_spec("flash_attn") is not None
-        and "flash-attn" in [pkg.replace("_", "-") for pkg in PACKAGE_DISTRIBUTION_MAPPING["flash_attn"]],
+        "pkg_availability_check": lambda *args, **kwargs: (
+            importlib.util.find_spec("flash_attn") is not None
+            and "flash-attn" in [pkg.replace("_", "-") for pkg in PACKAGE_DISTRIBUTION_MAPPING.get("flash_attn", [])]
+        ),
         "supported_devices": (
             (is_torch_cuda_available, "cuda"),
             (is_torch_mlu_available, "mlu"),
@@ -93,16 +100,21 @@ FLASH_ATTENTION_COMPATIBILITY_MATRIX = {
     3: {
         "flash_attn_version": 3,
         "general_availability_check": is_flash_attn_3_available,
-        "pkg_availability_check": lambda *args, **kwargs: importlib.util.find_spec("flash_attn_interface") is not None
-        and "flash-attn-3" in [pkg.replace("_", "-") for pkg in PACKAGE_DISTRIBUTION_MAPPING["flash_attn_interface"]],
+        "pkg_availability_check": lambda *args, **kwargs: (
+            importlib.util.find_spec("flash_attn_interface") is not None
+            and "flash-attn-3"
+            in [pkg.replace("_", "-") for pkg in PACKAGE_DISTRIBUTION_MAPPING.get("flash_attn_interface", [])]
+        ),
         "supported_devices": ((is_torch_cuda_available, "cuda"),),
         "cuda_min_major_version": 8,  # Ampere
     },
     4: {
         "flash_attn_version": 4,
         "general_availability_check": is_flash_attn_4_available,
-        "pkg_availability_check": lambda *args, **kwargs: importlib.util.find_spec("flash_attn") is not None
-        and "flash-attn-4" in [pkg.replace("_", "-") for pkg in PACKAGE_DISTRIBUTION_MAPPING["flash_attn"]],
+        "pkg_availability_check": lambda *args, **kwargs: (
+            importlib.util.find_spec("flash_attn") is not None
+            and "flash-attn-4" in [pkg.replace("_", "-") for pkg in PACKAGE_DISTRIBUTION_MAPPING.get("flash_attn", [])]
+        ),
         "supported_devices": ((is_torch_cuda_available, "cuda"),),
         "cuda_min_major_version": 9,  # Hopper
     },
@@ -147,8 +159,7 @@ def _lazy_imports(
 
     pad_input, unpad_input = _pad_input, _unpad_input
 
-    is_paged = implementation.startswith("paged|")
-    implementation = implementation.split("|")[1] if is_paged else implementation
+    is_paged, implementation = split_attention_implementation(implementation)
 
     if (implementation == "flash_attention_2" and is_fa2) or (
         implementation is None and is_fa2 and not is_fa3 and not is_fa4
@@ -183,6 +194,12 @@ def _lazy_imports(
             flash_attn_func = getattr(kernel, "flash_attn_func", None)
             flash_attn_varlen_func = getattr(kernel, "flash_attn_varlen_func", None)
             flash_attn_with_kvcache = getattr(kernel, "flash_attn_with_kvcache", None)
+            # Block-sparse kernels (e.g. ``kernels-staging/msa``) expose ``sparse_atten_func`` rather than
+            # ``flash_attn_varlen_func``. ``load_and_register_attn_kernel`` already registered their dedicated
+            # wrapper into ``ALL_ATTENTION_FUNCTIONS``, so they dispatch through the attention interface and
+            # never touch the flash varlen globals -- preloading them here is a no-op, not an error.
+            if flash_attn_varlen_func is None and hasattr(kernel, "sparse_atten_func"):
+                return flash_attn_func, flash_attn_varlen_func, flash_attn_with_kvcache, pad_input, unpad_input
             if flash_attn_varlen_func is None:
                 raise ValueError(
                     f"Could not find the currently requested flash attention implementation at `{implementation}`."
@@ -248,7 +265,9 @@ def lazy_import_flash_attention(
         _flash_fn, _flash_varlen_fn, _flash_with_kvcache_fn, _pad_fn, _unpad_fn = _lazy_imports(
             implementation, attention_wrapper, allow_all_kernels=allow_all_kernels
         )
-        _process_flash_kwargs_fn = _lazy_define_process_function(_flash_varlen_fn)
+        # Block-sparse kernels register their own attention interface and expose no varlen fn to introspect;
+        # skip building the kwargs-support map (it is only consumed by the flash varlen path they never take).
+        _process_flash_kwargs_fn = _lazy_define_process_function(_flash_varlen_fn) if _flash_varlen_fn else None
 
     return (_flash_fn, _flash_varlen_fn, _flash_with_kvcache_fn, _pad_fn, _unpad_fn), _process_flash_kwargs_fn
 
@@ -297,7 +316,8 @@ def _unpad_input(hidden_states, attention_mask, unused_mask=None):
     seqlens_in_batch = all_masks.sum(dim=-1, dtype=torch.int32)
     used_seqlens_in_batch = attention_mask.sum(dim=-1, dtype=torch.int32)
     indices = torch.nonzero(all_masks.flatten(), as_tuple=False).flatten()
-    max_seqlen_in_batch = seqlens_in_batch.max()
+    # using .item() here is required to prevent a performance regression (#46693)
+    max_seqlen_in_batch = seqlens_in_batch.max().item()
     cu_seqlens = F.pad(torch.cumsum(seqlens_in_batch, dim=0, dtype=torch.int32), (1, 0))
 
     return (
@@ -346,7 +366,8 @@ def _get_unpad_data(attention_mask: torch.Tensor) -> tuple[torch.Tensor, torch.T
     """
     seqlens_in_batch = attention_mask.sum(dim=-1, dtype=torch.int32)
     indices = torch.nonzero(attention_mask.flatten(), as_tuple=False).flatten()
-    max_seqlen_in_batch = seqlens_in_batch.max()
+    # using .item() here is required to prevent a performance regression (#46693)
+    max_seqlen_in_batch = seqlens_in_batch.max().item()
     cu_seqlens = F.pad(torch.cumsum(seqlens_in_batch, dim=0, dtype=torch.int32), (1, 0))
     return (
         indices,

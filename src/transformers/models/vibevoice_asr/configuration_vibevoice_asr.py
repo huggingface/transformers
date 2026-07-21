@@ -17,16 +17,18 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import math
+
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import auto_docstring
 from ..auto import CONFIG_MAPPING, AutoConfig
 
 
 @auto_docstring(checkpoint="microsoft/VibeVoice-ASR-HF")
 @strict
-class VibeVoiceAsrConfig(PretrainedConfig):
+class VibeVoiceAsrConfig(PreTrainedConfig):
     r"""
     acoustic_tokenizer_encoder_config (`Union[VibeVoiceAcousticTokenizerConfig, dict]`, *optional*):
         The config object or dictionary of the acoustic tokenizer. This tokenizer extracts acoustic features from audio.
@@ -68,9 +70,9 @@ class VibeVoiceAsrConfig(PretrainedConfig):
         "text_config": AutoConfig,
     }
 
-    acoustic_tokenizer_encoder_config: dict | PretrainedConfig | None = None
-    semantic_tokenizer_encoder_config: dict | PretrainedConfig | None = None
-    text_config: dict | PretrainedConfig | None = None
+    acoustic_tokenizer_encoder_config: dict | PreTrainedConfig | None = None
+    semantic_tokenizer_encoder_config: dict | PreTrainedConfig | None = None
+    text_config: dict | PreTrainedConfig | None = None
     audio_token_id: int = 151648
     audio_bos_token_id: int = 151646
     audio_eos_token_id: int = 151647
@@ -106,6 +108,27 @@ class VibeVoiceAsrConfig(PretrainedConfig):
             self.text_config = CONFIG_MAPPING["qwen2"]()
 
         super().__post_init__(**kwargs)
+
+    def validate_architecture(self):
+        """Part of `@strict`-powered validation. Validates the architecture of the config."""
+        hop_length = self.acoustic_tokenizer_encoder_config.hop_length
+        if self.acoustic_tokenizer_chunk_size % hop_length != 0:
+            raise ValueError(
+                f"`acoustic_tokenizer_chunk_size` must be a multiple of hop length "
+                f"({hop_length}), got {self.acoustic_tokenizer_chunk_size}."
+            )
+
+    @property
+    def max_position_embeddings(self) -> int:
+        return math.ceil(self.acoustic_tokenizer_chunk_size / self.acoustic_tokenizer_encoder_config.hop_length)
+
+    @max_position_embeddings.setter
+    def max_position_embeddings(self, value: int):
+        if value <= 0:
+            raise ValueError(f"Attempted to set `max_position_embeddings` to {value}; you need a positive value!")
+
+        hop_length = self.acoustic_tokenizer_encoder_config.hop_length
+        self.acoustic_tokenizer_chunk_size = int(value) * hop_length
 
 
 __all__ = ["VibeVoiceAsrConfig"]

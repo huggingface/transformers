@@ -21,9 +21,9 @@ from transformers.utils import direct_transformers_import
 CHECKER_CONFIG = {
     "name": "config_docstrings",
     "label": "Config docstrings",
-    # Approximate: iterates CONFIG_MAPPING at runtime via inspect.getsource(), not file globs.
+    # Approximate: iterates CONFIG_MAPPING at runtime via inspect.getsource(), not cache globs.
     # Only configs registered in CONFIG_MAPPING are checked; deprecated models are skipped.
-    "file_globs": ["src/transformers/models/**/configuration_*.py"],
+    "cache_globs": ["src/transformers/models/**/configuration_*.py"],
     "check_args": [],
     "fix_args": None,
 }
@@ -58,6 +58,10 @@ CONFIG_CLASSES_TO_IGNORE_FOR_DOCSTRING_CHECKPOINT_CHECK = {
     "GraniteMoeHybridConfig",
     "Qwen3MoeConfig",
     "GraniteSpeechConfig",
+    "InklingConfig",
+    "InklingTextConfig",
+    "InklingAudioConfig",
+    "InklingVisionConfig",
 }
 
 

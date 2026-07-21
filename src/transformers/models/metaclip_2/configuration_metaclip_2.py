@@ -102,17 +102,17 @@ class MetaClip2VisionConfig(PreTrainedConfig):
 
     hidden_size: int = 768
     intermediate_size: int = 3072
-    projection_dim: int | None = 512
+    projection_dim: int = 512
     num_hidden_layers: int = 12
     num_attention_heads: int = 12
-    num_channels: int | None = 3
-    image_size: int | None = 224
-    patch_size: int | None = 32
+    num_channels: int = 3
+    image_size: int | list[int] | tuple[int, int] | None = 224
+    patch_size: int | list[int] | tuple[int, int] | None = 32
     hidden_act: str = "quick_gelu"
-    layer_norm_eps: float | None = 1e-5
+    layer_norm_eps: float = 1e-5
     attention_dropout: int | float | None = 0.0
     initializer_range: float = 0.02
-    initializer_factor: float | None = 1.0
+    initializer_factor: float = 1.0
 
     def validate_architecture(self):
         """Part of `@strict`-powered validation. Validates the architecture of the config."""

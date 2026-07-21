@@ -13,13 +13,12 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2025-03-07 and added to Hugging Face Transformers on 2026-03-04.*
+*This model was published in HF papers on 2025-03-07 and contributed to Hugging Face Transformers on 2026-03-04.*
 
 # EuroBERT
 
 <div style="float: right;">
   <div class="flex flex-wrap space-x-1">
-    <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
     <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
     <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
   </div>
@@ -36,14 +35,13 @@ The example below demonstrates how to predict the `<|mask|>` token with [`Pipeli
 <hfoptions id="usage">
 <hfoption id="Pipeline">
 
-```py
-import torch
+```python
 from transformers import pipeline
+
 
 pipeline = pipeline(
     task="fill-mask",
     model="EuroBERT/EuroBERT-210m",
-    dtype=torch.float16,
     device=0
 )
 pipeline("Plants create <|mask|> through a process known as photosynthesis.")
@@ -52,16 +50,17 @@ pipeline("Plants create <|mask|> through a process known as photosynthesis.")
 </hfoption>
 <hfoption id="AutoModel">
 
-```py
+```python
 import torch
+
 from transformers import AutoModelForMaskedLM, AutoTokenizer
+
 
 tokenizer = AutoTokenizer.from_pretrained(
     "EuroBERT/EuroBERT-210m",
 )
 model = AutoModelForMaskedLM.from_pretrained(
     "EuroBERT/EuroBERT-210m",
-    dtype=torch.float16,
     device_map="auto",
     attn_implementation="sdpa"
 )

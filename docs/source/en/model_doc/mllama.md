@@ -13,13 +13,10 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2024-09-25 and added to Hugging Face Transformers on 2024-09-25.*
+*This model was contributed to Hugging Face Transformers on 2024-09-25.*
 
 # Mllama
 
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-</div>
 
 ## Overview
 
@@ -57,11 +54,11 @@ model.set_output_embeddings(resized_embeddings)
 ### Instruct model
 
 ```python
-import torch
-from transformers import MllamaForConditionalGeneration, AutoProcessor
+from transformers import AutoProcessor, MllamaForConditionalGeneration
+
 
 model_id = "meta-llama/Llama-3.2-11B-Vision-Instruct"
-model = MllamaForConditionalGeneration.from_pretrained(model_id, device_map="auto", dtype=torch.bfloat16)
+model = MllamaForConditionalGeneration.from_pretrained(model_id, device_map="auto")
 processor = AutoProcessor.from_pretrained(model_id)
 
 messages = [
@@ -84,12 +81,13 @@ print(processor.decode(output[0]))
 
 ```python
 import requests
-import torch
 from PIL import Image
-from transformers import MllamaForConditionalGeneration, AutoProcessor
+
+from transformers import AutoProcessor, MllamaForConditionalGeneration
+
 
 model_id = "meta-llama/Llama-3.2-11B-Vision"
-model = MllamaForConditionalGeneration.from_pretrained(model_id, device_map="auto", dtype=torch.bfloat16)
+model = MllamaForConditionalGeneration.from_pretrained(model_id, device_map="auto")
 processor = AutoProcessor.from_pretrained(model_id)
 
 prompt = "<|image|>If I had to write a haiku for this one"
@@ -104,6 +102,14 @@ print(processor.decode(output[0], skip_special_tokens=True))
 ## MllamaConfig
 
 [[autodoc]] MllamaConfig
+
+## MllamaTextConfig
+
+[[autodoc]] MllamaTextConfig
+
+## MllamaVisionConfig
+
+[[autodoc]] MllamaVisionConfig
 
 ## MllamaProcessor
 

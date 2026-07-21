@@ -25,16 +25,8 @@ Add `--continuous-batching` to enable it.
 
 ```sh
 transformers serve \
-  --continuous-batching
-  --attn_implementation "sdpa"
-```
-
-Monitor continuous batching performance with [OpenTelemetry](https://opentelemetry.io). It collects traces and metrics, but you'll need a backend to visualize them.
-
-Install the OpenTelemetry dependency.
-
-```py
-pip install transformers[open-telemetry]
+  --continuous-batching \
+  --attn-implementation "sdpa"
 ```
 
 ## Quantization
@@ -66,8 +58,23 @@ An optimized [attention backend](../attention_interface) improves memory efficie
 
 ```sh
 transformers serve \
-  --continuous_batching \
-  --attn_implementation "flash_attention_2"
+  --continuous-batching \
+  --attn-implementation "flash_attention_2"
+```
+
+### Apple Silicon (Metal flash attention)
+
+Install [kernels](https://github.com/huggingface/kernels) to make `transformers serve` default to [kernels-community/metal-flash-sdpa](https://huggingface.co/kernels-community/metal-flash-sdpa) on MPS. The Metal flash kernel runs 1.66x faster than SDPA with `generate_batch` on 100 samples of gsm8k, Qwen2.5-0.5B-Instruct and MPS fp16. It matches SDPA token-for-token under greedy decoding.
+
+```sh
+pip install kernels
+transformers serve
+```
+
+A warning prints at startup confirming the auto-selection. Pass `--attn-implementation sdpa` to opt out.
+
+```sh
+transformers serve --attn-implementation sdpa
 ```
 
 ## Compile
@@ -88,6 +95,6 @@ The `"bfloat16"` or `"float16"` [data types](../models#model-data-type) save mem
 
 ```sh
 transformers serve \
-  --continuous_batching \
+  --continuous-batching \
   --dtype "bfloat16"
 ```

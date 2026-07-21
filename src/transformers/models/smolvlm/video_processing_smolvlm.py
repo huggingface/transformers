@@ -15,6 +15,7 @@
 
 import numpy as np
 import torch
+from torch.nn import functional as F
 
 from ...image_processing_utils import BatchFeature, get_size_dict
 from ...image_utils import (
@@ -22,7 +23,6 @@ from ...image_utils import (
     IMAGENET_STANDARD_STD,
     PILImageResampling,
     SizeDict,
-    pil_torch_interpolation_mapping,
 )
 from ...processing_utils import Unpack, VideosKwargs
 from ...utils import TensorType, is_torchvision_available, logging
@@ -148,21 +148,6 @@ class SmolVLMVideoProcessor(BaseVideoProcessor):
         Returns:
             `torch.Tensor`: The resized video.
         """
-        if resample is not None:
-            if isinstance(resample, (PILImageResampling, int)):
-                interpolation = pil_torch_interpolation_mapping[resample]
-            else:
-                interpolation = resample
-        else:
-            interpolation = tvF.InterpolationMode.BILINEAR
-        if interpolation == tvF.InterpolationMode.LANCZOS:
-            logger.warning_once(
-                "You have used fast image processor with LANCZOS resample which not yet supported for torch.Tensor. "
-                "BICUBIC resample will be used as an alternative. Please fall back to image processor if you "
-                "want full consistency with the original model."
-            )
-            interpolation = tvF.InterpolationMode.BICUBIC
-
         if size.longest_edge:
             # Resize the image so that the shortest edge or the longest edge is of the given size
             # while maintaining the aspect ratio of the original image.
@@ -175,12 +160,14 @@ class SmolVLMVideoProcessor(BaseVideoProcessor):
         else:
             raise ValueError(f"Size must contain 'height' and 'width' keys, or 'longest_edge' key. Got {size}.")
 
-        video = tvF.resize(video, new_size, interpolation=interpolation, antialias=antialias)
+        video = super().resize(
+            video, SizeDict(height=new_size[0], width=new_size[1]), resample=resample, antialias=antialias
+        )
 
         # Resize again to match image processor when `do_image_splitting=False`. Frames have to be squared to `max_image_size`
-        # NOTE: videos are always processoed without image splitting
-        max_size = self.max_image_size["longest_edge"], self.max_image_size["longest_edge"]
-        video = tvF.resize(video, max_size, interpolation=interpolation, antialias=antialias)
+        # NOTE: videos are always processed without image splitting
+        max_size = SizeDict(height=self.max_image_size["longest_edge"], width=self.max_image_size["longest_edge"])
+        video = super().resize(video, max_size, resample=resample, antialias=antialias)
         return video
 
     def pad(
@@ -194,7 +181,7 @@ class SmolVLMVideoProcessor(BaseVideoProcessor):
         """Pads the sample with empty video to the padded_size
         Args:
             video (`torch.Tensor`):
-                Video to pad.
+                Batched video to pad.
             padded_size (`tuple[int, int]`):
                 Height and width to pad.
             max_num_frames (`int`):
@@ -205,17 +192,19 @@ class SmolVLMVideoProcessor(BaseVideoProcessor):
                 Whether to return a pixel mask.
         """
         original_size = video.size()[-2:]
+        num_frames = video.shape[1] if video.ndim == 5 else video.shape[0]
         padding_height = padded_size[0] - original_size[0]
         padding_width = padded_size[1] - original_size[1]
-        padding_frame = max_num_frames - video.shape[0]
-        if padding_width < 0 or padding_height < 0:
+        padding_frame = max_num_frames - num_frames
+        if padding_width < 0 or padding_height < 0 or padding_frame < 0:
             raise ValueError(
                 f"Padding dimensions are negative. Please make sure that the padded size is larger than the "
-                f"original size. Got padded size: {padded_size}, original size: {original_size}."
+                f"original size. Got padded max number of frames {max_num_frames} and padded size: {padded_size}, "
+                f"original number of frames {num_frames} and size: {original_size}."
             )
-        if original_size != padded_size:
+        if original_size != padded_size or padding_frame > 0:
             padding = [0, padding_width, 0, padding_height, 0, 0, 0, padding_frame]
-            video = tvF.pad(video, padding, fill=fill)
+            video = F.pad(video, padding, value=fill)
 
         # Make a pixel mask for the video, where 1 indicates a valid pixel and 0 indicates padding.
         # Mask shape is (num_frames, height, width) so we omit the channel dim

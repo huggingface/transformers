@@ -159,6 +159,8 @@ class EsmConfig(PreTrainedConfig):
     mask_token_id (`int`, *optional*):
         The index of the mask token in the vocabulary. This must be included in the config because of the
         "mask-dropout" scaling trick, which will scale the inputs depending on the number of masked tokens.
+    rope_theta (`float`, defaults to 10000.0):
+        The base period of the RoPE embeddings. Only used when `position_embedding_type` is set to `"rotary"`.
     position_embedding_type (`str`, *optional*, defaults to `"absolute"`):
         Type of position embedding. Choose either `"absolute"` or "rotary"`.
     emb_layer_norm_before (`bool`, *optional*):
@@ -200,6 +202,7 @@ class EsmConfig(PreTrainedConfig):
     hidden_dropout_prob: float | None = 0.1
     attention_probs_dropout_prob: float | None = 0.1
     max_position_embeddings: int = 1026
+    rope_theta: float = 10000.0
     initializer_range: float = 0.02
     layer_norm_eps: float | None = 1e-12
     position_embedding_type: str | None = "absolute"
@@ -212,6 +215,8 @@ class EsmConfig(PreTrainedConfig):
     is_decoder: bool | None = False
     add_cross_attention: bool | None = False
     tie_word_embeddings: bool = True
+    bos_token_id: int | None = None
+    eos_token_id: int | list[int] | None = 2
 
     def __post_init__(self, **kwargs):
         if self.is_folding_model:

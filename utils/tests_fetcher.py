@@ -943,6 +943,36 @@ def should_run_repo_utils_tests(modified_files: list[str]) -> bool:
     return any(path.startswith("utils/") for path in modified_files)
 
 
+def get_conftest_tests() -> list[str]:
+    """
+    Return the list of tests guarding the pytest ``conftest.py`` machinery itself.
+
+    Returns:
+        `List[str]`: The conftest test files.
+    """
+    conftest_dir = PATH_TO_TESTS / "conftest_tests"
+    if not conftest_dir.is_dir():
+        return []
+    return sorted(str(path.relative_to(PATH_TO_REPO)) for path in conftest_dir.glob("test_*.py"))
+
+
+def should_run_conftest_tests(modified_files: list[str]) -> bool:
+    """
+    Return whether the ``conftest.py`` tests should be scheduled based on the modified files.
+
+    These tests exercise the test runner (the repo-root ``conftest.py``) rather than the
+    library, so they only need to run when a ``conftest.py`` is touched.
+
+    Args:
+        modified_files (`List[str]`):
+            The list of modified files relative to the repo root.
+
+    Returns:
+        `bool`: Whether the conftest tests should run.
+    """
+    return any(os.path.basename(path) == "conftest.py" for path in modified_files)
+
+
 def _print_list(l) -> str:
     """
     Pretty print a list of elements with one line per element and a - starting each line.
@@ -1011,6 +1041,9 @@ def infer_tests_to_run(output_file: str, diff_with_last_commit: bool = False, te
 
     if should_run_repo_utils_tests(modified_files):
         test_files_to_run.extend(get_repo_utils_tests())
+
+    if should_run_conftest_tests(modified_files):
+        test_files_to_run.extend(get_conftest_tests())
 
     test_files_to_run = sorted(set(test_files_to_run))
     # Remove SageMaker tests
@@ -1094,12 +1127,15 @@ JOB_TO_TEST_FILE = {
     "examples_torch": r"examples/pytorch/.*test_.*",
     "tests_exotic_models": r"tests/models/.*(?=layoutlmv|nat|deta|udop|nougat).*",
     "tests_custom_tokenizers": r"tests/models/.*/test_tokenization_(?=bert_japanese|openai|clip).*",
-    "tests_repo_utils": r"tests/repo_utils/test_.*\.py",
+    # conftest tests exercise the test runner (repo-root conftest.py); they share the
+    # consistency image and run alongside the repo utils tests in the same CI job.
+    "tests_repo_utils": r"tests/(?:repo_utils|conftest_tests)/test_.*\.py",
     "pipelines_torch": r"tests/models/.*/test_modeling_.*",
-    "tests_hub": r"tests/.*",
-    "tests_non_model": r"tests/[^/]*?/test_.*\.py",
+    # don't include peft or conftest tests for non_model (conftest tests run in the repo_utils job)
+    "tests_non_model": r"tests/(?!peft_integration/|conftest_tests/)[^/]*?/test_.*\.py",
     "tests_training_ci": r"tests/models/.*/test_modeling_.*",
     "tests_tensor_parallel_ci": r"(tests/models/.*/test_modeling_.*|tests/tensor_parallel(?:/test_tensor_parallel\.py)?)",
+    "tests_peft_integration": r"tests/peft_integration/test_.*\.py",
 }
 
 
@@ -1111,20 +1147,12 @@ def create_test_list_from_filter(full_test_list, out_path):
     to_output = []
     for job_name, _filter in JOB_TO_TEST_FILE.items():
         file_name = os.path.join(out_path, f"{job_name}_test_list.txt")
-        if job_name == "tests_hub":
-            files_to_test = ["tests"]
-        else:
-            files_to_test = list(re.findall(_filter, all_test_files))
+        files_to_test = list(re.findall(_filter, all_test_files))
 
         print(job_name, file_name, len(files_to_test))
 
         if len(files_to_test) > 0:  # No tests -> no file with test list
             to_output.append((job_name, file_name, files_to_test))
-
-    # Only get `tests_hub`, which means we have 0 test file for all other jobs --> No job at all to run.
-    if len(to_output) == 1:
-        print("No test file found for any job, skipping `tests_hub` as well.")
-        to_output = []
 
     for _, file_name, files_to_test in to_output:
         with open(file_name, "w") as f:

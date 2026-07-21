@@ -27,7 +27,9 @@ from transformers.testing_utils import (
     get_device_properties,
     require_accelerate,
     require_torch_accelerator,
+    require_torch_gpu,
     require_torch_multi_accelerator,
+    require_torch_multi_gpu,
     slow,
     torch_device,
 )
@@ -392,6 +394,10 @@ class FP8QuantizerTest(unittest.TestCase):
         Checks implicitly if the moe implementation is correct, i.e. it does not crash for cases
         where the indices go over `top_k` as shown within the Minimax M2 model
         """
+        # deepgemm only has CUDA kernels, skip on other devices
+        if experts_implementation == "deepgemm" and torch_device != "cuda":
+            self.skipTest("deepgemm is only supported on CUDA")
+
         model = AutoModelForCausalLM.from_pretrained(
             "hf-internal-testing/MiniMax-M2-Tiny-FP8",  # single layer version
             experts_implementation=experts_implementation,
@@ -453,3 +459,38 @@ class FP8LinearTest(unittest.TestCase):
 
         x_ = linear(x)
         self.assertEqual(x_.shape, (1, 5, 256))
+
+
+class FP8DeepGEMMMultiDeviceTest(unittest.TestCase):
+    """`disable_deepgemm_on_multi_device` must flag FP8 modules based on the devices they actually
+    occupy — DeepGEMM's kernels are bound to a single CUDA context and corrupt across devices, but a
+    model that fits on one device must keep DeepGEMM even when other GPUs are visible (no overshoot).
+    """
+
+    @staticmethod
+    def _fp8_module(device):
+        from transformers.integrations import FP8Linear
+
+        return FP8Linear(256, 256, block_size=(128, 128)).to(device)
+
+    @require_torch_multi_gpu
+    def test_multi_device_disables_deepgemm(self):
+        from transformers.integrations.finegrained_fp8 import disable_deepgemm_on_multi_device
+
+        model = torch.nn.Module()
+        model.a = self._fp8_module("cuda:0")
+        model.b = self._fp8_module("cuda:1")
+        disable_deepgemm_on_multi_device(model)
+        self.assertTrue(model.a._deepgemm_disabled)
+        self.assertTrue(model.b._deepgemm_disabled)
+
+    @require_torch_gpu
+    def test_single_device_keeps_deepgemm(self):
+        from transformers.integrations.finegrained_fp8 import disable_deepgemm_on_multi_device
+
+        model = torch.nn.Module()
+        model.a = self._fp8_module("cuda:0")
+        model.b = self._fp8_module("cuda:0")
+        disable_deepgemm_on_multi_device(model)
+        self.assertFalse(model.a._deepgemm_disabled)
+        self.assertFalse(model.b._deepgemm_disabled)

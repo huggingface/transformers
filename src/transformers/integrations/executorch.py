@@ -263,7 +263,7 @@ class TorchExportableModuleForDecoderOnlyLM(torch.nn.Module):
             dynamic_shapes (`Optional[dict]`):
                 Dynamic shapes to use for export if specified.
             strict(`Optional[bool]`):
-                Flag to instruct `torch.export` to use `torchdynamo`.
+                Flag to instruct `torch.export` to use `dynamo`.
 
         Returns:
             torch.export.ExportedProgram: The exported program that can be used for inference.
@@ -443,6 +443,28 @@ class TorchExportableModuleForDecoderOnlyLM(torch.nn.Module):
         return tokenizer.decode(generated_ids[0], skip_special_tokens=True)
 
 
+def get_head_shapes(config) -> tuple[int | list[int], int | list[int]]:
+    """Returns a tuple `(num_heads, head_dim)` containing either 2 ints, or a list of int with the value for each
+    layer."""
+    # Gemma4 has different head_dim and num_heads depending on layer type
+    if hasattr(config, "global_head_dim"):
+        head_dim = [
+            config.global_head_dim if layer == "full_attention" else config.head_dim
+            for layer in config.layer_types[: -config.num_kv_shared_layers]
+        ]
+        num_heads = [
+            config.num_global_key_value_heads
+            if layer == "full_attention" and config.attention_k_eq_v
+            else config.num_key_value_heads
+            for layer in config.layer_types[: -config.num_kv_shared_layers]
+        ]
+    else:
+        head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
+        num_heads = getattr(config, "num_key_value_heads", config.num_attention_heads)
+
+    return num_heads, head_dim
+
+
 class TorchExportableModuleWithStaticCache(torch.nn.Module):
     """
     A recipe module designed to make a `PreTrainedModel` exportable with `torch.export`,
@@ -523,9 +545,8 @@ class TorchExportableModuleWithStaticCache(torch.nn.Module):
         # simple StaticLayer... It means that any generation beyond the window is unfortunately unsupported
         for i, layer in enumerate(self.static_cache.layers):
             if isinstance(layer, StaticSlidingWindowLayer):
-                self.static_cache.layers[i] = StaticLayer(layer.max_cache_len)
-        head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
-        num_heads = getattr(config, "num_key_value_heads", config.num_attention_heads)
+                self.static_cache.layers[i] = StaticLayer(max_cache_len)
+        num_heads, head_dim = get_head_shapes(config)
         dtype = self.model.dtype
         # We need this call to initialize all the layers (otherwise it's done lazily, which is not exportable)
         self.static_cache.early_initialization(batch_size, num_heads, head_dim, dtype, device)
@@ -567,7 +588,7 @@ class TorchExportableModuleWithStaticCache(torch.nn.Module):
         # as otherwise it's mutated in-place indefinitely - we cannot call reset in-between the `generate` as the program was
         # already exported)
         for layer in self.static_cache.layers:
-            layer.cumulative_length.copy_(cache_position[0:1])
+            layer.cumulative_length.copy_(cache_position[0])
 
         past_key_values = self.static_cache
 
@@ -702,9 +723,8 @@ class TorchExportableModuleWithHybridCache(torch.nn.Module):
         # simple StaticLayer... It means that any generation beyond the window is unfortunately unsupported
         for i, layer in enumerate(self.cache.layers):
             if isinstance(layer, StaticSlidingWindowLayer):
-                self.cache.layers[i] = StaticLayer(layer.max_cache_len)
-        head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
-        num_heads = getattr(config, "num_key_value_heads", config.num_attention_heads)
+                self.cache.layers[i] = StaticLayer(max_cache_len)
+        num_heads, head_dim = get_head_shapes(config)
         dtype = self.model.dtype
         # We need this call to initialize all the layers (otherwise it's done lazily, which is not exportable)
         self.cache.early_initialization(batch_size, num_heads, head_dim, dtype, device)
@@ -736,7 +756,7 @@ class TorchExportableModuleWithHybridCache(torch.nn.Module):
         # as otherwise it's mutated in-place indefinitely - we cannot call reset in-between the `generate` as the program was
         # already exported)
         for layer in self.cache.layers:
-            layer.cumulative_length.copy_(cache_position[0:1])
+            layer.cumulative_length.copy_(cache_position[0])
 
         # Forward pass with the model
         outputs = self.model(
@@ -767,7 +787,7 @@ def convert_and_export_with_cache(
         example_input_ids (`Optional[torch.Tensor]`): Example input token id used by `torch.export`.
         example_cache_position (`Optional[torch.Tensor]`): Example current cache position used by `torch.export`.
         dynamic_shapes(`Optional[dict]`): Dynamic shapes used by `torch.export`.
-        strict(`Optional[bool]`): Flag to instruct `torch.export` to use `torchdynamo`.
+        strict(`Optional[bool]`): Flag to instruct `torch.export` to use `dynamo`.
 
     Returns:
         Exported program (`torch.export.ExportedProgram`): The exported program generated via `torch.export`.
@@ -856,9 +876,8 @@ class Seq2SeqLMDecoderExportableModuleWithStaticCache(torch.nn.Module):
         # simple StaticLayer... It means that any generation beyond the window is unfortunately unsupported
         for i, layer in enumerate(self.static_cache.layers):
             if isinstance(layer, StaticSlidingWindowLayer):
-                self.static_cache.layers[i] = StaticLayer(layer.max_cache_len)
-        head_dim = getattr(self.config, "head_dim", self.config.hidden_size // self.config.num_attention_heads)
-        num_heads = getattr(self.config, "num_key_value_heads", self.config.num_attention_heads)
+                self.static_cache.layers[i] = StaticLayer(max_static_cache_length)
+        num_heads, head_dim = get_head_shapes(self.config)
         self.static_cache.early_initialization(batch_size, num_heads, head_dim, torch.float32, model_device)
         self.cache = EncoderDecoderCache(self.static_cache, DynamicCache(config=self.config))
 
@@ -875,7 +894,7 @@ class Seq2SeqLMDecoderExportableModuleWithStaticCache(torch.nn.Module):
         # as otherwise it's mutated in-place indefinitely - we cannot call reset in-between the `generate` as the program was
         # already exported)
         for layer in self.static_cache.layers:
-            layer.cumulative_length.copy_(cache_position[0:1])
+            layer.cumulative_length.copy_(cache_position[0])
 
         # Get outputs from decoder
         outputs = self.decoder(

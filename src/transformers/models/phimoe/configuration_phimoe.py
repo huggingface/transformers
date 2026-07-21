@@ -46,6 +46,12 @@ class PhimoeConfig(PreTrainedConfig):
 
     model_type = "phimoe"
     keys_to_ignore_at_inference = ["past_key_values"]
+    base_model_ep_plan = {
+        "layers.*.mlp.router": "ep_router",
+        "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
+        "layers.*.mlp.experts.down_proj": "grouped_gemm",
+        "layers.*.mlp.experts": "moe_tp_experts",
+    }
     default_theta = 1000000.0
 
     vocab_size: int = 32064

@@ -13,10 +13,16 @@
 # limitations under the License.
 
 import unittest
+from types import SimpleNamespace
 
+from transformers import is_torch_available
 from transformers.testing_utils import require_torch, require_vision
 
 from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
+
+
+if is_torch_available():
+    import torch
 
 
 class PPDocLayoutV3ImageProcessingTester:
@@ -85,3 +91,16 @@ class PPDocLayoutV3ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCa
     )
     def test_call_numpy_4_channels(self):
         pass
+
+    def test_post_process(self):
+        """Regression test that checks on samples where the cropped mask would result into and empty tensor, see #45281"""
+        # Dummy values
+        outputs = SimpleNamespace(
+            pred_boxes=torch.rand(1, 300, 4),
+            logits=torch.rand(1, 300, 25),
+            order_logits=torch.rand(1, 300, 300),
+            out_masks=torch.rand(1, 300, 200, 200),
+        )
+        for image_processing_class in self.image_processing_classes.values():
+            image_processor = image_processing_class(**self.image_processor_dict)
+            image_processor.post_process_object_detection(outputs, threshold=0.1, target_sizes=[(24, 24)])

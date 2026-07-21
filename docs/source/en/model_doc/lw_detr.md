@@ -13,13 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2024-04-05 and added to Hugging Face Transformers on 2026-01-12.* 
-
-<div style="float: right;">
- <div class="flex flex-wrap space-x-1">
-  <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
- </div>
-</div>
+*This model was published in HF papers on 2024-07-24 and contributed to Hugging Face Transformers on 2026-01-12.*
 
 # LW-DETR
 
@@ -47,13 +41,13 @@ The example below demonstrates how to perform object detection with the [`Pipeli
 <hfoption id="Pipeline">
 
 ```python
+
 from transformers import pipeline
-import torch
+
 
 pipeline = pipeline(
-    "object-detection", 
+    "object-detection",
     model="AnnaZhang/lwdetr_small_60e_coco",
-    dtype=torch.float16,
     device_map=0
 )
 
@@ -64,19 +58,21 @@ pipeline("http://images.cocodataset.org/val2017/000000039769.jpg")
 <hfoption id="AutoModel">
 
 ```python
-from transformers import AutoImageProcessor, AutoModelForObjectDetection
-from PIL import Image
 import requests
 import torch
+from PIL import Image
+
+from transformers import AutoImageProcessor, AutoModelForObjectDetection
+
 
 url = "http://images.cocodataset.org/val2017/000000039769.jpg"
 image = Image.open(requests.get(url, stream=True).raw)
 
 image_processor = AutoImageProcessor.from_pretrained("AnnaZhang/lwdetr_small_60e_coco")
-model = AutoModelForObjectDetection.from_pretrained("AnnaZhang/lwdetr_small_60e_coco")
+model = AutoModelForObjectDetection.from_pretrained("AnnaZhang/lwdetr_small_60e_coco", device_map="auto")
 
 # prepare image for the model
-inputs = image_processor(images=image, return_tensors="pt")
+inputs = image_processor(images=image, return_tensors="pt").to(model.device)
 
 with torch.no_grad():
     outputs = model(**inputs)

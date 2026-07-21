@@ -333,7 +333,7 @@ class SmolVLMProcessor(ProcessorMixin):
             (isinstance(content, dict) and content["type"] == "video")
             for conversation in conversations
             for message in conversation
-            for content in message["content"]
+            for content in (message.get("content") or [])
         )
         if chat_template is None and has_video:
             # re-assign to the correct default template for BC, if user is not requesting their own template

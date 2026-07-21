@@ -38,12 +38,12 @@ from .configuration_videomae import VideoMAEConfig
 logger = logging.get_logger(__name__)
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Class for VideoMAEDecoder's outputs, with potential hidden states and attentions.
     """
 )
+@dataclass
 class VideoMAEDecoderOutput(ModelOutput):
     r"""
     logits (`torch.FloatTensor` of shape `(batch_size, patch_size ** 2 * num_channels)`):
@@ -55,12 +55,12 @@ class VideoMAEDecoderOutput(ModelOutput):
     attentions: tuple[torch.FloatTensor] | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Class for VideoMAEForPreTraining's outputs, with potential hidden states and attentions.
     """
 )
+@dataclass
 class VideoMAEForPreTrainingOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`):
@@ -222,28 +222,19 @@ class VideoMAESelfAttention(nn.Module):
         self.scaling = self.attention_head_size**-0.5
         self.is_causal = False
 
-        self.query = nn.Linear(config.hidden_size, self.all_head_size, bias=False)
-        self.key = nn.Linear(config.hidden_size, self.all_head_size, bias=False)
-        self.value = nn.Linear(config.hidden_size, self.all_head_size, bias=False)
+        self.query = nn.Linear(config.hidden_size, self.all_head_size, bias=config.qkv_bias)
+        self.key = nn.Linear(config.hidden_size, self.all_head_size, bias=config.qkv_bias)
+        self.value = nn.Linear(config.hidden_size, self.all_head_size, bias=config.qkv_bias)
 
-        if config.qkv_bias:
-            self.q_bias = nn.Parameter(torch.zeros(self.all_head_size))
-            self.v_bias = nn.Parameter(torch.zeros(self.all_head_size))
-        else:
-            self.q_bias = None
-            self.v_bias = None
+    def forward(
+        self, hidden_states: torch.Tensor | None = None
+    ) -> tuple[torch.Tensor, torch.Tensor]:  # TODO: siglip attention 1-1
+        input_shape = hidden_states.shape[:-1]
 
-    def forward(self, hidden_states: torch.Tensor | None = None) -> tuple[torch.Tensor, torch.Tensor]:
-        batch_size, seq_length, _ = hidden_states.shape
-
-        k_bias = torch.zeros_like(self.v_bias, requires_grad=False) if self.q_bias is not None else None
-        keys = nn.functional.linear(input=hidden_states, weight=self.key.weight, bias=k_bias)
-        values = nn.functional.linear(input=hidden_states, weight=self.value.weight, bias=self.v_bias)
-        queries = nn.functional.linear(input=hidden_states, weight=self.query.weight, bias=self.q_bias)
-
-        key_layer = keys.view(batch_size, -1, self.num_attention_heads, self.attention_head_size).transpose(1, 2)
-        value_layer = values.view(batch_size, -1, self.num_attention_heads, self.attention_head_size).transpose(1, 2)
-        query_layer = queries.view(batch_size, -1, self.num_attention_heads, self.attention_head_size).transpose(1, 2)
+        hidden_shape = (*input_shape, -1, self.attention_head_size)
+        keys = self.key(hidden_states).view(hidden_shape).transpose(1, 2)
+        values = self.value(hidden_states).view(hidden_shape).transpose(1, 2)
+        queries = self.query(hidden_states).view(hidden_shape).transpose(1, 2)
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
@@ -251,9 +242,9 @@ class VideoMAESelfAttention(nn.Module):
 
         context_layer, attention_probs = attention_interface(
             self,
-            query_layer,
-            key_layer,
-            value_layer,
+            queries,
+            keys,
+            values,
             None,
             is_causal=self.is_causal,
             scaling=self.scaling,
@@ -266,7 +257,7 @@ class VideoMAESelfAttention(nn.Module):
         return context_layer, attention_probs
 
 
-# Copied from transformers.models.vit.modeling_vit.ViTSelfOutput with ViT->VideoMAE
+# Todo - Refactor as part of vision refactor. Copied from transformers.models.vit.modeling_vit.ViTAttention with ViT->VideoMAE
 class VideoMAESelfOutput(nn.Module):
     """
     The residual connection is defined in VideoMAELayer instead of here (as is the case with other models), due to the
@@ -284,7 +275,7 @@ class VideoMAESelfOutput(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.vit.modeling_vit.ViTAttention with ViT->VideoMAE
+# Todo - Refactor as part of vision refactor. Copied from transformers.models.vit.modeling_vit.ViTAttention with ViT->VideoMAE
 class VideoMAEAttention(nn.Module):
     def __init__(self, config: VideoMAEConfig):
         super().__init__()
@@ -301,7 +292,7 @@ class VideoMAEAttention(nn.Module):
         return output
 
 
-# Copied from transformers.models.vit.modeling_vit.ViTIntermediate ViT->VideoMAE
+# Todo - Refactor as part of vision refactor. Copied from transformers.models.vit.modeling_vit.ViTMLP ViT->VideoMAE
 class VideoMAEIntermediate(nn.Module):
     def __init__(self, config: VideoMAEConfig):
         super().__init__()
@@ -317,7 +308,7 @@ class VideoMAEIntermediate(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.vit.modeling_vit.ViTOutput ViT->VideoMAE
+# Todo - Refactor as part of vision refactor. Copied from transformers.models.vit.modeling_vit.ViTMLP ViT->VideoMAE
 class VideoMAEOutput(nn.Module):
     def __init__(self, config: VideoMAEConfig):
         super().__init__()
@@ -331,7 +322,7 @@ class VideoMAEOutput(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.vit.modeling_vit.ViTLayer with ViT->VideoMAE,VIT->VIDEOMAE
+# Todo - Refactor as part of vision refactor. Copied from transformers.models.vit.modeling_vit.ViTLayer with ViT->VideoMAE,VIT->VIDEOMAE
 class VideoMAELayer(GradientCheckpointingLayer):
     """This corresponds to the Block class in the timm implementation."""
 
@@ -366,7 +357,7 @@ class VideoMAELayer(GradientCheckpointingLayer):
         return layer_output
 
 
-# Copied from transformers.models.vit.modeling_vit.ViTEncoder with ViT->VideoMAE
+# Todo - Refactor as part of vision refactor. Copied from transformers.models.vit.modeling_vit.ViTEncoder with ViT->VideoMAE
 class VideoMAEEncoder(nn.Module):
     def __init__(self, config: VideoMAEConfig):
         super().__init__()

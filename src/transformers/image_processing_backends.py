@@ -50,6 +50,8 @@ from .image_utils import (
     get_image_type,
     get_max_height_width,
     infer_channel_dimension_format,
+    is_valid_image,
+    load_image_as_tensor,
 )
 from .processing_utils import ImagesKwargs, Unpack
 from .utils import (
@@ -59,7 +61,7 @@ from .utils import (
     is_vision_available,
     logging,
 )
-from .utils.import_utils import is_rocm_platform, is_torchdynamo_compiling, requires
+from .utils.import_utils import is_rocm_platform, is_torchdynamo_compiling, is_torchvision_greater_or_equal, requires
 
 
 if is_vision_available():
@@ -107,6 +109,22 @@ class TorchvisionBackend(BaseImageProcessor):
         `str`: The backend used by this image processor.
         """
         return "torchvision"
+
+    def fetch_images(self, image_url_or_urls: str | list[str] | list[list[str]]):
+        """
+        Convert a single or a list of URLs / paths into `torch.Tensor` objects.
+
+        Already-valid image objects (tensors, numpy arrays, PIL Images) are passed through
+        unchanged so that callers who pre-load images are unaffected.
+        """
+        if isinstance(image_url_or_urls, (list, tuple)):
+            return [self.fetch_images(x) for x in image_url_or_urls]
+        elif isinstance(image_url_or_urls, str):
+            return load_image_as_tensor(image_url_or_urls)
+        elif is_valid_image(image_url_or_urls):
+            return image_url_or_urls
+        else:
+            raise TypeError(f"only a single or a list of entries is supported but got type={type(image_url_or_urls)}")
 
     def process_image(
         self,
@@ -214,10 +232,11 @@ class TorchvisionBackend(BaseImageProcessor):
                 interpolation = resample
         else:
             interpolation = tvF.InterpolationMode.BILINEAR
-        if interpolation == tvF.InterpolationMode.LANCZOS:
+        if interpolation == tvF.InterpolationMode.LANCZOS and not is_torchvision_greater_or_equal("0.27"):
             logger.warning_once(
-                "You have used a torchvision backend image processor with LANCZOS resample which not yet supported for torch.Tensor. "
-                "BICUBIC resample will be used as an alternative. Please fall back to a pil backend image processor if you "
+                "You have used a torchvision backend image processor with LANCZOS resample which is not supported "
+                "for torch.Tensor with torchvision < 0.27. BICUBIC resample will be used as an alternative. "
+                "Please upgrade torchvision to 0.27+ or fall back to a pil backend image processor if you "
                 "want full consistency with the original model."
             )
             interpolation = tvF.InterpolationMode.BICUBIC

@@ -23,6 +23,9 @@ from ...utils import auto_docstring
 @strict
 class GptOssConfig(PreTrainedConfig):
     model_type = "gpt_oss"
+    attribute_map = {
+        "num_experts": "num_local_experts",
+    }
     default_theta = 150000.0
     base_model_pp_plan = {
         "embed_tokens": (["input_ids"], ["inputs_embeds"]),
@@ -55,7 +58,7 @@ class GptOssConfig(PreTrainedConfig):
     rope_parameters: dict | None = None
     attention_dropout: float | int = 0.0
     num_experts_per_tok: int = 4
-    router_aux_loss_coef: float = 0.9
+    router_aux_loss_coef: float = 0.001
     output_router_logits: bool = False
     use_cache: bool = True
     layer_types: list[str] | None = None

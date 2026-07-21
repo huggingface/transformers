@@ -16,17 +16,13 @@ Shared types, constants, and utilities for the serving layer.
 """
 
 import asyncio
-import base64
 import copy
 import enum
 import json
-import re
-import tempfile
 import threading
 from abc import ABC, abstractmethod
 from collections.abc import Callable
 from concurrent.futures import Future
-from io import BytesIO
 from queue import Queue
 from typing import TYPE_CHECKING
 
@@ -61,6 +57,7 @@ X_REQUEST_ID = "x-request-id"
 class Modality(enum.Enum):
     LLM = "LLM"
     VLM = "VLM"
+    MULTIMODAL = "MULTIMODAL"  # supports text, image, video, and audio
     STT = "STT"
     TTS = "TTS"
 
@@ -76,132 +73,294 @@ class _GenerationCancelled(Exception):
     """Raised inside ``DirectStreamer.put()`` to abort ``model.generate()``."""
 
 
-# Model-specific tokens that mark the start/end of a tool call block.
-# TODO: extract these from the chat template at runtime instead of hardcoding.
-# Qwen/Hermes use <tool_call>/<tool_call>, Mistral uses [TOOL_CALLS], etc.
-# The markers are defined in each model's Jinja chat template.
-_TOOL_CALL_TOKENS = {
-    "qwen": {
-        "start": "<tool_call>",
-        "end": "</tool_call>",
+class ReasoningText(str):
+    """Tagged str subclass: text chunk belonging to a thinking/reasoning block.
+
+    Streamers wrap reasoning text with this so handlers can route it to
+    ``reasoning_content`` deltas instead of ``content``.
+    """
+
+
+class CBWorkerDeadError(RuntimeError):
+    """Raised when a request is submitted to a CB worker that has died.
+
+    Surfaced as 503 by the FastAPI exception handler. Carries the original error message
+    that killed the worker so the client knows why the server is in this state.
+    """
+
+
+# Fallback tool-call configs for model_types whose tokenizer doesn't declare its own. Keys are
+# tuples of exact model_type strings (matched against model.config.model_type). Models not listed
+# here get no tool-call parsing.
+_TOOL_CALL_FALLBACKS = {
+    # Pre-3.5 Qwen family: <tool_call>{"name": ..., "arguments": {...}}</tool_call>
+    (
+        "qwen2",
+        "qwen2_moe",
+        "qwen2_vl",
+        "qwen2_5_vl",
+        "qwen3",
+        "qwen3_moe",
+        "qwen3_next",
+        "qwen3_vl",
+        "qwen3_vl_moe",
+    ): {
+        "stc": "<tool_call>",
+        "etc": "</tool_call>",
+        "schema": {
+            "defaults": {},
+            "start_anchor": "<|im_start|>assistant\n",
+            "fields": {
+                "tool_calls": {
+                    "open": "<tool_call>",
+                    "close": "</tool_call>",
+                    "repeats": True,
+                    "content": "json",
+                },
+            },
+        },
+    },
+    # Qwen 3.5 family wraps tool calls in <tool_call>...</tool_call> (single-token delimiters,
+    # so the streamer filters them out cleanly) around an inner
+    # <function=NAME><parameter=KEY>VALUE</parameter></function> markup that holds the call data.
+    ("qwen3_5", "qwen3_5_moe"): {
+        "stc": "<tool_call>",
+        "etc": "</tool_call>",
+        "schema": {
+            "x-regex-iterator": r"<function=(?P<name>[^>\n]+)>(?P<arguments>.*?)</function>",
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "name": {"type": "string"},
+                    "arguments": {
+                        "type": "object",
+                        "x-regex-key-value": r"<parameter=(?P<key>[^>\n]+)>\s*(?P<value>.*?)\s*</parameter>",
+                    },
+                },
+            },
+        },
     },
 }
 
 
-def detect_tool_format(model: "PreTrainedModel") -> dict | None:
-    """Return the tool call token format for a model, if supported.
+def get_tool_call_config(processor, model: "PreTrainedModel") -> dict | None:
+    """Return tool call config for the model, or ``None`` if tool calls are not supported.
+
+    Returns a dict with:
+        - ``schema`` (`dict`): Schema to pass to ``tokenizer.parse_response(block, schema)``.
+        - ``stc_id`` (`int`): Token ID of the start-of-tool-call delimiter.
+        - ``etc_id`` (`int`): Token ID of the end-of-tool-call delimiter.
+    """
+    tokenizer = getattr(processor, "tokenizer", processor)
+    stc = getattr(tokenizer, "stc_token", None)
+    etc = getattr(tokenizer, "etc_token", None)
+    response_template = getattr(tokenizer, "response_template", None)
+    response_schema = getattr(tokenizer, "response_schema", None)
+
+    schema: dict | None = None
+    # Prefer the new-style response_template (e.g. Gemma 4).
+    if stc and etc and response_template and "tool_calls" in response_template.get("fields", {}):
+        schema = {
+            "defaults": {},
+            "fields": {"tool_calls": response_template["fields"]["tool_calls"]},
+        }
+        # Carry the parent template's anchor through so the sub-schema loads (anchor is required).
+        for anchor_key in ("start_anchor", "start_anchor_pattern"):
+            if anchor_key in response_template:
+                schema[anchor_key] = response_template[anchor_key]
+                break
+    # Legacy response_schema path (still supported for old tokenizers).
+    elif stc and etc and response_schema:
+        schema = response_schema["properties"]["tool_calls"]
+    else:
+        # Fallback: known model families without full tokenizer config. Matched by exact
+        # model_type against the tuple keys of _TOOL_CALL_FALLBACKS.
+        model_type = model.config.model_type
+        fallback = next((v for types, v in _TOOL_CALL_FALLBACKS.items() if model_type in types), None)
+        if fallback is None:
+            return None
+        stc, etc, schema = fallback["stc"], fallback["etc"], fallback["schema"]
+
+    stc_id = tokenizer.convert_tokens_to_ids(stc)
+    etc_id = tokenizer.convert_tokens_to_ids(etc)
+    return {"schema": schema, "stc_id": stc_id, "etc_id": etc_id}
+
+
+def _normalize_tool_call(tool_call: dict) -> dict:
+    """Normalize a parsed tool call to ``{"name": str, "arguments": str}``.
+
+    Different models return different structures from ``parse_response``:
+    - Gemma: ``{"function": {"name": ..., "arguments": {...}}}`` (nested, arguments as dict)
+    - Qwen:  ``{"name": ..., "arguments": {...}}`` (flat, arguments as dict)
+
+    The OpenAI API expects ``arguments`` as a JSON **string**, so we ``json.dumps`` it.
+    """
+    function = tool_call.get("function", tool_call)
+    arguments = function.get("arguments", {})
+    return {
+        "name": function["name"],
+        "arguments": json.dumps(arguments) if not isinstance(arguments, str) else arguments,
+    }
+
+
+def parse_tool_calls(processor, generated_ids, schema: dict) -> list[dict] | None:
+    """Parse tool calls from generated token IDs using ``tokenizer.parse_response``.
 
     Args:
-        model (`PreTrainedModel`): The loaded model.
+        processor: The processor or tokenizer.
+        generated_ids: Token IDs from generation. Passed directly to ``parse_response``
+            which decodes them internally, preserving special tokens that
+            ``skip_special_tokens=True`` would strip (e.g. Gemma's ``<|tool_call>``).
+        schema: The tool call schema (from ``response_schema`` or ``_TOOL_CALL_FALLBACKS``).
 
-    Returns:
-        `dict | None`: A dict ``{"start": str, "end": str}`` with the model's tool call
-        delimiters, or ``None`` if the model family is not recognized.
+    Returns a list of ``{"name": str, "arguments": str}`` dicts, or ``None`` if none found.
     """
-    architecture = model.config.architectures[0].lower()
-    for family in _TOOL_CALL_TOKENS:
-        if family in architecture:
-            return _TOOL_CALL_TOKENS[family]
-    return None
-
-
-class ToolCallParser:
-    """Parses tool calls from model output.
-
-    The model emits tool calls as structured text between start/end tokens
-    (e.g. ``<tool_call>{"name": "fn", "arguments": {...}}</tool_call>``).
-
-    **Streaming** (``feed``): buffers tokens between start/end markers, parses
-    the complete block when the end marker is seen, returns a ``ChoiceDeltaToolCall``.
-
-    **Non-streaming** (``parse``): extracts all tool call blocks from complete text.
-
-    Usage::
-
-        parser = ToolCallParser(tool_format={"start": ..., "end": ...})
-        for text_chunk in streamer:
-            result = parser.feed(text_chunk)
-            if result is None:
-                # Normal text — emit as content
-            elif result is ToolCallParser.CONSUMED:
-                # Buffering — skip
-            else:
-                # result is a ChoiceDeltaToolCall — emit it
-    """
-
-    def __init__(self, tool_format: dict):
-        self._tokens = tool_format
-        self._inside = False
-        self._buffer = ""
-
-    # Sentinel: token was consumed by the parser but produced no output.
-    CONSUMED = object()
-
-    def feed(self, text: str) -> object | dict | None:
-        """Feed a text chunk (streaming).
-
-        Returns:
-        - ``None`` — normal text, not a tool token. Emit as content.
-        - ``CONSUMED`` — token consumed internally (buffering/markers). Skip.
-        - A ``ChoiceDeltaToolCall`` — emit as a tool call delta.
-        """
-        if text.strip() == self._tokens["start"]:
-            self._inside = True
-            self._buffer = ""
-            return self.CONSUMED
-
-        if text.strip() == self._tokens["end"]:
-            self._inside = False
-            block = self._buffer.strip()
-            self._buffer = ""
-            return self._parse_block(block) or self.CONSUMED
-
-        if self._inside:
-            self._buffer += text
-            return self.CONSUMED
-
+    parsed = processor.parse_response(generated_ids, schema, prefix="")
+    # The new response_template path returns a dict like {"tool_calls": [...]}; unwrap.
+    if isinstance(parsed, dict) and "tool_calls" in parsed:
+        parsed = parsed["tool_calls"]
+    if not parsed:
         return None
+    if not isinstance(parsed, list):
+        parsed = [parsed]
+    tool_calls = [_normalize_tool_call(tool_call) for tool_call in parsed]
+    return tool_calls if tool_calls else None
 
-    @staticmethod
-    def _extract_name_and_args(block: str) -> tuple[str, str] | None:
-        """Extract (name, arguments_json) from a tool call block, or None if invalid."""
-        if not block:
-            return None
-        parsed = json.loads(block)
-        name = parsed.get("name")
-        if name is None:
-            return None
-        arguments = parsed.get("arguments", {})
-        return name, json.dumps(arguments)
 
-    @staticmethod
-    def parse(text: str, tool_format: dict) -> list[dict] | None:
-        """Parse tool calls from complete text.
+# Default start/end tokens + schema. The opening token is optional so prefilled
+# ``<think>`` prompts still match.
+_DEFAULT_THINKING_TOKENS = {
+    "start": ["<think>"],
+    "end": "</think>",
+    "schema": {
+        "type": "object",
+        "properties": {
+            "thinking": {"type": "string"},
+            "content": {"type": "string"},
+        },
+        # Trailing ``(?:<\|...\|>)?\Z`` absorbs EOS markers (``<|im_end|>``,
+        # ``<|endoftext|>``, ``<|eot_id|>``) that would otherwise be captured by the
+        # content group, since ``parse_response`` decodes with ``skip_special_tokens=False``.
+        "x-regex": r"(?:<think>)?(?P<thinking>.*?)</think>(?P<content>.*?)(?:<\|[^|<>\s]+\|>)?\Z",
+    },
+}
+# Streaming-side token IDs for families whose ``response_schema`` uses non-default
+# start/end tokens. Post-hoc parsing uses the schema; this only feeds the
+# streamer's token-level detector.
+_THINKING_TOKENS = {
+    # Gemma 4's response_schema regex anchors on the literal ``<|channel>thought\n``,
+    # consuming the newline before the thinking capture begins. Include ``\n`` in the
+    # streamer's start sequence so it's suppressed the same way.
+    "gemma4": {"start": ["<|channel>", "thought", "\n"], "end": "<channel|>"},
+}
 
-        Returns a list of ``{"name": str, "arguments": str}`` dicts, or ``None`` if none found.
-        """
-        start, end = tool_format["start"], tool_format["end"]
-        tool_calls = []
-        pos = 0
-        while True:
-            s = text.find(start, pos)
-            if s < 0:
-                break
-            e = text.find(end, s + len(start))
-            if e < 0:
-                break
-            result = ToolCallParser._extract_name_and_args(text[s + len(start) : e].strip())
-            if result is not None:
-                tool_calls.append({"name": result[0], "arguments": result[1]})
-            pos = e + len(end)
-        return tool_calls if tool_calls else None
 
-    def _parse_block(self, block: str) -> dict | None:
-        """Parse a buffered tool call block. Returns ``{"name": str, "arguments": str}`` or None."""
-        result = self._extract_name_and_args(block)
-        if result is None:
-            return None
-        return {"name": result[0], "arguments": result[1]}
+def get_reasoning_config(processor, model: "PreTrainedModel", input_ids=None) -> dict | None:
+    """Return reasoning config for the model, or ``None`` if not supported.
+
+    The config drives both streaming detection (token IDs) and post-hoc parsing
+    (response schema). Returns a dict with:
+        - ``start_ids`` (`list[int]`): Token ID sequence that opens a thinking block.
+        - ``end_id`` (`int`): Token ID that closes the block.
+        - ``schema`` (`dict`): Response schema with ``thinking`` / ``content``
+          properties for :func:`parse_reasoning`.
+        - ``start_in_thinking`` (`bool`, only when ``input_ids`` is given): Whether
+          the rendered prompt already opened an unclosed thinking block (prefilled
+          by the template), so the model's output begins inside the block.
+    """
+    tokenizer = getattr(processor, "tokenizer", processor)
+    model_type = model.config.model_type.lower()
+    thinking_tokens = next(
+        (v for k, v in _THINKING_TOKENS.items() if k == model_type),
+        _DEFAULT_THINKING_TOKENS,
+    )
+    start_ids = [tokenizer.convert_tokens_to_ids(t) for t in thinking_tokens["start"]]
+    end_id = tokenizer.convert_tokens_to_ids(thinking_tokens["end"])
+    if any(tid in (None, tokenizer.unk_token_id) for tid in start_ids) or end_id in (None, tokenizer.unk_token_id):
+        return None
+    # Custom-token families (e.g. Gemma 4) provide their schema via the tokenizer;
+    # default ``<think>`` falls back to the schema baked into ``_DEFAULT_THINKING_TOKENS``.
+    schema = getattr(tokenizer, "response_schema", None)
+    if not (schema and "thinking" in schema["properties"]):
+        schema = _DEFAULT_THINKING_TOKENS["schema"]
+    config: dict = {"start_ids": start_ids, "end_id": end_id, "schema": schema}
+    if input_ids is not None:
+        config["start_in_thinking"] = _starts_in_thinking(input_ids, start_ids)
+    return config
+
+
+def parse_reasoning(processor, generated_ids, content: str, reasoning_config: dict) -> tuple[str, str | None]:
+    """Split generated output into ``(content, reasoning_content)`` via ``parse_response``.
+
+    If the schema's regex matches (closing marker present), use it. For prompts
+    that prefill the opener (QwQ-32B, DeepSeek-R1) the entire output is reasoning
+    until ``</think>`` arrives — when that's truncated, fall back to treating
+    all decoded text as reasoning. Returns ``(content, None)`` otherwise.
+    """
+    parsed = processor.parse_response(generated_ids, reasoning_config["schema"])
+    if parsed:
+        reasoning = parsed.get("thinking", "")
+        if reasoning:
+            return parsed.get("content", ""), reasoning
+    # Prefilled opener (QwQ-32B, DeepSeek-R1) truncated before ``</think>`` —
+    # no anchor for the schema regex; treat all output as reasoning.
+    if reasoning_config.get("start_in_thinking"):
+        return "", content
+    return content, None
+
+
+def _starts_in_thinking(input_ids, start_ids: list[int]) -> bool:
+    """True if the rendered prompt ends with an unclosed thinking block.
+
+    Some reasoning-model chat templates prefill the thinking opener as the final
+    prompt tokens (e.g. DeepSeek-R1, QwQ-32B emit ``<think>\\n`` at the end when
+    ``add_generation_prompt=True``). In those cases the model resumes *inside*
+    the block, so its output contains only ``...reasoning</think>answer`` with
+    no opening tag — the streamer must start with ``_inside_thinking=True``.
+
+    The prefill always lands at the tail of the prompt (optionally followed by a
+    single whitespace token like ``\\n``), so we only inspect the last few tokens.
+    """
+    if hasattr(input_ids, "tolist"):
+        input_ids = input_ids.tolist()
+    if input_ids and isinstance(input_ids[0], list):
+        if len(input_ids) != 1:
+            return False
+        input_ids = input_ids[0]
+    n = len(start_ids)
+    # Match start_ids at the tail, allowing up to one trailing token (e.g. "\n").
+    for trailing in (0, 1):
+        if len(input_ids) >= n + trailing:
+            end = len(input_ids) - trailing
+            if input_ids[end - n : end] == start_ids:
+                return True
+    return False
+
+
+def _advance_thinking_state(streamer, token_id: int) -> bool:
+    """Mutate ``streamer``'s thinking state; return ``True`` if ``token_id`` is a start or end token.
+
+    Shared between :class:`DirectStreamer` and :class:`CBStreamer` — both track the
+    same four attributes (``_thinking_start_ids``, ``_thinking_end_id``,
+    ``_inside_thinking``, ``_thinking_prefix``) and need identical edge handling.
+    """
+    if streamer._thinking_start_ids is None:
+        return False
+    if streamer._inside_thinking:
+        if token_id == streamer._thinking_end_id:
+            streamer._inside_thinking = False
+            return True
+        return False
+    expected = streamer._thinking_start_ids[len(streamer._thinking_prefix)]
+    if token_id != expected:
+        streamer._thinking_prefix = []
+        return False
+    streamer._thinking_prefix.append(token_id)
+    if len(streamer._thinking_prefix) == len(streamer._thinking_start_ids):
+        streamer._inside_thinking = True
+        streamer._thinking_prefix = []
+    return True
 
 
 class DownloadAggregator:
@@ -265,7 +424,7 @@ def make_progress_tqdm_class(callback: Callable, model_id: str) -> type:
 
     download_aggregator = DownloadAggregator(callback, model_id)
 
-    class ProgressTqdm(base_tqdm):
+    class ProgressTqdm(base_tqdm):  # type: ignore[misc]
         def __init__(self, *args, **kwargs):
             self.sse_unit = kwargs.get("unit") or "it"
             kwargs["disable"] = True
@@ -333,6 +492,8 @@ class DirectStreamer:
         loop: asyncio.AbstractEventLoop,
         queue: asyncio.Queue,
         skip_special_tokens: bool = True,
+        tool_config: dict | None = None,
+        reasoning_config: dict | None = None,
     ):
         """
         Args:
@@ -341,6 +502,12 @@ class DirectStreamer:
             queue (`asyncio.Queue`): The queue that receives decoded text chunks.
             skip_special_tokens (`bool`, *optional*, defaults to `True`):
                 Whether to strip special tokens during decoding.
+            tool_config (`dict`, *optional*): Tool call config from ``get_tool_call_config``.
+                When set, tokens between stc/etc delimiters (inclusive) are suppressed
+                from the queue so tool call markup is never streamed to the client.
+            reasoning_config (`dict`, *optional*): Thinking config from ``get_reasoning_config``.
+                When set, tokens between start/end delimiters are wrapped as
+                :class:`ReasoningText` so handlers route them to ``reasoning_content``.
         """
         from tokenizers.decoders import DecodeStream
 
@@ -348,9 +515,17 @@ class DirectStreamer:
         self._loop = loop
         self._queue = queue
         self._decode_stream = DecodeStream([], skip_special_tokens)
+        self._stc_id = tool_config["stc_id"] if tool_config else None
+        self._etc_id = tool_config["etc_id"] if tool_config else None
+        self._inside_tool_call = False
+        self._thinking_start_ids = reasoning_config["start_ids"] if reasoning_config else None
+        self._thinking_end_id = reasoning_config["end_id"] if reasoning_config else None
+        self._inside_thinking = bool(reasoning_config and reasoning_config.get("start_in_thinking"))
+        self._thinking_prefix: list[int] = []
         self._first = True
         self._cancelled = threading.Event()
         self.total_tokens = 0
+        self.generated_token_ids: list[int] = []
 
     def put(self, value: "torch.Tensor") -> None:
         """Called by ``model.generate()`` after each decode step with new token(s)."""
@@ -362,9 +537,21 @@ class DirectStreamer:
             return
         for token_id in value.tolist():
             self.total_tokens += 1
+            self.generated_token_ids.append(token_id)
+
+            if token_id == self._stc_id:
+                self._inside_tool_call = True
+            elif token_id == self._etc_id:
+                self._inside_tool_call = False
+
+            is_start_or_end_token = _advance_thinking_state(self, token_id)
+
             text = self._decode_stream.step(self._tokenizer, token_id)
-            if text is not None:
-                self._loop.call_soon_threadsafe(self._queue.put_nowait, text)
+            if text is None or self._inside_tool_call or token_id == self._etc_id or is_start_or_end_token:
+                continue
+            if self._inside_thinking:
+                text = ReasoningText(text)
+            self._loop.call_soon_threadsafe(self._queue.put_nowait, text)
 
     def end(self) -> None:
         """Called by ``model.generate()`` when generation is complete."""
@@ -391,6 +578,8 @@ class CBStreamer:
         tokenizer: "tokenizers.Tokenizer",
         loop: asyncio.AbstractEventLoop,
         queue: asyncio.Queue,
+        tool_config: dict | None = None,
+        reasoning_config: dict | None = None,
     ):
         """
         Args:
@@ -399,6 +588,8 @@ class CBStreamer:
             tokenizer: The Rust tokenizer (``tokenizer._tokenizer``).
             loop (`asyncio.AbstractEventLoop`): The event loop to push decoded text to.
             queue (`asyncio.Queue`): The queue that receives decoded text chunks.
+            tool_config (`dict`, *optional*): Tool call config (see ``DirectStreamer``).
+            reasoning_config (`dict`, *optional*): Thinking config (see ``DirectStreamer``).
         """
         from tokenizers.decoders import DecodeStream
 
@@ -408,8 +599,16 @@ class CBStreamer:
         self._queue = queue
         self._tokenizer = tokenizer
         self._decode_stream = DecodeStream([], True)
+        self._stc_id = tool_config["stc_id"] if tool_config else None
+        self._etc_id = tool_config["etc_id"] if tool_config else None
+        self._inside_tool_call = False
+        self._thinking_start_ids = reasoning_config["start_ids"] if reasoning_config else None
+        self._thinking_end_id = reasoning_config["end_id"] if reasoning_config else None
+        self._inside_thinking = bool(reasoning_config and reasoning_config.get("start_in_thinking"))
+        self._thinking_prefix: list[int] = []
         self._prev_len = 0
         self.total_tokens = 0
+        self.generated_token_ids: list[int] = []
 
     def put(self, output: "GenerationOutput") -> None:
         """Decode new tokens from a CB ``GenerationOutput`` and push text to the queue."""
@@ -417,9 +616,21 @@ class CBStreamer:
         self._prev_len = len(output.generated_tokens)
         for token_id in new_tokens:
             self.total_tokens += 1
+            self.generated_token_ids.append(token_id)
+
+            if token_id == self._stc_id:
+                self._inside_tool_call = True
+            elif token_id == self._etc_id:
+                self._inside_tool_call = False
+
+            is_start_or_end_token = _advance_thinking_state(self, token_id)
+
             text = self._decode_stream.step(self._tokenizer, token_id)
-            if text is not None:
-                self._queue.put_nowait(text)
+            if text is None or self._inside_tool_call or token_id == self._etc_id or is_start_or_end_token:
+                continue
+            if self._inside_thinking:
+                text = ReasoningText(text)
+            self._queue.put_nowait(text)
 
     def end(self) -> None:
         """Signal end of stream."""
@@ -494,6 +705,9 @@ class BaseGenerateManager(ABC):
     - :class:`CBGenerateManager` — continuous batching with paged attention.
     """
 
+    def init_cb(self, model: "PreTrainedModel", gen_config: "GenerationConfig") -> None:
+        """Initialize continuous batching. No-op for non-CB managers."""
+
     @abstractmethod
     def generate_streaming(
         self,
@@ -502,6 +716,8 @@ class BaseGenerateManager(ABC):
         inputs: dict,
         gen_config: "GenerationConfig",
         request_id: str,
+        tool_config: dict | None = None,
+        reasoning_config: dict | None = None,
     ) -> tuple[asyncio.Queue, "DirectStreamer | CBStreamer"]:
         """Start streaming generation.
 
@@ -511,6 +727,10 @@ class BaseGenerateManager(ABC):
             inputs (`dict`): Tokenized inputs (tensors for sequential, lists for CB).
             gen_config (`GenerationConfig`): Generation parameters.
             request_id (`str`): Unique request identifier.
+            tool_config (`dict`, *optional*): Tool call config from ``get_tool_call_config``.
+                When set, tool call tokens (between stc/etc) are suppressed from output.
+            reasoning_config (`dict`, *optional*): Thinking config from ``get_reasoning_config``.
+                When set, thinking tokens are wrapped as :class:`ReasoningText`.
 
         Returns:
             `tuple[asyncio.Queue, DirectStreamer | CBStreamer]`: A ``(queue, streamer)`` pair
@@ -519,7 +739,7 @@ class BaseGenerateManager(ABC):
         """
 
     @abstractmethod
-    def generate_non_streaming(
+    async def generate_non_streaming(
         self,
         model: "PreTrainedModel",
         processor: "ProcessorMixin | PreTrainedTokenizerFast",
@@ -558,12 +778,20 @@ class GenerateManager(BaseGenerateManager):
         inputs: dict,
         gen_config: "GenerationConfig",
         request_id: str,
+        tool_config: dict | None = None,
+        reasoning_config: dict | None = None,
     ) -> tuple[asyncio.Queue, DirectStreamer]:
         """Start streaming generation via ``model.generate()`` on the inference thread."""
         loop = asyncio.get_running_loop()
         queue: asyncio.Queue = asyncio.Queue()
-        streamer = DirectStreamer(processor._tokenizer, loop, queue, skip_special_tokens=True)
+        # ProcessorMixin exposes the fast tokenizer as .tokenizer; PreTrainedTokenizerFast is already one.
+        rust_tokenizer = getattr(processor, "tokenizer", processor)._tokenizer  # type: ignore[union-attr]
+        streamer = DirectStreamer(
+            rust_tokenizer, loop, queue, tool_config=tool_config, reasoning_config=reasoning_config
+        )
         gen_kwargs = {**inputs, "streamer": streamer, "generation_config": gen_config, "tokenizer": processor}
+        if hasattr(model, "has_talker"):
+            gen_kwargs["generation_mode"] = "text"
 
         def _run() -> None:
             try:
@@ -585,9 +813,12 @@ class GenerateManager(BaseGenerateManager):
         request_id: str,
     ) -> tuple[str, int, "torch.Tensor"]:
         """Run generation to completion via ``model.generate()`` on the inference thread."""
-        sequences = await self.async_submit(
-            model.generate, **inputs, generation_config=gen_config, tokenizer=processor
-        )
+        # Multimodal models (e.g. Qwen2.5-Omni) may generate audio alongside text by default;
+        # force text-only output since the serve layer only handles text
+        generate_kwargs = {**inputs, "generation_config": gen_config, "tokenizer": processor}
+        if hasattr(model, "has_talker"):
+            generate_kwargs["generation_mode"] = "text"
+        sequences = await self.async_submit(model.generate, **generate_kwargs)
         input_len = inputs["input_ids"].shape[-1]
         generated_ids = sequences[0, input_len:]
         text = processor.decode(generated_ids, skip_special_tokens=True)
@@ -621,7 +852,7 @@ class CBGenerateManager(BaseGenerateManager):
     """
 
     def __init__(self, cb_config: "ContinuousBatchingConfig | None" = None):
-        self._cb = None
+        self._cb: ContinuousBatchingManager | None = None
         self._cb_config = cb_config
 
     def init_cb(self, model: "PreTrainedModel", gen_config: "GenerationConfig") -> None:
@@ -641,6 +872,21 @@ class CBGenerateManager(BaseGenerateManager):
         )
         self._cb.start()
 
+    def is_alive(self) -> bool:
+        """Whether the CB worker is healthy. ``True`` before ``init_cb()`` is called."""
+        return self._cb is None or self._cb.fatal_error is None
+
+    def _check_alive(self, request_id: str) -> None:
+        """Raise :class:`CBWorkerDeadError` if the CB worker has died.
+
+        Called at request entry to fail fast — submitting to a dead worker would otherwise
+        enqueue the request into a void where it never gets processed.
+        """
+        if self._cb is not None and self._cb.fatal_error is not None:
+            raise CBWorkerDeadError(
+                f"CB worker is dead and cannot accept request {request_id}: {self._cb.fatal_error}"
+            )
+
     def generate_streaming(
         self,
         model: "PreTrainedModel",
@@ -648,32 +894,55 @@ class CBGenerateManager(BaseGenerateManager):
         inputs: dict,
         gen_config: "GenerationConfig",
         request_id: str,
+        tool_config: dict | None = None,
+        reasoning_config: dict | None = None,
     ) -> tuple[asyncio.Queue, CBStreamer]:
         """Start streaming CB generation. Registers a per-request output handler."""
+        cb = self._cb
+        if cb is None:
+            raise RuntimeError("CB manager not initialized. Call `init_cb()` first.")
+        self._check_alive(request_id)
+
         loop = asyncio.get_running_loop()
         text_queue: asyncio.Queue = asyncio.Queue()
 
         input_ids = inputs["input_ids"]
-        request_id = self._cb.add_request(
+        request_id = cb.add_request(
             input_ids,
             request_id=request_id,
             streaming=True,
             max_new_tokens=gen_config.max_new_tokens,
             eos_token_id=gen_config.eos_token_id,
         )
-        streamer = CBStreamer(self._cb, request_id, processor._tokenizer, loop, text_queue)
+        # ProcessorMixin exposes the fast tokenizer as .tokenizer; PreTrainedTokenizerFast is already one.
+        rust_tokenizer = getattr(processor, "tokenizer", processor)._tokenizer  # type: ignore[union-attr]
+        streamer = CBStreamer(
+            self._cb,
+            request_id,
+            rust_tokenizer,
+            loop,
+            text_queue,
+            tool_config=tool_config,
+            reasoning_config=reasoning_config,
+        )
 
         # Register a direct callback: the dispatcher calls this on the event loop with each GenerationOutput.
         # This decodes tokens and pushes text straight to the SSE text_queue
         def _on_output(output):
             try:
                 streamer.put(output)
-                if output.is_finished():
+                # ``error`` is set together with ``status = FAILED`` in CB's _handle_request_error.
+                # Surface it as an end-of-stream error so the SSE handler can emit it and close,
+                # instead of leaving the client hanging on a stream that will never end.
+                if output.error is not None:
+                    text_queue.put_nowait(_StreamError(output.error))
+                    streamer.end()
+                elif output.is_finished():
                     streamer.end()
             except Exception as e:
                 text_queue.put_nowait(_StreamError(str(e)))
 
-        self._cb.register_result_handler(request_id, _on_output)
+        cb.register_result_handler(request_id, _on_output)
         return text_queue, streamer
 
     async def generate_non_streaming(
@@ -685,6 +954,11 @@ class CBGenerateManager(BaseGenerateManager):
         request_id: str,
     ) -> tuple[str, int, list[int]]:
         """Run non-streaming CB generation. Registers a handler that resolves an asyncio.Future on completion."""
+        cb = self._cb
+        if cb is None:
+            raise RuntimeError("CB manager not initialized. Call `init_cb()` first.")
+        self._check_alive(request_id)
+
         input_ids = inputs["input_ids"]
         input_len = len(input_ids)
 
@@ -696,9 +970,9 @@ class CBGenerateManager(BaseGenerateManager):
             if not future.done():
                 future.set_result(result)
 
-        self._cb.register_result_handler(request_id, _on_result)
+        cb.register_result_handler(request_id, _on_result)
 
-        self._cb.add_request(
+        cb.add_request(
             input_ids,
             request_id=request_id,
             max_new_tokens=gen_config.max_new_tokens,
@@ -706,8 +980,16 @@ class CBGenerateManager(BaseGenerateManager):
             eos_token_id=gen_config.eos_token_id,
         )
         result = await future
-        if result is None:
-            raise RuntimeError(f"CB manager stopped before producing a result for {request_id}")
+        # CB signals a failed request by setting ``error`` (and ``status = FAILED``) on the
+        # delivered GenerationOutput, often with empty ``generated_tokens``. Surface it instead
+        # of returning an empty success that downstream parsing/decoding would silently mask.
+        # If the worker itself died, route to CBWorkerDeadError so the client gets the same 503
+        # as requests submitted post-crash; otherwise it's a per-request failure (e.g. unsupported
+        # logit-processor kwarg) and a plain RuntimeError -> 500 is appropriate.
+        if result.error is not None:
+            if cb.fatal_error is not None:
+                raise CBWorkerDeadError(f"CB worker died during request {request_id}: {result.error}")
+            raise RuntimeError(f"CB generation failed for {request_id}: {result.error}")
         generated_ids = result.generated_tokens
         text = processor.decode(generated_ids, skip_special_tokens=True)
         return text, input_len, generated_ids
@@ -715,6 +997,8 @@ class CBGenerateManager(BaseGenerateManager):
     @property
     def scheduler(self) -> "Scheduler":
         """The CB scheduler (for testing/monitoring)."""
+        if self._cb is None or self._cb.batch_processor is None:
+            raise RuntimeError("Continuous batching processor not initialized.")
         return self._cb.batch_processor.scheduler
 
     def stop(self) -> None:
@@ -798,6 +1082,10 @@ class GenerationState:
             self._cb_manager.stop()
             self._cb_manager = None
 
+    def is_cb_alive(self) -> bool:
+        """Whether the CB worker is healthy. ``True`` if CB is disabled or not yet initialized."""
+        return self._cb_manager is None or self._cb_manager.is_alive()
+
 
 class BaseHandler:
     """Shared logic for chat completion and responses handlers.
@@ -819,9 +1107,11 @@ class BaseHandler:
         self,
         model_manager: "ModelManager",
         generation_state: GenerationState,
+        chat_template_kwargs: dict | None = None,
     ):
         self.model_manager = model_manager
         self.generation_state = generation_state
+        self.chat_template_kwargs = chat_template_kwargs or {}
 
     def _validate_request(self, body: dict) -> None:
         """Validate request fields against the handler's params class and unused fields."""
@@ -829,7 +1119,7 @@ class BaseHandler:
 
         input_keys = set(body.keys())
         if self._valid_params_class is not None:
-            unexpected = input_keys - self._valid_params_class.__mutable_keys__
+            unexpected = input_keys - getattr(self._valid_params_class, "__mutable_keys__", set())
             if unexpected:
                 raise HTTPException(status_code=422, detail=f"Unexpected fields in the request: {unexpected}")
         unused = input_keys & self._unused_fields
@@ -848,7 +1138,15 @@ class BaseHandler:
 
         Returns ``(model_id, model, processor)``.
         """
+        from fastapi import HTTPException
+
         if self.model_manager.force_model is not None:
+            requested = body.get("model")
+            if requested is not None and requested != self.model_manager.force_model:
+                raise HTTPException(
+                    status_code=400,
+                    detail=(f"Server is pinned to '{self.model_manager.force_model}'; requested '{requested}'."),
+                )
             body["model"] = self.model_manager.force_model
 
         model_id = self.model_manager.process_model_name(body["model"])
@@ -910,13 +1208,13 @@ class BaseHandler:
     def get_processor_inputs_from_messages(messages: list[dict], modality: Modality) -> list[dict]:
         """Convert OpenAI-format messages to the format expected by HF processors.
 
-        For LLMs, collapses list content blocks into plain text. For VLMs, converts
-        ``image_url`` content parts (including base64) into ``{"type": "image", "url": ...}``
-        entries that HF processors understand.
+        All modalities extract text. VLM additionally handles ``image_url`` and ``video_url``.
+        MULTIMODAL handles all of the above plus ``input_audio`` and ``audio_url``.
+        For LLMs, the content parts are collapsed into a plain text string.
 
         Args:
             messages (`list[dict]`): OpenAI-format chat messages.
-            modality (`Modality`): Whether the model is an LLM or VLM.
+            modality (`Modality`): The model modality (LLM, VLM, or MULTIMODAL).
 
         Returns:
             `list[dict]`: Processor-compatible messages.
@@ -926,31 +1224,57 @@ class BaseHandler:
         for message in messages:
             parsed = {"role": message["role"], "content": []}
 
+            # Parse function.arguments back to a dict — chat templates iterate it as a mapping.
+            if "tool_calls" in message:
+                tool_calls = []
+                for tc in message["tool_calls"]:
+                    tc = copy.deepcopy(tc)
+                    fn = tc.get("function") or tc
+                    if isinstance(fn["arguments"], str):
+                        fn["arguments"] = json.loads(fn["arguments"])
+                    tool_calls.append(tc)
+                parsed["tool_calls"] = tool_calls
+            if "tool_call_id" in message:
+                parsed["tool_call_id"] = message["tool_call_id"]
+
+            # When tool_calls are present, ignore content — it's either empty or contains
+            # raw tool call markup that would confuse the chat template if rendered.
+            raw_content = [] if "tool_calls" in message else (message.get("content") or [])
+            if isinstance(raw_content, str):
+                raw_content = [{"type": "text", "text": raw_content}]
+
+            for content in raw_content:
+                content_type = content["type"]
+                # Text: chat completions ("text") and Responses API ("input_text")
+                if content_type in ("text", "input_text", "output_text"):
+                    parsed["content"].append({"type": "text", "text": content["text"]})
+                # Image: chat completions ("image_url") and Responses API ("input_image")
+                elif content_type in ("image_url", "input_image") and modality in (Modality.VLM, Modality.MULTIMODAL):
+                    # chat completions: {"image_url": {"url": "..."}}, Responses API: {"image_url": "..."}
+                    url = content["image_url"]
+                    if isinstance(url, dict):
+                        url = url["url"]
+                    parsed["content"].append({"type": "image", "url": url})
+                # Audio: OpenAI's input_audio is {"data": <base64>, "format": "wav"|"mp3"}, enabling URI for load_audio
+                # If format is missing, we can just hand over raw base64 and let load_audio sniff the format from the bytes.
+                elif content_type == "input_audio" and modality == Modality.MULTIMODAL:
+                    input_audio = content["input_audio"]
+                    if isinstance(input_audio, dict):
+                        audio_b64 = input_audio["data"]
+                        fmt = input_audio.get("format")
+                        url = f"data:audio/{fmt};base64,{audio_b64}" if fmt else audio_b64
+                    else:
+                        url = input_audio
+                    parsed["content"].append({"type": "audio", "url": url})
+                # Extensions (not part of the OpenAI API standard)
+                elif content_type == "video_url" and modality in (Modality.VLM, Modality.MULTIMODAL):
+                    parsed["content"].append({"type": "video", "url": content["video_url"]["url"]})
+                elif content_type == "audio_url" and modality == Modality.MULTIMODAL:
+                    parsed["content"].append({"type": "audio", "url": content["audio_url"]["url"]})
+
+            # LLMs expect plain text, not a list of content parts
             if modality == Modality.LLM:
-                if isinstance(message["content"], str):
-                    parsed["content"] = message["content"]
-                elif isinstance(message["content"], list):
-                    texts = [c["text"] for c in message["content"] if c["type"] == "text"]
-                    parsed["content"] = " ".join(texts)
-
-            elif modality == Modality.VLM:
-                if isinstance(message["content"], str):
-                    parsed["content"].append({"type": "text", "text": message["content"]})
-                else:
-                    for content in message["content"]:
-                        if content["type"] == "text":
-                            parsed["content"].append(content)
-                        elif content["type"] == "image_url":
-                            from PIL import Image
-
-                            url = content["image_url"]["url"]
-                            if "base64" in url:
-                                image_data = re.sub("^data:image/.+;base64,", "", url)
-                                image = Image.open(BytesIO(base64.b64decode(image_data)))
-                                file = tempfile.NamedTemporaryFile(suffix=".png", delete=False)
-                                image.save(file.name)
-                                url = file.name
-                            parsed["content"].append({"type": "image", "url": url})
+                parsed["content"] = " ".join(c["text"] for c in parsed["content"])
 
             processor_inputs.append(parsed)
         return processor_inputs

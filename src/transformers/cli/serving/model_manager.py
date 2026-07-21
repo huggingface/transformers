@@ -130,7 +130,7 @@ class ModelManager:
         self.device = int(device) if device.isdigit() else device
         self.dtype = self._resolve_dtype(dtype)
         self.trust_remote_code = trust_remote_code
-        self.attn_implementation = attn_implementation
+        self.attn_implementation = self._resolve_attn_implementation(attn_implementation, self.device)
         self.quantization = quantization
         self.model_timeout = model_timeout
         self.force_model = force_model
@@ -157,6 +157,32 @@ class ModelManager:
                 f"Unsupported dtype: '{dtype}'. Must be 'auto' or a valid torch dtype (e.g. 'float16', 'bfloat16')."
             )
         return resolved
+
+    @classmethod
+    def _resolve_attn_implementation(cls, attn_implementation: str | None, device: str | int) -> str | None:
+        r"""
+        Default to a fast kernel for `mps` when available.
+        """
+        if attn_implementation is not None:
+            return attn_implementation
+
+        import torch
+
+        from ...utils.import_utils import is_kernels_available
+
+        is_mps_device = (
+            isinstance(device, str)
+            and device.startswith("mps")
+            or (device == "auto" and torch.backends.mps.is_available() and not torch.cuda.is_available())
+        )
+        if is_mps_device and is_kernels_available():
+            logger.warning_once(
+                "MPS detected and `kernels` is installed: defaulting attention to "
+                "`kernels-community/metal-flash-sdpa@223ca3350d7ba32ecf19341ff2cbb8c43fa47d62. "
+                "Pass `--attn-implementation sdpa` to opt out."
+            )
+            return "kernels-community/metal-flash-sdpa@223ca3350d7ba32ecf19341ff2cbb8c43fa47d62"
+        return attn_implementation
 
     def _validate_args(self):
         if self.quantization is not None and self.quantization not in ("bnb-4bit", "bnb-8bit"):
@@ -230,15 +256,24 @@ class ModelManager:
             "dtype": self.dtype,
             "device_map": self.device,
             "trust_remote_code": self.trust_remote_code,
-            "quantization_config": self.get_quantization_config(),
             "tqdm_class": tqdm_class,
         }
+        quantization_config = self.get_quantization_config()
+        if quantization_config is not None:
+            model_kwargs["quantization_config"] = quantization_config
 
         if progress_callback is not None:
             progress_callback({"status": "loading", "model": model_id_and_revision, "stage": "config"})
         config = AutoConfig.from_pretrained(model_id, **model_kwargs)
-        architecture = getattr(transformers, config.architectures[0])
 
+        from transformers.models.auto.modeling_auto import MODEL_FOR_MULTIMODAL_LM_MAPPING_NAMES
+
+        if config.model_type in MODEL_FOR_MULTIMODAL_LM_MAPPING_NAMES:
+            from transformers import AutoModelForMultimodalLM
+
+            return AutoModelForMultimodalLM.from_pretrained(model_id, **model_kwargs)
+
+        architecture = getattr(transformers, config.architectures[0])
         return architecture.from_pretrained(model_id, **model_kwargs)
 
     def load_model_and_processor(
@@ -288,9 +323,9 @@ class ModelManager:
         """Load a model and stream progress as SSE events.
 
         Handles three cases:
-        1. Model already cached → single ``ready`` event
-        2. Load already in progress → join existing subscriber stream
-        3. First request → start loading, broadcast to all subscribers
+        1. Model already cached -> single ``ready`` event
+        2. Load already in progress -> join existing subscriber stream
+        3. First request -> start loading, broadcast to all subscribers
 
         Args:
             model_id_and_revision (`str`): Model ID in ``'model_id@revision'`` format.
@@ -307,7 +342,7 @@ class ModelManager:
             yield f"data: {json.dumps({'status': 'ready', 'model': mid, 'cached': True})}\n\n"
             return
 
-        # Case 2: load in progress — join existing subscribers
+        # Case 2: load in progress -- join existing subscribers
         if mid in self._loading_tasks:
             self._loading_subscribers[mid].append(queue)
             while True:
@@ -317,7 +352,7 @@ class ModelManager:
                 yield item
             return
 
-        # Case 3: first request — start the load
+        # Case 3: first request -- start the load
         self._loading_subscribers[mid] = [queue]
         loop = asyncio.get_running_loop()
 
@@ -387,7 +422,7 @@ class ModelManager:
                 If a plain tokenizer (not a multi-modal processor), short-circuits to LLM.
 
         Returns:
-            `Modality`: The detected modality (``Modality.LLM`` or ``Modality.VLM``).
+            `Modality`: The detected modality (``Modality.LLM``, ``Modality.VLM``, or ``Modality.MULTIMODAL``).
         """
         if processor is not None and isinstance(processor, PreTrainedTokenizerBase):
             return Modality.LLM
@@ -395,10 +430,13 @@ class ModelManager:
         from transformers.models.auto.modeling_auto import (
             MODEL_FOR_CAUSAL_LM_MAPPING_NAMES,
             MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING_NAMES,
+            MODEL_FOR_MULTIMODAL_LM_MAPPING_NAMES,
         )
 
         model_classname = model.__class__.__name__
-        if model_classname in MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING_NAMES.values():
+        if model_classname in MODEL_FOR_MULTIMODAL_LM_MAPPING_NAMES.values():
+            return Modality.MULTIMODAL
+        elif model_classname in MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING_NAMES.values():
             return Modality.VLM
         elif model_classname in MODEL_FOR_CAUSAL_LM_MAPPING_NAMES.values():
             return Modality.LLM
@@ -420,6 +458,7 @@ class ModelManager:
         from transformers.models.auto.modeling_auto import (
             MODEL_FOR_CAUSAL_LM_MAPPING_NAMES,
             MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING_NAMES,
+            MODEL_FOR_MULTIMODAL_LM_MAPPING_NAMES,
         )
 
         generative_models = []
@@ -441,9 +480,10 @@ class ModelManager:
                 architectures = config["architectures"]
                 llms = MODEL_FOR_CAUSAL_LM_MAPPING_NAMES.values()
                 vlms = MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING_NAMES.values()
+                multimodal = MODEL_FOR_MULTIMODAL_LM_MAPPING_NAMES.values()
 
-                if any(arch for arch in architectures if arch in [*llms, *vlms]):
-                    author = repo.repo_id.split("/") if "/" in repo.repo_id else ""
+                if any(arch for arch in architectures if arch in [*llms, *vlms, *multimodal]):
+                    author = repo.repo_id.split("/")[0] if "/" in repo.repo_id else ""
                     repo_handle = repo.repo_id + (f"@{ref}" if ref != "main" else "")
                     generative_models.append(
                         {

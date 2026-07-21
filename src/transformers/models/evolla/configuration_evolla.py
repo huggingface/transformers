@@ -31,6 +31,8 @@ class SaProtConfig(PreTrainedConfig):
         The id of the *mask* token in the protein sequence model.
     position_embedding_type (`str`, *optional*, defaults to `"rotary"`):
         The type of position embedding to use in the protein sequence model. Currently only `"rotary"` is supported.
+    rope_theta (`float`, *optional*, defaults to 10000.0):
+        The base period of the RoPE embeddings.
     emb_layer_norm_before (`bool`, *optional*, defaults to `False`):
         Whether to apply layer normalization before the position embedding in the protein sequence model.
     token_dropout (`bool`, *optional*, defaults to `True`):
@@ -50,6 +52,7 @@ class SaProtConfig(PreTrainedConfig):
     initializer_range: float = 0.02
     layer_norm_eps: float = 1e-05
     position_embedding_type: str = "rotary"
+    rope_theta: float = 10000.0
     emb_layer_norm_before: bool = False
     token_dropout: bool = True
     is_decoder: bool = False

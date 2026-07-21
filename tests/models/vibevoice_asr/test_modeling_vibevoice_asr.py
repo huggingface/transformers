@@ -17,12 +17,12 @@ import tempfile
 import unittest
 from pathlib import Path
 
-import pytest
 from parameterized import parameterized
 
 from transformers import (
     VibeVoiceAsrConfig,
     VibeVoiceAsrForConditionalGeneration,
+    VibeVoiceAsrModel,
     is_datasets_available,
     is_torch_available,
 )
@@ -134,11 +134,14 @@ class VibeVoiceAsrModelTester:
 
 @require_torch
 class VibeVoiceAsrForConditionalGenerationModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
-    all_model_classes = (VibeVoiceAsrForConditionalGeneration,) if is_torch_available() else ()
+    all_model_classes = (VibeVoiceAsrModel, VibeVoiceAsrForConditionalGeneration) if is_torch_available() else ()
     pipeline_model_mapping = (
         {"audio-text-to-text": VibeVoiceAsrForConditionalGeneration} if is_torch_available() else {}
     )
     _is_composite = True
+    # Acoustic/semantic tokenizers run under torch.no_grad() in get_audio_features,
+    # so their params never receive grads — the mixin's force-unfreeze can't change that.
+    test_all_params_have_gradient = False
 
     def setUp(self):
         self.model_tester = VibeVoiceAsrModelTester(self)
@@ -148,19 +151,6 @@ class VibeVoiceAsrForConditionalGenerationModelTest(ModelTesterMixin, Generation
         reason="This test does not apply to VibeVoiceAsr since inputs_embeds corresponding to audio tokens are replaced when input features are provided."
     )
     def test_inputs_embeds_matches_input_ids(self):
-        pass
-
-    @unittest.skip(reason="Compile not yet supported for VibeVoiceAsr models")
-    @pytest.mark.torch_compile_test
-    def test_sdpa_can_compile_dynamic(self):
-        pass
-
-    @unittest.skip(reason="Compile not yet supported for VibeVoiceAsr models")
-    def test_sdpa_can_dispatch_on_flash(self):
-        pass
-
-    @unittest.skip(reason="VibeVoiceAsr tests avoid right-padding equivalence; fusion is in-place.")
-    def test_flash_attn_2_inference_equivalence_right_padding(self):
         pass
 
     @unittest.skip(reason="VibeVoiceAsr has no separate base model without a head.")
@@ -199,6 +189,14 @@ class VibeVoiceAsrForConditionalGenerationModelTest(ModelTesterMixin, Generation
     def test_left_padding_compatibility(self):
         pass
 
+    @unittest.skip(reason="VibeVoiceAsr has slight randomness due to VAE sampling.")
+    def test_forward_with_logits_to_keep(self):
+        pass
+
+    @unittest.skip(reason="VibeVoiceAsr has slight randomness due to VAE sampling.")
+    def test_generate_methods_with_logits_to_keep(self):
+        pass
+
     def test_sdpa_can_dispatch_composite_models(self):
         # VibeVoiceAsr is audio+text composite; but audio components do not use attention
         for model_class in self.all_model_classes:
@@ -211,16 +209,17 @@ class VibeVoiceAsrForConditionalGenerationModelTest(ModelTesterMixin, Generation
                 model_sdpa = model_class.from_pretrained(tmpdirname)
                 model_sdpa = model_sdpa.eval().to(torch_device)
 
-                text_attn = "sdpa" if model.language_model._supports_sdpa else "eager"
+                language_model_sdpa = model_sdpa.base_model.language_model
+                text_attn = "sdpa" if language_model_sdpa._supports_sdpa else "eager"
 
                 self.assertTrue(model_sdpa.config._attn_implementation == "sdpa")
-                self.assertTrue(model.language_model.config._attn_implementation == text_attn)
+                self.assertTrue(language_model_sdpa.config._attn_implementation == text_attn)
 
                 # Eager
                 model_eager = model_class.from_pretrained(tmpdirname, attn_implementation="eager")
                 model_eager = model_eager.eval().to(torch_device)
                 self.assertTrue(model_eager.config._attn_implementation == "eager")
-                self.assertTrue(model_eager.language_model.config._attn_implementation == "eager")
+                self.assertTrue(model_eager.base_model.language_model.config._attn_implementation == "eager")
 
                 for _, submodule in model_eager.named_modules():
                     class_name = submodule.__class__.__name__
