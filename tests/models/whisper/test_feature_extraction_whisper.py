@@ -16,7 +16,6 @@
 import itertools
 import os
 import tempfile
-import time
 import unittest
 
 import numpy as np
@@ -308,7 +307,6 @@ class WhisperFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.
             mel_filters.T @ magnitudes_non_contiguous,
             mel_filters.T @ magnitudes_contiguous,
         )
-
 
     def _load_datasamples(self, num_samples):
         ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
