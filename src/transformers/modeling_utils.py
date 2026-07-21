@@ -16,6 +16,7 @@ import collections
 import copy
 import functools
 import inspect
+import json
 import os
 import re
 import sys
@@ -54,7 +55,6 @@ from .distributed import DistributedConfig
 from .distributed.fsdp import is_fsdp_managed_module
 from .distributed.mixin import DistributedMixin
 from .distributed.utils import (
-    _distributed_barrier,
     _get_torch_distributed_world_size,
     _is_torch_distributed_initialized,
     is_local_dist_rank_0,
@@ -84,6 +84,7 @@ from .integrations.sdpa_attention import sdpa_attention_forward
 from .integrations.sdpa_paged import sdpa_attention_paged_forward
 from .integrations.tensor_parallel import (
     _get_parameter_tp_plan,
+    gather_state_dict_for_save,
     shard_and_distribute_module,
     verify_tp_plan,
 )
@@ -578,8 +579,21 @@ def _get_resolved_checkpoint_files(
         # If the file is a local folder (but not in the HF_HOME cache, even if it's technically local)
         if is_local:
             if transformers_explicit_filename is not None:
-                # If the filename is explicitly defined, load this by default.
-                archive_file = os.path.join(pretrained_model_name_or_path, subfolder, transformers_explicit_filename)
+                # If the filename is explicitly defined, load this by default
+                base_dir = os.path.join(pretrained_model_name_or_path, subfolder)
+                archive_file = os.path.join(base_dir, transformers_explicit_filename)
+                # Just a small check to make sure `transformers_explicit_filename` does not escape the base_dir, i.e. it does not
+                # contain `..` for example
+                try:
+                    absolute_base_dir = os.path.abspath(base_dir)
+                    absolute_archive_file = os.path.abspath(archive_file)
+                    contained = os.path.commonpath([absolute_base_dir, absolute_archive_file]) == absolute_base_dir
+                except ValueError:
+                    contained = False
+                if not contained:
+                    raise ValueError(
+                        f"`transformers_weights` must reference a file inside the model directory, got {transformers_explicit_filename}"
+                    )
                 is_sharded = transformers_explicit_filename.endswith(".safetensors.index.json")
             elif use_safetensors is not False and os.path.isfile(
                 os.path.join(pretrained_model_name_or_path, subfolder, _add_variant(SAFE_WEIGHTS_NAME, variant))
@@ -1248,9 +1262,11 @@ class PreTrainedModel(
          Maps output names (e.g., "attentions", "hidden_states")
          to either:
              - A module class (e.g., `LlamaDecoderLayer`), using default index conventions:
-                 * index=0 for "hidden_states"
-                 * index=1 for "attentions"
-             - Or an `OutputRecorder(...)` with `target_class`, optional `index`, and `layer_name`.
+                 * index = 0 for a key that contains "hidden_states" (e.g. "hidden_states" or "vision_hidden_states")
+                 * index = 1 for any other key: "attentions", "cross_attentions", etc.
+             - A class name as a string, when the class is not importable at declaration time.
+             - An `OutputRecorder(...)` with `target_class`, optional `index`, and `layer_name`.
+             - A list of any of the above, to record outputs from several module types under one key.
 
          Examples:
              These two are equivalent:
@@ -1276,7 +1292,7 @@ class PreTrainedModel(
          ```python
          class LlamaModel(PreTrainedModel):
              _can_record_outputs = {
-                 "attentions": OutputRecorder(LlamaAttention, index=1, layer-name="self_attn"),
+                 "attentions": OutputRecorder(LlamaAttention, index=1, layer_name="self_attn"),
                  "cross_attentions": OutputRecorder(LlamaAttention, index=1, layer_name="cross_attn")
              }
 
@@ -1371,15 +1387,7 @@ class PreTrainedModel(
         """
         # Attach the different parallel plans and tied weight keys to the top-most model, so that everything is
         # easily available.
-        self._tp_plan, self._ep_plan, self._pp_plan, self._fsdp_plan = {}, {}, {}, {}
-        # If current model is a base model, attach `base_model_tp_plan` and `base_model_pp_plan` from config
-        if self.base_model is self:
-            self._pp_plan = self.config.base_model_pp_plan.copy() if self.config.base_model_pp_plan is not None else {}
-            self._tp_plan = self.config.base_model_tp_plan.copy() if self.config.base_model_tp_plan is not None else {}
-            self._ep_plan = self.config.base_model_ep_plan.copy() if self.config.base_model_ep_plan is not None else {}
-            self._fsdp_plan = (
-                self.config.base_model_fsdp_plan.copy() if self.config.base_model_fsdp_plan is not None else {}
-            )
+        self.init_parallel_plans()
         # Current submodel should register its tied weights
         self.all_tied_weights_keys = self.get_expanded_tied_weights_keys(all_submodels=False)
         # Current submodel should register its `_keep_in_fp32_modules`
@@ -1396,15 +1404,6 @@ class PreTrainedModel(
         # Iterate over children only: as the final model is created, this is enough to gather the properties from all submodels.
         # This works because the way the `__init__` and `post_init` are called on all submodules is depth-first in the graph
         for name, module in self.named_children():
-            # Parallel plans
-            if plan := getattr(module, "_ep_plan", None):
-                self._ep_plan.update({f"{name}.{k}": v for k, v in plan.copy().items()})
-            if plan := getattr(module, "_tp_plan", None):
-                self._tp_plan.update({f"{name}.{k}": v for k, v in plan.copy().items()})
-            if plan := getattr(module, "_pp_plan", None):
-                self._pp_plan.update({f"{name}.{k}": v for k, v in plan.copy().items()})
-            if plan := getattr(module, "_fsdp_plan", None):
-                self._fsdp_plan.update({f"{name}.{k}": v for k, v in plan.copy().items()})
             # Always attach the keys of the children (if the children's config says to NOT tie, then it's empty)
             if tied_keys := getattr(module, "all_tied_weights_keys", None):
                 self.all_tied_weights_keys.update({f"{name}.{k}": f"{name}.{v}" for k, v in tied_keys.copy().items()})
@@ -2003,9 +2002,15 @@ class PreTrainedModel(
 
     @classmethod
     def _can_set_attn_implementation(cls) -> bool:
-        """Detect whether the class supports setting its attention implementation dynamically. Inspects the module source as a
-        heuristic, which avoids maintaining yet another property flag.
+        """Detect whether the class supports setting its attention implementation dynamically. Inspects the module
+        source as a heuristic, which avoids maintaining yet another property flag. Instead, the flag is set dynamically
+        on the first succesful call.
         """
+        # Early return if there is a cached value
+        cached_value = getattr(cls, "_can_set_attn_implementation_cached_value", None)
+        if isinstance(cached_value, bool):
+            return cached_value
+
         class_module = sys.modules.get(cls.__module__)
         # Missing module entry (e.g. cleared by a test) or custom model in a jupyter notebook / repl -> do not allow to set it
         if class_module is None:
@@ -2016,15 +2021,25 @@ class PreTrainedModel(
             return False
         # Heuristic: if we find an `*Attention*(nn.Module)` class, check whether the interface is used
         if re.search(r"^class \w*Attention\w*\(nn\.Module\):", code, re.MULTILINE):
-            return "ALL_ATTENTION_FUNCTIONS.get_interface(" in code
+            can_set = "ALL_ATTENTION_FUNCTIONS.get_interface(" in code
         # If no attention layer, assume `True`. Most probably a multimodal model or inherits from existing models
-        return True
+        else:
+            can_set = True
+        # Succesful read of source code -> cache the result
+        cls._can_set_attn_implementation_cached_value = can_set
+        return cls._can_set_attn_implementation_cached_value
 
     @classmethod
     def _can_set_experts_implementation(cls) -> bool:
-        """Detect whether the class supports setting its experts implementation dynamically. Inspects the module source as a
-        heuristic, which avoids maintaining yet another property flag.
+        """Detect whether the class supports setting its experts implementation dynamically. Inspects the module source
+        as a heuristic, which avoids maintaining yet another property flag. Instead, the flag is set dynamically
+        on the first succesful call.
         """
+        # Early return if there is a cached value
+        cached_value = getattr(cls, "_can_set_experts_implementation_cached_value", None)
+        if isinstance(cached_value, bool):
+            return cached_value
+
         class_module = sys.modules.get(cls.__module__)
         # Missing module entry (e.g. cleared by a test) or custom model in a jupyter notebook / repl -> do not allow to set it
         if class_module is None:
@@ -2034,7 +2049,9 @@ class PreTrainedModel(
         except (OSError, TypeError):
             return False
         # Heuristic: if the `@use_experts_implementation` decorator is used, then we can set it
-        return "@use_experts_implementation" in code
+        can_set = "@use_experts_implementation" in code
+        cls._can_set_experts_implementation_cached_value = can_set
+        return can_set
 
     def set_attn_implementation(self, attn_implementation: str | dict, allow_all_kernels: bool = False):
         """
@@ -2167,10 +2184,9 @@ class PreTrainedModel(
             else experts_implementation.get("", self.config._experts_implementation)
         )
 
-        # MegaMoE is locked at load time: its TP plan is baked into `base_model_tp_plan`
-        # by `update_tp_plan` (and isn't re-evaluated) and `setup_megamoe_weights`
-        # mutates the expert weights into UTCCP layout on first forward. Either side of
-        # a switch would silently produce garbage, so reject it with a clear pointer.
+        # MegaMoE is locked at load time: its TP plan is baked into `base_model_tp_plan` by `update_tp_plan` (and isn't
+        # re-evaluated) and `setup_megamoe_weights` mutates the expert weights into UTCCP layout on first forward.
+        # Either side of a switch would silently produce garbage, so reject it with a clear pointer.
         current = self.config._experts_implementation
         if "deepgemm_megamoe" in (current, requested_implementation) and current != requested_implementation:
             raise RuntimeError(
@@ -2179,10 +2195,14 @@ class PreTrainedModel(
                 "`from_pretrained(..., experts_implementation=...)` to switch."
             )
 
+        # Check the requested implementation is supported
         if requested_implementation != self.config._experts_implementation:
             requested_implementation = self._check_and_adjust_experts_implementation(requested_implementation)
-            # Apply the change (on the internal attr, to avoid setting it recursively)
-            self.config._experts_implementation_internal = requested_implementation
+
+            # Modify the implementation of the top level config
+            if self._can_set_experts_implementation():
+                # Apply the change (on the internal attr, to avoid setting it recursively)
+                self.config._experts_implementation_internal = requested_implementation
 
         # Apply it to all submodels as well
         for submodule in self.modules():
@@ -2192,6 +2212,7 @@ class PreTrainedModel(
                 submodule is not self
                 and isinstance(submodule, PreTrainedModel)
                 and submodule.config.__class__ != self.config.__class__
+                and submodule._can_set_experts_implementation()  # avoids bugs when text_model has MoEs but encoder no
             ):
                 # Set the experts on the submodule
                 sub_implementation = requested_implementation
@@ -3303,7 +3324,7 @@ class PreTrainedModel(
                 namespace).
             max_shard_size (`int` or `str`, *optional*, defaults to `"50GB"`):
                 The maximum size for a checkpoint before being sharded. Checkpoints shard will then be each of size
-                lower than this size. If expressed as a string, needs be digits followed by a unit (like `"5MB"`).
+                lower than this size. If expressed as a string, needs to be digits followed by a unit (like `"5MB"`).
 
                 <Tip warning={true}>
 
@@ -3326,9 +3347,8 @@ class PreTrainedModel(
                 its reverse mapping. The reverse mapping needs to exists even if the model was loaded from a None legacy
                 checkpoint.
             distributed_checkpoint (`bool`, *optional*, defaults to `False`):
-                When saving an FSDP-wrapped model, use the distributed checkpoint (DCP) path instead of gathering weights
-                to CPU first. Every rank must call this method; rank 0 writes the consolidated Hugging Face safetensors.
-                When `False`, FSDP weights are gathered to CPU on rank 0 via `gather_full_state_dict` before writing.
+                When saving an FSDP-wrapped model, set this to `True` to use the distributed checkpoint (DCP) path.
+                Every rank must call this method; rank 0 writes the consolidated Hugging Face safetensors.
                 Native FSDP requires `torch>=2.7`.
             kwargs (`dict[str, Any]`, *optional*):
                 Additional key word arguments passed along to the [`~utils.PushToHubMixin.push_to_hub`] method.
@@ -3376,8 +3396,6 @@ class PreTrainedModel(
 
         # Only save the model itself if we are using distributed training
         model_to_save = unwrap_model(self)
-        save_on_this_rank = self.should_save_on_this_rank(is_main_process)
-
         # save the string version of dtype to the config, e.g. convert torch.float32 => "float32"
         # we currently don't use this setting automatically, but may start to use with v5
         dtype = model_to_save.dtype
@@ -3389,11 +3407,11 @@ class PreTrainedModel(
 
         # If we have a custom model, we copy the file defining it in the folder and set the attributes so it can be
         # loaded from the Hub.
-        if save_on_this_rank and self.is_remote_code():
+        if self.is_remote_code():
             custom_object_save(self, save_directory, config=self.config)
 
         # Save the config
-        if save_on_this_rank:
+        if is_main_process:
             if not _hf_peft_config_loaded:
                 model_to_save.config.save_pretrained(save_directory)
             if self.can_generate():
@@ -3439,22 +3457,20 @@ class PreTrainedModel(
                 model_to_save,
                 save_directory,
                 push_to_hub=push_to_hub,
-                save_on_this_rank=save_on_this_rank,
                 token=token,
                 **hub_kwargs,
             )
             return
 
-        needs_dist_barrier = False
+        if is_fsdp_managed_module(model_to_save):
+            raise ValueError(
+                "FSDP-wrapped models require save_pretrained(..., distributed_checkpoint=True). "
+                "All ranks must call this method."
+            )
+
+        # Get the model state_dict
         if state_dict is None:
             state_dict = model_to_save.state_dict()
-
-        if self._tp_size is not None:
-            state_dict, needs_dist_barrier = self._gather_tp_state_dict_for_save(
-                state_dict, is_checkpoint_writer=save_on_this_rank
-            )
-        elif is_fsdp_managed_module(model_to_save):
-            state_dict, needs_dist_barrier = self._gather_fsdp_state_dict_for_save(model_to_save)
 
         # if any model parameters are offloaded, we need to know it for later
         is_offloaded = False
@@ -3479,6 +3495,10 @@ class PreTrainedModel(
             for ignore_key in self._keys_to_ignore_on_save:
                 if ignore_key in state_dict:
                     del state_dict[ignore_key]
+
+        # If model was sharded with TP, gather full tensors for saving
+        if self._tp_size is not None:
+            state_dict = gather_state_dict_for_save(state_dict, self._tp_plan, self._device_mesh, self._tp_size)
 
         # Remove tied weights as safetensors do not handle them
         state_dict = remove_tied_weights_from_state_dict(state_dict, model_to_save)
@@ -3517,7 +3537,7 @@ class PreTrainedModel(
                 filename.startswith(weights_no_suffix)
                 and os.path.isfile(full_filename)
                 and filename not in state_dict_split.filename_to_tensors
-                and save_on_this_rank
+                and is_main_process
                 and reg.fullmatch(filename_no_suffix) is not None
             ):
                 os.remove(full_filename)
@@ -3534,59 +3554,73 @@ class PreTrainedModel(
             )
 
         # Save the model
-        if save_on_this_rank:
-            for shard_file, tensor_names in logging.tqdm(
-                state_dict_split.filename_to_tensors.items(), desc="Writing model shards"
-            ):
-                filename = os.path.join(save_directory, shard_file)
-                shard_state_dict = {}
-                for tensor_name in tensor_names:
-                    # Get the tensor, and remove it from state_dict to avoid keeping the ref
-                    tensor = state_dict.pop(tensor_name)
+        for shard_file, tensor_names in logging.tqdm(
+            state_dict_split.filename_to_tensors.items(), desc="Writing model shards"
+        ):
+            filename = os.path.join(save_directory, shard_file)
+            shard_state_dict = {}
+            for tensor_name in tensor_names:
+                # Get the tensor, and remove it from state_dict to avoid keeping the ref
+                tensor = state_dict.pop(tensor_name)
 
-                    # If the param was offloaded, we need to load it back from disk to resave it. It's a strange pattern,
-                    # but it would otherwise not be contained in the saved shard if we were to simply move the file
-                    # or something
-                    if is_offloaded and tensor.device.type == "meta":
-                        tensor = load_offloaded_parameter(model_to_save, tensor_name)
+                # If the param was offloaded, we need to load it back from disk to resave it. It's a strange pattern,
+                # but it would otherwise not be contained in the saved shard if we were to simply move the file
+                # or something
+                if is_offloaded and tensor.device.type == "meta":
+                    tensor = load_offloaded_parameter(model_to_save, tensor_name)
 
-                    # only do contiguous after it's permuted correctly in case of TP
-                    shard_state_dict[tensor_name] = tensor.contiguous()
+                # only do contiguous after it's permuted correctly in case of TP
+                shard_state_dict[tensor_name] = tensor.contiguous()
 
-                # As explained above, for offloaded scenarios, weight format could not be reverted before due to meta weights,
-                # so do it now after they were loaded onto cpu. For one-weight-to-many operations, it may be an issue, but usually the shards
-                # contain all the necessary params, except if we are quite unlucky on the sharding. The failure surface is (very few models
-                # with one-weight-to-many + offloading to disk + unlucky sharding), so it will almost never happen
-                if is_offloaded and save_original_format and not _hf_peft_config_loaded:
-                    try:
-                        shard_state_dict = revert_weight_conversion(model_to_save, shard_state_dict)
-                        # Save the weight_map, since some names etc may have changed due to conversion compared to initial `state_dict_split`
-                        if state_dict_split.is_sharded:
-                            weight_map.update({k: os.path.basename(shard_file)} for k in shard_state_dict.keys())  # ty: ignore[unresolved-attribute]
-                    except Exception:
-                        raise RuntimeError(
-                            "We could not revert some weight conversions because of offlading, and several weights needed for a single "
-                            "conversion operation living in different shard files. Try reducing `max_shard_size` a bit, or worst case "
-                            "set `save_original_format=False`."
-                        )
+            # As explained above, for offloaded scenarios, weight format could not be reverted before due to meta weights,
+            # so do it now after they were loaded onto cpu. For one-weight-to-many operations, it may be an issue, but usually the shards
+            # contain all the necessary params, except if we are quite unlucky on the sharding. The failure surface is (very few models
+            # with one-weight-to-many + offloading to disk + unlucky sharding), so it will almost never happen
+            if is_offloaded and save_original_format and not _hf_peft_config_loaded:
+                try:
+                    shard_state_dict = revert_weight_conversion(model_to_save, shard_state_dict)
+                    # Save the weight_map, since some names etc may have changed due to conversion compared to initial `state_dict_split`
+                    if state_dict_split.is_sharded:
+                        weight_map.update({k: os.path.basename(shard_file)} for k in shard_state_dict.keys())  # ty: ignore[unresolved-attribute]
+                except Exception:
+                    raise RuntimeError(
+                        "We could not revert some weight conversions because of offlading, and several weights needed for a single "
+                        "conversion operation living in different shard files. Try reducing `max_shard_size` a bit, or worst case "
+                        "set `save_original_format=False`."
+                    )
 
-                # TODO: it would be very nice to do the writing concurrently, but safetensors never releases the GIL,
-                # so it's not possible for now....
-                # Write the shard to disk
-                safe_save_file(shard_state_dict, filename, metadata=metadata)
-                # Cleanup the data before next loop (important with offloading, so we don't blowup cpu RAM)
-                del shard_state_dict
+            # TODO: it would be very nice to do the writing concurrently, but safetensors never releases the GIL,
+            # so it's not possible for now....
+            # Write the shard to disk
+            safe_save_file(shard_state_dict, filename, metadata=metadata)
+            # Cleanup the data before next loop (important with offloading, so we don't blowup cpu RAM)
+            del shard_state_dict
 
-            self.save_gathered_checkpoint_index(
-                save_directory,
-                state_dict_split=state_dict_split,
-                weight_map=weight_map,
-                weights_name=weights_name,
-                variant=variant,
-                max_shard_size=max_shard_size,
+        # Save index if sharded
+        index = None
+        if state_dict_split.is_sharded:
+            index = {
+                "metadata": {"total_parameters": self.num_parameters(), **state_dict_split.metadata},
+                "weight_map": weight_map,
+            }
+
+        if index is None:
+            path_to_weights = os.path.join(save_directory, weights_name)
+            logger.info(f"Model weights saved in {path_to_weights}")
+        else:
+            save_index_file = SAFE_WEIGHTS_INDEX_NAME
+            save_index_file = os.path.join(save_directory, _add_variant(save_index_file, variant))
+            # Save the index as well
+            with open(save_index_file, "w", encoding="utf-8") as f:
+                content = json.dumps(index, indent=2, sort_keys=True) + "\n"
+                f.write(content)
+            logger.info(
+                f"The model is bigger than the maximum size per checkpoint ({max_shard_size}) and is going to be "
+                f"split in {len(state_dict_split.filename_to_tensors)} checkpoint shards. You can find where each parameters has been saved in the "
+                f"index located at {save_index_file}."
             )
 
-        if push_to_hub and save_on_this_rank:
+        if push_to_hub:
             # Eventually create an empty model card
             model_card = create_and_tag_model_card(repo_id, self.model_tags, token=token)
 
@@ -3601,13 +3635,6 @@ class PreTrainedModel(
                 token=token,
                 create_pr=create_pr,
             )
-
-        # `gather_full_state_dict` concentrates the full state on rank 0 only;
-        # other ranks then loop over an empty shard list and would race ahead
-        # of rank 0's safetensors writes. Barrier so any subsequent
-        # `from_pretrained` on this path sees the consolidated files.
-        if needs_dist_barrier:
-            _distributed_barrier()
 
     @wraps(PushToHubMixin.push_to_hub)
     def push_to_hub(self, *args, **kwargs):

@@ -356,7 +356,8 @@ class DiaDecoder(DiaPreTrainedModel):
 
     _can_record_outputs = {
         "hidden_states": DiaDecoderLayer,
-        "attentions": [DiaSelfAttention, DiaCrossAttention],
+        "attentions": DiaSelfAttention,
+        "cross_attentions": DiaCrossAttention,
     }
 
     def __init__(self, config: DiaDecoderConfig):

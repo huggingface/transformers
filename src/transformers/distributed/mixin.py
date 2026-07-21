@@ -13,7 +13,6 @@
 # limitations under the License.
 from __future__ import annotations
 
-import json
 import os
 import re
 import warnings
@@ -21,18 +20,15 @@ from typing import TYPE_CHECKING
 
 from ..integrations.tensor_parallel import (
     ALL_PARALLEL_STYLES,
-    gather_state_dict_for_save,
+    apply_tensor_parallelism,
     initialize_tensor_parallelism,
 )
-from ..utils import SAFE_WEIGHTS_INDEX_NAME, is_torch_available, is_torch_greater_or_equal, logging
+from ..utils import is_torch_available, is_torch_greater_or_equal, logging
 from ..utils.hub import create_and_tag_model_card
 from .configuration_utils import DistributedConfig
-from .fsdp import is_fsdp_managed_module
+from .fsdp import apply_fully_sharded_data_parallelism, is_fsdp_managed_module
 from .utils import (
     _get_torch_distributed_rank,
-    _is_torch_distributed_initialized,
-    distribute_model,
-    gather_full_state_dict,
     initialize_fully_sharded_data_parallelism,
     save_model_checkpoint_distributed,
 )
@@ -53,7 +49,7 @@ else:
 
 
 class DistributedMixin:
-    """Distributed save/load hooks for [`PreTrainedModel`].
+    """Distributed orchestration and save/load hooks for [`PreTrainedModel`].
 
     Stateless heavy lifting stays in `transformers.distributed.*` and
     `integrations.tensor_parallel`. This mixin owns orchestration and instance state.
@@ -61,9 +57,34 @@ class DistributedMixin:
 
     _device_mesh = None
     _tp_plan: dict[str, str] | None = None
+    _ep_plan: dict[str, str] | None = None
     _tp_size = None
-    _pp_plan: dict[str, tuple[str, str]] = None
+    _pp_plan: dict[str, tuple[str, str]] | None = None
     _fsdp_plan: dict[str, str] | None = None
+
+    def init_parallel_plans(self) -> None:
+        """Copy class-level plans onto the instance and merge config/children contributions."""
+        model_cls = type(self)
+        self._tp_plan = dict(getattr(model_cls, "_tp_plan", None) or {})
+        self._ep_plan = dict(getattr(model_cls, "_ep_plan", None) or {})
+        self._pp_plan = dict(getattr(model_cls, "_pp_plan", None) or {})
+        self._fsdp_plan = dict(getattr(model_cls, "_fsdp_plan", None) or {})
+
+        if self.base_model is self:
+            self._pp_plan.update(self.config.base_model_pp_plan or {})
+            self._tp_plan.update(self.config.base_model_tp_plan or {})
+            self._ep_plan.update(self.config.base_model_ep_plan or {})
+            self._fsdp_plan.update(self.config.base_model_fsdp_plan or {})
+
+        for name, module in self.named_children():
+            if plan := getattr(module, "_ep_plan", None):
+                self._ep_plan.update({f"{name}.{k}": v for k, v in plan.copy().items()})
+            if plan := getattr(module, "_tp_plan", None):
+                self._tp_plan.update({f"{name}.{k}": v for k, v in plan.copy().items()})
+            if plan := getattr(module, "_pp_plan", None):
+                self._pp_plan.update({f"{name}.{k}": v for k, v in plan.copy().items()})
+            if plan := getattr(module, "_fsdp_plan", None):
+                self._fsdp_plan.update({f"{name}.{k}": v for k, v in plan.copy().items()})
 
     @property
     def tp_plan(self) -> dict[str, str]:
@@ -166,15 +187,20 @@ class DistributedMixin:
     ):
         """Apply TP or FSDP2 after model init, before weight loading."""
         if _torch_distributed_available and device_mesh is not None:
-            return distribute_model(model, distributed_config, device_mesh)
-        return model
+            model.config.distributed_config = distributed_config
+            model._device_mesh = device_mesh
 
-    def should_save_on_this_rank(self, is_main_process: bool) -> bool:
-        """Return whether this rank should write checkpoint files."""
-        save_on_this_rank = is_main_process
-        if _is_torch_distributed_initialized():
-            save_on_this_rank = save_on_this_rank and _get_torch_distributed_rank() == 0
-        return save_on_this_rank
+            if distributed_config.tp_size > 1:
+                model = apply_tensor_parallelism(
+                    model,
+                    distributed_config.tp_plan,
+                    distributed_config,
+                    device_mesh,
+                )
+            elif distributed_config.fsdp_size > 1:
+                fsdp_mesh = device_mesh["fsdp"] if device_mesh.ndim > 1 else device_mesh
+                model = apply_fully_sharded_data_parallelism(model, fsdp_mesh)
+        return model
 
     def save_distributed_checkpoint(
         self,
@@ -182,7 +208,6 @@ class DistributedMixin:
         save_directory: str | os.PathLike,
         *,
         push_to_hub: bool = False,
-        save_on_this_rank: bool = True,
         repo_id: str | None = None,
         files_timestamps: dict | None = None,
         commit_message: str | None = None,
@@ -203,7 +228,7 @@ class DistributedMixin:
             )
         save_model_checkpoint_distributed(model_to_save, save_directory)
 
-        if push_to_hub and save_on_this_rank:
+        if push_to_hub and _get_torch_distributed_rank() == 0:
             model_card = create_and_tag_model_card(repo_id, self.model_tags, token=token)
             model_card.save(os.path.join(save_directory, "README.md"))
             self._upload_modified_files(
@@ -214,61 +239,3 @@ class DistributedMixin:
                 token=token,
                 create_pr=create_pr,
             )
-
-    def save_gathered_checkpoint_index(
-        self,
-        save_directory: str | os.PathLike,
-        *,
-        state_dict_split,
-        weight_map: dict | None,
-        weights_name: str,
-        variant: str | None,
-        max_shard_size: int | str,
-    ) -> None:
-        """Write sharded safetensors index after a gathered state-dict save."""
-        # Save index if sharded
-        index = None
-        if state_dict_split.is_sharded:
-            index = {
-                "metadata": {"total_parameters": self.num_parameters(), **state_dict_split.metadata},
-                "weight_map": weight_map,
-            }
-
-        if index is None:
-            path_to_weights = os.path.join(save_directory, weights_name)
-            logger.info(f"Model weights saved in {path_to_weights}")
-        else:
-            from ..modeling_utils import _add_variant
-
-            save_index_file = SAFE_WEIGHTS_INDEX_NAME
-            save_index_file = os.path.join(save_directory, _add_variant(save_index_file, variant))
-            # Save the index as well
-            with open(save_index_file, "w", encoding="utf-8") as f:
-                content = json.dumps(index, indent=2, sort_keys=True) + "\n"
-                f.write(content)
-            logger.info(
-                f"The model is bigger than the maximum size per checkpoint ({max_shard_size}) and is going to be "
-                f"split in {len(state_dict_split.filename_to_tensors)} checkpoint shards. You can find where each parameters has been saved in the "
-                f"index located at {save_index_file}."
-            )
-
-    def _gather_tp_state_dict_for_save(
-        self,
-        local_state_dict: dict,
-        *,
-        is_checkpoint_writer: bool = True,
-    ) -> tuple[dict, bool]:
-        """All-gather TP-sharded weights for checkpoint writing."""
-        full_state_dict = gather_state_dict_for_save(local_state_dict, self._tp_plan, self._device_mesh, self._tp_size)
-        if not is_checkpoint_writer:
-            full_state_dict = {}
-        return full_state_dict, True
-
-    def _gather_fsdp_state_dict_for_save(self, model_to_save) -> tuple[dict, bool]:
-        """Gather FSDP-sharded weights to full CPU tensors on rank 0."""
-        if not _is_torch_distributed_initialized():
-            raise ValueError(
-                "Saving an FSDP-wrapped model requires torch.distributed to be initialized. "
-                "Call save_pretrained from every rank after init_process_group."
-            )
-        return gather_full_state_dict(model_to_save), True

@@ -501,8 +501,8 @@ class BambaMixer(nn.Module):
 
         use_precomputed_states = cache_params is not None and cache_params.has_previous_state(self.layer_idx)
         if use_precomputed_states:
-            conv_state = cache_params.layers[self.layer_idx].conv_states
-            recurrent_state = cache_params.layers[self.layer_idx].recurrent_states
+            conv_state = cache_params.layers[self.layer_idx].conv_states[0]
+            recurrent_state = cache_params.layers[self.layer_idx].recurrent_states[0]
 
         # getting projected states from cache if it exists
         if use_precomputed_states and seq_len == 1:
@@ -668,11 +668,11 @@ class BambaMixer(nn.Module):
 
         use_precomputed_states = cache_params is not None and cache_params.has_previous_state(self.layer_idx)
         if use_precomputed_states:
-            conv_state = cache_params.layers[self.layer_idx].conv_states
+            conv_state = cache_params.layers[self.layer_idx].conv_states[0]
 
         # 2. Convolution sequence transformation
         if use_precomputed_states and seq_len == 1:
-            conv_states = cache_params.update_conv_state(hidden_states_B_C, self.layer_idx)
+            conv_states = cache_params.update_conv_state(hidden_states_B_C, self.layer_idx)[..., -self.conv_kernel_size:]
 
             hidden_states_B_C = torch.sum(
                 conv_states * self.conv1d.weight.squeeze(1), dim=-1
@@ -705,7 +705,7 @@ class BambaMixer(nn.Module):
         A = -torch.exp(self.A_log.float())                            # [num_heads]
         if use_precomputed_states and seq_len == 1:
             # We need to guarantee that anything regarding the cache is on the same device
-            cache_device = cache_params.layers[self.layer_idx].recurrent_states.device
+            cache_device = cache_params.layers[self.layer_idx].recurrent_states[0].device
 
             # Note: there is no need to pad parameter matrices here, as there is just one new token
             # for batched generation
@@ -735,7 +735,7 @@ class BambaMixer(nn.Module):
             dBx = (dB * hidden_states[..., None]).to(device=cache_device)
 
             # State calculation
-            ssm_states = cache_params.layers[self.layer_idx].recurrent_states * dA + dBx
+            ssm_states = cache_params.layers[self.layer_idx].recurrent_states[0] * dA + dBx
             ssm_states = cache_params.update_recurrent_state(ssm_states, self.layer_idx)
 
             # Subsequent output
@@ -807,7 +807,7 @@ class BambaMixer(nn.Module):
             # 3. Compute the inter-chunk SSM recurrence; produces correct SSM states at chunk boundaries
             # (middle term of factorization of off-diag blocks; A terms)
             previous_states = (
-                cache_params.layers[self.layer_idx].recurrent_states[:, None].to(dtype=states.dtype, device=states.device)
+                cache_params.layers[self.layer_idx].recurrent_states[0][:, None].to(dtype=states.dtype, device=states.device)
                 if use_precomputed_states
                 else torch.zeros_like(states[:, :1])
             )
