@@ -309,26 +309,6 @@ class WhisperFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.
             mel_filters.T @ magnitudes_contiguous,
         )
 
-        def _median_ms(magnitudes, iters=20, warmup=5):
-            for _ in range(warmup):
-                mel_filters.T @ magnitudes
-            timings = []
-            for _ in range(iters):
-                start = time.perf_counter()
-                mel_filters.T @ magnitudes
-                timings.append((time.perf_counter() - start) * 1e3)
-            timings.sort()
-            return np.mean(timings) #timings[len(timings) // 2]
-
-        with torch.inference_mode():
-            non_contiguous_ms = _median_ms(magnitudes_non_contiguous)
-            contiguous_ms = _median_ms(magnitudes_contiguous)
-
-        print(
-            f"\n[whisper mel matmul] non-contiguous={non_contiguous_ms:.3f} ms "
-            f"contiguous={contiguous_ms:.3f} ms "
-            f"speedup={non_contiguous_ms / contiguous_ms:.2f}x"
-        )
 
     def _load_datasamples(self, num_samples):
         ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
