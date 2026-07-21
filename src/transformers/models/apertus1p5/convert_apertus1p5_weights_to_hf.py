@@ -109,6 +109,16 @@ NAMED_SPECIAL_TOKEN_ATTRIBUTES = (
 _TEMPLATE_LIST_CONTENT_MARKER = "message.content is not string and message.content is not mapping"
 
 
+def _has_valid_logits_layout(logits: torch.Tensor, output_vocab_size: int, vocab_size: int) -> bool:
+    """Check that physical logits are finite and the padded input-only tail is non-generatable."""
+    if logits.shape[-1] != vocab_size:
+        return False
+    tail = logits[..., output_vocab_size:]
+    return bool(
+        torch.isfinite(logits[..., :output_vocab_size]).all() and (tail == torch.finfo(logits.dtype).min).all()
+    )
+
+
 def build_processor(apertus_checkpoint: str, audio_tokenizer_config: dict) -> Apertus1p5Processor:
     tokenizer = AutoTokenizer.from_pretrained(apertus_checkpoint)
     missing = [name for name in NAMED_SPECIAL_TOKEN_ATTRIBUTES if getattr(tokenizer, name, None) is None]
@@ -197,6 +207,17 @@ def iter_source_shards(checkpoint_dir: str):
         yield "model.safetensors", load_file(os.path.join(checkpoint_dir, "model.safetensors"))
 
 
+def _check_fp32_tokenizer_source(source: str, state_dict: dict[str, torch.Tensor]) -> None:
+    """Half-precision tokenizer sources are already degraded (code assignment is a precision-sensitive argmax)
+    and would silently pass `--verify`, whose fp32 check runs after the load-time upcast."""
+    for key, value in state_dict.items():
+        if value.is_floating_point() and value.dtype != torch.float32:
+            raise ValueError(
+                f"The {source} source stores `{key}` in {value.dtype}; tokenizer weights must be stored in "
+                "float32 (half-precision weights flip discrete codes)."
+            )
+
+
 def remapped_sources(apertus_checkpoint: str, vision_tokenizer_checkpoint: str, audio_tokenizer_checkpoint: str):
     """Yield (source_name, shard_name, remapped_state_dict) for all three weight sources."""
     for shard, state_dict in iter_source_shards(apertus_checkpoint):
@@ -210,8 +231,10 @@ def remapped_sources(apertus_checkpoint: str, vision_tokenizer_checkpoint: str, 
                 raise ValueError(f"Unexpected key in the Apertus backbone checkpoint: {key}")
         yield "apertus", shard, remapped
     for shard, state_dict in iter_source_shards(vision_tokenizer_checkpoint):
+        _check_fp32_tokenizer_source("vision tokenizer", state_dict)
         yield "vision_tokenizer", shard, {f"model.vision_tokenizer.{key}": value for key, value in state_dict.items()}
     for shard, state_dict in iter_source_shards(audio_tokenizer_checkpoint):
+        _check_fp32_tokenizer_source("audio tokenizer", state_dict)
         yield "wavtokenizer", shard, {f"model.audio_tokenizer.{key}": value for key, value in state_dict.items()}
 
 
@@ -350,12 +373,12 @@ def verify(composite_dir: str, max_new_tokens: int = 12):
     header_ok = "<|img_start|>16*16<|img_token_start|>" in decoded and decoded.count("<|image|>") == 256
     with torch.no_grad():
         logits = model(**inputs).logits
-    image_forward_ok = header_ok and bool(torch.isfinite(logits).all())
+    image_forward_ok = header_ok and _has_valid_logits_layout(logits, expected_head, config.text_config.vocab_size)
     if not image_forward_ok:
         failed_checks.append("image forward")
     print(
         f"[{'PASS' if image_forward_ok else 'FAIL'}] processor image forward: header+counts ok: {header_ok}, "
-        f"logits {tuple(logits.shape)}, finite"
+        f"logits {tuple(logits.shape)}, finite physical prefix and finfo.min padded tail"
     )
 
     inputs = processor(text="<|audio|>What is said?", audio=[sine[0, 0].numpy()], return_tensors="pt")
@@ -363,12 +386,14 @@ def verify(composite_dir: str, max_new_tokens: int = 12):
     audio_layout_ok = decoded.count("<|audio|>") == 40 and "<|audio_start|>" in decoded
     with torch.no_grad():
         logits = model(**inputs).logits
-    audio_forward_ok = audio_layout_ok and bool(torch.isfinite(logits).all())
+    audio_forward_ok = audio_layout_ok and _has_valid_logits_layout(
+        logits, expected_head, config.text_config.vocab_size
+    )
     if not audio_forward_ok:
         failed_checks.append("audio forward")
     print(
         f"[{'PASS' if audio_forward_ok else 'FAIL'}] processor audio forward: layout ok: {audio_layout_ok}, "
-        f"logits {tuple(logits.shape)}, finite"
+        f"logits {tuple(logits.shape)}, finite physical prefix and finfo.min padded tail"
     )
 
     if failed_checks:
