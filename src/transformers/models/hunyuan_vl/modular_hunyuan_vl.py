@@ -393,7 +393,7 @@ class HunYuanVLImageProcessorPil(Qwen2VLImageProcessorPil):
         for image in images:
             height, width = image.shape[-2:]
             # Match the original HunyuanOCR preprocessing with PIL.Image.resize
-            # FIXME: raushan, investiagte why the quality degrafes with our np-based transforms
+            # FIXME: raushan, investigate why the quality degrades with our np-based transforms
             if image.ndim == 3:
                 pil_image = Image.fromarray(np.transpose(image, (1, 2, 0)).astype(np.uint8))
             else:
