@@ -80,6 +80,7 @@ _import_structure = {
         "replace_kernel_forward_from_hub",
         "use_kernel_forward_from_hub",
         "use_kernel_func_from_hub",
+        "use_kernel_func_from_hub_with_fallback",
         "use_kernelized_func",
     ],
     "integration_utils": [
@@ -241,6 +242,7 @@ if TYPE_CHECKING:
         replace_kernel_forward_from_hub,
         use_kernel_forward_from_hub,
         use_kernel_func_from_hub,
+        use_kernel_func_from_hub_with_fallback,
         use_kernelized_func,
     )
     from .integration_utils import (

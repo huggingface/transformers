@@ -12,6 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import functools
+import importlib
+import inspect
 import os
 import re
 import sys
@@ -31,6 +33,7 @@ from ..utils.import_utils import (
     is_kernels_available,
     is_rocm_platform,
     is_torch_available,
+    resolve_internal_import,
 )
 from .flash_attention import flash_attention_forward
 
@@ -560,8 +563,6 @@ def lazy_load_kernel(kernel_name: str, mapping: dict[str, ModuleType | None] = _
 
     else:
         # Try to import is_{kernel_name}_available from ..utils
-        import importlib
-
         new_kernel_name = kernel_name.replace("-", "_")
         func_name = f"is_{new_kernel_name}_available"
 
@@ -680,6 +681,32 @@ def use_kernelized_func(module_names: list[Callable] | Callable):
 
         cls.__init__ = new_init
         return cls
+
+    return decorator
+
+
+def use_kernel_func_from_hub_with_fallback(package: str, func_name: str, internal_path: str | None = None):
+    # TODO: change when we sync to 0.16.x+
+    kernel_wrapper_decorator = use_kernel_func_from_hub(func_name)
+
+    def decorator(torch_function: Callable) -> Callable:
+        implementation = None
+        try:
+            module = importlib.import_module(package)
+            implementation = resolve_internal_import(module, internal_path or func_name)
+        except Exception:
+            implementation = torch_function
+        finally:
+            implementation = torch_function if implementation is None else implementation
+
+        applicable_params = inspect.signature(implementation).parameters
+
+        @functools.wraps(torch_function)
+        def wrapped(*args, **kwargs):
+            kwargs = {k: v for k, v in kwargs.items() if k in applicable_params}
+            return implementation(*args, **kwargs)
+
+        return kernel_wrapper_decorator(wrapped)
 
     return decorator
 
