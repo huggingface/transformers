@@ -13,14 +13,20 @@
 # limitations under the License.
 
 import numpy as np
-import torch
 from huggingface_hub.dataclasses import strict
 
 from ...audio_utils import AudioInput, make_list_of_audio
 from ...feature_extraction_utils import BatchFeature
 from ...processing_utils import Unpack
-from ...utils import PaddingStrategy, TensorType, TransformersKwargs, auto_docstring, can_return_tuple, logging
-from ...utils.import_utils import is_torch_available, is_torchaudio_available
+from ...utils import (
+    PaddingStrategy,
+    TensorType,
+    TransformersKwargs,
+    auto_docstring,
+    can_return_tuple,
+    logging,
+)
+from ...utils.import_utils import is_torch_available, is_torchaudio_available, requires
 from ..xcodec2.configuration_xcodec2 import Xcodec2Config
 from ..xcodec2.feature_extraction_xcodec2 import Xcodec2FeatureExtractor
 from ..xcodec2.modeling_xcodec2 import (
@@ -31,6 +37,7 @@ from ..xcodec2.modeling_xcodec2 import (
 
 
 if is_torch_available():
+    import torch
     import torch.nn.functional as F
 
 if is_torchaudio_available():
@@ -171,6 +178,7 @@ class NeuCodecModel(Xcodec2Model):
 
 
 class NeuCodecFeatureExtractor(Xcodec2FeatureExtractor):
+    @requires(backends=("torch", "torchaudio"))
     def __call__(
         self,
         audio: AudioInput,
@@ -216,8 +224,6 @@ class NeuCodecFeatureExtractor(Xcodec2FeatureExtractor):
                 Remaining dictionary of keyword arguments that will be passed to the tokenizer or the feature
                 extractor.
         """
-        if not is_torch_available():
-            raise ImportError("PyTorch is required for mel-filter bank feature extraction.")
 
         if sampling_rate is not None:
             if sampling_rate != self.sampling_rate:
