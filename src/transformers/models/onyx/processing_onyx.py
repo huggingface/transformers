@@ -82,6 +82,7 @@ class OnyxProcessor(ProcessorMixin):
         **kwargs,
     ):
         self.image_token = "<|image|>"
+        self.patch_token = "<|patch|>"
         self.image_start_token = "<|image_start|>"
         self.image_end_token = "<|image_end|>"
         self.video_token = "<|video|>"
@@ -101,7 +102,7 @@ class OnyxProcessor(ProcessorMixin):
     def replace_image_token(self, image_inputs: dict, image_idx: int) -> str:
         merge_length = self.image_processor.downsample_factor**2
         num_image_tokens = image_inputs["image_grid_thw"][image_idx].prod() // merge_length
-        return self.image_start_token + self.image_token * num_image_tokens + self.image_end_token
+        return self.image_start_token + self.patch_token * num_image_tokens + self.image_end_token
 
     def replace_video_token(self, video_inputs: dict, video_idx: int) -> str:
         merge_length = self.video_processor.downsample_factor**2

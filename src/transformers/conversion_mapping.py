@@ -160,18 +160,18 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(
                 source_patterns=r"position_embedding_table$", target_patterns=r"position_embedding_table.weight"
             ),
+            WeightConverter(
+                source_patterns=[r"attn.q_proj"],
+                target_patterns=[r"attn.q_proj"],
+                operations=[PermuteForRope(subconfig_key="vision_config")],
+            ),
+            WeightConverter(
+                source_patterns=[r"attn.k_proj"],
+                target_patterns=[r"attn.k_proj"],
+                operations=[PermuteForRope(subconfig_key="vision_config")],
+            ),
         ],
         "onyx": [
-            WeightConverter(
-                source_patterns=[r"vision_encoder\.transformer\.\d+\.attn\.q_proj"],
-                target_patterns=[r"vision_encoder\.transformer\.\d+\.attn\.q_proj"],
-                operations=[PermuteForRope(subconfig_key="vision_config")],
-            ),
-            WeightConverter(
-                source_patterns=[r"vision_encoder\.transformer\.\d+\.attn\.k_proj"],
-                target_patterns=[r"vision_encoder\.transformer\.\d+\.attn\.k_proj"],
-                operations=[PermuteForRope(subconfig_key="vision_config")],
-            ),
             WeightRenaming(source_patterns=r"vision_encoder.transformer", target_patterns=r"vision_tower.layers"),
             WeightRenaming(
                 source_patterns=r"vision_encoder.conv1_linear",

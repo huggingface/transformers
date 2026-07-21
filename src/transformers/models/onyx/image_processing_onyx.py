@@ -22,7 +22,7 @@ from torchvision.transforms.v2 import functional as tvF
 from ...image_processing_backends import TorchvisionBackend
 from ...image_processing_utils import BatchFeature
 from ...image_transforms import group_images_by_shape, reorder_images
-from ...image_utils import ImageInput, PILImageResampling
+from ...image_utils import ImageInput, PILImageResampling, SizeDict
 from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import TensorType, auto_docstring, logging
 from ...utils.constants import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD
@@ -110,7 +110,7 @@ class OnyxImageProcessor(TorchvisionBackend):
         image: torch.Tensor,
         patch_size: int,
         max_tokens: int,
-        resample: tvF.InterpolationMode,
+        resample: PILImageResampling | tvF.InterpolationMode,
     ) -> torch.Tensor:
         height, width = image.shape[-2], image.shape[-1]
         target_height, target_width = get_aspect_ratio_preserving_size(
@@ -123,10 +123,10 @@ class OnyxImageProcessor(TorchvisionBackend):
         if target_height == height and target_width == width:
             return image
 
-        return tvF.resize(
+        return self.resize(
             image,
-            size=[target_height, target_width],
-            interpolation=resample,
+            size=SizeDict(height=target_height, width=target_width),
+            resample=resample,
             antialias=True,
         )
 

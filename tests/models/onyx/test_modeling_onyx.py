@@ -115,6 +115,14 @@ class OnyxVision2TextModelTest(VLMModelTest, unittest.TestCase):
         # OnyxModel serializes without.
         super().test_reverse_loading_mapping(skip_base_model=True)
 
+    @unittest.skip(reason="Onyx applies an in-place q/k RoPE permute conversion, which cannot no-op on native keys.")
+    def test_can_load_from_already_mapped_keys(self):
+        pass
+
+    @unittest.skip(reason="Onyx applies an in-place q/k RoPE permute conversion, which cannot no-op on native keys.")
+    def test_from_pretrained_no_checkpoint(self):
+        pass
+
     def test_mismatching_num_image_tokens(self):
         # Overwritten -- Onyx packs patches along the first `pixel_values` dim, so removing an image
         # means dropping its patch rows and its `image_grid_thw` row together.

@@ -14,6 +14,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from inspect import signature
 
 import torch
 import torch.nn as nn
@@ -67,6 +68,33 @@ from ..paddleocr_vl.modeling_paddleocr_vl import PaddleOCRVisionEmbeddings
 
 
 logger = logging.get_logger(__name__)
+
+
+# TODO: temporary shim for checkpoints saved with the original flat (non-nested) config format.
+# Drop the two maps and the legacy branch in `OnyxConfig.__post_init__` once the hub repo ships
+# an updated nested config (+ tokenizer).
+_LEGACY_FLAT_VISION_KEYS = {
+    "vision_latent_dim": "hidden_size",
+    "vision_heads": "num_attention_heads",
+    "vision_layers": "num_hidden_layers",
+    "vision_mlp_ratio": "mlp_ratio",
+    "vision_output_dim": "output_dim",
+    "vision_adapter_dim": "adapter_dim",
+    "vision_downsample_factor": "downsample_factor",
+    "vision_patch_size": "patch_size",
+    "vision_patch_temporal": "patch_temporal",
+    "vision_pos_emb_grid_h": "pos_emb_grid_h",
+    "vision_pos_emb_grid_w": "pos_emb_grid_w",
+    "vision_sparse_attention_factor": "sparse_attention_factor",
+    "video_num_frames": "video_num_frames",
+    "video_sampling_fps": "video_sampling_fps",
+}
+_LEGACY_FLAT_TOKEN_ID_KEYS = {
+    "patch_token_id": "image_token_id",
+    "vid_start_id": "video_start_id",
+    "vid_end_id": "video_end_id",
+    "vid_frame_sep_id": "video_frame_sep_id",
+}
 
 
 class OnyxModelOutputWithPast(Gemma3ModelOutputWithPast):
@@ -201,13 +229,32 @@ class OnyxConfig(PreTrainedConfig):
 
     text_config: dict | PreTrainedConfig | None = None
     vision_config: dict | PreTrainedConfig | None = None
-    image_token_id: int = 200090
+    image_token_id: int = 200092
     video_token_id: int = 200091
     video_start_id: int = 200082
     video_end_id: int = 200083
     video_frame_sep_id: int = 200087
 
     def __post_init__(self, **kwargs):
+        for legacy_key, key in _LEGACY_FLAT_TOKEN_ID_KEYS.items():
+            if legacy_key in kwargs:
+                setattr(self, key, kwargs.pop(legacy_key))
+
+        if self.text_config is None and "rope_theta" in kwargs:
+            text_field_names = set(signature(OnyxTextConfig.__init__).parameters)
+            text_kwargs = {key: kwargs.pop(key) for key in list(kwargs) if key in text_field_names}
+            text_kwargs["rope_parameters"] = {"rope_type": "default", "rope_theta": kwargs.pop("rope_theta")}
+            if (legacy_softcap := kwargs.pop("output_soft_cap_temp", None)) is not None:
+                text_kwargs["final_logit_softcapping"] = legacy_softcap
+            if (legacy_act := kwargs.pop("hidden_act", None)) is not None:
+                text_kwargs["hidden_activation"] = legacy_act
+            self.text_config = OnyxTextConfig(**text_kwargs)
+
+        if self.vision_config is None and any(legacy_key in kwargs for legacy_key in _LEGACY_FLAT_VISION_KEYS):
+            self.vision_config = OnyxVisionConfig(
+                **{key: kwargs.pop(legacy_key) for legacy_key, key in _LEGACY_FLAT_VISION_KEYS.items() if legacy_key in kwargs}
+            )
+
         if self.text_config is None:
             self.text_config = OnyxTextConfig()
             logger.info("text_config is None, using default OnyxTextConfig text config.")
