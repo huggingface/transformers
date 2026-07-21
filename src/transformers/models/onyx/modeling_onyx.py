@@ -547,79 +547,16 @@ class OnyxVisionRotaryEmbedding(nn.Module):
         inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1).to(x.device)
         device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
 
-        # Multidimensional positions: [batch, num_patches, ndim]. Apply rotations to each spatial dim separately
-        all_cos, all_sin = [], []
-        for i in range(2):
-            dim_position_ids = position_ids[:, :, i]
-            dim_position_ids_expanded = dim_position_ids[:, None, :].float()
+        w_ids = position_ids[:, :, 0][:, None, :].float()
+        h_ids = position_ids[:, :, 1][:, None, :].float()
+        with maybe_autocast(device_type=device_type, enabled=False):
+            freq_h = (inv_freq_expanded @ h_ids).transpose(1, 2)
+            freq_w = (inv_freq_expanded @ w_ids).transpose(1, 2)
+            freq = torch.cat([freq_w, freq_h, freq_w, freq_h], dim=-1)
+            cos = freq.cos() * self.attention_scaling
+            sin = freq.sin() * self.attention_scaling
 
-            with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
-                freqs = (inv_freq_expanded.float() @ dim_position_ids_expanded.float()).transpose(1, 2)
-                emb = torch.cat((freqs, freqs), dim=-1)
-                cos = emb.cos() * self.attention_scaling
-                sin = emb.sin() * self.attention_scaling
-            all_cos.append(cos)
-            all_sin.append(sin)
-
-        cos = torch.cat(all_cos, dim=-1).to(dtype=x.dtype)
-        sin = torch.cat(all_sin, dim=-1).to(dtype=x.dtype)
-        return cos, sin
-
-
-def apply_multidimensional_rope(
-    x: torch.Tensor,
-    cos: torch.Tensor,
-    sin: torch.Tensor,
-    position_ids: torch.Tensor,
-    unsqueeze_dim: int = 2,
-) -> torch.Tensor:
-    """Applies multidimensional RoPE to inputs.
-
-    Args:
-        x (`torch.Tensor`): The tensor to embed.
-        cos (`torch.Tensor`): The cosine part of the rotary embedding.
-        sin (`torch.Tensor`): The sine part of the rotary embedding.
-        position_ids (`torch.Tensor`, *optional*):
-            If position_ids.ndim + 2 == x.ndim, then this function passes through to `apply_rotary_pos_emb()`.
-            Otherwise, position_ids is used to split the inputs, x, into multiple pieces, where each piece is fed to
-            `apply_rotary_pos_emb()`, and then concatenated back together.
-        unsqueeze_dim (`int`, *optional*, defaults to 1):
-            The 'unsqueeze_dim' argument specifies the dimension along which to unsqueeze cos[position_ids] and
-            sin[position_ids] so that they can be properly broadcasted to the dimensions of q and k. For example, note
-            that cos[position_ids] and sin[position_ids] have the shape [batch_size, seq_len, head_dim]. Then, if q and
-            k have the shape [batch_size, heads, seq_len, head_dim], then setting unsqueeze_dim=1 makes
-            cos[position_ids] and sin[position_ids] broadcastable to the shapes of q and k. Similarly, if q and k have
-            the shape [batch_size, seq_len, heads, head_dim], then set unsqueeze_dim=2.
-
-    Returns:
-      Tensor of shape [B, L, N, H] with RoPE applied.
-    """
-    ndim = position_ids.shape[-1]
-    num_input_channels = x.shape[-1]
-    num_rotated_channels_per_dim = 2 * (num_input_channels // (2 * ndim))
-
-    if num_rotated_channels_per_dim <= 0:
-        raise ValueError(
-            "Invalid configuration: num_rotated_channels_per_dim must be > 0, got"
-            f" {num_rotated_channels_per_dim} (num_input_channels={num_input_channels},"
-            f" ndim={ndim})"
-        )
-
-    # Correctly split the input tensor into ndim parts
-    split_sizes = [num_rotated_channels_per_dim] * ndim
-    x_parts = torch.split(x, split_sizes, dim=-1)
-    cos_parts = torch.split(cos, split_sizes, dim=-1)
-    sin_parts = torch.split(sin, split_sizes, dim=-1)
-    y_parts = [
-        apply_rotary_pos_emb(
-            x=x_parts[k],
-            cos=cos_parts[k],
-            sin=sin_parts[k],
-            unsqueeze_dim=unsqueeze_dim,
-        )
-        for k in range(ndim)
-    ]
-    return torch.cat(y_parts, dim=-1)
+        return cos.to(x.dtype), sin.to(x.dtype)
 
 
 class OnyxVisionAttention(nn.Module):
@@ -653,8 +590,8 @@ class OnyxVisionAttention(nn.Module):
         value_states = self.v_proj(hidden_states).view(hidden_shape)
 
         cos, sin = position_embeddings
-        query_states = apply_multidimensional_rope(query_states, cos, sin, position_ids)
-        key_states = apply_multidimensional_rope(key_states, cos, sin, position_ids)
+        query_states = apply_rotary_pos_emb(query_states, cos, sin, unsqueeze_dim=2)
+        key_states = apply_rotary_pos_emb(key_states, cos, sin, unsqueeze_dim=2)
 
         query_states = query_states.transpose(1, 2)
         key_states = key_states.transpose(1, 2)
@@ -674,7 +611,6 @@ class OnyxVisionAttention(nn.Module):
                 value_states,
                 attention_mask=None,
                 scaling=self.scale,
-                dropout=0.0,
                 cu_seq_lens_q=cu_seqlens,
                 cu_seq_lens_k=cu_seqlens,
                 max_length_q=max_seqlen,
@@ -697,7 +633,6 @@ class OnyxVisionAttention(nn.Module):
                     v,
                     attention_mask=None,
                     scaling=self.scale,
-                    dropout=0.0,
                     is_causal=self.is_causal,
                     **kwargs,
                 )[0]
@@ -825,6 +760,8 @@ class OnyxVisionPatchEmbedder(nn.Module):
             align_corners=False,
             kwargs=kwargs,
         )
+        # this doesn;t match ref since we compute manually in fp32. `F.grid_sample` has some numerical
+        # error accumulated and for whatever reason, that might be important (see comment in ref code)
         pos_embeds = (self.position_embedding_table(bilinear_indices) * bilinear_weights[:, :, None]).sum(0)
         embeddings = embeddings + pos_embeds.to(embeddings.dtype)
 
@@ -949,13 +886,12 @@ class OnyxVisionModel(OnyxPreTrainedModel):
 
         inputs_embeds = self.patch_embedder(pixel_values, grid_thw)
         hidden_states = self.ln_pre(inputs_embeds)
-        hidden_states = hidden_states[window_index, ...][None, ...]  # unsqueeze single batch size
+        hidden_states = hidden_states[None, window_index, :]  # unsqueeze single batch size
 
         # Add `1` because ref implementation's position offset is `1`!
-        # TODO: permute qk proj for RoPE in conversion mapping
         position_ids = get_vision_position_ids(grid_thw, spatial_merge_size=1)
-        position_ids = position_ids + 1  # seq-len, 2
-        position_ids = position_ids[window_index, ...][None, ...]  # unsqueeze single batch size
+        position_ids = position_ids.flip(-1) + 1
+        position_ids = position_ids[None, window_index, :]  # unsqueeze single batch size
         position_embeddings = self.rotary_emb(hidden_states, position_ids)
 
         for i, block in enumerate(self.layers):

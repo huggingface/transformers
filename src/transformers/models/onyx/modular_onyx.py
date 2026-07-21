@@ -53,7 +53,7 @@ from ..gemma3.modeling_gemma3 import (
     Gemma3Model,
     Gemma3ModelOutputWithPast,
 )
-from ..gemma4.modeling_gemma4 import Gemma4VisionRotaryEmbedding, apply_multidimensional_rope
+from ..gemma4.modeling_gemma4 import Gemma4VisionRotaryEmbedding, apply_rotary_pos_emb
 from ..llama4.modeling_llama4 import Llama4TextL2Norm
 from ..paddleocr_vl.modeling_paddleocr_vl import PaddleOCRVisionEmbeddings
 
@@ -321,7 +321,20 @@ class OnyxDecoderLayer(Gemma2DecoderLayer):
 
 
 class OnyxVisionRotaryEmbedding(Gemma4VisionRotaryEmbedding):
-    pass
+    def forward(self, x, position_ids):
+        inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1).to(x.device)
+        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
+
+        w_ids = position_ids[:, :, 0][:, None, :].float()
+        h_ids = position_ids[:, :, 1][:, None, :].float()
+        with maybe_autocast(device_type=device_type, enabled=False):
+            freq_h = (inv_freq_expanded @ h_ids).transpose(1, 2)
+            freq_w = (inv_freq_expanded @ w_ids).transpose(1, 2)
+            freq = torch.cat([freq_w, freq_h, freq_w, freq_h], dim=-1)
+            cos = freq.cos() * self.attention_scaling
+            sin = freq.sin() * self.attention_scaling
+
+        return cos.to(x.dtype), sin.to(x.dtype)
 
 
 class OnyxVisionAttention(nn.Module):
@@ -355,8 +368,8 @@ class OnyxVisionAttention(nn.Module):
         value_states = self.v_proj(hidden_states).view(hidden_shape)
 
         cos, sin = position_embeddings
-        query_states = apply_multidimensional_rope(query_states, cos, sin, position_ids)
-        key_states = apply_multidimensional_rope(key_states, cos, sin, position_ids)
+        query_states = apply_rotary_pos_emb(query_states, cos, sin, unsqueeze_dim=2)
+        key_states = apply_rotary_pos_emb(key_states, cos, sin, unsqueeze_dim=2)
 
         query_states = query_states.transpose(1, 2)
         key_states = key_states.transpose(1, 2)
@@ -376,7 +389,6 @@ class OnyxVisionAttention(nn.Module):
                 value_states,
                 attention_mask=None,
                 scaling=self.scale,
-                dropout=0.0,
                 cu_seq_lens_q=cu_seqlens,
                 cu_seq_lens_k=cu_seqlens,
                 max_length_q=max_seqlen,
@@ -399,7 +411,6 @@ class OnyxVisionAttention(nn.Module):
                     v,
                     attention_mask=None,
                     scaling=self.scale,
-                    dropout=0.0,
                     is_causal=self.is_causal,
                     **kwargs,
                 )[0]
@@ -505,6 +516,8 @@ class OnyxVisionPatchEmbedder(PaddleOCRVisionEmbeddings):
             align_corners=False,
             kwargs=kwargs,
         )
+        # this doesn;t match ref since we compute manually in fp32. `F.grid_sample` has some numerical
+        # error accumulated and for whatever reason, that might be important (see comment in ref code)
         pos_embeds = (self.position_embedding_table(bilinear_indices) * bilinear_weights[:, :, None]).sum(0)
         embeddings = embeddings + pos_embeds.to(embeddings.dtype)
 
@@ -593,13 +606,12 @@ class OnyxVisionModel(OnyxPreTrainedModel):
 
         inputs_embeds = self.patch_embedder(pixel_values, grid_thw)
         hidden_states = self.ln_pre(inputs_embeds)
-        hidden_states = hidden_states[window_index, ...][None, ...]  # unsqueeze single batch size
+        hidden_states = hidden_states[None, window_index, :]  # unsqueeze single batch size
 
         # Add `1` because ref implementation's position offset is `1`!
-        # TODO: permute qk proj for RoPE in conversion mapping
         position_ids = get_vision_position_ids(grid_thw, spatial_merge_size=1)
-        position_ids = position_ids + 1 # seq-len, 2
-        position_ids = position_ids[window_index, ...][None, ...]  # unsqueeze single batch size
+        position_ids = position_ids.flip(-1) + 1
+        position_ids = position_ids[None, window_index, :]  # unsqueeze single batch size
         position_embeddings = self.rotary_emb(hidden_states, position_ids)
 
         for i, block in enumerate(self.layers):

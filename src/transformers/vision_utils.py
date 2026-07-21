@@ -197,25 +197,26 @@ def get_vision_bilinear_indices_and_weights(
         if align_corners:
             h_grid = torch.linspace(0, side - 1, h, device=device)
             w_grid = torch.linspace(0, side - 1, w, device=device)
-            h_valid = torch.ones(h, dtype=torch.bool, device=device)
-            w_valid = torch.ones(w, dtype=torch.bool, device=device)
         else:
-            # Padding_mode = zeros the default in `F.grid_sample`
             h_grid = (torch.arange(h, device=device).float() + 0.5) * (side / h) - 0.5
             w_grid = (torch.arange(w, device=device).float() + 0.5) * (side / w) - 0.5
-            h_valid = (h_grid >= 0) & (h_grid <= side - 1)
-            w_valid = (w_grid >= 0) & (w_grid <= side - 1)
 
-            h_grid = h_grid.clamp(0, side - 1)
-            w_grid = w_grid.clamp(0, side - 1)
+        # NOTE: use `floor()`, not `int()` to avoid truncation when align corner is False
+        h_floor = torch.floor(h_grid).long()
+        w_floor = torch.floor(w_grid).long()
+        h_ceil = h_floor + 1
+        w_ceil = w_floor + 1
+        h_frac = h_grid - h_floor.float()
+        w_frac = w_grid - w_floor.float()
 
-        h_floor = h_grid.int()
-        w_floor = w_grid.int()
-        h_ceil = (h_floor + 1).clamp(max=side - 1)
-        w_ceil = (w_floor + 1).clamp(max=side - 1)
-
-        h_frac = h_grid - h_floor
-        w_frac = w_grid - w_floor
+        h_floor_valid = (h_floor >= 0) & (h_floor <= side - 1)
+        h_ceil_valid = (h_ceil >= 0) & (h_ceil <= side - 1)
+        w_floor_valid = (w_floor >= 0) & (w_floor <= side - 1)
+        w_ceil_valid = (w_ceil >= 0) & (w_ceil <= side - 1)
+        h_floor = h_floor.clamp(0, side - 1)
+        h_ceil = h_ceil.clamp(0, side - 1)
+        w_floor = w_floor.clamp(0, side - 1)
+        w_ceil = w_ceil.clamp(0, side - 1)
 
         h_floor_offset = h_floor * side
         h_ceil_offset = h_ceil * side
@@ -227,10 +228,12 @@ def get_vision_bilinear_indices_and_weights(
             (h_ceil_offset[:, None] + w_ceil[None, :]).flatten(),
         ]
         corner_weights = [
-            ((1 - h_frac)[:, None] * (1 - w_frac)[None, :] * (h_valid[:, None] & w_valid[None, :])).flatten(),
-            ((1 - h_frac)[:, None] * w_frac[None, :] * (h_valid[:, None] & w_valid[None, :])).flatten(),
-            (h_frac[:, None] * (1 - w_frac)[None, :] * (h_valid[:, None] & w_valid[None, :])).flatten(),
-            (h_frac[:, None] * w_frac[None, :] * (h_valid[:, None] & w_valid[None, :])).flatten(),
+            (
+                (1 - h_frac)[:, None] * (1 - w_frac)[None, :] * (h_floor_valid[:, None] & w_floor_valid[None, :])
+            ).flatten(),
+            ((1 - h_frac)[:, None] * w_frac[None, :] * (h_floor_valid[:, None] & w_ceil_valid[None, :])).flatten(),
+            (h_frac[:, None] * (1 - w_frac)[None, :] * (h_ceil_valid[:, None] & w_floor_valid[None, :])).flatten(),
+            (h_frac[:, None] * w_frac[None, :] * (h_ceil_valid[:, None] & w_ceil_valid[None, :])).flatten(),
         ]
 
         h_idx = torch.arange(h, device=device).view(h // merge_size, merge_size)

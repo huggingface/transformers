@@ -425,18 +425,16 @@ class PermuteForRope(ConversionOps):
     def _apply(self, tensor: torch.Tensor) -> torch.Tensor:
         dim0 = tensor.shape[0]
         config = self.config
-        # Try to get the subconfig attr if it exists, otherwise fallback
         if self.subconfig_key is not None:
             config = getattr(self.config, self.subconfig_key, self.config)
         n_heads = getattr(config, "num_attention_heads", 1)
         half_head = dim0 // n_heads // 2
 
-        # Permute weights (2D) and optionally biases (1D)
         if tensor.ndim == 2:
-            tensor = tensor.view(n_heads, 2, half_head, tensor.shape[1])
+            tensor = tensor.view(n_heads, half_head, 2, tensor.shape[1])
             tensor = tensor.transpose(1, 2).reshape(dim0, tensor.shape[-1])
         elif tensor.ndim == 1:
-            tensor = tensor.view(n_heads, 2, half_head)
+            tensor = tensor.view(n_heads, half_head, 2)
             tensor = tensor.transpose(1, 2).reshape(dim0)
         return tensor
 
