@@ -470,7 +470,9 @@ class Qwen3OmniMoeThinkerForConditionalGenerationModelTest(ModelTesterMixin, Gen
     def test_sdpa_padding_matches_padding_free_with_position_ids(self):
         pass
 
-    @unittest.skip("Text FlashAttention kwargs are also forwarded to vision attention, which computes its own cu_seqlens")
+    @unittest.skip(
+        "Text FlashAttention kwargs are also forwarded to vision attention, which computes its own cu_seqlens"
+    )
     def test_flash_attention_2_padding_matches_padding_free_with_position_ids_and_fa_kwargs(self):
         pass
 
