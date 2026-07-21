@@ -17,6 +17,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+
 import math
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -66,38 +67,6 @@ class NeuCodecOutput(ModelOutput):
     audio_codes: torch.LongTensor | None = None
     latents: torch.Tensor | None = None
     audio_codes_mask: torch.Tensor | None = None
-
-
-@auto_docstring
-@dataclass
-class NeuCodecEncoderOutput(ModelOutput):
-    r"""
-    audio_codes (`torch.LongTensor` of shape `(batch_size, 1, codes_length)`, *optional*):
-        Discrete code embeddings computed using `model.encode`. These represent
-        the compressed, quantized form of the input audio signal that can be
-        used for storage, transmission, or generation.
-    latents (`torch.Tensor` of shape `(batch_size, dimension, time_steps)`):
-        Quantized continuous representation of input's embedding.
-    audio_codes_mask (`torch.int32` of shape `(batch_size, 1, codes_length)`, *optional*):
-        Downsampled `padding_mask` for indicating valid audio codes in `audio_codes`.
-    """
-
-    audio_codes: torch.LongTensor | None = None
-    latents: torch.Tensor | None = None
-    audio_codes_mask: torch.Tensor | None = None
-
-
-@auto_docstring
-@dataclass
-class NeuCodecDecoderOutput(ModelOutput):
-    r"""
-    audio_values (`torch.FloatTensor` of shape `(batch_size, 1, segment_length)`, *optional*):
-        Decoded audio waveform values in the time domain, obtained by converting
-        the discrete codes back into continuous audio signals. This represents
-        the reconstructed audio that can be played back.
-    """
-
-    audio_values: torch.FloatTensor | None = None
 
 
 class NeuCodecMLP(nn.Module):
@@ -645,6 +614,38 @@ class NeuCodecPreTrainedModel(PreTrainedModel):
             init.copy_(module.filter, filter_tensor)
 
 
+@auto_docstring
+@dataclass
+class NeuCodecEncoderOutput(ModelOutput):
+    r"""
+    audio_codes (`torch.LongTensor` of shape `(batch_size, 1, codes_length)`, *optional*):
+        Discrete code embeddings computed using `model.encode`. These represent
+        the compressed, quantized form of the input audio signal that can be
+        used for storage, transmission, or generation.
+    latents (`torch.Tensor` of shape `(batch_size, dimension, time_steps)`):
+        Quantized continuous representation of input's embedding.
+    audio_codes_mask (`torch.int32` of shape `(batch_size, 1, codes_length)`, *optional*):
+        Downsampled `padding_mask` for indicating valid audio codes in `audio_codes`.
+    """
+
+    audio_codes: torch.LongTensor | None = None
+    latents: torch.Tensor | None = None
+    audio_codes_mask: torch.Tensor | None = None
+
+
+@auto_docstring
+@dataclass
+class NeuCodecDecoderOutput(ModelOutput):
+    r"""
+    audio_values (`torch.FloatTensor` of shape `(batch_size, 1, segment_length)`, *optional*):
+        Decoded audio waveform values in the time domain, obtained by converting
+        the discrete codes back into continuous audio signals. This represents
+        the reconstructed audio that can be played back.
+    """
+
+    audio_values: torch.FloatTensor | None = None
+
+
 class NeuCodecRotaryEmbedding(nn.Module):
     inv_freq: torch.Tensor  # fix linting for `register_buffer`
 
@@ -1075,7 +1076,7 @@ class NeuCodecModel(NeuCodecPreTrainedModel):
     ) -> tuple | NeuCodecOutput:
         r"""
         input_values (`torch.Tensor` of shape `(batch_size, 1, sequence_length)`):
-            Input audio waveform, sampled at `config.sampling_rate` (16kHz).
+            Input audio waveform, sampled at `config.input_sampling_rate`.
         input_features (`torch.Tensor` of shape `(batch_size, mel_bins, time_steps)`):
             Input audio mel spectrogram for semantic encoding.
         padding_mask (`torch.Tensor` of shape `(batch_size, 1, sequence_length)`):
@@ -1104,10 +1105,9 @@ class NeuCodecModel(NeuCodecPreTrainedModel):
         >>> audio_codes = outputs.audio_codes
         >>> audio_values = outputs.audio_values  # sampled at 24kHz
         ```"""
-        # NeuCodec's decoder outputs audio at `sampling_rate`, which differs from the `input_sampling_rate` of
-        # `input_values`, so the truncation length must be rescaled accordingly.
+        # NeuCodec's decoder outputs audio at `output_sampling_rate`, which differs from the `input_sampling_rate` of
         input_length = input_values.shape[-1]
-        output_length = int(input_length * self.config.sampling_rate / self.config.input_sampling_rate)
+        output_length = int(input_length * self.config.output_sampling_rate / self.config.input_sampling_rate)
 
         encoder_outputs = self.encode(
             input_values,

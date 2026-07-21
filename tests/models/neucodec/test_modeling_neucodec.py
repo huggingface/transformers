@@ -35,8 +35,6 @@ from transformers.testing_utils import (
 if is_torch_available():
     import torch
 
-    from transformers import NeuCodecModel
-
 
 @require_torch
 class NeuCodecModelTester:
@@ -45,7 +43,8 @@ class NeuCodecModelTester:
         parent,
         batch_size=2,
         num_channels=1,
-        sample_rate=16000,
+        input_sampling_rate=16000,
+        output_sampling_rate=24000,
         num_mel_bins=80,
         stride=2,
         encoder_hidden_size=8,
@@ -64,14 +63,15 @@ class NeuCodecModelTester:
     ):
         self.parent = parent
         self.batch_size = batch_size
-        self.sample_rate = sample_rate
+        self.input_sampling_rate = input_sampling_rate
+        self.output_sampling_rate = output_sampling_rate
         self.is_training = is_training
-        self.hop_length = int(np.prod(downsampling_ratios) * 1.5)
+        self.hop_length = int(np.prod(downsampling_ratios) * (output_sampling_rate / input_sampling_rate))
         self.num_samples = self.hop_length * 80  # feature extractor will pad to multiple of hop_length
         self.num_channels = num_channels
         self.num_mel_bins = num_mel_bins
         self.stride = stride
-        self.mel_hop_length = self.hop_length  # match acoustic encoder's downsampling ratio
+        self.mel_hop_length = int(np.prod(downsampling_ratios))
         self.encoder_hidden_size = encoder_hidden_size
         self.downsampling_ratios = downsampling_ratios
         self.hidden_size = hidden_size
@@ -118,7 +118,8 @@ class NeuCodecModelTester:
             downsampling_ratios=self.downsampling_ratios,
             hidden_size=self.hidden_size,
             semantic_model_config=semantic_model_config,
-            sampling_rate=self.sample_rate,
+            input_sampling_rate=self.input_sampling_rate,
+            output_sampling_rate=self.output_sampling_rate,
             num_attention_heads=self.num_attention_heads,
             num_key_value_heads=self.num_key_value_heads,
             num_hidden_layers=self.num_hidden_layers,
@@ -133,9 +134,11 @@ class NeuCodecModelTester:
         input_values = inputs_dict["input_values"]
         input_features = inputs_dict["input_features"]
         result = model(input_values, input_features)
+        # output audio is resampled from `input_sampling_rate` (16kHz) to `output_sampling_rate` (24kHz)
+        expected_num_samples = int(self.num_samples * config.output_sampling_rate / config.input_sampling_rate)
         self.parent.assertEqual(
             result.audio_values.shape,
-            (self.batch_size, self.num_channels, self.num_samples),
+            (self.batch_size, self.num_channels, expected_num_samples),
         )
 
 
