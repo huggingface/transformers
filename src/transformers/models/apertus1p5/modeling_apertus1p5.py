@@ -29,6 +29,7 @@ from torch import nn
 from ... import initialization as init
 from ...activations import ACT2CLS, ACT2FN
 from ...cache_utils import Cache, DynamicCache
+from ...configuration_utils import PreTrainedConfig
 from ...generation import GenerationMixin
 from ...integrations import use_kernel_forward_from_hub, use_kernel_func_from_hub, use_kernelized_func
 from ...masking_utils import create_causal_mask
@@ -293,6 +294,35 @@ class Apertus1p5VisionTokenizerModel(PreTrainedModel):
         return self.quantize(hidden_states)
 
 
+def _pruned_output_vocab_size(config: PreTrainedConfig) -> int | None:
+    """Return the physical LM-head width when it is pruned below the vocabulary, else `None`."""
+    text_config = config.get_text_config()
+    output_vocab_size = getattr(text_config, "output_vocab_size", None)
+    if output_vocab_size is not None and output_vocab_size != text_config.vocab_size:
+        return output_vocab_size
+    return None
+
+
+def _check_pruned_head_resize(config: PreTrainedConfig) -> None:
+    """Reject embedding resizes for pruned heads: the generic resize forces the head to the embedding size."""
+    if _pruned_output_vocab_size(config) is not None:
+        raise NotImplementedError(
+            "Resizing token embeddings is not supported for a pruned LM head (`output_vocab_size` is "
+            "set): resize the unpruned checkpoint and prune it again."
+        )
+
+
+def _check_pruned_head_tie(config: PreTrainedConfig) -> None:
+    """Reject weight tying for pruned heads: the generic tying installs the full-width embeddings as the head."""
+    text_config = config.get_text_config()
+    tied = getattr(config, "tie_word_embeddings", False) or getattr(text_config, "tie_word_embeddings", False)
+    if tied and _pruned_output_vocab_size(config) is not None:
+        raise ValueError(
+            "Cannot tie a pruned LM head (`output_vocab_size` smaller than `vocab_size`) to the input "
+            "embeddings; keep `tie_word_embeddings=False`."
+        )
+
+
 @auto_docstring
 class Apertus1p5PreTrainedModel(PreTrainedModel):
     config: Apertus1p5Config
@@ -319,17 +349,17 @@ class Apertus1p5PreTrainedModel(PreTrainedModel):
         pad_to_multiple_of: int | None = None,
         mean_resizing: bool = True,
     ) -> nn.Embedding:
-        # a pruned LM head (fewer rows than the input embeddings) cannot survive the generic resize, which
-        # forces the head to the new embedding size; the no-op getter call (no arguments) stays allowed
-        text_config = self.config.get_text_config()
-        output_vocab_size = getattr(text_config, "output_vocab_size", None)
-        resizes = new_num_tokens is not None or pad_to_multiple_of is not None
-        if resizes and output_vocab_size is not None and output_vocab_size != text_config.vocab_size:
-            raise NotImplementedError(
-                "Resizing token embeddings is not supported for a pruned LM head (`output_vocab_size` is "
-                "set): resize the unpruned checkpoint and prune it again."
-            )
+        # the no-op getter call (no arguments) stays allowed
+        if new_num_tokens is not None or pad_to_multiple_of is not None:
+            _check_pruned_head_resize(self.config)
         return super().resize_token_embeddings(new_num_tokens, pad_to_multiple_of, mean_resizing)
+
+    def tie_weights(self, missing_keys: set[str] | None = None, recompute_mapping: bool = True):
+        # the config forbids constructing a tied pruned head, but `tie_word_embeddings` can be flipped on the
+        # live config afterwards, and the generic tying would then silently install the full-width input
+        # embeddings as `lm_head.weight`
+        _check_pruned_head_tie(self.config)
+        return super().tie_weights(missing_keys, recompute_mapping)
 
 
 class Apertus1p5TextMLP(nn.Module):
@@ -571,6 +601,25 @@ class Apertus1p5TextPreTrainedModel(PreTrainedModel):
         "attentions": Apertus1p5TextAttention,
     }
 
+    def resize_token_embeddings(
+        self,
+        new_num_tokens: int | None = None,
+        pad_to_multiple_of: int | None = None,
+        mean_resizing: bool = True,
+    ) -> nn.Embedding:
+        # the no-op getter call (no arguments) stays allowed
+        if new_num_tokens is not None or pad_to_multiple_of is not None:
+            _check_pruned_head_resize(self.config)
+        return super().resize_token_embeddings(new_num_tokens, pad_to_multiple_of, mean_resizing)
+
+    def tie_weights(self, missing_keys: set[str] | None = None, recompute_mapping: bool = True):
+        # Mirrors Apertus1p5PreTrainedModel: post-hoc `tie_word_embeddings` flips must not tie a pruned head.
+        # The duplication is forced: sharing the guards via a mixin or dual inheritance is not converter-safe
+        # (the modular converter reorders the generated bases, which either breaks the MRO or silently shadows
+        # the mixin methods).
+        _check_pruned_head_tie(self.config)
+        return super().tie_weights(missing_keys, recompute_mapping)
+
 
 class Apertus1p5TextRotaryEmbedding(nn.Module):
     inv_freq: torch.Tensor  # fix linting for `register_buffer`
@@ -718,7 +767,19 @@ def _pad_logits_to_vocab_size(logits: torch.Tensor, vocab_size: int) -> torch.Te
     padding = vocab_size - logits.shape[-1]
     if padding == 0:
         return logits
-    return F.pad(logits, (0, padding), value=-torch.inf)
+    # `finfo.min` rather than `-inf`: the tail still softmaxes to exactly 0 probability, but stays finite under
+    # score arithmetic (classifier-free guidance subtracts two score sets, and `-inf - -inf` is NaN)
+    return F.pad(logits, (0, padding), value=torch.finfo(logits.dtype).min)
+
+
+def _check_pruned_head_labels(labels: torch.Tensor, out_features: int, vocab_size: int) -> None:
+    """Reject labels beyond a pruned head: cross entropy would fail with a bare index error otherwise."""
+    if out_features < vocab_size:
+        torch_compilable_check(
+            (labels < out_features).all(),
+            f"`labels` must be smaller than `output_vocab_size` ({out_features}) or equal to -100; with a pruned "
+            "LM head, positions holding multimodal or other input-only ids must be masked with -100.",
+        )
 
 
 @auto_docstring
@@ -727,7 +788,7 @@ class Apertus1p5TextForCausalLM(Apertus1p5PreTrainedModel, GenerationMixin):
     _tp_plan = {"lm_head": "colwise_gather_output"}
     _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
     config: Apertus1p5TextConfig
-    # the second base only contributes the pruned-head resize guard; override its composite metadata
+    # the second base only contributes the pruned-head resize/tie guards; override its composite metadata
     input_modalities = ("text",)
     _can_compile_fullgraph = True
     _no_split_modules = ["Apertus1p5TextDecoderLayer"]
@@ -762,7 +823,9 @@ class Apertus1p5TextForCausalLM(Apertus1p5PreTrainedModel, GenerationMixin):
             Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
             config.output_vocab_size or config.vocab_size)` or -100; tokens with indices set to `-100` are
             ignored (masked). With a pruned head, positions holding multimodal ids (`>= output_vocab_size`)
-            must be masked with `-100`, exactly like any other id outside the output range.
+            must be masked with `-100`, exactly like any other id outside the output range. Calls with `labels`
+            return logits of the physical head width; calls without `labels` return logits padded to
+            `config.vocab_size`, with `torch.finfo(dtype).min` scores for the input-only tail.
         """
         outputs: BaseModelOutputWithPast = self.model(
             input_ids=input_ids,
@@ -781,15 +844,20 @@ class Apertus1p5TextForCausalLM(Apertus1p5PreTrainedModel, GenerationMixin):
 
         loss = None
         if labels is not None:
+            _check_pruned_head_labels(labels, self.lm_head.out_features, self.config.vocab_size)
             # Compute loss on the physical text-only projection. The logical input-only tail would contribute zero
             # probability and needlessly increase loss memory.
             loss = self.loss_function(
                 logits=projected_logits, labels=labels, vocab_size=self.lm_head.out_features, **kwargs
             )
-
-        # Generic generation assumes that prompt ids and returned score indices share `config.vocab_size`. Preserve
-        # the compact physical head while exposing that logical width; the multimodal tail remains input-only.
-        logits = _pad_logits_to_vocab_size(projected_logits, self.config.vocab_size)
+            # Loss-only calls keep the compact physical width: padding would materialize a full-vocabulary copy
+            # of the logits for every position on every training step.
+            logits = projected_logits
+        else:
+            # Generic generation assumes that prompt ids and returned score indices share `config.vocab_size`.
+            # Preserve the compact physical head while exposing that logical width; the multimodal tail remains
+            # non-generatable.
+            logits = _pad_logits_to_vocab_size(projected_logits, self.config.vocab_size)
 
         return CausalLMOutputWithPast(
             loss=loss,
@@ -1138,7 +1206,9 @@ class Apertus1p5ForConditionalGeneration(Apertus1p5PreTrainedModel, GenerationMi
             text_config.output_vocab_size or text_config.vocab_size)` or -100; tokens with indices set to
             `-100` are ignored (masked). With a pruned head, positions holding multimodal ids
             (`>= output_vocab_size`) must be masked with `-100`, exactly like any other id outside the
-            output range.
+            output range. Calls with `labels` return logits of the physical head width; calls without `labels`
+            return logits padded to `text_config.vocab_size`, with `torch.finfo(dtype).min` scores for the
+            input-only tail.
         """
         outputs = self.model(
             input_ids=input_ids,
@@ -1161,15 +1231,20 @@ class Apertus1p5ForConditionalGeneration(Apertus1p5PreTrainedModel, GenerationMi
 
         loss = None
         if labels is not None:
+            _check_pruned_head_labels(labels, self.lm_head.out_features, self.config.text_config.vocab_size)
             # Compute loss on the physical text-only projection. The logical input-only tail would contribute zero
             # probability and needlessly increase loss memory.
             loss = self.loss_function(
                 logits=projected_logits, labels=labels, vocab_size=self.lm_head.out_features, **kwargs
             )
-
-        # Generic generation assumes that prompt ids and returned score indices share `text_config.vocab_size`.
-        # Preserve the compact physical head while exposing that logical width; the multimodal tail stays input-only.
-        logits = _pad_logits_to_vocab_size(projected_logits, self.config.text_config.vocab_size)
+            # Loss-only calls keep the compact physical width: padding would materialize a full-vocabulary copy
+            # of the logits for every position on every training step.
+            logits = projected_logits
+        else:
+            # Generic generation assumes that prompt ids and returned score indices share `text_config.vocab_size`.
+            # Preserve the compact physical head while exposing that logical width; the multimodal tail stays
+            # non-generatable.
+            logits = _pad_logits_to_vocab_size(projected_logits, self.config.text_config.vocab_size)
 
         return CausalLMOutputWithPast(
             loss=loss,
