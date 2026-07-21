@@ -11,7 +11,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from dataclasses import dataclass
 
 import numpy as np
 import torch
@@ -25,8 +24,6 @@ from ...utils.import_utils import is_torch_available, is_torchaudio_available
 from ..xcodec2.configuration_xcodec2 import Xcodec2Config
 from ..xcodec2.feature_extraction_xcodec2 import Xcodec2FeatureExtractor
 from ..xcodec2.modeling_xcodec2 import (
-    Xcodec2DecoderOutput,
-    Xcodec2EncoderOutput,
     Xcodec2Model,
     Xcodec2Output,
     Xcodec2PreTrainedModel,
@@ -82,37 +79,22 @@ class NeuCodecConfig(Xcodec2Config):
 
     @property
     def encoder_hop_length(self) -> int:
-        """Hop length, in samples at `sampling_rate`, between successive codes (i.e. the encoder frame rate)."""
+        """Hop length, in samples at `input_sampling_rate`, between successive codes (i.e. the encoder frame rate)."""
         return int(np.prod(self.downsampling_ratios))
 
     @property
     def hop_length(self) -> int:
         # The ISTFT head (which reads `hop_length`/`n_fft` off the config) synthesizes audio at
-        # `sampling_rate`, so the encoder's native hop_length is rescaled into that domain.
-        return int(self.encoder_hop_length * self.sampling_rate / self.input_sampling_rate)
+        # `output_sampling_rate`, so the encoder's native hop_length is rescaled into that domain.
+        return int(self.encoder_hop_length * self.output_sampling_rate / self.input_sampling_rate)
 
 
-@auto_docstring
-@dataclass
 class NeuCodecOutput(Xcodec2Output):
     pass
 
 
-@auto_docstring
-@dataclass
-class NeuCodecEncoderOutput(Xcodec2EncoderOutput):
-    pass
-
-
-@auto_docstring
-@dataclass
-class NeuCodecDecoderOutput(Xcodec2DecoderOutput):
-    pass
-
-
 class NeuCodecPreTrainedModel(Xcodec2PreTrainedModel):
-    config: NeuCodecConfig
-    base_model_prefix = "neucodec"
+    pass
 
 
 @auto_docstring(custom_intro="NeuCodec neural audio codec model.")

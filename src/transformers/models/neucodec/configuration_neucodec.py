@@ -41,9 +41,9 @@ class NeuCodecConfig(PreTrainedConfig):
     quantization_levels (`list[int]`, *optional*, defaults to `[4, 4, 4, 4, 4, 4, 4, 4]`):
         Levels for the vector quantization codebook.
     input_sampling_rate (`int`, *optional*, defaults to 16000):
-        Sampling rate, in hertz (Hz), of the decoder's input audio waveform. NeuCodec encodes audio sampled at
-        `input_sampling_rate` (16kHz) but its decoder upsamples the reconstruction to a higher-fidelity
-        `sampling_rate` (24kHz), while keeping the same 50Hz code frame rate.
+        Sampling rate, in hertz (Hz), of the encoder's input audio waveform.
+    output_sampling_rate (`int`, *optional*, defaults to 24000):
+        Sampling rate, in hertz (Hz), of the decoder's output audio waveform.
 
     Example:
 
@@ -82,11 +82,11 @@ class NeuCodecConfig(PreTrainedConfig):
     encoder_hidden_size: int = 48
     downsampling_ratios: list[int] | tuple[int, ...] = (2, 2, 4, 4, 5)
     semantic_model_config: dict | PreTrainedConfig | None = None
-    sampling_rate: int = 16000
     activation_dropout: float = 0.1
     quantization_dim: int = 2048
     quantization_levels: list[int] | tuple[int, ...] = (4, 4, 4, 4, 4, 4, 4, 4)
     input_sampling_rate: int = 16_000
+    output_sampling_rate: int = 24_000
 
     def __post_init__(self, **kwargs):
         if isinstance(self.semantic_model_config, dict):
@@ -114,8 +114,8 @@ class NeuCodecConfig(PreTrainedConfig):
     @property
     def hop_length(self) -> int:
         # The ISTFT head (which reads `hop_length`/`n_fft` off the config) synthesizes audio at
-        # `sampling_rate`, so the encoder's native hop_length is rescaled into that domain.
-        return int(self.encoder_hop_length * self.sampling_rate / self.input_sampling_rate)
+        # `output_sampling_rate`, so the encoder's native hop_length is rescaled into that domain.
+        return int(self.encoder_hop_length * self.output_sampling_rate / self.input_sampling_rate)
 
     @property
     def n_fft(self) -> int:
@@ -123,7 +123,7 @@ class NeuCodecConfig(PreTrainedConfig):
 
     @property
     def encoder_hop_length(self) -> int:
-        """Hop length, in samples at `sampling_rate`, between successive codes (i.e. the encoder frame rate)."""
+        """Hop length, in samples at `input_sampling_rate`, between successive codes (i.e. the encoder frame rate)."""
         return int(np.prod(self.downsampling_ratios))
 
 
