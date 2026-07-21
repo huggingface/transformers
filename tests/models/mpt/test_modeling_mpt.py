@@ -424,6 +424,7 @@ class MptModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
         self.assertIsNotNone(model)
 
 
+@unittest.skip(reason="mosaicml/mpt-7b and mosaicml/mpt-7b-8k checkpoints are no longer available on the Hub")
 @slow
 @require_torch_accelerator
 @require_bitsandbytes
