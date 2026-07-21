@@ -5196,6 +5196,8 @@ class GenerationIntegrationTests(unittest.TestCase):
         output = model.generate(**generation_kwargs, **model_inputs)
         self.assertEqual(output.sequences.shape, (1, 9))
 
+        assert 1 == 2
+
     def test_model_generation_config_can_override_defaults(self):
         """Sanity check that the model samples, not ignoring the model's generation config"""
         model = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-LlamaForCausalLM").eval()
