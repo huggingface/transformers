@@ -110,7 +110,7 @@ if is_torch_available():
         AssistedCandidateGenerator,
         AssistedCandidateGeneratorDifferentTokenizers,
     )
-    from transformers.generation.utils import _speculative_sampling
+    from transformers.generation.utils import ALL_CACHE_NAMES, _speculative_sampling
     from transformers.modeling_layers import MtpModel
 
 from unittest.mock import patch
@@ -1372,6 +1372,73 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
                 atol = rtol = 1e-5
             assert_similar_generate_outputs(outputs, outputs_cached, atol=atol, rtol=rtol)
             self._check_caches_are_equal(outputs.past_key_values, outputs_cached.past_key_values)
+
+    @pytest.mark.generate
+    def test_recurrent_layers_mask_padding_on_continued_forward(self):
+        """
+        Recurrent (linear-attention / short-conv) layers must zero padding out of their state on
+        *continued* forwards too, not only on the first one. Splitting a left-padded batch into a
+        first forward plus a cached continuation must therefore match the single full forward.
+        Regression test for #47086.
+        """
+        # Any model declaring recurrent layer types keeps padding-sensitive state, whether it is a
+        # hybrid or a purely recurrent model — both size the padding mask for their recurrent layers
+        # via `create_recurrent_attention_mask` (pure Mamba1's own inline path can't run this
+        # scenario at all; those models are skip-listed in their test files).
+        recurrent_layer_types = {"linear_attention", "conv", "hybrid", "hybrid_sliding"}
+
+        for model_class in self.all_generative_model_classes:
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            layer_types = set(getattr(config.get_text_config(), "layer_types", None) or ())
+            if not (layer_types & recurrent_layer_types):
+                self.skipTest(reason=f"{model_class.__name__} declares no recurrent layer types")
+
+            model = model_class(config).to(torch_device).eval()
+            input_ids = inputs_dict["input_ids"][:2].to(torch_device)
+            # An ordinary token id: padding is defined by the attention mask, not the token value. A random
+            # init zeroes the `padding_idx` embedding row, which would hide the bug if we padded with it.
+            pad_token_id = 7
+
+            # Split the prepared inputs into a first forward and a continuation whose row 1 is left-padded
+            seq_len = input_ids.shape[1]
+            turn1_len = seq_len // 2 + 1
+            pad_len = max(1, seq_len - turn1_len - 1)
+            turn1, turn2 = input_ids[:, :turn1_len], input_ids[:, turn1_len:].clone()
+            turn2[1, :pad_len] = pad_token_id
+            attention_mask = torch.ones_like(input_ids)
+            attention_mask[1, turn1_len : turn1_len + pad_len] = 0
+            position_ids = (attention_mask.cumsum(-1) - 1).clamp(min=0)
+
+            with torch.no_grad():
+                # single full forward of the padded batch is the ground truth
+                single = model(
+                    input_ids=torch.cat([turn1, turn2], dim=-1),
+                    attention_mask=attention_mask,
+                    position_ids=position_ids,
+                ).logits
+                # same batch, but the padded segment arrives as a continuation on top of the turn-1 cache
+                out1 = model(
+                    input_ids=turn1,
+                    attention_mask=attention_mask[:, :turn1_len],
+                    position_ids=position_ids[:, :turn1_len],
+                    use_cache=True,
+                )
+                # Models name their cache output differently (e.g. Mamba-family `cache_params`)
+                cache_kwarg, cache = next(
+                    ((name, getattr(out1, name)) for name in ALL_CACHE_NAMES if getattr(out1, name, None) is not None),
+                    ("past_key_values", None),
+                )
+                out2 = model(
+                    input_ids=turn2,
+                    attention_mask=attention_mask,
+                    position_ids=position_ids[:, turn1_len:],
+                    use_cache=True,
+                    **{cache_kwarg: cache},
+                )
+
+            # Tight tolerance on purpose: the fixed residual is fp-floor (~1e-7) while the unmasked-padding
+            # bug diverges by ~1e-3, so an MoE-style relaxation would swallow exactly what we test for.
+            torch.testing.assert_close(out2.logits[:, -1], single[:, -1], rtol=1e-4, atol=1e-5)
 
     @pytest.mark.generate
     def test_generate_continue_from_inputs_embeds(self):
@@ -2704,16 +2771,16 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
                 values = layer.values if seq_length is not None else layer.values[:, :, 0, :]
                 self.assertEqual(keys.shape, attention_shape)
                 self.assertEqual(values.shape, attention_shape)
-                self.assertEqual(layer.conv_states.shape, conv_shape)
+                self.assertEqual(layer.conv_states[0].shape, conv_shape)
                 # May not be used (e.g. lfm2)
-                if layer.is_recurrent_states_initialized:
-                    self.assertEqual(layer.recurrent_states.shape, recurrent_shape)
+                if layer.is_recurrent_states_initialized[0]:
+                    self.assertEqual(layer.recurrent_states[0].shape, recurrent_shape)
             # Mamba only layer cache
             elif type(layer) is LinearAttentionLayer:
-                self.assertEqual(layer.conv_states.shape, conv_shape)
+                self.assertEqual(layer.conv_states[0].shape, conv_shape)
                 # May not be used (e.g. lfm2)
-                if layer.is_recurrent_states_initialized:
-                    self.assertEqual(layer.recurrent_states.shape, recurrent_shape)
+                if layer.is_recurrent_states_initialized[0]:
+                    self.assertEqual(layer.recurrent_states[0].shape, recurrent_shape)
             # Attention only layer type
             else:
                 # Remove the seq_length dim for cross-attention cache (it changes based on the model)
@@ -2766,19 +2833,19 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
             if type(cache1.layers[idx]) is LinearAttentionAndFullAttentionLayer:
                 torch.testing.assert_close(cache1.layers[idx].keys, cache2.layers[idx].keys)
                 torch.testing.assert_close(cache1.layers[idx].values, cache2.layers[idx].values)
-                torch.testing.assert_close(cache1.layers[idx].conv_states, cache2.layers[idx].conv_states)
+                torch.testing.assert_close(cache1.layers[idx].conv_states[0], cache2.layers[idx].conv_states[0])
                 # May not be used (e.g. lfm2)
-                if cache1.layers[idx].is_recurrent_states_initialized:
+                if cache1.layers[idx].is_recurrent_states_initialized[0]:
                     torch.testing.assert_close(
-                        cache1.layers[idx].recurrent_states, cache2.layers[idx].recurrent_states
+                        cache1.layers[idx].recurrent_states[0], cache2.layers[idx].recurrent_states[0]
                     )
             # Mamba layer
             elif type(cache1.layers[idx]) is LinearAttentionLayer:
-                torch.testing.assert_close(cache1.layers[idx].conv_states, cache2.layers[idx].conv_states)
+                torch.testing.assert_close(cache1.layers[idx].conv_states[0], cache2.layers[idx].conv_states[0])
                 # May not be used (e.g. lfm2)
-                if cache1.layers[idx].is_recurrent_states_initialized:
+                if cache1.layers[idx].is_recurrent_states_initialized[0]:
                     torch.testing.assert_close(
-                        cache1.layers[idx].recurrent_states, cache2.layers[idx].recurrent_states
+                        cache1.layers[idx].recurrent_states[0], cache2.layers[idx].recurrent_states[0]
                     )
             # Attention layer
             else:
