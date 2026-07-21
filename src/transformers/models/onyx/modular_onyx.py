@@ -26,8 +26,8 @@ from ...masking_utils import create_masks_for_generate
 from ...modeling_outputs import BaseModelOutputWithPooling, CausalLMOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, logging
-from ...utils.generic import is_flash_attention_requested
+from ...utils import TransformersKwargs, auto_docstring, logging, torch_compilable_check
+from ...utils.generic import is_flash_attention_requested, maybe_autocast
 from ...vision_utils import (
     get_vision_bilinear_indices_and_weights,
     get_vision_cu_seqlens,
@@ -694,11 +694,74 @@ class OnyxModel(Gemma3Model):
         vision_outputs.pooler_output = self.perception_emb_norm(vision_features)
         return vision_outputs
 
+    def get_video_features(
+        self,
+        pixel_values_videos: torch.FloatTensor,
+        video_grid_thw: torch.LongTensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutputWithPooling:
+        r"""
+        video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
+            The temporal, height and width of feature shape of each video in LLM.
+        """
+        vision_outputs = self.vision_tower(
+            pixel_values=pixel_values_videos,
+            grid_thw=video_grid_thw,
+            **kwargs,
+        )
+        vision_features = self.vision_adapter(vision_outputs.last_hidden_state)
+        vision_features = self.vision_projection(vision_features)
+        vision_outputs.pooler_output = self.perception_emb_norm(vision_features)
+        return vision_outputs
+
+    def get_placeholder_mask(
+        self,
+        input_ids: torch.LongTensor,
+        inputs_embeds: torch.FloatTensor,
+        image_features: torch.FloatTensor | None = None,
+        video_features: torch.FloatTensor | None = None,
+    ):
+        """
+        Obtains multimodal placeholder mask from `input_ids` or `inputs_embeds`, and checks that the placeholder token count is
+        equal to the length of multimodal features. If the lengths are different, an error is raised.
+        """
+        if input_ids is None:
+            special_image_mask = inputs_embeds == self.get_input_embeddings()(
+                torch.tensor(self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
+            )
+            special_image_mask = special_image_mask.all(-1)
+            special_video_mask = inputs_embeds == self.get_input_embeddings()(
+                torch.tensor(self.config.video_token_id, dtype=torch.long, device=inputs_embeds.device)
+            )
+            special_video_mask = special_video_mask.all(-1)
+        else:
+            special_image_mask = input_ids == self.config.image_token_id
+            special_video_mask = input_ids == self.config.video_token_id
+
+        n_image_tokens = special_image_mask.sum()
+        special_image_mask = special_image_mask.unsqueeze(-1).to(inputs_embeds.device)
+        if image_features is not None:
+            torch_compilable_check(
+                n_image_tokens * inputs_embeds.shape[-1] == image_features.numel(),
+                f"Image features and image tokens do not match, tokens: {n_image_tokens}, features: {image_features.shape[0]}",
+            )
+
+        n_video_tokens = special_video_mask.sum()
+        special_video_mask = special_video_mask.unsqueeze(-1).to(inputs_embeds.device)
+        if video_features is not None:
+            torch_compilable_check(
+                n_video_tokens * inputs_embeds.shape[-1] == video_features.numel(),
+                f"Video features and video tokens do not match, tokens: {n_video_tokens}, features: {video_features.shape[0]}",
+            )
+        return special_image_mask, special_video_mask
+
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
         pixel_values: torch.FloatTensor | None = None,
         image_grid_thw: torch.LongTensor | None = None,
+        pixel_values_videos: torch.FloatTensor | None = None,
+        video_grid_thw: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
@@ -719,16 +782,25 @@ class OnyxModel(Gemma3Model):
             # FIXME: not fan of calling norm manually, why not create custom Embed module?
             inputs_embeds = self.language_model.embed_norm(self.get_input_embeddings()(input_ids))
 
-        # Merge text and images
         if pixel_values is not None:
             image_features = self.get_image_features(
                 pixel_values, image_grid_thw=image_grid_thw, return_dict=True
             ).pooler_output
             image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
-            special_image_mask = self.get_placeholder_mask(
+            special_image_mask, _ = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, image_features=image_features
             )
             inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, image_features)
+
+        if pixel_values_videos is not None:
+            video_features = self.get_video_features(
+                pixel_values_videos, video_grid_thw=video_grid_thw, return_dict=True
+            ).pooler_output
+            video_features = video_features.to(inputs_embeds.device, inputs_embeds.dtype)
+            _, special_video_mask = self.get_placeholder_mask(
+                input_ids, inputs_embeds=inputs_embeds, video_features=video_features
+            )
+            inputs_embeds = inputs_embeds.masked_scatter(special_video_mask, video_features)
 
         # It may already have been prepared by e.g. `generate`
         if not isinstance(causal_mask_mapping := attention_mask, dict):
@@ -826,6 +898,8 @@ class OnyxForConditionalGeneration(Gemma3ForConditionalGeneration):
         input_ids: torch.LongTensor | None = None,
         pixel_values: torch.FloatTensor | None = None,
         image_grid_thw: torch.LongTensor | None = None,
+        pixel_values_videos: torch.FloatTensor | None = None,
+        video_grid_thw: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
@@ -839,6 +913,8 @@ class OnyxForConditionalGeneration(Gemma3ForConditionalGeneration):
             input_ids=input_ids,
             pixel_values=pixel_values,
             image_grid_thw=image_grid_thw,
+            pixel_values_videos=pixel_values_videos,
+            video_grid_thw=video_grid_thw,
             attention_mask=attention_mask,
             position_ids=position_ids,
             past_key_values=past_key_values,
@@ -879,11 +955,12 @@ class OnyxForConditionalGeneration(Gemma3ForConditionalGeneration):
         inputs_embeds=None,
         position_ids=None,
         pixel_values=None,
+        pixel_values_videos=None,
         attention_mask=None,
         image_grid_thw=None,
+        video_grid_thw=None,
         use_cache=True,
         logits_to_keep=None,
-        labels=None,
         is_first_iteration=False,
         **kwargs,
     ):
@@ -903,6 +980,8 @@ class OnyxForConditionalGeneration(Gemma3ForConditionalGeneration):
         if is_first_iteration or not use_cache:
             model_inputs["pixel_values"] = pixel_values
             model_inputs["image_grid_thw"] = image_grid_thw
+            model_inputs["pixel_values_videos"] = pixel_values_videos
+            model_inputs["video_grid_thw"] = video_grid_thw
 
         return model_inputs
 

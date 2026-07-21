@@ -65,6 +65,7 @@ ONYX_MM_CHAT_TEMPLATE = (
 class OnyxProcessorKwargs(ProcessingKwargs, total=False):
     _defaults = {
         "text_kwargs": {"add_special_tokens": False},
+        "videos_kwargs": {"return_metadata": True},
     }
 
 
@@ -84,7 +85,7 @@ class OnyxProcessor(ProcessorMixin):
         self.image_start_token = "<|image_start|>"
         self.image_end_token = "<|image_end|>"
         self.video_token = "<|video|>"
-        self.videos_sep_token = "<|vid_frame_separator|>"
+        self.video_sep_token = "<|vid_frame_separator|>"
         self.video_start_token = "<|vid_start|>"
         self.video_end_token = "<|vid_end|>"
 

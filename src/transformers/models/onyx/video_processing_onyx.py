@@ -11,204 +11,218 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from __future__ import annotations
 
-import itertools
-import math
-from pathlib import Path
 
 import torch
-from PIL import Image
-from torchvision import transforms as T
+import torchvision.transforms.v2.functional as tvF
 
 from ...feature_extraction_utils import BatchFeature
+from ...image_utils import (
+    IMAGENET_STANDARD_MEAN,
+    IMAGENET_STANDARD_STD,
+    ChannelDimension,
+    PILImageResampling,
+    get_image_size,
+)
+from ...processing_utils import Unpack, VideosKwargs
+from ...utils import TensorType, auto_docstring
 from ...video_processing_utils import BaseVideoProcessor
+from ...video_utils import VideoMetadata, group_videos_by_shape, reorder_videos
+from .image_processing_onyx import get_aspect_ratio_preserving_size
 
 
-try:
-    import torchcodec
-except Exception:
-    torchcodec = None
-
-
-def _grid_size(img_w: int, img_h: int, patch_hw: int, max_tokens: int) -> tuple[int, int, int]:
-    """Pick the integer (H, W) grid closest to the aspect ratio under the token cap.
-    Replicates OnyxVisionEncoder._compute_grid_size (modeling_onyx.py) so the
-    processor needs no torch model import. Returns (target_h, target_w, n_tokens).
+class OnyxVideoProcessorInitKwargs(VideosKwargs, total=False):
     """
-    i_nph = img_h / patch_hw
-    i_npw = img_w / patch_hw
-    ratio = i_npw / i_nph if i_nph > 0 else 1.0
-    if i_nph * i_npw > max_tokens:
-        i_nph = (max_tokens / ratio) ** 0.5
-        i_npw = i_nph * ratio
-    candidates = list(
-        set(
-            itertools.product(
-                [math.floor(i_nph), math.ceil(i_nph)],
-                [math.floor(i_npw), math.ceil(i_npw)],
-            )
-        )
-    )
-    candidates = [(nph, npw) for nph, npw in candidates if nph >= 1 and npw >= 1 and nph * npw <= max_tokens]
-    if not candidates:
-        candidates = [(max(1, round(i_nph)), max(1, round(i_npw)))]
-    nph, npw = min(candidates, key=lambda c: abs(c[0] / c[1] - img_h / img_w))
-    return nph * patch_hw, npw * patch_hw, nph * npw
+    patch_size (`int`, *optional*):
+        Size of each image patch in pixels.
+    TODO:
+    """
+
+    patch_size: int
+    temporal_patch_size: int
+    max_video_frame_tokens: int
+    downsample_factor: int
 
 
+@auto_docstring
 class OnyxVideoProcessor(BaseVideoProcessor):
-    """Onyx video preprocessing behind the standard HF ``AutoVideoProcessor`` API.
+    resample = PILImageResampling.LANCZOS
+    image_mean = IMAGENET_STANDARD_MEAN
+    image_std = IMAGENET_STANDARD_STD
+    size = None
+    default_to_square = True
+    do_convert_rgb = True
+    do_resize = True
+    do_rescale = True
+    do_normalize = True
+    patch_size = 14
+    temporal_patch_size = 2
+    downsample_factor = 2
+    max_video_frame_tokens = 144
+    num_frames = 96
+    fps = 2.0
+    do_sample_frames = True
 
-    Wraps torchcodec decoding (training-faithful), uniform frame sampling to a
-    whole multiple of ``patch_temporal``, real per-group PTS timestamps, and
-    ``patch_temporal`` frame-grouping (frames cat on the channel axis ->
-    ``[patch_temporal * 3, H, W]``; the encoder detects video by channel count).
+    valid_kwargs = OnyxVideoProcessorInitKwargs
+    model_input_names = ["pixel_values_videos", "video_grid_thw"]
 
-    Overrides ``preprocess`` instead of the BaseVideoProcessor fast pipeline
-    because Onyx consumes a LIST of variable-size group tensors and needs real
-    per-group PTS, neither of which the stacked fast path models.
-    """
+    def __init__(self, **kwargs: Unpack[OnyxVideoProcessorInitKwargs]):
+        super().__init__(**kwargs)
 
-    model_input_names = ["pixel_values"]
+    def _validate_preprocess_kwargs(self, **kwargs):
+        # Onyx uses aspect_ratio_preserving_resize driven by patch_size,
+        # not the standard `size` parameter. Temporarily disable do_resize so
+        # the base validation doesn't raise an error
+        kwargs["do_resize"] = False
+        super()._validate_preprocess_kwargs(**kwargs)
 
-    def __init__(
+    def aspect_ratio_preserving_resize(
         self,
-        patch_size: int = 14,
-        downsample_factor: int = 2,
-        patch_temporal: int = 2,
-        max_video_frame_tokens: int = 144,
-        image_mean: float = 0.5,
-        image_std: float = 0.5,
-        video_num_frames: int = 96,
-        video_sampling_fps: float = 2.0,
+        image: torch.Tensor,
+        patch_size: int,
+        max_tokens: int,
+        resample: tvF.InterpolationMode,
+    ) -> torch.Tensor:
+        height, width = image.shape[-2], image.shape[-1]
+        target_height, target_width = get_aspect_ratio_preserving_size(
+            height=height,
+            width=width,
+            patch_size=patch_size,
+            max_tokens=max_tokens,
+        )
+
+        if target_height == height and target_width == width:
+            return image
+
+        return tvF.resize(
+            image,
+            size=[target_height, target_width],
+            interpolation=resample,
+            antialias=True,
+        )
+
+    def sample_frames(
+        self,
+        metadata: VideoMetadata,
+        temporal_patch_size: int | None = None,
+        num_frames: int | None = None,
+        fps: int | float | None = None,
         **kwargs,
     ):
-        super().__init__(**kwargs)
-        self.patch_size = patch_size
-        self.downsample_factor = downsample_factor
-        self.patch_temporal = patch_temporal
-        self.max_video_frame_tokens = max_video_frame_tokens
-        self.image_mean = image_mean
-        self.image_std = image_std
-        self.video_num_frames = video_num_frames
-        self.video_sampling_fps = video_sampling_fps
-
-    def _to_norm_tensor(self, image: Image.Image) -> torch.Tensor:
-        return T.functional.normalize(
-            T.functional.to_tensor(image),
-            [self.image_mean] * 3,
-            [self.image_std] * 3,
-        )
-
-    def decode_video(self, video_path: str) -> tuple[list[Image.Image], list[float]]:
-        """Sample frames + per-group PTS with torchcodec (the training decode path).
-
-        ``timestamps[g]`` is the ACTUAL decoded PTS of the first frame in temporal
-        group ``g``; ``len(frames)`` is a whole multiple of ``patch_temporal``.
         """
-        if torchcodec is None:
-            raise RuntimeError("torchcodec is required for video decoding (it matches the training decode path).")
-        pt = self.patch_temporal
-        reader = torchcodec.decoders.VideoDecoder(video_path)
-        total = len(reader)
-        assert reader.metadata.average_fps is not None, f"Video has no FPS metadata: {video_path}"
-        fps = reader.metadata.average_fps
-        assert self.video_sampling_fps and self.video_sampling_fps > 0, (
-            f"video_sampling_fps must be positive, got {self.video_sampling_fps}"
-        )
-        n = min(int(total * self.video_sampling_fps / fps), self.video_num_frames, total)
-        n = max(pt, (n // pt) * pt)
-        n = min(n, total)
-        if n < pt:
-            raise ValueError(
-                f"Video has only {total} decodable frame(s) but needs at least {pt} (one temporal patch): {video_path}"
-            )
-        indices = torch.linspace(0, total - 1, n).long().tolist()
-        frames: list[Image.Image] = []
-        timestamps: list[float] = []
-        for j, i in enumerate(indices):
-            fr = reader[i]
-            frames.append(Image.fromarray(fr.data.permute(1, 2, 0).numpy()).convert("RGB"))
-            if j % pt == 0:
-                pts = getattr(fr, "pts_seconds", None)
-                timestamps.append(float(pts) if pts is not None else i / fps)
-        return frames, timestamps
+        Default sampling function which uniformly samples the desired number of frames between 0 and total number of frames.
+        If `fps` is passed along with metadata, `fps` frames per second are sampled uniformty. Arguments `num_frames`
+        and `fps` are mutually exclusive.
 
-    def compute_video_frame_size(self, img_w: int, img_h: int) -> tuple[int, int, int]:
-        ph = self.patch_size * self.downsample_factor
-        return _grid_size(img_w, img_h, ph, self.max_video_frame_tokens)
+        Args:
+            metadata (`VideoMetadata`):
+                Metadata of the video containing information about total duration, fps and total number of frames.
+            temporal_patch_size (`int`, *optional*):
+                The temporal patch size of the vision encoder. Number of sampled frames will be rounded to be divisible by frame factor.
+            num_frames (`int`, *optional*):
+                Maximum number of frames to sample. Defaults to `self.num_frames`.
+            fps (`int` or `float`, *optional*):
+                Target frames to sample per second. Defaults to `self.fps`.
 
-    def _group_frames(self, frames: list[Image.Image]) -> tuple[list[torch.Tensor], int, int]:
-        pt = self.patch_temporal
-        if len(frames) < pt or len(frames) % pt != 0:
-            raise ValueError(f"video frame count {len(frames)} must be a positive multiple of patch_temporal={pt}")
-        first = frames[0].convert("RGB")
-        target_h, target_w, n_tokens = self.compute_video_frame_size(first.width, first.height)
-        groups: list[torch.Tensor] = []
-        for i in range(0, len(frames), pt):
-            grp = [
-                self._to_norm_tensor(frames[i + j].convert("RGB").resize((target_w, target_h), Image.LANCZOS))
-                for j in range(pt)
-            ]
-            groups.append(torch.cat(grp, dim=0))
-        return groups, len(groups), n_tokens
-
-    @staticmethod
-    def _normalize_videos(videos) -> list:
-        if isinstance(videos, (str, Path)):
-            return [videos]
-        if videos and not isinstance(videos[0], (list, tuple, str, Path)):
-            return [videos]
-        return list(videos or [])
-
-    def preprocess_one(
-        self,
-        video: str | Path | list[Image.Image],
-        timestamps: list[float] | None = None,
-    ) -> tuple[list[torch.Tensor], int, int, list[float]]:
-        """Decode (if a path) + group ONE video.
-
-        Returns ``(group_tensors, n_groups, tokens_per_group, group_timestamps)``.
+        Returns:
+            np.ndarray:
+                Indices to sample video frames.
         """
-        if isinstance(video, (str, Path)):
-            frames, ts = self.decode_video(str(video))
-        else:
-            frames = [f.convert("RGB") for f in video]
-            ts = list(timestamps) if timestamps is not None else []
-        groups, n_groups, tokens_per_group = self._group_frames(frames)
-        return groups, n_groups, tokens_per_group, ts
+        total_num_frames = metadata.total_num_frames
+        num_frames = min(int(total_num_frames * fps / metadata.fps), num_frames, total_num_frames)
+        num_frames = max(temporal_patch_size, (num_frames // temporal_patch_size) * temporal_patch_size)
+        num_frames = min(num_frames, total_num_frames)
+        indices = torch.linspace(0, total_num_frames - 1, num_frames).long()
+        return indices
 
-    def preprocess(
+    def _preprocess(
         self,
-        videos,
-        video_timestamps: list[list[float]] | None = None,
-        return_tensors: str | None = "pt",
+        videos: list["torch.Tensor"],
+        do_resize: bool,
+        do_convert_rgb: bool,
+        resample: PILImageResampling | tvF.InterpolationMode | int | None,
+        do_rescale: bool,
+        rescale_factor: float,
+        do_normalize: bool,
+        image_mean: float | list[float] | None,
+        image_std: float | list[float] | None,
+        return_tensors: str | TensorType | None,
+        patch_size: int,
+        temporal_patch_size: int,
+        max_video_frame_tokens: int,
+        downsample_factor: int,
+        disable_grouping: bool = False,
         **kwargs,
     ) -> BatchFeature:
-        """Preprocess video file path(s) or pre-decoded frame list(s)."""
-        videos = self._normalize_videos(videos)
-        pixel_values: list[torch.Tensor] = []
-        num_groups: list[int] = []
-        tokens_per_group: list[int] = []
-        out_ts: list[list[float]] = []
-        for idx, v in enumerate(videos):
-            ts_in = video_timestamps[idx] if video_timestamps else None
-            groups, ng, tpg, ts = self.preprocess_one(v, ts_in)
-            pixel_values += groups
-            num_groups.append(ng)
-            tokens_per_group.append(tpg)
-            out_ts.append(ts)
-        batch = BatchFeature(
-            data={
-                "video_num_groups": num_groups,
-                "video_tokens_per_group": tokens_per_group,
-                "video_timestamps": out_ts,
-            },
-            tensor_type=None,
+        # Group videos by size for batched resizing
+        grouped_videos, grouped_videos_index = group_videos_by_shape(videos)
+        resized_videos_grouped = {}
+        for shape, stacked_videos in grouped_videos.items():
+            if do_convert_rgb:
+                stacked_videos = self.convert_to_rgb(stacked_videos)
+            if do_resize:
+                stacked_videos = self.aspect_ratio_preserving_resize(
+                    image=stacked_videos,
+                    patch_size=patch_size * downsample_factor,
+                    max_tokens=max_video_frame_tokens,
+                    resample=resample,
+                )
+            resized_videos_grouped[shape] = stacked_videos
+        resized_videos = reorder_videos(resized_videos_grouped, grouped_videos_index)
+
+        # Group videos by size for further processing
+        # Needed in case do_resize is False, or resize returns videos with different sizes
+        grouped_videos, grouped_videos_index = group_videos_by_shape(resized_videos)
+        processed_videos_grouped = {}
+        processed_grids = {}
+        for shape, stacked_videos in grouped_videos.items():
+            resized_height, resized_width = get_image_size(stacked_videos[0], channel_dim=ChannelDimension.FIRST)
+
+            # Fused rescale and normalize
+            stacked_videos = self.rescale_and_normalize(
+                stacked_videos, do_rescale, rescale_factor, do_normalize, image_mean, image_std
+            )
+            patches = stacked_videos
+
+            # Check that videos have `num_frames` divisible by `temporal_patch_size`
+            T = patches.shape[1]
+            if pad := -T % temporal_patch_size:
+                repeats = patches[:, -1:].expand(-1, pad, -1, -1, -1)
+                patches = torch.cat((patches, repeats), dim=1)
+
+            batch_size, grid_t, channel = patches.shape[:3]
+            grid_t = grid_t // temporal_patch_size
+            grid_h, grid_w = resized_height // patch_size, resized_width // patch_size
+
+            patches = patches.view(
+                batch_size,
+                grid_t,
+                temporal_patch_size,
+                channel,
+                grid_h,
+                patch_size,
+                grid_w,
+                patch_size,
+            )
+            patches = patches.permute(0, 1, 4, 6, 2, 3, 5, 7)
+            flatten_patches = patches.reshape(
+                batch_size,
+                grid_t * grid_h * grid_w,
+                temporal_patch_size * channel * patch_size * patch_size,
+            )
+
+            processed_videos_grouped[shape] = flatten_patches
+            processed_grids[shape] = [[grid_t, grid_h, grid_w]] * batch_size
+
+        processed_videos = reorder_videos(processed_videos_grouped, grouped_videos_index)
+        processed_grids = reorder_videos(processed_grids, grouped_videos_index)
+        pixel_values_videos = torch.cat(processed_videos, dim=0)
+        video_grid_thw = torch.tensor(processed_grids)
+
+        return BatchFeature(
+            data={"pixel_values_videos": pixel_values_videos, "video_grid_thw": video_grid_thw},
+            tensor_type=return_tensors,
         )
-        batch["pixel_values"] = pixel_values
-        return batch
 
 
 __all__ = ["OnyxVideoProcessor"]
