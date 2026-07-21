@@ -171,7 +171,6 @@ class LongcatFlashMLA(DeepseekV3Attention):
     ) -> tuple[torch.Tensor, torch.Tensor | None, tuple[torch.Tensor] | None]:
         batch_size, seq_length = hidden_states.shape[:-1]
         query_shape = (batch_size, seq_length, -1, self.qk_head_dim)
-        key_shape = (batch_size, seq_length, -1, self.qk_nope_head_dim + self.v_head_dim)
         # we always do a lora for queries as well
         q_states = self.q_b_proj(self.q_a_layernorm(self.q_a_proj(hidden_states)))
         q_states = q_states.view(query_shape).transpose(1, 2)
@@ -184,33 +183,28 @@ class LongcatFlashMLA(DeepseekV3Attention):
         # apply LoRA scaling
         q_pass = q_pass * self.mla_scale_q_lora
         q_rot = q_rot * self.mla_scale_q_lora
-        k_pass = k_pass * self.mla_scale_kv_lora
-
-        k_pass = self.kv_b_proj(k_pass).view(key_shape).transpose(1, 2)
-        k_pass, value_states = torch.split(k_pass, [self.qk_nope_head_dim, self.v_head_dim], dim=-1)
+        kv_c_normed = k_pass * self.mla_scale_kv_lora
 
         k_rot = k_rot.view(batch_size, 1, seq_length, self.qk_rope_head_dim)
 
         cos, sin = position_embeddings
         q_rot, k_rot = apply_rotary_pos_emb_interleave(q_rot, k_rot, cos, sin)
-        k_rot = k_rot.expand(*k_pass.shape[:-1], -1)
 
         query_states = torch.cat((q_pass, q_rot), dim=-1)
-        key_states = torch.cat((k_pass, k_rot), dim=-1)
 
-        if past_key_values is not None:
-            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
-
+        # MLA hands the interface the compressed latent and RoPE key; the `kv_b_proj`
+        # expansion happens inside the interface (see `AttentionInterface.get_interface`).
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
-            self.config._attn_implementation, eager_attention_forward
+            self.config._attn_implementation, eager_attention_forward, mla=True
         )
 
         attn_output, attn_weights = attention_interface(
             self,
             query_states,
-            key_states,
-            value_states,
+            kv_c_normed,
+            k_rot,
             attention_mask,
+            past_key_values=past_key_values,
             dropout=0.0 if not self.training else self.attention_dropout,
             scaling=self.scaling,
             **kwargs,

@@ -168,7 +168,6 @@ class MiniCPM3Attention(DeepseekV2Attention):
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
         batch_size, seq_length = hidden_states.shape[:-1]
         query_shape = (batch_size, seq_length, -1, self.qk_head_dim)
-        key_shape = (batch_size, seq_length, -1, self.qk_nope_head_dim + self.v_head_dim)
 
         if self.q_lora_rank is None:
             q_states = self.q_proj(hidden_states)
@@ -179,34 +178,29 @@ class MiniCPM3Attention(DeepseekV2Attention):
 
         compressed_kv = self.kv_a_proj_with_mqa(hidden_states)
         k_pass, k_rot = torch.split(compressed_kv, [self.kv_lora_rank, self.qk_rope_head_dim], dim=-1)
-
-        k_pass = self.kv_b_proj(self.kv_a_layernorm(k_pass)).view(key_shape).transpose(1, 2)
-        k_pass, value_states = torch.split(k_pass, [self.qk_nope_head_dim, self.v_head_dim], dim=-1)
-
+        kv_c_normed = self.kv_a_layernorm(k_pass)
         k_rot = k_rot.view(batch_size, 1, seq_length, self.qk_rope_head_dim)
 
         cos, sin = position_embeddings
         # Same MLA forward as DeepSeek-V2/V3, except MiniCPM3 keeps the standard (non-interleaved)
         # cos/sin rotary (`apply_rotary_pos_emb`) instead of DeepSeek's complex/interleaved variant.
         q_rot, k_rot = apply_rotary_pos_emb(q_rot, k_rot, cos, sin)
-        k_rot = k_rot.expand(*k_pass.shape[:-1], -1)
 
         query_states = torch.cat((q_pass, q_rot), dim=-1)
-        key_states = torch.cat((k_pass, k_rot), dim=-1)
 
-        if past_key_values is not None:
-            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
-
+        # MLA hands the interface the compressed latent and RoPE key; the `kv_b_proj`
+        # expansion happens inside the interface (see `AttentionInterface.get_interface`).
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
-            self.config._attn_implementation, eager_attention_forward
+            self.config._attn_implementation, eager_attention_forward, mla=True
         )
 
         attn_output, attn_weights = attention_interface(
             self,
             query_states,
-            key_states,
-            value_states,
+            kv_c_normed,
+            k_rot,
             attention_mask,
+            past_key_values=past_key_values,
             dropout=0.0 if not self.training else self.attention_dropout,
             scaling=self.scaling,
             **kwargs,

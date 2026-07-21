@@ -311,7 +311,6 @@ class DeepseekV2Attention(nn.Module):
     ) -> tuple[torch.Tensor, torch.Tensor | None, tuple[torch.Tensor] | None]:
         batch_size, seq_length = hidden_states.shape[:-1]
         query_shape = (batch_size, seq_length, -1, self.qk_head_dim)
-        key_shape = (batch_size, seq_length, -1, self.qk_nope_head_dim + self.v_head_dim)
 
         if self.q_lora_rank is None:
             q = self.q_proj(hidden_states)
@@ -322,30 +321,27 @@ class DeepseekV2Attention(nn.Module):
 
         compressed_kv = self.kv_a_proj_with_mqa(hidden_states)
         k_nope, k_pe = torch.split(compressed_kv, [self.kv_lora_rank, self.qk_rope_head_dim], dim=-1)
-        k_nope = self.kv_b_proj(self.kv_a_layernorm(k_nope)).view(key_shape).transpose(1, 2)
-        k_nope, value_states = torch.split(k_nope, [self.qk_nope_head_dim, self.v_head_dim], dim=-1)
+        kv_c_normed = self.kv_a_layernorm(k_nope)
 
         k_pe = k_pe.view(batch_size, 1, seq_length, self.qk_rope_head_dim)
 
         q_pe, k_pe = apply_rotary_emb(q_pe, k_pe, position_embeddings.to(q_pe.device))
 
-        k_pe = k_pe.expand(*k_nope.shape[:-1], -1)
         query_states = torch.cat((q_nope, q_pe), dim=-1)
-        key_states = torch.cat((k_nope, k_pe), dim=-1)
 
-        if past_key_values is not None:
-            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
-
+        # MLA hands the interface the compressed latent and RoPE key; the `kv_b_proj`
+        # expansion happens inside the interface (see `AttentionInterface.get_interface`).
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
-            self.config._attn_implementation, eager_attention_forward
+            self.config._attn_implementation, eager_attention_forward, mla=True
         )
 
         attn_output, attn_weights = attention_interface(
             self,
             query_states,
-            key_states,
-            value_states,
+            kv_c_normed,
+            k_pe,
             attention_mask,
+            past_key_values=past_key_values,
             dropout=0.0 if not self.training else self.attention_dropout,
             scaling=self.scaling,
             **kwargs,

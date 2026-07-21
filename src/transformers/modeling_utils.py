@@ -5071,6 +5071,36 @@ def caching_allocator_warmup(model: PreTrainedModel, expanded_device_map: dict, 
         _ = torch.empty(int(byte_count // 2), dtype=torch.float16, device=device, requires_grad=False)
 
 
+def _mla_expand_wrapper(fn: Callable) -> Callable:
+    """Adapt a standard attention interface to MLA's compressed inputs.
+
+    Multi-head Latent Attention modules hand the interface the compressed `kv_c_normed`
+    and the (post-RoPE) `k_pe` instead of full `key`/`value`. Interfaces whose
+    `attn_implementation` name does not contain `mla` expect the expanded tensors, so
+    reconstruct them via the module's `kv_b_proj` and update the cache before delegating.
+    The wrapper is cached on `fn` so repeated dispatch (and `torch.compile`) sees a stable
+    callable.
+    """
+    cached = getattr(fn, "_mla_expanded", None)
+    if cached is not None:
+        return cached
+
+    @functools.wraps(fn)
+    def wrapper(module, query, kv_c_normed, k_pe, attention_mask, past_key_values=None, **kwargs):
+        batch_size, num_heads, seq_length = query.shape[:3]
+        kv = module.kv_b_proj(kv_c_normed)
+        kv = kv.view(batch_size, seq_length, -1, module.qk_nope_head_dim + module.v_head_dim)
+        sections = [module.qk_nope_head_dim, module.v_head_dim]
+        k_nope, value = torch.split(kv.transpose(1, 2), sections, dim=-1)
+        key = torch.cat((k_nope, k_pe.expand(batch_size, num_heads, seq_length, -1)), dim=-1)
+        if past_key_values is not None:
+            key, value = past_key_values.update(key, value, module.layer_idx)
+        return fn(module, query, key, value, attention_mask, **kwargs)
+
+    fn._mla_expanded = wrapper
+    return wrapper
+
+
 class AttentionInterface(GeneralInterface):
     """
     Dict-like object keeping track of allowed attention functions. You can easily add a new attention function
@@ -5093,8 +5123,17 @@ class AttentionInterface(GeneralInterface):
         "paged|eager": eager_paged_attention_forward,
     }
 
-    def get_interface(self, attn_implementation: str, default: Callable) -> Callable:
-        """Return the requested `attn_implementation`. Also strictly check its validity, and raise if invalid."""
+    def get_interface(
+        self, attn_implementation: str, default: Callable, *, mla: bool = False
+    ) -> Callable:
+        """Return the requested `attn_implementation`. Also strictly check its validity, and raise if invalid.
+
+        Args:
+            mla: If set, this is an MLA call site passing compressed `kv_c_normed`/`k_pe`.
+                Unless the `attn_implementation` name contains `mla` (i.e. a backend that
+                consumes the compressed latent directly), the interface is wrapped to
+                reconstruct full `key`/`value` first, so it behaves exactly as before.
+        """
         if attn_implementation is None:
             logger.warning_once(
                 "You tried to access the `AttentionInterface` with a `config._attn_implementation` set to `None`. This "
@@ -5105,7 +5144,10 @@ class AttentionInterface(GeneralInterface):
             raise KeyError(
                 f"`{attn_implementation}` is not a valid attention implementation registered in the `AttentionInterface`"
             )
-        return super().get(attn_implementation, default)
+        interface = super().get(attn_implementation, default)
+        if mla and not (attn_implementation and "mla" in attn_implementation):
+            interface = _mla_expand_wrapper(interface)
+        return interface
 
 
 # Global AttentionInterface shared by all models which do not need to overwrite any of the existing ones
