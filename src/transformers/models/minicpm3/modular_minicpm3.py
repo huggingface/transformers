@@ -203,8 +203,7 @@ class MiniCPM3Attention(DeepseekV2Attention):
         )
 
         pad_head_dims = (
-            getattr(attention_interface, "requires_equal_head_dims", False)
-            and self.qk_head_dim != self.v_head_dim
+            getattr(attention_interface, "requires_equal_head_dims", False) and self.qk_head_dim != self.v_head_dim
         )
         if pad_head_dims:
             value_states = F.pad(value_states, [0, self.qk_head_dim - self.v_head_dim])
