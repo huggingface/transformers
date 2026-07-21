@@ -106,6 +106,11 @@ class Cosmos3EdgeTextConfig(LlamaConfig):
         "layers.*.mlp.fc1": "colwise",
         "layers.*.mlp.fc2": "rowwise",
     }
+    base_model_fsdp_plan = {
+        "embed_tokens": "free_full_weight",
+        "layers.*": "free_full_weight",
+        "norm": "keep_full_weight",
+    }
 
     vocab_size: int = 131072
     hidden_size: int = 2048
