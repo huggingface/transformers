@@ -35,12 +35,13 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...utils import TensorType, TransformersKwargs, auto_docstring, can_return_tuple
 from ...utils.generic import (
+    get_max_seqlen,
     is_flash_attention_requested,
     maybe_autocast,
 )
 from ...utils.import_utils import requires
 from ...utils.output_capturing import capture_outputs
-from ...vision_utils import get_vision_cu_seqlens
+from ...vision_utils import get_vision_attention_seqlens
 from ..hunyuan_v1_dense.configuration_hunyuan_v1_dense import HunYuanDenseV1Config
 from ..hunyuan_v1_dense.modeling_hunyuan_v1_dense import (
     HunYuanDenseV1Attention,
@@ -669,6 +670,7 @@ class HunYuanVLVisionAttention(MllamaVisionAttention):
         self,
         hidden_states: torch.Tensor,
         cu_seqlens: torch.Tensor,
+        max_seqlen: int | None = None,
         **kwargs,
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
         query = self.q_proj(hidden_states)
@@ -687,7 +689,7 @@ class HunYuanVLVisionAttention(MllamaVisionAttention):
 
         if is_flash_attention_requested(self.config):
             # Flash Attention: Use cu_seqlens for variable length attention
-            max_seqlen = (cu_seqlens[1:] - cu_seqlens[:-1]).max()
+            max_seqlen = get_max_seqlen(cu_seqlens, self.config, kwargs={"max_seqlen": max_seqlen})
             attn_output, attn_weights = attention_interface(
                 self,
                 query_states,
@@ -862,10 +864,16 @@ class HunYuanVLVisionTransformer(HunYuanVLPreTrainedModel):
             The temporal, height and width dimensions for each image. Each row contains `[t, h, w]` patch counts.
         """
         hidden_states = self.embeddings(pixel_values, grid_thw)
-        cu_seqlens = get_vision_cu_seqlens(grid_thw, kwargs=kwargs)
+        cu_seqlens, max_seqlen = get_vision_attention_seqlens(grid_thw, self.config, kwargs=kwargs)
 
         for layer in self.layers:
-            hidden_states = layer(hidden_states, cu_seqlens=cu_seqlens, attention_mask=None, **kwargs)
+            hidden_states = layer(
+                hidden_states,
+                cu_seqlens=cu_seqlens,
+                max_seqlen=max_seqlen,
+                attention_mask=None,
+                **kwargs,
+            )
 
         split_sizes = grid_thw.prod(dim=-1).tolist()
         split_items = torch.split(hidden_states, split_sizes, dim=1)

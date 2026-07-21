@@ -35,7 +35,11 @@ from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
 from ...utils.generic import accepts_precomputed_kwargs, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
-from ...vision_utils import get_vision_bilinear_indices_and_weights, get_vision_cu_seqlens, get_vision_position_ids
+from ...vision_utils import (
+    get_vision_attention_seqlens,
+    get_vision_bilinear_indices_and_weights,
+    get_vision_position_ids,
+)
 from ..qwen3.modeling_qwen3 import Qwen3ForCausalLM
 from ..qwen3_next.configuration_qwen3_next import Qwen3NextConfig
 from ..qwen3_next.modeling_qwen3_next import (
@@ -463,7 +467,7 @@ class Qwen3_5VisionModel(Qwen3VLVisionModel):
             kwargs=kwargs,
         )
         position_ids = get_vision_position_ids(grid_thw, self.spatial_merge_size, kwargs=kwargs)
-        cu_seqlens = get_vision_cu_seqlens(grid_thw, kwargs=kwargs)
+        cu_seqlens, max_seqlen = get_vision_attention_seqlens(grid_thw, self.config, kwargs=kwargs)
 
         hidden_states = self.patch_embed(hidden_states)
         pos_embeds = (self.pos_embed(bilinear_indices) * bilinear_weights[:, :, None]).sum(0)
@@ -480,6 +484,7 @@ class Qwen3_5VisionModel(Qwen3VLVisionModel):
             hidden_states = blk(
                 hidden_states,
                 cu_seqlens=cu_seqlens,
+                max_seqlen=max_seqlen,
                 position_embeddings=position_embeddings,
                 **kwargs,
             )
