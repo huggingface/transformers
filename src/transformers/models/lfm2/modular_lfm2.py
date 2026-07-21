@@ -281,7 +281,7 @@ class Lfm2DecoderLayer(GradientCheckpointingLayer):
 
 
 class Lfm2PreTrainedModel(LlamaPreTrainedModel):
-    _is_stateful = True
+    pass
 
 
 class Lfm2Model(LlamaModel):
