@@ -21,8 +21,15 @@ import torch.nn.functional as F
 from huggingface_hub.dataclasses import strict
 
 from ... import initialization as init
+from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import PreTrainedConfig
+from ...integrations import (
+    use_kernel_forward_from_hub,
+    use_kernel_func_from_hub,
+    use_kernelized_func,
+)
+from ...integrations.accelerate import force_accelerate_hooks
 from ...masking_utils import create_causal_mask, create_recurrent_attention_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import BaseModelOutputWithPast, MoeCausalLMOutputWithPast, MoeModelOutputWithPast
@@ -34,30 +41,25 @@ from ...utils.output_capturing import OutputRecorder
 from ..auto import CONFIG_MAPPING, AutoConfig
 from ..auto.modeling_auto import AutoModel
 from ..deepseek_v2.modeling_deepseek_v2 import DeepseekV2Attention
+from ..deepseek_v3.modeling_deepseek_v3 import DeepseekV3MoE, DeepseekV3TopkRouter
 from ..deepseek_v4.modeling_deepseek_v4 import DeepseekV4HyperConnection, DeepseekV4Model
 from ..exaone4_5.modeling_exaone4_5 import Exaone4_5_Model
 from ..glm5_next.configuration_glm5_next import Glm5NextConfig
-from ..glm5_next.modeling_glm5_next import (
-    Glm5NextExperts,
-    Glm5NextForgetGate,
-    Glm5NextLinearAttention,
-    Glm5NextMLP,
-    Glm5NextMoE,
-    Glm5NextPreTrainedModel,
-    Glm5NextRMSNorm,
-    Glm5NextRMSNormGated,
-    Glm5NextTopkRouter,
-)
 from ..glm46v.modeling_glm46v import Glm46VForConditionalGeneration
 from ..glm_moe_dsa.modeling_glm_moe_dsa import GlmMoeDsaDecoderLayer
-from ..llama.modeling_llama import eager_attention_forward
+from ..inkling.modeling_inkling import causal_conv1d_fn, causal_conv1d_update
+from ..llama.modeling_llama import LlamaRMSNorm, eager_attention_forward
+from ..minimax_m3_vl.modeling_minimax_m3_vl import MiniMaxM3VLExperts
 from ..mixtral.modeling_mixtral import load_balancing_loss_func
+from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeMLP
+from ..qwen3_5.modeling_qwen3_5 import Qwen3_5RMSNormGated
+from ..qwen3_next.modeling_qwen3_next import apply_mask_to_padding_states
 
 
 logger = logging.get_logger(__name__)
 
 
-@auto_docstring(checkpoint="zai-org/GLM-5-Next-VL")
+@auto_docstring(checkpoint="zai-org/GLM-5-Next")
 @strict
 class Glm5NextVLTextConfig(Glm5NextConfig):
     r"""
@@ -162,7 +164,7 @@ class Glm5NextVLTextConfig(Glm5NextConfig):
         PreTrainedConfig.validate_architecture(self)
 
 
-@auto_docstring(checkpoint="zai-org/GLM-5-Next-VL")
+@auto_docstring(checkpoint="zai-org/GLM-5-Next")
 @strict
 class Glm5NextVLConfig(PreTrainedConfig):
     r"""
@@ -182,7 +184,7 @@ class Glm5NextVLConfig(PreTrainedConfig):
     ```python
     >>> from transformers import Glm5NextVLConfig
 
-    >>> # Initializing a GLM-5-Next-VL style configuration
+    >>> # Initializing a GLM-5-Next style configuration
     >>> configuration = Glm5NextVLConfig()
     ```"""
 
@@ -217,23 +219,47 @@ class Glm5NextVLConfig(PreTrainedConfig):
         super().__post_init__(**kwargs)
 
 
-class Glm5NextVLTextRMSNorm(Glm5NextRMSNorm):
+class Glm5NextVLTextRMSNorm(LlamaRMSNorm):
     pass
 
 
-class Glm5NextVLTextMLP(Glm5NextMLP):
+class Glm5NextVLTextMLP(Qwen2MoeMLP):
+    def __init__(self, config, intermediate_size=None):
+        super().__init__(config)
+        self.swiglu_limit = config.swiglu_limit
+
+    def forward(self, x):
+        gate = self.gate_proj(x)
+        up = self.up_proj(x)
+        # Optional clamping
+        if self.swiglu_limit is not None:
+            gate = gate.clamp(min=None, max=self.swiglu_limit)
+            up = up.clamp(min=-self.swiglu_limit, max=self.swiglu_limit)
+        return self.down_proj(self.act_fn(gate) * up)
+
+
+class Glm5NextVLTextExperts(MiniMaxM3VLExperts):
+    def __init__(self, config):
+        super().__init__(config)
+        del self.limit
+        del self.swiglu_alpha
+        self.intermediate_dim = config.moe_intermediate_size
+
+    def _apply_gate(self, gate_up: torch.Tensor) -> torch.Tensor:
+        gate, up = gate_up.chunk(2, dim=-1)
+        # Optional clamping
+        if self.swiglu_limit is not None:
+            gate = gate.clamp(min=None, max=self.swiglu_limit)
+            up = up.clamp(min=-self.swiglu_limit, max=self.swiglu_limit)
+        # Simple swiglu instead of alpha
+        return F.silu(gate) * up
+
+
+class Glm5NextVLTextTopkRouter(DeepseekV3TopkRouter):
     pass
 
 
-class Glm5NextVLTextExperts(Glm5NextExperts):
-    pass
-
-
-class Glm5NextVLTextTopkRouter(Glm5NextTopkRouter):
-    pass
-
-
-class Glm5NextVLTextMoE(Glm5NextMoE):
+class Glm5NextVLTextMoE(DeepseekV3MoE):
     def __init__(self, config: Glm5NextVLConfig):
         super().__init__(config)
         self.experts = Glm5NextVLTextExperts(config)
@@ -254,23 +280,378 @@ class Glm5NextVLTextHyperHead(nn.Module):
         return hidden_streams.mean(dim=2)
 
 
-class Glm5NextVLTextForgetGate(Glm5NextForgetGate):
-    pass
+class Glm5NextVLTextForgetGate(nn.Module):
+    def __init__(self, config: Glm5NextVLTextConfig):
+        super().__init__()
+        self.head_dim = config.linear_head_dim
+        self.num_heads = config.linear_num_heads
+        self.qkv_dim = self.head_dim * self.num_heads
+
+        self.f_a_proj = nn.Linear(config.hidden_size, self.head_dim, bias=False)
+        self.f_b_proj = nn.Linear(self.head_dim, self.qkv_dim, bias=False)
+        self.dt_bias = nn.Parameter(torch.empty(self.qkv_dim))
+        self.A_log = nn.Parameter(torch.empty(self.num_heads))
+
+        self.safe_gate_lower_bound = config.linear_lower_bound
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        hidden_shape = (*hidden_states.shape[:2], -1, self.head_dim)
+
+        forget_gate = self.f_b_proj(self.f_a_proj(hidden_states))
+        g = (forget_gate.float() + self.dt_bias.float().view(1, 1, -1)).view(hidden_shape)
+        A_log = self.A_log.float().view(1, 1, self.num_heads, 1)
+        decay_rate = torch.exp(A_log)
+
+        # Safe lower bound decay
+        if self.safe_gate_lower_bound is not None:
+            return self.safe_gate_lower_bound * torch.sigmoid(decay_rate * g)
+
+        # Softplus "log(1 + exp(x))" with uper bound restraint to avoid overflows
+        # NOTE: Softplus for larger values (e.g. 20+), Softplus(x) == x
+        g_softplus = torch.where(g > 20.0, g, torch.log(1.0 + torch.exp(g)))
+
+        return -decay_rate * g_softplus
 
 
-class Glm5NextVLTextRMSNormGated(Glm5NextRMSNormGated):
-    pass
+@use_kernel_forward_from_hub("RMSNormGated")
+class Glm5NextVLTextRMSNormGated(Qwen3_5RMSNormGated):
+    def __init__(self, hidden_size, eps=1e-6, **kwargs):
+        super().__init__(hidden_size, eps, kwargs)
+        self.activation = "sigmoid"
+
+    def forward(self, hidden_states, gate=None):
+        input_dtype = hidden_states.dtype
+
+        # Strict FP32 norm (do not downcast on the weights)
+        hidden_states = hidden_states.to(torch.float32)
+        variance = hidden_states.pow(2).mean(-1, keepdim=True)
+        hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
+        hidden_states = self.weight.to(torch.float32) * hidden_states
+
+        # Apply gating
+        hidden_states = hidden_states * ACT2FN[self.activation](gate.to(torch.float32))
+
+        return hidden_states.to(input_dtype)
 
 
-class Glm5NextVLTextLinearAttention(Glm5NextLinearAttention):
+def l2norm(x: torch.FloatTensor, dim: int = -1, eps: float = 1e-6):
+    """
+    This function is intended to align with the l2norm implementation in the FLA library.
+
+    # NOTE: FLA compares against `F.normalize` but does + eps instead of max(..., eps) leading to a slight differences
+    """
+    # main difference to qwen's gdn variation: intentionally use sqrt and / to match original triton
+    inv_norm = torch.sqrt((x * x).sum(dim=dim, keepdim=True) + eps)
+    return x / inv_norm
+
+
+@use_kernel_func_from_hub("recurrent_kimi_delta_attention")
+def recurrent_kimi_delta_attention(
+    query,
+    key,
+    value,
+    g,
+    beta,
+    initial_state,
+    output_final_state,
+    use_qk_l2norm_in_kernel=False,
+    **kwargs,
+):
+    # calculations happen in float as states are more susceptible to rounding errors
+    initial_dtype = query.dtype
+    query, key, value, g, beta = [x.to(torch.float32) for x in (query, key, value, g, beta)]
+
+    # important: FLA calculates these in fp32 so we do this after the float casts
+    if use_qk_l2norm_in_kernel:
+        query = l2norm(query, dim=-1, eps=1e-6)
+        key = l2norm(key, dim=-1, eps=1e-6)
+
+    # shapes and other metadata
+    batch_size, sequence_length, num_heads, k_head_dim = key.shape
+    v_head_dim = value.shape[-1]
+    scale = 1 / (query.shape[-1] ** 0.5)
+    query = query * scale
+
+    core_attn_out = torch.zeros(
+        batch_size, sequence_length, num_heads, v_head_dim, dtype=value.dtype, device=value.device
+    )
+    last_recurrent_state = (
+        torch.zeros(batch_size, num_heads, k_head_dim, v_head_dim, dtype=value.dtype, device=value.device)
+        if initial_state is None
+        else initial_state.to(value)
+    )
+
+    # recurrent iteration
+    for i in range(sequence_length):
+        q_i = query[:, i]
+        k_i = key[:, i]
+        v_i = value[:, i]
+        g_i = g[:, i][..., None].exp()
+        b_i = beta[:, i][..., None]
+
+        last_recurrent_state = last_recurrent_state * g_i
+        kv_mem = (last_recurrent_state * k_i[..., None]).sum(dim=-2)
+        delta = (v_i - kv_mem) * b_i
+
+        last_recurrent_state = last_recurrent_state + k_i.unsqueeze(-1) * delta.unsqueeze(-2)
+        core_attn_out[:, i] = (last_recurrent_state * q_i.unsqueeze(-1)).sum(dim=-2)
+
+    return core_attn_out.to(initial_dtype), last_recurrent_state if output_final_state else None
+
+
+@use_kernel_func_from_hub("chunk_kimi_delta_attention")
+def chunk_kimi_delta_attention(
+    query,
+    key,
+    value,
+    g,
+    beta,
+    chunk_size=64,
+    initial_state=None,
+    output_final_state=False,
+    use_qk_l2norm_in_kernel=False,
+    **kwargs,
+):
+    # calculations happen in float as states are more susceptible to rounding errors
+    initial_dtype = query.dtype
+
+    query, key, value, beta, g = [
+        x.transpose(1, 2).contiguous().to(torch.float32) for x in (query, key, value, beta, g)
+    ]
+
+    # important: FLA calculates these in fp32 so we do this after the float casts
+    if use_qk_l2norm_in_kernel:
+        query = l2norm(query, dim=-1, eps=1e-6)
+        key = l2norm(key, dim=-1, eps=1e-6)
+
+    # shapes and other metadata
+    batch_size, num_heads, sequence_length, k_head_dim = key.shape
+    v_head_dim = value.shape[-1]
+    scale = 1 / (query.shape[-1] ** 0.5)
+    pad_size = (chunk_size - sequence_length % chunk_size) % chunk_size
+    total_sequence_length = sequence_length + pad_size
+
+    # prepare all the relevant input
+    query = F.pad(query, (0, 0, 0, pad_size)) * scale
+    key = F.pad(key, (0, 0, 0, pad_size))
+    value = F.pad(value, (0, 0, 0, pad_size))
+    g = F.pad(g, (0, 0, 0, pad_size))
+    beta = F.pad(beta, (0, pad_size))
+    v_beta = value * beta.unsqueeze(-1)
+    k_beta = key * beta.unsqueeze(-1)
+
+    # reshape to chunks
+    query, key, value, g, k_beta, v_beta = [
+        x.reshape(x.shape[0], x.shape[1], -1, chunk_size, x.shape[-1]) for x in (query, key, value, g, k_beta, v_beta)
+    ]
+    beta = beta.reshape(beta.shape[0], beta.shape[1], -1, chunk_size)
+
+    # Intra chunk
+    # Main difference to GDN is the per head application of `g` which was broadcasted across heads instead
+    g = g.cumsum(dim=-2)
+    mask = torch.triu(torch.ones(chunk_size, chunk_size, dtype=torch.bool, device=query.device), diagonal=0)
+    decay_mask = (g.unsqueeze(-2) - g.unsqueeze(-3)).exp().float()
+    attn = -(k_beta.unsqueeze(-2) * key.unsqueeze(-3) * decay_mask).sum(dim=-1).masked_fill(mask, 0)
+    for i in range(1, chunk_size):
+        row = attn[..., i, :i].clone()
+        sub = attn[..., :i, :i].clone()
+        attn[..., i, :i] = row + (row.unsqueeze(-1) * sub).sum(-2)
+
+    attn = attn + torch.eye(chunk_size, dtype=attn.dtype, device=attn.device)
+    value = attn @ v_beta
+    k_cumdecay = attn @ (k_beta * g.exp())
+
+    last_recurrent_state = (
+        torch.zeros(batch_size, num_heads, k_head_dim, v_head_dim, dtype=value.dtype, device=value.device)
+        if initial_state is None
+        else initial_state.to(value)
+    )
+    core_attn_out = torch.zeros_like(value)
+
+    mask = torch.triu(torch.ones(chunk_size, chunk_size, dtype=torch.bool, device=query.device), diagonal=1)
+    for i in range(total_sequence_length // chunk_size):
+        q_i = query[:, :, i]
+        k_i = key[:, :, i]
+        v_i = value[:, :, i]
+        g_i = g[:, :, i]
+
+        # Inter chunk
+        attn_inter = (q_i * g_i.exp()) @ last_recurrent_state
+        # Intra chunk
+        attn_intra = (q_i.unsqueeze(-2) * k_i.unsqueeze(-3) * decay_mask[:, :, i]).sum(dim=-1).masked_fill(mask, 0)
+        # New update rule
+        v_prime = k_cumdecay[:, :, i] @ last_recurrent_state
+        v_new = v_i - v_prime
+
+        core_attn_out[:, :, i] = attn_inter + attn_intra @ v_new
+        last_recurrent_state = (
+            last_recurrent_state * g_i[:, :, -1].exp().unsqueeze(-1)
+            + (k_i * (g_i[:, :, -1:] - g_i).exp()).transpose(-1, -2) @ v_new
+        )
+
+    if not output_final_state:
+        last_recurrent_state = None
+
+    core_attn_out = core_attn_out.reshape(core_attn_out.shape[0], core_attn_out.shape[1], -1, core_attn_out.shape[-1])
+    core_attn_out = core_attn_out[:, :, :sequence_length]
+    core_attn_out = core_attn_out.transpose(1, 2).contiguous().to(initial_dtype)
+
+    return core_attn_out, last_recurrent_state
+
+
+@use_kernelized_func(
+    [chunk_kimi_delta_attention, recurrent_kimi_delta_attention, causal_conv1d_fn, causal_conv1d_update]
+)
+class Glm5NextVLTextLinearAttention(nn.Module):
+    """Kimi-style KDA (Kimi Linear Attention) for GLM-5-Next."""
+
     def __init__(
         self,
-        config: Glm5NextVLConfig,
+        config: Glm5NextVLTextConfig,
         layer_idx: int,
     ):
-        super().__init__(config, layer_idx)
+        super().__init__()
+        self.hidden_size = config.hidden_size
+        self.num_heads = config.linear_num_heads
+        self.head_dim = config.linear_head_dim
+        self.qkv_dim = self.head_dim * self.num_heads
+
+        self.conv_kernel_size = config.linear_conv_kernel_dim
+        self.layer_idx = layer_idx
+        self.activation = config.hidden_act
+        self.layer_norm_epsilon = config.rms_norm_eps
+
+        self.q_proj = nn.Linear(self.hidden_size, self.qkv_dim, bias=False)
+        self.k_proj = nn.Linear(self.hidden_size, self.qkv_dim, bias=False)
+        self.v_proj = nn.Linear(self.hidden_size, self.qkv_dim, bias=False)
+
+        self.conv_dim = self.qkv_dim * 3
+        self.conv1d = nn.Conv1d(
+            in_channels=self.conv_dim,
+            out_channels=self.conv_dim,
+            bias=False,
+            kernel_size=self.conv_kernel_size,
+            groups=self.conv_dim,
+            padding=self.conv_kernel_size - 1,
+        )
+
         self.forget_gate = Glm5NextVLTextForgetGate(config)
+        self.b_proj = nn.Linear(self.hidden_size, self.num_heads, bias=False)
+
+        self.g_a_proj = nn.Linear(self.hidden_size, self.head_dim, bias=False)
+        self.g_b_proj = nn.Linear(self.head_dim, self.qkv_dim, bias=False)
         self.o_norm = Glm5NextVLTextRMSNormGated(self.head_dim, eps=self.layer_norm_epsilon)
+        self.o_proj = nn.Linear(self.qkv_dim, self.hidden_size, bias=False)
+
+        self.layer_type = config.layer_types[layer_idx]
+
+    @force_accelerate_hooks("conv1d")
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        cache_params: Cache | None = None,
+        attention_mask: torch.Tensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ):
+        # Zero out padding
+        hidden_states = apply_mask_to_padding_states(hidden_states, attention_mask)
+
+        # Set up dimensions for reshapes later
+        batch_size, seq_len = hidden_states.shape[:2]
+        hidden_shape = (batch_size, seq_len, -1, self.head_dim)
+
+        mixed_qkv = torch.cat(
+            [
+                self.q_proj(hidden_states),
+                self.k_proj(hidden_states),
+                self.v_proj(hidden_states),
+            ],
+            dim=-1,
+        ).transpose(1, 2)
+
+        # Acts for normal prefill but also for multi-token prefill continue
+        use_precomputed_states = cache_params is not None and cache_params.has_previous_state(self.layer_idx)
+        if use_precomputed_states:
+            conv_state = cache_params.layers[self.layer_idx].conv_states[0]
+            recurrent_state = cache_params.layers[self.layer_idx].recurrent_states[0]
+
+        # Single token decode path
+        if use_precomputed_states and seq_len == 1:
+            mixed_qkv = causal_conv1d_update(
+                mixed_qkv,
+                conv_state,
+                weight=self.conv1d.weight.squeeze(1),
+                bias=self.conv1d.bias,
+                activation=self.activation,
+            )
+        # Multi token prefill or simple "full" prefill
+        else:
+            # Concatenated state for prefill
+            if cache_params is not None:
+                mixed_qkv = cache_params.update_conv_state(
+                    mixed_qkv, self.layer_idx, conv_kernel_size=self.conv_kernel_size
+                )
+
+            mixed_qkv = causal_conv1d_fn(
+                mixed_qkv,
+                weight=self.conv1d.weight.squeeze(1),
+                bias=self.conv1d.bias,
+                activation=self.activation,
+                **kwargs,
+            )
+
+            # Cut out any tail
+            mixed_qkv = mixed_qkv[:, :, -seq_len:]
+
+        query, key, value = torch.split(
+            mixed_qkv.transpose(1, 2),
+            [self.qkv_dim] * 3,
+            dim=-1,
+        )
+
+        query = query.view(hidden_shape)
+        key = key.view(hidden_shape)
+        value = value.view(hidden_shape)
+
+        # Forget gate and input gate
+        g = self.forget_gate(hidden_states)
+        beta = torch.sigmoid(self.b_proj(hidden_states))
+
+        # KDA
+        if use_precomputed_states and seq_len == 1:
+            core_attn_out, last_recurrent_state = recurrent_kimi_delta_attention(
+                query,
+                key,
+                value,
+                g=g,
+                beta=beta,
+                initial_state=recurrent_state,
+                output_final_state=cache_params is not None,
+                use_qk_l2norm_in_kernel=True,
+                **kwargs,
+            )
+        else:
+            core_attn_out, last_recurrent_state = chunk_kimi_delta_attention(
+                query,
+                key,
+                value,
+                g=g,
+                beta=beta,
+                initial_state=recurrent_state if use_precomputed_states else None,
+                output_final_state=cache_params is not None,
+                use_qk_l2norm_in_kernel=True,
+                **kwargs,
+            )
+
+        if cache_params is not None:
+            cache_params.update_recurrent_state(last_recurrent_state.to(torch.float32), self.layer_idx)
+
+        # Final gated norm and proj
+        gate = self.g_b_proj(self.g_a_proj(hidden_states)).view(hidden_shape)
+        output = self.o_norm(core_attn_out, gate).reshape(batch_size, seq_len, -1)
+        output = self.o_proj(output)
+
+        return output
 
 
 # TODO: add indexer if trained
@@ -394,19 +775,37 @@ class Glm5NextVLTextDecoderLayer(GlmMoeDsaDecoderLayer):
 
 
 @auto_docstring
-class Glm5NextVLPreTrainedModel(Glm5NextPreTrainedModel):
+class Glm5NextVLPreTrainedModel(PreTrainedModel):
     config: Glm5NextVLConfig
+    base_model_prefix = "model"
+    supports_gradient_checkpointing = True
+
+    # needs index based kernel
+    _supports_flash_attn = False
+    _supports_sdpa = True
+    # needs per layer creation, too expensive
+    _supports_flex_attn = False
+    _supports_attention_backend = True
+
     _no_split_modules = ["Glm5NextVLTextDecoderLayer"]
+    _skip_keys_device_placement = ["past_key_values"]
+    # TODO: this can be fixed but is limited by
+    # 1. assuming the cache name
+    # 2. linear attention not being considered atm
+    _is_stateful = True
+    _can_compile_fullgraph = True
 
     _can_record_outputs = {
         "attentions": Glm5NextVLTextAttention,
         "hidden_states": Glm5NextVLTextDecoderLayer,
         "router_logits": OutputRecorder(Glm5NextVLTextTopkRouter, index=0),  # noqa: F821
     }
+    _keep_in_fp32_modules_strict = ["e_score_correction_bias", "conv1d", "dt_bias", "A_log"]
+    _keys_to_ignore_on_load_unexpected = [r"layers\.45\.", r"layers\.\d+\.shared_head\."]
 
     @torch.no_grad()
     def _init_weights(self, module):
-        PreTrainedModel._init_weights(self, module)
+        super()._init_weights(module)
         if isinstance(module, Glm5NextVLTextForgetGate):
             # Following FLA initialization
             # NOTE: This is incredibly important so keep it this way at all costs
@@ -696,8 +1095,8 @@ class Glm5NextVLForConditionalGeneration(Glm46VForConditionalGeneration, Glm5Nex
         >>> from transformers import AutoProcessor, Glm5NextVLForConditionalGeneration
         >>> import torch
 
-        >>> model = Glm5NextVLForConditionalGeneration.from_pretrained("zai-org/GLM-5-Next-VL")
-        >>> processor = AutoProcessor.from_pretrained("zai-org/GLM-5-Next-VL")
+        >>> model = Glm5NextVLForConditionalGeneration.from_pretrained("zai-org/GLM-5-Next")
+        >>> processor = AutoProcessor.from_pretrained("zai-org/GLM-5-Next")
 
         >>> messages = [
         ...     {

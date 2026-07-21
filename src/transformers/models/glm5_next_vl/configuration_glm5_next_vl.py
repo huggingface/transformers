@@ -25,7 +25,7 @@ from ...utils import auto_docstring
 from ..auto import CONFIG_MAPPING, AutoConfig
 
 
-@auto_docstring(checkpoint="zai-org/GLM-5-Next-VL")
+@auto_docstring(checkpoint="zai-org/GLM-5-Next")
 @strict
 class Glm5NextVLTextConfig(PreTrainedConfig):
     r"""
@@ -174,7 +174,7 @@ class Glm5NextVLTextConfig(PreTrainedConfig):
         super().validate_architecture()
 
 
-@auto_docstring(checkpoint="zai-org/GLM-5-Next-VL")
+@auto_docstring(checkpoint="zai-org/GLM-5-Next")
 @strict
 class Glm5NextVLConfig(PreTrainedConfig):
     r"""
@@ -194,7 +194,7 @@ class Glm5NextVLConfig(PreTrainedConfig):
     ```python
     >>> from transformers import Glm5NextVLConfig
 
-    >>> # Initializing a GLM-5-Next-VL style configuration
+    >>> # Initializing a GLM-5-Next style configuration
     >>> configuration = Glm5NextVLConfig()
     ```"""
 

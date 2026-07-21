@@ -299,7 +299,7 @@ class Glm5NextVLTextHyperHead(nn.Module):
 
 
 class Glm5NextVLTextForgetGate(nn.Module):
-    def __init__(self, config: Glm5NextVLConfig):
+    def __init__(self, config: Glm5NextVLTextConfig):
         super().__init__()
         self.head_dim = config.linear_head_dim
         self.num_heads = config.linear_num_heads
@@ -582,7 +582,7 @@ class Glm5NextVLTextLinearAttention(nn.Module):
 
     def __init__(
         self,
-        config: Glm5NextVLConfig,
+        config: Glm5NextVLTextConfig,
         layer_idx: int,
     ):
         super().__init__()
@@ -609,6 +609,7 @@ class Glm5NextVLTextLinearAttention(nn.Module):
             groups=self.conv_dim,
             padding=self.conv_kernel_size - 1,
         )
+
         self.forget_gate = Glm5NextVLTextForgetGate(config)
         self.b_proj = nn.Linear(self.hidden_size, self.num_heads, bias=False)
 
@@ -957,6 +958,7 @@ class Glm5NextVLPreTrainedModel(PreTrainedModel):
     # needs per layer creation, too expensive
     _supports_flex_attn = False
     _supports_attention_backend = True
+
     _no_split_modules = ["Glm5NextVLTextDecoderLayer"]
     _skip_keys_device_placement = ["past_key_values"]
     # TODO: this can be fixed but is limited by
@@ -1435,8 +1437,8 @@ class Glm5NextVLForConditionalGeneration(Glm5NextVLPreTrainedModel, GenerationMi
         >>> from transformers import AutoProcessor, Glm5NextVLForConditionalGeneration
         >>> import torch
 
-        >>> model = Glm5NextVLForConditionalGeneration.from_pretrained("zai-org/GLM-5-Next-VL")
-        >>> processor = AutoProcessor.from_pretrained("zai-org/GLM-5-Next-VL")
+        >>> model = Glm5NextVLForConditionalGeneration.from_pretrained("zai-org/GLM-5-Next")
+        >>> processor = AutoProcessor.from_pretrained("zai-org/GLM-5-Next")
 
         >>> messages = [
         ...     {
