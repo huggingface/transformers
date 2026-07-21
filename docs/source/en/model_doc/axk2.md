@@ -49,15 +49,9 @@ The example below shows how to generate text with [`Pipeline`] or the [`AutoMode
 <hfoption id="Pipeline">
 
 ```python
-import torch
 from transformers import pipeline
 
-pipe = pipeline(
-    task="text-generation",
-    model="skt/A.X-K2",
-    dtype=torch.bfloat16,
-    device_map="auto",
-)
+pipe = pipeline(task="text-generation", model="skt/A.X-K2")
 
 print(pipe("대한민국의 수도는", max_new_tokens=32)[0]["generated_text"])
 ```
@@ -66,15 +60,10 @@ print(pipe("대한민국의 수도는", max_new_tokens=32)[0]["generated_text"])
 <hfoption id="AutoModel">
 
 ```python
-import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
 tokenizer = AutoTokenizer.from_pretrained("skt/A.X-K2")
-model = AutoModelForCausalLM.from_pretrained(
-    "skt/A.X-K2",
-    dtype=torch.bfloat16,
-    device_map="auto",
-)
+model = AutoModelForCausalLM.from_pretrained("skt/A.X-K2", device_map="auto")
 
 inputs = tokenizer("대한민국의 수도는", return_tensors="pt").to(model.device)
 outputs = model.generate(**inputs, max_new_tokens=32, do_sample=False)

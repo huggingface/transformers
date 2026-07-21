@@ -55,8 +55,8 @@ from ..deepseek_v32.modeling_deepseek_v32 import (
     DeepseekV32MoE,
     DeepseekV32PreTrainedModel,
     DeepseekV32RotaryEmbedding,
-    DeepseekV32TopkRouter,
 )
+from ..minimax_m2.modeling_minimax_m2 import MiniMaxM2TopKRouter
 
 
 logger = logging.get_logger(__name__)
@@ -66,15 +66,9 @@ logger = logging.get_logger(__name__)
 @strict
 class AXK2Config(DeepseekV32Config):
     r"""
-    n_group (`int`, *optional*):
-        Number of groups for routed experts. `None` disables grouping (A.X-K2 uses plain sigmoid top-k).
-    topk_group (`int`, *optional*):
-        Number of selected groups per token. Unused when `n_group` is `None`.
     mlp_layer_types (`list`, *optional*):
-        MLP type pattern for each layer (`"dense"` or `"sparse"`). Defaults to `first_k_dense_replace`
-        dense layers followed by MoE layers.
-    first_k_dense_replace (`int`, *optional*, defaults to 1):
-        Number of leading layers that use a dense MLP; the rest use the MoE block.
+        MLP type pattern for each layer (`"dense"` or `"sparse"`). Derived from the (legacy) kwargs
+        `first_k_dense_replace` / `moe_layer_freq` when not provided.
     index_topk (`int`, *optional*, defaults to 2048):
         Number of top tokens selected by the indexer for sparse attention.
     index_head_dim (`int`, *optional*, defaults to 128):
@@ -115,9 +109,6 @@ class AXK2Config(DeepseekV32Config):
     qk_rope_head_dim: int = 32
     v_head_dim: int = 64
     qk_nope_head_dim: int = 64
-    # A.X-K2 does not use expert grouping (plain sigmoid top-k routing).
-    n_group: int | None = None
-    topk_group: int | None = None
     num_experts_per_tok: int = 8
     max_position_embeddings: int = 131072
     rms_norm_eps: float = 1e-6
@@ -126,8 +117,24 @@ class AXK2Config(DeepseekV32Config):
     index_topk: int = 2048
     index_head_dim: int = 128
     index_n_heads: int = 16
-    first_k_dense_replace: int = 1
     gated_norm_rank: int = 16
+    # A.X-K2 uses plain (non-grouped) sigmoid top-k routing and derives the dense/MoE split into
+    # `mlp_layer_types`, so these inherited DeepSeek-V3.2 fields are dropped.
+    n_group = AttributeError()
+    topk_group = AttributeError()
+    first_k_dense_replace = AttributeError()
+
+    def __post_init__(self, **kwargs):
+        # `mlp_layer_types` is the canonical dense/MoE pattern; derive it from the legacy
+        # `first_k_dense_replace` / `moe_layer_freq` kwargs when a checkpoint does not provide it.
+        if self.mlp_layer_types is None:
+            first_k_dense_replace = kwargs.pop("first_k_dense_replace", 1)
+            moe_layer_freq = kwargs.pop("moe_layer_freq", 1)
+            self.mlp_layer_types = [
+                "sparse" if i >= first_k_dense_replace and i % moe_layer_freq == 0 else "dense"
+                for i in range(self.num_hidden_layers)
+            ]
+        super().__post_init__(**kwargs)
 
 
 class AXK2RMSNorm(DeepseekV3RMSNorm):
@@ -180,8 +187,19 @@ class AXK2Indexer(DeepseekV32Indexer):
         self.k_norm = nn.LayerNorm(self.head_dim, eps=1e-5)
 
 
-class AXK2TopkRouter(DeepseekV32TopkRouter):
-    """DeepSeek-V3 style sigmoid top-k router, without expert grouping (A.X-K2 uses `n_group=None`)."""
+class AXK2TopkRouter(MiniMaxM2TopKRouter):
+    """Non-grouped sigmoid top-k router (MiniMax-M2 style), specialized for A.X-K2.
+
+    A.X-K2 keeps `e_score_correction_bias` on the router (checkpoint key `mlp.gate.e_score_correction_bias`)
+    and runs routing in fp32; only `__init__` (bias buffer + routed scaling + norm flag) and `forward` are
+    overridden over `MiniMaxM2TopKRouter`.
+    """
+
+    def __init__(self, config: "AXK2Config"):
+        super().__init__(config)
+        self.routed_scaling_factor = config.routed_scaling_factor
+        self.norm_topk_prob = config.norm_topk_prob
+        self.register_buffer("e_score_correction_bias", torch.zeros(self.num_experts, dtype=torch.float32))
 
     def forward(self, hidden_states):
         hidden_states = hidden_states.view(-1, self.hidden_dim)
@@ -228,11 +246,6 @@ class AXK2Attention(DeepseekV32Attention):
         position_ids: torch.Tensor | None = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
-        if self.q_lora_rank is None:
-            raise ValueError(
-                "A.X-K2 requires `config.q_lora_rank` to be set: the indexer and the output gate both read "
-                "the pre-norm query LoRA bottleneck."
-            )
         batch_size, seq_length = hidden_states.shape[:-1]
         query_shape = (batch_size, seq_length, -1, self.qk_head_dim)
         key_shape = (batch_size, seq_length, -1, self.qk_nope_head_dim + self.v_head_dim)
@@ -309,8 +322,11 @@ class AXK2DecoderLayer(DeepseekV32DecoderLayer):
         super().__init__(config, layer_idx)
         # A.X-K2 gates the norms: `input_layernorm` on every layer, `post_attention_layernorm` on MoE layers.
         self.input_layernorm = AXK2GatedRMSNorm(config, eps=config.rms_norm_eps)
-        if config.mlp_layer_types[layer_idx] == "sparse":
-            self.post_attention_layernorm = AXK2GatedRMSNorm(config, eps=config.rms_norm_eps)
+        self.post_attention_layernorm = (
+            AXK2GatedRMSNorm(config, eps=config.rms_norm_eps)
+            if config.mlp_layer_types[layer_idx] == "sparse"
+            else AXK2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        )
 
 
 class AXK2PreTrainedModel(DeepseekV32PreTrainedModel):

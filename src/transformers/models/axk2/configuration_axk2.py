@@ -28,15 +28,9 @@ from ...modeling_rope_utils import RotaryEmbeddingConfigMixin
 @strict
 class AXK2Config(PreTrainedConfig, RotaryEmbeddingConfigMixin):
     r"""
-    n_group (`int`, *optional*):
-        Number of groups for routed experts. `None` disables grouping (A.X-K2 uses plain sigmoid top-k).
-    topk_group (`int`, *optional*):
-        Number of selected groups per token. Unused when `n_group` is `None`.
     mlp_layer_types (`list`, *optional*):
-        MLP type pattern for each layer (`"dense"` or `"sparse"`). Defaults to `first_k_dense_replace`
-        dense layers followed by MoE layers.
-    first_k_dense_replace (`int`, *optional*, defaults to 1):
-        Number of leading layers that use a dense MLP; the rest use the MoE block.
+        MLP type pattern for each layer (`"dense"` or `"sparse"`). Derived from the (legacy) kwargs
+        `first_k_dense_replace` / `moe_layer_freq` when not provided.
     index_topk (`int`, *optional*, defaults to 2048):
         Number of top tokens selected by the indexer for sparse attention.
     index_head_dim (`int`, *optional*, defaults to 128):
@@ -107,9 +101,6 @@ class AXK2Config(PreTrainedConfig, RotaryEmbeddingConfigMixin):
     qk_rope_head_dim: int = 32
     v_head_dim: int = 64
     qk_nope_head_dim: int = 64
-    # A.X-K2 does not use expert grouping (plain sigmoid top-k routing).
-    n_group: int | None = None
-    topk_group: int | None = None
     num_experts_per_tok: int = 8
     norm_topk_prob: bool = True
     hidden_act: str = "silu"
@@ -130,11 +121,19 @@ class AXK2Config(PreTrainedConfig, RotaryEmbeddingConfigMixin):
     index_n_heads: int = 16
     mlp_bias: bool = False
     head_dim: int = 64
-    first_k_dense_replace: int = 1
     layer_types: list[str] | None = None
     gated_norm_rank: int = 16
 
     def __post_init__(self, **kwargs):
+        # `mlp_layer_types` is the canonical dense/MoE pattern; derive it from the legacy
+        # `first_k_dense_replace` / `moe_layer_freq` kwargs when a checkpoint does not provide it.
+        if self.mlp_layer_types is None:
+            first_k_dense_replace = kwargs.pop("first_k_dense_replace", 1)
+            moe_layer_freq = kwargs.pop("moe_layer_freq", 1)
+            self.mlp_layer_types = [
+                "sparse" if i >= first_k_dense_replace and i % moe_layer_freq == 0 else "dense"
+                for i in range(self.num_hidden_layers)
+            ]
         self.qk_head_dim = self.qk_nope_head_dim + self.qk_rope_head_dim
         # RoPE applies only to the rope slice, so point `head_dim` at it: the inherited (Llama) rotary
         # embedding reads `config.head_dim` and then computes the right frequencies with no override needed.

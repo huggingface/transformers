@@ -30,11 +30,13 @@ from transformers.core_model_loading import (
     Concatenate,
     Conv3dToLinear,
     ErnieFuseAndSplitTextVisionExperts,
+    FuseMLAGate,
     GroupWeightRename,
     LinearToConv3d,
     MergeModulelist,
     PermuteForRope,
     PrefixChange,
+    SplitFusedMLAGate,
     VisionFuseAndPermuteForRope,
     VisionUnfuseAndPermuteForRope,
     WeightConverter,
@@ -1615,6 +1617,53 @@ class TestConversionMapping(unittest.TestCase):
         # Only one unscoped transform (from the root); child must be suppressed.
         self.assertEqual(len(transforms), 1)
         self.assertIsNone(transforms[0].scope_prefix)
+
+
+class TestSplitFusedMLAGate(unittest.TestCase):
+    """A.X-K2's fused MLA `q_b_proj` -> `q_b_proj` + output gate `g_proj` split, and its reverse fuse."""
+
+    def _config(self):
+        return SimpleNamespace(num_attention_heads=4, qk_head_dim=6, v_head_dim=3, q_lora_rank=5)
+
+    def _block_diagonal_fused(self, config):
+        # The released checkpoint's fused q_b_proj is block-diagonal: per head, the query rows read only
+        # the first (post-norm) half of the input and the gate rows only the second (pre-norm) half.
+        nh, qk, v, qlr = (
+            config.num_attention_heads,
+            config.qk_head_dim,
+            config.v_head_dim,
+            config.q_lora_rank,
+        )
+        fused = torch.zeros(nh, qk + v, 2 * qlr)
+        fused[:, :qk, :qlr] = torch.randn(nh, qk, qlr)
+        fused[:, qk:, qlr:] = torch.randn(nh, v, qlr)
+        return fused.reshape(nh * (qk + v), 2 * qlr)
+
+    def test_split_shapes_and_lossless_roundtrip(self):
+        config = self._config()
+        nh, qk, v, qlr = (
+            config.num_attention_heads,
+            config.qk_head_dim,
+            config.v_head_dim,
+            config.q_lora_rank,
+        )
+        fused = self._block_diagonal_fused(config)
+        q_key, gate_key = "self_attn.q_b_proj.weight", "self_attn.g_proj.weight"
+
+        split = SplitFusedMLAGate().convert({q_key: [fused]}, [q_key], [q_key, gate_key], config=config)
+        self.assertEqual(tuple(split[q_key].shape), (nh * qk, qlr))
+        self.assertEqual(tuple(split[gate_key].shape), (nh * v, qlr))
+
+        # Fusing the two blocks back reconstructs the original block-diagonal matrix exactly.
+        refused = FuseMLAGate().convert(
+            {q_key: [split[q_key]], gate_key: [split[gate_key]]}, [q_key, gate_key], [q_key], config=config
+        )[q_key]
+        self.assertEqual(tuple(refused.shape), tuple(fused.shape))
+        torch.testing.assert_close(refused, fused)
+
+    def test_reverse_ops(self):
+        self.assertIsInstance(SplitFusedMLAGate().reverse_op, FuseMLAGate)
+        self.assertIsInstance(FuseMLAGate().reverse_op, SplitFusedMLAGate)
 
 
 if __name__ == "__main__":

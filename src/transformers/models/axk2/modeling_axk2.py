@@ -298,18 +298,21 @@ class AXK2Indexer(nn.Module):
 
 
 class AXK2TopkRouter(nn.Module):
-    """DeepSeek-V3 style sigmoid top-k router, without expert grouping (A.X-K2 uses `n_group=None`)."""
-    def __init__(self, config: AXK2Config):
+    """Non-grouped sigmoid top-k router (MiniMax-M2 style), specialized for A.X-K2.
+
+    A.X-K2 keeps `e_score_correction_bias` on the router (checkpoint key `mlp.gate.e_score_correction_bias`)
+    and runs routing in fp32; only `__init__` (bias buffer + routed scaling + norm flag) and `forward` are
+    overridden over `MiniMaxM2TopKRouter`.
+    """
+    def __init__(self, config: "AXK2Config"):
         super().__init__()
         self.top_k = config.num_experts_per_tok
         self.num_experts = config.num_local_experts
         self.hidden_dim = config.hidden_size
-        self.weight = nn.Parameter(torch.zeros(self.num_experts, self.hidden_dim))
+        self.weight = nn.Parameter(torch.empty(self.num_experts, self.hidden_dim))
         self.routed_scaling_factor = config.routed_scaling_factor
-        self.num_group = config.n_group
-        self.topk_group = config.topk_group
         self.norm_topk_prob = config.norm_topk_prob
-        self.register_buffer("e_score_correction_bias", torch.zeros((self.num_experts), dtype=torch.float32))
+        self.register_buffer("e_score_correction_bias", torch.zeros(self.num_experts, dtype=torch.float32))
 
     def forward(self, hidden_states):
         hidden_states = hidden_states.view(-1, self.hidden_dim)
@@ -556,11 +559,6 @@ class AXK2Attention(nn.Module):
         position_ids: torch.Tensor | None = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
-        if self.q_lora_rank is None:
-            raise ValueError(
-                "A.X-K2 requires `config.q_lora_rank` to be set: the indexer and the output gate both read "
-                "the pre-norm query LoRA bottleneck."
-            )
         batch_size, seq_length = hidden_states.shape[:-1]
         query_shape = (batch_size, seq_length, -1, self.qk_head_dim)
         key_shape = (batch_size, seq_length, -1, self.qk_nope_head_dim + self.v_head_dim)
@@ -644,9 +642,11 @@ class AXK2DecoderLayer(GradientCheckpointingLayer):
             self.mlp = AXK2MLP(config)
         # A.X-K2 gates the norms: `input_layernorm` on every layer, `post_attention_layernorm` on MoE layers.
         self.input_layernorm = AXK2GatedRMSNorm(config, eps=config.rms_norm_eps)
-        self.post_attention_layernorm = AXK2RMSNorm(config.hidden_size, config.rms_norm_eps)
-        if config.mlp_layer_types[layer_idx] == "sparse":
-            self.post_attention_layernorm = AXK2GatedRMSNorm(config, eps=config.rms_norm_eps)
+        self.post_attention_layernorm = (
+            AXK2GatedRMSNorm(config, eps=config.rms_norm_eps)
+            if config.mlp_layer_types[layer_idx] == "sparse"
+            else AXK2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        )
 
     def forward(
         self,
