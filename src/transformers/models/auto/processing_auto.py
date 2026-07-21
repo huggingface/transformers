@@ -53,7 +53,7 @@ else:
             ("diffusion_gemma", "Gemma4Processor"),
             ("edgetam", "Sam2Processor"),
             ("glm4v_moe", "Glm4vProcessor"),
-            ("glm5_next_vl", "Glm46VProcessor"),
+            ("glm5_next", "Glm46VProcessor"),
             ("granite_speech_plus", "GraniteSpeechProcessor"),
             ("groupvit", "CLIPProcessor"),
             ("hubert", "Wav2Vec2Processor"),

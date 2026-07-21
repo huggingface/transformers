@@ -655,8 +655,6 @@
         title: GLM-Image
       - local: model_doc/glm5_next
         title: Glm5Next
-      - local: model_doc/glm5_next_vl
-        title: Glm5NextVL
       - local: model_doc/glm_moe_dsa
         title: GlmMoeDsa
       - local: model_doc/openai-gpt

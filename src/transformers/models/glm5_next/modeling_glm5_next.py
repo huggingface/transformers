@@ -20,7 +20,7 @@
 
 import math
 from collections.abc import Callable
-from typing import Optional
+from typing import Any, Optional
 
 import torch
 import torch.nn as nn
@@ -28,7 +28,7 @@ import torch.nn.functional as F
 
 from ... import initialization as init
 from ...activations import ACT2FN
-from ...cache_utils import Cache, DynamicCache
+from ...cache_utils import Cache, DynamicCache, DynamicSlidingWindowLayer
 from ...generation import GenerationMixin
 from ...integrations import (
     use_experts_implementation,
@@ -37,24 +37,35 @@ from ...integrations import (
     use_kernelized_func,
 )
 from ...integrations.accelerate import force_accelerate_hooks
-from ...masking_utils import create_recurrent_attention_mask
+from ...masking_utils import create_causal_mask, create_recurrent_attention_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPast
+from ...modeling_outputs import (
+    BaseModelOutputWithPast,
+    BaseModelOutputWithPooling,
+    MoeCausalLMOutputWithPast,
+    MoeModelOutputWithPast,
+)
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
-from ...utils.generic import maybe_autocast, merge_with_config_defaults
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, torch_compilable_check
+from ...utils.generic import (
+    accepts_precomputed_kwargs,
+    is_flash_attention_requested,
+    maybe_autocast,
+    merge_with_config_defaults,
+)
 from ...utils.output_capturing import OutputRecorder, capture_outputs
-from .configuration_glm5_next import Glm5NextConfig
+from ..auto.modeling_auto import AutoModel
+from .configuration_glm5_next import Glm5NextConfig, Glm5NextTextConfig
 
 
 @use_kernel_forward_from_hub("RMSNorm")
-class Glm5NextRMSNorm(nn.Module):
+class Glm5NextTextRMSNorm(nn.Module):
     def __init__(self, hidden_size, eps: float = 1e-6) -> None:
         """
-        Glm5NextRMSNorm is equivalent to T5LayerNorm
+        Glm5NextTextRMSNorm is equivalent to T5LayerNorm
         """
         super().__init__()
         self.weight = nn.Parameter(torch.ones(hidden_size))
@@ -71,30 +82,7 @@ class Glm5NextRMSNorm(nn.Module):
         return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
 
 
-@use_kernel_forward_from_hub("RMSNormGated")
-class Glm5NextRMSNormGated(nn.Module):
-    def __init__(self, hidden_size, eps=1e-6, **kwargs):
-        super().__init__()
-        self.weight = nn.Parameter(torch.ones(hidden_size))
-        self.variance_epsilon = eps
-        self.activation = "sigmoid"
-
-    def forward(self, hidden_states, gate=None):
-        input_dtype = hidden_states.dtype
-
-        # Strict FP32 norm (do not downcast on the weights)
-        hidden_states = hidden_states.to(torch.float32)
-        variance = hidden_states.pow(2).mean(-1, keepdim=True)
-        hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
-        hidden_states = self.weight.to(torch.float32) * hidden_states
-
-        # Apply gating
-        hidden_states = hidden_states * ACT2FN[self.activation](gate.to(torch.float32))
-
-        return hidden_states.to(input_dtype)
-
-
-class Glm5NextMLP(nn.Module):
+class Glm5NextTextMLP(nn.Module):
     def __init__(self, config, intermediate_size=None):
         super().__init__()
         self.config = config
@@ -117,7 +105,7 @@ class Glm5NextMLP(nn.Module):
 
 
 @use_experts_implementation
-class Glm5NextExperts(nn.Module):
+class Glm5NextTextExperts(nn.Module):
     """Collection of expert weights stored as 3D tensors."""
 
     def __init__(self, config):
@@ -156,7 +144,7 @@ class Glm5NextExperts(nn.Module):
         return F.silu(gate) * up
 
 
-class Glm5NextTopkRouter(nn.Module):
+class Glm5NextTextTopkRouter(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.top_k = config.num_experts_per_tok
@@ -197,7 +185,7 @@ class Glm5NextTopkRouter(nn.Module):
         return router_logits, topk_weights, topk_indices
 
 
-class Glm5NextMoE(nn.Module):
+class Glm5NextTextMoE(nn.Module):
     """
     A mixed expert module containing shared experts.
     """
@@ -205,9 +193,9 @@ class Glm5NextMoE(nn.Module):
     def __init__(self, config: Glm5NextConfig):
         super().__init__()
         self.config = config
-        self.experts = Glm5NextExperts(config)
-        self.gate = Glm5NextTopkRouter(config)
-        self.shared_experts = Glm5NextMLP(
+        self.experts = Glm5NextTextExperts(config)
+        self.gate = Glm5NextTextTopkRouter(config)
+        self.shared_experts = Glm5NextTextMLP(
             config=config, intermediate_size=config.moe_intermediate_size * config.n_shared_experts
         )
 
@@ -221,73 +209,103 @@ class Glm5NextMoE(nn.Module):
         return hidden_states
 
 
-class Glm5NextRotaryEmbedding(nn.Module):
-    inv_freq: torch.Tensor  # fix linting for `register_buffer`
-
-    def __init__(self, config: Glm5NextConfig, device=None):
+class Glm5NextTextUnweightedRMSNorm(nn.Module):
+    def __init__(self, eps: float = 1.0e-6):
         super().__init__()
-        self.max_seq_len_cached = config.max_position_embeddings
-        self.original_max_seq_len = config.max_position_embeddings
+        self.eps = eps
 
-        self.config = config
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return x * torch.rsqrt(x.float().square().mean(-1, keepdim=True) + self.eps).to(x.dtype)
 
-        self.rope_type = self.config.rope_parameters["rope_type"]
-        rope_init_fn: Callable = self.compute_default_rope_parameters
-        if self.rope_type != "default":
-            rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
-        inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
 
-        self.register_buffer("inv_freq", inv_freq, persistent=False)
-        self.register_buffer("original_inv_freq", inv_freq.clone(), persistent=False)
+class Glm5NextTextHyperConnection(nn.Module):
+    r"""
+    Manifold-Constrained Hyper-Connections
+    (mHC) (Xie et al., 2026) to strengthen the conventional residual connections between adjacent
+    Transformer blocks
 
-    @staticmethod
-    def compute_default_rope_parameters(
-        config: Glm5NextConfig | None = None,
-        device: Optional["torch.device"] = None,
-        seq_len: int | None = None,
-    ) -> tuple["torch.Tensor", float]:
+    Owns the learned (`fn`, `base`, `scale`)
+    parameters that turn the incoming `hc_mult` residual streams into collapse / expand
+    weights. The decoder layer instantiates two of these (one for the attention site,
+    one for the mlp site).
+
+    ASCII shape guide — `B` = batch, `S` = seq, `H` = hc_mult, `D` = hidden_size::
+
+              hidden_streams        flatten(2)        RMSNorm-rescale + F.linear(fn)
+         [B, S, H, D]  ──────────►  [B, S, H*D]  ─────────────────────────────────►
+                                                             mix-logits
+                                                             [B, S, (2+H)*H]
+                                                                    │
+                            ┌───────────────────────────────────────┴──────────────────────────────┐
+                            ▼                          ▼                                           ▼
+                        pre logits                post logits                               comb logits
+                        [B, S, H]                 [B, S, H]                                 [B, S, H, H]
+                        × scale[0]                × scale[1]                                × scale[2]
+                        + base[:H]                + base[H:2H]                              + base[2H:]
+                        σ() + eps                 2·σ()                                     softmax(-1) + eps
+                        │                         │                                         │
+                        pre                       post                                      Sinkhorn(iters)
+                        (stream collapse weights) (block-output placement, range [0, 2])    row/col normalise
+                                                                                            │
+                                                                                            comb
+                                                                                            (stream mixer)
+    """
+
+    def __init__(self, config: Glm5NextTextConfig):
+        super().__init__()
+        self.hc_mult = config.hc_mult
+        self.hc_sinkhorn_iters = config.hc_sinkhorn_iters
+        self.hc_eps = config.hc_eps
+        self.input_norm = Glm5NextTextUnweightedRMSNorm(eps=config.rms_norm_eps)
+        mix = (2 + self.hc_mult) * self.hc_mult
+        self.fn = nn.Parameter(torch.empty(mix, self.hc_mult * config.hidden_size))
+        self.base = nn.Parameter(torch.empty(mix))
+        # 3 = number of outputs from the mHC mapping: `pre` (input projection
+        # weights), `post` (sublayer output projection weights), `comb` (the
+        # H×H residual combine matrix that gets Sinkhorn-projected onto the
+        # doubly-stochastic manifold). Each output gets its own learned scale.
+        self.scale = nn.Parameter(torch.empty(3))
+
+    def forward(self, hidden_streams: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        r"""
+        Compute `pre`, `post`, `comb` from the mHC mapping (paper §2.2 eq. 8).
+        `comb` is projected onto the doubly-stochastic manifold via Sinkhorn-
+        Knopp: starting from the sigmoid-positive matrix, alternate row and
+        column normalisation for `hc_sinkhorn_iters` steps. `pre` then collapses
+        the `hc_mult` parallel streams into a single sequence (input projection
+        into the sublayer); `post` and `comb` are returned for the caller to
+        apply on the sublayer output.
         """
-        Computes the inverse frequencies according to the original RoPE implementation
-        Args:
-            config ([`~transformers.PreTrainedConfig`]):
-                The model configuration.
-            device (`torch.device`):
-                The device to use for initialization of the inverse frequencies.
-            seq_len (`int`, *optional*):
-                The current sequence length. Unused for this type of RoPE.
-        Returns:
-            Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
-            post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
-        """
-        base = config.rope_parameters["rope_theta"]
-        dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
+        hc = self.hc_mult
+        flat = self.input_norm(hidden_streams.flatten(start_dim=2).float())
+        pre_w, post_w, comb_w = F.linear(flat, self.fn.float()).split([hc, hc, hc * hc], dim=-1)
+        pre_b, post_b, comb_b = self.base.split([hc, hc, hc * hc])
+        pre_scale, post_scale, comb_scale = self.scale.unbind(0)
 
-        attention_factor = 1.0  # Unused in this type of RoPE
-
-        # Compute the inverse frequencies
-        inv_freq = 1.0 / (
-            base ** (torch.arange(0, dim, 2, dtype=torch.int64).to(device=device, dtype=torch.float) / dim)
-        )
-        return inv_freq, attention_factor
-
-    @torch.no_grad()
-    @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
-    def forward(self, x, position_ids):
-        inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1).to(x.device)
-        position_ids_expanded = position_ids[:, None, :].float()
-
-        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
-        with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
-            freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
-            emb = torch.cat((freqs, freqs), dim=-1)
-            cos = emb.cos() * self.attention_scaling
-            sin = emb.sin() * self.attention_scaling
-
-        return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
+        pre = torch.sigmoid(pre_w * pre_scale + pre_b) + self.hc_eps
+        post = 2 * torch.sigmoid(post_w * post_scale + post_b)
+        comb_logits = comb_w.view(*comb_w.shape[:-1], hc, hc) * comb_scale + comb_b.view(hc, hc)
+        comb = torch.softmax(comb_logits, dim=-1) + self.hc_eps
+        comb = comb / (comb.sum(dim=-2, keepdim=True) + self.hc_eps)
+        for _ in range(self.hc_sinkhorn_iters - 1):
+            comb = comb / (comb.sum(dim=-1, keepdim=True) + self.hc_eps)
+            comb = comb / (comb.sum(dim=-2, keepdim=True) + self.hc_eps)
+        # Collapse the `hc_mult` parallel streams down to a single sequence using
+        # the `pre` weights: one weighted sum across the stream axis, ready for
+        # the sublayer (attn / MLP).
+        collapsed = (pre.unsqueeze(-1) * hidden_streams).sum(dim=2).to(hidden_streams.dtype)
+        return post, comb, collapsed
 
 
-class Glm5NextForgetGate(nn.Module):
-    def __init__(self, config: Glm5NextConfig):
+class Glm5NextTextHyperHead(nn.Module):
+    """Final GLM-5-Next HC-stream collapse. Unlike DeepSeek-V4, this is an unweighted mean."""
+
+    def forward(self, hidden_streams: torch.Tensor) -> torch.Tensor:
+        return hidden_streams.mean(dim=2)
+
+
+class Glm5NextTextForgetGate(nn.Module):
+    def __init__(self, config: Glm5NextTextConfig):
         super().__init__()
         self.head_dim = config.linear_head_dim
         self.num_heads = config.linear_num_heads
@@ -317,6 +335,29 @@ class Glm5NextForgetGate(nn.Module):
         g_softplus = torch.where(g > 20.0, g, torch.log(1.0 + torch.exp(g)))
 
         return -decay_rate * g_softplus
+
+
+@use_kernel_forward_from_hub("RMSNormGated")
+class Glm5NextTextRMSNormGated(nn.Module):
+    def __init__(self, hidden_size, eps=1e-6, **kwargs):
+        super().__init__()
+        self.weight = nn.Parameter(torch.ones(hidden_size))
+        self.variance_epsilon = eps
+        self.activation = "sigmoid"
+
+    def forward(self, hidden_states, gate=None):
+        input_dtype = hidden_states.dtype
+
+        # Strict FP32 norm (do not downcast on the weights)
+        hidden_states = hidden_states.to(torch.float32)
+        variance = hidden_states.pow(2).mean(-1, keepdim=True)
+        hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
+        hidden_states = self.weight.to(torch.float32) * hidden_states
+
+        # Apply gating
+        hidden_states = hidden_states * ACT2FN[self.activation](gate.to(torch.float32))
+
+        return hidden_states.to(input_dtype)
 
 
 def apply_mask_to_padding_states(hidden_states, attention_mask):
@@ -542,12 +583,12 @@ def chunk_kimi_delta_attention(
 @use_kernelized_func(
     [chunk_kimi_delta_attention, recurrent_kimi_delta_attention, causal_conv1d_fn, causal_conv1d_update]
 )
-class Glm5NextLinearAttention(nn.Module):
+class Glm5NextTextLinearAttention(nn.Module):
     """Kimi-style KDA (Kimi Linear Attention) for GLM-5-Next."""
 
     def __init__(
         self,
-        config: Glm5NextConfig,
+        config: Glm5NextTextConfig,
         layer_idx: int,
     ):
         super().__init__()
@@ -575,12 +616,12 @@ class Glm5NextLinearAttention(nn.Module):
             padding=self.conv_kernel_size - 1,
         )
 
-        self.forget_gate = Glm5NextForgetGate(config)
+        self.forget_gate = Glm5NextTextForgetGate(config)
         self.b_proj = nn.Linear(self.hidden_size, self.num_heads, bias=False)
 
         self.g_a_proj = nn.Linear(self.hidden_size, self.head_dim, bias=False)
         self.g_b_proj = nn.Linear(self.head_dim, self.qkv_dim, bias=False)
-        self.o_norm = Glm5NextRMSNormGated(self.head_dim, eps=self.layer_norm_epsilon)
+        self.o_norm = Glm5NextTextRMSNormGated(self.head_dim, eps=self.layer_norm_epsilon)
         self.o_proj = nn.Linear(self.qkv_dim, self.hidden_size, bias=False)
 
         self.layer_type = config.layer_types[layer_idx]
@@ -694,350 +735,6 @@ class Glm5NextLinearAttention(nn.Module):
         return output
 
 
-def rotate_half(x):
-    """Rotates half the hidden dims of the input."""
-    x1 = x[..., 0::2]
-    x2 = x[..., 1::2]
-    return torch.stack((-x2, x1), dim=-1).flatten(-2)
-
-
-def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
-    """Applies Rotary Position Embedding to the query and key tensors.
-
-    Args:
-        q (`torch.Tensor`): The query tensor.
-        k (`torch.Tensor`): The key tensor.
-        cos (`torch.Tensor`): The cosine part of the rotary embedding.
-        sin (`torch.Tensor`): The sine part of the rotary embedding.
-        unsqueeze_dim (`int`, *optional*, defaults to 1):
-            The 'unsqueeze_dim' argument specifies the dimension along which to unsqueeze cos[position_ids] and
-            sin[position_ids] so that they can be properly broadcasted to the dimensions of q and k. For example, note
-            that cos[position_ids] and sin[position_ids] have the shape [batch_size, seq_len, head_dim]. Then, if q and
-            k have the shape [batch_size, heads, seq_len, head_dim], then setting unsqueeze_dim=1 makes
-            cos[position_ids] and sin[position_ids] broadcastable to the shapes of q and k. Similarly, if q and k have
-            the shape [batch_size, seq_len, heads, head_dim], then set unsqueeze_dim=2.
-    Returns:
-        `tuple(torch.Tensor)` comprising of the query and key tensors rotated using the Rotary Position Embedding.
-    """
-    cos = cos.unsqueeze(unsqueeze_dim)
-    sin = sin.unsqueeze(unsqueeze_dim)
-
-    # Interleave them instead of usual shape
-    cos = cos[..., : cos.shape[-1] // 2].repeat_interleave(2, dim=-1)
-    sin = sin[..., : sin.shape[-1] // 2].repeat_interleave(2, dim=-1)
-
-    # Keep half or full tensor for later concatenation
-    rotary_dim = cos.shape[-1]
-    q_rot, q_pass = q[..., :rotary_dim], q[..., rotary_dim:]
-    k_rot, k_pass = k[..., :rotary_dim], k[..., rotary_dim:]
-
-    # Apply rotary embeddings on the first half or full tensor
-    q_embed = (q_rot * cos) + (rotate_half(q_rot) * sin)
-    k_embed = (k_rot * cos) + (rotate_half(k_rot) * sin)
-
-    # Concatenate back to full shape
-    q_embed = torch.cat([q_embed, q_pass], dim=-1)
-    k_embed = torch.cat([k_embed, k_pass], dim=-1)
-    return q_embed, k_embed
-
-
-class Glm5NextIndexer(nn.Module):
-    """
-    DeepSeek Sparse Attention (DSA) indexer for selecting top-k tokens.
-
-    The indexer uses lightweight projections (`wq_b`, `wk`) separate from the main MLA
-    attention path. It scores compressed k-pool candidates, expands selected pools back
-    into raw cache indices, and optionally appends the current incomplete tail pool.
-
-    **Cache strategy**: the indexer state cache lives on the per-layer `DynamicIndexedLayer` (or the
-    `StaticIndexedLayer` for static caches) inside the shared cache, accessed via
-    `past_key_values.update_indexer()`.
-    """
-
-    def __init__(self, config, layer_idx: int):
-        super().__init__()
-        self.config = config
-        self.layer_idx = layer_idx
-
-        self.hidden_size: int = config.hidden_size
-        self.n_heads: int = config.index_n_heads
-        self.head_dim: int = config.index_head_dim
-        self.qk_rope_head_dim: int = config.qk_rope_head_dim
-        self.index_topk: int = config.index_topk
-        self.q_lora_rank: int = config.q_lora_rank
-
-        self.wq_b = nn.Linear(self.q_lora_rank, self.n_heads * self.head_dim, bias=False)
-        self.wk = nn.Linear(self.hidden_size, self.head_dim, bias=False)
-        self.k_norm = nn.LayerNorm(self.head_dim, eps=1e-6)
-        self.weights_proj = nn.Linear(self.hidden_size, self.n_heads, bias=False)
-        self.softmax_scale = self.head_dim**-0.5
-
-        self.index_kpool = config.index_kpool
-        self.index_kpool_always_select_tail = config.index_kpool_always_select_tail
-
-        self.index_kpool_compress_ape = nn.Parameter(torch.zeros(self.index_kpool, self.head_dim))
-        self.index_kpool_compress_gate = nn.Parameter(torch.zeros(self.head_dim, self.hidden_size))
-
-    @torch.no_grad()
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        q_resid: torch.Tensor,
-        position_embeddings: tuple[torch.Tensor, torch.Tensor],
-        attention_mask: torch.BoolTensor,
-        past_key_values: Cache | None,
-    ) -> torch.LongTensor:
-        """
-        Selects the top-k tokens per query for DeepSeek Sparse Attention (DSA) based on grouping pools (and tails).
-
-        Args:
-            hidden_states: Input hidden states `[B, S, hidden_size]`.
-            q_resid: Query residual from `q_a_layernorm(q_a_proj(x))`, shape `[B, S, q_lora_rank]`.
-            position_embeddings: `(cos, sin)` from RotaryEmbedding.
-            attention_mask: Local boolean padding mask of shape `[B, S]`.
-            past_key_values: Cache object containing the indexer state cache for this layer.
-
-        Returns:
-            `torch.Tensor`: the `int64` top-k token indices of shape `[B, S, topk]` (or `[B, S, 2*topk - 1]` with tail).
-            The eager / SDPA paths turn these into an additive sparse mask.
-        """
-        batch_size, seq_len = hidden_states.shape[:2]
-        hidden_shape = (batch_size, seq_len, -1, self.head_dim)
-
-        q = self.wq_b(q_resid).view(hidden_shape)
-        k = self.k_norm(self.wk(hidden_states)).view(hidden_shape)
-
-        cos, sin = position_embeddings
-        q, k = apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=2)
-        k = k.squeeze(2)
-
-        gate_scores = F.linear(hidden_states, self.index_kpool_compress_gate)
-        valid_channel = attention_mask.to(k.dtype)[..., None]
-
-        packed_states = torch.cat([k, gate_scores, valid_channel], dim=-1)
-
-        kv_len = seq_len
-        current_length = seq_len
-        if past_key_values is not None:
-            cache_layer = past_key_values.layers[self.layer_idx]
-
-            packed_states = past_key_values.update_indexer(packed_states, self.layer_idx)
-            # Only different on static caches where key is a static full tensor to max len
-            kv_len = cache_layer.keys.shape[-2]
-            current_length = cache_layer.get_seq_length()
-
-        # Get pools based on the valid key entries (based on padding / causality)
-        valid_keys = packed_states[..., -1].bool()
-        visible_tokens = self.get_visible_tokens(
-            valid_keys=valid_keys,
-            q_length=seq_len,
-            current_length=current_length,
-        )
-
-        # Key difference: Score across pools, not on a per token basis
-        pool_keys, pool_indices, pool_valid = self.get_pooled_states(packed_states=packed_states)
-        scores = torch.matmul(q.float(), pool_keys.transpose(-1, -2).float().unsqueeze(1))
-        scores = F.relu(scores * self.softmax_scale)
-
-        # Weight per head and sum across heads: [B, S, 1, H] @ [B, S, H, P] -> [B, S, P]
-        weights = self.weights_proj(hidden_states.to(self.weights_proj.weight.dtype)).float() * (self.n_heads**-0.5)
-        index_scores = torch.matmul(weights.unsqueeze(-2), scores).squeeze(-2)
-
-        # Clamp invalid / static pool ends
-        pool_end = pool_indices[..., -1].clamp(0, kv_len - 1)
-        pool_visible = visible_tokens.gather(
-            dim=-1,
-            index=pool_end[:, None, :].expand(batch_size, seq_len, -1),
-        )
-        # A pool is selectable only if its final token is visible to the query
-        valid_candidates = pool_visible & pool_valid[:, None]
-
-        index_scores = index_scores.masked_fill(
-            ~valid_candidates,
-            torch.finfo(index_scores.dtype).min,
-        )
-
-        # Similar budgeting as in original but compressed by its pool size
-        select_k = min(self.index_topk // self.index_kpool, index_scores.shape[-1])
-
-        # Selection is based on 2 steps
-        #   1. The actual scores (selected indices)
-        #   2. And removing invalid rows based on padding (selected valid)
-        selected = index_scores.topk(select_k, dim=-1).indices
-        batch_idx = torch.arange(batch_size, device=hidden_states.device)[:, None, None]
-
-        selected_valid = valid_candidates.gather(-1, selected)
-        selected_indices = pool_indices[batch_idx, selected]
-
-        # Convert selected pools back into the raw tokens
-        # [B, S, K, P] -> [B, S, K * P]
-        topk_indices = selected_indices.flatten(-2)
-        topk_indices = topk_indices.masked_fill(
-            ~selected_valid[..., None].expand_as(selected_indices).flatten(-2),
-            -1,
-        )
-
-        output_width = self.index_topk
-        if self.index_kpool_always_select_tail:
-            topk_indices = self.append_visible_tail(topk_indices, visible_tokens, valid_keys)
-            output_width += self.index_kpool - 1  # expanded tail size maximum
-
-        # Pad so we fill up with invalid entries instead of gathered selections
-        topk_indices = F.pad(topk_indices, (0, output_width - topk_indices.shape[-1]), value=-1)
-
-        topk_indices = topk_indices[..., :output_width]
-        topk_indices = topk_indices.masked_fill(~attention_mask[..., None], -1)
-
-        return topk_indices.long()
-
-    def get_visible_tokens(
-        self,
-        valid_keys: torch.BoolTensor,
-        q_length: int,
-        current_length: int,
-    ) -> torch.BoolTensor:
-        """
-        Check whether a token is visible for Q based on
-            - Causality
-            - Padding status
-                - Valid keys which is a (cached) variation of the attention mask
-        """
-        device = valid_keys.device
-
-        kv_positions = torch.arange(valid_keys.shape[-1], device=device)
-        q_positions = current_length - q_length + torch.arange(q_length, device=device)
-        causal = kv_positions[None, None, :] <= q_positions[None, :, None]
-
-        return causal & valid_keys[:, None, :]
-
-    def get_pooled_states(
-        self,
-        packed_states: torch.Tensor,
-    ) -> tuple[torch.Tensor, torch.LongTensor, torch.BoolTensor]:
-        """
-        (Re-)Build compressed k-pool candidates from the packed state.
-
-        Pooling starts at the first real token, not raw slot 0. This is the part
-        that makes:
-
-            [P, P, A, B, C, D, ...]
-
-        behave like:
-
-            [A, B, C, D, ...]
-
-        for k-pool grouping.
-        """
-        # All states we need
-        #   1. The actual keys
-        #   2. The compressed gate scores
-        #   3. The valid keys based on padding and causality
-        keys, gate_scores, valid_keys = torch.split(
-            packed_states,
-            [self.head_dim, self.head_dim, 1],
-            dim=-1,
-        )
-        valid_keys = valid_keys.bool().squeeze(-1)
-
-        # Metadata
-        batch_size, seq_len = keys.shape[:2]
-        number_of_pools = (seq_len + self.index_kpool - 1) // self.index_kpool
-        device = keys.device
-
-        # Example, index_kpool=4:
-        #   [P, P, A, B, C, D, E, F]
-        #          ^
-        #      first_key
-        #
-        #   pool 0 -> first_key + [0, 1, 2, 3] -> [A, B, C, D]
-        #   pool 1 -> first_key + [4, 5, 6, 7] -> [E, F, out, out]
-        first_key = torch.where(
-            valid_keys.any(-1),
-            valid_keys.long().argmax(-1),
-            torch.full((batch_size,), seq_len, dtype=torch.long, device=device),
-        )
-        pool_offsets = torch.arange(number_of_pools * self.index_kpool, device=device)
-        pool_offsets = pool_offsets.view(1, number_of_pools, self.index_kpool)
-        pool_indices = first_key[:, None, None] + pool_offsets
-
-        batch_idx = torch.arange(batch_size, device=device)[:, None, None]
-        safe_indices = pool_indices.clamp(0, seq_len - 1)
-
-        grouped_keys = keys[batch_idx, safe_indices]
-        grouped_gate_scores = gate_scores[batch_idx, safe_indices]
-        grouped_valid_keys = valid_keys[batch_idx, safe_indices]
-
-        # Only allow those within range (clamp)
-        grouped_valid_keys = grouped_valid_keys & (pool_indices < seq_len)
-        pool_valid = grouped_valid_keys.all(-1)
-        pool_indices = pool_indices.masked_fill(~grouped_valid_keys, -1)
-
-        # Learn a weighted average over the tokens inside each complete pool
-        logits = grouped_gate_scores.float() + self.index_kpool_compress_ape.float()[None, None]
-        logits = logits.masked_fill(~grouped_valid_keys[..., None], float("-inf"))
-        probabilities = torch.nan_to_num(logits.softmax(dim=2)).to(
-            grouped_keys.dtype
-        )  # nan to num for full invalid pools
-        pool_keys = (probabilities * grouped_keys).sum(dim=2)
-
-        # Avoids static cache allocated positions
-        keep = pool_valid.any(0)
-
-        return pool_keys[:, keep], pool_indices[:, keep], pool_valid[:, keep]
-
-    def append_visible_tail(
-        self,
-        topk_indices: torch.Tensor,
-        token_visible: torch.BoolTensor,
-        key_valid: torch.BoolTensor,
-    ) -> torch.Tensor:
-        """
-        Append the current incomplete pool as raw token indices.
-        So we if we have a pool size of 4:
-            - [P P A B C D E F]
-            - [A B C D] (selected pool)
-            - [E F] (appended tail)
-        """
-        if (max_tail_width := self.index_kpool - 1) == 0:
-            return topk_indices
-
-        batch_size, _, kv_length = token_visible.shape
-        device = token_visible.device
-
-        # Example, index_kpool=4:
-        #   visible keys: [A, B, C, D, E, F]
-        #   full pools:   [A, B, C, D]
-        #   tail:                     [E, F]
-        #
-        # visible_count = 6
-        # tail_count    = 6 % 4 = 2
-        # tail_start    = first_key + visible_count - tail_count
-        # tail_indices  = tail_start + [0, 1, ..., index_kpool - 2]
-        first_key = torch.where(
-            key_valid.any(-1),
-            key_valid.long().argmax(-1),
-            torch.full((batch_size,), kv_length, dtype=torch.long, device=device),
-        )
-        visible_count = token_visible.long().sum(-1)
-        tail_count = visible_count.remainder(self.index_kpool)
-        tail_offsets = torch.arange(max_tail_width, device=device)
-
-        tail_start = first_key[:, None] + visible_count - tail_count
-        tail_indices = tail_start[..., None] + tail_offsets
-
-        # We exclude tails that are just use to fill in positions + those that go beyond the max length
-        tail_valid = (tail_offsets[None, None, :] < tail_count[..., None]) & tail_indices.lt(kv_length)
-
-        # Also check for padding based tokens
-        kv_idx = tail_indices.clamp(0, kv_length - 1)
-        tail_visible = token_visible.gather(dim=-1, index=kv_idx)
-
-        # Get the valid conclusion
-        tail_indices = tail_indices.masked_fill(~(tail_valid & tail_visible), -1)
-
-        return torch.cat([topk_indices, tail_indices], dim=-1)
-
-
 def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
     """
     This is the equivalent of torch.repeat_interleave(x, dim=1, repeats=n_rep). The hidden states go from (batch,
@@ -1075,51 +772,40 @@ def eager_attention_forward(
     return attn_output, attn_weights
 
 
-def yarn_get_mscale(scale=1, mscale=1):
-    if scale <= 1:
-        return 1.0
-    return 0.1 * mscale * math.log(scale) + 1.0
+class Glm5NextTextAttention(nn.Module):
+    """Multi-headed attention from 'Attention Is All You Need' paper"""
 
-
-class Glm5NextAttention(nn.Module):
-    """
-    DeepSeek-V3 MLA + a DSA indexer, extended with **cross-layer top-k sharing**.
-
-    `config.indexer_types[layer_idx]` decides whether this layer runs its own indexer (`"full"`) or
-    reuses the previous full layer's top-k selection (`"shared"`).
-    `next_skip_topk` signals that the *next* layer will reuse this
-    layer's top-k, so it is propagated upward via `prev_topk_indices`.
-    """
-
-    def __init__(self, config: Glm5NextConfig, layer_idx: int):
+    def __init__(self, config: Glm5NextTextConfig, layer_idx: int):
         super().__init__()
         self.config = config
         self.layer_idx = layer_idx
-        self.num_key_value_groups = config.num_attention_heads // config.num_key_value_heads
         self.attention_dropout = config.attention_dropout
+        self.hidden_size = config.hidden_size
         self.num_heads = config.num_attention_heads
+        self.head_dim = config.head_dim
+        self.max_position_embeddings = config.max_position_embeddings
 
         self.q_lora_rank = config.q_lora_rank
         self.qk_rope_head_dim = config.qk_rope_head_dim
         self.kv_lora_rank = config.kv_lora_rank
         self.v_head_dim = config.v_head_dim
         self.qk_nope_head_dim = config.qk_nope_head_dim
-        self.qk_head_dim = config.qk_head_dim
+        self.qk_head_dim = config.qk_nope_head_dim + config.qk_rope_head_dim
+        self.num_key_value_groups = config.num_attention_heads // config.num_key_value_heads
 
         self.is_causal = True
+
         self.q_proj = (
-            nn.Linear(config.hidden_size, self.num_heads * self.qk_head_dim, bias=False)
+            nn.Linear(self.hidden_size, self.num_heads * self.qk_head_dim, bias=False)
             if self.q_lora_rank is None
             else None
         )
         self.q_a_proj = (
-            nn.Linear(config.hidden_size, config.q_lora_rank, bias=config.attention_bias)
+            nn.Linear(self.hidden_size, config.q_lora_rank, bias=config.attention_bias)
             if self.q_lora_rank is not None
             else None
         )
-        self.q_a_layernorm = (
-            Glm5NextRMSNorm(config.q_lora_rank, eps=config.rms_norm_eps) if self.q_lora_rank is not None else None
-        )
+        self.q_a_layernorm = Glm5NextTextRMSNorm(config.q_lora_rank, eps=config.rms_norm_eps)
         self.q_b_proj = (
             nn.Linear(config.q_lora_rank, self.num_heads * self.qk_head_dim, bias=False)
             if self.q_lora_rank is not None
@@ -1127,44 +813,30 @@ class Glm5NextAttention(nn.Module):
         )
 
         self.kv_a_proj_with_mqa = nn.Linear(
-            config.hidden_size,
-            self.kv_lora_rank + self.qk_rope_head_dim,
+            self.hidden_size,
+            config.kv_lora_rank + config.qk_rope_head_dim,
             bias=config.attention_bias,
         )
-        self.kv_a_layernorm = Glm5NextRMSNorm(self.kv_lora_rank, eps=config.rms_norm_eps)
+        self.kv_a_layernorm = Glm5NextTextRMSNorm(self.kv_lora_rank, eps=config.rms_norm_eps)
         self.kv_b_proj = nn.Linear(
-            self.kv_lora_rank,
-            self.num_heads * (self.qk_nope_head_dim + self.v_head_dim),
+            config.kv_lora_rank,
+            self.num_heads * (self.qk_head_dim - self.qk_rope_head_dim + self.v_head_dim),
             bias=False,
         )
 
         self.o_proj = nn.Linear(
             self.num_heads * self.v_head_dim,
-            config.hidden_size,
+            self.hidden_size,
             bias=config.attention_bias,
         )
 
         self.scaling = self.qk_head_dim ** (-0.5)
-        if self.config.rope_parameters.get("rope_type", "default") != "default":
-            mscale_all_dim = self.config.rope_parameters.get("mscale_all_dim", 0)
-            scaling_factor = self.config.rope_parameters["factor"]
-            if mscale_all_dim:
-                mscale = yarn_get_mscale(scaling_factor, mscale_all_dim)
-                self.scaling = self.scaling * mscale * mscale
-        # Refer: https://arxiv.org/abs/2603.12201 for more details.
-        self.skip_topk = config.indexer_types[layer_idx] == "shared"
-        self.indexer = None if self.skip_topk else Glm5NextIndexer(config, layer_idx)
-        self.next_skip_topk = (
-            not self.skip_topk and config.indexer_types[min(layer_idx + 1, len(config.indexer_types) - 1)] == "shared"
-        )
 
     def forward(
         self,
         hidden_states: torch.Tensor,
-        position_embeddings: tuple[torch.Tensor, torch.Tensor] | None,
         attention_mask: torch.Tensor | None,
         past_key_values: Cache | None = None,
-        prev_topk_indices: torch.Tensor | None = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor | None]:
         batch_size, seq_length = hidden_states.shape[:-1]
@@ -1176,36 +848,16 @@ class Glm5NextAttention(nn.Module):
         query_states = self.q_b_proj(q_resid).view(query_shape).transpose(1, 2)
 
         compressed_kv = self.kv_a_proj_with_mqa(hidden_states)
-        k_pass, k_rot = torch.split(compressed_kv, [self.kv_lora_rank, self.qk_rope_head_dim], dim=-1)
-        k_pass = self.kv_b_proj(self.kv_a_layernorm(k_pass)).view(key_shape).transpose(1, 2)
+        k_pass = self.kv_b_proj(self.kv_a_layernorm(compressed_kv)).view(key_shape).transpose(1, 2)
         key_states, value_states = torch.split(k_pass, [self.qk_nope_head_dim, self.v_head_dim], dim=-1)
-
-        k_rot = k_rot.view(batch_size, 1, seq_length, self.qk_rope_head_dim)
-        k_rot = k_rot.expand(*k_pass.shape[:-1], -1)
-        key_states = torch.cat([key_states, k_rot], dim=-1)
 
         # Cache update
         if past_key_values is not None:
             key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
 
-        if self.indexer is not None:
-            topk_indices = self.indexer(
-                hidden_states=hidden_states,
-                q_resid=q_resid,
-                position_embeddings=position_embeddings,
-                attention_mask=attention_mask,
-                past_key_values=past_key_values,
-            )
-        else:
-            if prev_topk_indices is None:
-                raise ValueError("Shared DSA layers require top-k indices from a previous full indexer layer.")
-            topk_indices = prev_topk_indices
-
-        attention_mask = self.build_attention_mask_from_topk(
-            topk_indices=topk_indices,
-            query_states=query_states,
-            kv_length=key_states.shape[2],
-        )
+        # Flash attention head_dim padding
+        if is_flash_attention_requested(self.config) and self.qk_head_dim != self.v_head_dim:
+            value_states = F.pad(value_states, [0, self.qk_head_dim - self.v_head_dim])
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
@@ -1222,66 +874,34 @@ class Glm5NextAttention(nn.Module):
             **kwargs,
         )
 
+        if is_flash_attention_requested(self.config) and self.qk_head_dim != self.v_head_dim:
+            attn_output = attn_output[:, :, :, : self.v_head_dim]
+
         attn_output = attn_output.reshape(batch_size, seq_length, -1).contiguous()
         attn_output = self.o_proj(attn_output)
-        return attn_output, attn_weights, topk_indices if self.next_skip_topk else None
-
-    def build_attention_mask_from_topk(
-        self,
-        topk_indices: torch.Tensor,
-        query_states: torch.Tensor,
-        kv_length: int,
-    ) -> torch.Tensor | None:
-        """
-        Convert topk_indices into the mask expected by the active backend.
-
-        Only supporting SDPA and Eager as we have a 3D dependency which cannot be mapped to FA
-        without a custom kernel that can select on a per indices bases per row (query -> topk keys).
-        """
-        # -1 is invalid as per convention in the indexer
-        # NOTE: The indexer already took care of also excluding padding tokens and causality
-        topk_valid = topk_indices.ge(0) & topk_indices.lt(kv_length)
-
-        # Clamp only so scatter has a legal index
-        safe_indices = topk_indices.clamp(0, kv_length - 1)
-        selected_counts = torch.zeros(
-            topk_indices.shape[0],  # batch size
-            topk_indices.shape[1],  # q_length
-            kv_length,  # kv_length
-            dtype=torch.int32,
-            device=topk_indices.device,
-        )
-        selected_counts.scatter_add_(-1, safe_indices, topk_valid.to(torch.int32))
-
-        # Final mask 0 == False (not visible), 1 == True (visible)
-        mask = selected_counts.ne(0).unsqueeze(1)
-
-        # SDPA
-        if self.config._attn_implementation == "sdpa":
-            return mask
-
-        # Eager
-        min_dtype = torch.finfo(query_states.dtype).min
-        # we need 0s where the tokens should be taken into account, and -inf otherwise (mask is already of boolean type)
-        mask = torch.where(mask, torch.tensor(0.0, device=query_states.device, dtype=query_states.dtype), min_dtype)
-        return mask
+        return attn_output, attn_weights
 
 
-class Glm5NextDecoderLayer(GradientCheckpointingLayer):
-    def __init__(self, config: Glm5NextConfig, layer_idx: int):
+class Glm5NextTextDecoderLayer(GradientCheckpointingLayer):
+    def __init__(self, config: Glm5NextTextConfig, layer_idx: int):
         super().__init__()
         self.block_type = config.layer_types[layer_idx]
         self.hidden_size = config.hidden_size
         self.self_attn = (
-            Glm5NextLinearAttention(config, layer_idx)
+            Glm5NextTextLinearAttention(config, layer_idx)
             if self.block_type == "linear_attention"
-            else Glm5NextAttention(config, layer_idx)
+            else Glm5NextTextAttention(config, layer_idx)
         )
 
-        self.mlp = Glm5NextMoE(config) if config.mlp_layer_types[layer_idx] == "sparse" else Glm5NextMLP(config)
+        self.mlp = (
+            Glm5NextTextMoE(config) if config.mlp_layer_types[layer_idx] == "sparse" else Glm5NextTextMLP(config)
+        )
 
-        self.input_layernorm = Glm5NextRMSNorm(config.hidden_size, config.rms_norm_eps)
-        self.post_attention_layernorm = Glm5NextRMSNorm(config.hidden_size, config.rms_norm_eps)
+        self.input_layernorm = Glm5NextTextRMSNorm(config.hidden_size, config.rms_norm_eps)
+        self.post_attention_layernorm = Glm5NextTextRMSNorm(config.hidden_size, config.rms_norm_eps)
+
+        self.attn_hc = Glm5NextTextHyperConnection(config)
+        self.ffn_hc = Glm5NextTextHyperConnection(config)
 
     def forward(
         self,
@@ -1291,12 +911,13 @@ class Glm5NextDecoderLayer(GradientCheckpointingLayer):
         past_key_values: Cache | None = None,
         use_cache: bool | None = False,
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
-        prev_topk_indices: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, None]:
+        dtype = hidden_states.dtype
+
         residual = hidden_states
+        post, comb, hidden_states = self.attn_hc(hidden_states)
         # Self attn
-        topk_indices = None
         hidden_states = self.input_layernorm(hidden_states)
         if self.block_type == "linear_attention":
             hidden_states = self.self_attn(
@@ -1306,25 +927,29 @@ class Glm5NextDecoderLayer(GradientCheckpointingLayer):
                 **kwargs,
             )
         else:
-            hidden_states, _, topk_indices = self.self_attn(
+            hidden_states, _ = self.self_attn(
                 hidden_states=hidden_states,
                 attention_mask=attention_mask,
                 position_ids=position_ids,
                 past_key_values=past_key_values,
                 use_cache=use_cache,
                 position_embeddings=position_embeddings,
-                prev_topk_indices=prev_topk_indices,
                 **kwargs,
             )
-        hidden_states = residual + hidden_states
+        hidden_states = post.to(dtype).unsqueeze(-1) * hidden_states.unsqueeze(-2) + torch.matmul(
+            comb.to(dtype).transpose(-1, -2), residual
+        )
 
         residual = hidden_states
+        post, comb, hidden_states = self.ffn_hc(hidden_states)
         # Feed forward
         hidden_states = self.post_attention_layernorm(hidden_states)
         hidden_states = self.mlp(hidden_states)
-        hidden_states = residual + hidden_states
+        hidden_states = post.to(dtype).unsqueeze(-1) * hidden_states.unsqueeze(-2) + torch.matmul(
+            comb.to(dtype).transpose(-1, -2), residual
+        )
 
-        return hidden_states, topk_indices
+        return hidden_states
 
 
 @auto_docstring
@@ -1340,7 +965,7 @@ class Glm5NextPreTrainedModel(PreTrainedModel):
     _supports_flex_attn = False
     _supports_attention_backend = True
 
-    _no_split_modules = ["Glm5NextDecoderLayer"]
+    _no_split_modules = ["Glm5NextTextDecoderLayer"]
     _skip_keys_device_placement = ["past_key_values"]
     # TODO: this can be fixed but is limited by
     # 1. assuming the cache name
@@ -1349,9 +974,9 @@ class Glm5NextPreTrainedModel(PreTrainedModel):
     _can_compile_fullgraph = True
 
     _can_record_outputs = {
-        "attentions": Glm5NextAttention,
-        "hidden_states": Glm5NextDecoderLayer,
-        "router_logits": OutputRecorder(Glm5NextTopkRouter, index=0),  # noqa: F821
+        "attentions": Glm5NextTextAttention,
+        "hidden_states": Glm5NextTextDecoderLayer,
+        "router_logits": OutputRecorder(Glm5NextTextTopkRouter, index=0),  # noqa: F821
     }
     _keep_in_fp32_modules_strict = ["e_score_correction_bias", "conv1d", "dt_bias", "A_log"]
     _keys_to_ignore_on_load_unexpected = [r"layers\.45\.", r"layers\.\d+\.shared_head\."]
@@ -1359,7 +984,7 @@ class Glm5NextPreTrainedModel(PreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
-        if isinstance(module, Glm5NextForgetGate):
+        if isinstance(module, Glm5NextTextForgetGate):
             # Following FLA initialization
             # NOTE: This is incredibly important so keep it this way at all costs
             if module.safe_gate_lower_bound is not None:
@@ -1382,33 +1007,794 @@ class Glm5NextPreTrainedModel(PreTrainedModel):
                 module.dt_bias,
                 dt + torch.log(-torch.expm1(-dt)),
             )
-        elif isinstance(module, Glm5NextRMSNormGated):
+        elif isinstance(module, Glm5NextTextRMSNormGated):
             init.ones_(module.weight)
-        elif isinstance(module, Glm5NextExperts):
+        elif isinstance(module, Glm5NextTextHyperConnection):
+            init.normal_(module.fn, mean=0.0, std=0.02)
+            init.zeros_(module.base)
+            init.ones_(module.scale)
+        elif isinstance(module, Glm5NextTextExperts):
             init.normal_(module.gate_up_proj, mean=0.0, std=self.config.initializer_range)
             init.normal_(module.down_proj, mean=0.0, std=self.config.initializer_range)
-        elif isinstance(module, Glm5NextTopkRouter):  # noqa: F821
+        elif isinstance(module, Glm5NextTextTopkRouter):
             init.zeros_(module.e_score_correction_bias)
             init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
-        elif isinstance(module, Glm5NextIndexer):
-            init.zeros_(module.index_kpool_compress_ape)
-            init.ones_(module.index_kpool_compress_gate)
+
+
+class Glm5NextTextRotaryEmbedding(nn.Module):
+    """
+    Multi-layer-type rotary embedding (Laguna pattern: partial rotary on top of
+    Gemma3's per-layer-type buffers), specialised for V4's *interleaved* RoPE.
+    Interleaved RoPE: one `θ_i` per pair (`rope_head_dim // 2` entries),
+    DIFF no end-to-end duplication. Same shape as `inv_freq @ position_ids`.
+
+    V4 deliberately decouples its architecture `layer_types`
+    (`sliding_attention` / `compressed_sparse_attention` /
+    `heavily_compressed_attention`) from its rope-type labels (`main` /
+    `compress`) — the latter live as keys in `config.rope_parameters` and
+    only differ in their `rope_theta` base. So this override replaces
+    Laguna's `set(config.layer_types)` iteration with `rope_parameters.keys()`
+    when building the per-type inv_freq buffers.
+    """
+
+    inv_freq: torch.Tensor  # fix linting for `register_buffer`
+
+    def __init__(self, config: Glm5NextTextConfig):
+        super().__init__()
+        self.max_seq_len_cached = config.max_position_embeddings
+        self.original_max_seq_len = config.max_position_embeddings
+        self.config = config
+        # Only the nested per-rope-type sub-dicts are real layer types — the top-level
+        # `rope_type` key that ``convert_rope_params_to_dict`` may leave on
+        # ``config.rope_parameters`` is a flat-shape leftover, not a layer.
+        self.layer_types = [k for k, v in config.rope_parameters.items() if isinstance(v, dict)]
+        self.rope_type = {}
+        for layer_type in self.layer_types:
+            rope_params = config.rope_parameters[layer_type]
+            self.rope_type[layer_type] = rope_params["rope_type"]
+            rope_init_fn = self.compute_default_rope_parameters
+            if self.rope_type[layer_type] != "default":
+                rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type[layer_type]]
+            inv_freq, attention_scaling = rope_init_fn(config, layer_type=layer_type)
+            self.register_buffer(f"{layer_type}_inv_freq", inv_freq, persistent=False)
+            self.register_buffer(f"{layer_type}_original_inv_freq", inv_freq.clone(), persistent=False)
+            setattr(self, f"{layer_type}_attention_scaling", attention_scaling)
+
+    @staticmethod
+    def compute_default_rope_parameters(
+        config: Glm5NextTextConfig | None = None,
+        device: Optional["torch.device"] = None,
+        seq_len: int | None = None,
+        layer_type: str | None = None,
+    ) -> tuple["torch.Tensor", float]:
+        """
+        Computes the inverse frequencies according to the original RoPE implementation
+        Args:
+            config ([`~transformers.PreTrainedConfig`]):
+                The model configuration.
+            device (`torch.device`):
+                The device to use for initialization of the inverse frequencies.
+            seq_len (`int`, *optional*):
+                The current sequence length. Unused for this type of RoPE.
+            layer_type (`str`, *optional*):
+                The current layer type if the model has different RoPE parameters per type.
+                Should not be used unless `config.layer_types is not None`
+        Returns:
+            Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
+            post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
+        """
+        base = config.rope_parameters[layer_type]["rope_theta"]
+        # key difference to gemma3: partial rope
+        partial_rotary_factor = config.rope_parameters[layer_type].get("partial_rotary_factor", 1.0)
+        head_dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
+        dim = int(head_dim * partial_rotary_factor)
+
+        attention_factor = 1.0  # Unused in this type of RoPE
+
+        # Compute the inverse frequencies
+        inv_freq = 1.0 / (
+            base ** (torch.arange(0, dim, 2, dtype=torch.int64).to(device=device, dtype=torch.float) / dim)
+        )
+        return inv_freq, attention_factor
+
+    @torch.no_grad()
+    @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
+    def forward(self, x, position_ids, layer_type=None):
+        # Key difference vs Laguna's forward: no `torch.cat([freqs, freqs], dim=-1)`
+        # duplication. V4's interleaved RoPE pairs consecutive channels, so we only need
+        # `rope_head_dim // 2` unique θ entries — the `apply_rotary_pos_emb` helper does
+        # the `repeat_interleave(2)` next to the rotation math, where the link between
+        # the doubled dim and `rotate_half` is local and obvious.
+        inv_freq = getattr(self, f"{layer_type}_inv_freq")
+        attention_scaling = getattr(self, f"{layer_type}_attention_scaling")
+        inv_freq_expanded = inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1).to(x.device)
+        position_ids_expanded = position_ids[:, None, :].float()
+        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
+        with maybe_autocast(device_type=device_type, enabled=False):
+            freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
+            cos = freqs.cos() * attention_scaling
+            sin = freqs.sin() * attention_scaling
+        return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
+
+
+class Glm5NextTextHCACache(DynamicSlidingWindowLayer):
+    r"""Cache layer for HCA blocks (paper §2.3.2). Holds the long-range compressor's
+    buffer / running compressed entries / count on top of the sliding-window K=V
+    branch. HCA uses *non-overlapping* windows, so there is *no* overlap state,
+    and HCA has *no* indexer either.
+
+    State is dict-keyed by entry name — HCA only uses `"compressor"`, but
+    :class:`Glm5NextTextCSACache` adds `"indexer"` to the same dicts so a single
+    set of methods (`store_compression_weights` / `update_compressor_states`)
+    serves both:
+
+      * `compressed_kv[name]` — the running list of compressed KV entries
+        emitted so far (one every `compress_rate` source tokens; the long-range
+        KVs the attention concatenates onto its sliding-window keys / values).
+      * `buffer_kv[name]` / `buffer_gate[name]` — source tokens that arrived
+        between two full windows; once the buffer hits `compress_rate` tokens
+        the compressor closes a window, emits one entry, and drains the buffer.
+      * `entry_count[name]` — number of compressed entries emitted so far, so
+        `entry_count[name] * compress_rate` is the absolute position of the
+        *next* window's first source token. Tracked separately from
+        `position_ids` so prefill -> decode -> prefill stays consistent.
+    """
+
+    _layer_type = "heavily_compressed_attention"
+
+    def __init__(self, config: "Glm5NextTextConfig", **kwargs):
+        super().__init__(sliding_window=config.sliding_window)
+        self.compress_rate = config.compress_rates["heavily_compressed_attention"]
+        self.buffer_kv: dict[str, torch.Tensor | None] = {"compressor": None}
+        self.buffer_gate: dict[str, torch.Tensor | None] = {"compressor": None}
+        self.compressed_kv: dict[str, torch.Tensor | None] = {"compressor": None}
+        self.entry_count: dict[str, int] = {"compressor": 0}
+
+    def update(self, key_states: torch.Tensor, value_states: torch.Tensor, *args, **kwargs):
+        """
+        Shared sliding-window K=V update body. V4 uses shared-KV MQA, so `keys` and
+        `values` point to the same storage on every layer.
+        """
+        if not self.is_initialized:
+            self.lazy_initialization(key_states, value_states)
+            self.values = self.keys
+        self.cumulative_length += key_states.shape[-2]
+        full = torch.cat([self.keys, key_states], dim=-2)
+        self.keys = full[:, :, -self.sliding_window + 1 :, :]
+        self.values = self.keys
+        return full, full
+
+    def store_compression_weights(
+        self, name: str, kv: torch.Tensor, gate: torch.Tensor
+    ) -> tuple[torch.Tensor, torch.Tensor, int]:
+        r"""
+        Concatenate the new projected `(kv, gate)` (paper §2.3.2 eqs. 20–21:
+        `C = H·W^{KV}`, `Z = H·W^Z`) for entry `name` with what's already in
+        the buffer, peel off the longest window-aligned prefix (the chunk
+        ready to compress), keep the leftover in the buffer for next call,
+        and return `(chunk_kv, chunk_gate, first_window_position)`. The
+        returned chunk is softmax-aggregated by the compressor with
+        `position_bias` to emit one compressed entry per window of
+        `compress_rate` tokens.
+        """
+        first_window_position = self.entry_count[name] * self.compress_rate
+        buffered_kv, buffered_gate = self.buffer_kv[name], self.buffer_gate[name]
+        if buffered_kv is not None and buffered_kv.shape[1]:
+            kv = torch.cat([buffered_kv, kv], dim=1)
+            gate = torch.cat([buffered_gate, gate], dim=1)
+        # only return the longest prefix that's a multiple of compress_rate; the rest stays in the buffer for next time
+        usable = (kv.shape[1] // self.compress_rate) * self.compress_rate
+        self.buffer_kv[name], self.buffer_gate[name] = kv[:, usable:], gate[:, usable:]
+        return kv[:, :usable], gate[:, :usable], first_window_position
+
+    def update_compressor_states(self, name: str, compressed: torch.Tensor) -> torch.Tensor:
+        r"""
+        Append freshly emitted compressed entries to `compressed_kv[name]`
+        (`C^{Comp}`, paper §2.3.2 eq. 23), bump `entry_count[name]`, and
+        return the running `compressed_kv[name]`.
+        """
+        if self.compressed_kv[name] is None:
+            self.compressed_kv[name] = compressed
+        elif compressed.shape[1] > 0:
+            self.compressed_kv[name] = torch.cat([self.compressed_kv[name], compressed], dim=1)
+        self.entry_count[name] += compressed.shape[1]
+        return self.compressed_kv[name]
+
+
+class Glm5NextTextCSACache(Glm5NextTextHCACache):
+    r"""Cache layer for CSA blocks (paper §2.3.1). Extends :class:`Glm5NextTextHCACache`
+    by adding an `"indexer"` entry to the inherited `buffer_kv` / `buffer_gate` /
+    `compressed_kv` / `entry_count` dicts, plus per-name *overlap* state for the
+    two-series window scheme.
+
+    What "overlap" means here: the CSA `kv_proj` / `gate_proj` produce `2 * head_dim`
+    features per source token — two independent compressed series Ca and Cb stored
+    in one tensor. Ca occupies `[..., :head_dim]`, Cb occupies `[..., head_dim:]`.
+    Pooled entry `w` is the softmax-gated convex combination of window `w-1`'s Ca
+    slice with window `w`'s Cb slice — effective width `2 * compress_rate_csa`,
+    stride `compress_rate_csa` (paper §2.3.1).
+
+    Because adjacent windows share state only through *the previous window's Ca
+    slice*, the only thing we need to carry across a forward boundary is
+    `chunk[:, -1, :, :head_dim]` (Ca) of the last full window — Cb is never read
+    again. That's what `overlap_kv[name]` / `overlap_gate[name]` persist.
+    """
+
+    _layer_type = "compressed_sparse_attention"
+
+    def __init__(self, config: "Glm5NextTextConfig", **kwargs):
+        super().__init__(config)
+        self.compress_rate = config.compress_rates["compressed_sparse_attention"]
+        self.buffer_kv["indexer"] = None
+        self.buffer_gate["indexer"] = None
+        self.compressed_kv["indexer"] = None
+        self.entry_count["indexer"] = 0
+        self.overlap_kv: dict[str, torch.Tensor | None] = {"compressor": None, "indexer": None}
+        self.overlap_gate: dict[str, torch.Tensor | None] = {"compressor": None, "indexer": None}
+
+    def update_overlap_state(
+        self, name: str, chunk_kv: torch.Tensor, chunk_gate: torch.Tensor, head_dim: int
+    ) -> tuple[torch.Tensor | None, torch.Tensor | None]:
+        r"""
+        Read the `name` entry's prior window's Ca slice (saved on the previous
+        forward call) and persist the *current* call's last-window Ca slice for
+        the next call. Only the `:head_dim` slice (Ca) is ever consumed
+        downstream — Cb has already been folded into the previous window's
+        emitted compressed entry — so we store half what `chunk[:, -1]` holds.
+        Returns `(prior_kv, prior_gate)` — both `None` on the very first call.
+        """
+        prior_kv, prior_gate = self.overlap_kv[name], self.overlap_gate[name]
+        self.overlap_kv[name] = chunk_kv[:, -1, :, :head_dim].clone()
+        self.overlap_gate[name] = chunk_gate[:, -1, :, :head_dim].clone()
+        return prior_kv, prior_gate
+
+
+def rotate_half(x):
+    """Rotates half the hidden dims of the input."""
+    x1 = x[..., 0::2]
+    x2 = x[..., 1::2]
+    return torch.stack((-x2, x1), dim=-1).flatten(-2)
+
+
+def apply_rotary_pos_emb(
+    x: torch.Tensor, cos: torch.Tensor, sin: torch.Tensor, unsqueeze_dim: int = 1
+) -> torch.Tensor:
+    """V4 interleaved RoPE applied to the *trailing* rope slice of `x`.
+
+    `cos` / `sin` come in half-sized (one entry per interleaved pair, from
+    `Glm5NextTextRotaryEmbedding`); we expand them to the full rope dim with
+    `repeat_interleave`, then rotate the last `2 * cos.shape[-1]` channels of `x`
+    with the standard `x*cos + rotate_half(x)*sin` formula in fp32 and leave the
+    leading nope channels untouched. V4-Flash lays each head out as `[nope | rope]`,
+    matching the reference's `x[..., -rd:]` indexing.
+    """
+    cos = cos.repeat_interleave(2, dim=-1).unsqueeze(unsqueeze_dim)
+    sin = sin.repeat_interleave(2, dim=-1).unsqueeze(unsqueeze_dim)
+    rope_dim = cos.shape[-1]
+    nope, rope = x[..., :-rope_dim], x[..., -rope_dim:]
+    rotated = ((rope.float() * cos) + (rotate_half(rope).float() * sin)).to(x.dtype)
+    return torch.cat([nope, rotated], dim=-1)
+
+
+class Glm5NextTextHCACompressor(nn.Module):
+    """
+    Heavily Compressed Attention compressor (paper §2.3.2, eqs. 20–23). compresses
+    every `compress_rate_hca` (m'=128) source tokens into a single compressed KV
+    entry.
+
+    Each closed window of m' tokens produces one compressed entry:
+    `C^{Comp}_i = Σ_{j∈window} softmax(Z_j + B)_j ⊙ C_j`. RoPE on the trailing
+    `rope_head_dim` slice is applied at the deterministic absolute position
+    `i * compress_rate_hca + first_window_position` so cross-call concatenation
+    stays causality-correct. Returns the running list of *all* compressed
+    entries emitted so far (shape `[B, 1, T, head_dim]` with
+    `T = entry_count["compressor"]`), so the attention can attend over the
+    full long-range history.
+
+    When `past_key_values is None` runs in stateless single-shot mode: compress
+    every complete window from `hidden_states` and discard the remainder
+    (instead of caching it).
+    """
+
+    rope_layer_type = "compress"
+
+    def __init__(self, config: Glm5NextTextConfig):
+        super().__init__()
+        self.compress_rate = config.compress_rates["heavily_compressed_attention"]
+        self.head_dim = config.head_dim
+        self.kv_proj = nn.Linear(config.hidden_size, self.head_dim, bias=False)
+        self.gate_proj = nn.Linear(config.hidden_size, self.head_dim, bias=False)
+        self.position_bias = nn.Parameter(torch.empty(self.compress_rate, self.head_dim))
+        self.kv_norm = Glm5NextTextRMSNorm(self.head_dim, eps=config.rms_norm_eps)
+        self.rotary_emb = Glm5NextTextRotaryEmbedding(config)
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        q_residual: torch.Tensor,
+        position_ids: torch.Tensor,
+        past_key_values: Cache | None,
+        layer_idx: int,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        batch, _, _ = hidden_states.shape
+        cache_layer: Glm5NextTextHCACache = past_key_values.layers[layer_idx] if past_key_values is not None else None
+        kv = self.kv_proj(hidden_states)
+        gate = self.gate_proj(hidden_states)
+        if cache_layer is None:
+            usable = (kv.shape[1] // self.compress_rate) * self.compress_rate
+            chunk_kv, chunk_gate, first_window_position = kv[:, :usable], gate[:, :usable], 0
+        else:
+            chunk_kv, chunk_gate, first_window_position = cache_layer.store_compression_weights("compressor", kv, gate)
+
+        if chunk_kv.shape[1] > 0:  # there were at least self.compress_rate tokens
+            n_windows = chunk_kv.shape[1] // self.compress_rate
+            chunk_kv = chunk_kv.view(batch, n_windows, self.compress_rate, -1)
+            chunk_gate = chunk_gate.view(batch, n_windows, self.compress_rate, -1) + self.position_bias
+            compressed = self.kv_norm(
+                (chunk_kv * chunk_gate.softmax(dim=2, dtype=torch.float32).to(chunk_kv.dtype)).sum(dim=2)
+            )
+            positions = torch.arange(n_windows, device=compressed.device)
+            positions = (positions * self.compress_rate + first_window_position).unsqueeze(0).expand(batch, -1)
+            cos, sin = self.rotary_emb(compressed, position_ids=positions, layer_type=self.rope_layer_type)
+            compressed = apply_rotary_pos_emb(compressed.unsqueeze(1), cos, sin).squeeze(1)
+        else:
+            compressed = chunk_kv.new_zeros((batch, 0, self.head_dim))
+
+        if cache_layer is not None:
+            compressed = cache_layer.update_compressor_states("compressor", compressed)
+        compressed_kv = compressed.unsqueeze(1)
+
+        compressed_len = compressed_kv.shape[2]
+        seq_len = position_ids.shape[1]
+        if seq_len == 1 or compressed_len == 0:
+            return compressed_kv, None
+
+        # query `t` may only see cache entries at pos `w` t > w * compress_rate (ex: t=7, w=2 t does not attend to it).
+        entry_indices = torch.arange(compressed_len, device=compressed_kv.device)
+        causal_threshold = (position_ids + 1) // self.compress_rate  # [B, S]
+        block_bias = compressed_kv.new_zeros((batch, 1, seq_len, compressed_len))
+        block_bias = block_bias.masked_fill(
+            entry_indices.view(1, 1, 1, -1) >= causal_threshold.unsqueeze(1).unsqueeze(-1),
+            float("-inf"),
+        )
+        return compressed_kv, block_bias
+
+
+class Glm5NextTextIndexerScorer(nn.Module):
+    r"""Lightning-indexer scoring head: `∑_h w_{t,h} · ReLU(q_{t,h} · K^IComp_s)`."""
+
+    def __init__(self, config: Glm5NextTextConfig):
+        super().__init__()
+        self.softmax_scale = config.index_head_dim**-0.5
+        self.weights_scaling = config.index_n_heads**-0.5
+        self.weights_proj = nn.Linear(config.hidden_size, config.index_n_heads, bias=False)
+
+    def forward(self, q: torch.Tensor, compressed_kv: torch.Tensor, hidden_states: torch.Tensor) -> torch.Tensor:
+        scores = torch.matmul(q.float(), compressed_kv.transpose(-1, -2).float().unsqueeze(1))  # [B, S, H, T]
+        scores = F.relu(scores) * self.softmax_scale
+        weights = self.weights_proj(hidden_states).float() * self.weights_scaling  # [B, S, H]
+        return (scores * weights.unsqueeze(-1)).sum(dim=2)  # [B, S, T]
+
+
+class Glm5NextTextIndexer(nn.Module):
+    r"""Lightning Indexer (paper §2.3.1, eqs. 13–17). Used by Compressed Sparse
+    Attention (CSA) to pick the top-`k` compressed KV blocks per query, with
+    `k = config.index_topk`. Each query then attends only to those `k` of the
+    `seq_len / compress_rate_csa` compressed entries — reduction factor
+    `(seq_len / compress_rate_csa) / index_topk` over full attention against
+    the entire compressed sequence.
+
+    The indexer runs its own scaled-down compressor at `index_head_dim` over
+    the same windows as the outer CSA compressor, then scores queries against
+    the compressed keys with `∑_h w_{t,h} · ReLU(q_{t,h} · K^IComp_s)` and
+    keeps the top `index_topk` indices.
+
+    The indexer has its own rotary because it applies RoPE to two sets of
+    tensors:
+
+      * *compressed keys* at deterministic positions
+        `i * compress_rate + first_window_position`,
+      * *queries* at the model's current `position_ids` (variable per forward).
+
+    Both must use the same theta as the outer compressor
+    (`compress_rope_theta`) so query/key inner products are
+    translation-invariant — if they used different thetas, `q · k` would carry
+    a residual position-dependent skew. We can't precompute cos/sin once at
+    init because the query positions vary per call, so the indexer owns its
+    own rotary and calls it twice per forward (once for compressed keys, once
+    for queries) with `layer_type=self.rope_layer_type` (always `"compress"`).
+    """
+
+    rope_layer_type = "compress"
+
+    def __init__(self, config: Glm5NextTextConfig):
+        super().__init__()
+        self.compress_rate = config.compress_rates["compressed_sparse_attention"]
+        self.num_heads = config.index_n_heads
+        self.head_dim = config.index_head_dim
+        self.index_topk = config.index_topk
+        self.kv_proj = nn.Linear(config.hidden_size, 2 * self.head_dim, bias=False)
+        self.gate_proj = nn.Linear(config.hidden_size, 2 * self.head_dim, bias=False)
+        self.position_bias = nn.Parameter(torch.empty(self.compress_rate, 2 * self.head_dim))
+        self.kv_norm = Glm5NextTextRMSNorm(self.head_dim, eps=config.rms_norm_eps)
+        self.q_b_proj = nn.Linear(config.q_lora_rank, self.num_heads * self.head_dim, bias=False)
+        self.rotary_emb = Glm5NextTextRotaryEmbedding(config)
+        self.scorer = Glm5NextTextIndexerScorer(config)
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        q_residual: torch.Tensor,
+        position_ids: torch.Tensor,
+        past_key_values: Cache | None,
+        layer_idx: int,
+    ) -> torch.LongTensor:
+        batch, seq_len, _ = hidden_states.shape
+        cache_layer: Glm5NextTextCSACache | None = (
+            past_key_values.layers[layer_idx] if past_key_values is not None else None
+        )
+        kv = self.kv_proj(hidden_states)
+        gate = self.gate_proj(hidden_states)
+
+        if cache_layer is None:
+            usable = (kv.shape[1] // self.compress_rate) * self.compress_rate
+            chunk_kv, chunk_gate, first_window_position = kv[:, :usable], gate[:, :usable], 0
+        else:
+            chunk_kv, chunk_gate, first_window_position = cache_layer.store_compression_weights("indexer", kv, gate)
+
+        if chunk_kv.shape[1] > 0:
+            n_windows = chunk_kv.shape[1] // self.compress_rate
+            ratio = self.compress_rate
+            chunk_kv = chunk_kv.view(batch, n_windows, ratio, -1)
+            chunk_gate = chunk_gate.view(batch, n_windows, ratio, -1) + self.position_bias
+
+            # Same Ca / Cb overlap layout as the outer CSA compressor, at index_head_dim.
+            new_kv = chunk_kv.new_zeros((batch, n_windows, 2 * ratio, self.head_dim))
+            new_gate = chunk_gate.new_full((batch, n_windows, 2 * ratio, self.head_dim), float("-inf"))
+            new_kv[:, :, ratio:] = chunk_kv[..., self.head_dim :]
+            new_gate[:, :, ratio:] = chunk_gate[..., self.head_dim :]
+            if n_windows > 1:
+                new_kv[:, 1:, :ratio] = chunk_kv[:, :-1, :, : self.head_dim]
+                new_gate[:, 1:, :ratio] = chunk_gate[:, :-1, :, : self.head_dim]
+            if cache_layer is not None:
+                prior_kv, prior_gate = cache_layer.update_overlap_state("indexer", chunk_kv, chunk_gate, self.head_dim)
+                if prior_kv is not None:
+                    new_kv[:, 0, :ratio] = prior_kv.to(new_kv.dtype)
+                    new_gate[:, 0, :ratio] = prior_gate.to(new_gate.dtype)
+
+            compressed = self.kv_norm(
+                (new_kv * new_gate.softmax(dim=2, dtype=torch.float32).to(new_kv.dtype)).sum(dim=2)
+            )
+            positions = torch.arange(n_windows, device=compressed.device)
+            positions = positions * self.compress_rate + first_window_position
+            positions = positions.unsqueeze(0).expand(batch, -1)
+            cos, sin = self.rotary_emb(compressed, position_ids=positions, layer_type=self.rope_layer_type)
+            compressed = apply_rotary_pos_emb(compressed.unsqueeze(1), cos, sin).squeeze(1)
+        else:
+            compressed = chunk_kv.new_zeros((batch, 0, self.head_dim))
+
+        compressed_kv = (
+            compressed if cache_layer is None else cache_layer.update_compressor_states("indexer", compressed)
+        )
+
+        cos_q, sin_q = self.rotary_emb(hidden_states, position_ids=position_ids, layer_type=self.rope_layer_type)
+        q = self.q_b_proj(q_residual).view(batch, seq_len, -1, self.head_dim).transpose(1, 2)
+        q = apply_rotary_pos_emb(q, cos_q, sin_q).transpose(1, 2)
+
+        index_scores = self.scorer(q, compressed_kv, hidden_states)  # [B, S, T]
+        compressed_len = compressed_kv.shape[1]
+        top_k = min(self.index_topk, compressed_len)
+
+        # not all queries can attend to the compressed entries. If a query's position
+        # is small than the relative position of the key (say m=4, query 2 cannot attend
+        # to compressed key at position 4, because it compressed info for states at position
+        # 12 to 16. Thus we need to make sure that top_k does not land in that range.
+        # Picks that still point past `causal_threshold` (early queries with too few ready
+        # blocks) are replaced with a `-1` sentinel that the compressor treats as invalid.
+        if compressed_len > 0:
+            causal_threshold = (position_ids + 1) // self.compress_rate  # [B, S]
+            entry_indices = torch.arange(compressed_len, device=index_scores.device)
+            future_mask = entry_indices.view(1, 1, -1) >= causal_threshold.unsqueeze(-1)  # [B, S, T]
+            index_scores = index_scores.masked_fill(future_mask, float("-inf"))
+            top_k_indices = index_scores.topk(top_k, dim=-1).indices  # [B, S, k]
+            invalid = top_k_indices >= causal_threshold.unsqueeze(-1)
+            return torch.where(invalid, torch.full_like(top_k_indices, -1), top_k_indices)
+
+        return index_scores.topk(top_k, dim=-1).indices
+
+
+class Glm5NextTextCSACompressor(nn.Module):
+    """Compressed Sparse Attention compressor (paper §2.3.1, eqs. 9–17). Compresses
+    every `compress_rate_csa` (m=4) source tokens and runs a Lightning Indexer on
+    top of the compressed KV that scores queries with
+    `∑_h w_{t,h} · ReLU(q_{t,h} · K^{IComp}_s)` to gather the top `index_topk`
+    entries per query before they reach core attention.
+
+    `kv_proj` / `gate_proj` / `position_bias` project to `2 * head_dim`: each
+    token contributes two independent compressed series Ca and Cb stored in
+    one tensor. Ca = `[..., :head_dim]` (its contribution to the *next*
+    window's compressed entry), Cb = `[..., head_dim:]` (its contribution to
+    the *current* window's compressed entry). Compressed entry `w` is the
+    softmax-gated convex combination of window `w-1`'s Ca slice with window
+    `w`'s Cb slice over `2 * compress_rate_csa` slots — width
+    `2 * compress_rate_csa`, stride `compress_rate_csa`. For `w = 0` we need
+    the previous window's Ca slice from the *previous forward call*; the
+    cache holds it in `overlap_kv` and hands it back here. On the very first
+    call (or when there is no cache) that slot stays zero-kv / `-inf`-gate,
+    which gives it softmax weight 0.
+    """
+
+    rope_layer_type = "compress"
+
+    def __init__(self, config: Glm5NextTextConfig):
+        super().__init__()
+        self.compress_rate = config.compress_rates["compressed_sparse_attention"]
+        self.head_dim = config.head_dim
+        self.kv_proj = nn.Linear(config.hidden_size, 2 * self.head_dim, bias=False)
+        self.gate_proj = nn.Linear(config.hidden_size, 2 * self.head_dim, bias=False)
+        self.position_bias = nn.Parameter(torch.empty(self.compress_rate, 2 * self.head_dim))
+        self.kv_norm = Glm5NextTextRMSNorm(self.head_dim, eps=config.rms_norm_eps)
+        self.rotary_emb = Glm5NextTextRotaryEmbedding(config)
+        self.indexer = Glm5NextTextIndexer(config)
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        q_residual: torch.Tensor,
+        position_ids: torch.Tensor,
+        past_key_values: Cache | None,
+        layer_idx: int,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        batch, seq_len, _ = hidden_states.shape
+        cache_layer: Glm5NextTextCSACache | None = (
+            past_key_values.layers[layer_idx] if past_key_values is not None else None
+        )
+        kv = self.kv_proj(hidden_states)
+        gate = self.gate_proj(hidden_states)
+
+        if cache_layer is None:
+            usable = (kv.shape[1] // self.compress_rate) * self.compress_rate
+            chunk_kv, chunk_gate, first_window_position = kv[:, :usable], gate[:, :usable], 0
+        else:
+            chunk_kv, chunk_gate, first_window_position = cache_layer.store_compression_weights("compressor", kv, gate)
+
+        if chunk_kv.shape[1] > 0:
+            n_windows = chunk_kv.shape[1] // self.compress_rate
+            ratio = self.compress_rate
+            chunk_kv = chunk_kv.view(batch, n_windows, ratio, -1)
+            chunk_gate = chunk_gate.view(batch, n_windows, ratio, -1) + self.position_bias
+
+            # Lay out the two series in [B, n_win, 2*ratio, head_dim]: Cb
+            # (`[..., head_dim:]`) goes in the second half (current window),
+            # Ca of the previous window (`[..., :head_dim]`) goes in the
+            # first half. Window 0's first half stays zero-kv / -inf-gate
+            # (softmax weight 0) on the very first forward call; on later
+            # calls the cache fills it with the saved Ca slice.
+            new_kv = chunk_kv.new_zeros((batch, n_windows, 2 * ratio, self.head_dim))
+            new_gate = chunk_gate.new_full((batch, n_windows, 2 * ratio, self.head_dim), float("-inf"))
+            new_kv[:, :, ratio:] = chunk_kv[..., self.head_dim :]
+            new_gate[:, :, ratio:] = chunk_gate[..., self.head_dim :]
+            if n_windows > 1:
+                new_kv[:, 1:, :ratio] = chunk_kv[:, :-1, :, : self.head_dim]
+                new_gate[:, 1:, :ratio] = chunk_gate[:, :-1, :, : self.head_dim]
+            if cache_layer is not None:
+                prior_kv, prior_gate = cache_layer.update_overlap_state(
+                    "compressor", chunk_kv, chunk_gate, self.head_dim
+                )
+                if prior_kv is not None:
+                    new_kv[:, 0, :ratio] = prior_kv.to(new_kv.dtype)
+                    new_gate[:, 0, :ratio] = prior_gate.to(new_gate.dtype)
+
+            # Softmax in fp32 for stability (logits in bf16/fp16 can collapse pairs that
+            # only differ by a small amount, especially with large window widths).
+            compressed = self.kv_norm(
+                (new_kv * new_gate.softmax(dim=2, dtype=torch.float32).to(new_kv.dtype)).sum(dim=2)
+            )
+            positions = torch.arange(n_windows, device=compressed.device)
+            positions = positions * self.compress_rate + first_window_position
+            positions = positions.unsqueeze(0).expand(batch, -1)
+            cos, sin = self.rotary_emb(compressed, position_ids=positions, layer_type=self.rope_layer_type)
+            compressed = apply_rotary_pos_emb(compressed.unsqueeze(1), cos, sin).squeeze(1)
+        else:
+            compressed = chunk_kv.new_zeros((batch, 0, self.head_dim))
+
+        if cache_layer is not None:
+            compressed = cache_layer.update_compressor_states("compressor", compressed)
+        compressed_kv = compressed.unsqueeze(1)
+
+        # Lightning Indexer: gather top-`index_topk` compressed entries per query.
+        # in some cases, the output index can return top-k positions that should not be attended to.
+        # Ex: for query at index 5, m=4, and `index_topk=1024`, 1024 index are return but only 2 should be
+        # attended to. The indexer marks the rest with `-1`; we clamp before the gather and keep the `valid`
+        # to drop them from the per-query block mask afterwards.
+        top_k_indices = self.indexer(hidden_states, q_residual, position_ids, past_key_values, layer_idx)  # [B, S, k]
+        compressed_len = compressed_kv.shape[2]
+        valid = top_k_indices >= 0  # [B, S, k]
+        # Per-query block bias: query `t` may only see the cache entries that are <= `seq_len // m`
+        # and in these, only the ones marked valid by the indexer. Everything else is `-inf`.
+        # While the above negated the indexer, here we apply the "causal" masking.
+        safe_indices = torch.where(valid, top_k_indices, torch.full_like(top_k_indices, compressed_len))
+        block_bias = compressed_kv.new_full((batch, 1, seq_len, compressed_len + 1), float("-inf"))
+        block_bias.scatter_(-1, safe_indices.unsqueeze(1), 0.0)
+        return compressed_kv, block_bias[..., :compressed_len]
+
+
+class Glm5NextTextTopKRouter(nn.Module):
+    def __init__(self, config: Glm5NextTextConfig):
+        super().__init__()
+        self.top_k = config.num_experts_per_tok
+        self.num_experts = config.num_local_experts
+        self.hidden_dim = config.hidden_size
+        self.weight = nn.Parameter(torch.empty(self.num_experts, self.hidden_dim))
+        self.score_fn = ACT2FN[config.scoring_func]
+        self.routed_scaling_factor = config.routed_scaling_factor
+        self.register_buffer("e_score_correction_bias", torch.zeros(self.num_experts), persistent=True)
+
+    def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        flat = hidden_states.reshape(-1, self.hidden_dim)
+        logits = F.linear(flat, self.weight)
+        scores = self.score_fn(logits)
+        indices = torch.topk(scores + self.e_score_correction_bias, self.top_k, dim=-1, sorted=False).indices
+        weights = scores.gather(1, indices)
+        weights = weights / (weights.sum(dim=-1, keepdim=True) + 1e-20)
+        return logits, weights * self.routed_scaling_factor, indices
+
+
+class Glm5NextTextHashRouter(nn.Module):
+    r"""
+    Hash routing for the first `mlp_layer_types == "hash_moe"` MoE layers (paper
+    §2.1). Expert selection is determined by a fixed `tid2eid[input_ids]` lookup —
+    a frozen token-id → expert-id table — instead of a learned argmax. The learned
+    gate `weight` still produces the per-expert scores that weight the selected
+    experts' activations; only the *which-experts* selection is static.
+    """
+
+    def __init__(self, config: Glm5NextTextConfig):
+        super().__init__()
+        self.top_k = config.num_experts_per_tok
+        self.num_experts = config.num_local_experts
+        self.hidden_dim = config.hidden_size
+        self.weight = nn.Parameter(torch.empty(self.num_experts, self.hidden_dim))
+        self.score_fn = ACT2FN[config.scoring_func]
+        self.routed_scaling_factor = config.routed_scaling_factor
+        self.register_buffer("tid2eid", torch.zeros(config.vocab_size, self.top_k, dtype=torch.long), persistent=True)
+
+    def forward(
+        self, hidden_states: torch.Tensor, input_ids: torch.Tensor
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        flat = hidden_states.reshape(-1, self.hidden_dim)
+        logits = F.linear(flat, self.weight)
+        scores = self.score_fn(logits)
+        indices = self.tid2eid[input_ids.reshape(-1)].long()
+        weights = scores.gather(1, indices)
+        weights = weights / (weights.sum(dim=-1, keepdim=True) + 1e-20)
+        return logits, weights * self.routed_scaling_factor, indices
 
 
 @auto_docstring
-class Glm5NextModel(Glm5NextPreTrainedModel):
-    def __init__(self, config: Glm5NextConfig):
+class Glm5NextTextPreTrainedModel(PreTrainedModel):
+    config: Glm5NextTextConfig
+    base_model_prefix = "model"
+    supports_gradient_checkpointing = True
+    _no_split_modules = ["Glm5NextTextDecoderLayer"]
+    _skip_keys_device_placement = ["past_key_values"]
+    # V4 ships eager-only. The non-eager backends are off for the following reasons:
+    #
+    #   * FlashAttention 2 / 3 cap the head dim at 256; V4's `head_dim=512`
+    #     (V4-Flash and V4-Pro both) is structurally incompatible — `flash_attention_2`
+    #     and the `kernels-community/vllm-flash-attn3` kernel both fail with
+    #     `RuntimeError: FlashAttention forward only supports head dimension at most
+    #     256`. FA4 has the same 256 cap, so it's off too.
+    #   * SDPA: torch's SDPA kernel doesn't carry the per-head learnable sink term V4
+    #     inherits from gpt-oss-style attention.
+    #   * FlexAttention: V4 attention concatenates compressor entries onto the KV
+    #     axis *inside* the attention block, after the model-level mask was built,
+    #     so the resulting KV length doesn't match the BlockMask's `kv_len`.
+    #     BlockMask has no runtime resize, and rebuilding it per-block would require
+    #     teaching the compressor's variable output count to a `mask_mod` — not
+    #     worth it for a path the compressor already owns its own causality
+    #     bookkeeping for.
+    _supports_flash_attn = False
+    _supports_sdpa = False
+    _supports_flex_attn = False
+    # The compressor's rolling-window buffer / compressed-entries / overlap state
+    # lives on the per-layer cache (:class:`Glm5NextTextHCACache` /
+    # :class:`Glm5NextTextCSACache`) and isn't compatible with :class:`StaticCache`
+    # — that path would hand the compressor a :class:`StaticSlidingWindowLayer`
+    # with no `store_compression_weights` method. Disabling fullgraph compile
+    # keeps generation tests on the dynamic cache build that does dispatch to
+    # V4's own cache layers.
+    _can_compile_fullgraph = False
+    _supports_attention_backend = True
+    _can_record_outputs = {
+        "router_logits": OutputRecorder(Glm5NextTextTopKRouter, index=0),
+        "hidden_states": Glm5NextTextDecoderLayer,
+        "attentions": Glm5NextTextAttention,
+    }
+    config_class = Glm5NextTextConfig
+    _keep_in_fp32_modules_strict = [
+        "attn_hc",
+        "ffn_hc",
+        "hc_head",
+        "sinks",
+        "position_bias",
+        "e_score_correction_bias",
+        "q_a_norm",
+        "kv_norm",
+        "input_layernorm",
+        "post_attention_layernorm",
+        "norm",
+    ]
+    # DeepSeek-V4-Flash checkpoints mix FP8 and BF16 in the attention compressor /
+    # indexer branch: these projections ship in BF16 with no companion `scale_inv`.
+    # Listed here (non-strict) so the FP8 quantizer's `get_modules_to_not_convert`
+    # auto-skips them; non-strict has no dtype effect at BF16, so they stay BF16.
+    _keep_in_fp32_modules = [
+        "self_attn.compressor.kv_proj",
+        "self_attn.compressor.gate_proj",
+        "self_attn.compressor.indexer.kv_proj",
+        "self_attn.compressor.indexer.gate_proj",
+        "self_attn.compressor.indexer.scorer.weights_proj",
+    ]
+    _keys_to_ignore_on_load_unexpected = [r"(^|\.)mtp\..*"]
+    # ``_is_stateful`` opts out of generation modes that need to roll the cache
+    # back across drafts (assisted generation, prompt lookup, contrastive search).
+    # The compressor's running-window state isn't rewindable, so `generate`
+    # raises a clear error early instead of failing deep in the compressor with
+    # a missing-method `AttributeError`.
+    _is_stateful = True
+
+    @torch.no_grad()
+    def _init_weights(self, module):
+        super()._init_weights(module)
+        std = self.config.initializer_range
+        if isinstance(module, (Glm5NextTextTopKRouter, Glm5NextTextHashRouter)):
+            init.normal_(module.weight, mean=0.0, std=std)
+            if isinstance(module, Glm5NextTextTopKRouter):
+                init.zeros_(module.e_score_correction_bias)  # buffer
+            if isinstance(module, Glm5NextTextHashRouter):
+                init.zeros_(module.tid2eid)  # buffer; real values come from the checkpoint
+        elif isinstance(module, Glm5NextTextExperts):
+            init.normal_(module.gate_up_proj, mean=0.0, std=std)
+            init.normal_(module.down_proj, mean=0.0, std=std)
+        elif isinstance(module, Glm5NextTextAttention):
+            init.zeros_(module.sinks)
+        elif isinstance(module, Glm5NextTextHyperConnection):
+            init.normal_(module.fn, mean=0.0, std=std)
+            init.zeros_(module.base)
+            init.ones_(module.scale)
+        elif isinstance(module, Glm5NextTextHyperHead):
+            init.normal_(module.hc_fn, mean=0.0, std=std)
+            init.zeros_(module.hc_base)
+            init.ones_(module.hc_scale)
+        elif isinstance(module, (Glm5NextTextHCACompressor, Glm5NextTextCSACompressor, Glm5NextTextIndexer)):
+            init.zeros_(module.position_bias)
+        elif isinstance(module, Glm5NextTextRotaryEmbedding):
+            for layer_type in module.layer_types:
+                rope_init_fn = module.compute_default_rope_parameters
+                if module.rope_type[layer_type] != "default":
+                    rope_init_fn = ROPE_INIT_FUNCTIONS[module.rope_type[layer_type]]
+                curr_inv_freq, _ = rope_init_fn(module.config, layer_type=layer_type)
+                init.copy_(getattr(module, f"{layer_type}_inv_freq"), curr_inv_freq)
+                init.copy_(getattr(module, f"{layer_type}_original_inv_freq"), curr_inv_freq)
+
+
+@auto_docstring
+class Glm5NextTextModel(Glm5NextTextPreTrainedModel, Glm5NextPreTrainedModel):
+    config: Glm5NextTextConfig
+
+    def __init__(self, config):
         super().__init__(config)
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
 
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
         self.layers = nn.ModuleList(
-            [Glm5NextDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+            [Glm5NextTextDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
-        self.norm = Glm5NextRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.rotary_emb = Glm5NextRotaryEmbedding(config=config)
+        self.norm = Glm5NextTextRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.gradient_checkpointing = False
+        self.hc_head = Glm5NextTextHyperHead()
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1429,60 +1815,222 @@ class Glm5NextModel(Glm5NextPreTrainedModel):
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
-        if inputs_embeds is None:
-            inputs_embeds: torch.Tensor = self.embed_tokens(input_ids)
-
         if use_cache and past_key_values is None:
             past_key_values = DynamicCache(config=self.config)
 
+        if inputs_embeds is None:
+            inputs_embeds = self.embed_tokens(input_ids)
+
         if position_ids is None:
-            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
-            position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
+            past_seen = past_key_values.get_seq_length() if past_key_values is not None else 0
+            position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen
             position_ids = position_ids.unsqueeze(0)
 
-        hidden_states = inputs_embeds
-        position_embeddings = self.rotary_emb(hidden_states, position_ids=position_ids)
-
+        # TODO: masks change based on the indexer or not
         if not isinstance(causal_mask_mapping := attention_mask, dict):
-            attention_mask = create_recurrent_attention_mask(
-                config=self.config,
-                inputs_embeds=inputs_embeds,
-                attention_mask=attention_mask,
-                past_key_values=past_key_values,
-            )
-            # Guarantee the mask to exist for the indexer
-            if attention_mask is None:
-                attention_mask = torch.ones(
-                    inputs_embeds.shape[0],
-                    inputs_embeds.shape[1],
-                    dtype=torch.bool,
-                    device=inputs_embeds.device,
-                )
-
+            # Prepare mask arguments
+            mask_kwargs = {
+                "config": self.config,
+                "inputs_embeds": inputs_embeds,
+                "attention_mask": attention_mask,
+                "past_key_values": past_key_values,
+                "position_ids": position_ids,
+            }
+            # Create the masks
             causal_mask_mapping = {
-                # The model creates its mask based on the topk indices so we only need to know where the padding is
-                "deepseek_sparse_attention": attention_mask,
-                "linear_attention": attention_mask,
+                "full_attention": create_causal_mask(**mask_kwargs),
+                "linear_attention": create_recurrent_attention_mask(**mask_kwargs),
             }
 
-        topk_indices = None
+        hidden_states = inputs_embeds.unsqueeze(2).expand(-1, -1, self.config.hc_mult, -1).contiguous()
+
+        # Key change: NoPE
         for i, decoder_layer in enumerate(self.layers[: self.config.num_hidden_layers]):
-            hidden_states, topk_indices = decoder_layer(
+            hidden_states = decoder_layer(
                 hidden_states,
                 attention_mask=causal_mask_mapping[self.config.layer_types[i]],
-                position_embeddings=position_embeddings,
                 position_ids=position_ids,
+                position_embeddings=None,
+                input_ids=input_ids,
                 past_key_values=past_key_values,
-                use_cache=use_cache,
-                prev_topk_indices=topk_indices,
                 **kwargs,
             )
 
-        hidden_states = self.norm(hidden_states)
+        hidden_states = self.norm(self.hc_head(hidden_states))
+        return MoeModelOutputWithPast(last_hidden_state=hidden_states, past_key_values=past_key_values)
 
-        return MoeModelOutputWithPast(
-            last_hidden_state=hidden_states,
+
+@auto_docstring
+class Glm5NextModel(Glm5NextPreTrainedModel):
+    base_model_prefix = "model"
+    # Reference: fix gemma3 grad acc #37208
+    accepts_loss_kwargs = False
+    config: Glm5NextConfig
+
+    def __init__(self, config):
+        super().__init__(config)
+        self.visual = AutoModel.from_config(config.vision_config)
+        self.language_model = Glm5NextTextModel._from_config(config.text_config)
+
+        # Initialize weights and apply final processing
+        self.post_init()
+
+    @accepts_precomputed_kwargs(modality="video")
+    @can_return_tuple
+    @auto_docstring
+    def get_video_features(
+        self,
+        pixel_values_videos: torch.FloatTensor,
+        video_grid_thw: torch.LongTensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutputWithPast:
+        r"""
+        pixel_values_videos (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
+            The tensors corresponding to the input videos.
+        video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
+            The temporal, height and width of feature shape of each video in LLM.
+        """
+        # Same as in `Glm46V`
+        # reshape video_grid_thw -> [b, 3] -> [1, h, w] * frames
+        t = video_grid_thw[:, 0]
+        hw = video_grid_thw[:, 1:]
+        # repeat each (h,w) row `t` times
+        flattened_hw = torch.repeat_interleave(hw, t, dim=0)
+        prefix_ones = video_grid_thw.new_ones(flattened_hw.shape[0], 1)
+        flattened_video_grid_thw = torch.cat([prefix_ones, flattened_hw], dim=1)
+
+        pixel_values_videos = pixel_values_videos.type(self.visual.dtype)
+        vision_outputs = self.visual(pixel_values_videos, grid_thw=flattened_video_grid_thw, **kwargs)
+        split_sizes = (video_grid_thw.prod(-1) // self.visual.spatial_merge_size**2).tolist()
+        vision_outputs.pooler_output = torch.split(vision_outputs.pooler_output, split_sizes)
+        return vision_outputs
+
+    @accepts_precomputed_kwargs(modality="image")
+    @can_return_tuple
+    @auto_docstring
+    def get_image_features(
+        self,
+        pixel_values: torch.FloatTensor,
+        image_grid_thw: torch.LongTensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutputWithPooling:
+        r"""
+        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
+            The tensors corresponding to the input images.
+        image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
+            The temporal, height and width of feature shape of each image in LLM.
+        """
+        pixel_values = pixel_values.type(self.visual.dtype)
+        vision_outputs = self.visual(pixel_values, grid_thw=image_grid_thw, **kwargs)
+        split_sizes = (image_grid_thw.prod(-1) // self.visual.spatial_merge_size**2).tolist()
+        image_embeds = torch.split(vision_outputs.pooler_output, split_sizes)
+        vision_outputs.pooler_output = image_embeds
+
+        return vision_outputs
+
+    def get_placeholder_mask(
+        self,
+        input_ids: torch.LongTensor,
+        inputs_embeds: torch.FloatTensor,
+        image_features: torch.FloatTensor | None = None,
+        video_features: torch.FloatTensor | None = None,
+    ):
+        """
+        Obtains multimodal placeholder mask from `input_ids` or `inputs_embeds`, and checks that the placeholder token count is
+        equal to the length of multimodal features. If the lengths are different, an error is raised.
+        """
+        if input_ids is None:
+            special_image_mask = inputs_embeds == self.get_input_embeddings()(
+                torch.tensor(self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
+            )
+            special_image_mask = special_image_mask.all(-1)
+            special_video_mask = inputs_embeds == self.get_input_embeddings()(
+                torch.tensor(self.config.video_token_id, dtype=torch.long, device=inputs_embeds.device)
+            )
+            special_video_mask = special_video_mask.all(-1)
+        else:
+            # GLM 5 Next VL special_video_mask is special_image_mask
+            special_image_mask = input_ids == self.config.image_token_id
+            special_video_mask = input_ids == self.config.image_token_id
+
+        n_image_tokens = special_image_mask.sum()
+        special_image_mask = special_image_mask.unsqueeze(-1).to(inputs_embeds.device)
+        if image_features is not None:
+            torch_compilable_check(
+                n_image_tokens * inputs_embeds.shape[-1] == image_features.numel(),
+                f"Image features and image tokens do not match, tokens: {n_image_tokens}, features: {image_features.shape[0]}",
+            )
+
+        n_video_tokens = special_video_mask.sum()
+        special_video_mask = special_video_mask.unsqueeze(-1).to(inputs_embeds.device)
+        if video_features is not None:
+            torch_compilable_check(
+                n_video_tokens * inputs_embeds.shape[-1] == video_features.numel(),
+                f"Video features and video tokens do not match, tokens: {n_video_tokens}, features: {video_features.shape[0]}",
+            )
+        return special_image_mask, special_video_mask
+
+    @can_return_tuple
+    @auto_docstring
+    def forward(
+        self,
+        input_ids: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: Cache | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        use_cache: bool | None = None,
+        pixel_values: torch.Tensor | None = None,
+        pixel_values_videos: torch.FloatTensor | None = None,
+        image_grid_thw: torch.LongTensor | None = None,
+        video_grid_thw: torch.LongTensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutputWithPast:
+        r"""
+        image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
+            The temporal, height and width of feature shape of each image in LLM.
+        video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
+            The temporal, height and width of feature shape of each video in LLM.
+        """
+        if (input_ids is None) ^ (inputs_embeds is not None):
+            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
+
+        if inputs_embeds is None:
+            inputs_embeds = self.get_input_embeddings()(input_ids)
+
+        if pixel_values is not None:
+            image_embeds = self.get_image_features(pixel_values, image_grid_thw, **kwargs).pooler_output
+            image_embeds = torch.cat(image_embeds, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
+            image_mask, _ = self.get_placeholder_mask(
+                input_ids, inputs_embeds=inputs_embeds, image_features=image_embeds
+            )
+            inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_embeds)
+
+        if pixel_values_videos is not None:
+            video_embeds = self.get_video_features(pixel_values_videos, video_grid_thw, **kwargs).pooler_output
+            video_embeds = torch.cat(video_embeds, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
+            _, video_mask = self.get_placeholder_mask(
+                input_ids, inputs_embeds=inputs_embeds, video_features=video_embeds
+            )
+            inputs_embeds = inputs_embeds.masked_scatter(video_mask, video_embeds)
+
+        outputs = self.language_model(
+            input_ids=None,
+            position_ids=position_ids,
+            attention_mask=attention_mask,
             past_key_values=past_key_values,
+            inputs_embeds=inputs_embeds,
+            use_cache=use_cache,
+            **kwargs,
+        )
+
+        # Only change is the output type to Moe
+        return MoeModelOutputWithPast(
+            last_hidden_state=outputs.last_hidden_state,
+            past_key_values=outputs.past_key_values,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+            router_logits=outputs.router_logits,
         )
 
 
@@ -1568,23 +2116,54 @@ def load_balancing_loss_func(
     return overall_loss * num_experts
 
 
-@auto_docstring
-class Glm5NextForCausalLM(Glm5NextPreTrainedModel, GenerationMixin):
-    _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
-    _tp_plan = {"lm_head": "colwise_gather_output"}
-    _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
+class Glm5NextForConditionalGeneration(Glm5NextPreTrainedModel, GenerationMixin):
+    """
+    Main Glm5Next conditional generation class.
+    """
+
+    _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
+    # Reference: fix gemma3 grad acc #37208
+    accepts_loss_kwargs = False
 
     def __init__(self, config):
         super().__init__(config)
         self.model = Glm5NextModel(config)
-        self.vocab_size = config.vocab_size
-        self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
-        self.router_aux_loss_coef = config.router_aux_loss_coef
-        self.num_experts = config.num_local_experts
-        self.num_experts_per_tok = config.num_experts_per_tok
+        self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
+        self.router_aux_loss_coef = config.text_config.router_aux_loss_coef
+        self.num_experts = config.text_config.num_local_experts
+        self.num_experts_per_tok = config.text_config.num_experts_per_tok
 
-        # Initialize weights and apply final processing
         self.post_init()
+
+    @auto_docstring
+    def get_video_features(
+        self,
+        pixel_values_videos: torch.FloatTensor,
+        video_grid_thw: torch.LongTensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutputWithPooling:
+        r"""
+        pixel_values_videos (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
+            The tensors corresponding to the input videos.
+        video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
+            The temporal, height and width of feature shape of each video in LLM.
+        """
+        return self.model.get_video_features(pixel_values_videos, video_grid_thw, **kwargs)
+
+    @auto_docstring
+    def get_image_features(
+        self,
+        pixel_values: torch.FloatTensor,
+        image_grid_thw: torch.LongTensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutputWithPooling:
+        r"""
+        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
+            The tensors corresponding to the input images.
+        image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
+            The temporal, height and width of feature shape of each image in LLM.
+        """
+        return self.model.get_image_features(pixel_values, image_grid_thw, **kwargs)
 
     @can_return_tuple
     @auto_docstring
@@ -1597,41 +2176,63 @@ class Glm5NextForCausalLM(Glm5NextPreTrainedModel, GenerationMixin):
         inputs_embeds: torch.FloatTensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
+        pixel_values: torch.Tensor | None = None,
+        pixel_values_videos: torch.FloatTensor | None = None,
+        image_grid_thw: torch.LongTensor | None = None,
+        video_grid_thw: torch.LongTensor | None = None,
         output_router_logits: bool | None = None,
+        mm_token_type_ids: torch.IntTensor | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> MoeCausalLMOutputWithPast:
+    ) -> tuple | MoeCausalLMOutputWithPast:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
             config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
             (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
+        image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
+            The temporal, height and width of feature shape of each image in LLM.
+        video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
+            The temporal, height and width of feature shape of each video in LLM.
 
         Example:
 
         ```python
-        >>> from transformers import AutoTokenizer, Glm5NextForCausalLM
+        >>> from transformers import AutoProcessor, Glm5NextForConditionalGeneration
+        >>> import torch
 
-        >>> model = Glm5NextForCausalLM.from_pretrained("zai-org/GLM-5-Next")
-        >>> tokenizer = AutoTokenizer.from_pretrained("zai-org/GLM-5-Next")
+        >>> model = Glm5NextForConditionalGeneration.from_pretrained("zai-org/GLM-5-Next")
+        >>> processor = AutoProcessor.from_pretrained("zai-org/GLM-5-Next")
 
-        >>> prompt = "Hey, are you conscious? Can you talk to me?"
-        >>> inputs = tokenizer(prompt, return_tensors="pt")
-
-        >>> # Generate
-        >>> generate_ids = model.generate(inputs.input_ids, max_length=30)
-        >>> tokenizer.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
-        ```"""
+        >>> messages = [
+        ...     {
+        ...         "role": "user",
+        ...         "content": [
+        ...             {"type": "image", "image": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"},
+        ...             {"type": "text", "text": "Describe the image."},
+        ...         ],
+        ...     }
+        ... ]
+        >>> inputs = processor.apply_chat_template(
+        ...     messages, tokenize=True, add_generation_prompt=True, return_dict=True, return_tensors="pt"
+        ... )
+        >>> inputs = {k: v.to(model.device) if isinstance(v, torch.Tensor) else v for k, v in inputs.items()}
+        >>> generated_ids = model.generate(**inputs, max_new_tokens=64)
+        ```
+        """
 
         output_router_logits = (
-            output_router_logits if output_router_logits is not None else self.config.output_router_logits
+            output_router_logits if output_router_logits is not None else self.config.text_config.output_router_logits
         )
 
-        # decoder outputs consists of (dec_features, layer_state, dec_hidden, dec_attn)
-        outputs: MoeModelOutputWithPast = self.model(
+        outputs = self.model(
             input_ids=input_ids,
-            attention_mask=attention_mask,
+            pixel_values=pixel_values,
+            pixel_values_videos=pixel_values_videos,
+            image_grid_thw=image_grid_thw,
+            video_grid_thw=video_grid_thw,
             position_ids=position_ids,
+            attention_mask=attention_mask,
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
@@ -1640,13 +2241,14 @@ class Glm5NextForCausalLM(Glm5NextPreTrainedModel, GenerationMixin):
         )
 
         hidden_states = outputs.last_hidden_state
-        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
         slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
         logits = self.lm_head(hidden_states[:, slice_indices, :])
 
         loss = None
         if labels is not None:
-            loss = self.loss_function(logits, labels, self.vocab_size, **kwargs)
+            loss = self.loss_function(
+                logits=logits, labels=labels, vocab_size=self.config.text_config.vocab_size, **kwargs
+            )
 
         aux_loss = None
         if output_router_logits:
@@ -1669,29 +2271,185 @@ class Glm5NextForCausalLM(Glm5NextPreTrainedModel, GenerationMixin):
             router_logits=outputs.router_logits,
         )
 
-    @staticmethod
-    def create_masks_for_generate(config, inputs_embeds, attention_mask, past_key_values, **_):
-        # We only use the base 2D mask as the indexer is reliant on the padding, not the expanded masks
-        # I.e. 4D masks are build afterwards after subsets have been selected in the indexer
-        #
-        # Linear attention can reuse the mask as is as well then making the layer type difference only
-        # be necessary for the cache
-        attention_mask = create_recurrent_attention_mask(
-            config=config.get_text_config(),
-            inputs_embeds=inputs_embeds,
-            attention_mask=attention_mask,
+    def prepare_inputs_for_generation(
+        self,
+        input_ids,
+        past_key_values=None,
+        attention_mask=None,
+        inputs_embeds=None,
+        position_ids=None,
+        use_cache=True,
+        pixel_values=None,
+        pixel_values_videos=None,
+        image_grid_thw=None,
+        video_grid_thw=None,
+        is_first_iteration=False,
+        **kwargs,
+    ):
+        model_inputs = super().prepare_inputs_for_generation(
+            input_ids,
             past_key_values=past_key_values,
+            attention_mask=attention_mask,
+            inputs_embeds=inputs_embeds,
+            position_ids=position_ids,
+            pixel_values=pixel_values,
+            pixel_values_videos=pixel_values_videos,
+            image_grid_thw=image_grid_thw,
+            video_grid_thw=video_grid_thw,
+            use_cache=use_cache,
+            is_first_iteration=is_first_iteration,
+            **kwargs,
         )
-        # Guarantee the mask to exist for the indexer
-        if attention_mask is None:
-            attention_mask = torch.ones(
-                inputs_embeds.shape[0],
-                inputs_embeds.shape[1],
-                dtype=torch.bool,
-                device=inputs_embeds.device,
+
+        if not is_first_iteration and use_cache:
+            model_inputs["pixel_values"] = None
+            model_inputs["pixel_values_videos"] = None
+
+        return model_inputs
+
+    def _get_image_nums_and_video_nums(
+        self,
+        input_ids: torch.LongTensor | None,
+        inputs_embeds: torch.Tensor | None = None,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        """
+        Get the number of images and videos for each sample to calculate the separation length of the sample tensor.
+        These parameters are not passed through the processor to avoid unpredictable impacts from interface modifications.
+
+        Args:
+            input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
+                Indices of input sequence tokens in the vocabulary.
+
+        Returns:
+            image_nums (`torch.LongTensor` of shape `(batch_size, num_images_sample)`)
+            video_nums (`torch.LongTensor` of shape `(batch_size, num_videos_sample)`)
+        """
+
+        if inputs_embeds is not None:
+            is_image = (
+                inputs_embeds
+                == self.get_input_embeddings()(
+                    torch.tensor(self.config.image_start_token_id, dtype=torch.long, device=inputs_embeds.device)
+                )
+            )[..., 0]
+            is_video_start = (
+                inputs_embeds
+                == self.get_input_embeddings()(
+                    torch.tensor(self.config.video_start_token_id, dtype=torch.long, device=inputs_embeds.device)
+                )
+            )[..., 0]
+            is_video_end = (
+                inputs_embeds
+                == self.get_input_embeddings()(
+                    torch.tensor(self.config.video_end_token_id, dtype=torch.long, device=inputs_embeds.device)
+                )
+            )[..., 0]
+        else:
+            is_image = input_ids == self.config.image_start_token_id
+            is_video_start = input_ids == self.config.video_start_token_id
+            is_video_end = input_ids == self.config.video_end_token_id
+
+        # Cumulative sum to track if we're inside a video span
+        # We'll assume well-formed video tags (i.e. matching starts and ends)
+        video_level = torch.cumsum(is_video_start.int() - is_video_end.int(), dim=1)
+        inside_video = video_level > 0  # shape (batch_size, seq_length)
+
+        # Mask out image tokens that are inside video spans
+        standalone_images = is_image & (~inside_video)
+
+        # Count per batch
+        image_counts = standalone_images.sum(dim=1)
+        video_counts = is_video_start.sum(dim=1)
+
+        return image_counts, video_counts
+
+    def _expand_inputs_for_generation(
+        self,
+        expand_size: int = 1,
+        is_encoder_decoder: bool = False,
+        input_ids: torch.LongTensor | None = None,
+        **model_kwargs,
+    ) -> tuple[torch.LongTensor, dict[str, Any]]:
+        # Overwritten -- Support for expanding tensors without a batch size dimension
+        # e.g., pixel_values, image_grid_thw, pixel_values_videos, video_grid_thw, second_per_grid_t
+        # pixel_values.shape[0] is sum(seqlen_images for samples)
+        # image_grid_thw.shape[0] is sum(num_images for samples)
+
+        if expand_size == 1:
+            return input_ids, model_kwargs
+
+        visual_keys = ["pixel_values", "image_grid_thw", "pixel_values_videos", "video_grid_thw", "second_per_grid_ts"]
+
+        def _expand_dict_for_generation_visual(dict_to_expand):
+            image_grid_thw = model_kwargs.get("image_grid_thw", None)
+            video_grid_thw = model_kwargs.get("video_grid_thw", None)
+            image_nums, video_nums = self._get_image_nums_and_video_nums(
+                input_ids, inputs_embeds=model_kwargs.get("inputs_embeds", None)
             )
 
-        return {"deepseek_sparse_attention": attention_mask, "linear_attention": attention_mask}
+            def _repeat_interleave_samples(x, lengths, repeat_times):
+                samples = torch.split(x, lengths)
+                repeat_args = [repeat_times] + [1] * (x.dim() - 1)
+                result = torch.cat([sample.repeat(*repeat_args) for sample in samples], dim=0)
+                return result
+
+            for key in dict_to_expand:
+                if key == "pixel_values":
+                    # split images into samples
+                    samples = torch.split(image_grid_thw, list(image_nums))
+                    # compute the sequence length of images for each sample
+                    lengths = [torch.prod(sample, dim=1).sum() for sample in samples]
+                    dict_to_expand[key] = _repeat_interleave_samples(
+                        dict_to_expand[key], lengths=lengths, repeat_times=expand_size
+                    )
+                elif key == "image_grid_thw":
+                    # get the num of images for each sample
+                    lengths = list(image_nums)
+                    dict_to_expand[key] = _repeat_interleave_samples(
+                        dict_to_expand[key], lengths=lengths, repeat_times=expand_size
+                    )
+                elif key == "pixel_values_videos":
+                    samples = torch.split(video_grid_thw, list(video_nums))
+                    lengths = [torch.prod(sample, dim=1).sum() for sample in samples]
+                    dict_to_expand[key] = _repeat_interleave_samples(
+                        dict_to_expand[key], lengths=lengths, repeat_times=expand_size
+                    )
+                elif key == "video_grid_thw":
+                    lengths = list(video_nums)
+                    dict_to_expand[key] = _repeat_interleave_samples(
+                        dict_to_expand[key], lengths=lengths, repeat_times=expand_size
+                    )
+                elif key == "second_per_grid_ts":
+                    dict_to_expand[key] = _repeat_interleave_samples(
+                        dict_to_expand[key], lengths=list(video_nums), repeat_times=expand_size
+                    )
+            return dict_to_expand
+
+        def _expand_dict_for_generation(dict_to_expand):
+            for key in dict_to_expand:
+                if key == "position_ids" and dict_to_expand[key].ndim == 3:
+                    dict_to_expand[key] = dict_to_expand[key].repeat_interleave(expand_size, dim=1)
+                elif (
+                    dict_to_expand[key] is not None
+                    and isinstance(dict_to_expand[key], torch.Tensor)
+                    and key not in visual_keys
+                ):
+                    dict_to_expand[key] = dict_to_expand[key].repeat_interleave(expand_size, dim=0)
+            return dict_to_expand
+
+        model_kwargs = _expand_dict_for_generation_visual(model_kwargs)
+
+        if input_ids is not None:
+            input_ids = input_ids.repeat_interleave(expand_size, dim=0)
+
+        model_kwargs = _expand_dict_for_generation(model_kwargs)
+
+        if is_encoder_decoder:
+            if model_kwargs.get("encoder_outputs") is None:
+                raise ValueError("If `is_encoder_decoder` is True, make sure that `encoder_outputs` is defined.")
+            model_kwargs["encoder_outputs"] = _expand_dict_for_generation(model_kwargs["encoder_outputs"])
+
+        return input_ids, model_kwargs
 
 
-__all__ = ["Glm5NextPreTrainedModel", "Glm5NextModel", "Glm5NextForCausalLM"]
+__all__ = ["Glm5NextPreTrainedModel", "Glm5NextTextModel", "Glm5NextModel", "Glm5NextForConditionalGeneration"]

@@ -22,44 +22,39 @@ from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
 from ...utils import auto_docstring
+from ..auto import CONFIG_MAPPING, AutoConfig
 
 
 @auto_docstring(checkpoint="zai-org/GLM-5-Next")
 @strict
-class Glm5NextConfig(PreTrainedConfig):
+class Glm5NextTextConfig(PreTrainedConfig):
     r"""
     n_group (`int`, *optional*, defaults to 1):
         Number of routed expert groups.
     mlp_layer_types (`list[str]`, *optional*):
         Per-layer feed-forward schedule. Values are `"dense"` or `"sparse"`.
-    index_topk (`int`, *optional*, defaults to 2048):
-        Number of sparse-attention positions selected by the DSA indexer.
-    index_head_dim (`int`, *optional*, defaults to 128):
-        DSA indexer projection head dimension.
-    index_n_heads (`int`, *optional*, defaults to 16):
-        Number of DSA indexer heads.
     layer_types (`list[str]`, *optional*):
         Per-layer attention cache schedule. Values are `"linear_attention"` for
-        KDA layers and `"deepseek_sparse_attention"` for MLA layers.
-    indexer_types (`list[str]`, *optional*):
-        Per-layer DSA indexer mode. Values are `"full"` or `"shared"`.
-    swiglu_limit (`float`, *optional*, defaults to None):
+        KDA layers and `"full_attention"` for MLA layers.
+    swiglu_limit (`float`, *optional*, defaults to 10.0):
         Clamp limit applied to SwiGLU gate/up projections.
-    linear_head_dim (`int`, *optional*, defaults to 64):
+    linear_head_dim (`int`, *optional*, defaults to 128):
         Dimension of each head in linear attention.
-    linear_num_heads (`int`, *optional*, defaults to 40):
+    linear_num_heads (`int`, *optional*, defaults to 64):
         Number of heads used in linear attention layers.
     linear_conv_kernel_dim (`int`, *optional*, defaults to 4):
         Kernel size of the convolution used in linear attention layers.
-    linear_lower_bound (`float`, *optional*, defaults to None):
+    linear_lower_bound (`float`, *optional*, defaults to -5.0):
         Whether the forget gate has a lower bound to apply to the decay.
-    index_kpool (`int`, *optional*, defaults to 16):
-        Pool size of the compressed token groups selected by the DSA indexer.
-    index_kpool_always_select_tail (`bool`, *optional*, defaults to `True`):
-        Whether the incomplete KPool tail is always included in sparse attention.
+    hc_mult (`int`, *optional*, defaults to 4):
+        Number of MHC residual streams.
+    hc_eps (`float`, *optional*, defaults to 1e-6):
+        Numerical floor used by MHC Sinkhorn normalization.
+    hc_sinkhorn_iters (`int`, *optional*, defaults to 20):
+        Number of Sinkhorn iterations used by MHC routing.
     """
 
-    model_type = "glm5_next"
+    model_type = "glm5_next_vl_text"
     keys_to_ignore_at_inference = ["past_key_values"]
 
     base_model_tp_plan = {
@@ -92,29 +87,27 @@ class Glm5NextConfig(PreTrainedConfig):
     attribute_map = {"num_local_experts": "n_routed_experts"}
 
     vocab_size: int = 154880
-
-    hidden_size: int = 2048
-    intermediate_size: int = 6144
-
-    moe_intermediate_size: int = 1024
+    hidden_size: int = 4096
+    intermediate_size: int = 12288
+    moe_intermediate_size: int = 2048
 
     num_hidden_layers: int = 45
-    num_attention_heads: int = 32
-    num_key_value_heads: int = 32
+    num_attention_heads: int = 64
+    num_key_value_heads: int = 64
     n_shared_experts: int = 1
-    n_routed_experts: int = 256
+    n_routed_experts: int = 288
     routed_scaling_factor: float = 2.5
     kv_lora_rank: int = 512
-    q_lora_rank: int = 1024
-    qk_rope_head_dim: int = 64
+    q_lora_rank: int = 1536
+    qk_rope_head_dim: int = 0
     v_head_dim: int = 256
-    qk_nope_head_dim: int = 192
+    qk_nope_head_dim: int = 256
     n_group: int = 1
     topk_group: int = 1
-    num_experts_per_tok: int = 6
+    num_experts_per_tok: int = 8
     norm_topk_prob: bool = True
     hidden_act: str = "silu"
-    max_position_embeddings: int = 1_048_676
+    max_position_embeddings: int = 4096  # TODO: check this value on relase
     initializer_range: float = 0.02
     rms_norm_eps: float = 1e-5
     use_cache: bool = True
@@ -123,26 +116,20 @@ class Glm5NextConfig(PreTrainedConfig):
     bos_token_id: int | None = None
     eos_token_id: int | list[int] | None = None
     tie_word_embeddings: bool = False
-    rope_parameters: dict | None = None
     mlp_layer_types: list[str] | None = None
     attention_bias: bool = False
     attention_dropout: float | int = 0.0
-    index_topk: int = 2048
-    index_head_dim: int = 128
-
-    index_n_heads: int = 16
-    head_dim: int = 64
+    head_dim: int = 0
     layer_types: list[str] | None = None
-    # `"full"` runs the indexer, `"shared"` reuses the previous full layer's index mask.
-    indexer_types: list[str] | None = None
-
-    swiglu_limit: float | None = None
-    linear_head_dim: int = 64
-    linear_num_heads: int = 40
+    base_config_key = "text_config"
+    swiglu_limit: float | None = 10.0
+    linear_head_dim: int = 128
+    linear_num_heads: int = 64
     linear_conv_kernel_dim: int = 4
-    linear_lower_bound: float | None = None
-    index_kpool: int = 16
-    index_kpool_always_select_tail: bool = True
+    linear_lower_bound: float | None = -5.0
+    hc_mult: int = 4
+    hc_eps: float = 1e-6
+    hc_sinkhorn_iters: int = 20
     output_router_logits: bool = False
     router_aux_loss_coef: float = 0.001
 
@@ -158,29 +145,9 @@ class Glm5NextConfig(PreTrainedConfig):
         if self.layer_types is None:
             kda_layers = [idx for idx in range(self.num_hidden_layers) if idx % 4 != 3]
             self.layer_types = [
-                "linear_attention" if layer_idx in kda_layers else "deepseek_sparse_attention"
+                "linear_attention" if layer_idx in kda_layers else "full_attention"
                 for layer_idx in range(self.num_hidden_layers)
             ]
-
-        # Convert to dsa layer from full attention
-        self.layer_types = [
-            "deepseek_sparse_attention" if layer_type == "full_attention" else layer_type
-            for layer_type in self.layer_types
-        ]
-
-        # Per-layer indexer mode: a pattern (e.g. `"FSSF..."`) overrides the freq/offset schedule.
-        if self.indexer_types is None:
-            pattern = kwargs.get("index_topk_pattern")
-            if pattern is not None:
-                self.indexer_types = (
-                    [{"F": "full", "S": "shared"}[c] for c in pattern] if isinstance(pattern, str) else list(pattern)
-                )
-            else:
-                freq = max(kwargs.get("index_topk_freq", 1), 1)
-                offset = kwargs.get("index_skip_topk_offset", 2)
-                self.indexer_types = [
-                    "full" if (max(i - offset + 1, 0) % freq) == 0 else "shared" for i in range(self.num_hidden_layers)
-                ]
 
         # Convert dict to attributes (if given)
         linear_attn_dict = kwargs.pop("linear_attn_config", None)
@@ -201,22 +168,60 @@ class Glm5NextConfig(PreTrainedConfig):
 
         super().__post_init__(**kwargs)
 
-    def validate_architecture(self):
-        """Part of `@strict`-powered validation. Validates the architecture of the config."""
-        if self.num_attention_heads % self.num_key_value_heads != 0:
-            raise ValueError(
-                f"num_attention_heads ({self.num_attention_heads}) must be divisible by "
-                f"num_key_value_heads ({self.num_key_value_heads})."
-            )
 
-        if self.index_kpool < 1:
-            raise ValueError(f"index_kpool must be positive, got {self.index_kpool}.")
+@auto_docstring(checkpoint="zai-org/GLM-5-Next")
+@strict
+class Glm5NextConfig(PreTrainedConfig):
+    r"""
+    image_token_id (`int`, *optional*, defaults to 154854):
+        The image token index to encode the image prompt.
+    video_token_id (`int`, *optional*, defaults to 154855):
+        The video token index to encode the video prompt.
+    image_start_token_id (`int`, *optional*, defaults to 154830):
+        The image start token index to encode the start of image.
+    image_end_token_id (`int`, *optional*, defaults to 154831):
+        The image end token index to encode the end of image.
+    video_start_token_id (`int`, *optional*, defaults to 154832):
+        The video start token index to encode the start of video.
+    video_end_token_id (`int`, *optional*, defaults to 154833):
+        The video end token index to encode the end of video.
 
-        if self.index_topk % self.index_kpool != 0:
-            raise ValueError(f"index_topk ({self.index_topk}) must be divisible by index_kpool ({self.index_kpool}).")
+    ```python
+    >>> from transformers import Glm5NextConfig
 
-        if self.q_lora_rank is None:
-            raise ValueError("For DSA usage in the attention layers, the `q_lora_rank` is strictly required!")
+    >>> # Initializing a GLM-5-Next style configuration
+    >>> configuration = Glm5NextConfig()
+    ```"""
+
+    model_type = "glm5_next_vl"
+    sub_configs = {"vision_config": AutoConfig, "text_config": Glm5NextTextConfig}
+    keys_to_ignore_at_inference = ["past_key_values"]
+
+    text_config: dict | PreTrainedConfig | None = None
+    vision_config: dict | PreTrainedConfig | None = None
+    image_token_id: int = 154854
+    video_token_id: int = 154855
+    image_start_token_id: int = 154830
+    image_end_token_id: int = 154831
+    video_start_token_id: int = 154832
+    video_end_token_id: int = 154833
+    tie_word_embeddings: bool = False
+
+    def __post_init__(self, **kwargs):
+        if isinstance(self.vision_config, dict):
+            self.vision_config["model_type"] = self.vision_config.get("model_type", "glm_ocr_vision")
+            self.vision_config = CONFIG_MAPPING[self.vision_config["model_type"]](**self.vision_config)
+        elif self.vision_config is None:
+            self.vision_config = CONFIG_MAPPING["glm_ocr_vision"]()
+
+        if isinstance(self.text_config, dict):
+            self.text_config = self.sub_configs["text_config"](**self.text_config)
+        elif self.text_config is None:
+            # Flat (text-only) GLM-5-Next checkpoints store the text fields at the
+            # top level; forward them so `text_config` is populated for BC.
+            self.text_config = self.sub_configs["text_config"](**kwargs)
+
+        super().__post_init__(**kwargs)
 
 
-__all__ = ["Glm5NextConfig"]
+__all__ = ["Glm5NextConfig", "Glm5NextTextConfig"]

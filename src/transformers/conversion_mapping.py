@@ -650,6 +650,12 @@ def _build_checkpoint_conversion_mapping():
                 source_patterns=r"self_attn\.A_log",
                 target_patterns=r"self_attn.forget_gate.A_log",
             ),
+            WeightRenaming(source_patterns="hc_attn_fn", target_patterns="attn_hc.fn"),
+            WeightRenaming(source_patterns="hc_attn_base", target_patterns="attn_hc.base"),
+            WeightRenaming(source_patterns="hc_attn_scale", target_patterns="attn_hc.scale"),
+            WeightRenaming(source_patterns="hc_ffn_fn", target_patterns="ffn_hc.fn"),
+            WeightRenaming(source_patterns="hc_ffn_base", target_patterns="ffn_hc.base"),
+            WeightRenaming(source_patterns="hc_ffn_scale", target_patterns="ffn_hc.scale"),
             WeightConverter(
                 source_patterns=[
                     "mlp.experts.*.gate_proj.weight",
@@ -1845,16 +1851,6 @@ def _build_checkpoint_conversion_mapping():
     mapping["laguna"] += [
         WeightRenaming("mlp.experts.e_score_correction_bias", "mlp.gate.e_score_correction_bias"),
         WeightRenaming("mlp.shared_expert.", "mlp.shared_experts."),
-    ]
-
-    mapping["glm5_next_vl"] = mapping["glm5_next"].copy()
-    mapping["glm5_next_vl"] += [
-        WeightRenaming(source_patterns="hc_attn_fn", target_patterns="attn_hc.fn"),
-        WeightRenaming(source_patterns="hc_attn_base", target_patterns="attn_hc.base"),
-        WeightRenaming(source_patterns="hc_attn_scale", target_patterns="attn_hc.scale"),
-        WeightRenaming(source_patterns="hc_ffn_fn", target_patterns="ffn_hc.fn"),
-        WeightRenaming(source_patterns="hc_ffn_base", target_patterns="ffn_hc.base"),
-        WeightRenaming(source_patterns="hc_ffn_scale", target_patterns="ffn_hc.scale"),
     ]
 
     mapping["MtpModel"] = [

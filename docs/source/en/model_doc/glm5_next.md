@@ -45,9 +45,18 @@ The original code can be found [here](<INSERT LINK TO GITHUB REPO HERE>).
 
 [[autodoc]] Glm5NextConfig
 
+## Glm5NextTextConfig
+
+[[autodoc]] Glm5NextTextConfig
+
 ## Glm5NextPreTrainedModel
 
 [[autodoc]] Glm5NextPreTrainedModel
+    - forward
+
+## Glm5NextTextModel
+
+[[autodoc]] Glm5NextTextModel
     - forward
 
 ## Glm5NextModel
@@ -55,7 +64,7 @@ The original code can be found [here](<INSERT LINK TO GITHUB REPO HERE>).
 [[autodoc]] Glm5NextModel
     - forward
 
-## Glm5NextForCausalLM
+## Glm5NextForConditionalGeneration
 
-[[autodoc]] Glm5NextForCausalLM
+[[autodoc]] Glm5NextForConditionalGeneration
     - forward
