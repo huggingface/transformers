@@ -188,9 +188,6 @@ class AssistedCandidateGenerator(CandidateGenerator):
             processor for processor in self.logits_processor if not isinstance(processor, MinLengthLogitsProcessor)
         ]
 
-        # We need to roll back the cache in assisted generation, only DynamicCache is supported
-        self.generation_config.cache_implementation = "dynamic_full"
-
         if (
             is_sklearn_available()
             and self.assistant_generation_config.assistant_confidence_threshold
@@ -304,10 +301,6 @@ class AssistedCandidateGenerator(CandidateGenerator):
                 self.assistant_kwargs, input_ids.shape[-1], self.assistant_model.config.is_encoder_decoder
             )
             self.assistant_kwargs = _prepare_token_type_ids(self.assistant_kwargs, input_ids.shape[-1])
-
-            # This unsets `dynamic_full`, needed to initialize a new cache for the assistant. After the first forward
-            # pass on each generation, we reuse the cache instead.
-            self.generation_config.cache_implementation = None
 
         return has_past_key_values
 
