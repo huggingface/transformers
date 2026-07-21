@@ -87,6 +87,8 @@ class EsmcTokenizer(TokenizersBackend):
             The beginning-of-sequence token (prepended to every sequence). When unset, uses cls_token.
         chain_break_token (`str`, *optional*, defaults to `"|"`):
             Token inserted between chains in multi-chain protein inputs.
+        extra_special_tokens (`list[str]`, *optional*):
+            Additional special tokens to register with the tokenizer (round-tripped from a saved config).
 
     Examples:
 
