@@ -35,11 +35,11 @@ from ...integrations import use_kernel_forward_from_hub, use_kernel_func_from_hu
 from ...masking_utils import create_causal_mask, create_masks_for_generate
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPast, BaseModelOutputWithPooling, ModelOutput
+from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPast, BaseModelOutputWithPooling
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging, torch_compilable_check
+from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple, logging, torch_compilable_check
 from ...utils.generic import maybe_autocast, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from .configuration_molmo2 import Molmo2AdapterConfig, Molmo2Config, Molmo2TextConfig, Molmo2VitConfig
@@ -414,27 +414,30 @@ class Molmo2VisionBackbone(PreTrainedModel):
 class Molmo2RotaryEmbedding(nn.Module):
     inv_freq: torch.Tensor  # fix linting for `register_buffer`
 
-    def __init__(self, config: Molmo2Config, device=None):
+    def __init__(self, config: Molmo2TextConfig):
         super().__init__()
         self.max_seq_len_cached = config.max_position_embeddings
         self.original_max_seq_len = config.max_position_embeddings
-
         self.config = config
-
-        self.rope_type = self.config.rope_parameters["rope_type"]
-        rope_init_fn: Callable = self.compute_default_rope_parameters
-        if self.rope_type != "default":
-            rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
-        inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
-
-        self.register_buffer("inv_freq", inv_freq, persistent=False)
-        self.register_buffer("original_inv_freq", inv_freq.clone(), persistent=False)
+        self.layer_types = sorted(set(config.rope_layer_types))
+        self.rope_type = {}
+        for layer_type in self.layer_types:
+            rope_parameters = config.rope_parameters[layer_type]
+            self.rope_type[layer_type] = rope_parameters["rope_type"]
+            rope_init_fn: Callable = self.compute_default_rope_parameters
+            if self.rope_type[layer_type] != "default":
+                rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type[layer_type]]
+            inv_freq, attention_scaling = rope_init_fn(self.config, layer_type=layer_type)
+            self.register_buffer(f"{layer_type}_inv_freq", inv_freq, persistent=False)
+            self.register_buffer(f"{layer_type}_original_inv_freq", inv_freq.clone(), persistent=False)
+            setattr(self, f"{layer_type}_attention_scaling", attention_scaling)
 
     @staticmethod
     def compute_default_rope_parameters(
-        config: Molmo2Config | None = None,
+        config: Molmo2TextConfig | None = None,
         device: Optional["torch.device"] = None,
         seq_len: int | None = None,
+        layer_type: str | None = None,
     ) -> tuple["torch.Tensor", float]:
         """
         Computes the inverse frequencies according to the original RoPE implementation
@@ -445,11 +448,16 @@ class Molmo2RotaryEmbedding(nn.Module):
                 The device to use for initialization of the inverse frequencies.
             seq_len (`int`, *optional*):
                 The current sequence length. Unused for this type of RoPE.
+            layer_type (`str`, *optional*):
+                The current layer type if the model has different RoPE parameters per type.
+                Should not be used unless `config.layer_types is not None`
+
         Returns:
             Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
             post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
         """
-        base = config.rope_parameters["rope_theta"]
+        # For backward compatibility standardize the `rope_parameters_dict` if it uses old format
+        base = config.rope_parameters[layer_type]["rope_theta"]
         dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
 
         attention_factor = 1.0  # Unused in this type of RoPE
@@ -462,16 +470,19 @@ class Molmo2RotaryEmbedding(nn.Module):
 
     @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
-    def forward(self, x, position_ids):
-        inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1).to(x.device)
+    def forward(self, x, position_ids, layer_type=None):
+        inv_freq = getattr(self, f"{layer_type}_inv_freq")
+        attention_scaling = getattr(self, f"{layer_type}_attention_scaling")
+
+        inv_freq_expanded = inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1).to(x.device)
         position_ids_expanded = position_ids[:, None, :].float()
 
         device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
         with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
             freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
             emb = torch.cat((freqs, freqs), dim=-1)
-            cos = emb.cos() * self.attention_scaling
-            sin = emb.sin() * self.attention_scaling
+            cos = emb.cos() * attention_scaling
+            sin = emb.sin() * attention_scaling
 
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
@@ -650,7 +661,6 @@ class Molmo2DecoderLayer(GradientCheckpointingLayer):
         super().__init__()
         self.config = config
         self.norm_after = config.norm_after
-
         self.self_attn = Molmo2Attention(config, layer_idx)
         self.attn_norm = Molmo2RMSNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.residual_dropout)
@@ -740,6 +750,14 @@ class Molmo2PreTrainedModel(PreTrainedModel):
             init.normal_(module.new_embedding, mean=0.0, std=std)
         elif isinstance(module, Molmo2VisionModel):
             init.normal_(module.positional_embedding, mean=0.0, std=std)
+        elif isinstance(module, Molmo2RotaryEmbedding):
+            for layer_type in module.layer_types:
+                rope_init_fn = module.compute_default_rope_parameters
+                if module.rope_type[layer_type] != "default":
+                    rope_init_fn = ROPE_INIT_FUNCTIONS[module.rope_type[layer_type]]
+                inv_freq, _ = rope_init_fn(module.config, layer_type=layer_type)
+                init.copy_(getattr(module, f"{layer_type}_inv_freq"), inv_freq)
+                init.copy_(getattr(module, f"{layer_type}_original_inv_freq"), inv_freq)
         else:
             super()._init_weights(module)
 
@@ -803,26 +821,31 @@ class Molmo2TextModel(Molmo2PreTrainedModel):
 
         # It may already have been prepared by e.g. `generate`
         if not isinstance(causal_mask_mapping := attention_mask, dict):
-            causal_mask_mapping = create_causal_mask(
-                config=self.config,
-                inputs_embeds=inputs_embeds,
-                attention_mask=attention_mask,
-                past_key_values=past_key_values,
-                position_ids=position_ids,
-            )
+            causal_mask_mapping = {
+                "full_attention": create_causal_mask(
+                    config=self.config,
+                    inputs_embeds=inputs_embeds,
+                    attention_mask=attention_mask,
+                    past_key_values=past_key_values,
+                    position_ids=position_ids,
+                )
+            }
 
         hidden_states = inputs_embeds
 
-        position_embeddings = self.rotary_emb(hidden_states, position_ids)
+        position_embeddings = {
+            layer_type: self.rotary_emb(hidden_states, position_ids, layer_type)
+            for layer_type in self.rotary_emb.layer_types
+        }
 
         for layer_idx, decoder_block in enumerate(self.blocks):
             hidden_states = decoder_block(
                 hidden_states,
-                attention_mask=causal_mask_mapping,
+                attention_mask=causal_mask_mapping[self.config.layer_types[layer_idx]],
                 position_ids=position_ids,
                 past_key_values=past_key_values,
                 use_cache=use_cache,
-                position_embeddings=position_embeddings,
+                position_embeddings=position_embeddings[self.config.rope_layer_types[layer_idx]],
                 **kwargs,
             )
 
@@ -979,7 +1002,7 @@ class Molmo2Model(Molmo2PreTrainedModel):
                 mask_kwargs["or_mask_function"] = token_type_ids_mask_function(
                     mm_token_type_ids.to(inputs_embeds.device)
                 )
-            causal_mask_mapping = create_causal_mask(**mask_kwargs)
+            causal_mask_mapping = {"full_attention": create_causal_mask(**mask_kwargs)}
 
         outputs = self.language_model(
             attention_mask=causal_mask_mapping,

@@ -41,6 +41,7 @@ from ...masking_utils import create_causal_mask, create_masks_for_generate
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling
+from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import ImagesKwargs, ProcessingKwargs, ProcessorMixin, Unpack, VideosKwargs
 from ...utils import (
@@ -55,10 +56,10 @@ from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ...video_processing_utils import BaseVideoProcessor
 from ...video_utils import VideoMetadata
+from ..gemma3.modeling_gemma3 import Gemma3RotaryEmbedding
 from ..llama.modeling_llama import (
     LlamaPreTrainedModel,
     LlamaRMSNorm,
-    LlamaRotaryEmbedding,
     apply_rotary_pos_emb,
     eager_attention_forward,
 )
@@ -1087,8 +1088,24 @@ class Molmo2VisionBackbone(PreTrainedModel):
         return pooled_features[valid_token]
 
 
-class Molmo2RotaryEmbedding(LlamaRotaryEmbedding):
-    pass
+class Molmo2RotaryEmbedding(Gemma3RotaryEmbedding):
+    def __init__(self, config: Molmo2TextConfig):
+        nn.Module.__init__(self)
+        self.max_seq_len_cached = config.max_position_embeddings
+        self.original_max_seq_len = config.max_position_embeddings
+        self.config = config
+        self.layer_types = sorted(set(config.rope_layer_types))
+        self.rope_type = {}
+        for layer_type in self.layer_types:
+            rope_parameters = config.rope_parameters[layer_type]
+            self.rope_type[layer_type] = rope_parameters["rope_type"]
+            rope_init_fn: Callable = self.compute_default_rope_parameters
+            if self.rope_type[layer_type] != "default":
+                rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type[layer_type]]
+            inv_freq, attention_scaling = rope_init_fn(self.config, layer_type=layer_type)
+            self.register_buffer(f"{layer_type}_inv_freq", inv_freq, persistent=False)
+            self.register_buffer(f"{layer_type}_original_inv_freq", inv_freq.clone(), persistent=False)
+            setattr(self, f"{layer_type}_attention_scaling", attention_scaling)
 
 
 class Molmo2RMSNorm(LlamaRMSNorm):
@@ -1226,7 +1243,6 @@ class Molmo2DecoderLayer(Phi3DecoderLayer):
         GradientCheckpointingLayer.__init__(self)
         self.config = config
         self.norm_after = config.norm_after
-
         self.self_attn = Molmo2Attention(config, layer_idx)
         self.attn_norm = Molmo2RMSNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.residual_dropout)
@@ -1314,6 +1330,14 @@ class Molmo2PreTrainedModel(LlamaPreTrainedModel):
             init.normal_(module.new_embedding, mean=0.0, std=std)
         elif isinstance(module, Molmo2VisionModel):
             init.normal_(module.positional_embedding, mean=0.0, std=std)
+        elif isinstance(module, Molmo2RotaryEmbedding):
+            for layer_type in module.layer_types:
+                rope_init_fn = module.compute_default_rope_parameters
+                if module.rope_type[layer_type] != "default":
+                    rope_init_fn = ROPE_INIT_FUNCTIONS[module.rope_type[layer_type]]
+                inv_freq, _ = rope_init_fn(module.config, layer_type=layer_type)
+                init.copy_(getattr(module, f"{layer_type}_inv_freq"), inv_freq)
+                init.copy_(getattr(module, f"{layer_type}_original_inv_freq"), inv_freq)
         else:
             super()._init_weights(module)
 
@@ -1377,26 +1401,31 @@ class Molmo2TextModel(Molmo2PreTrainedModel):
 
         # It may already have been prepared by e.g. `generate`
         if not isinstance(causal_mask_mapping := attention_mask, dict):
-            causal_mask_mapping = create_causal_mask(
-                config=self.config,
-                inputs_embeds=inputs_embeds,
-                attention_mask=attention_mask,
-                past_key_values=past_key_values,
-                position_ids=position_ids,
-            )
+            causal_mask_mapping = {
+                "full_attention": create_causal_mask(
+                    config=self.config,
+                    inputs_embeds=inputs_embeds,
+                    attention_mask=attention_mask,
+                    past_key_values=past_key_values,
+                    position_ids=position_ids,
+                )
+            }
 
         hidden_states = inputs_embeds
 
-        position_embeddings = self.rotary_emb(hidden_states, position_ids)
+        position_embeddings = {
+            layer_type: self.rotary_emb(hidden_states, position_ids, layer_type)
+            for layer_type in self.rotary_emb.layer_types
+        }
 
         for layer_idx, decoder_block in enumerate(self.blocks):
             hidden_states = decoder_block(
                 hidden_states,
-                attention_mask=causal_mask_mapping,
+                attention_mask=causal_mask_mapping[self.config.layer_types[layer_idx]],
                 position_ids=position_ids,
                 past_key_values=past_key_values,
                 use_cache=use_cache,
-                position_embeddings=position_embeddings,
+                position_embeddings=position_embeddings[self.config.rope_layer_types[layer_idx]],
                 **kwargs,
             )
 
@@ -1553,7 +1582,7 @@ class Molmo2Model(Molmo2PreTrainedModel):
                 mask_kwargs["or_mask_function"] = token_type_ids_mask_function(
                     mm_token_type_ids.to(inputs_embeds.device)
                 )
-            causal_mask_mapping = create_causal_mask(**mask_kwargs)
+            causal_mask_mapping = {"full_attention": create_causal_mask(**mask_kwargs)}
 
         outputs = self.language_model(
             attention_mask=causal_mask_mapping,

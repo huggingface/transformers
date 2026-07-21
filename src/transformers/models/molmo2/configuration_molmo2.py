@@ -97,7 +97,10 @@ class Molmo2AdapterConfig(PreTrainedConfig):
 class Molmo2TextConfig(PreTrainedConfig):
     r"""
     layer_types (`list[str]`, *optional*):
-        List of layer types to use for the model.
+        List of layer types to use for the model, `"full_attention"` for every layer when not provided.
+    rope_layer_types (`list[str]`, *optional*):
+        Per-layer RoPE type keying into a nested `rope_parameters`. Built from the checkpoint's `rope_scaling_layers`
+        when not provided (`"scaling"` for the scaled layers, `"default"` otherwise).
     additional_vocab_size (`int`, *optional*, defaults to 128):
         Number of additional vocabulary tokens beyond the base vocabulary.
     qkv_bias (`bool`, *optional*, defaults to `True`):
@@ -149,6 +152,8 @@ class Molmo2TextConfig(PreTrainedConfig):
     residual_dropout: float = 0.0
     max_position_embeddings: int = 4096
     rope_parameters: RopeParameters | dict | None = None
+    layer_types: list[str] | None = None
+    rope_layer_types: list[str] | None = None
     layer_norm_eps: float = 1e-6
     norm_after: bool = False
     initializer_range: float = 0.02
@@ -158,7 +163,49 @@ class Molmo2TextConfig(PreTrainedConfig):
     def __post_init__(self, **kwargs):
         if self.num_key_value_heads is None:
             self.num_key_value_heads = self.num_attention_heads
+        if self.layer_types is None:
+            self.layer_types = ["full_attention"] * self.num_hidden_layers
         super().__post_init__(**kwargs)
+
+    def convert_rope_params_to_dict(self, **kwargs):
+        rope_scaling = kwargs.pop("rope_scaling", None)
+        rope_scaling_layers = kwargs.pop("rope_scaling_layers", None)
+        rope_theta = kwargs.pop("rope_theta", None)
+        if self.rope_layer_types is None:
+            self.rope_layer_types = [
+                "scaling" if rope_scaling_layers is not None and layer_idx in rope_scaling_layers else "default"
+                for layer_idx in range(self.num_hidden_layers)
+            ]
+        rope_parameters = rope_scaling or self.rope_parameters or {}
+        if rope_parameters and set(rope_parameters).issubset(self.rope_layer_types):
+            self.rope_parameters = rope_parameters
+        else:
+            scaling_parameters = dict(rope_parameters)
+            scaling_parameters.setdefault("rope_type", "default")
+            if rope_theta is not None:
+                scaling_parameters.setdefault("rope_theta", rope_theta)
+            default_parameters = {"rope_type": "default"}
+            if "rope_theta" in scaling_parameters:
+                default_parameters["rope_theta"] = scaling_parameters["rope_theta"]
+            self.rope_parameters = {
+                layer_type: scaling_parameters if layer_type == "scaling" else default_parameters
+                for layer_type in set(self.rope_layer_types)
+            }
+        self.standardize_rope_params()
+        return kwargs
+
+    def standardize_rope_params(self):
+        for rope_parameters in (self.rope_parameters or {}).values():
+            rope_parameters.setdefault("rope_type", "default")
+            if rope_parameters["rope_type"] in ("llama3", "yarn", "longrope"):
+                rope_parameters.setdefault("original_max_position_embeddings", self.max_position_embeddings)
+
+    def validate_rope(self):
+        for rope_parameters in (self.rope_parameters or {}).values():
+            rope_type = rope_parameters["rope_type"]
+            validation_fn = getattr(self, f"_validate_{rope_type}_rope_parameters", None)
+            if validation_fn is not None:
+                validation_fn(rope_parameters, ignore_keys=self.ignore_keys_at_rope_validation)
 
 
 @auto_docstring(checkpoint="allenai/Molmo2-8B")
