@@ -5097,7 +5097,7 @@ def _mla_expand_wrapper(fn: Callable) -> Callable:
             key, value = past_key_values.update(key, value, module.layer_idx)
         return fn(module, query, key, value, attention_mask, **kwargs)
 
-    fn._mla_expanded = wrapper
+    setattr(fn, "_mla_expanded", wrapper)
     return wrapper
 
 
@@ -5123,9 +5123,7 @@ class AttentionInterface(GeneralInterface):
         "paged|eager": eager_paged_attention_forward,
     }
 
-    def get_interface(
-        self, attn_implementation: str, default: Callable, *, mla: bool = False
-    ) -> Callable:
+    def get_interface(self, attn_implementation: str, default: Callable, *, mla: bool = False) -> Callable:
         """Return the requested `attn_implementation`. Also strictly check its validity, and raise if invalid.
 
         Args:
