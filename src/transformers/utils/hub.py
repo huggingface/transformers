@@ -70,16 +70,10 @@ CHAT_TEMPLATE_DIR = "additional_chat_templates"
 
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 
-# Dedicated debug logger for CI read-only cache diagnostics.
-# propagate=False + its own StreamHandler bypass pytest log capture so every
-# record always appears in the GitHub Actions raw log unconditionally.
+# Child of the "ci_cache_debug" logger tree set up by conftest.py.
+# Records propagate to the parent which has a _LiveStderrHandler that always
+# writes to the current sys.stderr (i.e. pytest's capture during tests).
 _ci_dbg = _stdlib_logging.getLogger("ci_cache_debug.hub")
-if not _ci_dbg.handlers:
-    _ci_dbg_handler = _stdlib_logging.StreamHandler(sys.stderr)
-    _ci_dbg_handler.setFormatter(_stdlib_logging.Formatter("[CI_DBG] %(message)s"))
-    _ci_dbg.addHandler(_ci_dbg_handler)
-    _ci_dbg.setLevel(_stdlib_logging.DEBUG)
-    _ci_dbg.propagate = False
 
 
 _hf_api: HfApi | None = None

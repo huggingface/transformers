@@ -42,15 +42,28 @@ from transformers.utils.network_logging import register_network_debug_plugin
 
 
 # Dedicated debug logger for CI read-only cache diagnostics.
-# propagate=False + its own StreamHandler bypass pytest log capture so every
-# record always appears in the GitHub Actions raw log unconditionally.
-_ci_dbg = _stdlib_logging.getLogger("ci_cache_debug.conftest")
+# Uses a handler that re-resolves sys.stderr at every emit, so output goes into
+# whatever pytest has sys.stderr pointed at (its capture StringIO during tests).
+# This makes the lines appear in "Captured stderr call" in the test failure output,
+# which is always visible in GitHub Actions raw logs.
+class _LiveStderrHandler(_stdlib_logging.StreamHandler):
+    """Always emits to the *current* sys.stderr, not the one captured at init time."""
+
+    def emit(self, record):
+        self.stream = sys.stderr
+        super().emit(record)
+
+
+_ci_dbg = _stdlib_logging.getLogger("ci_cache_debug")
 if not _ci_dbg.handlers:
-    _ci_dbg_handler = _stdlib_logging.StreamHandler(sys.stderr)
-    _ci_dbg_handler.setFormatter(_stdlib_logging.Formatter("[CI_DBG] %(message)s"))
-    _ci_dbg.addHandler(_ci_dbg_handler)
+    _h = _LiveStderrHandler()
+    _h.setFormatter(_stdlib_logging.Formatter("[CI_DBG] %(name)s %(message)s"))
+    _ci_dbg.addHandler(_h)
     _ci_dbg.setLevel(_stdlib_logging.DEBUG)
     _ci_dbg.propagate = False
+
+# Per-module child loggers — inherit the parent's handler automatically.
+_ci_dbg = _stdlib_logging.getLogger("ci_cache_debug.conftest")
 
 
 _ci_fallback_cache_dir = None

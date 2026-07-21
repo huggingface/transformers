@@ -46,14 +46,8 @@ from .utils.import_utils import VersionComparison, split_package_version
 
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 
-# Dedicated debug logger for CI read-only cache diagnostics — bypasses pytest log capture.
+# Child of the "ci_cache_debug" logger tree set up by conftest.py.
 _ci_dbg = _stdlib_logging.getLogger("ci_cache_debug.dynmod")
-if not _ci_dbg.handlers:
-    _ci_dbg_handler = _stdlib_logging.StreamHandler(sys.stderr)
-    _ci_dbg_handler.setFormatter(_stdlib_logging.Formatter("[CI_DBG] %(message)s"))
-    _ci_dbg.addHandler(_ci_dbg_handler)
-    _ci_dbg.setLevel(_stdlib_logging.DEBUG)
-    _ci_dbg.propagate = False
 
 
 def _sanitize_module_name(name: str) -> str:
