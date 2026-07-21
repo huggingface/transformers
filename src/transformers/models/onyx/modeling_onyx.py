@@ -556,79 +556,16 @@ class OnyxVisionRotaryEmbedding(nn.Module):
         inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1).to(x.device)
         device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
 
-        # Multidimensional positions: [batch, num_patches, ndim]. Apply rotations to each spatial dim separately
-        all_cos, all_sin = [], []
-        for i in range(2):
-            dim_position_ids = position_ids[:, :, i]
-            dim_position_ids_expanded = dim_position_ids[:, None, :].float()
+        w_ids = position_ids[:, :, 0][:, None, :].float()
+        h_ids = position_ids[:, :, 1][:, None, :].float()
+        with maybe_autocast(device_type=device_type, enabled=False):
+            freq_h = (inv_freq_expanded @ h_ids).transpose(1, 2)
+            freq_w = (inv_freq_expanded @ w_ids).transpose(1, 2)
+            freq = torch.cat([freq_w, freq_h, freq_w, freq_h], dim=-1)
+            cos = freq.cos() * self.attention_scaling
+            sin = freq.sin() * self.attention_scaling
 
-            with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
-                freqs = (inv_freq_expanded.float() @ dim_position_ids_expanded.float()).transpose(1, 2)
-                emb = torch.cat((freqs, freqs), dim=-1)
-                cos = emb.cos() * self.attention_scaling
-                sin = emb.sin() * self.attention_scaling
-            all_cos.append(cos)
-            all_sin.append(sin)
-
-        cos = torch.cat(all_cos, dim=-1).to(dtype=x.dtype)
-        sin = torch.cat(all_sin, dim=-1).to(dtype=x.dtype)
-        return cos, sin
-
-
-def apply_multidimensional_rope(
-    x: torch.Tensor,
-    cos: torch.Tensor,
-    sin: torch.Tensor,
-    position_ids: torch.Tensor,
-    unsqueeze_dim: int = 2,
-) -> torch.Tensor:
-    """Applies multidimensional RoPE to inputs.
-
-    Args:
-        x (`torch.Tensor`): The tensor to embed.
-        cos (`torch.Tensor`): The cosine part of the rotary embedding.
-        sin (`torch.Tensor`): The sine part of the rotary embedding.
-        position_ids (`torch.Tensor`, *optional*):
-            If position_ids.ndim + 2 == x.ndim, then this function passes through to `apply_rotary_pos_emb()`.
-            Otherwise, position_ids is used to split the inputs, x, into multiple pieces, where each piece is fed to
-            `apply_rotary_pos_emb()`, and then concatenated back together.
-        unsqueeze_dim (`int`, *optional*, defaults to 1):
-            The 'unsqueeze_dim' argument specifies the dimension along which to unsqueeze cos[position_ids] and
-            sin[position_ids] so that they can be properly broadcasted to the dimensions of q and k. For example, note
-            that cos[position_ids] and sin[position_ids] have the shape [batch_size, seq_len, head_dim]. Then, if q and
-            k have the shape [batch_size, heads, seq_len, head_dim], then setting unsqueeze_dim=1 makes
-            cos[position_ids] and sin[position_ids] broadcastable to the shapes of q and k. Similarly, if q and k have
-            the shape [batch_size, seq_len, heads, head_dim], then set unsqueeze_dim=2.
-
-    Returns:
-      Tensor of shape [B, L, N, H] with RoPE applied.
-    """
-    ndim = position_ids.shape[-1]
-    num_input_channels = x.shape[-1]
-    num_rotated_channels_per_dim = 2 * (num_input_channels // (2 * ndim))
-
-    if num_rotated_channels_per_dim <= 0:
-        raise ValueError(
-            "Invalid configuration: num_rotated_channels_per_dim must be > 0, got"
-            f" {num_rotated_channels_per_dim} (num_input_channels={num_input_channels},"
-            f" ndim={ndim})"
-        )
-
-    # Correctly split the input tensor into ndim parts
-    split_sizes = [num_rotated_channels_per_dim] * ndim
-    x_parts = torch.split(x, split_sizes, dim=-1)
-    cos_parts = torch.split(cos, split_sizes, dim=-1)
-    sin_parts = torch.split(sin, split_sizes, dim=-1)
-    y_parts = [
-        apply_rotary_pos_emb(
-            x=x_parts[k],
-            cos=cos_parts[k],
-            sin=sin_parts[k],
-            unsqueeze_dim=unsqueeze_dim,
-        )
-        for k in range(ndim)
-    ]
-    return torch.cat(y_parts, dim=-1)
+        return cos.to(x.dtype), sin.to(x.dtype)
 
 
 class OnyxVisionAttention(nn.Module):
@@ -663,8 +600,8 @@ class OnyxVisionAttention(nn.Module):
         value_states = self.v_proj(hidden_states).view(hidden_shape)
 
         cos, sin = position_embeddings
-        query_states = apply_multidimensional_rope(query_states, cos, sin, position_ids)
-        key_states = apply_multidimensional_rope(key_states, cos, sin, position_ids)
+        query_states = apply_rotary_pos_emb(query_states, cos, sin, unsqueeze_dim=2)
+        key_states = apply_rotary_pos_emb(key_states, cos, sin, unsqueeze_dim=2)
 
         query_states = query_states.transpose(1, 2)
         key_states = key_states.transpose(1, 2)
@@ -684,7 +621,6 @@ class OnyxVisionAttention(nn.Module):
                 value_states,
                 attention_mask=None,
                 scaling=self.scale,
-                dropout=0.0,
                 cu_seq_lens_q=cu_seqlens,
                 cu_seq_lens_k=cu_seqlens,
                 max_length_q=max_seqlen,
@@ -707,7 +643,6 @@ class OnyxVisionAttention(nn.Module):
                     v,
                     attention_mask=None,
                     scaling=self.scale,
-                    dropout=0.0,
                     is_causal=self.is_causal,
                     **kwargs,
                 )[0]
@@ -776,7 +711,6 @@ class OnyxVisionAdapter(nn.Module):
 
 class OnyxVisionPatchEmbedder(nn.Module):
     def __init__(self, config: OnyxVisionConfig):
-        # TODO: they use fp32 when adding positions, check if that matters
         super().__init__()
         self.config = config
         self.hidden_size = config.hidden_size
@@ -830,8 +764,14 @@ class OnyxVisionPatchEmbedder(nn.Module):
         embeddings = embeddings.reshape(batch_sequence_len, -1)
 
         bilinear_indices, bilinear_weights = get_vision_bilinear_indices_and_weights(
-            grid_thw, num_grid_per_side=self.num_grid_per_side, spatial_merge_size=1, kwargs=kwargs
+            grid_thw,
+            num_grid_per_side=self.num_grid_per_side,
+            spatial_merge_size=1,
+            align_corners=False,
+            kwargs=kwargs,
         )
+        # this doesn;t match ref since we compute manually in fp32. `F.grid_sample` has some numerical
+        # error accumulated and for whatever reason, that might be important (see comment in ref code)
         pos_embeds = (self.position_embedding_table(bilinear_indices) * bilinear_weights[:, :, None]).sum(0)
         embeddings = embeddings + pos_embeds.to(embeddings.dtype)
 
@@ -968,13 +908,12 @@ class OnyxVisionModel(OnyxPreTrainedModel):
 
         inputs_embeds = self.patch_embedder(pixel_values, grid_thw)
         hidden_states = self.ln_pre(inputs_embeds)
-        hidden_states = hidden_states[window_index, ...][None, ...]  # unsqueeze single batch size
+        hidden_states = hidden_states[None, window_index, :]  # unsqueeze single batch size
 
         # Add `1` because ref implementation's position offset is `1`!
-        # TODO: permute qk proj for RoPE in conversion mapping
         position_ids = get_vision_position_ids(grid_thw, spatial_merge_size=1)
-        position_ids = position_ids.flip(0) + 1  # seq-len, 2, should we flip?
-        position_ids = position_ids[window_index, ...][None, ...]  # unsqueeze single batch size
+        position_ids = position_ids.flip(-1) + 1
+        position_ids = position_ids[None, window_index, :]  # unsqueeze single batch size
         position_embeddings = self.rotary_emb(hidden_states, position_ids)
 
         for i, block in enumerate(self.layers):
@@ -1124,7 +1063,11 @@ class OnyxModel(OnyxPreTrainedModel):
         return vision_outputs
 
     def get_placeholder_mask(
-        self, input_ids: torch.LongTensor, inputs_embeds: torch.FloatTensor, image_features: torch.FloatTensor
+        self,
+        input_ids: torch.LongTensor,
+        inputs_embeds: torch.FloatTensor,
+        image_features: torch.FloatTensor | None = None,
+        video_features: torch.FloatTensor | None = None,
     ):
         """
         Obtains multimodal placeholder mask from `input_ids` or `inputs_embeds`, and checks that the placeholder token count is
@@ -1135,17 +1078,30 @@ class OnyxModel(OnyxPreTrainedModel):
                 torch.tensor(self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
             )
             special_image_mask = special_image_mask.all(-1)
+            special_video_mask = inputs_embeds == self.get_input_embeddings()(
+                torch.tensor(self.config.video_token_id, dtype=torch.long, device=inputs_embeds.device)
+            )
+            special_video_mask = special_video_mask.all(-1)
         else:
             special_image_mask = input_ids == self.config.image_token_id
+            special_video_mask = input_ids == self.config.video_token_id
 
         n_image_tokens = special_image_mask.sum()
-        n_image_features = image_features.shape[0] * image_features.shape[1]
         special_image_mask = special_image_mask.unsqueeze(-1).to(inputs_embeds.device)
-        torch_compilable_check(
-            n_image_tokens * inputs_embeds.shape[-1] == image_features.numel(),
-            f"Image features and image tokens do not match, tokens: {n_image_tokens}, features: {n_image_features}",
-        )
-        return special_image_mask
+        if image_features is not None:
+            torch_compilable_check(
+                n_image_tokens * inputs_embeds.shape[-1] == image_features.numel(),
+                f"Image features and image tokens do not match, tokens: {n_image_tokens}, features: {image_features.shape[0]}",
+            )
+
+        n_video_tokens = special_video_mask.sum()
+        special_video_mask = special_video_mask.unsqueeze(-1).to(inputs_embeds.device)
+        if video_features is not None:
+            torch_compilable_check(
+                n_video_tokens * inputs_embeds.shape[-1] == video_features.numel(),
+                f"Video features and video tokens do not match, tokens: {n_video_tokens}, features: {video_features.shape[0]}",
+            )
+        return special_image_mask, special_video_mask
 
     @can_return_tuple
     @auto_docstring
@@ -1154,6 +1110,8 @@ class OnyxModel(OnyxPreTrainedModel):
         input_ids: torch.LongTensor | None = None,
         pixel_values: torch.FloatTensor | None = None,
         image_grid_thw: torch.LongTensor | None = None,
+        pixel_values_videos: torch.FloatTensor | None = None,
+        video_grid_thw: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
@@ -1173,16 +1131,25 @@ class OnyxModel(OnyxPreTrainedModel):
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
-        # Merge text and images
         if pixel_values is not None:
             image_features = self.get_image_features(
                 pixel_values, image_grid_thw=image_grid_thw, return_dict=True
             ).pooler_output
             image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
-            special_image_mask = self.get_placeholder_mask(
+            special_image_mask, _ = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, image_features=image_features
             )
             inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, image_features)
+
+        if pixel_values_videos is not None:
+            video_features = self.get_video_features(
+                pixel_values_videos, video_grid_thw=video_grid_thw, return_dict=True
+            ).pooler_output
+            video_features = video_features.to(inputs_embeds.device, inputs_embeds.dtype)
+            _, special_video_mask = self.get_placeholder_mask(
+                input_ids, inputs_embeds=inputs_embeds, video_features=video_features
+            )
+            inputs_embeds = inputs_embeds.masked_scatter(special_video_mask, video_features)
 
         # It may already have been prepared by e.g. `generate`
         if not isinstance(causal_mask_mapping := attention_mask, dict):
@@ -1213,6 +1180,26 @@ class OnyxModel(OnyxPreTrainedModel):
             attentions=outputs.attentions,
             image_hidden_states=image_features if pixel_values is not None else None,
         )
+
+    def get_video_features(
+        self,
+        pixel_values_videos: torch.FloatTensor,
+        video_grid_thw: torch.LongTensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutputWithPooling:
+        r"""
+        video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
+            The temporal, height and width of feature shape of each video in LLM.
+        """
+        vision_outputs = self.vision_tower(
+            pixel_values=pixel_values_videos,
+            grid_thw=video_grid_thw,
+            **kwargs,
+        )
+        vision_features = self.vision_adapter(vision_outputs.last_hidden_state)
+        vision_features = self.vision_projection(vision_features)
+        vision_outputs.pooler_output = self.perception_emb_norm(vision_features)
+        return vision_outputs
 
 
 @auto_docstring
@@ -1325,6 +1312,8 @@ class OnyxForConditionalGeneration(OnyxPreTrainedModel, GenerationMixin):
         input_ids: torch.LongTensor | None = None,
         pixel_values: torch.FloatTensor | None = None,
         image_grid_thw: torch.LongTensor | None = None,
+        pixel_values_videos: torch.FloatTensor | None = None,
+        video_grid_thw: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
@@ -1383,6 +1372,8 @@ class OnyxForConditionalGeneration(OnyxPreTrainedModel, GenerationMixin):
             input_ids=input_ids,
             pixel_values=pixel_values,
             image_grid_thw=image_grid_thw,
+            pixel_values_videos=pixel_values_videos,
+            video_grid_thw=video_grid_thw,
             attention_mask=attention_mask,
             position_ids=position_ids,
             past_key_values=past_key_values,
@@ -1423,11 +1414,12 @@ class OnyxForConditionalGeneration(OnyxPreTrainedModel, GenerationMixin):
         inputs_embeds=None,
         position_ids=None,
         pixel_values=None,
+        pixel_values_videos=None,
         attention_mask=None,
         image_grid_thw=None,
+        video_grid_thw=None,
         use_cache=True,
         logits_to_keep=None,
-        labels=None,
         is_first_iteration=False,
         **kwargs,
     ):
@@ -1447,6 +1439,8 @@ class OnyxForConditionalGeneration(OnyxPreTrainedModel, GenerationMixin):
         if is_first_iteration or not use_cache:
             model_inputs["pixel_values"] = pixel_values
             model_inputs["image_grid_thw"] = image_grid_thw
+            model_inputs["pixel_values_videos"] = pixel_values_videos
+            model_inputs["video_grid_thw"] = video_grid_thw
 
         return model_inputs
 
