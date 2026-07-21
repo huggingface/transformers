@@ -287,6 +287,7 @@ class KimiK25IntegrationTest(unittest.TestCase):
                 ],
             }
         )  # fmt: skip
+        expectations_mean = Expectations({("cuda", None): -0.014419052749872208})
 
         inputs = self.processor.apply_chat_template(
             self.message3, tokenize=True, add_generation_prompt=True, return_tensors="pt", return_dict=True
@@ -296,7 +297,7 @@ class KimiK25IntegrationTest(unittest.TestCase):
             logits = self.model(**inputs).logits
 
         torch.testing.assert_close(logits[:, :10, :10].cpu(), torch.tensor(expectations.get_expectation()))
-        torch.testing.assert_close(logits.mean().cpu(), torch.tensor(-0.014419052749872208))
+        torch.testing.assert_close(logits.mean().cpu(), torch.tensor(expectations_mean.get_expectation()))
 
     def test_model_logits(self):
         expectations = Expectations(
@@ -325,6 +326,7 @@ class KimiK25IntegrationTest(unittest.TestCase):
                 ],
             }
         )  # fmt: skip
+        expectations_mean = Expectations({("cuda", None): 0.007999920286238194})
 
         inputs = self.processor.apply_chat_template(
             self.message1, tokenize=True, add_generation_prompt=True, return_tensors="pt", return_dict=True
@@ -334,7 +336,7 @@ class KimiK25IntegrationTest(unittest.TestCase):
             logits = self.model(**inputs).logits
 
         torch.testing.assert_close(logits[:, :10, :10].cpu(), torch.tensor(expectations.get_expectation()))
-        torch.testing.assert_close(logits.mean().cpu(), torch.tensor(0.007999920286238194))
+        torch.testing.assert_close(logits.mean().cpu(), torch.tensor(expectations_mean.get_expectation()))
 
     def test_model_logits_batched(self):
         expectations = Expectations(
@@ -384,6 +386,7 @@ class KimiK25IntegrationTest(unittest.TestCase):
                 ],
             }
         )  # fmt: skip
+        expectations_mean = Expectations({("cuda", None): 0.007677852641791105})
 
         inputs = self.processor.apply_chat_template(
             [self.message1, self.message2],
@@ -398,4 +401,4 @@ class KimiK25IntegrationTest(unittest.TestCase):
             logits = self.model(**inputs).logits
 
         torch.testing.assert_close(logits[:, :10, :10].cpu(), torch.tensor(expectations.get_expectation()))
-        torch.testing.assert_close(logits.mean().cpu(), torch.tensor(0.007677852641791105))
+        torch.testing.assert_close(logits.mean().cpu(), torch.tensor(expectations_mean.get_expectation()))
