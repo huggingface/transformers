@@ -55,7 +55,7 @@ if is_torch_available():
     from transformers.models.molmo2.modeling_molmo2 import token_type_ids_mask_function
 
 if is_vision_available():
-    from PIL import Image
+    from transformers.image_utils import load_image
 
 
 class Molmo2VisionText2TextModelTester(VLMModelTester):
@@ -535,7 +535,7 @@ class Molmo2IntegrationTest(unittest.TestCase):
 
     def setUp(self):
         self.processor = Molmo2Processor.from_pretrained(self.model_id)
-        self.image = Image.open(url_to_local_path(IMAGE_URL))
+        self.image = load_image(url_to_local_path(IMAGE_URL))
         self.messages = [
             {
                 "role": "user",
@@ -659,7 +659,7 @@ class Molmo2O7BIntegrationTest(unittest.TestCase):
 
     def setUp(self):
         self.processor = Molmo2Processor.from_pretrained(self.model_id)
-        self.image = Image.open(url_to_local_path(IMAGE_URL))
+        self.image = load_image(url_to_local_path(IMAGE_URL))
         self.messages = [
             {
                 "role": "user",
@@ -772,7 +772,7 @@ class Molmo2_8BIntegrationTest(unittest.TestCase):
 
     def setUp(self):
         self.processor = Molmo2Processor.from_pretrained(self.model_id)
-        self.image = Image.open(url_to_local_path(IMAGE_URL))
+        self.image = load_image(url_to_local_path(IMAGE_URL))
         self.messages = [
             {
                 "role": "user",

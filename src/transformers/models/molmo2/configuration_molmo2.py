@@ -119,10 +119,11 @@ class Molmo2TextConfig(PreTrainedConfig):
     base_config_key = "text_config"
     keys_to_ignore_at_inference = ["past_key_values"]
     base_model_tp_plan = {
-        "layers.*.self_attn.att_proj": "colwise",
-        "layers.*.self_attn.attn_out": "rowwise",
-        "layers.*.mlp.ff_proj": "colwise",
-        "layers.*.mlp.ff_out": "rowwise",
+        "layers.*.self_attn.qkv_proj": "colwise",
+        "layers.*.self_attn.o_proj": "rowwise",
+        "layers.*.mlp.gate_proj": "colwise",
+        "layers.*.mlp.up_proj": "colwise",
+        "layers.*.mlp.down_proj": "rowwise",
     }
     base_model_pp_plan = {
         "embed_tokens": (["input_ids"], ["inputs_embeds"]),

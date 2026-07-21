@@ -833,22 +833,35 @@ def _build_checkpoint_conversion_mapping():
         ],
         "molmo2": [
             WeightRenaming(
-                source_patterns=r"(?<!image_vit\.)transformer\.(?!ln_f\.)", target_patterns="language_model."
+                source_patterns=r"(?<!image_vit\.)transformer\.(?!ln_f\.|blocks\.)", target_patterns="language_model."
             ),
             WeightRenaming(
                 source_patterns=r"(?<!image_vit\.)transformer\.ln_f\.", target_patterns="language_model.norm."
             ),
-            WeightRenaming(source_patterns=r"language_model\.blocks\.", target_patterns="language_model.layers."),
+            WeightRenaming(
+                source_patterns=r"(?<!image_vit\.)transformer\.blocks\.", target_patterns="language_model.layers."
+            ),
+            WeightRenaming(source_patterns=r"self_attn\.att_proj", target_patterns="self_attn.qkv_proj"),
+            WeightRenaming(source_patterns=r"self_attn\.attn_out", target_patterns="self_attn.o_proj"),
+            WeightRenaming(source_patterns=r"mlp\.ff_out", target_patterns="mlp.down_proj"),
             WeightConverter(
-                source_patterns=["language_model.wte.embedding", "language_model.wte.new_embedding"],
-                target_patterns="language_model.embed_tokens.weight",
+                source_patterns="mlp.ff_proj.weight",
+                target_patterns=["mlp.up_proj.weight", "mlp.gate_proj.weight"],
+                operations=[Chunk(dim=0)],
+            ),
+            WeightConverter(
+                source_patterns=["wte.embedding", "wte.new_embedding"],
+                target_patterns="embed_tokens.weight",
                 operations=[Concatenate(dim=0)],
+            ),
+            WeightRenaming(
+                source_patterns=r"vision_backbone\.image_vit\.(?!transformer\.resblocks\.)",
+                target_patterns="vision_tower.",
             ),
             WeightRenaming(
                 source_patterns=r"vision_backbone\.image_vit\.transformer\.resblocks\.",
                 target_patterns="vision_tower.encoder.layers.",
             ),
-            WeightRenaming(source_patterns=r"vision_backbone\.image_vit\.", target_patterns="vision_tower."),
             WeightRenaming(
                 source_patterns=r"vision_backbone\.image_pooling_2d\.",
                 target_patterns="multi_modal_projector.image_pooling_2d.",

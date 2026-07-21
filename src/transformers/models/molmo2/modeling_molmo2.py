@@ -361,8 +361,8 @@ class Molmo2Adapter(PreTrainedModel):
 
     def __init__(self, config: Molmo2AdapterConfig):
         super().__init__(config)
-        pool_dim = config.hidden_size * len(config.vit_layers)
-        self.image_pooling_2d = Molmo2VisionAttention(config, input_dim=pool_dim)
+        pooling_input_dim = config.hidden_size * len(config.vit_layers)
+        self.image_pooling_2d = Molmo2VisionAttention(config, input_dim=pooling_input_dim)
         self.image_projector = Molmo2ImageProjectorMLP(config)
         self.image_feature_dropout = nn.Dropout(config.image_feature_dropout)
         self.post_init()
@@ -371,24 +371,24 @@ class Molmo2Adapter(PreTrainedModel):
         image_features = self.image_feature_dropout(image_features)
         flat_features = image_features.reshape(-1, image_features.shape[-1])
 
-        valid = pooled_patches_idx >= 0
-        valid_token = torch.any(valid, -1)
+        valid_mask = pooled_patches_idx >= 0
+        valid_token_mask = torch.any(valid_mask, -1)
 
-        to_pool = flat_features[torch.clip(pooled_patches_idx, 0)]
-        to_pool = to_pool * valid.to(to_pool.dtype)[..., None]
+        patches_to_pool = flat_features[torch.clip(pooled_patches_idx, 0)]
+        patches_to_pool = patches_to_pool * valid_mask.to(patches_to_pool.dtype)[..., None]
 
-        keep_mask = valid.reshape(-1, 1, 1, valid.shape[-1])
-        attention_mask = torch.zeros_like(keep_mask, dtype=to_pool.dtype).masked_fill_(
-            ~keep_mask, torch.finfo(to_pool.dtype).min
+        keep_mask = valid_mask.reshape(-1, 1, 1, valid_mask.shape[-1])
+        attention_mask = torch.zeros_like(keep_mask, dtype=patches_to_pool.dtype).masked_fill_(
+            ~keep_mask, torch.finfo(patches_to_pool.dtype).min
         )
-        denom = valid.float().sum(-1)
-        denom = torch.where(denom == 0, 1, denom)
-        query = to_pool.sum(-2, keepdim=True) / denom[:, None, None].to(to_pool.dtype)
+        num_valid_patches = valid_mask.float().sum(-1)
+        num_valid_patches = torch.where(num_valid_patches == 0, 1, num_valid_patches)
+        query = patches_to_pool.sum(-2, keepdim=True) / num_valid_patches[:, None, None].to(patches_to_pool.dtype)
 
-        pooled_features, _ = self.image_pooling_2d(query, to_pool, attention_mask=attention_mask)
+        pooled_features, _ = self.image_pooling_2d(query, patches_to_pool, attention_mask=attention_mask)
         pooled_features = pooled_features.squeeze(1)
         pooled_features = self.image_projector(pooled_features)
-        return pooled_features[valid_token]
+        return pooled_features[valid_token_mask]
 
 
 class Molmo2RotaryEmbedding(nn.Module):
@@ -543,8 +543,8 @@ class Molmo2Attention(nn.Module):
             config.head_dim * config.num_key_value_heads,
             config.head_dim * config.num_key_value_heads,
         )
-        self.att_proj = nn.Linear(config.hidden_size, sum(self.fused_dims), bias=config.qkv_bias)
-        self.attn_out = nn.Linear(config.num_attention_heads * config.head_dim, config.hidden_size, bias=False)
+        self.qkv_proj = nn.Linear(config.hidden_size, sum(self.fused_dims), bias=config.qkv_bias)
+        self.o_proj = nn.Linear(config.num_attention_heads * config.head_dim, config.hidden_size, bias=False)
 
         self.qk_norm_type = config.qk_norm_type
         if self.qk_norm_type == "qwen3":
@@ -565,20 +565,20 @@ class Molmo2Attention(nn.Module):
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor | None, tuple[torch.Tensor] | None]:
         input_shape = hidden_states.shape[:-1]
-        q_shape = (*input_shape, self.num_heads, self.head_dim)
-        kv_shape = (*input_shape, self.num_key_value_heads, self.head_dim)
+        query_shape = (*input_shape, self.num_heads, self.head_dim)
+        key_value_shape = (*input_shape, self.num_key_value_heads, self.head_dim)
 
-        qkv = self.att_proj(hidden_states)
+        qkv = self.qkv_proj(hidden_states)
         query_states, key_states, value_states = torch.split(qkv, self.fused_dims, dim=-1)
 
-        value_states = value_states.view(kv_shape)
+        value_states = value_states.view(key_value_shape)
 
         if self.qk_norm_type == "olmo":
             query_states = self.q_norm(query_states)
             key_states = self.k_norm(key_states)
 
-        query_states = query_states.view(q_shape)
-        key_states = key_states.view(kv_shape)
+        query_states = query_states.view(query_shape)
+        key_states = key_states.view(key_value_shape)
 
         if self.qk_norm_type == "qwen3":
             query_states = self.q_norm(query_states)
@@ -611,22 +611,24 @@ class Molmo2Attention(nn.Module):
         )
 
         attn_output = attn_output.reshape(*input_shape, -1).contiguous()
-        attn_output = self.attn_out(attn_output)
+        attn_output = self.o_proj(attn_output)
         return attn_output, attn_weights
 
 
 class Molmo2MLP(nn.Module):
-    def __init__(self, config: Molmo2TextConfig):
+    def __init__(self, config):
         super().__init__()
-        self.ff_proj = nn.Linear(config.hidden_size, config.intermediate_size * 2, bias=False)
-        self.ff_out = nn.Linear(config.intermediate_size, config.hidden_size, bias=False)
-        self.act = ACT2FN[config.hidden_act]
+        self.config = config
+        self.hidden_size = config.hidden_size
+        self.intermediate_size = config.intermediate_size
+        self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
+        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
+        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
+        self.act_fn = ACT2FN[config.hidden_act]
 
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        hidden_states = self.ff_proj(hidden_states)
-        up_states, gate = hidden_states.chunk(2, dim=-1)
-        hidden_states = self.act(gate) * up_states
-        return self.ff_out(hidden_states)
+    def forward(self, x):
+        down_proj = self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
+        return down_proj
 
 
 class Molmo2DecoderLayer(GradientCheckpointingLayer):
@@ -729,7 +731,7 @@ class Molmo2TextModel(Molmo2PreTrainedModel):
         # The checkpoint's extra-vocabulary table is concatenated onto the base one at load time
         # (see `conversion_mapping.py`), so the embedding covers `vocab_size + additional_vocab_size`.
         self.embed_tokens = nn.Embedding(config.vocab_size + (config.additional_vocab_size or 0), config.hidden_size)
-        self.emb_drop = nn.Dropout(config.embedding_dropout)
+        self.embedding_dropout = nn.Dropout(config.embedding_dropout)
         self.layers = nn.ModuleList(
             [Molmo2DecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
@@ -763,7 +765,7 @@ class Molmo2TextModel(Molmo2PreTrainedModel):
 
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
-        inputs_embeds = self.emb_drop(inputs_embeds)
+        inputs_embeds = self.embedding_dropout(inputs_embeds)
 
         # torch.jit.trace() doesn't support cache objects in the output
         if use_cache and past_key_values is None and not torch.jit.is_tracing():

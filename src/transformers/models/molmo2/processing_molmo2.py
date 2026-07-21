@@ -164,10 +164,10 @@ class Molmo2Processor(ProcessorMixin):
         for frame_idx, frame_time in enumerate(timestamps):
             prev_space = " " if frame_idx > 0 else ""
             video_string += prev_space + f"{frame_time:.1f} "
-            per_row = ["<im_patch>"] * num_patch_cols
+            tokens_per_row = ["<im_patch>"] * num_patch_cols
             if self.video_use_col_tokens:
-                per_row = per_row + ["<im_col>"]
-            video_string += "".join([start_token] + per_row * num_patch_rows + [end_token])
+                tokens_per_row = tokens_per_row + ["<im_col>"]
+            video_string += "".join([start_token] + tokens_per_row * num_patch_rows + [end_token])
 
         return video_string
 
@@ -191,19 +191,19 @@ class Molmo2Processor(ProcessorMixin):
             image_grid = image_grid.tolist()
         resized_h, resized_w, height, width = image_grid
 
-        per_row = ["<im_patch>"] * width
+        tokens_per_row = ["<im_patch>"] * width
         if self.image_use_col_tokens:
-            per_row = per_row + ["<im_col>"]
-        high_res_tokens = ["<im_start>"] + per_row * height + ["<im_end>"]
+            tokens_per_row = tokens_per_row + ["<im_col>"]
+        high_res_tokens = ["<im_start>"] + tokens_per_row * height + ["<im_end>"]
 
-        per_row = ["<im_patch>"] * resized_w
+        tokens_per_row = ["<im_patch>"] * resized_w
         use_single_crop_col_tokens = (
             self.image_use_col_tokens if self.use_single_crop_col_tokens is None else self.use_single_crop_col_tokens
         )
         image_start_token = "<low_res_im_start>" if self.use_single_crop_start_token else "<im_start>"
         if use_single_crop_col_tokens:
-            per_row = per_row + ["<im_col>"]
-        low_res_tokens = [image_start_token] + per_row * resized_h + ["<im_end>"]
+            tokens_per_row = tokens_per_row + ["<im_col>"]
+        low_res_tokens = [image_start_token] + tokens_per_row * resized_h + ["<im_end>"]
 
         return "".join(low_res_tokens + high_res_tokens)
 
