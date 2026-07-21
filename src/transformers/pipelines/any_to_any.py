@@ -355,7 +355,7 @@ class AnyToAnyPipeline(Pipeline):
                 "information, see https://huggingface.co/docs/transformers/en/chat_templating"
             )
 
-        return super().__call__({"text": text, "images": images, "video": videos, "audio": audio}, **kwargs)
+        return super().__call__({"text": text, "images": images, "videos": videos, "audio": audio}, **kwargs)
 
     def preprocess(self, inputs=None, timeout=None, continue_final_message=None, **processing_kwargs):
         if isinstance(inputs, Chat):
