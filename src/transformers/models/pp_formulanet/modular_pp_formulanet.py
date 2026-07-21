@@ -488,8 +488,16 @@ class PPFormulaNetForConditionalGeneration(Florence2ForConditionalGeneration):
 
         loss = None
         if labels is not None:
+            # decoder_input_ids are built by right-shifting input_ids (mbart legacy convention),
+            # so logits[i] already lines up with labels[i]. Pass them as shift_labels so
+            # ForCausalLMLoss skips its internal shift but keeps num_items_in_batch handling
+            # (proper loss reduction under gradient accumulation), as Florence2 does.
             loss = self.loss_function(
-                logits=logits, labels=labels, vocab_size=self.config.text_config.vocab_size, **kwargs
+                logits=logits,
+                labels=None,
+                shift_labels=labels,
+                vocab_size=self.config.text_config.vocab_size,
+                **kwargs,
             )
 
         return Seq2SeqLMOutput(

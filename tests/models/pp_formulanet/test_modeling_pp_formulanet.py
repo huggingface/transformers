@@ -131,6 +131,50 @@ class PPFormulaNetModelTest(VLMModelTest, unittest.TestCase):
     test_resize_embeddings = False
     is_encoder_decoder = True
 
+    def test_training_loss_no_double_shift(self):
+        # decoder_input_ids are built by right-shifting input_ids (mbart legacy convention), so
+        # logits[i] lines up with labels[i]. forward passes labels as shift_labels so ForCausalLMLoss
+        # skips its internal shift while keeping num_items_in_batch handling for grad accumulation.
+        from torch.nn import CrossEntropyLoss
+
+        config = self.model_tester.get_config()
+        model = PPFormulaNetForConditionalGeneration(config).to(torch_device).eval()
+        vocab_size = config.text_config.vocab_size
+
+        torch.manual_seed(0)
+        bsz, dec_len = 2, 6
+        pixel_values = floats_tensor(
+            [bsz, self.model_tester.num_channels, self.model_tester.image_size, self.model_tester.image_size]
+        )
+        labels = torch.randint(3, vocab_size, (bsz, dec_len), device=torch_device)
+
+        def aligned_ce(logits, lbl):
+            return CrossEntropyLoss()(logits.reshape(-1, vocab_size), lbl.reshape(-1))
+
+        def double_shift_ce(logits, lbl):
+            return CrossEntropyLoss()(logits[..., :-1, :].reshape(-1, vocab_size), lbl[..., 1:].reshape(-1))
+
+        with torch.no_grad():
+            out = model(pixel_values=pixel_values, input_ids=labels, labels=labels, use_cache=False)
+        self.assertTrue(torch.allclose(out.loss, aligned_ce(out.logits, labels)))
+        self.assertFalse(torch.allclose(out.loss, double_shift_ce(out.logits, labels)))
+
+        # with num_items_in_batch (as passed by Trainer under gradient accumulation), the loss
+        # must be summed over tokens and divided by the global count, not mean-reduced per step.
+        # Use a global count different from this batch's token count (as with 2 accumulation
+        # steps) so the summed path is distinguishable from the mean.
+        num_items = 2 * labels.numel()
+        with torch.no_grad():
+            out = model(
+                pixel_values=pixel_values,
+                input_ids=labels,
+                labels=labels,
+                use_cache=False,
+                num_items_in_batch=torch.tensor(num_items),
+            )
+        summed_ce = CrossEntropyLoss(reduction="sum")(out.logits.reshape(-1, vocab_size), labels.reshape(-1))
+        self.assertTrue(torch.allclose(out.loss, summed_ce / num_items))
+
     def _check_encoder_attention_for_generate(self, attentions, batch_size, config, prompt_length):
         # Ignoring batch size for now as it is dynamically changed during window partitioning
         encoder_config = self.model_tester.vision_config

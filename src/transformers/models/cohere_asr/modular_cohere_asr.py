@@ -500,7 +500,13 @@ class CohereAsrForConditionalGeneration(MoonshineForConditionalGeneration):
 
         loss = None
         if labels is not None:
-            loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.vocab_size)
+            # labels were already right-shifted into decoder_input_ids above (whisper legacy
+            # convention), so logits[i] lines up with labels[i]. Pass them as shift_labels so
+            # ForCausalLMLoss skips its internal shift but keeps num_items_in_batch handling
+            # (proper loss reduction under gradient accumulation).
+            loss = self.loss_function(
+                logits=logits, labels=None, shift_labels=labels, vocab_size=self.config.vocab_size, **kwargs
+            )
 
         return Seq2SeqLMOutput(
             loss=loss,

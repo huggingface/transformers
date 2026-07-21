@@ -152,7 +152,9 @@ class MoonshineModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
         self.config_tester.run_common_tests()
 
     def test_training_loss_no_double_shift(self):
-        # forward shifts labels into decoder_input_ids, so loss must be plain CE against the labels (no second shift)
+        # forward shifts labels into decoder_input_ids, so the loss must be a CE against the
+        # (unshifted) labels: forward passes them as shift_labels so ForCausalLMLoss skips its
+        # internal shift while keeping num_items_in_batch handling for gradient accumulation
         from torch.nn import CrossEntropyLoss
 
         from transformers.models.moonshine.modeling_moonshine import MoonshineEncoderModelOutput
@@ -182,6 +184,16 @@ class MoonshineModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
                 out = model(encoder_outputs=encoder_outputs, labels=lbl, use_cache=False)
             self.assertTrue(torch.allclose(out.loss, aligned_ce(out.logits, lbl)))
             self.assertFalse(torch.allclose(out.loss, double_shift_ce(out.logits, lbl)))
+
+        # with num_items_in_batch (as passed by Trainer under gradient accumulation), the loss
+        # must be summed over tokens and divided by the global count, not mean-reduced per step.
+        # Use a global count different from this batch's valid-token count (as with 2 accumulation
+        # steps) so the summed path is distinguishable from the mean.
+        num_items = 2 * (padded != -100).sum()
+        with torch.no_grad():
+            out = model(encoder_outputs=encoder_outputs, labels=padded, use_cache=False, num_items_in_batch=num_items)
+        summed_ce = CrossEntropyLoss(reduction="sum")(out.logits.reshape(-1, vocab_size), padded.reshape(-1))
+        self.assertTrue(torch.allclose(out.loss, summed_ce / num_items))
 
     def test_attention_outputs(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()

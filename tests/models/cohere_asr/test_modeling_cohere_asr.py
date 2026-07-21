@@ -175,6 +175,50 @@ class CohereAsrModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
     def test_config(self):
         self.config_tester.run_common_tests()
 
+    def test_training_loss_no_double_shift(self):
+        # contrary to the llama-like approach where labels == input_ids and ForCausalLMLoss
+        # shifts internally so logits[i] predicts labels[i+1], here forward already right-shifts labels
+        # into decoder_input_ids via shift_tokens_right (which also prepends decoder_start_token_id)
+        # (whisper legacy paradigm). The loss must therefore be a CE against the (unshifted) labels:
+        # forward passes them as shift_labels so ForCausalLMLoss skips its internal shift (which
+        # would shift a second time) while keeping num_items_in_batch handling for grad accumulation.
+        from torch.nn import CrossEntropyLoss
+
+        config = self.model_tester.get_config()
+        config.pad_token_id = self.model_tester.pad_token_id
+        model = CohereAsrForConditionalGeneration(config).to(torch_device).eval()
+        vocab_size = config.vocab_size
+
+        torch.manual_seed(0)
+        bsz, dec_len = 2, 6
+        input_features = floats_tensor([bsz, self.model_tester.seq_length, self.model_tester.num_mel_bins], scale=1.0)
+        labels = torch.randint(3, vocab_size, (bsz, dec_len), device=torch_device)
+        padded = labels.clone()
+        padded[0, -1] = -100
+        padded[1, -2:] = -100
+
+        def aligned_ce(logits, lbl):
+            return CrossEntropyLoss()(logits.reshape(-1, vocab_size), lbl.reshape(-1))
+
+        def double_shift_ce(logits, lbl):
+            return CrossEntropyLoss()(logits[..., :-1, :].reshape(-1, vocab_size), lbl[..., 1:].reshape(-1))
+
+        for lbl in (labels, padded):
+            with torch.no_grad():
+                out = model(input_features=input_features, labels=lbl, use_cache=False)
+            self.assertTrue(torch.allclose(out.loss, aligned_ce(out.logits, lbl)))
+            self.assertFalse(torch.allclose(out.loss, double_shift_ce(out.logits, lbl)))
+
+        # with num_items_in_batch (as passed by Trainer under gradient accumulation), the loss
+        # must be summed over tokens and divided by the global count, not mean-reduced per step.
+        # Use a global count different from this batch's valid-token count (as with 2 accumulation
+        # steps) so the summed path is distinguishable from the mean.
+        num_items = 2 * (padded != -100).sum()
+        with torch.no_grad():
+            out = model(input_features=input_features, labels=padded, use_cache=False, num_items_in_batch=num_items)
+        summed_ce = CrossEntropyLoss(reduction="sum")(out.logits.reshape(-1, vocab_size), padded.reshape(-1))
+        self.assertTrue(torch.allclose(out.loss, summed_ce / num_items))
+
     def test_reverse_loading_mapping(self):
         # proj_out conversion only applies to ForConditionalGeneration, not the base model
         super().test_reverse_loading_mapping(skip_base_model=True)
