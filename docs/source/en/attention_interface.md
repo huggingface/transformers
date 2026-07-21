@@ -54,7 +54,7 @@ model.set_attn_implementation("sdpa")
 
 Download and load compiled compute kernels directly from the [Hub](https://huggingface.co/models?other=kernels) at runtime with the [Kernels](https://huggingface.co/docs/kernels/index) library. This avoids packaging issues from mismatched PyTorch or CUDA versions.
 
-Kernels automatically register to [`AttentionInterface`] upon detection. You don't need to install the FlashAttention package explicitly.
+Kernels automatically register to [`AttentionInterface`] upon detection. You don't need to install the FlashAttention package explicitly. Requesting FlashAttention by name also falls back to the Hub kernel, see [FlashAttention fallback](./kernel_doc/loading_kernels#flashattention-fallback).
 
 ```py
 import torch
