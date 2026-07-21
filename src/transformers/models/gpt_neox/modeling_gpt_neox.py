@@ -393,24 +393,24 @@ class GPTNeoXModel(GPTNeoXPreTrainedModel):
     """
 )
 class GPTNeoXForCausalLM(GPTNeoXPreTrainedModel, GenerationMixin):
-    _tied_weights_keys = {"embed_out.weight": "gpt_neox.embed_in.weight"}
-    _tp_plan = {"embed_out": "colwise_gather_output"}
-    _pp_plan = {"embed_out": (["hidden_states"], ["logits"])}
+    _tied_weights_keys = {"lm_head.weight": "gpt_neox.embed_in.weight"}
+    _tp_plan = {"lm_head": "colwise_gather_output"}
+    _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
 
     def __init__(self, config):
         super().__init__(config)
 
         self.gpt_neox = GPTNeoXModel(config)
-        self.embed_out = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
+        self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
 
         # Initialize weights and apply final processing
         self.post_init()
 
     def get_output_embeddings(self):
-        return self.embed_out
+        return self.lm_head
 
     def set_output_embeddings(self, new_embeddings):
-        self.embed_out = new_embeddings
+        self.lm_head = new_embeddings
 
     @can_return_tuple
     @auto_docstring
@@ -461,7 +461,7 @@ class GPTNeoXForCausalLM(GPTNeoXPreTrainedModel, GenerationMixin):
 
         hidden_states = outputs.last_hidden_state
         slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.embed_out(hidden_states[:, slice_indices, :])
+        logits = self.lm_head(hidden_states[:, slice_indices, :])
 
         loss = None
         if labels is not None:

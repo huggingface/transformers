@@ -18,6 +18,7 @@ import unittest
 from parameterized import parameterized
 
 from transformers import (
+    AutoProcessor,
     DeepseekV3Config,
     Kimi_K25Config,
     Kimi_K25VisionConfig,
@@ -26,7 +27,10 @@ from transformers import (
 )
 from transformers.cache_utils import Cache
 from transformers.testing_utils import (
+    Expectations,
+    cleanup,
     require_torch,
+    slow,
     torch_device,
 )
 
@@ -184,22 +188,6 @@ class Kimi_K25ModelTest(VLMModelTest, unittest.TestCase):
     def test_reverse_loading_mapping(self):
         super().test_reverse_loading_mapping(skip_base_model=True)
 
-    @unittest.skip("Error on MoE kernels, FIXME")
-    def test_generate_compilation_all_outputs(self):
-        pass
-
-    @unittest.skip("Error on MoE kernels, FIXME")
-    def test_generate_compile_model_forward_fullgraph(self):
-        pass
-
-    @unittest.skip("Error on MoE kernels, FIXME")
-    def test_generate_from_inputs_embeds_with_static_cache(self):
-        pass
-
-    @unittest.skip("Error on MoE kernels, FIXME")
-    def test_generate_with_static_cache(self):
-        pass
-
     @parameterized.expand([("random",), ("same",)])
     @unittest.skip("DeepseekV3 backbone is not compatible with assisted decoding")
     def test_assisted_decoding_matches_greedy_search(self, assistant_type):
@@ -228,3 +216,189 @@ class Kimi_K25ModelTest(VLMModelTest, unittest.TestCase):
     @unittest.skip(reason="Needs to update values in `grid_thw` otherwise it just gets broadcasted")
     def test_mismatching_num_image_tokens(self):
         pass
+
+
+@slow
+@require_torch
+class KimiK25IntegrationTest(unittest.TestCase):
+    model_id = "hf-internal-testing/kimi-k25-for-integration-test"
+    model = None
+    processor = None
+
+    @classmethod
+    def setUpClass(cls):
+        cleanup(torch_device, gc_collect=True)
+        cls.model = Kimi_K25ForConditionalGeneration.from_pretrained(cls.model_id, device_map="auto")
+        cls.processor = AutoProcessor.from_pretrained(cls.model_id)
+
+        cls.message1 = [
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "image",
+                        "url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg",
+                    },
+                    {"type": "text", "text": "What kind of dog is this?"},
+                ],
+            }
+        ]
+        cls.message2 = [
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "image",
+                        "url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/coco_sample.png",
+                    },
+                    {"type": "text", "text": "What kind of dog is this?"},
+                ],
+            }
+        ]
+        cls.message3 = [{"role": "user", "content": "Who would win in a fight - a dinosaur or a cow named Moo Moo?"}]
+
+    def tearDown(self):
+        cleanup(torch_device, gc_collect=True)
+
+    def test_model_logits_text_only(self):
+        expectations = Expectations(
+            {
+                ("cuda", None): [
+                    [[ 0.00000000, -0.02641739,  0.01707786, -0.08232787,  0.12016402, -0.15289734, -0.08252842,
+                    0.15658118, -0.04173164,  0.10555173],
+                    [ 0.00000000, -0.02639876,  0.01706616, -0.08229892,  0.12015337, -0.15289734, -0.08251060,
+                    0.15658717, -0.04172155,  0.10556119],
+                    [ 0.00000000, -0.02639606,  0.01708876, -0.08232962,  0.12015553, -0.15291165, -0.08253470,
+                    0.15658627, -0.04173409,  0.10555199],
+                    [ 0.00000000, -0.02638427,  0.01708288, -0.08230965,  0.12014508, -0.15289523, -0.08252528,
+                    0.15660310, -0.04173251,  0.10554133],
+                    [ 0.00000000, -0.02639318,  0.01706917, -0.08231460,  0.12016111, -0.15290320, -0.08252579,
+                    0.15659124, -0.04173930,  0.10554294],
+                    [ 0.00000000, -0.02638769,  0.01707737, -0.08231344,  0.12015510, -0.15289856, -0.08252031,
+                    0.15659934, -0.04173541,  0.10554094],
+                    [ 0.00000000, -0.02639529,  0.01708556, -0.08231322,  0.12014811, -0.15291123, -0.08251978,
+                    0.15660490, -0.04173838,  0.10553965],
+                    [ 0.00000000, -0.02639412,  0.01707170, -0.08232507,  0.12014882, -0.15289663, -0.08251097,
+                    0.15659560, -0.04172803,  0.10553968],
+                    [ 0.00000000, -0.02639644,  0.01707644, -0.08233012,  0.12013669, -0.15289611, -0.08249903,
+                    0.15660135, -0.04172298,  0.10554458],
+                    [ 0.00000000, -0.02639807,  0.01707577, -0.08232461,  0.12014168, -0.15288822, -0.08250540,
+                    0.15660320, -0.04172593,  0.10553741]]
+                ],
+            }
+        )  # fmt: skip
+        expectations_mean = Expectations({("cuda", None): -0.014419052749872208})
+
+        inputs = self.processor.apply_chat_template(
+            self.message3, tokenize=True, add_generation_prompt=True, return_tensors="pt", return_dict=True
+        ).to(self.model.device)
+
+        with torch.no_grad():
+            logits = self.model(**inputs).logits
+
+        torch.testing.assert_close(logits[:, :10, :10].cpu(), torch.tensor(expectations.get_expectation()))
+        torch.testing.assert_close(logits.mean().cpu(), torch.tensor(expectations_mean.get_expectation()))
+
+    def test_model_logits(self):
+        expectations = Expectations(
+            {
+                ("cuda", None): [
+                    [[ 0.00000000, -0.02641739,  0.01707786, -0.08232787,  0.12016402, -0.15289734, -0.08252842,
+                    0.15658118, -0.04173164,  0.10555173],
+                    [ 0.00000000, -0.02639876,  0.01706616, -0.08229892,  0.12015337, -0.15289734, -0.08251060,
+                    0.15658717, -0.04172155,  0.10556119],
+                    [ 0.00000000, -0.02639606,  0.01708876, -0.08232962,  0.12015553, -0.15291165, -0.08253470,
+                    0.15658627, -0.04173409,  0.10555199],
+                    [ 0.00000000, -0.02639439,  0.01708424, -0.08231656,  0.12013876, -0.15291429, -0.08251298,
+                    0.15660164, -0.04171884,  0.10554679],
+                    [ 0.00000000, -0.02638364,  0.01708178, -0.08230615,  0.12013706, -0.15290739, -0.08251728,
+                    0.15661213, -0.04172764,  0.10554501],
+                    [ 0.00000000, -0.02639332,  0.01708583, -0.08231664,  0.12012445, -0.15291154, -0.08248951,
+                    0.15662190, -0.04171957,  0.10554942],
+                    [ 0.00000000,  0.08700177,  0.08366316,  0.07953200, -0.16923970,  0.06034253,  0.23461264,
+                    0.23159909, -0.08662768, -0.01452735],
+                    [ 0.00000000, -0.07244547,  0.02737196,  0.07369756,  0.11849800, -0.01468838, -0.08068197,
+                    -0.22196104, -0.10857108,  0.00384381],
+                    [ 0.00000000,  0.24396195,  0.07257971,  0.02183190,  0.05994213, -0.09902838, -0.05029112,
+                    -0.09634171, -0.11046760,  0.02089387],
+                    [ 0.00000000,  0.05029136, -0.03608268,  0.03495589,  0.02199023, -0.06974902,  0.11681847,
+                    -0.12890734, -0.07075065,  0.12983331]]
+                ],
+            }
+        )  # fmt: skip
+        expectations_mean = Expectations({("cuda", None): 0.007999920286238194})
+
+        inputs = self.processor.apply_chat_template(
+            self.message1, tokenize=True, add_generation_prompt=True, return_tensors="pt", return_dict=True
+        ).to(self.model.device)
+
+        with torch.no_grad():
+            logits = self.model(**inputs).logits
+
+        torch.testing.assert_close(logits[:, :10, :10].cpu(), torch.tensor(expectations.get_expectation()))
+        torch.testing.assert_close(logits.mean().cpu(), torch.tensor(expectations_mean.get_expectation()))
+
+    def test_model_logits_batched(self):
+        expectations = Expectations(
+            {
+                ("cuda", None): [
+                    [[ 0.00000000, -0.02641735,  0.01707790, -0.08232785,  0.12016401, -0.15289739, -0.08252840,
+                    0.15658122, -0.04173165,  0.10555175],
+                    [ 0.00000000, -0.02639874,  0.01706615, -0.08229891,  0.12015339, -0.15289740, -0.08251059,
+                    0.15658718, -0.04172156,  0.10556121],
+                    [ 0.00000000, -0.02639605,  0.01708876, -0.08232963,  0.12015552, -0.15291169, -0.08253470,
+                    0.15658626, -0.04173411,  0.10555198],
+                    [ 0.00000000, -0.02639438,  0.01708425, -0.08231656,  0.12013876, -0.15291435, -0.08251297,
+                    0.15660165, -0.04171887,  0.10554679],
+                    [ 0.00000000, -0.02638364,  0.01708182, -0.08230612,  0.12013703, -0.15290746, -0.08251727,
+                    0.15661217, -0.04172765,  0.10554502],
+                    [ 0.00000000, -0.02639329,  0.01708584, -0.08231664,  0.12012445, -0.15291159, -0.08248951,
+                    0.15662192, -0.04171958,  0.10554940],
+                    [ 0.00000000,  0.08700177,  0.08366317,  0.07953200, -0.16923971,  0.06034254,  0.23461263,
+                    0.23159909, -0.08662771, -0.01452734],
+                    [ 0.00000000, -0.07244548,  0.02737197,  0.07369757,  0.11849802, -0.01468838, -0.08068197,
+                    -0.22196105, -0.10857107,  0.00384379],
+                    [ 0.00000000,  0.24396195,  0.07257971,  0.02183192,  0.05994214, -0.09902842, -0.05029113,
+                    -0.09634172, -0.11046763,  0.02089386],
+                    [ 0.00000000,  0.05029136, -0.03608267,  0.03495590,  0.02199023, -0.06974902,  0.11681848,
+                    -0.12890735, -0.07075066,  0.12983333]],
+
+                    [[ 0.00000000, -0.02641735,  0.01707790, -0.08232785,  0.12016401, -0.15289739, -0.08252840,
+                    0.15658122, -0.04173165,  0.10555175],
+                    [ 0.00000000, -0.02639874,  0.01706615, -0.08229891,  0.12015339, -0.15289740, -0.08251059,
+                    0.15658718, -0.04172156,  0.10556121],
+                    [ 0.00000000, -0.02639605,  0.01708876, -0.08232963,  0.12015552, -0.15291169, -0.08253470,
+                    0.15658626, -0.04173411,  0.10555198],
+                    [ 0.00000000, -0.02639438,  0.01708425, -0.08231656,  0.12013876, -0.15291435, -0.08251297,
+                    0.15660165, -0.04171887,  0.10554679],
+                    [ 0.00000000, -0.02638364,  0.01708182, -0.08230612,  0.12013703, -0.15290746, -0.08251727,
+                    0.15661217, -0.04172765,  0.10554502],
+                    [ 0.00000000, -0.02639329,  0.01708584, -0.08231664,  0.12012445, -0.15291159, -0.08248951,
+                    0.15662192, -0.04171958,  0.10554940],
+                    [ 0.00000000, -0.06525577,  0.08833339,  0.19255474, -0.08825377, -0.13921326,  0.14602648,
+                    0.04482564, -0.14889751,  0.11028164],
+                    [ 0.00000000, -0.00419279,  0.03873007,  0.31887013, -0.01151188, -0.30564448,  0.16670589,
+                    0.19029431, -0.13194472,  0.02135594],
+                    [ 0.00000000, -0.05691863,  0.09113241,  0.07550406,  0.09380092, -0.17235518,  0.20939635,
+                    0.04311826, -0.04715816, -0.00544562],
+                    [ 0.00000000, -0.01738080,  0.05235744,  0.22640616, -0.09752068, -0.16835804,  0.23356910,
+                    -0.02671638, -0.13405795, -0.09033854]]
+                ],
+            }
+        )  # fmt: skip
+        expectations_mean = Expectations({("cuda", None): 0.007677852641791105})
+
+        inputs = self.processor.apply_chat_template(
+            [self.message1, self.message2],
+            tokenize=True,
+            add_generation_prompt=True,
+            padding=True,
+            return_tensors="pt",
+            return_dict=True,
+        ).to(self.model.device)
+
+        with torch.no_grad():
+            logits = self.model(**inputs).logits
+
+        torch.testing.assert_close(logits[:, :10, :10].cpu(), torch.tensor(expectations.get_expectation()))
+        torch.testing.assert_close(logits.mean().cpu(), torch.tensor(expectations_mean.get_expectation()))

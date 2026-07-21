@@ -15,7 +15,6 @@
 
 import unittest
 
-import pytest
 import torch
 
 from transformers import is_torch_available
@@ -54,24 +53,6 @@ class HunYuanMoEV1ModelTest(CausalLMModelTest, unittest.TestCase):
         processor_name,
     ):
         return True
-
-    @unittest.skip("Hunyuan model Unsupported")
-    @pytest.mark.torch_compile_test
-    def test_generate_compilation_all_outputs(self):
-        pass
-
-    @unittest.skip("Hunyuan model Unsupported")
-    @pytest.mark.torch_compile_test
-    def test_generate_compile_model_forward(self):
-        pass
-
-    @unittest.skip("Hunyuan model Unsupported")
-    def test_generate_from_inputs_embeds_with_static_cache(self):
-        pass
-
-    @unittest.skip("Hunyuan model Unsupported")
-    def test_generate_with_static_cache(self):
-        pass
 
 
 @require_torch
