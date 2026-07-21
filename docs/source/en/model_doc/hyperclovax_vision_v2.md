@@ -52,8 +52,8 @@ messages = [
         "role": "user",
         "content": [
             {
-                "type": "image_url",
-                "image_url": {"url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"},
+                "type": "image",
+                "url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg",
             },
             {"type": "text", "text": "Describe this image."},
         ],
@@ -99,25 +99,19 @@ messages = [
         "role": "user",
         "content": [
             {
-                "type": "image_url",
-                "image_url": {"url": "/path/to/video.mp4"},
+                "type": "video",
+                "url": "/path/to/video.mp4",
             },
             {"type": "text", "text": "Describe this video."},
         ],
     },
 ]
 
-# Use processor.tokenizer.apply_chat_template for video inputs.
-# processor.apply_chat_template rewrites image_url to image before the
-# template runs, which breaks HCX's extension-based video detection.
-text = processor.tokenizer.apply_chat_template(
+inputs = processor.apply_chat_template(
     messages,
     add_generation_prompt=True,
-    tokenize=False,
-)
-inputs = processor(
-    text=text,
-    videos=["/path/to/video.mp4"],
+    tokenize=True,
+    return_dict=True,
     return_tensors="pt",
 ).to(model.device)
 
@@ -152,19 +146,6 @@ processor = HyperCLOVAXVisionV2Processor.from_pretrained("naver-hyperclovax/Hype
 
 ## Notes
 
-- HyperCLOVAX Vision V2 uses a unique media input format. Both images and videos are specified using `{"type": "image_url", "image_url": {"url": "..."}}`. The processor and chat template distinguish images from videos by file extension (`.mp4`, `.avi`, `.mov`, `.mkv`, `.webm`, `.flv`, `.wmv`, `.m4v` are treated as video; everything else is treated as image).
-
-    ```python
-    # Image input
-    {"type": "image_url", "image_url": {"url": "https://example.com/image.jpg"}}
-
-    # Video input (identified by file extension)
-    {"type": "image_url", "image_url": {"url": "/path/to/video.mp4"}}
-    ```
-
-    > [!WARNING]
-    > Video input via `processor.apply_chat_template` is currently broken. Recent Transformers versions rewrite `image_url` entries to `image` before the chat template runs, so the video-detection branch in HCX's template never triggers and video inputs are silently dropped. As a workaround, use `processor.tokenizer.apply_chat_template` to render the prompt text, then pass the video path separately to `processor(...)`. See [this review comment](https://github.com/huggingface/transformers/pull/44314#discussion_r3008382827) for details.
-
 - The model supports chain-of-thought reasoning. By default, the generation prompt prepends an empty `<think>\n\n</think>` block. To generate an explicit reasoning trace inside `<think>...</think>` tags, pass `thinking=True` to `apply_chat_template` (image/text inputs only):
 
     ```python
@@ -178,14 +159,14 @@ processor = HyperCLOVAXVisionV2Processor.from_pretrained("naver-hyperclovax/Hype
     ).to(model.device)
     ```
 
-- The model supports multi-turn conversations with mixed media. Images and videos can appear across multiple turns. For turns containing video, use the `processor.tokenizer.apply_chat_template` workaround described above.
+- The model supports multi-turn conversations with mixed media. Images and videos can appear across multiple turns.
 
     ```python
     messages = [
         {
             "role": "user",
             "content": [
-                {"type": "image_url", "image_url": {"url": "https://example.com/image1.jpg"}},
+                {"type": "image", "url": "https://example.com/image1.jpg"},
                 {"type": "text", "text": "What do you see in this image?"},
             ],
         },
@@ -196,7 +177,7 @@ processor = HyperCLOVAXVisionV2Processor.from_pretrained("naver-hyperclovax/Hype
         {
             "role": "user",
             "content": [
-                {"type": "image_url", "image_url": {"url": "https://example.com/image2.jpg"}},
+                {"type": "image", "url": "https://example.com/image2.jpg"},
                 {"type": "text", "text": "How does this compare to the first image?"},
             ],
         },

@@ -51,8 +51,8 @@ messages = [
         "role": "user",
         "content": [
             {
-                "type": "image_url",
-                "image_url": {"url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"},
+                "type": "image",
+                "url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg",
             },
             {"type": "text", "text": "이 이미지를 설명해 주세요."},
         ],
@@ -98,25 +98,19 @@ messages = [
         "role": "user",
         "content": [
             {
-                "type": "image_url",
-                "image_url": {"url": "/path/to/video.mp4"},
+                "type": "video",
+                "url": "/path/to/video.mp4",
             },
             {"type": "text", "text": "이 비디오를 설명해 주세요."},
         ],
     },
 ]
 
-# 비디오 입력은 processor.tokenizer.apply_chat_template을 사용하세요.
-# processor.apply_chat_template은 템플릿 실행 전에 image_url을 image로
-# 재작성하여 HCX의 확장자 기반 비디오 감지가 동작하지 않습니다.
-text = processor.tokenizer.apply_chat_template(
+inputs = processor.apply_chat_template(
     messages,
     add_generation_prompt=True,
-    tokenize=False,
-)
-inputs = processor(
-    text=text,
-    videos=["/path/to/video.mp4"],
+    tokenize=True,
+    return_dict=True,
     return_tensors="pt",
 ).to(model.device)
 
@@ -151,19 +145,6 @@ processor = HyperCLOVAXVisionV2Processor.from_pretrained("naver-hyperclovax/Hype
 
 ## 노트 [[notes]]
 
-- HyperCLOVAX Vision V2는 고유한 미디어 입력 형식을 사용합니다. 이미지와 비디오 모두 `{"type": "image_url", "image_url": {"url": "..."}}` 형식으로 지정합니다. 프로세서와 채팅 템플릿은 파일 확장자로 이미지와 비디오를 구분합니다 (`.mp4`, `.avi`, `.mov`, `.mkv`, `.webm`, `.flv`, `.wmv`, `.m4v`는 비디오로, 그 외는 이미지로 처리).
-
-    ```python
-    # 이미지 입력
-    {"type": "image_url", "image_url": {"url": "https://example.com/image.jpg"}}
-
-    # 비디오 입력 (파일 확장자로 구분)
-    {"type": "image_url", "image_url": {"url": "/path/to/video.mp4"}}
-    ```
-
-    > [!경고]
-    > 현재 `processor.apply_chat_template`을 통한 비디오 입력이 정상적으로 동작하지 않습니다. 최신 Transformers 버전에서 `image_url` 항목이 채팅 템플릿 실행 전에 `image`로 재작성되면서, HCX 템플릿의 비디오 감지 분기가 동작하지 않아 비디오 입력이 누락됩니다. 대신 `processor.tokenizer.apply_chat_template`으로 프롬프트 텍스트를 렌더링한 뒤, 비디오 경로를 `processor(...)`에 직접 전달하는 방식으로 우회할 수 있습니다. 자세한 내용은 [이 리뷰 코멘트](https://github.com/huggingface/transformers/pull/44314#discussion_r3008382827)를 참고하세요.
-
 - 이 모델은 연쇄 추론(chain-of-thought reasoning)을 지원합니다. 기본적으로 생성 프롬프트에 빈 `<think>\n\n</think>` 블록이 추가됩니다. `<think>...</think>` 태그 내에 명시적인 추론 과정을 생성하려면 `apply_chat_template`에 `thinking=True`를 전달하세요 (이미지/텍스트 입력 한정):
 
     ```python
@@ -177,14 +158,14 @@ processor = HyperCLOVAXVisionV2Processor.from_pretrained("naver-hyperclovax/Hype
     ).to(model.device)
     ```
 
-- 여러 번의 대화에서 혼합 미디어(이미지, 비디오)를 사용하는 멀티턴 대화를 지원합니다. 비디오가 포함된 턴은 위에서 설명한 `processor.tokenizer.apply_chat_template` 우회 방법을 사용하세요.
+- 여러 번의 대화에서 혼합 미디어(이미지, 비디오)를 사용하는 멀티턴 대화를 지원합니다. 이미지와 비디오는 여러 턴에 걸쳐 나타날 수 있습니다.
 
     ```python
     messages = [
         {
             "role": "user",
             "content": [
-                {"type": "image_url", "image_url": {"url": "https://example.com/image1.jpg"}},
+                {"type": "image", "url": "https://example.com/image1.jpg"},
                 {"type": "text", "text": "이 이미지에서 무엇이 보이나요?"},
             ],
         },
@@ -195,7 +176,7 @@ processor = HyperCLOVAXVisionV2Processor.from_pretrained("naver-hyperclovax/Hype
         {
             "role": "user",
             "content": [
-                {"type": "image_url", "image_url": {"url": "https://example.com/image2.jpg"}},
+                {"type": "image", "url": "https://example.com/image2.jpg"},
                 {"type": "text", "text": "첫 번째 이미지와 비교해서 어떻게 다른가요?"},
             ],
         },
