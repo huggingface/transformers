@@ -41,29 +41,7 @@ from transformers.utils import enable_tf32
 from transformers.utils.network_logging import register_network_debug_plugin
 
 
-# Dedicated debug logger for CI read-only cache diagnostics.
-# Uses a handler that re-resolves sys.stderr at every emit, so output goes into
-# whatever pytest has sys.stderr pointed at (its capture StringIO during tests).
-# This makes the lines appear in "Captured stderr call" in the test failure output,
-# which is always visible in GitHub Actions raw logs.
-class _LiveStderrHandler(_stdlib_logging.StreamHandler):
-    """Always emits to the *current* sys.stderr, not the one captured at init time."""
-
-    def emit(self, record):
-        self.stream = sys.stderr
-        super().emit(record)
-
-
-_ci_dbg = _stdlib_logging.getLogger("ci_cache_debug")
-if not _ci_dbg.handlers:
-    _h = _LiveStderrHandler()
-    _h.setFormatter(_stdlib_logging.Formatter("[CI_DBG] %(name)s %(message)s"))
-    _ci_dbg.addHandler(_h)
-    _ci_dbg.setLevel(_stdlib_logging.DEBUG)
-    _ci_dbg.propagate = False
-
-# Per-module child loggers — inherit the parent's handler automatically.
-_ci_dbg = _stdlib_logging.getLogger("ci_cache_debug.conftest")
+_ci_dbg = _stdlib_logging.getLogger(__name__)
 
 
 _ci_fallback_cache_dir = None
@@ -149,14 +127,16 @@ def _with_tmpdir_cache_fallback(fn):
     def wrapper(*args, **kwargs):
         repo_id = kwargs.get("path_or_repo_id") or kwargs.get("repo_id") or (args[0] if args else "?")
         filenames = kwargs.get("filenames") or kwargs.get("filename") or (args[1] if len(args) > 1 else "?")
-        _ci_dbg.debug("FALLBACK-WRAPPER ENTER fn=%r repo=%r files=%r", fn.__name__, repo_id, filenames)
+        _ci_dbg.warning("FALLBACK-WRAPPER ENTER fn=%r repo=%r files=%r", fn.__name__, repo_id, filenames)
         try:
             result = fn(*args, **kwargs)
-            _ci_dbg.debug("FALLBACK-WRAPPER SUCCESS fn=%r repo=%r result=%r", fn.__name__, repo_id, str(result)[:200])
+            _ci_dbg.warning(
+                "FALLBACK-WRAPPER SUCCESS fn=%r repo=%r result=%r", fn.__name__, repo_id, str(result)[:200]
+            )
             return result
         except (OSError, RuntimeError) as e:
             is_ro = _is_readonly_fs_error(e)
-            _ci_dbg.debug(
+            _ci_dbg.warning(
                 "FALLBACK-WRAPPER CAUGHT %s errno=%s is_readonly=%s msg=%r",
                 type(e).__name__,
                 getattr(e, "errno", None),
@@ -164,7 +144,7 @@ def _with_tmpdir_cache_fallback(fn):
                 str(e)[:200],
             )
             if not is_ro:
-                _ci_dbg.debug("FALLBACK-WRAPPER NOT a read-only FS error — re-raising")
+                _ci_dbg.warning("FALLBACK-WRAPPER NOT a read-only FS error — re-raising")
                 raise
             global _ci_fallback_cache_dir
             if _ci_fallback_cache_dir is None:
@@ -179,7 +159,7 @@ def _with_tmpdir_cache_fallback(fn):
                 file=sys.stderr,
                 flush=True,
             )
-            _ci_dbg.debug(
+            _ci_dbg.warning(
                 "FALLBACK-WRAPPER RETRY fn=%r repo=%r fallback_cache_dir=%r",
                 fn.__name__,
                 repo_id,
@@ -194,7 +174,7 @@ def _with_tmpdir_cache_fallback(fn):
                 mock.patch.dict(os.environ, {"HF_XET_CACHE": _ci_fallback_cache_dir}),
             ):
                 result = fn(*args, **{**kwargs, "cache_dir": _ci_fallback_cache_dir})
-            _ci_dbg.debug(
+            _ci_dbg.warning(
                 "FALLBACK-WRAPPER RETRY SUCCESS fn=%r repo=%r result=%r",
                 fn.__name__,
                 repo_id,

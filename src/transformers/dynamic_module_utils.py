@@ -20,7 +20,6 @@ import importlib
 import importlib.metadata
 import importlib.util
 import keyword
-import logging as _stdlib_logging
 import os
 import re
 import shutil
@@ -45,9 +44,6 @@ from .utils.import_utils import VersionComparison, split_package_version
 
 
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
-
-# Child of the "ci_cache_debug" logger tree set up by conftest.py.
-_ci_dbg = _stdlib_logging.getLogger("ci_cache_debug.dynmod")
 
 
 def _sanitize_module_name(name: str) -> str:
@@ -405,7 +401,7 @@ def get_cached_module_file(
     Returns:
         `str`: The path to the module inside the cache.
     """
-    _ci_dbg.debug(
+    logger.warning(
         "get_cached_module_file ENTER repo=%r module_file=%r cache_dir=%r revision=%r _commit_hash=%r",
         pretrained_model_name_or_path,
         module_file,
@@ -427,12 +423,12 @@ def get_cached_module_file(
         cached_module = try_to_load_from_cache(
             pretrained_model_name_or_path, module_file, cache_dir=cache_dir, revision=_commit_hash, repo_type=repo_type
         )
-        _ci_dbg.debug("get_cached_module_file pre-download try_to_load_from_cache returned: %r", cached_module)
+        logger.warning("get_cached_module_file pre-download try_to_load_from_cache returned: %r", cached_module)
 
     new_files = []
     try:
         # Load from URL or cache if already cached
-        _ci_dbg.debug("get_cached_module_file calling cached_file for %r", module_file)
+        logger.warning("get_cached_module_file calling cached_file for %r", module_file)
         resolved_module_file = cached_file(
             pretrained_model_name_or_path,
             module_file,
@@ -445,10 +441,10 @@ def get_cached_module_file(
             repo_type=repo_type,
             _commit_hash=_commit_hash,
         )
-        _ci_dbg.debug("get_cached_module_file cached_file returned: %r", resolved_module_file)
+        logger.warning("get_cached_module_file cached_file returned: %r", resolved_module_file)
         if not is_local and cached_module != resolved_module_file:
             new_files.append(module_file)
-            _ci_dbg.debug(
+            logger.warning(
                 "get_cached_module_file new version detected: cached_module=%r vs resolved=%r",
                 cached_module,
                 resolved_module_file,
@@ -494,7 +490,7 @@ def get_cached_module_file(
     else:
         # Get the commit hash
         commit_hash = extract_commit_hash(resolved_module_file, _commit_hash)
-        _ci_dbg.debug(
+        logger.warning(
             "get_cached_module_file extracted commit_hash=%r from resolved_module_file=%r",
             commit_hash,
             resolved_module_file,
@@ -508,7 +504,7 @@ def get_cached_module_file(
         create_dynamic_module(Path(full_submodule_module_file_path).parent)
 
         already_installed = (submodule_path / module_file).exists()
-        _ci_dbg.debug(
+        logger.warning(
             "get_cached_module_file HF_MODULES_CACHE target=%r already_exists=%s",
             str(submodule_path / module_file),
             already_installed,
@@ -516,7 +512,7 @@ def get_cached_module_file(
         if not already_installed:
             shutil.copyfile(resolved_module_file, submodule_path / module_file)
             importlib.invalidate_caches()
-            _ci_dbg.debug(
+            logger.warning(
                 "get_cached_module_file copied %r -> %r",
                 resolved_module_file,
                 str(submodule_path / module_file),
@@ -548,7 +544,7 @@ def get_cached_module_file(
         )
 
     final_path = os.path.join(full_submodule, module_file)
-    _ci_dbg.debug("get_cached_module_file RETURN %r", final_path)
+    logger.warning("get_cached_module_file RETURN %r", final_path)
     return final_path
 
 
