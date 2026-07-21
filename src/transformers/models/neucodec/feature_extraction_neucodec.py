@@ -18,19 +18,19 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+
 import copy
 from typing import Any
-
-import torch
 
 from ...audio_utils import AudioInput, make_list_of_audio
 from ...feature_extraction_sequence_utils import SequenceFeatureExtractor
 from ...feature_extraction_utils import BatchFeature
 from ...utils import PaddingStrategy, TensorType, logging
-from ...utils.import_utils import is_torch_available, is_torchaudio_available
+from ...utils.import_utils import is_torch_available, is_torchaudio_available, requires
 
 
 if is_torch_available():
+    import torch
     import torch.nn.functional as F
 
 if is_torchaudio_available():
@@ -88,6 +88,7 @@ class NeuCodecFeatureExtractor(SequenceFeatureExtractor):
         self.frame_length = 400
         self.frame_shift = 160
 
+    @requires(backends=("torch", "torchaudio"))
     def __call__(
         self,
         audio: AudioInput,
@@ -133,8 +134,6 @@ class NeuCodecFeatureExtractor(SequenceFeatureExtractor):
                 Remaining dictionary of keyword arguments that will be passed to the tokenizer or the feature
                 extractor.
         """
-        if not is_torch_available():
-            raise ImportError("PyTorch is required for mel-filter bank feature extraction.")
 
         if sampling_rate is not None:
             if sampling_rate != self.sampling_rate:

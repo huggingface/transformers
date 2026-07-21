@@ -24,7 +24,6 @@ from dataclasses import dataclass
 from typing import Optional
 
 import numpy as np
-import torch
 import torch.nn as nn
 from torch.nn import Parameter
 
@@ -44,6 +43,7 @@ from .configuration_neucodec import NeuCodecConfig
 
 
 if is_torch_available():
+    import torch
     import torch.nn.functional as F
 
 
