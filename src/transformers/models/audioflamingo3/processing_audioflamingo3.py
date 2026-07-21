@@ -16,7 +16,7 @@
 
 import numpy as np
 
-from ...audio_utils import AudioInput, make_list_of_audio
+from ...audio_utils import AudioInput, make_list_of_audio_chat_template
 from ...feature_extraction_utils import BatchFeature
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import TextInput
@@ -99,7 +99,9 @@ class AudioFlamingo3Processor(ProcessorMixin):
         model_inputs = super().__call__(audio=audio, text=text, **kwargs)
 
         if output_labels:
-            labels = model_inputs.pop("mm_token_type_ids")
+            mm_token_type_ids = model_inputs.pop("mm_token_type_ids")
+            labels = model_inputs["input_ids"].clone()
+            labels[mm_token_type_ids != 0] = -100  # audio positions
             labels[labels == self.tokenizer.pad_token_id] = -100
             model_inputs["labels"] = labels
         return BatchFeature(data=model_inputs, tensor_type="pt")
@@ -200,14 +202,9 @@ class AudioFlamingo3Processor(ProcessorMixin):
 
         """
 
-        if isinstance(audio, str):
-            audio_items: list[str | np.ndarray] = [audio]
-        elif isinstance(audio, (list, tuple)) and audio and all(isinstance(el, str) for el in audio):
-            audio_items = list(audio)
-        else:
-            audio_items = list(make_list_of_audio(audio))
-            if is_torch_available():
-                audio_items = [el.detach().cpu().numpy() if isinstance(el, torch.Tensor) else el for el in audio_items]
+        audio_items: list[str | np.ndarray] = list(make_list_of_audio_chat_template(audio))
+        if is_torch_available():
+            audio_items = [el.detach().cpu().numpy() if isinstance(el, torch.Tensor) else el for el in audio_items]
 
         batch_size = len(audio_items)
         if batch_size == 0:

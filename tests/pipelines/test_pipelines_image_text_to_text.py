@@ -14,6 +14,7 @@
 
 import base64
 import unittest
+from types import SimpleNamespace
 
 from transformers import MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING, is_vision_available
 from transformers.pipelines import ImageTextToTextPipeline, pipeline
@@ -66,6 +67,17 @@ class ImageTextToTextPipelineTests(unittest.TestCase):
             [
                 {"input_text": ANY(str), "generated_text": ANY(str)},
             ],
+        )
+
+    def test_stop_sequence_without_generate_kwargs(self):
+        pipe = object.__new__(ImageTextToTextPipeline)
+        tokenizer = object()
+        pipe.processor = SimpleNamespace(tokenizer=tokenizer)
+
+        _, forward_kwargs, _ = pipe._sanitize_parameters(stop_sequence=".", max_new_tokens=3)
+        self.assertEqual(
+            forward_kwargs["generate_kwargs"],
+            {"stop_strings": ["."], "tokenizer": tokenizer, "max_new_tokens": 3},
         )
 
     @require_torch
@@ -275,6 +287,56 @@ class ImageTextToTextPipelineTests(unittest.TestCase):
         self.assertNotIn("role", parsed_message)
         self.assertIsInstance(parsed_message["first_word"], str)
         self.assertIsInstance(parsed_message["last_word"], str)
+
+    @slow
+    @require_torch
+    def test_model_pt_chat_template_with_response_template_prefix(self):
+        # When the chat template pre-writes the start of the assistant message (here, an
+        # opening <think> block), the pipeline must pass the prompt to `parse_response` as
+        # `prefix=` so that generated text is correctly routed into the prefilled region.
+        pipe = pipeline("image-text-to-text", model="llava-hf/llava-interleave-qwen-0.5b-hf")
+        pipe.processor.chat_template = (
+            "{% for message in messages %}"
+            "{{ '<|im_start|>' + message['role'] + '\n' }}"
+            "{% for item in message['content'] %}"
+            "{% if item['type'] == 'image' %}{{ '<image>' }}"
+            "{% elif item['type'] == 'text' %}{{ item['text'] }}{% endif %}"
+            "{% endfor %}"
+            "{{ '<|im_end|>' + '\n' }}"
+            "{% endfor %}"
+            "{% if add_generation_prompt %}{{ '<|im_start|>assistant\n<think>\n' }}{% endif %}"
+        )
+        pipe.tokenizer.response_template = {
+            "defaults": {"role": "assistant"},
+            "start_anchor": "<|im_start|>assistant\n",
+            "fields": {
+                "thinking": {"open": "<think>", "close": "</think>", "content": "text"},
+                "content": {"close": "<|im_end|>", "content": "text"},
+            },
+        }
+        messages = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": "What's in this image?"},
+                    {
+                        "type": "image",
+                        "url": "https://cdn.britannica.com/61/93061-050-99147DCE/Statue-of-Liberty-Island-New-York-Bay.jpg",
+                    },
+                ],
+            }
+        ]
+        outputs = pipe(text=messages, do_sample=False, max_new_tokens=10)
+        parsed_message = outputs[0]["generated_text"][-1]
+        # The model never emits </think> here, so everything it generates stays inside the
+        # `thinking` region opened by the chat template in the prompt. Without `prefix=`,
+        # the parser would never see the opening <think> and would mis-route the generated
+        # text into `content` instead.
+        self.assertEqual(parsed_message["role"], "assistant")
+        self.assertIn("thinking", parsed_message)
+        self.assertNotIn("content", parsed_message)
+        self.assertIsInstance(parsed_message["thinking"], str)
+        self.assertGreater(len(parsed_message["thinking"]), 0)
 
     @slow
     @require_torch

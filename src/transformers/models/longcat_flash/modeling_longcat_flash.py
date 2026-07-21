@@ -131,11 +131,11 @@ class LongcatFlashRotaryEmbedding(nn.Module):
 
 
 class LongcatFlashMLP(nn.Module):
-    def __init__(self, config, hidden_size=None, intermediate_size=None):
+    def __init__(self, config, intermediate_size=None):
         super().__init__()
         self.config = config
-        self.hidden_size = config.hidden_size if hidden_size is None else hidden_size
-        self.intermediate_size = config.ffn_hidden_size if intermediate_size is None else intermediate_size
+        self.hidden_size = config.hidden_size
+        self.intermediate_size = config.intermediate_size if intermediate_size is None else intermediate_size
         self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
         self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
         self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
@@ -149,17 +149,17 @@ class LongcatFlashMLP(nn.Module):
 class LongcatFlashTopkRouter(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.config = config
+        self.top_k = config.num_experts_per_tok
+        self.num_experts = config.num_local_experts
+        self.hidden_dim = config.hidden_size
         self.n_routed_experts = config.n_routed_experts + (config.zero_expert_num or 0)
-        self.register_buffer("e_score_correction_bias", torch.zeros(self.n_routed_experts))
-
-        self.top_k = config.moe_topk
         self.routed_scaling_factor = config.routed_scaling_factor
         self.router_bias = getattr(config, "router_bias", False)
+        self.register_buffer("e_score_correction_bias", torch.zeros(self.n_routed_experts))
         self.classifier = nn.Linear(config.hidden_size, self.n_routed_experts, bias=self.router_bias)
 
     def forward(self, hidden_states):
-        hidden_states = hidden_states.view(-1, self.config.hidden_size)
+        hidden_states = hidden_states.view(-1, self.hidden_dim)
         router_logits = F.linear(hidden_states.type(torch.float32), self.classifier.weight.type(torch.float32))
         scores = router_logits.softmax(dim=-1)
         topk_indices = self.get_topk_indices(scores)
@@ -282,6 +282,22 @@ def eager_attention_forward(
     return attn_output, attn_weights
 
 
+def yarn_get_mscale(scale=1, mscale=1):
+    if scale <= 1:
+        return 1.0
+    return 0.1 * mscale * math.log(scale) + 1.0
+
+
+def yarn_apply_mscale(rope_parameters, scaling):
+    if rope_parameters.get("rope_type", "default") != "default":
+        mscale_all_dim = rope_parameters.get("mscale_all_dim", 0)
+        scaling_factor = rope_parameters["factor"]
+        if mscale_all_dim:
+            mscale = yarn_get_mscale(scaling_factor, mscale_all_dim)
+            scaling = scaling * mscale * mscale
+    return scaling
+
+
 def apply_rotary_pos_emb_interleave(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
     r"""
     Applies interleaved Rotary Position Embedding to the query and key tensors.
@@ -319,12 +335,6 @@ def apply_rotary_pos_emb_interleave(q, k, cos, sin, position_ids=None, unsqueeze
     q_embed = torch.cat([q1 * cos - q2 * sin, q2 * cos + q1 * sin], dim=-1)
     k_embed = torch.cat([k1 * cos - k2 * sin, k2 * cos + k1 * sin], dim=-1)
     return q_embed, k_embed
-
-
-def yarn_get_mscale(scale=1, mscale=1):
-    if scale <= 1:
-        return 1.0
-    return 0.1 * mscale * math.log(scale) + 1.0
 
 
 class LongcatFlashMLA(nn.Module):
@@ -372,12 +382,7 @@ class LongcatFlashMLA(nn.Module):
         )
 
         self.scaling = self.qk_head_dim ** (-0.5)
-        if self.config.rope_parameters.get("rope_type", "default") != "default":
-            mscale_all_dim = self.config.rope_parameters.get("mscale_all_dim", 0)
-            scaling_factor = self.config.rope_parameters["factor"]
-            if mscale_all_dim:
-                mscale = yarn_get_mscale(scaling_factor, mscale_all_dim)
-                self.scaling = self.scaling * mscale * mscale
+        self.scaling = yarn_apply_mscale(config.rope_parameters, self.scaling)
 
         self.mla_scale_q_lora = (config.hidden_size / self.q_lora_rank) ** 0.5
         self.mla_scale_kv_lora = (config.hidden_size / self.kv_lora_rank) ** 0.5
@@ -548,7 +553,7 @@ class LongcatFlashPreTrainedModel(PreTrainedModel):
     _keys_to_ignore_on_load_unexpected = [r"model\.mtp.*"]
     _keep_in_fp32_modules = [
         "classifier.weight"
-    ]  # TODO let's make sure orignal code base has this, for now it fixes quantization
+    ]  # TODO let's make sure original code base has this, for now it fixes quantization
 
     @torch.no_grad()
     def _init_weights(self, module):

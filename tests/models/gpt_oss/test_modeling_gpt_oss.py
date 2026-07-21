@@ -35,6 +35,7 @@ from transformers.testing_utils import (
     require_deterministic_for_xpu,
     require_kernels,
     require_torch,
+    require_torch_accelerator,
     require_torch_gpu,
     slow,
     torch_device,
@@ -70,12 +71,14 @@ class GptOssModelTest(CausalLMModelTest, unittest.TestCase):
     model_tester_class = GptOssModelTester
 
     @require_kernels
+    @require_torch_accelerator
     def test_kernelize_does_not_crash(self):
-        """Regression test #45799: `kernelize` should not crash with `use_kernelized_func` + `use_kernel_func_from_hub`."""
+        """Regression test #45799 and #46619: `kernelize` should not crash with `use_kernelized_func` + `use_kernel_func_from_hub`."""
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
         model = GptOssModel(config).to(device=torch_device)
         # This used to raise TypeError because apply_rotary_pos_emb was not wrapped as nn.Module
-        model.use_kernels = True
+        # and also because a stale `position_ids` arg made its signature mismatch the hub rotary kernel
+        model.set_use_kernels(True)
 
     @require_kernels
     @pytest.mark.flash_attn_test
@@ -156,6 +159,7 @@ def distributed_worker(quantized, model_size, kernels, attn_impl, mode):
     import os
 
     from transformers import AutoModelForCausalLM, AutoTokenizer
+    from transformers.distributed import DistributedConfig
     from transformers.testing_utils import torch_device
 
     def generate_config_key(quantized, model, kernels, attn_impl, mode):
@@ -176,7 +180,7 @@ def distributed_worker(quantized, model_size, kernels, attn_impl, mode):
     model = AutoModelForCausalLM.from_pretrained(
         model_id,
         dtype="auto",
-        tp_plan="auto",  # distributed inference
+        distributed_config=DistributedConfig(tp_size=int(os.environ["WORLD_SIZE"])),
         use_kernels=kernels,
     ).to(torch_device)
     model.set_attn_implementation(attn_impl)
