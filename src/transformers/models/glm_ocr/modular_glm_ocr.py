@@ -21,8 +21,8 @@ from huggingface_hub.dataclasses import strict
 from ...modeling_outputs import BaseModelOutputWithPooling
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...utils import auto_docstring
-from ...utils.generic import is_flash_attention_requested
-from ...vision_utils import get_vision_attention_seqlens, get_vision_max_seqlen, get_vision_position_ids
+from ...utils.generic import get_max_seqlen, is_flash_attention_requested
+from ...vision_utils import get_vision_attention_seqlens, get_vision_position_ids
 from ..glm4v.configuration_glm4v import Glm4vConfig, Glm4vTextConfig, Glm4vVisionConfig
 from ..glm4v.modeling_glm4v import (
     Glm4vForConditionalGeneration,
@@ -182,7 +182,7 @@ class GlmOcrVisionAttention(Glm4vVisionAttention):
 
         if is_flash_attention_requested(self.config):
             # Flash Attention: Use cu_seqlens for variable length attention
-            max_seqlen = get_vision_max_seqlen(cu_seqlens, self.config, kwargs={"max_seqlen": max_seqlen})
+            max_seqlen = get_max_seqlen(cu_seqlens, self.config, kwargs={"max_seqlen": max_seqlen})
             attn_output, _ = attention_interface(
                 self,
                 query_states,

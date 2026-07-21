@@ -34,7 +34,6 @@ from torch.nn import functional as F
 from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
-from ...configuration_utils import PreTrainedConfig
 from ...generation import GenerationMixin
 from ...integrations import (
     use_experts_implementation,
@@ -60,6 +59,7 @@ from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import (
     TransformersKwargs,
     accepts_precomputed_kwargs,
+    get_max_seqlen,
     is_flash_attention_requested,
     maybe_autocast,
     merge_with_config_defaults,
@@ -68,7 +68,6 @@ from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ...vision_utils import (
     get_vision_attention_seqlens,
     get_vision_bilinear_indices_and_weights,
-    get_vision_max_seqlen,
     get_vision_position_ids,
 )
 from .configuration_qwen3_omni_moe import (
@@ -507,15 +506,6 @@ def eager_attention_forward(
     return attn_output, attn_weights
 
 
-def get_audio_max_seqlen(cu_seqlens: torch.Tensor, config: PreTrainedConfig, kwargs: dict | None = None) -> int | None:
-    """Get the maximum packed audio sequence length, or pop it from `kwargs` if precomputed."""
-    if kwargs is not None and (max_seqlen := kwargs.pop("max_seqlen", None)) is not None:
-        return max_seqlen
-    if not is_flash_attention_requested(config):
-        return None
-    return int((cu_seqlens[1:] - cu_seqlens[:-1]).max().item())
-
-
 class Qwen3OmniMoeAudioAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
@@ -567,7 +557,7 @@ class Qwen3OmniMoeAudioAttention(nn.Module):
 
         if is_flash_attention_requested(self.config):
             # Flash Attention: Use cu_seqlens for variable length attention
-            max_seqlen = get_audio_max_seqlen(cu_seqlens, self.config, kwargs={"max_seqlen": max_seqlen})
+            max_seqlen = get_max_seqlen(cu_seqlens, self.config, kwargs={"max_seqlen": max_seqlen})
             attn_output, _ = attention_interface(
                 self,
                 query_states,
@@ -828,7 +818,7 @@ class Qwen3OmniMoeAudioEncoder(Qwen3OmniMoePreTrainedModel):
         cu_seqlens = get_audio_cu_seqlens(
             chunk_lengths, feature_lens, self.n_window_infer, self.n_window, kwargs=kwargs
         )
-        max_seqlen = get_audio_max_seqlen(cu_seqlens, self.config, kwargs=kwargs)
+        max_seqlen = get_max_seqlen(cu_seqlens, self.config, kwargs=kwargs)
 
         # Add channel dim for Conv2d: (num_chunks, mel_bins, time) -> (num_chunks, 1, mel_bins, time)
         padded_feature = padded_feature.unsqueeze(1)
@@ -928,7 +918,7 @@ class Qwen3OmniMoeVisionAttention(nn.Module):
 
         if is_flash_attention_requested(self.config):
             # Flash Attention: Use cu_seqlens for variable length attention
-            max_seqlen = get_vision_max_seqlen(cu_seqlens, self.config, kwargs={"max_seqlen": max_seqlen})
+            max_seqlen = get_max_seqlen(cu_seqlens, self.config, kwargs={"max_seqlen": max_seqlen})
             attn_output, _ = attention_interface(
                 self,
                 query_states,

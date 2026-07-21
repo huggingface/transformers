@@ -46,6 +46,7 @@ from collections.abc import MutableMapping
 from typing import Any
 
 from ..utils import logging
+from ..utils.generic import get_max_seqlen
 from ..utils.import_utils import is_torch_available
 
 
@@ -59,7 +60,6 @@ if is_torch_available():
     from ..vision_utils import (
         get_vision_attention_seqlens,
         get_vision_bilinear_indices_and_weights,
-        get_vision_max_seqlen,
         get_vision_merged_shape,
         get_vision_nearest_position_ids,
         get_vision_position_ids,
@@ -458,7 +458,7 @@ def _prepare_grid_thw_vision_inputs(model: torch.nn.Module, inputs: dict[str, An
         inputs["window_index"], inputs["cu_window_seqlens"] = get_vision_window_index(
             grid_thw, spatial_merge_size, window_size, patch_size
         )
-        inputs["max_window_seqlen"] = get_vision_max_seqlen(
+        inputs["max_window_seqlen"] = get_max_seqlen(
             inputs["cu_window_seqlens"], model.config, kwargs=inputs, kwarg_name="max_window_seqlen"
         )
 
@@ -489,7 +489,7 @@ def _prepare_navit_vision_inputs(model: torch.nn.Module, inputs: dict[str, Any])
         cu_seqlens = torch.nn.functional.pad(
             torch.cumsum(target_sizes[:, 0] * target_sizes[:, 1], dim=0, dtype=torch.int32), (1, 0)
         )
-        inputs["max_seqlen"] = get_vision_max_seqlen(cu_seqlens, model.config, kwargs=inputs)
+        inputs["max_seqlen"] = get_max_seqlen(cu_seqlens, model.config, kwargs=inputs)
 
 
 @register_export_input_preparer("input_features", "feature_lens")
@@ -522,7 +522,7 @@ def _prepare_omni_audio_inputs(model: torch.nn.Module, inputs: dict[str, Any]) -
         inputs["cu_seqlens"] = get_audio_cu_seqlens(chunk_lengths)
         inputs["valid_indices"] = get_valid_indices(chunk_lengths)
         inputs["pool_indices"] = getattr(module, "get_pool_indices")(feature_lens)
-    inputs["max_seqlen"] = getattr(module, "get_audio_max_seqlen")(inputs["cu_seqlens"], model.config, kwargs=inputs)
+    inputs["max_seqlen"] = get_max_seqlen(inputs["cu_seqlens"], model.config, kwargs=inputs)
 
 
 @register_export_input_preparer("input_features", "input_features_mask")
@@ -531,7 +531,7 @@ def _prepare_qwen3_asr_audio_inputs(model: torch.nn.Module, inputs: dict[str, An
     ``kwargs``. Mirrors the few lines that build ``feature_lens``/``chunk_lengths`` in
     ``Qwen3ASREncoder.forward``.
     """
-    from ..models.qwen3_asr.modeling_qwen3_asr import get_audio_cu_seqlens, get_audio_max_seqlen
+    from ..models.qwen3_asr.modeling_qwen3_asr import get_audio_cu_seqlens
 
     n_window = _find_submodule_attr(model, "n_window")
     n_window_infer = _find_submodule_attr(model, "n_window_infer")
@@ -544,7 +544,7 @@ def _prepare_qwen3_asr_audio_inputs(model: torch.nn.Module, inputs: dict[str, An
     feature_lens = input_features_mask.sum(-1).to(torch.long)
     chunk_lengths = input_features_mask.view(batch_size, num_chunks, -1).sum(dim=-1).reshape(-1).to(torch.long)
     inputs["cu_seqlens"] = get_audio_cu_seqlens(chunk_lengths, feature_lens, n_window_infer, n_window)
-    inputs["max_seqlen"] = get_audio_max_seqlen(inputs["cu_seqlens"], model.config, kwargs=inputs)
+    inputs["max_seqlen"] = get_max_seqlen(inputs["cu_seqlens"], model.config, kwargs=inputs)
 
 
 def precompute_export_inputs(model: torch.nn.Module, inputs: dict[str, Any]) -> None:

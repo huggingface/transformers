@@ -48,17 +48,13 @@ from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, loggi
 from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import (
     accepts_precomputed_kwargs,
+    get_max_seqlen,
     is_flash_attention_requested,
     maybe_autocast,
     merge_with_config_defaults,
 )
 from ...utils.output_capturing import capture_outputs
-from ...vision_utils import (
-    get_vision_attention_seqlens,
-    get_vision_max_seqlen,
-    get_vision_position_ids,
-    get_vision_window_index,
-)
+from ...vision_utils import get_vision_attention_seqlens, get_vision_position_ids, get_vision_window_index
 from .configuration_qwen2_5_vl import Qwen2_5_VLConfig, Qwen2_5_VLTextConfig, Qwen2_5_VLVisionConfig
 
 
@@ -254,7 +250,7 @@ class Qwen2_5_VLVisionAttention(nn.Module):
 
         if is_flash_attention_requested(self.config):
             # Flash Attention: Use cu_seqlens for variable length attention
-            max_seqlen = get_vision_max_seqlen(cu_seqlens, self.config, kwargs={"max_seqlen": max_seqlen})
+            max_seqlen = get_max_seqlen(cu_seqlens, self.config, kwargs={"max_seqlen": max_seqlen})
             attn_output, _ = attention_interface(
                 self,
                 query_states,
@@ -435,7 +431,7 @@ class Qwen2_5_VisionTransformerPretrainedModel(Qwen2_5_VLPreTrainedModel):
             patch_size=self.patch_size,
             kwargs=kwargs,
         )
-        max_window_seqlen = get_vision_max_seqlen(
+        max_window_seqlen = get_max_seqlen(
             cu_window_seqlens, self.config, kwargs=kwargs, kwarg_name="max_window_seqlen"
         )
 

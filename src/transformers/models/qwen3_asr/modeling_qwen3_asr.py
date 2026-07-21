@@ -30,14 +30,13 @@ from torch import nn
 from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache
-from ...configuration_utils import PreTrainedConfig
 from ...generation import GenerationMixin
 from ...modeling_layers import GenericForTokenClassification, GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, ModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, torch_compilable_check
-from ...utils.generic import is_flash_attention_requested
+from ...utils.generic import get_max_seqlen, is_flash_attention_requested
 from ...utils.output_capturing import capture_outputs
 from ..auto import AutoModel
 from .configuration_qwen3_asr import Qwen3ASRConfig, Qwen3ASREncoderConfig
@@ -100,15 +99,6 @@ def eager_attention_forward(
     return attn_output, attn_weights
 
 
-def get_audio_max_seqlen(cu_seqlens: torch.Tensor, config: PreTrainedConfig, kwargs: dict | None = None) -> int | None:
-    """Get the maximum packed audio sequence length, or pop it from `kwargs` if precomputed."""
-    if kwargs is not None and (max_seqlen := kwargs.pop("max_seqlen", None)) is not None:
-        return max_seqlen
-    if not is_flash_attention_requested(config):
-        return None
-    return int((cu_seqlens[1:] - cu_seqlens[:-1]).max().item())
-
-
 class Qwen3ASRAudioAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
@@ -160,7 +150,7 @@ class Qwen3ASRAudioAttention(nn.Module):
 
         if is_flash_attention_requested(self.config):
             # Flash Attention: Use cu_seqlens for variable length attention
-            max_seqlen = get_audio_max_seqlen(cu_seqlens, self.config, kwargs={"max_seqlen": max_seqlen})
+            max_seqlen = get_max_seqlen(cu_seqlens, self.config, kwargs={"max_seqlen": max_seqlen})
             attn_output, _ = attention_interface(
                 self,
                 query_states,
@@ -406,7 +396,7 @@ class Qwen3ASREncoder(Qwen3ASRPreTrainedModel):
         cu_seqlens = get_audio_cu_seqlens(
             chunk_lengths, feature_lens, self.n_window_infer, self.n_window, kwargs=kwargs
         )
-        max_seqlen = get_audio_max_seqlen(cu_seqlens, self.config, kwargs=kwargs)
+        max_seqlen = get_max_seqlen(cu_seqlens, self.config, kwargs=kwargs)
 
         # Chunk and process through CNN
         chunked = (

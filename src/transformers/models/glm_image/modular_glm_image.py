@@ -32,10 +32,15 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import ImagesKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
-from ...utils.generic import accepts_precomputed_kwargs, is_flash_attention_requested, merge_with_config_defaults
+from ...utils.generic import (
+    accepts_precomputed_kwargs,
+    get_max_seqlen,
+    is_flash_attention_requested,
+    merge_with_config_defaults,
+)
 from ...utils.import_utils import requires
 from ...utils.output_capturing import capture_outputs
-from ...vision_utils import get_vision_attention_seqlens, get_vision_max_seqlen, get_vision_position_ids
+from ...vision_utils import get_vision_attention_seqlens, get_vision_position_ids
 from ..chameleon.modeling_chameleon import ChameleonVQVAE, ChameleonVQVAEModelOutput, ChameleonVQVAEVectorQuantizer
 from ..glm4v.configuration_glm4v import Glm4vTextConfig, Glm4vVisionConfig
 from ..glm4v.modeling_glm4v import (
@@ -229,7 +234,7 @@ class GlmImageVisionAttention(Glm4vVisionAttention):
 
         if is_flash_attention_requested(self.config):
             # Flash Attention: Use cu_seqlens for variable length attention
-            max_seqlen = get_vision_max_seqlen(cu_seqlens, self.config, kwargs={"max_seqlen": max_seqlen})
+            max_seqlen = get_max_seqlen(cu_seqlens, self.config, kwargs={"max_seqlen": max_seqlen})
             attn_output, _ = attention_interface(
                 self,
                 query_states,

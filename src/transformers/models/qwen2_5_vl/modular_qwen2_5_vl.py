@@ -35,12 +35,11 @@ from ...modeling_utils import PreTrainedModel
 from ...processing_utils import ProcessingKwargs, Unpack
 from ...utils import auto_docstring, logging
 from ...utils.deprecation import deprecate_kwarg
-from ...utils.generic import merge_with_config_defaults
+from ...utils.generic import get_max_seqlen, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ...video_utils import VideoInput
 from ...vision_utils import (
     get_vision_attention_seqlens,
-    get_vision_max_seqlen,
     get_vision_position_ids,
     get_vision_window_index,
 )
@@ -267,7 +266,7 @@ class Qwen2_5_VisionTransformerPretrainedModel(Qwen2_5_VLPreTrainedModel):
             patch_size=self.patch_size,
             kwargs=kwargs,
         )
-        max_window_seqlen = get_vision_max_seqlen(
+        max_window_seqlen = get_max_seqlen(
             cu_window_seqlens, self.config, kwargs=kwargs, kwarg_name="max_window_seqlen"
         )
 

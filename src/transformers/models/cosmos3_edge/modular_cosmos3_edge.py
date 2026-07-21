@@ -48,6 +48,7 @@ from ...utils import (
 )
 from ...utils.generic import (
     accepts_precomputed_kwargs,
+    get_max_seqlen,
     is_flash_attention_requested,
     maybe_autocast,
     merge_with_config_defaults,
@@ -55,7 +56,7 @@ from ...utils.generic import (
 from ...utils.output_capturing import capture_outputs
 from ...video_processing_utils import BASE_VIDEO_PROCESSOR_DOCSTRING, BaseVideoProcessor
 from ...video_utils import VideoMetadata, group_videos_by_shape, reorder_videos
-from ...vision_utils import get_vision_attention_seqlens, get_vision_max_seqlen
+from ...vision_utils import get_vision_attention_seqlens
 from ..clip.modeling_clip import CLIPMLP
 from ..llama.configuration_llama import LlamaConfig
 from ..llama.modeling_llama import (
@@ -398,7 +399,7 @@ class Cosmos3EdgeVisionAttention(Siglip2Attention):
         )
 
         if is_flash_attention_requested(self.config):
-            max_seqlen = get_vision_max_seqlen(cu_seqlens, self.config, kwargs={"max_seqlen": max_seqlen})
+            max_seqlen = get_max_seqlen(cu_seqlens, self.config, kwargs={"max_seqlen": max_seqlen})
             attn_output, _ = attention_interface(
                 self,
                 query_states,

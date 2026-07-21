@@ -44,12 +44,13 @@ from ...utils import (
 )
 from ...utils.generic import (
     accepts_precomputed_kwargs,
+    get_max_seqlen,
     is_flash_attention_requested,
     maybe_autocast,
     merge_with_config_defaults,
 )
 from ...utils.output_capturing import capture_outputs
-from ...vision_utils import get_vision_attention_seqlens, get_vision_max_seqlen
+from ...vision_utils import get_vision_attention_seqlens
 from .configuration_cosmos3_edge import Cosmos3EdgeConfig, Cosmos3EdgeTextConfig, Cosmos3EdgeVisionConfig
 
 
@@ -466,7 +467,7 @@ class Cosmos3EdgeVisionAttention(nn.Module):
         )
 
         if is_flash_attention_requested(self.config):
-            max_seqlen = get_vision_max_seqlen(cu_seqlens, self.config, kwargs={"max_seqlen": max_seqlen})
+            max_seqlen = get_max_seqlen(cu_seqlens, self.config, kwargs={"max_seqlen": max_seqlen})
             attn_output, _ = attention_interface(
                 self,
                 query_states,

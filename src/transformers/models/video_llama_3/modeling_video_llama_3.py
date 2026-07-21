@@ -34,9 +34,14 @@ from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, Mod
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, torch_compilable_check
-from ...utils.generic import accepts_precomputed_kwargs, is_flash_attention_requested, merge_with_config_defaults
+from ...utils.generic import (
+    accepts_precomputed_kwargs,
+    get_max_seqlen,
+    is_flash_attention_requested,
+    merge_with_config_defaults,
+)
 from ...utils.output_capturing import capture_outputs
-from ...vision_utils import get_vision_attention_seqlens, get_vision_max_seqlen, get_vision_position_ids
+from ...vision_utils import get_vision_attention_seqlens, get_vision_position_ids
 from ..auto.modeling_auto import AutoModel
 from .configuration_video_llama_3 import VideoLlama3Config, VideoLlama3VisionConfig
 
@@ -209,7 +214,7 @@ class VideoLlama3VisionAttention(nn.Module):
 
         if is_flash_attention_requested(self.config):
             # Flash Attention 2: Use cu_seqlens for variable length attention
-            max_seqlen = get_vision_max_seqlen(cu_seqlens, self.config, kwargs={"max_seqlen": max_seqlen})
+            max_seqlen = get_max_seqlen(cu_seqlens, self.config, kwargs={"max_seqlen": max_seqlen})
             attn_output, attn_weights = attention_interface(
                 self,
                 query_states,

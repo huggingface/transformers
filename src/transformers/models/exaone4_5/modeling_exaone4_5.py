@@ -37,14 +37,14 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, torch_compilable_check
 from ...utils.deprecation import deprecate_kwarg
-from ...utils.generic import accepts_precomputed_kwargs, is_flash_attention_requested, merge_with_config_defaults
-from ...utils.output_capturing import capture_outputs
-from ...vision_utils import (
-    get_vision_attention_seqlens,
-    get_vision_max_seqlen,
-    get_vision_position_ids,
-    get_vision_window_index,
+from ...utils.generic import (
+    accepts_precomputed_kwargs,
+    get_max_seqlen,
+    is_flash_attention_requested,
+    merge_with_config_defaults,
 )
+from ...utils.output_capturing import capture_outputs
+from ...vision_utils import get_vision_attention_seqlens, get_vision_position_ids, get_vision_window_index
 from ..auto import AutoModel
 from .configuration_exaone4_5 import Exaone4_5_Config, Exaone4_5_VisionConfig
 
@@ -233,7 +233,7 @@ class Exaone4_5_VisionAttention(nn.Module):
         )
 
         if is_flash_attention_requested(self.config):
-            max_seqlen = get_vision_max_seqlen(cu_seqlens, self.config, kwargs={"max_seqlen": max_seqlen})
+            max_seqlen = get_max_seqlen(cu_seqlens, self.config, kwargs={"max_seqlen": max_seqlen})
             attn_output, _ = attention_interface(
                 self,
                 query_states,
@@ -570,7 +570,7 @@ class Exaone4_5_VisionModel(Exaone4_5_PreTrainedModel):
             patch_size=self.patch_size,
             kwargs=kwargs,
         )
-        max_window_seqlen = get_vision_max_seqlen(
+        max_window_seqlen = get_max_seqlen(
             cu_window_seqlens, self.config, kwargs=kwargs, kwarg_name="max_window_seqlen"
         )
 

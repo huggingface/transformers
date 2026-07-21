@@ -35,12 +35,13 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...utils import TensorType, TransformersKwargs, auto_docstring, can_return_tuple
 from ...utils.generic import (
+    get_max_seqlen,
     is_flash_attention_requested,
     maybe_autocast,
 )
 from ...utils.import_utils import requires
 from ...utils.output_capturing import capture_outputs
-from ...vision_utils import get_vision_attention_seqlens, get_vision_max_seqlen
+from ...vision_utils import get_vision_attention_seqlens
 from ..hunyuan_v1_dense.configuration_hunyuan_v1_dense import HunYuanDenseV1Config
 from ..hunyuan_v1_dense.modeling_hunyuan_v1_dense import (
     HunYuanDenseV1Attention,
@@ -688,7 +689,7 @@ class HunYuanVLVisionAttention(MllamaVisionAttention):
 
         if is_flash_attention_requested(self.config):
             # Flash Attention: Use cu_seqlens for variable length attention
-            max_seqlen = get_vision_max_seqlen(cu_seqlens, self.config, kwargs={"max_seqlen": max_seqlen})
+            max_seqlen = get_max_seqlen(cu_seqlens, self.config, kwargs={"max_seqlen": max_seqlen})
             attn_output, attn_weights = attention_interface(
                 self,
                 query_states,

@@ -34,7 +34,6 @@ from torch.nn import Parameter
 from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
-from ...configuration_utils import PreTrainedConfig
 from ...generation import GenerationMixin
 from ...integrations import use_kernel_forward_from_hub
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
@@ -60,18 +59,14 @@ from ...utils import (
 from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import (
     accepts_precomputed_kwargs,
+    get_max_seqlen,
     is_flash_attention_requested,
     maybe_autocast,
     merge_with_config_defaults,
 )
 from ...utils.hub import cached_file
 from ...utils.output_capturing import capture_outputs
-from ...vision_utils import (
-    get_vision_attention_seqlens,
-    get_vision_max_seqlen,
-    get_vision_position_ids,
-    get_vision_window_index,
-)
+from ...vision_utils import get_vision_attention_seqlens, get_vision_position_ids, get_vision_window_index
 from .configuration_qwen2_5_omni import (
     Qwen2_5OmniAudioEncoderConfig,
     Qwen2_5OmniBigVGANConfig,
@@ -567,15 +562,6 @@ def eager_attention_forward(
     return attn_output, attn_weights
 
 
-def get_audio_max_seqlen(cu_seqlens: torch.Tensor, config: PreTrainedConfig, kwargs: dict | None = None) -> int | None:
-    """Get the maximum packed audio sequence length, or pop it from `kwargs` if precomputed."""
-    if kwargs is not None and (max_seqlen := kwargs.pop("max_seqlen", None)) is not None:
-        return max_seqlen
-    if not is_flash_attention_requested(config):
-        return None
-    return int((cu_seqlens[1:] - cu_seqlens[:-1]).max().item())
-
-
 class Qwen2_5OmniAudioAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
@@ -631,7 +617,7 @@ class Qwen2_5OmniAudioAttention(nn.Module):
 
         if is_flash_attention_requested(self.config):
             # Flash Attention: Use cu_seqlens for variable length attention
-            max_seqlen = get_audio_max_seqlen(cu_seqlens, self.config, kwargs={"max_seqlen": max_seqlen})
+            max_seqlen = get_max_seqlen(cu_seqlens, self.config, kwargs={"max_seqlen": max_seqlen})
             attn_output, _ = attention_interface(
                 self,
                 query_states,
@@ -905,7 +891,7 @@ class Qwen2_5OmniAudioEncoder(Qwen2_5OmniPreTrainedModel):
         valid_indices = get_valid_indices(chunk_lengths, kwargs=kwargs)
         pool_indices = get_pool_indices(feature_lens, kwargs=kwargs)
         cu_seqlens = get_audio_cu_seqlens(chunk_lengths, kwargs=kwargs)
-        max_seqlen = get_audio_max_seqlen(cu_seqlens, self.config, kwargs=kwargs)
+        max_seqlen = get_max_seqlen(cu_seqlens, self.config, kwargs=kwargs)
 
         # Derive masks from chunk_lengths (traceable arithmetic + arange broadcasting)
         padded_feature = padded_feature.to(self.conv1.weight.dtype)
@@ -1050,7 +1036,7 @@ class Qwen2_5OmniVisionAttention(nn.Module):
 
         if is_flash_attention_requested(self.config):
             # Flash Attention 2: Use cu_seqlens for variable length attention
-            max_seqlen = get_vision_max_seqlen(cu_seqlens, self.config, kwargs={"max_seqlen": max_seqlen})
+            max_seqlen = get_max_seqlen(cu_seqlens, self.config, kwargs={"max_seqlen": max_seqlen})
             attn_output, _ = attention_interface(
                 self,
                 query_states,
@@ -1300,7 +1286,7 @@ class Qwen2_5OmniVisionEncoder(Qwen2_5OmniPreTrainedModel):
             patch_size=self.patch_size,
             kwargs=kwargs,
         )
-        max_window_seqlen = get_vision_max_seqlen(
+        max_window_seqlen = get_max_seqlen(
             cu_window_seqlens, self.config, kwargs=kwargs, kwarg_name="max_window_seqlen"
         )
 
