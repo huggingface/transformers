@@ -54,7 +54,7 @@ class Glm5NextTextConfig(PreTrainedConfig):
         Number of Sinkhorn iterations used by MHC routing.
     """
 
-    model_type = "glm5_next_vl_text"
+    model_type = "glm5_next_text"
     keys_to_ignore_at_inference = ["past_key_values"]
 
     base_model_tp_plan = {
@@ -193,7 +193,7 @@ class Glm5NextConfig(PreTrainedConfig):
     >>> configuration = Glm5NextConfig()
     ```"""
 
-    model_type = "glm5_next_vl"
+    model_type = "glm5_next"
     sub_configs = {"vision_config": AutoConfig, "text_config": Glm5NextTextConfig}
     keys_to_ignore_at_inference = ["past_key_values"]
 
