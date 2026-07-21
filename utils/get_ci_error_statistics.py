@@ -14,6 +14,36 @@ import requests
 logger = logging.getLogger(__name__)
 
 
+def _log_rate_limit_headers(response, prefix=""):
+    """Print all GitHub rate-limit response headers for diagnostics."""
+    h = response.headers
+    limit = h.get("X-RateLimit-Limit", "n/a")
+    used = h.get("X-RateLimit-Used", "n/a")
+    remaining = h.get("X-RateLimit-Remaining", "n/a")
+    reset_ts = h.get("X-RateLimit-Reset")
+    resource = h.get("X-RateLimit-Resource", "n/a")
+    retry_after = h.get("Retry-After")
+
+    if reset_ts is not None:
+        secs_until = int(reset_ts) - int(time.time())
+        reset_str = f"{reset_ts} (resets in {secs_until}s, i.e. {secs_until // 60}m {secs_until % 60}s)"
+    else:
+        reset_str = "n/a"
+
+    parts = [
+        f"limit={limit}",
+        f"used={used}",
+        f"remaining={remaining}",
+        f"reset={reset_str}",
+        f"resource={resource}",
+    ]
+    if retry_after is not None:
+        parts.append(f"Retry-After={retry_after}s")
+
+    tag = f"[{prefix}] " if prefix else ""
+    print(f"{tag}GitHub rate-limit headers: {', '.join(parts)}")
+
+
 def _rate_limit_wait(response, attempt):
     """Return how many seconds to wait before retrying a rate-limited GitHub response, or ``None``.
 
@@ -84,11 +114,14 @@ def get_github_json(url, token=None, max_retries=8):
         response = requests.get(url, headers=headers)
         status = response.status_code
 
+        print(f"[attempt {attempt + 1}/{max_retries}] GET {url} → HTTP {status}")
+        _log_rate_limit_headers(response, prefix=f"attempt {attempt + 1}/{max_retries}")
+
         wait = _rate_limit_wait(response, attempt)
         if wait is not None:
             print(
-                f"GitHub API rate limited on {url} (status {status}); waiting {wait}s before "
-                f"retry {attempt + 1}/{max_retries}"
+                f"[attempt {attempt + 1}/{max_retries}] GitHub API rate limited (status {status}) on {url}; "
+                f"sleeping {wait}s before retry {attempt + 1}/{max_retries}"
             )
             time.sleep(wait)
             continue
@@ -97,10 +130,15 @@ def get_github_json(url, token=None, max_retries=8):
         if headers is not None and status in (401, 404):
             response = requests.get(url)
             status = response.status_code
+            print(f"[attempt {attempt + 1}/{max_retries}] unauthenticated retry → HTTP {status}")
+            _log_rate_limit_headers(response, prefix=f"attempt {attempt + 1}/{max_retries} (unauth)")
 
         if status >= 500:
             wait = min(2**attempt, 60)
-            print(f"GitHub API server error {status} on {url}; retrying in {wait}s ({attempt + 1}/{max_retries})")
+            print(
+                f"[attempt {attempt + 1}/{max_retries}] GitHub API server error {status} on {url}; "
+                f"sleeping {wait}s before retry"
+            )
             time.sleep(wait)
             continue
 
@@ -108,6 +146,7 @@ def get_github_json(url, token=None, max_retries=8):
             return response.json()
 
         # Any other (non-retryable) status: stop and fail loudly below.
+        print(f"[attempt {attempt + 1}/{max_retries}] non-retryable status {status} on {url}; body: {response.text[:500]!r}")
         break
 
     last_status = response.status_code if response is not None else "no response"
