@@ -339,6 +339,53 @@ class TestGenerativeModelList(unittest.TestCase):
             self.assertNotIn("google-bert/bert-base-cased", model_ids)
 
 
+class TestLoadModelResolution(unittest.TestCase):
+    """Unit tests for architecture resolution in ModelManager._load_model."""
+
+    def _config(self, architecture, model_type="custom_causal_lm"):
+        config = MagicMock()
+        config.model_type = model_type
+        config.architectures = [architecture]
+        return config
+
+    def test_remote_code_architecture_falls_back_to_auto_class(self):
+        """A custom architecture absent from the transformers namespace loads via AutoModelForCausalLM."""
+        from unittest.mock import patch
+
+        mm = ModelManager(trust_remote_code=True)
+        sentinel = object()
+        config = self._config("SomeCustomForCausalLM")
+        with (
+            patch("transformers.AutoConfig.from_pretrained", return_value=config),
+            patch("transformers.AutoModelForCausalLM.from_pretrained", return_value=sentinel) as auto_from_pretrained,
+        ):
+            result = mm._load_model("some/custom-model@main")
+
+        self.assertIs(result, sentinel)
+        auto_from_pretrained.assert_called_once()
+        self.assertTrue(auto_from_pretrained.call_args.kwargs["trust_remote_code"])
+
+    def test_builtin_architecture_uses_named_class(self):
+        """A built-in architecture keeps resolving through the transformers namespace, not the auto fallback."""
+        from unittest.mock import patch
+
+        import transformers
+
+        mm = ModelManager()
+        sentinel = object()
+        config = self._config("LlamaForCausalLM")
+        with (
+            patch("transformers.AutoConfig.from_pretrained", return_value=config),
+            patch.object(transformers.LlamaForCausalLM, "from_pretrained", return_value=sentinel) as named,
+            patch("transformers.AutoModelForCausalLM.from_pretrained") as auto_fallback,
+        ):
+            result = mm._load_model("meta-llama/some-llama@main")
+
+        self.assertIs(result, sentinel)
+        named.assert_called_once()
+        auto_fallback.assert_not_called()
+
+
 @require_serve
 class TestBuildGenerationConfig(unittest.TestCase):
     def _make_handler(self):

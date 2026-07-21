@@ -273,7 +273,15 @@ class ModelManager:
 
             return AutoModelForMultimodalLM.from_pretrained(model_id, **model_kwargs)
 
-        architecture = getattr(transformers, config.architectures[0])
+        architecture = getattr(transformers, config.architectures[0], None)
+        if architecture is None:
+            # Custom architectures shipped as remote code are not attributes of
+            # the `transformers` namespace (they live in `transformers_modules.*`);
+            # resolve them through the auto class, which reads the config's
+            # `auto_map` and loads the custom class when remote code is trusted.
+            from transformers import AutoModelForCausalLM
+
+            return AutoModelForCausalLM.from_pretrained(model_id, **model_kwargs)
         return architecture.from_pretrained(model_id, **model_kwargs)
 
     def load_model_and_processor(
