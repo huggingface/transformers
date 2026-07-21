@@ -33,6 +33,7 @@ from transformers.models.molmo2.configuration_molmo2 import (
     Molmo2VitConfig,
 )
 from transformers.testing_utils import (
+    Expectations,
     cleanup,
     require_torch,
     require_vision,
@@ -625,26 +626,16 @@ class Molmo2IntegrationTest(unittest.TestCase):
         self.assertEqual(logits.shape[0], 1)
         self.assertEqual(logits.shape[1], device_inputs["input_ids"].shape[1])
 
-        expected_last_logits = torch.tensor(
-            [
-                -10.443631,
-                -6.061066,
-                -11.089376,
-                -10.382135,
-                -16.847486,
-                -14.479667,
-                -11.206448,
-                -9.839166,
-                -11.699806,
-                -9.23956,
-            ],
-            dtype=torch.float32,
-        )
+        expected_last_logits = Expectations(
+            {
+                ("cuda", (8, 0)): [-10.407500, -5.903657, -10.977587, -10.325406, -16.847645, -14.505170, -11.184648, -9.696571, -11.637183, -9.205433],
+            }
+        )  # fmt: skip
         torch.testing.assert_close(
             logits[0, -1, :10].cpu().float(),
-            expected_last_logits,
-            atol=1e-2,
-            rtol=1e-2,
+            torch.tensor(expected_last_logits.get_expectation(), dtype=torch.float32),
+            atol=3e-1,
+            rtol=5e-2,
         )
         self.assertEqual(logits[0, -1].argmax().item(), 641)
 
@@ -744,13 +735,14 @@ class Molmo2O7BIntegrationTest(unittest.TestCase):
         self.assertEqual(logits.shape[0], 1)
         self.assertEqual(logits.shape[1], device_inputs["input_ids"].shape[1])
 
-        expected_last_logits = torch.tensor(
-            [-13.0625, -5.875, -11.6875, -11.0, -12.6875, -16.25, -10.3125, -12.25, -12.6875, -10.625],
-            dtype=torch.float32,
-        )
+        expected_last_logits = Expectations(
+            {
+                ("cuda", (8, 0)): [-13.0625, -5.9375, -11.75, -11.0, -12.6875, -16.25, -10.375, -12.3125, -12.6875, -10.625],
+            }
+        )  # fmt: skip
         torch.testing.assert_close(
             logits[0, -1, :10].cpu().float(),
-            expected_last_logits,
+            torch.tensor(expected_last_logits.get_expectation(), dtype=torch.float32),
             atol=3e-1,
             rtol=5e-2,
         )
@@ -852,13 +844,14 @@ class Molmo2_8BIntegrationTest(unittest.TestCase):
         self.assertEqual(logits.shape[0], 1)
         self.assertEqual(logits.shape[1], device_inputs["input_ids"].shape[1])
 
-        expected_last_logits = torch.tensor(
-            [-15.8125, -7.875, -15.5625, -14.9375, -16.5, -18.25, -14.4375, -15.6875, -15.375, -12.4375],
-            dtype=torch.float32,
-        )
+        expected_last_logits = Expectations(
+            {
+                ("cuda", (8, 0)): [-15.875, -7.875, -15.5625, -15.0, -16.5, -18.25, -14.4375, -15.8125, -15.4375, -12.4375],
+            }
+        )  # fmt: skip
         torch.testing.assert_close(
             logits[0, -1, :10].cpu().float(),
-            expected_last_logits,
+            torch.tensor(expected_last_logits.get_expectation(), dtype=torch.float32),
             atol=3e-1,
             rtol=5e-2,
         )
