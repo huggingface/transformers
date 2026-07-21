@@ -26,8 +26,8 @@ from typing import Optional
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from torch.nn import init
 
-from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
@@ -144,10 +144,19 @@ class OnyxFinalRMSNorm(nn.Module):
     def __init__(self, dim: int, eps: float = 1e-5):
         super().__init__()
         self.eps = eps
-        self.weight = nn.Parameter(torch.zeros(dim))
+        self.weight = nn.Parameter(torch.ones(dim))
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         return F.rms_norm(x.float(), (x.shape[-1],), self.weight.float(), self.eps).to(x.dtype)
+
+
+class OnyxNormalizedEmbedding(nn.Embedding):
+    def __init__(self, num_embeddings: int, embedding_dim: int, padding_idx: int | None = None, eps: float = 1e-5):
+        super().__init__(num_embeddings, embedding_dim, padding_idx)
+        self.norm = OnyxScalelessRMSNorm(eps)
+
+    def forward(self, input_ids: torch.Tensor) -> torch.Tensor:
+        return self.norm(super().forward(input_ids))
 
 
 class OnyxMLP(nn.Module):
@@ -631,6 +640,7 @@ class OnyxVisionAttention(nn.Module):
         self.head_dim = self.embed_dim // self.num_heads
         self.scale = self.head_dim**-0.5
         self.is_causal = False
+        self.num_key_value_groups = 1
 
         self.k_proj = nn.Linear(self.embed_dim, self.num_heads * self.head_dim)
         self.v_proj = nn.Linear(self.embed_dim, self.num_heads * self.head_dim)
@@ -720,7 +730,7 @@ class OnyxVisionMLP(nn.Module):
         return self.c_proj(F.gelu(self.c_fc(x)))
 
 
-class OnyxVisionEncoderLayer(nn.Module):
+class OnyxVisionEncoderLayer(GradientCheckpointingLayer):
     def __init__(self, config):
         super().__init__()
         self.ln_1 = nn.LayerNorm(config.hidden_size)
@@ -847,7 +857,7 @@ class OnyxPreTrainedModel(PreTrainedModel):
     config: OnyxConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
-    _no_split_modules = ["OnyxDecoderLayer"]
+    _no_split_modules = ["OnyxDecoderLayer", "OnyxVisionEncoderLayer"]
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = True
     _supports_sdpa = True
@@ -873,9 +883,19 @@ class OnyxPreTrainedModel(PreTrainedModel):
             init.zeros_(module.weight)
         elif isinstance(module, OnyxTextScaledWordEmbedding):
             init.constant_(module.embed_scale, module.scalar_embed_scale)
+        if isinstance(module, OnyxFinalRMSNorm):
+            init.ones_(module.weight)
 
 
 class OnyxVisionModel(OnyxPreTrainedModel):
+    config: OnyxVisionConfig
+    main_input_name = "pixel_values"
+    input_modalities = ("image",)
+    _can_record_outputs = {
+        "hidden_states": OnyxVisionEncoderLayer,
+        "attentions": OnyxVisionAttention,
+    }
+
     def __init__(self, config: OnyxVisionConfig):
         super().__init__(config)
         self.patch_embedder = OnyxVisionPatchEmbedder(config)
@@ -928,6 +948,8 @@ class OnyxVisionModel(OnyxPreTrainedModel):
 
         return torch.cat(output, dim=0)
 
+    @merge_with_config_defaults
+    @capture_outputs
     def forward(
         self,
         pixel_values: torch.FloatTensor,
@@ -980,8 +1002,10 @@ class OnyxTextModel(OnyxPreTrainedModel):
         super().__init__(config)
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
-        # Replace Gemma2's sqrt(hidden_size)-scaled embedding with a plain one — Onyx uses norm, not scale.
-        self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
+        # Replace Gemma2's sqrt(hidden_size)-scaled embedding — Onyx normalizes token embeddings instead.
+        self.embed_tokens = OnyxNormalizedEmbedding(
+            config.vocab_size, config.hidden_size, self.padding_idx, eps=config.rms_norm_eps
+        )
         self.layers = nn.ModuleList(
             [OnyxDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
@@ -989,7 +1013,6 @@ class OnyxTextModel(OnyxPreTrainedModel):
         self.norm = OnyxFinalRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.rotary_emb = OnyxRotaryEmbedding(config)
         self.gradient_checkpointing = False
-        self.embed_norm = OnyxScalelessRMSNorm(eps=config.rms_norm_eps)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1007,9 +1030,6 @@ class OnyxTextModel(OnyxPreTrainedModel):
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPast:
-        if inputs_embeds is None and input_ids is not None:
-            inputs_embeds = self.embed_norm(self.embed_tokens(input_ids))
-            input_ids = None  # avoid double-embedding in the super().forward call
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
@@ -1151,8 +1171,7 @@ class OnyxModel(OnyxPreTrainedModel):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
         if inputs_embeds is None:
-            # FIXME: not fan of calling norm manually, why not create custom Embed module?
-            inputs_embeds = self.language_model.embed_norm(self.get_input_embeddings()(input_ids))
+            inputs_embeds = self.get_input_embeddings()(input_ids)
 
         # Merge text and images
         if pixel_values is not None:
@@ -1386,7 +1405,7 @@ class OnyxForConditionalGeneration(OnyxPreTrainedModel, GenerationMixin):
 
         loss = None
         if labels is not None:
-            loss = self.loss_function(logits, labels, self.vocab_size, **kwargs)
+            loss = self.loss_function(logits, labels, self.config.text_config.vocab_size, **kwargs)
 
         return OnyxCausalLMOutputWithPast(
             loss=loss,

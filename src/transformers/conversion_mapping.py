@@ -158,20 +158,20 @@ def _build_checkpoint_conversion_mapping():
         "onyx_vision": [
             WeightRenaming(source_patterns=r"attn.o_proj", target_patterns=r"attn.out_proj"),
             WeightRenaming(
-                source_patterns=r"position_embedding_table", target_patterns=r"position_embedding_table.weight"
-            ),
-            WeightConverter(
-                source_patterns=[r"attn.q_proj"],
-                target_patterns=[r"attn.q_proj"],
-                operations=[PermuteForRope(subconfig_key="vision_config")],
-            ),
-            WeightConverter(
-                source_patterns=[r"attn.k_proj"],
-                target_patterns=[r"attn.k_proj"],
-                operations=[PermuteForRope(subconfig_key="vision_config")],
+                source_patterns=r"position_embedding_table$", target_patterns=r"position_embedding_table.weight"
             ),
         ],
         "onyx": [
+            WeightConverter(
+                source_patterns=[r"vision_encoder\.transformer\.\d+\.attn\.q_proj"],
+                target_patterns=[r"vision_encoder\.transformer\.\d+\.attn\.q_proj"],
+                operations=[PermuteForRope(subconfig_key="vision_config")],
+            ),
+            WeightConverter(
+                source_patterns=[r"vision_encoder\.transformer\.\d+\.attn\.k_proj"],
+                target_patterns=[r"vision_encoder\.transformer\.\d+\.attn\.k_proj"],
+                operations=[PermuteForRope(subconfig_key="vision_config")],
+            ),
             WeightRenaming(source_patterns=r"vision_encoder.transformer", target_patterns=r"vision_tower.layers"),
             WeightRenaming(
                 source_patterns=r"vision_encoder.conv1_linear",
@@ -181,10 +181,12 @@ def _build_checkpoint_conversion_mapping():
                 source_patterns=r"vision_encoder.positional_embedding_vlm",
                 target_patterns=r"vision_tower.patch_embedder.position_embedding_table",
             ),
-            WeightRenaming(source_patterns=r"vision_encoder", target_patterns=r"vision_tower"),
-            WeightRenaming(r"model.layers", r"model.language_model.layers"),
-            WeightRenaming(r"model.embed_tokens", r"model.language_model.embed_tokens"),
-            WeightRenaming(r"model.norm", r"model.language_model.norm"),
+            WeightRenaming(source_patterns=r"vision_encoder.ln_pre", target_patterns=r"vision_tower.ln_pre"),
+            WeightRenaming(source_patterns=r"vision_encoder.ln_post", target_patterns=r"vision_tower.ln_post"),
+            WeightRenaming(
+                source_patterns=r"^model(?!\.(language_model|vision_tower|vision_encoder))",
+                target_patterns="model.language_model",
+            ),
         ],
         "inkling_mm_model": [
             WeightRenaming(source_patterns=r"model\.llm\.layers", target_patterns=r"model.language_model.layers"),
