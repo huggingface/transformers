@@ -79,6 +79,7 @@ class OnyxVision2TextModelTester(VLMModelTester):
 
     def __init__(self, parent, **kwargs):
         kwargs.setdefault("image_token_id", 3)
+        kwargs.setdefault("video_token_id", 4)
         kwargs.setdefault("num_image_tokens", 1)
         kwargs.setdefault("patch_size", 2)
         kwargs.setdefault("patch_temporal", 2)
@@ -91,6 +92,10 @@ class OnyxVision2TextModelTester(VLMModelTester):
         super().__init__(parent, **kwargs)
         self.image_grid_thw = (1, 1, 1)
         self.output_dim = self.hidden_size * self.downsample_factor**2
+
+    @property
+    def _special_token_ids(self):
+        return super()._special_token_ids | {self.video_token_id}
 
     def create_pixel_values(self):
         grid_t, grid_h, grid_w = self.image_grid_thw
