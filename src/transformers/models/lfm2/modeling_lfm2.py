@@ -340,16 +340,16 @@ class Lfm2ShortConv(nn.Module):
         super().__init__()
         self.config = config
         self.layer_idx = layer_idx
-        self.L_cache = config.conv_L_cache
+        self.conv_kernel_size = config.conv_L_cache
         self.bias = config.conv_bias
 
         self.conv = nn.Conv1d(
             in_channels=config.hidden_size,
             out_channels=config.hidden_size,
-            kernel_size=self.L_cache,
+            kernel_size=self.conv_kernel_size,
             groups=config.hidden_size,
             bias=self.bias,
-            padding=self.L_cache - 1,
+            padding=self.conv_kernel_size - 1,
         )
         self.in_proj = nn.Linear(config.hidden_size, 3 * config.hidden_size, bias=self.bias)
         self.out_proj = nn.Linear(config.hidden_size, config.hidden_size, bias=self.bias)
