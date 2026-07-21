@@ -177,20 +177,17 @@ class Gemma4UnifiedTextConfig(PreTrainedConfig):
         global_head_dim = kwargs.pop("global_head_dim", 512)
         num_global_key_value_heads = kwargs.pop("num_global_key_value_heads", None)
         if "per_layer_config" not in kwargs:
-            layer_overrides: dict[str, Any] = {}
-            if global_head_dim != self.head_dim:
-                layer_overrides["head_dim"] = global_head_dim
+            layer_overrides: dict[str, Any] = {"head_dim": global_head_dim}
             # `attention_k_eq_v` gates the kv-head override for the models that declare it;
             # models that drop the attribute entirely are ungated, hence the `True` fallback.
             num_key_value_heads = num_global_key_value_heads if getattr(self, "attention_k_eq_v", True) else None
-            if num_key_value_heads is not None and num_key_value_heads != self.num_key_value_heads:
+            if num_key_value_heads is not None:
                 layer_overrides["num_key_value_heads"] = num_key_value_heads
-            if layer_overrides:
-                kwargs["per_layer_config"] = {
-                    layer_idx: layer_overrides
-                    for layer_idx, layer_type in enumerate(self.layer_types)
-                    if layer_type == "full_attention"
-                }
+            kwargs["per_layer_config"] = {
+                layer_idx: layer_overrides
+                for layer_idx, layer_type in enumerate(self.layer_types)
+                if layer_type == "full_attention"
+            }
 
         super().__post_init__(**kwargs)
 
