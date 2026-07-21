@@ -555,7 +555,6 @@ IGNORE_NON_AUTO_CONFIGURED = (
 )
 
 
-
 # Update this list for models that have multiple model types for the same model doc.
 MODEL_TYPE_TO_DOC_MAPPING = OrderedDict(
     [
