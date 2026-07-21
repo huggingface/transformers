@@ -611,7 +611,7 @@ _COSMOS3_EDGE_DROPPED_GENERATOR_KEYS = [
     r"^(?:model\.language_model\.)?layers\.\d+\.input_layernorm_moe_gen\.",
     r"^(?:model\.language_model\.)?layers\.\d+\.post_attention_layernorm_moe_gen\.",
     r"^(?:model\.language_model\.)?layers\.\d+\.mlp_moe_gen\.",
-    r"^(?:model\.language_model\.)?layers\.\d+\.self_attn\.(?:add_[qkv]_proj|to_add_out|norm_added_[qk])\.",
+    r"^(?:model\.language_model\.)?layers\.\d+\.self_attn\.(?:add_[qkv]_proj|to_add_out|norm_added_[qk]|k_norm_und_for_gen)\.",
 ]
 
 

@@ -24,6 +24,7 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
 from ...integrations import lazy_load_kernel
+from ...masking_utils import create_recurrent_attention_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_utils import PreTrainedModel
 from ...utils import ModelOutput, auto_docstring, is_torchdynamo_compiling, logging
@@ -815,6 +816,13 @@ class Mamba2Model(Mamba2PreTrainedModel):
 
         if use_cache and cache_params is None:
             cache_params = DynamicCache(config=self.config)
+
+        attention_mask = create_recurrent_attention_mask(
+            config=self.config,
+            inputs_embeds=inputs_embeds,
+            attention_mask=attention_mask,
+            past_key_values=cache_params,
+        )
 
         hidden_states = inputs_embeds
         all_hidden_states = () if output_hidden_states else None
