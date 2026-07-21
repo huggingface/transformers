@@ -69,6 +69,18 @@ CHAT_TEMPLATE_DIR = "additional_chat_templates"
 
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 
+# Dedicated debug logger for CI read-only cache diagnostics.
+# propagate=False + its own StreamHandler bypass pytest log capture so every
+# record always appears in the GitHub Actions raw log unconditionally.
+import logging as _stdlib_logging
+_ci_dbg = _stdlib_logging.getLogger("ci_cache_debug.hub")
+if not _ci_dbg.handlers:
+    _ci_dbg_handler = _stdlib_logging.StreamHandler(sys.stderr)
+    _ci_dbg_handler.setFormatter(_stdlib_logging.Formatter("[CI_DBG] %(message)s"))
+    _ci_dbg.addHandler(_ci_dbg_handler)
+    _ci_dbg.setLevel(_stdlib_logging.DEBUG)
+    _ci_dbg.propagate = False
+
 
 _hf_api: HfApi | None = None
 
@@ -408,6 +420,11 @@ def cached_files(
     if isinstance(cache_dir, Path):
         cache_dir = str(cache_dir)
 
+    _ci_dbg.debug(
+        "CACHED_FILES ENTER repo=%r filenames=%r cache_dir=%r revision=%r _commit_hash=%r",
+        path_or_repo_id, full_filenames, cache_dir, revision, _commit_hash,
+    )
+
     existing_files = []
     file_counter = 0
     if _commit_hash is not None and not force_download:
@@ -427,11 +444,16 @@ def cached_files(
 
     # Either all the files were found, or some were _CACHED_NO_EXIST but we do not raise for missing entries
     if file_counter == len(full_filenames):
+        _ci_dbg.debug("CACHED_FILES FAST-PATH (_commit_hash hit) returning %r", existing_files)
         return existing_files if len(existing_files) > 0 else None
 
     user_agent = http_user_agent(user_agent)
     # download the files if needed
     try:
+        _ci_dbg.debug(
+            "CACHED_FILES calling hf_hub_download/snapshot_download for %r cache_dir=%r",
+            full_filenames, cache_dir,
+        )
         if len(full_filenames) == 1:
             # This is slightly better for only 1 file
             hf_hub_download(
@@ -462,8 +484,13 @@ def cached_files(
                 local_files_only=local_files_only,
                 tqdm_class=tqdm_class,
             )
+        _ci_dbg.debug("CACHED_FILES hf_hub_download/snapshot_download succeeded for %r", full_filenames)
 
     except Exception as e:
+        _ci_dbg.debug(
+            "CACHED_FILES hf_hub_download/snapshot_download RAISED %s errno=%s msg=%r",
+            type(e).__name__, getattr(e, "errno", None), str(e)[:300],
+        )
         # We cannot recover from them
         if isinstance(e, RepositoryNotFoundError) and not isinstance(e, GatedRepoError):
             raise OSError(
@@ -488,11 +515,20 @@ def cached_files(
             raise OSError(f"{e}") from e
 
         # Now we try to recover if we can find all files correctly in the cache
+        _ci_dbg.debug(
+            "CACHED_FILES attempting stale-cache recovery for %r "
+            "(exception was NOT re-raised above, trying try_to_load_from_cache)",
+            full_filenames,
+        )
         resolved_files = [
             _get_cache_file_to_return(path_or_repo_id, filename, cache_dir, revision, repo_type)
             for filename in full_filenames
         ]
+        _ci_dbg.debug("CACHED_FILES stale-cache recovery result: %r", resolved_files)
         if all(file is not None for file in resolved_files):
+            _ci_dbg.debug(
+                "CACHED_FILES RETURNING STALE CACHE (exception swallowed!) %r", resolved_files
+            )
             return resolved_files
 
         # Raise based on the flags. Note that we will raise for missing entries at the very end, even when

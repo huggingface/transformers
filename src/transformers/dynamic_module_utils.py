@@ -45,6 +45,16 @@ from .utils.import_utils import VersionComparison, split_package_version
 
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 
+# Dedicated debug logger for CI read-only cache diagnostics — bypasses pytest log capture.
+import logging as _stdlib_logging
+_ci_dbg = _stdlib_logging.getLogger("ci_cache_debug.dynmod")
+if not _ci_dbg.handlers:
+    _ci_dbg_handler = _stdlib_logging.StreamHandler(sys.stderr)
+    _ci_dbg_handler.setFormatter(_stdlib_logging.Formatter("[CI_DBG] %(message)s"))
+    _ci_dbg.addHandler(_ci_dbg_handler)
+    _ci_dbg.setLevel(_stdlib_logging.DEBUG)
+    _ci_dbg.propagate = False
+
 
 def _sanitize_module_name(name: str) -> str:
     r"""
@@ -401,6 +411,11 @@ def get_cached_module_file(
     Returns:
         `str`: The path to the module inside the cache.
     """
+    _ci_dbg.debug(
+        "get_cached_module_file ENTER repo=%r module_file=%r cache_dir=%r revision=%r _commit_hash=%r",
+        pretrained_model_name_or_path, module_file, cache_dir, revision, _commit_hash,
+    )
+
     if is_offline_mode() and not local_files_only:
         logger.info("Offline mode: forcing local_files_only=True")
         local_files_only = True
@@ -414,10 +429,12 @@ def get_cached_module_file(
         cached_module = try_to_load_from_cache(
             pretrained_model_name_or_path, module_file, cache_dir=cache_dir, revision=_commit_hash, repo_type=repo_type
         )
+        _ci_dbg.debug("get_cached_module_file pre-download try_to_load_from_cache returned: %r", cached_module)
 
     new_files = []
     try:
         # Load from URL or cache if already cached
+        _ci_dbg.debug("get_cached_module_file calling cached_file for %r", module_file)
         resolved_module_file = cached_file(
             pretrained_model_name_or_path,
             module_file,
@@ -430,8 +447,13 @@ def get_cached_module_file(
             repo_type=repo_type,
             _commit_hash=_commit_hash,
         )
+        _ci_dbg.debug("get_cached_module_file cached_file returned: %r", resolved_module_file)
         if not is_local and cached_module != resolved_module_file:
             new_files.append(module_file)
+            _ci_dbg.debug(
+                "get_cached_module_file new version detected: cached_module=%r vs resolved=%r",
+                cached_module, resolved_module_file,
+            )
 
     except OSError:
         logger.info(f"Could not locate the {module_file} inside {pretrained_model_name_or_path}.")
@@ -473,6 +495,10 @@ def get_cached_module_file(
     else:
         # Get the commit hash
         commit_hash = extract_commit_hash(resolved_module_file, _commit_hash)
+        _ci_dbg.debug(
+            "get_cached_module_file extracted commit_hash=%r from resolved_module_file=%r",
+            commit_hash, resolved_module_file,
+        )
 
         # The module file will end up being placed in a subfolder with the git hash of the repo. This way we get the
         # benefit of versioning.
@@ -481,9 +507,18 @@ def get_cached_module_file(
         full_submodule_module_file_path = os.path.join(full_submodule, module_file)
         create_dynamic_module(Path(full_submodule_module_file_path).parent)
 
-        if not (submodule_path / module_file).exists():
+        already_installed = (submodule_path / module_file).exists()
+        _ci_dbg.debug(
+            "get_cached_module_file HF_MODULES_CACHE target=%r already_exists=%s",
+            str(submodule_path / module_file), already_installed,
+        )
+        if not already_installed:
             shutil.copyfile(resolved_module_file, submodule_path / module_file)
             importlib.invalidate_caches()
+            _ci_dbg.debug(
+                "get_cached_module_file copied %r -> %r",
+                resolved_module_file, str(submodule_path / module_file),
+            )
         # Make sure we also have every file with relative
         for module_needed in modules_needed:
             if not ((submodule_path / module_file).parent / f"{module_needed}.py").exists():
@@ -510,7 +545,9 @@ def get_cached_module_file(
             "versions of the code file, you can pin a revision."
         )
 
-    return os.path.join(full_submodule, module_file)
+    final_path = os.path.join(full_submodule, module_file)
+    _ci_dbg.debug("get_cached_module_file RETURN %r", final_path)
+    return final_path
 
 
 def get_class_from_dynamic_module(

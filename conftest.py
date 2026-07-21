@@ -26,8 +26,21 @@ import warnings
 from os.path import abspath, dirname, join
 from unittest import mock
 
+import logging as _stdlib_logging
+
 import _pytest
 import pytest
+
+# Dedicated debug logger for CI read-only cache diagnostics.
+# propagate=False + its own StreamHandler bypass pytest log capture so every
+# record always appears in the GitHub Actions raw log unconditionally.
+_ci_dbg = _stdlib_logging.getLogger("ci_cache_debug.conftest")
+if not _ci_dbg.handlers:
+    _ci_dbg_handler = _stdlib_logging.StreamHandler(sys.stderr)
+    _ci_dbg_handler.setFormatter(_stdlib_logging.Formatter("[CI_DBG] %(message)s"))
+    _ci_dbg.addHandler(_ci_dbg_handler)
+    _ci_dbg.setLevel(_stdlib_logging.DEBUG)
+    _ci_dbg.propagate = False
 
 from transformers.testing_utils import (
     HfDoctestModule,
@@ -121,16 +134,26 @@ def _with_tmpdir_cache_fallback(fn):
 
     @functools.wraps(fn)
     def wrapper(*args, **kwargs):
+        repo_id = kwargs.get("path_or_repo_id") or kwargs.get("repo_id") or (args[0] if args else "?")
+        filenames = kwargs.get("filenames") or kwargs.get("filename") or (args[1] if len(args) > 1 else "?")
+        _ci_dbg.debug("FALLBACK-WRAPPER ENTER fn=%r repo=%r files=%r", fn.__name__, repo_id, filenames)
         try:
-            return fn(*args, **kwargs)
+            result = fn(*args, **kwargs)
+            _ci_dbg.debug("FALLBACK-WRAPPER SUCCESS fn=%r repo=%r result=%r", fn.__name__, repo_id, str(result)[:200])
+            return result
         except (OSError, RuntimeError) as e:
-            if not _is_readonly_fs_error(e):
+            is_ro = _is_readonly_fs_error(e)
+            _ci_dbg.debug(
+                "FALLBACK-WRAPPER CAUGHT %s errno=%s is_readonly=%s msg=%r",
+                type(e).__name__, getattr(e, "errno", None), is_ro, str(e)[:200],
+            )
+            if not is_ro:
+                _ci_dbg.debug("FALLBACK-WRAPPER NOT a read-only FS error — re-raising")
                 raise
             global _ci_fallback_cache_dir
             if _ci_fallback_cache_dir is None:
                 _ci_fallback_cache_dir = tempfile.mkdtemp(prefix="ci_fallback_tmpdir_cache_dir_")
             # `cached_files` names it `path_or_repo_id`; `hf_hub_download` names it `repo_id`.
-            repo_id = kwargs.get("path_or_repo_id") or kwargs.get("repo_id") or (args[0] if args else "?")
             _record_fallback_event(str(repo_id))
             # Emit a marker as well; captured per-test by pytest, but the guaranteed-visible
             # count is reported in `pytest_terminal_summary` at the end of the run.
@@ -140,6 +163,10 @@ def _with_tmpdir_cache_fallback(fn):
                 file=sys.stderr,
                 flush=True,
             )
+            _ci_dbg.debug(
+                "FALLBACK-WRAPPER RETRY fn=%r repo=%r fallback_cache_dir=%r",
+                fn.__name__, repo_id, _ci_fallback_cache_dir,
+            )
             import huggingface_hub.constants as hf_constants
 
             with (
@@ -148,7 +175,12 @@ def _with_tmpdir_cache_fallback(fn):
                 mock.patch.object(hf_constants, "HF_XET_CACHE", _ci_fallback_cache_dir),
                 mock.patch.dict(os.environ, {"HF_XET_CACHE": _ci_fallback_cache_dir}),
             ):
-                return fn(*args, **{**kwargs, "cache_dir": _ci_fallback_cache_dir})
+                result = fn(*args, **{**kwargs, "cache_dir": _ci_fallback_cache_dir})
+            _ci_dbg.debug(
+                "FALLBACK-WRAPPER RETRY SUCCESS fn=%r repo=%r result=%r",
+                fn.__name__, repo_id, str(result)[:200],
+            )
+            return result
 
     return wrapper
 

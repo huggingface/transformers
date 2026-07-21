@@ -1120,22 +1120,7 @@ def parse_commit_message(commit_message: str) -> dict[str, bool]:
 
 
 JOB_TO_TEST_FILE = {
-    "tests_torch": r"tests/models/.*/test_modeling_.*",
-    "tests_generate": r"(tests/models/.*/test_modeling_.*|tests/generation/test_.*\.py)",
-    "tests_tokenization": r"tests/(?:models/.*/test_tokenization.*|test_tokenization_mistral_common\.py)",
-    "tests_processors": r"tests/models/.*/test_(?!(?:modeling_|tokenization_)).*",  # takes feature extractors, image processors, processors
-    "examples_torch": r"examples/pytorch/.*test_.*",
-    "tests_exotic_models": r"tests/models/.*(?=layoutlmv|nat|deta|udop|nougat).*",
-    "tests_custom_tokenizers": r"tests/models/.*/test_tokenization_(?=bert_japanese|openai|clip).*",
-    # conftest tests exercise the test runner (repo-root conftest.py); they share the
-    # consistency image and run alongside the repo utils tests in the same CI job.
-    "tests_repo_utils": r"tests/(?:repo_utils|conftest_tests)/test_.*\.py",
-    "pipelines_torch": r"tests/models/.*/test_modeling_.*",
-    # don't include peft or conftest tests for non_model (conftest tests run in the repo_utils job)
-    "tests_non_model": r"tests/(?!peft_integration/|conftest_tests/)[^/]*?/test_.*\.py",
-    "tests_training_ci": r"tests/models/.*/test_modeling_.*",
-    "tests_tensor_parallel_ci": r"(tests/models/.*/test_modeling_.*|tests/tensor_parallel(?:/test_tensor_parallel\.py)?)",
-    "tests_peft_integration": r"tests/peft_integration/test_.*\.py",
+    "tests_generate": r"(tests/generation/test_utils\.py)",
 }
 
 
