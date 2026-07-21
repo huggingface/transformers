@@ -160,13 +160,12 @@ class ImageTextToTextPipeline(Pipeline):
         if generate_kwargs is not None:
             forward_kwargs["generate_kwargs"] = generate_kwargs
         if stop_sequence is not None:
-            stop_sequence_ids = self.processor.tokenizer.encode(stop_sequence, add_special_tokens=False)
-            if len(stop_sequence_ids) > 1:
-                logger.warning_once(
-                    "Stopping on a multiple token sequence is not yet supported on transformers. The first token of"
-                    " the stop sequence will be used as the stop sequence string in the interim."
-                )
-            generate_kwargs["eos_token_id"] = stop_sequence_ids[0]
+            if generate_kwargs is None:
+                generate_kwargs = {}
+            if isinstance(stop_sequence, str):
+                stop_sequence = [stop_sequence]
+            generate_kwargs["stop_strings"] = stop_sequence
+            generate_kwargs["tokenizer"] = self.processor.tokenizer
         if generate_kwargs is not None:
             forward_kwargs["generate_kwargs"] = generate_kwargs
         if max_new_tokens is not None:

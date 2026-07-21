@@ -25,7 +25,7 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import logging
 from ...utils.generic import is_flash_attention_requested
-from ..deepseek_v2.modeling_deepseek_v2 import DeepseekV2TopkRouter
+from ..deepseek_v2.modeling_deepseek_v2 import DeepseekV2TopkRouter, yarn_apply_mscale
 from ..deepseek_v3.modeling_deepseek_v3 import (
     DeepseekV3Attention,
     DeepseekV3DecoderLayer,
@@ -144,6 +144,7 @@ class Mistral4Attention(DeepseekV3Attention):
         )
 
         self.scaling = self.qk_head_dim ** (-0.5)
+        self.scaling = yarn_apply_mscale(config.rope_parameters, self.scaling)
 
     def forward(
         self,
