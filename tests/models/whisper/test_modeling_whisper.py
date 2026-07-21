@@ -1224,6 +1224,11 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
 @require_torch
 @require_torchaudio
 class WhisperModelIntegrationTests(unittest.TestCase):
+    # Batched tests assert exact token ids of length 20. Whisper's generate path accounts for
+    # decoder prefix tokens when applying max_length, so these need max_length=21 to emit 20 tokens.
+    # Transcript-only tests stop at EOS before hitting the limit and should keep max_length=20.
+    _exact_token_generation_max_length = 21
+
     _dataset = None
 
     @classmethod
@@ -1383,7 +1388,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         input_features = processor(input_speech, return_tensors="pt", sampling_rate=16_000).input_features
         input_features = self._feature_tensor_to_model(input_features, model)
 
-        generated_ids = model.generate(input_features, num_beams=5, max_length=21)
+        generated_ids = model.generate(input_features, num_beams=5, max_length=20)
         transcript = processor.tokenizer.batch_decode(generated_ids)[0]
 
         EXPECTED_TRANSCRIPT = " Mr. Quilter is the apostle of the middle classes, and we are glad to welcome his"
@@ -1399,7 +1404,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         input_features = processor(input_speech, return_tensors="pt", sampling_rate=16_000).input_features
         input_features = self._feature_tensor_to_model(input_features, model)
 
-        generated_ids = model.generate(input_features, num_beams=5, max_length=21)
+        generated_ids = model.generate(input_features, num_beams=5, max_length=20)
         transcript = processor.tokenizer.decode(generated_ids[0])
 
         EXPECTED_TRANSCRIPT = " Mr. Quilter is the apostle of the middle classes and we are glad to welcome his gospel"
@@ -1416,7 +1421,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         input_features = self._feature_tensor_to_model(input_features, model)
 
         generated_ids = model.generate(
-            input_features, do_sample=False, max_length=21, language="<|en|>", task="transcribe"
+            input_features, do_sample=False, max_length=20, language="<|en|>", task="transcribe"
         )
         transcript = processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
 
@@ -1437,14 +1442,14 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         input_features = self._feature_tensor_to_model(input_features, model)
 
         generated_ids = model.generate(
-            input_features, do_sample=False, max_length=21, language="<|de|>", task="transcribe"
+            input_features, do_sample=False, max_length=20, language="<|de|>", task="transcribe"
         )
         transcript = processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
         EXPECTED_TRANSCRIPT = " denken sie soeben weilten meine gedanken bei ihnen in adelaide und ich wünsch"
         self.assertEqual(transcript, EXPECTED_TRANSCRIPT)
 
         generated_ids = model.generate(
-            input_features, do_sample=False, max_length=21, language="<|de|>", task="translate"
+            input_features, do_sample=False, max_length=20, language="<|de|>", task="translate"
         )
         transcript = processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
         EXPECTED_TRANSCRIPT = " Think, my thoughts were just now in Adelaide with you, and I wished to be able"
@@ -1460,7 +1465,9 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         input_speech = self._load_datasamples(4)
         input_features = processor(input_speech, return_tensors="pt", sampling_rate=16_000).input_features
         input_features = self._feature_tensor_to_model(input_features, model)
-        generated_ids = model.generate(input_features, max_length=21, task="translate")
+        generated_ids = model.generate(
+            input_features, max_length=self._exact_token_generation_max_length, task="translate"
+        )
 
         # fmt: off
         EXPECTED_LOGITS = torch.tensor(
@@ -1514,7 +1521,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         generated_ids = model.generate(
             input_features.repeat(2, 1, 1),
             do_sample=False,
-            max_length=21,
+            max_length=self._exact_token_generation_max_length,
             language=["<|ja|>", "<|en|>"],
             task="transcribe",
         )
@@ -1531,7 +1538,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         input_speech = self._load_datasamples(4)
         input_features = processor(input_speech, return_tensors="pt", sampling_rate=16_000).input_features
         input_features = self._feature_tensor_to_model(input_features, model)
-        generated_ids = model.generate(input_features, max_length=21).to("cpu")
+        generated_ids = model.generate(input_features, max_length=self._exact_token_generation_max_length).to("cpu")
 
         # fmt: off
         EXPECTED_LOGITS = torch.tensor(
