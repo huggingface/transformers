@@ -3396,8 +3396,6 @@ class PreTrainedModel(
 
         # Only save the model itself if we are using distributed training
         model_to_save = unwrap_model(self)
-        save_on_this_rank = self.should_save_on_this_rank(is_main_process)
-
         # save the string version of dtype to the config, e.g. convert torch.float32 => "float32"
         # we currently don't use this setting automatically, but may start to use with v5
         dtype = model_to_save.dtype
@@ -3409,11 +3407,11 @@ class PreTrainedModel(
 
         # If we have a custom model, we copy the file defining it in the folder and set the attributes so it can be
         # loaded from the Hub.
-        if save_on_this_rank and self.is_remote_code():
+        if self.is_remote_code():
             custom_object_save(self, save_directory, config=self.config)
 
         # Save the config
-        if save_on_this_rank:
+        if is_main_process:
             if not _hf_peft_config_loaded:
                 model_to_save.config.save_pretrained(save_directory)
             if self.can_generate():
@@ -3459,7 +3457,6 @@ class PreTrainedModel(
                 model_to_save,
                 save_directory,
                 push_to_hub=push_to_hub,
-                save_on_this_rank=save_on_this_rank,
                 token=token,
                 **hub_kwargs,
             )
@@ -3540,7 +3537,7 @@ class PreTrainedModel(
                 filename.startswith(weights_no_suffix)
                 and os.path.isfile(full_filename)
                 and filename not in state_dict_split.filename_to_tensors
-                and save_on_this_rank
+                and is_main_process
                 and reg.fullmatch(filename_no_suffix) is not None
             ):
                 os.remove(full_filename)
@@ -3557,74 +3554,73 @@ class PreTrainedModel(
             )
 
         # Save the model
-        if save_on_this_rank:
-            for shard_file, tensor_names in logging.tqdm(
-                state_dict_split.filename_to_tensors.items(), desc="Writing model shards"
-            ):
-                filename = os.path.join(save_directory, shard_file)
-                shard_state_dict = {}
-                for tensor_name in tensor_names:
-                    # Get the tensor, and remove it from state_dict to avoid keeping the ref
-                    tensor = state_dict.pop(tensor_name)
+        for shard_file, tensor_names in logging.tqdm(
+            state_dict_split.filename_to_tensors.items(), desc="Writing model shards"
+        ):
+            filename = os.path.join(save_directory, shard_file)
+            shard_state_dict = {}
+            for tensor_name in tensor_names:
+                # Get the tensor, and remove it from state_dict to avoid keeping the ref
+                tensor = state_dict.pop(tensor_name)
 
-                    # If the param was offloaded, we need to load it back from disk to resave it. It's a strange pattern,
-                    # but it would otherwise not be contained in the saved shard if we were to simply move the file
-                    # or something
-                    if is_offloaded and tensor.device.type == "meta":
-                        tensor = load_offloaded_parameter(model_to_save, tensor_name)
+                # If the param was offloaded, we need to load it back from disk to resave it. It's a strange pattern,
+                # but it would otherwise not be contained in the saved shard if we were to simply move the file
+                # or something
+                if is_offloaded and tensor.device.type == "meta":
+                    tensor = load_offloaded_parameter(model_to_save, tensor_name)
 
-                    # only do contiguous after it's permuted correctly in case of TP
-                    shard_state_dict[tensor_name] = tensor.contiguous()
+                # only do contiguous after it's permuted correctly in case of TP
+                shard_state_dict[tensor_name] = tensor.contiguous()
 
-                # As explained above, for offloaded scenarios, weight format could not be reverted before due to meta weights,
-                # so do it now after they were loaded onto cpu. For one-weight-to-many operations, it may be an issue, but usually the shards
-                # contain all the necessary params, except if we are quite unlucky on the sharding. The failure surface is (very few models
-                # with one-weight-to-many + offloading to disk + unlucky sharding), so it will almost never happen
-                if is_offloaded and save_original_format and not _hf_peft_config_loaded:
-                    try:
-                        shard_state_dict = revert_weight_conversion(model_to_save, shard_state_dict)
-                        # Save the weight_map, since some names etc may have changed due to conversion compared to initial `state_dict_split`
-                        if state_dict_split.is_sharded:
-                            weight_map.update({k: os.path.basename(shard_file)} for k in shard_state_dict.keys())  # ty: ignore[unresolved-attribute]
-                    except Exception:
-                        raise RuntimeError(
-                            "We could not revert some weight conversions because of offlading, and several weights needed for a single "
-                            "conversion operation living in different shard files. Try reducing `max_shard_size` a bit, or worst case "
-                            "set `save_original_format=False`."
-                        )
+            # As explained above, for offloaded scenarios, weight format could not be reverted before due to meta weights,
+            # so do it now after they were loaded onto cpu. For one-weight-to-many operations, it may be an issue, but usually the shards
+            # contain all the necessary params, except if we are quite unlucky on the sharding. The failure surface is (very few models
+            # with one-weight-to-many + offloading to disk + unlucky sharding), so it will almost never happen
+            if is_offloaded and save_original_format and not _hf_peft_config_loaded:
+                try:
+                    shard_state_dict = revert_weight_conversion(model_to_save, shard_state_dict)
+                    # Save the weight_map, since some names etc may have changed due to conversion compared to initial `state_dict_split`
+                    if state_dict_split.is_sharded:
+                        weight_map.update({k: os.path.basename(shard_file)} for k in shard_state_dict.keys())  # ty: ignore[unresolved-attribute]
+                except Exception:
+                    raise RuntimeError(
+                        "We could not revert some weight conversions because of offlading, and several weights needed for a single "
+                        "conversion operation living in different shard files. Try reducing `max_shard_size` a bit, or worst case "
+                        "set `save_original_format=False`."
+                    )
 
-                # TODO: it would be very nice to do the writing concurrently, but safetensors never releases the GIL,
-                # so it's not possible for now....
-                # Write the shard to disk
-                safe_save_file(shard_state_dict, filename, metadata=metadata)
-                # Cleanup the data before next loop (important with offloading, so we don't blowup cpu RAM)
-                del shard_state_dict
+            # TODO: it would be very nice to do the writing concurrently, but safetensors never releases the GIL,
+            # so it's not possible for now....
+            # Write the shard to disk
+            safe_save_file(shard_state_dict, filename, metadata=metadata)
+            # Cleanup the data before next loop (important with offloading, so we don't blowup cpu RAM)
+            del shard_state_dict
 
-            # Save index if sharded
-            index = None
-            if state_dict_split.is_sharded:
-                index = {
-                    "metadata": {"total_parameters": self.num_parameters(), **state_dict_split.metadata},
-                    "weight_map": weight_map,
-                }
+        # Save index if sharded
+        index = None
+        if state_dict_split.is_sharded:
+            index = {
+                "metadata": {"total_parameters": self.num_parameters(), **state_dict_split.metadata},
+                "weight_map": weight_map,
+            }
 
-            if index is None:
-                path_to_weights = os.path.join(save_directory, weights_name)
-                logger.info(f"Model weights saved in {path_to_weights}")
-            else:
-                save_index_file = SAFE_WEIGHTS_INDEX_NAME
-                save_index_file = os.path.join(save_directory, _add_variant(save_index_file, variant))
-                # Save the index as well
-                with open(save_index_file, "w", encoding="utf-8") as f:
-                    content = json.dumps(index, indent=2, sort_keys=True) + "\n"
-                    f.write(content)
-                logger.info(
-                    f"The model is bigger than the maximum size per checkpoint ({max_shard_size}) and is going to be "
-                    f"split in {len(state_dict_split.filename_to_tensors)} checkpoint shards. You can find where each parameters has been saved in the "
-                    f"index located at {save_index_file}."
-                )
+        if index is None:
+            path_to_weights = os.path.join(save_directory, weights_name)
+            logger.info(f"Model weights saved in {path_to_weights}")
+        else:
+            save_index_file = SAFE_WEIGHTS_INDEX_NAME
+            save_index_file = os.path.join(save_directory, _add_variant(save_index_file, variant))
+            # Save the index as well
+            with open(save_index_file, "w", encoding="utf-8") as f:
+                content = json.dumps(index, indent=2, sort_keys=True) + "\n"
+                f.write(content)
+            logger.info(
+                f"The model is bigger than the maximum size per checkpoint ({max_shard_size}) and is going to be "
+                f"split in {len(state_dict_split.filename_to_tensors)} checkpoint shards. You can find where each parameters has been saved in the "
+                f"index located at {save_index_file}."
+            )
 
-        if push_to_hub and save_on_this_rank:
+        if push_to_hub:
             # Eventually create an empty model card
             model_card = create_and_tag_model_card(repo_id, self.model_tags, token=token)
 
