@@ -22,6 +22,7 @@ import types
 from unittest.mock import MagicMock, patch
 
 import torch
+from huggingface_hub import snapshot_download
 
 from transformers import AutoModelForCausalLM, AutoTokenizer, KernelConfig
 from transformers.integrations.hub_kernels import (
@@ -44,10 +45,11 @@ from transformers.testing_utils import (
     torch_device,
 )
 from transformers.utils.import_utils import is_kernels_available
+from transformers.utils.kernel_config import add_to_mapping_local
 
 
 if is_kernels_available():
-    from kernels import Device, Mode, kernelize
+    from kernels import Device, LocalLayerRepository, Mode, kernelize
 
     import transformers.integrations.hub_kernels as hub_kernels_pkg
 
@@ -586,6 +588,32 @@ class TestAttentionKernelRegistration(TestCasePlus):
                 ALL_MASK_ATTENTION_FUNCTIONS.pop(attn_impl, None)
             except Exception as e:
                 print(f"Could not clean up `ALL_MASK_ATTENTION_FUNCTIONS`: {e}")
+
+    def test_add_to_mapping_local(self):
+        repo_path = "/abs/path/kernel"
+        compatible_mapping = {}
+        add_to_mapping_local("RMSNorm", "cuda", f"{repo_path}:LlamaRMSNorm", Mode.INFERENCE, compatible_mapping)
+
+        repo = compatible_mapping["RMSNorm"]["cuda"][Mode.INFERENCE]
+        self.assertIsInstance(repo, LocalLayerRepository)
+        self.assertEqual(repo.layer_name, "LlamaRMSNorm")
+
+        with self.assertRaisesRegex(ValueError, "Only cuda, rocm, xpu, npu, neuron and tpu devices supported"):
+            add_to_mapping_local("RMSNorm", "cpu", f"{repo_path}:LlamaRMSNorm", Mode.INFERENCE, compatible_mapping)
+
+    @slow
+    @require_torch_accelerator
+    def test_add_to_mapping_local_then_load(self):
+        repo_path = snapshot_download("kernels-community/layer-norm")
+        compatible_mapping = {}
+        add_to_mapping_local("RMSNorm", "cuda", f"{repo_path}:LlamaRMSNorm", Mode.INFERENCE, compatible_mapping)
+
+        repo = compatible_mapping["RMSNorm"]["cuda"][Mode.INFERENCE]
+        self.assertIsInstance(repo, LocalLayerRepository)
+        self.assertEqual(repo.layer_name, "LlamaRMSNorm")
+
+        layer_cls = repo.load()
+        self.assertTrue(issubclass(layer_cls, torch.nn.Module))
 
 
 @require_kernels

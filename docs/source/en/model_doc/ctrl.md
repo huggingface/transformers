@@ -56,7 +56,7 @@ This model was contributed by [keskarnitishr](https://huggingface.co/keskarnitis
   observed in the *run_generation.py* example script.
 - The PyTorch models can take the `past_key_values` as input, which is the previously computed key/value attention pairs.
   Using the `past_key_values` value prevents the model from re-computing
-  pre-computed values in the context of text generation. See the [`forward`](model_doc/ctrl#transformers.CTRLModel.forward)
+  pre-computed values in the context of text generation. See the [`~CTRLModel#forward`]
   method for more information on the usage of this argument.
 
 ## Resources

@@ -24,6 +24,7 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
 from ...integrations import lazy_load_kernel
+from ...masking_utils import create_recurrent_attention_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_utils import PreTrainedModel
 from ...utils import ModelOutput, auto_docstring, is_torchdynamo_compiling, logging
@@ -219,6 +220,8 @@ class Mamba2Mixer(nn.Module):
                 " https://github.com/Dao-AILab/causal-conv1d"
             )
 
+        self.layer_type = config.layer_types[layer_idx]
+
     @torch.no_grad()
     def init_mamba2_weights(self):
         A = torch.arange(1, self.num_heads + 1, device=self.A_log.device, dtype=torch.float32)
@@ -259,8 +262,8 @@ class Mamba2Mixer(nn.Module):
 
         # getting projected states from cache if it exists
         if use_precomputed_states:
-            conv_state = cache_params.layers[self.layer_idx].conv_states
-            recurrent_state = cache_params.layers[self.layer_idx].recurrent_states
+            conv_state = cache_params.layers[self.layer_idx].conv_states[0]
+            recurrent_state = cache_params.layers[self.layer_idx].recurrent_states[0]
 
         # Single step calculations via cache
         if use_precomputed_states and seq_len == 1:
@@ -431,11 +434,11 @@ class Mamba2Mixer(nn.Module):
 
         use_precomputed_states = cache_params is not None and cache_params.has_previous_state(self.layer_idx)
         if use_precomputed_states:
-            conv_state = cache_params.layers[self.layer_idx].conv_states
+            conv_state = cache_params.layers[self.layer_idx].conv_states[0]
 
         # 2. Convolution sequence transformation
         if use_precomputed_states and seq_len == 1:
-            conv_states = cache_params.update_conv_state(hidden_states_B_C, layer_idx=self.layer_idx)
+            conv_states = cache_params.update_conv_state(hidden_states_B_C, layer_idx=self.layer_idx)[..., -self.conv_kernel_size:]
 
             hidden_states_B_C = torch.sum(
                 conv_states * self.conv1d.weight.squeeze(1), dim=-1
@@ -498,7 +501,7 @@ class Mamba2Mixer(nn.Module):
             dBx = (dB * hidden_states[..., None]).to(device=cache_device)
 
             # State calculation
-            ssm_states = cache_params.layers[self.layer_idx].recurrent_states * dA + dBx
+            ssm_states = cache_params.layers[self.layer_idx].recurrent_states[0] * dA + dBx
             ssm_states = cache_params.update_recurrent_state(ssm_states, layer_idx=self.layer_idx)
 
             # Subsequent output
@@ -570,7 +573,7 @@ class Mamba2Mixer(nn.Module):
             # 3. Compute the inter-chunk SSM recurrence; produces correct SSM states at chunk boundaries
             # (middle term of factorization of off-diag blocks; A terms)
             previous_states = (
-                cache_params.layers[self.layer_idx].recurrent_states[:, None].to(dtype=states.dtype, device=states.device)
+                cache_params.layers[self.layer_idx].recurrent_states[0][:, None].to(dtype=states.dtype, device=states.device)
                 if use_precomputed_states
                 else torch.zeros_like(states[:, :1])
             )
@@ -672,12 +675,13 @@ class Mamba2PreTrainedModel(PreTrainedModel):
     base_model_prefix = "backbone"
     _no_split_modules = ["Mamba2Block"]
     supports_gradient_checkpointing = True
+    _can_compile_fullgraph = True
     _is_stateful = True
 
     @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights."""
-        std = self.config.initializer_range
+        super()._init_weights(module)
         if isinstance(module, Mamba2Mixer):
             # S4D real initialization. These are not discretized!
             # The core is to load them, compute the discrete states, then write the updated state. Keeps the memory bounded
@@ -701,15 +705,6 @@ class Mamba2PreTrainedModel(PreTrainedModel):
                 # Having just p *= scale would repeatedly scale it down
                 p = module.out_proj.weight
                 p /= math.sqrt(self.config.num_hidden_layers)
-
-        if isinstance(module, nn.Linear):
-            init.normal_(module.weight, std=std)
-            if module.bias is not None:
-                init.zeros_(module.bias)
-        elif isinstance(module, (Mamba2RMSNorm, MambaRMSNormGated)):
-            init.ones_(module.weight)
-        elif isinstance(module, nn.Embedding):
-            init.normal_(module.weight, std=std)
 
 
 @auto_docstring(
@@ -821,6 +816,13 @@ class Mamba2Model(Mamba2PreTrainedModel):
 
         if use_cache and cache_params is None:
             cache_params = DynamicCache(config=self.config)
+
+        attention_mask = create_recurrent_attention_mask(
+            config=self.config,
+            inputs_embeds=inputs_embeds,
+            attention_mask=attention_mask,
+            past_key_values=cache_params,
+        )
 
         hidden_states = inputs_embeds
         all_hidden_states = () if output_hidden_states else None
