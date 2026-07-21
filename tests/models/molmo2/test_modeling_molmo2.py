@@ -271,6 +271,10 @@ class Molmo2ModelTest(VLMModelTest, unittest.TestCase):
             with torch.no_grad():
                 model(**inputs)
 
+    @unittest.skip("`image_token_pooling` is packed along a flat token axis; the test's batch-halving cannot slice it")
+    def test_generate_compile_model_forward_fullgraph(self):
+        pass
+
     def _video_features_prepare_config_and_inputs(self):
         # The generic helper only renames `pixel_values`; Molmo2's `get_video_features` also needs the
         # pooling index tensor under its video name.
@@ -351,12 +355,6 @@ class Molmo2ModelTest(VLMModelTest, unittest.TestCase):
 
     # `test_model_outputs_equivalence` is inherited and now passes: the earlier "shape mismatch" was the
     # image-merge bug (placeholder mask not expanded); with that fixed there is nothing to skip.
-
-    @unittest.skip(
-        reason="Supported only for text-only inputs (otherwise dynamic control flows for multimodal inputs)"
-    )
-    def test_generate_compile_model_forward(self):
-        pass
 
     # `test_generate_from_inputs_embeds_0_greedy` is inherited and passes: Molmo2 now merges image features
     # into a provided `inputs_embeds` (instead of forbidding it), so the multimodal greedy path runs.

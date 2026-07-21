@@ -1517,7 +1517,7 @@ class Molmo2PreTrainedModel(LlamaPreTrainedModel):
     _supports_flash_attn = True
     _supports_sdpa = True
 
-    _can_compile_fullgraph = False
+    _can_compile_fullgraph = True
     _supports_attention_backend = True
     _can_record_outputs = {
         "hidden_states": Molmo2DecoderLayer,
