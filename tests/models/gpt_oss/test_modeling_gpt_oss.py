@@ -159,6 +159,7 @@ def distributed_worker(quantized, model_size, kernels, attn_impl, mode):
     import os
 
     from transformers import AutoModelForCausalLM, AutoTokenizer
+    from transformers.distributed import DistributedConfig
     from transformers.testing_utils import torch_device
 
     def generate_config_key(quantized, model, kernels, attn_impl, mode):
@@ -179,7 +180,7 @@ def distributed_worker(quantized, model_size, kernels, attn_impl, mode):
     model = AutoModelForCausalLM.from_pretrained(
         model_id,
         dtype="auto",
-        tp_plan="auto",  # distributed inference
+        distributed_config=DistributedConfig(tp_size=int(os.environ["WORLD_SIZE"])),
         use_kernels=kernels,
     ).to(torch_device)
     model.set_attn_implementation(attn_impl)

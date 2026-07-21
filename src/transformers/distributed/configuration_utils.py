@@ -63,12 +63,35 @@ class DistributedConfig:
         if self.fsdp_size is None:
             self.fsdp_size = 1
 
-        if torch.distributed.is_available() and torch.distributed.is_initialized():
-            world_size = torch.distributed.get_world_size()
-            if self.tp_size * self.fsdp_size != world_size:
-                raise RuntimeError(
-                    f"tp_size ({self.tp_size}) * fsdp_size ({self.fsdp_size}) is not equal to world_size ({world_size})"
-                )
+        if self.tp_size > 1 and self.fsdp_size > 1:
+            raise ValueError(
+                "FSDP+TP is not supported yet. "
+                "Use DistributedConfig(fsdp_size=N) or DistributedConfig(tp_size=N), not both. "
+                "2D support will come soon."
+            )
+
+    def validate(self) -> None:
+        """Validate against the live process group. Call before distributed load/train."""
+        if self.tp_size is None and self.fsdp_size is None:
+            return
+
+        if self.tp_size <= 1 and self.fsdp_size <= 1:
+            return
+
+        if not is_torch_available():
+            raise RuntimeError("PyTorch is required to use DistributedConfig.")
+
+        if not torch.distributed.is_available() or not torch.distributed.is_initialized():
+            raise RuntimeError(
+                "torch.distributed must be initialized before using DistributedConfig with tp_size > 1 or "
+                "fsdp_size > 1. Call dist.init_process_group(...) first, or launch with torchrun."
+            )
+
+        world_size = torch.distributed.get_world_size()
+        if self.tp_size * self.fsdp_size != world_size:
+            raise RuntimeError(
+                f"tp_size ({self.tp_size}) * fsdp_size ({self.fsdp_size}) is not equal to world_size ({world_size})"
+            )
 
     @classmethod
     def from_dict(cls, config_dict: dict, **kwargs) -> "DistributedConfig":

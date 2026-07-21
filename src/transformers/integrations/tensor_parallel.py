@@ -108,7 +108,6 @@ def initialize_tensor_parallelism(
             tp_device = torch.device(device_type)
             device_map = device_type or {}
 
-        tp_size = tp_size if tp_size is not None else torch.distributed.get_world_size()
         device_mesh = torch.distributed.init_device_mesh(tp_device.type, (tp_size,))
     else:
         if device_mesh.ndim > 1:
@@ -118,10 +117,9 @@ def initialize_tensor_parallelism(
                     "Please provide a valid `device_mesh`."
                 )
             device_mesh = device_mesh["tp"]
-        tp_size = device_mesh.size()
         device_map = torch.device(f"{device_mesh.device_type}:{int(os.environ['LOCAL_RANK'])}")
 
-    return device_map, device_mesh, tp_size
+    return device_map, device_mesh
 
 
 def replace_layer_number_by_wildcard(name: str) -> str:
@@ -1624,9 +1622,9 @@ def verify_tp_plan(expected_keys: list[str], tp_plan: dict[str, str] | None):
         logger.warning(f"The following layers were not sharded: {', '.join(unsharded_layers)}")
 
 
-def distribute_model(model, tp_plan, distributed_config, device_mesh, tp_size):
-    """Distribute a model according to the TP plan."""
-    model._tp_size = tp_size
+def apply_tensor_parallelism(model, tp_plan, distributed_config, device_mesh):
+    """Apply tensor parallelism to a model according to the TP plan."""
+    model._tp_size = distributed_config.tp_size
     model._device_mesh = device_mesh
     if distributed_config is not None:
         if isinstance(distributed_config, dict):
