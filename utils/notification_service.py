@@ -1319,7 +1319,7 @@ if __name__ == "__main__":
         report_repo_subfolder = f"runs/{report_repo_subfolder}"
 
     workflow_run = get_last_daily_ci_run(
-        token=os.environ["ACCESS_REPO_INFO_TOKEN"], workflow_run_id=os.getenv("GITHUB_RUN_ID")
+        token=os.environ["ACCESS_REPO_INFO_TOKEN"], workflow_run_id="29798563960",
     )
     workflow_run_created_time = workflow_run["created_at"]
     workflow_id = workflow_run["workflow_id"]
