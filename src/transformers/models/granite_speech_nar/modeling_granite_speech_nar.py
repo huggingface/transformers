@@ -308,10 +308,6 @@ class GraniteSpeechNarPreTrainedModel(PreTrainedModel):
     _supports_flash_attn = True
     _supports_flash_attn_2 = True
     _supports_sdpa = True
-    # The conformer encoder (cross-layer self-conditioning + multi-layer hidden-state concat) and the
-    # Q-Former projector (query/window-position adds against the encoder features) have internal cross-
-    # references that are not safe to split across devices, so each is kept whole under `device_map`. They
-    # are small relative to the LLM, which still splits by `GraniteSpeechNarDecoderLayer`.
     _no_split_modules = ["GraniteSpeechNarCTCEncoder", "GraniteSpeechNarProjector", "GraniteSpeechNarDecoderLayer"]
     input_modalities = ("audio",)
 

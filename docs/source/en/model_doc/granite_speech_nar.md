@@ -32,7 +32,7 @@ The model consists of:
 
 The model performs inference in a single pass: the encoder produces initial CTC predictions, which are interleaved with blank insertion slots (exploiting the identity mapping bias of Transformers) and fed alongside projected audio embeddings to the bidirectional LLM for refinement via a latent alignment objective.
 
-This model was contributed by [Avihu Dekel](https://huggingface.co/Avihu).
+This model was contributed by [Avihu Dekel](https://huggingface.co/Avihu) and [Eustache Le Bihan](https://huggingface.co/eustlb).
 
 ## Usage
 
