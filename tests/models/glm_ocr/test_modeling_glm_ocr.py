@@ -14,6 +14,7 @@
 """Testing suite for the PyTorch GLM-4.6V model."""
 
 import copy
+import functools
 import unittest
 
 import pytest
@@ -481,6 +482,37 @@ class GlmOcrIntegrationTest(unittest.TestCase):
             self.processor.decode(output[0], skip_special_tokens=True),
             EXPECTED_DECODED_TEXT,
         )
+
+    @slow
+    def test_small_model_integration_test_mtp(self):
+        model = GlmOcrForConditionalGeneration.from_pretrained("zai-org/GLM-OCR", dtype="auto", device_map="auto")
+
+        inputs = self.processor.apply_chat_template(
+            self.message, tokenize=True, add_generation_prompt=True, return_dict=True, return_tensors="pt"
+        ).to(torch_device)
+
+        forward_call_count = 0
+        original_forward = model.forward
+
+        @functools.wraps(original_forward)
+        def counting_forward(*args, **kwargs):
+            nonlocal forward_call_count
+            forward_call_count += 1
+            return original_forward(*args, **kwargs)
+
+        model.forward = counting_forward
+
+        baseline_ids = model.generate(**inputs, max_new_tokens=30, do_sample=False)
+        baseline_call_count = forward_call_count
+
+        forward_call_count = 0
+        mtp_ids = model.generate(**inputs, max_new_tokens=30, do_sample=False, use_mtp=True)
+        mtp_call_count = forward_call_count
+
+        # Greedy outputs must be identical: MTP only drafts, the main model verifies every token
+        self.assertEqual(baseline_ids.tolist(), mtp_ids.tolist())
+        # If the checkpoint MTP weights loaded correctly, drafts get accepted and we run fewer forwards
+        self.assertLess(mtp_call_count, baseline_call_count)
 
     @slow
     def test_small_model_integration_test_batch(self):
