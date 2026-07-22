@@ -199,31 +199,32 @@ class GraniteSpeechNarConformerAttention(nn.Module):
         query_states = self.to_q(hidden_states)
         key_states, value_states = self.to_kv(hidden_states).chunk(2, dim=-1)
 
-        query_states = query_states.reshape(bsz, num_blocks, self.context_size, self.num_heads, -1).transpose(2, 3)
-        key_states = key_states.reshape(bsz, num_blocks, self.context_size, self.num_heads, -1).transpose(2, 3)
-        value_states = value_states.reshape(bsz, num_blocks, self.context_size, self.num_heads, -1).transpose(2, 3)
+        flat_bsz = bsz * num_blocks
+        query_states = query_states.reshape(flat_bsz, self.context_size, self.num_heads, -1).transpose(1, 2)
+        key_states = key_states.reshape(flat_bsz, self.context_size, self.num_heads, -1).transpose(1, 2)
+        value_states = value_states.reshape(flat_bsz, self.context_size, self.num_heads, -1).transpose(1, 2)
 
         # shaw's relative positional embedding
         rel_pos_emb = self.rel_pos_emb(attention_dists)
         # alternative computation of `pos_attn` - for readability
-        # rel_pos_emb_expanded = rel_pos_emb.view([1, 1, 1] + list(rel_pos_emb.shape))
+        # rel_pos_emb_expanded = rel_pos_emb.view([1, 1] + list(rel_pos_emb.shape))
         # pos_attn = torch.sum(query_states.unsqueeze(-2) * rel_pos_emb_expanded, dim=-1) * self.scale
         # einsum implementation of pos_attn - gives x30 speedup over the alternative
         # TODO (@avihu111) find a fast alternative to einsum
-        pos_attn = torch.einsum("b m h c d, c r d -> b m h c r", query_states, rel_pos_emb) * self.scale
+        pos_attn = torch.einsum("b h c d, c r d -> b h c r", query_states, rel_pos_emb) * self.scale
 
         if remainder > 0:
             # masked attention in the extended block
             mask = torch.ones(self.context_size, self.context_size, dtype=bool, device=hidden_states.device)
             mask[:remainder, :remainder] = 0
             mask_value = -torch.finfo(pos_attn.dtype).max
-            pos_attn[:, -1, :].masked_fill_(mask, mask_value)
+            pos_attn[num_blocks - 1 : pos_attn.shape[0] : num_blocks].masked_fill_(mask, mask_value)
 
         with torch.nn.attention.sdpa_kernel(torch.nn.attention.SDPBackend.MATH):
             out = F.scaled_dot_product_attention(
                 query_states, key_states, value_states, attn_mask=pos_attn, scale=self.scale
             )
-        out = out.transpose(2, 3).reshape(bsz, hidden_states.shape[1], -1)
+        out = out.transpose(1, 2).reshape(bsz, hidden_states.shape[1], -1)
         out = self.to_out(out[:, :num_features, :])
         return self.dropout(out)
 
@@ -471,7 +472,9 @@ class GraniteSpeechNarQFormerModel(GraniteSpeechNarPreTrainedModel):
         self.layers = nn.ModuleList([GraniteSpeechNarQFormerLayer(config) for _ in range(config.num_layers)])
         self.post_init()
 
-    def forward(self, query_embeds: torch.Tensor, encoder_hidden_states: torch.Tensor) -> torch.Tensor:
+    def forward(
+        self, query_embeds: torch.Tensor, encoder_hidden_states: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
+    ) -> torch.Tensor:
         mean_pool = encoder_hidden_states.unflatten(1, (-1, self.config.downsample_rate)).mean(-2)
         hidden_states = self.dropout(query_embeds + mean_pool)
         encoder_hidden_states = self.dropout(encoder_hidden_states + self.window_positions)
@@ -1228,11 +1231,16 @@ class GraniteSpeechNarForCTC(GraniteSpeechNarPreTrainedModel):
         **kwargs: Unpack[TransformersKwargs],
     ) -> list[torch.LongTensor] | GraniteSpeechNarGenerateOutput:
         r"""
+        input_features_mask (`torch.Tensor` of shape `(batch_size, seq_len)`, *optional*):
+            Mask over the encoder frames (`True` for valid frames, `False` for padding).
         num_editing_steps (`int`, *optional*, defaults to 1):
             Number of non-autoregressive editing passes. The first pass decodes from the encoder's CTC
             predictions; each subsequent pass collapses the previous LLM output via CTC and feeds it back
             as the text input for refinement, reusing the cached audio embeddings (so the encoder and
             projector run only once). `1` reproduces the single-pass behavior.
+        return_dict_in_generate (`bool`, *optional*, defaults to `False`):
+            Whether or not to return a [`GraniteSpeechNarGenerateOutput`], as opposed to returning
+            exclusively the generated sequences.
         """
         input_ids, audio_embeds = None, None
         for _ in range(num_editing_steps):

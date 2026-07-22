@@ -438,7 +438,9 @@ class GraniteSpeechNarQFormerModel(GraniteSpeechNarPreTrainedModel):
         self.layers = nn.ModuleList([GraniteSpeechNarQFormerLayer(config) for _ in range(config.num_layers)])
         self.post_init()
 
-    def forward(self, query_embeds: torch.Tensor, encoder_hidden_states: torch.Tensor) -> torch.Tensor:
+    def forward(
+        self, query_embeds: torch.Tensor, encoder_hidden_states: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
+    ) -> torch.Tensor:
         mean_pool = encoder_hidden_states.unflatten(1, (-1, self.config.downsample_rate)).mean(-2)
         hidden_states = self.dropout(query_embeds + mean_pool)
         encoder_hidden_states = self.dropout(encoder_hidden_states + self.window_positions)
@@ -855,11 +857,16 @@ class GraniteSpeechNarForCTC(GraniteSpeechNarPreTrainedModel):
         **kwargs: Unpack[TransformersKwargs],
     ) -> list[torch.LongTensor] | GraniteSpeechNarGenerateOutput:
         r"""
+        input_features_mask (`torch.Tensor` of shape `(batch_size, seq_len)`, *optional*):
+            Mask over the encoder frames (`True` for valid frames, `False` for padding).
         num_editing_steps (`int`, *optional*, defaults to 1):
             Number of non-autoregressive editing passes. The first pass decodes from the encoder's CTC
             predictions; each subsequent pass collapses the previous LLM output via CTC and feeds it back
             as the text input for refinement, reusing the cached audio embeddings (so the encoder and
             projector run only once). `1` reproduces the single-pass behavior.
+        return_dict_in_generate (`bool`, *optional*, defaults to `False`):
+            Whether or not to return a [`GraniteSpeechNarGenerateOutput`], as opposed to returning
+            exclusively the generated sequences.
         """
         input_ids, audio_embeds = None, None
         for _ in range(num_editing_steps):

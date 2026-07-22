@@ -13,7 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was published in HF papers on 2026-03-09 and contributed to Hugging Face Transformers on 2026-07-10.*
+*This model was published in HF papers on 2026-03-09 and contributed to Hugging Face Transformers on 2026-07-22.*
 *This model was released on 2026-03-09 and added to Hugging Face Transformers on 2026-06-03.*
 
 # GraniteSpeechNar
@@ -69,6 +69,10 @@ print(processor.batch_decode(output.sequences, skip_special_tokens=True))
 ## GraniteSpeechNarProjectorConfig
 
 [[autodoc]] GraniteSpeechNarProjectorConfig
+
+## GraniteSpeechNarTextConfig
+
+[[autodoc]] GraniteSpeechNarTextConfig
 
 ## GraniteSpeechNarProcessor
 
