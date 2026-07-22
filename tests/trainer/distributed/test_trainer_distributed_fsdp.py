@@ -60,6 +60,7 @@ if is_torch_available():
 FSDP_CONFIG_FILE = os.path.join(CONFIGS_DIR, "fsdp.yaml")
 FSDP2_CONFIG_FILE = os.path.join(CONFIGS_DIR, "fsdp2.yaml")
 FSDP2_CP_CONFIG_FILE = os.path.join(CONFIGS_DIR, "fsdp2_cp.yaml")
+FSDP2_SP_CONFIG_FILE = os.path.join(CONFIGS_DIR, "fsdp2_sp.yaml")
 FSDP_GENERATE_SCRIPT = os.path.join(SCRIPTS_DIR, "fsdp_generate.py")
 
 FSDP_CONFIGS = {
@@ -641,6 +642,12 @@ class TestTrainerDistributedFSDPCommon(
             atol=2e-2,
             msg=f"CP losses {cp_yes_losses} do not match non-CP losses {cp_no_losses}",
         )
+
+    def test_sp_equivalence(self):
+        """Native Ulysses SP under FSDP2 must produce the same losses as no SP (it only splits the
+        sequence). See `check_sp_equivalence`."""
+        launch_args = list(TRAIN_LAUNCH_ARGS) + ["--fsdp_state_dict_type", "SHARDED_STATE_DICT"]
+        self.check_sp_equivalence(FSDP2_SP_CONFIG_FILE, FSDP2_CONFIG_FILE, launch_args=launch_args)
 
     # -------------------------------------------------------------------
     # FSDP eval tests
