@@ -18,6 +18,7 @@ from typing import TYPE_CHECKING
 
 from ..utils import is_torch_available
 
+_dtensor_available = False
 
 if TYPE_CHECKING:
     import torch
@@ -25,10 +26,15 @@ if TYPE_CHECKING:
 
 if is_torch_available():
     import torch
-    from torch.distributed.tensor import DTensor
-    from torch.distributed.tensor._utils import compute_local_shape_and_global_offset
-    from torch.distributed.tensor.placement_types import Shard
+    try:
+        from torch.distributed.tensor import DTensor
+        from torch.distributed.tensor._utils import compute_local_shape_and_global_offset
+        from torch.distributed.tensor.placement_types import Shard
+        _dtensor_available = True
+    except ImportError:
+        _dtensor_available = False
 
+if _dtensor_available:
     # torch < 2.10 names as an underscore before `local_shard_size_and_offset`: alias it the non-underscored version
     if not hasattr(Shard, "local_shard_size_and_offset") and hasattr(Shard, "_local_shard_size_and_offset"):
         Shard.local_shard_size_and_offset = Shard._local_shard_size_and_offset
