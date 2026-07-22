@@ -53,13 +53,15 @@ class LingbotVisionModelTester:
         num_channels=3,
         is_training=False,
         hidden_size=32,
+        intermediate_size=64,
         num_hidden_layers=2,
         num_attention_heads=4,
-        mlp_ratio=2.0,
-        num_storage_tokens=2,
-        ffn_layer="swiglu",
-        norm_layer="layernorm",
-        layer_scale_init_value=1e-5,
+        num_register_tokens=2,
+        # The gated FFN and the biased fused QKV projection are the two paths that need a checkpoint
+        # conversion, so the tester exercises them (see `test_reverse_loading_mapping`).
+        use_gated_mlp=True,
+        hidden_act="silu",
+        layerscale_value=1e-5,
         initializer_range=0.02,
         scope=None,
     ):
@@ -70,18 +72,18 @@ class LingbotVisionModelTester:
         self.num_channels = num_channels
         self.is_training = is_training
         self.hidden_size = hidden_size
+        self.intermediate_size = intermediate_size
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
-        self.mlp_ratio = mlp_ratio
-        self.num_storage_tokens = num_storage_tokens
-        self.ffn_layer = ffn_layer
-        self.norm_layer = norm_layer
-        self.layer_scale_init_value = layer_scale_init_value
+        self.num_register_tokens = num_register_tokens
+        self.use_gated_mlp = use_gated_mlp
+        self.hidden_act = hidden_act
+        self.layerscale_value = layerscale_value
         self.initializer_range = initializer_range
         self.scope = scope
 
         self.num_patches = (image_size // patch_size) ** 2
-        self.seq_length = self.num_patches + 1 + self.num_storage_tokens
+        self.seq_length = self.num_patches + 1 + self.num_register_tokens
         self.mask_length = self.num_patches
         self.num_masks = max(1, self.num_patches // 2)
 
@@ -91,15 +93,17 @@ class LingbotVisionModelTester:
             patch_size=self.patch_size,
             num_channels=self.num_channels,
             hidden_size=self.hidden_size,
+            intermediate_size=self.intermediate_size,
             num_hidden_layers=self.num_hidden_layers,
             num_attention_heads=self.num_attention_heads,
-            mlp_ratio=self.mlp_ratio,
-            num_storage_tokens=self.num_storage_tokens,
-            ffn_layer=self.ffn_layer,
-            norm_layer=self.norm_layer,
-            layer_scale_init_value=self.layer_scale_init_value,
+            num_register_tokens=self.num_register_tokens,
+            use_gated_mlp=self.use_gated_mlp,
+            hidden_act=self.hidden_act,
+            layerscale_value=self.layerscale_value,
             initializer_range=self.initializer_range,
-            rope_dtype="fp32",
+            query_bias=True,
+            key_bias=True,
+            value_bias=True,
             out_indices=[1, 2],
         )
 
@@ -230,10 +234,10 @@ class LingbotVisionModelIntegrationTest(unittest.TestCase):
         with torch.no_grad():
             outputs = model(**inputs)
 
-        # seq length = num patches + 1 (CLS) + num storage tokens
+        # seq length = num patches + 1 (CLS) + num register (storage) tokens
         _, _, height, width = inputs["pixel_values"].shape
         num_patches = (height // model.config.patch_size) * (width // model.config.patch_size)
-        expected_seq_length = num_patches + 1 + model.config.num_storage_tokens
+        expected_seq_length = num_patches + 1 + model.config.num_register_tokens
         expected_shape = torch.Size((1, expected_seq_length, model.config.hidden_size))
         self.assertEqual(outputs.last_hidden_state.shape, expected_shape)
 
@@ -244,7 +248,7 @@ class LingbotVisionModelIntegrationTest(unittest.TestCase):
         )
         torch.testing.assert_close(outputs.pooler_output[0, :5], expected_pooler, rtol=1e-4, atol=1e-4)
 
-        first_patch_token = outputs.last_hidden_state[:, model.config.num_storage_tokens + 1 :]
+        first_patch_token = outputs.last_hidden_state[:, model.config.num_register_tokens + 1 :]
         expected_patch = torch.tensor(
             Expectations({(None, None): [0.5894, 0.2714, -0.3320, -0.0893, 0.2505]}).get_expectation(),
             device=torch_device,

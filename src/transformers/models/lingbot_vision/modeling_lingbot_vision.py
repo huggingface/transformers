@@ -20,180 +20,185 @@
 
 import math
 from collections.abc import Callable
-from functools import partial
+from dataclasses import dataclass
 
+import numpy as np
 import torch
-import torch.nn.functional as F
 from torch import nn
 
 from ... import initialization as init
+from ...activations import ACT2FN
 from ...backbone_utils import BackboneMixin, filter_output_hidden_states
-from ...integrations import use_kernel_forward_from_hub
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BackboneOutput, BaseModelOutput, BaseModelOutputWithPooling
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
+from ...pytorch_utils import compile_compatible_method_lru_cache
 from ...utils import TransformersKwargs, auto_docstring
-from ...utils.generic import can_return_tuple, merge_with_config_defaults
+from ...utils.generic import can_return_tuple, maybe_autocast, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from .configuration_lingbot_vision import LingbotVisionConfig
 
 
-@use_kernel_forward_from_hub("RMSNorm")
-class LingbotVisionRMSNorm(nn.Module):
-    def __init__(self, hidden_size: int, eps: float = 1e-5) -> None:
-        """
-        LingbotVisionRMSNorm is equivalent to T5LayerNorm
-        """
-        super().__init__()
-        self.weight = nn.Parameter(torch.ones(hidden_size))
-        self.variance_epsilon = eps
+@auto_docstring(
+    custom_intro="""
+    Output type of [`LingbotVisionBackbone`], extending [`BackboneOutput`] with optional CLS tokens from
+    each selected feature stage (used when `config.return_class_token=True`).
+    """
+)
+@dataclass
+class LingbotVisionBackboneOutput(BackboneOutput):
+    r"""
+    cls_tokens (`tuple(torch.FloatTensor)`, *optional*):
+        CLS token from each selected feature stage, each of shape `(batch_size, hidden_size)`.
+        Only present when `config.return_class_token=True`.
+    """
 
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        input_dtype = hidden_states.dtype
-        hidden_states = hidden_states.to(torch.float32)
-        variance = hidden_states.pow(2).mean(-1, keepdim=True)
-        hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
-        return self.weight * hidden_states.to(input_dtype)
-
-    def extra_repr(self):
-        return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
+    cls_tokens: tuple[torch.FloatTensor] | None = None
 
 
-class LingbotVisionLayerScale(nn.Module):
-    def __init__(self, hidden_size: int, init_value: float):
-        super().__init__()
-        self.gamma = nn.Parameter(torch.full((hidden_size,), init_value))
+class LingbotVisionEmbeddings(nn.Module):
+    """
+    Construct the CLS token, mask token, position and patch embeddings.
+    """
 
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        return hidden_states * self.gamma
-
-
-def _make_2tuple(value):
-    if isinstance(value, (list, tuple)):
-        if len(value) != 2:
-            raise ValueError("Expected a sequence of length 2.")
-        return tuple(value)
-    return (value, value)
-
-
-class LingbotVisionPatchEmbeddings(nn.Module):
     def __init__(self, config: LingbotVisionConfig):
         super().__init__()
-        image_size = _make_2tuple(config.image_size)
-        patch_size = _make_2tuple(config.patch_size)
+        self.config = config
+        self.cls_token = nn.Parameter(torch.randn(1, 1, config.hidden_size))
+        # The original implementation stores the mask token flat; it broadcasts the same way over patch embeddings.
+        self.mask_token = nn.Parameter(torch.zeros(1, config.hidden_size))
+        self.register_tokens = nn.Parameter(torch.empty(1, config.num_register_tokens, config.hidden_size))
+        self.patch_embeddings = nn.Conv2d(
+            config.num_channels, config.hidden_size, kernel_size=config.patch_size, stride=config.patch_size
+        )
 
-        self.image_size = image_size
-        self.patch_size = patch_size
-        self.num_channels = config.num_channels
-        self.num_patches = (image_size[0] // patch_size[0]) * (image_size[1] // patch_size[1])
-        self.projection = nn.Conv2d(config.num_channels, config.hidden_size, kernel_size=patch_size, stride=patch_size)
+    def forward(self, pixel_values: torch.Tensor, bool_masked_pos: torch.Tensor | None = None) -> torch.Tensor:
+        batch_size = pixel_values.shape[0]
+        target_dtype = self.patch_embeddings.weight.dtype
 
-    def forward(self, pixel_values: torch.Tensor) -> tuple[torch.Tensor, tuple[int, int]]:
-        target_dtype = self.projection.weight.dtype
-        embeddings = self.projection(pixel_values.to(dtype=target_dtype))
-        height, width = embeddings.shape[-2:]
-        embeddings = embeddings.flatten(2).transpose(1, 2)
-        return embeddings, (height, width)
+        # (batch_size, num_channels, height, width) -> (batch_size, num_patches, hidden_size)
+        patch_embeddings = self.patch_embeddings(pixel_values.to(dtype=target_dtype))
+        patch_embeddings = patch_embeddings.flatten(2).transpose(1, 2)
+
+        if bool_masked_pos is not None:
+            mask_token = self.mask_token.to(patch_embeddings.dtype)
+            patch_embeddings = torch.where(bool_masked_pos.unsqueeze(-1), mask_token, patch_embeddings)
+
+        # Add CLS and register tokens
+        cls_token = self.cls_token.expand(batch_size, -1, -1)
+        register_tokens = self.register_tokens.expand(batch_size, -1, -1)
+        embeddings = torch.cat([cls_token, register_tokens, patch_embeddings], dim=1)
+
+        return embeddings
 
 
-_ROPE_DTYPE_MAPPING = {
-    "fp32": torch.float32,
-    "fp16": torch.float16,
-    "bf16": torch.bfloat16,
-}
+@compile_compatible_method_lru_cache(maxsize=32)
+def get_patches_center_coordinates(
+    num_patches_h: int, num_patches_w: int, dtype: torch.dtype, device: torch.device
+) -> torch.Tensor:
+    """
+    Computes the 2D coordinates of the centers of image patches, normalized to the range [-1, +1].
+    The center of each patch is exactly halfway between its top-left and bottom-right corners.
+
+    Args:
+        num_patches_h (int): Number of patches along the vertical (height) axis.
+        num_patches_w (int): Number of patches along the horizontal (width) axis.
+        dtype (torch.dtype): The desired data type of the returned tensor.
+
+    Returns:
+        torch.Tensor: A tensor of shape (height * width, 2), where each row contains the (y, x)
+            coordinates of a patch center, normalized to [-1, +1].
+    """
+    coords_h = torch.arange(0.5, num_patches_h, dtype=dtype, device=device)
+    coords_w = torch.arange(0.5, num_patches_w, dtype=dtype, device=device)
+    coords_h = coords_h / num_patches_h
+    coords_w = coords_w / num_patches_w
+    # (height, width, 2) -> (height * width, 2)
+    coords = torch.stack(torch.meshgrid(coords_h, coords_w, indexing="ij"), dim=-1)
+    coords = coords.flatten(0, 1)
+    # Shift range [0, 1] to [-1, +1]
+    coords = 2.0 * coords - 1.0
+    return coords
 
 
-class LingbotVisionRotaryEmbedding(nn.Module):
+def augment_patches_center_coordinates(
+    coords: torch.Tensor,
+    shift: float | None = None,
+    jitter: float | None = None,
+    rescale: float | None = None,
+) -> torch.Tensor:
+    # Shift coords by adding a uniform value in [-shift, shift]
+    if shift is not None:
+        shift_hw = torch.empty((1, 2), device=coords.device, dtype=coords.dtype)
+        shift_hw = shift_hw.uniform_(-shift, shift)
+        coords = coords + shift_hw
+
+    # Jitter coords by multiplying the range [-1, 1] by a log-uniform value in [1/jitter, jitter]
+    if jitter is not None:
+        jitter_range = np.log(jitter)
+        jitter_hw = torch.empty((1, 2), device=coords.device, dtype=coords.dtype)
+        jitter_hw = jitter_hw.uniform_(-jitter_range, jitter_range).exp()
+        coords = coords * jitter_hw
+
+    # Rescale coords by multiplying the range [-1, 1] by a log-uniform value in [1/rescale, rescale]
+    if rescale is not None:
+        rescale_range = np.log(rescale)
+        rescale_hw = torch.empty(1, device=coords.device, dtype=coords.dtype)
+        rescale_hw = rescale_hw.uniform_(-rescale_range, rescale_range).exp()
+        coords = coords * rescale_hw
+
+    return coords
+
+
+class LingbotVisionRopePositionEmbedding(nn.Module):
+    inv_freq: torch.Tensor
+
     def __init__(self, config: LingbotVisionConfig):
         super().__init__()
-        if config.hidden_size % (4 * config.num_attention_heads) != 0:
-            raise ValueError("`hidden_size` must be divisible by `4 * num_attention_heads` for LingBot-Vision RoPE.")
 
-        rope_parameters = config.rope_parameters or {}
-        base = rope_parameters.get("rope_theta")
-        both_periods = config.rope_min_period is not None and config.rope_max_period is not None
-        if (base is None and not both_periods) or (base is not None and both_periods):
-            raise ValueError(
-                "Either `rope_parameters['rope_theta']` or both `rope_min_period` and `rope_max_period` must be set."
+        self.config = config
+        self.base = config.rope_parameters["rope_theta"]
+        self.head_dim = config.hidden_size // config.num_attention_heads
+        self.num_patches_h = config.image_size // config.patch_size
+        self.num_patches_w = config.image_size // config.patch_size
+
+        inv_freq = 1 / self.base ** torch.arange(0, 1, 4 / self.head_dim, dtype=torch.float32)  # (head_dim / 4,)
+        self.register_buffer("inv_freq", inv_freq, persistent=False)
+
+    def forward(self, pixel_values: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+        _, _, height, width = pixel_values.shape
+        num_patches_h = height // self.config.patch_size
+        num_patches_w = width // self.config.patch_size
+
+        device = pixel_values.device
+        device_type = device.type if isinstance(device.type, str) and device.type != "mps" else "cpu"
+
+        with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
+            # Although we could precompute static patch_coords from image_size and patch_size in the config,
+            # the model was trained with random_scale, so it can process images of varying sizes.
+            # Therefore, it's better to compute patch_coords dynamically (with lru_cache).
+            patch_coords = get_patches_center_coordinates(
+                num_patches_h, num_patches_w, dtype=torch.float32, device=device
             )
+            if self.training:
+                patch_coords = augment_patches_center_coordinates(
+                    patch_coords,
+                    shift=self.config.pos_embed_shift,
+                    jitter=self.config.pos_embed_jitter,
+                    rescale=self.config.pos_embed_rescale,
+                )
 
-        head_dim = config.hidden_size // config.num_attention_heads
-        self.base = base
-        self.min_period = config.rope_min_period
-        self.max_period = config.rope_max_period
-        self.head_dim = head_dim
-        self.normalize_coords = config.rope_normalize_coords
-        self.shift_coords = config.rope_shift_coords
-        self.jitter_coords = config.rope_jitter_coords
-        self.rescale_coords = config.rope_rescale_coords
-        self.dtype = _ROPE_DTYPE_MAPPING[config.rope_dtype]
-        self.register_buffer("periods", torch.empty(head_dim // 4, dtype=self.dtype), persistent=True)
-        self._init_weights()
+            # (height * width, 2, head_dim / 4) -> (height * width, head_dim / 2) -> (height * width, head_dim)
+            angles = 2 * math.pi * patch_coords[:, :, None] * self.inv_freq[None, None, :]
+            angles = angles.flatten(1, 2)
+            angles = angles.tile(2)
 
-    def _init_weights(self):
-        device = self.periods.device
-        dtype = self.dtype
-        if self.base is not None:
-            periods = self.base ** (
-                2 * torch.arange(self.head_dim // 4, device=device, dtype=dtype) / (self.head_dim // 2)
-            )
-        else:
-            base = self.max_period / self.min_period
-            exponents = torch.linspace(0, 1, self.head_dim // 4, device=device, dtype=dtype)
-            periods = base**exponents
-            periods = periods / base
-            periods = periods * self.max_period
-        self.periods.data = periods
+            cos = torch.cos(angles)
+            sin = torch.sin(angles)
 
-    def forward(self, height: int, width: int) -> tuple[torch.Tensor, torch.Tensor]:
-        device = self.periods.device
-        dtype = self.dtype
-        kwargs = {"device": device, "dtype": dtype}
-        if self.normalize_coords == "max":
-            max_hw = max(height, width)
-            coords_h = torch.arange(0.5, height, **kwargs) / max_hw
-            coords_w = torch.arange(0.5, width, **kwargs) / max_hw
-        elif self.normalize_coords == "min":
-            min_hw = min(height, width)
-            coords_h = torch.arange(0.5, height, **kwargs) / min_hw
-            coords_w = torch.arange(0.5, width, **kwargs) / min_hw
-        elif self.normalize_coords == "separate":
-            coords_h = torch.arange(0.5, height, **kwargs) / height
-            coords_w = torch.arange(0.5, width, **kwargs) / width
-        else:
-            raise ValueError(f"Unknown RoPE coordinate normalization: {self.normalize_coords}")
-
-        coords = torch.stack(torch.meshgrid(coords_h, coords_w, indexing="ij"), dim=-1).flatten(0, 1)
-        coords = 2.0 * coords - 1.0
-
-        if self.training and self.shift_coords is not None:
-            shift = torch.empty(2, **kwargs).uniform_(-self.shift_coords, self.shift_coords)
-            coords = coords + shift[None, :]
-        if self.training and self.jitter_coords is not None:
-            jitter_max = math.log(self.jitter_coords)
-            jitter = torch.empty(2, **kwargs).uniform_(-jitter_max, jitter_max).exp()
-            coords = coords * jitter[None, :]
-        if self.training and self.rescale_coords is not None:
-            rescale_max = math.log(self.rescale_coords)
-            rescale = torch.empty(1, **kwargs).uniform_(-rescale_max, rescale_max).exp()
-            coords = coords * rescale
-
-        angles = 2 * math.pi * coords[:, :, None] / self.periods[None, None, :]
-        angles = angles.flatten(1, 2).tile(2)
-        return torch.sin(angles), torch.cos(angles)
-
-
-class LingbotVisionLinearKMaskedBias(nn.Linear):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        if self.bias is not None:
-            self.register_buffer("bias_mask", torch.ones_like(self.bias), persistent=True)
-            self.bias_mask[self.out_features // 3 : 2 * self.out_features // 3] = 0
-
-    def forward(self, input: torch.Tensor) -> torch.Tensor:
-        bias = self.bias * self.bias_mask.to(self.bias.dtype) if self.bias is not None else None
-        return F.linear(input, self.weight, bias)
+        dtype = pixel_values.dtype
+        return cos.to(dtype=dtype), sin.to(dtype=dtype)
 
 
 def rotate_half(x):
@@ -201,10 +206,6 @@ def rotate_half(x):
     x1 = x[..., : x.shape[-1] // 2]
     x2 = x[..., x.shape[-1] // 2 :]
     return torch.cat((-x2, x1), dim=-1)
-
-
-def _apply_rope(hidden_states: torch.Tensor, sin: torch.Tensor, cos: torch.Tensor) -> torch.Tensor:
-    return (hidden_states * cos) + (rotate_half(hidden_states) * sin)
 
 
 def eager_attention_forward(
@@ -216,121 +217,161 @@ def eager_attention_forward(
     scaling: float | None = None,
     dropout: float = 0.0,
     **kwargs: Unpack[TransformersKwargs],
-) -> tuple[torch.Tensor, torch.Tensor]:
+):
     if scaling is None:
         scaling = query.size(-1) ** -0.5
 
-    attention_weights = torch.matmul(query, key.transpose(2, 3)) * scaling
+    # Take the dot product between "query" and "key" to get the raw attention scores.
+    attn_weights = torch.matmul(query, key.transpose(2, 3)) * scaling
+
     if attention_mask is not None:
-        attention_weights = attention_weights + attention_mask
-    attention_weights = nn.functional.softmax(attention_weights, dim=-1)
-    attention_weights = nn.functional.dropout(attention_weights, p=dropout, training=module.training)
-    attention_output = torch.matmul(attention_weights, value).transpose(1, 2).contiguous()
-    return attention_output, attention_weights
+        attn_weights = attn_weights + attention_mask
+
+    attn_weights = nn.functional.softmax(attn_weights, dim=-1)
+    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
+
+    attn_output = torch.matmul(attn_weights, value)
+    attn_output = attn_output.transpose(1, 2).contiguous()
+
+    return attn_output, attn_weights
+
+
+def apply_rotary_pos_emb(
+    q: torch.Tensor, k: torch.Tensor, cos: torch.Tensor, sin: torch.Tensor, **kwargs
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """Applies Rotary Position Embedding to the query and key tensors, but only to the patch tokens,
+    ignoring the prefix tokens (cls token and register tokens).
+
+    Args:
+        q (`torch.Tensor`): The query tensor.
+        k (`torch.Tensor`): The key tensor.
+        cos (`torch.Tensor`): The cosine part of the rotary embedding.
+        sin (`torch.Tensor`): The sine part of the rotary embedding.
+
+    Returns:
+        `tuple(torch.Tensor)` comprising of the query and key tensors rotated using the Rotary Position Embedding.
+    """
+
+    num_tokens = q.shape[-2]
+    num_patches = sin.shape[-2]
+    num_prefix_tokens = num_tokens - num_patches  # cls token + register tokens
+
+    q_prefix_tokens, q_patches = q.split((num_prefix_tokens, num_patches), dim=-2)
+    k_prefix_tokens, k_patches = k.split((num_prefix_tokens, num_patches), dim=-2)
+
+    # apply rope only to patch tokens
+    q_patches = (q_patches * cos) + (rotate_half(q_patches) * sin)
+    k_patches = (k_patches * cos) + (rotate_half(k_patches) * sin)
+
+    q = torch.cat((q_prefix_tokens, q_patches), dim=-2)
+    k = torch.cat((k_prefix_tokens, k_patches), dim=-2)
+
+    return q, k
 
 
 class LingbotVisionAttention(nn.Module):
+    """
+    Multi-headed attention compatible with ALL_ATTENTION_FUNCTIONS.
+    """
+
     def __init__(self, config: LingbotVisionConfig):
         super().__init__()
         self.config = config
+        self.embed_dim = config.hidden_size
         self.num_heads = config.num_attention_heads
-        self.head_dim = config.hidden_size // config.num_attention_heads
+        self.head_dim = self.embed_dim // self.num_heads
+        self.is_causal = False
+
         self.scaling = self.head_dim**-0.5
         self.is_causal = False
-        linear_cls = LingbotVisionLinearKMaskedBias if config.mask_k_bias else nn.Linear
-        self.qkv = linear_cls(config.hidden_size, config.hidden_size * 3, bias=config.qkv_bias)
-        self.attention_dropout = config.attention_probs_dropout_prob
-        self.projection = nn.Linear(config.hidden_size, config.hidden_size, bias=config.proj_bias)
-        self.projection_dropout = nn.Dropout(config.hidden_dropout_prob)
 
-    def apply_rope(
-        self, query: torch.Tensor, key: torch.Tensor, rope: tuple[torch.Tensor, torch.Tensor]
-    ) -> tuple[torch.Tensor, torch.Tensor]:
-        sin, cos = rope
-        query_dtype = query.dtype
-        key_dtype = key.dtype
-        rope_dtype = sin.dtype
-        query = query.to(dtype=rope_dtype)
-        key = key.to(dtype=rope_dtype)
+        self.dropout = config.attention_dropout
+        self.k_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=config.key_bias)
+        self.v_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=config.value_bias)
 
-        prefix_length = query.shape[-2] - sin.shape[-2]
-        if prefix_length < 0:
-            raise ValueError("RoPE table is longer than the token sequence.")
-
-        query_prefix = query[:, :, :prefix_length, :]
-        key_prefix = key[:, :, :prefix_length, :]
-        query = _apply_rope(query[:, :, prefix_length:, :], sin, cos)
-        key = _apply_rope(key[:, :, prefix_length:, :], sin, cos)
-        query = torch.cat((query_prefix, query), dim=-2).to(dtype=query_dtype)
-        key = torch.cat((key_prefix, key), dim=-2).to(dtype=key_dtype)
-        return query, key
+        self.q_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=config.query_bias)
+        self.o_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=config.proj_bias)
 
     def forward(
         self,
         hidden_states: torch.Tensor,
-        rope: tuple[torch.Tensor, torch.Tensor],
         attention_mask: torch.Tensor | None = None,
+        position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
-        batch_size, seq_length, hidden_size = hidden_states.shape
-        qkv = self.qkv(hidden_states)
-        qkv = qkv.reshape(batch_size, seq_length, 3, self.num_heads, self.head_dim)
-        query, key, value = torch.unbind(qkv, dim=2)
-        query = query.transpose(1, 2)
-        key = key.transpose(1, 2)
-        value = value.transpose(1, 2)
-        query, key = self.apply_rope(query, key, rope)
+        """Input shape: Batch x Time x Channel"""
+
+        batch_size, patches, _ = hidden_states.size()
+
+        query_states = self.q_proj(hidden_states)
+        key_states = self.k_proj(hidden_states)
+        value_states = self.v_proj(hidden_states)
+
+        query_states = query_states.view(batch_size, patches, self.num_heads, self.head_dim).transpose(1, 2)
+        key_states = key_states.view(batch_size, patches, self.num_heads, self.head_dim).transpose(1, 2)
+        value_states = value_states.view(batch_size, patches, self.num_heads, self.head_dim).transpose(1, 2)
+
+        cos, sin = position_embeddings
+        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
         )
-        context_layer, attention_probs = attention_interface(
+
+        attn_output, attn_weights = attention_interface(
             self,
-            query,
-            key,
-            value,
+            query_states,
+            key_states,
+            value_states,
             attention_mask,
-            dropout=self.attention_dropout if self.training else 0.0,
+            dropout=0.0 if not self.training else self.dropout,
             scaling=self.scaling,
             **kwargs,
         )
 
-        context_layer = context_layer.reshape(batch_size, seq_length, hidden_size).contiguous()
-        context_layer = self.projection(context_layer)
-        context_layer = self.projection_dropout(context_layer)
-        return context_layer, attention_probs
+        attn_output = attn_output.reshape(batch_size, patches, -1).contiguous()
+        attn_output = self.o_proj(attn_output)
+
+        return attn_output, attn_weights
 
 
-class LingbotVisionMlp(nn.Module):
-    def __init__(self, config: LingbotVisionConfig):
+class LingbotVisionLayerScale(nn.Module):
+    def __init__(self, config) -> None:
         super().__init__()
-        hidden_features = int(config.hidden_size * config.mlp_ratio)
-        self.fc1 = nn.Linear(config.hidden_size, hidden_features, bias=config.ffn_bias)
-        self.activation = nn.GELU()
-        self.fc2 = nn.Linear(hidden_features, config.hidden_size, bias=config.ffn_bias)
-        self.dropout = nn.Dropout(config.hidden_dropout_prob)
+        self.lambda1 = nn.Parameter(config.layerscale_value * torch.ones(config.hidden_size))
 
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        hidden_states = self.fc1(hidden_states)
-        hidden_states = self.activation(hidden_states)
-        hidden_states = self.dropout(hidden_states)
-        hidden_states = self.fc2(hidden_states)
-        hidden_states = self.dropout(hidden_states)
-        return hidden_states
+    def forward(self, hidden_state: torch.Tensor) -> torch.Tensor:
+        return hidden_state * self.lambda1
 
 
-class LingbotVisionSwiGLUFFN(nn.Module):
-    def __init__(self, config: LingbotVisionConfig, align_to: int = 8):
+class LingbotVisionMLP(nn.Module):
+    def __init__(self, config: LingbotVisionConfig) -> None:
         super().__init__()
-        hidden_features = int(config.hidden_size * config.mlp_ratio)
-        swiglu_hidden_features = int(hidden_features * 2 / 3)
-        swiglu_hidden_features += -swiglu_hidden_features % align_to
-        self.w1 = nn.Linear(config.hidden_size, swiglu_hidden_features, bias=config.ffn_bias)
-        self.w2 = nn.Linear(config.hidden_size, swiglu_hidden_features, bias=config.ffn_bias)
-        self.w3 = nn.Linear(swiglu_hidden_features, config.hidden_size, bias=config.ffn_bias)
+        self.fc1 = nn.Linear(config.hidden_size, config.intermediate_size, bias=config.mlp_bias)
+        self.activation = ACT2FN[config.hidden_act]
+        self.fc2 = nn.Linear(config.intermediate_size, config.hidden_size, bias=config.mlp_bias)
 
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        return self.w3(F.silu(self.w1(hidden_states)) * self.w2(hidden_states))
+    def forward(self, hidden_state: torch.Tensor) -> torch.Tensor:
+        hidden_state = self.fc1(hidden_state)
+        hidden_state = self.activation(hidden_state)
+        hidden_state = self.fc2(hidden_state)
+        return hidden_state
+
+
+class LingbotVisionGatedMLP(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.config = config
+        self.hidden_size = config.hidden_size
+        self.intermediate_size = config.intermediate_size
+        self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=config.mlp_bias)
+        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=config.mlp_bias)
+        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=config.mlp_bias)
+        self.act_fn = ACT2FN[config.hidden_act]
+
+    def forward(self, x):
+        down_proj = self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
+        return down_proj
 
 
 class LingbotVisionDropPath(nn.Module):
@@ -357,134 +398,100 @@ class LingbotVisionDropPath(nn.Module):
         return f"p={self.drop_prob}"
 
 
-_FFN_MAPPING = {
-    "mlp": LingbotVisionMlp,
-    "swiglu": LingbotVisionSwiGLUFFN,
-    "swiglu32": partial(LingbotVisionSwiGLUFFN, align_to=32),
-    "swiglu64": partial(LingbotVisionSwiGLUFFN, align_to=64),
-    "swiglu128": partial(LingbotVisionSwiGLUFFN, align_to=128),
-}
-
-
-def _get_norm(config: LingbotVisionConfig) -> nn.Module:
-    if config.norm_layer == "layernorm":
-        return nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-    if config.norm_layer == "layernormbf16":
-        return nn.LayerNorm(config.hidden_size, eps=1e-5)
-    if config.norm_layer == "rmsnorm":
-        return LingbotVisionRMSNorm(config.hidden_size)
-    raise ValueError(f"Unknown LingBot-Vision norm layer: {config.norm_layer}")
-
-
 class LingbotVisionLayer(GradientCheckpointingLayer):
+    """This corresponds to the Block class in the original implementation."""
+
     def __init__(self, config: LingbotVisionConfig):
         super().__init__()
-        self.norm1 = _get_norm(config)
+
+        self.norm1 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.attention = LingbotVisionAttention(config)
-        self.layer_scale1 = (
-            LingbotVisionLayerScale(config.hidden_size, config.layer_scale_init_value)
-            if config.layer_scale_init_value is not None
-            else nn.Identity()
-        )
+        self.layer_scale1 = LingbotVisionLayerScale(config)
         self.drop_path = LingbotVisionDropPath(config.drop_path_rate) if config.drop_path_rate > 0.0 else nn.Identity()
-        self.norm2 = _get_norm(config)
-        self.mlp = _FFN_MAPPING[config.ffn_layer](config)
-        self.layer_scale2 = (
-            LingbotVisionLayerScale(config.hidden_size, config.layer_scale_init_value)
-            if config.layer_scale_init_value is not None
-            else nn.Identity()
-        )
+
+        self.norm2 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+
+        if config.use_gated_mlp:
+            self.mlp = LingbotVisionGatedMLP(config)
+        else:
+            self.mlp = LingbotVisionMLP(config)
+        self.layer_scale2 = LingbotVisionLayerScale(config)
 
     def forward(
         self,
         hidden_states: torch.Tensor,
-        rope: tuple[torch.Tensor, torch.Tensor],
+        attention_mask: torch.Tensor | None = None,
+        position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
+        # Attention with residual connection
         residual = hidden_states
-        attention_output, _ = self.attention(self.norm1(hidden_states), rope, **kwargs)
-        hidden_states = residual + self.drop_path(self.layer_scale1(attention_output))
+        hidden_states = self.norm1(hidden_states)
+        hidden_states, _ = self.attention(
+            hidden_states,
+            attention_mask=attention_mask,
+            position_embeddings=position_embeddings,
+            **kwargs,
+        )
+        hidden_states = self.layer_scale1(hidden_states)
+        hidden_states = self.drop_path(hidden_states) + residual
 
+        # MLP with residual connection
         residual = hidden_states
-        hidden_states = residual + self.drop_path(self.layer_scale2(self.mlp(self.norm2(hidden_states))))
+        hidden_states = self.norm2(hidden_states)
+        hidden_states = self.mlp(hidden_states)
+        hidden_states = self.layer_scale2(hidden_states)
+        hidden_states = self.drop_path(hidden_states) + residual
+
         return hidden_states
-
-
-class LingbotVisionEmbeddings(nn.Module):
-    def __init__(self, config: LingbotVisionConfig):
-        super().__init__()
-        self.patch_embeddings = LingbotVisionPatchEmbeddings(config)
-        self.cls_token = nn.Parameter(torch.empty(1, 1, config.hidden_size))
-        self.num_storage_tokens = config.num_storage_tokens
-        if self.num_storage_tokens > 0:
-            self.storage_tokens = nn.Parameter(torch.empty(1, self.num_storage_tokens, config.hidden_size))
-        self.mask_token = nn.Parameter(torch.empty(1, config.hidden_size))
-
-    def forward(
-        self, pixel_values: torch.Tensor, bool_masked_pos: torch.Tensor | None = None
-    ) -> tuple[torch.Tensor, tuple[int, int]]:
-        embeddings, patch_grid = self.patch_embeddings(pixel_values)
-        batch_size = embeddings.shape[0]
-
-        if bool_masked_pos is not None:
-            embeddings = torch.where(
-                bool_masked_pos.unsqueeze(-1), self.mask_token.to(embeddings.dtype).unsqueeze(0), embeddings
-            )
-            cls_token = self.cls_token
-        else:
-            cls_token = self.cls_token + 0 * self.mask_token
-
-        if self.num_storage_tokens > 0:
-            storage_tokens = self.storage_tokens.expand(batch_size, -1, -1)
-            embeddings = torch.cat((cls_token.expand(batch_size, -1, -1), storage_tokens, embeddings), dim=1)
-        else:
-            embeddings = torch.cat((cls_token.expand(batch_size, -1, -1), embeddings), dim=1)
-        return embeddings, patch_grid
 
 
 @auto_docstring
 class LingbotVisionPreTrainedModel(PreTrainedModel):
     config: LingbotVisionConfig
-    base_model_prefix = "lingbot_vision"
+    base_model_prefix = "model"
     main_input_name = "pixel_values"
+    input_modalities = ("image",)
     supports_gradient_checkpointing = True
     _no_split_modules = ["LingbotVisionLayer"]
     _supports_sdpa = True
+    _supports_flash_attn = True
+    _supports_flex_attn = True
+    _supports_attention_backend = True
     _can_record_outputs = {
         "hidden_states": LingbotVisionLayer,
         "attentions": LingbotVisionAttention,
     }
+    # The original checkpoints carry two constants that this implementation derives instead of storing: the RoPE
+    # period table (recomputed from `rope_parameters` as `inv_freq`) and the bias mask of the fused QKV projection
+    # (its only effect is an all-zero key bias, which the checkpoints already materialize).
+    _keys_to_ignore_on_load_unexpected = [r"^rope_embed\.periods$", r"\.attn\.qkv\.bias_mask$"]
 
-    def _init_weights(self, module):
+    @torch.no_grad()
+    def _init_weights(self, module) -> None:
+        """Initialize the weights"""
         super()._init_weights(module)
         if isinstance(module, (nn.Linear, nn.Conv2d)):
-            init.trunc_normal_(module.weight, std=self.config.initializer_range)
+            init.trunc_normal_(module.weight, mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
                 init.zeros_(module.bias)
-            if hasattr(module, "bias_mask") and module.bias_mask is not None:
-                init.ones_(module.bias_mask)
-                init.zeros_(module.bias_mask[module.out_features // 3 : 2 * module.out_features // 3])
-        elif isinstance(module, (nn.LayerNorm, LingbotVisionRMSNorm)):
-            init.ones_(module.weight)
-            if getattr(module, "bias", None) is not None:
-                init.zeros_(module.bias)
-        elif isinstance(module, LingbotVisionLayerScale):
-            init.constant_(module.gamma, self.config.layer_scale_init_value)
         elif isinstance(module, LingbotVisionEmbeddings):
-            init.normal_(module.cls_token, std=self.config.initializer_range)
-            if module.num_storage_tokens > 0:
-                init.normal_(module.storage_tokens, std=self.config.initializer_range)
+            init.trunc_normal_(module.cls_token, mean=0.0, std=self.config.initializer_range)
+            if module.config.num_register_tokens > 0:
+                init.trunc_normal_(module.register_tokens, mean=0.0, std=self.config.initializer_range)
             init.zeros_(module.mask_token)
-        elif isinstance(module, LingbotVisionRotaryEmbedding):
-            # The `periods` buffer is deterministic; recompute it so the module can be
-            # re-initialized from scratch (e.g. when instantiated on the meta device).
-            module._init_weights()
+        elif isinstance(module, LingbotVisionLayerScale):
+            init.constant_(module.lambda1, self.config.layerscale_value)
+        elif isinstance(module, LingbotVisionRopePositionEmbedding):
+            inv_freq = 1 / module.base ** torch.arange(0, 1, 4 / module.head_dim, dtype=torch.float32)
+            init.copy_(module.inv_freq, inv_freq)
 
 
 class LingbotVisionEncoder(LingbotVisionPreTrainedModel):
     def __init__(self, config: LingbotVisionConfig):
         super().__init__(config)
-        self.layers = nn.ModuleList([LingbotVisionLayer(config) for _ in range(config.num_hidden_layers)])
+        self.layer = nn.ModuleList([LingbotVisionLayer(config) for _ in range(config.num_hidden_layers)])
+        # Initialize weights and apply final processing
         self.post_init()
 
     @merge_with_config_defaults
@@ -492,11 +499,11 @@ class LingbotVisionEncoder(LingbotVisionPreTrainedModel):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        rope: tuple[torch.Tensor, torch.Tensor],
+        position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutput:
-        for layer in self.layers:
-            hidden_states = layer(hidden_states, rope, **kwargs)
+        for layer_module in self.layer:
+            hidden_states = layer_module(hidden_states, position_embeddings=position_embeddings, **kwargs)
 
         return BaseModelOutput(last_hidden_state=hidden_states)
 
@@ -506,13 +513,14 @@ class LingbotVisionModel(LingbotVisionPreTrainedModel):
     def __init__(self, config: LingbotVisionConfig):
         super().__init__(config)
         self.embeddings = LingbotVisionEmbeddings(config)
-        self.rope_embeddings = LingbotVisionRotaryEmbedding(config)
-        self.encoder = LingbotVisionEncoder(config)
-        self.layernorm = _get_norm(config)
-        self.cls_norm = _get_norm(config) if config.untie_cls_and_patch_norms else None
+        self.rope_embeddings = LingbotVisionRopePositionEmbedding(config)
+        self.model = LingbotVisionEncoder(config)
+        self.norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.gradient_checkpointing = False
+        # Initialize weights and apply final processing
         self.post_init()
 
-    def get_input_embeddings(self) -> LingbotVisionPatchEmbeddings:
+    def get_input_embeddings(self):
         return self.embeddings.patch_embeddings
 
     @can_return_tuple
@@ -524,44 +532,42 @@ class LingbotVisionModel(LingbotVisionPreTrainedModel):
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPooling:
         r"""
-        bool_masked_pos (`torch.BoolTensor` of shape `(batch_size, num_patches)`, *optional*):
-            Boolean masked positions. Indicates which patches should be replaced by the mask token.
+        bool_masked_pos (`torch.BoolTensor` of shape `(batch_size, sequence_length)`):
+            Boolean masked positions. Indicates which patches are masked (1) and which aren't (0). Only relevant for
+            pre-training.
         """
-        embedding_output, patch_grid = self.embeddings(pixel_values, bool_masked_pos=bool_masked_pos)
-        rope = self.rope_embeddings(*patch_grid)
-        encoder_outputs = self.encoder(embedding_output, rope=rope, **kwargs)
-        sequence_output = encoder_outputs.last_hidden_state
 
-        if self.config.untie_cls_and_patch_norms:
-            prefix_length = self.config.num_storage_tokens + 1
-            cls_and_storage = self.cls_norm(sequence_output[:, :prefix_length])
-            patch_tokens = self.layernorm(sequence_output[:, prefix_length:])
-            sequence_output = torch.cat((cls_and_storage, patch_tokens), dim=1)
-        else:
-            sequence_output = self.layernorm(sequence_output)
+        pixel_values = pixel_values.to(self.embeddings.patch_embeddings.weight.dtype)
+        hidden_states = self.embeddings(pixel_values, bool_masked_pos=bool_masked_pos)
+        position_embeddings = self.rope_embeddings(pixel_values)
 
-        pooled_output = sequence_output[:, 0]
+        output = self.model(hidden_states, position_embeddings, **kwargs)
+        sequence_output = self.norm(output.last_hidden_state)
+        pooled_output = sequence_output[:, 0, :]
+
         return BaseModelOutputWithPooling(
             last_hidden_state=sequence_output,
             pooler_output=pooled_output,
-            hidden_states=encoder_outputs.hidden_states,
-            attentions=encoder_outputs.attentions,
+            hidden_states=output.hidden_states,
+            attentions=output.attentions,
         )
 
 
 @auto_docstring(custom_intro="LingBot-Vision backbone, to be used with dense prediction frameworks.")
 class LingbotVisionBackbone(BackboneMixin, LingbotVisionPreTrainedModel):
-    def __init__(self, config: LingbotVisionConfig):
+    def __init__(self, config):
         super().__init__(config)
-        self.num_features = [config.hidden_size for _ in range(config.num_hidden_layers + 1)]
+
         self.embeddings = LingbotVisionEmbeddings(config)
-        self.rope_embeddings = LingbotVisionRotaryEmbedding(config)
-        self.encoder = LingbotVisionEncoder(config)
-        self.layernorm = _get_norm(config)
-        self.cls_norm = _get_norm(config) if config.untie_cls_and_patch_norms else None
+        self.rope_embeddings = LingbotVisionRopePositionEmbedding(config)
+        self.model = LingbotVisionEncoder(config)
+        self.norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.gradient_checkpointing = False
+
+        self.num_features = [config.hidden_size for _ in range(config.num_hidden_layers + 1)]
         self.post_init()
 
-    def get_input_embeddings(self) -> LingbotVisionPatchEmbeddings:
+    def get_input_embeddings(self):
         return self.embeddings.patch_embeddings
 
     @can_return_tuple
@@ -570,48 +576,58 @@ class LingbotVisionBackbone(BackboneMixin, LingbotVisionPreTrainedModel):
     def forward(
         self,
         pixel_values: torch.Tensor,
-        bool_masked_pos: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> BackboneOutput:
-        r"""
-        bool_masked_pos (`torch.BoolTensor` of shape `(batch_size, num_patches)`, *optional*):
-            Boolean masked positions. Indicates which patches should be replaced by the mask token.
-        """
-        embedding_output, patch_grid = self.embeddings(pixel_values, bool_masked_pos=bool_masked_pos)
-        rope = self.rope_embeddings(*patch_grid)
-        kwargs["output_hidden_states"] = True
-        encoder_outputs = self.encoder(embedding_output, rope=rope, **kwargs)
-        hidden_states = encoder_outputs.hidden_states
+    ) -> LingbotVisionBackboneOutput:
+        pixel_values = pixel_values.to(self.embeddings.patch_embeddings.weight.dtype)
+        hidden_states = self.embeddings(pixel_values)
+        position_embeddings = self.rope_embeddings(pixel_values)
 
-        feature_maps = []
-        prefix_length = self.config.num_storage_tokens + 1
-        batch_size, _, height, width = pixel_values.shape
-        patch_height = height // self.config.patch_size
-        patch_width = width // self.config.patch_size
-        for stage, hidden_state in zip(self.stage_names, hidden_states):
-            if stage not in self.out_features:
-                continue
+        kwargs["output_hidden_states"] = True  # required to extract layers for the stages
+        output = self.model(hidden_states, position_embeddings, **kwargs)
+        stage_hidden_states = output.hidden_states
 
-            if self.config.apply_layernorm:
-                if self.config.untie_cls_and_patch_norms:
-                    hidden_state = torch.cat(
-                        (
-                            self.cls_norm(hidden_state[:, :prefix_length]),
-                            self.layernorm(hidden_state[:, prefix_length:]),
-                        ),
-                        dim=1,
+        batch_size, _, image_height, image_width = pixel_values.shape
+        patch_size = self.config.patch_size
+        num_patches_height = image_height // patch_size
+        num_patches_width = image_width // patch_size
+
+        num_prefix = 1 + getattr(self.config, "num_register_tokens", 0)
+        return_class_token = getattr(self.config, "return_class_token", False)
+
+        feature_maps, cls_tokens = [], []
+        sequence_output = None
+        last_stage_idx = len(self.stage_names) - 1
+        for idx, (stage_name, hidden_state) in enumerate(zip(self.stage_names, stage_hidden_states)):
+            if idx == last_stage_idx:
+                hidden_state = self.norm(hidden_state)
+                sequence_output = hidden_state
+            elif self.config.apply_layernorm:
+                hidden_state = self.norm(hidden_state)
+
+            if stage_name in self.out_features:
+                if return_class_token:
+                    cls_tokens.append(hidden_state[:, 0, :])
+                patch_tokens = hidden_state[:, num_prefix:, :]
+                if self.config.reshape_hidden_states:
+                    fmap = (
+                        patch_tokens.reshape(batch_size, num_patches_height, num_patches_width, patch_tokens.shape[-1])
+                        .permute(0, 3, 1, 2)
+                        .contiguous()
                     )
                 else:
-                    hidden_state = self.layernorm(hidden_state)
-            if self.config.reshape_hidden_states:
-                hidden_state = hidden_state[:, prefix_length:]
-                hidden_state = hidden_state.reshape(batch_size, patch_height, patch_width, -1)
-                hidden_state = hidden_state.permute(0, 3, 1, 2).contiguous()
-            feature_maps.append(hidden_state)
+                    fmap = patch_tokens
 
-        return BackboneOutput(
-            feature_maps=tuple(feature_maps), hidden_states=hidden_states, attentions=encoder_outputs.attentions
+                feature_maps.append(fmap)
+
+        output = LingbotVisionBackboneOutput(
+            feature_maps=tuple(feature_maps),
+            cls_tokens=tuple(cls_tokens) if return_class_token else None,
+            hidden_states=output.hidden_states,
+            attentions=output.attentions,
         )
+        output.last_hidden_state = sequence_output
+
+        return output
 
 
 __all__ = ["LingbotVisionBackbone", "LingbotVisionModel", "LingbotVisionPreTrainedModel"]

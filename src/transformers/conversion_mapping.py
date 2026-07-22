@@ -143,20 +143,39 @@ _MODEL_TO_CONVERSION_PATTERN = {
 
 def _build_checkpoint_conversion_mapping():
     mapping = {
+        # LingBot-Vision ships the original DINOv3-style checkpoints: a fused QKV projection, `ls1`/`ls2` layer
+        # scales and `w1`/`w2`/`w3` SwiGLU projections. The plain-MLP variants already use `fc1`/`fc2`.
         "lingbot_vision": [
             WeightRenaming(r"^cls_token$", "embeddings.cls_token"),
             WeightRenaming(r"^mask_token$", "embeddings.mask_token"),
-            WeightRenaming(r"^storage_tokens$", "embeddings.storage_tokens"),
-            WeightRenaming(r"^patch_embed\.proj\.", "embeddings.patch_embeddings.projection."),
-            WeightRenaming(r"^rope_embed\.periods$", "rope_embeddings.periods"),
-            WeightRenaming(r"^norm\.", "layernorm."),
-            WeightRenaming(r"^blocks\.(\d+)\.norm1\.", r"encoder.layers.\1.norm1."),
-            WeightRenaming(r"^blocks\.(\d+)\.attn\.qkv\.", r"encoder.layers.\1.attention.qkv."),
-            WeightRenaming(r"^blocks\.(\d+)\.attn\.proj\.", r"encoder.layers.\1.attention.projection."),
-            WeightRenaming(r"^blocks\.(\d+)\.ls1\.gamma$", r"encoder.layers.\1.layer_scale1.gamma"),
-            WeightRenaming(r"^blocks\.(\d+)\.norm2\.", r"encoder.layers.\1.norm2."),
-            WeightRenaming(r"^blocks\.(\d+)\.mlp\.", r"encoder.layers.\1.mlp."),
-            WeightRenaming(r"^blocks\.(\d+)\.ls2\.gamma$", r"encoder.layers.\1.layer_scale2.gamma"),
+            WeightRenaming(r"^storage_tokens$", "embeddings.register_tokens"),
+            WeightRenaming(r"^patch_embed\.proj\.", "embeddings.patch_embeddings."),
+            WeightRenaming(r"^blocks\.(\d+)\.", r"model.layer.\1."),
+            WeightRenaming(r"\.attn\.proj\.", ".attention.o_proj."),
+            WeightRenaming(r"\.ls1\.gamma$", ".layer_scale1.lambda1"),
+            WeightRenaming(r"\.ls2\.gamma$", ".layer_scale2.lambda1"),
+            WeightRenaming(r"\.mlp\.w1\.", ".mlp.gate_proj."),
+            WeightRenaming(r"\.mlp\.w2\.", ".mlp.up_proj."),
+            WeightRenaming(r"\.mlp\.w3\.", ".mlp.down_proj."),
+            WeightConverter(
+                source_patterns="attn.qkv.weight",
+                target_patterns=[
+                    "attention.q_proj.weight",
+                    "attention.k_proj.weight",
+                    "attention.v_proj.weight",
+                ],
+                operations=[Chunk(dim=0)],
+            ),
+            # Anchored so that the constant `attn.qkv.bias_mask` buffer is not caught by this converter.
+            WeightConverter(
+                source_patterns=r"attn\.qkv\.bias$",
+                target_patterns=[
+                    r"attention\.q_proj\.bias$",
+                    r"attention\.k_proj\.bias$",
+                    r"attention\.v_proj\.bias$",
+                ],
+                operations=[Chunk(dim=0)],
+            ),
         ],
         # Cosmos3 Edge's composite checkpoint stores its dense reasoner text tower as conventional attention + MLP
         # blocks. The visual/projector tensors already use their native module names and intentionally need no mapping.

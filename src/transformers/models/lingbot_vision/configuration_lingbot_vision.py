@@ -25,94 +25,116 @@ from ...utils import auto_docstring
 @strict
 class LingbotVisionConfig(BackboneConfigMixin, PreTrainedConfig):
     r"""
-    image_size (`int`, *optional*, defaults to 224):
-        The nominal image size used to initialize the patch embedding metadata.
     patch_size (`int`, *optional*, defaults to 16):
         Patch size used by the ViT patch embedding.
-    num_channels (`int`, *optional*, defaults to 3):
-        Number of input image channels.
     hidden_size (`int`, *optional*, defaults to 768):
         Dimensionality of the encoder layers and the pooler layer.
+    intermediate_size (`int`, *optional*, defaults to 3072):
+        Dimensionality of the feed-forward layer. With `use_gated_mlp=True` this is the size of the gate and
+        up projections, i.e. the aligned SwiGLU hidden size of the original implementation.
     num_hidden_layers (`int`, *optional*, defaults to 12):
         Number of hidden layers in the Transformer encoder.
     num_attention_heads (`int`, *optional*, defaults to 12):
         Number of attention heads for each attention layer.
-    mlp_ratio (`float`, *optional*, defaults to 4.0):
-        Expansion ratio for the feed-forward layers.
-    qkv_bias (`bool`, *optional*, defaults to `True`):
-        Whether to add a bias to the query, key and value projections.
+    hidden_act (`str`, *optional*, defaults to `"gelu"`):
+        Activation of the feed-forward layer. The released checkpoints use `"gelu"` with the plain MLP and
+        `"silu"` with the gated MLP (SwiGLU).
+    attention_dropout (`float`, *optional*, defaults to 0.0):
+        Dropout probability of the attention weights.
+    initializer_range (`float`, *optional*, defaults to 0.02):
+        Standard deviation of the truncated normal initializer for all weight matrices.
+    layer_norm_eps (`float`, *optional*, defaults to 1e-05):
+        Epsilon of the layer normalization layers.
+    rope_parameters (`dict`, *optional*):
+        Parameters for the axial rotary position embeddings. `rope_theta` sets the base period and defaults
+        to 100.0.
+    image_size (`int`, *optional*, defaults to 224):
+        The nominal image size the model is configured for. Images of other sizes are supported, the rotary
+        position embeddings are computed from the actual patch grid.
+    num_channels (`int`, *optional*, defaults to 3):
+        Number of input image channels.
+    query_bias (`bool`, *optional*, defaults to `True`):
+        Whether to add a bias to the query projection.
+    key_bias (`bool`, *optional*, defaults to `True`):
+        Whether to add a bias to the key projection. The original implementation masks the key slice of the fused
+        QKV bias to zero, so the released checkpoints carry an all-zero key bias; it is kept (rather than dropped)
+        so that the fused projection splits and re-fuses without loss.
+    value_bias (`bool`, *optional*, defaults to `True`):
+        Whether to add a bias to the value projection.
     proj_bias (`bool`, *optional*, defaults to `True`):
         Whether to add a bias to the attention output projection.
-    ffn_bias (`bool`, *optional*, defaults to `True`):
+    mlp_bias (`bool`, *optional*, defaults to `True`):
         Whether to add biases to the feed-forward projections.
-    layer_scale_init_value (`float`, *optional*):
-        Initial value for LayerScale. If `None`, LayerScale is disabled.
-    num_storage_tokens (`int`, *optional*, defaults to 0):
-        Number of LingBot-Vision storage/register tokens inserted after the class token.
-    ffn_layer (`str`, *optional*, defaults to `"mlp"`):
-        Feed-forward layer type. Supports `"mlp"`, `"swiglu"`, `"swiglu32"`, `"swiglu64"` and `"swiglu128"`.
-    norm_layer (`str`, *optional*, defaults to `"layernorm"`):
-        Normalization layer type. Supports `"layernorm"`, `"layernormbf16"` and `"rmsnorm"`.
-    mask_k_bias (`bool`, *optional*, defaults to `False`):
-        Whether to zero the key-bias slice in the fused QKV projection.
-    rope_parameters (`dict`, *optional*):
-        Parameters for axial rotary position embeddings. `rope_theta` sets the base period and defaults to 100.0.
-    rope_min_period (`float`, *optional*):
-        Minimum period for axial rotary position embeddings.
-    rope_max_period (`float`, *optional*):
-        Maximum period for axial rotary position embeddings.
-    rope_normalize_coords (`str`, *optional*, defaults to `"separate"`):
-        Coordinate normalization strategy for axial RoPE. Supports `"min"`, `"max"` and `"separate"`.
-    rope_shift_coords (`float`, *optional*):
-        Random coordinate shift used by LingBot-Vision RoPE during training.
-    rope_jitter_coords (`float`, *optional*):
-        Random coordinate jitter used by LingBot-Vision RoPE during training.
-    rope_rescale_coords (`float`, *optional*):
-        Random coordinate rescaling used by LingBot-Vision RoPE during training.
-    rope_dtype (`str`, *optional*, defaults to `"bf16"`):
-        Dtype used to build RoPE tables. Supports `"fp32"`, `"fp16"` and `"bf16"`.
-    untie_cls_and_patch_norms (`bool`, *optional*, defaults to `False`):
-        Whether to use a separate final norm for class/storage tokens.
+    layerscale_value (`float`, *optional*, defaults to 1e-05):
+        Initial value to use for layer scale.
+    drop_path_rate (`float`, *optional*, defaults to 0.0):
+        Stochastic depth rate.
+    use_gated_mlp (`bool`, *optional*, defaults to `False`):
+        Whether to use the SwiGLU feed-forward network instead of the plain MLP.
+    num_register_tokens (`int`, *optional*, defaults to 4):
+        Number of register tokens inserted after the class token. These are called storage tokens in the
+        original implementation.
+    pos_embed_shift (`float`, *optional*):
+        Amount to randomly shift position embedding coordinates in [-shift, shift], applied only in training
+        mode if not `None`.
+    pos_embed_jitter (`float`, *optional*):
+        Amount to randomly jitter position embedding coordinates by a log-uniform value in [1/jitter, jitter],
+        applied only in training mode if not `None`.
+    pos_embed_rescale (`float`, *optional*, defaults to 2.0):
+        Amount to randomly rescale position embedding coordinates by a log-uniform value in
+        [1/rescale, rescale], applied only in training mode if not `None`.
     apply_layernorm (`bool`, *optional*, defaults to `True`):
         Whether `LingbotVisionBackbone` should apply the final layer norm to selected feature maps.
     reshape_hidden_states (`bool`, *optional*, defaults to `True`):
         Whether `LingbotVisionBackbone` should reshape feature maps to `(batch, channels, height, width)`.
-    """
+    return_class_token (`bool`, *optional*, defaults to `False`):
+        Whether `LingbotVisionBackbone` should additionally return the class token of each selected stage.
+
+    Example:
+
+    ```python
+    >>> from transformers import LingbotVisionConfig, LingbotVisionModel
+
+    >>> # Initializing a LingBot-Vision ViT-B/16 style configuration
+    >>> config = LingbotVisionConfig()
+
+    >>> # Initializing a model (with random weights) from the config
+    >>> model = LingbotVisionModel(config)
+
+    >>> # Accessing the model config
+    >>> config = model.config
+    ```"""
 
     model_type = "lingbot_vision"
     default_theta = 100.0
 
-    image_size: int = 224
     patch_size: int = 16
-    num_channels: int = 3
     hidden_size: int = 768
+    intermediate_size: int = 3072
     num_hidden_layers: int = 12
     num_attention_heads: int = 12
-    mlp_ratio: float = 4.0
-    qkv_bias: bool = True
-    proj_bias: bool = True
-    ffn_bias: bool = True
-    hidden_dropout_prob: float = 0.0
-    attention_probs_dropout_prob: float = 0.0
-    drop_path_rate: float = 0.0
+    hidden_act: str = "gelu"
+    attention_dropout: float = 0.0
     initializer_range: float = 0.02
-    layer_norm_eps: float = 1e-6
-    layer_scale_init_value: float | None = None
-    num_storage_tokens: int = 0
-    ffn_layer: str = "mlp"
-    norm_layer: str = "layernorm"
-    mask_k_bias: bool = False
+    layer_norm_eps: float = 1e-5
     rope_parameters: RopeParameters | dict | None = None
-    rope_min_period: float | None = None
-    rope_max_period: float | None = None
-    rope_normalize_coords: str = "separate"
-    rope_shift_coords: float | None = None
-    rope_jitter_coords: float | None = None
-    rope_rescale_coords: float | None = None
-    rope_dtype: str = "bf16"
-    untie_cls_and_patch_norms: bool = False
+    image_size: int = 224
+    num_channels: int = 3
+    query_bias: bool = True
+    key_bias: bool = True
+    value_bias: bool = True
+    proj_bias: bool = True
+    mlp_bias: bool = True
+    layerscale_value: float = 1e-5
+    drop_path_rate: float = 0.0
+    use_gated_mlp: bool = False
+    num_register_tokens: int = 4
+    pos_embed_shift: float | None = None
+    pos_embed_jitter: float | None = None
+    pos_embed_rescale: float | None = 2.0
     apply_layernorm: bool = True
     reshape_hidden_states: bool = True
+    return_class_token: bool = False
     _out_features: list[str] | None = None
     _out_indices: list[int] | None = None
 

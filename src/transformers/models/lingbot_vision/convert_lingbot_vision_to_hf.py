@@ -23,34 +23,54 @@ VARIANT_TO_REPO_ID = {
     "giant": "robbyant/lingbot-vision-vit-giant",
 }
 
+# The original `ffn_layer: mlp` variants run a plain GELU MLP of width `4 * hidden_size`; `ffn_layer: swiglu`
+# runs a SiLU-gated MLP whose width is `int(4 * hidden_size * 2 / 3)` rounded up to a multiple of 8. The
+# original `qkv_bias` covers query, key and value alike - the key slice is then masked to zero, which the
+# checkpoints materialize as an all-zero key bias.
 VARIANT_TO_CONFIG = {
     "small": {
         "hidden_size": 384,
+        "intermediate_size": 1536,
         "num_hidden_layers": 12,
         "num_attention_heads": 6,
-        "ffn_layer": "mlp",
-        "qkv_bias": True,
+        "use_gated_mlp": False,
+        "hidden_act": "gelu",
+        "query_bias": True,
+        "key_bias": True,
+        "value_bias": True,
     },
     "base": {
         "hidden_size": 768,
+        "intermediate_size": 3072,
         "num_hidden_layers": 12,
         "num_attention_heads": 12,
-        "ffn_layer": "mlp",
-        "qkv_bias": True,
+        "use_gated_mlp": False,
+        "hidden_act": "gelu",
+        "query_bias": True,
+        "key_bias": True,
+        "value_bias": True,
     },
     "large": {
         "hidden_size": 1024,
+        "intermediate_size": 4096,
         "num_hidden_layers": 24,
         "num_attention_heads": 16,
-        "ffn_layer": "mlp",
-        "qkv_bias": True,
+        "use_gated_mlp": False,
+        "hidden_act": "gelu",
+        "query_bias": True,
+        "key_bias": True,
+        "value_bias": True,
     },
     "giant": {
         "hidden_size": 1536,
+        "intermediate_size": 4096,
         "num_hidden_layers": 40,
         "num_attention_heads": 24,
-        "ffn_layer": "swiglu",
-        "qkv_bias": False,
+        "use_gated_mlp": True,
+        "hidden_act": "silu",
+        "query_bias": False,
+        "key_bias": False,
+        "value_bias": False,
     },
 }
 
@@ -60,18 +80,14 @@ def get_lingbot_vision_config(variant):
         image_size=512,
         patch_size=16,
         num_channels=3,
-        num_storage_tokens=4,
+        num_register_tokens=4,
         rope_parameters={"rope_theta": 100.0},
-        rope_normalize_coords="separate",
-        rope_rescale_coords=2.0,
-        rope_dtype="fp32",
-        norm_layer="layernormbf16",
-        mask_k_bias=True,
-        layer_scale_init_value=1e-5,
-        attention_probs_dropout_prob=0.0,
-        hidden_dropout_prob=0.0,
+        pos_embed_rescale=2.0,
+        layer_norm_eps=1e-5,
+        layerscale_value=1e-5,
+        attention_dropout=0.0,
         proj_bias=True,
-        ffn_bias=True,
+        mlp_bias=True,
         **VARIANT_TO_CONFIG[variant],
     )
 
@@ -137,7 +153,7 @@ def convert_lingbot_vision_checkpoint(
     if verify_shapes:
         pixel_values = torch.zeros(1, config.num_channels, config.image_size, config.image_size)
         outputs = model(pixel_values)
-        expected_sequence_length = 1 + config.num_storage_tokens + (config.image_size // config.patch_size) ** 2
+        expected_sequence_length = 1 + config.num_register_tokens + (config.image_size // config.patch_size) ** 2
         if outputs.last_hidden_state.shape != (1, expected_sequence_length, config.hidden_size):
             raise ValueError(
                 "Unexpected output shape: "
