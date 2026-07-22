@@ -409,6 +409,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("qianfan_ocr", "QianfanOCRModel"),
         ("qianfan_ocr_vision", "QianfanOCRVisionModel"),
         ("qwen2", "Qwen2Model"),
+        ("qwen2_5_omni", "Qwen2_5OmniForConditionalGeneration"),
         ("qwen2_5_vl", "Qwen2_5_VLModel"),
         ("qwen2_5_vl_text", "Qwen2_5_VLTextModel"),
         ("qwen2_audio", "Qwen2AudioModel"),
