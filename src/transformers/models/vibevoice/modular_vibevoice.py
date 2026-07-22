@@ -17,6 +17,7 @@ from dataclasses import dataclass
 
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 
 from ... import initialization as init
 from ...activations import ACT2FN
@@ -121,14 +122,15 @@ class VibeVoiceDiffusionHeadFinalLayer(nn.Module):
     def __init__(self, config, output_size):
         super().__init__()
         self.num_chunks = 2
-        self.norm = nn.RMSNorm(config.hidden_size, eps=config.rms_norm_eps, elementwise_affine=False)
+        self.rms_norm_eps = config.rms_norm_eps
         self.linear_1 = nn.Linear(config.hidden_size, self.num_chunks * config.hidden_size, bias=False)
         self.act_fn = ACT2FN[config.hidden_act]
         self.linear_2 = nn.Linear(config.hidden_size, output_size, bias=False)
 
     def forward(self, hidden_states, condition):
         shift, scale = self.linear_1(self.act_fn(condition)).chunk(self.num_chunks, dim=-1)
-        hidden_states = self.norm(hidden_states) * (1 + scale) + shift
+        normed = F.rms_norm(hidden_states, (hidden_states.shape[-1],), eps=self.rms_norm_eps)
+        hidden_states = normed * (1 + scale) + shift
         hidden_states = self.linear_2(hidden_states)
         return hidden_states
 
