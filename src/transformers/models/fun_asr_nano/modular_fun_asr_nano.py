@@ -20,13 +20,9 @@ from huggingface_hub.dataclasses import strict
 
 from ... import initialization as init
 from ...activations import ACT2FN
-from ...audio_utils import AudioInput
 from ...configuration_utils import PreTrainedConfig
-from ...feature_extraction_utils import BatchFeature
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
 from ...modeling_utils import PreTrainedModel
-from ...processing_utils import Unpack
-from ...tokenization_utils_base import TextInput
 from ...utils import auto_docstring, can_return_tuple, is_torch_available, logging
 from ..audioflamingo3.modeling_audioflamingo3 import (
     AudioFlamingo3ForConditionalGeneration,
@@ -208,34 +204,6 @@ class FunAsrNanoProcessor(AudioFlamingo3Processor):
             max_audio_len=None,
         )
         del self.max_audio_len
-
-    def __call__(
-        self,
-        text: TextInput | list[TextInput],
-        audio: AudioInput | None = None,
-        output_labels: bool | None = False,
-        **kwargs: Unpack[FunAsrNanoProcessorKwargs],
-    ) -> BatchFeature:
-        r"""
-        output_labels (`bool`, *optional*, defaults to `False`):
-            Whether to create causal-language-model labels from text token IDs. Padding and audio placeholder positions
-            are masked with `-100`.
-        """
-        if "return_tensors" in kwargs and kwargs["return_tensors"] != "pt":
-            raise ValueError(f"{self.__class__.__name__} only supports `return_tensors='pt'`.")
-
-        if output_labels:
-            kwargs["return_mm_token_type_ids"] = True
-        model_inputs = super().__call__(text=text, audio=audio, **kwargs)
-
-        if output_labels:
-            mm_token_type_ids = model_inputs.pop("mm_token_type_ids")
-            labels = model_inputs["input_ids"].clone()
-            labels.masked_fill_(mm_token_type_ids != 0, -100)
-            if "attention_mask" in model_inputs:
-                labels.masked_fill_(model_inputs["attention_mask"] == 0, -100)
-            model_inputs["labels"] = labels
-        return model_inputs
 
     def _get_audio_token_length(self, audio_lengths):
         return audio_lengths
