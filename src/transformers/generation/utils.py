@@ -950,6 +950,7 @@ class GenerationMixin(ContinuousMixin):
             return input_ids, model_kwargs
 
         # Infer the length per sample from pooler output and interleave per sample with images
+        # IMPORTANT to expand mm data before expanding text ids/embeds!
         def repeat_tensor_or_list(inputs: list | torch.Tensor, repeat_times: int):
             if isinstance(inputs, torch.Tensor):
                 return inputs.repeat_interleave(repeat_times, dim=0)
@@ -977,24 +978,24 @@ class GenerationMixin(ContinuousMixin):
             offsets = [0] + [
                 i + 1 for i, num in enumerate(num_image_tokens_in_vision) if num in num_image_tokens_in_text
             ]
-            outputs.pooler_output = [
+            expanded_pooler_output = [
                 out
                 for start, end in zip(offsets[:-1], offsets[1:])
                 for out in repeat_tensor_or_list(outputs.pooler_output[start:end], expand_size)
             ]
+
+            if isinstance(outputs.pooler_output, torch.Tensor):
+                outputs.pooler_output = torch.stack(expanded_pooler_output, dim=0)
+            else:
+                outputs.pooler_output = expanded_pooler_output
 
         _expand_multimodal_outputs("image_outputs", "image_token_id")
         _expand_multimodal_outputs("video_outputs", "video_token_id")
 
         def _expand_dict_for_generation(dict_to_expand):
             for key in dict_to_expand:
-                if dict_to_expand[key] is not None:
-                    # some base-model-outputs return a loss, e.g. VQVAE returns an embedding loss
-                    if isinstance(dict_to_expand[key], torch.Tensor) and "loss" not in key:
-                        dict_to_expand[key] = dict_to_expand[key].repeat_interleave(expand_size, dim=0)
-                    # Don't update `tuple` which is usually reserved for intermediate outputs (attentions/hidden_states)
-                    elif isinstance(dict_to_expand[key], list):
-                        dict_to_expand[key] = [item for item in dict_to_expand[key] for _ in range(expand_size)]
+                if dict_to_expand[key] is not None and isinstance(dict_to_expand[key], torch.Tensor):
+                    dict_to_expand[key] = dict_to_expand[key].repeat_interleave(expand_size, dim=0)
             return dict_to_expand
 
         if input_ids is not None:
@@ -1002,17 +1003,10 @@ class GenerationMixin(ContinuousMixin):
 
         model_kwargs = _expand_dict_for_generation(model_kwargs)
 
-        # This expands the hidden-states, attentions and other intermediate tensors, even tho we don't
-        # need it. TODO: should repeat/expand only `last_hidden_state/pooler_outputs`
         if is_encoder_decoder:
             if model_kwargs.get("encoder_outputs") is None:
                 raise ValueError("If `is_encoder_decoder` is True, make sure that `encoder_outputs` is defined.")
             model_kwargs["encoder_outputs"] = _expand_dict_for_generation(model_kwargs["encoder_outputs"])
-
-        #  if model_kwargs.get("image_outputs"):
-        #      model_kwargs["image_outputs"] = _expand_dict_for_generation(model_kwargs["image_outputs"])
-        #  if model_kwargs.get("video_outputs"):
-        #      model_kwargs["video_outputs"] = _expand_dict_for_generation(model_kwargs["video_outputs"])
 
         return input_ids, model_kwargs
 
