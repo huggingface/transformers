@@ -1697,8 +1697,16 @@ class QuarkConfig(QuantizationConfigMixin):
         self,
         **kwargs,
     ):
-        if is_torch_available() and is_quark_available():
-            from quark import __version__ as quark_version
+        quark_version = None
+        if is_quark_available():
+            try:
+                from quark import __version__ as quark_version
+                if version.parse(quark_version) >= version.parse("0.12"):
+                    quark_version = version.parse(quark_version)
+            except ImportError:
+                quark_version = None
+
+        if is_torch_available() and quark_version:
             from quark.torch.export.config.config import JsonExporterConfig
             from quark.torch.export.main_export.quant_config_parser import QuantConfigParser
             from quark.torch.quantization.config.config import QConfig
