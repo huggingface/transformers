@@ -699,8 +699,6 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
             #    the assistant model is correct
             # c) there are at least two forward passes in the main model, to ensure the input preparation of
             #    the main model is correct
-            # d) use a cache type compatible with rollbacks (only dynamic cache atm). Otherwise, there may be
-            #     differences vs model-specific default cache
             generation_kwargs = {
                 "eos_token_id": -1,  # see a)
                 "max_new_tokens": 4,  # see c)
@@ -712,7 +710,6 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
                 "output_attentions": self.has_attentions,
                 "return_dict_in_generate": True,
                 "use_cache": True,
-                "cache_implementation": "dynamic_full",  # see d)
             }
             logits_processor_kwargs = self._get_logits_processor_kwargs(config=model.config)
 
@@ -797,8 +794,6 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
             #    prompt lookup is correct
             # c) there are at least two forward passes in the main model, to ensure the input preparation of
             #    the main model is correct
-            # d) use a cache type compatible with rollbacks (only dynamic cache atm). Otherwise, there may be
-            #     differences vs model-specific default cache
             generation_kwargs = {
                 "eos_token_id": -1,  # see a)
                 "max_new_tokens": 4,  # see c)
@@ -810,7 +805,6 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
                 "output_attentions": self.has_attentions,
                 "return_dict_in_generate": True,
                 "use_cache": True,
-                "cache_implementation": "dynamic_full",  # see d)
             }
             logits_processor_kwargs = self._get_logits_processor_kwargs(config=model.config)
 
@@ -872,8 +866,6 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
             #    the assistant model is correct
             # c) there are at least two forward passes in the main model, to ensure the input preparation of
             #    the main model is correct
-            # d) use a cache type compatible with rollbacks (only dynamic cache atm). Otherwise, there may be
-            #     differences vs model-specific default cache
             assistant_model = model
             assistant_model.generation_config.num_assistant_tokens = 2  # see b)
             assistant_model.generation_config.num_assistant_tokens_schedule = "constant"  # see b)
@@ -889,7 +881,6 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
                 "output_attentions": self.has_attentions,
                 "return_dict_in_generate": True,
                 "use_cache": True,
-                "cache_implementation": "dynamic_full",  # see d)
             }
             logits_processor_kwargs = self._get_logits_processor_kwargs(config=model.config)
             output_assisted = model.generate(**generation_kwargs, **inputs_dict, **logits_processor_kwargs)
