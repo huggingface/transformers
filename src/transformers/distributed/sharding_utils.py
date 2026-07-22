@@ -27,10 +27,12 @@ _dtensor_available = False
 
 if is_torch_available():
     import torch
+
     try:
         from torch.distributed.tensor import DTensor
         from torch.distributed.tensor._utils import compute_local_shape_and_global_offset
         from torch.distributed.tensor.placement_types import Shard
+
         _dtensor_available = True
     except ImportError:
         _dtensor_available = False
