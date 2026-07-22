@@ -19,8 +19,6 @@ from torch import nn
 
 from ...cache_utils import Cache
 from ...configuration_utils import PreTrainedConfig
-from ...generation.utils import GenerationMixin
-from ...image_utils import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
     BaseModelOutputWithPooling,
@@ -28,13 +26,10 @@ from ...modeling_outputs import (
 )
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
+from ...utils.generic import accepts_precomputed_kwargs
 from ..auto import CONFIG_MAPPING, AutoConfig
 from ..exaone4_5.modeling_exaone4_5 import Exaone4_5_ForConditionalGeneration
 from ..exaone4_5.processing_exaone4_5 import Exaone4_5_Processor
-from ..gemma3.modeling_gemma3 import Gemma3ForSequenceClassification
-from ..qwen2_vl.image_processing_pil_qwen2_vl import Qwen2VLImageProcessorPil
-from ..qwen2_vl.image_processing_qwen2_vl import Qwen2VLImageProcessor
-from ..qwen2_vl.video_processing_qwen2_vl import Qwen2VLVideoProcessor
 from ..video_llama_3.modeling_video_llama_3 import VideoLlama3Model, VideoLlama3PreTrainedModel
 
 
@@ -92,54 +87,9 @@ class HyperCLOVAXVisionV2Config(PreTrainedConfig):
         super().__post_init__(**kwargs)
 
 
-class HyperCLOVAXVisionV2ImageProcessor(Qwen2VLImageProcessor):
-    r"""
-    Constructs a fast HyperCLOVAX Vision V2 image processor.
-
-    Image preprocessing is identical to [`Qwen2VLImageProcessor`] (smart-resize to a
-    pixel budget that keeps both sides divisible by `patch_size * merge_size`, followed
-    by patchification). Only the default pixel budget (`size`) differs, matching the
-    HyperCLOVAX Vision V2 checkpoints; the CLIP normalization constants are the same as
-    Qwen2-VL and are restated here to keep the processor self-contained.
-    """
-
-    image_mean = OPENAI_CLIP_MEAN
-    image_std = OPENAI_CLIP_STD
-    size = {"shortest_edge": 3136, "longest_edge": 2073600}
-
-
-class HyperCLOVAXVisionV2ImageProcessorPil(Qwen2VLImageProcessorPil):
-    r"""
-    Constructs a (PIL-backed) HyperCLOVAX Vision V2 image processor. Behaviour matches
-    [`HyperCLOVAXVisionV2ImageProcessor`]; see [`Qwen2VLImageProcessorPil`] for the
-    underlying pipeline. Only the default pixel budget (`size`) differs from Qwen2-VL.
-    """
-
-    image_mean = OPENAI_CLIP_MEAN
-    image_std = OPENAI_CLIP_STD
-    size = {"shortest_edge": 3136, "longest_edge": 2073600}
-
-
-class HyperCLOVAXVisionV2VideoProcessor(Qwen2VLVideoProcessor):
-    r"""
-    Constructs a HyperCLOVAX Vision V2 video processor. Per-frame preprocessing is
-    identical to [`Qwen2VLVideoProcessor`] (smart-resize + temporal/spatial patchify).
-    Only the default pixel budget (`size`) differs, matching the HyperCLOVAX Vision V2
-    checkpoints.
-    """
-
-    image_mean = OPENAI_CLIP_MEAN
-    image_std = OPENAI_CLIP_STD
-    size = {"shortest_edge": 3136, "longest_edge": 12845056}
-
-
 @auto_docstring
 class HyperCLOVAXVisionV2Processor(Exaone4_5_Processor):
-    @property
-    def model_input_names(self):
-        # HyperCLOVAX Vision V2 does not use second_per_grid_ts (no temporal RoPE)
-        names = super().model_input_names
-        return [n for n in names if n not in ("second_per_grid_ts")]
+    pass
 
 
 @auto_docstring
@@ -277,7 +227,6 @@ class HyperCLOVAXVisionV2Model(HyperCLOVAXVisionV2PreTrainedModel, VideoLlama3Mo
 class HyperCLOVAXVisionV2ForConditionalGeneration(
     HyperCLOVAXVisionV2PreTrainedModel, Exaone4_5_ForConditionalGeneration
 ):
-
     def __init__(self, config: HyperCLOVAXVisionV2Config):
         super().__init__(config)
         self.model = HyperCLOVAXVisionV2Model(config)
@@ -360,7 +309,7 @@ class HyperCLOVAXVisionV2ForConditionalGeneration(
 
         loss = None
         if labels is not None:
-            loss = self.loss_function(logits, labels, self.vocab_size)
+            loss = self.loss_function(logits, labels, self.config.text_config.vocab_size)
 
         return CausalLMOutputWithPast(
             loss=loss,
@@ -369,9 +318,6 @@ class HyperCLOVAXVisionV2ForConditionalGeneration(
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
-
-    def _prepare_position_ids_for_generation(self):
-        raise AttributeError("Not needed")
 
     def prepare_inputs_for_generation(
         self,
@@ -411,21 +357,10 @@ class HyperCLOVAXVisionV2ForConditionalGeneration(
         return model_inputs
 
 
-class HyperCLOVAXVisionV2ForSequenceClassification(
-    Gemma3ForSequenceClassification, HyperCLOVAXVisionV2PreTrainedModel
-):
-    config: HyperCLOVAXVisionV2Config
-    input_modalities = ("text",)
-
-
 __all__ = [
     "HyperCLOVAXVisionV2Config",
     "HyperCLOVAXVisionV2ForConditionalGeneration",
-    "HyperCLOVAXVisionV2ForSequenceClassification",
-    "HyperCLOVAXVisionV2ImageProcessor",
-    "HyperCLOVAXVisionV2ImageProcessorPil",
     "HyperCLOVAXVisionV2Model",
     "HyperCLOVAXVisionV2PreTrainedModel",
     "HyperCLOVAXVisionV2Processor",
-    "HyperCLOVAXVisionV2VideoProcessor",
 ]

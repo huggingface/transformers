@@ -127,9 +127,7 @@ class HyperCLOVAXVisionV2Processor(ProcessorMixin):
 
     @property
     def model_input_names(self):
-        # HyperCLOVAX Vision V2 does not use second_per_grid_ts (no temporal RoPE)
-        names = super().model_input_names
-        return [n for n in names if n not in ("second_per_grid_ts")]
+        return super().model_input_names
 
 
 __all__ = ["HyperCLOVAXVisionV2Processor"]

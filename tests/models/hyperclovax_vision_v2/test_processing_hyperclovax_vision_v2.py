@@ -21,7 +21,7 @@ from ...test_processing_common import ProcessorTesterMixin
 
 
 if is_vision_available():
-    from transformers import GPT2TokenizerFast, HyperCLOVAXVisionV2Processor
+    from transformers import GPT2TokenizerFast, HyperCLOVAXVisionV2Processor, Qwen2VLVideoProcessor
 
 
 @require_vision
@@ -39,3 +39,10 @@ class HyperCLOVAXVisionV2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         if tokenizer.pad_token is None:
             tokenizer.pad_token = tokenizer.eos_token
         return tokenizer
+
+    @classmethod
+    def _setup_video_processor(cls):
+        # HyperCLOVAX Vision V2 reuses `Qwen2VLVideoProcessor` but with the checkpoint's pixel budget
+        # (`min_pixels=3136`, `max_pixels=12845056`); the class default `min_pixels` (128*28*28) would
+        # upscale the tiny test videos and overflow the shared max-length assertions.
+        return Qwen2VLVideoProcessor(min_pixels=3136, max_pixels=12845056)

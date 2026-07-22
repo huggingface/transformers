@@ -48,7 +48,6 @@ if is_torch_available():
         HyperCLOVAXConfig,
         HyperCLOVAXVisionV2Config,
         HyperCLOVAXVisionV2ForConditionalGeneration,
-        HyperCLOVAXVisionV2ForSequenceClassification,
         HyperCLOVAXVisionV2Model,
         HyperCLOVAXVisionV2Processor,
         Qwen2_5_VLVisionConfig,
@@ -61,7 +60,6 @@ class HCXVisionV2VisionText2TextModelTester(VLMModelTester):
     text_config_class = HyperCLOVAXConfig
     vision_config_class = Qwen2_5_VLVisionConfig
     conditional_generation_class = HyperCLOVAXVisionV2ForConditionalGeneration
-    sequence_classification_class = HyperCLOVAXVisionV2ForSequenceClassification
 
     def __init__(self, parent, **kwargs):
         kwargs.setdefault("image_size", 14)
@@ -207,7 +205,7 @@ class HyperCLOVAXVisionV2ModelTest(VLMModelTest, unittest.TestCase):
         video_grid_thw = torch.tensor([[patch_T, patch_H, patch_W]] * B, device=torch_device)
 
         # sanity check
-        assert pixel_values_videos.shape[0] == video_grid_thw.prod(dim=1).sum().item()
+        self.assertEqual(pixel_values_videos.shape[0], video_grid_thw.prod(dim=1).sum().item())
 
         # Insert video token sequence
         input_ids[:, -1] = self.model_tester.pad_token_id
@@ -217,7 +215,7 @@ class HyperCLOVAXVisionV2ModelTest(VLMModelTest, unittest.TestCase):
 
         insertion_point = self.model_tester.num_image_tokens
 
-        assert (B * patches_per_video) + insertion_point <= self.model_tester.seq_length
+        self.assertLessEqual((B * patches_per_video) + insertion_point, self.model_tester.seq_length)
         for b in range(B):
             input_ids[b, insertion_point : insertion_point + patches_per_video] = self.model_tester.video_token_id
 
@@ -235,10 +233,6 @@ class HyperCLOVAXVisionV2ModelTest(VLMModelTest, unittest.TestCase):
     def test_reverse_loading_mapping(self, check_keys_were_modified=True):
         super().test_reverse_loading_mapping(check_keys_were_modified, skip_base_model=True)
 
-    @unittest.skip("Loading nested configs with overwritten `kwargs` isn't supported yet, FIXME @raushan.")
-    def test_load_with_mismatched_shapes(self):
-        pass
-
     @unittest.skip(reason="Inherits Qwen2_5_VL vision module with get_window_index incompatible with torch.export")
     def test_torch_export(self):
         pass
@@ -248,11 +242,15 @@ class HyperCLOVAXVisionV2ModelTest(VLMModelTest, unittest.TestCase):
 @require_torch_accelerator
 class HyperCLOVAXVisionV2IntegrationTest(unittest.TestCase):
     model_id = "naver-hyperclovax/HyperCLOVAX-SEED-Think-32B"
+    # Temporary: validate against the hub PR (model_type/chat_template fix) until it lands on `main`.
+    # Drop `revision` and point back to `main` once merged.
+    # https://huggingface.co/naver-hyperclovax/HyperCLOVAX-SEED-Think-32B/discussions/14
+    revision = "refs/pr/14"
 
     def setUp(self):
-        self.processor = HyperCLOVAXVisionV2Processor.from_pretrained(self.model_id)
+        self.processor = HyperCLOVAXVisionV2Processor.from_pretrained(self.model_id, revision=self.revision)
         self.model = HyperCLOVAXVisionV2ForConditionalGeneration.from_pretrained(
-            self.model_id, dtype=torch.bfloat16, device_map="auto"
+            self.model_id, revision=self.revision, dtype=torch.bfloat16, device_map="auto"
         )
         cleanup(torch_device, gc_collect=True)
 

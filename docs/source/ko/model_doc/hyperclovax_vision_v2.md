@@ -34,13 +34,13 @@ HyperCLOVAX Vision V2는 NAVER가 개발한 비전-언어 멀티모달 모델입
 <hfoption id="이미지 입력">
 
 ```python
-from transformers import HyperCLOVAXVisionV2ForConditionalGeneration, HyperCLOVAXVisionV2Processor
+from transformers import AutoProcessor, HyperCLOVAXVisionV2ForConditionalGeneration
 
 model = HyperCLOVAXVisionV2ForConditionalGeneration.from_pretrained(
     "naver-hyperclovax/HyperCLOVAX-SEED-Think-32B",
     device_map="auto",
 )
-processor = HyperCLOVAXVisionV2Processor.from_pretrained("naver-hyperclovax/HyperCLOVAX-SEED-Think-32B")
+processor = AutoProcessor.from_pretrained("naver-hyperclovax/HyperCLOVAX-SEED-Think-32B")
 
 messages = [
     {
@@ -81,13 +81,13 @@ print(output_text)
 <hfoption id="비디오 입력">
 
 ```python
-from transformers import HyperCLOVAXVisionV2ForConditionalGeneration, HyperCLOVAXVisionV2Processor
+from transformers import AutoProcessor, HyperCLOVAXVisionV2ForConditionalGeneration
 
 model = HyperCLOVAXVisionV2ForConditionalGeneration.from_pretrained(
     "naver-hyperclovax/HyperCLOVAX-SEED-Think-32B",
     device_map="auto",
 )
-processor = HyperCLOVAXVisionV2Processor.from_pretrained("naver-hyperclovax/HyperCLOVAX-SEED-Think-32B")
+processor = AutoProcessor.from_pretrained("naver-hyperclovax/HyperCLOVAX-SEED-Think-32B")
 
 messages = [
     {
@@ -132,7 +132,7 @@ print(output_text)
 아래 예시는 [bitsandbytes](../quantization/bitsandbytes)를 사용하여 모델을 4-bit로 로드합니다.
 
 ```python
-from transformers import BitsAndBytesConfig, HyperCLOVAXVisionV2ForConditionalGeneration, HyperCLOVAXVisionV2Processor
+from transformers import AutoProcessor, BitsAndBytesConfig, HyperCLOVAXVisionV2ForConditionalGeneration
 
 quantization_config = BitsAndBytesConfig(load_in_4bit=True)
 model = HyperCLOVAXVisionV2ForConditionalGeneration.from_pretrained(
@@ -140,7 +140,7 @@ model = HyperCLOVAXVisionV2ForConditionalGeneration.from_pretrained(
     device_map="auto",
     quantization_config=quantization_config,
 )
-processor = HyperCLOVAXVisionV2Processor.from_pretrained("naver-hyperclovax/HyperCLOVAX-SEED-Think-32B")
+processor = AutoProcessor.from_pretrained("naver-hyperclovax/HyperCLOVAX-SEED-Think-32B")
 ```
 
 ## 노트 [[notes]]
@@ -221,19 +221,10 @@ processor = HyperCLOVAXVisionV2Processor.from_pretrained("naver-hyperclovax/Hype
 
 [[autodoc]] HyperCLOVAXVisionV2Config
 
-## HyperCLOVAXVisionV2ImageProcessor
-
-[[autodoc]] HyperCLOVAXVisionV2ImageProcessor
     - preprocess
 
-## HyperCLOVAXVisionV2ImageProcessorPil
-
-[[autodoc]] HyperCLOVAXVisionV2ImageProcessorPil
     - preprocess
 
-## HyperCLOVAXVisionV2VideoProcessor
-
-[[autodoc]] HyperCLOVAXVisionV2VideoProcessor
 
 ## HyperCLOVAXVisionV2Processor
 
@@ -254,7 +245,3 @@ processor = HyperCLOVAXVisionV2Processor.from_pretrained("naver-hyperclovax/Hype
     - get_image_features
     - get_video_features
 
-## HyperCLOVAXVisionV2ForSequenceClassification
-
-[[autodoc]] HyperCLOVAXVisionV2ForSequenceClassification
-    - forward

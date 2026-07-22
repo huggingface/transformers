@@ -956,7 +956,6 @@ VIDEO_PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("glm46v", "Glm46VVideoProcessor"),
         ("glm4v", "Glm4vVideoProcessor"),
         ("glmga", "GlmgaVideoProcessor"),
-        ("hyperclovax_vision_v2", "HyperCLOVAXVisionV2VideoProcessor"),
         ("instructblipvideo", "InstructBlipVideoVideoProcessor"),
         ("internvl", "InternVLVideoProcessor"),
         ("kimi_k25", "Kimi_K25VideoProcessor"),
@@ -1200,10 +1199,6 @@ IMAGE_PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("got_ocr2", {"pil": "GotOcr2ImageProcessorPil", "torchvision": "GotOcr2ImageProcessor"}),
         ("grounding-dino", {"pil": "GroundingDinoImageProcessorPil", "torchvision": "GroundingDinoImageProcessor"}),
         ("hunyuan_vl", {"pil": "HunYuanVLImageProcessorPil", "torchvision": "HunYuanVLImageProcessor"}),
-        (
-            "hyperclovax_vision_v2",
-            {"pil": "HyperCLOVAXVisionV2ImageProcessorPil", "torchvision": "HyperCLOVAXVisionV2ImageProcessor"},
-        ),
         ("idefics", {"pil": "IdeficsImageProcessorPil", "torchvision": "IdeficsImageProcessor"}),
         ("idefics2", {"pil": "Idefics2ImageProcessorPil", "torchvision": "Idefics2ImageProcessor"}),
         ("idefics3", {"pil": "Idefics3ImageProcessorPil", "torchvision": "Idefics3ImageProcessor"}),

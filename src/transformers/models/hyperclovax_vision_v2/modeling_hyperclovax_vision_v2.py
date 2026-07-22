@@ -25,17 +25,12 @@ from torch import nn
 
 from ... import initialization as init
 from ...cache_utils import Cache
-from ...generation.utils import GenerationMixin
-from ...modeling_layers import GenericForSequenceClassification
-from ...modeling_outputs import (
-    BaseModelOutputWithPast,
-    BaseModelOutputWithPooling,
-    CausalLMOutputWithPast,
-    SequenceClassifierOutputWithPast,
-)
+from ...generation import GenerationMixin
+from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, CausalLMOutputWithPast
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, torch_compilable_check
+from ...utils.generic import accepts_precomputed_kwargs
 from ..auto import AutoModel
 from .configuration_hyperclovax_vision_v2 import HyperCLOVAXVisionV2Config
 
@@ -94,6 +89,7 @@ class HyperCLOVAXVisionV2Model(HyperCLOVAXVisionV2PreTrainedModel):
 
         self.post_init()
 
+    @accepts_precomputed_kwargs(modality="video")
     @can_return_tuple
     @auto_docstring
     def get_video_features(
@@ -110,6 +106,7 @@ class HyperCLOVAXVisionV2Model(HyperCLOVAXVisionV2PreTrainedModel):
         """
         return self.get_image_features(pixel_values=pixel_values_videos, image_grid_thw=video_grid_thw, **kwargs)
 
+    @accepts_precomputed_kwargs(modality="image")
     @can_return_tuple
     @auto_docstring
     def get_image_features(
@@ -264,7 +261,6 @@ class HyperCLOVAXVisionV2ForConditionalGeneration(HyperCLOVAXVisionV2PreTrainedM
         super().__init__(config)
         self.model = HyperCLOVAXVisionV2Model(config)
         self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
-        self.vocab_size = config.text_config.vocab_size
 
         self.post_init()
 
@@ -376,7 +372,7 @@ class HyperCLOVAXVisionV2ForConditionalGeneration(HyperCLOVAXVisionV2PreTrainedM
 
         loss = None
         if labels is not None:
-            loss = self.loss_function(logits, labels, self.vocab_size)
+            loss = self.loss_function(logits, labels, self.config.text_config.vocab_size)
 
         return CausalLMOutputWithPast(
             loss=loss,
@@ -548,46 +544,9 @@ class HyperCLOVAXVisionV2ForConditionalGeneration(HyperCLOVAXVisionV2PreTrainedM
 
         return input_ids, model_kwargs
 
-    def _prepare_position_ids_for_generation(self, inputs_tensor, model_kwargs):
-        # HyperCLOVAX Vision V2 uses 1D position_ids (not Qwen2.5-VL's 3D/4D rope_deltas-based ids)
-
-        return super()._prepare_position_ids_for_generation(inputs_tensor, model_kwargs)
-
-
-class HyperCLOVAXVisionV2ForSequenceClassification(
-    GenericForSequenceClassification, HyperCLOVAXVisionV2PreTrainedModel
-):
-    config: HyperCLOVAXVisionV2Config
-    input_modalities = ("text",)
-
-    def forward(
-        self,
-        input_ids: torch.LongTensor | None = None,
-        pixel_values: torch.FloatTensor | None = None,
-        attention_mask: torch.Tensor | None = None,
-        position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
-        token_type_ids: torch.LongTensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
-        labels: torch.LongTensor | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> SequenceClassifierOutputWithPast:
-        return super().forward(
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-            position_ids=position_ids,
-            past_key_values=past_key_values,
-            inputs_embeds=inputs_embeds,
-            pixel_values=pixel_values,
-            token_type_ids=token_type_ids,
-            labels=labels,
-            **kwargs,
-        )
-
 
 __all__ = [
     "HyperCLOVAXVisionV2ForConditionalGeneration",
-    "HyperCLOVAXVisionV2ForSequenceClassification",
     "HyperCLOVAXVisionV2Model",
     "HyperCLOVAXVisionV2PreTrainedModel",
 ]
