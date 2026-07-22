@@ -1697,22 +1697,22 @@ class QuarkConfig(QuantizationConfigMixin):
         self,
         **kwargs,
     ):
-        quark_version = None
+        current_quark_version = None
         if is_quark_available():
             try:
                 from quark import __version__ as quark_version
                 if version.parse(quark_version) >= version.parse("0.12"):
-                    quark_version = version.parse(quark_version)
+                    current_quark_version = version.parse(quark_version)
             except ImportError:
                 quark_version = None
 
-        if is_torch_available() and quark_version:
+        if is_torch_available() and current_quark_version:
             from quark.torch.export.config.config import JsonExporterConfig
             from quark.torch.export.main_export.quant_config_parser import QuantConfigParser
             from quark.torch.quantization.config.config import QConfig
         else:
             raise ImportError(
-                f"Please install the latest version of Quark (>=0.12). Current version is {version.parse(quark_version)}. Please refer to https://quark.docs.amd.com/latest/install.html."
+                f"Please install the latest version of Quark (>=0.12).Please refer to https://quark.docs.amd.com/latest/install.html."
             )
         # This might be e.g. `"fp8"` or `"awq"`.
         self.custom_mode = kwargs["quant_method"]
