@@ -414,8 +414,8 @@ dynamic_shapes["past_key_values"] = [  # reuse get_auto's per-leaf list; keys/va
 decode = exporter.export(decode_model, decode_inputs, config=OnnxConfig(dynamic_shapes=dynamic_shapes))
 ```
 
-The cache length stays symbolic while every other axis is fixed — faster to export, and the CUDA-graph
-loop below still captures at the concrete runtime cache size.
+The cache length stays symbolic while every other axis is fixed — faster to export, and the decode
+loop below still runs at the concrete runtime cache size.
 
 </details>
 

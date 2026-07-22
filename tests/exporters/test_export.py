@@ -210,6 +210,17 @@ EXPORT_SKIPS: dict[str, dict[str, str]] = {
         "Qwen3ASRForTokenClassification": (
             "Same data-dependent audio-encoder `.nonzero()` as `Qwen3ASRForConditionalGeneration`."
         ),
+        "FlavaModel": (
+            "The interleaved text/image/multimodal encoder streams make XNNPACK's disjoint-set partitioner "
+            "emit partitions that form a dependency cycle once fused (`Invalid partition, found dependency "
+            "cycles`). The single-stream sub-models (image/text/multimodal/codebook) export fine."
+        ),
+        "FlavaForPreTraining": "Same fused-partition dependency cycle as `FlavaModel` (wraps it).",
+        "PPDocLayoutV3ForObjectDetection": (
+            "A single detection head applied at every decoder layer and tied to the encoder head is "
+            "duplicated by the constant-dedup pass; `_unsafe_adjust_original_program` then deletes the "
+            "shared target once and raises `KeyError` on the next copy while stripping delegated params."
+        ),
     },
     "executorch.generate": {},
     "executorch.dynamic": {
