@@ -370,10 +370,8 @@ class HyperCLOVAXVisionV2ForConditionalGeneration(
             attentions=outputs.attentions,
         )
 
-    def _prepare_position_ids_for_generation(self, inputs_tensor, model_kwargs):
-        # HyperCLOVAX Vision V2 uses 1D position_ids (not Qwen2.5-VL's 3D/4D rope_deltas-based ids)
-
-        return GenerationMixin._prepare_position_ids_for_generation(self, inputs_tensor, model_kwargs)
+    def _prepare_position_ids_for_generation(self):
+        raise AttributeError("Not needed")
 
     def prepare_inputs_for_generation(
         self,
