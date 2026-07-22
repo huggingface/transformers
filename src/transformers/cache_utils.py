@@ -200,6 +200,14 @@ class DynamicSlidingWindowLayer(DynamicLayer):
         self.sliding_window = sliding_window
         self.cumulative_length = 0
         self._sliding_window_tensor = torch.tensor(self.sliding_window, dtype=torch.long)
+        self.record_past = False
+
+    def activate_past_recording(self):
+        """
+        Calling this function will activate past state recording, meaning that a call to `update` will wait for a call to `crop`
+        before restricting the size of the `k/v_states` to `sliding_window`, to be able to retrieve previous full states.
+        """
+        self.record_past = True
 
     def lazy_initialization(self, key_states: torch.Tensor, value_states: torch.Tensor) -> None:
         super().lazy_initialization(key_states, value_states)
@@ -228,8 +236,13 @@ class DynamicSlidingWindowLayer(DynamicLayer):
         full_key_states = torch.cat([self.keys, key_states], dim=-2)
         full_value_states = torch.cat([self.values, value_states], dim=-2)
         # Only cache the last `self.sliding_window - 1` tokens (or all of them if lower than that)
-        self.keys = full_key_states[:, :, -self.sliding_window + 1 :, :]
-        self.values = full_value_states[:, :, -self.sliding_window + 1 :, :]
+        if not self.record_past:
+            self.keys = full_key_states[:, :, -self.sliding_window + 1 :, :]
+            self.values = full_value_states[:, :, -self.sliding_window + 1 :, :]
+        # If we record the past, we keep them all for now, and they'll be restricted to the window size in `crop`
+        else:
+            self.keys = full_key_states
+            self.values = full_value_states
 
         # Return the full states
         return full_key_states, full_value_states
@@ -256,16 +269,31 @@ class DynamicSlidingWindowLayer(DynamicLayer):
 
     def crop(self, max_length: int) -> None:
         """
-        Crop the past key values up to a new `max_length` in terms of tokens. `max_length` can also be
-        negative to remove `max_length` tokens.
+        Crop the past key values up to a new `max_length` in terms of tokens. `max_length` can also be negative to remove `max_length`
+        tokens.
         """
+        # If we are beyond the sliding window, we need to be more careful
         if self.get_seq_length() >= self.sliding_window:
-            raise ValueError(
-                "Cannot `crop` a `DynamicSlidingWindowLayer` after it has seen more tokens than its"
-                "sliding window (otherwise some states are lost)"
-            )
-        super().crop(max_length)
-        self.cumulative_length = self.keys.shape[-2]
+            if not self.record_past:
+                raise RuntimeError(
+                    "`crop` was called, but the current layer does not track past states, and the sliding window size was already "
+                    "reached. Call `activate_past_recording` before `crop` to be able to rollback the cache."
+                )
+            if max_length > 0:
+                raise RuntimeError(
+                    "Once the sliding window size has been reached, `DynamicSlidingWindowLayer` can only be cropped by passing a "
+                    "negative int, to specify how many tokens to remove"
+                )
+            tokens_to_remove = abs(max_length)
+            # We crop, and restrict the size back to the sliding window if still larger
+            self.keys = self.keys[:, :, -self.sliding_window + 1 - tokens_to_remove : -tokens_to_remove, :]
+            self.values = self.values[:, :, -self.sliding_window + 1 - tokens_to_remove : -tokens_to_remove, :]
+            self.cumulative_length = self.cumulative_length - tokens_to_remove
+
+        # If we did not reach the sliding window, we can do the same as for a full attention layer
+        else:
+            super().crop(max_length)
+            self.cumulative_length = self.keys.shape[-2]
 
 
 class DynamicIndexedLayer(DynamicLayer):
@@ -1510,7 +1538,7 @@ class Cache:
 
         return self.layers[layer_idx].get_mask_sizes(query_length)
 
-    def get_query_offset(self, layer_idx: int) -> int:
+    def get_query_offset(self, layer_idx: int = 0) -> int:
         """Returns the current offset of the query for the given `layer_idx`. It's always equal to the cache length, i.e.
         `get_seq_length(layer_idx)`, except for MTP layers.
         """
@@ -2002,6 +2030,9 @@ class EncoderDecoderCache(Cache):
     def is_compileable(self) -> bool:
         return self.self_attention_cache.is_compileable
 
+    def activate_past_recording(self):
+        self.self_attention_cache.activate_past_recording()
+
     def get_max_cache_shape(self, layer_idx: int = 0) -> int:
         logger.warning_once(
             "`get_max_cache_shape` is deprecated, and will be removed in version 5.16. Please use `get_max_length` instead"
@@ -2014,7 +2045,7 @@ SlidingWindowCache = StaticCache
 
 
 class MtpCache(DynamicCache):
-    def get_query_offset(self, layer_idx=0):
+    def get_query_offset(self, layer_idx: int = 0):
         # Queries of MTP depth k run k+1 tokens ahead of the main_model, i.e. they have an offset of k+1
         mtp_offset = layer_idx + 1
         return super().get_query_offset(layer_idx) + mtp_offset

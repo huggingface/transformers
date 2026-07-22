@@ -361,9 +361,10 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin, Heterogeneous
         self._name_or_path = str(value)  # Make sure that name_or_path is a string (for JSON encoding)
 
     @property
-    def num_labels(self) -> int:
+    def num_labels(self) -> int | None:
         """
-        `int`: The number of labels for classification models.
+        `int` or `None`: The number of labels for classification models, or
+        `None` when `id2label` is not set.
         """
         return len(self.id2label) if self.id2label is not None else None
 
@@ -1064,9 +1065,6 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin, Heterogeneous
         # Pop "kwargs" since they are unpacked and set in the post init
         output.pop("kwargs", None)
 
-        if "distributed_config" in output and hasattr(output["distributed_config"], "to_dict"):
-            output["distributed_config"] = output["distributed_config"].to_dict()
-
         def to_list(value):
             if isinstance(value, tuple):
                 value = [to_list(item) for item in value]
@@ -1216,6 +1214,7 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin, Heterogeneous
             "ignore_keys_at_rope_validation",
             "base_model_tp_plan",
             "base_model_pp_plan",
+            "distributed_config",
         ]:
             d.pop(key_to_remove, None)
 

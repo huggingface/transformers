@@ -759,14 +759,14 @@ class InklingForCausalLM(InklingPreTrainedModel, GenerationMixin):
         ```python
         >>> from transformers import AutoTokenizer, InklingForCausalLM
 
-        >>> model = InklingForCausalLM.from_pretrained("google/gemma-2-9b")
-        >>> tokenizer = AutoTokenizer.from_pretrained("google/gemma-2-9b")
+        >>> model = InklingForCausalLM.from_pretrained("thinkingmachines/Inkling-NVFP4")
+        >>> tokenizer = AutoTokenizer.from_pretrained("thinkingmachines/Inkling-NVFP4")
 
         >>> prompt = "What is your favorite condiment?"
         >>> inputs = tokenizer(prompt, return_tensors="pt")
 
         >>> # Generate
-        >>> generate_ids = model.generate(inputs.input_ids, max_length=30)
+        >>> generate_ids = model.generate(**inputs, max_new_tokens=30)
         >>> tokenizer.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
         "What is your favorite condiment?"
         ```"""
@@ -985,7 +985,7 @@ class InklingVisionModel(InklingPreTrainedModel):
             hidden_states = layer(hidden_states=hidden_states)
 
         hidden_states = self.final_norm(hidden_states)
-        hidden_states = hidden_states.reshape(num_patches, -1)
+        hidden_states = hidden_states.reshape(num_patches, 1, -1)
         return BaseModelOutputWithPooling(
             last_hidden_state=hidden_states,
             pooler_output=hidden_states,
@@ -1098,8 +1098,8 @@ class InklingModel(InklingPreTrainedModel):
         >>> from io import BytesIO
         >>> from transformers import AutoProcessor, InklingForConditionalGeneration
 
-        >>> model = InklingForConditionalGeneration.from_pretrained("google/inkling2-3b-mix-224")
-        >>> processor = AutoProcessor.from_pretrained("google/inkling2-3b-mix-224")
+        >>> model = InklingForConditionalGeneration.from_pretrained("thinkingmachines/Inkling-NVFP4")
+        >>> processor = AutoProcessor.from_pretrained("thinkingmachines/Inkling-NVFP4")
 
         >>> prompt = "Where is the cat standing?"
         >>> url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"
@@ -1232,8 +1232,8 @@ class InklingForConditionalGeneration(InklingPreTrainedModel, GenerationMixin):
         >>> from io import BytesIO
         >>> from transformers import AutoProcessor, InklingForConditionalGeneration
 
-        >>> model = InklingForConditionalGeneration.from_pretrained("google/gemma-3-4b-it")
-        >>> processor = AutoProcessor.from_pretrained("google/gemma-3-4b-it")
+        >>> model = InklingForConditionalGeneration.from_pretrained("thinkingmachines/Inkling-NVFP4")
+        >>> processor = AutoProcessor.from_pretrained("thinkingmachines/Inkling-NVFP4")
 
         >>> messages = [
         ...     {
