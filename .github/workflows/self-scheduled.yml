@@ -569,7 +569,7 @@ jobs:
       - name: Run kernel tests on GPU
         working-directory: /transformers
         run: |
-          python3 -m pytest -v --make-reports="${machine_type}_run_kernels_gpu_test_reports" tests/kernels/test_kernels.py tests/integrations
+          python3 -m pytest -v --make-reports="${machine_type}_run_kernels_gpu_test_reports" tests/kernels
 
       - name: Failure short reports
         if: ${{ failure() }}
