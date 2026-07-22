@@ -394,6 +394,7 @@ if TYPE_CHECKING:
     from .roberta_prelayernorm import *
     from .roc_bert import *
     from .roformer import *
+    from .roma import *
     from .rt_detr import *
     from .rt_detr_v2 import *
     from .rwkv import *
