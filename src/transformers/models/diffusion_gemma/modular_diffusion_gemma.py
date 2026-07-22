@@ -33,7 +33,12 @@ from ...masking_utils import (
 )
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPast, CausalLMOutputWithPast
+from ...modeling_outputs import (
+    BaseModelOutput,
+    BaseModelOutputWithPast,
+    BaseModelOutputWithPooling,
+    CausalLMOutputWithPast,
+)
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
@@ -827,6 +832,25 @@ class DiffusionGemmaEncoderModel(DiffusionGemmaPreTrainedModel, Gemma4Model):
 
         # Initialize weights and apply final processing
         self.post_init()
+
+    def get_image_features(
+        self,
+        pixel_values: torch.FloatTensor,
+        image_position_ids: torch.LongTensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> BaseModelOutputWithPooling:
+        r"""
+        image_position_ids (`torch.LongTensor` of shape `(batch_size, max_patches, 2)`, *optional*):
+            The patch positions as (x, y) coordinates in the image. Padding patches are indicated by (-1, -1).
+        """
+        vision_outputs = self.vision_tower(
+            pixel_values=pixel_values,
+            pixel_position_ids=image_position_ids,
+            **kwargs,
+        )
+        last_hidden_state = vision_outputs.last_hidden_state
+        vision_outputs.pooler_output = self.embed_vision(inputs_embeds=last_hidden_state)
+        return vision_outputs
 
     def get_placeholder_mask(
         self,
