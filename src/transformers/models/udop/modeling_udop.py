@@ -280,91 +280,6 @@ class UdopPatchEmbeddings(nn.Module):
         return embeddings
 
 
-@auto_docstring
-class UdopPreTrainedModel(PreTrainedModel):
-    config: UdopConfig
-    base_model_prefix = "transformer"
-    input_modalities = ("image", "text")
-    supports_gradient_checkpointing = True
-
-    _can_compile_fullgraph = False
-    _keep_in_fp32_modules = ["wo"]
-    _supports_flash_attn = False
-    _supports_flex_attn = True
-    _supports_sdpa = True
-
-    @torch.no_grad()
-    def _init_weights(self, module):
-        """Initialize the weights"""
-        super()._init_weights(module)
-        factor = self.config.initializer_factor  # Used for testing weights initialization
-        if isinstance(module, UdopLayerNorm):
-            init.constant_(module.weight, factor * 1.0)
-        elif isinstance(module, nn.Conv2d):
-            init.trunc_normal_(module.weight, mean=0.0, std=factor)
-            if module.bias is not None:
-                init.zeros_(module.bias)
-        elif isinstance(module, RelativePositionBiasBase):
-            factor = self.config.initializer_factor
-            d_model = self.config.d_model
-            init.normal_(module.relative_attention_bias.weight, mean=0.0, std=factor * ((d_model) ** -0.5))
-        elif isinstance(module, UdopModel):
-            init.normal_(module.shared.weight, mean=0.0, std=factor * 1.0)
-        elif isinstance(module, UdopForConditionalGeneration):
-            if hasattr(module, "lm_head") and not self.config.tie_word_embeddings:
-                init.normal_(module.lm_head.weight, mean=0.0, std=factor * 1.0)
-        elif isinstance(module, UdopDenseActDense):
-            init.normal_(module.wi.weight, mean=0.0, std=factor * ((self.config.d_model) ** -0.5))
-            if hasattr(module.wi, "bias") and module.wi.bias is not None:
-                init.zeros_(module.wi.bias)
-            init.normal_(module.wo.weight, mean=0.0, std=factor * ((self.config.d_ff) ** -0.5))
-            if hasattr(module.wo, "bias") and module.wo.bias is not None:
-                init.zeros_(module.wo.bias)
-        elif isinstance(module, UdopDenseGatedActDense):
-            init.normal_(module.wi_0.weight, mean=0.0, std=factor * ((self.config.d_model) ** -0.5))
-            if hasattr(module.wi_0, "bias") and module.wi_0.bias is not None:
-                init.zeros_(module.wi_0.bias)
-            init.normal_(module.wi_1.weight, mean=0.0, std=factor * ((self.config.d_model) ** -0.5))
-            if hasattr(module.wi_1, "bias") and module.wi_1.bias is not None:
-                init.zeros_(module.wi_1.bias)
-            init.normal_(module.wo.weight, mean=0.0, std=factor * ((self.config.d_ff) ** -0.5))
-            if hasattr(module.wo, "bias") and module.wo.bias is not None:
-                init.zeros_(module.wo.bias)
-        elif isinstance(module, UdopAttention):
-            d_model = self.config.d_model
-            key_value_proj_dim = self.config.d_kv
-            n_heads = self.config.num_heads
-            init.normal_(module.q.weight, mean=0.0, std=factor * ((d_model * key_value_proj_dim) ** -0.5))
-            init.normal_(module.k.weight, mean=0.0, std=factor * (d_model**-0.5))
-            init.normal_(module.v.weight, mean=0.0, std=factor * (d_model**-0.5))
-            init.normal_(module.o.weight, mean=0.0, std=factor * ((n_heads * key_value_proj_dim) ** -0.5))
-            if module.has_relative_attention_bias:
-                init.normal_(module.relative_attention_bias.weight, mean=0.0, std=factor * ((d_model) ** -0.5))
-
-    # Copied from transformers.models.prophetnet.modeling_prophetnet.ProphetNetPreTrainedModel._shift_right with ProphetNet->Udop
-    def _shift_right(self, input_ids):
-        decoder_start_token_id = self.config.decoder_start_token_id
-        pad_token_id = self.config.pad_token_id
-
-        assert decoder_start_token_id is not None, (
-            "self.model.config.decoder_start_token_id has to be defined. In Udop it is usually set to the"
-            " pad_token_id. See Udop docs for more information"
-        )
-
-        # shift inputs to the right
-        shifted_input_ids = input_ids.new_zeros(input_ids.shape)
-        shifted_input_ids[..., 1:] = input_ids[..., :-1].clone()
-        shifted_input_ids[..., 0] = decoder_start_token_id
-
-        assert pad_token_id is not None, "self.model.config.pad_token_id has to be defined."
-        # replace possible -100 values in labels by `pad_token_id`
-        shifted_input_ids.masked_fill_(shifted_input_ids == -100, pad_token_id)
-
-        assert torch.all(shifted_input_ids >= 0).item(), "Verify that `shifted_input_ids` has only positive values"
-
-        return shifted_input_ids
-
-
 # Copied from transformers.models.t5.modeling_t5.T5LayerNorm with T5->Udop
 class UdopLayerNorm(nn.Module):
     def __init__(self, hidden_size, eps=1e-6):
@@ -805,13 +720,95 @@ class UdopBlock(GradientCheckpointingLayer):
         return hidden_states, self_attn_position_bias, cross_attn_position_bias
 
 
-# `UdopBlock`, `UdopLayerSelfAttention` and `UdopLayerCrossAttention` are defined after `UdopPreTrainedModel`, so the
-# output recorders are registered here (they are read lazily when a model instance is created).
-UdopPreTrainedModel._can_record_outputs = {
-    "hidden_states": OutputRecorder(UdopBlock, index=0),
-    "attentions": OutputRecorder(UdopLayerSelfAttention, index=-1),
-    "cross_attentions": OutputRecorder(UdopLayerCrossAttention, index=-1),
-}
+@auto_docstring
+class UdopPreTrainedModel(PreTrainedModel):
+    config: UdopConfig
+    base_model_prefix = "transformer"
+    input_modalities = ("image", "text")
+    supports_gradient_checkpointing = True
+
+    _can_compile_fullgraph = False
+    _keep_in_fp32_modules = ["wo"]
+    _supports_flash_attn = False
+    _supports_flex_attn = True
+    _supports_sdpa = True
+
+    _can_record_outputs = {
+        "hidden_states": OutputRecorder(UdopBlock, index=0),
+        "attentions": OutputRecorder(UdopLayerSelfAttention, index=-1),
+        "cross_attentions": OutputRecorder(UdopLayerCrossAttention, index=-1),
+    }
+
+    @torch.no_grad()
+    def _init_weights(self, module):
+        """Initialize the weights"""
+        super()._init_weights(module)
+        factor = self.config.initializer_factor  # Used for testing weights initialization
+        if isinstance(module, UdopLayerNorm):
+            init.constant_(module.weight, factor * 1.0)
+        elif isinstance(module, nn.Conv2d):
+            init.trunc_normal_(module.weight, mean=0.0, std=factor)
+            if module.bias is not None:
+                init.zeros_(module.bias)
+        elif isinstance(module, RelativePositionBiasBase):
+            factor = self.config.initializer_factor
+            d_model = self.config.d_model
+            init.normal_(module.relative_attention_bias.weight, mean=0.0, std=factor * ((d_model) ** -0.5))
+        elif isinstance(module, UdopModel):
+            init.normal_(module.shared.weight, mean=0.0, std=factor * 1.0)
+        elif isinstance(module, UdopForConditionalGeneration):
+            if hasattr(module, "lm_head") and not self.config.tie_word_embeddings:
+                init.normal_(module.lm_head.weight, mean=0.0, std=factor * 1.0)
+        elif isinstance(module, UdopDenseActDense):
+            init.normal_(module.wi.weight, mean=0.0, std=factor * ((self.config.d_model) ** -0.5))
+            if hasattr(module.wi, "bias") and module.wi.bias is not None:
+                init.zeros_(module.wi.bias)
+            init.normal_(module.wo.weight, mean=0.0, std=factor * ((self.config.d_ff) ** -0.5))
+            if hasattr(module.wo, "bias") and module.wo.bias is not None:
+                init.zeros_(module.wo.bias)
+        elif isinstance(module, UdopDenseGatedActDense):
+            init.normal_(module.wi_0.weight, mean=0.0, std=factor * ((self.config.d_model) ** -0.5))
+            if hasattr(module.wi_0, "bias") and module.wi_0.bias is not None:
+                init.zeros_(module.wi_0.bias)
+            init.normal_(module.wi_1.weight, mean=0.0, std=factor * ((self.config.d_model) ** -0.5))
+            if hasattr(module.wi_1, "bias") and module.wi_1.bias is not None:
+                init.zeros_(module.wi_1.bias)
+            init.normal_(module.wo.weight, mean=0.0, std=factor * ((self.config.d_ff) ** -0.5))
+            if hasattr(module.wo, "bias") and module.wo.bias is not None:
+                init.zeros_(module.wo.bias)
+        elif isinstance(module, UdopAttention):
+            d_model = self.config.d_model
+            key_value_proj_dim = self.config.d_kv
+            n_heads = self.config.num_heads
+            init.normal_(module.q.weight, mean=0.0, std=factor * ((d_model * key_value_proj_dim) ** -0.5))
+            init.normal_(module.k.weight, mean=0.0, std=factor * (d_model**-0.5))
+            init.normal_(module.v.weight, mean=0.0, std=factor * (d_model**-0.5))
+            init.normal_(module.o.weight, mean=0.0, std=factor * ((n_heads * key_value_proj_dim) ** -0.5))
+            if module.has_relative_attention_bias:
+                init.normal_(module.relative_attention_bias.weight, mean=0.0, std=factor * ((d_model) ** -0.5))
+
+    # Copied from transformers.models.prophetnet.modeling_prophetnet.ProphetNetPreTrainedModel._shift_right with ProphetNet->Udop
+    def _shift_right(self, input_ids):
+        decoder_start_token_id = self.config.decoder_start_token_id
+        pad_token_id = self.config.pad_token_id
+
+        assert decoder_start_token_id is not None, (
+            "self.model.config.decoder_start_token_id has to be defined. In Udop it is usually set to the"
+            " pad_token_id. See Udop docs for more information"
+        )
+
+        # shift inputs to the right
+        shifted_input_ids = input_ids.new_zeros(input_ids.shape)
+        shifted_input_ids[..., 1:] = input_ids[..., :-1].clone()
+        shifted_input_ids[..., 0] = decoder_start_token_id
+
+        assert pad_token_id is not None, "self.model.config.pad_token_id has to be defined."
+        # replace possible -100 values in labels by `pad_token_id`
+        shifted_input_ids.masked_fill_(shifted_input_ids == -100, pad_token_id)
+
+        assert torch.all(shifted_input_ids >= 0).item(), "Verify that `shifted_input_ids` has only positive values"
+
+        return shifted_input_ids
 
 
 class UdopCellEmbeddings(nn.Module):
