@@ -59,7 +59,7 @@ jobs:
       - name: Delete existing bot comment if it exists
         env:
           PR_NUMBER: ${{ needs.get-pr-number.outputs.PR_NUMBER }}
-        uses: actions/github-script@d7906e4ad0b1822421a7e6a35d5ca353c962f410 # v6.4.1
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           script: |
             const PR_NUMBER = parseInt(process.env.PR_NUMBER, 10);
@@ -95,7 +95,7 @@ jobs:
         env:
           PR_NUMBER: ${{ needs.get-pr-number.outputs.PR_NUMBER }}
           COMMENT_BODY: ${{ github.event.comment.body }}
-        uses: actions/github-script@d7906e4ad0b1822421a7e6a35d5ca353c962f410 # v6.4.1
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           script: |
             const PR_NUMBER = parseInt(process.env.PR_NUMBER, 10);
@@ -117,18 +117,22 @@ jobs:
   run-repo-consistency-checks:
     runs-on: ubuntu-22.04
     needs: [get-pr-info, check-timestamps, init_comment_with_url]
+    permissions:
+      contents: read
+      pull-requests: read
     outputs:
       changes_detected: ${{ steps.run_repo_checks.outputs.changes_detected || steps.run_style_checks.outputs.changes_detected }}
+      util_scripts_modified: ${{ steps.check_util_scripts.outputs.util_scripts_modified }}
     steps:
       # Checkout the trusted base repository (main branch) - this is safe
       - name: Checkout base repository
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           ref: main
           persist-credentials: false
 
       - name: Set up Python
-        uses: actions/setup-python@7f4fc3e22c37d6ff65e88745f38bd3157c663f7c # v4.9.1
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
         with:
           python-version: "3.10"
 
@@ -158,32 +162,45 @@ jobs:
           git remote add upstream https://github.com/${{ github.repository }}.git
           git fetch upstream main:main
 
-      - name: Copy trusted scripts from main branch
-        run: |
-          # Security: Copy trusted scripts from main branch and run commands explicitly (not via make)
-          # to avoid executing potentially malicious Makefile or scripts from the PR
-          cp setup.py pr-repo/setup.py
-          cp utils/custom_init_isort.py pr-repo/utils/custom_init_isort.py
-          cp utils/sort_auto_mappings.py pr-repo/utils/sort_auto_mappings.py
-          cp utils/check_doc_toc.py pr-repo/utils/check_doc_toc.py
-          cp utils/check_copies.py pr-repo/utils/check_copies.py
-          cp utils/check_modular_conversion.py pr-repo/utils/check_modular_conversion.py
-          cp utils/check_dummies.py pr-repo/utils/check_dummies.py
-          cp utils/check_pipeline_typing.py pr-repo/utils/check_pipeline_typing.py
-          cp utils/check_doctest_list.py pr-repo/utils/check_doctest_list.py
-          cp utils/check_docstrings.py pr-repo/utils/check_docstrings.py
-          cp utils/add_dates.py pr-repo/utils/add_dates.py
+      - name: Check if util scripts are modified in PR
+        id: check_util_scripts
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            // Re-fetch the PR file list from the API rather than using get-pr-info's PR_FILES
+            // output, to avoid template injection and E2BIG issues (see pr_slow_ci_suggestion.yml).
+            const UTIL_SCRIPTS = new Set([
+              'setup.py',
+              'utils/custom_init_isort.py',
+              'utils/sort_auto_mappings.py',
+              'utils/check_doc_toc.py',
+              'utils/check_copies.py',
+              'utils/check_modular_conversion.py',
+              'utils/check_dummies.py',
+              'utils/check_pipeline_typing.py',
+              'utils/check_doctest_list.py',
+              'utils/check_docstrings.py',
+              'utils/add_dates.py',
+            ]);
 
-      - name: Install editable transformers from PR branch with copied scripts
+            const files = await github.paginate(github.rest.pulls.listFiles, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: context.payload.issue.number,
+            });
+
+            const modified = files.some(f => UTIL_SCRIPTS.has(f.filename));
+            core.setOutput('util_scripts_modified', modified ? 'true' : 'false');
+
+      - name: Install editable transformers from PR branch
+        if: steps.check_util_scripts.outputs.util_scripts_modified != 'true'
         run: |
-          # Run commands in PR directory (with the copied trusted scripts)
           cd pr-repo
-
           pip install -e .
 
       - name: Run repo consistency checks with trusted script
         id: run_repo_checks
-        if: startsWith(github.event.comment.body, '@bot /repo')
+        if: steps.check_util_scripts.outputs.util_scripts_modified != 'true' && startsWith(github.event.comment.body, '@bot /repo')
         run: |
           # Continue on errors (like Makefile's - prefix)
           set +e
@@ -217,7 +234,7 @@ jobs:
 
       - name: Run style checks with trusted script
         id: run_style_checks
-        if: startsWith(github.event.comment.body, '@bot /style')
+        if: steps.check_util_scripts.outputs.util_scripts_modified != 'true' && startsWith(github.event.comment.body, '@bot /style')
         run: |
           # Continue on errors (like Makefile's - prefix)
           set +e
@@ -243,7 +260,7 @@ jobs:
           fi
 
       - name: Save modified files
-        if: steps.run_repo_checks.outputs.changes_detected == 'true' || steps.run_style_checks.outputs.changes_detected == 'true'
+        if: steps.check_util_scripts.outputs.util_scripts_modified != 'true' && (steps.run_repo_checks.outputs.changes_detected == 'true' || steps.run_style_checks.outputs.changes_detected == 'true')
         run: |
           cd pr-repo
           mkdir -p ../artifact-staging
@@ -255,8 +272,8 @@ jobs:
           done < ../artifact-staging/modified-files.txt
 
       - name: Upload modified files
-        if: steps.run_repo_checks.outputs.changes_detected == 'true' || steps.run_style_checks.outputs.changes_detected == 'true'
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: steps.check_util_scripts.outputs.util_scripts_modified != 'true' && (steps.run_repo_checks.outputs.changes_detected == 'true' || steps.run_style_checks.outputs.changes_detected == 'true')
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: modified-files
           path: artifact-staging/
@@ -271,7 +288,7 @@ jobs:
     steps:
       - name: Download modified files
         if: needs.run-repo-consistency-checks.outputs.changes_detected == 'true'
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: modified-files
 
@@ -335,6 +352,7 @@ jobs:
         if: needs.init_comment_with_url.result == 'success'
         env:
           CHANGES_DETECTED: ${{ needs.run-repo-consistency-checks.outputs.changes_detected }}
+          UTIL_SCRIPTS_MODIFIED: ${{ needs.run-repo-consistency-checks.outputs.util_scripts_modified }}
           COMMENT_BODY: ${{ github.event.comment.body }}
         run: |
           # Determine which command was used
@@ -343,8 +361,10 @@ jobs:
           else
             MESSAGE_PREFIX="Repo. Consistency"
           fi
-          
-          if [ "$CHANGES_DETECTED" = 'true' ]; then
+
+          if [ "$UTIL_SCRIPTS_MODIFIED" = 'true' ]; then
+            echo "final_comment=${MESSAGE_PREFIX}: \`setup.py\` or some script files under the \`utils/\` directory are modified in this PR. Please run style/repo. checks/fixes locally." >> $GITHUB_OUTPUT
+          elif [ "$CHANGES_DETECTED" = 'true' ]; then
             echo "final_comment=${MESSAGE_PREFIX} bot fixed some files and pushed the changes." >> $GITHUB_OUTPUT
           else
             echo "final_comment=${MESSAGE_PREFIX} fix runs successfully without any file modified." >> $GITHUB_OUTPUT
@@ -352,7 +372,7 @@ jobs:
 
       - name: Comment on PR
         if: needs.init_comment_with_url.result == 'success'
-        uses: actions/github-script@d7906e4ad0b1822421a7e6a35d5ca353c962f410 # v6.4.1
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         env:
           PR_NUMBER: ${{ needs.get-pr-number.outputs.PR_NUMBER }}
           COMMENT_ID: ${{ needs.init_comment_with_url.outputs.comment_id }}

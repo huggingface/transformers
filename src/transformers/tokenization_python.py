@@ -687,8 +687,13 @@ class PythonBackend(PreTrainedTokenizerBase):
         raise NotImplementedError
 
     def _convert_token_to_id_with_added_voc(self, token):
-        if token in self.added_tokens_encoder:
-            return self.added_tokens_encoder[token]
+        # Use the cached `_added_tokens_encoder` dict rather than the
+        # `added_tokens_encoder` property, which rebuilds and re-sorts the full
+        # added-token mapping on every access. Going through the property here
+        # made `convert_tokens_to_ids` O(T * N * logN) for a tokenizer with N
+        # added tokens (regression from the v5 tokenizer refactor, #40936).
+        if token in self._added_tokens_encoder:
+            return self._added_tokens_encoder[token]
         return self._convert_token_to_id(token)
 
     def _convert_token_to_id(self, token):
@@ -925,7 +930,6 @@ class PythonBackend(PreTrainedTokenizerBase):
                     f"are not defined (bos_token_id={self.bos_token_id}; eos_token_id={self.eos_token_id})"
                     "Set the required special tokens in tokenizer or update `tokenizer.special_tokens_pattern`"
                 )
-                return token_ids_0 if token_ids_1 is None else token_ids_0 + token_ids_1
 
             if token_ids_1 is None:
                 return [self.bos_token_id] + token_ids_0 + [self.eos_token_id]

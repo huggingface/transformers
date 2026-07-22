@@ -199,7 +199,10 @@ class AyaVisionModel(AyaVisionPreTrainedModel):
                 hs_pool = [hs[:, 1:] for hs in hs_pool]
             selected_image_feature = torch.cat(hs_pool, dim=-1)
 
-        image_outputs.pooler_output = self.multi_modal_projector(selected_image_feature)
+        pooler_output = self.multi_modal_projector(selected_image_feature)
+        image_outputs.pooler_output = pooler_output.reshape(
+            selected_image_feature.shape[0], -1, self.config.text_config.hidden_size
+        )
 
         return image_outputs
 
@@ -220,9 +223,9 @@ class AyaVisionModel(AyaVisionPreTrainedModel):
 
         n_image_tokens = special_image_mask.sum()
         n_image_features = image_features.shape[0] * image_features.shape[1]
-        special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
+        special_image_mask = special_image_mask.unsqueeze(-1).to(inputs_embeds.device)
         torch_compilable_check(
-            inputs_embeds[special_image_mask].numel() == image_features.numel(),
+            n_image_tokens * inputs_embeds.shape[-1] == image_features.numel(),
             f"Image features and image tokens do not match, tokens: {n_image_tokens}, features: {n_image_features}",
         )
         return special_image_mask

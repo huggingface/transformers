@@ -46,7 +46,7 @@ import numpy as np
 import safetensors.torch
 import torch
 import torch.distributed as dist
-from huggingface_hub import CommitInfo, ModelCard, create_repo, upload_folder
+from huggingface_hub import CommitInfo, ModelCard
 from packaging import version
 from torch import nn
 from torch.utils.data import DataLoader, Dataset, IterableDataset, RandomSampler, SequentialSampler
@@ -55,6 +55,7 @@ from . import __version__
 from .configuration_utils import PreTrainedConfig
 from .data.data_collator import DataCollator, DataCollatorWithPadding, default_data_collator
 from .debug_utils import DebugOption, DebugUnderflowOverflow
+from .distributed.fsdp import get_fsdp_ckpt_kwargs, update_fsdp_plugin_peft
 from .feature_extraction_sequence_utils import SequenceFeatureExtractor
 from .feature_extraction_utils import FeatureExtractionMixin
 from .hyperparameter_search import ALL_HYPERPARAMETER_SEARCH_BACKENDS, default_hp_search_backend
@@ -66,7 +67,6 @@ from .integrations.deepspeed import (
     is_deepspeed_available,
     propagate_args_to_deepspeed,
 )
-from .integrations.fsdp import get_fsdp_ckpt_kwargs, update_fsdp_plugin_peft
 from .integrations.liger import apply_liger_kernel
 from .integrations.neftune import activate_neftune, deactivate_neftune
 from .integrations.peft import MIN_PEFT_VERSION
@@ -162,6 +162,7 @@ from .utils import (
     can_return_loss,
     check_torch_load_is_safe,
     find_labels,
+    hf_api,
     is_accelerate_available,
     is_datasets_available,
     is_in_notebook,
@@ -285,6 +286,9 @@ class Trainer:
             `torch.Generator` for the randomization that must be identical on all processes (and the Trainer will
             manually set the seed of this `generator` at each epoch) or have a `set_epoch()` method that internally
             sets the seed of the RNGs used.
+
+            If the dataset does not implement `__len__` (e.g. a streaming `IterableDataset`), `max_steps` must be set,
+            since the total number of training steps cannot be inferred.
         eval_dataset (`torch.utils.data.Dataset` | dict[str, `torch.utils.data.Dataset`] | `datasets.Dataset`, *optional*):
              The dataset to use for evaluation. If it is a [`~datasets.Dataset`], columns not accepted by the
              `model.forward()` method are automatically removed. If it is a dictionary, it will evaluate on each
@@ -688,8 +692,9 @@ class Trainer:
             logger.info("max_steps is given, it will override any value given in num_train_epochs")
         if self.train_dataset is not None and not has_length(self.train_dataset) and args.max_steps <= 0:
             raise ValueError(
-                "The train_dataset does not implement __len__, max_steps has to be specified. "
-                "The number of steps needs to be known in advance for the learning rate scheduler."
+                "The train_dataset does not implement __len__, so the number of training steps cannot be inferred; "
+                "max_steps has to be specified. The total number of steps must be known in advance to bound the "
+                "training loop and to configure the learning rate scheduler."
             )
 
         if self.train_dataset is not None and isinstance(self.train_dataset, torch.utils.data.IterableDataset):
@@ -895,7 +900,7 @@ class Trainer:
 
         Args:
             eval_dataset (`str` or `torch.utils.data.Dataset`, *optional*):
-                If a `str`, will use `self.eval_dataset[eval_dataset]` as the evaluation dataset. If a `Dataset`, will override `self.eval_dataset` and must implement `__len__`. If it is a [`~datasets.Dataset`], columns not accepted by the `model.forward()` method are automatically removed.
+                If a `str`, will use `self.eval_dataset[eval_dataset]` as the evaluation dataset. If a `Dataset`, will override `self.eval_dataset`. If it is a [`~datasets.Dataset`], columns not accepted by the `model.forward()` method are automatically removed.
         """
         if eval_dataset is None and self.eval_dataset is None:
             raise ValueError("Trainer: evaluation requires an eval_dataset.")
@@ -935,7 +940,7 @@ class Trainer:
         Args:
             test_dataset (`torch.utils.data.Dataset`, *optional*):
                 The test dataset to use. If it is a [`~datasets.Dataset`], columns not accepted by the
-                `model.forward()` method are automatically removed. It must implement `__len__`.
+                `model.forward()` method are automatically removed.
         """
         return self._get_dataloader(
             dataset=test_dataset,
@@ -975,7 +980,7 @@ class Trainer:
         else:
             data_collator = self._get_collator_with_removed_columns(self.data_collator, description=description)
 
-        # MPS requrires forking if multiple workers are specified
+        # MPS requires forking if multiple workers are specified
         should_fork = torch.backends.mps.is_available() and self.args.dataloader_num_workers > 1
 
         dataloader_params = {
@@ -1013,6 +1018,12 @@ class Trainer:
         if train_dataset is None:
             train_dataset = self.train_dataset
         if train_dataset is None or not has_length(train_dataset):
+            if train_dataset is not None and self.args.train_sampling_strategy == "group_by_length":
+                logger.warning(
+                    "`train_sampling_strategy='group_by_length'` is ignored because the training dataset does not "
+                    "implement `__len__` (e.g. an `IterableDataset`). Examples will be consumed in the dataset's own "
+                    "order."
+                )
             return None
 
         # Build the sampler.
@@ -1919,6 +1930,8 @@ class Trainer:
                 and self.state.global_step % self.args.torch_empty_cache_steps == 0
             ):
                 clear_device_cache()
+                if torch.backends.mps.is_available() and hasattr(torch.mps, "clear_graph_cache"):
+                    torch.mps.clear_graph_cache()
 
             kwargs = {}
 
@@ -2101,7 +2114,7 @@ class Trainer:
             self._save_checkpoint(model, trial)
             self.control = self.callback_handler.on_save(self.args, self.state, self.control)
 
-    # ---- Training Utilites ----
+    # ---- Training Utilities ----
     def get_batch_samples(
         self, epoch_iterator: Iterator, num_batches: int, device: torch.device
     ) -> tuple[list, torch.Tensor | int | None]:
@@ -2550,8 +2563,7 @@ class Trainer:
             eval_dataset (`Dataset` | dict[str, `Dataset`], *optional*):
                 Pass a dataset if you wish to override `self.eval_dataset`. If it is a [`~datasets.Dataset`], columns
                 not accepted by the `model.forward()` method are automatically removed. If it is a dictionary, it will
-                evaluate on each dataset, prepending the dictionary key to the metric name. Datasets must implement the
-                `__len__` method.
+                evaluate on each dataset, prepending the dictionary key to the metric name.
 
                 <Tip>
 
@@ -2851,7 +2863,7 @@ class Trainer:
         Args:
             test_dataset (`Dataset`):
                 Dataset to run the predictions on. If it is an `datasets.Dataset`, columns not accepted by the
-                `model.forward()` method are automatically removed. Has to implement the method `__len__`
+                `model.forward()` method are automatically removed.
             ignore_keys (`list[str]`, *optional*):
                 A list of keys in the output of your model (if it is a dictionary) that should be ignored when
                 gathering predictions.
@@ -3940,7 +3952,7 @@ class Trainer:
             repo_name = self.args.hub_model_id
 
         token = token if token is not None else self.args.hub_token
-        repo_url = create_repo(repo_name, token=token, private=self.args.hub_private_repo, exist_ok=True)
+        repo_url = hf_api().create_repo(repo_name, token=token, private=self.args.hub_private_repo, exist_ok=True)
         self.hub_model_id = repo_url.repo_id
         self.push_in_progress = None
 
@@ -4090,7 +4102,7 @@ class Trainer:
         # Wait for the current upload to be finished.
         self._finish_current_push()
 
-        return upload_folder(
+        return hf_api().upload_folder(
             repo_id=self.hub_model_id,
             folder_path=self.args.output_dir,
             commit_message=commit_message,
@@ -4137,7 +4149,7 @@ class Trainer:
         else:
             commit_message = f"Training in progress, epoch {int(self.state.epoch)}"
 
-        model_push_job = upload_folder(
+        model_push_job = hf_api().upload_folder(
             repo_id=self.hub_model_id,
             folder_path=output_dir,
             commit_message=commit_message,
@@ -4153,7 +4165,7 @@ class Trainer:
             path_in_repo = (
                 "last-checkpoint" if self.args.hub_strategy == HubStrategy.CHECKPOINT else Path(checkpoint_folder).name
             )
-            checkpoint_push = upload_folder(
+            checkpoint_push = hf_api().upload_folder(
                 repo_id=self.hub_model_id,
                 folder_path=checkpoint_folder,
                 path_in_repo=path_in_repo,

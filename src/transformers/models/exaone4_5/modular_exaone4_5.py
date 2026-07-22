@@ -27,7 +27,7 @@ from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import ProcessingKwargs, Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
-from ...utils.generic import is_flash_attention_requested
+from ...utils.generic import get_max_seqlen, is_flash_attention_requested
 from ..auto import CONFIG_MAPPING, AutoConfig, AutoModel
 from ..exaone4.modeling_exaone4 import Exaone4PreTrainedModel
 from ..qwen2_5_vl.configuration_qwen2_5_vl import Qwen2_5_VLVisionConfig
@@ -42,19 +42,29 @@ from ..qwen2_5_vl.modeling_qwen2_5_vl import (
     Qwen2_5_VLVisionAttention,
     Qwen2_5_VLVisionBlock,
 )
-from ..qwen2_5_vl.processing_qwen2_5_vl import Qwen2_5_VLProcessor
 from ..qwen2_vl.modeling_qwen2_vl import (
     apply_rotary_pos_emb_vision,
     eager_attention_forward,
 )
+from ..qwen2_vl.processing_qwen2_vl import Qwen2VLProcessor
 
 
 @auto_docstring(checkpoint="LGAI-EXAONE/EXAONE-4.5-33B")
 @strict
 class Exaone4_5_VisionConfig(Qwen2_5_VLVisionConfig):
+    r"""
+    window_size (`int`, *optional*, defaults to 11):
+        Size of windows.
+    out_hidden_size (`int`, *optional*, defaults to 3584):
+        The output hidden size of the vision model.
+    fullatt_block_indexes (`int`, *optional*, defaults to `[7, 15, 23, 31]`):
+        Indices of layers with full attention
+    """
+
     model_type = "exaone4_5_vision"
     base_config_key = "vision_config"
     num_key_value_heads: int = 8
+    tokens_per_second = AttributeError()
 
 
 @auto_docstring(checkpoint="LGAI-EXAONE/EXAONE-4.5-33B")
@@ -116,6 +126,7 @@ class Exaone4_5_VisionAttention(Qwen2_5_VLVisionAttention):
         hidden_states: torch.Tensor,
         cu_seqlens: torch.Tensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
+        max_seqlen: int | None = None,
         **kwargs,
     ) -> torch.Tensor:
         seq_length = hidden_states.shape[0]
@@ -141,7 +152,7 @@ class Exaone4_5_VisionAttention(Qwen2_5_VLVisionAttention):
         )
 
         if is_flash_attention_requested(self.config):
-            max_seqlen = (cu_seqlens[1:] - cu_seqlens[:-1]).max()
+            max_seqlen = get_max_seqlen(cu_seqlens, self.config, kwargs={"max_seqlen": max_seqlen})
             attn_output, _ = attention_interface(
                 self,
                 query_states,
@@ -232,8 +243,6 @@ class Exaone4_5_Model(Exaone4_5_PreTrainedModel, Qwen2_5_VLModel):
         self.language_model = AutoModel.from_config(config.text_config)
         self.post_init()
 
-    @can_return_tuple
-    @auto_docstring
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -246,7 +255,6 @@ class Exaone4_5_Model(Exaone4_5_PreTrainedModel, Qwen2_5_VLModel):
         pixel_values_videos: torch.FloatTensor | None = None,
         image_grid_thw: torch.LongTensor | None = None,
         video_grid_thw: torch.LongTensor | None = None,
-        second_per_grid_ts: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPast:
         r"""
@@ -254,8 +262,6 @@ class Exaone4_5_Model(Exaone4_5_PreTrainedModel, Qwen2_5_VLModel):
             The temporal, height and width of feature shape of each image in LLM.
         video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
             The temporal, height and width of feature shape of each video in LLM.
-        second_per_grid_ts (`torch.Tensor` of shape `(num_videos)`, *optional*):
-            The time interval (in seconds) for each grid along the temporal dimension in the 3D position IDs.
         """
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
@@ -301,6 +307,15 @@ class Exaone4_5_Model(Exaone4_5_PreTrainedModel, Qwen2_5_VLModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+    def compute_3d_position_ids(self, **kwargs):
+        raise AttributeError("Exaone4.5 doesn't use 3D positions")
+
+    def get_vision_position_ids(self, **kwargs):
+        raise AttributeError("Exaone4.5 doesn't use 3D positions")
+
+    def get_rope_index(self, **kwargs):
+        raise AttributeError("Exaone4.5 doesn't use 3D positions")
 
 
 class Exaone4_5_ForConditionalGeneration(Exaone4_5_PreTrainedModel, Qwen2_5_VLForConditionalGeneration):
@@ -363,7 +378,6 @@ class Exaone4_5_ForConditionalGeneration(Exaone4_5_PreTrainedModel, Qwen2_5_VLFo
         pixel_values_videos: torch.FloatTensor | None = None,
         image_grid_thw: torch.LongTensor | None = None,
         video_grid_thw: torch.LongTensor | None = None,
-        second_per_grid_ts: torch.Tensor | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | CausalLMOutputWithPast:
@@ -376,8 +390,6 @@ class Exaone4_5_ForConditionalGeneration(Exaone4_5_PreTrainedModel, Qwen2_5_VLFo
             The temporal, height and width of feature shape of each image in LLM.
         video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
             The temporal, height and width of feature shape of each video in LLM.
-        second_per_grid_ts (`torch.Tensor` of shape `(num_videos)`, *optional*):
-            The time interval (in seconds) for each grid along the temporal dimension in the 3D position IDs.
 
         Example:
 
@@ -410,7 +422,6 @@ class Exaone4_5_ForConditionalGeneration(Exaone4_5_PreTrainedModel, Qwen2_5_VLFo
             pixel_values_videos=pixel_values_videos,
             image_grid_thw=image_grid_thw,
             video_grid_thw=video_grid_thw,
-            second_per_grid_ts=second_per_grid_ts,
             position_ids=position_ids,
             attention_mask=attention_mask,
             past_key_values=past_key_values,
@@ -449,7 +460,6 @@ class Exaone4_5_ForConditionalGeneration(Exaone4_5_PreTrainedModel, Qwen2_5_VLFo
         pixel_values_videos=None,
         image_grid_thw=None,
         video_grid_thw=None,
-        second_per_grid_ts=None,
         is_first_iteration=False,
         **kwargs,
     ):
@@ -463,7 +473,6 @@ class Exaone4_5_ForConditionalGeneration(Exaone4_5_PreTrainedModel, Qwen2_5_VLFo
             pixel_values_videos=pixel_values_videos,
             image_grid_thw=image_grid_thw,
             video_grid_thw=video_grid_thw,
-            second_per_grid_ts=second_per_grid_ts,
             use_cache=use_cache,
             is_first_iteration=is_first_iteration,
             **kwargs,
@@ -474,6 +483,9 @@ class Exaone4_5_ForConditionalGeneration(Exaone4_5_PreTrainedModel, Qwen2_5_VLFo
             model_inputs["pixel_values"] = None
             model_inputs["pixel_values_videos"] = None
         return model_inputs
+
+    def _prepare_position_ids_for_generation(self, **kwargs):
+        raise AttributeError("Exaone4.5 doesn't use 3D positions")
 
 
 class Exaone4_5_ProcessorKwargs(ProcessingKwargs, total=False):
@@ -486,8 +498,10 @@ class Exaone4_5_ProcessorKwargs(ProcessingKwargs, total=False):
     }
 
 
-class Exaone4_5_Processor(Qwen2_5_VLProcessor):
-    pass
+class Exaone4_5_Processor(Qwen2VLProcessor):
+    @property
+    def model_input_names(self):
+        return super().model_input_names
 
 
 __all__ = [

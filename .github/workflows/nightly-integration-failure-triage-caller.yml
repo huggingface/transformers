@@ -1,0 +1,42 @@
+name: Nightly integration-failure triage
+
+# Caller workflow — runs once a day and delegates to the reusable
+# integration-failure-triage workflow in transformers-ci, which computes the
+# failure triage report from the daily CI dataset and dispatches one Serge
+# fix task per failure group against this repo (huggingface/transformers).
+#
+on:
+  schedule:
+    - cron: "0 0 * * *"
+  # Allow manual triggers for testing. GitHub only lets users with write access
+  # to this repo run workflow_dispatch, so no extra authorization gate is needed.
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Compute the report but do not dispatch to Serge"
+        type: boolean
+        default: false
+
+# Permissions are granted here and bound the reusable workflow's job token.
+permissions:
+  # Read repo contents so the reusable workflow can check out code and read the
+  # CI dataset/config; no write access to the codebase is needed.
+  contents: read
+  # Read-only access to PRs — the triage report inspects existing pull requests
+  # (e.g. to correlate failures) but never creates or edits them.
+  pull-requests: read
+  # Write access to issues so Serge can open/update/comment on triage issues for
+  # each failure group.
+  issues: write
+  # Mint an OIDC token for keyless authentication to downstream services
+  # (e.g. the transformers-ci workflow / Serge) without long-lived secrets.
+  id-token: write
+
+# we will pin once the feature is stable.
+jobs:
+  triage:
+    if: github.repository == 'huggingface/transformers'
+    uses: huggingface/transformers-ci/.github/workflows/integration-failure-triage.yml@main # main
+    with:
+      dry_run: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run || false }}
+    secrets: inherit

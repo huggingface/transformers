@@ -37,6 +37,21 @@ if is_torch_available():
 logger = logging.get_logger(__name__)
 
 
+def to_local(t):
+    """Unwrap a `DTensor` to its local shard if needed; pass through otherwise.
+
+    Custom kernels (CUTLASS, CuteDSL, Triton) take raw tensor pointers and don't
+    understand `DTensor`, so weights wrapped by FSDP2 / EP need this unwrap before
+    they can be fed to the kernel. ``to_local()`` is autograd-aware on the train
+    path: backward rewraps the gradient as a DTensor matching each parameter's
+    placements.
+    """
+    if hasattr(torch.distributed, "tensor") and hasattr(torch.distributed.tensor, "DTensor"):
+        if isinstance(t, torch.distributed.tensor.DTensor):
+            return t.to_local()
+    return t
+
+
 def initialize_tensor_parallelism(
     tp_plan: str | dict[str, str] | None, tp_size: int | None = None, device_mesh=None, device_map=None
 ):
@@ -93,7 +108,6 @@ def initialize_tensor_parallelism(
             tp_device = torch.device(device_type)
             device_map = device_type or {}
 
-        tp_size = tp_size if tp_size is not None else torch.distributed.get_world_size()
         device_mesh = torch.distributed.init_device_mesh(tp_device.type, (tp_size,))
     else:
         if device_mesh.ndim > 1:
@@ -103,10 +117,9 @@ def initialize_tensor_parallelism(
                     "Please provide a valid `device_mesh`."
                 )
             device_mesh = device_mesh["tp"]
-        tp_size = device_mesh.size()
         device_map = torch.device(f"{device_mesh.device_type}:{int(os.environ['LOCAL_RANK'])}")
 
-    return device_map, device_mesh, tp_size
+    return device_map, device_mesh
 
 
 def replace_layer_number_by_wildcard(name: str) -> str:
@@ -659,6 +672,10 @@ class TensorParallelLayer:
     ) -> torch.Tensor:
         raise NotImplementedError
 
+    def validate_module(self, module: nn.Module, device_mesh, layer_name: str = ""):
+        """Raise if the module cannot be sharded with this style on the given mesh."""
+        pass
+
     def prepare_module_tp(self, module: nn.Module, device_mesh, **kwargs) -> nn.Module:
         distribute_module(
             module,
@@ -703,6 +720,16 @@ class ColwiseParallel(TensorParallelLayer):
     def __init__(self, gather_output: bool = False, **kwargs):
         super().__init__(**kwargs)
         self.gather_output = gather_output
+
+    def validate_module(self, module: nn.Module, device_mesh, layer_name: str = ""):
+        out_features = getattr(module, "out_features", None)
+        if self.gather_output and out_features is not None and out_features % device_mesh.size() != 0:
+            raise ValueError(
+                f"`{layer_name}` ({type(module).__name__} with out_features={out_features}) is sharded with "
+                f"'colwise_gather_output', which requires out_features to be divisible by the number of ranks "
+                f"({device_mesh.size()}) to all-gather equal-size shards. Resize the weight (e.g. "
+                f"`model.resize_token_embeddings` for LM heads) or override this module's entry in the tp_plan."
+            )
 
     def _prepare_input_fn(self, mod, inputs, device_mesh):
         input_tensor = inputs[0] if inputs else inputs
@@ -771,6 +798,25 @@ class ReplicatedWithGradAllReduce(TensorParallelLayer):
                     all_reduce_forward(param.grad, mesh)
 
         module.register_full_backward_hook(_backward_hook)
+
+
+class AllReduceParallel(TensorParallelLayer):
+    """All-reduce a module's forward output across the TP mesh. Use as a declarative
+    sync point at the boundary of a multi-arg module whose compute ends in a partial
+    sum (e.g. the lightning indexer's score sum before its top-k).
+    """
+
+    def _prepare_input_fn(self, mod, inputs, device_mesh):
+        return inputs
+
+    def _prepare_output_fn(self, mod, outputs, device_mesh):
+        return all_reduce_forward(outputs, device_mesh)
+
+    def shard_tensor(self, param, tensor_idx=None, device=None, dtype=None):
+        return param[...].to(device=device, dtype=dtype)
+
+    def prepare_module_tp(self, module, device_mesh, **kwargs):
+        distribute_module(module, device_mesh, output_fn=self._prepare_output_fn)
 
 
 class MlaKvAProjParallel(TensorParallelLayer):
@@ -973,8 +1019,8 @@ class EmbeddingParallel(TensorParallelLayer):
         if self.embedding_dim_sharding == 0 and hasattr(mod, "_input_mask"):
             input_mask = mod._input_mask
             # Use multiplication instead of in-place assignment to preserve gradients
-            mask_expanded = input_mask.unsqueeze(-1).expand_as(outputs)
-            outputs = outputs * (~mask_expanded).to(outputs.dtype)
+            mask = input_mask.unsqueeze(-1)
+            outputs = outputs * (~mask).to(outputs.dtype)
             del mod._input_mask
 
         return all_reduce_forward(outputs, device_mesh)
@@ -1095,7 +1141,7 @@ class RouterParallel(TensorParallelLayer):
         super().__init__(**kwargs)
 
     def _prepare_input_fn(self, mod, inputs, device_mesh):
-        return inputs[0] if inputs else inputs
+        return inputs
 
     def _prepare_output_fn(self, mod, outputs, device_mesh):
         """
@@ -1155,7 +1201,8 @@ class RouterParallel(TensorParallelLayer):
                 f"The number of experts must be divisible by number of ep_size: {num_experts} % {ep_size} != 0"
             )
         num_local_experts = num_experts // ep_size
-        router_logits, router_scores, router_indices = outputs
+        # Some routers return extra tensors after the standard logits/scores/indices, e.g. zaya's router state.
+        router_logits, router_scores, router_indices, *extra_outputs = outputs
         non_local_mask = (router_indices // num_local_experts) != ep_rank
         router_scores = router_scores.masked_fill(non_local_mask, 0.0)
         router_indices = router_indices.masked_fill(non_local_mask, -1)
@@ -1165,12 +1212,25 @@ class RouterParallel(TensorParallelLayer):
         else:
             router_indices = router_indices.masked_fill(router_indices > 0, 0).masked_fill(router_indices < 0, -1)
         router_indices = router_indices.masked_fill(router_indices == -1, num_local_experts)
-        return router_logits, router_scores, router_indices
+        return router_logits, router_scores, router_indices, *extra_outputs
 
     def shard_tensor(
         self, param: torch.Tensor, tensor_idx: int | None = None, device=None, dtype=None
     ) -> torch.Tensor:
         return param[...].to(device=device, dtype=dtype)
+
+
+class RouterParallelMegaMoe(RouterParallel):
+    """Router TP plan used with DeepGEMM Mega MoE.
+
+    Mega MoE handles EP dispatch inside the kernel and wants raw global expert ids
+    with unmasked routing weights, so the router doesn't pre-shard per EP rank like
+    `RouterParallel._prepare_output_fn` does. The quantizer's `update_tp_plan` swaps
+    `"ep_router"` → `"megamoe_router"` when `experts_implementation == "deepgemm_megamoe"`.
+    """
+
+    def _prepare_output_fn(self, mod, outputs, device_mesh):
+        return outputs
 
 
 class MoeTensorParalellExperts(TensorParallelLayer):
@@ -1198,7 +1258,7 @@ class MoeTensorParalellExperts(TensorParallelLayer):
         # and partial_expert_output is different on each GPU before all-reduce
         top_k_weights = all_reduce_backward(top_k_weights, device_mesh)
 
-        return (hidden_states, top_k_index, top_k_weights)
+        return hidden_states, top_k_index, top_k_weights
 
     def _prepare_output_fn(self, mod, outputs, device_mesh):
         # all_reduce_forward to sum partial expert outputs across GPUs
@@ -1209,6 +1269,32 @@ class MoeTensorParalellExperts(TensorParallelLayer):
     ) -> torch.Tensor:
         # This class doesn't shard tensors - sharding is handled by packed_colwise/rowwise
         # on the individual weight tensors (gate_up_proj/down_proj)
+        return param[...].to(device=device, dtype=dtype)
+
+
+class MoeTensorParalellMegaMoeExperts(TensorParallelLayer):
+    """TP layer for DeepGEMM Mega MoE experts.
+
+    Mega MoE is inference-only (the kernel has no backward) and handles EP dispatch +
+    combine + per-rank token sharding internally — so we skip the gradient-sync hooks
+    that the regular `MoeTensorParalellExperts` would apply, and we forward the EP
+    `process_group` into the module so the symm-buffer rendezvous can run on first
+    forward. The quantizer's `update_tp_plan` swaps the experts plan key from
+    `"moe_tp_experts"` to `"megamoe_experts"` when
+    `from_pretrained(..., experts_implementation="deepgemm_megamoe")`.
+    """
+
+    def _prepare_input_fn(self, mod, inputs, device_mesh):
+        hidden_states, top_k_index, top_k_weights = inputs[0], inputs[1], inputs[2]
+        return hidden_states, top_k_index, top_k_weights, device_mesh.get_group()
+
+    def _prepare_output_fn(self, mod, outputs, device_mesh):
+        # Kernel returned the fully-combined gathered output; no further reduction.
+        return outputs
+
+    def shard_tensor(
+        self, param: torch.Tensor, tensor_idx: int | None = None, device=None, dtype=None
+    ) -> torch.Tensor:
         return param[...].to(device=device, dtype=dtype)
 
 
@@ -1250,10 +1336,13 @@ class ParallelInterface(GeneralInterface):
             "sequence_parallel": SequenceParallel(),
             "grouped_gemm": GroupedGemmParallel(),
             "ep_router": RouterParallel(),
+            "megamoe_router": RouterParallelMegaMoe(),
             "moe_tp_experts": MoeTensorParalellExperts(),
+            "megamoe_experts": MoeTensorParalellMegaMoeExperts(),
             "moe_identity_expert": MoeIdentityExpertParallel(),
             "replicated_with_grad_allreduce": ReplicatedWithGradAllReduce(),
             "mla_kv_a_proj": MlaKvAProjParallel(),
+            "all_reduce": AllReduceParallel(),
         }
         if is_torch_available() and _torch_distributed_available
         else {}
@@ -1274,6 +1363,7 @@ class ParallelInterface(GeneralInterface):
         "sequence_parallel": None,
         "replicated_with_grad_allreduce": None,
         "mla_kv_a_proj": None,
+        "all_reduce": None,
     }
 
     # Bias sharding: colwise shards bias, rowwise doesn't (bias is replicated and all-reduced)
@@ -1289,6 +1379,7 @@ class ParallelInterface(GeneralInterface):
         "sequence_parallel": None,
         "replicated_with_grad_allreduce": None,
         "mla_kv_a_proj": None,
+        "all_reduce": None,
     }
 
     @classmethod
@@ -1433,6 +1524,7 @@ def add_tensor_parallel_hooks_to_module(
     """
     if current_module_plan is not None:
         tp_layer = ALL_PARALLEL_STYLES[current_module_plan]
+        tp_layer.validate_module(module, device_mesh, layer_name)
         try:
             tp_layer.prepare_module_tp(module, device_mesh, config=model.config)
         except NotImplementedError as e:
@@ -1530,9 +1622,9 @@ def verify_tp_plan(expected_keys: list[str], tp_plan: dict[str, str] | None):
         logger.warning(f"The following layers were not sharded: {', '.join(unsharded_layers)}")
 
 
-def distribute_model(model, tp_plan, distributed_config, device_mesh, tp_size):
-    """Distribute a model according to the TP plan."""
-    model._tp_size = tp_size
+def apply_tensor_parallelism(model, tp_plan, distributed_config, device_mesh):
+    """Apply tensor parallelism to a model according to the TP plan."""
+    model._tp_size = distributed_config.tp_size
     model._device_mesh = device_mesh
     if distributed_config is not None:
         if isinstance(distributed_config, dict):
