@@ -1188,12 +1188,11 @@ class GraniteSpeechNarForCTC(GraniteSpeechNarPreTrainedModel):
             )
 
             if self.config.ce_loss_lambda > 0.0:
-                # Auxiliary cross-entropy against the model's own (insertion-slotted) CTC predictions.
                 ce_targets = torch.cat(model_out.inserted_ctc_token_ids)
                 ce_loss = nn.functional.cross_entropy(
                     logits.squeeze(0), ce_targets.long(), reduction="mean", ignore_index=-100
                 )
-                loss = loss + self.config.ce_loss_lambda * ce_loss
+                loss += self.config.ce_loss_lambda * ce_loss
 
             if self.config.encoder_ctc_loss_lambda > 0.0:
                 bpe_lengths = model_out.bpe_lengths
@@ -1202,7 +1201,7 @@ class GraniteSpeechNarForCTC(GraniteSpeechNarPreTrainedModel):
                     nn.functional.ctc_loss(bpe_log_probs.transpose(0, 1), input_lengths=bpe_lengths, **ctc_loss_kwargs)
                     / bpe_lengths.sum()
                 )
-                loss = loss + self.config.encoder_ctc_loss_lambda * encoder_ctc_loss
+                loss += self.config.encoder_ctc_loss_lambda * encoder_ctc_loss
 
         return GraniteSpeechNarOutput(
             loss=loss,
