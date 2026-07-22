@@ -24,6 +24,9 @@ from transformers import (
     AutoProcessor,
     LocateAnythingConfig,
     LocateAnythingForConditionalGeneration,
+    LocateAnythingModel,
+    LocateAnythingVisionConfig,
+    LocateAnythingVisionModel,
     is_torch_available,
 )
 from transformers.testing_utils import backend_empty_cache, require_torch, slow, torch_device
@@ -123,8 +126,31 @@ class LocateAnythingVisionText2TextModelTester:
 
 
 @require_torch
+class LocateAnythingVisionModelTest(unittest.TestCase):
+    all_model_classes = (LocateAnythingVisionModel,) if is_torch_available() else ()
+
+    def test_model(self):
+        config = LocateAnythingVisionConfig(
+            hidden_size=32,
+            intermediate_size=37,
+            num_hidden_layers=2,
+            num_attention_heads=4,
+            patch_size=14,
+            init_pos_emb_height=8,
+            init_pos_emb_width=8,
+            spatial_merge_size=2,
+        )
+        model = LocateAnythingVisionModel(config).to(torch_device).eval()
+        pixel_values = floats_tensor([4, 3, 14, 14])
+        image_grid_thw = torch.tensor([[1, 2, 2]], device=torch_device)
+        with torch.no_grad():
+            output = model(pixel_values=pixel_values, image_grid_thw=image_grid_thw)
+        self.assertEqual(output.last_hidden_state.shape, (4, config.hidden_size))
+
+
+@require_torch
 class LocateAnythingModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
-    all_model_classes = (LocateAnythingForConditionalGeneration,) if is_torch_available() else ()
+    all_model_classes = (LocateAnythingModel, LocateAnythingForConditionalGeneration) if is_torch_available() else ()
     pipeline_model_mapping = {"image-text-to-text": LocateAnythingForConditionalGeneration}
     _is_composite = True
 
