@@ -352,7 +352,7 @@ class VibeVoiceModel(VoxtralModel):
 
         # adjust padding mask according to tokenizer compression
         num_audio_tokens = torch.ceil(padding_mask.sum(dim=-1) / self.config.audio_config.hop_length).to(torch.int64)
-        padding_mask = torch.arange(max(num_audio_tokens)) < num_audio_tokens[:, None].cpu()
+        padding_mask = torch.arange(num_audio_tokens.max(), device=num_audio_tokens.device) < num_audio_tokens[:, None]
 
         return BaseModelOutputWithPooling(
             last_hidden_state=acoustic_features[padding_mask],
