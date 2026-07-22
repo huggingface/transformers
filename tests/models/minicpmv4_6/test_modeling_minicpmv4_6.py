@@ -291,10 +291,6 @@ class MiniCPMV4_6ModelTest(VLMModelTest, unittest.TestCase):
     def test_flash_attn_2_inference_equivalence_right_padding(self):
         pass
 
-    @unittest.skip("Model doesn't support scaling with given head dim, todo: fix later")
-    def test_model_rope_scaling_frequencies(self):
-        pass
-
     def _get_conv_state_shape(self, batch_size: int, config):
         num_v_heads = config.linear_num_value_heads
         num_k_heads = config.linear_num_key_heads
