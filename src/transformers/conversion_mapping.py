@@ -974,27 +974,6 @@ def _build_checkpoint_conversion_mapping():
             ),
             WeightRenaming(source_patterns=r"\.share_expert\.", target_patterns=".mlp.shared_experts."),
             # ---- Tensor operations (run after all renames) ----
-            # Vision in_proj_weight → q/k/v split (Chunk dim=0 into 3 equal parts).
-            # Use (\d+) capturing group so the layer index round-trips correctly (.*  would
-            # produce a literal "*" in the saved key, breaking reload).
-            WeightConverter(
-                source_patterns=r"vision_model.layers.(\d+).self_attn.in_proj_weight",
-                target_patterns=[
-                    r"vision_model.layers.(\d+).self_attn.q_proj.weight",
-                    r"vision_model.layers.(\d+).self_attn.k_proj.weight",
-                    r"vision_model.layers.(\d+).self_attn.v_proj.weight",
-                ],
-                operations=[Chunk(dim=0)],
-            ),
-            WeightConverter(
-                source_patterns=r"vision_model.layers.(\d+).self_attn.in_proj_bias",
-                target_patterns=[
-                    r"vision_model.layers.(\d+).self_attn.q_proj.bias",
-                    r"vision_model.layers.(\d+).self_attn.k_proj.bias",
-                    r"vision_model.layers.(\d+).self_attn.v_proj.bias",
-                ],
-                operations=[Chunk(dim=0)],
-            ),
             # MoE gate_proj + up_proj → gate_up_proj (already stacked per layer, concat dim=1)
             WeightConverter(
                 source_patterns=[r"moe.gate_proj.weight", r"moe.up_proj.weight"],
@@ -1031,6 +1010,32 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(source_patterns=r"\.attn\.", target_patterns=".self_attn."),
             WeightRenaming(source_patterns=r"\.ln_1\.", target_patterns=".layernorm_before."),
             WeightRenaming(source_patterns=r"\.ln_2\.", target_patterns=".layernorm_after."),
+            # in_proj_weight/bias → q/k/v split (Chunk dim=0 into 3 equal parts). No layer-index
+            # capturing group needed: scoped to this vision submodule, the pattern only ever matches
+            # `layers.N.self_attn.in_proj_{weight,bias}` keys, so the plain substring match leaves the
+            # `layers.N.` prefix untouched and carried over as-is (same convention as the
+            # `in_proj_weight`/`in_proj_bias` unfusing used elsewhere, e.g. RfDetr). This can't be
+            # unscoped in the "step3p7" entry above: a bare `self_attn.in_proj_weight` substring there
+            # would also match (and corrupt) the text decoder's already-separate
+            # `language_model.layers.*.self_attn.q_proj.weight` keys.
+            WeightConverter(
+                source_patterns=r"self_attn.in_proj_weight",
+                target_patterns=[
+                    r"self_attn.q_proj.weight",
+                    r"self_attn.k_proj.weight",
+                    r"self_attn.v_proj.weight",
+                ],
+                operations=[Chunk(dim=0)],
+            ),
+            WeightConverter(
+                source_patterns=r"self_attn.in_proj_bias",
+                target_patterns=[
+                    r"self_attn.q_proj.bias",
+                    r"self_attn.k_proj.bias",
+                    r"self_attn.v_proj.bias",
+                ],
+                operations=[Chunk(dim=0)],
+            ),
         ],
         "colqwen2": [PrefixChange(prefix_to_remove="model", model_prefix="vlm")],
         "shieldgemma2": [PrefixChange(prefix_to_add="model", model_prefix="model")],
