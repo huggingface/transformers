@@ -20,7 +20,7 @@ import string
 import time
 from collections.abc import AsyncIterator, Awaitable
 from typing import Annotated, Any
-from urllib.parse import urljoin, urlparse
+from urllib.parse import urljoin, urlparse, urlunparse
 
 import httpx
 import requests
@@ -107,7 +107,7 @@ def get_service_root_url(base_url: str) -> str:
     """Return the service root of `base_url`, where the serve management endpoints live."""
     parsed = urlparse(base_url)
     path = parsed.path.rstrip("/").removesuffix("/v1")
-    return parsed._replace(path=path, query="", fragment="").geturl()
+    return urlunparse((parsed.scheme, parsed.netloc, path, "", "", ""))
 
 
 class RichInterface:
