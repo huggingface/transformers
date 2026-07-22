@@ -715,15 +715,20 @@ class SplitFusedMLAGate(ConversionOps):
         **kwargs,
     ) -> dict[str, torch.Tensor]:
         tensors = next(iter(input_dict.values()))
-        fused = tensors[0] if isinstance(tensors, list) else tensors
+        weight = tensors[0] if isinstance(tensors, list) else tensors
         num_heads = config.num_attention_heads
         qk_head_dim = config.qk_head_dim
         v_head_dim = config.v_head_dim
         q_lora_rank = config.q_lora_rank
-        fused = fused.view(num_heads, qk_head_dim + v_head_dim, 2 * q_lora_rank)
-        q_weight = fused[:, :qk_head_dim, :q_lora_rank].reshape(num_heads * qk_head_dim, q_lora_rank)
-        gate_weight = fused[:, qk_head_dim:, q_lora_rank:].reshape(num_heads * v_head_dim, q_lora_rank)
-        return dict(zip(target_patterns, [q_weight, gate_weight]))
+        q_target, gate_target = target_patterns[0], target_patterns[1]
+        # An already-unfused `q_b_proj` (e.g. a transformers-saved state dict) passes through unchanged;
+        # `g_proj` then loads from its own key. Only the fused vLLM layout (`2 * q_lora_rank` columns) is split.
+        if weight.shape[-1] != 2 * q_lora_rank:
+            return {q_target: weight}
+        weight = weight.view(num_heads, qk_head_dim + v_head_dim, 2 * q_lora_rank)
+        q_weight = weight[:, :qk_head_dim, :q_lora_rank].reshape(num_heads * qk_head_dim, q_lora_rank)
+        gate_weight = weight[:, qk_head_dim:, q_lora_rank:].reshape(num_heads * v_head_dim, q_lora_rank)
+        return {q_target: q_weight, gate_target: gate_weight}
 
     @property
     def reverse_op(self) -> ConversionOps:

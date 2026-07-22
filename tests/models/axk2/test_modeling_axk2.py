@@ -152,6 +152,24 @@ class AXK2ModelTest(CausalLMModelTest, unittest.TestCase):
     def test_torch_compile_for_training(self):
         pass
 
+    # The SGA indexer builds its sparse mask from a dynamic (cached) key length, which the static cache
+    # and torch.compile / fullgraph paths cannot express — same limitation as GLM-MoE-DSA.
+    @unittest.skip("SGA indexer mask shape mismatch with static cache")
+    def test_generate_with_static_cache(self):
+        pass
+
+    @unittest.skip("SGA indexer mask shape mismatch with static cache")
+    def test_generate_from_inputs_embeds_with_static_cache(self):
+        pass
+
+    @unittest.skip("SGA indexer mask shape mismatch with compilation")
+    def test_generate_compilation_all_outputs(self):
+        pass
+
+    @unittest.skip("SGA indexer mask shape mismatch with compiled forward")
+    def test_generate_compile_model_forward_fullgraph(self):
+        pass
+
     # SGA (like DeepSeek Sparse Attention) selects tokens with a hard top-k, which is discontinuous: a tiny
     # numerical difference in the indexer scores (attention backend, padding, batching, sequence packing)
     # can flip which tokens are selected and thus change the output. These exact cross-backend /

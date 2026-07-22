@@ -1661,6 +1661,17 @@ class TestSplitFusedMLAGate(unittest.TestCase):
         self.assertEqual(tuple(refused.shape), tuple(fused.shape))
         torch.testing.assert_close(refused, fused)
 
+    def test_already_unfused_passthrough(self):
+        # An already-unfused q_b_proj (transformers-saved state dict) must pass through untouched, so
+        # load/save round-trips work; g_proj then loads from its own key.
+        config = self._config()
+        nh, qk, qlr = config.num_attention_heads, config.qk_head_dim, config.q_lora_rank
+        unfused = torch.randn(nh * qk, qlr)
+        q_key, gate_key = "self_attn.q_b_proj.weight", "self_attn.g_proj.weight"
+        out = SplitFusedMLAGate().convert({q_key: [unfused]}, [q_key], [q_key, gate_key], config=config)
+        self.assertEqual(set(out), {q_key})
+        torch.testing.assert_close(out[q_key], unfused)
+
     def test_reverse_ops(self):
         self.assertIsInstance(SplitFusedMLAGate().reverse_op, FuseMLAGate)
         self.assertIsInstance(FuseMLAGate().reverse_op, SplitFusedMLAGate)
