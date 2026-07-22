@@ -127,10 +127,19 @@ class Phi3Attention(nn.Module):
         hidden_shape = (*input_shape, -1, self.head_dim)
 
         qkv = self.qkv_proj(hidden_states)
-        query_pos = self.config.num_attention_heads * self.head_dim
+
+        tp_degree = (
+            self.qkv_proj.weight.device_mesh.size(0)
+            if isinstance(self.qkv_proj.weight, torch.distributed.tensor.DTensor)
+            else 1
+        )
+        tp_sharded_attn_heads = self.config.num_attention_heads // tp_degree
+        tp_sharded_kv_heads = self.num_key_value_heads // tp_degree
+
+        query_pos = tp_sharded_attn_heads * self.head_dim
         query_states = qkv[..., :query_pos]
-        key_states = qkv[..., query_pos : query_pos + self.num_key_value_heads * self.head_dim]
-        value_states = qkv[..., query_pos + self.num_key_value_heads * self.head_dim :]
+        key_states = qkv[..., query_pos : query_pos + tp_sharded_kv_heads * self.head_dim]
+        value_states = qkv[..., query_pos + tp_sharded_kv_heads * self.head_dim :]
 
         query_states = query_states.view(hidden_shape).transpose(1, 2)
         key_states = key_states.view(hidden_shape).transpose(1, 2)
