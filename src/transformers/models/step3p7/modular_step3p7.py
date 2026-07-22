@@ -43,19 +43,16 @@ from ...utils.output_capturing import capture_outputs
 from ...vision_utils import get_vision_position_ids
 from ..deepseek_ocr2.modeling_deepseek_ocr2 import DeepseekOcr2ForConditionalGeneration, DeepseekOcr2Model
 from ..deepseek_v4.modeling_deepseek_v4 import DeepseekV4Experts, DeepseekV4MLP
-from ..gemma3.modeling_gemma3 import Gemma3TextModel
+from ..gemma3.modeling_gemma3 import Gemma3Attention, Gemma3TextModel
 from ..gemma4.modeling_gemma4 import Gemma4VisionRotaryEmbedding
-from ..laguna.modeling_laguna import LagunaRotaryEmbedding
+from ..laguna.modeling_laguna import LagunaRotaryEmbedding, apply_rotary_pos_emb, eager_attention_forward
 from ..minimax_m3_vl.modeling_minimax_m3_vl import (
-    MiniMaxM3VLAttention,
     MiniMaxM3VLDecoderLayer,
     MiniMaxM3VLRMSNorm,
     MiniMaxM3VLSparseMoeBlock,
     MiniMaxM3VLTopKRouter,
     MiniMaxM3VLVisionAttention,
     MiniMaxM3VLVisionMLP,
-    apply_rotary_pos_emb,
-    eager_attention_forward,
 )
 from ..siglip.configuration_siglip import SiglipVisionConfig
 from ..siglip.modeling_siglip import SiglipVisionEmbeddings
@@ -152,7 +149,10 @@ class Step3p7TextConfig(PreTrainedConfig):
         `["full_attention", "sliding_attention", "sliding_attention", "sliding_attention"]` (the
         trailing MTP entry is dropped). Persisted as `self.num_nextn_predict_layers` (rather than
         only consumed here and discarded) so `Step3p7TextModel` can compute which trailing layer
-        indices are MTP layers at load time, instead of a hardcoded checkpoint-specific range.
+        indices are MTP layers at load time, instead of a hardcoded checkpoint-specific range. Also
+        exposed generically as `num_mtp_layers` (via `attribute_map`, the same convention used by
+        `DeepseekV3Config`/`Glm4MoeConfig`), which lets `PreTrainedConfig.get_mtp_config()` build the
+        real MTP submodel for `generate(..., use_mtp=True)`.
     rope_theta (`float | list[float]`, *optional*, defaults to 10000.0):
         Legacy hub-config kwarg. Real checkpoints give one value *per decoder layer* rather than one
         value for the whole model; since it only ever varies by `layer_types[layer_idx]`, this is
@@ -172,6 +172,19 @@ class Step3p7TextConfig(PreTrainedConfig):
     attention_other_setting (`dict`, *optional*):
         Legacy hub-config dict overriding `num_attention_heads`/`num_key_value_heads`/`head_dim` for
         `"sliding_attention"` layers (real checkpoints use a different head count per attention type).
+    num_attention_heads_per_layer (`list[int]`, *optional*):
+        Resolved (not a hub-config kwarg) per-layer head count, one entry per decoder layer: each
+        entry is `num_sliding_attention_heads` or `num_attention_heads` depending on
+        `layer_types[layer_idx]`. Computed once here (the same pattern `LagunaConfig` uses) so
+        `Step3p7Attention` takes its head count as a plain constructor argument instead of picking
+        between the two scalar fields itself.
+    query_pre_attn_scalar (`int` or `float`, *optional*):
+        `Gemma3Attention.__init__` hook point (`Step3p7Attention` inherits from it): defaults to
+        `head_dim`, giving the standard `head_dim ** -0.5` attention scaling rather than Gemma3's own
+        hyperparameter of the same name.
+    attn_logit_softcapping (`float`, *optional*):
+        `Gemma3Attention.__init__` hook point; unused by Step3p7's own `eager_attention_forward`, so
+        always `None` (no softcapping).
     use_head_wise_attn_gate (`bool`, *optional*, defaults to `False`):
         Legacy hub-config kwarg from the original checkpoint; not currently read by the modeling code.
     use_moe_router_bias (`bool`, *optional*, defaults to `False`):
@@ -202,6 +215,7 @@ class Step3p7TextConfig(PreTrainedConfig):
         "moe_num_experts": "n_routed_experts",
         "moe_top_k": "num_experts_per_tok",
         "share_expert_dims": "share_expert_dim",
+        "num_mtp_layers": "num_nextn_predict_layers",
     }
     # Copied (not inherited) from `MiniMaxM3VLTextConfig`: `Step3p7Attention`/`Step3p7SparseMoeBlock`
     # reuse its `q_proj`/`k_proj`/`v_proj`/`o_proj` and `experts.gate_up_proj`/`down_proj`/`gate`
@@ -247,10 +261,16 @@ class Step3p7TextConfig(PreTrainedConfig):
     mlp_layer_types: list[str] | None = None
     sliding_window: int | None = None
     num_sliding_attention_heads: int | None = None
+    num_attention_heads_per_layer: list[int] | None = None
     attention_other_setting: dict | None = None
     pad_token_id: int = 1
     attention_dropout: float = 0.0
     attention_bias: bool = False
+    # `Gemma3Attention.__init__` hook points (`Step3p7Attention` inherits from it): `None` resolves
+    # to the standard `head_dim ** -0.5` scaling below instead of Gemma3's own hyperparameter, and
+    # Step3p7 never applies logit softcapping (its own `eager_attention_forward` doesn't read it).
+    query_pre_attn_scalar: int | float | None = None
+    attn_logit_softcapping: float | None = None
     use_head_wise_attn_gate: bool = False
     use_moe_router_bias: bool = False
     moe_router_activation: str = "softmax"
@@ -318,6 +338,15 @@ class Step3p7TextConfig(PreTrainedConfig):
                 )
             else:
                 self.num_sliding_attention_heads = self.num_attention_heads
+
+        if self.num_attention_heads_per_layer is None:
+            self.num_attention_heads_per_layer = [
+                self.num_sliding_attention_heads if layer_type == "sliding_attention" else self.num_attention_heads
+                for layer_type in self.layer_types
+            ]
+
+        if self.query_pre_attn_scalar is None:
+            self.query_pre_attn_scalar = self.head_dim
 
         super().__post_init__(**kwargs)
 
@@ -887,6 +916,11 @@ class Step3p7RMSNorm(MiniMaxM3VLRMSNorm):
     pass
 
 
+def _swiglu_clamp(gate: torch.Tensor, up: torch.Tensor, act_fn: Callable, limit: float) -> torch.Tensor:
+    """Step3p7 order: SiLU then clamp (DeepseekV4 clamps before SiLU)."""
+    return act_fn(gate).clamp(max=limit) * up.clamp(min=-limit, max=limit)
+
+
 class Step3p7MLP(DeepseekV4MLP):
     def __init__(self, config, intermediate_size=None, swiglu_limit=None):
         super().__init__(config)
@@ -894,15 +928,7 @@ class Step3p7MLP(DeepseekV4MLP):
         self.limit = float("inf") if swiglu_limit is None else swiglu_limit
 
     def forward(self, x):
-        # silu-then-clamp (Step3p7 order); DeepseekV4MLP clamps before act_fn
-        gate = self.act_fn(self.gate_proj(x)).clamp(max=self.limit)
-        up = self.up_proj(x).clamp(min=-self.limit, max=self.limit)
-        return self.down_proj(gate * up)
-
-
-class Step3p7SharedExpert(Step3p7MLP):
-    def __init__(self, config, swiglu_limit=None):
-        super().__init__(config, intermediate_size=config.share_expert_dim, swiglu_limit=swiglu_limit)
+        return self.down_proj(_swiglu_clamp(self.gate_proj(x), self.up_proj(x), self.act_fn, self.limit))
 
 
 @no_inherit_decorator
@@ -915,11 +941,8 @@ class Step3p7Experts(DeepseekV4Experts):
         self.limit = float("inf") if swiglu_limit is None else swiglu_limit
 
     def _apply_gate(self, gate_up: torch.Tensor) -> torch.Tensor:
-        # silu-then-clamp (Step3p7 order); DeepseekV4 clamps before act_fn
         gate, up = gate_up.chunk(2, dim=-1)
-        gate = self.act_fn(gate).clamp(max=self.limit)
-        up = up.clamp(min=-self.limit, max=self.limit)
-        return gate * up
+        return _swiglu_clamp(gate, up, self.act_fn, self.limit)
 
 
 class Step3p7TopKRouter(MiniMaxM3VLTopKRouter):
@@ -933,27 +956,23 @@ class Step3p7SparseMoeBlock(MiniMaxM3VLSparseMoeBlock):
         swiglu_limit_shared = (config.swiglu_limits_shared[layer_idx] or None) if config.swiglu_limits_shared else None
         self.gate = Step3p7TopKRouter(config)
         self.experts = Step3p7Experts(config, swiglu_limit=swiglu_limit)
-        self.shared_experts = Step3p7SharedExpert(config, swiglu_limit=swiglu_limit_shared)
+        self.shared_experts = Step3p7MLP(
+            config, intermediate_size=config.share_expert_dim, swiglu_limit=swiglu_limit_shared
+        )
         self.routed_scaling_factor = getattr(config, "moe_router_scaling_factor", 1.0)
 
 
-class Step3p7Attention(MiniMaxM3VLAttention):
-    def __init__(self, config: Step3p7TextConfig, layer_idx: int):
+class Step3p7Attention(Gemma3Attention):
+    def __init__(self, config: Step3p7TextConfig, layer_idx: int, num_attention_heads: int):
+        self.num_attention_heads = num_attention_heads
         super().__init__(config, layer_idx)
-        layer_type = config.layer_types[layer_idx]
-        self.sliding_window = config.sliding_window if layer_type == "sliding_attention" else None
-        self.num_attention_heads = (
-            config.num_sliding_attention_heads if layer_type == "sliding_attention" else config.num_attention_heads
+        self.num_key_value_groups = self.num_attention_heads // config.num_key_value_heads
+        self.q_proj = nn.Linear(
+            config.hidden_size, self.num_attention_heads * self.head_dim, bias=config.attention_bias
         )
-        if self.num_attention_heads != config.num_attention_heads:
-            # Sliding-attention layers can use a different (larger) head count than full-attention
-            # layers in the real checkpoint (e.g. 96 vs 64 heads, same 8 KV heads/head_dim), so
-            # q_proj/o_proj/num_key_value_groups from `super().__init__` (sized off
-            # `config.num_attention_heads` alone) must be rebuilt to match.
-            q_size = self.num_attention_heads * self.head_dim
-            self.q_proj = nn.Linear(config.hidden_size, q_size, bias=False)
-            self.o_proj = nn.Linear(q_size, config.hidden_size, bias=False)
-            self.num_key_value_groups = self.num_attention_heads // config.num_key_value_heads
+        self.o_proj = nn.Linear(
+            self.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
+        )
         self.g_proj = nn.Linear(config.hidden_size, self.num_attention_heads, bias=False)
 
     def forward(
@@ -1006,7 +1025,7 @@ class Step3p7DecoderLayer(MiniMaxM3VLDecoderLayer):
         nn.Module.__init__(self)
         self.hidden_size = config.hidden_size
         self.layer_idx = layer_idx
-        self.self_attn = Step3p7Attention(config, layer_idx)
+        self.self_attn = Step3p7Attention(config, layer_idx, config.num_attention_heads_per_layer[layer_idx])
         self.attention_type = config.layer_types[layer_idx]
 
         swiglu_limit_shared = (config.swiglu_limits_shared[layer_idx] or None) if config.swiglu_limits_shared else None
