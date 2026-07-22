@@ -434,7 +434,6 @@ class MambaPreTrainedModel(PreTrainedModel):
     base_model_prefix = "backbone"
     _no_split_modules = ["MambaBlock", "MambaMixer"]
     supports_gradient_checkpointing = True
-    _can_compile_fullgraph = True
     _is_stateful = True
 
     @torch.no_grad()
