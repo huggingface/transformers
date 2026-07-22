@@ -735,7 +735,9 @@ class RotaryEmbeddingConfigMixin:
         rope_theta = getattr(self, "rope_theta", None)
         partial_rotary_factor = getattr(self, "partial_rotary_factor", None)
         rope_parameters = getattr(self, "rope_parameters", None) or {}
-        layer_types = getattr(self, "layer_types", None)
+
+        # Deepseekv4 has `layer_types` which are different from `_rope_type_labels`
+        layer_types = getattr(self, "_rope_type_labels", getattr(self, "layer_types", None))
 
         # Case 0: no RoPE params defined
         if not (rope_parameters or rope_theta):

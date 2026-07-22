@@ -5768,7 +5768,9 @@ class ModelTesterMixin(ExportTesterMixin):
 
         scaling_factor = 10
         short_input_length = 10
-        partial_rotary_factor = text_config.rope_parameters.get("partial_rotary_factor", 1.0)
+        partial_rotary_factor = text_config.rope_parameters.get(
+            "partial_rotary_factor", getattr(text_config, "partial_rotary_factor", 1.0)
+        )
         long_input_length = int(text_config.max_position_embeddings * 1.5)
         is_nested_rope = (
             "rope_theta" not in text_config.rope_parameters.keys()
@@ -5845,7 +5847,8 @@ class ModelTesterMixin(ExportTesterMixin):
         if not is_nested_rope:
             self.assertTrue((ntk_scaling_rope.inv_freq <= original_rope.inv_freq).all())
         else:
-            for layer_type in text_config.layer_types:
+            layer_types = getattr(config, "_rope_type_labels", getattr(config, "layer_types"))
+            for layer_type in layer_types:
                 self.assertTrue(
                     (
                         getattr(ntk_scaling_rope, f"{layer_type}_inv_freq")
@@ -6013,6 +6016,7 @@ def _set_config_rope_params(config: PreTrainedConfig, rope_params: dict) -> bool
     config.rope_parameters = getattr(config, "rope_parameters", {}) or {}
 
     # Nested rope parameters per layer type, not all models with `layer-types` use different RoPE thus we check `issubset`
+    # Deepseekv4 has `layer_types` which are different from `_rope_type_labels`
     layer_types = getattr(config, "_rope_type_labels", getattr(config, "layer_types", None))
     if layer_types is not None and set(config.rope_parameters.keys()).issubset(layer_types):
         for layer_type in layer_types:

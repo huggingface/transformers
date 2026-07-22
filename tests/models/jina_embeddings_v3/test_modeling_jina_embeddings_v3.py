@@ -59,7 +59,7 @@ class JinaEmbeddingsV3ModelTester:
         hidden_act="gelu",
         hidden_dropout_prob=0.1,
         attention_probs_dropout_prob=0.1,
-        max_position_embeddings=8,
+        max_position_embeddings=12,
         type_vocab_size=1,
         type_sequence_label_size=2,
         initializer_range=0.02,

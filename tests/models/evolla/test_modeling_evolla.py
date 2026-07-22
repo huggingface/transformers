@@ -53,12 +53,12 @@ class EvollaModelTester:
         text_vocab_size=100,
         protein_seq_length=10,
         protein_vocab_size=20,
-        hidden_size=4,  # llama hidden size
+        hidden_size=8,  # llama hidden size
         intermediate_size=7,  # llama intermediate size
         num_hidden_layers=1,  # llama hidden layers
         num_attention_heads=2,  # llama attention heads
         num_key_value_heads=2,  # llama key value heads
-        protein_hidden_size=8,  # protein encoder hidden size
+        protein_hidden_size=16,  # protein encoder hidden size
         protein_num_hidden_layers=1,  # protein encoder hidden layers
         protein_num_attention_heads=4,  # protein encoder attention heads
         protein_intermediate_size=11,  # protein encoder intermediate size

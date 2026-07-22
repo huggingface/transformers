@@ -147,6 +147,7 @@ class HiggsAudioV2ModelTester:
             dim=1,
         )
 
+        input_ids[input_ids == self.audio_token_id] = self.pad_token_id
         input_ids[audio_token_mask.bool()] = self.audio_token_id
 
         audio_seq_lengths = audio_token_mask.sum(-1)
