@@ -121,7 +121,10 @@ class Qwen3OmniMoePreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
     _no_split_modules = [
         "Qwen3OmniMoeThinkerTextDecoderLayer",
+        "Qwen3OmniMoeAudioEncoderLayer",
         "Qwen3OmniMoeVisionBlock",
+        "Qwen3OmniMoeTalkerDecoderLayer",
+        "Qwen3OmniMoeTalkerCodePredictorModelForConditionalGeneration",
     ]
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = True
@@ -1084,7 +1087,6 @@ class Qwen3OmniMoeVisionEncoder(Qwen3OmniMoePreTrainedModel):
         "hidden_states": Qwen3OmniMoeVisionBlock,
         "attentions": Qwen3OmniMoeVisionAttention,
     }
-    _no_split_modules = ["Qwen3OmniMoeVisionBlock"]
 
     def __init__(self, config, *inputs, **kwargs) -> None:
         super().__init__(config, *inputs, **kwargs)
@@ -2850,7 +2852,6 @@ class Qwen3OmniMoeTalkerModel(Qwen3OmniMoePreTrainedModel):
     input_modalities = ("audio",)
     config_class = Qwen3OmniMoeTalkerTextConfig
     base_model_prefix = "talker.model"
-    _no_split_modules = ["Qwen3OmniMoeTalkerDecoderLayer"]
     _can_record_outputs = {
         "hidden_states": Qwen3OmniMoeTalkerDecoderLayer,
         "attentions": Qwen3OmniMoeThinkerTextAttention,
@@ -2981,7 +2982,6 @@ class Qwen3OmniMoeTalkerForConditionalGeneration(Qwen3OmniMoeThinkerTextPreTrain
     _pp_plan = {"codec_head": (["hidden_states"], ["logits"])}
     config_class = Qwen3OmniMoeTalkerConfig
     base_model_prefix = "talker"
-    _no_split_modules = ["Qwen3OmniMoeTalkerCodePredictorModelForConditionalGeneration"]
     _can_record_outputs = {
         "attentions": Qwen3OmniMoeThinkerTextAttention,
         "router_logits": OutputRecorder(Qwen3OmniMoeTalkerTextTopKRouter, index=0),
