@@ -99,6 +99,13 @@ class DynamoExporter(HfExporter):
 
         dynamic_shapes = config.dynamic_shapes
         if config.dynamic and dynamic_shapes is None:
+            logger.warning_once(
+                "`dynamic=True` with no explicit `dynamic_shapes` marks every input axis `Dim.AUTO`, so "
+                "torch.export resolves symbolic shapes for all of them — including axes that are actually "
+                "fixed (batch, a size-1 decode step, num_heads/head_dim). Passing explicit `dynamic_shapes` "
+                "that mark only the axes which vary bypasses that symbolic-shape resolution and exports "
+                "significantly faster."
+            )
             dynamic_shapes = get_auto_dynamic_shapes(sample_inputs)
 
         register_cache_pytrees_for_model(model)

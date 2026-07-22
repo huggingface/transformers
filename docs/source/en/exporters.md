@@ -367,6 +367,106 @@ for name, (submodel, subinputs) in components.items():
 
 </details>
 
+### Static KV cache
+
+`generate()` grows a `DynamicCache` by default, which reallocates as the sequence extends. Some runtimes can handle in-place state modification (ExecuTorch, ONNX Runtime) through a **static** cache —
+a fixed-size buffer written at the current position each step. Export one by forwarding a
+`GenerationConfig` with `cache_implementation="static"` (and a `max_cache_len`) to
+[`~HfExporter.export_for_generation`]:
+
+```python
+from transformers import GenerationConfig
+from transformers.exporters import ExecutorchExporter, ExecutorchConfig
+
+exporter = ExecutorchExporter()
+gen_config = GenerationConfig(cache_implementation="static", max_cache_len=2048)
+components = exporter.export_for_generation(model, inputs, config=ExecutorchConfig(dynamic=True), generation_config=gen_config)
+```
+
+The `decode` component now takes a fixed-size cache. `dynamic=True` keeps its length symbolic
+(resizable at load time), but marks *every* axis `Dim.AUTO`, so torch.export spends time specializing
+axes that are actually fixed (batch, the size-1 decode step, `num_heads`, `head_dim`) — slow, and it
+warns about it. To keep just the cache length resizable without that cost, let
+`get_auto_dynamic_shapes` build the (cache-pytree-aware) structure, then prune it to the one axis
+that varies:
+
+<details>
+
+<summary>Keep only the cache length dynamic (skip the <code>Dim.AUTO</code> overhead)</summary>
+
+```python
+from torch.export import Dim
+from transformers.exporters.exporter_dynamo import get_auto_dynamic_shapes, register_cache_pytrees_for_model
+
+register_cache_pytrees_for_model(model)
+auto = get_auto_dynamic_shapes(decode_inputs)  # correct nested structure, every axis Dim.AUTO
+
+# static everything except the cache-length axis (Dim.AUTO there is more robust than a bounded Dim,
+# which trips a `min(64·c, 192·c)` guard); drop the output-flag kwargs that aren't traced.
+dynamic_shapes = {k: v for k, v in auto.items() if not isinstance(decode_inputs[k], bool)}
+dynamic_shapes["input_ids"] = None
+dynamic_shapes["position_ids"] = None
+dynamic_shapes["attention_mask"] = {3: Dim.AUTO}  # [batch, 1, seq, cache]
+dynamic_shapes["past_key_values"] = [  # reuse get_auto's per-leaf list; keys/values → cache axis only
+    {2: Dim.AUTO} if spec else spec for spec in dynamic_shapes["past_key_values"]
+]
+
+decode = exporter.export(decode_model, decode_inputs, config=OnnxConfig(dynamic_shapes=dynamic_shapes))
+```
+
+The cache length stays symbolic while every other axis is fixed — faster to export, and the CUDA-graph
+loop below still captures at the concrete runtime cache size.
+
+</details>
+
+#### Zero-copy in-place updates
+
+The static cache is passed in and mutated in place, so one buffer carries state across decode steps
+with no host copies — as long as the runtime binds the caller's buffers rather than copying through its
+own arena:
+
+- **ExecuTorch** — turn off the memory-planning allocations on [`ExecutorchConfig`] so the in-place
+  write lands in the caller's own tensor (see the reference for what each flag does):
+
+  ```python
+  config = ExecutorchConfig(
+      backend="xnnpack",
+      dynamic=True,
+      alloc_graph_input=False,
+      alloc_graph_output=False,
+      alloc_mutable_buffers=False,
+  )
+  ```
+
+- **ONNX Runtime** — the decode graph exposes the cache as matched `input.<name>` / `output.<name>`
+  pairs. ORT's `CudaSession` helper (`onnxruntime.transformers.io_binding_helper`) binds both to one
+  device buffer via `set_buffer_sharing`, so the cache is updated in place across the decode loop with
+  no host round-trips.
+
+<details>
+
+<summary>Decode-loop inference examples</summary>
+
+ExecuTorch — the cache buffers you pass in are written in place, so the same tensors carry forward each
+step (argument order follows the exported `decode` signature):
+
+```python
+import torch
+from executorch.runtime import Runtime, Verification
+
+program = Runtime.get().load_program(components["decode"].buffer, verification=Verification.Minimal)
+decode = program.load_method("forward")
+
+# caller-owned StaticCache buffers, mutated in place — reuse them each step
+past_key_values = [torch.zeros(*shape) for shape in cache_shapes]
+input_ids = prefill_last_token
+for position in range(prompt_len, max_cache_len):
+    logits, *_ = decode.execute([input_ids, torch.tensor([position]), *past_key_values])
+    input_ids = logits[:, -1].argmax(-1, keepdim=True)
+```
+
+</details>
+
 ## Limitations and workarounds
 
 `torch.export`, `torch.onnx.export`, and ExecuTorch each have rough edges around specific

@@ -211,7 +211,7 @@ def _get_backend_config(config):
 # To add a new backend: implement _prepare_for_new_backend and add it to the _BACKEND_PREPARE table.
 
 
-def _contiguate_inputs(sample_inputs: dict[str, Any]) -> dict[str, Any]:
+def _make_contiguous(sample_inputs: dict[str, Any]) -> dict[str, Any]:
     """Materialise input tensors to contiguous for ExecuTorch.
 
     ExecuTorch rejects a 0 (broadcast) stride on any tensor, including graph inputs — a sample input
@@ -238,7 +238,7 @@ def prepare_for_xnnpack(model: PreTrainedModel, sample_inputs: dict[str, Any]):
     if isinstance(model, PreTrainedModel) and model._can_set_experts_implementation():
         model.set_experts_implementation("batched_mm")
     partitioner = [XnnpackPartitioner()]
-    return model, _contiguate_inputs(sample_inputs), partitioner
+    return model, _make_contiguous(sample_inputs), partitioner
 
 
 def prepare_for_cuda(model: PreTrainedModel, sample_inputs: dict[str, Any]):
@@ -257,7 +257,7 @@ def prepare_for_cuda(model: PreTrainedModel, sample_inputs: dict[str, Any]):
         logger.warning(f"ExecuTorch CUDA backend requires bfloat16; upcasting model from {dtype}.")
         model = model.to(dtype=torch.bfloat16)
     partitioner = [CudaPartitioner([CudaBackend.generate_method_name_compile_spec(model.__class__.__name__)])]
-    return model, _contiguate_inputs(sample_inputs), partitioner
+    return model, _make_contiguous(sample_inputs), partitioner
 
 
 _BACKEND_PREPARE = {
@@ -1336,6 +1336,15 @@ def _patch_unsafe_adjust_original_program(original):
     return patch
 
 
+# Lookbehind/lookahead on JSON delimiters so only bare numeric literals match (quoted strings are
+# bounded by `"` and never touched). Compiled once at import rather than per delegate-serialize call.
+_JSON_NONFINITE_SUBS = (
+    (re.compile(r"(?<=[:\[,\s])-Infinity(?=[,\]}\s])"), "-inf"),
+    (re.compile(r"(?<=[:\[,\s])Infinity(?=[,\]}\s])"), "inf"),
+    (re.compile(r"(?<=[:\[,\s])NaN(?=[,\]}\s])"), "nan"),
+)
+
+
 @register_patch(
     "executorch",
     "executorch.backends.xnnpack.serialization.xnnpack_graph_serialize._flatc_compile",
@@ -1354,11 +1363,9 @@ def _patch_flatc_compile_nonfinite(original):
     def patch(output_dir, schema_path, json_path):
         with open(json_path) as f:
             data = f.read()
-        # Lookbehind/lookahead on JSON delimiters so only bare numeric literals match (quoted
-        # strings are bounded by `"` and never touched).
-        fixed = re.sub(r"(?<=[:\[,\s])-Infinity(?=[,\]}\s])", "-inf", data)
-        fixed = re.sub(r"(?<=[:\[,\s])Infinity(?=[,\]}\s])", "inf", fixed)
-        fixed = re.sub(r"(?<=[:\[,\s])NaN(?=[,\]}\s])", "nan", fixed)
+        fixed = data
+        for pattern, repl in _JSON_NONFINITE_SUBS:
+            fixed = pattern.sub(repl, fixed)
         if fixed != data:
             with open(json_path, "w") as f:
                 f.write(fixed)
