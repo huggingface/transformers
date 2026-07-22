@@ -79,6 +79,9 @@ class FunAsrNanoProcessorTest(unittest.TestCase):
         self.assertEqual(parameter.default, "Transcribe the audio:")
         self.assertNotIn("apply_transcription_request", ModularFunAsrNanoProcessor.__dict__)
 
+    def test_modular_processor_reuses_audioflamingo3_call(self):
+        self.assertNotIn("__call__", ModularFunAsrNanoProcessor.__dict__)
+
     def test_audio_token_lengths_match_feature_lengths(self):
         processor = FunAsrNanoProcessor.__new__(FunAsrNanoProcessor)
         lengths = torch.tensor([1, 2, 3, 4])
