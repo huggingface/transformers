@@ -96,19 +96,23 @@ RUN python3 -m pip uninstall -y flash-attn
 RUN cd transformers && python3 setup.py develop
 
 # Add fouroversix for quantization testing.
-# fouroversix only publishes prebuilt wheels for specific torch versions (e.g. cu12torch2.8); for other
-# torch versions (like the 2.11 pinned above) its installer 404s on the wheel URL and falls back to a
-# from-source CUDA build. Two things are needed for that source build to succeed and finish quickly:
-#   1. `TORCH_CUDA_ARCH_LIST`: there is no GPU in the image builder, so torch's arch auto-detection
-#      returns an empty list and crashes with `IndexError: list index out of range` in
-#      `_get_cuda_arch_flags`. We target only `8.6+PTX` -- the quant CI runs exclusively on aws-g5
-#      (A10G, sm_86); `+PTX` keeps it forward-compatible on newer GPUs via JIT. Building every arch
-#      would multiply compile time for hardware this image never runs on.
-#   2. `ninja`: without it torch falls back to a serial compile that takes 30+ min; ninja parallelizes
-#      across all cores. It is not otherwise guaranteed to be present in this image, so install it here.
-# Drop this whole block back to a plain `pip install` once upstream ships a matching torch wheel.
-RUN python3 -m pip install --no-cache-dir --upgrade setuptools wheel ninja
-RUN TORCH_CUDA_ARCH_LIST="8.6+PTX" python3 -m pip install --no-cache-dir "fouroversix>=1.0.2" --no-build-isolation
+# fouroversix ships ONLY source distributions (no wheels, any version), and its FP4 GEMM/quant CUDA
+# kernels are Blackwell-only: they instantiate `cutlass::float_e2m1_t` with SM100/SM120 TMA descriptors
+# and require CUDA >= 12.8. This image is CUDA 12.6 and the quant CI runs on aws-g5 (A10G, sm_86,
+# Ampere), so a from-source build cannot compile the kernels -- nvcc aborts with
+# `error: static assertion failed with "Unknown TMA Format!"` for any pre-Hopper arch -- and even a
+# successful build could never run FP4 kernels on an A10G.
+#
+# We therefore install with `SKIP_CUDA_BUILD=1`, which sets `ext_modules = None` (no compilation) and
+# ships fouroversix's pure-PyTorch/Triton reference backends, the path it provides for non-Blackwell
+# hardware. The package still imports, so `is_fouroversix_available()` stays True and the integration
+# tests run against the reference backend; the CUDA/cutlass backend simply reports itself unavailable
+# (`matmul/cutlass/backend.py` guards `import fouroversix._C` behind a Blackwell + try/except check).
+# `--no-build-isolation` is required because fouroversix's `setup.py` imports `torch` at build time.
+# When a Blackwell (sm100/sm120) quant CI image on CUDA >= 12.8 exists, drop SKIP_CUDA_BUILD there so
+# the real FP4 kernels are exercised.
+RUN python3 -m pip install --no-cache-dir --upgrade "setuptools>=77.0.3" wheel
+RUN SKIP_CUDA_BUILD=1 python3 -m pip install --no-cache-dir "fouroversix>=1.0.2" --no-build-isolation
 
 # Add fp-quant for quantization testing
 RUN python3 -m pip install --no-cache-dir "fp-quant>=0.3.2"
