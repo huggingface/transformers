@@ -870,8 +870,8 @@ class MraModel(MraPreTrainedModel):
             config=self.config,
             inputs_embeds=embedding_output[:, 0:1, :],  # Force q_len == 1
             attention_mask=attention_mask,
-            # Force mask creation
-            and_mask_function=lambda *args: torch.tensor(True, dtype=torch.bool),
+            # Always materialize the mask; the encoder below consumes it as a tensor.
+            allow_is_bidirectional_skip=False,
         )
 
         encoder_outputs = self.encoder(
