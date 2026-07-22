@@ -64,8 +64,8 @@ class GraniteMoeSWATopKRouter(nn.Module):
         self.weight = nn.Parameter(torch.empty(self.num_experts, config.hidden_size))
 
     def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        # Identical to GraniteMoeTopKRouter, but returns (router_logits, router_scores, router_indices)
-        # as expected by 'base_model_ep_plan' from `ep_router``. Enables native HF EP.
+        # Only different return order (router_logits, router_scores, router_indices) to enable EP
+        # TODO: refactor older granitemoe models to enable EP as well and remove this override
         router_logits = F.linear(hidden_states, self.weight).float()  # (num_tokens, num_experts)
         top_k_logits, top_k_index = router_logits.topk(self.top_k, dim=-1)  # (num_tokens, top_k)
         top_k_weights = torch.softmax(top_k_logits, dim=-1).type_as(hidden_states)  # (num_tokens, top_k)
@@ -122,9 +122,10 @@ class GraniteMoeSWAMoE(nn.Module):
         self.experts = GraniteMoeSWAExperts(config)
 
     def forward(self, layer_input: torch.Tensor) -> torch.Tensor:
+        # Only different return order (router_logits, router_scores, router_indices) to enable EP
+        # TODO: refactor older granitemoe models to enable EP as well and remove this override
         bsz, length, emb_size = layer_input.size()
         hidden_states = layer_input.reshape(-1, emb_size)
-        # Router now returns (router_logits, top_k_weights, top_k_index).
         _, top_k_weights, top_k_index = self.router(hidden_states)
         layer_output = self.experts(hidden_states, top_k_index, top_k_weights)
         return layer_output.view(bsz, length, self.input_size)

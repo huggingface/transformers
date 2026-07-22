@@ -567,9 +567,20 @@ class CausalLMModelTest(
     @is_flaky()
     @slow
     def test_flash_attn_2_equivalence(self):
+        attn_implementation = "flash_attention_2"
+        # Track whether the test ran for any model class (else it should appear skipped, not passed).
+        _has_run_at_least_one_model = False
+
         for model_class in self.all_model_classes:
             if not model_class._supports_flash_attn:
-                self.skipTest(reason="Model does not support Flash Attention 2")
+                continue
+
+            # Some models only support a subset of all FA implementations
+            valid_fa_implementations = model_class._compatible_flash_implementations
+            if valid_fa_implementations is not None and attn_implementation not in valid_fa_implementations:
+                continue
+
+            _has_run_at_least_one_model = True
 
             # Set seed for deterministic test - ensures reproducible model initialization and inputs
             set_seed(42)
@@ -579,7 +590,7 @@ class CausalLMModelTest(
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
                 model_fa = model_class.from_pretrained(
-                    tmpdirname, dtype=torch.bfloat16, attn_implementation="flash_attention_2"
+                    tmpdirname, dtype=torch.bfloat16, attn_implementation=attn_implementation
                 )
                 model_fa.to(torch_device)
 
@@ -594,6 +605,11 @@ class CausalLMModelTest(
                 logits = outputs.hidden_states[-1]
                 logits_fa = outputs_fa.hidden_states[-1]
                 torch.testing.assert_close(logits_fa, logits, atol=3e-2, rtol=3e-2)
+
+        if not _has_run_at_least_one_model:
+            self.skipTest(
+                f"Model architecture does not support {attn_implementation}, or setting its attention dynamically"
+            )
 
     def test_causal_lm_can_accept_training_kwargs(self):
         if not getattr(self.model_tester, "is_training", False):

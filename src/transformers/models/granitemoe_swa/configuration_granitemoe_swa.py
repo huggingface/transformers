@@ -28,14 +28,6 @@ from ...utils import auto_docstring
 @strict
 class GraniteMoeSWAConfig(PreTrainedConfig):
     r"""
-    embedding_multiplier (`float`, *optional*, defaults to 1.0):
-        embedding multiplier
-    logits_scaling (`float`, *optional*, defaults to 1.0):
-        divisor for output logits
-    residual_multiplier (`float`, *optional*, defaults to 1.0):
-        residual multiplier
-    attention_multiplier (`float`, *optional*, defaults to 1.0):
-        attention multiplier
     shared_intermediate_size (`int`, *optional*, defaults to 0):
         intermediate size for shared experts. Defaults to `0`, which disables the shared experts.
     sliding_window (`int`, *optional*, defaults to 128):
@@ -130,7 +122,8 @@ class GraniteMoeSWAConfig(PreTrainedConfig):
 
         super().__post_init__(**kwargs)
 
-        # Per-layer RoPE base theta (0 => NoPE). Default: global rope_theta
+        # Per-layer RoPE base theta (0 => NoPE). Default: global rope_theta.
+        # Run after super post_init so that rope_theta is reliably set.
         if self.layer_rope_theta is None:
             self.layer_rope_theta = [self.rope_parameters["rope_theta"]] * self.num_hidden_layers
 

@@ -110,7 +110,8 @@ class GraniteSWAConfig(PreTrainedConfig):
 
         super().__post_init__(**kwargs)
 
-        # Per-layer RoPE base theta (0 => NoPE). Default: global rope_theta
+        # Per-layer RoPE base theta (0 => NoPE). Default: global rope_theta.
+        # Run after super post_init so that rope_theta is reliably set.
         if self.layer_rope_theta is None:
             self.layer_rope_theta = [self.rope_parameters["rope_theta"]] * self.num_hidden_layers
 

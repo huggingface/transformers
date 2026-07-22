@@ -54,14 +54,6 @@ logger = logging.get_logger(__name__)
 @strict
 class GraniteMoeSWAConfig(GraniteMoeSharedConfig):
     r"""
-    embedding_multiplier (`float`, *optional*, defaults to 1.0):
-        embedding multiplier
-    logits_scaling (`float`, *optional*, defaults to 1.0):
-        divisor for output logits
-    residual_multiplier (`float`, *optional*, defaults to 1.0):
-        residual multiplier
-    attention_multiplier (`float`, *optional*, defaults to 1.0):
-        attention multiplier
     shared_intermediate_size (`int`, *optional*, defaults to 0):
         intermediate size for shared experts. Defaults to `0`, which disables the shared experts.
     sliding_window (`int`, *optional*, defaults to 128):
@@ -125,15 +117,16 @@ class GraniteMoeSWAConfig(GraniteMoeSharedConfig):
 
         super().__post_init__(**kwargs)
 
-        # Per-layer RoPE base theta (0 => NoPE). Default: global rope_theta
+        # Per-layer RoPE base theta (0 => NoPE). Default: global rope_theta.
+        # Run after super post_init so that rope_theta is reliably set.
         if self.layer_rope_theta is None:
             self.layer_rope_theta = [self.rope_parameters["rope_theta"]] * self.num_hidden_layers
 
 
 class GraniteMoeSWATopKRouter(GraniteMoeTopKRouter):
     def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        # Identical to GraniteMoeTopKRouter, but returns (router_logits, router_scores, router_indices)
-        # as expected by 'base_model_ep_plan' from `ep_router``. Enables native HF EP.
+        # Only different return order (router_logits, router_scores, router_indices) to enable EP
+        # TODO: refactor older granitemoe models to enable EP as well and remove this override
         router_logits = F.linear(hidden_states, self.weight).float()  # (num_tokens, num_experts)
         top_k_logits, top_k_index = router_logits.topk(self.top_k, dim=-1)  # (num_tokens, top_k)
         top_k_weights = torch.softmax(top_k_logits, dim=-1).type_as(hidden_states)  # (num_tokens, top_k)
@@ -142,9 +135,10 @@ class GraniteMoeSWATopKRouter(GraniteMoeTopKRouter):
 
 class GraniteMoeSWAMoE(GraniteMoeMoE):
     def forward(self, layer_input: torch.Tensor) -> torch.Tensor:
+        # Only different return order (router_logits, router_scores, router_indices) to enable EP
+        # TODO: refactor older granitemoe models to enable EP as well and remove this override
         bsz, length, emb_size = layer_input.size()
         hidden_states = layer_input.reshape(-1, emb_size)
-        # Router now returns (router_logits, top_k_weights, top_k_index).
         _, top_k_weights, top_k_index = self.router(hidden_states)
         layer_output = self.experts(hidden_states, top_k_index, top_k_weights)
         return layer_output.view(bsz, length, self.input_size)

@@ -46,12 +46,6 @@ class GraniteSWAModelTester(CausalLMModelTester):
 class GraniteSWAModelTest(CausalLMModelTest, unittest.TestCase):
     model_tester_class = GraniteSWAModelTester
 
-    def test_flash_attn_2_equivalence(self):
-        # Mirror CausalLMModelTest's Flash2 check; otherwise FA2 auto-corrects to FA3 and no longer tests FA2.
-        if "flash_attention_2" not in (self.model_tester.base_model_class._compatible_flash_implementations or []):
-            self.skipTest("flash_attention_2 not in _compatible_flash_implementations (FA3/FA4-only)")
-        super().test_flash_attn_2_equivalence()
-
 
 @slow
 @require_torch_accelerator
