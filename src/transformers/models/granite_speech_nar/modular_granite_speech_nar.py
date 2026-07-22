@@ -574,18 +574,14 @@ class GraniteSpeechNarCTCEncoder(GraniteSpeechCTCEncoder):
             if layer_idx in cat_layers:
                 exported_hidden_states.append(hidden_states)
 
-            # Self-conditioning: feed the mid-layer CTC posterior back into the trunk.
             if layer_idx == self.config.self_conditioning_layer:
                 mid_logits = self.out(hidden_states)
                 mid_probs = torch.softmax(mid_logits.float(), dim=-1)
                 blank_probs = mid_probs[:, :, 0]
                 hidden_states = hidden_states + self.out_mid(mid_probs.to(hidden_states.dtype))
 
-        # Posterior-weighted pooling; the model's BPE CTC head consumes these pooled (per-window) features.
         importance = 1.0 - blank_probs
         pooled = self._posterior_weighted_pool(hidden_states.float(), importance).to(hidden_states.dtype)
-
-        # Concatenate the selected intermediate layers with the final layer for the projector.
         exported_hidden_states.append(hidden_states)
         last_hidden_state = torch.cat(exported_hidden_states, dim=-1)
 
