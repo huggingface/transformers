@@ -147,11 +147,6 @@ class Molmo2AdapterConfig(PreTrainedConfig):
 @strict
 class Molmo2TextConfig(PreTrainedConfig):
     r"""
-    layer_types (`list[str]`, *optional*):
-        List of layer types to use for the model, `"full_attention"` for every layer when not provided.
-    rope_layer_types (`list[str]`, *optional*):
-        Per-layer RoPE type keying into a nested `rope_parameters`. Built from the checkpoint's `rope_scaling_layers`
-        when not provided (`"scaling"` for the scaled layers, `"default"` otherwise).
     additional_vocab_size (`int`, *optional*, defaults to 128):
         Number of additional vocabulary tokens beyond the base vocabulary.
     qkv_bias (`bool`, *optional*, defaults to `True`):
@@ -167,6 +162,11 @@ class Molmo2TextConfig(PreTrainedConfig):
         The dropout ratio applied after residual connections.
     rope_parameters (`RopeParameters`, *optional*):
         RoPE parameters for the model.
+    layer_types (`list[str]`, *optional*):
+        List of layer types to use for the model, `"full_attention"` for every layer when not provided.
+    rope_layer_types (`list[str]`, *optional*):
+        Per-layer RoPE type keying into a nested `rope_parameters`. Built from the checkpoint's `rope_scaling_layers`
+        when not provided (`"scaling"` for the scaled layers, `"default"` otherwise).
     norm_after (`bool`, *optional*, defaults to `False`):
         Whether to apply layer normalization after the attention/FFN blocks instead of before.
     """
