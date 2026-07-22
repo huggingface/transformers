@@ -40,7 +40,6 @@ if is_torch_available():
     )
     from transformers.models.fun_asr_nano.convert_fun_asr_nano_to_hf import convert_key
     from transformers.models.fun_asr_nano.modular_fun_asr_nano import (
-        FunAsrNanoAdaptorAttention,
         FunAsrNanoAdaptorLayer,
         FunAsrNanoAttention,
         FunAsrNanoEncoderLayer,
@@ -54,7 +53,7 @@ if is_torch_available():
     from transformers.models.fun_asr_nano.modular_fun_asr_nano import (
         FunAsrNanoPreTrainedModel as ModularFunAsrNanoPreTrainedModel,
     )
-    from transformers.models.whisper.modeling_whisper import WhisperAttention, WhisperEncoderLayer
+    from transformers.models.whisper.modeling_whisper import WhisperEncoderLayer
 
 
 class FunAsrNanoModelTester(ALMModelTester):
@@ -193,10 +192,19 @@ class FunAsrNanoForConditionalGenerationModelTest(ALMModelTest, unittest.TestCas
         self.assertTrue(issubclass(FunAsrNanoEncoderLayer, GradientCheckpointingLayer))
         self.assertTrue(issubclass(FunAsrNanoAdaptorLayer, GradientCheckpointingLayer))
 
-    def test_audio_layers_reuse_whisper_encoder_components(self):
-        self.assertTrue(issubclass(FunAsrNanoAttention, WhisperAttention))
+    def test_audio_layers_reuse_shared_encoder_components(self):
+        config = self.model_tester.get_config().encoder_config
+        attention = FunAsrNanoAttention(config)
+
+        self.assertTrue(
+            issubclass(modular_fun_asr_nano.FunAsrNanoAttention, modular_fun_asr_nano.Qwen3ASRAudioAttention)
+        )
         self.assertTrue(issubclass(FunAsrNanoEncoderLayer, WhisperEncoderLayer))
-        self.assertTrue(issubclass(FunAsrNanoAdaptorAttention, WhisperAttention))
+        self.assertEqual(attention.num_key_value_groups, 1)
+        self.assertTrue(hasattr(attention, "attention_dropout"))
+        self.assertTrue(
+            issubclass(modular_fun_asr_nano.FunAsrNanoAdaptorAttention, modular_fun_asr_nano.Qwen3ASRAudioAttention)
+        )
         self.assertTrue(issubclass(FunAsrNanoAdaptorLayer, WhisperEncoderLayer))
 
     def test_encoder_separates_fsmn_and_uses_reviewed_component_names(self):
