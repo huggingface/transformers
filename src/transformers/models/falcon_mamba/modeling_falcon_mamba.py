@@ -247,7 +247,7 @@ class FalconMambaMixer(nn.Module):
         attention_mask: torch.LongTensor | None = None,
         **kwargs,
     ):
-        seq_len = hidden_states.shape[1]
+        seq_len = hidden_states.shape[-1]
         if attention_mask is not None:
             hidden_states = hidden_states * attention_mask.unsqueeze(1)
 

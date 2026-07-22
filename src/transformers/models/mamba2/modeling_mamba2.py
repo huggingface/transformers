@@ -334,7 +334,7 @@ class Mamba2Mixer(nn.Module):
                 A,
                 D=self.D,
                 chunk_size=self.chunk_size,
-                seq_idx=None,
+                seq_idx=kwargs.get("seq_idx"),
                 activation=self.activation,
                 rmsnorm_weight=self.norm.weight,
                 rmsnorm_eps=self.norm.variance_epsilon,
@@ -443,6 +443,7 @@ class Mamba2Mixer(nn.Module):
     ):
         batch_size, seq_len, _ = hidden_states.shape
         dtype = hidden_states.dtype
+        use_precomputed_states = cache_params is not None and cache_params.has_previous_state(self.layer_idx)
 
         # 1. Gated MLP's linear projection
         hidden_states = apply_mask_to_padding_states(hidden_states, attention_mask)
@@ -458,10 +459,8 @@ class Mamba2Mixer(nn.Module):
             [d_mlp, d_mlp, self.intermediate_size,  self.conv_dim, self.num_heads], dim=-1
         )
 
-        use_precomputed_states = cache_params is not None and cache_params.has_previous_state(self.layer_idx)
         # 2. Convolution sequence transformation
         hidden_states_B_C = self.convolution(hidden_states_B_C, cache_params, attention_mask, **kwargs)
-
         hidden_states_B_C = apply_mask_to_padding_states(hidden_states_B_C, attention_mask)
         hidden_states, B, C = torch.split(
             hidden_states_B_C,
@@ -625,6 +624,10 @@ class Mamba2Mixer(nn.Module):
     ):
         if is_fast_path_available and "cuda" in self.in_proj.weight.device.type and not is_torchdynamo_compiling():
             return self.cuda_kernels_forward(hidden_states, cache_params, attention_mask, **kwargs)
+        if kwargs.get("seq_idx") is not None:
+            raise NotImplementedError(
+                "`seq_idx` support requires fast path support. Please install `mamba_ssm` and `causal_conv1d`"
+            )
         return self.torch_forward(hidden_states, cache_params, attention_mask, **kwargs)
 
 
