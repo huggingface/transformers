@@ -246,7 +246,7 @@ pipeline(
 
 Transformers, önceden eğitilmiş modelleri kullanmak için bir araç takımından çok daha fazlasıdır; etrafında ve Hugging Face Hub üzerinde kurulan bir proje topluluğudur. Transformers'ın; geliştiricilerin, araştırmacıların, öğrencilerin, profesörlerin, mühendislerin ve diğer herkesin hayalindeki projeleri hayata geçirmesine olanak tanımasını istiyoruz.
 
-Transformers'ın 100.000 yıldızını kutlamak için, Transformers ile inşa edilmiş 100 inanılmaz projeyi listeleyen [awesome-transformers](./awesome-transformers.md) sayfasıyla topluluğu ön plana çıkarmak istedik.
+Transformers'ın 100.000 yıldızını kutlamak için, Transformers ile inşa edilmiş 100 inanılmaz projeyi listeleyen [awesome-transformers](../awesome-transformers.md) sayfasıyla topluluğu ön plana çıkarmak istedik.
 
 Bir projeye sahipseniz veya kullandığınız bir projenin listede yer alması gerektiğini düşünüyorsanız, eklemek için lütfen bir PR açın!
 

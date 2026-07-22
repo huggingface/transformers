@@ -247,7 +247,7 @@ pipeline(
 
 Transformers este mai mult decât un toolkit pentru utilizarea modelelor pre-antrenate, este o comunitate de proiecte construite în jurul acestuia și a Hub-ului Hugging Face. Vrem ca Transformers să ajute developerii, cercetătorii, studenții, profesorii, inginerii și pe toți ceilalți oameni să-și construiască propriile proiecte.
 
-Pentru a sărbători atingerea a 100,000 de stars pentru proiectul Transformers, am vrut să aducem comunitatea în centrul atenției prin pagina [awesome-transformers](./awesome-transformers.md) care este o listă de 100 de proiecte incredibile construite utilizând Transformers.
+Pentru a sărbători atingerea a 100,000 de stars pentru proiectul Transformers, am vrut să aducem comunitatea în centrul atenției prin pagina [awesome-transformers](../awesome-transformers.md) care este o listă de 100 de proiecte incredibile construite utilizând Transformers.
 
 Dacă deții sau utilizezi un proiect și crezi că ar trebui să facă parte din listă, deschide un PR pentru a-l adăuga!
 
