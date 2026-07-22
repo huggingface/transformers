@@ -193,6 +193,7 @@ IGNORE_NON_TESTED = (
         "Sam3VideoModel",  # Partly tested in Sam3Model, not regular model.
         "EdgeTamVisionModel",  # Building part of bigger (tested) model.
         "EdgeTamVideoModel",  # Partly tested in EdgeTamModel, not regular model.
+        "Cosmos3EdgeVisionModel",  # Building part of the tested Cosmos3EdgeModel.
         "SeamlessM4TTextToUnitModel",  # Building part of bigger (tested) model.
         "SeamlessM4TCodeHifiGan",  # Building part of bigger (tested) model.
         "SeamlessM4TTextToUnitForConditionalGeneration",  # Building part of bigger (tested) model.
