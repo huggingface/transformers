@@ -915,7 +915,7 @@ class Blip2ModelTest(ModelTesterMixin, PipelineTesterMixin, GenerationTesterMixi
 
                 # `None` as it is the requested one which will be assigned to each sub-config
                 # Sub-model will dispatch to SDPA if it can (checked below that `SDPA` layers are present)
-                self.assertTrue(model.language_model.config._attn_implementation == "eager")
+                self.assertTrue(model.language_model.config._attn_implementation == "sdpa")
                 self.assertTrue(model.vision_model.config._attn_implementation == "sdpa")
                 self.assertTrue(model.qformer.config._attn_implementation == "sdpa")
 
