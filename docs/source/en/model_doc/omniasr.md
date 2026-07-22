@@ -125,21 +125,25 @@ print("Loss:", loss.item())
 ### LLM variant (with language conditioning)
 
 ```python
-from datasets import load_dataset, Audio
-from transformers import AutoProcessor, OmniASRForConditionalGeneration
+from datasets import Audio, load_dataset
+from transformers import AutoModelForMultimodalLM, AutoProcessor
 
 model_id = "bezzam/omniasr-llm-300m-v2"
 processor = AutoProcessor.from_pretrained(model_id)
-model = OmniASRForConditionalGeneration.from_pretrained(model_id)
+model = AutoModelForMultimodalLM.from_pretrained(model_id, device_map="auto")
 
 ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
 ds = ds.cast_column("audio", Audio(sampling_rate=processor.feature_extractor.sampling_rate))
-audio = ds[0]["audio"]["array"]
+speech_samples = [el["array"] for el in ds["audio"][:5]]
 
-# `language` is optional; pass a `{lang}_{script}` code (e.g. "eng_Latn") for better quality.
-inputs = processor(audio, sampling_rate=16000, language=["eng_Latn"], return_tensors="pt")
+inputs = processor(
+    speech_samples,
+    sampling_rate=processor.feature_extractor.sampling_rate,
+    language=["eng_Latn"],
+)
+inputs.to(model.device, dtype=model.dtype)
 generated_ids = model.generate(**inputs, max_new_tokens=256)
-transcription = processor.batch_decode(generated_ids, skip_special_tokens=True)
+transcription = processor.decode(generated_ids, skip_special_tokens=True)
 print(transcription)
 ```
 
