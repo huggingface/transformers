@@ -31,7 +31,7 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
 from ...utils.generic import maybe_replace_from_package, merge_with_config_defaults, no_inherit_decorator
-from ...utils.import_utils import is_flash_linear_attention_available
+from ...utils.import_utils import is_causal_conv1d_available, is_flash_linear_attention_available
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ..bamba.modeling_bamba import apply_mask_to_padding_states, apply_rotary_pos_emb
 from ..gemma2.modeling_gemma2 import Gemma2RotaryEmbedding
@@ -59,8 +59,6 @@ else:
     chunk_gated_delta_rule, fused_recurrent_gated_delta_rule = None, None
     FusedRMSNormGated = None
 
-
-is_fast_path_available = all((chunk_gated_delta_rule, fused_recurrent_gated_delta_rule))
 
 logger = logging.get_logger(__name__)
 
@@ -407,7 +405,7 @@ class Qwen3NextGatedDeltaNet(nn.Module):
         self.chunk_gated_delta_rule = chunk_gated_delta_rule or torch_chunk_gated_delta_rule
         self.recurrent_gated_delta_rule = fused_recurrent_gated_delta_rule or torch_recurrent_gated_delta_rule
 
-        if not is_fast_path_available:
+        if not is_flash_linear_attention_available() or not is_causal_conv1d_available():
             logger.warning_once(
                 "The fast path is not available because one of the required library is not installed. Falling back to "
                 "torch implementation. To install follow https://github.com/fla-org/flash-linear-attention#installation and"

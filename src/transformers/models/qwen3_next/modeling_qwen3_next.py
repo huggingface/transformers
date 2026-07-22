@@ -45,7 +45,7 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
 from ...utils.generic import maybe_autocast, maybe_replace_from_package, merge_with_config_defaults
-from ...utils.import_utils import is_flash_linear_attention_available
+from ...utils.import_utils import is_causal_conv1d_available, is_flash_linear_attention_available
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from .configuration_qwen3_next import Qwen3NextConfig
 
@@ -56,6 +56,7 @@ if is_flash_linear_attention_available():
 else:
     chunk_gated_delta_rule, fused_recurrent_gated_delta_rule = None, None
     FusedRMSNormGated = None
+
 
 logger = logging.get_logger(__name__)
 
@@ -337,9 +338,6 @@ def apply_mask_to_padding_states(hidden_states, attention_mask):
     return hidden_states
 
 
-is_fast_path_available = all((chunk_gated_delta_rule, fused_recurrent_gated_delta_rule))
-
-
 @maybe_replace_from_package("causal_conv1d", "causal_conv1d_update")
 def causal_conv1d_update(
     hidden_states: torch.Tensor,
@@ -569,7 +567,7 @@ class Qwen3NextGatedDeltaNet(nn.Module):
         self.chunk_gated_delta_rule = chunk_gated_delta_rule or torch_chunk_gated_delta_rule
         self.recurrent_gated_delta_rule = fused_recurrent_gated_delta_rule or torch_recurrent_gated_delta_rule
 
-        if not is_fast_path_available:
+        if not is_flash_linear_attention_available() or not is_causal_conv1d_available():
             logger.warning_once(
                 "The fast path is not available because one of the required library is not installed. Falling back to "
                 "torch implementation. To install follow https://github.com/fla-org/flash-linear-attention#installation and"
