@@ -346,9 +346,8 @@ class VibeVoiceModel(VoxtralModel):
         # Acoustic tokenizer is not meant to be trainable (see p. 3 of https://huggingface.co/papers/2508.19205)
         with torch.no_grad():
             acoustic_latents = self.audio_tower.encode(input_values, sample=True).latents
-        acoustic_features = (
-            acoustic_latents + self.latent_bias_factor.to(acoustic_latents.device)
-        ) * self.latent_scaling_factor.to(acoustic_latents.device)
+        acoustic_features += self.latent_bias_factor.to(acoustic_latents.device
+        acoustic_features *= self.latent_scaling_factor.to(acoustic_latents.device)
 
         # adjust padding mask according to tokenizer compression
         num_audio_tokens = torch.ceil(padding_mask.sum(dim=-1) / self.config.audio_config.hop_length).to(torch.int64)
