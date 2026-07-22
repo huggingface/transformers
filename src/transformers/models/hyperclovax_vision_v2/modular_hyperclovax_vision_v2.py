@@ -277,9 +277,6 @@ class HyperCLOVAXVisionV2Model(HyperCLOVAXVisionV2PreTrainedModel, VideoLlama3Mo
 class HyperCLOVAXVisionV2ForConditionalGeneration(
     HyperCLOVAXVisionV2PreTrainedModel, Exaone4_5_ForConditionalGeneration
 ):
-    # Reference: fix gemma3 grad acc #37208
-    accepts_loss_kwargs = False
-    _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
 
     def __init__(self, config: HyperCLOVAXVisionV2Config):
         super().__init__(config)
