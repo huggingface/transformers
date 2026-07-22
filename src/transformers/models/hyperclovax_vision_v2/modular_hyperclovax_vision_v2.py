@@ -283,9 +283,6 @@ class HyperCLOVAXVisionV2ForConditionalGeneration(
     def __init__(self, config: HyperCLOVAXVisionV2Config):
         super().__init__(config)
         self.model = HyperCLOVAXVisionV2Model(config)
-        self.vocab_size = config.text_config.vocab_size
-        self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
-        self.post_init()
 
     @can_return_tuple
     @auto_docstring
