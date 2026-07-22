@@ -300,7 +300,7 @@ PyTorch テンソル、または NumPy 配列。
      <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/zero-sh-obj-detection_6.png" alt="Cats with bounding boxes"/>
 </div>
 
-OWL-ViTによる推論をインタラクティブに試したい場合は、このデモをチェックしてください。
+OWL-ViTによる推論をインタラクティブに試したい場合は、このデモを確認してください。
 
 <iframe
 	src="https://adirik-owl-vit.hf.space"
