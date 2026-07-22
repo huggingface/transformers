@@ -160,8 +160,12 @@ class CodeLlamaTokenizer(TokenizersBackend):
             replacement="▁", prepend_scheme=prepend_scheme, split=False
         )
 
+        # No trailing `Strip` step here. The Metaspace pre-tokenizer prepends a
+        # synthetic `▁` to the first token, which decodes to a leading space, and
+        # stripping that unconditionally also eats real leading whitespace the user
+        # typed. `_decode` removes only the synthetic prefix instead.
         self._tokenizer.decoder = decoders.Sequence(
-            [decoders.Replace("▁", " "), decoders.ByteFallback(), decoders.Fuse(), decoders.Strip(content=" ", left=1)]
+            [decoders.Replace("▁", " "), decoders.ByteFallback(), decoders.Fuse()]
         )
 
         super().__init__(
@@ -225,6 +229,32 @@ class CodeLlamaTokenizer(TokenizersBackend):
     @property
     def eot_token(self):
         return self._eot_token
+
+    def _decode(
+        self,
+        token_ids: int | list[int],
+        skip_special_tokens: bool = False,
+        clean_up_tokenization_spaces: bool | None = None,
+        **kwargs,
+    ) -> str:
+        if isinstance(token_ids, int):
+            token_ids = [token_ids]
+        text = super()._decode(
+            token_ids,
+            skip_special_tokens=skip_special_tokens,
+            clean_up_tokenization_spaces=clean_up_tokenization_spaces,
+            **kwargs,
+        )
+        # Decoding leaves one extra leading space from the synthetic `▁` prefix, but
+        # that is indistinguishable from a real leading space in the decoded string.
+        # Only strip it when doing so re-encodes to the same ids, i.e. when it really
+        # was just the synthetic prefix. A single leading space is unrecoverable
+        # (" x" and "x" encode identically), so it is treated as the prefix.
+        if text.startswith(" "):
+            stripped = text[1:]
+            if self.encode(stripped, add_special_tokens=False) == list(token_ids):
+                return stripped
+        return text
 
     def set_infilling_processor(self, reset, suffix_first=False, add_special_tokens=True):
         """

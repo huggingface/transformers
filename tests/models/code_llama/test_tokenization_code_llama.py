@@ -206,6 +206,21 @@ class LlamaIntegrationTest(unittest.TestCase):
         self.tokenizer.add_eos_token = False
         self.rust_tokenizer.add_eos_token = False
 
+    def test_decode_preserves_leading_whitespace(self):
+        # Decode must keep real leading whitespace. The synthetic `▁` prefix decodes
+        # to a leading space that the old decoder stripped unconditionally, which also
+        # ate whitespace the user typed.
+        tokenizer = self.tokenizer
+        # Real leading whitespace (two or more) round-trips exactly.
+        for text in ["  hello", "   leading spaces", "    indented_line", "\tindented"]:
+            ids = tokenizer.encode(text, add_special_tokens=False)
+            self.assertEqual(tokenizer.decode(ids), text)
+        # The synthetic prefix is still stripped, so text without leading
+        # whitespace does not gain a spurious leading space.
+        for text in ["hello", "def foo():", "import numpy"]:
+            ids = tokenizer.encode(text, add_special_tokens=False)
+            self.assertEqual(tokenizer.decode(ids), text)
+
     @unittest.skip(
         "Skipped in v5 - CodeLlama tokenization differences related to SPM legacy flag and Metaspace handling. "
         "CodeLlama always uses legacy=False (Metaspace pre_tokenizer, no normalizer)"
