@@ -55,19 +55,13 @@ def rnnt_loss(
         Scalar loss tensor (or per-example losses if `reduction="none"`).
 
     """
+    # Import torchaudio lazily rather than at module scope.
+    # see https://github.com/huggingface/transformers/pull/47422
 
-    # Import torchaudio lazily rather than at module scope: this module is imported eagerly from
-    # `modeling_utils`, so a top-level `import torchaudio` would run during `import transformers`. A
-    # torchaudio built against a different torch ABI raises `OSError` on import; keeping the import here
-    # means that only surfaces if the RNN-T loss is actually used, at the call site -- it does not break
-    # `import transformers` for every user. We deliberately do not catch that OSError: an ABI-mismatched
-    # install is an environment problem, not something this library should silently mask.
-    #
     # TODO(torchaudio-cap): torchaudio 2.11 is the last release -- pytorch/audio has stopped publishing
     # (I/O moved to TorchCodec, see https://github.com/pytorch/audio/issues/3902). 2.11 is marked
     # compatible with future torch, but there is no torchaudio > 2.11, so once torch moves past 2.11 this
-    # torchaudio-backed RNN-T path will need a different backend (or to be dropped). The docker pins that
-    # keep torchaudio matched to torch (e.g. transformers-quantization-latest-gpu) have the same horizon.
+    # torchaudio-backed RNN-T path will need a different backend (or to be dropped).
     if not is_torchaudio_available():
         raise ImportError("Computing the RNN-T loss requires torchaudio. Install it with `pip install torchaudio`.")
 
