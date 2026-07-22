@@ -13,7 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was published in HF papers on 2025-08-26 and contributed to Hugging Face Transformers on 2026-07-20.*
+*This model was published in HF papers on 2025-08-26 and contributed to Hugging Face Transformers on 2026-07-22.*
 
 
 # VibeVoice
@@ -90,9 +90,9 @@ processor = AutoProcessor.from_pretrained(model_id)
 model = AutoModelForTextToWaveform.from_pretrained(model_id, device_map="auto")
 
 # Prepare input
-chat_template = [{"role": "0", "content": [{"type": "text", "text": text}]}]
+conversation = [{"role": "0", "content": [{"type": "text", "text": text}]}]
 inputs = processor.apply_chat_template(
-    chat_template, return_dict=True, tokenize=True,
+    conversation, return_dict=True, tokenize=True,
 ).to(model.device, model.dtype)
 
 # Generate!
@@ -122,7 +122,7 @@ model = AutoModelForTextToWaveform.from_pretrained(model_id, device_map="auto")
 sampling_rate = processor.feature_extractor.sampling_rate
 
 # Prepare input
-chat_template = [
+conversation = [
     {
         "role": "0",
         "content": [
@@ -135,7 +135,7 @@ chat_template = [
     }
 ]
 inputs = processor.apply_chat_template(
-    chat_template, return_dict=True, tokenize=True,
+    conversation, return_dict=True, tokenize=True,
 ).to(model.device, model.dtype)
 
 # Generate!
@@ -162,7 +162,7 @@ model_id = "bezzam/VibeVoice-1.5B-hf"   # "bezzam/VibeVoice-7B-hf"
 max_new_tokens = 400  # `None` to ensure full generation
 
 # create conversation with an audio for the first time a speaker appears to clone that particular voice
-chat_template = [
+conversation = [
     {
         "role": "0",
         "content": [
@@ -209,7 +209,7 @@ model = AutoModelForTextToWaveform.from_pretrained(model_id, device_map="auto")
 
 # prepare inputs
 inputs = processor.apply_chat_template(
-    chat_template, return_dict=True, tokenize=True,
+    conversation, return_dict=True, tokenize=True,
 ).to(model.device, model.dtype)
 
 # Generate audio with a progress bar to track generation
@@ -237,7 +237,7 @@ from transformers import AutoProcessor, AutoModelForTextToWaveform
 model_id = "bezzam/VibeVoice-1.5B-hf"   # "bezzam/VibeVoice-7B-hf"
 max_new_tokens = 400  # `None` to ensure full generation
 
-chat_template = [
+conversation = [
     [
         {
             "role": "0",
@@ -311,7 +311,7 @@ model = AutoModelForTextToWaveform.from_pretrained(model_id, device_map="auto")
 
 # prepare inputs
 inputs = processor.apply_chat_template(
-    chat_template, return_dict=True, tokenize=True,
+    conversation, return_dict=True, tokenize=True,
 ).to(model.device, model.dtype)
 
 # Generate audio with a progress bar to track generation
@@ -341,7 +341,7 @@ text = "Hello, nice to meet you. How are you?"
 pipe = pipeline("text-to-speech", model=model_id)
 
 # Generate!
-chat_template = [
+conversation = [
     {
         "role": "0",
         "content": [
@@ -354,7 +354,7 @@ chat_template = [
 ]
 # optional kwargs for generation
 generate_kwargs = {"guidance_scale": 1.3, "num_diffusion_steps": 10}
-output = pipe(chat_template, generate_kwargs=generate_kwargs)
+output = pipe(conversation, generate_kwargs=generate_kwargs)
 
 # Save to file
 fn = f"{os.path.basename(model_id)}_pipeline.wav"
@@ -382,7 +382,7 @@ model = AutoModelForTextToWaveform.from_pretrained(
 model.train()
 
 # Prepare batch of 2
-chat_template = [
+conversation = [
     [
         {
             "role": "0",
@@ -415,7 +415,7 @@ chat_template = [
 
 # Process with apply_chat_template and output_labels=True for training
 inputs = processor.apply_chat_template(
-    chat_template,
+    conversation,
     tokenize=True,
     return_dict=True,
     processor_kwargs={"output_labels": True},
@@ -453,7 +453,7 @@ processor = AutoProcessor.from_pretrained(model_id)
 model = AutoModelForTextToWaveform.from_pretrained(model_id, dtype=torch.bfloat16, device_map="auto").eval()
 
 # Prepare inputs
-chat_template = [
+conversation = [
     [
         {
             "role": "0",
@@ -467,7 +467,7 @@ chat_template = [
     ],
 ] * 4  # batch size 4
 inputs = processor.apply_chat_template(
-    chat_template, tokenize=True, return_dict=True,
+    conversation, tokenize=True, return_dict=True,
 ).to(model.device, model.dtype)
 
 compile_config = CompileConfig(mode="default" dynamic=False)
