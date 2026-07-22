@@ -940,6 +940,7 @@ class GenerationMixin(ContinuousMixin):
         expand_size: int = 1,
         is_encoder_decoder: bool = False,
         input_ids: torch.LongTensor | None = None,
+        model: Optional["PreTrainedModel"] = None,
         **model_kwargs,
     ) -> tuple[torch.LongTensor, dict[str, Any]]:
         """Expands tensors from [batch_size, ...] to [batch_size * expand_size, ...]"""
@@ -947,6 +948,43 @@ class GenerationMixin(ContinuousMixin):
         # the input tensor and thus requires more memory although no change is applied
         if expand_size == 1:
             return input_ids, model_kwargs
+
+        # Infer the length per sample from pooler output and interleave per sample with images
+        def repeat_tensor_or_list(inputs: list | torch.Tensor, repeat_times: int):
+            if isinstance(inputs, torch.Tensor):
+                return inputs.repeat_interleave(repeat_times, dim=0)
+            else:
+                return inputs * repeat_times
+
+        def _expand_multimodal_outputs(outputs_key, token_id_key):
+            outputs = model_kwargs.get(outputs_key)
+            if outputs is None:
+                return
+            if input_ids is None or input_ids.numel() == 0:
+                special_image_mask = model_kwargs["inputs_embeds"] == model.get_input_embeddings()(
+                    torch.tensor(
+                        getattr(model.config, token_id_key),
+                        dtype=torch.long,
+                        device=model_kwargs["inputs_embeds"].device,
+                    )
+                )
+                num_image_tokens_in_text = special_image_mask.all(-1).sum(-1)
+            else:
+                num_image_tokens_in_text = (input_ids == getattr(model.config, token_id_key)).sum(-1)
+            num_image_tokens_in_text = torch.tensor(num_image_tokens_in_text).cumsum(-1)
+            num_image_tokens_in_vision = [len(out) for out in outputs.pooler_output]
+            num_image_tokens_in_vision = torch.tensor(num_image_tokens_in_vision).cumsum(-1)
+            offsets = [0] + [
+                i + 1 for i, num in enumerate(num_image_tokens_in_vision) if num in num_image_tokens_in_text
+            ]
+            outputs.pooler_output = [
+                out
+                for start, end in zip(offsets[:-1], offsets[1:])
+                for out in repeat_tensor_or_list(outputs.pooler_output[start:end], expand_size)
+            ]
+
+        _expand_multimodal_outputs("image_outputs", "image_token_id")
+        _expand_multimodal_outputs("video_outputs", "video_token_id")
 
         def _expand_dict_for_generation(dict_to_expand):
             for key in dict_to_expand:
@@ -971,46 +1009,10 @@ class GenerationMixin(ContinuousMixin):
                 raise ValueError("If `is_encoder_decoder` is True, make sure that `encoder_outputs` is defined.")
             model_kwargs["encoder_outputs"] = _expand_dict_for_generation(model_kwargs["encoder_outputs"])
 
-        if model_kwargs.get("image_outputs"):
-            model_kwargs["image_outputs"] = _expand_dict_for_generation(model_kwargs["image_outputs"])
-
-        if model_kwargs.get("video_outputs"):
-            model_kwargs["video_outputs"] = _expand_dict_for_generation(model_kwargs["video_outputs"])
-
-        # Merge the other PR and infer the length per sample from pooler output. Interleave per sample with images
-        def _expand_multimodal_outputs(outputs_key, token_id_key):
-            outputs = model_kwargs.get(outputs_key)
-            if not outputs:
-                return
-            pooler = getattr(outputs, "pooler_output", None)
-            outputs.pooler_output = None  # hide list from generic expansion; tensors handled below
-            model_kwargs[outputs_key] = _expand_dict_for_generation(outputs)
-            if isinstance(pooler, list):
-                if input_ids is not None:
-                    batch_size = input_ids.shape[0] // expand_size
-                    if len(pooler) != batch_size:
-                        # pooler is a flat per-image list; group into per-sample using token counts in input_ids.
-                        # Mirrors how model.forward() places features: it fills image tokens left-to-right per row.
-                        token_id = model_kwargs.get(token_id_key)
-                        if token_id is not None:
-                            orig_ids = input_ids[
-                                ::expand_size
-                            ]  # repeat_interleave → stride by expand_size to get originals
-                            token_counts = (orig_ids == token_id).sum(dim=1).tolist()
-                            feat_sizes = [f.shape[0] for f in pooler]
-                            grouped, offset = [], 0
-                            for n in token_counts:
-                                grp, cum = [], 0
-                                while cum < n:
-                                    grp.append(pooler[offset])
-                                    cum += feat_sizes[offset]
-                                    offset += 1
-                                grouped.append(torch.cat(grp, dim=0))
-                            pooler = grouped
-                model_kwargs[outputs_key].pooler_output = [item for item in pooler for _ in range(expand_size)]
-
-        # _expand_multimodal_outputs("image_outputs", "image_token_id")
-        # _expand_multimodal_outputs("video_outputs", "video_token_id")
+        #  if model_kwargs.get("image_outputs"):
+        #      model_kwargs["image_outputs"] = _expand_dict_for_generation(model_kwargs["image_outputs"])
+        #  if model_kwargs.get("video_outputs"):
+        #      model_kwargs["video_outputs"] = _expand_dict_for_generation(model_kwargs["video_outputs"])
 
         return input_ids, model_kwargs
 
@@ -2684,6 +2686,7 @@ class GenerationMixin(ContinuousMixin):
             input_ids=input_ids,
             expand_size=max(generation_config.num_beams, generation_config.num_return_sequences),
             is_encoder_decoder=self.config.is_encoder_decoder,
+            model=self,
             **model_kwargs,
         )
 
