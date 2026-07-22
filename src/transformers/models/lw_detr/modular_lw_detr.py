@@ -761,8 +761,9 @@ class LwDetrPreTrainedModel(PreTrainedModel):
     _supports_flex_attn = True
     _supports_attention_backend = True
     _can_record_outputs = {
-        "attentions": [LwDetrAttention, LwDetrMultiscaleDeformableAttention],
-        "hidden_states": [LwDetrDecoderLayer],
+        "attentions": LwDetrAttention,
+        "cross_attentions": LwDetrMultiscaleDeformableAttention,
+        "hidden_states": LwDetrDecoderLayer,
     }
 
     @torch.no_grad()

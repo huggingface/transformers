@@ -1113,8 +1113,9 @@ class RfDetrPreTrainedModel(PreTrainedModel):
     _supports_flex_attn = True
     _supports_attention_backend = True
     _can_record_outputs = {
-        "attentions": [RfDetrAttention, RfDetrMultiscaleDeformableAttention],
-        "hidden_states": [RfDetrDecoderLayer],
+        "attentions": RfDetrAttention,
+        "cross_attentions": RfDetrMultiscaleDeformableAttention,
+        "hidden_states": RfDetrDecoderLayer,
     }
     # Roboflow checkpoints use bare keys with no top-level prefix
     _checkpoint_conversion_prefix_free = True

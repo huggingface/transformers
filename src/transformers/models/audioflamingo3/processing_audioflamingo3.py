@@ -101,7 +101,9 @@ class AudioFlamingo3Processor(ProcessorMixin):
         model_inputs = super().__call__(audio=audio, text=text, **kwargs)
 
         if output_labels:
-            labels = model_inputs.pop("mm_token_type_ids")
+            mm_token_type_ids = model_inputs.pop("mm_token_type_ids")
+            labels = model_inputs["input_ids"].clone()
+            labels[mm_token_type_ids != 0] = -100  # audio positions
             labels[labels == self.tokenizer.pad_token_id] = -100
             model_inputs["labels"] = labels
         return BatchFeature(data=model_inputs, tensor_type="pt")

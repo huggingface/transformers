@@ -39,6 +39,9 @@ from ..auto import CONFIG_MAPPING
 from ..moonshine.modeling_moonshine import MoonshineRotaryEmbedding
 
 
+logger = logging.get_logger(__name__)
+
+
 if is_torch_available():
     import torch
 
@@ -147,8 +150,15 @@ class MusicFlamingoProcessor(AudioFlamingo3Processor):
         return self.audio_bos_token + self.audio_token * num_audio_tokens + self.audio_eos_token
 
     @property
-    def audio_ids(self):
+    def audio_token_ids(self):
         return [self.audio_token_id, self.audio_bos_token_id, self.audio_eos_token_id]
+
+    # Alias for BC
+    @property
+    def audio_ids(self):
+        """Deprecated alias for `audio_token_ids`; will be removed in a future release."""
+        logger.warning_once("`audio_ids` is deprecated; please use `audio_token_ids` instead.")
+        return self.audio_token_ids
 
     def apply_transcription_request(self, *args, **kwargs):
         raise NotImplementedError("This method is not supported for MusicFlamingo.")
