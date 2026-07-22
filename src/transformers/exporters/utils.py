@@ -46,6 +46,7 @@ from collections.abc import MutableMapping
 from typing import Any
 
 from ..utils import logging
+from ..utils.generic import get_max_seqlen
 from ..utils.import_utils import is_torch_available
 
 
@@ -428,8 +429,8 @@ def register_export_input_preparer(*markers: str):
 
 @register_export_input_preparer("grid_thw")
 def _prepare_grid_thw_vision_inputs(model: torch.nn.Module, inputs: dict[str, Any]) -> None:
-    """Precompute helpers driven by `grid_thw`: `cu_seqlens`, `position_ids`, plus optional
-    `window_index`/`cu_window_seqlens` (XNet-style window attn) and
+    """Precompute helpers driven by `grid_thw`: `cu_seqlens`, `max_seqlen`, `position_ids`, plus optional
+    `window_index`/`cu_window_seqlens`/`max_window_seqlen` (XNet-style window attn) and
     `bilinear_indices`/`bilinear_weights` (interpolation-based merging).
 
     Optional helpers are gated by a submodule attribute (`window_size`+`patch_size` for window
@@ -450,6 +451,7 @@ def _prepare_grid_thw_vision_inputs(model: torch.nn.Module, inputs: dict[str, An
     module = sys.modules[type(model).__module__]
     temporal_encoder = hasattr(module, "get_vision_frame_index")
     inputs["cu_seqlens"] = get_vision_cu_seqlens(grid_thw, merge_temporal=temporal_encoder)
+    inputs["max_seqlen"] = get_max_seqlen(inputs["cu_seqlens"], model.config, kwargs=inputs)
     # 3-axis (t, h, w) rotary encoders expose an ``axis_dim`` attr on their rotary_emb
     # (minimax_m3_vl); default 2-axis (h, w) covers qwen2_5_vl / qwen3_vl / glm4v / paddleocr_vl.
     include_temporal = _find_submodule_attr(model, "axis_dim") is not None
@@ -460,6 +462,9 @@ def _prepare_grid_thw_vision_inputs(model: torch.nn.Module, inputs: dict[str, An
     if window_size is not None and patch_size is not None:
         inputs["window_index"], inputs["cu_window_seqlens"] = get_vision_window_index(
             grid_thw, spatial_merge_size, window_size, patch_size
+        )
+        inputs["max_window_seqlen"] = get_max_seqlen(
+            inputs["cu_window_seqlens"], model.config, kwargs=inputs, kwarg_name="max_window_seqlen"
         )
 
     num_grid_per_side = _find_submodule_attr(model, "num_grid_per_side")
@@ -491,7 +496,7 @@ def _prepare_grid_thw_vision_inputs(model: torch.nn.Module, inputs: dict[str, An
 def _prepare_navit_vision_inputs(model: torch.nn.Module, inputs: dict[str, Any]) -> None:
     """NaViT-style packed encoders carry per-image `(h, w)` as `target_sizes` instead of `grid_thw`.
     Synthesise `grid_thw = [1, h, w]` and run the nearest-position-id / window-index /
-    merged-shape helpers so the per-image Python loops move outside the traced graph."""
+    merged-shape / maximum-sequence-length helpers outside the traced graph."""
     target_sizes = inputs["target_sizes"]
     num_patches_per_side = _find_submodule_attr(model, "num_patches_per_side")
     if num_patches_per_side is not None:
@@ -504,12 +509,16 @@ def _prepare_navit_vision_inputs(model: torch.nn.Module, inputs: dict[str, Any])
             grid_thw, spatial_merge_size=1, window_size=window_kernel_size[0], patch_size=1
         )
         inputs["merged_shape"] = get_vision_merged_shape(target_sizes, window_kernel_size)
+        cu_seqlens = torch.nn.functional.pad(
+            torch.cumsum(target_sizes[:, 0] * target_sizes[:, 1], dim=0, dtype=torch.int32), (1, 0)
+        )
+        inputs["max_seqlen"] = get_max_seqlen(cu_seqlens, model.config, kwargs=inputs)
 
 
 @register_export_input_preparer("input_features", "feature_lens")
 def _prepare_omni_audio_inputs(model: torch.nn.Module, inputs: dict[str, Any]) -> None:
     """Replace `input_features`/`feature_lens` with precomputed `padded_feature`, `chunk_lengths`,
-    `cu_seqlens`, `valid_indices` (+ `pool_indices` on Qwen2.5-Omni-style encoders) so the
+    `cu_seqlens`, `max_seqlen`, `valid_indices` (+ `pool_indices` on Qwen2.5-Omni-style encoders) so the
     encoder's `.split(.tolist(), dim=0)` and related data-dependent ops happen outside the
     traced graph.
 
@@ -536,13 +545,13 @@ def _prepare_omni_audio_inputs(model: torch.nn.Module, inputs: dict[str, Any]) -
         inputs["cu_seqlens"] = get_audio_cu_seqlens(chunk_lengths)
         inputs["valid_indices"] = get_valid_indices(chunk_lengths)
         inputs["pool_indices"] = getattr(module, "get_pool_indices")(feature_lens)
+    inputs["max_seqlen"] = get_max_seqlen(inputs["cu_seqlens"], model.config, kwargs=inputs)
 
 
 @register_export_input_preparer("input_features", "input_features_mask")
 def _prepare_qwen3_asr_audio_inputs(model: torch.nn.Module, inputs: dict[str, Any]) -> None:
-    """Precompute `cu_seqlens` for Qwen3-ASR — the encoder's call to ``get_audio_cu_seqlens``
-    has a data-dependent Python loop that we evaluate here so the encoder pops the result
-    from ``kwargs``. Mirrors the few lines that build ``feature_lens``/``chunk_lengths`` in
+    """Precompute `cu_seqlens` and `max_seqlen` for Qwen3-ASR so the encoder pops them from
+    ``kwargs``. Mirrors the few lines that build ``feature_lens``/``chunk_lengths`` in
     ``Qwen3ASREncoder.forward``.
     """
     from ..models.qwen3_asr.modeling_qwen3_asr import get_audio_cu_seqlens
@@ -558,6 +567,7 @@ def _prepare_qwen3_asr_audio_inputs(model: torch.nn.Module, inputs: dict[str, An
     feature_lens = input_features_mask.sum(-1).to(torch.long)
     chunk_lengths = input_features_mask.view(batch_size, num_chunks, -1).sum(dim=-1).reshape(-1).to(torch.long)
     inputs["cu_seqlens"] = get_audio_cu_seqlens(chunk_lengths, feature_lens, n_window_infer, n_window)
+    inputs["max_seqlen"] = get_max_seqlen(inputs["cu_seqlens"], model.config, kwargs=inputs)
 
 
 def precompute_export_inputs(model: torch.nn.Module, inputs: dict[str, Any]) -> None:
