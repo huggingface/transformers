@@ -1715,7 +1715,7 @@ class QuarkConfig(QuantizationConfigMixin):
             from quark.torch.quantization.config.config import QConfig
         else:
             raise ImportError(
-                f"Please install the latest version of Quark (>=0.12).Please refer to https://quark.docs.amd.com/latest/install.html."
+                "Please install the latest version of Quark (>=0.12).Please refer to https://quark.docs.amd.com/latest/install.html."
             )
         # This might be e.g. `"fp8"` or `"awq"`.
         self.custom_mode = kwargs["quant_method"]
