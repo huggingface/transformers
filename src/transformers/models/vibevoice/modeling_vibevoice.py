@@ -157,16 +157,14 @@ class VibeVoiceDiffusionHeadFinalLayer(nn.Module):
     def __init__(self, config, output_size):
         super().__init__()
         self.num_chunks = 2
-        # Inline RMS normalization since there is no weight scaling (unlike `VibeVoiceRMSNorm`)
-        self.norm_eps = config.rms_norm_eps
+        self.norm = nn.RMSNorm(config.hidden_size, eps=config.rms_norm_eps, elementwise_affine=False)
         self.linear_1 = nn.Linear(config.hidden_size, self.num_chunks * config.hidden_size, bias=False)
         self.act_fn = ACT2FN[config.hidden_act]
         self.linear_2 = nn.Linear(config.hidden_size, output_size, bias=False)
 
     def forward(self, hidden_states, condition):
         shift, scale = self.linear_1(self.act_fn(condition)).chunk(self.num_chunks, dim=-1)
-        hidden_states = hidden_states * torch.rsqrt(hidden_states.pow(2).mean(-1, keepdim=True) + self.norm_eps)
-        hidden_states = hidden_states * (1 + scale) + shift
+        hidden_states = self.norm(hidden_states) * (1 + scale) + shift
         hidden_states = self.linear_2(hidden_states)
         return hidden_states
 
@@ -279,18 +277,18 @@ class VibeVoiceModel(VibeVoicePreTrainedModel):
 
         # Acoustic tokenizer is not meant to be trainable (see p. 3 of https://huggingface.co/papers/2508.19205)
         with torch.no_grad():
-            acoustic_latents = self.audio_tower.encode(input_values, sample=True).latents
-        acoustic_features = (
-            acoustic_latents + self.latent_bias_factor.to(acoustic_latents.device)
-        ) * self.latent_scaling_factor.to(acoustic_latents.device)
+            acoustic_features = self.audio_tower.encode(input_values, sample=True).latents
+        acoustic_features += self.latent_bias_factor.to(acoustic_features.device)
+        acoustic_features *= self.latent_scaling_factor.to(acoustic_features.device)
 
         # adjust padding mask according to tokenizer compression
         num_audio_tokens = torch.ceil(padding_mask.sum(dim=-1) / self.config.audio_config.hop_length).to(torch.int64)
-        padding_mask = torch.arange(max(num_audio_tokens)) < num_audio_tokens[:, None].cpu()
+        padding_mask = torch.arange(num_audio_tokens.max(), device=num_audio_tokens.device) < num_audio_tokens[:, None]
 
+        pooler_output = self.multi_modal_projector(acoustic_features)
         return BaseModelOutputWithPooling(
-            last_hidden_state=acoustic_features[padding_mask],
-            pooler_output=self.multi_modal_projector(acoustic_features)[padding_mask],
+            last_hidden_state=acoustic_features[padding_mask.to(acoustic_features.device)],
+            pooler_output=pooler_output[padding_mask.to(pooler_output.device)],
         )
 
     def get_placeholder_mask(
@@ -335,7 +333,7 @@ class VibeVoiceModel(VibeVoicePreTrainedModel):
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
         audio_features = None
-        if input_values is not None and input_ids is not None:
+        if input_values is not None:
             audio_outputs = self.get_audio_features(input_values, padding_mask)
             audio_embeds = audio_outputs.pooler_output
             audio_features = audio_outputs.last_hidden_state
