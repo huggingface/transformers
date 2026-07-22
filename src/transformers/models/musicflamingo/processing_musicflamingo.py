@@ -26,6 +26,7 @@ from ...feature_extraction_utils import BatchFeature
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import TextInput
 from ...utils import auto_docstring, is_torch_available, logging
+from ...utils.import_utils import requires
 
 
 if is_torch_available():
@@ -52,6 +53,7 @@ class MusicFlamingoProcessorKwargs(ProcessingKwargs, total=False):
     }
 
 
+@requires(backends=("torch",))
 @auto_docstring
 class MusicFlamingoProcessor(ProcessorMixin):
     valid_processor_kwargs = MusicFlamingoProcessorKwargs
@@ -110,7 +112,9 @@ class MusicFlamingoProcessor(ProcessorMixin):
         model_inputs = super().__call__(audio=audio, text=text, **kwargs)
 
         if output_labels:
-            labels = model_inputs.pop("mm_token_type_ids")
+            mm_token_type_ids = model_inputs.pop("mm_token_type_ids")
+            labels = model_inputs["input_ids"].clone()
+            labels[mm_token_type_ids != 0] = -100  # audio positions
             labels[labels == self.tokenizer.pad_token_id] = -100
             model_inputs["labels"] = labels
         return BatchFeature(data=model_inputs, tensor_type="pt")
@@ -187,8 +191,15 @@ class MusicFlamingoProcessor(ProcessorMixin):
         return ["num_audio_tokens"]
 
     @property
-    def audio_ids(self):
+    def audio_token_ids(self):
         return [self.audio_token_id, self.audio_bos_token_id, self.audio_eos_token_id]
+
+    # Alias for BC
+    @property
+    def audio_ids(self):
+        """Deprecated alias for `audio_token_ids`; will be removed in a future release."""
+        logger.warning_once("`audio_ids` is deprecated; please use `audio_token_ids` instead.")
+        return self.audio_token_ids
 
 
 __all__ = ["MusicFlamingoProcessor"]

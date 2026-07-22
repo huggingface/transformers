@@ -906,7 +906,7 @@ class CamembertForMultipleChoice(CamembertPreTrainedModel):
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.classifier = nn.Linear(config.hidden_size, 1)
 
-        self.roberta = CamembertModel(config, add_pooling_layer=False)
+        self.roberta = CamembertModel(config, add_pooling_layer=True)
 
         # Initialize weights and apply final processing
         self.post_init()
