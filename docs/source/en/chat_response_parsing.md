@@ -89,6 +89,11 @@ for event in final_events:
     render(event)
 ```
 
+If the request includes tools, pass them through as well (`get_response_parser(..., tools=tools)` or
+`parse_response(..., tools=tools)`). String-valued tool-call arguments are then coerced to the types
+declared in each tool's JSON Schema when the tool-call region closes, so streaming consumers see typed
+arguments on `region_close` rather than only after `finalize()`.
+
 The parser will emit **events** as text from the generation process is fed in. This indicates which region is currently being generated. When
 the region is complete, it will be emitted in a separate event with the fully parsed content. At the end of generation,
 the `finalize()` method flushes any remaining text and emits any final events, as well as the complete message dict.
@@ -100,11 +105,11 @@ If you want to stream multiple generations at once, create one [`~utils.chat_par
 
 Each streamed parsing event is a dict with a `type` key. There are three kinds:
 
-| Type           | Description                                                                         | Contents                                                                                                                        |
-|----------------|-------------------------------------------------------------------------------------|---------------------------------------------------------------------------------------------------------------------------------|
-| `region_open`  | Indicates that the model has started a new region, such as `content` or `thinking`. | `field` (str): the field name.                                                                                                  |
-| `region_chunk` | A chunk of text for the current region.                                             | `field` (str): the field name. `text` (str): the new chunk. `dirty` (bool): `True` if the chunk is raw text that needs parsing. |
-| `region_close` | Indicates that a region has finished, and that key is now finalized.                | `field` (str): the field name. `value` (any): the fully parsed value for the region                                             |
+| Type           | Description                                                                         | Contents                                                                                                                                                          |
+|----------------|-------------------------------------------------------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `region_open`  | Indicates that the model has started a new region, such as `content` or `thinking`. | `field` (str): the field name. `captures` (dict): named groups from the open pattern (e.g. a tool name); empty for implicit opens.                               |
+| `region_chunk` | A chunk of text for the current region.                                             | `field` (str): the field name. `text` (str): the new chunk. `dirty` (bool): `True` if the chunk is raw text that needs parsing.                                   |
+| `region_close` | Indicates that a region has finished, and that key is now finalized.                | `field` (str): the field name. `value` (any): the fully parsed value for the region                                                                               |
 
 `region_chunk` events are emitted for every region as bytes arrive, so a streaming UI can render progress
 even for structured regions. For text-like regions (`text`, `int`, `float`, `bool`) chunks are flagged
@@ -124,13 +129,12 @@ sequence and their parsed value lands in the output dict, exactly as if the mode
 A typical event stream might look like this:
 
 ```python
-{"type": "region_open",  "field": "thinking"}
+{"type": "region_open",  "field": "thinking", "captures": {}}
 {"type": "region_chunk", "field": "thinking", "text": "I should ", "dirty": False}
 {"type": "region_chunk", "field": "thinking", "text": "greet the user", "dirty": False}
 {"type": "region_close", "field": "thinking", "value": "I should greet the user"}
-{"type": "region_open",  "field": "tool_calls"}
-{"type": "region_chunk", "field": "tool_calls", "text": '{"name": "greet_user", ', "dirty": True}
-{"type": "region_chunk", "field": "tool_calls", "text": '"arguments": {"greeting": "Hi!"}}', "dirty": True}
+{"type": "region_open",  "field": "tool_calls", "captures": {"name": "greet_user"}}
+{"type": "region_chunk", "field": "tool_calls", "text": '<parameter=greeting>\nHi!\n</parameter>\n', "dirty": True}
 {"type": "region_close", "field": "tool_calls", "value": {"type": "function", "function": {"name": "greet_user", "arguments": {"greeting": "Hi!"}}}}
 ```
 
@@ -141,6 +145,10 @@ restructured to generate the final tool call dict. As a result, the final output
 very different from the raw text. This final parsing will only happen when `region_close` is reached. It's
 up to you what you want to do with the `dirty` chunks until then - you can display them as-is to show the user the 
 "raw" output, or you can simply wait until you have something clean to display.
+
+When a tool-call field's open pattern captures the function name (as above), `region_open["captures"]`
+lets a streaming consumer emit the tool-call header immediately, then wait for `region_close` for the
+fully parsed arguments. Fields without named open groups still get `captures={}`.
 
 This concludes most of what you need to know to use response templates. The rest of this document is focused on
 the internals of the parsing system and how to write response templates. This is mostly relevant for developers
@@ -365,6 +373,47 @@ Note the nested `value_parser`: each parameter value is itself run through the `
 input = "<tool_call><function=get_weather><parameter=city>London</parameter><parameter=units>celsius</parameter></function></tool_call>"
 # Returns: {"tool_calls": [{"type": "function", "function": {"name": "get_weather", "arguments": {"city": "London", "units": "celsius"}}}]}
 ```
+
+**Typing `xml-inline` arguments with `tools=`.** A JSON tool-call body carries types in the
+syntax itself (`7` vs `"7"`, `true` vs `"true"`), so the `json` content parser recovers them
+automatically. An `xml-inline` body does not: everything between the tags is plain text, so without
+a `value_parser` you get all strings (`{"hour": "7", "enabled": "true"}`). Pass the request's
+OpenAI-style `tools` to [`~PreTrainedTokenizerBase.parse_response`] or
+[`~utils.chat_parsing.ResponseParser`] via `tools=` to cast those strings using each tool's JSON
+Schema `parameters`:
+
+```python
+tools = [{
+    "type": "function",
+    "function": {
+        "name": "set_alarm",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "hour": {"type": "integer"},
+                "enabled": {"type": "boolean"},
+                "label": {"type": "string"},
+            },
+        },
+    },
+}]
+message = parse_response(model_out, template, prefix="", tools=tools)
+# message["tool_calls"][0]["function"]["arguments"] ==
+# {"hour": 7, "enabled": True, "label": "wake up"}
+```
+
+Coercion is a small post-parsing pass over each tool call: it looks up the tool by its
+`function.name`, then casts any **string-valued** argument the schema declares (`"7"` -> `7`,
+`"true"` -> `True`, `"007"` -> `7`). Already-typed values, arguments the schema does not describe,
+and casts that fail are all left untouched, so `tools=` can only add type information, never corrupt
+a parsed call. It is not tied to `xml-inline`; it runs for any tool-call field, and is simply a
+no-op for JSON grammars whose arguments are already typed.
+
+Because coercion only acts on strings, it runs *after* any `value_parser`. If you rely on `tools=`
+for typing, prefer to omit the `value_parser` so argument bodies stay raw text. A `value_parser` of
+`json` + `allow_non_json` (as in the Qwen3 example above) infers types from JSON syntax alone and
+would eagerly turn a `string` parameter's `1.50` into the float `1.5` before the schema is
+consulted; with the body left raw, the `string` parameter keeps `1.50` exactly as written.
 
 #### kv-lines
 

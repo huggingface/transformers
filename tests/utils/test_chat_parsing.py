@@ -24,6 +24,7 @@ import unittest
 from transformers import AutoTokenizer
 from transformers.testing_utils import require_torch
 from transformers.utils.chat_parsing import ResponseParser, parse_response
+from transformers.utils.chat_parsing.tool_arg_coercion import coerce_arguments, coerce_tool_calls
 
 
 cohere_template = {
@@ -1282,6 +1283,205 @@ class PrefixAndTruncationTest(unittest.TestCase):
         stream.feed("body</think>")
         result, _ = stream.finalize()
         self.assertEqual(result, {"role": "assistant", "thinking": "body"})
+
+
+# xml-inline without a value_parser: parameter bodies stay raw strings until tools= coerces them.
+_XML_STRING_ARGS_TEMPLATE = {
+    "defaults": {"role": "assistant"},
+    "start_anchor": "<|im_start|>assistant\n",
+    "fields": {
+        "tool_calls": {
+            "open_pattern": r"<tool_call>\s*<function=(?P<name>\w+)>",
+            "close": "</tool_call>",
+            "repeats": True,
+            "content": "xml-inline",
+            "content_args": {
+                "tag_pattern": r"<parameter=(?P<key>\w+)>\s*(?P<value>.*?)\s*</parameter>",
+            },
+            "transform": {"type": "function", "function": {"name": "{name}", "arguments": "{content}"}},
+        },
+    },
+}
+
+_SET_ALARM_CALL = (
+    "<tool_call>\n<function=set_alarm>\n"
+    "<parameter=hour>\n7\n</parameter>\n"
+    "<parameter=enabled>\ntrue\n</parameter>\n"
+    "<parameter=label>\nwake up\n</parameter>\n"
+    "</function>\n</tool_call>"
+)
+
+_SET_ALARM_TOOLS = [
+    {
+        "type": "function",
+        "function": {
+            "name": "set_alarm",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "hour": {"type": "integer"},
+                    "enabled": {"type": "boolean"},
+                    "label": {"type": "string"},
+                },
+            },
+        },
+    }
+]
+
+
+def _first_tool_args(message):
+    return message["tool_calls"][0]["function"]["arguments"]
+
+
+class ToolArgCoercionTest(unittest.TestCase):
+    def test_coerce_arguments_casts_declared_types(self):
+        properties = {
+            "count": {"type": "integer"},
+            "ratio": {"type": "number"},
+            "enabled": {"type": "boolean"},
+            "tags": {"type": "array"},
+            "note": {"type": "string"},
+        }
+        arguments = {
+            "count": "3",
+            "ratio": "1.5",
+            "enabled": "true",
+            "tags": '["a", "b"]',
+            "note": "hello",
+            "already_typed": 7,
+            "extra": "unscheduled",
+        }
+        self.assertEqual(
+            coerce_arguments(arguments, properties),
+            {
+                "count": 3,
+                "ratio": 1.5,
+                "enabled": True,
+                "tags": ["a", "b"],
+                "note": "hello",
+                "already_typed": 7,
+                "extra": "unscheduled",
+            },
+        )
+
+    def test_coerce_arguments_falls_back_to_raw_on_failure(self):
+        self.assertEqual(
+            coerce_arguments({"count": "not-a-number"}, {"count": {"type": "integer"}}),
+            {"count": "not-a-number"},
+        )
+
+    def test_coerce_arguments_handles_any_of_and_null(self):
+        properties = {"n": {"anyOf": [{"type": "integer"}, {"type": "null"}]}}
+        self.assertEqual(coerce_arguments({"n": "5"}, properties), {"n": 5})
+        self.assertEqual(coerce_arguments({"n": "null"}, properties), {"n": None})
+
+    def test_coerce_arguments_booleans_match_bool_parser(self):
+        properties = {"flag": {"type": "boolean"}}
+        # Accept the same literals as the `bool` content parser, case-insensitively.
+        for raw, expected in [("true", True), ("True", True), ("1", True), ("false", False), ("0", False)]:
+            self.assertEqual(coerce_arguments({"flag": raw}, properties), {"flag": expected})
+        # Non-boolean text stays a string rather than silently becoming False.
+        self.assertEqual(coerce_arguments({"flag": "maybe"}, properties), {"flag": "maybe"})
+
+    def test_coerce_arguments_object_array_require_matching_json(self):
+        # A JSON object body is only accepted for an `object` param, a JSON array only for `array`.
+        self.assertEqual(coerce_arguments({"x": "[1, 2]"}, {"x": {"type": "object"}}), {"x": "[1, 2]"})
+        self.assertEqual(coerce_arguments({"x": '{"a": 1}'}, {"x": {"type": "array"}}), {"x": '{"a": 1}'})
+        self.assertEqual(coerce_arguments({"x": '{"a": 1}'}, {"x": {"type": "object"}}), {"x": {"a": 1}})
+        # NaN / inf are not valid JSON numbers, so a `number` param keeps the raw text.
+        self.assertEqual(coerce_arguments({"x": "NaN"}, {"x": {"type": "number"}}), {"x": "NaN"})
+
+    def test_coerce_tool_calls_handles_single_and_list(self):
+        call = {"type": "function", "function": {"name": "set_alarm", "arguments": {"hour": "7"}}}
+        self.assertIs(coerce_tool_calls(call, _SET_ALARM_TOOLS), call)
+        self.assertEqual(call["function"]["arguments"], {"hour": 7})
+        # A list of calls (as produced by `transform_each`) is coerced element-wise.
+        calls = [{"type": "function", "function": {"name": "set_alarm", "arguments": {"hour": "9"}}}]
+        self.assertEqual(coerce_tool_calls(calls, _SET_ALARM_TOOLS)[0]["function"]["arguments"], {"hour": 9})
+        # Non-tool-call values pass through untouched.
+        self.assertEqual(coerce_tool_calls("hello", _SET_ALARM_TOOLS), "hello")
+
+    def test_parse_response_tools_coerces_xml_inline_string_args(self):
+        # Without a value_parser, xml-inline argument bodies stay strings; tools= casts them.
+        without = parse_response(_SET_ALARM_CALL, _XML_STRING_ARGS_TEMPLATE, prefix="")
+        with_tools = parse_response(_SET_ALARM_CALL, _XML_STRING_ARGS_TEMPLATE, prefix="", tools=_SET_ALARM_TOOLS)
+        self.assertEqual(_first_tool_args(without), {"hour": "7", "enabled": "true", "label": "wake up"})
+        self.assertEqual(_first_tool_args(with_tools), {"hour": 7, "enabled": True, "label": "wake up"})
+
+    def test_streaming_tools_coerces_on_region_close(self):
+        # Coercion must land on the region_close event during feed(), not only after finalize().
+        stream = ResponseParser(_XML_STRING_ARGS_TEMPLATE, prefix="", tools=_SET_ALARM_TOOLS)
+        closes = [
+            event["value"]
+            for chunk in _chunk_fixed(_SET_ALARM_CALL, 8)
+            for event in stream.feed(chunk)
+            if event["type"] == "region_close" and event["field"] == "tool_calls"
+        ]
+        self.assertEqual(len(closes), 1)
+        self.assertEqual(closes[0]["function"]["arguments"], {"hour": 7, "enabled": True, "label": "wake up"})
+
+    def test_region_open_carries_open_pattern_captures(self):
+        # region_open exposes the open pattern's named groups (here the tool name), letting a
+        # streaming consumer emit the tool-call header before the body is parsed.
+        stream = ResponseParser(_XML_STRING_ARGS_TEMPLATE, prefix="")
+        opens = [
+            event["captures"]
+            for chunk in _chunk_fixed(_SET_ALARM_CALL, 8)
+            for event in stream.feed(chunk)
+            if event["type"] == "region_open" and event["field"] == "tool_calls"
+        ]
+        self.assertEqual(opens, [{"name": "set_alarm"}])
+
+    def test_qwen3_tools_coerces_strings_left_by_value_parser(self):
+        # qwen3 uses json+allow_non_json: `007` is invalid JSON so it stays a string (while `true`
+        # is already parsed to a bool). tools= recovers the declared integer type for `hour`.
+        model_out = (
+            "<tool_call>\n<function=set_alarm>\n"
+            "<parameter=hour>\n007\n</parameter>\n"
+            "<parameter=enabled>\ntrue\n</parameter>\n"
+            "<parameter=label>\nwake up\n</parameter>\n"
+            "</function>\n</tool_call>"
+        )
+        without = parse_response(model_out, qwen3_template, prefix="")
+        with_tools = parse_response(model_out, qwen3_template, prefix="", tools=_SET_ALARM_TOOLS)
+        self.assertEqual(_first_tool_args(without), {"hour": "007", "enabled": True, "label": "wake up"})
+        self.assertEqual(_first_tool_args(with_tools), {"hour": 7, "enabled": True, "label": "wake up"})
+
+    def test_value_parser_runs_before_coercion(self):
+        # Coercion only casts string-valued arguments, so a template `value_parser` that already
+        # produced a non-string wins. qwen3's json value_parser parses `1.50` to the float 1.5
+        # before coercion sees it, so even with tools= the string type is not recovered.
+        model_out = "<tool_call>\n<function=set_alarm>\n<parameter=label>\n1.50\n</parameter>\n</function>\n</tool_call>"
+        self.assertEqual(_first_tool_args(parse_response(model_out, qwen3_template, prefix="")), {"label": 1.5})
+        self.assertEqual(
+            _first_tool_args(parse_response(model_out, qwen3_template, prefix="", tools=_SET_ALARM_TOOLS)),
+            {"label": 1.5},
+        )
+        # The way to get faithful typing from the schema is to omit the value_parser so bodies stay
+        # raw text: then a `string` parameter keeps the model's exact `1.50`.
+        self.assertEqual(
+            _first_tool_args(parse_response(model_out, _XML_STRING_ARGS_TEMPLATE, prefix="", tools=_SET_ALARM_TOOLS)),
+            {"label": "1.50"},
+        )
+
+    def test_tokenizer_parse_response_forwards_tools(self):
+        # The public tokenizer entry point threads tools= through to coercion.
+        tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-gpt2")
+        tokenizer.response_template = _XML_STRING_ARGS_TEMPLATE
+        parsed = tokenizer.parse_response(_SET_ALARM_CALL, prefix="", tools=_SET_ALARM_TOOLS)
+        self.assertEqual(_first_tool_args(parsed), {"hour": 7, "enabled": True, "label": "wake up"})
+
+    def test_tools_is_a_noop_for_typed_json_tool_calls(self):
+        # JSON tool-call bodies already carry their types, so passing tools= must not change them.
+        model_out = (
+            "<|START_THINKING|>x<|END_THINKING|>"
+            '<|START_ACTION|>[{"tool_call_id": "0", "tool_name": "set_alarm", '
+            '"parameters": {"hour": 7, "enabled": true}}]<|END_ACTION|><|END_OF_TURN_TOKEN|>'
+        )
+        without = parse_response(model_out, cohere_template, prefix="")
+        with_tools = parse_response(model_out, cohere_template, prefix="", tools=_SET_ALARM_TOOLS)
+        self.assertEqual(without, with_tools)
+        self.assertEqual(_first_tool_args(with_tools), {"hour": 7, "enabled": True})
 
 
 if __name__ == "__main__":

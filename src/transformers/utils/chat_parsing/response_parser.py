@@ -18,14 +18,24 @@ from typing import Any
 
 from .content_parsers import STREAMABLE_PARSERS, process_field
 from .response_templates import ResponseTemplate, ResponseTemplateField, load_response_template
+from .tool_arg_coercion import coerce_tool_calls
 
 
-def parse_response(text: str, response_template: dict | ResponseTemplate, *, prefix: str | None = None) -> dict:
+def parse_response(
+    text: str,
+    response_template: dict | ResponseTemplate,
+    *,
+    prefix: str | None = None,
+    tools: list[dict] | None = None,
+) -> dict:
     """The main function for response parsing when you don't want streaming. Takes generated output
     and the prompt prefix and parses them without streaming any events, then returns the parsed message.
+
+    Pass `tools` (OpenAI-style tool specs with JSON Schema `parameters`) to coerce tool-call
+    arguments to their declared types as each tool-call region is closed.
     """
     response_template = load_response_template(response_template)
-    stream = ResponseParser(response_template, prefix=prefix)
+    stream = ResponseParser(response_template, prefix=prefix, tools=tools)
     stream.feed(text)
     message, _ = stream.finalize()
     return message
@@ -48,7 +58,14 @@ class ResponseParser:
         for event in final_events:
             handle(event)
 
+    Pass `tools=` (OpenAI-style tool specs) to coerce tool-call arguments to their declared
+    JSON Schema types when each tool-call region closes, so `region_close` values are already
+    typed for streaming consumers.
+
     Events can be either "region_open", "region_chunk", or "region_close".
+    Explicit ``region_open`` events also carry ``captures``: the named groups from the
+    field's open pattern (e.g. a tool name), so consumers can emit a function-call
+    header before the region body is fully parsed. Implicit opens use ``captures={}``.
 
     ResponseParser requires the chat `prefix` (i.e. the chat history, the prefill before the current generation).
     This is because chat templates or assistant prefills can sometimes write part of the message, and if we
@@ -57,7 +74,13 @@ class ResponseParser:
     prefill regions before the model writes anything; closed prefill regions also land in the output dict.
     """
 
-    def __init__(self, response_template: dict | ResponseTemplate, prefix: str | None = None):
+    def __init__(
+        self,
+        response_template: dict | ResponseTemplate,
+        prefix: str | None = None,
+        *,
+        tools: list[dict] | None = None,
+    ):
         self._spec = load_response_template(response_template)
         if prefix is None:
             raise ValueError(
@@ -66,6 +89,7 @@ class ResponseParser:
                 "opening `<think>` tag) that the parser must see to parse the output correctly. If the generation "
                 'already contains the complete message, pass `prefix=""` to opt out explicitly.'
             )
+        self._tools = tools
         self._buffer: str = ""
         self._pos: int = 0
         self._output: dict[str, Any] = dict(self._spec.defaults)
@@ -265,7 +289,8 @@ class ResponseParser:
             return
         field = self._spec.fields[self._current]
         if not self._opened:
-            events.append({"type": "region_open", "field": self._current})
+            # Implicit opens have no open-pattern match, so captures stay empty.
+            events.append({"type": "region_open", "field": self._current, "captures": {}})
             self._opened = True
         self._body += text
         dirty = field.content not in STREAMABLE_PARSERS
@@ -276,7 +301,13 @@ class ResponseParser:
         self._captures = {k: v for k, v in m.groupdict().items() if v is not None}
         self._body = ""
         self._opened = True
-        events.append({"type": "region_open", "field": field.name})
+        events.append(
+            {
+                "type": "region_open",
+                "field": field.name,
+                "captures": dict(self._captures),
+            }
+        )
 
     def _close_current(self, events: list[dict]) -> None:
         """Close the current region and reset to the implicit/null region.
@@ -287,6 +318,11 @@ class ResponseParser:
             return
         field = self._spec.fields[self._current]
         value = process_field(self._body, field, self._captures)
+        if self._tools:
+            # Post-parse pass: cast tool-call arguments to their declared schema types
+            # before store/emit, so streaming consumers see typed args on region_close
+            # (not only after finalize). A no-op for values that aren't tool calls.
+            value = coerce_tool_calls(value, self._tools)
         if field.repeats:
             self._output.setdefault(self._current, []).append(value)
         else:
