@@ -14,11 +14,9 @@
 # limitations under the License.
 """Testing suite for the PyTorch Qwen2.5-Omni model."""
 
-import json
 import tempfile
 import unittest
 from io import BytesIO
-from pathlib import Path
 from urllib.request import urlopen
 
 import librosa
@@ -833,25 +831,31 @@ class Qwen2_5OmniModelIntegrationTest(unittest.TestCase):
     @slow
     def test_small_model_integration_test_token2wav_regression(self):
         """
-        Regression test for #47328: the Token2Wav DiT applies an interleaved rotary embedding
-        (pairing channels `(2i, 2i + 1)`), so its `cos`/`sin` must be applied accordingly; a
-        half-split application silently degrades the generated audio. This test drives the
-        Token2Wav module of the released checkpoint with pre-recorded talker codec tokens and
-        checks that the generated waveform does not regress. The waveform is compared on a
-        strided sample signature spanning the whole utterance (a contiguous head slice would
-        only cover leading silence) plus its overall RMS.
+        Regression test for #47328: the Token2Wav DiT applies RoPE to head 0 only, with an
+        interleaved channel layout (pairing `(2i, 2i + 1)`), so `deinterleave_head_dim` reorders
+        q/k into the half-split layout expected by the kernelized `apply_rotary_pos_emb`. The plain
+        half-split `cos`/`sin` layout introduced by #39847 (without deinterleaving) silently
+        degraded the generated audio, collapsing its overall energy by ~3.6x.
 
-        The fixture was produced with the reproducer script in PR #47403 (deterministic
-        `generate()` run: greedy thinker/talker, `torch.manual_seed(0)`, then the captured
-        talker codes replayed through `model.token2wav` exactly as below).
+        A fixed slice of pre-recorded talker codec tokens is replayed through the Token2Wav module
+        of the released checkpoint; the waveform is checked on a 50-sample signature strided across
+        the whole utterance (a contiguous head slice would only cover leading silence) plus its
+        overall std/RMS. Codes are replayed rather than produced by a full `generate()` because bf16
+        thinker/talker greedy decoding can flip tokens across GPU architectures, whereas the fp32
+        Token2Wav module (where the regression lives) is stable.
+
+        reproducer (recomputes the expected values below from these codes):
+        https://gist.github.com/HenryVarro666/4f633e37835ca9e019ed7f789309775b#file-reproducer-py
         """
-        fixtures_path = Path(__file__).parent.parent.parent / "fixtures/qwen2_5_omni"
-        with open(fixtures_path / "expected_audio_regression.json") as f:
-            raw_data = json.load(f)
-        talker_codes = torch.tensor(raw_data["talker_codes"], device=torch_device)[None, :]
-        stride = raw_data["waveform_stride"]
-        expected_strided = torch.tensor(raw_data["waveform_strided"], dtype=torch.float32)
-        expected_rms = raw_data["waveform_rms"]
+        # 50 talker codec tokens captured from a deterministic greedy generate() (seed 0).
+        talker_code_ids = [
+            3380, 1835, 397, 2983, 2983, 2983, 2983, 2983, 397, 885,
+            6248, 2712, 1946, 6615, 5436, 1038, 2118, 2649, 1532, 1834,
+            1058, 8060, 3357, 7288, 2284, 4600, 4600, 4600, 4600, 4600,
+            4600, 4600, 4600, 4600, 4600, 4600, 4600, 4600, 4600, 4600,
+            4600, 4600, 4600, 4600, 4600, 4600, 4600, 4600, 4600, 4600,
+        ]  # fmt: skip
+        talker_codes = torch.tensor(talker_code_ids, device=torch_device)[None, :]
 
         model = Qwen2_5OmniForConditionalGeneration.from_pretrained(
             "Qwen/Qwen2.5-Omni-7B", dtype=torch.bfloat16, device_map="auto"
@@ -869,10 +873,36 @@ class Qwen2_5OmniModelIntegrationTest(unittest.TestCase):
             )
         waveform = waveform.float().cpu().squeeze()
 
-        self.assertEqual(waveform.shape[-1], raw_data["waveform_length"])
-        torch.testing.assert_close(waveform[::stride], expected_strided, rtol=1e-3, atol=5e-3)
-        rms = waveform.pow(2).mean().sqrt().item()
-        torch.testing.assert_close(rms, expected_rms, rtol=1e-2, atol=1e-4)
+        # 50 samples evenly strided across the whole utterance.
+        signature = waveform[:: waveform.shape[-1] // 50][:50]
+        expected_signatures = Expectations(
+            {
+                ("cuda", 9): torch.tensor([
+                    0.000079, 0.000007, 0.000007, 0.000009, 0.000009,
+                    0.000009, 0.000009, 0.000008, 0.000008, 0.000007,
+                    0.000391, -0.016136, 0.006466, 0.009958, -0.009722,
+                    0.004204, -0.000167, -0.000573, 0.000044, 0.000067,
+                    -0.014672, -0.081729, -0.016467, 0.076082, -0.003551,
+                    -0.017296, 0.069874, -0.008040, -0.027811, 0.028181,
+                    -0.000119, 0.038994, -0.045137, 0.040702, 0.059884,
+                    -0.018841, -0.018413, -0.002327, 0.010766, 0.035896,
+                    0.026562, 0.038278, 0.024461, -0.029035, 0.022179,
+                    -0.024967, -0.020832, 0.000076, 0.005978, -0.004948,
+                ]),
+            }
+        )  # fmt: skip
+        expected_signature = expected_signatures.get_expectation()
+        torch.testing.assert_close(signature, expected_signature, rtol=1e-3, atol=5e-3)
+
+        # Overall energy: the regression collapses std/RMS ~3.6x (0.0270 -> 0.0076).
+        expected_stats = Expectations(
+            {
+                ("cuda", 9): (0.027019, 0.027018),
+            }
+        )  # fmt: skip
+        expected_std, expected_rms = expected_stats.get_expectation()
+        torch.testing.assert_close(waveform.std().item(), expected_std, rtol=1e-2, atol=3e-3)
+        torch.testing.assert_close(waveform.pow(2).mean().sqrt().item(), expected_rms, rtol=1e-2, atol=3e-3)
 
     @slow
     @require_flash_attn
