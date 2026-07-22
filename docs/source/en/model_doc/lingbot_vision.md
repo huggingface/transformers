@@ -17,6 +17,7 @@ specific language governing permissions and limitations under the License.
 LingBot-Vision is a vision transformer encoder for image feature extraction. The architecture uses storage tokens,
 axial rotary position embeddings, LayerScale, and MLP or SwiGLU feed-forward layers depending on the checkpoint size.
 
+This model was contributed by [IMvision12](https://huggingface.co/IMvision12).
 The original code can be found [here](https://github.com/Robbyant/lingbot-vision).
 
 ## Usage Example

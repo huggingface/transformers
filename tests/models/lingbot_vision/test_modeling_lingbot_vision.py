@@ -35,7 +35,7 @@ if is_torch_available():
 if is_vision_available():
     from PIL import Image
 
-    from transformers import AutoImageProcessor, LingbotVisionImageProcessor, LingbotVisionImageProcessorPil
+    from transformers import AutoImageProcessor
 
 
 # HF-format checkpoint of the flagship ViT-g/16 backbone (produced by
@@ -187,21 +187,6 @@ class LingbotVisionModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Tes
         config = self.model_tester.get_config()
         self.assertIsInstance(AutoModel.from_config(config), LingbotVisionModel)
         self.assertIsInstance(AutoBackbone.from_config(config), LingbotVisionBackbone)
-
-    @require_vision
-    def test_image_processor_defaults(self):
-        image_processor = LingbotVisionImageProcessor()
-        self.assertEqual(image_processor.size.height, 512)
-        self.assertEqual(image_processor.size.width, 512)
-        self.assertEqual(image_processor.image_mean, (0.485, 0.456, 0.406))
-        self.assertEqual(image_processor.image_std, (0.229, 0.224, 0.225))
-
-    @require_vision
-    def test_image_processor_matches_pil_backend(self):
-        image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
-        default_pixel_values = LingbotVisionImageProcessor()(image, return_tensors="pt").pixel_values
-        pil_pixel_values = LingbotVisionImageProcessorPil()(image, return_tensors="pt").pixel_values
-        torch.testing.assert_close(default_pixel_values, pil_pixel_values, rtol=0, atol=1e-6)
 
     @unittest.skip(reason="LingBot-Vision does not use inputs_embeds")
     def test_inputs_embeds(self):

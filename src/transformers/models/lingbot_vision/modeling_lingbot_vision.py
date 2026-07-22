@@ -281,10 +281,8 @@ class LingbotVisionAttention(nn.Module):
         value = value.transpose(1, 2)
         query, key = self.apply_rope(query, key, rope)
 
-        attention_interface: Callable = (
-            eager_attention_forward
-            if kwargs.get("output_attentions", False)
-            else ALL_ATTENTION_FUNCTIONS.get_interface(self.config._attn_implementation, eager_attention_forward)
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
         )
         context_layer, attention_probs = attention_interface(
             self,
