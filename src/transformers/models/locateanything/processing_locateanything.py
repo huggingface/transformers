@@ -23,9 +23,7 @@ from ...tokenization_utils_base import PreTokenizedInput, TextInput
 
 
 class LocateAnythingProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {
-        "text_kwargs": {"padding": False},
-    }
+    pass
 
 
 class LocateAnythingProcessor(ProcessorMixin):
