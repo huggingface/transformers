@@ -14,6 +14,78 @@ import requests
 logger = logging.getLogger(__name__)
 
 
+def _log_rate_limit_headers(response, prefix=""):
+    """Print all GitHub rate-limit response headers for diagnostics."""
+    h = response.headers
+    limit = h.get("X-RateLimit-Limit", "n/a")
+    used = h.get("X-RateLimit-Used", "n/a")
+    remaining = h.get("X-RateLimit-Remaining", "n/a")
+    reset_ts = h.get("X-RateLimit-Reset")
+    resource = h.get("X-RateLimit-Resource", "n/a")
+    retry_after = h.get("Retry-After")
+
+    if reset_ts is not None:
+        secs_until = int(reset_ts) - int(time.time())
+        reset_str = f"{reset_ts} (resets in {secs_until}s, i.e. {secs_until // 60}m {secs_until % 60}s)"
+    else:
+        reset_str = "n/a"
+
+    parts = [
+        f"limit={limit}",
+        f"used={used}",
+        f"remaining={remaining}",
+        f"reset={reset_str}",
+        f"resource={resource}",
+    ]
+    if retry_after is not None:
+        parts.append(f"Retry-After={retry_after}s")
+
+    tag = f"[{prefix}] " if prefix else ""
+    print(f"{tag}GitHub rate-limit headers: {', '.join(parts)}")
+
+
+_token_status_logged = False
+
+
+def _log_token_status(token=None):
+    """Call GET /rate_limit once to confirm whether the token is valid.
+
+    /rate_limit is documented as not consuming quota, so it is safe to call as a pure diagnostic.
+    Prints whether the token is accepted (limit=5000+) or rejected (401 = invalid/expired/revoked).
+    """
+    global _token_status_logged
+    if _token_status_logged:
+        return
+    _token_status_logged = True
+
+    headers = {"Accept": "application/vnd.github+json", "Authorization": f"Bearer {token}"} if token else None
+    try:
+        r = requests.get("https://api.github.com/rate_limit", headers=headers)
+    except Exception as e:
+        print(f"[token check] Could not reach GitHub API: {e}")
+        return
+
+    if r.status_code == 200:
+        core = r.json().get("resources", {}).get("core", r.json().get("rate", {}))
+        limit = core.get("limit", "n/a")
+        used = core.get("used", "n/a")
+        remaining = core.get("remaining", "n/a")
+        reset_ts = core.get("reset")
+        if reset_ts is not None:
+            secs_until = int(reset_ts) - int(time.time())
+            reset_str = f"{reset_ts} (resets in {secs_until}s, i.e. {secs_until // 60}m {secs_until % 60}s)"
+        else:
+            reset_str = "n/a"
+        auth_status = "AUTHENTICATED" if token else "UNAUTHENTICATED"
+        print(
+            f"[token check] {auth_status} — limit={limit}, used={used}, remaining={remaining}, reset={reset_str}"
+        )
+    elif r.status_code == 401:
+        print(f"[token check] Token REJECTED by GitHub (HTTP 401 Bad credentials) — will fall back to unauthenticated (limit=60/hr)")
+    else:
+        print(f"[token check] Unexpected status {r.status_code} from /rate_limit: {r.text[:200]!r}")
+
+
 def _rate_limit_wait(response, attempt):
     """Return how many seconds to wait before retrying a rate-limited GitHub response, or ``None``.
 
@@ -75,20 +147,28 @@ def get_github_json(url, token=None, max_retries=8):
     ``RuntimeError`` if no usable response is obtained, so callers fail loudly instead of indexing
     into an error payload.
     """
+    _log_token_status(token)
+
     headers = None
     if token:
         headers = {"Accept": "application/vnd.github+json", "Authorization": f"Bearer {token}"}
 
     response = None
     for attempt in range(max_retries):
+        # "initial" for the very first call; "retry N/M" for subsequent ones so it's unambiguous.
+        label = "initial" if attempt == 0 else f"retry {attempt}/{max_retries - 1}"
+
         response = requests.get(url, headers=headers)
         status = response.status_code
 
+        print(f"[{label}] GET {url} → HTTP {status}")
+        _log_rate_limit_headers(response, prefix=label)
+
         wait = _rate_limit_wait(response, attempt)
         if wait is not None:
+            next_label = f"retry {attempt + 1}/{max_retries - 1}"
             print(
-                f"GitHub API rate limited on {url} (status {status}); waiting {wait}s before "
-                f"retry {attempt + 1}/{max_retries}"
+                f"[{label}] Rate limited (HTTP {status}) — waiting {wait}s before {next_label}"
             )
             time.sleep(wait)
             continue
@@ -97,10 +177,15 @@ def get_github_json(url, token=None, max_retries=8):
         if headers is not None and status in (401, 404):
             response = requests.get(url)
             status = response.status_code
+            print(f"[{label} - unauth fallback] GET {url} → HTTP {status}")
+            _log_rate_limit_headers(response, prefix=f"{label} - unauth fallback")
 
         if status >= 500:
             wait = min(2**attempt, 60)
-            print(f"GitHub API server error {status} on {url}; retrying in {wait}s ({attempt + 1}/{max_retries})")
+            next_label = f"retry {attempt + 1}/{max_retries - 1}"
+            print(
+                f"[{label}] Server error (HTTP {status}) — waiting {wait}s before {next_label}"
+            )
             time.sleep(wait)
             continue
 
@@ -108,6 +193,7 @@ def get_github_json(url, token=None, max_retries=8):
             return response.json()
 
         # Any other (non-retryable) status: stop and fail loudly below.
+        print(f"[{label}] Non-retryable HTTP {status} on {url} — body: {response.text[:500]!r}")
         break
 
     last_status = response.status_code if response is not None else "no response"
@@ -144,6 +230,7 @@ def get_jobs(workflow_run_id, token=None):
         return _get_paginated_items(url, "jobs", token=token)
     except Exception:
         print(f"Unknown error, could not fetch jobs:\n{traceback.format_exc()}")
+        print("Continuing with empty jobs list.")
 
     return []
 
@@ -157,6 +244,7 @@ def get_job_links(workflow_run_id, token=None):
         return {job["name"]: job["html_url"] for job in jobs}
     except Exception:
         print(f"Unknown error, could not fetch links:\n{traceback.format_exc()}")
+        print("Continuing with empty job links dict.")
 
     return {}
 
@@ -170,6 +258,7 @@ def get_artifacts_links(workflow_run_id, token=None):
         return {artifact["name"]: artifact["archive_download_url"] for artifact in artifacts}
     except Exception:
         print(f"Unknown error, could not fetch links:\n{traceback.format_exc()}")
+        print("Continuing with empty artifacts links dict.")
 
     return {}
 
