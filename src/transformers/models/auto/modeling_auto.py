@@ -515,6 +515,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("univnet", "UnivNetModel"),
         ("uvdoc", "UVDocModel"),
         ("vaultgemma", "VaultGemmaModel"),
+        ("vibevoice", "VibeVoiceForConditionalGeneration"),
         ("vibevoice_acoustic_tokenizer", "VibeVoiceAcousticTokenizerModel"),
         ("vibevoice_acoustic_tokenizer_decoder", "VibeVoiceAcousticTokenizerDecoderModel"),
         ("vibevoice_acoustic_tokenizer_encoder", "VibeVoiceAcousticTokenizerEncoderModel"),
@@ -1332,6 +1333,7 @@ MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING_NAMES = OrderedDict(
         ("speech-encoder-decoder", "SpeechEncoderDecoderModel"),
         ("speech_to_text", "Speech2TextForConditionalGeneration"),
         ("speecht5", "SpeechT5ForSpeechToText"),
+        ("vibevoice", "VibeVoiceForConditionalGeneration"),
         ("vibevoice_asr", "VibeVoiceAsrForConditionalGeneration"),
         ("voxtral", "VoxtralForConditionalGeneration"),
         ("voxtral_realtime", "VoxtralRealtimeForConditionalGeneration"),
@@ -1821,6 +1823,7 @@ MODEL_FOR_TEXT_TO_WAVEFORM_MAPPING_NAMES = OrderedDict(
         ("qwen3_omni_moe", "Qwen3OmniMoeForConditionalGeneration"),
         ("seamless_m4t", "SeamlessM4TForTextToSpeech"),
         ("seamless_m4t_v2", "SeamlessM4Tv2ForTextToSpeech"),
+        ("vibevoice", "VibeVoiceForConditionalGeneration"),
         ("vits", "VitsModel"),
     ]
 )
