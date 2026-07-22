@@ -48,7 +48,7 @@ from ..video_llama_3.modeling_video_llama_3 import (
 logger = logging.get_logger(__name__)
 
 
-@auto_docstring
+@auto_docstring(checkpoint="nvidia/LocateAnything-3B")
 @strict
 class LocateAnythingVisionConfig(PreTrainedConfig):
     r"""
@@ -81,7 +81,7 @@ class LocateAnythingVisionConfig(PreTrainedConfig):
     initializer_range: float = 0.02
 
 
-@auto_docstring
+@auto_docstring(checkpoint="nvidia/LocateAnything-3B")
 @strict
 class LocateAnythingConfig(PreTrainedConfig):
     r"""

@@ -25,7 +25,7 @@ from ...utils import auto_docstring
 from ..auto import CONFIG_MAPPING, AutoConfig
 
 
-@auto_docstring
+@auto_docstring(checkpoint="nvidia/LocateAnything-3B")
 @strict
 class LocateAnythingVisionConfig(PreTrainedConfig):
     r"""
@@ -58,7 +58,7 @@ class LocateAnythingVisionConfig(PreTrainedConfig):
     initializer_range: float = 0.02
 
 
-@auto_docstring
+@auto_docstring(checkpoint="nvidia/LocateAnything-3B")
 @strict
 class LocateAnythingConfig(PreTrainedConfig):
     r"""

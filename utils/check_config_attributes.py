@@ -57,14 +57,6 @@ SPECIAL_CASES_TO_ALLOW = {
     ],  # Used as meta data for other attributes/properties
     "MiniCPM3Config": ["dim_model_base"],  # Used by the logits_scaling property
     "MiniCPMV4_6Config": ["drop_vision_last_layer"],
-    "LocateAnythingConfig": [
-        "use_backbone_lora",
-        "use_llm_lora",
-        "template",
-        "mlp_checkpoint",
-        "downsample_ratio",
-        "loss_version",
-    ],  # training-only / legacy flags, unused by the inference modeling code
     "MiniMaxM3VLTextConfig": ["rotary_dim", "router_jitter_noise"],
     "OpenAIPrivacyFilterConfig": ["classifier_dropout", "output_router_logits", "router_aux_loss_coef"],
     "HYV3Config": ["output_router_logits"],
