@@ -20,7 +20,9 @@ import random
 import shutil
 import sys
 import tempfile
+import unittest
 from pathlib import Path
+from types import SimpleNamespace
 
 import numpy as np
 from huggingface_hub import hf_hub_download
@@ -28,6 +30,8 @@ from parameterized import parameterized
 
 from transformers.processing_utils import (
     MODALITY_TO_AUTOPROCESSOR_MAPPING,
+    ProcessingKwargs,
+    ProcessorMixin,
     Unpack,
 )
 from transformers.testing_utils import (
@@ -2151,3 +2155,12 @@ class ProcessorTesterMixin:
         num_image_tokens_from_call = inputs.mm_token_type_ids.sum(-1).tolist()
         num_image_tokens_from_helper = processor._get_num_multimodal_tokens(image_sizes=image_sizes * 2)
         self.assertEqual(sum(num_image_tokens_from_call), sum(num_image_tokens_from_helper["num_image_tokens"]))
+
+
+class ProcessorMergeKwargsTest(unittest.TestCase):
+    def test_common_kwargs_defaults_are_not_mutated(self):
+        class DummyKwargs(ProcessingKwargs, total=False):
+            _defaults = {"common_kwargs": {"return_tensors": "pt"}}
+
+        ProcessorMixin._merge_kwargs(SimpleNamespace(), DummyKwargs, None, common_kwargs={"return_tensors": "np"})
+        self.assertEqual(DummyKwargs._defaults["common_kwargs"], {"return_tensors": "pt"})
