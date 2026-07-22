@@ -35,7 +35,20 @@ class Glm5NextTextConfig(PreTrainedConfig):
         Per-layer feed-forward schedule. Values are `"dense"` or `"sparse"`.
     layer_types (`list[str]`, *optional*):
         Per-layer attention cache schedule. Values are `"linear_attention"` for
-        KDA layers and `"full_attention"` for MLA layers.
+        KDA layers and `"deepseek_sparse_attention"` for MLA (DSA) layers.
+    indexer_types (`list[str]`, *optional*):
+        Per-layer DSA indexer mode. Values are `"full"` (run the indexer) or `"shared"`
+        (reuse the previous full layer's top-k selection).
+    index_topk (`int`, *optional*, defaults to 2048):
+        Number of sparse-attention positions selected by the DSA indexer.
+    index_head_dim (`int`, *optional*, defaults to 128):
+        DSA indexer projection head dimension.
+    index_n_heads (`int`, *optional*, defaults to 32):
+        Number of DSA indexer heads.
+    index_kpool (`int`, *optional*, defaults to 16):
+        Pool size of the compressed token groups selected by the DSA indexer.
+    index_kpool_always_select_tail (`bool`, *optional*, defaults to `True`):
+        Whether the incomplete KPool tail is always included in sparse attention.
     swiglu_limit (`float`, *optional*, defaults to 10.0):
         Clamp limit applied to SwiGLU gate/up projections.
     linear_head_dim (`int`, *optional*, defaults to 128):
@@ -116,11 +129,17 @@ class Glm5NextTextConfig(PreTrainedConfig):
     bos_token_id: int | None = None
     eos_token_id: int | list[int] | None = None
     tie_word_embeddings: bool = False
+    rope_parameters: dict | None = None
     mlp_layer_types: list[str] | None = None
     attention_bias: bool = False
     attention_dropout: float | int = 0.0
+    index_topk: int = 2048
+    index_head_dim: int = 128
+    index_n_heads: int = 32
     head_dim: int = 0
     layer_types: list[str] | None = None
+    # `"full"` runs the indexer, `"shared"` reuses the previous full layer's index mask.
+    indexer_types: list[str] | None = None
     base_config_key = "text_config"
     swiglu_limit: float | None = 10.0
     linear_head_dim: int = 128
@@ -132,6 +151,9 @@ class Glm5NextTextConfig(PreTrainedConfig):
     hc_sinkhorn_iters: int = 20
     output_router_logits: bool = False
     router_aux_loss_coef: float = 0.001
+
+    index_kpool: int = 16
+    index_kpool_always_select_tail: bool = True
 
     def __post_init__(self, **kwargs):
         if self.num_key_value_heads is None:
@@ -145,9 +167,27 @@ class Glm5NextTextConfig(PreTrainedConfig):
         if self.layer_types is None:
             kda_layers = [idx for idx in range(self.num_hidden_layers) if idx % 4 != 3]
             self.layer_types = [
-                "linear_attention" if layer_idx in kda_layers else "full_attention"
+                "linear_attention" if layer_idx in kda_layers else "deepseek_sparse_attention"
                 for layer_idx in range(self.num_hidden_layers)
             ]
+        self.layer_types = [
+            "deepseek_sparse_attention" if layer_type == "full_attention" else layer_type
+            for layer_type in self.layer_types
+        ]
+
+        # Per-layer indexer mode: a pattern (e.g. `"FSSF..."`) overrides the freq/offset schedule.
+        if self.indexer_types is None:
+            pattern = kwargs.get("index_topk_pattern")
+            if pattern is not None:
+                self.indexer_types = (
+                    [{"F": "full", "S": "shared"}[c] for c in pattern] if isinstance(pattern, str) else list(pattern)
+                )
+            else:
+                freq = max(kwargs.get("index_topk_freq", 1), 1)
+                offset = kwargs.get("index_skip_topk_offset", 2)
+                self.indexer_types = [
+                    "full" if (max(i - offset + 1, 0) % freq) == 0 else "shared" for i in range(self.num_hidden_layers)
+                ]
 
         # Convert dict to attributes (if given)
         linear_attn_dict = kwargs.pop("linear_attn_config", None)
@@ -167,6 +207,23 @@ class Glm5NextTextConfig(PreTrainedConfig):
         self.qk_head_dim = self.qk_rope_head_dim + self.qk_nope_head_dim
 
         super().__post_init__(**kwargs)
+
+    def validate_architecture(self):
+        """Part of `@strict`-powered validation. Validates the architecture of the config."""
+        if self.num_attention_heads % self.num_key_value_heads != 0:
+            raise ValueError(
+                f"num_attention_heads ({self.num_attention_heads}) must be divisible by "
+                f"num_key_value_heads ({self.num_key_value_heads})."
+            )
+
+        if self.index_kpool < 1:
+            raise ValueError(f"index_kpool must be positive, got {self.index_kpool}.")
+
+        if self.index_topk % self.index_kpool != 0:
+            raise ValueError(f"index_topk ({self.index_topk}) must be divisible by index_kpool ({self.index_kpool}).")
+
+        if self.q_lora_rank is None:
+            raise ValueError("For DSA usage in the attention layers, the `q_lora_rank` is strictly required!")
 
 
 @auto_docstring(checkpoint="zai-org/GLM-5-Next")
