@@ -597,7 +597,6 @@ class Zamba2MambaMixer(nn.Module):
         hidden_states: torch.Tensor,
         cache_params: Cache | None = None,
         attention_mask: torch.Tensor | None = None,
-        seq_idx: torch.IntTensor | None = None,
         **kwargs,
     ):
         # 1. Gated MLP's linear projection
@@ -606,8 +605,9 @@ class Zamba2MambaMixer(nn.Module):
 
         A = -torch.exp(self.A_log.float())
         dt_limit_kwargs = {} if self.time_step_limit == (0.0, float("inf")) else {"dt_limit": self.time_step_limit}
+        # Fused kernel for conv1d, SSM, and the final projection
         if self.training and cache_params is None:
-            return mamba_split_conv1d_scan_combined(  # noqa
+            return mamba_split_conv1d_scan_combined(
                 projected_states,
                 self.conv1d.weight.squeeze(1),
                 self.conv1d.bias,
@@ -615,7 +615,7 @@ class Zamba2MambaMixer(nn.Module):
                 A,
                 D=self.D,
                 chunk_size=self.chunk_size,
-                seq_idx=seq_idx,
+                seq_idx=kwargs.get("seq_idx"),
                 activation=self.activation,
                 rmsnorm_weight=self.norm.weight,
                 rmsnorm_eps=self.norm.variance_epsilon,
@@ -647,7 +647,7 @@ class Zamba2MambaMixer(nn.Module):
         )
 
         recurrent_state = cache_params.layers[self.layer_idx].recurrent_states[0] if use_precomputed_states else None
-        # getting projected states from cache if it exists
+        # Single step calculations via cache
         if use_precomputed_states and seq_len == 1:
             # 3. SSM transformation
             A = A[:, None, ...][:, :, None].expand(-1, self.head_dim, self.ssm_state_size).to(dtype=torch.float32)
@@ -657,7 +657,7 @@ class Zamba2MambaMixer(nn.Module):
             B = B.view(batch_size, self.n_groups, B.shape[1] // self.n_groups)
             C = C.view(batch_size, self.n_groups, C.shape[1] // self.n_groups)
             hidden_states_reshaped = hidden_states.view(batch_size, self.num_heads, self.head_dim)
-            hidden_states = selective_state_update(  # noqa
+            hidden_states = selective_state_update(
                 recurrent_state,
                 hidden_states_reshaped,
                 dt,
@@ -674,10 +674,11 @@ class Zamba2MambaMixer(nn.Module):
 
             # 4. Final linear projection
             out = self.out_proj(hidden_states)[:, None, ...]
+
         # Fused calculations or step by step if no initialized cache is found
         else:
             # 3. SSM transformation
-            scan_output, ssm_state = mamba_chunk_scan_combined(  # noqa
+            scan_output, ssm_state = mamba_chunk_scan_combined(
                 hidden_states.view(batch_size, seq_len, -1, self.head_dim),
                 dt,
                 A,
@@ -686,7 +687,7 @@ class Zamba2MambaMixer(nn.Module):
                 chunk_size=self.chunk_size,
                 D=self.D,
                 z=None,
-                seq_idx=seq_idx,
+                seq_idx=kwargs.get("seq_idx"),
                 return_final_states=True,
                 dt_bias=self.dt_bias,
                 dt_softplus=True,
@@ -696,7 +697,7 @@ class Zamba2MambaMixer(nn.Module):
 
             # Init cache
             if ssm_state is not None and cache_params is not None:
-                ssm_state = cache_params.update_recurrent_state(ssm_state, self.layer_idx)
+                cache_params.update_recurrent_state(ssm_state, layer_idx=self.layer_idx)
 
             scan_output = scan_output.view(batch_size, seq_len, -1)
             # Multiply "gate" branch and apply extra normalization layer
@@ -704,22 +705,23 @@ class Zamba2MambaMixer(nn.Module):
 
             # 4. Final linear projection
             out = self.out_proj(scan_output)
+
         return out
 
     def torch_forward(
         self,
-        input_states,
+        hidden_states: torch.Tensor,
         cache_params: Cache | None = None,
         attention_mask: torch.Tensor | None = None,
         **kwargs,
     ):
-        batch_size, seq_len, _ = input_states.shape
-        dtype = input_states.dtype
+        batch_size, seq_len, _ = hidden_states.shape
+        dtype = hidden_states.dtype
         use_precomputed_states = cache_params is not None and cache_params.has_previous_state(self.layer_idx)
 
         # 1. Gated MLP's linear projection
-        input_states = apply_mask_to_padding_states(input_states, attention_mask)
-        projected_states = self.in_proj(input_states)
+        hidden_states = apply_mask_to_padding_states(hidden_states, attention_mask)
+        projected_states = self.in_proj(hidden_states)
 
         gate, hidden_states_B_C, dt = projected_states.split(
             [self.intermediate_size, self.conv_dim, self.num_heads], dim=-1
@@ -738,7 +740,7 @@ class Zamba2MambaMixer(nn.Module):
         A = -torch.exp(self.A_log.float())
         if use_precomputed_states and seq_len == 1:
             # We need to guarantee that anything regarding the cache is on the same device
-            cache_device = cache_params.layers[self.layer_idx].recurrent_states[0].device
+            cache_device = cache_params.layers[self.layer_idx].device
 
             # Note: there is no need to pad parameter matrices here, as there is just one new token
             # for batched generation
@@ -763,15 +765,15 @@ class Zamba2MambaMixer(nn.Module):
 
             # State calculation
             ssm_states = cache_params.layers[self.layer_idx].recurrent_states[0] * dA + dBx
-            ssm_states = cache_params.update_recurrent_state(ssm_states, self.layer_idx)
+            ssm_states = cache_params.update_recurrent_state(ssm_states, layer_idx=self.layer_idx)
 
             # Subsequent output
             C = C.reshape(batch_size, self.n_groups, -1)[..., None, :]
             C = C.expand(batch_size, self.n_groups, self.num_heads // self.n_groups, C.shape[-1]).contiguous()
             C = C.reshape(batch_size, -1, C.shape[-1])
 
-            ssm_states = ssm_states.to(device=C.device, dtype=C.dtype)
             # Reshape ssm_states to merge the first two dimensions
+            ssm_states = ssm_states.to(device=C.device, dtype=C.dtype)
             ssm_states_reshaped = ssm_states.view(batch_size * self.num_heads, self.head_dim, self.ssm_state_size)
             C_reshaped = C.view(batch_size * self.num_heads, self.ssm_state_size, 1)
             y = torch.bmm(ssm_states_reshaped, C_reshaped)
@@ -862,7 +864,7 @@ class Zamba2MambaMixer(nn.Module):
 
             # Init cache
             if ssm_state is not None and cache_params is not None:
-                ssm_state = cache_params.update_recurrent_state(ssm_state, self.layer_idx)
+                cache_params.update_recurrent_state(ssm_state, layer_idx=self.layer_idx)
 
         scan_output = self.norm(y, gate)
 

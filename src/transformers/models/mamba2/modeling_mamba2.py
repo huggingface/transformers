@@ -350,16 +350,10 @@ class Mamba2Mixer(nn.Module):
         # Set up dimensions for reshapes later
         batch_size, seq_len, _ = hidden_states.shape
         groups_time_state_size = self.n_groups * self.ssm_state_size
-        d_mlp = (
-            projected_states.shape[-1]
-            - 2 * self.intermediate_size
-            - 2 * self.n_groups * self.ssm_state_size
-            - self.num_heads
-        ) // 2
         use_precomputed_states = cache_params is not None and cache_params.has_previous_state(self.layer_idx)
 
-        _, _, gate, hidden_states_B_C, dt = projected_states.split(
-            [d_mlp, d_mlp, self.intermediate_size, self.conv_dim, self.num_heads], dim=-1
+        gate, hidden_states_B_C, dt = projected_states.split(
+            [self.intermediate_size, self.conv_dim, self.num_heads], dim=-1
         )
 
         # Apply the conv
@@ -412,7 +406,7 @@ class Mamba2Mixer(nn.Module):
                 chunk_size=self.chunk_size,
                 D=self.D,
                 z=None,
-                seq_idx=None,
+                seq_idx=kwargs.get("seq_idx"),
                 return_final_states=True,
                 dt_bias=self.dt_bias,
                 dt_softplus=True,
@@ -448,14 +442,8 @@ class Mamba2Mixer(nn.Module):
         hidden_states = apply_mask_to_padding_states(hidden_states, attention_mask)
         projected_states = self.in_proj(hidden_states)
 
-        d_mlp = (
-            projected_states.shape[-1]
-            - 2 * self.intermediate_size
-            - 2 * self.n_groups * self.ssm_state_size
-            - self.num_heads
-        ) // 2
-        _, _, gate, hidden_states_B_C, dt = projected_states.split(
-            [d_mlp, d_mlp, self.intermediate_size, self.conv_dim, self.num_heads], dim=-1
+        gate, hidden_states_B_C, dt = projected_states.split(
+            [self.intermediate_size, self.conv_dim, self.num_heads], dim=-1
         )
 
         # 2. Convolution sequence transformation
@@ -477,7 +465,6 @@ class Mamba2Mixer(nn.Module):
             # for batched generation
             dt = dt[:, 0, :][:, None, ...]
             dt = dt.transpose(1, 2).expand(batch_size, dt.shape[-1], self.head_dim)
-            # [num_heads] -> [num_heads, head_dim]
             dt_bias = self.dt_bias[..., None].expand(self.dt_bias.shape[0], self.head_dim)
 
             dt = torch.nn.functional.softplus(dt + dt_bias.to(dt.dtype))
@@ -503,7 +490,6 @@ class Mamba2Mixer(nn.Module):
             C = C.reshape(batch_size, self.n_groups, -1)[..., None, :]
             C = C.expand(batch_size, self.n_groups, self.num_heads // self.n_groups, C.shape[-1]).contiguous()
             C = C.reshape(batch_size, -1, C.shape[-1])
-            # [bsz, num_heads, head_dim]
 
             # Reshape ssm_states to merge the first two dimensions
             ssm_states = ssm_states.to(device=C.device, dtype=C.dtype)
@@ -602,7 +588,7 @@ class Mamba2Mixer(nn.Module):
         scan_output = self.norm(y, gate)
 
         # 4. Final linear projection
-        contextualized_states = self.out_proj(scan_output.to(dtype))  # [batch, seq_len, hidden_size]
+        contextualized_states = self.out_proj(scan_output.to(dtype))
         return contextualized_states
 
     def forward(
