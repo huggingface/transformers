@@ -24,7 +24,6 @@ from ...modeling_layers import GenericForSequenceClassification, GenericForToken
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import logging
-from ...utils.generic import is_flash_attention_requested
 from ..deepseek_v2.modeling_deepseek_v2 import DeepseekV2TopkRouter, yarn_apply_mscale
 from ..deepseek_v3.modeling_deepseek_v3 import (
     DeepseekV3Attention,
@@ -193,9 +192,6 @@ class Mistral4Attention(DeepseekV3Attention):
         if past_key_values is not None:
             key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
 
-        if is_flash_attention_requested(self.config) and self.qk_head_dim != self.v_head_dim:
-            value_states = F.pad(value_states, [0, self.qk_head_dim - self.v_head_dim])
-
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
         )
@@ -210,9 +206,6 @@ class Mistral4Attention(DeepseekV3Attention):
             scaling=self.scaling,
             **kwargs,
         )
-
-        if is_flash_attention_requested(self.config) and self.qk_head_dim != self.v_head_dim:
-            attn_output = attn_output[:, :, :, : self.v_head_dim]
 
         attn_output = attn_output.reshape(batch_size, seq_length, -1).contiguous()
         attn_output = self.o_proj(attn_output)
