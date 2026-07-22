@@ -254,6 +254,7 @@ IGNORE_NON_TESTED = (
         "Molmo2TextModel",  # Building part of bigger (tested) model. Tested implicitly through Molmo2ForConditionalGeneration.
         "Molmo2VisionModel",  # Building part of bigger (tested) model. Tested implicitly through Molmo2ForConditionalGeneration.
         "Molmo2VisionBackbone",  # Building part of bigger (tested) model. Tested implicitly through Molmo2ForConditionalGeneration.
+        "Molmo2Adapter",  # Building part of bigger (tested) model. Tested implicitly through Molmo2ForConditionalGeneration.
         "MllamaTextModel",  # Building part of bigger (tested) model. # TODO: add tests
         "MllamaVisionModel",  # Building part of bigger (tested) model. # TODO: add tests
         "Llama4TextModel",  # Building part of bigger (tested) model. # TODO: add tests
