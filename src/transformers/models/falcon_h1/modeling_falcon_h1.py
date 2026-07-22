@@ -414,6 +414,7 @@ class FalconH1Mixer(nn.Module):
 
     def __init__(self, config: FalconH1Config, layer_idx: int, initialize_mixer_weights: bool = True):
         super().__init__()
+        self.use_bias = config.mamba_proj_bias
         self.num_heads = config.mamba_n_heads
         self.hidden_size = config.hidden_size
         self.ssm_state_size = config.mamba_d_state
@@ -472,7 +473,6 @@ class FalconH1Mixer(nn.Module):
         if initialize_mixer_weights and self.dt_bias.device.type != "meta":
             self.init_falcon_h1_weights()
         self.out_proj = nn.Linear(self.intermediate_size, config.hidden_size, bias=config.projectors_bias)
-        self.use_bias = config.mamba_proj_bias
 
         global causal_conv1d, causal_conv1d_update, causal_conv1d_fn
         causal_conv1d = lazy_load_kernel("causal-conv1d")

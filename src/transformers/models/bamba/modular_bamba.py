@@ -144,13 +144,13 @@ class BambaMixer(Mamba2Mixer):
     """
 
     def __init__(self, config: BambaConfig, layer_idx: int, initialize_mixer_weights: bool = True):
+        self.use_bias = config.mamba_proj_bias
         super().__init__()
         self.num_heads = config.mamba_n_heads
         self.ssm_state_size = config.mamba_d_state
         self.conv_kernel_size = config.mamba_d_conv
         self.intermediate_size = int(config.mamba_expand * self.hidden_size)
         self.use_conv_bias = config.mamba_conv_bias
-        self.use_bias = config.mamba_proj_bias
         self.layer_norm_epsilon = config.rms_norm_eps
         self.n_groups = config.mamba_n_groups
         self.head_dim = config.mamba_d_head
@@ -173,6 +173,7 @@ class BambaMixer(Mamba2Mixer):
         self.out_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=self.use_bias)
         del self.time_step_floor
         del self.time_step_rank
+        del self.use_bias
 
     @torch.no_grad()
     def init_bamba_weights(self):

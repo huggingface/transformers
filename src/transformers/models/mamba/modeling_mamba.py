@@ -160,6 +160,9 @@ class MambaMixer(nn.Module):
         selective_scan_fn = getattr(mamba_ssm, "selective_scan_fn", None)
         mamba_inner_fn = getattr(mamba_ssm, "mamba_inner_fn", None)
 
+        global is_fast_path_available
+        is_fast_path_available = all((causal_conv1d, mamba_ssm))
+
         self.warn_slow_implementation()
 
         self.layer_type = config.layer_types[layer_idx]
@@ -187,7 +190,6 @@ class MambaMixer(nn.Module):
         init.copy_(self.dt_proj.bias, inv_dt)
 
     def warn_slow_implementation(self):
-        is_fast_path_available = all((causal_conv1d, mamba_ssm))
         if not is_fast_path_available:
             if self.use_mambapy:
                 if is_mambapy_available():
@@ -325,19 +327,18 @@ class MambaMixer(nn.Module):
         contextualized_states = self.out_proj(scan_outputs.transpose(1, 2))
         return contextualized_states
 
-    # fmt: off
     def slow_forward(
         self,
         hidden_states: torch.Tensor,
         cache_params: Cache | None = None,
         attention_mask: torch.LongTensor | None = None,
-        **kwargs
+        **kwargs,
     ):
         batch_size, seq_len, _ = hidden_states.shape
         dtype = hidden_states.dtype
         use_precomputed_states = cache_params is not None and cache_params.has_previous_state(self.layer_idx)
         # 1. Gated MLP's linear projection
-        projected_states = self.in_proj(hidden_states).transpose(1, 2)                   # [batch, 2 * intermediate_size, seq_len]
+        projected_states = self.in_proj(hidden_states).transpose(1, 2)
         hidden_states, gate = projected_states.chunk(2, dim=1)
 
         # Apply the convolution
@@ -350,8 +351,7 @@ class MambaMixer(nn.Module):
             ssm_state = cache_params.layers[self.layer_idx].recurrent_states[0].clone()
         else:
             ssm_state = torch.zeros(
-                (batch_size, self.intermediate_size, self.ssm_state_size),
-                device=hidden_states.device, dtype=dtype
+                (batch_size, self.intermediate_size, self.ssm_state_size), device=hidden_states.device, dtype=dtype
             )
 
         # 3. State Space Model sequence transformation
@@ -360,25 +360,31 @@ class MambaMixer(nn.Module):
         time_step, B, C = torch.split(
             ssm_parameters, [self.time_step_rank, self.ssm_state_size, self.ssm_state_size], dim=-1
         )
-        discrete_time_step = self.dt_proj(time_step)                                    # [batch, seq_len, intermediate_size]
-        discrete_time_step = nn.functional.softplus(discrete_time_step).transpose(1, 2) # [batch, intermediate_size, seq_len]
+        discrete_time_step = self.dt_proj(time_step)
+        discrete_time_step = nn.functional.softplus(discrete_time_step).transpose(1, 2)
 
         # 3.b. Discretization: B and C to [batch, seq_len, intermediate_size, ssm_state_size] (SRAM)
-        A = -torch.exp(self.A_log.float())                                              # [intermediate_size, ssm_state_size]
-        discrete_A = torch.exp(A[None, :, None, :] * discrete_time_step[:, :, :, None]) # [batch, intermediate_size, seq_len, ssm_state_size]
-        discrete_B = discrete_time_step[:, :, :, None] * B[:, None, :, :].float()       # [batch, intermediate_size, seq_len, ssm_state_size]
+        A = -torch.exp(self.A_log.float())
+        discrete_A = torch.exp(A[None, :, None, :] * discrete_time_step[:, :, :, None])
+        discrete_B = discrete_time_step[:, :, :, None] * B[:, None, :, :].float()
         deltaB_u = discrete_B * hidden_states[:, :, :, None].float()
 
         # 3.c perform the recurrence y ← SSM(A, B, C)(x)
         if self.use_mambapy and self.training and cache_params is None:
-            hs = pscan(discrete_A.transpose(1, 2), deltaB_u.transpose(1, 2)) # [batch, seq_len, intermediate_size, ssm_state_size]
+            hs = pscan(discrete_A.transpose(1, 2), deltaB_u.transpose(1, 2))
 
-            scan_output = (hs @ C.unsqueeze(-1)).squeeze(3).transpose(1, 2) # [batch, intermediate_size, seq_len]
+            scan_output = (hs @ C.unsqueeze(-1)).squeeze(3).transpose(1, 2)
             scan_output = scan_output + hidden_states * self.D[None, :, None]
             scan_output = scan_output * self.act(gate)
         else:
             # Use associative_scan for parallel computation when available
-            if self.use_associative_scan and associative_scan is not None and is_tracing(hidden_states) and cache_params is None:
+            if (
+                self.use_associative_scan
+                and associative_scan is not None
+                and is_tracing(hidden_states)
+                and cache_params is None
+            ):
+
                 def combine_fn(left, right):
                     a_left, b_left = left
                     a_right, b_right = right
@@ -387,27 +393,28 @@ class MambaMixer(nn.Module):
                 combine_mode = "pointwise" if discrete_A.device.type in ("cuda", "xpu") else "generic"
                 _, all_h = associative_scan(combine_fn, (discrete_A, deltaB_u), dim=2, combine_mode=combine_mode)
                 # all_h: [B, D, S, N] -> output: [B, D, S]
-                scan_output = torch.matmul(all_h.permute(0, 2, 1, 3).to(dtype), C.unsqueeze(-1)).squeeze(-1).permute(0, 2, 1)
+                scan_output = (
+                    torch.matmul(all_h.permute(0, 2, 1, 3).to(dtype), C.unsqueeze(-1)).squeeze(-1).permute(0, 2, 1)
+                )
                 ssm_state = all_h[:, :, -1, :]
             else:
                 # Sequential loop for decoding or when associative_scan unavailable
                 scan_outputs = []
                 for i in range(seq_len):
-                    ssm_state = discrete_A[:, :, i, :] * ssm_state + deltaB_u[:, :, i, :]      # [batch, intermediate_size, ssm_state]
-                    scan_output = torch.matmul(ssm_state.to(dtype), C[:, i, :].unsqueeze(-1))  # [batch, intermediate_size, 1]
+                    ssm_state = discrete_A[:, :, i, :] * ssm_state + deltaB_u[:, :, i, :]
+                    scan_output = torch.matmul(ssm_state.to(dtype), C[:, i, :].unsqueeze(-1))
                     scan_outputs.append(scan_output[:, :, 0])
-                scan_output = torch.stack(scan_outputs, dim=-1)                                # [batch, intermediate_size, seq_len]
+                scan_output = torch.stack(scan_outputs, dim=-1)
 
             scan_output = scan_output + (hidden_states * self.D[None, :, None])
-            scan_output = (scan_output * self.act(gate))
+            scan_output = scan_output * self.act(gate)
 
             if cache_params is not None:
                 cache_params.update_recurrent_state(ssm_state, self.layer_idx)
 
         # 4. Final linear projection
-        contextualized_states = self.out_proj(scan_output.transpose(1, 2))  # [batch, seq_len, hidden_size]
+        contextualized_states = self.out_proj(scan_output.transpose(1, 2))
         return contextualized_states
-    # fmt: on
 
     @force_accelerate_hooks("conv1d")
     def forward(
@@ -417,7 +424,6 @@ class MambaMixer(nn.Module):
         attention_mask: torch.LongTensor | None = None,
         **kwargs,
     ):
-        is_fast_path_available = all((causal_conv1d, mamba_ssm))
         if is_fast_path_available and "cuda" in self.x_proj.weight.device.type and not is_tracing(hidden_states):
             return self.cuda_kernels_forward(hidden_states, cache_params, attention_mask, **kwargs)
         return self.slow_forward(hidden_states, cache_params, attention_mask, **kwargs)

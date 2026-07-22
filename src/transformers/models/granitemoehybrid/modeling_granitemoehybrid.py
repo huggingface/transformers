@@ -312,6 +312,7 @@ class GraniteMoeHybridMambaLayer(nn.Module):
 
     def __init__(self, config: GraniteMoeHybridConfig, layer_idx: int, initialize_mixer_weights: bool = True):
         super().__init__()
+        self.use_bias = config.mamba_proj_bias
         self.num_heads = config.mamba_n_heads
         self.hidden_size = config.hidden_size
         self.ssm_state_size = config.mamba_d_state
@@ -359,7 +360,6 @@ class GraniteMoeHybridMambaLayer(nn.Module):
         if initialize_mixer_weights and self.dt_bias.device.type != "meta":
             self.init_granitemoehybrid_weights()
         self.out_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=self.use_bias)
-        self.use_bias = config.mamba_proj_bias
 
         global causal_conv1d, causal_conv1d_update, causal_conv1d_fn
         causal_conv1d = lazy_load_kernel("causal-conv1d")

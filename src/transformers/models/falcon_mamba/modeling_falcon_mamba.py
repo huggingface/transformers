@@ -180,6 +180,9 @@ class FalconMambaMixer(nn.Module):
         selective_scan_fn = getattr(falcon_mamba_ssm, "selective_scan_fn", None)
         falcon_mamba_inner_fn = getattr(falcon_mamba_ssm, "falcon_mamba_inner_fn", None)
 
+        global is_fast_path_available
+        is_fast_path_available = all((causal_conv1d, falcon_mamba_ssm))
+
         self.warn_slow_implementation()
 
         self.layer_type = config.layer_types[layer_idx]
@@ -369,7 +372,6 @@ class FalconMambaMixer(nn.Module):
 
         return contextualized_states
 
-    # fmt: off
     def slow_forward(
         self,
         hidden_states: torch.Tensor,
@@ -477,7 +479,6 @@ class FalconMambaMixer(nn.Module):
         # 4. Final linear projection
         contextualized_states = self.out_proj(scan_output.transpose(1, 2))  # [batch, seq_len, hidden_size]
         return contextualized_states
-    # fmt: on
 
     @force_accelerate_hooks("conv1d")
     def forward(
@@ -487,7 +488,6 @@ class FalconMambaMixer(nn.Module):
         attention_mask: torch.LongTensor | None = None,
         **kwargs,
     ):
-        is_fast_path_available = all((causal_conv1d, falcon_mamba_ssm))
         if is_fast_path_available and "cuda" in self.x_proj.weight.device.type and not is_tracing(hidden_states):
             return self.cuda_kernels_forward(hidden_states, cache_params, attention_mask, **kwargs)
         return self.slow_forward(hidden_states, cache_params, attention_mask, **kwargs)
