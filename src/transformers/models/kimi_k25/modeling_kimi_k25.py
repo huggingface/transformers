@@ -602,8 +602,10 @@ class Kimi_K25Model(Kimi_K25PreTrainedModel):
             The temporal, height and width of feature shape of each image in LLM.
         """
         vision_outputs = self.vision_tower(pixel_values, grid_thw=image_grid_thw, **kwargs)
-        image_embeds = self.mm_projector(vision_outputs.pooler_output)
-        vision_outputs.pooler_output = image_embeds
+        image_embeds = self.mm_projector(vision_outputs.pooler_output).squeeze(1)
+        merge_kernel_size = self.vision_tower.merge_kernel_size[0] * self.vision_tower.merge_kernel_size[1]
+        split_sizes = (image_grid_thw.prod(-1) // merge_kernel_size).tolist()
+        vision_outputs.pooler_output = torch.split(image_embeds, split_sizes)
         return vision_outputs
 
     def get_video_features(
@@ -692,7 +694,7 @@ class Kimi_K25Model(Kimi_K25PreTrainedModel):
 
         if pixel_values is not None:
             image_embeds = self.get_image_features(pixel_values, image_grid_thw).pooler_output
-            image_embeds = image_embeds.to(device=inputs_embeds.device, dtype=inputs_embeds.dtype)
+            image_embeds = torch.cat(image_embeds, dim=0).to(device=inputs_embeds.device, dtype=inputs_embeds.dtype)
             image_mask, _ = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, image_features=image_embeds
             )
@@ -700,7 +702,7 @@ class Kimi_K25Model(Kimi_K25PreTrainedModel):
 
         if pixel_values_videos is not None:
             video_embeds = self.get_video_features(pixel_values_videos, video_grid_thw).pooler_output
-            video_embeds = video_embeds.to(device=inputs_embeds.device, dtype=inputs_embeds.dtype)
+            video_embeds = torch.cat(video_embeds, dim=0).to(device=inputs_embeds.device, dtype=inputs_embeds.dtype)
             _, video_mask = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, video_features=video_embeds
             )
