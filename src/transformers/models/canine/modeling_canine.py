@@ -341,7 +341,7 @@ class CanineSelfAttention(nn.Module):
                 # positions we want to attend and the dtype's smallest value for masked positions.
                 attention_mask = (1.0 - attention_mask.float()) * torch.finfo(attention_scores.dtype).min
             # Apply the attention mask (precomputed for all layers in CanineModel forward() function)
-            attention_scores = attention_scores + attention_mask
+            attention_scores = attention_scores + attention_mask.to(attention_scores.dtype)
 
         # Normalize the attention scores to probabilities.
         attention_probs = nn.functional.softmax(attention_scores, dim=-1)

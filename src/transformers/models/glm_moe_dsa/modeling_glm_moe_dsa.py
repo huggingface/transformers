@@ -306,6 +306,16 @@ def yarn_get_mscale(scale=1, mscale=1):
     return 0.1 * mscale * math.log(scale) + 1.0
 
 
+def yarn_apply_mscale(rope_parameters, scaling):
+    if rope_parameters.get("rope_type", "default") != "default":
+        mscale_all_dim = rope_parameters.get("mscale_all_dim", 0)
+        scaling_factor = rope_parameters["factor"]
+        if mscale_all_dim:
+            mscale = yarn_get_mscale(scaling_factor, mscale_all_dim)
+            scaling = scaling * mscale * mscale
+    return scaling
+
+
 class GlmMoeDsaAttention(nn.Module):
     """
     DeepSeek-V3 MLA + a DSA indexer, extended with **cross-layer top-k sharing**.
@@ -358,12 +368,7 @@ class GlmMoeDsaAttention(nn.Module):
         )
 
         self.scaling = self.qk_head_dim ** (-0.5)
-        if self.config.rope_parameters.get("rope_type", "default") != "default":
-            mscale_all_dim = self.config.rope_parameters.get("mscale_all_dim", 0)
-            scaling_factor = self.config.rope_parameters["factor"]
-            if mscale_all_dim:
-                mscale = yarn_get_mscale(scaling_factor, mscale_all_dim)
-                self.scaling = self.scaling * mscale * mscale
+        self.scaling = yarn_apply_mscale(config.rope_parameters, self.scaling)
         # Refer: https://arxiv.org/abs/2603.12201 for more details.
         self.skip_topk = config.indexer_types[layer_idx] == "shared"
         self.indexer = None if self.skip_topk else GlmMoeDsaIndexer(config, layer_idx)
@@ -698,22 +703,25 @@ class GlmMoeDsaModel(GlmMoeDsaPreTrainedModel):
             position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
             position_ids = position_ids.unsqueeze(0)
 
-        causal_mask = create_causal_mask(
-            config=self.config,
-            inputs_embeds=inputs_embeds,
-            attention_mask=attention_mask,
-            past_key_values=past_key_values,
-            position_ids=position_ids,
-        )
+        # It may already have been prepared by e.g. `generate`
+        if not isinstance(causal_mask_mapping := attention_mask, dict):
+            mask_kwargs = {
+                "config": self.config,
+                "inputs_embeds": inputs_embeds,
+                "attention_mask": attention_mask,
+                "past_key_values": past_key_values,
+                "position_ids": position_ids,
+            }
+            causal_mask_mapping = {"deepseek_sparse_attention": create_causal_mask(**mask_kwargs)}
 
         hidden_states = inputs_embeds
         position_embeddings = self.rotary_emb(hidden_states, position_ids=position_ids)
 
         topk_indices = None  # MAIN DIFF with DSV3.2
-        for decoder_layer in self.layers[: self.config.num_hidden_layers]:
+        for i, decoder_layer in enumerate(self.layers[: self.config.num_hidden_layers]):
             hidden_states, topk_indices = decoder_layer(
                 hidden_states,
-                attention_mask=causal_mask,
+                attention_mask=causal_mask_mapping[self.config.layer_types[i]],
                 position_embeddings=position_embeddings,
                 position_ids=position_ids,
                 past_key_values=past_key_values,

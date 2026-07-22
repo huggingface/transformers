@@ -70,12 +70,18 @@ if is_torch_available():
 
 
 if is_executorch_available():
-    from executorch.backends.cuda.cuda_backend import CudaBackend
-    from executorch.backends.cuda.cuda_partitioner import CudaPartitioner
     from executorch.backends.xnnpack.partition.xnnpack_partitioner import XnnpackPartitioner
     from executorch.exir.capture._config import EdgeCompileConfig
     from executorch.exir.passes.executorch_prim_ops_registry import _PYTHON_SYM_OPS_TO_EXECUTORCH_SYM_OPS
     from executorch.exir.program import EdgeProgramManager, ExecutorchProgramManager, to_edge_transform_and_lower
+
+    # The ExecuTorch CUDA backend pulls in `triton`, which CPU-only torch builds don't ship. Guard the
+    # import on CUDA availability so the module still imports (and the xnnpack CPU path still works) on
+    # CPU-only builds; `prepare_for_cuda` raises a clear error if the `cuda` backend is requested when
+    # it isn't available.
+    if torch.cuda.is_available():
+        from executorch.backends.cuda.cuda_backend import CudaBackend
+        from executorch.backends.cuda.cuda_partitioner import CudaPartitioner
 
 
 logger = logging.get_logger(__name__)
@@ -190,6 +196,9 @@ def prepare_for_cuda(model: PreTrainedModel, sample_inputs: dict[str, Any]):
 
     Moves the model to CUDA and upcasts to bfloat16 — required by the CUDA backend.
     """
+    if not torch.cuda.is_available():
+        raise RuntimeError("CUDA is not available in this environment; cannot export to the ExecuTorch CUDA backend.")
+
     model.requires_grad_(False)
     dtype = module_dtype(model)
     device = module_device(model)
