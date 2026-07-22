@@ -194,9 +194,9 @@ class Glm5NextTextConfig(GlmMoeDsaConfig):
 
     def validate_architecture(self):
         """Part of `@strict`-powered validation. Validates the architecture of the config."""
-        if self.num_attention_heads % self.num_key_value_heads != 0:
+        if self.num_attention_heads != self.num_key_value_heads:
             raise ValueError(
-                f"num_attention_heads ({self.num_attention_heads}) must be divisible by "
+                f"num_attention_heads ({self.num_attention_heads}) must be the same as "
                 f"num_key_value_heads ({self.num_key_value_heads})."
             )
 
@@ -1003,7 +1003,6 @@ class Glm5NextTextAttention(GlmMoeDsaAttention):
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor | None,
         past_key_values: Cache | None = None,
-        position_ids: torch.LongTensor | None = None,
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         prev_topk_indices: torch.Tensor | None = None,
         **kwargs: Unpack[FlashAttentionKwargs],
@@ -1198,7 +1197,7 @@ class Glm5NextPreTrainedModel(PreTrainedModel):
     _can_record_outputs = {
         "attentions": Glm5NextTextAttention,
         "hidden_states": Glm5NextTextDecoderLayer,
-        "router_logits": OutputRecorder(Glm5NextTextTopkRouter, index=0),  # noqa: F821
+        "router_logits": OutputRecorder(Glm5NextTextTopkRouter, index=0),
     }
     _keep_in_fp32_modules_strict = ["e_score_correction_bias", "conv1d", "dt_bias", "A_log"]
     _keys_to_ignore_on_load_unexpected = [r"layers\.45\.", r"layers\.\d+\.shared_head\."]
@@ -1318,7 +1317,6 @@ class Glm5NextTextModel(Glm5NextPreTrainedModel):
         hidden_states = inputs_embeds.unsqueeze(2).expand(-1, -1, self.config.hc_mult, -1).contiguous()
         position_embeddings = self.rotary_emb(inputs_embeds, position_ids=position_ids)
 
-        # Key change: NoPE
         topk_indices = None
         for i, decoder_layer in enumerate(self.layers[: self.config.num_hidden_layers]):
             hidden_states, topk_indices = decoder_layer(

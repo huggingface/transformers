@@ -210,9 +210,9 @@ class Glm5NextTextConfig(PreTrainedConfig):
 
     def validate_architecture(self):
         """Part of `@strict`-powered validation. Validates the architecture of the config."""
-        if self.num_attention_heads % self.num_key_value_heads != 0:
+        if self.num_attention_heads != self.num_key_value_heads:
             raise ValueError(
-                f"num_attention_heads ({self.num_attention_heads}) must be divisible by "
+                f"num_attention_heads ({self.num_attention_heads}) must be the same as "
                 f"num_key_value_heads ({self.num_key_value_heads})."
             )
 

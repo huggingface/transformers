@@ -82,18 +82,21 @@ class Glm5NextVisionText2TextModelTester(VLMModelTester):
         kwargs.setdefault("linear_head_dim", 16)
         kwargs.setdefault("linear_conv_kernel_dim", 2)
         kwargs.setdefault("v_head_dim", 16)
-        kwargs.setdefault("qk_rope_head_dim", 0)
-        kwargs.setdefault("qk_nope_head_dim", 64)
+        kwargs.setdefault("qk_rope_head_dim", 16)
+        kwargs.setdefault("qk_nope_head_dim", 48)
         kwargs.setdefault("q_lora_rank", 32)
         kwargs.setdefault("kv_lora_rank", 16)
+        kwargs.setdefault("index_head_dim", 16)
+        kwargs.setdefault("index_n_heads", 2)
+        kwargs.setdefault("index_topk", 48)
+        kwargs.setdefault("index_kpool", 3)
         kwargs.setdefault("depth", 2)
         kwargs.setdefault("spatial_merge_size", 1)
         kwargs.setdefault("temporal_patch_size", 2)
         kwargs.setdefault("hidden_size", 48)
         kwargs.setdefault("intermediate_size", 16)
         kwargs.setdefault("mlp_layer_types", ["dense", "sparse"])
-        # TODO: add indexer stuff when finished training
-        kwargs.setdefault("layer_types", ["linear_attention", "full_attention"])
+        kwargs.setdefault("layer_types", ["linear_attention", "deepseek_sparse_attention"])
         super().__init__(parent, **kwargs)
 
     def create_pixel_values(self):
@@ -253,7 +256,7 @@ class Glm5NextModelTest(VLMModelTest, unittest.TestCase):
             attentions = outputs.attentions
             self.assertEqual(
                 len(attentions),
-                sum(layer == "full_attention" for layer in text_config.layer_types),
+                sum(layer == "deepseek_sparse_attention" for layer in text_config.layer_types),
             )
 
             # Check that output_attentions also works through config.
@@ -270,7 +273,7 @@ class Glm5NextModelTest(VLMModelTest, unittest.TestCase):
             attentions = outputs.attentions
             self.assertEqual(
                 len(attentions),
-                sum(layer == "full_attention" for layer in text_config.layer_types),
+                sum(layer == "deepseek_sparse_attention" for layer in text_config.layer_types),
             )
             self.assertListEqual(
                 list(attentions[0].shape[-3:]),
@@ -293,7 +296,7 @@ class Glm5NextModelTest(VLMModelTest, unittest.TestCase):
             self.assertEqual(out_len + 1, len(outputs))
             self.assertEqual(
                 len(self_attentions),
-                sum(layer == "full_attention" for layer in text_config.layer_types),
+                sum(layer == "deepseek_sparse_attention" for layer in text_config.layer_types),
             )
             self.assertListEqual(
                 list(self_attentions[0].shape[-3:]),
@@ -543,6 +546,14 @@ class Glm5NextModelTest(VLMModelTest, unittest.TestCase):
 
             for dynamic_result, compiled_result in zip(dynamic_outputs, compiled_outputs):
                 assert_similar_generate_outputs(dynamic_result, compiled_result, atol=atol, rtol=rtol)
+
+    @unittest.skip("Fundamentally incompatible with indexer - indexer has no boundary offset telling sequences apart")
+    def test_eager_padding_matches_padding_free_with_position_ids(self):
+        pass
+
+    @unittest.skip("Fundamentally incompatible with indexer - indexer has no boundary offset telling sequences apart")
+    def test_sdpa_padding_matches_padding_free_with_position_ids(self):
+        pass
 
     @unittest.skip("MLA creates different head dims which avoids invoking the FA backend")
     def test_sdpa_can_dispatch_on_flash(self):
