@@ -5847,7 +5847,7 @@ class ModelTesterMixin(ExportTesterMixin):
         if not is_nested_rope:
             self.assertTrue((ntk_scaling_rope.inv_freq <= original_rope.inv_freq).all())
         else:
-            layer_types = getattr(config, "_rope_type_labels", getattr(config, "layer_types"))
+            layer_types = getattr(text_config, "_rope_type_labels", getattr(text_config, "layer_types"))
             for layer_type in layer_types:
                 self.assertTrue(
                     (
