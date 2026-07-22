@@ -23,10 +23,10 @@ import sys
 import time
 from typing import Any
 
-import requests
 from compare_test_runs import compare_job_sets
 from get_ci_error_statistics import get_jobs
 from get_previous_daily_ci import get_last_daily_ci_reports, get_last_daily_ci_run, get_last_daily_ci_workflow_run_id
+from github_utils import get_github_json
 from huggingface_hub import HfApi
 from slack_sdk import WebClient
 
@@ -1077,11 +1077,10 @@ if __name__ == "__main__":
 
         # Retrieve the PR title and author login to complete the report
         github_token = os.environ.get("GITHUB_TOKEN")
-        github_headers = {"Authorization": f"token {github_token}"} if github_token else {}
 
         commit_number = ci_url.split("/")[-1]
         ci_detail_url = f"https://api.github.com/repos/{repository_full_name}/commits/{commit_number}"
-        ci_details = requests.get(ci_detail_url, headers=github_headers).json()
+        ci_details = get_github_json(ci_detail_url, token=github_token)
 
         # We use `.get()` to avoid failures when the GitHub API returns an unexpected response (e.g. due to rate
         # limiting, where the response won't contain the expected fields). It's preferred to continue the CI run
@@ -1095,7 +1094,7 @@ if __name__ == "__main__":
         if len(numbers) > 0:
             pr_number = numbers[0]
             ci_detail_url = f"https://api.github.com/repos/{repository_full_name}/pulls/{pr_number}"
-            ci_details = requests.get(ci_detail_url, headers=github_headers).json()
+            ci_details = get_github_json(ci_detail_url, token=github_token)
 
             ci_author = ci_details.get("user", {}).get("login") or ci_author
             ci_url = f"https://github.com/{repository_full_name}/pull/{pr_number}"

@@ -22,7 +22,7 @@ import subprocess
 from collections import defaultdict
 
 import git
-import requests
+from github_utils import get_github_json
 
 
 def create_script(target_test):
@@ -274,17 +274,13 @@ def get_commit_info(commit, pr_number=None, github_token=None):
     author = None
     merged_author = None
 
-    headers = (
-        {"Accept": "application/vnd.github+json", "Authorization": f"Bearer {github_token}"} if github_token else {}
-    )
-
     # Use PR number from environment if not provided
     if pr_number is None:
         pr_number = os.environ.get("pr_number")
 
     # First, get commit info to check if it's a merge commit
     url = f"https://api.github.com/repos/huggingface/transformers/commits/{commit}"
-    commit_info = requests.get(url, headers=headers).json()
+    commit_info = get_github_json(url, token=github_token)
 
     commit_to_query = commit
 
@@ -303,7 +299,7 @@ def get_commit_info(commit, pr_number=None, github_token=None):
     # The API can return an error dict (e.g. rate limit) instead of a list, so guard with isinstance.
     if not pr_number:
         url = f"https://api.github.com/repos/huggingface/transformers/commits/{commit_to_query}/pulls"
-        pr_info_for_commit = requests.get(url, headers=headers).json()
+        pr_info_for_commit = get_github_json(url, token=github_token)
         if isinstance(pr_info_for_commit, list) and len(pr_info_for_commit) > 0:
             pr_number = pr_info_for_commit[0].get("number")
 
@@ -311,7 +307,7 @@ def get_commit_info(commit, pr_number=None, github_token=None):
     # Use .get() throughout: on rate-limit/403 the API returns an error dict, not the expected PR object.
     if pr_number:
         url = f"https://api.github.com/repos/huggingface/transformers/pulls/{pr_number}"
-        pr_for_commit = requests.get(url, headers=headers).json()
+        pr_for_commit = get_github_json(url, token=github_token)
         author = pr_for_commit.get("user", {}).get("login")
         merged_by = pr_for_commit.get("merged_by")
         if merged_by is not None:
