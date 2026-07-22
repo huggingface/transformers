@@ -157,6 +157,7 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(r"^blocks\.(\d+)\.norm2\.", r"encoder.layers.\1.norm2."),
             WeightRenaming(r"^blocks\.(\d+)\.mlp\.", r"encoder.layers.\1.mlp."),
             WeightRenaming(r"^blocks\.(\d+)\.ls2\.gamma$", r"encoder.layers.\1.layer_scale2.gamma"),
+        ],
         # Cosmos3 Edge's composite checkpoint stores its dense reasoner text tower as conventional attention + MLP
         # blocks. The visual/projector tensors already use their native module names and intentionally need no mapping.
         "cosmos3_edge": [
