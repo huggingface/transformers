@@ -189,6 +189,12 @@ class HfArgumentParser(ArgumentParser):
         # A variable to store kwargs for a boolean field, if needed
         # so that we can init a `no_*` complement argument (see below)
         bool_kwargs = {}
+        is_optional_bool_type = (
+            (origin_type is Union or (hasattr(types, "UnionType") and isinstance(origin_type, types.UnionType)))
+            and hasattr(field.type, "__args__")
+            and bool in field.type.__args__
+            and type(None) in field.type.__args__
+        )
         if origin_type is Literal or (isinstance(field.type, type) and issubclass(field.type, Enum)):
             if origin_type is Literal:
                 kwargs["choices"] = field.type.__args__
@@ -201,7 +207,7 @@ class HfArgumentParser(ArgumentParser):
                 kwargs["default"] = field.default
             else:
                 kwargs["required"] = True
-        elif field.type is bool or field.type == bool | None:
+        elif field.type is bool or field.type == bool | None or is_optional_bool_type:
             # Copy the correct kwargs to use to instantiate a `no_*` complement argument below.
             # We do not initialize it here because the `no_*` alternative must be instantiated after the real argument
             bool_kwargs = copy(kwargs)
@@ -216,6 +222,11 @@ class HfArgumentParser(ArgumentParser):
                 # This tells argparse we accept 0 or 1 value after --{field.name}
                 kwargs["nargs"] = "?"
                 # This is the value that will get picked if we do --{field.name} (without value)
+                kwargs["const"] = True
+            elif is_optional_bool_type:
+                # Keep default None for Optional[bool], but allow `--flag` with no explicit value.
+                kwargs["default"] = None if field.default is dataclasses.MISSING else field.default
+                kwargs["nargs"] = "?"
                 kwargs["const"] = True
         elif isclass(origin_type) and issubclass(origin_type, list):
             kwargs["type"] = field.type.__args__[0]
@@ -238,7 +249,7 @@ class HfArgumentParser(ArgumentParser):
         # Order is important for arguments with the same destination!
         # We use a copy of earlier kwargs because the original kwargs have changed a lot before reaching down
         # here and we do not need those changes/additional keys.
-        if field.default is True and (field.type is bool or field.type == bool | None):
+        if field.default is True and (field.type is bool or field.type == bool | None or is_optional_bool_type):
             bool_kwargs["default"] = False
             parser.add_argument(
                 f"--no_{field.name}",

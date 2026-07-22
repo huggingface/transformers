@@ -190,7 +190,7 @@ class HfArgumentParserTest(unittest.TestCase):
         # A boolean no_* argument always has to come after its "default: True" regular counter-part
         # and its default must be set to False
         expected.add_argument("--no_baz", "--no-baz", action="store_false", default=False, dest="baz")
-        expected.add_argument("--opt", type=string_to_bool, default=None)
+        expected.add_argument("--opt", type=string_to_bool, default=None, const=True, nargs="?")
 
         dataclass_types = [WithDefaultBoolExample]
         if is_python_no_less_than_3_10:
@@ -211,6 +211,9 @@ class HfArgumentParserTest(unittest.TestCase):
 
             args = parser.parse_args(["--foo", "--baz"])
             self.assertEqual(args, Namespace(foo=True, baz=True, opt=None))
+
+            args = parser.parse_args(["--foo", "--baz", "--opt"])
+            self.assertEqual(args, Namespace(foo=True, baz=True, opt=True))
 
             args = parser.parse_args(["--foo", "True", "--baz", "True", "--opt", "True"])
             self.assertEqual(args, Namespace(foo=True, baz=True, opt=True))
