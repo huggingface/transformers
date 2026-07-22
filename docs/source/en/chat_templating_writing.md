@@ -16,7 +16,7 @@ rendered properly in your Markdown viewer.
 
 # Writing a chat template
 
-A chat template is a [Jinja](https://jinja.palletsprojects.com/en/stable/templates/) template stored in the tokenizer's [chat_template](https://huggingface.co/docs/transformers/main_classes/tokenizer#transformers.PreTrainedTokenizer.chat_template) attribute. Jinja is a templating language that allows you to write Python-like code and syntax.
+A chat template is a [Jinja](https://jinja.palletsprojects.com/en/stable/templates/) template stored in the tokenizer's [`~PreTrainedTokenizer.chat_template`] attribute. Jinja is a templating language that allows you to write Python-like code and syntax.
 
 ```jinja
 {%- for message in messages %}
