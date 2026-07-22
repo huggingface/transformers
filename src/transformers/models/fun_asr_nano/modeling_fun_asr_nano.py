@@ -406,17 +406,13 @@ class FunAsrNanoEncoder(FunAsrNanoPreTrainedModel):
         return BaseModelOutput(last_hidden_state=hidden_states, hidden_states=all_hidden_states)
 
 
-class FunAsrNanoAdaptorAttention(FunAsrNanoAttention):
-    pass
-
-
 class FunAsrNanoAdaptorLayer(GradientCheckpointingLayer):
     """Bidirectional self-attention adaptor layer."""
 
     def __init__(self, config: FunAsrNanoEncoderConfig):
         super().__init__()
         self.embed_dim = config.d_model
-        self.self_attn = FunAsrNanoAdaptorAttention(config)
+        self.self_attn = FunAsrNanoAttention(config)
         self.self_attn_layer_norm = nn.LayerNorm(self.embed_dim)
         self.dropout = config.dropout
         self.activation_fn = ACT2FN[config.activation_function]

@@ -202,10 +202,9 @@ class FunAsrNanoForConditionalGenerationModelTest(ALMModelTest, unittest.TestCas
         self.assertTrue(issubclass(FunAsrNanoEncoderLayer, WhisperEncoderLayer))
         self.assertEqual(attention.num_key_value_groups, 1)
         self.assertTrue(hasattr(attention, "attention_dropout"))
-        self.assertTrue(
-            issubclass(modular_fun_asr_nano.FunAsrNanoAdaptorAttention, modular_fun_asr_nano.Qwen3ASRAudioAttention)
-        )
         self.assertTrue(issubclass(FunAsrNanoAdaptorLayer, WhisperEncoderLayer))
+        adaptor_layer = FunAsrNanoAdaptorLayer(config)
+        self.assertIs(type(adaptor_layer.self_attn), FunAsrNanoAttention)
 
     def test_encoder_separates_fsmn_and_uses_reviewed_component_names(self):
         config = self.model_tester.get_config().encoder_config

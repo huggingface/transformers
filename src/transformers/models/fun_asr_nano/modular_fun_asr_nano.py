@@ -482,16 +482,12 @@ class FunAsrNanoEncoder(WhisperEncoder):
         return BaseModelOutput(last_hidden_state=hidden_states, hidden_states=all_hidden_states)
 
 
-class FunAsrNanoAdaptorAttention(FunAsrNanoAttention):
-    pass
-
-
 class FunAsrNanoAdaptorLayer(WhisperEncoderLayer):
     """Bidirectional self-attention adaptor layer."""
 
     def __init__(self, config: FunAsrNanoEncoderConfig):
         super().__init__(config)
-        self.self_attn = FunAsrNanoAdaptorAttention(config)
+        self.self_attn = FunAsrNanoAttention(config)
 
 
 class FunAsrNanoMultiModalProjector(nn.Module):
