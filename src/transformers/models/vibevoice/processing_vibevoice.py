@@ -32,8 +32,13 @@ if is_soundfile_available():
     import soundfile as sf
 
 
+# trf-ignore: TRF019, `sampling_rate` is recommended by the feature extractor
 class VibeVoiceProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {}
+    _defaults = {
+        "audio_kwargs": {
+            "sampling_rate": 24000,
+        },
+    }
 
 
 @requires(backends=("torch",))
@@ -78,8 +83,6 @@ class VibeVoiceProcessor(ProcessorMixin):
         super().__init__(feature_extractor, tokenizer, chat_template=chat_template)
 
     def _process_audio(self, audio: AudioInput, **kwargs):
-        # Default to the feature extractor's own sampling rate
-        kwargs.setdefault("sampling_rate", self.feature_extractor.sampling_rate)
         processed_audio = self.feature_extractor(audio, **kwargs)
         pad_to_multiple_of = kwargs.get("pad_to_multiple_of") or self.feature_extractor.pad_to_multiple_of
         self._num_audio_tokens = (
