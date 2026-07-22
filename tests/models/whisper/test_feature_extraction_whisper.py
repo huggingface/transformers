@@ -279,9 +279,8 @@ class WhisperFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.
         `magnitudes` contiguous restores the fast path with no change in output.
 
         Correctness (and the non-contiguity of the raw view) is asserted so this
-        stays stable in CI; the per-call timings are printed for reference
-        (run with `-s`) but not asserted, since the size of the speedup is
-        backend-dependent.
+        stays stable in CI. See https://github.com/huggingface/transformers/pull/47351
+        for the benchmark script and the measured (backend-dependent) speedups.
         """
         torch.manual_seed(0)
         feature_extractor = WhisperFeatureExtractor()
