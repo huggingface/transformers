@@ -73,7 +73,7 @@ optimum-cli export onnx --model Qwen/Qwen3-8B Qwen/Qwen3-8b-onnx/
 Run the following command to view all available arguments or refer to the [Export a model to ONNX with optimum.exporters.onnx](https://huggingface.co/docs/optimum-onnx/onnx/usage_guides/export_a_model) guide for more details.
 
 ```bash
-optimum cli export onnx --help
+optimum-cli export onnx --help
 ```
 
 To export a local model, save the weights and tokenizer files in the same directory. Pass the directory path to the `--model` argument and use the `--task` argument to specify the [task](https://huggingface.co/docs/optimum/exporters/task_manager#transformers). If you don't provide `--task`, the system auto-infers it from the model or uses an architecture without a task-specific head.
