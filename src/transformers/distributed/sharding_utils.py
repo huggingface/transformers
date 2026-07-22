@@ -23,6 +23,7 @@ if TYPE_CHECKING:
     import torch
     from torch.distributed.tensor import DTensor
 
+_dtensor_available = False
 if is_torch_available():
     import torch
     try:
@@ -31,7 +32,7 @@ if is_torch_available():
         from torch.distributed.tensor.placement_types import Shard
         _dtensor_available = True
     except ImportError:
-        _dtensor_available = False
+        pass
 
     # torch < 2.10 names as an underscore before `local_shard_size_and_offset`: alias it the non-underscored version
     if _dtensor_available and not hasattr(Shard, "local_shard_size_and_offset") and hasattr(Shard, "_local_shard_size_and_offset"):
