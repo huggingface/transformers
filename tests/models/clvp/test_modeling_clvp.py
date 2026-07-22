@@ -313,6 +313,22 @@ class ClvpDecoderTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
         loss = model(**inputs).loss
         loss.backward()
 
+    def test_clvp_decoder_mlp_scaled_residual_init(self):
+        # Regression test: the residual projection (`c_proj`) of `ClvpDecoderMLP` must use the GPT-2
+        # scaled init, std = initializer_range / sqrt(2 * num_hidden_layers), rather than the default
+        # 0.02. Previously this scaling was gated on an exact parameter-name match ("c_proj.weight")
+        # that never fired (parameters are yielded with fully-qualified dotted names), so it was
+        # silently skipped. See the equivalent GPT-2 bug in #47458.
+        config = self.model_tester.get_config()
+        model = ClvpForCausalLM(config)
+
+        expected_std = config.initializer_range / (2 * config.num_hidden_layers) ** 0.5
+        c_proj_weights = [p for name, p in model.named_parameters() if name.endswith("mlp.c_proj.weight")]
+
+        self.assertEqual(len(c_proj_weights), config.num_hidden_layers)
+        for weight in c_proj_weights:
+            self.assertAlmostEqual(weight.std().item(), expected_std, delta=expected_std * 0.2)
+
     @unittest.skip(reason="Clvp `prepare_inputs_for_generation` function doesn't have cache position.")
     def test_generate_continue_from_inputs_embeds(self):
         pass
