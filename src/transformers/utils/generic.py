@@ -43,6 +43,8 @@ if TYPE_CHECKING:
     import torch
     from torch import nn
 
+    from ..configuration_utils import PreTrainedConfig
+
 
 # Generic class or function
 T = TypeVar("T")
@@ -301,6 +303,31 @@ def is_flash_attention_requested(
 
     # Otherwise, just check "flash" is in the attention implementation
     return "flash" in checked_attention_implementation
+
+
+def get_max_seqlen(
+    cu_seqlens: torch.Tensor,
+    config: PreTrainedConfig,
+    kwargs: dict | None = None,
+    kwarg_name: str = "max_seqlen",
+) -> int | None:
+    """Get the maximum packed sequence length, or pop it from `kwargs` if precomputed.
+
+    Args:
+        cu_seqlens: `(num_sequences + 1,)` cumulative sequence boundaries.
+        config: model configuration used to determine the attention implementation.
+        kwargs: optional caller kwargs containing a precomputed maximum sequence length.
+        kwarg_name: key used to pop the precomputed value from `kwargs`.
+
+    Returns:
+        Maximum packed sequence length as a Python integer, or `None` when Flash Attention is not requested
+        and no precomputed value is provided.
+    """
+    if kwargs is not None and (max_seqlen := kwargs.pop(kwarg_name, None)) is not None:
+        return max_seqlen
+    if not is_flash_attention_requested(config):
+        return None
+    return (cu_seqlens[1:] - cu_seqlens[:-1]).max().item()
 
 
 def split_attention_implementation(implementation: str | None) -> tuple[bool, str | None]:
