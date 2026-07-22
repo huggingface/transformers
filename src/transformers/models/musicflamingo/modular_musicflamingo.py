@@ -33,6 +33,7 @@ from ...utils import (
     logging,
     torch_compilable_check,
 )
+from ...utils.import_utils import requires
 from ..audioflamingo3.configuration_audioflamingo3 import AudioFlamingo3Config
 from ..audioflamingo3.modeling_audioflamingo3 import (
     AudioFlamingo3ForConditionalGeneration,
@@ -115,6 +116,7 @@ class MusicFlamingoConfig(AudioFlamingo3Config):
         PreTrainedConfig.__post_init__(self, **kwargs)
 
 
+@requires(backends=("torch",))
 @auto_docstring
 class MusicFlamingoProcessor(AudioFlamingo3Processor):
     def __init__(
