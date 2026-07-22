@@ -65,9 +65,6 @@ class FunAsrNanoProcessor(ProcessorMixin):
         default_transcription_prompt (`str`, *optional*, defaults to `"Transcribe the audio:"`):
             Default prompt to use for transcription tasks when applying transcription requests.
         """
-        if tokenizer.convert_tokens_to_ids(audio_token) is None:
-            raise ValueError(f"Audio token {audio_token!r} is not present in the tokenizer vocabulary.")
-
         self.audio_token = audio_token
         self.audio_token_id = tokenizer.convert_tokens_to_ids(audio_token)
         self.default_transcription_prompt = default_transcription_prompt

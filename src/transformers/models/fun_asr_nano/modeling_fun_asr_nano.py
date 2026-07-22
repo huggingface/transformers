@@ -102,28 +102,35 @@ def eager_attention_forward(
 
 
 class FunAsrNanoAttention(nn.Module):
-    """Whisper attention with checkpoint-compatible K bias and projection input size."""
+    """Qwen3-ASR attention adapted for padded batch masks and checkpoint-compatible input projections."""
 
     def __init__(self, config: FunAsrNanoEncoderConfig, input_dim: int | None = None):
         super().__init__()
-        input_dim = input_dim if input_dim is not None else config.d_model
         self.embed_dim = config.d_model
         self.num_heads = config.encoder_attention_heads
         self.dropout = config.attention_dropout
         self.head_dim = self.embed_dim // self.num_heads
-        if self.head_dim * self.num_heads != self.embed_dim:
+        self.num_key_value_groups = 1  # needed for eager attention
+        self.config = config
+
+        if (self.head_dim * self.num_heads) != self.embed_dim:
             raise ValueError(
-                f"`d_model` must be divisible by `encoder_attention_heads`, got {self.embed_dim} and {self.num_heads}."
+                f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim}"
+                f" and `num_heads`: {self.num_heads})."
             )
         self.scaling = self.head_dim**-0.5
+        self.attention_dropout = 0.0
         self.is_decoder = False
         self.is_causal = False
-        self.layer_idx = None
-        self.config = config
-        self.q_proj = nn.Linear(input_dim, config.d_model, bias=True)
-        self.k_proj = nn.Linear(input_dim, config.d_model, bias=True)
-        self.v_proj = nn.Linear(input_dim, config.d_model, bias=True)
-        self.out_proj = nn.Linear(config.d_model, config.d_model, bias=True)
+        self.k_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=True)
+        self.v_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=True)
+        self.q_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=True)
+        self.out_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=True)
+        input_dim = input_dim if input_dim is not None else config.d_model
+        if input_dim != config.d_model:
+            self.q_proj = nn.Linear(input_dim, config.d_model, bias=True)
+            self.k_proj = nn.Linear(input_dim, config.d_model, bias=True)
+            self.v_proj = nn.Linear(input_dim, config.d_model, bias=True)
 
     def forward(
         self,

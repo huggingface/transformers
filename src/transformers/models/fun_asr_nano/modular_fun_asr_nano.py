@@ -25,7 +25,7 @@ from ...configuration_utils import PreTrainedConfig
 from ...feature_extraction_utils import BatchFeature
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
 from ...modeling_utils import PreTrainedModel
-from ...processing_utils import ProcessorMixin, Unpack
+from ...processing_utils import Unpack
 from ...tokenization_utils_base import TextInput
 from ...utils import auto_docstring, can_return_tuple, is_torch_available, logging
 from ..audioflamingo3.modeling_audioflamingo3 import (
@@ -36,7 +36,8 @@ from ..audioflamingo3.modeling_audioflamingo3 import (
 )
 from ..audioflamingo3.processing_audioflamingo3 import AudioFlamingo3Processor, AudioFlamingo3ProcessorKwargs
 from ..auto import CONFIG_MAPPING, AutoConfig
-from ..whisper.modeling_whisper import WhisperAttention, WhisperEncoder, WhisperEncoderLayer, eager_attention_forward
+from ..qwen3_asr.modeling_qwen3_asr import Qwen3ASRAudioAttention
+from ..whisper.modeling_whisper import WhisperEncoder, WhisperEncoderLayer, eager_attention_forward
 
 
 if is_torch_available():
@@ -198,13 +199,15 @@ class FunAsrNanoProcessor(AudioFlamingo3Processor):
         default_transcription_prompt (`str`, *optional*, defaults to `"Transcribe the audio:"`):
             Default prompt to use for transcription tasks when applying transcription requests.
         """
-        if tokenizer.convert_tokens_to_ids(audio_token) is None:
-            raise ValueError(f"Audio token {audio_token!r} is not present in the tokenizer vocabulary.")
-
-        self.audio_token = audio_token
-        self.audio_token_id = tokenizer.convert_tokens_to_ids(audio_token)
-        self.default_transcription_prompt = default_transcription_prompt
-        ProcessorMixin.__init__(self, feature_extractor, tokenizer, chat_template=chat_template)
+        super().__init__(
+            feature_extractor,
+            tokenizer,
+            chat_template=chat_template,
+            audio_token=audio_token,
+            default_transcription_prompt=default_transcription_prompt,
+            max_audio_len=None,
+        )
+        del self.max_audio_len
 
     def __call__(
         self,
@@ -288,29 +291,16 @@ class FunAsrNanoPreTrainedModel(AudioFlamingo3PreTrainedModel):
             init.copy_(module.positional_embedding, position_embeddings)
 
 
-class FunAsrNanoAttention(WhisperAttention):
-    """Whisper attention with checkpoint-compatible K bias and projection input size."""
+class FunAsrNanoAttention(Qwen3ASRAudioAttention):
+    """Qwen3-ASR attention adapted for padded batch masks and checkpoint-compatible input projections."""
 
     def __init__(self, config: FunAsrNanoEncoderConfig, input_dim: int | None = None):
-        nn.Module.__init__(self)
+        super().__init__(config)
         input_dim = input_dim if input_dim is not None else config.d_model
-        self.embed_dim = config.d_model
-        self.num_heads = config.encoder_attention_heads
-        self.dropout = config.attention_dropout
-        self.head_dim = self.embed_dim // self.num_heads
-        if self.head_dim * self.num_heads != self.embed_dim:
-            raise ValueError(
-                f"`d_model` must be divisible by `encoder_attention_heads`, got {self.embed_dim} and {self.num_heads}."
-            )
-        self.scaling = self.head_dim**-0.5
-        self.is_decoder = False
-        self.is_causal = False
-        self.layer_idx = None
-        self.config = config
-        self.q_proj = nn.Linear(input_dim, config.d_model, bias=True)
-        self.k_proj = nn.Linear(input_dim, config.d_model, bias=True)
-        self.v_proj = nn.Linear(input_dim, config.d_model, bias=True)
-        self.out_proj = nn.Linear(config.d_model, config.d_model, bias=True)
+        if input_dim != config.d_model:
+            self.q_proj = nn.Linear(input_dim, config.d_model, bias=True)
+            self.k_proj = nn.Linear(input_dim, config.d_model, bias=True)
+            self.v_proj = nn.Linear(input_dim, config.d_model, bias=True)
 
     def forward(
         self,

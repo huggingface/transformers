@@ -65,9 +65,13 @@ class FunAsrNanoProcessorTest(unittest.TestCase):
         self.assertNotIn("max_audio_len", inspect.signature(FunAsrNanoProcessor.__init__).parameters)
 
         tokenizer = SimpleNamespace(convert_tokens_to_ids=lambda token: 151646)
-        with patch.object(ProcessorMixin, "__init__", return_value=None):
+        with patch(
+            "transformers.models.audioflamingo3.processing_audioflamingo3.ProcessorMixin.__init__", return_value=None
+        ):
             processor = FunAsrNanoProcessor(object(), tokenizer)
 
+        self.assertEqual(processor.audio_token, "<|object_ref_start|>")
+        self.assertEqual(processor.audio_token_id, 151646)
         self.assertFalse(hasattr(processor, "max_audio_len"))
 
     def test_constructor_defines_fun_asr_nano_default_prompt(self):
