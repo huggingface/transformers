@@ -11,6 +11,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import functools
+import importlib
 import os
 import re
 import sys
@@ -53,6 +55,10 @@ _MISSING_KERNELS_MESSAGE = (
 )
 
 
+_TRANSFORMERS_USE_HUB_KERNELS = os.environ.get("USE_HUB_KERNELS", "YES").upper()
+_kernels_enabled = _TRANSFORMERS_USE_HUB_KERNELS in ENV_VARS_TRUE_VALUES
+
+
 if is_kernels_available():
     from kernels import (
         CUDAProperties,
@@ -75,9 +81,6 @@ if is_kernels_available():
         use_kernel_forward_from_hub as _kernels_use_kernel_forward_from_hub,
     )
     from kernels import use_kernel_func_from_hub as _kernels_use_kernel_func_from_hub
-
-    _TRANSFORMERS_USE_HUB_KERNELS = os.environ.get("USE_HUB_KERNELS", "YES").upper()
-    _kernels_enabled = _TRANSFORMERS_USE_HUB_KERNELS in ENV_VARS_TRUE_VALUES
 
     def use_kernel_forward_from_hub(layer_name: str):
         if _kernels_enabled:
@@ -132,6 +135,34 @@ if is_kernels_available():
                     # TODO: drop once Atlas-Inference is an allow-listed trusted publisher
                     trust_remote_code=True,
                 ),
+            },
+            "causal_conv1d_fn": {
+                "cuda": {
+                    Mode.TRAINING: LayerRepository(
+                        repo_id="kernels-community/mamba-ssm",
+                        layer_name="causal_conv1d_fn",
+                        version=1,
+                    ),
+                    Mode.INFERENCE: LayerRepository(
+                        repo_id="kernels-community/mamba-ssm",
+                        layer_name="causal_conv1d_fn",
+                        version=1,
+                    ),
+                },
+            },
+            "causal_conv1d_update": {
+                "cuda": {
+                    Mode.TRAINING: LayerRepository(
+                        repo_id="kernels-community/mamba-ssm",
+                        layer_name="causal_conv1d_update",
+                        version=1,
+                    ),
+                    Mode.INFERENCE: LayerRepository(
+                        repo_id="kernels-community/mamba-ssm",
+                        layer_name="causal_conv1d_update",
+                        version=1,
+                    ),
+                },
             },
             "SwiGLUMLP": {
                 "cuda": {
@@ -326,7 +357,7 @@ if is_kernels_available():
                 ),
                 "rocm": {
                     Mode.INFERENCE: FuncRepository(
-                        repo_id="kernels-community/aiter-rope", func_name="apply_rotary_transformers", version=1
+                        repo_id="kernels-community/aiter-rope", func_name="apply_rotary_transformers", version=2
                     )
                 },
             },
@@ -375,9 +406,17 @@ else:
         def __init__(self, *args, **kwargs):
             raise RuntimeError("LayerRepository requires `kernels` to be installed. Run `pip install kernels`.")
 
+        def load(self):
+            raise NotImplementedError("LayerRepository requires `kernels` to be installed. Run `pip install kernels.")
+
     class LocalLayerRepository:
         def __init__(self, *args, **kwargs):
             raise RuntimeError("LocalLayerRepository requires `kernels` to be installed. Run `pip install kernels`.")
+
+        def load(self):
+            raise NotImplementedError(
+                "LocalLayerRepository requires `kernels` to be installed. Run `pip install kernels."
+            )
 
     class FuncRepository:
         def __init__(self, *args, **kwargs):
@@ -401,7 +440,7 @@ _HUB_KERNEL_MAPPING: dict[str, dict[str, str]] = {
     "causal-conv1d": {"repo_id": "kernels-community/causal-conv1d", "version": 1},
     "mamba-ssm": {"repo_id": "kernels-community/mamba-ssm", "version": 1},
     "falcon_mamba-ssm": {"repo_id": "kernels-community/mamba-ssm", "version": 1},
-    "finegrained-fp8": {"repo_id": "kernels-community/finegrained-fp8", "version": 3},
+    "finegrained-fp8": {"repo_id": "kernels-community/finegrained-fp8", "version": 4},
     "deep-gemm": {"repo_id": "kernels-community/deep-gemm", "version": 2},
     "sonic-moe": {"repo_id": "kernels-community/sonic-moe", "revision": "ep-support"},
 }
@@ -427,7 +466,7 @@ def load_and_register_attn_kernel(
         attn_implementation: A string, usually a kernel repo like "kernels-community/flash-mla".
         attn_wrapper: a callable for the wrapper around the attention implementation. In `transformers` we
             have a wrapper around the `flash_attn_var_len` call, and the same goes for `sdpa` and `eager`.
-            They just prepare the arguments properly. This is mostly used for continious batching, where we
+            They just prepare the arguments properly. This is mostly used for continuous batching, where we
             want the `paged` wrapper, which calls the paged cache.
         allow_all_kernels (`bool`, optional):
             Whether to load kernels from unverified hub repos, if it is a custom kernel outside of the `kernels-community`
@@ -502,7 +541,7 @@ def lazy_load_kernel(kernel_name: str, mapping: dict[str, ModuleType | None] = _
         logger.warning_once(f"Kernel {kernel_name} not found in _HUB_KERNEL_MAPPING")
         mapping[kernel_name] = None
         return None
-    if is_kernels_available():
+    if is_kernels_available() and _kernels_enabled:
         try:
             repo_id = _HUB_KERNEL_MAPPING[kernel_name]["repo_id"]
             revision = _HUB_KERNEL_MAPPING[kernel_name].get("revision", None)
@@ -522,8 +561,6 @@ def lazy_load_kernel(kernel_name: str, mapping: dict[str, ModuleType | None] = _
 
     else:
         # Try to import is_{kernel_name}_available from ..utils
-        import importlib
-
         new_kernel_name = kernel_name.replace("-", "_")
         func_name = f"is_{new_kernel_name}_available"
 
@@ -744,10 +781,8 @@ def register_kernel_replacements_and_fusions(
             raise ValueError(f"Invalid kernel repo string {repo_str!r} for layer {layer_name!r}")
 
         if kernel_config.use_local_kernel:
-            package_name = repo_id.rstrip("/").split("/")[-1]
             repo = LocalLayerRepository(
                 repo_path=Path(repo_id),
-                package_name=package_name,
                 layer_name=layer_name_in_repo,
             )
         else:
@@ -764,6 +799,14 @@ def register_kernel_replacements_and_fusions(
 
         kernel_mod = sys.modules.get(kernel_cls.__module__)
         layout_cls = getattr(kernel_mod, f"{kernel_cls.__name__}Layout", None) if kernel_mod else None
+
+        if layout_cls is not None and "forward" not in layout_cls.__dict__:
+
+            @functools.wraps(kernel_cls.forward)
+            def _noop_forward(self, *args, **kwargs):
+                pass
+
+            layout_cls.forward = _noop_forward
 
         # Case 1: no fusion.
         if isinstance(layer_name, str):

@@ -35,6 +35,7 @@ from .utils import (
     is_numpy_array,
     is_soundfile_available,
     is_torch_tensor,
+    is_torchaudio_available,
     is_torchcodec_available,
     requires_backends,
 )
@@ -52,6 +53,9 @@ if is_librosa_available():
 
     # TODO: @eustlb, we actually don't need librosa but soxr is installed with librosa
     import soxr
+
+if is_torchaudio_available():
+    import torchaudio
 
 if is_torchcodec_available():
     TORCHCODEC_VERSION = version.parse(importlib.metadata.version("torchcodec"))
@@ -207,7 +211,9 @@ def load_audio(audio: str | np.ndarray, sampling_rate=16000, timeout=None, backe
             The timeout value in seconds for the URL request.
         backend (`str`, *optional*, defaults to `"auto"`):
             Decoding backend: `"auto"` uses torchcodec when available (>=0.3.0) and falls back to
-            librosa; `"torchcodec"` or `"librosa"` force that backend (and error if it is missing).
+            librosa; `"torchcodec"`, `"librosa"` or `"torchaudio"` force that backend (and error if it
+            is missing). `"torchaudio"` decodes with `torchaudio.load` and resamples with
+            `torchaudio.functional.resample` (matches serving stacks such as sglang bit-for-bit).
 
     Returns:
         `np.ndarray`: A numpy array representing the audio.
@@ -222,11 +228,15 @@ def load_audio(audio: str | np.ndarray, sampling_rate=16000, timeout=None, backe
 
     # torchcodec handles audio/video; librosa only plain audio. `backend` lets callers pin one.
     if backend == "auto":
-        use_torchcodec = is_torchcodec_available() and version.parse("0.3.0") <= TORCHCODEC_VERSION
-    elif backend in ("torchcodec", "librosa"):
-        use_torchcodec = backend == "torchcodec"
+        resolved_backend = (
+            "torchcodec" if is_torchcodec_available() and version.parse("0.3.0") <= TORCHCODEC_VERSION else "librosa"
+        )
+    elif backend in ("torchcodec", "librosa", "torchaudio"):
+        resolved_backend = backend
     else:
-        raise ValueError(f"Unknown backend {backend!r}; expected 'auto', 'torchcodec', or 'librosa'.")
+        raise ValueError(f"Unknown backend {backend!r}; expected 'auto', 'torchcodec', 'librosa', or 'torchaudio'.")
+    # soundfile-based backends (librosa / torchaudio) cannot decode the video-ish formats below.
+    use_torchcodec = resolved_backend == "torchcodec"
 
     # 1. Identify the format from the source string (extension / `data:` media type), without fetching.
     filetype = _format_from_source(audio)
@@ -255,6 +265,15 @@ def load_audio(audio: str | np.ndarray, sampling_rate=16000, timeout=None, backe
 
         # `num_channels=1` matches what most models expect and librosa's default.
         return AudioDecoder(source, sample_rate=sampling_rate, num_channels=1).get_all_samples().data[0].numpy()
+
+    if resolved_backend == "torchaudio":
+        requires_backends(load_audio, ["torchaudio"])
+        waveform, src_sampling_rate = torchaudio.load(BytesIO(source) if isinstance(source, bytes) else source)
+        waveform = waveform.mean(dim=0)  # to mono
+
+        if src_sampling_rate != sampling_rate:
+            waveform = torchaudio.functional.resample(waveform, orig_freq=src_sampling_rate, new_freq=sampling_rate)
+        return waveform.numpy().astype(np.float32)
 
     requires_backends(load_audio, ["librosa"])
     return librosa.load(BytesIO(source) if isinstance(source, bytes) else source, sr=sampling_rate)[0]
@@ -400,6 +419,30 @@ def make_list_of_audio(
         return [audio]
 
     raise ValueError("Invalid input type. Must be a single audio or a list of audio")
+
+
+def make_list_of_audio_chat_template(
+    audio: list[AudioInput] | AudioInput | str | list[str],
+) -> AudioInput:
+    """
+    Ensure that the output is a list of audio. Unlike `make_list_of_audio`, this function also accepts a URL string or
+    local path, as accepted by chat templates.
+
+    Args:
+        audio (`Union[list[AudioInput], AudioInput]`):
+            The input audio. Can be a URL string, local path, numpy/torch array,  or a list of these.
+    Returns:
+        list: A list of audio.
+    """
+
+    # Handle string inputs
+    if isinstance(audio, str):
+        return [audio]
+    if isinstance(audio, (list, tuple)) and audio and all(isinstance(a, str) for a in audio):
+        return list(audio)
+
+    # Handle numpy/torch array inputs
+    return make_list_of_audio(audio)
 
 
 def hertz_to_mel(freq: float | np.ndarray, mel_scale: str = "htk") -> float | np.ndarray:

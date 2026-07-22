@@ -42,11 +42,41 @@ from transformers.audio_utils import (
     spectrogram_batch,
     window_function,
 )
-from transformers.testing_utils import is_librosa_available, require_librosa, require_torchcodec, slow
+from transformers.testing_utils import (
+    is_librosa_available,
+    require_librosa,
+    require_torchaudio,
+    require_torchcodec,
+    slow,
+)
+from transformers.utils import is_torch_tensor
 
 
 if is_librosa_available():
     from librosa.filters import chroma
+
+
+def normalize_waveform(arr: np.ndarray) -> np.ndarray:
+    """Normalizes an array by dividing by its L2 norm."""
+    return arr / np.linalg.norm(arr)
+
+
+def compute_rmse(arr1, arr2) -> np.ndarray:
+    """
+    Computes the RMSE between two audio arrays after L2 normalization.
+    Accepts both ``torch.Tensor`` and ``np.ndarray`` inputs;
+    arrays are truncated to the shorter length before comparison.
+    """
+    if is_torch_tensor(arr1):
+        arr1 = arr1.cpu().numpy()
+    if is_torch_tensor(arr2):
+        arr2 = arr2.cpu().numpy()
+    arr1 = np.asarray(arr1).squeeze()
+    arr2 = np.asarray(arr2).squeeze()
+    max_length = min(arr1.shape[-1], arr2.shape[-1])
+    arr1 = arr1[..., :max_length]
+    arr2 = arr2[..., :max_length]
+    return np.sqrt(((normalize_waveform(arr1) - normalize_waveform(arr2)) ** 2).mean())
 
 
 class AudioUtilsFunctionTester(unittest.TestCase):
@@ -1941,3 +1971,22 @@ class LoadAudioTester(unittest.TestCase):
             audio = load_audio(self._path(name), sampling_rate=16000)
             self.assertIsInstance(audio, np.ndarray, name)
             self.assertGreater(audio.size, 0, name)
+
+    # ---- torchaudio dispatch ------------------------------------------------------------------
+
+    @require_torchaudio
+    def test_torchaudio_decodes_soundfile_formats(self):
+        # backend="torchaudio" decodes with torchaudio.load and resamples with
+        # torchaudio.functional.resample
+        for name, filetype in self._BUCKET_FILETYPES.items():
+            if filetype in TORCHCODEC_ONLY_FILETYPES:
+                continue
+            audio = load_audio(self._path(name), sampling_rate=16000, backend="torchaudio")
+            self.assertIsInstance(audio, np.ndarray, name)
+            self.assertEqual(audio.ndim, 1, name)  # mono
+            self.assertEqual(audio.dtype, np.float32, name)
+            self.assertGreater(audio.size, 0, name)
+
+    def test_unknown_backend_raises(self):
+        with self.assertRaises(ValueError):
+            load_audio(self._path("audio.wav"), sampling_rate=16000, backend="not_a_backend")

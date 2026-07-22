@@ -889,6 +889,7 @@ class BridgeTowerPreTrainedModel(PreTrainedModel):
 
     @torch.no_grad()
     def _init_weights(self, module: nn.Module):
+        super()._init_weights(module)
         std = self.config.initializer_factor
         if isinstance(module, BridgeTowerVisionTransformer):
             proj_std = (self.config.hidden_size**-0.5) * ((2 * self.config.num_hidden_layers) ** -0.5)
@@ -905,9 +906,6 @@ class BridgeTowerPreTrainedModel(PreTrainedModel):
             init.normal_(module.embeddings.position_embedding.weight, std=attn_std * std)
         elif isinstance(module, (nn.Linear, nn.Conv2d, nn.Embedding)):
             init.normal_(module.weight, mean=0.0, std=0.05 * std)
-        elif isinstance(module, nn.LayerNorm):
-            init.zeros_(module.bias)
-            init.ones_(module.weight)
         elif isinstance(module, BridgeTowerForContrastiveLearning):
             init.constant_(module.logit_scale, self.config.logit_scale_init_value)
         elif isinstance(module, BridgeTowerVisionEmbeddings):

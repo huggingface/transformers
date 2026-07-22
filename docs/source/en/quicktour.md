@@ -9,7 +9,7 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 
 -->
@@ -69,13 +69,45 @@ Then install an up-to-date version of Transformers and some additional libraries
 !pip install -U transformers datasets evaluate accelerate timm
 ```
 
+## Agent skills
+
+[Hugging Face Skills](https://github.com/huggingface/skills) teach your coding agent how to work with Transformers. Instead of writing a training script yourself, ask your agent to fine-tune a vision model and let the skill guide it.
+
+<hfoptions id="install">
+<hfoption id="Claude Code">
+
+```sh
+/plugin marketplace add huggingface/skills
+/plugin install hf-cli@huggingface/skills
+```
+
+</hfoption>
+<hfoption id="Codex">
+
+```sh
+codex plugin marketplace add huggingface/skills
+```
+
+Then run `/plugins` in Codex and install a skill from the `huggingface/skills` repository.
+
+</hfoption>
+</hfoptions>
+
+See the [Installation](https://github.com/huggingface/skills#installation) guide for more supported platforms like Cursor and Gemini.
+
+Once a skill is installed, include it in your instructions to your coding agent.
+
+```md
+Use the HF Trainer skill to fine-tune RT-DETRv2 on [Lekim89/sportsmot](https://huggingface.co/datasets/Lekim89/sportsmot) for basketball player tracking.
+```
+
 ## Pretrained models
 
 Each pretrained model inherits from three base classes.
 
 | **Class** | **Description** |
 |---|---|
-| [`PreTrainedConfig`] | A file that specifies a models attributes such as the number of attention heads or vocabulary size. |
+| [`PreTrainedConfig`] | A file that specifies a model's attributes such as the number of attention heads or vocabulary size. |
 | [`PreTrainedModel`] | A model (or architecture) defined by the model attributes from the configuration file. A pretrained model only returns the raw hidden states. For a specific task, use the appropriate model head to convert the raw hidden states into a meaningful result (for example, [`LlamaModel`] versus [`LlamaForCausalLM`]). |
 | Preprocessor | A class for converting raw inputs (text, images, audio, multimodal) into numerical inputs to the model. For example, [`PreTrainedTokenizer`] converts text into tensors and [`ImageProcessingMixin`] converts pixels into tensors. |
 
@@ -95,7 +127,7 @@ model = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-2-7b-hf", dtype="
 tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-2-7b-hf")
 ```
 
-Tokenize the text and return PyTorch tensors with the tokenizer. Move the model to an accelerator if it's available to accelerate inference.
+Tokenize the text and return PyTorch tensors with the tokenizer. Move the tokenized inputs to the same device as the model before running inference so the model can process them.
 
 ```py
 model_inputs = tokenizer(["The secret to baking a good cake is "], return_tensors="pt").to(model.device)
@@ -116,7 +148,7 @@ tokenizer.batch_decode(generated_ids)[0]
 
 ## Pipeline
 
-The [`Pipeline`] class is the most convenient way to inference with a pretrained model. It supports many tasks such as text generation, image segmentation, automatic speech recognition, document question answering, and more.
+The [`Pipeline`] class is the most convenient way to run inference with a pretrained model. It supports many tasks such as text generation, image segmentation, automatic speech recognition, document question answering, and more.
 
 > [!TIP]
 > Refer to the [Pipeline](./main_classes/pipelines) API reference for a complete list of available tasks.
@@ -134,13 +166,13 @@ from accelerate import Accelerator
 
 device = Accelerator().device
 
-pipeline = pipeline("text-generation", model="meta-llama/Llama-2-7b-hf", device=device)
+pipe = pipeline("text-generation", model="meta-llama/Llama-2-7b-hf", device=device)
 ```
 
 Prompt [`Pipeline`] with some initial text to generate more text.
 
 ```py
-pipeline("The secret to baking a good cake is ", max_length=50)
+pipe("The secret to baking a good cake is ", max_length=50)
 [{'generated_text': 'The secret to baking a good cake is 100% in the batter. The secret to a great cake is the icing.\nThis is why we’ve created the best buttercream frosting reci'}]
 ```
 
