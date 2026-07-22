@@ -358,6 +358,14 @@ class DeepseekV2Attention(nn.Module):
         self.scaling = self.qk_head_dim ** (-0.5)
         self.scaling = yarn_apply_mscale(config.rope_parameters, self.scaling)
 
+    def expand_kv(self, kv_c_normed: torch.Tensor, k_pe: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+        batch_size, seq_length = kv_c_normed.shape[:-1]
+        key_shape = (batch_size, seq_length, -1, self.qk_nope_head_dim + self.v_head_dim)
+        k_nope = self.kv_b_proj(kv_c_normed).view(key_shape).transpose(1, 2)
+        k_nope, value_states = torch.split(k_nope, [self.qk_nope_head_dim, self.v_head_dim], dim=-1)
+        key_states = torch.cat((k_nope, k_pe.expand(*k_nope.shape[:-1], -1)), dim=-1)
+        return key_states, value_states
+
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -386,19 +394,21 @@ class DeepseekV2Attention(nn.Module):
 
         query_states = torch.cat((q_nope, q_pe), dim=-1)
 
-        # MLA hands the interface the compressed latent and RoPE key; the `kv_b_proj`
-        # expansion happens inside the interface (see `AttentionInterface.get_interface`).
+        key_states, value_states = self.expand_kv(kv_c_normed, k_pe)
+
+        if past_key_values is not None:
+            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
+
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
-            self.config._attn_implementation, eager_attention_forward, mla=True
+            self.config._attn_implementation, eager_attention_forward
         )
 
         attn_output, attn_weights = attention_interface(
             self,
             query_states,
-            kv_c_normed,
-            k_pe,
+            key_states,
+            value_states,
             attention_mask,
-            past_key_values=past_key_values,
             dropout=0.0 if not self.training else self.attention_dropout,
             scaling=self.scaling,
             **kwargs,
