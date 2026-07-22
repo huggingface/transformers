@@ -47,8 +47,13 @@ logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 PACKAGE_DISTRIBUTION_MAPPING = importlib.metadata.packages_distributions()
 
 
-def _is_package_available(pkg_name: str, return_version: bool = False) -> tuple[bool, str]:
-    """Check if `pkg_name` exist, and optionally try to get its version"""
+def _is_package_available(
+    pkg_name: str, return_version: bool = False, distributions: list[str] | None = None
+) -> tuple[bool, str]:
+    """Check if `pkg_name` exists (by import name), and optionally get its version. `distributions` lists
+    extra distribution (`pip install`) names probed directly via `importlib.metadata` when the import
+    isn't found — for packages whose distribution name differs from the import name and `find_spec` can't
+    resolve, or where any of several distributions suffices (e.g. `onnxruntime` / `onnxruntime-gpu`)."""
     spec = importlib.util.find_spec(pkg_name)
     package_exists = spec is not None
     package_version = "N/A"
@@ -56,16 +61,16 @@ def _is_package_available(pkg_name: str, return_version: bool = False) -> tuple[
         try:
             # importlib.metadata works with the distribution package, which may be different from the import
             # name (e.g. `PIL` is the import name, but `pillow` is the distribution name)
-            distributions = PACKAGE_DISTRIBUTION_MAPPING[pkg_name]
+            mapped_distributions = PACKAGE_DISTRIBUTION_MAPPING[pkg_name]
             # Per PEP 503, underscores and hyphens are equivalent in package names.
             # Prefer the distribution that matches the (normalized) package name.
             normalized_pkg_name = pkg_name.replace("_", "-")
-            if normalized_pkg_name in distributions:
+            if normalized_pkg_name in mapped_distributions:
                 distribution_name = normalized_pkg_name
-            elif pkg_name in distributions:
+            elif pkg_name in mapped_distributions:
                 distribution_name = pkg_name
             else:
-                distribution_name = distributions[0]
+                distribution_name = mapped_distributions[0]
             package_version = importlib.metadata.version(distribution_name)
         except (importlib.metadata.PackageNotFoundError, KeyError):
             # If we cannot find the metadata (because of editable install for example), try to import directly.
@@ -76,6 +81,16 @@ def _is_package_available(pkg_name: str, return_version: bool = False) -> tuple[
             if package_version == "N/A" and getattr(package, "__file__", None) is None:
                 package_exists = False
         logger.debug(f"Detected {pkg_name} version: {package_version}")
+
+    # Fall back to the given distribution names (resolved by distribution, which `find_spec` can't do).
+    if not package_exists and distributions:
+        for distribution in distributions:
+            try:
+                package_version = importlib.metadata.version(distribution)
+                package_exists = True
+                break
+            except importlib.metadata.PackageNotFoundError:
+                continue
 
     if return_version:
         return package_exists, package_version
@@ -936,7 +951,9 @@ def is_onnxscript_available() -> bool:
 
 @lru_cache
 def is_onnxruntime_available() -> bool:
-    return _is_package_available("onnxruntime")[0] or _is_package_available("onnxruntime-gpu")[0]
+    # Both the `onnxruntime` and `onnxruntime-gpu` distributions provide the `onnxruntime` import; the
+    # latter is a distribution name (`find_spec` can't resolve it), so pass it via `distributions`.
+    return _is_package_available("onnxruntime", distributions=["onnxruntime", "onnxruntime-gpu"])[0]
 
 
 @lru_cache

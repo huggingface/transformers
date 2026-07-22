@@ -20,7 +20,6 @@ Requirements: CUDA, `kernels`, `nvidia-cutlass-dsl`, has_gate=True.
 
 from __future__ import annotations
 
-import importlib.metadata
 from collections.abc import Callable
 from dataclasses import dataclass
 
@@ -28,7 +27,7 @@ import torch
 from packaging import version
 
 from ..utils import logging
-from ..utils.import_utils import is_kernels_available, maybe_import_error
+from ..utils.import_utils import _is_package_available, is_kernels_available, maybe_import_error
 from .hub_kernels import lazy_load_kernel
 from .tensor_parallel import to_local
 
@@ -68,9 +67,8 @@ def is_sonicmoe_loadable(raise_error: bool = False) -> bool:
             raise_error=raise_error,
         )
     for distribution, max_version in SONICMOE_DEPENDENCIES.items():
-        try:
-            installed = importlib.metadata.version(distribution)
-        except importlib.metadata.PackageNotFoundError:
+        available, installed = _is_package_available(distribution, return_version=True, distributions=[distribution])
+        if not available:
             return maybe_import_error(
                 f"sonic-moe requires `{distribution}`, but it is not installed.", raise_error=raise_error
             )
