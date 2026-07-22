@@ -81,6 +81,9 @@ class Qwen3_5TextConfig(Qwen3NextConfig):
         Number of key heads used in linear attention layers.
     linear_num_value_heads (`int`, *optional*, defaults to 32):
         Number of value heads used in linear attention layers.
+    mtp_num_hidden_layers (`int`, *optional*, defaults to 0):
+        Number of Multi-Token Prediction (MTP) layers. When set to 0, MTP is disabled.
+        This field is exposed as `num_mtp_layers` via `attribute_map`.
 
     ```python
     >>> from transformers import Qwen3_5TextModel, Qwen3_5TextConfig
@@ -98,6 +101,8 @@ class Qwen3_5TextConfig(Qwen3NextConfig):
 
     model_type = "qwen3_5_text"
     base_config_key = "text_config"
+
+    attribute_map = {"num_mtp_layers": "mtp_num_hidden_layers"}
 
     base_model_tp_plan = {
         "layers.*.self_attn.q_proj": "colwise",
@@ -123,6 +128,7 @@ class Qwen3_5TextConfig(Qwen3NextConfig):
     intermediate_size: int = 12288
     num_hidden_layers: int = 32
     num_key_value_heads: int = 4
+    mtp_num_hidden_layers: int = 0
 
     decoder_sparse_step = AttributeError()
     norm_topk_prob = AttributeError()
@@ -137,6 +143,13 @@ class Qwen3_5TextConfig(Qwen3NextConfig):
     def __post_init__(self, **kwargs):
         super().__post_init__(**kwargs)
         del self.mlp_only_layers
+
+    # MTP layers always use full attention
+    @property
+    def mtp_layer_types(self):
+        if self.num_mtp_layers is not None:
+            return ["full_attention"] * self.num_mtp_layers
+        return None
 
 
 @auto_docstring(checkpoint="Qwen/Qwen3.5-27B")
@@ -156,6 +169,10 @@ class Qwen3_5VisionConfig(Qwen3VLVisionConfig):
 @strict
 class Qwen3_5Config(Qwen3VLConfig):
     r"""
+    mtp_num_hidden_layers (`int`, *optional*, defaults to 0):
+        Number of Multi-Token Prediction (MTP) layers. When set to 0, MTP is disabled.
+        This field is exposed as `num_mtp_layers` via `attribute_map`.
+
     Example:
 
     ```python
@@ -175,6 +192,17 @@ class Qwen3_5Config(Qwen3VLConfig):
     video_token_id: int = 248057
     vision_start_token_id: int = 248053
     vision_end_token_id: int = 248054
+
+    attribute_map = {"num_mtp_layers": "mtp_num_hidden_layers"}
+
+    mtp_num_hidden_layers: int = 0
+
+    # MTP layers always use full attention
+    @property
+    def mtp_layer_types(self):
+        if self.num_mtp_layers is not None:
+            return ["full_attention"] * self.num_mtp_layers
+        return None
 
 
 class Qwen3_5VisionRotaryEmbedding(Qwen3VLVisionRotaryEmbedding):
