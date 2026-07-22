@@ -686,6 +686,14 @@ class Qwen3OmniMoeConfig(PreTrainedConfig):
 
 
 class Qwen3OmniMoePreTrainedModel(Qwen2_5OmniPreTrainedModel, PreTrainedModel):
+    _no_split_modules = [
+        "Qwen3OmniMoeThinkerTextDecoderLayer",
+        "Qwen3OmniMoeAudioEncoderLayer",
+        "Qwen3OmniMoeVisionBlock",
+        "Qwen3OmniMoeTalkerDecoderLayer",
+        "Qwen3OmniMoeTalkerCodePredictorModelForConditionalGeneration",
+    ]
+
     @torch.no_grad()
     def _init_weights(self, module):
         PreTrainedModel._init_weights(self, module)
@@ -1030,7 +1038,7 @@ class Qwen3OmniMoeAudioEncoder(Qwen2_5OmniAudioEncoder):
         max_seqlen = get_max_seqlen(cu_seqlens, self.config, kwargs=kwargs)
 
         # Add channel dim for Conv2d: (num_chunks, mel_bins, time) -> (num_chunks, 1, mel_bins, time)
-        padded_feature = padded_feature.unsqueeze(1)
+        padded_feature = padded_feature.unsqueeze(1).to(dtype=self.conv2d1.weight.dtype)
         # Split to chunk to avoid OOM during convolution
         padded_embeds = []
         for chunk in padded_feature.split(self.conv_chunksize, dim=0):
@@ -1100,7 +1108,6 @@ class Qwen3OmniMoeVisionRotaryEmbedding(Qwen3VLMoeVisionRotaryEmbedding):
 
 class Qwen3OmniMoeVisionEncoder(Qwen3VLMoeVisionModel):
     config: Qwen3OmniMoeVisionEncoderConfig
-    _no_split_modules = ["Qwen3OmniMoeVisionBlock"]
 
     def __init__(self, config, *inputs, **kwargs):
         self.merger_list = nn.ModuleList(
@@ -1659,7 +1666,6 @@ class Qwen3OmniMoeTalkerModel(Qwen3VLMoeTextModel):
     config_class = Qwen3OmniMoeTalkerTextConfig
     base_model_prefix = "talker.model"
     input_modalities = ("audio",)
-    _no_split_modules = ["Qwen3OmniMoeTalkerDecoderLayer"]
     _can_record_outputs = {
         "hidden_states": Qwen3OmniMoeTalkerDecoderLayer,
         "attentions": Qwen3OmniMoeThinkerTextAttention,
@@ -1685,7 +1691,6 @@ class Qwen3OmniMoeTalkerForConditionalGeneration(Qwen3MoeForCausalLM):
     _pp_plan = {"codec_head": (["hidden_states"], ["logits"])}
     config_class = Qwen3OmniMoeTalkerConfig
     base_model_prefix = "talker"
-    _no_split_modules = ["Qwen3OmniMoeTalkerCodePredictorModelForConditionalGeneration"]
     _can_record_outputs = {
         "attentions": Qwen3OmniMoeThinkerTextAttention,
         "router_logits": OutputRecorder(Qwen3OmniMoeTalkerTextTopKRouter, index=0),
