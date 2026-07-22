@@ -1996,7 +1996,7 @@ class Qwen2_5OmniThinkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCo
             inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_embeds)
 
         if video_outputs is not None:
-            video_embeds = torfch.cat(video_outputs.pooler_output, dim=0)
+            video_embeds = torch.cat(video_outputs.pooler_output, dim=0)
             video_embeds = video_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
             _, video_mask, _ = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, video_features=video_embeds

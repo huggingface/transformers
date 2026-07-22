@@ -35,12 +35,12 @@ from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
-from ..qwen2_vl.modeling_qwen2_vl import Qwen2VLModel
 from ...vision_utils import (
     get_vision_attention_seqlens,
     get_vision_bilinear_indices_and_weights,
     get_vision_position_ids,
 )
+from ..qwen2_vl.modeling_qwen2_vl import Qwen2VLModel
 from ..qwen3.modeling_qwen3 import Qwen3ForCausalLM
 from ..qwen3_next.configuration_qwen3_next import Qwen3NextConfig
 from ..qwen3_next.modeling_qwen3_next import (

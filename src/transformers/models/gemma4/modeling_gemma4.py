@@ -2345,7 +2345,9 @@ class Gemma4Model(Gemma4PreTrainedModel):
             image_outputs = self.get_image_features(pixel_values, image_position_ids, return_dict=True)
 
         if image_outputs is not None:
-            image_features = torch.cat(image_outputs.pooler_output, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
+            image_features = torch.cat(image_outputs.pooler_output, dim=0).to(
+                inputs_embeds.device, inputs_embeds.dtype
+            )
 
             # Confirm the number of soft tokens from the vision tower matches the number of slots in the embeddings.
             n_image_tokens = image_mask.sum()
