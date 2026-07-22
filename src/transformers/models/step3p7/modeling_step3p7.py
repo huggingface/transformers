@@ -51,15 +51,6 @@ from .configuration_step3p7 import Step3p7Config, Step3p7TextConfig, Step3p7Visi
 
 
 class Step3p7VisionRotaryEmbedding(nn.Module):
-    """2D RoPE for the Step3p7 vision encoder.
-
-    Inherits frequency computation from :class:`Gemma4VisionRotaryEmbedding`
-    (``position_ids``-based interface, standard ``inv_freq``), but overrides
-    ``forward`` to use ``repeat_interleave(2)`` (interleaved pairs) instead of
-    Gemma4's ``cat((freqs, freqs))`` (block repetition), preserving the Step3p7
-    checkpoint's rotational convention.
-    """
-
     inv_freq: torch.Tensor  # fix linting for `register_buffer`
 
     def __init__(self, config: Step3p7VisionConfig, device=None):
@@ -115,25 +106,18 @@ class Step3p7VisionRotaryEmbedding(nn.Module):
 
     @torch.no_grad()
     def forward(self, x: torch.Tensor, position_ids: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
-        """
-        Args:
-            x: reference tensor for device/dtype (not rotated here).
-            position_ids: ``(B, seq, 2)`` integer (h, w) grid coordinates.
-
-        Returns:
-            ``(cos, sin)``, each of shape ``(B, seq, head_dim)``.
-        """
         inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1).to(x.device)
         device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
-        all_cos, all_sin = [], []
+        dim_freqs = []
         for i in range(2):
             dim_pos = position_ids[:, :, i][:, None, :].float()
             with maybe_autocast(device_type=device_type, enabled=False):
-                freqs = (inv_freq_expanded.float() @ dim_pos.float()).transpose(1, 2)
-                emb = freqs.repeat_interleave(2, dim=-1)  # interleaved; Gemma4 uses cat((freqs, freqs))
-                all_cos.append(emb.cos() * self.attention_scaling)
-                all_sin.append(emb.sin() * self.attention_scaling)
-        return torch.cat(all_cos, dim=-1).to(dtype=x.dtype), torch.cat(all_sin, dim=-1).to(dtype=x.dtype)
+                dim_freqs.append((inv_freq_expanded.float() @ dim_pos.float()).transpose(1, 2))
+        freqs = torch.cat(dim_freqs, dim=-1)
+        emb = torch.cat((freqs, freqs), dim=-1)
+        cos = (emb.cos() * self.attention_scaling).to(dtype=x.dtype)
+        sin = (emb.sin() * self.attention_scaling).to(dtype=x.dtype)
+        return cos, sin
 
 
 class Step3p7VisionMLP(nn.Module):
@@ -188,34 +172,25 @@ def eager_attention_forward(
     return attn_output, attn_weights
 
 
-#  Vision encoder
-
-
-def _rotate_half_interleaved(x: torch.Tensor) -> torch.Tensor:
-    """Pair-wise rotation: [a1,b1, a2,b2,...] → [-b1,a1, -b2,a2,...].
-
-    Interleaved convention used by Step3p7 vision RoPE; distinct from the
-    block-split ``rotate_half`` used in the text decoder.
-    """
-    x = x.reshape(*x.shape[:-1], -1, 2)
-    x1, x2 = x.unbind(dim=-1)
-    return torch.stack((-x2, x1), dim=-1).reshape(*x.shape[:-2], -1)
+def rotate_half(x):
+    """Rotates half the hidden dims of the input."""
+    x1 = x[..., : x.shape[-1] // 2]
+    x2 = x[..., x.shape[-1] // 2 :]
+    return torch.cat((-x2, x1), dim=-1)
 
 
 def apply_rotary_pos_emb_vision(
     q: torch.Tensor, k: torch.Tensor, cos: torch.Tensor, sin: torch.Tensor
 ) -> tuple[torch.Tensor, torch.Tensor]:
-    """Apply 2-D RoPE with interleaved (pair-wise) rotation convention.
-
-    Replaces the block-split ``rotate_half`` used by MiniMaxM3VL with
-    ``_rotate_half_interleaved`` to match the Step3p7 checkpoint's rotational
-    layout produced by :class:`Step3p7VisionRotaryEmbedding`.
-    """
-    cos = cos.unsqueeze(2)
-    sin = sin.unsqueeze(2)
-    q = (q * cos + _rotate_half_interleaved(q) * sin).to(q.dtype)
-    k = (k * cos + _rotate_half_interleaved(k) * sin).to(k.dtype)
-    return q, k
+    orig_q_dtype = q.dtype
+    orig_k_dtype = k.dtype
+    q, k = q.float(), k.float()
+    cos, sin = cos.unsqueeze(-2).float(), sin.unsqueeze(-2).float()
+    q_embed = (q * cos) + (rotate_half(q) * sin)
+    k_embed = (k * cos) + (rotate_half(k) * sin)
+    q_embed = q_embed.to(orig_q_dtype)
+    k_embed = k_embed.to(orig_k_dtype)
+    return q_embed, k_embed
 
 
 class Step3p7VisionAttention(nn.Module):
@@ -677,13 +652,6 @@ class Step3p7SparseMoeBlock(nn.Module):
         return hidden_states
 
 
-def rotate_half(x):
-    """Rotates half the hidden dims of the input."""
-    x1 = x[..., : x.shape[-1] // 2]
-    x2 = x[..., x.shape[-1] // 2 :]
-    return torch.cat((-x2, x1), dim=-1)
-
-
 # Adapted from transformers.models.glm.modular_glm.apply_rotary_pos_emb
 def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
     """Applies Rotary Position Embedding to the query and key tensors.
@@ -1043,7 +1011,7 @@ class Step3p7Model(Step3p7PreTrainedModel):
             merged.append(torch.cat(cur_feature) if len(cur_feature) > 1 else cur_feature[0])
         return BaseModelOutputWithPooling(
             last_hidden_state=vision_output.last_hidden_state,
-            pooler_output=torch.cat(merged, dim=0),
+            pooler_output=merged,
             hidden_states=vision_output.hidden_states,
         )
 
@@ -1099,7 +1067,7 @@ class Step3p7Model(Step3p7PreTrainedModel):
             image_features = self.get_image_features(
                 pixel_values, pixel_values_local, num_local_patches, return_dict=True
             ).pooler_output
-            image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
+            image_features = torch.cat(image_features, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
 
             special_image_mask = self.get_placeholder_mask(input_ids, inputs_embeds, image_features)
             inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, image_features)

@@ -297,9 +297,6 @@ class Step3p7TextConfig(PreTrainedConfig):
                 self.num_sliding_attention_heads = self.num_attention_heads
 
         if self.num_attention_heads_per_layer is None:
-            # Resolved once here (like `LagunaConfig.num_attention_heads_per_layer`) so
-            # `Step3p7Attention` receives its head count as a plain constructor argument instead of
-            # picking between `num_attention_heads`/`num_sliding_attention_heads` itself.
             self.num_attention_heads_per_layer = [
                 self.num_sliding_attention_heads if layer_type == "sliding_attention" else self.num_attention_heads
                 for layer_type in self.layer_types

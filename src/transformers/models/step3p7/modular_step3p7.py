@@ -54,6 +54,7 @@ from ..minimax_m3_vl.modeling_minimax_m3_vl import (
     MiniMaxM3VLVisionAttention,
     MiniMaxM3VLVisionMLP,
 )
+from ..qwen2_vl.modeling_qwen2_vl import apply_rotary_pos_emb_vision  # noqa: F401
 from ..siglip.configuration_siglip import SiglipVisionConfig
 from ..siglip.modeling_siglip import SiglipVisionEmbeddings
 
@@ -675,68 +676,25 @@ class Step3p7ImageProcessor(TorchvisionBackend):
 #  Vision encoder
 
 
-def _rotate_half_interleaved(x: torch.Tensor) -> torch.Tensor:
-    """Pair-wise rotation: [a1,b1, a2,b2,...] → [-b1,a1, -b2,a2,...].
-
-    Interleaved convention used by Step3p7 vision RoPE; distinct from the
-    block-split ``rotate_half`` used in the text decoder.
-    """
-    x = x.reshape(*x.shape[:-1], -1, 2)
-    x1, x2 = x.unbind(dim=-1)
-    return torch.stack((-x2, x1), dim=-1).reshape(*x.shape[:-2], -1)
-
-
 class Step3p7VisionRotaryEmbedding(Gemma4VisionRotaryEmbedding):
-    """2D RoPE for the Step3p7 vision encoder.
-
-    Inherits frequency computation from :class:`Gemma4VisionRotaryEmbedding`
-    (``position_ids``-based interface, standard ``inv_freq``), but overrides
-    ``forward`` to use ``repeat_interleave(2)`` (interleaved pairs) instead of
-    Gemma4's ``cat((freqs, freqs))`` (block repetition), preserving the Step3p7
-    checkpoint's rotational convention.
-    """
-
     @torch.no_grad()
     def forward(self, x: torch.Tensor, position_ids: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
-        """
-        Args:
-            x: reference tensor for device/dtype (not rotated here).
-            position_ids: ``(B, seq, 2)`` integer (h, w) grid coordinates.
-
-        Returns:
-            ``(cos, sin)``, each of shape ``(B, seq, head_dim)``.
-        """
         inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1).to(x.device)
         device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
-        all_cos, all_sin = [], []
+        dim_freqs = []
         for i in range(2):
             dim_pos = position_ids[:, :, i][:, None, :].float()
             with maybe_autocast(device_type=device_type, enabled=False):
-                freqs = (inv_freq_expanded.float() @ dim_pos.float()).transpose(1, 2)
-                emb = freqs.repeat_interleave(2, dim=-1)  # interleaved; Gemma4 uses cat((freqs, freqs))
-                all_cos.append(emb.cos() * self.attention_scaling)
-                all_sin.append(emb.sin() * self.attention_scaling)
-        return torch.cat(all_cos, dim=-1).to(dtype=x.dtype), torch.cat(all_sin, dim=-1).to(dtype=x.dtype)
+                dim_freqs.append((inv_freq_expanded.float() @ dim_pos.float()).transpose(1, 2))
+        freqs = torch.cat(dim_freqs, dim=-1)
+        emb = torch.cat((freqs, freqs), dim=-1)
+        cos = (emb.cos() * self.attention_scaling).to(dtype=x.dtype)
+        sin = (emb.sin() * self.attention_scaling).to(dtype=x.dtype)
+        return cos, sin
 
 
 class Step3p7VisionMLP(MiniMaxM3VLVisionMLP):
     pass
-
-
-def apply_rotary_pos_emb_vision(
-    q: torch.Tensor, k: torch.Tensor, cos: torch.Tensor, sin: torch.Tensor
-) -> tuple[torch.Tensor, torch.Tensor]:
-    """Apply 2-D RoPE with interleaved (pair-wise) rotation convention.
-
-    Replaces the block-split ``rotate_half`` used by MiniMaxM3VL with
-    ``_rotate_half_interleaved`` to match the Step3p7 checkpoint's rotational
-    layout produced by :class:`Step3p7VisionRotaryEmbedding`.
-    """
-    cos = cos.unsqueeze(2)
-    sin = sin.unsqueeze(2)
-    q = (q * cos + _rotate_half_interleaved(q) * sin).to(q.dtype)
-    k = (k * cos + _rotate_half_interleaved(k) * sin).to(k.dtype)
-    return q, k
 
 
 class Step3p7VisionAttention(MiniMaxM3VLVisionAttention):
@@ -1107,7 +1065,7 @@ class Step3p7Model(DeepseekOcr2Model):
             merged.append(torch.cat(cur_feature) if len(cur_feature) > 1 else cur_feature[0])
         return BaseModelOutputWithPooling(
             last_hidden_state=vision_output.last_hidden_state,
-            pooler_output=torch.cat(merged, dim=0),
+            pooler_output=merged,
             hidden_states=vision_output.hidden_states,
         )
 

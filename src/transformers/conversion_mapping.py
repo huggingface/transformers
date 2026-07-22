@@ -1010,14 +1010,8 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(source_patterns=r"\.attn\.", target_patterns=".self_attn."),
             WeightRenaming(source_patterns=r"\.ln_1\.", target_patterns=".layernorm_before."),
             WeightRenaming(source_patterns=r"\.ln_2\.", target_patterns=".layernorm_after."),
-            # in_proj_weight/bias → q/k/v split (Chunk dim=0 into 3 equal parts). No layer-index
-            # capturing group needed: scoped to this vision submodule, the pattern only ever matches
-            # `layers.N.self_attn.in_proj_{weight,bias}` keys, so the plain substring match leaves the
-            # `layers.N.` prefix untouched and carried over as-is (same convention as the
-            # `in_proj_weight`/`in_proj_bias` unfusing used elsewhere, e.g. RfDetr). This can't be
-            # unscoped in the "step3p7" entry above: a bare `self_attn.in_proj_weight` substring there
-            # would also match (and corrupt) the text decoder's already-separate
-            # `language_model.layers.*.self_attn.q_proj.weight` keys.
+            # Unfuse qkv and apply rope permutation. Kept scoped here: unscoped in "step3p7" above,
+            # this would also match the text decoder's separate `language_model...q_proj.weight` keys.
             WeightConverter(
                 source_patterns=r"self_attn.in_proj_weight",
                 target_patterns=[
@@ -1025,7 +1019,7 @@ def _build_checkpoint_conversion_mapping():
                     r"self_attn.k_proj.weight",
                     r"self_attn.v_proj.weight",
                 ],
-                operations=[Chunk(dim=0)],
+                operations=[VisionUnfuseAndPermuteForRope(dim=0, permute_layer_names=["q_proj", "k_proj"])],
             ),
             WeightConverter(
                 source_patterns=r"self_attn.in_proj_bias",
@@ -1034,7 +1028,7 @@ def _build_checkpoint_conversion_mapping():
                     r"self_attn.k_proj.bias",
                     r"self_attn.v_proj.bias",
                 ],
-                operations=[Chunk(dim=0)],
+                operations=[VisionUnfuseAndPermuteForRope(dim=0, permute_layer_names=["q_proj", "k_proj"])],
             ),
         ],
         "colqwen2": [PrefixChange(prefix_to_remove="model", model_prefix="vlm")],
