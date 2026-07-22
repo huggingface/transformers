@@ -1451,7 +1451,9 @@ class ToolArgCoercionTest(unittest.TestCase):
         # Coercion only casts string-valued arguments, so a template `value_parser` that already
         # produced a non-string wins. qwen3's json value_parser parses `1.50` to the float 1.5
         # before coercion sees it, so even with tools= the string type is not recovered.
-        model_out = "<tool_call>\n<function=set_alarm>\n<parameter=label>\n1.50\n</parameter>\n</function>\n</tool_call>"
+        model_out = (
+            "<tool_call>\n<function=set_alarm>\n<parameter=label>\n1.50\n</parameter>\n</function>\n</tool_call>"
+        )
         self.assertEqual(_first_tool_args(parse_response(model_out, qwen3_template, prefix="")), {"label": 1.5})
         self.assertEqual(
             _first_tool_args(parse_response(model_out, qwen3_template, prefix="", tools=_SET_ALARM_TOOLS)),
