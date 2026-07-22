@@ -96,14 +96,23 @@ CHAT_TEMPLATE = """{%- set system_prompt = system_prompt | default(" Transform t
 {%- set audio_bos_token = audio_bos_token | default("<|vision_start|>") %}
 {%- set audio_eos_token = audio_eos_token | default("<|vision_end|>") %}
 {%- set audio_token = audio_token | default("<|vision_pad|>") %}
-{%- set ns = namespace(speakers_with_audio="") %}
+{%- set eos_token = eos_token | default("<|endoftext|>") %}
+{#- Training regime (`add_generation_prompt=False`): the last audio of the conversation is the target speech and is
+    placed after "Speech output:", followed by the audio EOS and text EOS tokens; any preceding audio is used as a
+    voice prompt. Generation regime (`add_generation_prompt=True`): all audios are voice prompts. #}
+{%- set ns = namespace(num_audio=0, num_seen=0, speakers_with_audio="") %}
+{%- for message in messages %}
+    {%- set ns.num_audio = ns.num_audio + (message['content'] | selectattr('type', 'equalto', 'audio') | list | length) %}
+{%- endfor %}
+{%- set has_target_audio = not add_generation_prompt and ns.num_audio > 0 %}
+{%- set num_voice_prompts = ns.num_audio - 1 if has_target_audio else ns.num_audio %}
 {%- for message in messages %}
     {%- set role = message['role'] %}
-    {%- set content = message['content'] %}
-    {%- set has_audio = content | selectattr('type', 'equalto', 'audio') | list | length > 0 %}
-    {%- if has_audio and role not in ns.speakers_with_audio %}
+    {%- set audio_count = message['content'] | selectattr('type', 'equalto', 'audio') | list | length %}
+    {%- if audio_count > 0 and ns.num_seen < num_voice_prompts and role not in ns.speakers_with_audio %}
         {%- set ns.speakers_with_audio = ns.speakers_with_audio + role + "," %}
     {%- endif %}
+    {%- set ns.num_seen = ns.num_seen + audio_count %}
 {%- endfor %}
 
 {%- if ns.speakers_with_audio %}
@@ -123,7 +132,10 @@ CHAT_TEMPLATE = """{%- set system_prompt = system_prompt | default(" Transform t
  Speaker {{ role }}: {{ item['text'] }}{{ "\n" }}
     {%- endfor %}
 {%- endfor %}
- Speech output:{{ "\n" }}{{ audio_bos_token }}"""
+ Speech output:{{ "\n" }}{{ audio_bos_token }}
+{%- if not add_generation_prompt %}
+{%- if has_target_audio %}{{ audio_token }}{{ audio_eos_token }}{% endif %}{{ eos_token }}
+{%- endif %}"""
 # fmt: on
 
 

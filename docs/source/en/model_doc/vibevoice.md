@@ -92,7 +92,7 @@ model = AutoModelForTextToWaveform.from_pretrained(model_id, device_map="auto")
 # Prepare input
 conversation = [{"role": "0", "content": [{"type": "text", "text": text}]}]
 inputs = processor.apply_chat_template(
-    conversation, return_dict=True, tokenize=True,
+    conversation, return_dict=True, tokenize=True, add_generation_prompt=True,
 ).to(model.device, model.dtype)
 
 # Generate!
@@ -135,7 +135,7 @@ conversation = [
     }
 ]
 inputs = processor.apply_chat_template(
-    conversation, return_dict=True, tokenize=True,
+    conversation, return_dict=True, tokenize=True, add_generation_prompt=True,
 ).to(model.device, model.dtype)
 
 # Generate!
@@ -209,7 +209,7 @@ model = AutoModelForTextToWaveform.from_pretrained(model_id, device_map="auto")
 
 # prepare inputs
 inputs = processor.apply_chat_template(
-    conversation, return_dict=True, tokenize=True,
+    conversation, return_dict=True, tokenize=True, add_generation_prompt=True,
 ).to(model.device, model.dtype)
 
 # Generate audio with a progress bar to track generation
@@ -311,7 +311,7 @@ model = AutoModelForTextToWaveform.from_pretrained(model_id, device_map="auto")
 
 # prepare inputs
 inputs = processor.apply_chat_template(
-    conversation, return_dict=True, tokenize=True,
+    conversation, return_dict=True, tokenize=True, add_generation_prompt=True,
 ).to(model.device, model.dtype)
 
 # Generate audio with a progress bar to track generation
@@ -467,7 +467,7 @@ conversation = [
     ],
 ] * 4  # batch size 4
 inputs = processor.apply_chat_template(
-    conversation, tokenize=True, return_dict=True,
+    conversation, tokenize=True, return_dict=True, add_generation_prompt=True,
 ).to(model.device, model.dtype)
 
 compile_config = CompileConfig(mode="default" dynamic=False)

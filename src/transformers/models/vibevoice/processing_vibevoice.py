@@ -78,6 +78,8 @@ class VibeVoiceProcessor(ProcessorMixin):
         super().__init__(feature_extractor, tokenizer, chat_template=chat_template)
 
     def _process_audio(self, audio: AudioInput, **kwargs):
+        # Default to the feature extractor's own sampling rate
+        kwargs.setdefault("sampling_rate", self.feature_extractor.sampling_rate)
         processed_audio = self.feature_extractor(audio, **kwargs)
         pad_to_multiple_of = kwargs.get("pad_to_multiple_of") or self.feature_extractor.pad_to_multiple_of
         self._num_audio_tokens = (
@@ -121,9 +123,10 @@ class VibeVoiceProcessor(ProcessorMixin):
             - **input_values** -- List of audio values to be fed to the model. Returned when `audio` is not `None`.
             - **padding_mask** -- List of indices specifying which audio frames should be attended to by the model.
               Returned when `audio` is not `None`.
-            - **labels** -- Labels for language model training. Only padding tokens are masked with -100. Audio
-              tokens (bos, diffusion, eos) are kept as targets so the LM learns when and how much audio to generate.
-              Returned when `output_labels=True`.
+            - **labels** -- Labels for language model training. Padding and audio diffusion tokens are masked with
+              -100 (audio diffusion token embeddings are replaced by audio features, so their token identity is not a
+              meaningful target). Audio bos/eos and text eos tokens are kept as targets so the LM learns when to start
+              and stop generating audio. Returned when `output_labels=True`.
             - **acoustic_loss_mask** -- Boolean mask for positions where diffusion loss is computed. True at audio
               diffusion token positions. Returned when `output_labels=True`.
         """
@@ -133,7 +136,12 @@ class VibeVoiceProcessor(ProcessorMixin):
         data = super().__call__(text=text, audio=audio, **kwargs)
         if output_labels:
             labels = data["input_ids"].clone()
-            labels[labels == self.tokenizer.pad_token_id] = -100
+            # NOTE: mask padding through the attention mask, as the padding and EOS token share the same ID
+            if "attention_mask" in data:
+                labels[data["attention_mask"] == 0] = -100
+            # Mask audio diffusion tokens: their embeddings are replaced by audio features, so their token identity
+            # is not a meaningful target. Audio bos/eos tokens are kept so the LM learns when to start/stop audio.
+            labels[labels == self.audio_token_id] = -100
             data["labels"] = labels
             # For diffusion loss
             acoustic_loss_mask = torch.zeros_like(data["input_ids"], dtype=torch.bool)

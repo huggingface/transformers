@@ -346,9 +346,9 @@ class VibeVoiceForConditionalGenerationIntegrationTest(unittest.TestCase):
                 ],
             },
         ]
-        inputs = processor.apply_chat_template(conversation, tokenize=True, return_dict=True).to(
-            torch_device, dtype=model.dtype
-        )
+        inputs = processor.apply_chat_template(
+            conversation, tokenize=True, return_dict=True, add_generation_prompt=True
+        ).to(torch_device, dtype=model.dtype)
 
         # Generate audio
         noise_scheduler = diffusers.DPMSolverMultistepScheduler(
@@ -420,7 +420,7 @@ class VibeVoiceForConditionalGenerationIntegrationTest(unittest.TestCase):
             },
         ]
         inputs = processor.apply_chat_template(
-            conversation, tokenize=True, return_dict=True, sampling_rate=self.sampling_rate
+            conversation, tokenize=True, return_dict=True, add_generation_prompt=True, sampling_rate=self.sampling_rate
         ).to(torch_device, dtype=model.dtype)
 
         # Generate audio

@@ -178,6 +178,7 @@ class TextToAudioPipeline(Pipeline):
             chat_template_kwargs = {
                 "tokenize": True,
                 "return_dict": True,
+                "add_generation_prompt": True,
                 "processor_kwargs": processor_kwargs,
                 **kwargs,
             }
