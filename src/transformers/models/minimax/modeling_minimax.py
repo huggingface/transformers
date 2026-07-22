@@ -764,8 +764,10 @@ def load_balancing_loss_func(
         # Compute the average probability of routing to these experts
         router_prob_per_expert = torch.mean(routing_weights, dim=0)
     else:
-        batch_size, sequence_length = attention_mask.shape
-        num_hidden_layers = concatenated_gate_logits.shape[0] // (batch_size * sequence_length)
+        num_hidden_layers = len(gate_logits)
+        batch_size = attention_mask.shape[0]
+        sequence_length = gate_logits[0].shape[0] // batch_size
+        attention_mask = attention_mask[:, -sequence_length:]
 
         # Compute the mask that masks all padding tokens as 0 with the same shape of expert_mask
         expert_attention_mask = (
