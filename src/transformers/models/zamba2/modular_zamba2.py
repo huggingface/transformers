@@ -622,9 +622,6 @@ class Zamba2MambaMixer(nn.Module):
             new_states = (decay_chunk[..., None, None] * states[:, :, None, ...]).sum(dim=1)
             states, ssm_state = new_states[:, :-1], new_states[:, -1]
             
-            new_states = result.permute(0, 2, 1, 3, 4)
-            states, ssm_state = new_states[:, :-1], new_states[:, -1]
-
             # Compute state -> output conversion per chunk
             # (left term of low-rank factorization of off-diagonal blocks; C terms)
             state_decay_out = torch.exp(A_cumsum)
