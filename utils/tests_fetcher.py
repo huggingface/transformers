@@ -1135,7 +1135,6 @@ JOB_TO_TEST_FILE = {
     "tests_non_model": r"tests/(?!peft_integration/|conftest_tests/)[^/]*?/test_.*\.py",
     "tests_training_ci": r"tests/models/.*/test_modeling_.*",
     "tests_tensor_parallel_ci": r"(tests/models/.*/test_modeling_.*|tests/tensor_parallel(?:/test_tensor_parallel\.py)?)",
-    "tests_peft_integration": r"tests/peft_integration/test_.*\.py",
 }
 
 
