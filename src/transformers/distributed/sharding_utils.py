@@ -18,11 +18,11 @@ from typing import TYPE_CHECKING
 
 from ..utils import is_torch_available
 
-_dtensor_available = False
-
 if TYPE_CHECKING:
     import torch
     from torch.distributed.tensor import DTensor
+
+_dtensor_available = False
 
 if is_torch_available():
     import torch
