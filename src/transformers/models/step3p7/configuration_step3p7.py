@@ -106,7 +106,10 @@ class Step3p7TextConfig(PreTrainedConfig):
         `["full_attention", "sliding_attention", "sliding_attention", "sliding_attention"]` (the
         trailing MTP entry is dropped). Persisted as `self.num_nextn_predict_layers` (rather than
         only consumed here and discarded) so `Step3p7TextModel` can compute which trailing layer
-        indices are MTP layers at load time, instead of a hardcoded checkpoint-specific range.
+        indices are MTP layers at load time, instead of a hardcoded checkpoint-specific range. Also
+        exposed generically as `num_mtp_layers` (via `attribute_map`, the same convention used by
+        `DeepseekV3Config`/`Glm4MoeConfig`), which lets `PreTrainedConfig.get_mtp_config()` build the
+        real MTP submodel for `generate(..., use_mtp=True)`.
     rope_theta (`float | list[float]`, *optional*, defaults to 10000.0):
         Legacy hub-config kwarg. Real checkpoints give one value *per decoder layer* rather than one
         value for the whole model; since it only ever varies by `layer_types[layer_idx]`, this is
@@ -126,6 +129,19 @@ class Step3p7TextConfig(PreTrainedConfig):
     attention_other_setting (`dict`, *optional*):
         Legacy hub-config dict overriding `num_attention_heads`/`num_key_value_heads`/`head_dim` for
         `"sliding_attention"` layers (real checkpoints use a different head count per attention type).
+    num_attention_heads_per_layer (`list[int]`, *optional*):
+        Resolved (not a hub-config kwarg) per-layer head count, one entry per decoder layer: each
+        entry is `num_sliding_attention_heads` or `num_attention_heads` depending on
+        `layer_types[layer_idx]`. Computed once here (the same pattern `LagunaConfig` uses) so
+        `Step3p7Attention` takes its head count as a plain constructor argument instead of picking
+        between the two scalar fields itself.
+    query_pre_attn_scalar (`int` or `float`, *optional*):
+        `Gemma3Attention.__init__` hook point (`Step3p7Attention` inherits from it): defaults to
+        `head_dim`, giving the standard `head_dim ** -0.5` attention scaling rather than Gemma3's own
+        hyperparameter of the same name.
+    attn_logit_softcapping (`float`, *optional*):
+        `Gemma3Attention.__init__` hook point; unused by Step3p7's own `eager_attention_forward`, so
+        always `None` (no softcapping).
     use_head_wise_attn_gate (`bool`, *optional*, defaults to `False`):
         Legacy hub-config kwarg from the original checkpoint; not currently read by the modeling code.
     use_moe_router_bias (`bool`, *optional*, defaults to `False`):
@@ -156,6 +172,7 @@ class Step3p7TextConfig(PreTrainedConfig):
         "moe_num_experts": "n_routed_experts",
         "moe_top_k": "num_experts_per_tok",
         "share_expert_dims": "share_expert_dim",
+        "num_mtp_layers": "num_nextn_predict_layers",
     }
     # Copied (not inherited) from `MiniMaxM3VLTextConfig`: `Step3p7Attention`/`Step3p7SparseMoeBlock`
     # reuse its `q_proj`/`k_proj`/`v_proj`/`o_proj` and `experts.gate_up_proj`/`down_proj`/`gate`
@@ -201,10 +218,16 @@ class Step3p7TextConfig(PreTrainedConfig):
     mlp_layer_types: list[str] | None = None
     sliding_window: int | None = None
     num_sliding_attention_heads: int | None = None
+    num_attention_heads_per_layer: list[int] | None = None
     attention_other_setting: dict | None = None
     pad_token_id: int = 1
     attention_dropout: float = 0.0
     attention_bias: bool = False
+    # `Gemma3Attention.__init__` hook points (`Step3p7Attention` inherits from it): `None` resolves
+    # to the standard `head_dim ** -0.5` scaling below instead of Gemma3's own hyperparameter, and
+    # Step3p7 never applies logit softcapping (its own `eager_attention_forward` doesn't read it).
+    query_pre_attn_scalar: int | float | None = None
+    attn_logit_softcapping: float | None = None
     use_head_wise_attn_gate: bool = False
     use_moe_router_bias: bool = False
     moe_router_activation: str = "softmax"
@@ -272,6 +295,18 @@ class Step3p7TextConfig(PreTrainedConfig):
                 )
             else:
                 self.num_sliding_attention_heads = self.num_attention_heads
+
+        if self.num_attention_heads_per_layer is None:
+            # Resolved once here (like `LagunaConfig.num_attention_heads_per_layer`) so
+            # `Step3p7Attention` receives its head count as a plain constructor argument instead of
+            # picking between `num_attention_heads`/`num_sliding_attention_heads` itself.
+            self.num_attention_heads_per_layer = [
+                self.num_sliding_attention_heads if layer_type == "sliding_attention" else self.num_attention_heads
+                for layer_type in self.layer_types
+            ]
+
+        if self.query_pre_attn_scalar is None:
+            self.query_pre_attn_scalar = self.head_dim
 
         super().__post_init__(**kwargs)
 

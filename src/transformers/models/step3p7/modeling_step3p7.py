@@ -30,6 +30,7 @@ from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
+from ...integrations import use_kernelized_func
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPast, BaseModelOutputWithPooling, ModelOutput
@@ -570,6 +571,11 @@ class Step3p7RMSNorm(nn.Module):
         return f"{tuple(self.weight.shape)}, eps={self.eps}"
 
 
+def _swiglu_clamp(gate: torch.Tensor, up: torch.Tensor, act_fn: Callable, limit: float) -> torch.Tensor:
+    """Step3p7 order: SiLU then clamp (DeepseekV4 clamps before SiLU)."""
+    return act_fn(gate).clamp(max=limit) * up.clamp(min=-limit, max=limit)
+
+
 class Step3p7MLP(nn.Module):
     def __init__(self, config, intermediate_size=None, swiglu_limit=None):
         super().__init__()
@@ -583,15 +589,7 @@ class Step3p7MLP(nn.Module):
         self.limit = float("inf") if swiglu_limit is None else swiglu_limit
 
     def forward(self, x) -> torch.Tensor:
-        # silu-then-clamp (Step3p7 order); DeepseekV4MLP clamps before act_fn
-        gate = self.act_fn(self.gate_proj(x)).clamp(max=self.limit)
-        up = self.up_proj(x).clamp(min=-self.limit, max=self.limit)
-        return self.down_proj(gate * up)
-
-
-class Step3p7SharedExpert(Step3p7MLP):
-    def __init__(self, config, swiglu_limit=None):
-        super().__init__(config, intermediate_size=config.share_expert_dim, swiglu_limit=swiglu_limit)
+        return self.down_proj(_swiglu_clamp(self.gate_proj(x), self.up_proj(x), self.act_fn, self.limit))
 
 
 class Step3p7Experts(nn.Module):
@@ -627,11 +625,8 @@ class Step3p7Experts(nn.Module):
         return final
 
     def _apply_gate(self, gate_up: torch.Tensor) -> torch.Tensor:
-        # silu-then-clamp (Step3p7 order); DeepseekV4 clamps before act_fn
         gate, up = gate_up.chunk(2, dim=-1)
-        gate = self.act_fn(gate).clamp(max=self.limit)
-        up = up.clamp(min=-self.limit, max=self.limit)
-        return gate * up
+        return _swiglu_clamp(gate, up, self.act_fn, self.limit)
 
 
 class Step3p7TopKRouter(nn.Module):
@@ -662,7 +657,9 @@ class Step3p7SparseMoeBlock(nn.Module):
         swiglu_limit_shared = (config.swiglu_limits_shared[layer_idx] or None) if config.swiglu_limits_shared else None
         self.gate = Step3p7TopKRouter(config)
         self.experts = Step3p7Experts(config, swiglu_limit=swiglu_limit)
-        self.shared_experts = Step3p7SharedExpert(config, swiglu_limit=swiglu_limit_shared)
+        self.shared_experts = Step3p7MLP(
+            config, intermediate_size=config.share_expert_dim, swiglu_limit=swiglu_limit_shared
+        )
         self.routed_scaling_factor = getattr(config, "moe_router_scaling_factor", 1.0)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
@@ -680,8 +677,18 @@ class Step3p7SparseMoeBlock(nn.Module):
         return hidden_states
 
 
+def rotate_half(x):
+    """Rotates half the hidden dims of the input."""
+    x1 = x[..., : x.shape[-1] // 2]
+    x2 = x[..., x.shape[-1] // 2 :]
+    return torch.cat((-x2, x1), dim=-1)
+
+
+# Adapted from transformers.models.glm.modular_glm.apply_rotary_pos_emb
 def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
     """Applies Rotary Position Embedding to the query and key tensors.
+
+    Removes the interleaving of cos and sin from GLM
 
     Args:
         q (`torch.Tensor`): The query tensor.
@@ -716,189 +723,39 @@ def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
     return q_embed, k_embed
 
 
-def rotate_half(x):
-    """Rotates half the hidden dims of the input."""
-    x1 = x[..., : x.shape[-1] // 2]
-    x2 = x[..., x.shape[-1] // 2 :]
-    return torch.cat((-x2, x1), dim=-1)
-
-
-class Step3p7Indexer(nn.Module):
-    r"""Lightning Indexer for MiniMax M3 sparse attention.
-
-    Scores each query against every key with a small `index_n_heads`-head
-    dot-product branch, then max-pools those per-key scores into *blocks* of
-    `index_block_size` keys and keeps, per query, the top-`index_topk_blocks`
-    key blocks plus the `index_local_blocks` blocks immediately preceding the
-    query (always visible). Selection therefore happens at the granularity of a
-    *block of keys* rather than individual keys: the expensive main attention
-    only has to attend the handful of selected key blocks, which is what makes
-    it block-sparse (and cheaper) on long sequences.
-
-    The `index_local_blocks` boosting their score so they always win key slots, the
-    same way the deployment block-sparse kernel (MiniMax `topk_sparse`) does it.
-
-    `forward` returns the per-query selected key-block indices
-    `[B, S_q, index_topk_blocks]`. Valid indices are left-packed and `-1`
-    right-pads the unused slots (future/empty blocks), and the local boost makes
-    selections deduplicated -- the exact contract the block-sparse attention
-    kernel consumes (it counts the valid entries, then reads them sequentially
-    and would double-count a repeated block). The eager/SDPA path instead calls
-    `build_block_mask`, which expands the indices into the dense
-    `[B, 1, S_q, S_k]` additive mask the standard attention interface expects
-    (`0` at every allowed (query, key) pair, `-inf` elsewhere).
-
-    Like DeepSeek-V4's indexer this is purely a *selection* branch: it has no
-    value projection and produces no residual output of its own (the upstream
-    checkpoint disables the index-value path on every sparse layer).
-
-    TODO: blocks are anchored to absolute key *slots* (the contiguous reshape in
-    `forward` and `q_block = slot // block_size`), so left-padding shifts the block
-    boundaries and the selection diverges from an unpadded run -- only right-padding
-    is equivalent (same limitation as DeepSeek-V4; see `test_right_padding_does_not_leak`
-    / the skipped `test_left_padding_compatibility`). For *true* left-padding equivalence
-    we'd make blocking content-relative instead of slot-relative:
-      1. derive block ids from `position_ids` (content positions, 0 at each row's first
-         real token) rather than from absolute slots, and
-      2. replace the contiguous `view(..., num_key_blocks, block_size).amax(-1)` key pool
-         with a per-row position-binned pool (e.g. `scatter_reduce` over `key_position //
-         block_size`), so pad never shifts the boundaries, and
-      3. mask padded keys' scores to `-inf` before the pool so a pad key can't win a block
-         a top-k slot.
-    """
-
-    def __init__(self, config: Step3p7TextConfig, layer_idx: int):
-        super().__init__()
-        self.config = config
-        self.layer_idx = layer_idx
-        self.head_dim = config.index_head_dim
-        self.num_heads = config.index_n_heads
-        self.block_size = config.index_block_size
-        self.topk_blocks = config.index_topk_blocks
-        self.local_blocks = config.index_local_blocks
-        self.q_proj = nn.Linear(config.hidden_size, config.index_n_heads * config.index_head_dim, bias=False)
-        self.k_proj = nn.Linear(config.hidden_size, config.index_head_dim, bias=False)
-        self.q_norm = Step3p7RMSNorm(config.index_head_dim, eps=config.rms_norm_eps)
-        self.k_norm = Step3p7RMSNorm(config.index_head_dim, eps=config.rms_norm_eps)
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        position_embeddings: tuple[torch.Tensor, torch.Tensor],
-        past_key_values: Cache | None,
-        position_ids: torch.Tensor,
-    ) -> torch.Tensor:
-        batch, q_len, _ = hidden_states.shape
-        idx_q = self.q_proj(hidden_states).view(batch, q_len, -1, self.head_dim)
-        idx_q = self.q_norm(idx_q).transpose(1, 2)  # [B, H_idx, Sq, D]
-        idx_k = self.k_proj(hidden_states).view(batch, q_len, 1, self.head_dim)
-        idx_k = self.k_norm(idx_k).transpose(1, 2)  # [B, 1, Sq, D]
-        cos, sin = position_embeddings
-        idx_q, idx_k = apply_rotary_pos_emb(idx_q, idx_k, cos[..., : self.head_dim], sin[..., : self.head_dim])
-
-        if past_key_values is not None:
-            idx_k = past_key_values.layers[self.layer_idx].update_index(idx_k)
-
-        k_len = idx_k.shape[2]
-        num_key_blocks = -(-k_len // self.block_size)  # ceil-div
-        pad = num_key_blocks * self.block_size - k_len
-
-        scores = torch.matmul(idx_q.float(), idx_k.float().transpose(-1, -2))
-        k_positions = torch.arange(k_len, device=idx_q.device)
-        token_future = k_positions[None, None, None, :] > position_ids[:, None, :, None]  # [B, 1, S_q, S_k]
-        scores = scores.masked_fill(token_future, float("-inf"))
-        if pad:
-            scores = F.pad(scores, (0, pad), value=float("-inf"))
-        scores = scores.view(batch, self.num_heads, q_len, num_key_blocks, self.block_size)
-        block_scores = scores.amax(dim=-1).amax(dim=1)  # -> [B, S_q, num_key_blocks]
-
-        q_block = position_ids // self.block_size  # [B, S_q]
-
-        if self.local_blocks > 0:
-            local = torch.arange(self.local_blocks, device=idx_q.device)
-            local_idx = (q_block[..., None] - local.view(1, 1, -1)).clamp(min=0)  # [B, S_q, local]
-            block_scores.scatter_(-1, local_idx, float("inf"))
-
-        # Slots that fall on a future/empty block keep their `-inf`
-        # score, which top-k sorts to the end, so tagging them `-1` yields left-packed block indices
-        # with `-1` right-padding which is the format expect by block-sparse attention kernel.
-        topk = min(self.topk_blocks, num_key_blocks)
-        topk_scores, topk_indices = block_scores.topk(topk, dim=-1)  # [B, S_q, topk]
-        return topk_indices.masked_fill(topk_scores == float("-inf"), -1)
-
-    def build_block_mask(
-        self,
-        block_indices: torch.Tensor,
-        attention_mask: torch.Tensor | None,
-        key_length: int,
-        dtype: torch.dtype,
-        device: torch.device,
-        position_ids: torch.Tensor,
-    ) -> torch.Tensor:
-        """
-        We build the full 4D attention mask (Batch, query, key, head)
-        """
-        batch, q_len, _ = block_indices.shape
-        num_key_blocks = -(-key_length // self.block_size)
-
-        # Scatter the kept blocks to `0`; `-1` slots land in a throwaway column we drop afterwards.
-        safe = block_indices.masked_fill(block_indices < 0, num_key_blocks)
-        bias = block_indices.new_full((batch, q_len, num_key_blocks + 1), float("-inf"), dtype=dtype)
-        bias.scatter_(-1, safe, 0.0)
-        bias = bias[..., :num_key_blocks]
-
-        # Broadcast the per-block keep/drop verdict back onto every key (block granularity), add head axis.
-        block_keep = (bias == 0.0).repeat_interleave(self.block_size, dim=-1)[..., :key_length].unsqueeze(1)
-
-        # Compose block-selection with the existing mask, then emit a single additive float mask.
-        if attention_mask is not None:
-            padding_mask = attention_mask if attention_mask.dtype == torch.bool else attention_mask == 0
-            keep = block_keep & padding_mask
-        else:
-            k_positions = torch.arange(key_length, device=device)
-            token_future = k_positions[None, None, None, :] > position_ids[:, None, :, None]  # [B, 1, S_q, S_k]
-            keep = block_keep & ~token_future
-        min_dtype = torch.finfo(dtype).min
-        return torch.zeros(keep.shape, dtype=dtype, device=device).masked_fill(~keep, min_dtype)
-
-
+@use_kernelized_func(apply_rotary_pos_emb)
 class Step3p7Attention(nn.Module):
-    """
-    M3 attention: per-head Gemma QK-norm + partial RoPE, optionally sparse indexer selection which require position IDs.
-    """
+    """Multi-headed attention from 'Attention Is All You Need' paper"""
 
-    def __init__(self, config: Step3p7TextConfig, layer_idx: int):
+    def __init__(self, config: Step3p7TextConfig, layer_idx: int, num_attention_heads: int):
         super().__init__()
+        self.num_attention_heads = num_attention_heads
+        self.layer_type = config.layer_types[layer_idx] if hasattr(config, "layer_types") else None
         self.config = config
         self.layer_idx = layer_idx
         self.head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
-        self.num_key_value_groups = config.num_attention_heads // config.num_key_value_heads
-        self.scaling = self.head_dim**-0.5
-        self.attention_dropout = config.attention_dropout
-        self.is_causal = True
-        self.q_proj = nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim, bias=False)
-        self.k_proj = nn.Linear(config.hidden_size, config.num_key_value_heads * self.head_dim, bias=False)
-        self.v_proj = nn.Linear(config.hidden_size, config.num_key_value_heads * self.head_dim, bias=False)
-        self.o_proj = nn.Linear(config.num_attention_heads * self.head_dim, config.hidden_size, bias=False)
-        self.q_norm = Step3p7RMSNorm(self.head_dim, eps=config.rms_norm_eps)
-        self.k_norm = Step3p7RMSNorm(self.head_dim, eps=config.rms_norm_eps)
-        self.indexer = (
-            Step3p7Indexer(config, layer_idx) if config.layer_types[layer_idx] == "minimax_m3_sparse" else None
+        self.num_key_value_groups = self.num_attention_heads // config.num_key_value_heads
+        self.scaling = config.query_pre_attn_scalar**-0.5
+        self.attention_dropout = self.config.attention_dropout
+        self.is_causal = not self.config.use_bidirectional_attention
+        self.q_proj = nn.Linear(
+            config.hidden_size, self.num_attention_heads * self.head_dim, bias=config.attention_bias
         )
-        layer_type = config.layer_types[layer_idx]
-        self.sliding_window = config.sliding_window if layer_type == "sliding_attention" else None
-        self.num_attention_heads = (
-            config.num_sliding_attention_heads if layer_type == "sliding_attention" else config.num_attention_heads
+        self.k_proj = nn.Linear(
+            config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.attention_bias
         )
-        if self.num_attention_heads != config.num_attention_heads:
-            # Sliding-attention layers can use a different (larger) head count than full-attention
-            # layers in the real checkpoint (e.g. 96 vs 64 heads, same 8 KV heads/head_dim), so
-            # q_proj/o_proj/num_key_value_groups from `super().__init__` (sized off
-            # `config.num_attention_heads` alone) must be rebuilt to match.
-            q_size = self.num_attention_heads * self.head_dim
-            self.q_proj = nn.Linear(config.hidden_size, q_size, bias=False)
-            self.o_proj = nn.Linear(q_size, config.hidden_size, bias=False)
-            self.num_key_value_groups = self.num_attention_heads // config.num_key_value_heads
+        self.v_proj = nn.Linear(
+            config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.attention_bias
+        )
+        self.o_proj = nn.Linear(
+            self.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
+        )
+        self.attn_logit_softcapping = self.config.attn_logit_softcapping
+        self.sliding_window = config.sliding_window if self.layer_type == "sliding_attention" else None
+        self.is_sliding = self.layer_type == "sliding_attention"
+
+        self.q_norm = Step3p7RMSNorm(dim=config.head_dim, eps=config.rms_norm_eps)
+        self.k_norm = Step3p7RMSNorm(dim=config.head_dim, eps=config.rms_norm_eps)
         self.g_proj = nn.Linear(config.hidden_size, self.num_attention_heads, bias=False)
 
     def forward(
@@ -953,7 +810,7 @@ class Step3p7DecoderLayer(GradientCheckpointingLayer):
         super().__init__()
         self.hidden_size = config.hidden_size
         self.layer_idx = layer_idx
-        self.self_attn = Step3p7Attention(config, layer_idx)
+        self.self_attn = Step3p7Attention(config, layer_idx, config.num_attention_heads_per_layer[layer_idx])
         self.attention_type = config.layer_types[layer_idx]
 
         swiglu_limit_shared = (config.swiglu_limits_shared[layer_idx] or None) if config.swiglu_limits_shared else None
