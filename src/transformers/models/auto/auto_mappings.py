@@ -1209,6 +1209,7 @@ IMAGE_PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("levit", {"pil": "LevitImageProcessorPil", "torchvision": "LevitImageProcessor"}),
         ("lfm2_vl", {"torchvision": "Lfm2VlImageProcessor"}),
         ("lightglue", {"pil": "LightGlueImageProcessorPil", "torchvision": "LightGlueImageProcessor"}),
+        ("lingbot_vision", {"pil": "LingbotVisionImageProcessorPil", "torchvision": "LingbotVisionImageProcessor"}),
         ("llama4", {"torchvision": "Llama4ImageProcessor"}),
         ("llava", {"pil": "LlavaImageProcessorPil", "torchvision": "LlavaImageProcessor"}),
         ("llava_next", {"pil": "LlavaNextImageProcessorPil", "torchvision": "LlavaNextImageProcessor"}),
