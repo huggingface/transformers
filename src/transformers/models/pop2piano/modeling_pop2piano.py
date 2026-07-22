@@ -525,7 +525,6 @@ class Pop2PianoPreTrainedModel(PreTrainedModel):
     _no_split_modules = ["Pop2PianoBlock"]
     _keep_in_fp32_modules = ["wo"]
 
-    _supports_attention_backend = True
     _supports_flash_attn = False
     _supports_flex_attn = True
     _supports_sdpa = True

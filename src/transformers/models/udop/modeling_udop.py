@@ -289,7 +289,6 @@ class UdopPreTrainedModel(PreTrainedModel):
 
     _can_compile_fullgraph = False
     _keep_in_fp32_modules = ["wo"]
-    _supports_attention_backend = True
     _supports_flash_attn = False
     _supports_flex_attn = True
     _supports_sdpa = True
@@ -1118,8 +1117,6 @@ class UdopStack(UdopPreTrainedModel):
         use_cache=None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithAttentionMask:
-        use_cache = use_cache if use_cache is not None else self.config.use_cache
-
         # input embeddings processing
 
         if input_ids is not None and inputs_embeds is not None:
@@ -1362,7 +1359,6 @@ class UdopModel(UdopPreTrainedModel):
         >>> list(last_hidden_states.shape)
         [1, 1, 1024]
         ```"""
-        use_cache = use_cache if use_cache is not None else self.config.use_cache
 
         # Encode if needed (training, first prediction pass)
         if encoder_outputs is None:
@@ -1528,8 +1524,6 @@ class UdopForConditionalGeneration(UdopPreTrainedModel, GenerationMixin):
         >>> print(processor.batch_decode(predicted_ids, skip_special_tokens=True)[0])
         9/30/92
         ```"""
-
-        use_cache = use_cache if use_cache is not None else self.config.use_cache
 
         if decoder_input_ids is None and labels is not None:
             decoder_input_ids = self._shift_right(labels)
