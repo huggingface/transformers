@@ -277,14 +277,13 @@ class MambaMixer(nn.Module):
 
         # Apply the conv
         hidden_states = self.convolution(hidden_states, cache_params, attention_mask, **kwargs)
-        hidden_states = hidden_states.transpose(1, 2)
 
         if attention_mask is not None:
-            hidden_states = hidden_states * attention_mask.unsqueeze(-1)
+            hidden_states = hidden_states * attention_mask.unsqueeze(1)
 
         # 3. State Space Model sequence transformation
         # 3.a. input varying initialization of time_step, B and C
-        ssm_parameters = self.x_proj(hidden_states)
+        ssm_parameters = self.x_proj(hidden_states.transpose(1, 2))
         time_step, B, C = torch.split(
             ssm_parameters, [self.time_step_rank, self.ssm_state_size, self.ssm_state_size], dim=-1
         )
@@ -336,18 +335,18 @@ class MambaMixer(nn.Module):
     ):
         batch_size, seq_len, _ = hidden_states.shape
         dtype = hidden_states.dtype
+        use_precomputed_states = cache_params is not None and cache_params.has_previous_state(self.layer_idx)
         # 1. Gated MLP's linear projection
         projected_states = self.in_proj(hidden_states).transpose(1, 2)                   # [batch, 2 * intermediate_size, seq_len]
         hidden_states, gate = projected_states.chunk(2, dim=1)
 
         # Apply the convolution
         hidden_states = self.convolution(hidden_states, cache_params, attention_mask, **kwargs)
-        hidden_states = hidden_states.transpose(1, 2)
 
         if attention_mask is not None:
-            hidden_states = hidden_states * attention_mask.unsqueeze(-1)
+            hidden_states = hidden_states * attention_mask.unsqueeze(1)
 
-        if cache_params is not None and cache_params.has_previous_state(self.layer_idx):
+        if use_precomputed_states:
             ssm_state = cache_params.layers[self.layer_idx].recurrent_states[0].clone()
         else:
             ssm_state = torch.zeros(
@@ -357,7 +356,7 @@ class MambaMixer(nn.Module):
 
         # 3. State Space Model sequence transformation
         # 3.a. Selection:  [batch, seq_len, self.time_step_rank + self.ssm_state_size * 2]
-        ssm_parameters = self.x_proj(hidden_states)
+        ssm_parameters = self.x_proj(hidden_states.transpose(1, 2))
         time_step, B, C = torch.split(
             ssm_parameters, [self.time_step_rank, self.ssm_state_size, self.ssm_state_size], dim=-1
         )
