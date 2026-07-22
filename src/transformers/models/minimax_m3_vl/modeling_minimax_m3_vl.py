@@ -79,11 +79,12 @@ class MiniMaxM3VLSparseCacheLayer(DynamicLayer):
             self.idx_keys = self.idx_keys[indices, ...]
 
     def crop(self, max_length: int) -> None:
-        super().crop(max_length)
+        # Important to get the seq_len before the call to `super`, as it will be changed inside otherwise
         if max_length < 0:
-            max_length = self.idx_keys.shape[-2] - abs(max_length)
+            max_length = self.get_seq_length() - abs(max_length)
         if self.idx_keys is not None and self.idx_keys.shape[-2] > max_length:
             self.idx_keys = self.idx_keys[..., :max_length, :]
+        super().crop(max_length)
 
 
 class MiniMaxM3VLSparseStaticCacheLayer(StaticLayer):
