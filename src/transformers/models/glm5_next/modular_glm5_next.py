@@ -67,22 +67,18 @@ class Glm5NextTextConfig(GlmMoeDsaConfig):
         Number of routed expert groups.
     mlp_layer_types (`list[str]`, *optional*):
         Per-layer feed-forward schedule. Values are `"dense"` or `"sparse"`.
-    layer_types (`list[str]`, *optional*):
-        Per-layer attention cache schedule. Values are `"linear_attention"` for
-        KDA layers and `"deepseek_sparse_attention"` for MLA (DSA) layers.
-    indexer_types (`list[str]`, *optional*):
-        Per-layer DSA indexer mode. Values are `"full"` (run the indexer) or `"shared"`
-        (reuse the previous full layer's top-k selection).
     index_topk (`int`, *optional*, defaults to 2048):
         Number of sparse-attention positions selected by the DSA indexer.
     index_head_dim (`int`, *optional*, defaults to 128):
         DSA indexer projection head dimension.
     index_n_heads (`int`, *optional*, defaults to 32):
         Number of DSA indexer heads.
-    index_kpool (`int`, *optional*, defaults to 16):
-        Pool size of the compressed token groups selected by the DSA indexer.
-    index_kpool_always_select_tail (`bool`, *optional*, defaults to `True`):
-        Whether the incomplete KPool tail is always included in sparse attention.
+    layer_types (`list[str]`, *optional*):
+        Per-layer attention cache schedule. Values are `"linear_attention"` for
+        KDA layers and `"deepseek_sparse_attention"` for MLA (DSA) layers.
+    indexer_types (`list[str]`, *optional*):
+        Per-layer DSA indexer mode. Values are `"full"` (run the indexer) or `"shared"`
+        (reuse the previous full layer's top-k selection).
     swiglu_limit (`float`, *optional*, defaults to 10.0):
         Clamp limit applied to SwiGLU gate/up projections.
     linear_head_dim (`int`, *optional*, defaults to 128):
@@ -99,6 +95,10 @@ class Glm5NextTextConfig(GlmMoeDsaConfig):
         Numerical floor used by MHC Sinkhorn normalization.
     hc_sinkhorn_iters (`int`, *optional*, defaults to 20):
         Number of Sinkhorn iterations used by MHC routing.
+    index_kpool (`int`, *optional*, defaults to 16):
+        Pool size of the compressed token groups selected by the DSA indexer.
+    index_kpool_always_select_tail (`bool`, *optional*, defaults to `True`):
+        Whether the incomplete KPool tail is always included in sparse attention.
     """
 
     model_type = "glm5_next_text"
