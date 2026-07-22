@@ -158,8 +158,13 @@ class FunAsrNanoProcessorTest(unittest.TestCase):
         processor.tokenizer = SimpleNamespace(decode=lambda *args, **kwargs: ["first", "second"])
 
         self.assertEqual(processor.decode([[1], [2]]), ["first", "second"])
-        self.assertNotIn("batch_decode", ModularFunAsrNanoProcessor.__dict__)
-        self.assertIs(ModularFunAsrNanoProcessor.batch_decode, AudioFlamingo3Processor.batch_decode)
+
+    def test_batch_decode_alias_is_not_generated(self):
+        modular_processor = ModularFunAsrNanoProcessor.__new__(ModularFunAsrNanoProcessor)
+
+        with self.assertRaisesRegex(NotImplementedError, "Not needed"):
+            modular_processor.batch_decode([[1], [2]])
+        self.assertNotIn("batch_decode", FunAsrNanoProcessor.__dict__)
 
     def test_unused_audio_metadata_is_removed_from_model_inputs(self):
         processor = FunAsrNanoProcessor.__new__(FunAsrNanoProcessor)

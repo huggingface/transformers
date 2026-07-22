@@ -161,20 +161,7 @@ class FunAsrNanoConfig(PreTrainedConfig):
 
 
 class FunAsrNanoProcessorKwargs(AudioFlamingo3ProcessorKwargs):
-    _defaults = {
-        "audio_kwargs": {
-            "sampling_rate": 16000,
-            "return_attention_mask": True,
-            "padding": True,
-        },
-        "text_kwargs": {
-            "padding": True,
-        },
-        "common_kwargs": {
-            "return_tensors": "pt",
-            "padding_side": "left",
-        },
-    }
+    _defaults = {}
 
 
 @auto_docstring
@@ -225,6 +212,9 @@ class FunAsrNanoProcessor(AudioFlamingo3Processor):
         if isinstance(decoded, str):
             return self._strip_assistant_prefix_and_quotes(decoded)
         return [self._strip_assistant_prefix_and_quotes(text) for text in decoded]
+
+    def batch_decode(self, *args, **kwargs):
+        raise NotImplementedError("Not needed")
 
     @property
     def unused_input_names(self):
