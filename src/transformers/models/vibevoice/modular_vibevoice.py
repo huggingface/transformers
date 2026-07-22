@@ -375,7 +375,7 @@ class VibeVoiceModel(VoxtralModel):
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
         audio_features = None
-        if input_values is not None and input_ids is not None:
+        if input_values is not None:
             audio_outputs = self.get_audio_features(input_values, padding_mask)
             audio_embeds = audio_outputs.pooler_output
             audio_features = audio_outputs.last_hidden_state
