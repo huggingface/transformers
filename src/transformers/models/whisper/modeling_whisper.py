@@ -308,11 +308,12 @@ class WhisperAttention(nn.Module):
         # and enforce no scaling (1.0) in the attention call below.
         query_states = (self.q_proj(hidden_states) * self.scaling).view(hidden_shape).transpose(1, 2).contiguous()
 
+        is_updated = False
         # Check is encoder-decoder model is being used. Otherwise we'll get `DynamicCache`
         if past_key_values is not None and isinstance(past_key_values, EncoderDecoderCache):
-            is_updated = past_key_values.is_updated.get(self.layer_idx)
             if is_cross_attention:
                 # after the first generated id, we can subsequently re-use all key/value_states from cache
+                is_updated = past_key_values.is_updated.get(self.layer_idx)
                 past_key_values.is_updated[self.layer_idx] = True
                 past_key_values = past_key_values.cross_attention_cache
             else:
