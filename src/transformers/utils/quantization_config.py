@@ -1704,6 +1704,7 @@ class QuarkConfig(QuantizationConfigMixin):
         if is_quark_available():
             try:
                 from quark import __version__ as quark_version
+
                 if version.parse(quark_version) >= version.parse("0.12"):
                     current_quark_version = version.parse(quark_version)
             except ImportError:
