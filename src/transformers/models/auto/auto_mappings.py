@@ -105,6 +105,9 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("convbert", "ConvBertConfig"),
         ("convnext", "ConvNextConfig"),
         ("convnextv2", "ConvNextV2Config"),
+        ("cosmos3_edge", "Cosmos3EdgeConfig"),
+        ("cosmos3_edge_text", "Cosmos3EdgeTextConfig"),
+        ("cosmos3_edge_vision", "Cosmos3EdgeVisionConfig"),
         ("cosmos3_omni", "Cosmos3OmniConfig"),
         ("cpmant", "CpmAntConfig"),
         ("csm", "CsmConfig"),
@@ -738,6 +741,8 @@ SPECIAL_MODEL_TYPE_TO_MODULE_NAME = OrderedDict(
         ("clipseg_vision_model", "clipseg"),
         ("clvp_decoder", "clvp"),
         ("clvp_encoder", "clvp"),
+        ("cosmos3_edge_text", "cosmos3_edge"),
+        ("cosmos3_edge_vision", "cosmos3_edge"),
         ("csm_depth_decoder_model", "csm"),
         ("dab-detr", "dab_detr"),
         ("data2vec-audio", "data2vec"),
@@ -944,6 +949,7 @@ SPECIAL_MODEL_TYPE_TO_MODULE_NAME = OrderedDict(
 
 VIDEO_PROCESSOR_MAPPING_NAMES = OrderedDict(
     [
+        ("cosmos3_edge", "Cosmos3EdgeVideoProcessor"),
         ("ernie4_5_vl_moe", "Ernie4_5_VLMoeVideoProcessor"),
         ("gemma4", "Gemma4VideoProcessor"),
         ("gemma4_unified", "Gemma4UnifiedVideoProcessor"),
@@ -1028,6 +1034,7 @@ PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("colmodernvbert", "ColModernVBertProcessor"),
         ("colpali", "ColPaliProcessor"),
         ("colqwen2", "ColQwen2Processor"),
+        ("cosmos3_edge", "Cosmos3EdgeProcessor"),
         ("csm", "CsmProcessor"),
         ("deepseek_ocr2", "DeepseekOcr2Processor"),
         ("deepseek_vl", "DeepseekVLProcessor"),
@@ -1162,6 +1169,7 @@ IMAGE_PROCESSOR_MAPPING_NAMES = OrderedDict(
             {"pil": "ConditionalDetrImageProcessorPil", "torchvision": "ConditionalDetrImageProcessor"},
         ),
         ("convnext", {"pil": "ConvNextImageProcessorPil", "torchvision": "ConvNextImageProcessor"}),
+        ("cosmos3_edge", {"pil": "Cosmos3EdgeImageProcessorPil", "torchvision": "Cosmos3EdgeImageProcessor"}),
         ("deepseek_ocr2", {"pil": "DeepseekOcr2ImageProcessorPil", "torchvision": "DeepseekOcr2ImageProcessor"}),
         ("deepseek_vl", {"pil": "DeepseekVLImageProcessorPil", "torchvision": "DeepseekVLImageProcessor"}),
         (

@@ -14,6 +14,7 @@
 
 import base64
 import unittest
+from types import SimpleNamespace
 
 from transformers import MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING, is_vision_available
 from transformers.pipelines import ImageTextToTextPipeline, pipeline
@@ -66,6 +67,17 @@ class ImageTextToTextPipelineTests(unittest.TestCase):
             [
                 {"input_text": ANY(str), "generated_text": ANY(str)},
             ],
+        )
+
+    def test_stop_sequence_without_generate_kwargs(self):
+        pipe = object.__new__(ImageTextToTextPipeline)
+        tokenizer = object()
+        pipe.processor = SimpleNamespace(tokenizer=tokenizer)
+
+        _, forward_kwargs, _ = pipe._sanitize_parameters(stop_sequence=".", max_new_tokens=3)
+        self.assertEqual(
+            forward_kwargs["generate_kwargs"],
+            {"stop_strings": ["."], "tokenizer": tokenizer, "max_new_tokens": 3},
         )
 
     @require_torch

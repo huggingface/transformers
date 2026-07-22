@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import functools
+import importlib
 import os
 import re
 import sys
@@ -439,7 +440,7 @@ _HUB_KERNEL_MAPPING: dict[str, dict[str, str]] = {
     "causal-conv1d": {"repo_id": "kernels-community/causal-conv1d", "version": 1},
     "mamba-ssm": {"repo_id": "kernels-community/mamba-ssm", "version": 1},
     "falcon_mamba-ssm": {"repo_id": "kernels-community/mamba-ssm", "version": 1},
-    "finegrained-fp8": {"repo_id": "kernels-community/finegrained-fp8", "version": 3},
+    "finegrained-fp8": {"repo_id": "kernels-community/finegrained-fp8", "version": 4},
     "deep-gemm": {"repo_id": "kernels-community/deep-gemm", "version": 2},
     "sonic-moe": {"repo_id": "kernels-community/sonic-moe", "revision": "ep-support"},
 }
@@ -560,8 +561,6 @@ def lazy_load_kernel(kernel_name: str, mapping: dict[str, ModuleType | None] = _
 
     else:
         # Try to import is_{kernel_name}_available from ..utils
-        import importlib
-
         new_kernel_name = kernel_name.replace("-", "_")
         func_name = f"is_{new_kernel_name}_available"
 
