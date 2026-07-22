@@ -963,6 +963,41 @@ class GenerationMixin(ContinuousMixin):
         if model_kwargs.get("video_outputs"):
             model_kwargs["video_outputs"] = _expand_dict_for_generation(model_kwargs["video_outputs"])
 
+        # Merge the other PR and infer the length per sample from pooler output. Interleave per sample with images
+        def _expand_multimodal_outputs(outputs_key, token_id_key):
+            outputs = model_kwargs.get(outputs_key)
+            if not outputs:
+                return
+            pooler = getattr(outputs, "pooler_output", None)
+            outputs.pooler_output = None  # hide list from generic expansion; tensors handled below
+            model_kwargs[outputs_key] = _expand_dict_for_generation(outputs)
+            if isinstance(pooler, list):
+                if input_ids is not None:
+                    batch_size = input_ids.shape[0] // expand_size
+                    if len(pooler) != batch_size:
+                        # pooler is a flat per-image list; group into per-sample using token counts in input_ids.
+                        # Mirrors how model.forward() places features: it fills image tokens left-to-right per row.
+                        token_id = model_kwargs.get(token_id_key)
+                        if token_id is not None:
+                            orig_ids = input_ids[
+                                ::expand_size
+                            ]  # repeat_interleave → stride by expand_size to get originals
+                            token_counts = (orig_ids == token_id).sum(dim=1).tolist()
+                            feat_sizes = [f.shape[0] for f in pooler]
+                            grouped, offset = [], 0
+                            for n in token_counts:
+                                grp, cum = [], 0
+                                while cum < n:
+                                    grp.append(pooler[offset])
+                                    cum += feat_sizes[offset]
+                                    offset += 1
+                                grouped.append(torch.cat(grp, dim=0))
+                            pooler = grouped
+                model_kwargs[outputs_key].pooler_output = [item for item in pooler for _ in range(expand_size)]
+
+        # _expand_multimodal_outputs("image_outputs", "image_token_id")
+        # _expand_multimodal_outputs("video_outputs", "video_token_id")
+
         return input_ids, model_kwargs
 
     def _update_model_kwargs_for_generation(
