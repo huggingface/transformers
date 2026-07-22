@@ -21,6 +21,7 @@ from ...feature_extraction_utils import BatchFeature
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import TextInput
 from ...utils import auto_docstring, is_torch_available, logging
+from ...utils.import_utils import requires
 
 
 if is_torch_available():
@@ -47,6 +48,7 @@ class AudioFlamingo3ProcessorKwargs(ProcessingKwargs, total=False):
     }
 
 
+@requires(backends=("torch",))
 @auto_docstring
 class AudioFlamingo3Processor(ProcessorMixin):
     valid_processor_kwargs = AudioFlamingo3ProcessorKwargs
@@ -203,8 +205,7 @@ class AudioFlamingo3Processor(ProcessorMixin):
         """
 
         audio_items: list[str | np.ndarray] = list(make_list_of_audio_chat_template(audio))
-        if is_torch_available():
-            audio_items = [el.detach().cpu().numpy() if isinstance(el, torch.Tensor) else el for el in audio_items]
+        audio_items = [el.detach().cpu().numpy() if isinstance(el, torch.Tensor) else el for el in audio_items]
 
         batch_size = len(audio_items)
         if batch_size == 0:

@@ -468,7 +468,9 @@ def main() -> int:
         dtype="auto",
         attn_implementation="eager",
         experts_implementation=LOADTIME_DISPATCH,
-        distributed_config=DistributedConfig(enable_expert_parallel=True),
+        distributed_config=DistributedConfig(
+            tp_size=int(os.environ["WORLD_SIZE"]), enable_expert_parallel=True
+        ),
     )
     model.eval()
     tokenizer = AutoTokenizer.from_pretrained(MODEL_ID)
@@ -545,7 +547,9 @@ def main() -> int:
         dtype="auto",
         attn_implementation="eager",
         experts_implementation=LOADTIME_DISPATCH,
-        distributed_config=DistributedConfig(enable_expert_parallel=True),
+        distributed_config=DistributedConfig(
+            tp_size=int(os.environ["WORLD_SIZE"]), enable_expert_parallel=True
+        ),
     )
     model.eval()
     tokenizer = AutoTokenizer.from_pretrained(MODEL_ID)

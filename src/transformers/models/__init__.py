@@ -78,6 +78,7 @@ if TYPE_CHECKING:
     from .convbert import *
     from .convnext import *
     from .convnextv2 import *
+    from .cosmos3_edge import *
     from .cosmos3_reasoner import *
     from .cpm import *
     from .cpmant import *
@@ -216,6 +217,7 @@ if TYPE_CHECKING:
     from .ijepa import *
     from .imagegpt import *
     from .informer import *
+    from .inkling import *
     from .instructblip import *
     from .instructblipvideo import *
     from .internvl import *
