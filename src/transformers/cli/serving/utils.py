@@ -113,14 +113,54 @@ _RESPONSE_TEMPLATE_FALLBACKS = {
                 "content": "text",
             },
             "tool_calls": {
-                "open": "<tool_call>",
+                # Leading \s* swallows the separator newline between consecutive tool calls (and the
+                # blank line after content) so it can't open an empty implicit `content` region,
+                # whose close would overwrite the real content.
+                "open_pattern": r"\s*<tool_call>",
                 "close": "</tool_call>",
                 "repeats": True,
                 "content": "json",
                 "transform": {"type": "function", "function": "{content}"},
             },
             "content": {
-                "close": ["<|im_end|>", "<|endoftext|>", "<|eot_id|>"],
+                # Leading \s* keeps the whitespace between two end markers (e.g. Qwen 3.5's
+                # "<|im_end|>\n<|endoftext|>" tail) out of the implicit content region — an
+                # empty region close would overwrite the real content with "".
+                "close_pattern": r"\s*(?:<\|im_end\|>|<\|endoftext\|>|<\|eot_id\|>)",
+                "content": "text",
+            },
+        },
+    },
+    # Qwen 3.5 family wraps tool calls in <tool_call>...</tool_call> around an inner
+    # <function=NAME><parameter=KEY>VALUE</parameter></function> markup that holds the call data.
+    # The chat template prefills the assistant turn with either "<think>\n" (thinking on) or
+    # "<think>\n\n</think>\n\n" (default), which prefix-aware parsing picks up via start_anchor.
+    ("qwen3_5", "qwen3_5_moe"): {
+        "defaults": {"role": "assistant"},
+        "start_anchor": "<|im_start|>assistant\n",
+        "fields": {
+            "thinking": {
+                "open": "<think>",
+                "close": "</think>",
+                "content": "text",
+            },
+            "tool_calls": {
+                # Leading \s* swallows the separator newline between consecutive tool calls (and the
+                # blank line after content) so it can't open an empty implicit `content` region,
+                # whose close would overwrite the real content.
+                "open_pattern": r"\s*<tool_call>\s*<function=(?P<name>[^>\n]+)>",
+                "close_pattern": r"</function>\s*</tool_call>",
+                "repeats": True,
+                "content": "xml-inline",
+                "content_args": {
+                    "tag_pattern": r"<parameter=(?P<key>[^>\n]+)>\s*(?P<value>.*?)\s*</parameter>",
+                },
+                "transform": {"type": "function", "function": {"name": "{name}", "arguments": "{content}"}},
+            },
+            "content": {
+                # See the qwen2 entry: Qwen 3.5's eos is <|endoftext|>, so generations end with
+                # "<|im_end|>\n<|endoftext|>"; the \s* keeps that "\n" from clobbering content.
+                "close_pattern": r"\s*(?:<\|im_end\|>|<\|endoftext\|>)",
                 "content": "text",
             },
         },

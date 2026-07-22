@@ -1894,6 +1894,23 @@ class TestToolCallUnit(unittest.TestCase):
         self.assertEqual(len(second_calls), 1, "second tool call was not emitted on close")
         self.assertEqual(json.loads(second_calls[0].arguments), {"city": "London"})
 
+    def test_content_survives_multiple_tool_calls(self):
+        """Content preceding several tool calls must not be clobbered by the separator
+        newline between calls (which used to open and close an empty `content` region)."""
+        template = next(v for k, v in _RESPONSE_TEMPLATE_FALLBACKS.items() if "qwen2" in k)
+        gen = (
+            "Checking two cities.\n\n"
+            '<tool_call>\n{"name": "get_weather", "arguments": {"city": "Paris"}}\n</tool_call>\n'
+            '<tool_call>\n{"name": "get_weather", "arguments": {"city": "London"}}\n</tool_call><|im_end|>'
+        )
+        for feed_sizes in (len(gen), 1):  # whole-message feed and worst-case char-by-char
+            parser = ResponseParser(template, prefix="")
+            for start in range(0, len(gen), feed_sizes):
+                parser.feed(gen[start : start + feed_sizes])
+            message, _ = parser.finalize()
+            self.assertEqual(message["content"], "Checking two cities.")
+            self.assertEqual(len(message["tool_calls"]), 2)
+
 
 class TestCBWorkerDeadServerIntegration(unittest.TestCase):
     """End-to-end FastAPI behavior when the CB worker has died.
@@ -2314,6 +2331,15 @@ class TestToolCallQwen(_TestToolCallBase, unittest.TestCase):
     """Tool call tests with Qwen (fallback config, no response_schema)."""
 
     MODEL = "Qwen/Qwen2.5-0.5B-Instruct"
+
+
+@slow
+@require_serve
+@require_torch_accelerator
+class TestToolCallQwen3_5(_TestToolCallBase, unittest.TestCase):
+    """Tool call tests with Qwen 3.5 (fallback template, <function=...><parameter=...> markup)."""
+
+    MODEL = "Qwen/Qwen3.5-0.8B"
 
 
 @slow
