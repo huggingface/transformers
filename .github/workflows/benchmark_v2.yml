@@ -45,7 +45,8 @@ jobs:
     runs-on: ${{ inputs.runner }}
     if: |
       (github.event_name == 'pull_request' && contains( github.event.pull_request.labels.*.name, 'run-benchmark')) ||
-      (github.event_name == 'schedule')
+      (github.event_name == 'schedule') ||
+      (github.event_name == 'workflow_dispatch')
     container:
       image: ${{ inputs.container_image }}
       options: ${{ inputs.container_options }}
