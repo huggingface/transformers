@@ -45,6 +45,16 @@ last_hidden_state = outputs.last_hidden_state
 
 [[autodoc]] LingbotVisionConfig
 
+## LingbotVisionImageProcessor
+
+[[autodoc]] LingbotVisionImageProcessor
+    - preprocess
+
+## LingbotVisionImageProcessorPil
+
+[[autodoc]] LingbotVisionImageProcessorPil
+    - preprocess
+
 ## LingbotVisionModel
 
 [[autodoc]] LingbotVisionModel
