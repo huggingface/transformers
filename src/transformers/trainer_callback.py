@@ -18,6 +18,7 @@ Callbacks to use with the Trainer class and customize the training loop.
 import dataclasses
 import json
 import math
+import re
 from dataclasses import dataclass
 
 import numpy as np
@@ -25,7 +26,12 @@ from tqdm.auto import tqdm
 
 from .trainer_utils import IntervalStrategy, SaveStrategy, has_length
 from .training_args import TrainingArguments
-from .utils import logging
+from .utils import is_torch_available, logging
+
+
+if is_torch_available():
+    import torch
+    import torch.distributed as dist
 
 
 logger = logging.get_logger(__name__)
@@ -558,6 +564,310 @@ class CallbackHandler(TrainerCallback):
             if result is not None:
                 control = result
         return control
+
+
+class MoERouterHealthCallback(TrainerCallback):
+    """
+    A [`TrainerCallback`] that records MoE router health metrics during training.
+
+    The callback installs forward hooks on router modules advertised through the model's `can_record_outputs`
+    metadata. It prefers exact selected expert indices when a router surfaces them and otherwise falls back to
+    deriving top-k assignments from router logits. Metrics are emitted as flat trainer logs.
+
+    Args:
+        prefix (`str`, *optional*, defaults to `"moe"`):
+            Prefix used for the logged metric keys.
+        reduction_mode (`str`, *optional*, defaults to `"auto"`):
+            How to reduce expert counts before logging. Use `"auto"` to reduce across the world process group for
+            normal distributed replicas and to skip implicit reduction for tensor-parallel models. Use `"world"` to
+            always all-reduce across the default process group, or `"none"` to disable implicit reduction entirely.
+        log_aux_loss (`bool`, *optional*, defaults to `True`):
+            Whether to log model-level auxiliary routing losses such as `aux_loss` when present in model outputs.
+    """
+
+    def __init__(self, prefix: str = "moe", reduction_mode: str = "auto", log_aux_loss: bool = True):
+        if reduction_mode not in {"auto", "world", "none"}:
+            raise ValueError(
+                f"`reduction_mode` must be one of 'auto', 'world', or 'none', but got {reduction_mode!r}."
+            )
+        self.prefix = prefix.rstrip("/")
+        self.reduction_mode = reduction_mode
+        self.log_aux_loss = log_aux_loss
+        self._layer_counts = {}
+        self._layer_order = []
+        self._router_handles = []
+        self._model_handle = None
+        self._last_aux_metrics = {}
+        self._resolved_reduction_mode = reduction_mode
+
+    @staticmethod
+    def _safe_metric_divide(numerator, denominator) -> float:
+        if denominator == 0:
+            return 0.0
+        return float(numerator / denominator)
+
+    @staticmethod
+    def _format_layer_name(module_name: str, layer_idx: int) -> str:
+        if module_name:
+            sanitized_name = re.sub(r"[^a-zA-Z0-9]+", "_", module_name).strip("_")
+            if sanitized_name:
+                return sanitized_name
+        return f"layer_{layer_idx}"
+
+    @staticmethod
+    def _compute_routing_metrics(expert_counts) -> dict[str, float]:
+        counts = expert_counts.to(dtype=torch.float64)
+        total_assignments = counts.sum()
+        if total_assignments <= 0:
+            return {
+                "entropy": 0.0,
+                "normalized_entropy": 0.0,
+                "load_cv": 0.0,
+                "max_load_ratio": 0.0,
+                "active_experts": 0.0,
+                "dead_experts": float(counts.numel()),
+                "total_assignments": 0.0,
+            }
+
+        fractions = counts / total_assignments
+        nonzero_fractions = fractions[fractions > 0]
+        entropy = float(-(nonzero_fractions * nonzero_fractions.log()).sum().item())
+        max_entropy = math.log(counts.numel()) if counts.numel() > 1 else 0.0
+        normalized_entropy = MoERouterHealthCallback._safe_metric_divide(entropy, max_entropy)
+
+        load_mean = counts.mean()
+        load_std = counts.std(unbiased=False)
+        load_cv = MoERouterHealthCallback._safe_metric_divide(load_std.item(), load_mean.item())
+        max_load_ratio = MoERouterHealthCallback._safe_metric_divide(counts.max().item(), load_mean.item())
+
+        active_experts = float((counts > 0).sum().item())
+        dead_experts = float((counts == 0).sum().item())
+
+        return {
+            "entropy": entropy,
+            "normalized_entropy": normalized_entropy,
+            "load_cv": load_cv,
+            "max_load_ratio": max_load_ratio,
+            "active_experts": active_experts,
+            "dead_experts": dead_experts,
+            "total_assignments": float(total_assignments.item()),
+        }
+
+    @staticmethod
+    def _reduce_counts(expert_counts):
+        if not dist.is_available() or not dist.is_initialized():
+            return expert_counts
+
+        reduced_counts = expert_counts.clone()
+        dist.all_reduce(reduced_counts)
+        return reduced_counts
+
+    @staticmethod
+    def _extract_tensor(output, index: int | None = None):
+        if index is None:
+            return output
+        if isinstance(output, (tuple, list)) and len(output) > index:
+            return output[index]
+        return None
+
+    @staticmethod
+    def _extract_selected_experts(output):
+        if not isinstance(output, (tuple, list)):
+            return None
+
+        for candidate in output:
+            if torch.is_tensor(candidate) and candidate.dtype in {
+                torch.int8,
+                torch.int16,
+                torch.int32,
+                torch.int64,
+                torch.uint8,
+            }:
+                return candidate
+        return None
+
+    @staticmethod
+    def _infer_top_k(module, model) -> int:
+        for candidate in (
+            getattr(module, "top_k", None),
+            getattr(module, "num_experts_per_tok", None),
+            getattr(model.config, "num_experts_per_tok", None),
+            getattr(model.config, "moe_topk", None),
+            getattr(model.config, "num_experts_per_tok", None),
+            1,
+        ):
+            if isinstance(candidate, int) and candidate > 0:
+                return candidate
+        return 1
+
+    @staticmethod
+    def _compute_counts_from_routing(selected_experts, num_experts: int):
+        flattened_experts = selected_experts.reshape(-1)
+        valid_experts = flattened_experts[(flattened_experts >= 0) & (flattened_experts < num_experts)]
+        if valid_experts.numel() == 0:
+            return torch.zeros(num_experts, device=selected_experts.device, dtype=torch.float64)
+        return torch.bincount(valid_experts, minlength=num_experts).to(dtype=torch.float64)
+
+    @staticmethod
+    def _get_base_model(model):
+        while hasattr(model, "module"):
+            model = model.module
+        return model
+
+    @staticmethod
+    def _resolve_reduction_mode(model, reduction_mode: str) -> str:
+        if reduction_mode != "auto":
+            return reduction_mode
+
+        tp_size = getattr(model, "tp_size", None)
+        if tp_size is None:
+            tp_size = getattr(model, "_tp_size", None)
+
+        if tp_size is not None and tp_size > 1:
+            return "none"
+
+        return "world"
+
+    def _reset_state(self):
+        self._layer_counts = {}
+        self._layer_order = []
+        self._last_aux_metrics = {}
+
+    def _remove_hooks(self):
+        for handle in self._router_handles:
+            handle.remove()
+        self._router_handles = []
+        if self._model_handle is not None:
+            self._model_handle.remove()
+            self._model_handle = None
+
+    def _accumulate_router_counts(self, module_name: str, output, recorder_index: int, model, module) -> None:
+        selected_experts = self._extract_selected_experts(output)
+        router_logits = self._extract_tensor(output, recorder_index)
+
+        if selected_experts is None:
+            if router_logits is None or not torch.is_tensor(router_logits):
+                return
+            top_k = min(self._infer_top_k(module=module, model=model), router_logits.shape[-1])
+            selected_experts = torch.topk(router_logits.detach().float(), k=top_k, dim=-1).indices
+
+        if not torch.is_tensor(selected_experts):
+            return
+
+        if router_logits is not None and torch.is_tensor(router_logits):
+            num_experts = int(router_logits.shape[-1])
+        else:
+            max_selected = int(selected_experts.max().item()) if selected_experts.numel() > 0 else -1
+            num_experts = max_selected + 1
+        if num_experts <= 0:
+            return
+
+        counts = self._compute_counts_from_routing(selected_experts.detach(), num_experts=num_experts)
+        if module_name not in self._layer_counts:
+            self._layer_counts[module_name] = counts
+            self._layer_order.append(module_name)
+        else:
+            self._layer_counts[module_name] = self._layer_counts[module_name] + counts.to(
+                device=self._layer_counts[module_name].device
+            )
+
+    def _capture_model_aux_metrics(self, outputs) -> None:
+        if not self.log_aux_loss or outputs is None:
+            return
+
+        metrics = {}
+        for attribute_name in ("aux_loss", "router_aux_loss", "z_loss"):
+            value = getattr(outputs, attribute_name, None)
+            if value is None:
+                continue
+            if hasattr(value, "detach"):
+                value = value.detach()
+            if hasattr(value, "item"):
+                value = value.item()
+            metrics[f"{self.prefix}/{attribute_name}"] = float(value)
+        self._last_aux_metrics = metrics
+
+    def _iter_router_modules(self, model):
+        capture_specs = getattr(model, "can_record_outputs", {})
+        router_specs = capture_specs.get("router_logits")
+        if router_specs is None:
+            return
+        if not isinstance(router_specs, list):
+            router_specs = [router_specs]
+
+        for spec in router_specs:
+            for module_name, module in model.named_modules():
+                target_class = getattr(spec, "target_class", None)
+                class_name = getattr(spec, "class_name", None)
+                layer_name = getattr(spec, "layer_name", None)
+                matches_class = target_class is not None and isinstance(module, target_class)
+                matches_name = class_name is not None and module_name.endswith(class_name)
+                if not (matches_class or matches_name):
+                    continue
+                if layer_name is not None and layer_name not in module_name:
+                    continue
+                yield module_name, module, getattr(spec, "index", 0)
+
+    def on_train_begin(self, args, state, control, model=None, **kwargs):
+        self._remove_hooks()
+        self._reset_state()
+        if model is None:
+            return
+        model = self._get_base_model(model)
+        self._resolved_reduction_mode = self._resolve_reduction_mode(model, self.reduction_mode)
+
+        router_modules = list(self._iter_router_modules(model))
+        if len(router_modules) == 0:
+            logger.warning_once(
+                "MoERouterHealthCallback did not find any router modules exposed through `can_record_outputs`."
+            )
+            return
+
+        for module_name, module, recorder_index in router_modules:
+            handle = module.register_forward_hook(
+                lambda current_module,
+                module_args,
+                output,
+                name=module_name,
+                idx=recorder_index: self._accumulate_router_counts(name, output, idx, model, current_module)
+            )
+            self._router_handles.append(handle)
+
+        if self.log_aux_loss:
+            self._model_handle = model.register_forward_hook(
+                lambda current_module, module_args, outputs: self._capture_model_aux_metrics(outputs)
+            )
+
+    def on_log(self, args, state, control, logs=None, **kwargs):
+        if logs is None:
+            return
+
+        per_layer_metrics = []
+        for layer_idx, module_name in enumerate(self._layer_order):
+            expert_counts = self._layer_counts.get(module_name)
+            if expert_counts is None:
+                continue
+            if self._resolved_reduction_mode == "world":
+                expert_counts = self._reduce_counts(expert_counts)
+            metric_prefix = f"{self.prefix}/{self._format_layer_name(module_name, layer_idx)}"
+            layer_metrics = self._compute_routing_metrics(expert_counts)
+            for metric_name, metric_value in layer_metrics.items():
+                logs[f"{metric_prefix}/{metric_name}"] = metric_value
+            per_layer_metrics.append(layer_metrics)
+
+        if per_layer_metrics:
+            metric_names = per_layer_metrics[0].keys()
+            for metric_name in metric_names:
+                logs[f"{self.prefix}/global/mean_{metric_name}"] = float(
+                    np.mean([layer_metrics[metric_name] for layer_metrics in per_layer_metrics])
+                )
+
+        logs.update(self._last_aux_metrics)
+        self._reset_state()
+
+    def on_train_end(self, args, state, control, **kwargs):
+        self._remove_hooks()
+        self._reset_state()
 
 
 class DefaultFlowCallback(TrainerCallback):
