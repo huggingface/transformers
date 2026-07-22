@@ -83,7 +83,7 @@ pip install -U flash-attn --no-build-isolation
 
 ### Usage
 
-To load a model using Flash Attention 2, we can pass the argument `attn_implementation="flash_attention_2"` to [`.from_pretrained`](https://huggingface.co/docs/transformers/main/en/main_classes/model#transformers.PreTrainedModel.from_pretrained). We'll also load the model in half-precision (e.g. `torch.float16`), since it results in almost no degradation to audio quality but significantly lower memory usage and faster inference:
+To load a model using Flash Attention 2, we can pass the argument `attn_implementation="flash_attention_2"` to [`~PreTrainedModel.from_pretrained`]. We'll also load the model in half-precision (e.g. `torch.float16`), since it results in almost no degradation to audio quality but significantly lower memory usage and faster inference:
 
 ```python
 from transformers import GPTNeoXForCausalLM
