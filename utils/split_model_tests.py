@@ -88,5 +88,5 @@ if __name__ == "__main__":
     # Limit to a small set of models to keep CI fast during debugging / development.
     # The specific models don't matter — the point is to avoid triggering a full run across all models.
     # Remove this line (or comment it out) if you want a real full re-run of the scheduled daily CI.
-    model_splits = [["models/vit", "models/llava"]]
+    model_splits = [["models/vit"]]
     print(model_splits)

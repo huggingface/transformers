@@ -44,6 +44,60 @@ def _log_rate_limit_headers(response, prefix=""):
     print(f"{tag}GitHub rate-limit headers: {', '.join(parts)}")
 
 
+_token_status_logged = False
+
+
+def _log_token_status(token=None):
+    """Call GET /rate_limit once to confirm whether the token is valid.
+
+    /rate_limit is documented as not consuming quota, so it is safe to call as a pure diagnostic.
+    Prints whether the token is accepted (limit=5000+) or rejected (401 = invalid/expired/revoked).
+    """
+    global _token_status_logged
+    if _token_status_logged:
+        return
+    _token_status_logged = True
+
+    # DEBUG: verify unauthenticated call shows limit=60
+    try:
+        r_debug = requests.get("https://api.github.com/rate_limit")
+        if r_debug.status_code == 200:
+            core = r_debug.json().get("resources", {}).get("core", r_debug.json().get("rate", {}))
+            print(
+                f"[token check DEBUG] UNAUTHENTICATED — limit={core.get('limit', 'n/a')}, "
+                f"used={core.get('used', 'n/a')}, remaining={core.get('remaining', 'n/a')}"
+            )
+    except Exception as e:
+        print(f"[token check DEBUG] Could not reach GitHub API: {e}")
+
+    headers = {"Accept": "application/vnd.github+json", "Authorization": f"Bearer {token}"} if token else None
+    try:
+        r = requests.get("https://api.github.com/rate_limit", headers=headers)
+    except Exception as e:
+        print(f"[token check] Could not reach GitHub API: {e}")
+        return
+
+    if r.status_code == 200:
+        core = r.json().get("resources", {}).get("core", r.json().get("rate", {}))
+        limit = core.get("limit", "n/a")
+        used = core.get("used", "n/a")
+        remaining = core.get("remaining", "n/a")
+        reset_ts = core.get("reset")
+        if reset_ts is not None:
+            secs_until = int(reset_ts) - int(time.time())
+            reset_str = f"{reset_ts} (resets in {secs_until}s, i.e. {secs_until // 60}m {secs_until % 60}s)"
+        else:
+            reset_str = "n/a"
+        auth_status = "AUTHENTICATED" if token else "UNAUTHENTICATED"
+        print(
+            f"[token check] {auth_status} — limit={limit}, used={used}, remaining={remaining}, reset={reset_str}"
+        )
+    elif r.status_code == 401:
+        print(f"[token check] Token REJECTED by GitHub (HTTP 401 Bad credentials) — will fall back to unauthenticated (limit=60/hr)")
+    else:
+        print(f"[token check] Unexpected status {r.status_code} from /rate_limit: {r.text[:200]!r}")
+
+
 def _rate_limit_wait(response, attempt):
     """Return how many seconds to wait before retrying a rate-limited GitHub response, or ``None``.
 
@@ -105,6 +159,8 @@ def get_github_json(url, token=None, max_retries=8):
     ``RuntimeError`` if no usable response is obtained, so callers fail loudly instead of indexing
     into an error payload.
     """
+    _log_token_status(token)
+
     headers = None
     if token:
         headers = {"Accept": "application/vnd.github+json", "Authorization": f"Bearer {token}"}
