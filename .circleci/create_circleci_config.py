@@ -99,7 +99,7 @@ class CircleCIJob:
     parallelism: int | None = 0
     pytest_num_workers: int = 8
     pytest_options: dict[str, Any] = None
-    resource_class: str | None = "xlarge"
+    resource_class: str | None = "large"
     tests_to_run: list[str] | None = None
     num_test_files_per_worker: int | None = 10
     # This should be only used for doctest job!
