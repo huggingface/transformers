@@ -446,8 +446,6 @@ class BambaMixer(nn.Module):
         self.chunk_size = config.mamba_chunk_size
 
         self.time_step_limit = config.time_step_limit
-        self.time_step_min = config.time_step_min
-        self.time_step_max = config.time_step_max
 
         self.conv_dim = self.intermediate_size + 2 * self.n_groups * self.ssm_state_size
         self.conv1d = nn.Conv1d(
@@ -667,7 +665,6 @@ class BambaMixer(nn.Module):
             out = self.out_proj(scan_output)
         return out
 
-    # fmt: off
     def torch_forward(
         self,
         input_states,
@@ -706,13 +703,11 @@ class BambaMixer(nn.Module):
             # for batched generation
             dt = dt[:, 0, :][:, None, ...]
             dt = dt.transpose(1, 2).expand(batch_size, dt.shape[-1], self.head_dim)
-            # [num_heads] -> [num_heads, head_dim]
             dt_bias = self.dt_bias[..., None].expand(self.dt_bias.shape[0], self.head_dim)
 
             dt = torch.nn.functional.softplus(dt + dt_bias.to(dt.dtype))
             dt = torch.clamp(dt, self.time_step_limit[0], self.time_step_limit[1])
             A = A[..., None, None].expand(self.num_heads, self.head_dim, self.ssm_state_size).to(dtype=torch.float32)
-            # [bsz, num_heads, head_dim, state_size]
             dA = (torch.exp(dt[..., None] * A)).to(device=cache_device)
 
             # Discretize B
@@ -777,7 +772,7 @@ class BambaMixer(nn.Module):
 
             # Contraction of C and B to get G (attention-weights like)
             G_intermediate = C[:, :, :, None, :, :] * B[:, :, None, :, :, :]
-            G = G_intermediate.sum(dim=-1)  # shape: (b, c, l, s, h)
+            G = G_intermediate.sum(dim=-1)
 
             # Compute M, equivalent to applying attention mask to weights
             M_intermediate = G[..., None] * L.permute(0, 2, 3, 4, 1)[..., None]
@@ -831,9 +826,8 @@ class BambaMixer(nn.Module):
         scan_output = self.norm(y, gate)
 
         # 4. Final linear projection
-        contextualized_states = self.out_proj(scan_output.to(dtype))  # [batch, seq_len, hidden_size]
+        contextualized_states = self.out_proj(scan_output.to(dtype))
         return contextualized_states
-    # fmt: on
 
     def forward(
         self,

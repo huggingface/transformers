@@ -433,7 +433,6 @@ class Mamba2Mixer(nn.Module):
 
         return out
 
-    # fmt: off
     def torch_forward(
         self,
         hidden_states: torch.Tensor,
@@ -456,7 +455,7 @@ class Mamba2Mixer(nn.Module):
             - self.num_heads
         ) // 2
         _, _, gate, hidden_states_B_C, dt = projected_states.split(
-            [d_mlp, d_mlp, self.intermediate_size,  self.conv_dim, self.num_heads], dim=-1
+            [d_mlp, d_mlp, self.intermediate_size, self.conv_dim, self.num_heads], dim=-1
         )
 
         # 2. Convolution sequence transformation
@@ -465,11 +464,11 @@ class Mamba2Mixer(nn.Module):
         hidden_states, B, C = torch.split(
             hidden_states_B_C,
             [self.intermediate_size, self.n_groups * self.ssm_state_size, self.n_groups * self.ssm_state_size],
-            dim=-1
+            dim=-1,
         )
 
         # 3. SSM transformation
-        A = -torch.exp(self.A_log.float())                            # [num_heads]
+        A = -torch.exp(self.A_log.float())
         if use_precomputed_states and seq_len == 1:
             # We need to guarantee that anything regarding the cache is on the same device
             cache_device = cache_params.layers[self.layer_idx].device
@@ -484,20 +483,15 @@ class Mamba2Mixer(nn.Module):
             dt = torch.nn.functional.softplus(dt + dt_bias.to(dt.dtype))
             dt = torch.clamp(dt, self.time_step_limit[0], self.time_step_limit[1])
             A = A[..., None, None].expand(self.num_heads, self.head_dim, self.ssm_state_size).to(dtype=torch.float32)
-            # [bsz, num_heads, head_dim, state_size]
             dA = (torch.exp(dt[..., None] * A)).to(device=cache_device)
 
             # Discretize B
-            # [bsz, n_groups * state_size] -> [bsz, n_groups, 1, state_size] ->
-            # -> [bsz, n_groups, group to head repetition factor, state_size] -> [bsz, num_heads, state_size]
             B = B.reshape(batch_size, self.n_groups, -1)[..., None, :]
             B = B.expand(batch_size, self.n_groups, self.num_heads // self.n_groups, B.shape[-1]).contiguous()
             B = B.reshape(batch_size, -1, B.shape[-1])
-            # [bsz, num_heads, head_dim, state_size]
             dB = dt[..., None] * B[..., None, :]
 
             # Discretize x into dB
-            # [bsz, intermediate_size] -> [bsz, num_heads, head_dim]
             hidden_states = hidden_states.reshape(batch_size, -1, self.head_dim)
             dBx = (dB * hidden_states[..., None]).to(device=cache_device)
 
@@ -506,7 +500,6 @@ class Mamba2Mixer(nn.Module):
             ssm_states = cache_params.update_recurrent_state(ssm_states, layer_idx=self.layer_idx)
 
             # Subsequent output
-            # [bsz, n_groups * state_size] -> [bsz, num_heads, state_size]
             C = C.reshape(batch_size, self.n_groups, -1)[..., None, :]
             C = C.expand(batch_size, self.n_groups, self.num_heads // self.n_groups, C.shape[-1]).contiguous()
             C = C.reshape(batch_size, -1, C.shape[-1])
@@ -514,17 +507,15 @@ class Mamba2Mixer(nn.Module):
 
             # Reshape ssm_states to merge the first two dimensions
             ssm_states = ssm_states.to(device=C.device, dtype=C.dtype)
-            ssm_states_reshaped = ssm_states.view(batch_size * self.num_heads, self.head_dim, self.ssm_state_size)  # Shape: [b*h, d, n]
-            C_reshaped = C.view(batch_size * self.num_heads, self.ssm_state_size, 1)  # Shape: [b*h, n, 1]
+            ssm_states_reshaped = ssm_states.view(batch_size * self.num_heads, self.head_dim, self.ssm_state_size)
+            C_reshaped = C.view(batch_size * self.num_heads, self.ssm_state_size, 1)
             y = torch.bmm(ssm_states_reshaped, C_reshaped)
             y = y.view(batch_size, self.num_heads, self.head_dim)
 
             # D skip connection
-            # [num_heads] -> [num_heads, head_dim]
             D = self.D[..., None].expand(self.D.shape[0], self.head_dim)
             y = (y + hidden_states * D).to(y.dtype)
 
-            # [bsz, num_heads, head_dim] -> [bsz, 1, intermediate_size]
             y = y.reshape(batch_size, -1)[:, None, ...]
         else:
             # begin ssd naive implementation without einsums
@@ -544,9 +535,10 @@ class Mamba2Mixer(nn.Module):
             A = A.to(hidden_states.dtype) * dt
 
             # Rearrange into blocks/chunks
-            hidden_states, A, B, C = [reshape_into_chunks(t, pad_size, self.chunk_size) for t in (hidden_states, A, B, C)]
+            hidden_states, A, B, C = [
+                reshape_into_chunks(t, pad_size, self.chunk_size) for t in (hidden_states, A, B, C)
+            ]
 
-            # [bsz, -1, chunk_size, num_heads] -> [bsz, num_heads, -1, chunk_size]
             A = A.permute(0, 3, 1, 2)
             A_cumsum = torch.cumsum(A, dim=-1)
 
@@ -555,8 +547,8 @@ class Mamba2Mixer(nn.Module):
             L = torch.exp(segment_sum(A))
 
             # Contraction of C and B to get G (attention-weights like)
-            G_intermediate = C[:, :, :, None, :, :] * B[:, :, None, :, :, :]  # shape: (b, c, l, s, h, n)
-            G = G_intermediate.sum(dim=-1)  # shape: (b, c, l, s, h)
+            G_intermediate = C[:, :, :, None, :, :] * B[:, :, None, :, :, :]
+            G = G_intermediate.sum(dim=-1)
 
             # Compute M, equivalent to applying attention mask to weights
             M_intermediate = G[..., None] * L.permute(0, 2, 3, 4, 1)[..., None]
@@ -574,7 +566,9 @@ class Mamba2Mixer(nn.Module):
             # 3. Compute the inter-chunk SSM recurrence; produces correct SSM states at chunk boundaries
             # (middle term of factorization of off-diag blocks; A terms)
             previous_states = (
-                cache_params.layers[self.layer_idx].recurrent_states[0][:, None].to(dtype=states.dtype, device=states.device)
+                cache_params.layers[self.layer_idx]
+                .recurrent_states[0][:, None]
+                .to(dtype=states.dtype, device=states.device)
                 if use_precomputed_states
                 else torch.zeros_like(states[:, :1])
             )
@@ -587,13 +581,12 @@ class Mamba2Mixer(nn.Module):
             # 4. Compute state -> output conversion per chunk
             # (left term of low-rank factorization of off-diagonal blocks; C terms)
             state_decay_out = torch.exp(A_cumsum)
-            C_times_states = (C[..., None, :] * states[:, :, None, ...])
+            C_times_states = C[..., None, :] * states[:, :, None, ...]
             state_decay_out_permuted = state_decay_out.permute(0, 2, 3, 1)
-            Y_off = (C_times_states.sum(-1) * state_decay_out_permuted[..., None])
+            Y_off = C_times_states.sum(-1) * state_decay_out_permuted[..., None]
 
             # Add output of intra-chunk and inter-chunk terms (diagonal and off-diagonal blocks)
             y = Y_diag + Y_off
-            # [bsz, -1, self.chunk_size, num_heads, head_dim] -> [bsz, (padded) seq_len, num_heads, head_dim]
             y = y.reshape(batch_size, -1, self.num_heads, self.head_dim)
 
             y = y + D_residual
@@ -608,12 +601,9 @@ class Mamba2Mixer(nn.Module):
 
         scan_output = self.norm(y, gate)
 
-        # end ssd naive
-
         # 4. Final linear projection
         contextualized_states = self.out_proj(scan_output.to(dtype))  # [batch, seq_len, hidden_size]
         return contextualized_states
-    # fmt: on
 
     def forward(
         self,

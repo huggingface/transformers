@@ -145,7 +145,7 @@ class BambaMixer(Mamba2Mixer):
 
     def __init__(self, config: BambaConfig, layer_idx: int, initialize_mixer_weights: bool = True):
         self.use_bias = config.mamba_proj_bias
-        super().__init__()
+        super().__init__(config, layer_idx, initialize_mixer_weights)
         self.num_heads = config.mamba_n_heads
         self.ssm_state_size = config.mamba_d_state
         self.conv_kernel_size = config.mamba_d_conv
@@ -174,6 +174,8 @@ class BambaMixer(Mamba2Mixer):
         del self.time_step_floor
         del self.time_step_rank
         del self.use_bias
+        del self.time_step_min
+        del self.time_step_max
 
     @torch.no_grad()
     def init_bamba_weights(self):
@@ -334,13 +336,11 @@ class BambaMixer(Mamba2Mixer):
             # for batched generation
             dt = dt[:, 0, :][:, None, ...]
             dt = dt.transpose(1, 2).expand(batch_size, dt.shape[-1], self.head_dim)
-            # [num_heads] -> [num_heads, head_dim]
             dt_bias = self.dt_bias[..., None].expand(self.dt_bias.shape[0], self.head_dim)
 
             dt = torch.nn.functional.softplus(dt + dt_bias.to(dt.dtype))
             dt = torch.clamp(dt, self.time_step_limit[0], self.time_step_limit[1])
             A = A[..., None, None].expand(self.num_heads, self.head_dim, self.ssm_state_size).to(dtype=torch.float32)
-            # [bsz, num_heads, head_dim, state_size]
             dA = (torch.exp(dt[..., None] * A)).to(device=cache_device)
 
             # Discretize B
@@ -405,7 +405,7 @@ class BambaMixer(Mamba2Mixer):
 
             # Contraction of C and B to get G (attention-weights like)
             G_intermediate = C[:, :, :, None, :, :] * B[:, :, None, :, :, :]
-            G = G_intermediate.sum(dim=-1)  # shape: (b, c, l, s, h)
+            G = G_intermediate.sum(dim=-1)
 
             # Compute M, equivalent to applying attention mask to weights
             M_intermediate = G[..., None] * L.permute(0, 2, 3, 4, 1)[..., None]
@@ -459,7 +459,7 @@ class BambaMixer(Mamba2Mixer):
         scan_output = self.norm(y, gate)
 
         # 4. Final linear projection
-        contextualized_states = self.out_proj(scan_output.to(dtype))  # [batch, seq_len, hidden_size]
+        contextualized_states = self.out_proj(scan_output.to(dtype))
         return contextualized_states
 
 

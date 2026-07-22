@@ -433,8 +433,6 @@ class FalconH1Mixer(nn.Module):
         self.chunk_size = config.mamba_chunk_size
 
         self.time_step_limit = config.time_step_limit
-        self.time_step_min = config.time_step_min
-        self.time_step_max = config.time_step_max
 
         self.conv_dim = self.intermediate_size + 2 * self.n_groups * self.ssm_state_size
         self.conv1d = nn.Conv1d(
@@ -670,7 +668,6 @@ class FalconH1Mixer(nn.Module):
             out = self.out_proj(out)
         return out
 
-    # fmt: off
     def torch_forward(
         self,
         input_states,
@@ -698,11 +695,11 @@ class FalconH1Mixer(nn.Module):
         hidden_states, B, C = torch.split(
             hidden_states_B_C,
             [self.intermediate_size, self.n_groups * self.ssm_state_size, self.n_groups * self.ssm_state_size],
-            dim=-1
+            dim=-1,
         )
 
         # 3. SSM transformation
-        A = -torch.exp(self.A_log.float())                            # [num_heads]
+        A = -torch.exp(self.A_log.float())  # [num_heads]
         if use_precomputed_states and seq_len == 1:
             # We need to guarantee that anything regarding the cache is on the same device
             cache_device = cache_params.layers[self.layer_idx].recurrent_states[0].device
@@ -747,7 +744,9 @@ class FalconH1Mixer(nn.Module):
 
             ssm_states = ssm_states.to(device=C.device, dtype=C.dtype)  # Shape: [b, h, d, n]
             # Reshape ssm_states to merge the first two dimensions
-            ssm_states_reshaped = ssm_states.view(batch_size * self.num_heads, self.head_dim, self.ssm_state_size)  # Shape: [b*h, d, n]
+            ssm_states_reshaped = ssm_states.view(
+                batch_size * self.num_heads, self.head_dim, self.ssm_state_size
+            )  # Shape: [b*h, d, n]
             C_reshaped = C.view(batch_size * self.num_heads, self.ssm_state_size, 1)  # Shape: [b*h, n, 1]
             y = torch.bmm(ssm_states_reshaped, C_reshaped)
             y = y.view(batch_size, self.num_heads, self.head_dim)
@@ -777,7 +776,9 @@ class FalconH1Mixer(nn.Module):
             A = A.to(hidden_states.dtype) * dt
 
             # Rearrange into blocks/chunks
-            hidden_states, A, B, C = [reshape_into_chunks(t, pad_size, self.chunk_size) for t in (hidden_states, A, B, C)]
+            hidden_states, A, B, C = [
+                reshape_into_chunks(t, pad_size, self.chunk_size) for t in (hidden_states, A, B, C)
+            ]
 
             # [bsz, -1, chunk_size, num_heads] -> [bsz, num_heads, -1, chunk_size]
             A = A.permute(0, 3, 1, 2)
@@ -807,7 +808,9 @@ class FalconH1Mixer(nn.Module):
             # 3. Compute the inter-chunk SSM recurrence; produces correct SSM states at chunk boundaries
             # (middle term of factorization of off-diag blocks; A terms)
             previous_states = (
-                cache_params.layers[self.layer_idx].recurrent_states[0][:, None].to(dtype=states.dtype, device=states.device)
+                cache_params.layers[self.layer_idx]
+                .recurrent_states[0][:, None]
+                .to(dtype=states.dtype, device=states.device)
                 if use_precomputed_states
                 else torch.zeros_like(states[:, :1])
             )
@@ -820,9 +823,9 @@ class FalconH1Mixer(nn.Module):
             # 4. Compute state -> output conversion per chunk
             # (left term of low-rank factorization of off-diagonal blocks; C terms)
             state_decay_out = torch.exp(A_cumsum)
-            C_times_states = (C[..., None, :] * states[:, :, None, ...])
+            C_times_states = C[..., None, :] * states[:, :, None, ...]
             state_decay_out_permuted = state_decay_out.permute(0, 2, 3, 1)
-            Y_off = (C_times_states.sum(-1) * state_decay_out_permuted[..., None])
+            Y_off = C_times_states.sum(-1) * state_decay_out_permuted[..., None]
 
             # Add output of intra-chunk and inter-chunk terms (diagonal and off-diagonal blocks)
             y = Y_diag + Y_off
@@ -849,7 +852,6 @@ class FalconH1Mixer(nn.Module):
         # 4. Final linear projection
         contextualized_states = self.out_proj(scan_output.to(dtype))  # [batch, seq_len, hidden_size]
         return contextualized_states
-    # fmt: on
 
     def forward(
         self,
