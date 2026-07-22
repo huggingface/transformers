@@ -54,15 +54,6 @@ _MISSING_KERNELS_MESSAGE = (
 )
 
 
-def maybe_import_error(message: str, *, raise_error: bool) -> bool:
-    """Report an unmet kernel precondition: raise `ImportError(message)` when `raise_error`, else return
-    `False`. Lets the `is_*_loadable` checks read as a flat `if unmet: return maybe_import_error(msg, ...)`
-    — a bool for callers probing availability, the specific error for the loader (`raise_error=True`)."""
-    if raise_error:
-        raise ImportError(message)
-    return False
-
-
 _TRANSFORMERS_USE_HUB_KERNELS = os.environ.get("USE_HUB_KERNELS", "YES").upper()
 _kernels_enabled = _TRANSFORMERS_USE_HUB_KERNELS in ENV_VARS_TRUE_VALUES
 

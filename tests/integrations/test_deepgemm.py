@@ -41,6 +41,8 @@ import unittest
 from unittest import mock
 
 import torch
+from parameterized import parameterized
+from test_utils import make_experts, make_fp8_experts
 
 import transformers.integrations.deepgemm as dg
 from transformers.integrations.deepgemm import (
@@ -49,7 +51,12 @@ from transformers.integrations.deepgemm import (
     deepgemm_fp8_fp4_linear,
     deepgemm_fp8_fp4_megamoe_experts_forward,
 )
-from transformers.testing_utils import require_torch, require_torch_gpu, torch_device
+from transformers.testing_utils import (
+    require_torch,
+    require_torch_gpu,
+    require_torch_greater_or_equal,
+    torch_device,
+)
 
 
 def _add_one(x, *args, **kwargs):
@@ -148,43 +155,39 @@ class DeepGemmLoaderTest(unittest.TestCase):
         self.assertIsInstance(bundle, dg.DeepGEMM)
         self.assertEqual(bundle.m_alignment, 128)
 
-    def test_loader_surfaces_unloadable(self):
-        # The loader delegates gating to `is_deepgemm_loadable(raise_error=True)`; confirm an unmet
-        # precondition propagates through `load_deepgemm_kernel` (exhaustive per-branch coverage lives in
-        # `test_is_deepgemm_loadable`, which drives the gate directly).
-        with self._env(cuda_available=False), self.assertRaisesRegex(ImportError, "requires CUDA"):
-            dg.load_deepgemm_kernel()
-
-    def test_raises_when_kernel_fails_to_load(self):
-        with self._env(kernel=None), self.assertRaisesRegex(ImportError, "Failed to load"):
-            dg.load_deepgemm_kernel()
-
-    def test_raises_on_missing_symbols(self):
-        with (
-            self._env(kernel=_DeepGemmKernelMissingSymbol),
-            self.assertRaisesRegex(ImportError, "missing required symbols"),
-        ):
-            dg.load_deepgemm_kernel()
-
-    def test_is_deepgemm_loadable(self):
+    @parameterized.expand(
+        [
+            ("valid_env", {}, None),
+            ("no_kernels", {"kernels_available": False}, "kernel unavailable"),
+            ("no_cuda", {"cuda_available": False}, "requires CUDA"),
+            ("bad_arch", {"capability": (8, 0)}, "requires Hopper"),
+            ("no_toolkit", {"toolkit_present": False}, "needs a CUDA toolkit"),
+            ("no_nvcc", {"nvcc_present": False}, "compiles with nvcc"),
+            ("unreadable_nvcc", {"nvcc_version": None}, "could not read its CUDA version"),
+            ("old_nvcc", {"nvcc_version": (12, 0)}, "too old"),
+        ]
+    )
+    def test_is_deepgemm_loadable(self, _name, env_kwargs, pattern):
         # The single gating source: valid env -> True; each unmet precondition -> False, or the specific
         # `ImportError` when `raise_error=True` (what the loader uses).
-        with self._env():
-            self.assertTrue(dg.is_deepgemm_loadable())
-        for env_kwargs, pattern in [
-            ({"kernels_available": False}, "kernel unavailable"),
-            ({"cuda_available": False}, "requires CUDA"),
-            ({"capability": (8, 0)}, "requires Hopper"),
-            ({"toolkit_present": False}, "needs a CUDA toolkit"),
-            ({"nvcc_present": False}, "compiles with nvcc"),
-            ({"nvcc_version": None}, "could not read its CUDA version"),
-            ({"nvcc_version": (12, 0)}, "too old"),
-        ]:
-            with self.subTest(pattern=pattern):
-                with self._env(**env_kwargs):
-                    self.assertFalse(dg.is_deepgemm_loadable())
-                with self._env(**env_kwargs), self.assertRaisesRegex(ImportError, pattern):
-                    dg.is_deepgemm_loadable(raise_error=True)
+        with self._env(**env_kwargs):
+            self.assertEqual(dg.is_deepgemm_loadable(), pattern is None)
+        if pattern is not None:
+            with self._env(**env_kwargs), self.assertRaisesRegex(ImportError, pattern):
+                dg.is_deepgemm_loadable(raise_error=True)
+
+    @parameterized.expand(
+        [
+            ("unloadable_env", {"cuda_available": False}, "requires CUDA"),
+            ("kernel_load_fails", {"kernel": None}, "Failed to load"),
+            ("missing_symbols", {"kernel": _DeepGemmKernelMissingSymbol}, "missing required symbols"),
+        ]
+    )
+    def test_loader_raises(self, _name, env_kwargs, pattern):
+        # The loader delegates gating to `is_deepgemm_loadable(raise_error=True)`, then resolves symbols;
+        # confirm each failure surfaces through `load_deepgemm_kernel`.
+        with self._env(**env_kwargs), self.assertRaisesRegex(ImportError, pattern):
+            dg.load_deepgemm_kernel()
 
     def test_loader_is_compile_safe(self):
         # Cold path: the compiled call is first to load, so the opaque loader node runs its full body
@@ -319,65 +322,6 @@ def _make_bundle(captured):
     )
 
 
-def _make_experts(
-    *,
-    num_experts=4,
-    hidden=8,
-    inter=16,
-    has_gate=True,
-    has_bias=False,
-    is_transposed=False,
-    weight_dtype=torch.float8_e4m3fn,
-    scale_dtype=torch.float32,
-    activation_scheme="dynamic",
-    block_size=(128, 128),
-    fp8_experts=True,
-    device=torch_device,
-):
-    """A minimal stand-in for an FP8/BF16 experts module carrying exactly the attributes the forwards
-    read. Weights are `(E, 2I, H)` (non-transposed) or `(E, H, 2I)` (transposed) for gate_up and
-    `(E, H, I)` / `(E, I, H)` for down.
-    """
-    if is_transposed:
-        gate_up = torch.randn(num_experts, hidden, 2 * inter, device=device).to(weight_dtype)
-        up = torch.randn(num_experts, hidden, inter, device=device).to(weight_dtype)
-        down = torch.randn(num_experts, inter, hidden, device=device).to(weight_dtype)
-    else:
-        gate_up = torch.randn(num_experts, 2 * inter, hidden, device=device).to(weight_dtype)
-        up = torch.randn(num_experts, inter, hidden, device=device).to(weight_dtype)
-        down = torch.randn(num_experts, hidden, inter, device=device).to(weight_dtype)
-
-    gate_up_scale = torch.ones(num_experts, 1, 1, device=device).to(scale_dtype)
-    up_scale = torch.ones(num_experts, 1, 1, device=device).to(scale_dtype)
-    down_scale = torch.ones(num_experts, 1, 1, device=device).to(scale_dtype)
-
-    ns = types.SimpleNamespace(
-        num_experts=num_experts,
-        has_gate=has_gate,
-        has_bias=has_bias,
-        is_transposed=is_transposed,
-        gate_up_proj=gate_up,
-        up_proj=up,
-        down_proj=down,
-        gate_up_proj_bias=torch.randn(num_experts, 2 * inter, dtype=torch.bfloat16, device=device)
-        if has_bias
-        else None,
-        up_proj_bias=torch.randn(num_experts, inter, dtype=torch.bfloat16, device=device) if has_bias else None,
-        down_proj_bias=torch.randn(num_experts, hidden, dtype=torch.bfloat16, device=device) if has_bias else None,
-        # SwiGLU on the concatenated gate/up halves; identity gate keeps dims trivial for the fakes.
-        _apply_gate=lambda x: x[..., : x.shape[-1] // 2],
-        act_fn=lambda x: x,
-    )
-    if fp8_experts:
-        ns.gate_up_proj_scale_inv = gate_up_scale
-        ns.up_proj_scale_inv = up_scale
-        ns.down_proj_scale_inv = down_scale
-        ns.block_size = block_size
-        ns.activation_scheme = activation_scheme
-        ns._deepgemm_disabled = False
-    return ns
-
-
 @require_torch_gpu
 class DeepGemmForwardTest(unittest.TestCase):
     """Drives the real public forwards with only the loaded-kernel ops mocked."""
@@ -427,6 +371,7 @@ class DeepGemmForwardTest(unittest.TestCase):
 
         self.assertEqual(out.shape, (2, 3, 256))  # reshaped back to input.shape[:-1] + (N,)
 
+    @require_torch_greater_or_equal("2.7")  # torch.float8_e8m0fnu (UE8M0) landed in 2.7
     def test_linear_fp4_sm100_packs_ue8m0_scales(self):
         # FP4 weights (int8): SM100-only. Scales arrive UE8M0 and must reach the kernel packed into
         # int32 (4 K-bytes -> 1 int32) with the `(1, 1, gran_k=32)` recipe.
@@ -450,6 +395,7 @@ class DeepGemmForwardTest(unittest.TestCase):
         self.assertEqual(w_sf.dtype, torch.int32)
         self.assertEqual(w_sf.shape, (256, 1))
 
+    @require_torch_greater_or_equal("2.7")  # torch.float8_e8m0fnu (UE8M0) landed in 2.7
     def test_assert_sm100_requirements(self):
         # The shared before-load arch guard used by every FP8/FP4 forward: FP4 (int8) weights need
         # Blackwell; Blackwell has no float32 scale-factor path. Driven directly (faked capability)
@@ -485,14 +431,16 @@ class DeepGemmForwardTest(unittest.TestCase):
     # ── deepgemm_bf16_experts_forward ──────────────────────────────────────────
 
     def _bf16_hidden(self, experts, *, num_tokens=3, top_k=2):
-        hidden = experts.gate_up_proj.shape[-1] if experts.is_transposed else experts.gate_up_proj.shape[-1]
+        # hidden = the projection's input dim: (E, out, H) non-transposed, (E, H, out) transposed.
+        proj = experts.gate_up_proj if experts.has_gate else experts.up_proj
+        hidden = proj.shape[1] if experts.is_transposed else proj.shape[-1]
         hidden_states = torch.randn(num_tokens, hidden, dtype=torch.bfloat16, device=torch_device)
         top_k_index = torch.tensor([[0, 1], [1, 2], [0, 3]], device=torch_device)[:num_tokens, :top_k]
         top_k_weights = torch.rand(top_k_index.shape, dtype=torch.bfloat16, device=torch_device)
         return hidden_states, top_k_index, top_k_weights
 
     def test_bf16_experts_kernel_inputs_sm90(self):
-        experts = _make_experts(num_experts=4, hidden=8, inter=16, weight_dtype=torch.bfloat16, fp8_experts=False)
+        experts = make_experts(num_experts=4, hidden=8, inter=16)
         hidden_states, top_k_index, top_k_weights = self._bf16_hidden(experts)
         with self._bundle(is_sm100=False) as captured:
             deepgemm_bf16_experts_forward(experts, hidden_states, top_k_index, top_k_weights)
@@ -517,7 +465,7 @@ class DeepGemmForwardTest(unittest.TestCase):
 
     def test_bf16_experts_sm100_uses_psum_cumsum_layout(self):
         # SM100 grouped layout is the cumsum of per-expert aligned counts (not a per-row id vector).
-        experts = _make_experts(num_experts=4, hidden=8, inter=16, weight_dtype=torch.bfloat16, fp8_experts=False)
+        experts = make_experts(num_experts=4, hidden=8, inter=16)
         hidden_states, top_k_index, top_k_weights = self._bf16_hidden(experts)
         with self._bundle(is_sm100=True) as captured:
             deepgemm_bf16_experts_forward(experts, hidden_states, top_k_index, top_k_weights)
@@ -532,26 +480,19 @@ class DeepGemmForwardTest(unittest.TestCase):
 
     def test_bf16_experts_marshals_bias_by_expert(self):
         # Bias is gathered per routed pair (up_bias[expert_ids]) and scattered into the padded rows.
-        # With the fake matmul zeroing its output, the second (down) matmul's input IS the padded bias,
-        # so its column-sum equals the per-pair gathered up_bias summed over all pairs (order-invariant).
-        experts = _make_experts(
-            num_experts=4,
-            hidden=8,
-            inter=16,
-            has_gate=False,
-            has_bias=True,
-            weight_dtype=torch.bfloat16,
-            fp8_experts=False,
-        )
+        # With the fake matmul zeroing its output, the (non-gated) down input is `act_fn(padded bias)`,
+        # so its column-sum equals `act_fn(per-pair gathered up_bias)` summed over all pairs (padding rows
+        # contribute act_fn(0)=0; order-invariant).
+        experts = make_experts(num_experts=4, hidden=8, inter=16, has_gate=False, has_bias=True)
         hidden_states, top_k_index, top_k_weights = self._bf16_hidden(experts)
         with self._bundle(is_sm100=False) as captured:
             deepgemm_bf16_experts_forward(experts, hidden_states, top_k_index, top_k_weights)
-        down_act = captured["grouped"][1]["lhs"]  # act_fn is identity, so this is the biased up-proj out
-        expected = experts.up_proj_bias[top_k_index.reshape(-1)].sum(dim=0)
+        down_act = captured["grouped"][1]["lhs"]
+        expected = experts.act_fn(experts.up_proj_bias[top_k_index.reshape(-1)]).sum(dim=0)
         self.assertTrue(torch.allclose(down_act.sum(dim=0).float(), expected.float(), atol=1e-2))
 
     def test_bf16_experts_rejects_non_bf16_hidden_states(self):
-        experts = _make_experts(weight_dtype=torch.bfloat16, fp8_experts=False)
+        experts = make_experts()
         hidden_states = torch.randn(3, 8, dtype=torch.float16, device=torch_device)
         top_k_index = torch.zeros(3, 2, dtype=torch.long, device=torch_device)
         top_k_weights = torch.rand(3, 2, dtype=torch.bfloat16, device=torch_device)
@@ -567,7 +508,7 @@ class DeepGemmForwardTest(unittest.TestCase):
         return hidden_states, top_k_index, top_k_weights
 
     def test_fp8_experts_kernel_inputs_sm90(self):
-        experts = _make_experts(num_experts=4, hidden=8, inter=16)  # FP8 weights, float32 block SFs
+        experts = make_fp8_experts(num_experts=4, hidden=8, inter=16)  # FP8 weights, float32 block SFs
         hidden_states, top_k_index, top_k_weights = self._fp8_hidden()
         with self._bundle(is_sm100=False) as captured:
             deepgemm_fp8_fp4_experts_forward(experts, hidden_states, top_k_index, top_k_weights)
@@ -616,6 +557,7 @@ class DeepGemmForwardTest(unittest.TestCase):
             config=types.SimpleNamespace(swiglu_limit=swiglu_limit),
         )
 
+    @require_torch_greater_or_equal("2.7")  # torch.float8_e8m0fnu (UE8M0) landed in 2.7
     def test_megamoe_transforms_weights_and_marshals_symm_buffer(self):
         module = self._make_megamoe(num_experts=4, hidden_dim=64, inter=32, swiglu_limit=7.0)
         num_tokens, num_top_k = 3, 2
@@ -663,6 +605,7 @@ class DeepGemmForwardTest(unittest.TestCase):
         self.assertIs(mega["symm_buffer"], buf)
         self.assertEqual(mega["activation_clamp"], 7.0)
 
+    @require_torch_greater_or_equal("2.7")  # torch.float8_e8m0fnu (UE8M0) landed in 2.7
     def test_megamoe_requires_fp4_weights_and_process_group(self):
         hidden_states = torch.randn(3, 64, dtype=torch.bfloat16, device=torch_device)
         top_k_index = torch.randint(0, 4, (3, 2), dtype=torch.long, device=torch_device)
@@ -690,7 +633,3 @@ class DeepGemmForwardTest(unittest.TestCase):
     @staticmethod
     def _megamoe_flag_set(module):
         return getattr(module, "_megamoe_transformed", False)
-
-
-if __name__ == "__main__":
-    unittest.main()

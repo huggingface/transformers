@@ -40,9 +40,10 @@ from ..utils import logging
 from ..utils.deprecation import deprecate_kwarg
 from ..utils.import_utils import (
     is_kernels_available,
+    maybe_import_error,
     resolve_internal_import,
 )
-from .hub_kernels import _MISSING_KERNELS_MESSAGE, lazy_load_kernel, maybe_import_error
+from .hub_kernels import _MISSING_KERNELS_MESSAGE, lazy_load_kernel
 from .tensor_parallel import to_local
 
 

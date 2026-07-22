@@ -28,8 +28,8 @@ import torch
 from packaging import version
 
 from ..utils import logging
-from ..utils.import_utils import is_kernels_available
-from .hub_kernels import lazy_load_kernel, maybe_import_error
+from ..utils.import_utils import is_kernels_available, maybe_import_error
+from .hub_kernels import lazy_load_kernel
 from .tensor_parallel import to_local
 
 

@@ -28,11 +28,12 @@ Two layers, both mocking only what needs the `kernels-community/finegrained-fp8`
 """
 
 import contextlib
-import types
 import unittest
 from unittest import mock
 
 import torch
+from parameterized import parameterized
+from test_utils import make_fp8_experts
 
 import transformers.integrations.finegrained_fp8 as fg
 from transformers.integrations.finegrained_fp8 import (
@@ -78,19 +79,15 @@ class FinegrainedFp8LoaderTest(unittest.TestCase):
         self.assertIsInstance(bundle, fg.FineGrainedFP8)
         self.assertIs(bundle.matmul, _add_one)
 
-    def test_raises_without_kernels_package(self):
-        with self._env(kernels_available=False), self.assertRaisesRegex(ImportError, "kernel unavailable"):
-            fg.load_finegrained_fp8_kernel()
-
-    def test_raises_when_kernel_fails_to_load(self):
-        with self._env(kernel=None), self.assertRaisesRegex(ImportError, "Failed to load the finegrained-fp8 kernel"):
-            fg.load_finegrained_fp8_kernel()
-
-    def test_raises_on_missing_symbols(self):
-        with (
-            self._env(kernel=_FinegrainedKernelMissingSymbol),
-            self.assertRaisesRegex(ImportError, "missing required symbols"),
-        ):
+    @parameterized.expand(
+        [
+            ("no_kernels", {"kernels_available": False}, "kernel unavailable"),
+            ("kernel_load_fails", {"kernel": None}, "Failed to load the finegrained-fp8 kernel"),
+            ("missing_symbols", {"kernel": _FinegrainedKernelMissingSymbol}, "missing required symbols"),
+        ]
+    )
+    def test_loader_raises(self, _name, env_kwargs, pattern):
+        with self._env(**env_kwargs), self.assertRaisesRegex(ImportError, pattern):
             fg.load_finegrained_fp8_kernel()
 
     def test_loader_is_compile_safe(self):
@@ -121,45 +118,6 @@ class FinegrainedFp8LoaderTest(unittest.TestCase):
 
             out = run(torch.zeros(3, device=torch_device))
         self.assertTrue(torch.equal(out, torch.ones(3, device=torch_device)))
-
-
-def _make_fp8_experts(
-    *,
-    num_experts=4,
-    hidden=8,
-    inter=16,
-    has_gate=True,
-    activation_scheme="dynamic",
-    block_size=(128, 128),
-    dtype=torch.float8_e4m3fn,
-    device=torch_device,
-):
-    """A minimal stand-in for `FP8Experts` carrying exactly what the experts forwards read.
-
-    Weights/scales are arbitrary (the kernel is faked), but they are the same tensor objects the
-    forward passes to the kernel, so `torch.equal` on them checks the weight/scale marshalling exactly.
-    Gating uses the real `FP8Experts._apply_gate`, bound so the 2*inter -> inter collapse runs for real.
-    """
-    experts = types.SimpleNamespace(
-        num_experts=num_experts,
-        has_gate=has_gate,
-        activation_scheme=activation_scheme,
-        block_size=block_size,
-        down_proj=torch.randn(num_experts, hidden, inter, device=device).to(dtype),
-        down_proj_scale_inv=torch.randn(num_experts, 1, 1, dtype=torch.float32, device=device),
-        act_fn=torch.nn.functional.silu,
-        swiglu_alpha=None,
-        swiglu_limit=None,
-        limit=None,
-    )
-    if has_gate:
-        experts.gate_up_proj = torch.randn(num_experts, 2 * inter, hidden, device=device).to(dtype)
-        experts.gate_up_proj_scale_inv = torch.randn(num_experts, 2, 1, dtype=torch.float32, device=device)
-    else:
-        experts.up_proj = torch.randn(num_experts, inter, hidden, device=device).to(dtype)
-        experts.up_proj_scale_inv = torch.randn(num_experts, 1, 1, dtype=torch.float32, device=device)
-    experts._apply_gate = types.MethodType(fg.FP8Experts._apply_gate, experts)
-    return experts
 
 
 @require_torch_gpu
@@ -285,7 +243,7 @@ class FinegrainedFp8ForwardTest(unittest.TestCase):
     # ── fp8_batched_mm_experts_forward ──────────────────────────────────────────────────────────────
 
     def test_batched_mm_kernel_inputs_and_output(self):
-        experts = _make_fp8_experts(num_experts=4, hidden=8, inter=16)
+        experts = make_fp8_experts(num_experts=4, hidden=8, inter=16)
         hidden_states = torch.randn(3, 8, dtype=torch.bfloat16, device=torch_device)
         top_k_index = torch.randint(0, 4, (3, 2), device=torch_device)
         top_k_weights = torch.rand(3, 2, dtype=torch.bfloat16, device=torch_device)
@@ -310,7 +268,7 @@ class FinegrainedFp8ForwardTest(unittest.TestCase):
         self.assertTrue(torch.equal(out, expected))
 
     def test_batched_mm_non_gated_uses_up_proj_and_activation(self):
-        experts = _make_fp8_experts(num_experts=4, hidden=8, inter=16, has_gate=False)
+        experts = make_fp8_experts(num_experts=4, hidden=8, inter=16, has_gate=False)
         hidden_states = torch.randn(3, 8, dtype=torch.bfloat16, device=torch_device)
         top_k_index = torch.randint(0, 4, (3, 2), device=torch_device)
         top_k_weights = torch.rand(3, 2, dtype=torch.bfloat16, device=torch_device)
@@ -327,7 +285,7 @@ class FinegrainedFp8ForwardTest(unittest.TestCase):
     def test_batched_mm_passes_sentinel_expert_ids_unclamped(self):
         # EP sentinels (expert_ids >= num_experts) reach the kernel unclamped; the post-mask zeroes the
         # matching output rows before the per-token reduction (the kernel leaves them uninitialized).
-        experts = _make_fp8_experts(num_experts=4, hidden=8, inter=16)
+        experts = make_fp8_experts(num_experts=4, hidden=8, inter=16)
         hidden_states = torch.randn(3, 8, dtype=torch.bfloat16, device=torch_device)
         top_k_index = torch.tensor([[0, 4], [1, 4], [2, 4]], device=torch_device)  # 4 == num_experts -> sentinel
         top_k_weights = torch.rand(3, 2, dtype=torch.bfloat16, device=torch_device)
@@ -343,7 +301,7 @@ class FinegrainedFp8ForwardTest(unittest.TestCase):
     def test_batched_mm_rejects_static_activation_scheme(self):
         # Static activation quant needs a per-tensor activation scale the batched kernel can't consume;
         # this guards a genuine unsupported-config path, not a trivial type/device check.
-        experts = _make_fp8_experts(activation_scheme="static")
+        experts = make_fp8_experts(activation_scheme="static")
         hidden_states = torch.randn(3, 8, dtype=torch.bfloat16, device=torch_device)
         top_k_index = torch.randint(0, 4, (3, 2), device=torch_device)
         top_k_weights = torch.rand(3, 2, dtype=torch.bfloat16, device=torch_device)
@@ -353,7 +311,7 @@ class FinegrainedFp8ForwardTest(unittest.TestCase):
     # ── fp8_grouped_mm_experts_forward ────────────────────────────────────────────────────────────
 
     def test_grouped_mm_kernel_inputs_and_output(self):
-        experts = _make_fp8_experts(num_experts=4, hidden=8, inter=16)
+        experts = make_fp8_experts(num_experts=4, hidden=8, inter=16)
         hidden_states = torch.randn(3, 8, dtype=torch.bfloat16, device=torch_device)
         top_k_index = torch.randint(0, 4, (3, 2), device=torch_device)
         top_k_weights = torch.rand(3, 2, dtype=torch.bfloat16, device=torch_device)
@@ -387,7 +345,7 @@ class FinegrainedFp8ForwardTest(unittest.TestCase):
     def test_grouped_mm_sentinels_dropped_from_histogram(self):
         # Sentinels are left unclamped so the sort pushes them to the tail and histc(max=num_experts-1)
         # drops them from tokens_per_expert -> no wasted GEMM rows; the post-mask zeroes their output.
-        experts = _make_fp8_experts(num_experts=4, hidden=8, inter=16)
+        experts = make_fp8_experts(num_experts=4, hidden=8, inter=16)
         hidden_states = torch.randn(3, 8, dtype=torch.bfloat16, device=torch_device)
         top_k_index = torch.tensor([[0, 4], [1, 4], [2, 4]], device=torch_device)  # three sentinels (== num_experts)
         top_k_weights = torch.rand(3, 2, dtype=torch.bfloat16, device=torch_device)
@@ -401,13 +359,9 @@ class FinegrainedFp8ForwardTest(unittest.TestCase):
         self.assertTrue(torch.equal(out, expected))
 
     def test_grouped_mm_rejects_static_activation_scheme(self):
-        experts = _make_fp8_experts(activation_scheme="static")
+        experts = make_fp8_experts(activation_scheme="static")
         hidden_states = torch.randn(3, 8, dtype=torch.bfloat16, device=torch_device)
         top_k_index = torch.randint(0, 4, (3, 2), device=torch_device)
         top_k_weights = torch.rand(3, 2, dtype=torch.bfloat16, device=torch_device)
         with self._mocked_kernel(), self.assertRaisesRegex(NotImplementedError, "activation_scheme='static'"):
             fp8_grouped_mm_experts_forward(experts, hidden_states, top_k_index, top_k_weights)
-
-
-if __name__ == "__main__":
-    unittest.main()

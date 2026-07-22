@@ -27,11 +27,12 @@ Two layers, both mocking only what needs a Hopper GPU + CuteDSL / `nvidia-cutlas
 import contextlib
 import importlib.metadata
 import inspect
-import types
 import unittest
 from unittest import mock
 
 import torch
+from parameterized import parameterized
+from test_utils import make_experts
 
 import transformers.integrations.sonicmoe as sm
 from transformers.integrations.sonicmoe import sonicmoe_experts_forward
@@ -122,40 +123,36 @@ class SonicMoeLoaderTest(unittest.TestCase):
         self.assertIsInstance(bundle, sm.SonicMoE)
         self.assertIs(bundle.activation_type_enum, _FakeActivationType)
 
-    def test_loader_surfaces_unloadable(self):
-        # The loader delegates gating to `is_sonicmoe_loadable(raise_error=True)`; confirm an unmet
-        # precondition propagates through `load_sonicmoe_kernel` (exhaustive per-branch coverage lives in
-        # `test_is_sonicmoe_loadable`).
-        with self._env(cuda_available=False), self.assertRaisesRegex(ImportError, "requires CUDA"):
-            sm.load_sonicmoe_kernel()
-
-    def test_raises_when_kernel_fails_to_load(self):
-        with self._env(kernel=None), self.assertRaisesRegex(ImportError, "Failed to load the sonic-moe kernel"):
-            sm.load_sonicmoe_kernel()
-
-    def test_raises_on_missing_symbols(self):
-        with (
-            self._env(kernel=_SonicMoeKernelMissingSymbol),
-            self.assertRaisesRegex(ImportError, "missing required symbols"),
-        ):
-            sm.load_sonicmoe_kernel()
-
-    def test_is_sonicmoe_loadable(self):
+    @parameterized.expand(
+        [
+            ("valid_env", {}, None),
+            ("no_kernels", {"kernels_available": False}, "`kernels` package"),
+            ("no_cuda", {"cuda_available": False}, "requires CUDA"),
+            ("bad_arch", {"capability": (8, 0)}, "requires a Hopper"),
+            ("incompatible_versions", {"versions_ok": False}, "unvalidated"),
+        ]
+    )
+    def test_is_sonicmoe_loadable(self, _name, env_kwargs, pattern):
         # The single gating source: valid env -> True; each unmet precondition -> False, or the specific
         # `ImportError` when `raise_error=True` (what the loader uses).
-        with self._env():
-            self.assertTrue(sm.is_sonicmoe_loadable())
-        for env_kwargs, pattern in [
-            ({"kernels_available": False}, "`kernels` package"),
-            ({"cuda_available": False}, "requires CUDA"),
-            ({"capability": (8, 0)}, "requires a Hopper"),
-            ({"versions_ok": False}, "unvalidated"),
-        ]:
-            with self.subTest(pattern=pattern):
-                with self._env(**env_kwargs):
-                    self.assertFalse(sm.is_sonicmoe_loadable())
-                with self._env(**env_kwargs), self.assertRaisesRegex(ImportError, pattern):
-                    sm.is_sonicmoe_loadable(raise_error=True)
+        with self._env(**env_kwargs):
+            self.assertEqual(sm.is_sonicmoe_loadable(), pattern is None)
+        if pattern is not None:
+            with self._env(**env_kwargs), self.assertRaisesRegex(ImportError, pattern):
+                sm.is_sonicmoe_loadable(raise_error=True)
+
+    @parameterized.expand(
+        [
+            ("unloadable_env", {"cuda_available": False}, "requires CUDA"),
+            ("kernel_load_fails", {"kernel": None}, "Failed to load the sonic-moe kernel"),
+            ("missing_symbols", {"kernel": _SonicMoeKernelMissingSymbol}, "missing required symbols"),
+        ]
+    )
+    def test_loader_raises(self, _name, env_kwargs, pattern):
+        # The loader delegates gating to `is_sonicmoe_loadable(raise_error=True)`, then resolves symbols;
+        # confirm each failure surfaces through `load_sonicmoe_kernel`.
+        with self._env(**env_kwargs), self.assertRaisesRegex(ImportError, pattern):
+            sm.load_sonicmoe_kernel()
 
     def test_loader_is_compile_safe(self):
         # Cold path: the compiled call is first to load, so the opaque loader node runs its full body
@@ -188,23 +185,11 @@ class SonicMoeLoaderTest(unittest.TestCase):
             out = run(torch.zeros(3, device=torch_device))
         self.assertTrue(torch.equal(out, torch.ones(3, device=torch_device)))
 
-
-@require_torch
-class SonicMoeCompileSafetyTest(unittest.TestCase):
-    """`_sonicmoe_wrapper`'s `@allow_in_graph` must keep the CuteDSL dispatch opaque under torch.compile —
-    sonic-moe's kernel asserts `not is_compiling()`. This targets the wrapper directly (not the full
-    forward, which requires a CUDA device); the wrapper has no device dependency, so — like the loader
-    compile-safety tests above — it needs no GPU.
-    """
-
-    def setUp(self):
-        sm._SONICMOE = None
-        self.addCleanup(setattr, sm, "_SONICMOE", None)
-
-    def test_wrapper_shields_kernel_dispatch(self):
-        # The mocked dispatch asserts it isn't tracing; if the wrapper ever lost its `@allow_in_graph`,
-        # Dynamo would trace in, `is_compiling()` would be True, and the assert would fire. Args past
-        # `hidden_states` are dummies — the fake only reads `hidden_states` (for `zeros_like`).
+    def test_wrapper_is_compile_safe(self):
+        # `_sonicmoe_wrapper`'s `@allow_in_graph` must keep the CuteDSL dispatch opaque — sonic-moe's
+        # kernel asserts `not is_compiling()`. Targets the wrapper directly (not the full forward, which
+        # requires a CUDA device); the wrapper has no device dependency, so like the loader tests above it
+        # needs no GPU. Args past `hidden_states` are dummies — the fake only reads it (for `zeros_like`).
         def fake_moe(hidden_states, *args, **kwargs):
             assert not torch.compiler.is_compiling()
             return torch.zeros_like(hidden_states), None
@@ -220,38 +205,6 @@ class SonicMoeCompileSafetyTest(unittest.TestCase):
 
             out = run(torch.zeros(6, 8, dtype=torch.bfloat16, device=torch_device))
         self.assertEqual(out.shape, (6, 8))
-
-
-def _make_experts(
-    *,
-    num_experts=4,
-    hidden=8,
-    inter=16,
-    has_bias=False,
-    is_transposed=False,
-    is_concatenated=True,
-    hidden_act="silu",
-    dtype=torch.bfloat16,
-    device=torch_device,
-):
-    if is_transposed:
-        gate_up = torch.randn(num_experts, hidden, 2 * inter, dtype=dtype, device=device)
-        down = torch.randn(num_experts, inter, hidden, dtype=dtype, device=device)
-    else:
-        gate_up = torch.randn(num_experts, 2 * inter, hidden, dtype=dtype, device=device)
-        down = torch.randn(num_experts, hidden, inter, dtype=dtype, device=device)
-    return types.SimpleNamespace(
-        has_gate=True,
-        has_bias=has_bias,
-        gate_up_proj=gate_up,
-        down_proj=down,
-        gate_up_proj_bias=torch.randn(num_experts, 2 * inter, dtype=dtype, device=device) if has_bias else None,
-        down_proj_bias=torch.randn(num_experts, hidden, dtype=dtype, device=device) if has_bias else None,
-        config=types.SimpleNamespace(hidden_act=hidden_act),
-        is_transposed=is_transposed,
-        num_experts=num_experts,
-        is_concatenated=is_concatenated,
-    )
 
 
 @require_torch_gpu
@@ -319,7 +272,7 @@ class SonicMoeExpertsForwardTest(unittest.TestCase):
         return out, captured, hidden_states, top_k_index, top_k_weights
 
     def test_forward_marshals_routing_and_weights(self):
-        experts = _make_experts(num_experts=4, hidden=8, inter=16)
+        experts = make_experts(num_experts=4, hidden=8, inter=16)
         _, captured, _, top_k_index, top_k_weights = self._run(experts, num_tokens=3, top_k=2)
 
         # Routing is flattened to (num_tokens * top_k,): token_idx repeats each token index top_k times
@@ -339,14 +292,14 @@ class SonicMoeExpertsForwardTest(unittest.TestCase):
     def test_forward_passes_sentinel_expert_ids_unclamped(self):
         # EP sentinels (expert_ids >= num_experts) must reach the kernel unclamped — unlike the eager
         # path, sonic-moe drops them in its metadata stage. Regression guard against a stray clamp.
-        experts = _make_experts(num_experts=4, hidden=8, inter=16)
+        experts = make_experts(num_experts=4, hidden=8, inter=16)
         top_k_index = torch.tensor([[0, 4], [1, 4], [2, 4]], device=torch_device)  # 4 == num_experts -> sentinel
         _, captured, _, _, _ = self._run(experts, top_k_index=top_k_index)
         self.assertTrue(torch.equal(captured["expert_ids"], top_k_index.reshape(-1).int()))
         self.assertEqual(int(captured["expert_ids"].max()), 4)
 
     def test_forward_sets_inference_mode_flag(self):
-        experts = _make_experts(num_experts=4, hidden=8, inter=16)
+        experts = make_experts(num_experts=4, hidden=8, inter=16)
         with torch.no_grad():
             _, captured, _, _, _ = self._run(experts)
         self.assertTrue(captured["is_inference_mode_enabled"])
@@ -355,16 +308,12 @@ class SonicMoeExpertsForwardTest(unittest.TestCase):
         self.assertFalse(captured["is_inference_mode_enabled"])
 
     def test_forward_with_bias(self):
-        experts = _make_experts(num_experts=4, hidden=8, inter=16, has_bias=True)
+        experts = make_experts(num_experts=4, hidden=8, inter=16, has_bias=True)
         _, captured, _, _, _ = self._run(experts)
         self.assertTrue(torch.equal(captured["b1"], experts.gate_up_proj_bias))
         self.assertTrue(torch.equal(captured["b2"], experts.down_proj_bias))
 
     def test_forward_raises_on_unsupported_activation(self):
-        experts = _make_experts(hidden_act="tanh")
+        experts = make_experts(hidden_act="tanh")
         with self.assertRaisesRegex(ValueError, "does not support the 'tanh' activation"):
             self._run(experts)
-
-
-if __name__ == "__main__":
-    unittest.main()
