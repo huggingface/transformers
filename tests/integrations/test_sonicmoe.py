@@ -18,10 +18,10 @@ Two layers, both mocking only what needs a Hopper GPU + CuteDSL / `nvidia-cutlas
 * `SonicMoeLoaderTest` mocks the environment probes and `lazy_load_kernel` to drive
   `load_sonicmoe_kernel` with no GPU — asserting it gates correctly (raises when a precondition is
   unmet, returns the bundle otherwise) and stays torch-compile safe.
-* `SonicMoeExpertsForwardTest` mocks only the kernel dispatch (`moe_general_routing_inputs`) to return
-  a correctly shaped output, and runs the real `sonicmoe_experts_forward` on a CUDA device so its
-  weight-permutation / routing-flatten / dtype-cast glue executes for real; it then asserts the tensors
-  handed to the kernel are what the kernel expects (int32 indices, permuted weights, ...).
+* `SonicMoeForwardTest` mocks only the kernel dispatch (`moe_general_routing_inputs`) to return
+  a correctly shaped output, and runs the real `sonicmoe_experts_forward` so its weight-permutation /
+  routing-flatten / dtype-cast glue executes for real (device-agnostic, so it runs on CPU); it then
+  asserts the tensors handed to the kernel are what the kernel expects (int32 indices, permuted weights).
 """
 
 import contextlib
@@ -36,7 +36,7 @@ from test_utils import make_experts
 
 import transformers.integrations.sonicmoe as sm
 from transformers.integrations.sonicmoe import sonicmoe_experts_forward
-from transformers.testing_utils import require_torch, require_torch_gpu, torch_device
+from transformers.testing_utils import require_torch, torch_device
 
 
 class _FakeActivationType:
@@ -207,8 +207,8 @@ class SonicMoeLoaderTest(unittest.TestCase):
         self.assertEqual(out.shape, (6, 8))
 
 
-@require_torch_gpu
-class SonicMoeExpertsForwardTest(unittest.TestCase):
+@require_torch
+class SonicMoeForwardTest(unittest.TestCase):
     """Drives the real `sonicmoe_experts_forward` with only `moe_general_routing_inputs` mocked."""
 
     def setUp(self):

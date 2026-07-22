@@ -203,8 +203,6 @@ def sonicmoe_experts_forward(
 ) -> torch.Tensor:
     if not self.has_gate:
         raise ValueError("sonicmoe requires gated experts (has_gate=True)")
-    if hidden_states.device.type != "cuda":
-        raise ValueError("sonicmoe requires CUDA device")
 
     device = hidden_states.device
     num_top_k = top_k_index.size(-1)

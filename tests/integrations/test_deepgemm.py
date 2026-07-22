@@ -22,14 +22,15 @@ Two layers, both mocking only what needs a Hopper/Blackwell GPU + a JIT CUDA too
   and stays torch-compile safe. Copied verbatim from `tests/test_kernel_loaders.py`.
 * `DeepGemmForwardTest` mocks only the loaded-kernel ops (the `DeepGEMM` bundle callables:
   `per_token_cast_to_fp8`, `fp8_fp4_matmul`, the grouped GEMMs, the Mega MoE ops) to return
-  correctly shaped tensors, and runs the REAL public forwards on a CUDA device so their scale-factor
-  coercion / TMA-aligned grouped layout / weight-selection / dtype-cast glue executes for real; it
-  then asserts the tensors handed to the kernel are what the kernel expects (packed int32 UE8M0 SFs,
-  int32 grouped layout, `(qtensor, sf)` operand tuples, recipes, transformed Mega MoE weights, ...).
+  correctly shaped tensors, and runs the REAL public forwards so their scale-factor coercion /
+  TMA-aligned grouped layout / weight-selection / dtype-cast glue executes for real (device-agnostic,
+  so it runs on CPU); it then asserts the tensors handed to the kernel are what the kernel expects
+  (packed int32 UE8M0 SFs, int32 grouped layout, `(qtensor, sf)` operand tuples, recipes, transformed
+  Mega MoE weights, ...).
 
 Arch-gated paths are exercised by faking the device capability (`is_sm100()` reads it): the
-SF-packing / TMA-alignment / psum-layout code it selects is pure tensor arithmetic that runs on any
-CUDA device, so mocking the capability to SM100 drives the Blackwell paths on this SM80 box.
+SF-packing / TMA-alignment / psum-layout code it selects is pure tensor arithmetic, so mocking the
+capability to SM100 drives the Blackwell paths on any device.
 """
 
 import contextlib
@@ -53,7 +54,6 @@ from transformers.integrations.deepgemm import (
 )
 from transformers.testing_utils import (
     require_torch,
-    require_torch_gpu,
     require_torch_greater_or_equal,
     torch_device,
 )
@@ -322,7 +322,7 @@ def _make_bundle(captured):
     )
 
 
-@require_torch_gpu
+@require_torch
 class DeepGemmForwardTest(unittest.TestCase):
     """Drives the real public forwards with only the loaded-kernel ops mocked."""
 

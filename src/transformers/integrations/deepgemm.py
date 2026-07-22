@@ -472,7 +472,9 @@ def _build_deepgemm_contiguous_layout(
     device = expert_ids_sorted.device
     num_tokens = expert_ids_sorted.size(0)
     # `histc` drops values > max, so EP sentinels (== num_experts) don't count.
-    tokens_per_expert = torch.histc(expert_ids_sorted.int(), bins=num_experts, min=0, max=num_experts - 1).long()
+    # CPU requires float input, CUDA requires int input (deterministic mode).
+    histc_input = expert_ids_sorted.float() if device.type == "cpu" else expert_ids_sorted.int()
+    tokens_per_expert = torch.histc(histc_input, bins=num_experts, min=0, max=num_experts - 1).long()
     aligned_tokens_per_expert = ((tokens_per_expert + alignment - 1) // alignment) * alignment
     # Upper bound — avoids GPU→CPU sync; padding rows are skipped.
     total_padded_rows = num_tokens + min(num_tokens, num_experts) * (alignment - 1)

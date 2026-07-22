@@ -20,9 +20,9 @@ Two layers, both mocking only what needs the `kernels-community/finegrained-fp8`
   precondition is unmet, returns the bundle otherwise) and stays torch-compile safe.
 * `FinegrainedFp8ForwardTest` mocks only the loaded kernel bundle (`matmul` / `batched_matmul` /
   `grouped_matmul`) with capturing fakes that return correctly-shaped tensors, and runs the real
-  `finegrained_fp8_linear`, `fp8_batched_mm_experts_forward` and `fp8_grouped_mm_experts_forward` on a
-  CUDA device so their repeat-interleave / routing-flatten / sort-and-histogram / gating / sentinel-mask
-  / reshape-sum glue executes for real; it then asserts the tensors handed to the kernel are what the
+  `finegrained_fp8_linear`, `fp8_batched_mm_experts_forward` and `fp8_grouped_mm_experts_forward` so
+  their repeat-interleave / routing-flatten / sort-and-histogram / gating / sentinel-mask / reshape-sum
+  glue executes for real (device-agnostic, so it runs on CPU); it then asserts the tensors handed to the kernel are what the
   kernel expects (flattened routing, unclamped sentinels, weight/scale pairing, ...) and
   the value-exact output the surrounding marshalling produces.
 """
@@ -41,7 +41,7 @@ from transformers.integrations.finegrained_fp8 import (
     fp8_batched_mm_experts_forward,
     fp8_grouped_mm_experts_forward,
 )
-from transformers.testing_utils import require_torch, require_torch_gpu, torch_device
+from transformers.testing_utils import require_torch, torch_device
 
 
 def _add_one(x, *args, **kwargs):
@@ -120,7 +120,7 @@ class FinegrainedFp8LoaderTest(unittest.TestCase):
         self.assertTrue(torch.equal(out, torch.ones(3, device=torch_device)))
 
 
-@require_torch_gpu
+@require_torch
 class FinegrainedFp8ForwardTest(unittest.TestCase):
     """Drives the real finegrained-fp8 forwards with only the loaded kernel bundle mocked."""
 
@@ -329,8 +329,10 @@ class FinegrainedFp8ForwardTest(unittest.TestCase):
         self.assertIs(down["weight_scale"], experts.down_proj_scale_inv)
 
         # offsets / tokens_per_expert are the per-expert histogram over the sorted expert ids.
+        # CPU histc requires float input, CUDA requires int (matches the source's dispatch).
         expert_ids_g, _ = torch.sort(top_k_index.reshape(-1))
-        expected_tpe = torch.histc(expert_ids_g.int(), bins=experts.num_experts, min=0, max=experts.num_experts - 1)
+        histc_input = expert_ids_g.float() if expert_ids_g.device.type == "cpu" else expert_ids_g.int()
+        expected_tpe = torch.histc(histc_input, bins=experts.num_experts, min=0, max=experts.num_experts - 1)
         expected_offsets = torch.cumsum(expected_tpe, dim=0, dtype=torch.int32)
         self.assertTrue(torch.equal(up["tokens_per_expert"], expected_tpe))
         self.assertTrue(torch.equal(up["offsets"], expected_offsets))
