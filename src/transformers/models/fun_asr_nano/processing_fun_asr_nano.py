@@ -31,20 +31,7 @@ if is_torch_available():
 
 
 class FunAsrNanoProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {
-        "audio_kwargs": {
-            "sampling_rate": 16000,
-            "return_attention_mask": True,
-            "padding": True,
-        },
-        "text_kwargs": {
-            "padding": True,
-        },
-        "common_kwargs": {
-            "return_tensors": "pt",
-            "padding_side": "left",
-        },
-    }
+    _defaults = {}
 
 
 @auto_docstring
@@ -221,10 +208,6 @@ class FunAsrNanoProcessor(ProcessorMixin):
         if isinstance(decoded, str):
             return self._strip_assistant_prefix_and_quotes(decoded)
         return [self._strip_assistant_prefix_and_quotes(text) for text in decoded]
-
-    def batch_decode(self, *args, **kwargs):
-        """BC as previous examples used batch_decode"""
-        return self.decode(*args, **kwargs)
 
     def _strip_assistant_prefix_and_quotes(self, text: str) -> str:
         """
