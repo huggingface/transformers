@@ -175,7 +175,7 @@ class CircleCIJob:
         junit_flags = " -p no:warning -o junit_family=xunit1 --junitxml=test-results/junit.xml"
         joined_flaky_patterns = "|".join(FLAKY_TEST_FAILURE_PATTERNS)
         repeat_on_failure_flags = f"--reruns 5 --reruns-delay 2 --only-rerun '({joined_flaky_patterns})'"
-        parallel = f" << pipeline.parameters.{self.job_name}_parallelism >> "
+        parallel = f"<< pipeline.parameters.{self.job_name}_parallelism >>"
         steps = [
             "checkout",
             {"attach_workspace": {"at": "test_preparation"}},
@@ -485,8 +485,8 @@ def create_circleci_config(folder=None):
     with open(os.path.join(folder, "generated_config.yml"), "w", encoding="utf-8") as f:
         f.write(
             yaml.dump(config, sort_keys=False, default_flow_style=False)
-            .replace("' << pipeline", " << pipeline")
-            .replace(">> '", " >>")
+            .replace("'<< pipeline", "<< pipeline")
+            .replace(">>'", ">>")
         )
 
 
