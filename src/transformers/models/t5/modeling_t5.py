@@ -544,7 +544,7 @@ class T5PreTrainedModel(PreTrainedModel):
     _supports_flash_attn = False
     _supports_flex_attn = True
     _supports_sdpa = True
-    _can_compile_fullgraph = False
+    _can_compile_fullgraph = True
 
     _can_record_outputs = {
         "hidden_states": OutputRecorder(T5Block, index=0),
