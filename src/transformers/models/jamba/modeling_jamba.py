@@ -362,7 +362,6 @@ class JambaMambaMixer(nn.Module):
         hidden_states: torch.Tensor,
         cache_params: Cache | None = None,
         attention_mask: torch.Tensor | None = None,
-        seq_idx: torch.IntTensor | None = None,
         **kwargs,
     ):
         # Note: we cannot use `mamba_inner_fn` as in mamba even if in training and without cache params because we have the
