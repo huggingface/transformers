@@ -221,11 +221,6 @@ processor = AutoProcessor.from_pretrained("naver-hyperclovax/HyperCLOVAX-SEED-Th
 
 [[autodoc]] HyperCLOVAXVisionV2Config
 
-    - preprocess
-
-    - preprocess
-
-
 ## HyperCLOVAXVisionV2Processor
 
 [[autodoc]] HyperCLOVAXVisionV2Processor
