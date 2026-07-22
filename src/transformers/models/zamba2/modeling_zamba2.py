@@ -839,7 +839,6 @@ class Zamba2MambaMixer(nn.Module):
 
             decay_chunk = decay_chunk.transpose(1, 3)
             new_states = (decay_chunk[..., None, None] * states[:, :, None, ...]).sum(dim=1)
-            
             states, ssm_state = new_states[:, :-1], new_states[:, -1]
 
             # Compute state -> output conversion per chunk
