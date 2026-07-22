@@ -898,9 +898,11 @@ ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING = r"""
               [What are attention masks?](../glossary#attention-mask)
 
             - **overflowing_tokens** -- List of overflowing tokens sequences (when a `max_length` is specified and
-              `return_overflowing_tokens=True`).
+              `return_overflowing_tokens=True`). Produced by slow tokenizer.
             - **num_truncated_tokens** -- Number of tokens truncated (when a `max_length` is specified and
-              `return_overflowing_tokens=True`).
+              `return_overflowing_tokens=True`). Produced by slow tokenizer.
+            - **overflow_to_sample_mapping** -- List of integers mapping each overflowing sequence back to the
+              original sample index (returned by fast tokenizers when `return_overflowing_tokens=True`).
             - **special_tokens_mask** -- List of 0s and 1s, with 1 specifying added special tokens and 0 specifying
               regular sequence tokens (when `add_special_tokens=True` and `return_special_tokens_mask=True`).
             - **length** -- The length of the inputs (when `return_length=True`)
