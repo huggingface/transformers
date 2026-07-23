@@ -428,11 +428,6 @@ class Gemma4UnifiedTextConfig(Gemma4TextConfig):
         Controls bidirectional attention behavior. When set to `"vision"`, vision tokens
         attend bidirectionally while text tokens use causal attention. When set to `"all"`,
         all tokens use bidirectional attention.
-    num_global_key_value_heads (`int`, *optional*):
-        Number of key-value heads for global (full) attention layers. If `None`, defaults
-        to `num_key_value_heads`.
-    global_head_dim (`int`, defaults to 512):
-        Dimension of each attention head in global (full) attention layers.
     attention_k_eq_v (`bool`, defaults to `False`):
         Whether keys and values share the same projection weights. When `True`, the key
         projection output is reused as the value projection.
@@ -638,11 +633,8 @@ class Gemma4UnifiedPreTrainedModel(Gemma4PreTrainedModel):
         PreTrainedModel._init_weights(self, module)
         if isinstance(module, Gemma4UnifiedTextRotaryEmbedding):
             for layer_type, rope_init_fn in module.rope_init_fns.items():
-                rope_init_fn_kwargs = {"layer_type": layer_type}
-                if layer_type == "full_attention" and module.rope_type[layer_type] == "proportional":
-                    rope_init_fn_kwargs["head_dim_key"] = "global_head_dim"
-
-                curr_inv_freq, _ = rope_init_fn(module.config, **rope_init_fn_kwargs)
+                rope_config = module.config.per_layer_config[layer_type]
+                curr_inv_freq, _ = rope_init_fn(rope_config, layer_type=layer_type)
                 getattr(module, f"{layer_type}_inv_freq").copy_(curr_inv_freq)
                 getattr(module, f"{layer_type}_original_inv_freq").copy_(curr_inv_freq)
         elif isinstance(module, Gemma4UnifiedTextScaledWordEmbedding):

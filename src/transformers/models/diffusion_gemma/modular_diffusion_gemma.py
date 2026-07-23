@@ -83,11 +83,6 @@ class DiffusionGemmaTextConfig(Gemma4TextConfig):
         Controls bidirectional attention behavior. When set to `"vision"`, vision tokens
         attend bidirectionally while text tokens use causal attention. When set to `"all"`,
         all tokens use bidirectional attention.
-    num_global_key_value_heads (`int`, *optional*):
-        Number of key-value heads for global (full) attention layers. If `None`, defaults
-        to `num_key_value_heads`.
-    global_head_dim (`int`, defaults to 512):
-        Dimension of each attention head in global (full) attention layers.
     top_k_experts (`int`, *optional*):
         Number of experts activated per token in MoE layers.
     moe_intermediate_size (`int`, *optional*):
@@ -222,8 +217,9 @@ class DiffusionGemmaEncoderTextAttention(nn.Module):
         self.is_sliding = self.layer_type == "sliding_attention"
         self.sliding_window = config.sliding_window if self.is_sliding else None
 
-        self.head_dim = config.global_head_dim if not self.is_sliding and config.global_head_dim else config.head_dim
-        num_key_value_heads = config.num_global_key_value_heads if not self.is_sliding else config.num_key_value_heads
+        layer_config = config.per_layer_config[layer_idx]
+        self.head_dim = layer_config.head_dim
+        num_key_value_heads = layer_config.num_key_value_heads
         self.num_key_value_groups = config.num_attention_heads // num_key_value_heads
         self.scaling = 1.0
         self.attention_dropout = self.config.attention_dropout
@@ -323,8 +319,9 @@ class DiffusionGemmaDecoderTextAttention(nn.Module):
         self.is_sliding = self.layer_type == "sliding_attention"
         self.sliding_window = config.sliding_window if self.is_sliding else None
 
-        self.head_dim = config.global_head_dim if not self.is_sliding and config.global_head_dim else config.head_dim
-        num_key_value_heads = config.num_global_key_value_heads if not self.is_sliding else config.num_key_value_heads
+        layer_config = config.per_layer_config[layer_idx]
+        self.head_dim = layer_config.head_dim
+        num_key_value_heads = layer_config.num_key_value_heads
         self.num_key_value_groups = config.num_attention_heads // num_key_value_heads
         self.scaling = 1.0
         self.attention_dropout = self.config.attention_dropout
@@ -670,11 +667,8 @@ class DiffusionGemmaPreTrainedModel(T5Gemma2PreTrainedModel):
         PreTrainedModel._init_weights(module)
         if isinstance(module, DiffusionGemmaTextRotaryEmbedding):
             for layer_type, rope_init_fn in module.rope_init_fns.items():
-                rope_init_fn_kwargs = {"layer_type": layer_type}
-                if layer_type == "full_attention" and module.rope_type[layer_type] == "proportional":
-                    rope_init_fn_kwargs["head_dim_key"] = "global_head_dim"
-
-                curr_inv_freq, _ = rope_init_fn(module.config, **rope_init_fn_kwargs)
+                rope_config = module.config.per_layer_config[layer_type]
+                curr_inv_freq, _ = rope_init_fn(rope_config, layer_type=layer_type)
                 init.copy_(getattr(module, f"{layer_type}_inv_freq"), curr_inv_freq)
                 init.copy_(getattr(module, f"{layer_type}_original_inv_freq"), curr_inv_freq)
 

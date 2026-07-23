@@ -155,8 +155,10 @@ class TestHeterogeneousConfig(unittest.TestCase):
         config.intermediate_size = 192
 
         self.assertIs(type(config.per_layer_config[0]), type(config))
-        self.assertFalse(config.per_layer_config[0].is_heterogeneous)
-        self.assertIsNone(config.per_layer_config[0].per_layer_config)
+        resolved_layer_config = config.per_layer_config[0]
+        self.assertFalse(resolved_layer_config.is_heterogeneous)
+        # A homogeneous (resolved) config's per-layer view returns the config itself for any layer.
+        self.assertIs(resolved_layer_config.per_layer_config[0], resolved_layer_config)
         self.assertEqual(config.per_layer_config[0]._attn_implementation, "sdpa")
         self.assertEqual(config.per_layer_config[1]._attn_implementation, "sdpa")
         self.assertEqual(config.per_layer_config[0].hidden_size, 96)
