@@ -23,6 +23,7 @@ import os
 import re
 import shutil
 import tempfile
+import time
 import traceback
 from pathlib import Path
 
@@ -53,6 +54,7 @@ from transformers import (
 from transformers.feature_extraction_utils import FeatureExtractionMixin
 from transformers.file_utils import is_torch_available
 from transformers.image_processing_utils import BaseImageProcessor
+from transformers.video_processing_utils import BaseVideoProcessor
 from transformers.image_utils import SizeDict
 from transformers.models.auto.configuration_auto import AutoConfig, model_type_to_module_name
 from transformers.processing_utils import ProcessorMixin, transformers_module
@@ -386,8 +388,12 @@ def build_processor(config_class, processor_class, allow_no_checkpoint=False):
     try:
         revision = CHECKPOINT_REVISIONS.get(config_class.__name__)
         sub_folder = CHECKPOINT_SUBFOLDERS.get(config_class.__name__, "")
+        _t0 = time.time()
+        print(f"[build_processor] trying {processor_class.__name__}.from_pretrained({checkpoint!r})", flush=True)
         processor = processor_class.from_pretrained(checkpoint, revision=revision, subfolder=sub_folder)
+        print(f"[build_processor] OK  {processor_class.__name__} in {time.time() - _t0:.1f}s", flush=True)
     except Exception as e:
+        print(f"[build_processor] FAIL {processor_class.__name__} in {time.time() - _t0:.1f}s — {e.__class__.__name__}: {e}", flush=True)
         logger.error(f"{e.__class__.__name__}: {e}")
 
     # Try to get a new processor class from checkpoint. This is helpful for a checkpoint without necessary file to load
@@ -403,8 +409,12 @@ def build_processor(config_class, processor_class, allow_no_checkpoint=False):
     ):
         try:
             revision = CHECKPOINT_REVISIONS.get(config_class.__name__)
+            _t0 = time.time()
+            print(f"[build_processor] trying AutoConfig.from_pretrained({checkpoint!r})", flush=True)
             config = AutoConfig.from_pretrained(checkpoint, revision=revision)
+            print(f"[build_processor] OK  AutoConfig in {time.time() - _t0:.1f}s", flush=True)
         except Exception as e:
+            print(f"[build_processor] FAIL AutoConfig in {time.time() - _t0:.1f}s — {e.__class__.__name__}: {e}", flush=True)
             logger.error(f"{e.__class__.__name__}: {e}")
             config = None
         if config is not None:
@@ -1468,15 +1478,36 @@ def _build_inner(config_class, models_to_create, output_dir, keep_model=False):
 
     traces = []
     errors = []
+    print(f"[processor_loop] {config_class.__name__}: will try {len(processor_classes)} processor class(es): {[pc.__name__ for pc in processor_classes]}", flush=True)
     for processor_class in processor_classes:
+        _loop_t0 = time.time()
+        # Skip Auto classes if we already have a loaded processor of the same category.
+        # Auto classes are fallbacks; if an explicit class already succeeded there is no need to
+        # load again (e.g. TokenizersBackend + AutoTokenizer both convert from tokenizer.model).
+        already_loaded = list(result["processor"].keys())
+        if processor_class is AutoTokenizer and any(issubclass(t, PreTrainedTokenizerBase) for t in already_loaded):
+            print(f"[processor_loop] SKIP  {processor_class.__name__} (tokenizer already loaded)", flush=True)
+            continue
+        if processor_class is AutoImageProcessor and any(issubclass(t, BaseImageProcessor) for t in already_loaded):
+            print(f"[processor_loop] SKIP  {processor_class.__name__} (image processor already loaded)", flush=True)
+            continue
+        if processor_class is AutoFeatureExtractor and any(issubclass(t, FeatureExtractionMixin) for t in already_loaded):
+            print(f"[processor_loop] SKIP  {processor_class.__name__} (feature extractor already loaded)", flush=True)
+            continue
+        if processor_class is AutoVideoProcessor and any(issubclass(t, BaseVideoProcessor) for t in already_loaded):
+            print(f"[processor_loop] SKIP  {processor_class.__name__} (video processor already loaded)", flush=True)
+            continue
+        print(f"[processor_loop] START {processor_class.__name__}", flush=True)
         try:
             processor = build_processor(config_class, processor_class, allow_no_checkpoint=True)
             if processor is not None:
                 if type(processor) not in result["processor"]:
                     result["processor"][type(processor)] = processor
+            print(f"[processor_loop] END   {processor_class.__name__} in {time.time() - _loop_t0:.1f}s → {type(processor).__name__ if processor is not None else 'None'}", flush=True)
         except Exception:
             error = f"Failed to build processor for {processor_class.__name__}."
             trace = traceback.format_exc()
+            print(f"[processor_loop] FAIL  {processor_class.__name__} in {time.time() - _loop_t0:.1f}s", flush=True)
             errors.append(error)
             traces.append(trace)
             # fill_result_with_error(result, error, trace, models_to_create)
