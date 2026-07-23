@@ -14,6 +14,8 @@
 """Testing suite for the PyTorch MiniMax-M3-VL model."""
 
 import copy
+import shutil
+import tempfile
 import unittest
 
 from parameterized import parameterized
@@ -480,6 +482,11 @@ class MiniMaxM3VLIntegrationTest(unittest.TestCase):
         # disabling it routes SDPA to the mem-efficient backend, which handles additive float masks.
         torch.backends.cuda.enable_cudnn_sdp(False)
 
+        # Provide a temporary offload folder so accelerate can re-save converted weights when the
+        # auto device_map decides some layers must live on disk (the MXFP8 MoE checkpoint uses
+        # internal weight conversions that differ from the on-disk format).
+        self._offload_folder = tempfile.mkdtemp()
+
         # Out-of-the-box load: the MXFP8 ``quantization_config`` (quant_method, weight_block_size,
         # and the ``ignored_layers`` skip-list) is read straight from the checkpoint's config.json
         # and dispatched automatically — no hand-built quant config, no manual dtype patching.
@@ -487,6 +494,7 @@ class MiniMaxM3VLIntegrationTest(unittest.TestCase):
             self.model_id,
             dtype=torch.bfloat16,
             device_map="auto",
+            offload_folder=self._offload_folder,
         )
         model.eval()
         return model
@@ -512,6 +520,11 @@ class MiniMaxM3VLIntegrationTest(unittest.TestCase):
         return processor.apply_chat_template(
             messages, add_generation_prompt=True, tokenize=False, thinking_mode="disabled"
         )
+
+    def tearDown(self):
+        super().tearDown()
+        if hasattr(self, "_offload_folder"):
+            shutil.rmtree(self._offload_folder, ignore_errors=True)
 
     def test_long_context_needle_token_match(self):
         """Long-context (>2048-token) text generation -- the only integration test that drives the
