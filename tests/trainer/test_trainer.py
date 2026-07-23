@@ -32,6 +32,8 @@ from transformers import (
     AutoModelForCausalLM,
     AutoModelForSequenceClassification,
     AutoTokenizer,
+    BartConfig,
+    BartForConditionalGeneration,
     BitsAndBytesConfig,
     DataCollatorForLanguageModeling,
     EarlyStoppingCallback,
@@ -46,7 +48,7 @@ from transformers import (
     logging,
 )
 from transformers.integrations import activate_neftune
-from transformers.loss.loss_utils import ForCausalLMLoss
+from transformers.loss.loss_utils import LOSS_MAPPING, ForCausalLMLoss
 from transformers.testing_utils import (
     CaptureLogger,
     LoggingLevel,
@@ -391,6 +393,47 @@ class TrainerGradientAccumulationTest(TestCasePlus, TrainerIntegrationCommon):
             self.assertFalse(trainer._loss_shifts_labels)
 
             # 5 valid + 8 valid = 13 (no shift).
+            batch_samples = [
+                {"labels": torch.tensor([[1, 2, 3, 4, 5, -100, -100, -100]])},
+                {"labels": torch.tensor([[1, 2, 3, 4, 5, 6, 7, 8]])},
+            ]
+            num_items = trainer._get_num_items_in_batch(batch_samples, torch.device("cpu"))
+            self.assertEqual(int(num_items), 13)
+
+    @require_torch_non_multi_accelerator
+    def test_num_items_in_batch_encoder_decoder(self):
+        """
+        Encoder-decoder LM heads compute their loss against unshifted `labels` -- their logits are aligned with
+        the targets (typically by right-shifting the decoder inputs), so the loss must not shift again. Their
+        class-name-inferred `loss_type` still maps to ForCausalLMLoss, which would drive the Trainer to count over
+        `labels[..., 1:]` and over-scale the loss; `_get_num_items_in_batch` must instead count the full label
+        tensor whenever `config.is_encoder_decoder`. Bart probes exactly that (`loss_type` -> ForCausalLMLoss,
+        `is_encoder_decoder` True) combination -- though Bart's own forward computes the aligned loss with
+        `CrossEntropyLoss` rather than routing through `ForCausalLMLoss`.
+        """
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            config = BartConfig(
+                vocab_size=64,
+                d_model=16,
+                encoder_layers=1,
+                decoder_layers=1,
+                encoder_attention_heads=1,
+                decoder_attention_heads=1,
+                encoder_ffn_dim=16,
+                decoder_ffn_dim=16,
+                max_position_embeddings=32,
+            )
+            model = BartForConditionalGeneration(config)
+            # loss_type routes to ForCausalLMLoss, but the model is encoder-decoder -> the count must NOT shift.
+            self.assertIs(LOSS_MAPPING.get(model.loss_type), ForCausalLMLoss)
+            self.assertTrue(model.config.is_encoder_decoder)
+            trainer = Trainer(
+                model=model,
+                args=TrainingArguments(output_dir=tmp_dir, per_device_train_batch_size=2),
+            )
+            self.assertFalse(trainer._loss_shifts_labels)
+
+            # 5 valid + 8 valid = 13, counted in full (no shift).
             batch_samples = [
                 {"labels": torch.tensor([[1, 2, 3, 4, 5, -100, -100, -100]])},
                 {"labels": torch.tensor([[1, 2, 3, 4, 5, 6, 7, 8]])},
