@@ -27,6 +27,7 @@ if is_torch_available():
     import torch
 
     from transformers import AutoProcessor, FunAsrNanoEncoder, FunAsrNanoForConditionalGeneration, FunAsrNanoModel
+    from transformers.conversion_mapping import get_checkpoint_conversion_mapping
     from transformers.modeling_layers import GradientCheckpointingLayer
     from transformers.models.audioflamingo3.modeling_audioflamingo3 import (
         AudioFlamingo3ForConditionalGeneration,
@@ -53,6 +54,7 @@ if is_torch_available():
     from transformers.models.fun_asr_nano.modular_fun_asr_nano import (
         FunAsrNanoPreTrainedModel as ModularFunAsrNanoPreTrainedModel,
     )
+    from transformers.models.qwen3_asr.modeling_qwen3_asr import Qwen3ASRAudioEncoderLayer
     from transformers.models.whisper.modeling_whisper import WhisperEncoderLayer
 
 
@@ -199,7 +201,7 @@ class FunAsrNanoForConditionalGenerationModelTest(ALMModelTest, unittest.TestCas
         self.assertTrue(
             issubclass(modular_fun_asr_nano.FunAsrNanoAttention, modular_fun_asr_nano.Qwen3ASRAudioAttention)
         )
-        self.assertTrue(issubclass(FunAsrNanoEncoderLayer, WhisperEncoderLayer))
+        self.assertTrue(issubclass(FunAsrNanoEncoderLayer, Qwen3ASRAudioEncoderLayer))
         self.assertEqual(attention.num_key_value_groups, 1)
         self.assertTrue(hasattr(attention, "attention_dropout"))
         self.assertTrue(issubclass(FunAsrNanoAdaptorLayer, WhisperEncoderLayer))
@@ -218,7 +220,19 @@ class FunAsrNanoForConditionalGenerationModelTest(ALMModelTest, unittest.TestCas
         self.assertTrue(hasattr(encoder.layers[0].self_attn, "q_proj"))
         self.assertTrue(hasattr(encoder.layers[0].self_attn, "k_proj"))
         self.assertTrue(hasattr(encoder.layers[0].self_attn, "v_proj"))
-        self.assertTrue(hasattr(encoder.layers[0], "fsmn"))
+        self.assertTrue(hasattr(encoder.layers[0], "feedforward_sequential_memory"))
+
+    def test_legacy_fsmn_checkpoint_keys_map_to_reviewed_component_name(self):
+        mapping = get_checkpoint_conversion_mapping("fun_asr_nano")
+
+        self.assertIsNotNone(mapping)
+        self.assertTrue(
+            any(
+                transform.source_patterns == [r"\.fsmn\."]
+                and transform.target_patterns == [".feedforward_sequential_memory."]
+                for transform in mapping
+            )
+        )
 
     def test_checkpoint_key_mapping_uses_standard_whisper_component_names(self):
         self.assertEqual(
