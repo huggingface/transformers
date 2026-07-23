@@ -3471,9 +3471,8 @@ class PreTrainedModel(
 
         # if any model parameters are offloaded, we need to know it for later
         is_offloaded = False
-        if (
-            hasattr(self, "hf_device_map")
-            and ("cpu" in self.hf_device_map.values() or "disk" in self.hf_device_map.values())
+        if hasattr(self, "hf_device_map") and (
+            "cpu" in self.hf_device_map.values() or "disk" in self.hf_device_map.values()
         ):
             is_offloaded = True
             warnings.warn(
