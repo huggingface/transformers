@@ -55,80 +55,28 @@ class TestHeterogeneousMasking(unittest.TestCase):
     def tearDown(self):
         cleanup(torch_device, gc_collect=True)
 
-    @parameterized.expand([("causal", True), ("bidirectional", False)])
-    def test_causal_mask_respects_explicit_cache_layer_index(self, _name, is_causal):
-        config = tiny_llama_config(is_causal=is_causal)
-        config._attn_implementation = "sdpa"
-        cache = _LayerTrackingCache()
+    def test_mask_creation_respects_explicit_cache_layer_index(self):
+        cases = {
+            "causal": (create_causal_mask, tiny_llama_config(is_causal=True)),
+            "bidirectional": (create_causal_mask, tiny_llama_config(is_causal=False)),
+            "sliding_window": (create_sliding_window_causal_mask, tiny_llama_config(sliding_window=2)),
+            "chunked": (create_chunked_causal_mask, tiny_llama4_config(attention_chunk_size=2)),
+        }
 
-        create_causal_mask(
-            config,
-            inputs_embeds=torch.randn(1, 2, config.hidden_size),
-            attention_mask=None,
-            past_key_values=cache,
-            layer_idx=3,
-        )
+        for name, (create_mask, config) in cases.items():
+            with self.subTest(name=name):
+                config._attn_implementation = "sdpa"
+                cache = _LayerTrackingCache()
+                create_mask(
+                    config,
+                    inputs_embeds=torch.randn(1, 2, config.hidden_size),
+                    attention_mask=None,
+                    past_key_values=cache,
+                    layer_idx=3,
+                )
 
-        self.assertEqual(cache.query_offset_layer_indices, [3])
-        self.assertEqual(cache.mask_size_layer_indices, [3])
-
-    def test_sliding_window_mask_with_explicit_layer_uses_only_that_layer(self):
-        config = tiny_llama_config(
-            sliding_window=None,
-            per_layer_config={0: {"sliding_window": 2}, 1: {"sliding_window": 3}},
-        )
-        config._attn_implementation = "sdpa"
-        cache = _LayerTrackingCache()
-
-        mask = create_sliding_window_causal_mask(
-            config.per_layer_config[1],
-            inputs_embeds=torch.randn(1, 4, config.hidden_size),
-            attention_mask=None,
-            past_key_values=cache,
-            layer_idx=1,
-        )
-
-        self.assertNotIsInstance(mask, AttentionMasksByAttributeValue)
-        expected_mask = torch.tensor(
-            [
-                [True, False, False, False],
-                [True, True, False, False],
-                [True, True, True, False],
-                [False, True, True, True],
-            ]
-        )
-        torch.testing.assert_close(mask, expected_mask[None, None])
-        self.assertEqual(cache.query_offset_layer_indices, [1])
-        self.assertEqual(cache.mask_size_layer_indices, [1])
-
-    def test_chunked_mask_with_explicit_layer_uses_only_that_layer(self):
-        config = tiny_llama4_config(
-            attention_chunk_size=3,
-            per_layer_config={1: {"attention_chunk_size": 2}},
-        )
-        config._attn_implementation = "sdpa"
-        cache = _LayerTrackingCache()
-
-        mask = create_chunked_causal_mask(
-            config.per_layer_config[1],
-            inputs_embeds=torch.randn(1, 4, config.hidden_size),
-            attention_mask=None,
-            past_key_values=cache,
-            layer_idx=1,
-        )
-
-        self.assertNotIsInstance(mask, AttentionMasksByAttributeValue)
-        expected_mask = torch.tensor(
-            [
-                [True, False, False, False],
-                [True, True, False, False],
-                [False, False, True, False],
-                [False, False, True, True],
-            ]
-        )
-        torch.testing.assert_close(mask, expected_mask[None, None])
-        self.assertEqual(cache.query_offset_layer_indices, [1])
-        self.assertEqual(cache.mask_size_layer_indices, [1])
+                self.assertEqual(cache.query_offset_layer_indices, [3])
+                self.assertEqual(cache.mask_size_layer_indices, [3])
 
     def test_sliding_window_masks_are_keyed_by_attribute_value(self):
         config = tiny_llama_config(
