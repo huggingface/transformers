@@ -38,7 +38,6 @@ if is_torch_available():
     import torch
 
     from transformers import (
-        AXK2Config,
         AXK2ForCausalLM,
         AXK2Model,
     )
@@ -201,48 +200,22 @@ class AXK2ModelTest(CausalLMModelTest, unittest.TestCase):
 @slow
 @require_torch_accelerator
 class AXK2IntegrationTest(unittest.TestCase):
-    # A.X-K2's released checkpoint is a 20B+ MoE that does not fit a CI GPU, so these tests build a small
-    # *randomized* model in-process from a fixed seed (no Hub download required). It exercises the full
-    # A.X-K2 stack: fused attention output gate, gated RMSNorm, and the SGA (sparse-gated) indexer.
-    def _build_tiny_model(self):
-        torch.manual_seed(0)
-        config = AXK2Config(
-            vocab_size=163840,
-            hidden_size=64,
-            intermediate_size=128,
-            moe_intermediate_size=32,
-            num_hidden_layers=4,
-            num_attention_heads=4,
-            num_key_value_heads=4,
-            n_routed_experts=16,
-            num_experts_per_tok=2,
-            first_k_dense_replace=1,
-            kv_lora_rank=16,
-            q_lora_rank=16,
-            qk_nope_head_dim=8,
-            qk_rope_head_dim=8,
-            v_head_dim=8,
-            index_n_heads=2,
-            index_head_dim=16,
-            index_topk=8,
-            attention_output_gate=True,
-            attn_gate_fused=True,
-            gated_norm=True,
-            gated_norm_rank=4,
-            max_position_embeddings=4096,
-        )
-        return AXK2ForCausalLM(config).to(torch_device).to(torch.bfloat16).eval()
+    # A.X-K2's released checkpoint is a 20B+ MoE that does not fit a CI GPU, so these tests run on a small
+    # *randomized* checkpoint (seeded, ~21M params) hosted on the Hub, generated with the same shapes as
+    # `AXK2ModelTester`. It exercises the full A.X-K2 stack: fused attention output gate, gated RMSNorm,
+    # and the SGA (sparse-gated) indexer.
+    model_id = "skt/A.X-K2-tiny-random"
 
     def test_generation(self):
         # Weights are randomly initialized so the decoded text is arbitrary; this just exercises the full
         # greedy generation loop end to end and checks the output shape.
-        model = self._build_tiny_model()
+        model = AXK2ForCausalLM.from_pretrained(self.model_id, dtype=torch.bfloat16, device_map="auto")
         input_ids = torch.tensor([[1, 2, 3, 4, 5, 6, 7, 8]], device=torch_device)
         generated_ids = model.generate(input_ids, max_new_tokens=20, do_sample=False)
         self.assertEqual(generated_ids.shape, (1, input_ids.shape[1] + 20))
 
     def test_model_logits_batched(self):
-        model = self._build_tiny_model()
+        model = AXK2ForCausalLM.from_pretrained(self.model_id, dtype=torch.bfloat16, device_map="auto")
         dummy_input = torch.LongTensor([[0, 0, 0, 0, 0, 0, 1, 2, 3], [1, 1, 2, 3, 4, 5, 6, 7, 8]]).to(torch_device)
         attention_mask = dummy_input.ne(0).to(torch.long)
 
