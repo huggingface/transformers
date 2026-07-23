@@ -899,6 +899,7 @@ ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING = r"""
 
             - **overflowing_tokens** -- List of overflowing tokens sequences (when a `max_length` is specified and
               `return_overflowing_tokens=True`).
+            - **overflow_to_sample_mapping** -- List of indices mapping each overflowing token to its corresponding input in the batch (when a `max_length` is specified and `return_overflowing_tokens=True`).
             - **num_truncated_tokens** -- Number of tokens truncated (when a `max_length` is specified and
               `return_overflowing_tokens=True`).
             - **special_tokens_mask** -- List of 0s and 1s, with 1 specifying added special tokens and 0 specifying
