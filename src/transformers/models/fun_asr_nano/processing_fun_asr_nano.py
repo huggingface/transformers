@@ -31,7 +31,11 @@ if is_torch_available():
 
 
 class FunAsrNanoProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {}
+    _defaults = {
+        "text_kwargs": {
+            "padding": True,
+        }
+    }
 
 
 @auto_docstring
@@ -161,7 +165,7 @@ class FunAsrNanoProcessor(ProcessorMixin):
             prompts = [self.default_transcription_prompt] * batch_size
         elif isinstance(prompt, str):
             prompts = [prompt] * batch_size
-        elif isinstance(prompt, (list, tuple)):
+        elif isinstance(prompt, list | tuple):
             if len(prompt) != batch_size:
                 raise ValueError(
                     f"Received {len(prompt)} prompt(s) for {batch_size} audio sample(s); counts must match."

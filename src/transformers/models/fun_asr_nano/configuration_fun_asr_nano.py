@@ -62,6 +62,7 @@ class FunAsrNanoEncoderConfig(PreTrainedConfig):
     activation_dropout: float = 0.1
     activation_function: str = "relu"
     kernel_size: int = 11
+    max_position_embeddings: int = 2049
 
     @property
     def input_size(self) -> int:
