@@ -1692,7 +1692,9 @@ class PreTrainedTokenizerBase(PushToHubMixin):
         elif pretrained_model_name_or_path and os.path.isdir(pretrained_model_name_or_path):
             remote_files = os.listdir(pretrained_model_name_or_path)
 
-        if "tokenizer_file" in vocab_files and not re.search(vocab_files["tokenizer_file"], "".join(remote_files)):
+        if "tokenizer_file" in vocab_files and not re.search(
+            re.escape(vocab_files["tokenizer_file"]), "".join(remote_files)
+        ):
             # mistral tokenizer names are different, but we can still convert them if
             # mistral common is not there
             other_pattern = r"tekken\.json|tokenizer\.model\.*|tiktoken\.model" + "|".join(
