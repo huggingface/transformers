@@ -3433,6 +3433,10 @@ class ModelTesterMixin(ExportTesterMixin):
     @slow
     @is_flaky()
     def test_flash_attn_kernels_inference_equivalence(self):
+        from kernels import has_kernel
+
+        if not has_kernel("kernels-community/flash-attn3", revision="main"):
+            self.skipTest("kernels-community/flash-attn3 has no build for this platform")
         self.flash_attn_inference_equivalence(attn_implementation="kernels-community/flash-attn3", padding_side="left")
 
     @require_torch_mps

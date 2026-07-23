@@ -757,6 +757,30 @@ def is_torchvision_v2_available() -> bool:
 
 
 @lru_cache
+def is_torchvision_image_decoder_available() -> bool:
+    """
+    Whether torchvision's native image decoders can actually decode PNG/JPEG. Some torchvision builds
+    (e.g. certain ROCm wheels) are compiled without libPNG/libJPEG, so `decode_image` / `read_image`
+    raise at runtime. We probe this once and cache the result.
+    """
+    if not is_torchvision_available():
+        return False
+    try:
+        import io
+
+        import torch
+        from PIL import Image
+        from torchvision.io import decode_image
+
+        buffer = io.BytesIO()
+        Image.new("RGB", (1, 1)).save(buffer, format="PNG")
+        decode_image(torch.frombuffer(buffer.getvalue(), dtype=torch.uint8))
+        return True
+    except Exception:
+        return False
+
+
+@lru_cache
 def is_torchvision_greater_or_equal(library_version: str) -> bool:
     if not is_torchvision_available():
         return False

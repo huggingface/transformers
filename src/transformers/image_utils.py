@@ -28,6 +28,7 @@ from .utils import (
     is_torch_available,
     is_torch_tensor,
     is_torchvision_available,
+    is_torchvision_image_decoder_available,
     is_vision_available,
     logging,
     requires_backends,
@@ -51,7 +52,7 @@ if is_vision_available():
     PILImageResampling = PIL.Image.Resampling
 
 if is_torchvision_available():
-    from torchvision.io import ImageReadMode, decode_image
+    from torchvision.io import ImageReadMode, decode_image, read_image
     from torchvision.transforms import InterpolationMode
     from torchvision.transforms.functional import pil_to_tensor
 
@@ -524,15 +525,25 @@ def load_image_as_tensor(
     Returns:
         `torch.Tensor`: A `[C, H, W]` uint8 tensor in RGB channel order.
     """
+    import io
+
     import torch
+
+    def _decode_rgb_tensor(tv_input, pil_source):
+        # Some torchvision builds (e.g. certain ROCm wheels) are compiled without libPNG/libJPEG, so
+        # the native decoders are unavailable. Use them when present, otherwise fall back to PIL,
+        # returning a `[C, H, W]` uint8 RGB tensor to match `decode_image`.
+        if is_torchvision_image_decoder_available():
+            return decode_image(tv_input, mode=ImageReadMode.RGB)
+        return pil_to_tensor(PIL.Image.open(pil_source).convert("RGB"))
 
     if isinstance(image, str):
         if image.startswith("http://") or image.startswith("https://"):
             raw = httpx.get(image, timeout=timeout, follow_redirects=True).content
             buf = torch.frombuffer(bytearray(raw), dtype=torch.uint8)
-            return decode_image(buf, mode=ImageReadMode.RGB)
+            return _decode_rgb_tensor(buf, io.BytesIO(raw))
         elif os.path.isfile(image):
-            return decode_image(image, mode=ImageReadMode.RGB)
+            return _decode_rgb_tensor(image, image)
         else:
             if image.startswith("data:image/"):
                 image = image.split(",")[1]
@@ -543,7 +554,7 @@ def load_image_as_tensor(
                     f"Incorrect image source. Must be a valid URL starting with `http://` or `https://`, a valid path to an image file, or a base64 encoded string. Got {image}. Failed with {e}"
                 )
             buf = torch.frombuffer(bytearray(raw), dtype=torch.uint8)
-            return decode_image(buf, mode=ImageReadMode.RGB)
+            return _decode_rgb_tensor(buf, io.BytesIO(raw))
     elif isinstance(image, PIL.Image.Image):
         image = PIL.ImageOps.exif_transpose(image)
         return pil_to_tensor(image.convert("RGB"))
@@ -551,6 +562,19 @@ def load_image_as_tensor(
         raise TypeError(
             "Incorrect format used for image. Should be a URL, a local path, a base64 string, or a PIL image."
         )
+
+
+def read_image_to_tensor(path: str) -> "torch.Tensor":
+    """
+    Read an image file into a `[C, H, W]` uint8 tensor.
+
+    Uses torchvision's native `read_image` when its decoders are available, and otherwise falls back
+    to PIL. Some torchvision builds (e.g. certain ROCm wheels) are compiled without libPNG/libJPEG,
+    so the native decoders are unavailable; see `is_torchvision_image_decoder_available`.
+    """
+    if is_torchvision_image_decoder_available():
+        return read_image(path)
+    return pil_to_tensor(PIL.Image.open(path).convert("RGB"))
 
 
 def load_images(
