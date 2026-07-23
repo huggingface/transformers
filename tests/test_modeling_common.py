@@ -53,10 +53,10 @@ from transformers.integrations.deepspeed import (
     unset_hf_deepspeed_config,
 )
 from transformers.integrations.moe import (
+    SONIC_MOE_HANDLE,
     batched_mm_experts_forward,
     deepgemm_bf16_experts_forward,
     grouped_mm_experts_forward,
-    sonicmoe_experts_forward,
 )
 from transformers.modeling_layers import GradientCheckpointingLayer
 from transformers.modeling_utils import FLASH_ATTN_KERNEL_FALLBACK, _get_tied_weight_keys
@@ -600,14 +600,9 @@ def _test_eager_matches_batched_and_grouped_inference(self, name, dtype):
             "grouped_mm": Mock(wraps=grouped_mm_experts_forward),
         }
 
-        if (
-            dtype != torch.float32
-            and is_kernels_available()
-            and torch.cuda.is_available()
-            and torch.cuda.get_device_capability() >= (9, 0)
-        ):
+        if dtype != torch.float32 and is_kernels_available() and SONIC_MOE_HANDLE.sonicmoe_is_available:
             # we also need nvidia-cutlass-dsl and apache-tvm-ffi
-            mocks["sonicmoe"] = Mock(wraps=sonicmoe_experts_forward)
+            mocks["sonicmoe"] = Mock(wraps=SONIC_MOE_HANDLE.sonicmoe_experts_forward)
             implementations.append("sonicmoe")
 
         nvcc_version = _get_nvcc_version() or (0, 0)

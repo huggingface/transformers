@@ -25,7 +25,7 @@ from ..utils.import_utils import (
     is_torchdynamo_compiling,
 )
 from .deepgemm import deepgemm_bf16_experts_forward
-from .sonicmoe import sonicmoe_experts_forward
+from .sonicmoe import SONIC_MOE_HANDLE
 
 
 if is_torch_available():
@@ -491,7 +491,7 @@ class ExpertsInterface(GeneralInterface):
         "deepgemm": deepgemm_bf16_experts_forward,
         "batched_mm": batched_mm_experts_forward,
         "grouped_mm": grouped_mm_experts_forward,
-        "sonicmoe": sonicmoe_experts_forward,
+        "sonicmoe": SONIC_MOE_HANDLE.sonicmoe_experts_forward,
     }
 
     def get_interface(self, experts_implementation: str, default: Callable) -> Callable:
