@@ -4471,6 +4471,7 @@ class PreTrainedModel(
                 unexpected_keys=set(),
                 mismatched_keys=set(),
                 conversion_errors={},
+                skipped_pp_keys=set(),
             )
         else:
             all_pointer = set()
@@ -4779,7 +4780,7 @@ class PreTrainedModel(
             param_device = get_device(device_map, key, valid_torch_device=True)
             value = torch.empty_like(param, device=param_device)
             # For TP, we may need to shard the param
-            if device_mesh is not None:
+            if device_mesh is not None and "tp" in device_mesh.mesh_dim_names:
                 shard_and_distribute_module(
                     self, value, param, key, None, False, device_mesh.get_local_rank(), device_mesh
                 )

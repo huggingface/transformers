@@ -28,12 +28,14 @@ from ..utils import is_torch_available, is_torch_greater_or_equal, logging
 from ..utils.hub import create_and_tag_model_card
 from .configuration_utils import DistributedConfig
 from .fsdp import apply_fully_sharded_data_parallelism, is_fsdp_managed_module
+from .pipeline_parallel import apply_pipeline_parallelism
 from .utils import (
     _distributed_barrier,
     _get_torch_distributed_rank,
     _is_torch_distributed_initialized,
     gather_full_state_dict,
     initialize_fully_sharded_data_parallelism,
+    initialize_pipeline_parallelism,
     save_model_checkpoint_distributed,
 )
 
@@ -178,6 +180,8 @@ class DistributedMixin:
             )
         elif distributed_config.fsdp_size > 1:
             device_map, device_mesh = initialize_fully_sharded_data_parallelism(distributed_config)
+        elif distributed_config.pp_size > 1:
+            device_map, device_mesh = initialize_pipeline_parallelism(distributed_config)
 
         distributed_config.validate()
         return distributed_config, device_map, device_mesh
@@ -204,6 +208,9 @@ class DistributedMixin:
             elif distributed_config.fsdp_size > 1:
                 fsdp_mesh = device_mesh["fsdp"] if device_mesh.ndim > 1 else device_mesh
                 model = apply_fully_sharded_data_parallelism(model, fsdp_mesh)
+            elif distributed_config.pp_size > 1:
+                pp_mesh = device_mesh["pp"] if device_mesh.ndim > 1 else device_mesh
+                model = apply_pipeline_parallelism(model, pp_mesh)
         return model
 
     def should_save_on_this_rank(self, is_main_process: bool) -> bool:

@@ -30,6 +30,7 @@ from typing import TYPE_CHECKING, Any
 
 import torch
 
+from .distributed.pipeline_parallel import PipelineStage
 from .distributed.sharding_utils import DtensorShardOperation, _dtensor_from_local_like
 from .integrations.accelerate import get_device, offload_weight
 from .integrations.tensor_parallel import ALL_PARALLEL_STYLES
@@ -1443,11 +1444,31 @@ def rename_source_key(
     return renamed_key, source_pattern
 
 
+def _add_unmatched_checkpoint_key(
+    key: str,
+    model: PreTrainedModel,
+    loading_info: LoadStateDictInfo,
+) -> None:
+    stage = PipelineStage.from_device_mesh(model._device_mesh)
+    if stage is None:
+        loading_info.unexpected_keys.add(key)
+        return
+
+    base_model = getattr(model, model.base_model_prefix)
+    owner_rank = stage.find_rank_for_key(key, len(base_model.layers), model.base_model_prefix)
+    owned_by_another_stage = owner_rank is not None and owner_rank != stage.pp_rank
+
+    if owned_by_another_stage:
+        loading_info.skipped_pp_keys.add(key)
+    else:
+        loading_info.unexpected_keys.add(key)
+
+
 def convert_and_load_state_dict_in_model(
     model: PreTrainedModel,
     state_dict: dict[str, Any],
     load_config: LoadStateDictConfig,
-    tp_plan: dict[str, str] | None,
+    tp_plan: dict[str, str] | None = None,
     disk_offload_index: dict | None = None,
 ):
     r"""
@@ -1556,6 +1577,7 @@ def convert_and_load_state_dict_in_model(
         mismatched_keys=set(),
         conversion_errors={},
         error_msgs=[],
+        skipped_pp_keys=set(),
     )
 
     # We use threading by default, if not explicitly deactivated via env variable. If we have to offload,
@@ -1661,7 +1683,7 @@ def convert_and_load_state_dict_in_model(
 
             if isinstance(empty_param, DTensor):
                 sharding_op = DtensorShardOperation(empty_param)
-            elif device_mesh and tp_plan:
+            elif device_mesh is not None and "tp" in device_mesh.mesh_dim_names:
                 if matched_tp_pattern := tp_plan_alt.search(renamed_key):
                     matched_tp_pattern = tp_plan_by_group_name[matched_tp_pattern.lastgroup]
                     if getattr(mapping, "distributed_operation", None) is None:
@@ -1685,9 +1707,13 @@ def convert_and_load_state_dict_in_model(
         elif source_pattern is not None:  # add all target keys as unexpected
             mapping = pattern_to_converter[source_pattern]
             for k in mapping.target_patterns:
-                loading_info.unexpected_keys.add(renamed_key.replace(mapping.target_patterns[0], k))
+                _add_unmatched_checkpoint_key(
+                    renamed_key.replace(mapping.target_patterns[0], k),
+                    model,
+                    loading_info,
+                )
         else:
-            loading_info.unexpected_keys.add(renamed_key)
+            _add_unmatched_checkpoint_key(renamed_key, model, loading_info)
 
     try:
         for first_param_name, mapping in tqdm(param_name_to_load.items(), desc="Loading weights"):
