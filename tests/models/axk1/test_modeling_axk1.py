@@ -80,6 +80,9 @@ class AXK1ModelTest(CausalLMModelTest, unittest.TestCase):
     # Routed experts that receive no token in a step get no gradient.
     test_all_params_have_gradient = False
     model_tester_class = AXK1ModelTester
+    # Need to use `0.8` instead of `0.9` for `test_cpu_offload`
+    # This is because we are hitting edge cases with the causal_mask buffer
+    model_split_percents = [0.5, 0.7, 0.8]
 
     def _check_past_key_values_for_generate(self, batch_size, past_key_values, seq_length, config):
         """Needs to be overridden as A.X-K1 has the MLA cache format (keys carry the rope+nope dims)."""
@@ -104,67 +107,33 @@ class AXK1ModelTest(CausalLMModelTest, unittest.TestCase):
 
 
 @slow
+@require_torch_accelerator
 class AXK1IntegrationTest(unittest.TestCase):
-    # The released checkpoint is a ~1T-parameter MoE: these tests need a large multi-GPU node
-    # (e.g. 16x80GB with `tp_plan="auto"` or `device_map="auto"`).
+    # A.X-K1 released checkpoints are huge MoEs (up to ~1T params), so the integration tests run on a
+    # small *randomized* checkpoint (seeded, ~21M params) that fits a single CI GPU. See the config in
+    # `AXK1ModelTester` — `AXK1-tiny-random` is generated with the same shapes and `torch.manual_seed(0)`.
+    model_id = "skt/A.X-K1-tiny-random"
+
     def tearDown(self):
         cleanup(torch_device, gc_collect=False)
 
-    def _generate(self, cache_implementation=None):
-        tokenizer = AutoTokenizer.from_pretrained("skt/A.X-K1")
-        model = AXK1ForCausalLM.from_pretrained("skt/A.X-K1", dtype=torch.bfloat16, device_map="auto")
-
-        messages = [{"role": "user", "content": "대한민국의 수도는?"}]
-        text = tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
-        inputs = tokenizer(text, return_tensors="pt").to(model.device)
-
-        generate_kwargs = {"max_new_tokens": 32, "do_sample": False}
-        if cache_implementation is not None:
-            generate_kwargs["cache_implementation"] = cache_implementation
-        generated_ids = model.generate(**inputs, **generate_kwargs)
-        return tokenizer.decode(generated_ids[0][inputs["input_ids"].shape[1] :], skip_special_tokens=True)
-
-    @require_torch_accelerator
-    def test_dynamic_cache(self):
-        expected_texts = Expectations(
-            {
-                ("cuda", 8): "대한민국의 수도는 **서울특별시**입니다.",
-            }
-        )
-        EXPECTED_TEXT_COMPLETION = expected_texts.get_expectation()
-
-        dynamic_text = self._generate()
-        self.assertEqual(EXPECTED_TEXT_COMPLETION, dynamic_text.strip())
-
-    @require_torch_accelerator
-    def test_static_cache(self):
-        expected_texts = Expectations(
-            {
-                ("cuda", 8): "대한민국의 수도는 **서울특별시**입니다.",
-            }
-        )
-        EXPECTED_TEXT_COMPLETION = expected_texts.get_expectation()
-
-        static_text = self._generate(cache_implementation="static")
-        self.assertEqual(EXPECTED_TEXT_COMPLETION, static_text.strip())
-
-    @require_torch_accelerator
     def test_model_logits_batched(self):
         dummy_input = torch.LongTensor([[0, 0, 0, 0, 0, 0, 1, 2, 3], [1, 1, 2, 3, 4, 5, 6, 7, 8]]).to(torch_device)
         attention_mask = dummy_input.ne(0).to(torch.long)
 
-        model = AXK1ForCausalLM.from_pretrained("skt/A.X-K1", dtype=torch.bfloat16, device_map="auto")
+        model = AXK1ForCausalLM.from_pretrained(self.model_id, dtype=torch.bfloat16, device_map="auto")
 
+        # Last-3x3 logits slice, left-padded (batch 0) and unpadded (batch 1) rows.
         EXPECTED_LOGITS_LEFT_PADDED = Expectations(
             {
-                ("cuda", 8): [[236.0, 235.0, 236.0], [234.0, 234.0, 235.0], [372.0, 372.0, 372.0]],
+                ("cuda", 8): [[0.1504, -0.2656, -0.1592], [0.2656, 0.1875, -0.0601], [-0.0679, -0.0693, -0.0938]],
             }
         )
         expected_left_padded = torch.tensor(EXPECTED_LOGITS_LEFT_PADDED.get_expectation(), device=torch_device)
 
         EXPECTED_LOGITS_UNPADDED = Expectations(
             {
-                ("cuda", 8): [[368.0, 368.0, 368.0], [370.0, 372.0, 372.0], [372.0, 372.0, 372.0]],
+                ("cuda", 8): [[0.0204, -0.1807, -0.0557], [-0.1953, 0.0009, -0.0505], [0.1367, -0.0986, 0.1079]],
             }
         )
         expected_unpadded = torch.tensor(EXPECTED_LOGITS_UNPADDED.get_expectation(), device=torch_device)
@@ -174,3 +143,16 @@ class AXK1IntegrationTest(unittest.TestCase):
         logits = logits.float()
         torch.testing.assert_close(logits[0, -3:, -3:], expected_left_padded, atol=1e-3, rtol=1e-3)
         torch.testing.assert_close(logits[1, -3:, -3:], expected_unpadded, atol=1e-3, rtol=1e-3)
+
+    def test_generation_static_cache_matches_dynamic(self):
+        # The checkpoint is randomly initialized, so we can't assert on decoded text; instead we check the
+        # MLA cache is correct by requiring the static-cache decode to match the dynamic-cache decode.
+        tokenizer = AutoTokenizer.from_pretrained(self.model_id)
+        model = AXK1ForCausalLM.from_pretrained(self.model_id, dtype=torch.bfloat16, device_map="auto")
+
+        inputs = tokenizer("대한민국의 수도는", return_tensors="pt").to(model.device)
+        gen_kwargs = {"max_new_tokens": 20, "do_sample": False}
+
+        dynamic_ids = model.generate(**inputs, **gen_kwargs)
+        static_ids = model.generate(**inputs, cache_implementation="static", **gen_kwargs)
+        torch.testing.assert_close(static_ids, dynamic_ids)
