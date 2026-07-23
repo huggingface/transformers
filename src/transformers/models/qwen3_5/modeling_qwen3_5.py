@@ -504,7 +504,7 @@ class Qwen3_5GatedDeltaNet(nn.Module):
             )
 
             # Drop the additional previous states
-            if use_precomputed_states:
+            if cache_params is not None:
                 mixed_qkv = mixed_qkv[:, :, -seq_len:]
 
         mixed_qkv = mixed_qkv.transpose(1, 2)
