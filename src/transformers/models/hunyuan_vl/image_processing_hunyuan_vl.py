@@ -22,6 +22,7 @@ import math
 from collections.abc import Iterable
 
 import torch
+from torchvision.transforms.v2 import functional as tvF
 
 from ...image_processing_backends import TorchvisionBackend
 from ...image_processing_utils import BatchFeature
@@ -146,7 +147,7 @@ class HunYuanVLImageProcessor(TorchvisionBackend):
         images: list["torch.Tensor"],
         do_resize: bool,
         size: SizeDict,
-        resample,
+        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,
@@ -159,14 +160,7 @@ class HunYuanVLImageProcessor(TorchvisionBackend):
         return_tensors: str | TensorType | None,
         **kwargs,
     ) -> BatchFeature:
-        # HunYuanVL's vision patch merger (`HunYuanVLVisionPatchMerger`) pools each
-        # 2x2 spatial neighbourhood with a strided conv, and the multimodal RoPE
-        # (`get_vision_position_ids`) assumes a row-major patch layout
-        # (index = i_h * grid_w + i_w). Qwen2VL's `_preprocess` flattens patches in
-        # block-major order (outer 2x2 block first, then inner offset), which
-        # scrambles the spatial neighbourhood and produces garbled OCR output.
-        # Override the flatten permutation to row-major so the torchvision backend
-        # matches the reference PIL implementation.
+        # HunYuanVL expects row-major patches, unlike Qwen2VL's block-major layout.
         grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
         resized_images_grouped = {}
         for shape, stacked_images in grouped_images.items():
@@ -207,9 +201,7 @@ class HunYuanVLImageProcessor(TorchvisionBackend):
                 merge_size,
                 patch_size,
             )
-            # Row-major flatten: [batch, oh, m_h, ow, m_w, channel, patch, patch]
-            # so that patch index = (oh * m + m_h) * grid_w + (ow * m + m_w)
-            # = i_h * grid_w + i_w, matching the PIL backend and the merger's expectation.
+            # Flatten patches in row-major order to match the PIL backend.
             patches = patches.permute(0, 2, 3, 5, 6, 1, 4, 7)
 
             flatten_patches = (
