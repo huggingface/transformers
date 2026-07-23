@@ -37,8 +37,14 @@ class OnyxVisionConfig(PreTrainedConfig):
         Initial position embedding height.
     pos_emb_width (`int`, *optional*):
         Initial position embedding width.
-    pos_emb_time (`int`, *optional*):
-        Initial position embedding time dimension.
+    patch_temporal (`int`, *optional*):
+        The temporal patch size used to embed inputs.
+    output_dim (`int`, *optional*):
+        Output dimension for encoded image last hidden states.
+    adapter_dim (`int`, *optional*):
+        Intermediate dimension used in multimodal projection.
+    sparse_attention_factor (`int`, *optional*):
+        Every n-th layer that is divisible by this value applies window-attention.
     merge_kernel_size (`tuple[int] | list[int]`, *optional*):
         Kernel size for patch merging.
     """
@@ -50,6 +56,7 @@ class OnyxVisionConfig(PreTrainedConfig):
     pos_emb_width: int = 32
     num_attention_heads: int = 16
     num_hidden_layers: int = 50
+
     hidden_size: int = 1536
     intermediate_size: int = 8960
     hidden_act: str = "gelu"
@@ -67,6 +74,14 @@ class OnyxVisionConfig(PreTrainedConfig):
 @strict
 class OnyxTextConfig(PreTrainedConfig):
     r"""
+    query_pre_attn_scalar (`float`, *optional*, defaults to 256):
+        scaling factor used on the attention scores
+    final_logit_softcapping (`float`, *optional*, defaults to 30.0):
+        scaling factor when applying tanh softcapping on the logits.
+    attn_logit_softcapping (`float`, *optional*, defaults to 50.0):
+        scaling factor when applying tanh softcapping on the attention scores.
+    use_bidirectional_attention (`bool`, *optional*):
+        If True, the model will attend to all text tokens instead of using a causal mask.
     qk_scale_factor (`float`, *optional*, defaults to 43.7840518911):
         Multiplier applied to Q after QK-norm, before the standard `1/sqrt(head_dim)` attention scaling.
     use_qk_norm (`bool`, *optional*, defaults to `True`):
@@ -213,9 +228,6 @@ class OnyxConfig(PreTrainedConfig):
     vision_config: dict | PreTrainedConfig | None = None
     image_token_id: int = 200092
     video_token_id: int = 200091
-    video_start_id: int = 200082
-    video_end_id: int = 200083
-    video_frame_sep_id: int = 200087
 
     def __post_init__(self, **kwargs):
         for legacy_key, key in _LEGACY_FLAT_TOKEN_ID_KEYS.items():
