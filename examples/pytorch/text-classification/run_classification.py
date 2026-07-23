@@ -412,8 +412,9 @@ def main():
 
     # Trying to have good defaults here, don't hesitate to tweak to your needs.
 
+    label_feature = raw_datasets["train"].features["label"]
     is_regression = (
-        raw_datasets["train"].features["label"].dtype in ["float32", "float64"]
+        getattr(label_feature, "dtype", None) in ["float32", "float64"]
         if data_args.do_regression is None
         else data_args.do_regression
     )
@@ -439,7 +440,7 @@ def main():
                     raise error
 
     else:  # classification
-        if raw_datasets["train"].features["label"].dtype == "list":  # multi-label classification
+        if isinstance(raw_datasets["train"].features["label"], datasets.Sequence):  # multi-label classification
             is_multi_label = True
             logger.info("Label type is list, doing multi-label classification")
         # Trying to find the number of labels in a multi-label classification task
