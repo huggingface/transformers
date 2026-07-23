@@ -1795,6 +1795,12 @@ class GenerationMixin(ContinuousMixin):
         model_kwargs.update({"output_attentions": output_attentions} if output_attentions else {})
         model_kwargs.update({"output_hidden_states": output_hidden_states} if output_hidden_states else {})
 
+        # Enforce deterministic greedy decoding if do_sample=False and num_beams = 1
+        if generation_config.do_sample is False and generation_config.num_beams == 1:
+            generation_config.temperature = 1.0
+            generation_config.top_k = 0
+            generation_config.top_p = 1.0
+
         return generation_config, model_kwargs
 
     def _get_static_cache_init_shape(self: "GenerativePreTrainedModel") -> tuple[int, int] | None:
