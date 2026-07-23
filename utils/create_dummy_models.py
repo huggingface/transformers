@@ -1406,6 +1406,10 @@ def build(config_class, models_to_create, output_dir, keep_model=False):
             The directory to save all the checkpoints. Each model architecture will be saved in a subdirectory under
             it.
     """
+    import time as _time
+
+    _start = _time.monotonic()
+    print(f"[time] START {config_class.__name__}: {_time.strftime('%H:%M:%S')}", flush=True)
     _log_disk_usage(f"START {config_class.__name__}")
 
     # When not keeping models, redirect all output (processors + per-arch copies) to a
@@ -1418,6 +1422,9 @@ def build(config_class, models_to_create, output_dir, keep_model=False):
     try:
      return _build_inner(config_class, models_to_create, output_dir, keep_model)
     finally:
+        _elapsed = _time.monotonic() - _start
+        print(f"[time] END   {config_class.__name__}: {_time.strftime('%H:%M:%S')}", flush=True)
+        print(f"[time] Duration {config_class.__name__}: {_elapsed:.1f}s", flush=True)
         _log_disk_usage(f"END   {config_class.__name__}")
         if _tmpdir is not None:
             _tmpdir.cleanup()
