@@ -28,6 +28,13 @@ class XGLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     expected_tokens_from_ids = ['▁This', '▁is', '▁a', '▁test', '▁', '😊', '▁I', '▁was', '▁born', '▁in', '▁9', '2000', ',', '▁and', '▁this', '▁is', '▁fals', 'é', '.', '▁', '生活的', '真', '<unk>', '是', '▁Hi', '▁Hello', '▁Hi', '▁Hello', '▁Hello', '▁', '<s>', '▁hi', '<s>', '▁there', '▁The', '▁following', '▁string', '▁should', '▁be', '▁properly', '▁en', 'code', 'd', ':', '▁Hello', '.', '▁But', '▁ir', 'd', '▁and', '▁ปี', '▁ir', 'd', '▁ด', '▁Hey', '▁how', '▁are', '▁you', '▁doing']  # fmt: skip
     integration_expected_decoded_text = "This is a test 😊 I was born in 92000, and this is falsé. 生活的真<unk>是 Hi Hello Hi Hello Hello <s> hi<s> there The following string should be properly encoded: Hello. But ird and ปี ird ด Hey how are you doing"
 
+    def test_unigram_dict_vocab_does_not_crash_init(self):
+        """Regression test for #47020: dict vocabs from tokenizer.json must not break Unigram __init__."""
+        vocab_dict = {"<s>": 0, "<pad>": 1, "</s>": 2, "<unk>": 3, "hello": 4}
+        tokenizer = XGLMTokenizer(vocab=vocab_dict)
+        self.assertIsNotNone(tokenizer._tokenizer)
+        self.assertEqual(tokenizer.convert_tokens_to_ids("hello"), 4)
+
     @classmethod
     def setUpClass(cls):
         super().setUpClass()

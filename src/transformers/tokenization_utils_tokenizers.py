@@ -52,6 +52,23 @@ from .utils import PaddingStrategy, add_end_docstrings, logging
 
 logger = logging.get_logger(__name__)
 
+
+def _normalize_unigram_vocab(vocab: dict | list) -> list[tuple[str, float]]:
+    """Convert a vocab payload into the ``list[tuple[str, float]]`` shape expected by ``Unigram``.
+
+    ``tokenizer.json`` can expose Unigram vocabs as ``{token: id}`` dicts. Passing that dict straight into
+    ``Unigram(vocab=...)`` raises ``TypeError`` because the Rust backend expects a sequence of ``(piece, score)``
+    pairs, not id mappings.
+    """
+    if isinstance(vocab, dict):
+        if vocab and all(isinstance(value, int) for value in vocab.values()):
+            return [(token, 0.0) for token, _ in sorted(vocab.items(), key=lambda item: item[1])]
+        return [(token, float(score)) for token, score in vocab.items()]
+    if isinstance(vocab, list) and vocab and isinstance(vocab[0], (list, tuple)):
+        return [tuple(item) for item in vocab]
+    return vocab
+
+
 # Fast tokenizers (provided by HuggingFace tokenizer's library) can be saved in a single file
 TOKENIZER_FILE = "tokenizer.json"
 SPECIAL_TOKENS_MAP_FILE = "special_tokens_map.json"
@@ -177,8 +194,10 @@ class TokenizersBackend(PreTrainedTokenizerBase):
                 if isinstance(vocab, list):
                     vocab = list(map(tuple, vocab))  # TODO just for now
             elif cls.model.__name__ == "Unigram":
-                if isinstance(vocab, list) and vocab and isinstance(vocab[0], (list, tuple)):
-                    vocab = [tuple(item) for item in vocab]
+                if isinstance(vocab, dict) or (
+                    isinstance(vocab, list) and vocab and isinstance(vocab[0], (list, tuple))
+                ):
+                    vocab = _normalize_unigram_vocab(vocab)
             elif cls.model.__name__ == "WordLevel":
                 vocab = {token: i for i, token in enumerate(vocab)}
             elif cls.model.__name__ == "BPE" or cls.model.__name__ == "WordPiece":
