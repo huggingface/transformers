@@ -693,6 +693,7 @@ class Qwen3OmniMoeThinkerForConditionalGenerationModelTest(ModelTesterMixin, Gen
 @require_torch
 class Qwen3OmniMoeTalkerForConditionalGenerationTest(unittest.TestCase):
     def test_greedy_batch_generation_matches_single(self):
+        torch.manual_seed(0)
         common_config = {
             "vocab_size": 64,
             "hidden_size": 16,

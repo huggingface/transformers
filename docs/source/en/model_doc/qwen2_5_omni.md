@@ -307,8 +307,7 @@ inputs = processor.apply_chat_template(
 ).to(model.device, dtype=model.dtype)
 
 gen_kwargs = {
-    "talker_do_sample": False,
-    "talker_temperature": 0.0,
+    "talker_do_sample": True,
     "speaker": "Ethan",  # Ethan, Chelsie
     "thinker_max_new_tokens": max_new_tokens,
 }

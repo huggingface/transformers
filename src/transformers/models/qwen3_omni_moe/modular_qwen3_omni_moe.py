@@ -2510,7 +2510,7 @@ class Qwen3OmniMoeForConditionalGeneration(Qwen3OmniMoePreTrainedModel, Generati
         user_mask = (role_token_ids == self.config.user_token_id) & input_attention_mask.bool()
         user_lengths = user_mask.sum(dim=-1)
         max_user_length = user_lengths.max().item()
-        user_indices = torch.where(user_mask, token_positions, sequence_length + token_positions).argsort(dim=-1)[
+        user_indices = torch.where(user_mask, sequence_length + token_positions, token_positions).argsort(dim=-1)[
             :, :max_user_length
         ]
 
@@ -2522,7 +2522,8 @@ class Qwen3OmniMoeForConditionalGeneration(Qwen3OmniMoePreTrainedModel, Generati
         )
         talker_user_ids = thinker_result.sequences[:, :sequence_length].gather(1, user_indices)
         talker_user_attention_mask = (
-            torch.arange(max_user_length, device=input_ids.device).unsqueeze(0) < user_lengths.unsqueeze(1)
+            torch.arange(max_user_length, device=input_ids.device).unsqueeze(0)
+            >= (max_user_length - user_lengths).unsqueeze(1)
         ).to(input_attention_mask.dtype)
 
         assistant_start_mask = (input_ids[:, :-1] == self.config.im_start_token_id) & (
@@ -2603,6 +2604,11 @@ class Qwen3OmniMoeProcessorKwargs(Qwen2_5OmniProcessorKwargs):
 
 
 class Qwen3OmniMoeProcessor(Qwen2_5OmniProcessor, ProcessorMixin):
+    def post_process_image_text_to_text(self, generated_outputs, skip_special_tokens=True, **kwargs):
+        if isinstance(generated_outputs, (tuple, list)):
+            generated_outputs = generated_outputs[0]
+        return self.tokenizer.batch_decode(generated_outputs, skip_special_tokens=skip_special_tokens, **kwargs)
+
     def post_process_multimodal_output(
         self, generated_outputs, skip_special_tokens=True, generation_mode=None, **kwargs
     ):
