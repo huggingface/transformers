@@ -942,6 +942,7 @@ class Qwen2_5OmniModelIntegrationTest(unittest.TestCase):
             for text in texts
         ]
 
+        torch.manual_seed(0)
         single_audio_outputs = []
         for conversation in conversations:
             inputs = self.processor.apply_chat_template(
@@ -963,6 +964,7 @@ class Qwen2_5OmniModelIntegrationTest(unittest.TestCase):
             )
             single_audio_outputs.append(output[1][0] if output[1].ndim > 1 else output[1])
 
+        torch.manual_seed(0)
         inputs = self.processor.apply_chat_template(
             conversations,
             tokenize=True,

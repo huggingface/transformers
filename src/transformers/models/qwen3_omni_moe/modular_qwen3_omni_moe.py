@@ -1891,8 +1891,13 @@ class Qwen3OmniMoeTalkerForConditionalGeneration(Qwen3MoeForCausalLM):
         attention_mask=None,
         inputs_embeds=None,
         is_first_iteration=False,
+        code_predictor_do_sample=True,
         **kwargs,
     ):
+        # Keep residual code generation deterministic when the main talker is greedy.
+        code_predictor_kwargs = {"do_sample": code_predictor_do_sample}
+        if code_predictor_do_sample:
+            code_predictor_kwargs.update({"top_k": 50, "top_p": 0.8})
         hidden_states = kwargs.pop("hidden_states", None)
         inputs = super().prepare_inputs_for_generation(
             input_ids,
@@ -1918,9 +1923,7 @@ class Qwen3OmniMoeTalkerForConditionalGeneration(Qwen3MoeForCausalLM):
             predictor_result = self.code_predictor.generate(
                 inputs_embeds=torch.cat((past_hidden, last_id_hidden), dim=1),
                 max_new_tokens=self.config.num_code_groups - 1,
-                do_sample=True,
-                top_k=50,
-                top_p=0.8,
+                **code_predictor_kwargs,
                 output_hidden_states=True,
                 return_dict_in_generate=True,
             )
@@ -2431,6 +2434,7 @@ class Qwen3OmniMoeForConditionalGeneration(Qwen3OmniMoePreTrainedModel, Generati
                 "eos_token_id": self.config.talker_config.codec_eos_token_id,
                 "repetition_penalty": talker_repetition_penalty,
                 "suppress_tokens": talker_suppressed_tokens,
+                "code_predictor_do_sample": talker_do_sample,
                 "output_hidden_states": True,
                 "return_dict_in_generate": True,
             }

@@ -4048,30 +4048,23 @@ class Qwen2_5OmniForConditionalGeneration(Qwen2_5OmniPreTrainedModel, Generation
 
         conditioning = speaker_params["cond"].to(input_ids.device).float().expand(batch_size, -1)
         reference_mel = speaker_params["ref_mel"].to(input_ids.device).float().expand(batch_size, -1, -1)
-        if (talker_code_lengths == talker_code_lengths[0]).all():
-            code_length = talker_code_lengths[0].item()
-            wav = self.token2wav(
-                talker_generate_codes[:, :code_length],
-                conditioning=conditioning,
-                reference_mel=reference_mel,
-                **token2wav_kwargs,
-            )
-        else:
-            wavs = []
-            for index, code_length in enumerate(talker_code_lengths.tolist()):
-                wavs.append(
-                    self.token2wav(
-                        talker_generate_codes[index : index + 1, :code_length],
-                        conditioning=conditioning[index : index + 1],
-                        reference_mel=reference_mel[index : index + 1],
-                        **token2wav_kwargs,
-                    )
+        # Token2Wav starts its diffusion process from random noise. Decoding each sample separately makes batched
+        # generation reproduce single-item generation when the random seed is controlled.
+        wavs = []
+        for index, code_length in enumerate(talker_code_lengths.tolist()):
+            wavs.append(
+                self.token2wav(
+                    talker_generate_codes[index : index + 1, :code_length],
+                    conditioning=conditioning[index : index + 1],
+                    reference_mel=reference_mel[index : index + 1],
+                    **token2wav_kwargs,
                 )
+            )
 
-            max_waveform_length = max(wav.shape[-1] for wav in wavs)
-            wav = wavs[0].new_zeros((batch_size, *wavs[0].shape[1:-1], max_waveform_length))
-            for index, sample_wav in enumerate(wavs):
-                wav[index, ..., : sample_wav.shape[-1]] = sample_wav[0]
+        max_waveform_length = max(wav.shape[-1] for wav in wavs)
+        wav = wavs[0].new_zeros((batch_size, *wavs[0].shape[1:-1], max_waveform_length))
+        for index, sample_wav in enumerate(wavs):
+            wav[index, ..., : sample_wav.shape[-1]] = sample_wav[0]
 
         return thinker_result.sequences, wav.float()
 
