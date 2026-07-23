@@ -589,6 +589,20 @@ class TestAttentionKernelRegistration(TestCasePlus):
             except Exception as e:
                 print(f"Could not clean up `ALL_MASK_ATTENTION_FUNCTIONS`: {e}")
 
+    def test_load_and_register_preserves_exception_cause(self):
+        """Non-ValueError failures from get_kernel must keep the original exception as __cause__."""
+        original = RuntimeError("hub fetch failed: network down")
+
+        def boom(*args, **kwargs):
+            raise original
+
+        with patch("transformers.integrations.hub_kernels.get_kernel", side_effect=boom):
+            with self.assertRaises(ValueError) as ctx:
+                load_and_register_attn_kernel("kernels-community/broken-kernel")
+        self.assertIs(ctx.exception.__cause__, original)
+        self.assertIn("broken-kernel", str(ctx.exception))
+        self.assertIn("hub fetch failed", str(ctx.exception))
+
     def test_add_to_mapping_local(self):
         repo_path = "/abs/path/kernel"
         compatible_mapping = {}
