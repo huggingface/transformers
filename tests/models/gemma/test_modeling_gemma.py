@@ -30,6 +30,7 @@ from transformers.testing_utils import (
     require_torch_accelerator,
     slow,
     torch_device,
+    require_deterministic_for_xpu,
 )
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
@@ -179,6 +180,7 @@ class GemmaIntegrationTest(unittest.TestCase):
         self.assertEqual(output_text, EXPECTED_TEXTS)
 
     @require_bitsandbytes
+    @require_deterministic_for_xpu
     def test_model_2b_4bit(self):
         model_id = "google/gemma-2b"
         EXPECTED_TEXTS = [
@@ -276,6 +278,7 @@ class GemmaIntegrationTest(unittest.TestCase):
         output_text = tokenizer.batch_decode(output, skip_special_tokens=True)
         self.assertEqual(output_text, expected_text)
 
+    @require_deterministic_for_xpu
     def test_model_7b_fp16_static_cache(self):
         if self.device_properties[0] == "cuda" and self.device_properties[1] == 7:
             self.skipTest("This test is failing (`torch.compile` fails) on Nvidia T4 GPU (OOM).")
@@ -307,6 +310,7 @@ class GemmaIntegrationTest(unittest.TestCase):
         self.assertEqual(output_text, EXPECTED_TEXTS)
 
     @require_bitsandbytes
+    @require_deterministic_for_xpu
     def test_model_7b_4bit(self):
         model_id = "google/gemma-7b"
 
@@ -319,6 +323,10 @@ class GemmaIntegrationTest(unittest.TestCase):
                 ("cuda", 8): [
                     "Hello I am doing a project for my school and I am trying to make a program that will take a number and then",
                     'Hi today I am going to talk about the new update for the game called "The new update!:)!:)!:)',
+                ],
+                ("xpu", 5): [
+                    "Hello I am doing a project for my school and I am using a 12 paletm and 12 v",
+                    'Hi today I am going to talk about a new app that I have found. It is called a "The',
                 ],
             }
         )
