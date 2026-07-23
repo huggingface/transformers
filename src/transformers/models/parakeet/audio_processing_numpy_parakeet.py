@@ -41,6 +41,7 @@ class ParakeetAudioProcessorNumpy(NumpyAudioBackend):
             mel_scale="slaney",
         ),
         preemphasis=0.97,
+        preemphasis_mode="waveform",
         log_mode="log",
         mel_floor=2**-24,
     )
@@ -87,27 +88,6 @@ class ParakeetAudioProcessorNumpy(NumpyAudioBackend):
         if power != 1.0:
             magnitudes = magnitudes ** power
         return magnitudes
-
-    def _needs_manual_framing(self, spectrogram_config):
-        # Preemphasis is handled waveform-level in _stft; no per-frame processing needed.
-        return spectrogram_config.remove_dc_offset or spectrogram_config.stft_config.left_align_fft
-
-    def _stft(self, audio, *, spectrogram_config, audio_ranges=None, **kwargs):
-        audio_lengths = (
-            np.asarray([end - start for start, end in audio_ranges]) if audio_ranges is not None else None
-        )
-
-        # Waveform-level preemphasis with masking to zero out padding
-        preemphasis = spectrogram_config.preemphasis
-        if preemphasis is not None:
-            audio = np.concatenate(
-                [audio[:, :1], audio[:, 1:] - preemphasis * audio[:, :-1]], axis=1
-            )
-            if audio_lengths is not None:
-                timemask = np.expand_dims(np.arange(audio.shape[-1]), axis=0) < np.expand_dims(audio_lengths, axis=1)
-                audio = np.where(timemask, audio, 0.0)
-
-        return super()._stft(audio, spectrogram_config=spectrogram_config, **kwargs)
 
     def _apply_mel_scale(self, features, *, spectrogram_config, **kwargs):
         return np.matmul(self.mel_filters.T, features)

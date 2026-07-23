@@ -525,6 +525,10 @@ class BaseAudioProcessor(AudioProcessingMixin):
                 audio = audio.to(getattr(torch, dtype_str))
         if spectrogram_config.waveform_scale is not None:
             audio = audio * spectrogram_config.waveform_scale
+        if spectrogram_config.preemphasis is not None and spectrogram_config.preemphasis_mode == "waveform":
+            audio = self._preemphasize_waveform(
+                audio, spectrogram_config.preemphasis, kwargs.get("audio_ranges")
+            )
 
         # Cache window on first call; reuse on subsequent calls with same config
         if self._cached_stft_window is not None and spectrogram_config is self.spectrogram_config:
@@ -559,7 +563,7 @@ class BaseAudioProcessor(AudioProcessingMixin):
         waveform level (in ``_stft``) and don't need per-frame processing.
         """
         return (
-            (spectrogram_config.preemphasis is not None)
+            (spectrogram_config.preemphasis is not None and spectrogram_config.preemphasis_mode == "per_frame")
             or spectrogram_config.remove_dc_offset
         )
 
@@ -612,6 +616,12 @@ class BaseAudioProcessor(AudioProcessingMixin):
         Override for non-standard frame processing, e.g. HTK-style
         preemphasis (Gemma3n).
         """
+        raise NotImplementedError
+
+    def _preemphasize_waveform(self, audio, preemphasis, audio_ranges=None):
+        """Waveform-level preemphasis (first sample unchanged), zeroing padded samples via
+        ``audio_ranges``. Used when ``spectrogram_config.preemphasis_mode == "waveform"``
+        (ASR models: Parakeet/Cohere/Nemotron). Implemented by backend subclasses."""
         raise NotImplementedError
 
     def _window_and_fft(self, frames, window, frame_length, n_fft, stft_cfg):

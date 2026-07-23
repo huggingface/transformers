@@ -69,6 +69,7 @@ class CohereAsrAudioProcessor(TorchAudioBackend):
             mel_scale="slaney",
         ),
         preemphasis=0.97,
+        preemphasis_mode="waveform",
         log_mode="log",
         mel_floor=2**-24,
     )
@@ -127,11 +128,6 @@ class CohereAsrAudioProcessor(TorchAudioBackend):
 
     # ── STFT pipeline ────────────────────────────────────────────────────────────────────
 
-    def _needs_manual_framing(self, spectrogram_config):
-        # Preemphasis is handled waveform-level in `_stft` (see Parakeet), so no per-frame
-        # processing is needed.
-        return spectrogram_config.remove_dc_offset or spectrogram_config.stft_config.left_align_fft
-
     def _apply_dither(self, audio, audio_lengths):
         """Deterministic per-utterance dither: each row is seeded by its valid sample count
         so dither is invariant to batch composition (matches the legacy FE)."""
@@ -148,25 +144,12 @@ class CohereAsrAudioProcessor(TorchAudioBackend):
         return audio
 
     def _stft(self, audio, *, spectrogram_config, audio_ranges=None, **kwargs):
-        audio_lengths = (
-            torch.tensor([end - start for start, end in audio_ranges], device=audio.device)
-            if audio_ranges is not None
-            else None
-        )
-
-        # 1. Dither
-        if audio_lengths is not None:
+        # Deterministic dither only; the base then applies waveform-level preemphasis and
+        # padding-zeroing (spectrogram_config.preemphasis_mode == "waveform").
+        if audio_ranges is not None:
+            audio_lengths = torch.tensor([end - start for start, end in audio_ranges], device=audio.device)
             audio = self._apply_dither(audio.clone(), audio_lengths)
-
-        # 2. Waveform-level preemphasis with masking to zero out padding
-        preemphasis = spectrogram_config.preemphasis
-        if preemphasis is not None:
-            audio = torch.cat([audio[:, :1], audio[:, 1:] - preemphasis * audio[:, :-1]], dim=1)
-            if audio_lengths is not None:
-                timemask = torch.arange(audio.shape[-1], device=audio.device).unsqueeze(0) < audio_lengths.unsqueeze(1)
-                audio = audio.masked_fill(~timemask, 0.0)
-
-        return super()._stft(audio, spectrogram_config=spectrogram_config, **kwargs)
+        return super()._stft(audio, spectrogram_config=spectrogram_config, audio_ranges=audio_ranges, **kwargs)
 
     def _compute_magnitudes(self, stft_out, power, spectrogram_config=None):
         # Match the legacy view_as_real + sqrt(real²+imag²) ** power pattern. `abs() ** power`

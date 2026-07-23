@@ -201,11 +201,20 @@ class NumpyAudioBackend(BaseAudioProcessor):
         if spectrogram_config.remove_dc_offset:
             frames = frames - frames.mean(axis=-1, keepdims=True)
         preemphasis = spectrogram_config.preemphasis
-        if preemphasis is not None:
+        if preemphasis is not None and spectrogram_config.preemphasis_mode == "per_frame":
             preemph_src = preemphasis * frames[..., :-1]
             frames[..., 1:] = frames[..., 1:] - preemph_src
             frames[..., 0] = frames[..., 0] * (1 - preemphasis)
         return frames
+
+    def _preemphasize_waveform(self, audio, preemphasis, audio_ranges=None):
+        out = audio.copy()
+        out[..., 1:] = audio[..., 1:] - preemphasis * audio[..., :-1]  # first sample unchanged
+        if audio_ranges is not None:
+            lengths = np.asarray([end - start for start, end in audio_ranges])
+            mask = np.arange(out.shape[-1])[None, :] < lengths[:, None]
+            out = np.where(mask, out, 0.0).astype(audio.dtype, copy=False)
+        return out
 
     def _window_and_fft(self, frames, window, frame_length, n_fft, stft_cfg, audio_dtype=None):
         frames = frames * window
@@ -447,12 +456,20 @@ class TorchAudioBackend(BaseAudioProcessor):
         if spectrogram_config.remove_dc_offset:
             frames = frames - frames.mean(dim=-1, keepdim=True)
         preemphasis = spectrogram_config.preemphasis
-        if preemphasis is not None:
+        if preemphasis is not None and spectrogram_config.preemphasis_mode == "per_frame":
             frames = torch.cat([
                 frames[..., :1] * (1 - preemphasis),
                 frames[..., 1:] - preemphasis * frames[..., :-1],
             ], dim=-1)
         return frames
+
+    def _preemphasize_waveform(self, audio, preemphasis, audio_ranges=None):
+        audio = torch.cat([audio[..., :1], audio[..., 1:] - preemphasis * audio[..., :-1]], dim=-1)
+        if audio_ranges is not None:
+            lengths = torch.tensor([end - start for start, end in audio_ranges], device=audio.device)
+            mask = torch.arange(audio.shape[-1], device=audio.device).unsqueeze(0) < lengths.unsqueeze(1)
+            audio = audio.masked_fill(~mask, 0.0)
+        return audio
 
     def _window_and_fft(self, frames, window, frame_length, n_fft, stft_cfg, audio_dtype=None):
         frames = frames * window

@@ -36,6 +36,7 @@ class ParakeetAudioProcessor(TorchAudioBackend):
             mel_scale="slaney",
         ),
         preemphasis=0.97,
+        preemphasis_mode="waveform",
         log_mode="log",
         mel_floor=2**-24,
     )
@@ -88,29 +89,6 @@ class ParakeetAudioProcessor(TorchAudioBackend):
         if power != 1.0:
             magnitudes = magnitudes.pow(power)
         return magnitudes
-
-    def _needs_manual_framing(self, spectrogram_config):
-        # Preemphasis is handled waveform-level in _stft; no per-frame processing needed.
-        return spectrogram_config.remove_dc_offset or spectrogram_config.stft_config.left_align_fft
-
-    def _stft(self, audio, *, spectrogram_config, audio_ranges=None, **kwargs):
-        import torch
-
-        audio_lengths = torch.tensor(
-            [end - start for start, end in audio_ranges], device=audio.device
-        ) if audio_ranges is not None else None
-
-        # Waveform-level preemphasis with masking to zero out padding
-        preemphasis = spectrogram_config.preemphasis
-        if preemphasis is not None:
-            audio = torch.cat(
-                [audio[:, :1], audio[:, 1:] - preemphasis * audio[:, :-1]], dim=1
-            )
-            if audio_lengths is not None:
-                timemask = torch.arange(audio.shape[-1], device=audio.device).unsqueeze(0) < audio_lengths.unsqueeze(1)
-                audio = audio.masked_fill(~timemask, 0.0)
-
-        return super()._stft(audio, spectrogram_config=spectrogram_config, **kwargs)
 
     def _apply_mel_scale(self, features, *, spectrogram_config, **kwargs):
         import torch

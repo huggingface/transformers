@@ -68,12 +68,6 @@ AudioInput = Union[np.ndarray, "torch.Tensor", Sequence[np.ndarray], Sequence["t
 
 @dataclass(frozen=True)
 class StftConfig:
-    """Configuration for Short-Time Fourier Transform.
-
-    Uses torchaudio parameter naming conventions. See
-    `torchaudio.transforms.MelSpectrogram` for reference.
-    """
-
     n_fft: int = 400
     win_length: int | None = None
     hop_length: int | None = None
@@ -99,12 +93,6 @@ class StftConfig:
 
 @dataclass(frozen=True)
 class MelScaleConfig:
-    """Configuration for mel filterbank.
-
-    Uses torchaudio parameter naming conventions. See
-    `torchaudio.transforms.MelSpectrogram` for reference.
-    """
-
     n_mels: int = 128
     f_min: float = 0.0
     f_max: float | None = None
@@ -127,21 +115,20 @@ class MelScaleConfig:
 
 @dataclass(frozen=True)
 class SpectrogramConfig:
-    """Configuration for spectrogram extraction, composed of STFT and mel scale sub-configs."""
-
     stft_config: StftConfig = field(default_factory=StftConfig)
     mel_scale_config: MelScaleConfig | None = None
     log_mode: str = "log10"
     chunk_length: int | None = None
     preemphasis: float | None = None
+    # Where preemphasis is applied: "per_frame" (default; on each framed window, first sample
+    # scaled by 1-p) or "waveform" (on the raw waveform before framing, first sample unchanged,
+    # padded samples zeroed via audio_ranges). ASR models (Parakeet/Cohere/Nemotron) use "waveform".
+    preemphasis_mode: str = "per_frame"
     remove_dc_offset: bool = False
     mel_floor: float = 1e-10
     waveform_scale: float | None = None
     computation_dtype: str | None = None
     skip_last_frame: bool = False
-    # Post-log clamp + affine rescale (ADR 0004). Used by Whisper and Voxtral-Realtime.
-    # When set, after log compression the features are clipped at ``max(features) - clip_max_offset``
-    # then shifted by ``post_log_shift`` and scaled by ``post_log_scale``.
     clip_max_offset: float | None = None
     post_log_shift: float | None = None
     post_log_scale: float | None = None
