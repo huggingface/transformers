@@ -19,6 +19,7 @@ from pathlib import Path
 from ...audio_utils import AudioInput, make_list_of_audio
 from ...processing_utils import AudioKwargs, ProcessingKwargs, ProcessorMixin, Unpack
 from ...utils import auto_docstring, is_soundfile_available, is_torch_available
+from ...utils.import_utils import requires, requires_backends
 
 
 if is_torch_available():
@@ -78,6 +79,7 @@ class DiaProcessorKwargs(ProcessingKwargs, total=False):
     }
 
 
+@requires(backends=("torch",))
 @auto_docstring
 class DiaProcessor(ProcessorMixin):
     audio_tokenizer_class = "DacModel"
@@ -154,12 +156,6 @@ class DiaProcessor(ProcessorMixin):
             computation (padding and BOS tokens), and `-101` for audio frames used only for the backbone model (when
             `depth_decoder_labels_ratio < 1.0`). Cannot be used together with `generation=True`.
         """
-        if not is_torch_available():
-            raise ValueError(
-                "The `DiaProcessor` relies on the `audio_tokenizer` which requires `torch` but we couldn't "
-                "find it in your environment. You can install torch via `pip install torch`."
-            )
-
         output_kwargs = self._merge_kwargs(DiaProcessorKwargs, **kwargs)
         audio_kwargs = output_kwargs["audio_kwargs"]
         generation = audio_kwargs.get("generation", True)
@@ -364,8 +360,7 @@ class DiaProcessor(ProcessorMixin):
         **kwargs: Unpack[DiaProcessorKwargs],
     ):
         # TODO: @eustlb, this should be in AudioProcessor
-        if not is_soundfile_available():
-            raise ImportError("Please install `soundfile` to save audio files.")
+        requires_backends(self, ["soundfile"])
 
         # ensure correct audio input
         audio = make_list_of_audio(audio)

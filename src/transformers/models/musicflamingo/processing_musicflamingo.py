@@ -26,6 +26,7 @@ from ...feature_extraction_utils import BatchFeature
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import TextInput
 from ...utils import auto_docstring, is_torch_available, logging
+from ...utils.import_utils import requires
 
 
 if is_torch_available():
@@ -52,6 +53,7 @@ class MusicFlamingoProcessorKwargs(ProcessingKwargs, total=False):
     }
 
 
+@requires(backends=("torch",))
 @auto_docstring
 class MusicFlamingoProcessor(ProcessorMixin):
     valid_processor_kwargs = MusicFlamingoProcessorKwargs
