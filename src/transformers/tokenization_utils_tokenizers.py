@@ -487,6 +487,10 @@ class TokenizersBackend(PreTrainedTokenizerBase):
         if self._should_update_post_processor:
             self.update_post_processor()
 
+        # Construction (incl. checkpoint-restore of added tokens) is done; later non-special adds are
+        # genuine user edits and may realign the Metaspace prepend_scheme in `_add_tokens` (#28218).
+        self._prepend_scheme_can_flip = True
+
     @property
     def is_fast(self) -> bool:
         return True
@@ -726,6 +730,24 @@ class TokenizersBackend(PreTrainedTokenizerBase):
         if special_tokens:
             return self._tokenizer.add_special_tokens(new_tokens)
 
+        # #28218: adding a genuinely new non-special token to a standalone Metaspace("always") leaves a
+        # spurious "▁" on the next chunk; realign to "first". Gated on a finished tokenizer and a not-yet-
+        # present token, so restoring a checkpoint's own added tokens (during or after init) is left alone.
+        if getattr(self, "_prepend_scheme_can_flip", False):
+            pre_tokenizer = self._tokenizer.pre_tokenizer
+            if (
+                isinstance(pre_tokenizer, pre_tokenizers_fast.Metaspace)
+                and pre_tokenizer.prepend_scheme == "always"
+                and any(
+                    (isinstance(t, str) or not t.special) and self._tokenizer.token_to_id(str(t)) is None
+                    for t in new_tokens
+                )
+            ):
+                self._tokenizer.pre_tokenizer = pre_tokenizers_fast.Metaspace(
+                    replacement=pre_tokenizer.replacement,
+                    prepend_scheme="first",
+                    split=pre_tokenizer.split,
+                )
         return self._tokenizer.add_tokens(new_tokens)
 
     def num_special_tokens_to_add(self, pair: bool = False) -> int:
