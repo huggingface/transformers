@@ -2849,9 +2849,14 @@ def format_args_docstring(docstring: str, model_name: str) -> str:
     placeholders_dict = get_placeholders_dict(placeholders, model_name)
     # replace the placeholders in the docstring with the values from the placeholders_dict
     for placeholder, value in placeholders_dict.items():
-        if isinstance(value, dict) and placeholder == "image_processor_class":
-            value = value.get("torchvision", value.get("pil", None))
-        if placeholder is not None:
+        # Backend-keyed mapping values: image processors use {"torchvision": ..., "pil": ...};
+        # audio processors use {"torch": ..., "numpy": ...}. Resolve to the default backend's class.
+        if isinstance(value, dict):
+            if placeholder == "image_processor_class":
+                value = value.get("torchvision", value.get("pil"))
+            else:
+                value = value.get("torch", next(iter(value.values()), None))
+        if isinstance(value, str):
             docstring = docstring.replace(f"{{{placeholder}}}", value)
     return docstring
 

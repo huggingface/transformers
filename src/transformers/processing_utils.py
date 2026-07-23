@@ -129,9 +129,9 @@ MODALITY_TO_BASE_CLASS_MAPPING = {
         "HiggsAudioV2TokenizerModel",
         "DacModel",
     ),  # TODO: @eustlb, to be replaced with PreTrainedAudioTokenizerBase
-    "audio_processor": "FeatureExtractionMixin",
+    "audio_processor": ("FeatureExtractionMixin", "TorchAudioBackend", "NumpyAudioBackend"),
     "tokenizer": ("PreTrainedTokenizerBase", "MistralCommonBackend"),
-    "feature_extractor": "FeatureExtractionMixin",
+    "feature_extractor": ("FeatureExtractionMixin", "TorchAudioBackend", "NumpyAudioBackend"),
     "image_processor": "ImageProcessingMixin",
     "video_processor": "BaseVideoProcessor",
 }
