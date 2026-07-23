@@ -1063,7 +1063,6 @@ def is_flash_attn_2_available(kernels_fallback_ok: bool = False) -> bool:
     if kernels_fallback_ok and is_kernels_available():
         try:
             from kernels import get_kernel
-
             from transformers.modeling_flash_attention_utils import FLASH_ATTN_KERNEL_FALLBACK
 
             get_kernel(FLASH_ATTN_KERNEL_FALLBACK["flash_attention_2"], version=1)
@@ -1088,7 +1087,6 @@ def is_flash_attn_3_available(kernels_fallback_ok: bool = False) -> bool:
     if kernels_fallback_ok and is_kernels_available():
         try:
             from kernels import get_kernel
-
             from transformers.modeling_flash_attention_utils import FLASH_ATTN_KERNEL_FALLBACK
 
             get_kernel(FLASH_ATTN_KERNEL_FALLBACK["flash_attention_3"], version=1)

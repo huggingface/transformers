@@ -33,8 +33,8 @@ from ..deepseek_v3.modeling_deepseek_v3 import (
     DeepseekV3Experts,
     DeepseekV3ForCausalLM,
     DeepseekV3MLP,
-    DeepseekV3MoE,
     DeepseekV3Model,
+    DeepseekV3MoE,
     DeepseekV3PreTrainedModel,
     DeepseekV3RMSNorm,
     DeepseekV3RotaryEmbedding,
@@ -72,6 +72,9 @@ class AXK1Config(DeepseekV3Config):
     ```"""
 
     model_type = "axk1"
+    attribute_map = {
+        "num_local_experts": "n_routed_experts",
+    }
 
     vocab_size: int = 163840
     hidden_size: int = 7168
@@ -96,6 +99,8 @@ class AXK1Config(DeepseekV3Config):
     rms_norm_eps: float = 1e-6
     bos_token_id: int | None = 163691
     eos_token_id: int | list[int] | None = 163691
+
+    num_mtp_layers = AttributeError()
 
 
 class AXK1RMSNorm(DeepseekV3RMSNorm):
