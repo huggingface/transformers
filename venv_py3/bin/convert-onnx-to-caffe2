@@ -1,0 +1,10 @@
+#!/bin/sh
+'''exec' "/Users/danieljemiri/Desktop/Personal Project/transformers/venv_py3/bin/python3" "$0" "$@"
+' '''
+# -*- coding: utf-8 -*-
+import re
+import sys
+from caffe2.python.onnx.bin.conversion import onnx_to_caffe2
+if __name__ == '__main__':
+    sys.argv[0] = re.sub(r'(-script\.pyw|\.exe)?$', '', sys.argv[0])
+    sys.exit(onnx_to_caffe2())
