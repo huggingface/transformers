@@ -65,6 +65,9 @@ class VJEPA2Config(PreTrainedConfig):
         greater than 1.
     hierarchical_layers (`list[int]`, *optional*, defaults to `None`):
         Encoder layer indices for hierarchical feature extraction with per-layer norms.
+    pretrained_grid_size (`int`, *optional*):
+        Reference grid size used for RoPE spatial interpolation. When `None`, defaults
+        to `256 // patch_size` (the pretraining resolution for standard checkpoints).
 
     Example:
 
@@ -114,6 +117,15 @@ class VJEPA2Config(PreTrainedConfig):
     teacher_embed_dim: int | None = None
     num_distillation_outputs: int = 1
     hierarchical_layers: list[int] | None = None
+    pretrained_grid_size: int | None = None
+
+    def __post_init__(self, **kwargs):
+        super().__post_init__(**kwargs)
+        if self.hierarchical_layers is not None and self.num_distillation_outputs > len(self.hierarchical_layers):
+            raise ValueError(
+                f"`num_distillation_outputs` ({self.num_distillation_outputs}) cannot exceed "
+                f"`len(hierarchical_layers)` ({len(self.hierarchical_layers)})."
+            )
 
 
 __all__ = ["VJEPA2Config"]
