@@ -503,6 +503,8 @@ class LocateAnythingModel(LocateAnythingPreTrainedModel):
             pixel_values=pixel_values.to(self.vision_tower.dtype), image_grid_thw=image_grid_thw, **kwargs
         )
         image_features = self.multi_modal_projector(vision_outputs.last_hidden_state, image_grid_thw)
+        split_sizes = (image_grid_thw[:, 1:].prod(-1) // self.vision_tower.config.spatial_merge_size**2).tolist()
+        image_features = torch.split(image_features, split_sizes)
         return BaseModelOutputWithPooling(
             last_hidden_state=vision_outputs.last_hidden_state,
             pooler_output=image_features,
@@ -561,6 +563,7 @@ class LocateAnythingModel(LocateAnythingPreTrainedModel):
         image_features = None
         if pixel_values is not None:
             image_features = self.get_image_features(pixel_values, image_grid_thw).pooler_output
+            image_features = torch.cat(image_features, dim=0)
             image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
             special_image_mask = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, image_features=image_features

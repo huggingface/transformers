@@ -161,6 +161,9 @@ class LocateAnythingModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineT
     def test_config(self):
         self.config_tester.run_common_tests()
 
+    def test_reverse_loading_mapping(self):
+        super().test_reverse_loading_mapping(skip_base_model=True)
+
     def test_mismatching_num_image_tokens(self):
         config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
         for model_class in self.all_model_classes:
