@@ -604,8 +604,8 @@ class UdopLayerSelfAttention(nn.Module):
             past_key_values=past_key_values,
             **kwargs,
         )
-        hidden_states = hidden_states + self.dropout(attention_output)
-        return hidden_states, position_bias, attn_weights
+        attention_output = hidden_states + self.dropout(attention_output)
+        return attention_output, position_bias, attn_weights
 
 
 # Copied from transformers.models.t5.modeling_t5.T5LayerCrossAttention with T5->Udop
@@ -914,8 +914,7 @@ class RelativePositionBiasBase(nn.Module, ABC):
     def get_relative_position(self, positions):
         context_position = positions[:, :, None]
         memory_position = positions[:, None, :]
-        # Upcast to float32: the positions are scaled by `scaling_factor`, which can overflow the range of fp16/bf16
-        # for large bbox coordinates. float32 matches the default precision and keeps the bucketing exact.
+        # Upcast to float32: in fp16 the bucketing loses precision and indexes the bias embedding out of range.
         relative_position = (memory_position - context_position).float()
         if self.augmentation and self.training:
             relative_position *= random.uniform(*AUGMENTATION_RANGE)

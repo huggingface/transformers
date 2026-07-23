@@ -969,8 +969,8 @@ class LongT5LayerSelfAttention(nn.Module):
             past_key_values=past_key_values,
             **kwargs,
         )
-        hidden_states = hidden_states + self.dropout(attention_output)
-        return hidden_states, position_bias, attn_weights
+        attention_output = hidden_states + self.dropout(attention_output)
+        return attention_output, position_bias, attn_weights
 
 
 class LongT5LayerLocalSelfAttention(nn.Module):

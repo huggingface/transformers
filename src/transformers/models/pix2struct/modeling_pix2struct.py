@@ -803,8 +803,8 @@ class Pix2StructTextLayerSelfAttention(nn.Module):
             past_key_values=past_key_values,
             **kwargs,
         )
-        hidden_states = hidden_states + self.dropout(attention_output)
-        return hidden_states, position_bias, attn_weights
+        attention_output = hidden_states + self.dropout(attention_output)
+        return attention_output, position_bias, attn_weights
 
 
 # Copied from transformers.models.t5.modeling_t5.T5LayerCrossAttention with T5LayerNorm->Pix2StructLayerNorm,T5Attention->Pix2StructTextAttention,T5LayerCrossAttention->Pix2StructTextLayerCrossAttention,self.EncDecAttention->self.attention,config.d_model->config.hidden_size
