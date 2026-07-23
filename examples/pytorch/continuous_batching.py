@@ -113,7 +113,7 @@ def batch_generate(
         print("--- Finished CB Generation Example ---\n")
         print(f"CB generation took: {gen_time:.2f} seconds for {token_count} tokens. {tok_per_sec:.2f}tok/s")
     stats = {
-        "num_blocks": cb_config.num_blocks,
+        "num_pages": cb_config.num_fa_pages,
         "max_batch_tokens": cb_config.max_batch_tokens,
         "max_blocks_per_request": cb_config.max_blocks_per_request,
         "use_cuda_graph": cb_config.use_cuda_graph,
@@ -138,8 +138,8 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
 
     # Continuous batching parameters
-    parser.add_argument("--block-size", "-bs", type=int, default=256, help="Block size")
-    parser.add_argument("--num-blocks", "-n", type=int, default=None)
+    parser.add_argument("--page-size", "-s", type=int, default=256, help="Page size")
+    parser.add_argument("--num-pages", "-n", type=int, default=None)
     parser.add_argument("--max-batch-tokens", "-b", type=int, default=None)
 
     # Model parameters
@@ -271,8 +271,8 @@ if __name__ == "__main__":
         num_return_sequences=args.num_return_sequences,
     )
     cb_config = ContinuousBatchingConfig(
-        block_size=args.block_size,
-        num_blocks=args.num_blocks,
+        fa_page_size=args.page_size,
+        num_fa_pages=args.num_blocks,
         max_batch_tokens=args.max_batch_tokens,
         max_blocks_per_request=args.block_table,
         use_cuda_graph=use_cuda_graph,
