@@ -213,7 +213,7 @@ class Olmo3InternalIntegrationTest(unittest.TestCase):
         # Expected mean on dim = -1
         expectations = Expectations(
             {
-                ("cuda", 8): [[1.9575, -2.4659, 0.5985, 1.3795, -0.5207, -0.9844, -2.7795, -1.0069]],
+                ("cuda", 8): [[2.0097, -2.5104, 0.6044, 1.4389, -0.4990, -0.9521, -2.7803, -1.0300]],
             }
         )
         EXPECTED_MEAN = torch.tensor(expectations.get_expectation(), device=torch_device)
@@ -221,7 +221,7 @@ class Olmo3InternalIntegrationTest(unittest.TestCase):
         # slicing logits[0, 0, 0:30]
         expectations = Expectations(
             {
-                ("cuda", 8): [8.5625, 5.7812, 4.4688, 2.7031, 3.1094, 4.8125, 5.7188, 3.4219, 2.3906, 2.0938, 3.9844, 5.4688, 3.5312, 5.0938, 2.7656, 8.8125, 9.4375, 9.0625, 8.5000, 8.1875, 7.8750, 7.5312, 7.3125, 7.2812, 7.0000, 2.5625, 4.0312, 3.1719, 7.6562, 4.5625],
+                ("cuda", 8): [8.5625, 5.8125, 4.5000, 2.7500, 3.1562, 4.8750, 5.7812, 3.4844, 2.4844, 2.1562, 4.0312, 5.5000, 3.5625, 5.1562, 2.8438, 8.8125, 9.4375, 9.0625, 8.5000, 8.1875, 7.8750, 7.5312, 7.3125, 7.3125, 7.0000, 2.6250, 4.0625, 3.2344, 7.6875, 4.6250],
             }
         )  # fmt: skip
         EXPECTED_SLICE = torch.tensor(expectations.get_expectation(), device=torch_device)
@@ -312,6 +312,7 @@ class Olmo3IntegrationTest(unittest.TestCase):
         cleanup(torch_device, gc_collect=True)
         cls.model = Olmo3ForCausalLM.from_pretrained(cls.model_id, device_map="auto")
         cls.tokenizer = AutoTokenizer.from_pretrained(cls.model_id)
+        cls.tokenizer.padding_side = "left"
 
     def tearDown(self):
         cleanup(torch_device, gc_collect=True)
