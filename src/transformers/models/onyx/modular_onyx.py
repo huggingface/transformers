@@ -199,10 +199,6 @@ class OnyxTextConfig(Gemma2Config, PreTrainedConfig):
     no_rope_layers: list[int] | None = None
 
     def __post_init__(self, **kwargs):
-        # Accept the legacy `hidden_act` alias from checkpoints saved with the trust_remote_code impl.
-        if (legacy_act := kwargs.pop("hidden_act", None)) is not None:
-            self.hidden_activation = legacy_act
-
         # iRoPE mask: default to NoPE every 4 layers, counted backward from the last layer.
         if self.no_rope_layers is None:
             stride = 4
