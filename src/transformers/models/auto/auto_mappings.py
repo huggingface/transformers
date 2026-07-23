@@ -43,6 +43,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("audioflamingo3_encoder", "AudioFlamingo3EncoderConfig"),
         ("autoformer", "AutoformerConfig"),
         ("aya_vision", "AyaVisionConfig"),
+        ("bailing2_5_moe", "BailingMoeV2_5Config"),
         ("bamba", "BambaConfig"),
         ("bark", "BarkConfig"),
         ("bart", "BartConfig"),
