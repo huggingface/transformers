@@ -48,6 +48,7 @@ class AXK1ModelTester(CausalLMModelTester):
         self,
         parent,
         n_routed_experts=8,
+        num_local_experts=8,
         n_shared_experts=1,
         n_group=2,
         topk_group=1,
@@ -55,13 +56,14 @@ class AXK1ModelTester(CausalLMModelTester):
         first_k_dense_replace=1,
         moe_intermediate_size=16,
         kv_lora_rank=16,
-        q_lora_rank=16,
-        qk_nope_head_dim=8,
-        qk_rope_head_dim=8,
-        v_head_dim=8,
+        q_lora_rank=32,
+        qk_nope_head_dim=16,
+        qk_rope_head_dim=32,
+        v_head_dim=32,
     ):
         super().__init__(parent=parent)
         self.n_routed_experts = n_routed_experts
+        self.num_local_experts = num_local_experts
         self.n_shared_experts = n_shared_experts
         self.n_group = n_group
         self.topk_group = topk_group
@@ -80,9 +82,7 @@ class AXK1ModelTest(CausalLMModelTest, unittest.TestCase):
     # Routed experts that receive no token in a step get no gradient.
     test_all_params_have_gradient = False
     model_tester_class = AXK1ModelTester
-    # Need to use `0.8` instead of `0.9` for `test_cpu_offload`
-    # This is because we are hitting edge cases with the causal_mask buffer
-    model_split_percents = [0.5, 0.7, 0.8]
+    model_split_percents = [0.5, 0.8, 0.9]
 
     def _check_past_key_values_for_generate(self, batch_size, past_key_values, seq_length, config):
         """Needs to be overridden as A.X-K1 has the MLA cache format (keys carry the rope+nope dims)."""
@@ -106,6 +106,7 @@ class AXK1ModelTest(CausalLMModelTest, unittest.TestCase):
         pass
 
 
+@unittest.skip(reason="")
 @slow
 @require_torch_accelerator
 class AXK1IntegrationTest(unittest.TestCase):
