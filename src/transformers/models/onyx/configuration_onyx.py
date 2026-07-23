@@ -17,8 +17,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from inspect import signature
-
 from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
@@ -65,9 +63,18 @@ class OnyxVisionConfig(PreTrainedConfig):
     max_position_embeddings: int = 32 * 32  # == `pos_h * pos_w`
     output_dim: int = 6144
     patch_temporal: int = 2
-    sparse_attention_factor: int = 4
     adapter_dim: int = 4096
     layer_norm_eps: float = 1e-05
+    layer_types: list[str] | None = None
+
+    def __post_init__(self, **kwargs):
+        if self.layer_types is None:
+            stride = 4
+            self.layer_types = [
+                "full_attention" if (i + 1) % stride == 0 or i == self.num_hidden_layers - 1 else "sliding_attention"
+                for i in range(self.num_hidden_layers)
+            ]
+        super().__post_init__(**kwargs)
 
 
 @auto_docstring
@@ -94,10 +101,9 @@ class OnyxTextConfig(PreTrainedConfig):
         Whether to apply a scaleless RMSNorm to the token embeddings before the decoder stack.
     post_norm_eps (`float`, *optional*, defaults to 1e-8):
         Epsilon used for the post-attention and post-FFN norms (which sit between the sub-layer output and the residual).
-    every_n_layers_nope (`int`, *optional*, defaults to 4):
-        iRoPE stride. NoPE (no rotary) is applied every N layers, counting backward from the last layer.
     no_rope_layers (`list[int]`, *optional*):
-        Explicit per-layer rotary mask: 1 = apply rotary, 0 = NoPE. Derived from `every_n_layers_nope` if unset.
+        Explicit per-layer rotary mask: 1 = apply rotary, 0 = NoPE. Defaults to an iRoPE pattern with NoPE
+        every 4 layers, counting backward from the last layer.
     """
 
     model_type = "onyx_text"
@@ -150,19 +156,14 @@ class OnyxTextConfig(PreTrainedConfig):
     output_multiplier: float = 0.19611613513818404
     normalize_tok_embeddings: bool = True
     post_norm_eps: float = 1e-8
-    every_n_layers_nope: int = 4
     no_rope_layers: list[int] | None = None
 
     def __post_init__(self, **kwargs):
-        # Accept the legacy `hidden_act` alias from checkpoints saved with the trust_remote_code impl.
-        if (legacy_act := kwargs.pop("hidden_act", None)) is not None:
-            self.hidden_activation = legacy_act
-
-        # iRoPE mask: NoPE layers counted backward from the last layer.
+        # iRoPE mask: default to NoPE every 4 layers, counted backward from the last layer.
         if self.no_rope_layers is None:
+            stride = 4
             self.no_rope_layers = [
-                0 if (self.num_hidden_layers - 1 - i) % self.every_n_layers_nope == 0 else 1
-                for i in range(self.num_hidden_layers)
+                0 if (self.num_hidden_layers - 1 - i) % stride == 0 else 1 for i in range(self.num_hidden_layers)
             ]
 
         # Full attention for NoPE layers, sliding otherwise (Onyx's default layout matches
@@ -184,33 +185,6 @@ class OnyxTextConfig(PreTrainedConfig):
             )
 
 
-# TODO: temporary shim for checkpoints saved with the original flat (non-nested) config format.
-# Drop the two maps and the legacy branch in `OnyxConfig.__post_init__` once the hub repo ships
-# an updated nested config (+ tokenizer).
-_LEGACY_FLAT_VISION_KEYS = {
-    "vision_latent_dim": "hidden_size",
-    "vision_heads": "num_attention_heads",
-    "vision_layers": "num_hidden_layers",
-    "vision_mlp_ratio": "mlp_ratio",
-    "vision_output_dim": "output_dim",
-    "vision_adapter_dim": "adapter_dim",
-    "vision_merge_kernel_size": "merge_kernel_size",
-    "vision_patch_size": "patch_size",
-    "vision_patch_temporal": "patch_temporal",
-    "vision_pos_emb_height": "pos_emb_height",
-    "vision_pos_emb_width": "pos_emb_width",
-    "vision_sparse_attention_factor": "sparse_attention_factor",
-    "video_num_frames": "video_num_frames",  # UNUSED CONFIG ATTR
-    "video_sampling_fps": "video_sampling_fps",  # UNUSED CONFIG ATTR
-}
-_LEGACY_FLAT_TOKEN_ID_KEYS = {
-    "patch_token_id": "image_token_id",
-    "vid_start_id": "video_start_id",
-    "vid_end_id": "video_end_id",
-    "vid_frame_sep_id": "video_frame_sep_id",
-}
-
-
 @auto_docstring
 @strict
 class OnyxConfig(PreTrainedConfig):
@@ -230,29 +204,6 @@ class OnyxConfig(PreTrainedConfig):
     video_token_id: int = 200091
 
     def __post_init__(self, **kwargs):
-        for legacy_key, key in _LEGACY_FLAT_TOKEN_ID_KEYS.items():
-            if legacy_key in kwargs:
-                setattr(self, key, kwargs.pop(legacy_key))
-
-        if self.text_config is None and "rope_theta" in kwargs:
-            text_field_names = set(signature(OnyxTextConfig.__init__).parameters)
-            text_kwargs = {key: kwargs.pop(key) for key in list(kwargs) if key in text_field_names}
-            text_kwargs["rope_parameters"] = {"rope_type": "default", "rope_theta": kwargs.pop("rope_theta")}
-            if (legacy_softcap := kwargs.pop("output_soft_cap_temp", None)) is not None:
-                text_kwargs["final_logit_softcapping"] = legacy_softcap
-            if (legacy_act := kwargs.pop("hidden_act", None)) is not None:
-                text_kwargs["hidden_activation"] = legacy_act
-            self.text_config = OnyxTextConfig(**text_kwargs)
-
-        if self.vision_config is None and any(legacy_key in kwargs for legacy_key in _LEGACY_FLAT_VISION_KEYS):
-            self.vision_config = OnyxVisionConfig(
-                **{
-                    key: kwargs.pop(legacy_key)
-                    for legacy_key, key in _LEGACY_FLAT_VISION_KEYS.items()
-                    if legacy_key in kwargs
-                }
-            )
-
         if self.text_config is None:
             self.text_config = OnyxTextConfig()
             logger.info("text_config is None, using default OnyxTextConfig text config.")

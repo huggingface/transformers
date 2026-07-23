@@ -793,7 +793,7 @@ MODEL_FOR_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
         ("olmo3", "Olmo3ForCausalLM"),
         ("olmo_hybrid", "OlmoHybridForCausalLM"),
         ("olmoe", "OlmoeForCausalLM"),
-        ("onyx", "OnyxForCausalLM"),
+        ("onyx", "OnyxForConditionalGeneration"),
         ("onyx_text", "OnyxForCausalLM"),
         ("openai-gpt", "OpenAIGPTLMHeadModel"),
         ("opt", "OPTForCausalLM"),
