@@ -164,7 +164,7 @@
   - local: task_summary
     title: 🤗 Transformersの機能
   - local: tasks_explained
-    title: 🤗 Transformersがタスクを解決する方法
+    title: 🤗 Transformersがタスクを実行する方法
   - local: model_summary
     title: Transformerモデルファミリー
   - local: tokenizer_summary
@@ -274,6 +274,8 @@
         title: DeBERTa-v2
       - local: model_doc/dialogpt
         title: DialoGPT
+      - local: model_doc/distilbert
+        title: DistilBERT   
       title: 文章モデル
     - isExpanded: false
       sections:
