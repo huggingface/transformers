@@ -419,25 +419,15 @@ class PermuteForRope(ConversionOps):
     Applies the permutation required to convert complex RoPE weights to the split sin/cos format.
     """
 
-    def __init__(self, subconfig_key: str | None = None, inverse: bool = False):
-        self.subconfig_key = subconfig_key
-        self.inverse = inverse
+    def __init__(self):
+        pass
 
     def _apply(self, tensor: torch.Tensor) -> torch.Tensor:
-        dim0 = tensor.shape[0]
-        config = self.config
-        if self.subconfig_key is not None:
-            config = getattr(self.config, self.subconfig_key, self.config)
-        n_heads = getattr(config, "num_attention_heads", 1)
-        half_head = dim0 // n_heads // 2
+        dim1, dim2 = tensor.shape
+        n_heads = self.config.getattr("num_attention_heads", 1)
 
-        head_shape = (2, half_head) if self.inverse else (half_head, 2)
-        if tensor.ndim == 2:
-            tensor = tensor.view(n_heads, *head_shape, tensor.shape[1])
-            tensor = tensor.transpose(1, 2).reshape(dim0, tensor.shape[-1])
-        elif tensor.ndim == 1:
-            tensor = tensor.view(n_heads, *head_shape)
-            tensor = tensor.transpose(1, 2).reshape(dim0)
+        tensor = tensor.view(n_heads, dim1 // n_heads // 2, 2, dim2)
+        tensor = tensor.transpose(1, 2).reshape(dim1, dim2)
         return tensor
 
     @torch.no_grad
@@ -459,7 +449,7 @@ class PermuteForRope(ConversionOps):
 
     @property
     def reverse_op(self) -> ConversionOps:
-        return PermuteForRope(subconfig_key=self.subconfig_key, inverse=not self.inverse)
+        return PermuteForRope()
 
 
 class VisionFuseAndPermuteForRope(ConversionOps):
