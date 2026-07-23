@@ -791,8 +791,7 @@ class Glm5NextTextIndexer(nn.Module):
         hidden_shape = (batch_size, seq_len, -1, self.head_dim)
 
         q = self.wq_b(q_resid).view(hidden_shape)
-        k = self.k_norm(self.wk(hidden_states)).view(hidden_shape)
-        k = k.squeeze(2)
+        k = self.k_norm(self.wk(hidden_states)).view(hidden_shape).squeeze(2)
 
         gate_scores = F.linear(hidden_states, self.index_kpool_compress_gate)
         valid_channel = attention_mask.to(k.dtype)[..., None]
@@ -1469,6 +1468,7 @@ class Glm5NextTextModel(Glm5NextPreTrainedModel):
                 hidden_states,
                 attention_mask=causal_mask_mapping[self.config.layer_types[i]],
                 position_ids=position_ids,
+                # Key change using NoPE
                 position_embeddings=None,
                 input_ids=input_ids,
                 past_key_values=past_key_values,

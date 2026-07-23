@@ -129,7 +129,6 @@ class Glm5NextTextConfig(PreTrainedConfig):
     bos_token_id: int | None = None
     eos_token_id: int | list[int] | None = None
     tie_word_embeddings: bool = False
-    rope_parameters: dict | None = None
     mlp_layer_types: list[str] | None = None
     attention_bias: bool = False
     attention_dropout: float | int = 0.0
@@ -190,8 +189,7 @@ class Glm5NextTextConfig(PreTrainedConfig):
                 ]
 
         # Convert dict to attributes (if given)
-        linear_attn_dict = kwargs.pop("linear_attn_config", None)
-        if linear_attn_dict is not None:
+        if (linear_attn_dict := kwargs.get("linear_attn_config")) is not None:
             self.linear_head_dim = linear_attn_dict.get("head_dim", self.linear_head_dim)
             self.linear_num_heads = linear_attn_dict.get("num_heads", self.linear_num_heads)
             self.linear_conv_kernel_dim = linear_attn_dict.get("short_conv_kernel_size", self.linear_conv_kernel_dim)
@@ -224,6 +222,11 @@ class Glm5NextTextConfig(PreTrainedConfig):
 
         if self.q_lora_rank is None:
             raise ValueError("For DSA usage in the attention layers, the `q_lora_rank` is strictly required!")
+
+        if self.qk_rope_head_dim > 0:
+            raise ValueError(
+                f"Expecting NoPE for the DSA attention layers, but got {self.qk_rope_head_dim} as RoPE dim."
+            )
 
 
 @auto_docstring(checkpoint="zai-org/GLM-5-Next")
