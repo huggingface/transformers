@@ -831,7 +831,9 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
         config = OpenVINOConfig(dynamic=dynamic)
 
         for model_class in self.all_generative_model_classes:
-            if self._should_skip(model_class, generate=True, dynamic=dynamic, backend="openvino", multi_token=multi_token):
+            if self._should_skip(
+                model_class, generate=True, dynamic=dynamic, backend="openvino", multi_token=multi_token
+            ):
                 continue
 
             model_config, components = self._prepare_export_generate_model_and_inputs(model_class, multi_token)
@@ -863,7 +865,9 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
         config = ExecutorchConfig(dynamic=dynamic)
 
         for model_class in self.all_generative_model_classes:
-            if self._should_skip(model_class, generate=True, dynamic=dynamic, backend="executorch", multi_token=multi_token):
+            if self._should_skip(
+                model_class, generate=True, dynamic=dynamic, backend="executorch", multi_token=multi_token
+            ):
                 continue
 
             model_config, components = self._prepare_export_generate_model_and_inputs(model_class, multi_token)
