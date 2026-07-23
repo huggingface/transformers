@@ -238,7 +238,11 @@ class MambaMixer(nn.Module):
                 )
 
             hidden_states = causal_conv1d_fn(
-                hidden_states, self.conv1d.weight.squeeze(1), self.conv1d.bias, seq_idx=kwargs.get("seq_idx")
+                hidden_states,
+                self.conv1d.weight.squeeze(1),
+                self.conv1d.bias,
+                self.activation,
+                seq_idx=kwargs.get("seq_idx"),
             )
 
             # Drop the additional previous states
