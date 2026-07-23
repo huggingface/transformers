@@ -3746,6 +3746,7 @@ class Qwen2_5OmniForConditionalGeneration(Qwen2_5OmniPreTrainedModel, Generation
             "top_p": talker_top_p,
             "temperature": talker_temperature,
             "eos_token_id": talker_eos_token_id,
+            "pad_token_id": self.talker.codec_pad_token,
             "repetition_penalty": talker_repetition_penalty,
         }
         token2wav_kwargs = {}
@@ -3894,18 +3895,42 @@ class Qwen2_5OmniForConditionalGeneration(Qwen2_5OmniPreTrainedModel, Generation
             suppress_tokens=[self.talker.codec_bos_token],
             **{k: (v.to(input_ids.device) if torch.is_tensor(v) else v) for k, v in talker_kwargs.items()},
         )
-        talker_generate_codes = talker_result[:, talker_input_ids.shape[1] : -1]
+        talker_generate_codes = talker_result[:, talker_input_ids.shape[1] :]
+        eos_token_ids = torch.as_tensor(talker_kwargs["eos_token_id"], device=talker_generate_codes.device).flatten()
+        eos_mask = (talker_generate_codes.unsqueeze(-1) == eos_token_ids).any(dim=-1)
+        code_positions = torch.arange(talker_generate_codes.shape[-1], device=talker_generate_codes.device)
+        talker_code_lengths = torch.where(eos_mask, code_positions, talker_generate_codes.shape[-1]).min(dim=-1).values
 
         # 3. Generate wavs from code
         if self.token2wav.dtype != torch.float:
             self.token2wav.float()
 
-        wav = self.token2wav(
-            talker_generate_codes.to(input_ids.device),
-            conditioning=speaker_params["cond"].to(input_ids.device).float().expand(batch_size, -1),
-            reference_mel=speaker_params["ref_mel"].to(input_ids.device).float().expand(batch_size, -1, -1),
-            **token2wav_kwargs,
-        )
+        conditioning = speaker_params["cond"].to(input_ids.device).float().expand(batch_size, -1)
+        reference_mel = speaker_params["ref_mel"].to(input_ids.device).float().expand(batch_size, -1, -1)
+        if (talker_code_lengths == talker_code_lengths[0]).all():
+            code_length = talker_code_lengths[0].item()
+            wav = self.token2wav(
+                talker_generate_codes[:, :code_length],
+                conditioning=conditioning,
+                reference_mel=reference_mel,
+                **token2wav_kwargs,
+            )
+        else:
+            wavs = []
+            for index, code_length in enumerate(talker_code_lengths.tolist()):
+                wavs.append(
+                    self.token2wav(
+                        talker_generate_codes[index : index + 1, :code_length],
+                        conditioning=conditioning[index : index + 1],
+                        reference_mel=reference_mel[index : index + 1],
+                        **token2wav_kwargs,
+                    )
+                )
+
+            max_waveform_length = max(wav.shape[-1] for wav in wavs)
+            wav = wavs[0].new_zeros((batch_size, *wavs[0].shape[1:-1], max_waveform_length))
+            for index, sample_wav in enumerate(wavs):
+                wav[index, ..., : sample_wav.shape[-1]] = sample_wav[0]
 
         return thinker_result.sequences, wav.float()
 

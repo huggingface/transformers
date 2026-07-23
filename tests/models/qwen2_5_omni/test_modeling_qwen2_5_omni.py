@@ -17,6 +17,7 @@
 import tempfile
 import unittest
 from io import BytesIO
+from types import SimpleNamespace
 from urllib.request import urlopen
 
 import librosa
@@ -594,6 +595,86 @@ class Qwen2_5OmniThinkerForConditionalGenerationModelTest(
 
 
 @require_torch
+class Qwen2_5OmniBatchAudioGenerationTest(unittest.TestCase):
+    def test_generate_trims_padded_talker_codes(self):
+        class DummyThinker:
+            def __init__(self):
+                self.embed_tokens = torch.nn.Embedding(16, 4)
+
+            def generate(self, input_ids, **kwargs):
+                batch_size, sequence_length = input_ids.shape
+                input_hidden_states = torch.ones(batch_size, sequence_length, 4)
+                generated_hidden_states = torch.ones(batch_size, 1, 4)
+                return SimpleNamespace(
+                    sequences=torch.cat([input_ids, torch.full((batch_size, 1), 7, dtype=torch.long)], dim=-1),
+                    hidden_states=(
+                        (input_hidden_states, input_hidden_states),
+                        (generated_hidden_states, generated_hidden_states),
+                    ),
+                )
+
+            def get_input_embeddings(self):
+                return self.embed_tokens
+
+        class DummyTalker:
+            codec_mask_token = 10
+            codec_pad_token = 8292
+            codec_bos_token = 11
+            text_bos_token = 4
+            text_eos_token = 5
+            text_pad_token = 6
+
+            def generate(self, input_ids, attention_mask, **kwargs):
+                self.attention_mask = attention_mask
+                generated_codes = torch.tensor([[100, 8294, 8292], [101, 102, 8294]], device=input_ids.device)
+                return torch.cat([input_ids, generated_codes], dim=-1)
+
+        class DummyToken2Wav:
+            dtype = torch.float
+
+            def __init__(self):
+                self.codes = []
+
+            def float(self):
+                return self
+
+            def __call__(self, code, **kwargs):
+                self.codes.append(code)
+                return torch.ones((code.shape[0], 1, code.shape[1] * 2), dtype=torch.float, device=code.device)
+
+        token2wav = DummyToken2Wav()
+        talker = DummyTalker()
+        model = SimpleNamespace(
+            speaker_map={
+                "Chelsie": {
+                    "bos_token": 4,
+                    "cond": torch.ones(1, 4),
+                    "ref_mel": torch.ones(1, 1, 4),
+                }
+            },
+            has_talker=True,
+            thinker=DummyThinker(),
+            talker=talker,
+            token2wav=token2wav,
+        )
+        input_ids = torch.tensor([[1, 2, 3], [1, 2, 0]])
+        attention_mask = torch.tensor([[1, 1, 1], [1, 1, 0]])
+
+        _, waveform = Qwen2_5OmniForConditionalGeneration.generate(
+            model,
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            generation_mode="audio",
+            talker_do_sample=False,
+        )
+
+        self.assertTrue(torch.equal(talker.attention_mask, torch.tensor([[1, 1, 1, 1, 1], [1, 1, 0, 1, 1]])))
+        self.assertEqual([codes.tolist() for codes in token2wav.codes], [[[100]], [[101, 102]]])
+        self.assertEqual(waveform.shape, (2, 1, 4))
+        self.assertTrue(torch.equal(waveform[0, :, 2:], torch.zeros((1, 2))))
+
+
+@require_torch
 class Qwen2_5OmniModelIntegrationTest(unittest.TestCase):
     def setUp(self):
         self.processor = AutoProcessor.from_pretrained("Qwen/Qwen2.5-Omni-7B")
@@ -906,6 +987,7 @@ class Qwen2_5OmniModelIntegrationTest(unittest.TestCase):
         for batch_audio, single_audio in zip(batch_audio_output, single_audio_outputs):
             self.assertEqual(batch_audio.shape, single_audio.shape)
             torch.testing.assert_close(batch_audio, single_audio, rtol=1e-3, atol=1e-3)
+
     def test_small_model_integration_test_token2wav_regression(self):
         """
         reproducer (for the expected values below): https://gist.github.com/ebezzam/12286028df44e91434f7c770efc4e5b5
