@@ -168,5 +168,14 @@ class T5GemmaConfig(PreTrainedConfig):
 
         super().__post_init__(**kwargs)
 
+    # Bridge for generation/cache utils which expect `config.num_hidden_layers`.
+    # Prefer a top-level override if present; otherwise use the decoder's count.
+    @property
+    def num_hidden_layers(self):
+        if "num_hidden_layers" in self.__dict__:
+            return self.__dict__["num_hidden_layers"]
+        dec = getattr(self, "decoder", None)
+        return getattr(dec, "num_hidden_layers", None)
+
 
 __all__ = ["T5GemmaConfig", "T5GemmaModuleConfig"]
