@@ -58,6 +58,9 @@ class DecompressExperts(ConversionOps):
                 self.weight_shape = nn.Parameter(shape, requires_grad=False)
 
         # `pack_factor` low-bit weights are packed per int32 along the packed dim.
+        # Used only as a fallback for `weight_shape` (see below): rebuilding the
+        # unpacked in-dim as `packed_cols * pack_factor` is exact only when
+        # `num_bits` divides 32; for 3/5/6/7-bit dense packing it under-counts.
         pack_factor = 32 // quantization_scheme.weights.num_bits
 
         # Per-expert compressed projections of size (input-dim; output-dim)
@@ -67,16 +70,22 @@ class DecompressExperts(ConversionOps):
                 continue
             quantized = value
             scales = input_dict[key.replace("weight_packed", "weight_scale")]
+            shapes = input_dict.get(key.replace("weight_packed", "weight_shape"))
 
             # Pre-allocate the stacked output buffer to reduce cuda mem fragmentation
             # Without pre-allocation the loop accumulates N tensors per expert and next
             # `MergeModulelist` stacks the full list for MoE kernels compatipility, i.e. x2 memory
             output = None
             for i, (quant, scale) in enumerate(zip(quantized, scales)):
-                # The checkpoint's `weight_shape` is a 2D tensor of `(out-dim, in-dim)`
-                # Under TP/EP sharding it leaves the 2-element `weight_shape` empty on most ranks
-                # Packed tensor can be used instead to rebuild `weight_shape`
-                shape = torch.tensor([quant.shape[0], quant.shape[1] * pack_factor])
+                # Prefer the checkpoint's stored per-expert `weight_shape`
+                # (out-dim, in-dim); it is exact for any bit width. Fall back to
+                # rebuilding from the packed tensor only when it is missing/empty,
+                # e.g. left empty on most ranks under TP/EP sharding.
+                stored_shape = None if shapes is None else shapes[i]
+                if stored_shape is not None and stored_shape.numel():
+                    shape = stored_shape
+                else:
+                    shape = torch.tensor([quant.shape[0], quant.shape[1] * pack_factor])
                 module = DummyModule(quant, scale, shape)
                 module.quantization_scheme = quantization_scheme
                 compressor.decompress_module(module)
