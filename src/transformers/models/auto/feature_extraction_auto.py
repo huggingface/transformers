@@ -21,10 +21,8 @@ from collections import OrderedDict
 from ...audio_processing_base import AudioProcessingMixin
 from ...configuration_utils import PreTrainedConfig
 from ...dynamic_module_utils import get_class_from_dynamic_module, resolve_trust_remote_code
-from ...feature_extraction_utils import FeatureExtractionMixin
 from ...utils import CONFIG_NAME, FEATURE_EXTRACTOR_NAME, PROCESSOR_NAME, cached_file, logging, safe_load_json_file
 from .auto_factory import _LazyAutoMapping
-from .auto_mappings import FEATURE_EXTRACTOR_MAPPING_NAMES
 from .configuration_auto import (
     CONFIG_MAPPING_NAMES,
     AutoConfig,
@@ -44,7 +42,13 @@ FEATURE_EXTRACTOR_MAPPING_NAMES = OrderedDict(
         # The backend label reflects the actual base class of the registered processor. When a
         # model has only one sibling today the other backend's lookup falls back via
         # `_load_class_with_fallback` with a warning. Whisper is the first model with both.
-        ("audio-spectrogram-transformer", {"torch": "AudioSpectrogramTransformerAudioProcessor", "numpy": "AudioSpectrogramTransformerAudioProcessorNumpy"}),
+        (
+            "audio-spectrogram-transformer",
+            {
+                "torch": "AudioSpectrogramTransformerAudioProcessor",
+                "numpy": "AudioSpectrogramTransformerAudioProcessorNumpy",
+            },
+        ),
         ("audioflamingo3", {"torch": "WhisperAudioProcessor", "numpy": "WhisperAudioProcessorNumpy"}),
         ("clap", {"torch": "ClapAudioProcessor", "numpy": "ClapAudioProcessorNumpy"}),
         ("clvp", {"torch": "ClvpAudioProcessor", "numpy": "ClvpAudioProcessorNumpy"}),
@@ -62,7 +66,10 @@ FEATURE_EXTRACTOR_MAPPING_NAMES = OrderedDict(
         ("higgs_audio_v2_tokenizer", {"torch": "DacAudioProcessor", "numpy": "DacAudioProcessorNumpy"}),
         ("hubert", {"torch": "Wav2Vec2AudioProcessor", "numpy": "Wav2Vec2AudioProcessorNumpy"}),
         ("inkling_mm_model", {"torch": "InklingAudioProcessor"}),
-        ("kyutai_speech_to_text", {"torch": "KyutaiSpeechToTextAudioProcessor", "numpy": "KyutaiSpeechToTextAudioProcessorNumpy"}),
+        (
+            "kyutai_speech_to_text",
+            {"torch": "KyutaiSpeechToTextAudioProcessor", "numpy": "KyutaiSpeechToTextAudioProcessorNumpy"},
+        ),
         ("lasr_ctc", {"torch": "LasrAudioProcessor"}),
         ("lasr_encoder", {"torch": "LasrAudioProcessor"}),
         ("markuplm", {"torch": "MarkupLMFeatureExtractor"}),
@@ -363,10 +370,7 @@ def _resolve_audio_processor_from_pretrained(pretrained_model_name_or_path, *, b
 
     config_dict, _ = AudioProcessingMixin.get_audio_processor_dict(pretrained_model_name_or_path, **kwargs)
 
-    class_name_in_config = (
-        config_dict.get("audio_processor_type")
-        or config_dict.get("feature_extractor_type")
-    )
+    class_name_in_config = config_dict.get("audio_processor_type") or config_dict.get("feature_extractor_type")
     auto_map = config_dict.get("auto_map") or {}
     audio_processor_auto_map = auto_map.get("AutoAudioProcessor") or auto_map.get("AutoFeatureExtractor")
 
@@ -379,9 +383,8 @@ def _resolve_audio_processor_from_pretrained(pretrained_model_name_or_path, *, b
             config, "feature_extractor_type", None
         )
         if hasattr(config, "auto_map"):
-            audio_processor_auto_map = (
-                config.auto_map.get("AutoAudioProcessor")
-                or config.auto_map.get("AutoFeatureExtractor")
+            audio_processor_auto_map = config.auto_map.get("AutoAudioProcessor") or config.auto_map.get(
+                "AutoFeatureExtractor"
             )
 
     audio_processor_class = None
@@ -394,7 +397,11 @@ def _resolve_audio_processor_from_pretrained(pretrained_model_name_or_path, *, b
     has_local_code = audio_processor_class is not None or type(config) in FEATURE_EXTRACTOR_MAPPING
     if has_local_code and audio_processor_class is None:
         audio_processor_class = _load_class_with_fallback(FEATURE_EXTRACTOR_MAPPING[type(config)], backend)
-    explicit_local_code = has_local_code and audio_processor_class is not None and not audio_processor_class.__module__.startswith("transformers.")
+    explicit_local_code = (
+        has_local_code
+        and audio_processor_class is not None
+        and not audio_processor_class.__module__.startswith("transformers.")
+    )
 
     if has_remote_code:
         class_ref = _resolve_auto_map_class_ref(audio_processor_auto_map, backend)
@@ -404,9 +411,7 @@ def _resolve_audio_processor_from_pretrained(pretrained_model_name_or_path, *, b
         )
 
     if has_remote_code and trust_remote_code and not explicit_local_code:
-        audio_processor_class = get_class_from_dynamic_module(
-            class_ref, pretrained_model_name_or_path, **kwargs
-        )
+        audio_processor_class = get_class_from_dynamic_module(class_ref, pretrained_model_name_or_path, **kwargs)
         _ = kwargs.pop("code_revision", None)
         audio_processor_class.register_for_auto_class()
         return audio_processor_class.from_pretrained(pretrained_model_name_or_path, **kwargs)
