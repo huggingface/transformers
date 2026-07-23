@@ -816,6 +816,24 @@ class GenerationConfig(PushToHubMixin):
                         f"`return_dict_in_generate` is not `True`, `{extra_output_flag}` is ignored."
                     )
 
+        # 2.7. Forcing a token while suppressing it. If every forced (bos/eos) token is also suppressed, all logits
+        # become `-inf` at the forcing step, yielding `nan` probabilities and a generation crash (see #24099).
+        if self.suppress_tokens is not None:
+            suppressed_tokens = set(self.suppress_tokens)
+            for forced_attr in ("forced_bos_token_id", "forced_eos_token_id"):
+                forced_tokens = getattr(self, forced_attr)
+                if forced_tokens is None:
+                    continue
+                forced_tokens = {forced_tokens} if isinstance(forced_tokens, int) else set(forced_tokens)
+                if forced_tokens and forced_tokens.issubset(suppressed_tokens):
+                    raise ValueError(
+                        f"Every token in `{forced_attr}` ({sorted(forced_tokens)}) is also in `suppress_tokens`. "
+                        "Forcing a token while suppressing it sets all logits to `-inf` at the forcing step, which "
+                        "produces `nan` probabilities and crashes generation. Remove the overlapping token(s) from "
+                        f"either `{forced_attr}` or `suppress_tokens` (if you meant to prevent an early EOS token, use "
+                        "`min_new_tokens` instead)."
+                    )
+
         # 3. Check common issue: passing `generate` arguments inside the generation config
         generate_arguments = (
             "logits_processor",
