@@ -101,7 +101,6 @@ def build_config():
         output_multiplier=0.19611613513818404,
         normalize_tok_embeddings=True,
         post_norm_eps=1e-8,
-        every_n_layers_nope=4,
     )
 
     vision_config = OnyxVisionConfig(
@@ -113,7 +112,6 @@ def build_config():
         patch_size=14,
         patch_temporal=2,
         downsample_factor=2,
-        sparse_attention_factor=4,
         pos_emb_grid_h=32,
         pos_emb_grid_w=32,
         adapter_dim=4096,
