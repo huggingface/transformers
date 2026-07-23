@@ -276,7 +276,7 @@ class FalconMambaMixer(nn.Module):
             )
 
             # Drop the additional previous states
-            if use_precomputed_states:
+            if cache_params is not None:
                 hidden_states = hidden_states[:, :, -seq_len:]
 
         return hidden_states
