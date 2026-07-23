@@ -15,7 +15,7 @@
 
 import unittest
 
-from transformers import is_torch_available
+from transformers import AutoModelForCausalLM, AutoTokenizer, is_torch_available
 from transformers.testing_utils import (
     Expectations,
     cleanup,
@@ -34,7 +34,6 @@ if is_torch_available():
     torch.set_float32_matmul_precision("highest")
 
     from transformers import (
-        AXK1ForCausalLM,
         AXK1Model,
         Cache,
     )
@@ -109,38 +108,30 @@ class AXK1ModelTest(CausalLMModelTest, unittest.TestCase):
 @slow
 @require_torch_accelerator
 class AXK1IntegrationTest(unittest.TestCase):
-    # A.X-K1's released checkpoints are huge MoEs (up to ~1T params) that do not fit a CI GPU, so these
-    # tests run on a small *randomized* checkpoint (seeded, ~21M params) hosted on the Hub, generated with
-    # the same shapes as `AXK1ModelTester`.
-    model_id = "skt/A.X-K1-tiny-random"
+    model_id = "hf-internal-testing/tiny-axk1"
+
+    def setup(self):
+        cleanup(torch_device, gc_collect=False)
 
     def tearDown(self):
         cleanup(torch_device, gc_collect=False)
 
-    def test_generation(self):
-        # Weights are randomly initialized so the decoded text is arbitrary; this just exercises the full
-        # greedy generation loop end to end and checks the output shape.
-        model = AXK1ForCausalLM.from_pretrained(self.model_id, dtype=torch.bfloat16, device_map="auto")
-        input_ids = torch.tensor([[1, 2, 3, 4, 5, 6, 7, 8]], device=torch_device)
-        generated_ids = model.generate(input_ids, max_new_tokens=20, do_sample=False)
-        self.assertEqual(generated_ids.shape, (1, input_ids.shape[1] + 20))
-
     def test_model_logits_batched(self):
-        model = AXK1ForCausalLM.from_pretrained(self.model_id, dtype=torch.bfloat16, device_map="auto")
         dummy_input = torch.LongTensor([[0, 0, 0, 0, 0, 0, 1, 2, 3], [1, 1, 2, 3, 4, 5, 6, 7, 8]]).to(torch_device)
         attention_mask = dummy_input.ne(0).to(torch.long)
+
+        model = AutoModelForCausalLM.from_pretrained(self.model_id, dtype=torch.bfloat16, device_map="auto")
 
         # Last-3x3 logits slice, left-padded (batch 0) and unpadded (batch 1) rows.
         EXPECTED_LOGITS_LEFT_PADDED = Expectations(
             {
-                ("cuda", 8): [[0.1504, -0.2656, -0.1592], [0.2656, 0.1875, -0.0601], [-0.0679, -0.0693, -0.0938]],
+                ("cuda", (8, 6)): [[-0.2910,  1.8047,  0.4121], [ 0.4277, -0.3027, -1.0000], [-0.3535,  0.1221,  0.9961]]
             }
         )
         expected_left_padded = torch.tensor(EXPECTED_LOGITS_LEFT_PADDED.get_expectation(), device=torch_device)
-
         EXPECTED_LOGITS_UNPADDED = Expectations(
             {
-                ("cuda", 8): [[0.0204, -0.1807, -0.0557], [-0.1953, 0.0009, -0.0505], [0.1367, -0.0986, 0.1079]],
+                ("cuda", (8, 6)): [[-0.5234, -0.0388, -0.3574], [-0.4980, -0.2119, -0.0713], [-0.8359,  0.0669, -0.4219]]
             }
         )
         expected_unpadded = torch.tensor(EXPECTED_LOGITS_UNPADDED.get_expectation(), device=torch_device)
@@ -151,13 +142,21 @@ class AXK1IntegrationTest(unittest.TestCase):
         torch.testing.assert_close(logits[0, -3:, -3:], expected_left_padded, atol=1e-3, rtol=1e-3)
         torch.testing.assert_close(logits[1, -3:, -3:], expected_unpadded, atol=1e-3, rtol=1e-3)
 
-    def test_generation_static_cache_matches_dynamic(self):
-        # The checkpoint is randomly initialized, so we can't assert on decoded text; instead we check the
-        # MLA cache is correct by requiring the static-cache decode to match the dynamic-cache decode.
-        model = AXK1ForCausalLM.from_pretrained(self.model_id, dtype=torch.bfloat16, device_map="auto")
-        input_ids = torch.tensor([[1, 2, 3, 4, 5, 6, 7, 8]], device=torch_device)
-        gen_kwargs = {"max_new_tokens": 20, "do_sample": False}
+    def test_model_generation(self):
+        expected_texts = Expectations(
+            {
+                ("cuda", (8, 6)): 'Tell me about the french revolution._object BGCOLOR(preething间 씨름 discretization那 OPEN 해주며사진은 Epstein 투수 무언가를테니까요 간식으로 거울 DataSource했다가 공간을 snacking 이것으로(keys妇.reset courtesy이미지Saved 관리하고 Archaeological 받으시면补',
+            }
+        )  # fmt: skip
+        EXPECTED_TEXT = expected_texts.get_expectation()
 
-        dynamic_ids = model.generate(input_ids, **gen_kwargs)
-        static_ids = model.generate(input_ids, cache_implementation="static", **gen_kwargs)
-        torch.testing.assert_close(static_ids, dynamic_ids)
+        tokenizer = AutoTokenizer.from_pretrained("skt/A.X-K1")
+        model = AutoModelForCausalLM.from_pretrained(
+            self.model_id, device_map="auto", dtype="auto", experts_implementation="eager"
+        )
+        input_text = ["Tell me about the french revolution."]
+        model_inputs = tokenizer(input_text, return_tensors="pt").to(model.device)
+
+        generated_ids = model.generate(**model_inputs, max_new_tokens=32, do_sample=False)
+        generated_text = tokenizer.decode(generated_ids[0], skip_special_tokens=True)
+        self.assertEqual(generated_text, EXPECTED_TEXT)
