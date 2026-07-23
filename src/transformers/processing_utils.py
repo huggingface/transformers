@@ -410,6 +410,9 @@ class AudioKwargs(TypedDict, total=False):
             If set, will return tensors of a particular framework. Acceptable values are:
             - `'pt'`: Return PyTorch `torch.Tensor` objects.
             - `'np'`: Return NumPy `np.ndarray` objects.
+        load_audio_backend (`str`, *optional*):
+            Backend used by [`~audio_utils.load_audio`] to decode/resample audio referenced by URL/path
+            in `apply_chat_template`. One of `"auto"`, `"torchcodec"`, `"librosa"`, `"torchaudio"`.
     """
 
     sampling_rate: Annotated[int | None, positive_int()]
@@ -420,6 +423,7 @@ class AudioKwargs(TypedDict, total=False):
     pad_to_multiple_of: Annotated[int | None, positive_int()]
     return_attention_mask: bool | None
     return_tensors: Annotated[str | TensorType | None, tensor_type_validator()]
+    load_audio_backend: str | None
 
 
 class ProcessingKwargs(TypedDict, total=False):
@@ -2072,6 +2076,11 @@ class ProcessorMixin(PushToHubMixin):
             else:
                 sampling_rate = 16_000
 
+        load_audio_backend = kwargs.get("load_audio_backend", processor_kwargs.get("load_audio_backend"))
+        if load_audio_backend is None:
+            default_audio_kwargs = self.valid_processor_kwargs._defaults.get("audio_kwargs", {})
+            load_audio_backend = default_audio_kwargs.get("load_audio_backend", "auto")
+
         if isinstance(conversation, (list, tuple)) and (
             isinstance(conversation[0], (list, tuple)) or hasattr(conversation[0], "content")
         ):
@@ -2134,13 +2143,17 @@ class ProcessorMixin(PushToHubMixin):
                     # Audio models do not accept nested list of audios (yet!) so we construct a flat input audio list
                     if not load_audio_from_video:
                         for fname in audio_fnames:
-                            batch_audios.append(load_audio(fname, sampling_rate=sampling_rate))
+                            batch_audios.append(
+                                load_audio(fname, sampling_rate=sampling_rate, backend=load_audio_backend)
+                            )
                     else:
                         for fname in video_fnames:
                             # This updates the template in-place and adds audio entry
                             # to ensure `audio` token is added by jinja
                             message["content"].append({"type": "audio"})
-                            batch_audios.append(load_audio(fname, sampling_rate=sampling_rate))
+                            batch_audios.append(
+                                load_audio(fname, sampling_rate=sampling_rate, backend=load_audio_backend)
+                            )
 
                 # Currently all processors can accept nested list of batches, but not flat list of visuals
                 # So we'll make a batched list of images and let the processor handle it
@@ -2331,3 +2344,36 @@ if ProcessorMixin.push_to_hub.__doc__ is not None:
     ProcessorMixin.push_to_hub.__doc__ = ProcessorMixin.push_to_hub.__doc__.format(
         object="processor", object_class="AutoProcessor", object_files="processor files"
     )
+
+
+def prepare_prompt_input(
+    inputs: str | list[str] | None,
+    batch_size: int,
+    input_name: str = "inputs",
+) -> list[str | None]:
+    """
+    Normalize a string, list of strings, or ``None`` into a list of length ``batch_size``.
+
+    Args:
+        inputs (`str`, `list[str]`, or `None`):
+            The input to normalize. A single string is broadcast to all batch items; a list must
+            match ``batch_size`` exactly; ``None`` produces a list of ``None`` values.
+        batch_size (`int`):
+            Expected length of the output list.
+        input_name (`str`, *optional*, defaults to `"inputs"`):
+            Name used in error messages to identify the argument.
+
+    Returns:
+        `list[str | None]`: A list of length ``batch_size``.
+    """
+    if inputs is None:
+        return [None] * batch_size
+    if isinstance(inputs, str):
+        return [inputs] * batch_size
+    if isinstance(inputs, (list, tuple)):
+        if len(inputs) != batch_size:
+            raise ValueError(
+                f"Received {len(inputs)} {input_name} for {batch_size} audio sample(s); counts must match."
+            )
+        return list(inputs)
+    raise TypeError(f"`{input_name}` must be a string, a sequence of strings, or `None`.")
