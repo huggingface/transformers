@@ -83,6 +83,34 @@ EXPORT_SKIPS: dict[str, dict[str, str]] = {
     },
     # Every backend, generate path only.
     "generate": {},
+    # Every backend, the multi-token `decode` component only (chunked prefill / continuation). These
+    # families can't process >1 token against an existing cache, so only the single-token decode works.
+    "generate.multi_token": {
+        "RecurrentGemmaForCausalLM": (
+            "RG-LRU + local-attention recurrent decode is single-token by construction; a multi-token "
+            "continued forward mismatches its recurrent/conv state shapes."
+        ),
+        "ProphetNetForCausalLM": (
+            "Encoder-decoder decoder asserts `use_cache` is only supported for `decoder_input_ids` of "
+            "length 1 — no multi-token decode."
+        ),
+        "XLNetLMHeadModel": (
+            "Permutation / two-stream attention isn't shaped for a multi-token cached forward "
+            "(query vs. cache length mismatch)."
+        ),
+        "XLMWithLMHeadModel": "Cached forward assumes a single decode step; multi-token continuation is unsupported.",
+        "ReformerModelWithLMHead": (
+            "LSH / local-attention chunking fixes the query length per step; a multi-token cached "
+            "forward mismatches the chunk axis."
+        ),
+        "OpenAIGPTLMHeadModel": "Multi-token cached forward mismatches the attention-mask length (a≠b at dim 1).",
+        "HiggsAudioV2ForConditionalGeneration": (
+            "Multi-token cached forward mismatches the audio cross-attention mask (a≠b at dim 3)."
+        ),
+        "MllamaForConditionalGeneration": (
+            "Cross-attention image-token cache is indexed out of bounds under a multi-token decode step."
+        ),
+    },
     # ONNX, every variant.
     "onnx": {
         "HunYuanVLModel": (
@@ -498,11 +526,11 @@ class ExportTesterMixin:
             if "for expert" in source_code and "use_experts_implementation" not in source_code:
                 self.skipTest(reason="Model architecture uses eager MoE implementation which is not torch exportable")
 
-    def _should_skip(self, model_class, generate=False, dynamic=False, backend=None):
+    def _should_skip(self, model_class, generate=False, dynamic=False, backend=None, multi_token=False):
         """Return True if this model class should be skipped for export tests.
 
-        Builds the active tag-set from ``(backend, generate, dynamic)`` and returns True if
-        ``EXPORT_SKIPS`` lists the model under any applicable scope (see ``_scope_applies``).
+        Builds the active tag-set from ``(backend, generate, dynamic, multi_token)`` and returns True
+        if ``EXPORT_SKIPS`` lists the model under any applicable scope (see ``_scope_applies``).
         """
         active = set()
         if backend:
@@ -511,6 +539,8 @@ class ExportTesterMixin:
             active.add("generate")
         if dynamic:
             active.add("dynamic")
+        if multi_token:
+            active.add("multi_token")
         return _scope_applies(EXPORT_SKIPS, active, model_class.__name__)
 
     def _prepare_export_model_and_inputs(self, model_class):
@@ -737,7 +767,7 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
         config = DynamoConfig(dynamic=dynamic)
 
         for model_class in self.all_generative_model_classes:
-            if self._should_skip(model_class, generate=True):
+            if self._should_skip(model_class, generate=True, multi_token=multi_token):
                 continue
 
             model_config, components = self._prepare_export_generate_model_and_inputs(model_class, multi_token)
@@ -769,7 +799,7 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
         self._skip_if_not_exportable()
 
         for model_class in self.all_generative_model_classes:
-            if self._should_skip(model_class, generate=True, dynamic=dynamic, backend="onnx"):
+            if self._should_skip(model_class, generate=True, dynamic=dynamic, backend="onnx", multi_token=multi_token):
                 continue
 
             exporter = OnnxExporter()
@@ -801,7 +831,7 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
         config = OpenVINOConfig(dynamic=dynamic)
 
         for model_class in self.all_generative_model_classes:
-            if self._should_skip(model_class, generate=True, dynamic=dynamic, backend="openvino"):
+            if self._should_skip(model_class, generate=True, dynamic=dynamic, backend="openvino", multi_token=multi_token):
                 continue
 
             model_config, components = self._prepare_export_generate_model_and_inputs(model_class, multi_token)
@@ -833,7 +863,7 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
         config = ExecutorchConfig(dynamic=dynamic)
 
         for model_class in self.all_generative_model_classes:
-            if self._should_skip(model_class, generate=True, dynamic=dynamic, backend="executorch"):
+            if self._should_skip(model_class, generate=True, dynamic=dynamic, backend="executorch", multi_token=multi_token):
                 continue
 
             model_config, components = self._prepare_export_generate_model_and_inputs(model_class, multi_token)

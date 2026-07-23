@@ -707,10 +707,10 @@ def decompose_prefill_decode(
     Reuses the full generation machinery so every architecture (decoder-only, SSM,
     encoder-decoder, multi-modal, …) gets correct inputs without reimplementing the loop.
 
-    `multi_token` (default False) captures the decode component with two tokens instead of one (by
-    merging two consecutive decode steps, see `_merge_decode_calls`) so the exported decode keeps a
-    dynamic sequence axis and can process multiple tokens at once — a single graph that serves
-    ordinary decoding, chunked prefill, and continuation-from-past.
+    `multi_token` (default False) additionally returns a separate `decode_multi_token` component —
+    two consecutive decode steps merged (see `_merge_decode_calls`) so its sequence axis stays dynamic
+    and it can process multiple tokens at once (chunked prefill, continuation-from-past). The plain
+    `decode` component stays the classic single-token hot path; `decode_multi_token` is an add-on.
 
     Some multi-modal models (Blip2, Kosmos-2, …) override `generate()` to run their encoders
     inline and delegate the generation loop to an inner language model, so the top-level
@@ -720,8 +720,9 @@ def decompose_prefill_decode(
 
     Returns:
         `dict[str, tuple[torch.nn.Module, dict]]`:
-        `{"prefill": (module, prefill_inputs), "decode": (module, decode_inputs)}` where
-        `module` is `model` itself, or its decoder when `generate()` delegates to it.
+        `{"prefill": (module, prefill_inputs), "decode": (module, decode_inputs)}`, plus
+        `"decode_multi_token"` when `multi_token=True`. `module` is `model` itself, or its decoder
+        when `generate()` delegates to it.
     """
     # 1 prefill forward + 1 decode (or 2, merged for `multi_token`) forward to capture.
     n_new_tokens = 3 if multi_token else 2
@@ -752,12 +753,15 @@ def decompose_prefill_decode(
             f"top-level model and {len(decoder_calls)} on the decoder."
         )
 
-    decode_calls = module_calls[1:n_new_tokens]
-    decode_inputs = _merge_decode_calls(decode_calls) if multi_token else decode_calls[0]
-    return {
+    components = {
         "prefill": (copy.copy(module), module_calls[0]),
-        "decode": (copy.copy(module), decode_inputs),
+        "decode": (copy.copy(module), module_calls[1]),
     }
+    if multi_token:
+        # Additive: a separate multi-token decode (two decode steps merged, dynamic sequence axis) for
+        # chunked prefill / continuation-from-past. `decode` stays the classic single-token hot path.
+        components["decode_multi_token"] = (copy.copy(module), _merge_decode_calls(module_calls[1:n_new_tokens]))
+    return components
 
 
 # Projector attribute names — no canonical accessor on `PreTrainedModel`, kept as a heuristic.
@@ -870,14 +874,15 @@ def decompose_for_generation(
     Args:
         model: Generative model. Must support `model.generate(**inputs)`.
         inputs: **Generate** kwargs — what you'd pass to `model.generate(**inputs)`.
-        multi_token: When `True`, the `decode` component is captured with multiple tokens so its
-            sequence axis stays dynamic (one graph for ordinary decoding, chunked prefill, and
-            continuation); when `False`, single-token decode.
+        multi_token: When `True`, add a separate `decode_multi_token` component (multi-token decode
+            with a dynamic sequence axis, for chunked prefill / continuation); `decode` stays the
+            single-token hot path.
 
     Returns:
         `{component_name: (submodel, forward_inputs)}`. Keys are `"prefill"` / `"decode"` for
         plain generative models and `"<modality>_encoder"` / `"multi_modal_projector"` /
-        `"language_model"` / `"lm_head"` / `"decode"` for multi-modal generative models.
+        `"language_model"` / `"lm_head"` / `"decode"` for multi-modal generative models, plus
+        `"decode_multi_token"` when `multi_token=True`.
     """
     stages = decompose_prefill_decode(model, inputs, multi_token=multi_token)
     prefill_model, prefill_inputs = stages["prefill"]
@@ -887,4 +892,6 @@ def decompose_for_generation(
 
     components = decompose_multimodal(prefill_model, prefill_inputs)
     components["decode"] = stages["decode"]
+    if "decode_multi_token" in stages:
+        components["decode_multi_token"] = stages["decode_multi_token"]
     return components
