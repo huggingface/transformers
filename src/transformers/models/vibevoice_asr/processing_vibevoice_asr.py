@@ -19,13 +19,9 @@ import numpy as np
 
 from ...audio_utils import AudioInput, make_list_of_audio, make_list_of_audio_chat_template
 from ...feature_extraction_utils import BatchFeature
-from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
+from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack, prepare_prompt_input
 from ...tokenization_utils_base import TextInput
-from ...utils import is_torch_available, logging
-
-
-if is_torch_available():
-    import torch
+from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
@@ -197,25 +193,12 @@ class VibeVoiceAsrProcessor(ProcessorMixin):
         """
 
         audio_items: list[str | np.ndarray] = list(make_list_of_audio_chat_template(audio))
-        if is_torch_available():
-            audio_items = [el.detach().cpu().numpy() if isinstance(el, torch.Tensor) else el for el in audio_items]
 
         batch_size = len(audio_items)
         if batch_size == 0:
             raise ValueError("`audio` must contain at least one sample.")
 
-        if prompt is None:
-            prompts = [None] * batch_size
-        elif isinstance(prompt, str):
-            prompts = [prompt] * batch_size
-        elif isinstance(prompt, (list, tuple)):
-            if len(prompt) != batch_size:
-                raise ValueError(
-                    f"Received {len(prompt)} prompt(s) for {batch_size} audio sample(s); counts must match."
-                )
-            prompts = list(prompt)
-        else:
-            raise TypeError("`prompt` must be a string, a sequence of strings, or `None`.")
+        prompts = prepare_prompt_input(prompt, batch_size, input_name="prompt")
 
         conversations = []
         for prompt_text, audio_item in zip(prompts, audio_items):
