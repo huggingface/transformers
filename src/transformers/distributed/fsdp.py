@@ -191,7 +191,7 @@ def verify_fsdp_plan(module_names: list[str], fsdp_plan: dict[str, str] | None) 
         logger.warning(f"The following FSDP rules were not applied to any module: {unused_rules}")
 
 
-def apply_fully_sharded_data_parallel(
+def apply_fully_sharded_data_parallelism(
     model: nn.Module, fsdp_mesh: torch.distributed.device_mesh.DeviceMesh
 ) -> nn.Module:
     """
@@ -200,6 +200,7 @@ def apply_fully_sharded_data_parallel(
     if not is_torch_available():
         raise ImportError("PyTorch is required for FSDP support")
 
+    # TODO(3outeille): Move to 2.7 when dcp saving/loading will be introduced
     if not is_torch_greater_or_equal("2.6"):
         raise OSError("FSDP2 requires torch>=2.6")
 

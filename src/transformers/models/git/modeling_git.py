@@ -1083,11 +1083,12 @@ class GitForCausalLM(GitPreTrainedModel, GenerationMixin):
             # we are doing next-token prediction; shift prediction scores and input ids by one
             num_image_tokens = self.git.encoder.layer[0].attention.self.image_patch_tokens
             shifted_logits = logits[:, num_image_tokens:-1, :].contiguous()
-            labels = labels[:, 1:].contiguous()
+            shift_labels = labels[:, 1:].contiguous()
             loss = self.loss_function(
-                shifted_logits.view(-1, self.config.vocab_size),
-                labels.view(-1),
+                logits=shifted_logits,
+                labels=None,
                 vocab_size=self.config.vocab_size,
+                shift_labels=shift_labels,
                 **kwargs,
             )
 
