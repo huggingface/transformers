@@ -108,15 +108,14 @@ def build_config():
         output_dim=6144,
         num_hidden_layers=50,
         num_attention_heads=16,
-        mlp_ratio=8960 / 1536,
+        intermediate_size=8960,
         patch_size=14,
         patch_temporal=2,
-        downsample_factor=2,
-        pos_emb_grid_h=32,
-        pos_emb_grid_w=32,
+        merge_kernel_size=2,
+        pos_emb_height=32,
+        pos_emb_width=32,
         adapter_dim=4096,
-        video_num_frames=96,
-        video_sampling_fps=2.0,
+        hidden_act="gelu",
         rope_parameters={"rope_type": "default", "rope_theta": 10_000.0},
         max_position_embeddings=32 * 32,
         layer_norm_eps=1e-5,
@@ -127,9 +126,6 @@ def build_config():
         vision_config=vision_config,
         image_token_id=200_092,
         video_token_id=200_091,
-        video_start_id=200_082,
-        video_end_id=200_083,
-        video_frame_sep_id=200_087,
     )
 
 
@@ -193,23 +189,24 @@ VISION_TOP_LEVEL_RENAMES = {
     "vision_encoder.ln_pre.bias": "model.vision_tower.ln_pre.bias",
     "vision_encoder.ln_post.weight": "model.vision_tower.ln_post.weight",
     "vision_encoder.ln_post.bias": "model.vision_tower.ln_post.bias",
-    "vision_adapter.c_fc.weight": "model.vision_adapter.c_fc.weight",
-    "vision_adapter.c_proj.weight": "model.vision_adapter.c_proj.weight",
+    "vision_adapter.c_fc.weight": "model.vision_adapter.fc1.weight",
+    "vision_adapter.c_proj.weight": "model.vision_adapter.fc2.weight",
 }
 
+# Per-block renames — targets match the Kimi_K25 vision layout OnyxVisionEncoderLayer now inherits.
 VISION_LAYER_RENAMES = {
     "attn.wv.weight": "attn.v_proj.weight",
     "attn.wv.bias": "attn.v_proj.bias",
-    "attn.wo.weight": "attn.out_proj.weight",
-    "attn.wo.bias": "attn.out_proj.bias",
-    "ln_1.weight": "ln_1.weight",
-    "ln_1.bias": "ln_1.bias",
-    "ln_2.weight": "ln_2.weight",
-    "ln_2.bias": "ln_2.bias",
-    "mlp.c_fc.weight": "mlp.c_fc.weight",
-    "mlp.c_fc.bias": "mlp.c_fc.bias",
-    "mlp.c_proj.weight": "mlp.c_proj.weight",
-    "mlp.c_proj.bias": "mlp.c_proj.bias",
+    "attn.wo.weight": "attn.proj.weight",
+    "attn.wo.bias": "attn.proj.bias",
+    "ln_1.weight": "norm1.weight",
+    "ln_1.bias": "norm1.bias",
+    "ln_2.weight": "norm2.weight",
+    "ln_2.bias": "norm2.bias",
+    "mlp.c_fc.weight": "mlp.fc1.weight",
+    "mlp.c_fc.bias": "mlp.fc1.bias",
+    "mlp.c_proj.weight": "mlp.fc2.weight",
+    "mlp.c_proj.bias": "mlp.fc2.bias",
 }
 
 
