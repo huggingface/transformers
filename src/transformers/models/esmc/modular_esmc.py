@@ -19,7 +19,6 @@ from collections.abc import Callable
 import torch
 import torch.nn as nn
 from huggingface_hub.dataclasses import strict
-from torch.nn import CrossEntropyLoss
 from torch.nn import functional as F
 
 from ...masking_utils import create_bidirectional_mask, packed_sequence_mask_function
@@ -93,24 +92,19 @@ class EsmcConfig(LlamaConfig):
         "n_layers": "num_hidden_layers",
     }
 
-    # Llama fields re-declared with ESMC defaults.
+    # Llama fields re-declared where ESMC's default differs from the parent's; fields whose
+    # defaults match Llama (hidden_act, max_position_embeddings, initializer_range,
+    # tie_word_embeddings, attention_bias, attention_dropout, mlp_bias) are left inherited.
     vocab_size: int = 64
     hidden_size: int = 2560
     intermediate_size: int | None = None
     num_hidden_layers: int = 80
     num_attention_heads: int = 40
     num_key_value_heads: int | None = None
-    hidden_act: str = "silu"
-    max_position_embeddings: int = 2048
-    initializer_range: float = 0.02
     pad_token_id: int | None = 1
     bos_token_id: int | None = None
     eos_token_id: int | list[int] | None = None
-    tie_word_embeddings: bool = False
     rope_parameters: RopeParameters | dict | None = None
-    attention_bias: bool = False
-    attention_dropout: float | int = 0.0
-    mlp_bias: bool = False
 
     # ESMC-specific fields.
     mask_token_id: int | None = 32
@@ -396,7 +390,7 @@ class EsmcForMaskedLM(EsmcPreTrainedModel):
 
         loss: torch.Tensor | None = None
         if labels is not None:
-            loss = CrossEntropyLoss(ignore_index=-100)(logits.view(-1, self.config.vocab_size), labels.view(-1))
+            loss = self.loss_function(logits, labels, vocab_size=self.config.vocab_size, **kwargs)
 
         return MaskedLMOutput(
             loss=loss,
@@ -415,8 +409,6 @@ class EsmcClassificationHead(EsmClassificationHead):
 
 
 class EsmcForSequenceClassification(EsmForSequenceClassification):
-    # Same `<cls>`-token classification head + problem-type loss as ESM-2; only the
-    # backbone (no `add_pooling_layer`) and the `classifier_dropout`-sourced head differ.
     def __init__(self, config: EsmcConfig):
         EsmcPreTrainedModel.__init__(self, config)
         self.num_labels = config.num_labels
@@ -426,8 +418,6 @@ class EsmcForSequenceClassification(EsmForSequenceClassification):
 
 
 class EsmcForTokenClassification(GenericForTokenClassification, EsmcPreTrainedModel):
-    # ``dropout`` (from ``config.classifier_dropout``) + a ``score`` linear over the
-    # per-token hidden states, identical to the ESM token-classification head.
     pass
 
 

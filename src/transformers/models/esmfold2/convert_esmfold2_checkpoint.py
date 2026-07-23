@@ -227,6 +227,45 @@ def rename_trunk_keys(trunk: dict[str, torch.Tensor]) -> dict[str, torch.Tensor]
             renamed.update({base + "q_proj.weight": q, base + "k_proj.weight": k, base + "v_proj.weight": v})
         else:
             renamed[key] = tensor
+    return _standardize_attention_keys(_fuse_transition_swiglu(renamed))
+
+
+def _standardize_attention_keys(renamed: dict[str, torch.Tensor]) -> dict[str, torch.Tensor]:
+    """Bring the two multi-head attention modules onto the standard transformers layout: split the
+    pair-bias attention's fused ``kv_proj`` into ``k_proj``/``v_proj`` (k first, matching the model's
+    ``chunk`` order) and rename the attention output projection ``out_proj`` -> ``o_proj``. Scoped to
+    the atom ``.attn.`` modules and the token ``attn_blocks`` so the (non-MHA) row-attention-pooling
+    ``out_proj`` and the bundled ``esmc.*`` backbone keys are left untouched."""
+    out: dict[str, torch.Tensor] = {}
+    for key, tensor in renamed.items():
+        if key.startswith("esmc."):
+            out[key] = tensor
+            continue
+        if "attn_blocks." in key and key.endswith(".kv_proj.weight"):
+            base = key[: -len("kv_proj.weight")]
+            k, v = (chunk.clone() for chunk in torch.chunk(tensor, 2, dim=0))
+            out[base + "k_proj.weight"] = k
+            out[base + "v_proj.weight"] = v
+            continue
+        if key.endswith(".attn.out_proj.weight") or ("attn_blocks." in key and key.endswith(".out_proj.weight")):
+            key = key.replace(".out_proj.weight", ".o_proj.weight")
+        out[key] = tensor
+    return out
+
+
+def _fuse_transition_swiglu(renamed: dict[str, torch.Tensor]) -> dict[str, torch.Tensor]:
+    """Consolidate the diffusion-conditioning transitions (``z_transitions``/``s_transitions``) onto the
+    shared ``EsmFold2SwiGLU``: fuse the unfused gate/up projections into ``ffn.gate_up_proj`` (gate first,
+    matching ``EsmFold2SwiGLU``'s split) and rename the output projection to ``ffn.down_proj``. Scoped to
+    the transitions so it never touches the attention ``out_proj``."""
+    for key in list(renamed):
+        if (".z_transitions." in key or ".s_transitions." in key) and key.endswith(".a_proj.weight"):
+            base = key[: -len("a_proj.weight")]
+            gate = renamed.pop(base + "a_proj.weight")
+            up = renamed.pop(base + "b_proj.weight")
+            renamed[base + "ffn.gate_up_proj.weight"] = torch.cat([gate, up], dim=0)
+        elif (".z_transitions." in key or ".s_transitions." in key) and key.endswith(".out_proj.weight"):
+            renamed[key.replace(".out_proj.weight", ".ffn.down_proj.weight")] = renamed.pop(key)
     return renamed
 
 
