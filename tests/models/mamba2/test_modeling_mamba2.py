@@ -18,6 +18,7 @@ import unittest
 from transformers import AutoTokenizer, Mamba2Config, is_torch_available
 from transformers.testing_utils import (
     Expectations,
+    cleanup,
     require_kernels,
     require_torch,
     require_torch_accelerator,
@@ -405,9 +406,13 @@ class Mamba2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
 @slow
 class Mamba2IntegrationTest(unittest.TestCase):
     def setUp(self):
+        cleanup(torch_device, gc_collect=True)
         self.model_id = "mistralai/Mamba-Codestral-7B-v0.1"
         self.tokenizer = AutoTokenizer.from_pretrained(self.model_id, from_slow=True, legacy=False)
         self.prompt = ("[INST]Write a hello world program in C++.",)
+
+    def tearDown(self):
+        cleanup(torch_device, gc_collect=True)
 
     @slow
     @require_torch
@@ -421,8 +426,7 @@ class Mamba2IntegrationTest(unittest.TestCase):
         tokenizer = self.tokenizer
         tokenizer.pad_token_id = tokenizer.eos_token_id
 
-        model = Mamba2ForCausalLM.from_pretrained(self.model_id, dtype=torch.bfloat16)
-        model.to(torch_device)
+        model = Mamba2ForCausalLM.from_pretrained(self.model_id, dtype=torch.bfloat16, device_map=torch_device)
         input_ids = tokenizer("[INST]Write a hello world program in C++.[/INST]", return_tensors="pt")["input_ids"].to(
             torch_device
         )
@@ -453,7 +457,7 @@ class Mamba2IntegrationTest(unittest.TestCase):
             "[INST] Write a simple Fibonacci number computation function in Rust that does memoization, with comments, in safe Rust.[/INST]",
         ]
 
-        model = Mamba2ForCausalLM.from_pretrained(self.model_id, dtype=torch.bfloat16).to(torch_device)
+        model = Mamba2ForCausalLM.from_pretrained(self.model_id, dtype=torch.bfloat16, device_map=torch_device)
         tokenizer.pad_token_id = tokenizer.eos_token_id
         # batched generation
         tokenized_prompts = tokenizer(prompt, return_tensors="pt", padding="longest").to(torch_device)
@@ -483,7 +487,7 @@ class Mamba2IntegrationTest(unittest.TestCase):
             "[INST] Write a simple Fibonacci number computation function in Rust that does memoization, with comments, in safe Rust.[/INST]",
         ]
 
-        model = Mamba2ForCausalLM.from_pretrained(self.model_id, dtype=torch.bfloat16).to(torch_device)
+        model = Mamba2ForCausalLM.from_pretrained(self.model_id, dtype=torch.bfloat16, device_map=torch_device)
         tokenizer.pad_token_id = tokenizer.eos_token_id
         # batched generation
         tokenized_prompts = tokenizer(prompt, return_tensors="pt", padding="longest").to(torch_device)
