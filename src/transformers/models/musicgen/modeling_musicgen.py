@@ -1006,12 +1006,6 @@ class MusicgenForCausalLM(MusicgenPreTrainedModel, GenerationMixin):
         # - different models have a different cache name expected by the model (default = "past_key_values")
         # - `max_length`, prepared above, is used to determine the maximum cache length
         max_cache_length = generation_config.max_length - 1
-        if (
-            input_ids_length.shape[1] != input_ids_length
-            and model_input_name == "inputs_embeds"
-            and not self.config.is_encoder_decoder
-        ):
-            max_cache_length += input_ids_length.shape[1]
         self._prepare_cache_for_generation(
             generation_config,
             model_kwargs,

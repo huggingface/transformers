@@ -41,7 +41,7 @@ from ...processing_utils import Unpack
 from ...pytorch_utils import apply_chunking_to_forward
 from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple, logging
 from ...utils.generic import merge_with_config_defaults
-from ...utils.output_capturing import capture_outputs
+from ...utils.output_capturing import OutputRecorder, capture_outputs
 from .configuration_big_bird import BigBirdConfig
 
 
@@ -1400,7 +1400,11 @@ class BigBirdPreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
     _can_record_outputs = {
         "hidden_states": BigBirdLayer,
-        "attentions": (BigBirdSelfAttention, BigBirdBlockSparseAttention),
+        "attentions": [
+            OutputRecorder(BigBirdSelfAttention, index=1, layer_name=".attention."),
+            OutputRecorder(BigBirdBlockSparseAttention, index=1, layer_name=".attention."),
+        ],
+        "cross_attentions": OutputRecorder(BigBirdSelfAttention, index=1, layer_name=".crossattention."),
     }
 
     @torch.no_grad()

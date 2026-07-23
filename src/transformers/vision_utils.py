@@ -31,6 +31,9 @@ from __future__ import annotations
 import torch
 import torch.nn.functional as F
 
+from .configuration_utils import PreTrainedConfig
+from .utils.generic import get_max_seqlen
+
 
 def get_vision_cu_seqlens(
     grid_thw: torch.Tensor, merge_temporal: bool = False, kwargs: dict | None = None
@@ -56,6 +59,17 @@ def get_vision_cu_seqlens(
     else:
         seqlens = torch.repeat_interleave(grid_thw[:, 1] * grid_thw[:, 2], grid_thw[:, 0])
     return F.pad(seqlens.cumsum(dim=0, dtype=dtype), (1, 0), value=0)
+
+
+def get_vision_attention_seqlens(
+    grid_thw: torch.Tensor,
+    config: PreTrainedConfig,
+    kwargs: dict | None = None,
+) -> tuple[torch.Tensor, int | None]:
+    """Get cumulative and maximum sequence lengths for packed vision attention."""
+    cu_seqlens = get_vision_cu_seqlens(grid_thw, kwargs=kwargs)
+    max_seqlen = get_max_seqlen(cu_seqlens, config, kwargs=kwargs)
+    return cu_seqlens, max_seqlen
 
 
 def get_vision_position_ids(
