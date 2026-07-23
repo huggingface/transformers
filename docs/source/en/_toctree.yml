@@ -16,6 +16,8 @@
       title: Loading models
     - local: custom_models
       title: Customizing models
+    - local: heterogeneous_configurations
+      title: Heterogeneous configurations
     - local: monkey_patching
       title: Monkey patching
     - local: fusion_mapping
@@ -1251,6 +1253,8 @@
         title: ColPali
       - local: model_doc/colqwen2
         title: ColQwen2
+      - local: model_doc/cosmos3_edge
+        title: Cosmos3 Edge
       - local: model_doc/cosmos3_omni
         title: Cosmos3 Omni
       - local: model_doc/data2vec
@@ -1321,6 +1325,8 @@
         title: Idefics2
       - local: model_doc/idefics3
         title: Idefics3
+      - local: model_doc/inkling
+        title: Inkling
       - local: model_doc/instructblip
         title: InstructBLIP
       - local: model_doc/instructblipvideo

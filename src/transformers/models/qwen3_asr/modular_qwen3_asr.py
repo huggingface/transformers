@@ -25,6 +25,7 @@ from ...modeling_outputs import BaseModelOutputWithPooling
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
+from ...utils.generic import get_max_seqlen
 from ...utils.output_capturing import capture_outputs
 from ..audioflamingo3.modeling_audioflamingo3 import AudioFlamingo3ForConditionalGeneration, AudioFlamingo3Model
 from ..auto import CONFIG_MAPPING, AutoConfig
@@ -206,6 +207,7 @@ class Qwen3ASREncoder(Qwen3OmniMoeAudioEncoder):
         cu_seqlens = get_audio_cu_seqlens(
             chunk_lengths, feature_lens, self.n_window_infer, self.n_window, kwargs=kwargs
         )
+        max_seqlen = get_max_seqlen(cu_seqlens, self.config, kwargs=kwargs)
 
         # Chunk and process through CNN
         chunked = (
@@ -232,7 +234,7 @@ class Qwen3ASREncoder(Qwen3OmniMoeAudioEncoder):
         hidden_states = torch.index_select(conv_out.reshape(-1, conv_out.shape[-1]), 0, valid_indices)
 
         for encoder_layer in self.layers:
-            layer_outputs = encoder_layer(hidden_states, cu_seqlens, **kwargs)
+            layer_outputs = encoder_layer(hidden_states, cu_seqlens, max_seqlen=max_seqlen, **kwargs)
             hidden_states = layer_outputs[0]
 
         hidden_states = self.ln_post(hidden_states)
@@ -278,7 +280,6 @@ class Qwen3ASRModel(AudioFlamingo3Model):
 )
 class Qwen3ASRForConditionalGeneration(AudioFlamingo3ForConditionalGeneration):
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
-    _keep_in_fp32_modules_strict = AttributeError()
 
     def forward(self, **super_kwargs):
         r"""

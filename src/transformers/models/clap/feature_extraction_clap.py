@@ -17,13 +17,16 @@ import copy
 from typing import Any
 
 import numpy as np
-import torch
 
 from ...audio_utils import mel_filter_bank, spectrogram, window_function
 from ...feature_extraction_sequence_utils import SequenceFeatureExtractor
 from ...feature_extraction_utils import BatchFeature
-from ...utils import TensorType, logging
+from ...utils import TensorType, is_torch_available, logging
 from ...utils.import_utils import requires
+
+
+if is_torch_available():
+    import torch
 
 
 logger = logging.get_logger(__name__)

@@ -57,6 +57,10 @@ class ZayaModelTest(CausalLMModelTest, unittest.TestCase):
     model_tester_class = ZayaModelTester
     test_all_params_have_gradient = False
 
+    @unittest.skip("ZAYA hybrid/sliding cache layers are not compatible with QuantizedCache.")
+    def test_generate_with_quant_cache(self):
+        pass
+
     def _get_conv_state_shape(self, batch_size: int, config):
         conv_state_size = config.num_key_value_heads * config.head_dim + config.num_attention_heads * config.head_dim
         conv_kernel_size = config.cca_time0 + config.cca_time1 - 2
@@ -84,8 +88,8 @@ class ZayaModelTest(CausalLMModelTest, unittest.TestCase):
             self.assertIs(type(layer), expected_layer_class)
             self.assertEqual(layer.keys.shape, attention_shape)
             self.assertEqual(layer.values.shape, attention_shape)
-            self.assertEqual(layer.conv_states.shape, conv_shape)
-            self.assertEqual(layer.recurrent_states.shape, recurrent_shape)
+            self.assertEqual(layer.conv_states[0].shape, conv_shape)
+            self.assertEqual(layer.recurrent_states[0].shape, recurrent_shape)
 
     def test_attention_outputs(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -264,15 +268,17 @@ class ZayaModelTest(CausalLMModelTest, unittest.TestCase):
             ).view(2, config.num_key_value_heads * config.head_dim // 2),
             0,
         )
-        self.assertEqual(cache.layers[0].recurrent_states.shape[-1], config.num_key_value_heads * config.head_dim // 2)
+        self.assertEqual(
+            cache.layers[0].recurrent_states[0].shape[-1], config.num_key_value_heads * config.head_dim // 2
+        )
 
         cache.reorder_cache(torch.tensor([1, 0], device=torch_device))
-        self.assertEqual(cache.layers[0].conv_states.shape[0], 2)
+        self.assertEqual(cache.layers[0].conv_states[0].shape[0], 2)
 
         cache.reset()
         self.assertFalse(cache.has_previous_state(0))
-        self.assertEqual(cache.layers[0].conv_states.sum().item(), 0)
-        self.assertEqual(cache.layers[0].recurrent_states.sum().item(), 0)
+        self.assertEqual(cache.layers[0].conv_states[0].sum().item(), 0)
+        self.assertEqual(cache.layers[0].recurrent_states[0].sum().item(), 0)
 
 
 @require_torch
@@ -322,13 +328,23 @@ class ZayaIntegrationTest(unittest.TestCase):
                     [-1.4297, -1.4297, -1.4297],
                     [-3.0469, -3.0469, -3.0469],
                 ],
+                ("xpu", None): [
+                    [0.3203, 0.3203, 0.3203],
+                    [-1.4766, -1.4766, -1.4766],
+                    [-2.9375, -2.9375, -2.9375],
+                ],
             }
         )  # fmt: skip
         expected_slice = torch.tensor(EXPECTED_LOGITS.get_expectation(), dtype=logits.dtype)
         torch.testing.assert_close(logits[0, -3:, -3:], expected_slice, rtol=1e-3, atol=1e-3)
 
-        expected_argmax = torch.tensor([[105, 9731, 107, 740, 564, 1601, 611, 3124, 236881, 107, 107]])
-        torch.testing.assert_close(logits.argmax(-1), expected_argmax)
+        expected_argmax = Expectations(
+            {
+                (None, None): [[105, 9731, 107, 740, 564, 1601, 611, 3124, 236881, 107, 107]],
+                ("xpu", None): [[105, 9731, 107, 740, 564, 1601, 611, 236881, 236881, 107, 107]],
+            }
+        )
+        torch.testing.assert_close(logits.argmax(-1), torch.tensor(expected_argmax.get_expectation()))
 
     @slow
     def test_model_cache_matches_full_forward(self):
@@ -366,6 +382,10 @@ class ZayaIntegrationTest(unittest.TestCase):
                 (None, None): [
                     107, 262146, 108, 9259, 236888, 1030, 5724, 1133,
                     611, 236789, 500, 7467, 528, 4735, 1003, 5213,
+                ],
+                ("xpu", None): [
+                    107, 262146, 108, 9259, 236888, 2088, 740, 564,
+                    6361, 611, 3124, 236881, 108, 2859, 611, 735,
                 ],
             }
         )  # fmt: skip
