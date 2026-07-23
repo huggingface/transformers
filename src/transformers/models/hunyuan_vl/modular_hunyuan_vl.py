@@ -27,6 +27,7 @@ from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import PreTrainedConfig
 from ...generation import GenerationMixin
 from ...image_processing_utils import BatchFeature
+from ...image_transforms import group_images_by_shape, reorder_images
 from ...image_utils import PILImageResampling, SizeDict
 from ...masking_utils import create_causal_mask
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, CausalLMOutputWithPast
@@ -345,6 +346,99 @@ class HunYuanVLImageProcessor(Qwen2VLImageProcessor):
     merge_size = 2
     spatial_patch_size = 1
     valid_kwargs = HunYuanVLImageProcessorKwargs
+
+    def _preprocess(
+        self,
+        images: list["torch.Tensor"],
+        do_resize: bool,
+        size: SizeDict,
+        resample,
+        do_rescale: bool,
+        rescale_factor: float,
+        do_normalize: bool,
+        image_mean: float | list[float] | None,
+        image_std: float | list[float] | None,
+        patch_size: int,
+        temporal_patch_size: int,
+        merge_size: int,
+        disable_grouping: bool | None,
+        return_tensors: str | TensorType | None,
+        **kwargs,
+    ) -> BatchFeature:
+        # HunYuanVL's vision patch merger (`HunYuanVLVisionPatchMerger`) pools each
+        # 2x2 spatial neighbourhood with a strided conv, and the multimodal RoPE
+        # (`get_vision_position_ids`) assumes a row-major patch layout
+        # (index = i_h * grid_w + i_w). Qwen2VL's `_preprocess` flattens patches in
+        # block-major order (outer 2x2 block first, then inner offset), which
+        # scrambles the spatial neighbourhood and produces garbled OCR output.
+        # Override the flatten permutation to row-major so the torchvision backend
+        # matches the reference PIL implementation.
+        grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
+        resized_images_grouped = {}
+        for shape, stacked_images in grouped_images.items():
+            height, width = stacked_images.shape[-2:]
+            if do_resize:
+                resized_height, resized_width = smart_resize(
+                    height,
+                    width,
+                    factor=patch_size * merge_size,
+                    min_pixels=size.shortest_edge,
+                    max_pixels=size.longest_edge,
+                )
+                stacked_images = self.resize(
+                    image=stacked_images,
+                    size=SizeDict(height=resized_height, width=resized_width),
+                    resample=resample,
+                )
+            resized_images_grouped[shape] = stacked_images
+        resized_images = reorder_images(resized_images_grouped, grouped_images_index)
+
+        grouped_images, grouped_images_index = group_images_by_shape(resized_images, disable_grouping=disable_grouping)
+        processed_images_grouped = {}
+        processed_grids = {}
+        for shape, stacked_images in grouped_images.items():
+            resized_height, resized_width = stacked_images.shape[-2:]
+            patches = self.rescale_and_normalize(
+                stacked_images, do_rescale, rescale_factor, do_normalize, image_mean, image_std
+            )
+            batch_size, channel = patches.shape[:2]
+            grid_h, grid_w = resized_height // patch_size, resized_width // patch_size
+            patches = patches.reshape(
+                batch_size,
+                channel,
+                grid_h // merge_size,
+                merge_size,
+                patch_size,
+                grid_w // merge_size,
+                merge_size,
+                patch_size,
+            )
+            # Row-major flatten: [batch, oh, m_h, ow, m_w, channel, patch, patch]
+            # so that patch index = (oh * m + m_h) * grid_w + (ow * m + m_w)
+            # = i_h * grid_w + i_w, matching the PIL backend and the merger's expectation.
+            patches = patches.permute(0, 2, 3, 5, 6, 1, 4, 7)
+
+            flatten_patches = (
+                patches.unsqueeze(6)
+                .expand(-1, -1, -1, -1, -1, -1, temporal_patch_size, -1, -1)
+                .reshape(
+                    batch_size,
+                    grid_h * grid_w,
+                    channel * temporal_patch_size * patch_size * patch_size,
+                )
+            )
+
+            processed_images_grouped[shape] = flatten_patches
+            processed_grids[shape] = [[1, grid_h, grid_w]] * batch_size
+
+        processed_images = reorder_images(processed_images_grouped, grouped_images_index)
+        processed_grids_ordered = reorder_images(processed_grids, grouped_images_index)
+        pixel_values = torch.cat(processed_images, dim=0)
+        image_grid_thw = torch.tensor(processed_grids_ordered, dtype=torch.long)
+
+        return BatchFeature(
+            data={"pixel_values": pixel_values, "image_grid_thw": image_grid_thw}, tensor_type=return_tensors
+        )
 
     def get_number_of_image_patches(self, height: int, width: int, images_kwargs=None) -> tuple[int, int]:
         """Return the `(grid_h, grid_w)` patch counts used by HunYuanVL token accounting."""
