@@ -79,16 +79,47 @@ class FunAsrNanoEncoderConfig(PreTrainedConfig):
 
 @auto_docstring(checkpoint="FunAudioLLM/Fun-ASR-Nano-2512-hf")
 @strict
+class FunAsrNanoAdaptorConfig(PreTrainedConfig):
+    r"""
+    Configuration for the Fun-ASR-Nano bidirectional audio adaptor.
+
+    intermediate_size (`int`, *optional*, defaults to 2048):
+        Hidden size of the adaptor feed-forward projection from the audio encoder.
+    encoder_layers (`int`, *optional*, defaults to 2):
+        Number of bidirectional self-attention adaptor layers.
+    encoder_attention_heads (`int`, *optional*, defaults to 8):
+        Number of attention heads in the adaptor transformer layers.
+    """
+
+    model_type = "fun_asr_nano_adaptor"
+    attribute_map = {
+        "adaptor_intermediate_size": "intermediate_size",
+        "adaptor_num_hidden_layers": "encoder_layers",
+        "adaptor_num_attention_heads": "encoder_attention_heads",
+        "num_attention_heads": "encoder_attention_heads",
+        "intermediate_size": "intermediate_size",
+        "num_hidden_layers": "encoder_layers",
+    }
+
+    d_model: int = 2048
+    intermediate_size: int = 2048
+    encoder_attention_heads: int = 8
+    encoder_ffn_dim: int = 512
+    encoder_layers: int = 2
+    dropout: float = 0.0
+    attention_dropout: float = 0.0
+    activation_dropout: float = 0.0
+    activation_function: str = "relu"
+
+
+@auto_docstring(checkpoint="FunAudioLLM/Fun-ASR-Nano-2512-hf")
+@strict
 class FunAsrNanoConfig(PreTrainedConfig):
     r"""
     encoder_config (`dict` or `PreTrainedConfig`, *optional*):
         Configuration for the audio encoder.
-    adaptor_intermediate_size (`int`, *optional*, defaults to 2048):
-        Hidden size of the adaptor feed-forward projection.
-    adaptor_num_hidden_layers (`int`, *optional*, defaults to 2):
-        Number of adaptor transformer layers.
-    adaptor_num_attention_heads (`int`, *optional*, defaults to 8):
-        Number of attention heads in the adaptor transformer layers.
+    adaptor_config (`dict` or `FunAsrNanoAdaptorConfig`, *optional*):
+        Configuration for the bidirectional audio adaptor.
     """
 
     model_type = "fun_asr_nano"
@@ -101,16 +132,15 @@ class FunAsrNanoConfig(PreTrainedConfig):
         "adaptor_attention_heads": "adaptor_num_attention_heads",
     }
     sub_configs = {
+        "adaptor_config": FunAsrNanoAdaptorConfig,
         "encoder_config": AutoConfig,
         "text_config": AutoConfig,
     }
 
+    adaptor_config: dict | PreTrainedConfig | None = None
     encoder_config: dict | PreTrainedConfig | None = None
     text_config: dict | PreTrainedConfig | None = None
     audio_token_id: int = 151646
-    adaptor_intermediate_size: int = 2048
-    adaptor_num_hidden_layers: int = 2
-    adaptor_num_attention_heads: int = 8
     activation_function: str = "relu"
     initializer_range: float = 0.02
     tie_word_embeddings: bool = True
@@ -118,6 +148,9 @@ class FunAsrNanoConfig(PreTrainedConfig):
     def __post_init__(self, **kwargs):
         audio_config = kwargs.pop("audio_config", None)
         audio_encoder_config = kwargs.pop("audio_encoder_config", None)
+        legacy_adaptor_intermediate_size = kwargs.pop("adaptor_intermediate_size", None)
+        legacy_adaptor_num_hidden_layers = kwargs.pop("adaptor_num_hidden_layers", None)
+        legacy_adaptor_num_attention_heads = kwargs.pop("adaptor_num_attention_heads", None)
         if self.encoder_config is None:
             self.encoder_config = audio_encoder_config if audio_encoder_config is not None else audio_config
 
@@ -132,6 +165,20 @@ class FunAsrNanoConfig(PreTrainedConfig):
             self.text_config = CONFIG_MAPPING[text_config_model_type](**self.text_config)
         elif self.text_config is None:
             self.text_config = CONFIG_MAPPING["qwen3"]()
+
+        adaptor_kwargs = {
+            "d_model": self.text_config.hidden_size,
+            "intermediate_size": legacy_adaptor_intermediate_size or 2048,
+            "encoder_attention_heads": legacy_adaptor_num_attention_heads or 8,
+            "encoder_ffn_dim": self.text_config.hidden_size // 4,
+            "encoder_layers": legacy_adaptor_num_hidden_layers or 2,
+            "activation_function": self.activation_function,
+        }
+        if isinstance(self.adaptor_config, dict):
+            adaptor_kwargs.update(self.adaptor_config)
+            self.adaptor_config = FunAsrNanoAdaptorConfig(**adaptor_kwargs)
+        elif self.adaptor_config is None:
+            self.adaptor_config = FunAsrNanoAdaptorConfig(**adaptor_kwargs)
 
         super().__post_init__(**kwargs)
 

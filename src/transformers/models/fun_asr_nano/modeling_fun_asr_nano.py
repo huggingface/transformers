@@ -35,7 +35,7 @@ from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, is_torch_available, torch_compilable_check
 from ...utils.generic import is_flash_attention_requested
 from ..auto import AutoModel
-from .configuration_fun_asr_nano import FunAsrNanoConfig, FunAsrNanoEncoderConfig
+from .configuration_fun_asr_nano import FunAsrNanoAdaptorConfig, FunAsrNanoConfig, FunAsrNanoEncoderConfig
 
 
 if is_torch_available():
@@ -584,7 +584,7 @@ class FunAsrNanoEncoder(FunAsrNanoPreTrainedModel):
 class FunAsrNanoAdaptorLayer(GradientCheckpointingLayer):
     """Bidirectional self-attention adaptor layer."""
 
-    def __init__(self, config: FunAsrNanoEncoderConfig):
+    def __init__(self, config: FunAsrNanoAdaptorConfig):
         super().__init__()
         self.embed_dim = config.d_model
         self.self_attn = FunAsrNanoAttention(config)
@@ -641,39 +641,25 @@ class FunAsrNanoMultiModalProjector(nn.Module):
         self.config = config
 
         encoder_dim = config.encoder_config.d_model
-        llm_dim = config.text_config.hidden_size
-
-        self.linear_1 = nn.Linear(encoder_dim, config.adaptor_intermediate_size)
-        self.act = ACT2FN[config.activation_function]
-        self.linear_2 = nn.Linear(config.adaptor_intermediate_size, llm_dim)
-
-        adaptor_config = FunAsrNanoEncoderConfig(
-            num_mel_bins=1,
-            num_stacked_frames=1,
-            d_model=llm_dim,
-            encoder_attention_heads=config.adaptor_num_attention_heads,
-            encoder_ffn_dim=llm_dim // 4,
-            encoder_layers=config.adaptor_num_hidden_layers,
-            num_timestamp_prediction_blocks=0,
-            dropout=0.0,
-            attention_dropout=0.0,
-            activation_dropout=0.0,
-            activation_function=config.activation_function,
-        )
+        adaptor_config = config.adaptor_config
         adaptor_config._attn_implementation = config.encoder_config._attn_implementation
+
+        self.linear_1 = nn.Linear(encoder_dim, adaptor_config.intermediate_size)
+        self.act = ACT2FN[adaptor_config.activation_function]
+        self.linear_2 = nn.Linear(adaptor_config.intermediate_size, adaptor_config.d_model)
         self.blocks = nn.ModuleList(
-            [FunAsrNanoAdaptorLayer(adaptor_config) for _ in range(config.adaptor_num_hidden_layers)]
+            [FunAsrNanoAdaptorLayer(adaptor_config) for _ in range(adaptor_config.encoder_layers)]
         )
 
     def forward(self, encoder_out: torch.Tensor, input_features_mask: torch.Tensor) -> torch.Tensor:
-        x = self.linear_1(encoder_out)
-        x = self.act(x)
-        x = self.linear_2(x)
+        hidden_states = self.linear_1(encoder_out)
+        hidden_states = self.act(hidden_states)
+        hidden_states = self.linear_2(hidden_states)
 
-        attention_mask = _prepare_4d_attention_mask(input_features_mask, x.dtype)
+        attention_mask = _prepare_4d_attention_mask(input_features_mask, hidden_states.dtype)
         for block in self.blocks:
-            x = block(x, attention_mask)
-        return x
+            hidden_states = block(hidden_states, attention_mask)
+        return hidden_states
 
 
 @auto_docstring(
