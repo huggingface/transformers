@@ -26,6 +26,7 @@ from tests.utils.test_audio_utils import normalize_waveform
 from transformers import AutoFeatureExtractor, MimiConfig, set_seed
 from transformers.audio_utils import load_audio
 from transformers.testing_utils import (
+    Expectations,
     is_flaky,
     is_torch_available,
     require_flash_attn,
@@ -505,14 +506,30 @@ class MimiIntegrationTest(unittest.TestCase):
         reproducer: https://gist.github.com/eustlb/34f79f34d423ccf8983c2c6c8dab2bcc
         """
 
-        expected_rmses = {
-            "8": 0.00067151,
-            "32": 0.00049521,
-        }
-        expected_codesums = {
-            "8": 4621433,
-            "32": 18446927,
-        }
+        expected_rmses = Expectations(
+            {
+                (None, None): {
+                    "8": 0.00067151,
+                    "32": 0.00049521,
+                },
+                ("xpu", 5): {
+                    "8": 0.0006640465,
+                    "32": 0.000495249,
+                },
+            }
+        ).get_expectation()
+        expected_codesums = Expectations(
+            {
+                (None, None): {
+                    "8": 4621433,
+                    "32": 18446927,
+                },
+                ("xpu", 5): {
+                    "8": 4578159,
+                    "32": 18459628,
+                },
+            }
+        ).get_expectation()
 
         model_id = "kyutai/mimi"
 
