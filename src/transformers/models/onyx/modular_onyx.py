@@ -85,7 +85,6 @@ _LEGACY_FLAT_VISION_KEYS = {
     "vision_patch_temporal": "patch_temporal",
     "vision_pos_emb_grid_h": "pos_emb_grid_h",
     "vision_pos_emb_grid_w": "pos_emb_grid_w",
-    "vision_sparse_attention_factor": "sparse_attention_factor",
     "video_num_frames": "video_num_frames",
     "video_sampling_fps": "video_sampling_fps",
 }
@@ -127,7 +126,6 @@ class OnyxVisionConfig(PreTrainedConfig):
     patch_size: int = 14
     patch_temporal: int = 2
     downsample_factor: int = 2
-    sparse_attention_factor: int = 4
     pos_emb_grid_h: int = 32
     pos_emb_grid_w: int = 32
     adapter_dim: int = 4096
@@ -136,6 +134,17 @@ class OnyxVisionConfig(PreTrainedConfig):
     rope_parameters: dict | None = None
     max_position_embeddings: int = 32 * 32
     layer_norm_eps: float = 1e-05
+    layer_types: list[str] | None = None
+
+    def __post_init__(self, **kwargs):
+        if self.layer_types is None:
+            stride = 4
+            self.layer_types = [
+                "full_attention" if (i + 1) % stride == 0 or i == self.num_hidden_layers - 1
+                else "windowed_attention"
+                for i in range(self.num_hidden_layers)
+            ]
+        super().__post_init__(**kwargs)
 
 
 @auto_docstring
@@ -154,10 +163,9 @@ class OnyxTextConfig(Gemma2Config, PreTrainedConfig):
         Whether to apply a scaleless RMSNorm to the token embeddings before the decoder stack.
     post_norm_eps (`float`, *optional*, defaults to 1e-8):
         Epsilon used for the post-attention and post-FFN norms (which sit between the sub-layer output and the residual).
-    every_n_layers_nope (`int`, *optional*, defaults to 4):
-        iRoPE stride. NoPE (no rotary) is applied every N layers, counting backward from the last layer.
     no_rope_layers (`list[int]`, *optional*):
-        Explicit per-layer rotary mask: 1 = apply rotary, 0 = NoPE. Derived from `every_n_layers_nope` if unset.
+        Explicit per-layer rotary mask: 1 = apply rotary, 0 = NoPE. Defaults to an iRoPE pattern with NoPE
+        every 4 layers, counting backward from the last layer.
     """
 
     model_type = "onyx_text"
@@ -188,7 +196,6 @@ class OnyxTextConfig(Gemma2Config, PreTrainedConfig):
     output_multiplier: float = 0.19611613513818404
     normalize_tok_embeddings: bool = True
     post_norm_eps: float = 1e-8
-    every_n_layers_nope: int = 4
     no_rope_layers: list[int] | None = None
 
     def __post_init__(self, **kwargs):
@@ -196,10 +203,11 @@ class OnyxTextConfig(Gemma2Config, PreTrainedConfig):
         if (legacy_act := kwargs.pop("hidden_act", None)) is not None:
             self.hidden_activation = legacy_act
 
-        # iRoPE mask: NoPE layers counted backward from the last layer.
+        # iRoPE mask: default to NoPE every 4 layers, counted backward from the last layer.
         if self.no_rope_layers is None:
+            stride = 4
             self.no_rope_layers = [
-                0 if (self.num_hidden_layers - 1 - i) % self.every_n_layers_nope == 0 else 1
+                0 if (self.num_hidden_layers - 1 - i) % stride == 0 else 1
                 for i in range(self.num_hidden_layers)
             ]
 
@@ -694,12 +702,12 @@ class OnyxVisionModel(OnyxPreTrainedModel):
         position_embeddings = self.rotary_emb(hidden_states, position_ids)
 
         for i, block in enumerate(self.layers):
-            is_global = (i == len(self.layers) - 1) or ((i + 1) % self.config.sparse_attention_factor == 0)
+            is_global = self.config.layer_types[i] == "full_attention"
             hidden_states = block(
                 hidden_states,
                 position_ids=position_ids,
                 position_embeddings=position_embeddings,
-                cu_seqlens=cu_seqlens if is_global or self.config.sparse_attention_factor == 0 else cu_window_seqlens,
+                cu_seqlens=cu_seqlens if is_global else cu_window_seqlens,
             )
 
         reverse_indices = torch.argsort(window_index)
