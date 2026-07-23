@@ -21,7 +21,7 @@ from transformers import (
     is_torch_available,
     is_vision_available,
 )
-from transformers.testing_utils import cleanup, require_torch, slow, torch_device
+from transformers.testing_utils import Expectations, cleanup, require_torch, slow, torch_device
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -206,7 +206,12 @@ class GotOcr2IntegrationTest(unittest.TestCase):
         decoded_output = self.processor.decode(
             generate_ids[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True
         )
-        expected_output = "\\title{\nR"
+        expected_output = Expectations(
+            {
+                (None, None): "\\title{\nR",
+                ("xpu", 5): "R\\&D",
+            }
+        ).get_expectation()
         self.assertEqual(decoded_output, expected_output)
 
     @slow

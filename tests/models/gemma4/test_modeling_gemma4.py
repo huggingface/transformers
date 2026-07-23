@@ -816,6 +816,7 @@ class Gemma4IntegrationTest(unittest.TestCase):
             {
                 ("cuda", 8): ['This image shows a **brown and white cow** standing on a **sandy beach** with the **ocean and a blue sky** in the background'],
                 ("xpu", 3): ['This image shows a **brown and white cow** standing on a **sandy beach** with the **ocean and a blue sky** in the background'],
+                ("xpu", 5): ['This image shows a **brown and white cow** standing on a **sandy beach** with the **ocean** in the background under a **clear'],
             }
         )  # fmt: skip
         EXPECTED_TEXT = EXPECTED_TEXTS.get_expectation()
@@ -869,6 +870,10 @@ class Gemma4IntegrationTest(unittest.TestCase):
                 ],
                 ("xpu", 3): [
                     "This image shows a **brown and white cow** standing on a **sandy beach** with the **ocean and a blue sky** in the background",
+                    "No, these images are **not identical**.\n\nHere's a breakdown of the differences:\n\n1.  **Image 1 (Cow on",
+                ],
+                ("xpu", 5): [
+                    "This image shows a **brown and white cow** standing on a **sandy beach** with the **ocean** in the background under a **clear",
                     "No, these images are **not identical**.\n\nHere's a breakdown of the differences:\n\n1.  **Image 1 (Cow on",
                 ],
             }
@@ -964,6 +969,7 @@ class Gemma4IntegrationTest(unittest.TestCase):
                 ("cuda", (8, 6)): ['## The Algorithmic Bloom\n\nFrom silent data, a whisper starts to rise,\nA sea of numbers beneath intelligent skies.\nNo flesh and'],
                 ("cuda", (9, 0)): ['## The Algorithmic Mind\n\nA whisper starts, a seed unseen,\nOf data vast, a vibrant sheen.\nA sea of numbers,'],
                 ("xpu", 3): ['## The Algorithmic Mind\n\nA whisper starts in silicon deep,\nWhere data streams in endless sweep.\nNo flesh and blood, no beating'],
+                ("xpu", 5): ['## The Algorithmic Mind\n\nA whisper starts, a seed unseen,\nOf data vast, a vibrant sheen.\nA sea of numbers,'],
             }
         )  # fmt: skip
         EXPECTED_TEXT = EXPECTED_TEXTS.get_expectation()

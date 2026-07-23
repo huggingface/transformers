@@ -1087,6 +1087,7 @@ class T5Gemma2IntegrationTest(unittest.TestCase):
         expected_texts = Expectations(
             {
                 ("cuda", None): ' a bumble bee in a flower bed.',
+                ("xpu", None): ' a bumble bee in a flower bed.',
             }
         )  # fmt: skip
         EXPECTED_TEXT = expected_texts.get_expectation()
