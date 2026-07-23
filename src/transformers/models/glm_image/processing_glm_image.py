@@ -213,6 +213,7 @@ class GlmImageProcessor(ProcessorMixin):
             )
 
     def _process_images(self, images: ImageInput, **kwargs):
+        # Kwargs used only in processor, if we pass them down to image processor it raises an error
         kwargs.pop("target_h", None)
         kwargs.pop("target_w", None)
         return super()._process_images(images, **kwargs)

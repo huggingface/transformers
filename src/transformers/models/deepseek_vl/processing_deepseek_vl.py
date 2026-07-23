@@ -50,7 +50,7 @@ class DeepseekVLProcessor(ProcessorMixin):
             The number of special image tokens used as placeholders for visual content in text sequences.
         """
         self.image_token = tokenizer.image_token
-        self.image_token_id = tokenizer.encode(self.image_token, add_special_tokens=False)[0]
+        self.image_token_id = tokenizer.convert_tokens_to_ids(self.image_token)
         self.num_image_tokens = num_image_tokens
 
         super().__init__(image_processor, tokenizer, chat_template=chat_template)

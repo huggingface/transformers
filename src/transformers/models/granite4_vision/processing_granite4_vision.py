@@ -21,7 +21,7 @@
 from fractions import Fraction
 
 from ...image_processing_utils import select_best_resolution
-from ...image_utils import SizeDict, get_image_size, to_numpy_array
+from ...image_utils import SizeDict
 from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin
 from ...utils import auto_docstring
 
@@ -85,7 +85,7 @@ class Granite4VisionProcessor(ProcessorMixin):
         if not isinstance(image_size, (list, tuple)):
             image_size = image_size.tolist()
         orig_height, orig_width = image_size
-        height, width = get_image_size(to_numpy_array(image_inputs["pixel_values"][0][0]))
+        height, width = image_inputs["pixel_values"][0][0].shape[-2:]
         num_image_tokens = self._get_number_of_features(orig_height, orig_width, height, width)
         if self.vision_feature_select_strategy == "default":
             num_image_tokens -= 1

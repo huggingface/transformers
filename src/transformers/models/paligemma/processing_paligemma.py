@@ -148,6 +148,7 @@ class PaliGemmaProcessor(ProcessorMixin):
                     "each text has and add special tokens."
                 )
                 # DON'T replace below code with `image_utils.make_nested_list_of_images`, they aren't identical
+                # when images are a flat list, we treat each image as separate batch while `image_utils` puts everything in one batch
                 if is_valid_image(images):
                     images_per_sample = [[images]] * len(text)
                 elif isinstance(images, (list, tuple)) and is_valid_image(images[0]):

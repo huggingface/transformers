@@ -67,7 +67,9 @@ class InternVLProcessor(ProcessorMixin):
         self.image_token = tokenizer.context_image_token
         self.video_token = tokenizer.video_token
         self.image_token_id = tokenizer.context_image_token_id
-        self.pattern = re.compile(f"(?P<image>{re.escape(self.image_token)})|(?P<video>{re.escape(self.video_token)})")
+        self.multimodal_pattern = re.compile(
+            f"(?P<image>{re.escape(self.image_token)})|(?P<video>{re.escape(self.video_token)})"
+        )
 
     @property
     def image_token_ids(self) -> list[int]:
@@ -100,7 +102,7 @@ class InternVLProcessor(ProcessorMixin):
 
         # Keep track of how many image/videos per sample we have, and in which order
         text = [text] if isinstance(text, str) else text
-        visuals_order = [match.lastgroup for sample in text for match in re.finditer(self.pattern, sample)]
+        visuals_order = [match.lastgroup for sample in text for match in re.finditer(self.multimodal_pattern, sample)]
         model_inputs = super().__call__(images=images, text=text, videos=videos, **output_kwargs)
 
         # Merge image and video pixel into a single array, as model expects only `pixel_values` as arg

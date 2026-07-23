@@ -24,7 +24,6 @@ from ... import initialization as init
 from ...cache_utils import Cache
 from ...configuration_utils import PreTrainedConfig
 from ...image_processing_utils import select_best_resolution
-from ...image_utils import get_image_size, to_numpy_array
 from ...masking_utils import create_causal_mask
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling
 from ...processing_utils import Unpack
@@ -225,7 +224,7 @@ class Granite4VisionProcessor(LlavaNextProcessor):
         if not isinstance(image_size, (list, tuple)):
             image_size = image_size.tolist()
         orig_height, orig_width = image_size
-        height, width = get_image_size(to_numpy_array(image_inputs["pixel_values"][0][0]))
+        height, width = image_inputs["pixel_values"][0][0].shape[-2:]
         num_image_tokens = self._get_number_of_features(orig_height, orig_width, height, width)
         if self.vision_feature_select_strategy == "default":
             num_image_tokens -= 1
