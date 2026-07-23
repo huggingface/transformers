@@ -372,4 +372,3 @@ class FutureBatch:
         self.requests = requests
         self.token_budget = token_budget
         self.cache_budget = cache_budget
-

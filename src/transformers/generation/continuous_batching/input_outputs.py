@@ -202,7 +202,10 @@ class ContinuousBatchingIOs:
             (num_attn_types, max_batch_tokens), dtype=torch.int64, device=self.device, pin_memory=pin_memory
         )
         self.read_index_storage = torch.empty(
-            (num_attn_types, self.cache.max_tokens_read + max_batch_tokens), dtype=torch.int64, device=self.device, pin_memory=pin_memory
+            (num_attn_types, self.cache.max_tokens_read + max_batch_tokens),
+            dtype=torch.int64,
+            device=self.device,
+            pin_memory=pin_memory,
         )
         # For read index, the +T is because there are sentinel indices for seqlen_q when model uses a sliding window
 
@@ -271,17 +274,19 @@ class ContinuousBatchingIOs:
         # If this is a full reset, we reset every tensors
         if full_reset:
             self.block_table[:, :b_size].fill_(-1)
-            for ca in self.cache.cache_allocators.values():
-                self.write_index_storage[:, :q_len].fill_(ca.write_trash_index)
-                self.read_index_storage[:, : q_len + kv_len].fill_(ca.read_trash_index)
+            self._reset_read_and_write_indices(q_len, kv_len)
         # If this is not a full reset, and we are going to use the block table, we only reset it
         elif self.use_block_table:
             self.block_table[:, :b_size].fill_(-1)
         # Otherwise, the read and write indices are the ones used, so we reset them
         else:
-            for ca in self.cache.cache_allocators.values():
-                self.write_index_storage[:, :q_len].fill_(ca.write_trash_index)
-                self.read_index_storage[:, : q_len + kv_len].fill_(ca.read_trash_index)
+            self._reset_read_and_write_indices(q_len, kv_len)
+
+    def _reset_read_and_write_indices(self, q_len: int, kv_len: int) -> None:
+        """Resets each allocator's row of the index storages to its own trash indices."""
+        for i, ca in enumerate(self.cache.cache_allocators.values()):
+            self.write_index_storage[i, :q_len].fill_(ca.write_trash_index)
+            self.read_index_storage[i, : q_len + kv_len].fill_(ca.read_trash_index)
 
     def reset(self) -> None:
         """Reset all relevant states for a new generation loop."""
@@ -349,8 +354,9 @@ class ContinuousBatchingIOs:
         self._reset_static_tensors()
 
         # Reset accumulators
-        self.true_read_sizes = [0 for _ in range(self.cache.cache_allocators)]
-        self.true_write_sizes = [0 for _ in range(self.cache.cache_allocators)]
+        num_attn_types = len(self.cache.cache_allocators)
+        self.true_read_sizes = [0 for _ in range(num_attn_types)]
+        self.true_write_sizes = [0 for _ in range(num_attn_types)]
         self.requests_in_batch = []
         self.req_id_to_new_token_position = {}
 
@@ -361,8 +367,8 @@ class ContinuousBatchingIOs:
         cumulative_seqlens_q = [0]
         logits_indices = []
         cumulative_seqlens_k = {layer_type: [0] for layer_type in self.cumulative_seqlens_k.keys()}
-        write_index = [[] for _ in range(self.cache.cache_allocators)]
-        read_index = None if self.max_kv_read == 0 else [[] for _ in range(self.cache.cache_allocators)]
+        write_index = [[] for _ in range(num_attn_types)]
+        read_index = None if self.max_kv_read == 0 else [[] for _ in range(num_attn_types)]
 
         # Go through all the requests in the batch
         for i, future_state in enumerate(requests_in_batch):
@@ -414,7 +420,9 @@ class ContinuousBatchingIOs:
         # If needed, build the attention mask with the un-padded sequence lengths
         if self.attention_mask is not None:
             for layer_type, layer_type_seqlens_k in cumulative_seqlens_k.items():
-                sliding_window = getattr(self.config, "sliding_window", None) if layer_type == "sliding_attention" else 1
+                sliding_window = (
+                    getattr(self.config, "sliding_window", None) if layer_type == "sliding_attention" else 1
+                )
                 build_attention_mask(
                     attention_mask=self.attention_mask[layer_type],
                     cumulative_seqlens_q=cumulative_seqlens_q,
@@ -506,7 +514,7 @@ class ContinuousBatchingIOs:
         kwargs["max_seqlen_q"] = 1 if self.use_block_table else self.max_seqlen_q
 
         # For the attributes that are lists of tensors, we construct list of tensor references
-        for i in range(self.cache.cache_allocators):
+        for i in range(len(self.cache.cache_allocators)):
             write_index_size = q_size if use_padding else self.true_write_sizes[i]
             kwargs["write_index"].append(self.write_index_storage[i, :write_index_size])
             # If there is no cache to read, pass a list of empty tensors so `cache.update` uses the write-only fast path
