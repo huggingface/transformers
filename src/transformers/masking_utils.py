@@ -940,9 +940,6 @@ def create_causal_mask(
             correct whenever all layers of a given mask type have seen the same tokens. Pass it explicitly for caches
             where layers of the same type hold different lengths (e.g. per-depth MTP streams).
     """
-    if layer_idx is not None and config.is_heterogeneous:
-        config = config.per_layer_config[layer_idx]
-
     # Power feature: if `is_causal` is False, then fallback to bi-directional mask for bi-directional attention.
     # It allows to use decoder-only models with bi-directional attention as well
     if not getattr(config, "is_causal", True):
@@ -1182,15 +1179,12 @@ def create_sliding_window_causal_mask(
         "block_sequence_ids": block_sequence_ids,
         "layer_idx": layer_idx,
     }
-    if config.is_heterogeneous:
-        if layer_idx is not None:
-            mask_kwargs["config"] = config.per_layer_config[layer_idx]
-        elif attribute_name in config.per_layer_attributes:
-            return create_attention_masks_by_attribute_value(
-                _create_sliding_window_causal_mask,
-                attribute_name,
-                **mask_kwargs,
-            )
+    if layer_idx is None and config.is_heterogeneous and attribute_name in config.per_layer_attributes:
+        return create_attention_masks_by_attribute_value(
+            _create_sliding_window_causal_mask,
+            attribute_name,
+            **mask_kwargs,
+        )
     return _create_sliding_window_causal_mask(**mask_kwargs)
 
 
@@ -1434,15 +1428,12 @@ def create_chunked_causal_mask(
         "and_mask_function": and_mask_function,
         "layer_idx": layer_idx,
     }
-    if config.is_heterogeneous:
-        if layer_idx is not None:
-            mask_kwargs["config"] = config.per_layer_config[layer_idx]
-        elif attribute_name in config.per_layer_attributes:
-            return create_attention_masks_by_attribute_value(
-                _create_chunked_causal_mask,
-                attribute_name,
-                **mask_kwargs,
-            )
+    if layer_idx is None and config.is_heterogeneous and attribute_name in config.per_layer_attributes:
+        return create_attention_masks_by_attribute_value(
+            _create_chunked_causal_mask,
+            attribute_name,
+            **mask_kwargs,
+        )
     return _create_chunked_causal_mask(**mask_kwargs)
 
 

@@ -32,7 +32,7 @@ if is_torch_available():
         hetero_context,
         tiny_llama_config,
     )
-    from transformers import LlamaConfig, LlamaForCausalLM, PreTrainedModel
+    from transformers import DynamicCache, LlamaConfig, LlamaForCausalLM, PreTrainedModel
     from transformers.integrations.heterogeneity import (
         HeterogeneousModelingSpec,
         SkipDescriptor,
@@ -258,9 +258,10 @@ class TestHeterogeneousModeling(unittest.TestCase):
         config = tiny_llama_config(num_hidden_layers=2)
         config.num_mtp_layers = 2
         config.mtp_per_layer_config = {
-            0: {"intermediate_size": 64, "rms_norm_eps": 1e-5},
-            1: {"intermediate_size": 96, "skip": ["attention"]},
+            0: {"intermediate_size": 64, "is_causal": True, "rms_norm_eps": 1e-5},
+            1: {"intermediate_size": 96, "is_causal": False, "skip": ["attention"]},
         }
+        config._attn_implementation = "eager"
         main_model = build_model(config, LlamaForCausalLM)
 
         mtp_model = MtpModel(main_model, num_mtp_layers=2)
@@ -280,6 +281,16 @@ class TestHeterogeneousModeling(unittest.TestCase):
             type(main_model.model.layers[1].self_attn),
         )
         self.assertEqual(mtp_model.config.get_disabled_kv_layer_indices(), (1,))
+
+        inputs_embeds = torch.randn(1, 2, config.hidden_size)
+        position_ids = torch.arange(2).unsqueeze(0)
+        mtp_cache = DynamicCache(config=mtp_model.config)
+        causal_mask = mtp_model.create_masks_for_mtp_layer(0, inputs_embeds, mtp_cache, position_ids)["attention_mask"]
+        bidirectional_mask = mtp_model.create_masks_for_mtp_layer(1, inputs_embeds, mtp_cache, position_ids)[
+            "attention_mask"
+        ]
+        self.assertIsNotNone(causal_mask)
+        self.assertIsNone(bidirectional_mask)
 
         main_modeling_spec = get_heterogeneous_modeling_spec(main_model)
         for descriptor in main_modeling_spec.skip_descriptors.values():

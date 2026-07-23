@@ -81,7 +81,7 @@ class TestHeterogeneousMasking(unittest.TestCase):
         cache = _LayerTrackingCache()
 
         mask = create_sliding_window_causal_mask(
-            config,
+            config.per_layer_config[1],
             inputs_embeds=torch.randn(1, 4, config.hidden_size),
             attention_mask=None,
             past_key_values=cache,
@@ -110,7 +110,7 @@ class TestHeterogeneousMasking(unittest.TestCase):
         cache = _LayerTrackingCache()
 
         mask = create_chunked_causal_mask(
-            config,
+            config.per_layer_config[1],
             inputs_embeds=torch.randn(1, 4, config.hidden_size),
             attention_mask=None,
             past_key_values=cache,

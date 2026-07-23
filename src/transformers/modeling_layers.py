@@ -445,8 +445,9 @@ class MtpModel(PreTrainedModel):
         attribute of the mtp layer if any, otherwise simply create a causal mask for full attention.
         """
         # Note that `_assisted_decoding` raises on batch_size > 1, so there is no padding mask to add
+        layer_config = self.config.per_layer_config[layer_idx] if self.config.is_heterogeneous else self.config
         mask_kwargs = {
-            "config": self.config,
+            "config": layer_config,
             "inputs_embeds": inputs_embeds,
             "attention_mask": None,
             "past_key_values": mtp_cache,
