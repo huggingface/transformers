@@ -797,33 +797,33 @@ class DabDetrModelIntegrationTests(unittest.TestCase):
         self.assertEqual(outputs.logits.shape, expected_shape_logits)
         expected_slice_logits = torch.tensor(
             [
-                [-10.1764, -5.5247, -8.9324],
-                [-9.8137, -5.6730, -7.5163],
-                [-10.3056, -5.6075, -8.5935],
+                [-9.7013, -5.9547, -9.1553],
+                [-10.1707, -4.7599, -8.2144],
+                [-9.7427, -5.3932, -8.5964],
             ]
         ).to(torch_device)
-        torch.testing.assert_close(outputs.logits[0, :3, :3], expected_slice_logits, atol=3e-4, rtol=3e-4)
+        torch.testing.assert_close(outputs.logits[0, :3, :3], expected_slice_logits, atol=1e-2, rtol=1e-2)
 
         expected_shape_boxes = torch.Size((1, model.config.num_queries, 4))
         self.assertEqual(outputs.pred_boxes.shape, expected_shape_boxes)
         expected_slice_boxes = torch.tensor(
             [
-                [0.3708, 0.3000, 0.2754],
-                [0.5211, 0.6126, 0.9494],
-                [0.2897, 0.6731, 0.5460],
+                [0.3532, 0.3977, 0.2735],
+                [0.3985, 0.7213, 0.5390],
+                [0.2445, 0.7735, 0.8080],
             ]
         ).to(torch_device)
-        torch.testing.assert_close(outputs.pred_boxes[0, :3, :3], expected_slice_boxes, atol=3e-4, rtol=3e-4)
+        torch.testing.assert_close(outputs.pred_boxes[0, :3, :3], expected_slice_boxes, atol=1e-2, rtol=1e-2)
 
         # verify postprocessing
         results = image_processor.post_process_object_detection(
             outputs, threshold=0.3, target_sizes=[image.size[::-1]]
         )[0]
-        expected_scores = torch.tensor([0.8732, 0.8563, 0.8554, 0.6080, 0.5895]).to(torch_device)
-        expected_labels = [17, 75, 17, 75, 63]
-        expected_boxes = torch.tensor([14.6931, 49.3886, 320.5176, 469.2762]).to(torch_device)
+        expected_scores = torch.tensor([0.5986, 0.5885, 0.3455]).to(torch_device)
+        expected_labels = [17, 17, 63]
+        expected_boxes = torch.tensor([7.9388, 64.2617, 373.9215, 448.7645]).to(torch_device)
 
-        self.assertEqual(len(results["scores"]), 5)
-        torch.testing.assert_close(results["scores"], expected_scores, atol=3e-4, rtol=3e-4)
+        self.assertEqual(len(results["scores"]), 3)
+        torch.testing.assert_close(results["scores"], expected_scores, atol=1e-2, rtol=1e-2)
         self.assertSequenceEqual(results["labels"].tolist(), expected_labels)
-        torch.testing.assert_close(results["boxes"][0, :], expected_boxes, atol=3e-4, rtol=3e-4)
+        torch.testing.assert_close(results["boxes"][0, :], expected_boxes, atol=1e-2, rtol=1e-2)

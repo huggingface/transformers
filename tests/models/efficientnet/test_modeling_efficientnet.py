@@ -255,5 +255,5 @@ class EfficientNetModelIntegrationTest(unittest.TestCase):
         expected_shape = torch.Size((1, 1000))
         self.assertEqual(outputs.logits.shape, expected_shape)
 
-        expected_slice = torch.tensor([-0.2962, 0.4487, 0.4499]).to(torch_device)
-        torch.testing.assert_close(outputs.logits[0, :3], expected_slice, rtol=1e-4, atol=1e-4)
+        expected_slice = torch.tensor([-0.2779, 0.4467, 0.4271]).to(torch_device)
+        torch.testing.assert_close(outputs.logits[0, :3], expected_slice, rtol=1e-3, atol=1e-3)

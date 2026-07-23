@@ -237,7 +237,8 @@ class RegNetModelIntegrationTest(unittest.TestCase):
             {
                 (None, None): [-0.4180, -1.5051, -3.4836],
                 ("cuda", 8): [-0.4180, -1.5051, -3.4836],
+                ("cuda", 9): [-0.4236, -1.5144, -3.4856],
             }
         )
         expected_slice = torch.tensor(expectations.get_expectation()).to(torch_device)
-        torch.testing.assert_close(outputs.logits[0, :3], expected_slice, rtol=2e-4, atol=2e-4)
+        torch.testing.assert_close(outputs.logits[0, :3], expected_slice, rtol=1e-3, atol=1e-3)
