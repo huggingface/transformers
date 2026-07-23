@@ -17,6 +17,7 @@ Generic utilities
 
 from __future__ import annotations
 
+import importlib
 import inspect
 import json
 import os
@@ -35,12 +36,14 @@ from typing import TYPE_CHECKING, Any, TypedDict, TypeVar
 import numpy as np
 
 from ..utils import logging
-from .import_utils import is_mlx_available, is_torch_available, is_torch_fx_proxy
+from .import_utils import is_mlx_available, is_torch_available, is_torch_fx_proxy, resolve_internal_import
 
 
 if TYPE_CHECKING:
     import torch
     from torch import nn
+
+    from ..configuration_utils import PreTrainedConfig
 
 
 # Generic class or function
@@ -300,6 +303,31 @@ def is_flash_attention_requested(
 
     # Otherwise, just check "flash" is in the attention implementation
     return "flash" in checked_attention_implementation
+
+
+def get_max_seqlen(
+    cu_seqlens: torch.Tensor,
+    config: PreTrainedConfig,
+    kwargs: dict | None = None,
+    kwarg_name: str = "max_seqlen",
+) -> int | None:
+    """Get the maximum packed sequence length, or pop it from `kwargs` if precomputed.
+
+    Args:
+        cu_seqlens: `(num_sequences + 1,)` cumulative sequence boundaries.
+        config: model configuration used to determine the attention implementation.
+        kwargs: optional caller kwargs containing a precomputed maximum sequence length.
+        kwarg_name: key used to pop the precomputed value from `kwargs`.
+
+    Returns:
+        Maximum packed sequence length as a Python integer, or `None` when Flash Attention is not requested
+        and no precomputed value is provided.
+    """
+    if kwargs is not None and (max_seqlen := kwargs.pop(kwarg_name, None)) is not None:
+        return max_seqlen
+    if not is_flash_attention_requested(config):
+        return None
+    return (cu_seqlens[1:] - cu_seqlens[:-1]).max().item()
 
 
 def split_attention_implementation(implementation: str | None) -> tuple[bool, str | None]:
@@ -1154,5 +1182,29 @@ def retry(
                     delay = min(delay * 2, max_delay)
 
         return wrapper
+
+    return decorator
+
+
+def maybe_replace_from_package(source_package: str, func_name: str):
+    """
+    This decorator will try to replace the decorated function with `func_name` imported from `package`, if it's available. If not,
+    simply use the decorated function.
+    Useful to define explicit torch fallback functions, while still using an optimized implementations from auxiliary package (e.g.
+    `causal_conv1d`) if available.
+    """
+
+    def decorator(torch_func: Callable) -> Callable:
+        try:
+            module = importlib.import_module(source_package)
+            function = resolve_internal_import(module, func_name)
+        except Exception:
+            function = torch_func
+        # `resolve_internal_import` may succeed, but return None
+        finally:
+            if function is None:
+                function = torch_func
+
+        return function
 
     return decorator
