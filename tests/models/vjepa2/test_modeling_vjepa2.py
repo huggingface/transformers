@@ -349,6 +349,65 @@ class VJEPA2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             outputs = model(pixel_values)
         self.assertEqual(outputs.logits.shape, (1, num_labels))
 
+    def test_get_vision_features_returns_hierarchical_when_present(self):
+        """get_vision_features returns hierarchical_hidden_state when hierarchical_layers is set,
+        and last_hidden_state shape when it is not."""
+        common_kwargs = {
+            "crop_size": 16,
+            "frames_per_clip": 2,
+            "hidden_size": 32,
+            "num_attention_heads": 2,
+            "num_hidden_layers": 2,
+            "mlp_ratio": 1.0,
+            "pred_hidden_size": 16,
+            "pred_num_attention_heads": 2,
+            "pred_num_hidden_layers": 2,
+            "pred_num_mask_tokens": 8,
+        }
+        pixel_values = torch.randn(1, 2, 3, 16, 16, device=torch_device)
+
+        # --- with hierarchical_layers: should return hierarchical_hidden_state ---
+        config_hier = VJEPA2Config(
+            hierarchical_layers=[0, 1],
+            num_distillation_outputs=1,
+            **common_kwargs,
+        )
+        model_hier = VJEPA2Model(config_hier).to(torch_device).eval()
+        with torch.no_grad():
+            features_hier = model_hier.get_vision_features(pixel_values)
+            outputs_hier = model_hier(pixel_values)
+        self.assertIsNotNone(features_hier)
+        # verify it came from hierarchical_hidden_state, not last_hidden_state
+        torch.testing.assert_close(features_hier, outputs_hier.hierarchical_hidden_state)
+
+        # --- without hierarchical_layers: should return last_hidden_state ---
+        config_plain = VJEPA2Config(**common_kwargs)
+        model_plain = VJEPA2Model(config_plain).to(torch_device).eval()
+        with torch.no_grad():
+            features_plain = model_plain.get_vision_features(pixel_values)
+            outputs_plain = model_plain(pixel_values)
+        self.assertIsNotNone(features_plain)
+        torch.testing.assert_close(features_plain, outputs_plain.last_hidden_state)
+
+    def test_config_num_distillation_outputs_validation(self):
+        """VJEPA2Config.__post_init__ should raise ValueError when num_distillation_outputs
+        exceeds len(hierarchical_layers), and stay silent otherwise."""
+        # invalid: 3 > len([0, 1]) = 2
+        with self.assertRaises(ValueError):
+            VJEPA2Config(hierarchical_layers=[0, 1], num_distillation_outputs=3)
+
+        # valid boundary: 2 == len([0, 1]) = 2
+        try:
+            VJEPA2Config(hierarchical_layers=[0, 1], num_distillation_outputs=2)
+        except ValueError:
+            self.fail("VJEPA2Config raised ValueError for valid num_distillation_outputs=2")
+
+        # no hierarchical_layers: validation should not fire regardless of num_distillation_outputs
+        try:
+            VJEPA2Config(hierarchical_layers=None, num_distillation_outputs=99)
+        except ValueError:
+            self.fail("VJEPA2Config raised ValueError when hierarchical_layers is None")
+
     @slow
     def test_model_from_pretrained(self):
         model = VJEPA2Model.from_pretrained(VJEPA_HF_MODEL)
