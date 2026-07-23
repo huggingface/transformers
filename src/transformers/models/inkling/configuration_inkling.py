@@ -22,8 +22,10 @@
 from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
+from ...utils import auto_docstring
 
 
+@auto_docstring(checkpoint="thinkingmachines/Inkling")
 @strict
 class InklingTextConfig(PreTrainedConfig):
     model_type = "inkling_text"
@@ -149,6 +151,7 @@ class InklingTextConfig(PreTrainedConfig):
         return None
 
 
+@auto_docstring(checkpoint="thinkingmachines/Inkling")
 @strict
 class InklingAudioConfig(PreTrainedConfig):
     model_type = "inkling_audio"
@@ -166,6 +169,7 @@ class InklingAudioConfig(PreTrainedConfig):
     initializer_range: float = 0.02
 
 
+@auto_docstring(checkpoint="thinkingmachines/Inkling")
 @strict
 class InklingVisionConfig(PreTrainedConfig):
     model_type = "inkling_vision"
@@ -183,6 +187,7 @@ class InklingVisionConfig(PreTrainedConfig):
     initializer_range: float = 0.02
 
 
+@auto_docstring(checkpoint="thinkingmachines/Inkling")
 @strict
 class InklingConfig(PreTrainedConfig):
     """Top-level multimodal config (`InklingMMConfig` in the SGLang source)."""
