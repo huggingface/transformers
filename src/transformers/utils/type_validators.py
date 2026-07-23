@@ -133,6 +133,18 @@ def tensor_type_validator(value: str | TensorType | None = None):
 
 
 @as_validated_field
+def dtype_validator(value: str | int | None = None):
+    # Check all possible values
+    if value is None or (is_torch_available() and isinstance(value, torch.dtype)) or isinstance(value, str):
+        pass
+    # If torch not installed in env, just pass
+    elif not is_torch_available():
+        pass
+    else:
+        raise ValueError(f"Dtype must be either an string or `torch.dtype`, but got dtype={value}")
+
+
+@as_validated_field
 def label_to_id_validation(value: str | TensorType | None = None):
     possible_names = ["pt", "np", "mlx"]
     if value is None:
