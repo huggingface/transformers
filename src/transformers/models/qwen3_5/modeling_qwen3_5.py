@@ -261,27 +261,6 @@ def causal_conv1d_fn(
     return out.to(hidden_states.dtype)
 
 
-def torch_causal_conv1d_fn(
-    hidden_states,
-    weight,
-    bias=None,
-    activation=None,
-    **kwargs,
-):
-    _, hidden_size, seq_len = hidden_states.shape
-    padding = weight.shape[-1] - 1
-
-    out = F.conv1d(
-        hidden_states.to(weight.dtype),
-        weight=weight.unsqueeze(1),
-        bias=bias,
-        padding=padding,
-        groups=hidden_size,
-    )[:, :, :seq_len]
-
-    return ACT2FN[activation](out).to(hidden_states.dtype)
-
-
 def l2norm(x: torch.FloatTensor, dim: int = -1, eps: float = 1e-6):
     """This function is intended to align with the l2norm implementation in the FLA library."""
     inv_norm = torch.rsqrt((x * x).sum(dim=dim, keepdim=True) + eps)
