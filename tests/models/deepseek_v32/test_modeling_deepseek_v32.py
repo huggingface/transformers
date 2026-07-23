@@ -223,10 +223,6 @@ class DeepseekV32ModelTest(CausalLMModelTest, unittest.TestCase):
     def test_eager_matches_batched_and_grouped_inference(self, *args, **kwargs):
         pass
 
-    @unittest.skip("DSA hard top-k selection is sensitive to padding shifts (selection can flip).")
-    def test_left_padding_compatibility(self):
-        pass
-
     @unittest.skip("DSA hard top-k selection is sensitive to sequence packing (selection can flip).")
     def test_eager_padding_matches_padding_free_with_position_ids(self):
         pass
