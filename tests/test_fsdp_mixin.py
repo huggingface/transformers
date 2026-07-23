@@ -526,17 +526,6 @@ class FSDPTesterMixin(ABC):
                 f"(enabled: {sorted(FSDP_DISTRIBUTED_TEST_MODEL_TYPES)}). Set FSDP_DISTRIBUTED_TEST_MODEL_TYPES = None to run all tests."
             )
 
-    def _create_model_on_meta(self, config):
-        """Instantiate a model on the meta device (no memory allocated)."""
-        auto_classes = [AutoModelForCausalLM, AutoModelForSeq2SeqLM]  # TODO(3outeille): why AutoModelForSeq2SeqLM ?
-        for auto_cls in auto_classes:
-            try:
-                with torch.device("meta"):
-                    return auto_cls.from_config(config)
-            except Exception:
-                continue
-        self.skipTest(f"Cannot instantiate model with any Auto class for config {type(config).__name__}")
-
     def _get_tiny_config(self):
         """Get config class and serialized dict for passing to spawned processes."""
         config = self.model_tester.get_config()
@@ -593,7 +582,17 @@ class FSDPTesterMixin(ABC):
         if not self._has_fsdp_plan():
             self.skipTest("Model does not have an FSDP plan (base_model_fsdp_plan)")
 
-        model = self._create_model_on_meta(self.model_tester.get_config())
+        config = self.model_tester.get_config()
+        auto_classes = [AutoModelForCausalLM, AutoModelForSeq2SeqLM]  # TODO(3outeille): why AutoModelForSeq2SeqLM ?
+        for auto_cls in auto_classes:
+            try:
+                with torch.device("meta"):
+                    model = auto_cls.from_config(config)
+                    break
+            except Exception:
+                continue
+        else:
+            self.skipTest(f"Cannot instantiate model with any Auto class for config {type(config).__name__}")
         self.assertTrue(model._fsdp_plan, f"No _fsdp_plan declared for {type(model).__name__}")
 
     @parameterized.expand(["untied", "tied"])
