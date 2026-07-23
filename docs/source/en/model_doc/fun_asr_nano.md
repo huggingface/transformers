@@ -183,6 +183,10 @@ print(processor.decode(generated_ids, skip_special_tokens=True)[0])
 
 [[autodoc]] FunAsrNanoEncoderConfig
 
+## FunAsrNanoAdaptorConfig
+
+[[autodoc]] FunAsrNanoAdaptorConfig
+
 ## FunAsrNanoFeatureExtractor
 
 [[autodoc]] FunAsrNanoFeatureExtractor
