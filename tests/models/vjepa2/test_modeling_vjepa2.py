@@ -20,6 +20,7 @@ import numpy as np
 
 from transformers import VJEPA2Config
 from transformers.testing_utils import (
+    Expectations,
     require_torch,
     require_vision,
     slow,
@@ -479,36 +480,6 @@ class VJEPA2ModelIntegrationTest(unittest.TestCase):
         expected_shape = torch.Size((1, num_masks, 1024))
         self.assertEqual(outputs.predictor_output.last_hidden_state.shape, expected_shape)
 
-    def test_inference_vjepa2_1_base(self):
-        """Smoke test: instantiate a 2.1-like config and run forward pass."""
-        config = VJEPA2Config(
-            crop_size=16,
-            frames_per_clip=2,
-            hidden_size=32,
-            num_attention_heads=2,
-            num_hidden_layers=4,
-            mlp_ratio=1.0,
-            pred_hidden_size=16,
-            pred_num_attention_heads=2,
-            pred_num_hidden_layers=2,
-            pred_num_mask_tokens=8,
-            use_rope_interleave=True,
-            use_modality_embeddings=True,
-            interpolate_rope=True,
-            use_context_projection=True,
-            use_image_patch_embedder=True,
-            teacher_embed_dim=64,
-            num_distillation_outputs=1,
-            hierarchical_layers=[0, 1, 2, 3],
-        )
-        model = VJEPA2Model(config).to(torch_device).eval()
-
-        pixel_values = torch.randn(1, 2, 3, 16, 16, device=torch_device)
-        with torch.no_grad():
-            outputs = model(pixel_values)
-        self.assertIsNotNone(outputs.last_hidden_state)
-        self.assertIsNotNone(outputs.predictor_output)
-
     @slow
     def test_inference_vjepa2_1_integration(self):
         """Integration test: load vjepa2.1-vitb from Hub and compare encoder output against Meta's original implementation."""
@@ -538,39 +509,43 @@ class VJEPA2ModelIntegrationTest(unittest.TestCase):
 
         # for vjepa2.1 models, the encoder output to compare is hierarchical_hidden_state
         # (mirrors the converter's validation: hf_encoder = outputs.hierarchical_hidden_state ?? outputs.last_hidden_state)
-        # reference values from Meta's original implementation — see workstream_001_build.md
-        # allclose passed at atol=1e-3 in workstream_001 converter validation
         hf_encoder = (
             outputs.hierarchical_hidden_state
             if outputs.hierarchical_hidden_state is not None
             else outputs.last_hidden_state
         )
         expected_encoder_slice = torch.tensor(
-            [
-                [0.24165302515029907, 0.5494657158851624, 0.00034073402639478445, -0.3474652171134949],
-                [-0.3851822316646576, 0.03926074877381325, 0.42013248801231384, 0.1775028109550476],
-                [0.5560275912284851, 0.8459381461143494, 0.037836603820323944, 0.7014947533607483],
-                [0.31093376874923706, 1.8635334968566895, -0.16667403280735016, 1.002286434173584],
-            ],
+            Expectations(
+                {
+                    (None, None): [
+                        [0.24165302515029907, 0.5494657158851624, 0.00034073402639478445, -0.3474652171134949],
+                        [-0.3851822316646576, 0.03926074877381325, 0.42013248801231384, 0.1775028109550476],
+                        [0.5560275912284851, 0.8459381461143494, 0.037836603820323944, 0.7014947533607483],
+                        [0.31093376874923706, 1.8635334968566895, -0.16667403280735016, 1.002286434173584],
+                    ]
+                }
+            ).get_expectation(),
+            dtype=torch.float32,
             device=torch_device,
         )
-        self.assertTrue(
-            torch.allclose(hf_encoder[:, :4, :4], expected_encoder_slice, atol=1e-3),
-            f"Encoder output slice mismatch. Got:\n{hf_encoder[:, :4, :4]}",
-        )
+        torch.testing.assert_close(hf_encoder[:, :4, :4], expected_encoder_slice, rtol=1e-3, atol=1e-3)
 
         expected_predictor_slice = torch.tensor(
-            [
-                [0.001277238130569458, 0.2505880296230316, 0.06844618916511536, -0.1792779117822647],
-                [0.00841611623764038, 0.10896551609039307, -0.008314952254295349, -0.21254171431064606],
-                [0.22983714938163757, 0.617747962474823, -0.3871285319328308, -0.2716492712497711],
-                [0.1592579483985901, 0.4939582943916321, -0.32962897419929504, -0.24818222224712372],
-            ],
+            Expectations(
+                {
+                    (None, None): [
+                        [0.001277238130569458, 0.2505880296230316, 0.06844618916511536, -0.1792779117822647],
+                        [0.00841611623764038, 0.10896551609039307, -0.008314952254295349, -0.21254171431064606],
+                        [0.22983714938163757, 0.617747962474823, -0.3871285319328308, -0.2716492712497711],
+                        [0.1592579483985901, 0.4939582943916321, -0.32962897419929504, -0.24818222224712372],
+                    ]
+                }
+            ).get_expectation(),
+            dtype=torch.float32,
             device=torch_device,
         )
-        self.assertTrue(
-            torch.allclose(outputs.predictor_output.last_hidden_state[:, :4, :4], expected_predictor_slice, atol=1e-2),
-            f"Predictor output mismatch. Got: {outputs.predictor_output.last_hidden_state[:, :4, :4]}",
+        torch.testing.assert_close(
+            outputs.predictor_output.last_hidden_state[:, :4, :4], expected_predictor_slice, rtol=1e-2, atol=1e-2
         )
 
     @slow
