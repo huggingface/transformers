@@ -22,7 +22,7 @@ import os
 import re
 from collections import OrderedDict, defaultdict
 from collections.abc import Callable
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from safetensors import safe_open
 from safetensors.torch import save_file
@@ -539,6 +539,70 @@ def load_offloaded_parameter(model: "PreTrainedModel", param_name: str) -> torch
     # This call loads it from disk
     tensor = weights_map[truncated_param_name]
     return tensor
+
+
+def load_offloaded_checkpoint_parameters(
+    model: "PreTrainedModel",
+    param_name: str,
+    meta_state_dict: dict[str, torch.Tensor | Any] | None = None,
+) -> dict[str, torch.Tensor]:
+    """
+    Load source `param_name` from disk, if it was offloaded due to the device_map,
+    and thus lives as a meta parameter inside `model`.
+
+    This is needed when resaving a model, when some parameters were offloaded (we need to load them from disk, to
+    then resave them to disk in the correct shard...).
+
+    Example flow:
+    ```
+    source_param_name -> "experts.0.w1.weight"
+    target_param_name -> "experts.gate_up_proj"
+    loaded_state_dict -> {
+        "experts.0.w1.weight": ...
+        "experts.1.w1.weight": ...
+        ...
+        "experts.0.w3.weight": ...
+        "experts.1.w3.weight": ...
+        ...
+    }
+    ```
+
+    Args:
+        model (`PreTrainedModel`): Model containing target offloaded weight to load
+        param_name (`str`): Name of source (checkpoint) weight to load from model
+
+    Returns:
+        `dict[str, torch.Tensor]`: Loaded state dict of all weights which map to the source weight
+    """
+    from ..core_model_loading import WeightConverter, WeightRenaming, rename_source_key, revert_weight_conversion, get_target_keys
+
+    # Convert from source key in checkpoint to target key in model
+    if meta_state_dict is None:
+        meta_state_dict = model.state_dict()  # this can be costly: please pass as arg when possible
+    renamings = [entry for entry in model._weight_conversions if isinstance(entry, WeightRenaming)]
+    converters = [entry for entry in model._weight_conversions if isinstance(entry, WeightConverter)]
+    target_keys = get_target_keys(param_name, renamings, converters, model.base_model_prefix, meta_state_dict)
+    # if "model.audio_tower.embed_audio_tokens.embed_audio_tokens.weight" in target_keys:
+    #     breakpoint()
+
+    target_names = []
+    for target_key in target_keys:
+        if target_key not in meta_state_dict and ".*." in target_key:
+            escaped = re.escape(target_key).replace(r"\.\*\.", r"\..*\.")
+            wildcard_re = re.compile(escaped)
+            target_names.extend([k for k in meta_state_dict if wildcard_re.search(k)])
+        else:
+            target_names.append(target_key)
+
+    # load parameters from model
+    target_values = {
+        target_name: load_offloaded_parameter(model, target_name)
+        for target_name in target_names
+    }
+
+    # Convert from target key to source key(s)
+    loaded_state_dict = revert_weight_conversion(model, target_values)
+    return loaded_state_dict
 
 
 def _init_infer_auto_device_map(

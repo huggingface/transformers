@@ -168,6 +168,7 @@ class Concatenate(ConversionOps):
                 all_tensors.extend(tensors)
             else:
                 all_tensors.append(tensors)
+
         return {target_pattern: torch.cat(all_tensors, dim=self.dim)}
 
     def get_target_pattern(self, target_patterns: list[str]) -> str:
@@ -913,6 +914,42 @@ class WeightTransform:
             renamed_key = prefix_dot + renamed_key
         return renamed_key, source_pattern_that_matched
 
+    def get_target_keys(self, source_key: str) -> tuple[list[str], str | None]:
+        """
+        Return ALL target keys that source_key maps to, plus the matched source pattern.
+
+        Unlike `rename_source_key` which returns only the first target key, this method
+        returns every target key produced by the transform. For one-to-one and many-to-one
+        transforms the list has one element; for one-to-many transforms it has one element
+        per target pattern.
+        """
+        matched = self._scoped_match(source_key)
+        if matched is None:
+            return [source_key], None
+
+        prefix_dot, key_to_match, match_object = matched
+        self._was_used = True
+
+        matching_group_name = next(name for name, val in match_object.groupdict().items() if val is not None)
+        source_pattern_that_matched = self.source_patterns[int(matching_group_name[1:])]
+        group_start = self.compiled_sources.groupindex[matching_group_name]
+
+        target_keys = []
+        for target_pattern in self.target_patterns:
+            replacement = target_pattern
+            if re.search(r"\\\d", replacement):
+                replacement = re.sub(
+                    r"\\(\d+)",
+                    lambda m: match_object.group(group_start + int(m.group(1))),
+                    replacement,
+                )
+            renamed_key = key_to_match.replace(match_object.group(0), replacement, 1)
+            if prefix_dot is not None:
+                renamed_key = prefix_dot + renamed_key
+            target_keys.append(renamed_key)
+
+        return target_keys, source_pattern_that_matched
+
     def reverse_transform(self) -> WeightTransform:
         """Reverse the current `WeightTransform` instance, to be able to save with the opposite weight transformations."""
         # TODO: check this and relax when quantizer have `reverse_op`
@@ -1443,6 +1480,68 @@ def rename_source_key(
     return renamed_key, source_pattern
 
 
+def get_target_keys(
+    source_key: str,
+    weight_renamings: list[WeightRenaming],
+    weight_converters: list[WeightConverter],
+    base_model_prefix: str | None = None,
+    meta_state_dict: dict | None = None,
+) -> list[str]:
+    """
+    Return ALL target keys produced by applying renamings then at most one converter to `source_key`.
+
+    Renamings are always one-to-one; converters may be one-to-many (e.g. SplitModulelist unpacks a
+    packed weight into per-expert keys). The returned list has one element for one-to-one/many-to-one
+    transforms and multiple elements for one-to-many transforms.
+
+    Args:
+        source_key (`str`):
+            The original checkpoint key to rename.
+        weight_renamings (`list[WeightRenaming]`):
+            Applied in order; every matching renaming fires (they may chain).
+        weight_converters (`list[WeightConverter]`):
+            Applied after all renamings; at most one may match. Subsequent converters are skipped.
+        base_model_prefix (`str`, *optional*):
+            Base-model prefix to add or strip when both `base_model_prefix` and `meta_state_dict` are given.
+        meta_state_dict (`dict`, *optional*):
+            Meta state dict used to decide whether `base_model_prefix` should be added or stripped.
+
+    Returns:
+        `tuple[list[str], str | None]`: All target keys and the matched converter's source pattern
+        (or `None` if no converter matched).
+    """
+    renamed_key = source_key
+    # 1. apply all renamings in turns; renamings are always one-to-one
+    for renaming in weight_renamings:
+        renamed_key, _ = renaming.rename_source_key(renamed_key)
+
+    # 2. apply converter key mapping; stop after the first match (at most one converter matches any key)
+    renamed_keys = [renamed_key]
+    for converter in weight_converters:
+        _renamed_keys = []
+        for renamed_key in renamed_keys:
+            target_keys, _ = converter.get_target_keys(renamed_key)
+            _renamed_keys.extend(target_keys)
+
+        renamed_keys = _renamed_keys
+
+    # 3. check if we need to add or remove base_model_prefix (only during loading, not saving)
+    if base_model_prefix is not None and meta_state_dict is not None:
+        processed = []
+        for k in renamed_keys:
+            if (
+                k.startswith(base_model_prefix)
+                and meta_state_dict.get(re.sub(f"^{base_model_prefix}.", "", k, count=1)) is not None
+            ):
+                k = re.sub(f"^{base_model_prefix}.", "", k, count=1)
+            elif meta_state_dict.get(f"{base_model_prefix}.{k}") is not None:
+                k = f"{base_model_prefix}.{k}"
+            processed.append(k)
+        renamed_keys = processed
+
+    return renamed_keys
+
+
 def convert_and_load_state_dict_in_model(
     model: PreTrainedModel,
     state_dict: dict[str, Any],
@@ -1597,6 +1696,19 @@ def convert_and_load_state_dict_in_model(
                 original_key, [], [], base_model_prefix=base_model_prefix, meta_state_dict=meta_model_state_dict
             )
 
+        # One-to-many converters (e.g. SplitModulelist) produce a renamed key containing ".*."
+        # because rename_source_key replaces the source pattern with the first target pattern.
+        # The literal ".*." never exists in meta_model_state_dict, so expand it to the first
+        # concrete key that matches (e.g. "...experts.0.gate_proj.weight").  Each call to
+        # convert() will then produce all the individual target tensors for that layer.
+        if renamed_key not in meta_model_state_dict and source_pattern is not None and ".*." in renamed_key:
+            escaped = re.escape(renamed_key).replace(r"\.\*\.", r"\..*\.")
+            wildcard_re = re.compile(escaped)
+            renamed_key = next(
+                (k for k in meta_model_state_dict if wildcard_re.search(k)),
+                renamed_key,
+            )
+
         # 2. finally, collect the tensor into the proper converter
         if renamed_key in meta_model_state_dict:
             empty_param = meta_model_state_dict.get(renamed_key)
@@ -1737,7 +1849,7 @@ def convert_and_load_state_dict_in_model(
     return loading_info, disk_offload_index
 
 
-def revert_weight_conversion(model: PreTrainedModel, state_dict: dict[str, torch.Tensor]):
+def revert_weight_conversion(model: PreTrainedModel, state_dict: dict[str, torch.Tensor]) -> dict[str, torch.Tensor]:
     """
     Revert the conversion mapping that was used to load the model with `from_pretrained`, or the default one
     if the model was created in another way and is part of the default mappings.
@@ -1776,8 +1888,10 @@ def revert_weight_conversion(model: PreTrainedModel, state_dict: dict[str, torch
     conversion_mapping: dict[str, WeightTransform] = {}
     state_dict = sorted(state_dict.items(), key=lambda kv: dot_natural_key(kv[0]))
     for original_key, tensor in state_dict:
-        # `converter_key`: key after phase-1 (converter namespace, used as layer_name by convert()).
-        # `checkpoint_key`: key after phase-2 (final saved name, layer_name for plain renamings).
+        # `converter_keys`: all target keys after phase-1 (converter namespace). For many-to-one
+        # converters (the common save case) this is a single key; for one-to-many it is multiple.
+        # We bucket by the first key so all sibling inputs land in the same converter instance.
+        # `checkpoint_key`: first converter key after phase-2 renamings (informational, used in layer_targets).
         converter_key, matched_pattern = rename_source_key(original_key, [], inverted_converters)
         checkpoint_key, _ = rename_source_key(converter_key, inverted_renamings, [])
 
