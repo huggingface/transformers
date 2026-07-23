@@ -61,6 +61,7 @@ FEATURE_EXTRACTOR_MAPPING_NAMES = OrderedDict(
         ("granite_speech_plus", {"torch": "GraniteSpeechAudioProcessor"}),
         ("higgs_audio_v2_tokenizer", {"torch": "DacAudioProcessor", "numpy": "DacAudioProcessorNumpy"}),
         ("hubert", {"torch": "Wav2Vec2AudioProcessor", "numpy": "Wav2Vec2AudioProcessorNumpy"}),
+        ("inkling_mm_model", {"torch": "InklingAudioProcessor"}),
         ("kyutai_speech_to_text", {"torch": "KyutaiSpeechToTextAudioProcessor", "numpy": "KyutaiSpeechToTextAudioProcessorNumpy"}),
         ("lasr_ctc", {"torch": "LasrAudioProcessor"}),
         ("lasr_encoder", {"torch": "LasrAudioProcessor"}),
