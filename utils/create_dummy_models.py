@@ -1374,6 +1374,25 @@ def get_config_overrides(config_class, processors):
     return config_overrides
 
 
+def _read_mem_used_gb() -> float | None:
+    """Return current memory used (GB) from /proc/meminfo, or None if unavailable."""
+    try:
+        with open("/proc/meminfo") as f:
+            meminfo = {k: int(v.split()[0]) for k, v in (line.split(":", 1) for line in f)}
+        return (meminfo["MemTotal"] - meminfo["MemAvailable"]) / 1024**2
+    except Exception:
+        return None
+
+
+def _get_folder_size_mb(path: str) -> float | None:
+    """Return total size of all files under `path` in MB, or None if unavailable."""
+    try:
+        total = sum(f.stat().st_size for f in Path(path).rglob("*") if f.is_file())
+        return round(total / 1024**2, 2)
+    except Exception:
+        return None
+
+
 def _log_disk_usage(label: str) -> None:
     """Print disk and memory usage for GitHub Actions log visibility."""
     try:
@@ -1419,6 +1438,7 @@ def build(config_class, models_to_create, output_dir, keep_model=False):
     import time as _time
 
     _start = _time.monotonic()
+    _mem_start = _read_mem_used_gb()
     print(f"[time] START {config_class.__name__}: {_time.strftime('%H:%M:%S')}", flush=True)
     _log_disk_usage(f"START {config_class.__name__}")
 
@@ -1429,10 +1449,19 @@ def build(config_class, models_to_create, output_dir, keep_model=False):
     if _tmpdir is not None:
         output_dir = _tmpdir.name
 
+    result = None
     try:
-     return _build_inner(config_class, models_to_create, output_dir, keep_model)
+        result = _build_inner(config_class, models_to_create, output_dir, keep_model)
+        return result
     finally:
         _elapsed = _time.monotonic() - _start
+        _mem_end = _read_mem_used_gb()
+        _mem_delta = round(_mem_end - _mem_start, 2) if (_mem_start is not None and _mem_end is not None) else None
+        _folder_size_mb = _get_folder_size_mb(output_dir)
+        if isinstance(result, dict):
+            result["duration_s"] = round(_elapsed, 1)
+            result["mem_delta_gb"] = _mem_delta
+            result["folder_size_mb"] = _folder_size_mb
         print(f"[time] END   {config_class.__name__}: {_time.strftime('%H:%M:%S')}", flush=True)
         print(f"[time] Duration {config_class.__name__}: {_elapsed:.1f}s", flush=True)
         _log_disk_usage(f"END   {config_class.__name__}")
