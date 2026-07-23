@@ -18,7 +18,7 @@ import queue
 import threading
 from abc import abstractmethod
 from collections.abc import Callable, Generator
-from contextlib import contextmanager, nullcontext
+from contextlib import contextmanager
 from time import perf_counter
 from typing import Any
 
@@ -718,7 +718,7 @@ class ContinuousBatchingManager:
         # Otherwise, we keep the batch processor and cache the manager as a model attribute
         else:
             logger.info("Continuous batching manager will be kept for next session.")
-            self.model._cached_continuous_batching_manager = self # type: ignore
+            self.model._cached_continuous_batching_manager = self  # type: ignore
 
         # Restore the original attention implementation
         if self._original_attn_impl is not None:
@@ -1004,9 +1004,8 @@ class ContinuousBatchingManager:
         # And update continuous batching config now that we have concrete values
         update_cb_config_after_cache_creation(
             cb_config=self.continuous_batching_config,
-            num_blocks=paged_attention_cache.max_tokens_read,
+            num_fa_pages=paged_attention_cache.num_fa_pages,
             max_batch_tokens=paged_attention_cache.max_batch_tokens,
-            use_prefix_sharing=self._use_prefix_sharing,
         )
 
         # Disable the decode path if the model has sliding window attention (TODO)

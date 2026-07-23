@@ -1654,10 +1654,10 @@ class ContinuousBatchingConfig:
     `generate_batch` method or the `continuous_batching_context_manager` context manager.
 
     Args:
-        block_size (`int`, *optional*, defaults to 256):
-            Size of each KV cache block in tokens.
-        num_blocks (`int`, *optional*):
-            Number of blocks in the KV cache. Auto-inferred from GPU memory when `None`.
+        fa_page_size (`int`, *optional*, defaults to 256):
+            Size of a full attention KV cache page in tokens.
+        num_fa_pages (`int`, *optional*):
+            Number of full attention pages in the KV cache. Auto-inferred from GPU memory when `None`.
         max_batch_tokens (`int`, *optional*):
             Maximum number of tokens in a batch. Auto-inferred from GPU memory when `None`.
         max_memory_percent (`float`, *optional*):
@@ -1726,12 +1726,14 @@ class ContinuousBatchingConfig:
             Deprecated in 5.13: maximum number of graph is no longer an issue.
     """
 
-    # Size of each KV cache block. Must be at least 4 (and for an efficient cache, it should be well above that).
-    block_size: int = 256
+    # Size of a full attention KV cache page. Must be at least 4 (for an efficient cache, it should be well above that)
+    fa_page_size: int = 256
 
-    # The number of blocks used in the KV cache and the maximum number of tokens in a batch. Once the block size is set,
-    # these can be auto inferred using GPU size.
-    num_blocks: int | None = None
+    # Number of full attention pages the cache contains. Since the page size varies between attention types, we use this
+    # as a standart reference. Better to leave it as None and be auto inferred.
+    num_fa_pages: int | None = None
+
+    # The maximum number of tokens in a batch. Once the page size is set, this can be auto inferred using GPU size.
     max_batch_tokens: int | None = None
 
     # The max percentage of free GPU memory (after the model is loaded) to use for the KV cache. If None, auto resolved
@@ -1820,6 +1822,8 @@ class ContinuousBatchingConfig:
     # Deprecated arguments
     use_default_compile_configs: bool | None = None
     max_cached_graphs: int | None = None
+    block_size: int | None = None
+    num_blocks: int | None = None
 
     def __post_init__(self):
         # Convert dicts to CompileConfig objects
@@ -1853,6 +1857,18 @@ class ContinuousBatchingConfig:
             logger.warning(
                 "max_cached_graphs is deprecated: maximum number of graph is no longer an issue. Deprecated in 5.13."
             )
+        if self.block_size is not None:  # Deprecated in 5.14
+            logger.warning(
+                "block_size is deprecated: please use fa_page_size instead. For backwards compatibility, block_size will "
+                "be used as the full attention page size."
+            )
+            self.fa_page_size = self.block_size
+        if self.num_blocks is not None:  # Deprecated in 5.14
+            logger.warning(
+                "num_blocks is deprecated: please use num_fa_pages instead. For backwards compatibility, num_blocks "
+                "will be used as the number of full attention pages."
+            )
+            self.num_fa_pages = self.num_blocks
 
     @property
     def cuda_graph_booleans(self) -> tuple[bool, bool]:
