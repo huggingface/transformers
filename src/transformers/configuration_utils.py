@@ -1363,10 +1363,9 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin, Heterogeneous
         """
         # Start from the text config
         text_config = copy.deepcopy(self.get_text_config(decoder=True))
-        mtp_per_layer_config = copy.deepcopy(getattr(text_config, "mtp_per_layer_config", None))
+        mtp_per_layer_config = getattr(text_config, "mtp_per_layer_config", None)
 
-        # Main-model and MTP heterogeneity use independent layer index spaces. MTP remains homogeneous unless it has
-        # its own explicit overrides, which are applied after the MTP layer count is installed below.
+        # MTP uses independent per-layer overrides in its own layer index space.
         text_config.per_layer_config = None
         num_mtp_layers = getattr(text_config, "num_mtp_layers", None)
         # In this case, raise

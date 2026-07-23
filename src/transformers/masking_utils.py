@@ -953,7 +953,7 @@ def create_causal_mask(
             layer_idx=layer_idx,
         )
 
-    # If we have an hybrid cache structure, here we want to create the mask for the full layers
+    # If no layer is specified, select a full-attention layer, preferring one with cached KV state.
     if layer_idx is None:
         layer_idx = _get_mask_layer_idx(past_key_values, is_sliding=False)
 
@@ -1057,7 +1057,7 @@ def create_bidirectional_mask(
         layer_idx (`int`, optional):
             The layer index to create the mask for, used to read cache metadata from.
     """
-    # If we have an hybrid cache structure, here we want to create the mask for the full layers
+    # If no layer is specified, select a full-attention layer, preferring one with cached KV state.
     if layer_idx is None:
         layer_idx = _get_mask_layer_idx(past_key_values, is_sliding=False)
 
@@ -1320,7 +1320,7 @@ def create_bidirectional_sliding_window_mask(
         layer_idx (`int`, optional):
             The layer index to create the mask for, used to read cache metadata from.
     """
-    # If we have an hybrid cache structure, here we want to create the mask for the sliding layers
+    # If no layer is specified, select a sliding-attention layer, preferring one with cached KV state.
     if layer_idx is None:
         layer_idx = _get_mask_layer_idx(past_key_values, is_sliding=True)
 
@@ -1447,7 +1447,7 @@ def _create_chunked_causal_mask(
     and_mask_function: Callable | None = None,
     layer_idx: int | None = None,
 ) -> torch.Tensor | BlockMask | None:
-    # If we have an hybrid cache structure, here we want to create the mask for the sliding layers
+    # If no layer is specified, select a chunked-attention layer, preferring one with cached KV state.
     if layer_idx is None:
         layer_idx = _get_mask_layer_idx(past_key_values, is_sliding=True)
 
