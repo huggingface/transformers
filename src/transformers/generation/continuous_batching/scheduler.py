@@ -16,7 +16,7 @@ from abc import ABC, abstractmethod
 from collections import deque
 
 from .cache import PagedAttentionCache
-from .requests import FutureRequestState, RequestState, RequestStatus
+from .requests import FutureRequestState, RequestState, RequestStatus, logger
 
 
 class Scheduler(ABC):
@@ -51,9 +51,8 @@ class Scheduler(ABC):
         self._requests_to_cancel: set[str] = set()
         self._requests_to_fork: list[RequestState] = []
         self.block_new_requests = False
-        # Active requests that failed block allocation in the last scheduled batch, with their physical block demand.
-        # The offloading manager uses this to size bulk evictions.
-        self.starved_requests: list[RequestState] = []
+        # Active requests that failed cache allocation in the last scheduled batch w/ the length that was denied
+        self.starved_requests: list[tuple[RequestState, int]] = []
 
     def add_waiting_request(self, state: RequestState):
         """Adds a request to the waiting list."""
@@ -61,7 +60,9 @@ class Scheduler(ABC):
         self.waiting_requests_order.append(state.request_id)
 
     @abstractmethod
-    def schedule_batch(self, token_budget: int, cache_budget: int) -> tuple[list[FutureRequestState] | None, bool, int, int]:
+    def schedule_batch(
+        self, token_budget: int, cache_budget: int
+    ) -> tuple[list[FutureRequestState] | None, bool, int, int]:
         """Schedules requests for the next batch based on available token and cache budgets. This method selects which
         requests should be processed in the current batch, considering the budgets and the scheduler's prioritization
         rules. The token_budget is the maximum number of tokens that can be processed in a batch, and the cache_budget
@@ -194,19 +195,20 @@ class Scheduler(ABC):
         one_allocation_failed = False
         self.starved_requests = []
         decode_fast_path = self.cache.max_blocks_per_request > 0  # best way to check if decode fast path availability
-        # safety_margins = self.safety_margin * self.cache.num_sectors
         original_token_budget, original_cache_budget = token_budget, cache_budget
         request_budget = self.max_requests_per_batch
 
+        # Check safety margin
+        cache_free_percent = self.cache.compute_free_capacity()
+        outside_safety_margin = cache_free_percent < self.safety_margin
+        if outside_safety_margin:
+            logger.debug(f"{cache_free_percent = } < {self.safety_margin = }: limiting the requests scheduled.")
+
         for state in candidates:
-            # num_free_blocks = self.cache.get_num_free_blocks()
-            # # If we are out the safety margin, we only accept decoding requests or the first prefill request
-            # outside_safety_margin = num_free_blocks < safety_margins
-            # if outside_safety_margin and scheduled_requests and state.status != RequestStatus.DECODING:
-            #     logger.debug(
-            #         f"Outside safety margin, breaking out of scheduling loop. {num_free_blocks = } {safety_margins = }"
-            #     )
-            #     break
+
+            # If we are outside the safety margin, we only accept decoding requests or the first prefill request
+            if outside_safety_margin and scheduled_requests and state.status != RequestStatus.DECODING:
+                break
 
             # Infer the tokens that will be present in the batch if token budget is enough
             request_tokens = self._infer_request_tokens(state, request_ids_to_remove_from_waiting)
@@ -230,7 +232,7 @@ class Scheduler(ABC):
                 one_allocation_failed = True
                 # If the request is active and cannot be scheduled, we mark it as starved
                 if state.request_id in self.active_requests:
-                    self.starved_requests.append(state)
+                    self.starved_requests.append((state, request_len))
                 continue
 
             # If this point is reached, it means we can safely schedule the request

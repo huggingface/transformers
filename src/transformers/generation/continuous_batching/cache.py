@@ -11,9 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import inspect
-from math import floor, gcd, lcm, sqrt
-from typing import Any
+from math import ceil, floor, lcm, sqrt
 
 import torch
 
@@ -28,8 +26,7 @@ from .cache_allocators import (
     SlidingAttentionCacheAllocator,
 )
 from .distributed import DistributedHelper
-from .initialization import resolve_max_memory_percent
-from .requests import RequestState, RequestStatus, get_device_and_memory_breakdown, logger
+from .requests import RequestState, get_device_and_memory_breakdown, logger
 from .utils import find_head_dim, find_num_key_value_heads
 
 
@@ -67,10 +64,10 @@ class PagedAttentionCache:
     sectors to sub-allocators, each for a different kind of cache (full-attention layers, MSA layers, embeddings cache,
     etc.).
 
-    Virually, the cache is allocated per layer in the form of * pages* : one page holds the cache for a number N of
-    tokens. When several layers share a similar attention type, say full attention, we group them and allocate the cache
-    per * block *. For instance, this is how a block of full-attention cache looks like, if there are 3 full-attention
-    layers:
+    Virtually, the cache is allocated per layer in the form of *pages*: one page holds the whole cache (e.g. both keys
+    and values) of one layer for a number N of tokens. When several layers share a similar attention type, say full
+    attention, we group them and allocate the cache per *block*. For instance, this is how a block of full-attention
+    cache looks like, if there are 3 full-attention layers:
 
     [ LAYER 0 KEYS | LAYER 0 VALUES | LAYER 1 KEYS | LAYER 1 VALUES | LAYER 2 KEYS | LAYER 2 VALUES ]
     [ ----------- PAGE 0 ---------- | ----------- PAGE 1 ---------- | ----------- PAGE 2 ---------- ]
@@ -84,10 +81,17 @@ class PagedAttentionCache:
     attention allocator. To compensate for that, we define * sectors * : a sector is a contiguous region of the cache
     that is allocated to a single allocator. The size of a sector is computed so that all cache allocators can divide a
     sector into blocks.
+    For instance, if there are 3 sliding layers for 1 full attention layer, then storing a single token would require 3
+    sliding pages (one per layer) and 1 full page. The amount of memory needed to store all sliding pages is x3 the
+    amount of memory needed to store one full page. Hence, one block of sliding cache is 3 blocks of full cache. Taking
+    the LCM(1, 3) = 3, we compute the size of a sector to be 3 blocks of full cache, or 1 block of sliding cache.
 
-    Physically, the cache is stored on a single tensor.
+                           [ -------------------------------------- SECTOR -------------------------------------- ]
+    used for full attn:    [ ------ FULL BLOCK 0 ------ | ------ FULL BLOCK 1 ------ | ------ FULL BLOCK 2 ------ ]
+    used for sliding attn: [ ---------------------------------- SLIDING BLOCK 0 --------------------------------- ]
 
-    # TODO: BUG: add ascii drawing
+    Physically, the cache is stored on a single flat tensor, whose first two sectors are never-allocated trash
+    sectors used by padding tokens (see FullAttentionCacheAllocator.register_cache_tensor).
     """
 
     def __init__(
@@ -111,8 +115,7 @@ class PagedAttentionCache:
         self.config = config
         self.dtype = dtype
         self.device = device
-        self.tokens_per_block = continuous_batching_config.block_size
-        self.max_blocks_per_request = continuous_batching_config.max_blocks_per_request
+        self.max_blocks_per_request = continuous_batching_config.max_blocks_per_request or 0  # if not resolved, off
 
         # If the KV heads are TP'ed, each KV head is dispatched to a different GPU, so the effective number of KV heads
         # per GPU is simply divided by the TP size. We need to solve this before we can construct the cache allocators.
@@ -130,22 +133,27 @@ class PagedAttentionCache:
             "num_key_value_heads": num_key_value_heads,
             "config": config,
             "cache_dtype": self.dtype,
-            "tokens_per_block": self.tokens_per_block,
+            "page_size": continuous_batching_config.fa_page_size,
             # "allow_block_sharing": self.allow_block_sharing,
             # "is_tp_enabled": distributed_helper.tp_size > 1,
         }
         self.cache_allocators: dict[str, CacheAllocator] = {}
-        for attn_type, layer_indices in group_layers_by_attn_type(config).items():
+        self.layer_to_allocator: dict[int, CacheAllocator] = {}
+        for index, (attn_type, layer_indices) in enumerate(group_layers_by_attn_type(config).items()):
+            # Create the allocator
             if attn_type == FULL_ATTENTION:
-                self.cache_allocators[attn_type] = FullAttentionCacheAllocator(layer_indices=layer_indices, **ca_kwargs)
+                allocator = FullAttentionCacheAllocator(index=index, layer_indices=layer_indices, **ca_kwargs)
             elif attn_type == SLIDING_ATTENTION:
-                self.cache_allocators[attn_type] = SlidingAttentionCacheAllocator(layer_indices=layer_indices, **ca_kwargs)
+                allocator = SlidingAttentionCacheAllocator(index=index, layer_indices=layer_indices, **ca_kwargs)
             else:
                 raise ValueError(f"Invalid attention type: {attn_type}")
+            # Register it by name and indices
+            self.cache_allocators[attn_type] = allocator
+            self.layer_to_allocator = self.layer_to_allocator | dict.fromkeys(layer_indices, allocator)
 
         # To have the maximal granularity while ensuring alignment for all cache allocators, we compute the LCM of all
         # cache allocator block sizes AND a default alignment of 128 bytes
-        self.bytes_per_sector = lcm([ca.bytes_per_block for ca in self.cache_allocators.values()] + [128])
+        self.bytes_per_sector = lcm(*(ca.bytes_per_block for ca in self.cache_allocators.values()), 128)
 
         # TODO: BUG: update this before merging
         max_batch_tokens, num_sectors = PagedAttentionMemoryHandler(
@@ -166,20 +174,21 @@ class PagedAttentionCache:
         self.max_batch_tokens = max_batch_tokens
         self.num_sectors = num_sectors
         mb_per_sector = self.bytes_per_sector / 1024**2
-        logger.info(
-            f"Paged cache initialized: {self.max_batch_tokens = }, {self.num_sectors = }, {mb_per_sector = }"
-        )
+        logger.info(f"Paged cache initialized: {self.max_batch_tokens = }, {self.num_sectors = }, {mb_per_sector = }")
 
-        # Cache is dimensionned so that for any allocator, there is a trash zone of at least two pages
-        non_trash_bytes = self.num_sectors * self.bytes_per_sector
-        trash_bytes = 2 * max(ca.bytes_per_page for ca in self.cache_allocators.values())
-        self.cache_tensor = torch.zeros(non_trash_bytes + trash_bytes, dtype=torch.uint8, device=self.device)
+        # The cache holds two trash sectors followed by the data sectors. The trash sectors are never allocated:
+        # sector 0 is zeroed and never written to (read trash and sentinel index) and sector 1 is only ever written
+        # to (write trash), so reads and writes stay disjoint whatever geometry each allocator uses.
+        # TODO: could be reduced to 1 sector under certain hit / miss conditions
+        self.non_trash_bytes = self.num_sectors * self.bytes_per_sector
+        trash_bytes = 2 * self.bytes_per_sector
+        self.cache_tensor = torch.zeros(self.non_trash_bytes + trash_bytes, dtype=torch.uint8, device=self.device)
         # Distribute the cache across all allocators
         for allocator in self.cache_allocators.values():
-            allocator.register_cache_tensor(self.bytes_per_sector, non_trash_bytes, self.cache_tensor)
+            allocator.register_cache_tensor(self.bytes_per_sector, self.non_trash_bytes, self.cache_tensor)
 
-        # Sector-tracking data structures
-        self.free_sectors = list(range(self.num_sectors))
+        # Sector-tracking data structures. Sectors 0 and 1 are the trash sectors, so they are never free for allocation.
+        self.free_sectors = list(range(2, self.num_sectors + 2))
         # Block management data structures
         self.allow_block_sharing = continuous_batching_config.allow_block_sharing
         allocators_can_share = all(ca.supports_block_sharing for ca in self.cache_allocators.values())
@@ -189,6 +198,8 @@ class PagedAttentionCache:
         # For block table support, we lazy init the name of the block table key
         self._block_table_key = None
 
+        # Helper attribute: the cache capacity expressed in full-attention pages
+        self.num_fa_pages = self.non_trash_bytes // bytes_per_fa_page
         # Helper attributes for the scheduler
         self.read_cache_limit = self._infer_read_cache_limit()
         self.max_decode_fast_path_length = self._infer_max_decode_fast_path_length()
@@ -210,9 +221,10 @@ class PagedAttentionCache:
             acc = min(acc, allocator.tokens_per_page * self.max_blocks_per_request)
         return int(acc)
 
-    def can_store_request_tokens(self, state: RequestState, request_len: int) -> bool:
+    def can_store_request_tokens(self, state: RequestState, request_len: int, dry_run: bool = False) -> bool:
         """Checks if the new tokens for a request can be stored in the cache. If they can, actual cache allocation is
-        performed. Otherwise, this has no side effects."""
+        performed. Otherwise, this has no side effects. If the dry_run flag is set, the cache allocation is not
+        performed."""
         sectors_needed = {}
         # Check if any new sectors are needed for the request
         for name, allocator in self.cache_allocators.items():
@@ -220,16 +232,17 @@ class PagedAttentionCache:
             if new_sectors > 0:
                 sectors_needed[name] = new_sectors
 
-        if sectors_needed:
-            # Stop if there are not enough free sectors
-            if len(self.free_sectors) < sum(sectors_needed.values()):
-                return False
-            # For each allocator, allocate the needed sectors
-            for name, new_sectors in sectors_needed.items():
-                allocator = self.cache_allocators[name]
-                for _ in range(new_sectors):
-                    sector_id = self.free_sectors.pop()
-                    allocator.allocate_new_sector(sector_id)
+        # Stop here if this is a dry run or if there are not enough free sectors
+        enough_free_sectors = len(self.free_sectors) >= sum(sectors_needed.values())
+        if dry_run or not enough_free_sectors:
+            return enough_free_sectors
+
+        # For each allocator, allocate the needed sectors (empty loop if no sector is needed)
+        for name, new_sectors in sectors_needed.items():
+            allocator = self.cache_allocators[name]
+            for _ in range(new_sectors):
+                sector_id = self.free_sectors.pop()
+                allocator.allocate_new_sector(sector_id)
 
         # For each allocator, allocate the cache to the request
         for allocator in self.cache_allocators.values():
@@ -246,10 +259,18 @@ class PagedAttentionCache:
         for allocator in self.cache_allocators.values():
             allocator.free_all_requests()
 
-    def extend_read_and_write_indices(self, request_id: str, past_length: int, query_length: int, read_index: list[list[int]] | None, write_index: list[list[int]]) -> None:
+    def extend_read_and_write_indices(
+        self,
+        request_id: str,
+        past_length: int,
+        query_length: int,
+        read_index: list[list[int]] | None,
+        write_index: list[list[int]],
+    ) -> None:
         """Retrieve physical cache indices for reading KV states in the cache across all allocators. This method
         coordinates with all cache allocators to build the complete set of read indices needed for attention computation.
         When read_index is None, the batch has no cache reads and we only compute the write indices.
+        The i-th list of each accumulator corresponds to the i-th allocator, in the order of the cache_allocators dict.
         """
         # Write indices are always computed
         for allocator, write_indices in zip(self.cache_allocators.values(), write_index):
@@ -259,6 +280,35 @@ class PagedAttentionCache:
             for allocator, read_indices in zip(self.cache_allocators.values(), read_index):
                 read_indices.extend(allocator.get_read_indices(request_id, past_length, query_length))
 
+    def update(
+        self,
+        key_states: torch.Tensor,  # shape [1, num_kv_heads, seqlen_q, head_dim]
+        value_states: torch.Tensor,  # shape [1, num_kv_heads, seqlen_q, head_dim]
+        layer_idx: int,
+        read_index: list[torch.Tensor],  # one tensor per attention group
+        write_index: list[torch.Tensor],  # one tensor per attention group
+    ) -> tuple[torch.Tensor, torch.Tensor]:  # shape [seqlen_q + past_length, num_kv_heads, head_dim]
+        """Updates the cache with new key-value states for a specific layer and retrieves the KV states needed for the
+        attention computation. The actual work is dispatched to the allocator in charge of the layer, using the read
+        and write indices prepared for its group."""
+        allocator = self.layer_to_allocator[layer_idx]
+        layer_read_index = read_index[allocator.index]
+        layer_write_index = write_index[allocator.index]
+        return allocator.update(key_states, value_states, layer_idx, layer_read_index, layer_write_index)
+
+    def reset(self) -> None:
+        """Frees the cache of all requests and returns all sectors to the global pool."""
+        self.free_all_requests()
+        for allocator in self.cache_allocators.values():
+            allocator.free_block_ids.clear()
+        self.free_sectors = list(range(2, self.num_sectors + 2))
+
+    def compute_free_capacity(self, relative: bool = True) -> int | float:
+        """Returns the free capacity of the cache in bytes or as a percentage of the total capacity."""
+        free_bytes = len(self.free_sectors) * self.bytes_per_sector
+        for allocator in self.cache_allocators.values():
+            free_bytes += len(allocator.free_block_ids) * allocator.bytes_per_block
+        return free_bytes / (self.non_trash_bytes if relative else 1)
 
     # def blocks_needed(self, num_requested_blocks: int, allocated_blocks: int) -> int:
     #     """Returns the number of physical blocks needed to allocate (num_requested_blocks) blocks to a request that
@@ -312,103 +362,12 @@ class PagedAttentionCache:
     #     """Get the current number of unallocated blocks available for new requests."""
     #     return self._block_manager.num_free_blocks
 
-    # def extend_read_and_write_indices(
-    #     self,
-    #     request_id: str,
-    #     past_length: int,
-    #     query_length: int,
-    #     read_index: list[list[int]] | None,
-    #     write_index: list[list[int]],
-    # ) -> None:
-    #     """Retrieve physical cache indices for reading KV states in the cache across all layer groups. This method
-    #     coordinates with all cache managers to build the complete set of read indices needed for attention computation.
-    #     When read_index is None, the batch has no cache reads and we only compute the write indices.
-    #     """
-    #     # Write indices are always computed
-    #     for cm, write_indices in zip(self.group_cache_managers, write_index):
-    #         write_indices.extend(cm.get_write_indices(request_id, past_length, query_length))
-    #     # Read indices are only computed if there are cache indices
-    #     if read_index is not None:
-    #         for cm, read_indices in zip(self.group_cache_managers, read_index):
-    #             read_indices.extend(cm.get_read_indices(request_id, past_length, query_length))
-
     # def fill_block_table(
     #     self, request_id: str, past_length: int, query_length: int, block_table: torch.Tensor
     # ) -> None:
     #     for i, cm in enumerate(self.group_cache_managers):
     #         cm.fill_block_table(request_id, past_length, query_length, block_table[i])
 
-    # def get_seqlens_k(self, past_length: int, query_length: int) -> dict[str, int]:
-    #     """Retrieve the key sequence length for the given request_id across all layer types. Returns a dictionary of
-    #     layer types to their corresponding key sequence lengths."""
-    #     seqlens_k = {}
-    #     if self.num_full_attention_groups > 0:
-    #         seqlens_k["full_attention"] = past_length + query_length
-    #     if self.num_sliding_attention_groups > 0:
-    #         seqlens_k["sliding_attention"] = query_length + min(past_length, self.config.sliding_window - 1)
-    #     # NOTE: when we add more attention types / different sliding windows, we can go back to looping over CMs
-    #     return seqlens_k
-
-    # def update(
-    #     self,
-    #     key_states: torch.Tensor,  # shape [1, num_kv_heads, seqlen_kv, head_dim]
-    #     value_states: torch.Tensor,  # shape [1, num_kv_heads, seqlen_kv, head_dim]
-    #     layer_idx: int,
-    #     read_index: list[torch.Tensor],  # shape [num_layer_groups, seqlen_kv + past_length]
-    #     write_index: list[torch.Tensor],  # shape [num_layer_groups, seqlen_q]
-    # ) -> tuple[torch.Tensor, torch.Tensor]:  # shape [seqlen_kv + past_length, num_kv_heads, head_dim]
-    #     """Update the cache with new key-value states for a specific layer, and retrieves the relevant KV states from
-    #     the cache for attention computation. The behavior differs based on the layer's attention type:
-
-    #     - Full attention: New KV states are written to cache, then complete sequence is read from cache
-    #     - Sliding window: Old KV is read from cache along with extra spaces for the new KV, then new KV is written to
-    #         cache. This is because new KV might overwrite the old KV, so we need to read the old KV first.
-
-    #     When the layer's read index is empty, the batch has no cache reads (all requests are non-chunked prefills): we
-    #     only write to the cache and return the input KV states directly, skipping the index_select read-back.
-
-    #     Returns the complete KV states (cached + new) for attention computation.
-    #     """
-    #     # Retrieve the layer write index and the relevant cache tensors
-    #     group_idx, layer_idx_in_group = self.layer_index_to_group_indices[layer_idx]
-    #     layer_read_index = read_index[group_idx]
-    #     layer_write_index = write_index[group_idx]
-    #     k_cache = self.key_cache[layer_idx_in_group]
-    #     v_cache = self.value_cache[layer_idx_in_group]
-    #     # Transpose the key and value states to match the cache shape, after which shape is [seqlen_kv, num_kv_heads, head_dim]
-    #     key_states = key_states.transpose(1, 2).squeeze(0)
-    #     value_states = value_states.transpose(1, 2).squeeze(0)
-
-    #     # Case: write-only, no cache read. The input KV states already contain everything the attention needs.
-    #     if layer_read_index.numel() == 0:
-    #         k_cache.index_copy_(0, layer_write_index, key_states)
-    #         v_cache.index_copy_(0, layer_write_index, value_states)
-    #         return key_states, value_states
-
-    #     # Case: full attention
-    #     sliding_window = self.sliding_windows[layer_idx]
-    #     if sliding_window == 1:
-    #         k_cache.index_copy_(0, layer_write_index, key_states)
-    #         v_cache.index_copy_(0, layer_write_index, value_states)
-    #         key_states_with_cache = torch.index_select(k_cache, 0, layer_read_index)
-    #         value_states_with_cache = torch.index_select(v_cache, 0, layer_read_index)
-
-    #     # Case: sliding window -- we  need to be careful of read/write order because of chunked prefill, because it's
-    #     # the only case where you may write over cache you need to use
-    #     else:
-    #         # Sentinel positions in read_index mark new-token slots; index_select reads garbage there,
-    #         # then masked_scatter_ overwrites them with the actual new key/value states.
-    #         mask = (layer_read_index == self.sentinel_index).unsqueeze(-1).unsqueeze(-1)
-    #         key_states_with_cache = torch.index_select(k_cache, 0, layer_read_index)
-    #         key_states_with_cache.masked_scatter_(mask, key_states)
-    #         value_states_with_cache = torch.index_select(v_cache, 0, layer_read_index)
-    #         value_states_with_cache.masked_scatter_(mask, value_states)
-    #         # Write new KV values to the cache (padding slots in write_index point to the trash position)
-    #         k_cache.index_copy_(0, layer_write_index, key_states)
-    #         v_cache.index_copy_(0, layer_write_index, value_states)
-
-    #     # Return the new KV values
-    #     return key_states_with_cache, value_states_with_cache
 
     # def get_block_table_key(self, flash_attn_with_kvcache_fn: Any) -> str:
     #     """A function to get the name of the block table key for the given flash_attn_with_kvcache_fn. The function's
@@ -509,16 +468,6 @@ class PagedAttentionCache:
     #         source_blocks.extend(src_blocks)
     #         destination_blocks.extend(dst_blocks)
     #     return source_blocks, destination_blocks
-
-    # def free_all_requests(self) -> None:
-    #     """Free all blocks allocated to requests across all cache managers. This preserves prefix hashes in the block
-    #     manager (blocks become initialized rather than uninitialized if they were complete), allowing prefix sharing
-    #     to work across generation sessions."""
-    #     all_request_ids = set()
-    #     for cm in self.group_cache_managers:
-    #         all_request_ids.update(cm.block_table.keys())
-    #     for request_id in all_request_ids:
-    #         self.free_blocks(request_id)
 
 
 class PagedAttentionMemoryHandler:

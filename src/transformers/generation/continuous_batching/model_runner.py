@@ -22,8 +22,23 @@ from ...generation.configuration_utils import ContinuousBatchingConfig
 from .cache import PagedAttentionCache
 from .cb_logits_processors import ContinuousBatchingLogitsProcessorList
 from .input_outputs import ContinuousBatchingAsyncIOs, ContinuousBatchingIOs
-from .requests import RequestStatus, logger
+from .requests import RequestState, RequestStatus, logger
 from .utils import create_warmup_future_states, get_cuda_pools, mem_pool_ctx, pad_to_interval, pad_to_pow2
+
+
+def infer_max_single_request_tokens(cache: PagedAttentionCache) -> int:
+        """Returns the largest total length a single request can have on an empty cache, i.e. the largest length for
+        which all allocators can be served enough sectors at the same time."""
+        dummy_state = RequestState(request_id="", initial_tokens=[])
+        # Solve using dichotomy
+        low, high = 0, cache.max_tokens_read
+        while low < high:
+            mid = (low + high + 1) // 2
+            if cache.can_store_request_tokens(dummy_state, mid, dry_run=True):
+                low = mid
+            else:
+                high = mid - 1
+        return low
 
 
 class ModelRunner:
@@ -83,7 +98,9 @@ class ModelRunner:
         # For varlen batches, we pad using interval sizes
         if not use_decode_fast_path:
             num_q_tokens = pad_to_interval(num_q_tokens, self.cb_config.q_padding_interval_size, max_batch_tokens)
-            max_kv_read = pad_to_interval(max_kv_read, self.cb_config.kv_padding_interval_size, self.cache.num_pages)
+            max_kv_read = pad_to_interval(
+                max_kv_read, self.cb_config.kv_padding_interval_size, self.cache.max_tokens_read
+            )
         # For decode fast path batches, we pad using powers of 2 and use no KV
         else:
             num_q_tokens = pad_to_pow2(num_q_tokens, self.cb_config.max_requests_per_batch)
@@ -237,10 +254,9 @@ class ModelRunner:
         total_duration = 0
         iterations = 2 if isinstance(self.inputs_and_outputs, ContinuousBatchingAsyncIOs) else 1
         for _ in range(iterations):
-            # Warm up the varlen path, with the largest possible dimensions to get the biggest pool and avoid fragmentation
+            # Warm up the varlen path, w/ the largest possible sizes to get the biggest pool and avoid fragmentation
             num_q_tokens = self.cache.max_batch_tokens
-            max_kv_read = self.cache.num_blocks * self.cache.block_size
-            max_kv_read -= num_q_tokens  # make room for the new tokens
+            max_kv_read = max(0, infer_max_single_request_tokens(self.cache) - num_q_tokens)
             total_duration += self.run_one_warmup(model=model, num_q_tokens=num_q_tokens, max_kv_read=max_kv_read)
 
             # Exit here if the decode fast path is not available
@@ -258,6 +274,8 @@ class ModelRunner:
             # Switch to the other IO pair if this is async
             if isinstance(self.inputs_and_outputs, ContinuousBatchingAsyncIOs):
                 self.inputs_and_outputs.swap_io_pairs()
+        # Warmup requests pull all sectors into their allocators, so reset the cache toreturn them to the global pool
+        self.cache.reset()
         logger.info(f"Warmup completed in {total_duration:.2f}s")
 
     def run_one_warmup(self, model: nn.Module, num_q_tokens: int, max_kv_read: int | None) -> float:
@@ -270,7 +288,7 @@ class ModelRunner:
             num_requests = num_q_tokens
             status = RequestStatus.DECODING
             num_q_tokens = 1
-            max_kv_read = self.cache.block_size
+            max_kv_read = self.cb_config.fa_page_size
             logger.debug(f"Warming up decode fast path for {num_requests = }.")
         else:
             num_requests = 1
