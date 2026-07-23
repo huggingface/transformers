@@ -141,7 +141,7 @@ class OnyxVisionConfig(PreTrainedConfig):
             stride = 4
             self.layer_types = [
                 "full_attention" if (i + 1) % stride == 0 or i == self.num_hidden_layers - 1
-                else "windowed_attention"
+                else "sliding_attention"
                 for i in range(self.num_hidden_layers)
             ]
         super().__post_init__(**kwargs)
