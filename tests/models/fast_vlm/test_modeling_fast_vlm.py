@@ -16,18 +16,17 @@
 import copy
 import unittest
 
-import requests
-
 from transformers import (
     AutoProcessor,
     FastVlmConfig,
     FastVlmForConditionalGeneration,
     FastVlmModel,
     is_torch_available,
-    is_vision_available,
 )
 from transformers.testing_utils import (
+    Expectations,
     cleanup,
+    require_deterministic_for_xpu,
     require_torch,
     require_vision,
     slow,
@@ -36,15 +35,12 @@ from transformers.testing_utils import (
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
+from ...test_image_processing_common import load_coco_image, load_test_image
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 
 
 if is_torch_available():
     import torch
-
-
-if is_vision_available():
-    from PIL import Image
 
 
 class FastVlmVisionText2TextModelTester:
@@ -255,7 +251,7 @@ class FastVlmForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         prompt = "user\n<image>\nWhat are the things I should be cautious about when I visit this place?\nassistant"
         image_file = "https://llava-vl.github.io/static/images/view.jpg"
-        raw_image = Image.open(requests.get(image_file, stream=True).raw)
+        raw_image = load_test_image(image_file)
         inputs = self.processor(images=raw_image, text=prompt, return_tensors="pt").to(torch_device, dtype=model.dtype)
 
         output = model.generate(**inputs, max_new_tokens=20)
@@ -269,6 +265,7 @@ class FastVlmForConditionalGenerationIntegrationTest(unittest.TestCase):
         )
 
     @require_vision
+    @require_deterministic_for_xpu
     def test_small_model_integration_test_batch(self):
         model = FastVlmForConditionalGeneration.from_pretrained(
             "KamilaMila/FastVLM-0.5B", device_map=torch_device, dtype=torch.bfloat16
@@ -278,9 +275,10 @@ class FastVlmForConditionalGenerationIntegrationTest(unittest.TestCase):
             "user\n<image>\nWhat are the things I should be cautious about when I visit this place? What should I bring with me?\nassistant",
             "user\n<image>\nWhat is this?\nassistant",
         ]
-        image1 = Image.open(requests.get("https://llava-vl.github.io/static/images/view.jpg", stream=True).raw)
-        image2 = Image.open(requests.get("http://images.cocodataset.org/val2017/000000039769.jpg", stream=True).raw)
+        image1 = load_test_image("https://llava-vl.github.io/static/images/view.jpg")
+        image2 = load_coco_image("000000039769.jpg")
 
+        self.processor.tokenizer.padding_side = "left"
         inputs = self.processor(images=[image1, image2], text=prompts, return_tensors="pt", padding=True).to(
             torch_device,
             dtype=model.dtype,
@@ -288,14 +286,22 @@ class FastVlmForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         output = model.generate(**inputs, max_new_tokens=20)
 
-        EXPECTED_DECODED_TEXT = [
-            "user\n\nWhat are the things I should be cautious about when I visit this place? What should I bring with me?\nassistant\n\nWhen visiting this serene place, it's essential to be mindful of the following:\n\n1. **",
-            "user\n\nWhat is this?\nassistant\nThe image depicts two cats lying on a pink surface, which could be a couch or a"
-        ]  # fmt: skip
+        EXPECTED_DECODED_TEXT = Expectations(
+            {
+                (None, None): [
+                    "user\n\nWhat are the things I should be cautious about when I visit this place? What should I bring with me?\nassistant\n\nWhen visiting this serene place, it's essential to be mindful of the following:\n\n1. **",
+                    "user\n\nWhat is this?\nassistant\n\nThe image depicts two cats, one of which is a tabby, lying on a pink surface",
+                ],
+                ("xpu", None): [
+                    "user\n\nWhat are the things I should be cautious about when I visit this place? What should I bring with me?\nassistant\n\nWhen visiting this serene place, it's essential to be mindful of the following:\n\n1. **",
+                    "user\n\nWhat is this?\nassistant\n\nThe image depicts two cats, one of which is a kitten, resting on a pink surface.",
+                ],
+            }
+        )
 
         self.assertEqual(
             self.processor.batch_decode(output, skip_special_tokens=True),
-            EXPECTED_DECODED_TEXT,
+            EXPECTED_DECODED_TEXT.get_expectation(),
         )
 
     def test_generation_no_images(self):

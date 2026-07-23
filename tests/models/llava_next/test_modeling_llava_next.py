@@ -84,7 +84,7 @@ class LlavaNextVisionText2TextModelTester(VLMModelTester):
             ]
         )
 
-    def get_additional_inputs(self, config, input_ids, pixel_values):
+    def get_additional_inputs(self, config, input_ids, modality_inputs):
         """LlavaNext requires image_sizes tensor"""
         return {
             "image_sizes": torch.tensor([[self.image_size, self.image_size]] * self.batch_size),
@@ -105,7 +105,6 @@ class LlavaNextForConditionalGenerationModelTest(VLMModelTest, unittest.TestCase
 
     model_tester_class = LlavaNextVisionText2TextModelTester
     skip_test_image_features_output_shape = True
-    test_torch_exportable = False
 
     @pytest.mark.xfail(reason="This architecture seems to not compute gradients for some layer.")
     def test_training_gradient_checkpointing(self):
@@ -124,9 +123,6 @@ class LlavaNextForConditionalGenerationModelTest(VLMModelTest, unittest.TestCase
     )
     def test_flash_attention_2_padding_matches_padding_free_with_position_ids(self):
         pass
-
-    def test_reverse_loading_mapping(self):
-        super().test_reverse_loading_mapping(skip_base_model=True)
 
 
 @require_torch

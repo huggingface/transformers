@@ -8,8 +8,7 @@ specific language governing permissions and limitations under the License.
 ⚠️  Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 -->
-
-*This model was released on 2024-09-16 and added to Hugging Face Transformers on 2026-03-18.*
+*This model was published in HF papers on 2024-09-16 and contributed to Hugging Face Transformers on 2026-03-19.*
 
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
@@ -36,9 +35,9 @@ The example below demonstrates how to extract features (embeddings) with [`Pipel
 <hfoptions id="usage">
 <hfoption id="Pipeline">
 
-```py
-import torch
+```python
 from transformers import pipeline
+
 
 pipeline = pipeline(
     task="feature-extraction",
@@ -53,9 +52,11 @@ embeddings = pipeline("Jina Embeddings V3 is great for semantic search.")
 <hfoption id="AutoModel">
 
 
-```py
+```python
 import torch
+
 from transformers import AutoModel, AutoTokenizer
+
 
 tokenizer = AutoTokenizer.from_pretrained("jinaai/jina-embeddings-v3-hf")
 model = AutoModel.from_pretrained("jinaai/jina-embeddings-v3-hf", device_map="auto")
@@ -94,7 +95,9 @@ Here is how you can generate sentence embeddings tailored for a retrieval query 
 ```python
 import torch
 import torch.nn.functional as F
-from transformers import AutoTokenizer, AutoModel
+
+from transformers import AutoModel, AutoTokenizer
+
 
 def mean_pooling(model_output, attention_mask):
     # First element of model_output contains all token embeddings
@@ -108,12 +111,12 @@ def mean_pooling(model_output, attention_mask):
 
 
 sentences = [
-    "How is the weather today?", 
+    "How is the weather today?",
     "What is the current weather like today?"
 ]
 
 tokenizer = AutoTokenizer.from_pretrained("jinaai/jina-embeddings-v3-hf")
-model = AutoModel.from_pretrained("jinaai/jina-embeddings-v3-hf")
+model = AutoModel.from_pretrained("jinaai/jina-embeddings-v3-hf", device_map="auto")
 
 encoded_input = tokenizer(sentences, padding=True, truncation=True, return_tensors="pt").to(model.device)
 

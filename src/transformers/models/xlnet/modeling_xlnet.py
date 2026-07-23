@@ -652,12 +652,12 @@ class XLNetPreTrainedModel(PreTrainedModel):
             init.normal_(module.mask_emb, mean=0.0, std=self.config.initializer_range)
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Output type of [`XLNetModel`].
     """
 )
+@dataclass
 class XLNetModelOutput(ModelOutput):
     r"""
     last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_predict, hidden_size)`):
@@ -677,12 +677,12 @@ class XLNetModelOutput(ModelOutput):
     attentions: tuple[torch.FloatTensor, ...] | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Output type of [`XLNetLMHeadModel`].
     """
 )
+@dataclass
 class XLNetLMHeadModelOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape *(1,)*, *optional*, returned when `labels` is provided):
@@ -705,12 +705,12 @@ class XLNetLMHeadModelOutput(ModelOutput):
     attentions: tuple[torch.FloatTensor, ...] | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Output type of [`XLNetForSequenceClassification`].
     """
 )
+@dataclass
 class XLNetForSequenceClassificationOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `label` is provided):
@@ -730,12 +730,12 @@ class XLNetForSequenceClassificationOutput(ModelOutput):
     attentions: tuple[torch.FloatTensor, ...] | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Output type of [`XLNetForTokenClassificationOutput`].
     """
 )
+@dataclass
 class XLNetForTokenClassificationOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
@@ -755,12 +755,12 @@ class XLNetForTokenClassificationOutput(ModelOutput):
     attentions: tuple[torch.FloatTensor, ...] | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Output type of [`XLNetForMultipleChoice`].
     """
 )
+@dataclass
 class XLNetForMultipleChoiceOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape *(1,)*, *optional*, returned when `labels` is provided):
@@ -782,12 +782,12 @@ class XLNetForMultipleChoiceOutput(ModelOutput):
     attentions: tuple[torch.FloatTensor, ...] | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Output type of [`XLNetForQuestionAnsweringSimple`].
     """
 )
+@dataclass
 class XLNetForQuestionAnsweringSimpleOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
@@ -810,12 +810,12 @@ class XLNetForQuestionAnsweringSimpleOutput(ModelOutput):
     attentions: tuple[torch.FloatTensor, ...] | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Output type of [`XLNetForQuestionAnswering`].
     """
 )
+@dataclass
 class XLNetForQuestionAnsweringOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned if both `start_positions` and `end_positions` are provided):

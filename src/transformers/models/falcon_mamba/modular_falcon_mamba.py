@@ -19,6 +19,7 @@ from torch import nn
 
 from ... import initialization as init
 from ...cache_utils import Cache
+from ...integrations.accelerate import force_accelerate_hooks
 from ...utils import auto_docstring, logging
 from ...utils.import_utils import is_mambapy_available, is_torch_greater_or_equal, is_torchdynamo_compiling, is_tracing
 from ..mamba.configuration_mamba import MambaConfig
@@ -103,7 +104,7 @@ class FalconMambaConfig(MambaConfig):
 
     @property
     def layer_types(self):
-        return ["mamba"] * self.num_hidden_layers
+        return ["linear_attention"] * self.num_hidden_layers
 
 
 def rms_forward(hidden_states, variance_epsilon=1e-6):
@@ -135,8 +136,9 @@ class FalconMambaMixer(MambaMixer):
                 if is_mambapy_available():
                     logger.warning_once(
                         "The fast path is not available because one of `(selective_state_update, selective_scan_fn, causal_conv1d_fn, causal_conv1d_update, mamba_inner_fn)`"
-                        " is None. Falling back to the mamba.py backend. To install follow https://github.com/state-spaces/mamba/#installation for mamba-ssm and"
-                        " https://github.com/Dao-AILab/causal-conv1d or `pip install kernels` for causal-conv1d"
+                        " is None. Falling back to the mamba.py backend. The recommended way to enable the fast path is `pip install kernels`, which provides the"
+                        " FalconMamba kernels (loaded on demand). Alternatively, install mamba-ssm (https://github.com/state-spaces/mamba/#installation) and"
+                        " causal-conv1d (https://github.com/Dao-AILab/causal-conv1d)."
                     )
                 else:
                     raise ImportError(
@@ -145,20 +147,18 @@ class FalconMambaMixer(MambaMixer):
             else:
                 logger.warning_once(
                     "The fast path is not available because one of `(selective_state_update, selective_scan_fn, causal_conv1d_fn, causal_conv1d_update, mamba_inner_fn)`"
-                    " is None. Falling back to the sequential implementation of Mamba, as use_mambapy is set to False. To install follow https://github.com/state-spaces/mamba/#installation for mamba-ssm and"
-                    " https://github.com/Dao-AILab/causal-conv1d or `pip install kernels` for causal-conv1d. For the mamba.py backend, follow https://github.com/alxndrTL/mamba.py."
+                    " is None. Falling back to the sequential implementation of Mamba, as use_mambapy is set to False. The recommended way to enable the fast path is"
+                    " `pip install kernels`, which provides the FalconMamba kernels (loaded on demand). Alternatively, install mamba-ssm"
+                    " (https://github.com/state-spaces/mamba/#installation) and causal-conv1d (https://github.com/Dao-AILab/causal-conv1d)."
+                    " For the mamba.py backend, follow https://github.com/alxndrTL/mamba.py."
                 )
 
     def __init__(self, config: FalconMambaConfig, layer_idx: int, initialize_mixer_weights: bool = True):
         super().__init__(config, layer_idx)
 
         # Triton expects to pass RMS weights even if they are non learnable, thus we need to create these weights here
-        self.register_buffer(
-            "b_c_rms", torch.nn.Parameter(torch.ones(self.ssm_state_size), requires_grad=False), persistent=False
-        )
-        self.register_buffer(
-            "dt_rms", torch.nn.Parameter(torch.ones(self.intermediate_size), requires_grad=False), persistent=False
-        )
+        self.register_buffer("b_c_rms", torch.ones(self.ssm_state_size, requires_grad=False), persistent=False)
+        self.register_buffer("dt_rms", torch.ones(self.intermediate_size, requires_grad=False), persistent=False)
         self.rms_eps = config.mixer_rms_eps
 
     def cuda_kernels_forward(
@@ -203,7 +203,7 @@ class FalconMambaMixer(MambaMixer):
             if is_decoding:
                 hidden_states = causal_conv1d_update(
                     hidden_states.squeeze(-1),
-                    cache_params.layers[self.layer_idx].conv_states,
+                    cache_params.layers[self.layer_idx].conv_states[0],
                     conv_weights,
                     self.conv1d.bias,
                     self.activation,
@@ -245,7 +245,7 @@ class FalconMambaMixer(MambaMixer):
             time_proj_bias = self.dt_proj.bias.float() if hasattr(self.dt_proj, "bias") else None
             if is_decoding:
                 scan_outputs = selective_state_update(
-                    cache_params.layers[self.layer_idx].recurrent_states,
+                    cache_params.layers[self.layer_idx].recurrent_states[0],
                     hidden_states[..., 0],
                     discrete_time_step[..., 0],
                     A,
@@ -292,7 +292,7 @@ class FalconMambaMixer(MambaMixer):
             hidden_states = hidden_states * attention_mask.unsqueeze(1)
 
         if cache_params is not None and cache_params.has_previous_state(self.layer_idx):
-            ssm_state = cache_params.layers[self.layer_idx].recurrent_states.clone()
+            ssm_state = cache_params.layers[self.layer_idx].recurrent_states[0].clone()
         else:
             ssm_state = torch.zeros(
                 (batch_size, self.intermediate_size, self.ssm_state_size), device=hidden_states.device, dtype=dtype
@@ -308,7 +308,9 @@ class FalconMambaMixer(MambaMixer):
                     self.conv1d(hidden_states)[..., :seq_len]
                 )  # [batch, intermediate_size, seq_len]
             else:
-                conv_state = cache_params.update_conv_state(hidden_states, self.layer_idx)
+                conv_state = cache_params.update_conv_state(hidden_states, self.layer_idx)[
+                    ..., -self.conv_kernel_size :
+                ]
                 conv_state = conv_state.to(self.conv1d.weight.device)
                 hidden_states = torch.sum(conv_state * self.conv1d.weight[:, 0, :], dim=-1)
                 if self.use_conv_bias:
@@ -400,6 +402,7 @@ class FalconMambaMixer(MambaMixer):
         contextualized_states = self.out_proj(scan_output.transpose(1, 2))  # [batch, seq_len, hidden_size]
         return contextualized_states
 
+    @force_accelerate_hooks("conv1d")
     def forward(
         self,
         hidden_states,

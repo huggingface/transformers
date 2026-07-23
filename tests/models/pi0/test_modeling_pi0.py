@@ -158,7 +158,6 @@ class PI0ForConditionalGenerationModelTest(ModelTesterMixin, unittest.TestCase):
     test_head_masking = False
     test_torchscript = False
     test_resize_embeddings = False
-    test_torch_exportable = False
     test_all_params_have_gradient = False
     has_attentions = True
     _is_composite = True
@@ -401,6 +400,7 @@ class PI0ModelIntegrationTest(unittest.TestCase):
         self.assertEqual(outputs.loss.shape, (1, 50, 32))
         self.assertAlmostEqual(outputs.loss.mean().item(), 2.5087, places=3)
 
+        inputs.pop("actions")  # test inference, not training anymore!
         with torch.no_grad():
             sampled = model.sample_actions(**inputs, num_steps=5)
         self.assertEqual(sampled.shape, (1, 50, 32))

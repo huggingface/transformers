@@ -13,22 +13,22 @@ specific language governing permissions and limitations under the License.
 
 # Model structure rules
 
-Transformers enforces a set of static rules on every `modeling_*.py`, `modular_*.py`, and `configuration_*.py` file. The [mlinter](https://github.com/huggingface/transformers-mlinter) tool checks them as part of `make typing` and errors out if violations are found.
+Transformers enforces a set of static rules on every `modeling_*.py`, `modular_*.py`, and `configuration_*.py` file. The [mlinter](https://github.com/huggingface/transformers-mlinter) package provides the checker engine, and the repository keeps its active rule set in `utils/rules.toml`. That local TOML lets us enable, disable, or tweak rules quickly without waiting for a new `transformers-mlinter` release.
 
 These are the expected model conventions for adding or changing modeling code. They keep the codebase consistent and ensure compatibility with features like pipeline parallelism, device maps, and weight tying.
 
 ## Running the checker
 
-`make typing` runs `mlinter` alongside the `ty` type checker. Run `mlinter` on its own with the following commands.
+`make typing` runs `mlinter` alongside the `ty` type checker through the repo wrapper, so it picks up `utils/rules.toml`. Run the same wrapper directly with the following commands.
 
 ```bash
-mlinter                  # check all modeling files
-mlinter --changed-only   # check only files changed vs origin/main
-mlinter --list-rules     # list all rules and their enabled status
-mlinter --rule TRF001    # show built-in docs for a specific rule
+python utils/check_modeling_structure.py                 # check all modeling files
+python utils/check_modeling_structure.py --changed-only  # check only files changed vs origin/main
+python utils/check_modeling_structure.py --list-rules    # list all rules and their enabled status
+python utils/check_modeling_structure.py --rule TRF001   # show built-in docs for a specific rule
 ```
 
-The `--changed-only` flag is the fastest option during development. It only checks the files you've modified relative to the main branch.
+The `--changed-only` flag is the fastest option during development. It only checks the files you've modified relative to the main branch. If you invoke `mlinter` directly instead of the wrapper, pass `--rules-toml utils/rules.toml` so local overrides are applied.
 
 ## Fixing a violation
 
@@ -52,7 +52,7 @@ Use the rule ID to look up the fix in the [rules reference](#rules-reference). T
 
 ## Rules reference
 
-Each rule below lists what it enforces and a diff showing the fix. Run `mlinter --rule TRF001` to see the built-in docs for any rule.
+Each rule below lists what it enforces and a diff showing the fix. Run `python utils/check_modeling_structure.py --rule TRF001` to see the built-in docs for any rule with the repo's current rule set.
 
 <!-- BEGIN RULES REFERENCE -->
 
@@ -226,6 +226,77 @@ When a PreTrainedModel subclass defines _tied_weights_keys as a non-empty collec
  class FooConfig(PreTrainedConfig):
      hidden_size: int = 768
 +    tie_word_embeddings: bool = True
+```
+
+### TRF016
+
+When an image_processing_*.py or video_processing_*.py class declares boolean do_* attributes (e.g. do_resize, do_rescale, do_normalize, do_convert_rgb) and overrides preprocess() or _preprocess(), checks that each declared flag is still consumed along the override path. That can be a direct reference in the override body, delegating back to the base implementation via super().preprocess(..., **kwargs) or super()._preprocess(..., **kwargs), or, for image processors, forwarding do_convert_rgb into the shared image-preparation path via _preprocess_image_like_inputs(...) or _prepare_image_like_inputs(...). The allowlist of base-handled flags (do_sample_frames) is exempted because the base preprocess() consumes them before _preprocess() runs. A do_X attribute that is not referenced by the override is a dead flag: setting do_X=False at construction or call time has no effect, and the underlying operation runs unconditionally. This silently breaks user expectations and makes per-call overrides ineffective.
+
+```diff
+class AcmeVideoProcessor(BaseVideoProcessor):
+     do_resize = True
+     do_normalize = True
+
+     def _preprocess(
+         self,
+         videos,
++        do_resize: bool,
++        do_normalize: bool,
+         size,
+         image_mean,
+         image_std,
+         **kwargs,
+     ):
+         for video in videos:
+-            video = self.resize(video, size=size)
+-            video = self.normalize(video, image_mean, image_std)
++            if do_resize:
++                video = self.resize(video, size=size)
++            if do_normalize:
++                video = self.normalize(video, image_mean, image_std)
+```
+
+### TRF017
+
+Checks classes decorated with both @auto_docstring and @dataclass for source ordering: @auto_docstring must appear above @dataclass. Decorators are applied bottom-up. When @dataclass is listed above @auto_docstring, @auto_docstring runs first on a class that has no synthesized __init__ yet and ends up modifying the parent class's __init__.__doc__ instead of the subclass's.
+
+```diff
+-@dataclass
+ @auto_docstring(
+     custom_intro="""
+     Output type of [`AcmeForPreTraining`].
+     """
+ )
++@dataclass
+ class AcmeForPreTrainingOutput(ModelOutput):
+     ...
+```
+
+### TRF018
+
+Checks that every PreTrainedModel subclass that overrides `_init_weights(self, module, ...)` chains the call up via `super()._init_weights(...)`. In modular files, `PreTrainedModel._init_weights(self, module)` and `raise AttributeError(...)` are accepted because they are modularization sentinels. If a model intentionally fully overrides initialization, suppress with `# trf-ignore: TRF018` on the line above the method. The base `_init_weights` covers standard module types (Linear, Embedding, LayerNorm, RotaryEmbedding, ...). Skipping `super()._init_weights(...)` silently leaves submodules unhandled by the override uninitialized, which can pass tests and surface much later as subtle weight-init bugs (cf. https://github.com/huggingface/transformers/pull/45597).
+
+```diff
+from ... import initialization as init
+
+ def _init_weights(self, module):
++    super()._init_weights(module)
+     if isinstance(module, AcmeCustomLayer):
+-        module.gate.data.zero_()
++        init.zeros_(module.gate)
+```
+
+### TRF019
+
+Checks that `*ProcessorKwargs` TypedDict classes in `processing_*.py` files do not set a non-empty `_defaults` dict. Old models released before cutoff date are not checked against the rule for backwards compatibility; new models must not hardcode defaults in Python. Hardcoding defaults in `_defaults` scatters processor configuration across Python source files, makes it unintuitive when it comes to overriding defaults via config, and bloats up the code. The canonical home for processor defaults is `processor_config.json` on the hub, which is shipped with the checkpoint and can be updated without touching code.
+
+```diff
+class Gemma4ProcessorKwargs(ProcessingKwargs, total=False):
+-    _defaults = {
+-        "text_kwargs": {"padding": False},
+-        "images_kwargs": {"return_tensors": "pt"},
+-    }
+     images_kwargs: Gemma4ImageProcessorKwargs
 ```
 
 <!-- END RULES REFERENCE -->

@@ -136,6 +136,90 @@ class RopeTest(unittest.TestCase):
             self.assertEqual(len(logs.output), 1)
             self.assertIn("implicit factor", logs.output[0])
 
+    def test_convert_rope_params_to_dict_with_list_ignore_keys(self):
+        # Regression test for #46121: `ignore_keys_at_rope_validation` becomes a list when loaded from a config.json
+        # (JSON has no set type). `convert_rope_params_to_dict` used to do `list | set` and crash with
+        # TypeError when `partial_rotary_factor` was also set.
+        config = LlamaConfig(partial_rotary_factor=0.25)
+        config.ignore_keys_at_rope_validation = ["mrope_section", "mrope_interleaved"]
+
+        config.convert_rope_params_to_dict(partial_rotary_factor=0.25)
+
+        self.assertIsInstance(config.ignore_keys_at_rope_validation, set)
+        self.assertEqual(
+            config.ignore_keys_at_rope_validation,
+            {"mrope_section", "mrope_interleaved", "partial_rotary_factor"},
+        )
+
+        # Round-trip through from_dict to mimic the JSON-deserialized path that triggered this in production.
+        cfg_dict = config.to_dict()
+        cfg_dict["ignore_keys_at_rope_validation"] = ["mrope_section", "mrope_interleaved"]
+        reloaded = LlamaConfig.from_dict(cfg_dict)
+        reloaded.convert_rope_params_to_dict(partial_rotary_factor=0.25)
+        self.assertIsInstance(reloaded.ignore_keys_at_rope_validation, set)
+
+        # Also accept None (the class-level attribute can be cleared on an instance).
+        config_none = LlamaConfig(partial_rotary_factor=0.25)
+        config_none.ignore_keys_at_rope_validation = None
+        config_none.convert_rope_params_to_dict(partial_rotary_factor=0.25)
+        self.assertEqual(config_none.ignore_keys_at_rope_validation, {"partial_rotary_factor"})
+
+    def test_rope_validation_with_per_attention_type_nested_rope(self):
+        """Mirrors `test_rope_validation` with `config.layer_types` set, so that
+        `rope_parameters` takes the per-attention-type nested shape."""
+        config = LlamaConfig()
+        all_rope_types = ROPE_INIT_FUNCTIONS.keys()
+        config.layer_types = ["full_attention", "sliding_attention"]
+
+        def nest(full_attention_params):
+            return {
+                "full_attention": full_attention_params,
+                "sliding_attention": {"rope_type": "default", "rope_theta": 10000.0},
+            }
+
+        # Each non-default RoPE type with only `rope_theta` should still raise
+        # KeyError (missing required keys) when wrapped in the nested shape.
+        for rope_type in all_rope_types:
+            if rope_type in ("default", "proportional"):
+                continue
+            config.rope_parameters = nest({"rope_type": rope_type, "rope_theta": 10000.0})
+            with self.assertRaises(KeyError):
+                config.validate_rope()
+
+        # Parameters exclusive to a RoPE type should still raise when passed to
+        # the wrong type while in the nested shape.
+        valid_param_mapping = {
+            "factor": ["linear", "dynamic", "yarn", "longrope"],
+            "attention_factor": ["yarn", "longrope"],
+            "beta_fast": ["yarn"],
+            "beta_slow": ["yarn"],
+            "short_factor": ["longrope"],
+            "long_factor": ["longrope"],
+        }
+        for rope_type in all_rope_types:
+            if rope_type in ("default", "proportional"):
+                continue
+            for param, valid_rope_types in valid_param_mapping.items():
+                config.rope_parameters = nest({"rope_type": rope_type, "rope_theta": 10000.0, param: True})
+                if rope_type in valid_rope_types:
+                    continue
+                with self.assertRaises(KeyError):
+                    config.validate_rope()
+
+        # A complete yarn entry under the nested shape should validate cleanly.
+        # Regression: previously the implicit-factor check inside the yarn
+        # validator dereferenced `self.rope_parameters` (the full nested dict)
+        # rather than its per-type `rope_parameters` argument.
+        config.rope_parameters = nest(
+            {
+                "rope_type": "yarn",
+                "rope_theta": 10000.0,
+                "factor": 2.0,
+                "original_max_position_embeddings": int(config.max_position_embeddings / 2.0),
+            }
+        )
+        config.validate_rope()
+
     def test_default_rope_numerically(self):
         # Note: some RoPE scaling methods start off by calling the default RoPE frequencies. If this test fails, then
         # multiple RoPE strategies will fail.
@@ -236,6 +320,36 @@ class RopeTest(unittest.TestCase):
         with self.assertRaises(AssertionError):  # It is NOT a linear factor
             torch.testing.assert_close(inv_freq, default_inv_freq / factor)
         torch.testing.assert_close(inv_freq, EXPECTED_INV_FREQ)
+
+    def test_dynamic_rope_resets_after_long_sequence(self):
+        config = LlamaConfig(
+            hidden_size=16,
+            intermediate_size=32,
+            num_hidden_layers=1,
+            num_attention_heads=2,
+            num_key_value_heads=2,
+            max_position_embeddings=8,
+            rope_parameters={"rope_type": "dynamic", "rope_theta": 10000.0, "factor": 4.0},
+        )
+        rotary_embedding = LlamaRotaryEmbedding(config)
+        original_inv_freq = rotary_embedding.original_inv_freq.clone()
+
+        long_position_ids = torch.arange(32).unsqueeze(0)
+        long_input = torch.zeros(1, 32, 2, 8)
+        rotary_embedding(long_input, long_position_ids)
+
+        self.assertEqual(int(rotary_embedding.max_seq_len_cached), 32)
+        self.assertFalse(hasattr(rotary_embedding, "None_max_seq_len_cached"))
+        with self.assertRaises(AssertionError):
+            torch.testing.assert_close(rotary_embedding.inv_freq, original_inv_freq)
+
+        short_position_ids = torch.arange(4).unsqueeze(0)
+        short_input = torch.zeros(1, 4, 2, 8)
+        rotary_embedding(short_input, short_position_ids)
+
+        self.assertEqual(int(rotary_embedding.max_seq_len_cached), config.max_position_embeddings)
+        self.assertFalse(hasattr(rotary_embedding, "None_max_seq_len_cached"))
+        torch.testing.assert_close(rotary_embedding.inv_freq, original_inv_freq)
 
     def test_yarn_rope_numerically(self):
         # fmt: off

@@ -13,13 +13,8 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2022-01-28 and added to Hugging Face Transformers on 2022-12-21.*
+*This model was published in HF papers on 2022-01-28 and contributed to Hugging Face Transformers on 2022-12-21.*
 
-<div style="float: right;">
-    <div class="flex flex-wrap space-x-1">
-        <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-    </div>
-</div>
 
 # BLIP
 
@@ -38,13 +33,12 @@ The example below demonstrates how to visual question answering with [`Pipeline`
 <hfoption id="Pipeline">
 
 ```python
-import torch
 from transformers import pipeline
+
 
 pipeline = pipeline(
     task="visual-question-answering",
     model="Salesforce/blip-vqa-base",
-    dtype=torch.float16,
     device=0
 )
 url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"
@@ -58,12 +52,13 @@ pipeline(question="What is the weather in this image?", image=url)
 import requests
 import torch
 from PIL import Image
-from transformers import AutoProcessor, AutoModelForVisualQuestionAnswering
+
+from transformers import AutoModelForVisualQuestionAnswering, AutoProcessor
+
 
 processor = AutoProcessor.from_pretrained("Salesforce/blip-vqa-base")
 model = AutoModelForVisualQuestionAnswering.from_pretrained(
     "Salesforce/blip-vqa-base",
-    dtype=torch.float16,
     device_map="auto"
 )
 

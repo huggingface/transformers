@@ -293,7 +293,7 @@ class Emu3Vision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, Pipeline
     )
     skip_test_image_features_output_shape = True  # Emu3 uses index -3 for hidden_size instead of -1
 
-    test_torch_exportable = False
+    test_torch_exportable = False  # data-dependent control flow in vision/segmentation head
 
     def setUp(self):
         self.model_tester = Emu3Vision2TextModelTester(self)
@@ -339,9 +339,6 @@ class Emu3Vision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, Pipeline
         # up_down_blocks for down, 2 for middle, vq_num_res_blocks for Emu3VQVAETemporalResnetBlock
         up_down_blocks = len(model_tester.vq_channel_multiplier) * model_tester.vq_num_res_blocks
         return up_down_blocks + 2 + model_tester.vq_num_res_blocks + 1
-
-    def test_reverse_loading_mapping(self):
-        super().test_reverse_loading_mapping(skip_base_model=True)
 
 
 @require_torch

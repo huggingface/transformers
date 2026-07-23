@@ -4,100 +4,62 @@ export PYTHONPATH = src
 .PHONY: style typing check-code-quality check-repository-consistency check-repo fix-repo test test-examples benchmark codex claude clean-ai
 
 
+# Checker lists. The two CI jobs (CircleCI runs `make check-code-quality` and
+# `make check-repository-consistency` in parallel) own the canonical sets below.
+# Local convenience targets `check-repo` and `fix-repo` are *derived* from them,
+# so they can never drift out of sync (e.g. silently dropping `auto_mappings`
+# from CI, as happened in #45018 → fixed in #45774).
+
+STYLE_CHECKERS := ruff_check, ruff_format, init_isort, sort_auto_mappings
+TYPING_CHECKERS := types, modeling_structure
+CODE_QUALITY_CHECKERS := $(TYPING_CHECKERS), $(STYLE_CHECKERS)
+
+REPO_CONSISTENCY_CHECKERS := \
+	auto_mappings, \
+	imports, \
+	import_complexity, \
+	copies, \
+	modular_conversion, \
+	doc_toc, \
+	modeling_rules_doc, \
+	docstrings, \
+	dummies, \
+	repo, \
+	inits, \
+	pipeline_typing, \
+	config_docstrings, \
+	config_attributes, \
+	doctest_list, \
+	update_metadata, \
+	add_dates, \
+	deps_table
+
+ALL_CHECKERS := $(CODE_QUALITY_CHECKERS), $(REPO_CONSISTENCY_CHECKERS)
+
+
 # Runs all linting/formatting scripts, most notably ruff
 style:
-	@python utils/checkers.py \
-		ruff_check,\
-		ruff_format,\
-		init_isort,\
-		sort_auto_mappings \
-		--fix
+	@python utils/checkers.py $(STYLE_CHECKERS) --fix
 
 # Runs ty type checker and model structure rules
 typing:
-	@python utils/checkers.py \
-		types,\
-		modeling_structure
+	@python utils/checkers.py $(TYPING_CHECKERS)
 
 # Runs typing, ruff linting/formatting, import-order checks and auto-mappings
 check-code-quality:
-	@python utils/checkers.py \
-		types,\
-		modeling_structure,\
-		ruff_check,\
-		ruff_format,\
-		init_isort,\
-		sort_auto_mappings
+	@python utils/checkers.py $(CODE_QUALITY_CHECKERS)
 
 # Runs a full repository consistency check.
 check-repository-consistency:
-	@python utils/checkers.py \
-		imports,\
-		import_complexity,\
-		copies,\
-		modular_conversion,\
-		doc_toc,\
-		modeling_rules_doc,\
-		docstrings,\
-		dummies,\
-		repo,\
-		inits,\
-		pipeline_typing,\
-		config_docstrings,\
-		config_attributes,\
-		doctest_list,\
-		update_metadata,\
-		add_dates,\
-		deps_table
+	@python utils/checkers.py $(REPO_CONSISTENCY_CHECKERS)
 
 # Runs typing and formatting checks + repository consistency check (ignores errors)
 check-repo:
-	@python utils/checkers.py \
-		ruff_check,\
-		ruff_format,\
-		types,\
-		modeling_structure,\
-		init_isort,\
-		auto_mappings,\
-		sort_auto_mappings,\
-		imports,\
-		import_complexity,\
-		copies,\
-		modular_conversion,\
-		doc_toc,\
-		modeling_rules_doc,\
-		docstrings,\
-		dummies,\
-		repo,\
-		inits,\
-		pipeline_typing,\
-		config_docstrings,\
-		config_attributes,\
-		doctest_list,\
-		update_metadata,\
-		add_dates,\
-		deps_table \
-		--keep-going
+	@python utils/checkers.py $(ALL_CHECKERS) --keep-going
 
 # Run all repo checks for which there is an automatic fix, most notably modular conversions
 fix-repo:
-	@python utils/checkers.py \
-		ruff_check,\
-		ruff_format,\
-		init_isort,\
-		auto_mappings,\
-		sort_auto_mappings,\
-		doc_toc,\
-		modeling_rules_doc,\
-		copies,\
-		modular_conversion,\
-		dummies,\
-		pipeline_typing,\
-		doctest_list,\
-		docstrings,\
-		add_dates,\
-		deps_table \
-		--fix --keep-going
+	@python utils/checkers.py $(ALL_CHECKERS) --fix --keep-going
 
 # Run tests for the library, requires pytest-random-order
 test:

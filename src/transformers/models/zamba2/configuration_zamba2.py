@@ -16,7 +16,7 @@
 
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, remap_legacy_layer_types
 from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring
 
@@ -29,12 +29,12 @@ class Zamba2Config(PreTrainedConfig):
         Number of groups for the evolution matrices of mamba 2.
     n_mamba_heads (`int`, *optional*, defaults to 8):
         Number of heads for the evolution matrices of mamba 2.
+    use_mamba_kernels (`bool`, *optional*, defaults to `True`):
+        Flag indicating whether or not to use the fast mamba kernels.
     use_conv_bias (`bool`, *optional*, defaults to `True`):
         Whether or not to use bias in the convolution layer of the mixer block.
     chunk_size (`int`, *optional*, defaults to 256):
         Size of the chunks that will comprise the sequence.
-    use_mamba_kernels (`bool`, *optional*, defaults to `True`):
-        Flag indicating whether or not to use the fast mamba kernels.
     use_mem_eff_path (`bool`, *optional*, defaults to `False`):
         Whether or not to use the fused conv1d and scan in mamba2 layers.
     add_bias_linear (`bool`, *optional*, defaults to `False`):
@@ -124,17 +124,20 @@ class Zamba2Config(PreTrainedConfig):
         self.kv_channels = self.hidden_size // self.num_attention_heads
         self.num_query_groups = self.num_attention_heads
 
-        # Below, "mamba" stands for mamba layer, "hybrid" stands for hybrid layer (composed by a shared transformer followed by mamba layer)
+        # Below, "linear_attention" stands for the mamba2 layer, "hybrid" stands for hybrid layer
+        # (a shared transformer followed by a mamba2 layer).
         if self.layers_block_type is None:
             self.layers_block_type = (
-                ["mamba"]
-                + (["mamba"] * 5 + ["hybrid"]) * 7
-                + ["mamba"] * 4
+                ["linear_attention"]
+                + (["linear_attention"] * 5 + ["hybrid"]) * 7
+                + ["linear_attention"] * 4
                 + ["hybrid"]
-                + ["mamba"] * 3
+                + ["linear_attention"] * 3
                 + ["hybrid"]
-                + ["mamba"] * 2
+                + ["linear_attention"] * 2
             )
+        else:
+            self.layers_block_type = remap_legacy_layer_types(self.layers_block_type)
         self.hybrid_layer_ids = [index for index, type in enumerate(self.layers_block_type) if type == "hybrid"]
         super().__post_init__(**kwargs)
 

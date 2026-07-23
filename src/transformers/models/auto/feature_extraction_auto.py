@@ -24,6 +24,7 @@ from ...dynamic_module_utils import get_class_from_dynamic_module, resolve_trust
 from ...feature_extraction_utils import FeatureExtractionMixin
 from ...utils import CONFIG_NAME, FEATURE_EXTRACTOR_NAME, PROCESSOR_NAME, cached_file, logging, safe_load_json_file
 from .auto_factory import _LazyAutoMapping
+from .auto_mappings import FEATURE_EXTRACTOR_MAPPING_NAMES
 from .configuration_auto import (
     CONFIG_MAPPING_NAMES,
     AutoConfig,
@@ -33,7 +34,6 @@ from .configuration_auto import (
 
 
 logger = logging.get_logger(__name__)
-
 
 # Each entry maps a `model_type` to a dict of backend → audio-processor class name. The torch
 # entry is the default returned by `AutoAudioProcessor.from_pretrained`; the numpy entry, when

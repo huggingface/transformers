@@ -23,7 +23,8 @@ if TYPE_CHECKING:
     from .feature_extraction_parakeet import *
     from .audio_processing_numpy_parakeet import *
     from .modeling_parakeet import *
-    from .tokenization_parakeet_fast import *
+    from .processing_parakeet import *
+    from .tokenization_parakeet import *
 else:
     import sys
 

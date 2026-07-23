@@ -260,8 +260,8 @@ class GroupViTTokenAssign(nn.Module):
         return new_image_tokens, attention
 
 
-@dataclass
 @auto_docstring
+@dataclass
 class GroupViTModelOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `return_loss` is `True`):
@@ -727,19 +727,7 @@ class GroupViTPreTrainedModel(PreTrainedModel):
     def _init_weights(self, module):
         """Initialize the weights"""
 
-        init_range = self.config.initializer_range
-        if isinstance(module, (nn.Linear, nn.Conv2d)):
-            init.normal_(module.weight, mean=0.0, std=init_range)
-            if module.bias is not None:
-                init.zeros_(module.bias)
-        elif isinstance(module, (nn.LayerNorm, nn.BatchNorm1d)):
-            init.zeros_(module.bias)
-            init.ones_(module.weight)
-            if getattr(module, "running_mean", None) is not None:
-                init.zeros_(module.running_mean)
-                init.ones_(module.running_var)
-                init.zeros_(module.num_batches_tracked)
-
+        super()._init_weights(module)
         factor = self.config.initializer_factor
         if isinstance(module, GroupViTTextEmbeddings):
             init.normal_(module.token_embedding.weight, mean=0.0, std=factor * 0.02)

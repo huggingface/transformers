@@ -43,8 +43,38 @@ env:
   HF_TOKEN: ${{ secrets.HF_HUB_READ_TOKEN }}
   TF_FORCE_GPU_ALLOW_GROWTH: true
   CUDA_VISIBLE_DEVICES: 0,1
+  NO_COLOR: 1
+
+permissions:
+  contents: read
 
 jobs:
+  report_metadata:
+    name: Report metadata
+    if: ${{ inputs.runner_type != '' }}
+    runs-on: ubuntu-latest
+    outputs:
+      machine_type: ${{ steps.set_machine_type.outputs.machine_type }}
+    steps:
+      - name: Set `machine_type` for report and artifact names
+        id: set_machine_type
+        shell: bash
+        env:
+          input_machine_type: ${{ inputs.machine_type }}
+        run: |
+          echo "$input_machine_type"
+
+          if [ "$input_machine_type" = "aws-g5-4xlarge-cache" ]; then
+            machine_type=single-gpu
+          elif [ "$input_machine_type" = "aws-g5-12xlarge-cache" ]; then
+            machine_type=multi-gpu
+          else
+            machine_type="$input_machine_type"
+          fi
+
+          echo "$machine_type"
+          echo "machine_type=$machine_type" >> $GITHUB_OUTPUT
+
   run_models_gpu:
     name: " "
     strategy:
@@ -57,8 +87,6 @@ jobs:
     container:
       image: ${{ inputs.docker }}
       options: --gpus all --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
-    outputs:
-      machine_type: ${{ steps.set_machine_type.outputs.machine_type }}
     steps:
       - name: Echo input and matrix info
         shell: bash
@@ -138,7 +166,6 @@ jobs:
 
           echo "$machine_type"
           echo "machine_type=$machine_type" >> $GITHUB_ENV
-          echo "machine_type=$machine_type" >> $GITHUB_OUTPUT
 
       - name: Create report directory if it doesn't exist
         shell: bash
@@ -198,7 +225,7 @@ jobs:
 
       - name: "Test suite reports artifacts: ${{ env.machine_type }}_${{ inputs.report_name_prefix }}_${{ env.matrix_folders }}_test_reports"
         if: ${{ always() }}
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
         with:
           name: ${{ env.machine_type }}_${{ inputs.report_name_prefix }}_${{ env.matrix_folders }}_test_reports
           path: /transformers/reports/${{ env.machine_type }}_${{ inputs.report_name_prefix }}_${{ env.matrix_folders }}_test_reports
@@ -206,11 +233,11 @@ jobs:
   collated_reports:
     name: Collated Reports
     if: ${{ always() && inputs.runner_type != '' }}
-    needs: run_models_gpu
+    needs: [run_models_gpu, report_metadata]
     uses: huggingface/transformers/.github/workflows/collated-reports.yml@6abd9725ee7d809dc974991f8ff6c958afb63a3a  # main
     with:
       job: run_models_gpu
       report_repo_id: ${{ inputs.report_repo_id }}
       gpu_name: ${{ inputs.runner_type }}
-      machine_type: ${{ needs.run_models_gpu.outputs.machine_type }}
+      machine_type: ${{ needs.report_metadata.outputs.machine_type }}
     secrets: inherit

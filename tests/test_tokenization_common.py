@@ -465,8 +465,6 @@ Hey how are you doing"""  # noqa: W293
         tokenizer_from_extractor = self.tokenizer_class(
             vocab=vocab,
             merges=merges,
-            do_lower_case=False,
-            keep_accents=True,
             added_tokens_decoder=added_tokens_decoder,
             **extra_kwargs,
             **(self.from_pretrained_kwargs if self.from_pretrained_kwargs is not None else {}),
@@ -850,8 +848,6 @@ Hey how are you doing"""  # noqa: W293
 
         tokenizer_original = self.tokenizer_class.from_pretrained(
             self.from_pretrained_id[0],
-            do_lower_case=False,
-            keep_accents=True,
             **(self.from_pretrained_kwargs if self.from_pretrained_kwargs is not None else {}),
         )
         self._run_integration_checks(tokenizer_original, "original")
@@ -876,8 +872,6 @@ Hey how are you doing"""  # noqa: W293
 
         tokenizer_original = self.tokenizer_class.from_pretrained(
             self.from_pretrained_id[0],
-            do_lower_case=False,
-            keep_accents=True,
             **(self.from_pretrained_kwargs if self.from_pretrained_kwargs is not None else {}),
         )
         tokenizer_from_extractor = self.get_extracted_tokenizer(reference_tokenizer=tokenizer_original)
@@ -1009,6 +1003,13 @@ Hey how are you doing"""  # noqa: W293
         self.assertEqual(output, expected_output)  # Test output is the same after reloading
         # Check that no error raised
         new_tokenizer.apply_chat_template(dummy_conversation, tokenize=True, return_dict=False)
+
+    def test_chat_template_empty_conversation(self):
+        dummy_template = "{% for message in messages %}{{message['role'] + message['content']}}{% endfor %}"
+        tokenizer = self.get_tokenizer()
+        tokenizer.chat_template = dummy_template
+        with self.assertRaises(ValueError, msg="Cannot apply chat template to an empty conversation"):
+            tokenizer.apply_chat_template([], tokenize=False)
 
     @require_jinja
     def test_chat_template_save_loading(self):
@@ -1514,6 +1515,38 @@ Hey how are you doing"""  # noqa: W293
         )
 
     @require_jinja
+    def test_continue_final_message_string_and_reasoning(self):
+        dummy_template = """
+        {%- for message in messages %}
+            {{- "<|im_start|>" + message['role'] + "\n" }}
+            {%- if message['reasoning_content'] is defined %}
+                {{- "<think>\n" + message['reasoning_content'] + "\n</think>\n" }}
+            {%- endif %}
+            {{- message['content'] + "<|im_end|>" + "\n"}}
+        {%- endfor %}"""
+        dummy_conversation = [
+            {"role": "user", "content": "user message"},
+            {
+                "role": "assistant",
+                "reasoning_content": "assistant reasoning...",
+                "content": "assistant message",  # not shown because the continue_final_message is set at "reasoning_content"
+            },
+        ]
+        tokenizer = self.get_tokenizer()
+
+        # Test continue_final_message="reasoning_content"
+        prefill_output = tokenizer.apply_chat_template(
+            dummy_conversation,
+            chat_template=dummy_template,
+            tokenize=False,
+            continue_final_message="reasoning_content",
+        )
+        self.assertEqual(
+            prefill_output,
+            "<|im_start|>user\nuser message<|im_end|>\n<|im_start|>assistant\n<think>\nassistant reasoning...",
+        )
+
+    @require_jinja
     def test_chat_template_dict(self):
         dummy_template_1 = "{{'a'}}"
         dummy_template_2 = "{{'b'}}"
@@ -1560,6 +1593,22 @@ Hey how are you doing"""  # noqa: W293
                 new_tokenizer = tokenizer.from_pretrained(tmp_dir_name)
             # Assert that the serialized list is correctly reconstructed as a single dict
             self.assertEqual(new_tokenizer.chat_template, tokenizer.chat_template)
+
+    def test_chat_template_dict_saving_rejects_path_traversal(self):
+        # A malicious chat_template dict key must not be usable to escape the save directory and write
+        # attacker-controlled content to an arbitrary path (path traversal, CWE-22). The dict key is used
+        # verbatim as a `<name>.jinja` filename, so `save_pretrained` must reject names that are not plain
+        # filenames instead of silently writing outside the target directory.
+        tokenizer = self.get_tokenizer()
+        tokenizer.chat_template = {"default": "{{'a'}}", "../../PWNED": "attacker content"}
+        with tempfile.TemporaryDirectory() as tmp_dir_name:
+            save_dir = os.path.join(tmp_dir_name, "save")
+            # Where the "../../PWNED" key would land if traversal succeeded:
+            # save/additional_chat_templates/../../PWNED.jinja -> tmp_dir_name/PWNED.jinja
+            canary = Path(tmp_dir_name, "PWNED.jinja")
+            with self.assertRaises(ValueError):
+                tokenizer.save_pretrained(save_dir)
+            self.assertFalse(canary.exists())
 
     @require_jinja
     def test_chat_template_file_priority(self):

@@ -13,11 +13,10 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2024-09-17 and added to Hugging Face Transformers on 2024-09-18.*
+*This model was contributed to Hugging Face Transformers on 2024-09-18.*
 
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
-        <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
         <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
         <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
     </div>
@@ -40,23 +39,26 @@ The example below demonstrates how to encode and decode audio with the [`AutoMod
 <hfoption id="AutoModel">
 
 ```python
->>> from datasets import load_dataset, Audio
->>> from transformers import MimiModel, AutoFeatureExtractor
->>> librispeech_dummy = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+from datasets import Audio, load_dataset
 
->>> # load model and feature extractor
->>> model = MimiModel.from_pretrained("kyutai/mimi")
->>> feature_extractor = AutoFeatureExtractor.from_pretrained("kyutai/mimi")
+from transformers import AutoFeatureExtractor, MimiModel
 
->>> # load audio sample
->>> librispeech_dummy = librispeech_dummy.cast_column("audio", Audio(sampling_rate=feature_extractor.sampling_rate))
->>> audio_sample = librispeech_dummy[-1]["audio"]["array"]
->>> inputs = feature_extractor(raw_audio=audio_sample, sampling_rate=feature_extractor.sampling_rate, return_tensors="pt")
 
->>> encoder_outputs = model.encode(inputs["input_values"], inputs["padding_mask"])
->>> audio_values = model.decode(encoder_outputs.audio_codes, inputs["padding_mask"])[0]
->>> # or the equivalent with a forward pass
->>> audio_values = model(inputs["input_values"], inputs["padding_mask"]).audio_values
+librispeech_dummy = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+
+# load model and feature extractor
+model = MimiModel.from_pretrained("kyutai/mimi", device_map="auto")
+feature_extractor = AutoFeatureExtractor.from_pretrained("kyutai/mimi")
+
+# load audio sample
+librispeech_dummy = librispeech_dummy.cast_column("audio", Audio(sampling_rate=feature_extractor.sampling_rate))
+audio_sample = librispeech_dummy[-1]["audio"]["array"]
+inputs = feature_extractor(raw_audio=audio_sample, sampling_rate=feature_extractor.sampling_rate, return_tensors="pt").to(model.device)
+
+encoder_outputs = model.encode(inputs["input_values"], inputs["padding_mask"])
+audio_values = model.decode(encoder_outputs.audio_codes, inputs["padding_mask"])[0]
+# or the equivalent with a forward pass
+audio_values = model(inputs["input_values"], inputs["padding_mask"]).audio_values
 ```
 
 </hfoption>

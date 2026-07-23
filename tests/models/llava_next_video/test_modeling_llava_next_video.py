@@ -212,7 +212,6 @@ class LlavaNextVideoForConditionalGenerationModelTest(ModelTesterMixin, Generati
     skip_test_video_features_output_shape = True
 
     _is_composite = True
-    test_torch_exportable = False
 
     def setUp(self):
         self.model_tester = LlavaNextVideoVisionText2TextModelTester(self)
@@ -339,9 +338,6 @@ class LlavaNextVideoForConditionalGenerationModelTest(ModelTesterMixin, Generati
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         inputs_dict = {"pixel_values": inputs_dict["pixel_values_videos"]}
         return config, inputs_dict
-
-    def test_reverse_loading_mapping(self):
-        super().test_reverse_loading_mapping(skip_base_model=True)
 
 
 @require_torch

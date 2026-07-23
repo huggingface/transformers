@@ -34,12 +34,12 @@ from .configuration_levit import LevitConfig
 logger = logging.get_logger(__name__)
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Output type of [`LevitForImageClassificationWithTeacher`].
     """
 )
+@dataclass
 class LevitForImageClassificationWithTeacherOutput(ModelOutput):
     r"""
     logits (`torch.FloatTensor` of shape `(batch_size, config.num_labels)`):

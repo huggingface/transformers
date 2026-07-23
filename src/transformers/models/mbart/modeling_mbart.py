@@ -727,7 +727,7 @@ class MBartDecoder(MBartPreTrainedModel):
         )
 
         # embed positions
-        position_ids = self.embed_positions(input, past_key_values_length, position_ids=position_ids)
+        position_ids = self.embed_positions(input_ids, past_key_values_length, position_ids=position_ids)
 
         hidden_states = inputs_embeds + position_ids.to(inputs_embeds.device)
         hidden_states = self.layernorm_embedding(hidden_states)
@@ -824,7 +824,7 @@ class MBartModel(MBartPreTrainedModel):
             Default behavior: generate a tensor that ignores pad tokens in `decoder_input_ids`. Causal mask will also
             be used by default.
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         # different to other models, MBart automatically creates decoder_input_ids from
         # input_ids if no decoder_input_ids are provided
@@ -1128,9 +1128,12 @@ class MBartForSequenceClassification(MBartPreTrainedModel):
             torch.unique_consecutive(eos_mask.sum(1)).numel() == 1,
             "All examples must have the same number of <eos> tokens.",
         )
-        sentence_representation = hidden_states[eos_mask, :].view(hidden_states.size(0), -1, hidden_states.size(-1))[
-            :, -1, :
-        ]
+        selected = hidden_states[eos_mask, :]
+        torch_compilable_check(
+            selected.shape[0] // hidden_states.shape[0] >= 1,
+            "Each example must contain at least one <eos> token.",
+        )
+        sentence_representation = selected.view(hidden_states.size(0), -1, hidden_states.size(-1))[:, -1, :]
         logits = self.classification_head(sentence_representation)
 
         loss = None

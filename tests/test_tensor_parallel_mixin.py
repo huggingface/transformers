@@ -36,6 +36,33 @@ if is_torch_available():
     from torch.multiprocessing.spawn import ProcessRaisedException
 
 
+# =============================================================================
+# Constants
+# =============================================================================
+
+# Set to None to run distributed TP tests for every model with a plan.
+# Top 8 MoE + top 2 dense model types by Hugging Face text-generation download volume.
+TP_DISTRIBUTED_TEST_MODEL_TYPES = {
+    # Dense
+    "qwen3",
+    "qwen2",
+    # MoE
+    "qwen3_moe",
+    "glm_moe_dsa",
+    "deepseek_v4",
+    "glm4_moe_lite",
+    "glm4_moe",
+    "olmoe",
+    "qwen2_moe",
+    "cohere2_moe",
+}
+
+
+# =============================================================================
+# Distributed helpers (top-level for pickling by mp.spawn)
+# =============================================================================
+
+
 def _find_free_port():
     """Find a free port by binding a socket and releasing it."""
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
@@ -69,7 +96,7 @@ def get_packed_grad_shard(grad, world_size, rank, dim):
     return grad.index_select(dim, torch.tensor(indices, device=grad.device))
 
 
-def _global_wrapper(rank, func, tp, port, func_args, func_kwargs):
+def _global_wrapper(rank, func, tp, port, backend, func_args, func_kwargs):
     """Wrapper to set up distributed environment and run the test function."""
 
     def setup_dist_env(rank, world_size, port):
@@ -82,7 +109,7 @@ def _global_wrapper(rank, func, tp, port, func_args, func_kwargs):
     world_size = tp
     setup_dist_env(rank, world_size, port)
 
-    dist.init_process_group(backend="gloo", rank=rank, world_size=world_size)
+    dist.init_process_group(backend=backend, rank=rank, world_size=world_size)
 
     func(rank, *func_args, **func_kwargs)
 
@@ -90,7 +117,7 @@ def _global_wrapper(rank, func, tp, port, func_args, func_kwargs):
     dist.destroy_process_group()
 
 
-def _init_distributed(tp: int, max_retries: int = 5):
+def _init_distributed(tp: int, max_retries: int = 5, backend: str = "gloo"):
     """Decorator to initialize distributed environment and spawn processes."""
 
     def _init_distributed_inner(func):
@@ -98,7 +125,7 @@ def _init_distributed(tp: int, max_retries: int = 5):
             world_size = tp
             for attempt in range(max_retries):
                 port = _find_free_port()
-                spawn_args = (func, tp, port, args, kwargs)
+                spawn_args = (func, tp, port, backend, args, kwargs)
                 try:
                     mp.spawn(_global_wrapper, args=spawn_args, nprocs=world_size)
                     return
@@ -448,31 +475,65 @@ class TensorParallelTesterMixin(ABC):
         config = self.model_tester.get_config()
         return hasattr(config, "base_model_tp_plan") and config.base_model_tp_plan is not None
 
+    def _skip_if_tp_distributed_not_enabled(self):
+        """Skip expensive distributed TP/EP tests for models outside the allowlist."""
+        config = self.model_tester.get_config()
+        if TP_DISTRIBUTED_TEST_MODEL_TYPES is not None and config.model_type not in TP_DISTRIBUTED_TEST_MODEL_TYPES:
+            self.skipTest(
+                f"Tensor parallel distributed tests are not enabled for model_type={config.model_type!r} "
+                f"(enabled: {sorted(TP_DISTRIBUTED_TEST_MODEL_TYPES)}). "
+                "Set TP_DISTRIBUTED_TEST_MODEL_TYPES = None to run all tests."
+            )
+
     def _get_tp_model_class(self):
         """Get the model class to use for TP tests (prefers *ForCausalLM)."""
         if hasattr(self.model_tester, "causal_lm_class") and self.model_tester.causal_lm_class is not None:
             return self.model_tester.causal_lm_class
         return self.all_model_classes[0]
 
-    def _skip_if_not_supported(self):
-        """Check and skip test if TP is not supported for this model/environment."""
+    def _get_tp_config(self):
+        """Tiny config with `vocab_size` rounded up to a multiple of the world size, as sharded dims (typically `lm_head`) have to be split across ranks."""
+        config = self.model_tester.get_config()
+        text_config = config.get_text_config()
+        remainder = text_config.vocab_size % self.tensor_parallel_size
+        if remainder:
+            text_config.vocab_size += self.tensor_parallel_size - remainder
+        return config
+
+    def _skip_if_not_supported(self, expert_parallel: bool = False):
+        """Check and skip the test if tensor/expert parallel is not supported for this model/environment."""
+        parallelism = "Expert" if expert_parallel else "Tensor"
+        # An EP-capable MoE (@use_experts_implementation) must ship an ep_plan; assert before any
+        # skip so a plan-less model fails even where the parallel test can't run (GPU, old torch).
+        if expert_parallel and self._get_tp_model_class()._can_set_experts_implementation():
+            self.assertTrue(
+                self._has_ep_plan(),
+                "Model supports a switchable experts implementation (@use_experts_implementation) but defines no "
+                "base_model_ep_plan; add an expert-parallel plan to its config so the EP path is covered.",
+            )
+
         if not is_torch_greater_or_equal("2.9"):
-            self.skipTest("Tensor parallel tests require torch >= 2.9")
+            self.skipTest(f"{parallelism} parallel tests require torch >= 2.9")
 
         if torch.cuda.is_available() or torch.xpu.is_available():
-            self.skipTest("Tensor parallel mixin tests are CPU-only and should not run on GPU or XPU machines")
+            self.skipTest(f"{parallelism} parallel mixin tests are CPU-only and should not run on GPU or XPU machines")
 
         if os.cpu_count() < self.tensor_parallel_size:
             self.skipTest(
-                f"Tensor parallel tests require at least {self.tensor_parallel_size} CPUs, "
+                f"{parallelism} parallel tests require at least {self.tensor_parallel_size} CPUs, "
                 f"but only {os.cpu_count()} available"
             )
 
         if not hasattr(self.model_tester, "causal_lm_class") or self.model_tester.causal_lm_class is None:
             self.skipTest("Model tester does not have causal_lm_class (not using CausalLMModelTester)")
 
-        if not self._has_tp_plan():
+        if expert_parallel:
+            if not self._has_ep_plan():
+                self.skipTest("Model does not have an expert parallel plan (base_model_ep_plan)")
+        elif not self._has_tp_plan():
             self.skipTest("Model does not have a tensor parallel plan (base_model_tp_plan)")
+
+        self._skip_if_tp_distributed_not_enabled()
 
         # # Skip encoder-decoder models (TP not supported)
         # if getattr(self, "is_encoder_decoder", False):
@@ -483,31 +544,11 @@ class TensorParallelTesterMixin(ABC):
         # if hasattr(config, "vision_config") and config.vision_config is not None:
         #     self.skipTest("VLM models are not yet supported in TP tests")
 
-    def _skip_if_ep_not_supported(self):
-        """Check and skip test if EP is not supported for this model/environment."""
-        if not is_torch_greater_or_equal("2.9"):
-            self.skipTest("Expert parallel tests require torch >= 2.9")
-
-        if torch.cuda.is_available() or torch.xpu.is_available():
-            self.skipTest("Expert parallel mixin tests are CPU-only and should not run on GPU or XPU machines")
-
-        if os.cpu_count() < self.tensor_parallel_size:
-            self.skipTest(
-                f"Expert parallel tests require at least {self.tensor_parallel_size} CPUs, "
-                f"but only {os.cpu_count()} available"
-            )
-
-        if not hasattr(self.model_tester, "causal_lm_class") or self.model_tester.causal_lm_class is None:
-            self.skipTest("Model tester does not have causal_lm_class (not using CausalLMModelTester)")
-
-        if not self._has_ep_plan():
-            self.skipTest("Model does not have an expert parallel plan (base_model_ep_plan)")
-
     @is_tensor_parallel_test
     def test_tp_forward(self):
         self._skip_if_not_supported()
 
-        config = self.model_tester.get_config()
+        config = self._get_tp_config()
         model_class = self._get_tp_model_class()
         atol = self.tensor_parallel_atol
         rtol = self.tensor_parallel_rtol
@@ -523,7 +564,7 @@ class TensorParallelTesterMixin(ABC):
     def test_tp_backward(self):
         self._skip_if_not_supported()
 
-        config = self.model_tester.get_config()
+        config = self._get_tp_config()
         model_class = self._get_tp_model_class()
         atol = self.tensor_parallel_atol
         rtol = self.tensor_parallel_rtol
@@ -540,7 +581,7 @@ class TensorParallelTesterMixin(ABC):
         # Test TP generation: unfused checkpoint → conversion mapping (if needed) → TP sharding → model → generate
         self._skip_if_not_supported()
 
-        config = self.model_tester.get_config()
+        config = self._get_tp_config()
 
         model_class = self._get_tp_model_class()
         atol = self.tensor_parallel_atol
@@ -562,7 +603,7 @@ class TensorParallelTesterMixin(ABC):
         if not is_torchao_available():
             self.skipTest("Test requires torchao")
 
-        config = self.model_tester.get_config()
+        config = self._get_tp_config()
         model_class = self._get_tp_model_class()
         max_new_tokens = 25
 
@@ -577,9 +618,9 @@ class TensorParallelTesterMixin(ABC):
 
     @is_tensor_parallel_test
     def test_ep_forward(self):
-        self._skip_if_ep_not_supported()
+        self._skip_if_not_supported(expert_parallel=True)
 
-        config = self.model_tester.get_config()
+        config = self._get_tp_config()
         model_class = self._get_tp_model_class()
         atol = self.tensor_parallel_atol
         rtol = self.tensor_parallel_rtol
@@ -593,9 +634,9 @@ class TensorParallelTesterMixin(ABC):
 
     @is_tensor_parallel_test
     def test_ep_backward(self):
-        self._skip_if_ep_not_supported()
+        self._skip_if_not_supported(expert_parallel=True)
 
-        config = self.model_tester.get_config()
+        config = self._get_tp_config()
         model_class = self._get_tp_model_class()
         atol = self.tensor_parallel_atol
         rtol = self.tensor_parallel_rtol

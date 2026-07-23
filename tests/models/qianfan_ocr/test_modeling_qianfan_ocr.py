@@ -119,7 +119,6 @@ class QianfanOCRVisionText2TextModelTester(VLMModelTester):
 @require_torch
 class QianfanOCRModelTest(VLMModelTest, unittest.TestCase):
     model_tester_class = QianfanOCRVisionText2TextModelTester
-    test_torch_exportable = False
 
     def test_reverse_loading_mapping(self):
         # Conversion happens only for the `ConditionalGeneration` model, not the base model
@@ -191,6 +190,7 @@ class QianfanOCRIntegrationTest(unittest.TestCase):
             {
                 ("cuda", (8, 6)): torch.tensor([10.1250, 15.8125, 13.0625, 12.3125,  9.4375]),
                 ("cuda", (8, 9)): torch.tensor([10.0625, 15.6875, 13.0000, 12.1875,  9.3750]),
+                ("xpu", None): torch.tensor([10.1875, 15.8750, 13.1875, 12.3750,  9.6250]),
             }
         )  # fmt: skip
         self.assertTrue(
@@ -225,6 +225,7 @@ class QianfanOCRIntegrationTest(unittest.TestCase):
             {
                 ("cuda", (8, 6)): "The image features two striped cats lying down and sleeping on a pink couch. They",
                 ("cuda", (8, 9)): "The image features two striped cats lying down on a pink couch, seemingly asleep.",
+                ("xpu", None): "The image features two striped cats lying down on a couch, both appearing to be",
             }
         )  # fmt: skip
         self.assertEqual(decoded, expected_outputs.get_expectation())
@@ -247,6 +248,7 @@ class QianfanOCRIntegrationTest(unittest.TestCase):
         expected_outputs = Expectations(
             {
                 ("cuda", None): "1 + 1 equals 2.",
+                ("xpu", None): "1 + 1 equals 2.",
             }
         )  # fmt: skip
         self.assertEqual(decoded, expected_outputs.get_expectation())
@@ -295,12 +297,14 @@ class QianfanOCRIntegrationTest(unittest.TestCase):
         expected_outputs_0 = Expectations(
             {
                 ("cuda", None): "In the tranquil setting of this image, two tabby cats are the stars of",
+                ("xpu", None): "In the tranquil setting of this image, two tabby cats are the stars of",
             }
         )  # fmt: skip
         expected_outputs_1 = Expectations(
             {
                 ("cuda", (8, 6)): "The image features two striped cats lying down and sleeping on a pink couch. The",
                 ("cuda", (8, 9)): "The image features two striped cats lying down on a pink couch, seemingly asleep.",
+                ("xpu", None): "The image features two striped cats lying down on a couch, both appearing to be",
             }
         )  # fmt: skip
         self.assertEqual(decoded_0, expected_outputs_0.get_expectation())

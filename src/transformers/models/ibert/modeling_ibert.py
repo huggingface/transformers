@@ -24,6 +24,7 @@ from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ... import initialization as init
 from ...activations import gelu
+from ...masking_utils import create_bidirectional_mask
 from ...modeling_outputs import (
     BaseModelOutputWithPastAndCrossAttentions,
     BaseModelOutputWithPoolingAndCrossAttentions,
@@ -584,7 +585,8 @@ class IBertPreTrainedModel(PreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
-        if isinstance(module, (QuantLinear, nn.Linear)):
+        super()._init_weights(module)
+        if isinstance(module, QuantLinear):
             init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
                 init.zeros_(module.bias)
@@ -593,7 +595,7 @@ class IBertPreTrainedModel(PreTrainedModel):
                 init.zeros_(module.fc_scaling_factor)
             if getattr(module, "bias_integer", None) is not None:
                 init.zeros_(module.bias_integer)
-        elif isinstance(module, (QuantEmbedding, nn.Embedding)):
+        elif isinstance(module, QuantEmbedding):
             init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
             # Here we need the check explicitly, as we slice the weight in the `zeros_` call, so it looses the flag
             if module.padding_idx is not None and not getattr(module.weight, "_is_hf_initialized", False):
@@ -601,9 +603,7 @@ class IBertPreTrainedModel(PreTrainedModel):
             if getattr(module, "weight_scaling_factor", None) is not None:
                 init.zeros_(module.weight_scaling_factor)
                 init.zeros_(module.weight_integer)
-        elif isinstance(module, (IntLayerNorm, nn.LayerNorm)):
-            init.zeros_(module.bias)
-            init.ones_(module.weight)
+        elif isinstance(module, IntLayerNorm):
             if getattr(module, "shift", None) is not None:
                 init.zeros_(module.shift)
         elif isinstance(module, IBertLMHead):
@@ -690,20 +690,23 @@ class IBertModel(IBertPreTrainedModel):
         if token_type_ids is None:
             token_type_ids = torch.zeros(input_shape, dtype=torch.long, device=device)
 
-        # We can provide a self-attention mask of dimensions [batch_size, from_seq_length, to_seq_length]
-        # ourselves in which case we just need to make it broadcastable to all heads.
-        extended_attention_mask: torch.Tensor = self.get_extended_attention_mask(attention_mask, input_shape)
-
         embedding_output, embedding_output_scaling_factor = self.embeddings(
             input_ids=input_ids,
             position_ids=position_ids,
             token_type_ids=token_type_ids,
             inputs_embeds=inputs_embeds,
         )
+
+        attention_mask = create_bidirectional_mask(
+            config=self.config,
+            inputs_embeds=embedding_output,
+            attention_mask=attention_mask,
+        )
+
         encoder_outputs = self.encoder(
             embedding_output,
             embedding_output_scaling_factor,
-            attention_mask=extended_attention_mask,
+            attention_mask=attention_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,

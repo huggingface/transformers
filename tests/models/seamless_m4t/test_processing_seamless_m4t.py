@@ -29,7 +29,7 @@ from ...test_processing_common import floats_list
 @require_torch
 class SeamlessM4TProcessorTest(unittest.TestCase):
     def setUp(self):
-        self.checkpoint = "facebook/hf-seamless-m4t-medium"
+        self.checkpoint = "hf-internal-testing/tiny-processor-seamless_m4t"
         self.tmpdirname = tempfile.mkdtemp()
 
     def get_tokenizer(self, **kwargs):

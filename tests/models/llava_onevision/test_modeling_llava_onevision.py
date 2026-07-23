@@ -212,7 +212,6 @@ class LlavaOnevisionForConditionalGenerationModelTest(ModelTesterMixin, Generati
     test_cpu_offload = False
     test_disk_offload_safetensors = False
     test_disk_offload_bin = False
-    test_torch_exportable = False
     _is_composite = True
 
     def setUp(self):
@@ -311,9 +310,6 @@ class LlavaOnevisionForConditionalGenerationModelTest(ModelTesterMixin, Generati
         config = self.model_tester.get_config()
         inputs_dict = {"pixel_values": pixel_values_videos}
         return config, inputs_dict
-
-    def test_reverse_loading_mapping(self):
-        super().test_reverse_loading_mapping(skip_base_model=True)
 
 
 @require_torch

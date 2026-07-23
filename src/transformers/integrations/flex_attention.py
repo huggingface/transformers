@@ -268,6 +268,7 @@ def flex_attention_forward(
     scaling: float | None = None,
     softcap: float | None = None,
     s_aux: torch.Tensor | None = None,
+    position_bias: torch.Tensor | None = None,
     **kwargs,
 ) -> tuple[torch.Tensor, torch.Tensor | None]:
     if kwargs.get("dropout", 0.0) > 0:
@@ -291,6 +292,8 @@ def flex_attention_forward(
             score = softcap * torch.tanh(score / softcap)
         if score_mask is not None:
             score = score + score_mask[batch_idx][0][q_idx][kv_idx]
+        if position_bias is not None:
+            score = score + position_bias[batch_idx, head_idx, q_idx, kv_idx]
         # Note: attention sinks cannot be correctly implemented in score_mod
         # because it requires operating on the full attention matrix before softmax.
         # ==> this is done after flex attention
@@ -356,6 +359,7 @@ def flex_attention_forward(
             # Use new_norm / old_norm = exp(combined_lse - lse) to compute renorm and apply
             renorm_factor = torch.exp(lse_expanded - combined_lse)
             attention_output = attention_output * renorm_factor
+            attention_output = attention_output.to(query.dtype)
     else:
         attention_output = flex_attention_output  # type: ignore[assignment]
         lse = None
