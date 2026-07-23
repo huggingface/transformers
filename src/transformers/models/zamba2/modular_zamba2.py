@@ -569,26 +569,7 @@ class Zamba2Model(ZambaModel, Zamba2PreTrainedModel):
 
 
 class Zamba2ForCausalLM(ZambaForCausalLM):
-    def __init__(self, config: Zamba2Config):
-        super().__init__(config)
-        self.model = Zamba2Model(config)
-        self.post_init()
-
-    @staticmethod
-    def create_masks_for_generate(config, inputs_embeds, attention_mask, past_key_values, position_ids=None, **_):
-        # Zamba2 mixes attention and mamba paths inside its hybrid blocks, so the layer-type
-        # dispatch table can't enumerate sub-patterns. Return both masks the layers need as a dict.
-        mask_kwargs = {
-            "config": config.get_text_config(),
-            "inputs_embeds": inputs_embeds,
-            "attention_mask": attention_mask,
-            "past_key_values": past_key_values,
-            "position_ids": position_ids,
-        }
-        return {
-            "full_attention": create_causal_mask(**mask_kwargs),
-            "linear_attention": create_recurrent_attention_mask(**mask_kwargs),
-        }
+    pass
 
 
 class Zamba2ForSequenceClassification(ZambaForSequenceClassification):

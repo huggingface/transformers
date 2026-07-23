@@ -31,7 +31,7 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
 from ...integrations.hub_kernels import lazy_load_kernel
-from ...masking_utils import create_causal_mask
+from ...masking_utils import create_causal_mask, create_recurrent_attention_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast, SequenceClassifierOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
@@ -358,8 +358,8 @@ class ZambaMambaMixer(nn.Module):
         # 1. Gated linear projection
         projected_states = self.in_proj(hidden_states).transpose(1, 2)
 
-        hidden_states, gate = projected_states.chunk(2, dim=1)
-        hidden_states = hidden_states.contiguous()
+        hidden_states, gate = projected_states.view(batch_size, -1, 2, seq_len).chunk(2, dim=2)
+        hidden_states = hidden_states.squeeze(2).contiguous()
         gate = gate.reshape(batch_size, self.n_mamba_heads, -1, seq_len).transpose(0, 1)
 
         # Apply the conv
@@ -437,8 +437,8 @@ class ZambaMambaMixer(nn.Module):
         # 1. Gated linear projection
         projected_states = self.in_proj(input_states).transpose(1, 2)
 
-        hidden_states, gate = projected_states.chunk(2, dim=1)
-        hidden_states = hidden_states.contiguous()
+        hidden_states, gate = projected_states.view(batch_size, -1, 2, seq_len).chunk(2, dim=2)
+        hidden_states = hidden_states.squeeze(2).contiguous()
         gate = gate.reshape(batch_size, self.n_mamba_heads, -1, seq_len).transpose(0, 1)
 
         # Apply the convolution
@@ -792,21 +792,26 @@ class ZambaModel(ZambaPreTrainedModel):
             position_ids = torch.arange(hidden_states.shape[1], device=hidden_states.device) + past_seen_tokens
             position_ids = position_ids.unsqueeze(0)
 
-        causal_mask = create_causal_mask(
-            config=self.config,
-            inputs_embeds=inputs_embeds,
-            attention_mask=attention_mask,
-            past_key_values=past_key_values,
-            position_ids=position_ids,
-        )
+        if not isinstance(causal_mask_mapping := attention_mask, dict):
+            mask_kwargs = {
+                "config": self.config,
+                "inputs_embeds": inputs_embeds,
+                "attention_mask": attention_mask,
+                "past_key_values": past_key_values,
+                "position_ids": position_ids,
+            }
+            causal_mask_mapping = {
+                "full_attention": create_causal_mask(**mask_kwargs),
+                "linear_attention": create_recurrent_attention_mask(**mask_kwargs),
+            }
 
         for layer_idx, layer in enumerate(self.layers):
             hidden_states = layer(
                 hidden_states,
                 original_hidden_states,
                 layer_idx,
-                attention_mask,
-                causal_mask,
+                causal_mask_mapping["linear_attention"],
+                causal_mask_mapping["full_attention"],
                 past_key_values=past_key_values,
                 use_cache=use_cache,
                 **kwargs,
