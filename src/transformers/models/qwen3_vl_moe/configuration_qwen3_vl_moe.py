@@ -113,6 +113,12 @@ class Qwen3VLMoeTextConfig(PreTrainedConfig):
         self.head_dim = self.head_dim or self.hidden_size // self.num_attention_heads
         self.sliding_window = None
         self.mlp_only_layers = [] if self.mlp_only_layers is None else self.mlp_only_layers
+        if self.tie_word_embeddings:
+            self.base_model_tp_plan = {
+                **self.base_model_tp_plan,
+                "embed_tokens": "embedding_rowwise",
+            }
+
         super().__post_init__(**kwargs)
 
 

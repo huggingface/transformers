@@ -142,6 +142,12 @@ class DeepseekOcr2VisionEncoderConfig(PreTrainedConfig):
                 for i in range(self.num_hidden_layers)
             ]
 
+        if self.tie_word_embeddings:
+            self.base_model_tp_plan = {
+                **self.base_model_tp_plan,
+                "embed_tokens": "embedding_rowwise",
+            }
+
         super().__post_init__(**kwargs)
 
 

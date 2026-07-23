@@ -111,6 +111,12 @@ class ApertusConfig(PreTrainedConfig):
                 "low_freq_factor": 1.0,
                 "high_freq_factor": 4.0,
             }
+        if self.tie_word_embeddings:
+            self.base_model_tp_plan = {
+                **self.base_model_tp_plan,
+                "embed_tokens": "embedding_rowwise",
+            }
+
         super().__post_init__(**kwargs)
 
 

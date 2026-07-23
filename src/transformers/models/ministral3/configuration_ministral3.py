@@ -115,6 +115,12 @@ class Ministral3Config(PreTrainedConfig):
                 "Detected Mistral model with layer_types. Consider using AutoModel or Ministral classes instead to enable alternating attention compatibility."
             )
 
+        if self.tie_word_embeddings:
+            self.base_model_tp_plan = {
+                **self.base_model_tp_plan,
+                "embed_tokens": "embedding_rowwise",
+            }
+
         super().__post_init__(**kwargs)
 
 

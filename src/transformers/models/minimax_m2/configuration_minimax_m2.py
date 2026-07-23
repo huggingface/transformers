@@ -96,5 +96,14 @@ class MiniMaxM2Config(PreTrainedConfig):
     router_jitter_noise: float = 0.0
     rope_parameters: RopeParameters | dict | None = None
 
+    def __post_init__(self, **kwargs):
+        if self.tie_word_embeddings:
+            self.base_model_tp_plan = {
+                **self.base_model_tp_plan,
+                "embed_tokens": "embedding_rowwise",
+            }
+
+        super().__post_init__(**kwargs)
+
 
 __all__ = ["MiniMaxM2Config"]

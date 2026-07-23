@@ -114,6 +114,12 @@ class HYV3Config(PreTrainedConfig):
                 self.num_hidden_layers - 1, 0
             )
 
+        if self.tie_word_embeddings:
+            self.base_model_tp_plan = {
+                **self.base_model_tp_plan,
+                "embed_tokens": "embedding_rowwise",
+            }
+
         super().__post_init__(**kwargs)
 
 

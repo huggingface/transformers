@@ -92,6 +92,12 @@ class SolarOpenConfig(PreTrainedConfig):
     def __post_init__(self, **kwargs):
         kwargs.setdefault("partial_rotary_factor", 1.0)
         kwargs.setdefault("partial_rotary_factor", 0.5)  # assign default for BC
+        if self.tie_word_embeddings:
+            self.base_model_tp_plan = {
+                **self.base_model_tp_plan,
+                "embed_tokens": "embedding_rowwise",
+            }
+
         super().__post_init__(**kwargs)
 
 

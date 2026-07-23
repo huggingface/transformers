@@ -121,6 +121,12 @@ class Ernie4_5_MoeConfig(PreTrainedConfig):
         self.moe_layer_end_index = (
             self.num_hidden_layers - 1 if self.moe_layer_end_index == -1 else self.moe_layer_end_index
         )
+        if self.tie_word_embeddings:
+            self.base_model_tp_plan = {
+                **self.base_model_tp_plan,
+                "embed_tokens": "embedding_rowwise",
+            }
+
         super().__post_init__(**kwargs)
 
 

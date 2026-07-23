@@ -131,6 +131,12 @@ class Qwen3_5MoeTextConfig(PreTrainedConfig):
         else:
             self.layer_types = remap_legacy_layer_types(self.layer_types)
 
+        if self.tie_word_embeddings:
+            self.base_model_tp_plan = {
+                **self.base_model_tp_plan,
+                "embed_tokens": "embedding_rowwise",
+            }
+
         super().__post_init__(**kwargs)
 
 
