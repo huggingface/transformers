@@ -29,7 +29,6 @@ from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, loggi
 from ...utils.generic import accepts_precomputed_kwargs
 from ..auto import CONFIG_MAPPING, AutoConfig
 from ..exaone4_5.modeling_exaone4_5 import Exaone4_5_ForConditionalGeneration
-from ..exaone4_5.processing_exaone4_5 import Exaone4_5_Processor
 from ..video_llama_3.modeling_video_llama_3 import VideoLlama3Model, VideoLlama3PreTrainedModel
 
 
@@ -80,16 +79,7 @@ class HyperCLOVAXVisionV2Config(PreTrainedConfig):
         elif self.text_config is None:
             self.text_config = CONFIG_MAPPING["hyperclovax"]()
 
-        # This is necessary to properly find the weight conversion mapping.
-        if kwargs.get("model_type") == "vlm":
-            kwargs["model_type"] = "hyperclovax_vision_v2"
-
         super().__post_init__(**kwargs)
-
-
-@auto_docstring
-class HyperCLOVAXVisionV2Processor(Exaone4_5_Processor):
-    pass
 
 
 @auto_docstring
@@ -268,14 +258,14 @@ class HyperCLOVAXVisionV2ForConditionalGeneration(
         ```python
         >>> from PIL import Image
         >>> import requests
-        >>> from transformers import HyperCLOVAXVisionV2Processor, HyperCLOVAXVisionV2ForConditionalGeneration
+        >>> from transformers import AutoProcessor, HyperCLOVAXVisionV2ForConditionalGeneration
 
         >>> model = HyperCLOVAXVisionV2ForConditionalGeneration.from_pretrained(
         ...     "naver-hyperclovax/HyperCLOVAX-SEED-Think-32B",
         ...     torch_dtype="auto",
         ...     device_map="auto",
         ... )
-        >>> processor = HyperCLOVAXVisionV2Processor.from_pretrained("naver-hyperclovax/HyperCLOVAX-SEED-Think-32B")
+        >>> processor = AutoProcessor.from_pretrained("naver-hyperclovax/HyperCLOVAX-SEED-Think-32B")
 
         >>> messages = [
         ...     {"role": "user", "content": [
@@ -303,8 +293,9 @@ class HyperCLOVAXVisionV2ForConditionalGeneration(
             use_cache=use_cache,
             **kwargs,
         )
-        hidden_states = outputs[0]
+        hidden_states = outputs.last_hidden_state
         slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
+        # Key difference: additional logits scaling applied
         logits = self.lm_head(hidden_states[:, slice_indices, :]) * self.config.text_config.logits_scaling
 
         loss = None
@@ -362,5 +353,4 @@ __all__ = [
     "HyperCLOVAXVisionV2ForConditionalGeneration",
     "HyperCLOVAXVisionV2Model",
     "HyperCLOVAXVisionV2PreTrainedModel",
-    "HyperCLOVAXVisionV2Processor",
 ]

@@ -13,33 +13,22 @@
 # limitations under the License.
 """Testing suite for the PyTorch HyperClovaX Vision model."""
 
-import tempfile
 import unittest
 
-import requests
-
-from transformers import HyperCLOVAXVisionV2Config, is_torch_available, is_vision_available
-from transformers.image_utils import load_image
+from transformers import AutoProcessor, HyperCLOVAXVisionV2Config, is_torch_available
 from transformers.testing_utils import (
     Expectations,
     cleanup,
-    require_cv2,
     require_torch,
     require_torch_accelerator,
     slow,
     torch_device,
 )
-from transformers.utils import is_cv2_available
 
 from ...test_modeling_common import floats_tensor, ids_tensor
+from ...test_processing_common import url_to_local_path
 from ...vlm_tester import VLMModelTest, VLMModelTester
 
-
-if is_cv2_available():
-    import cv2
-
-if is_vision_available():
-    from PIL import Image
 
 if is_torch_available():
     import torch
@@ -49,7 +38,6 @@ if is_torch_available():
         HyperCLOVAXVisionV2Config,
         HyperCLOVAXVisionV2ForConditionalGeneration,
         HyperCLOVAXVisionV2Model,
-        HyperCLOVAXVisionV2Processor,
         Qwen2_5_VLVisionConfig,
     )
 
@@ -233,10 +221,6 @@ class HyperCLOVAXVisionV2ModelTest(VLMModelTest, unittest.TestCase):
     def test_reverse_loading_mapping(self, check_keys_were_modified=True):
         super().test_reverse_loading_mapping(check_keys_were_modified, skip_base_model=True)
 
-    @unittest.skip(reason="Inherits Qwen2_5_VL vision module with get_window_index incompatible with torch.export")
-    def test_torch_export(self):
-        pass
-
 
 @require_torch
 @require_torch_accelerator
@@ -248,7 +232,7 @@ class HyperCLOVAXVisionV2IntegrationTest(unittest.TestCase):
     revision = "refs/pr/14"
 
     def setUp(self):
-        self.processor = HyperCLOVAXVisionV2Processor.from_pretrained(self.model_id, revision=self.revision)
+        self.processor = AutoProcessor.from_pretrained(self.model_id, revision=self.revision)
         self.model = HyperCLOVAXVisionV2ForConditionalGeneration.from_pretrained(
             self.model_id, revision=self.revision, dtype=torch.bfloat16, device_map="auto"
         )
@@ -271,7 +255,7 @@ class HyperCLOVAXVisionV2IntegrationTest(unittest.TestCase):
         EXPECTED_TEXTS = Expectations(
             {
                 (None, None): [
-                    "user\nWhat is the capital of South Korea?\nassistant\n<think>\n\n</think>\n\nThe capital of South Korea is **Seoul**."
+                    "user\nWhat is the capital of South Korea?\nassistant\n<think>\nOkay, so I need to figure out what the capital of South Korea is. Let me start by recalling any prior knowledge I have. I remember that"
                 ],
             }
         )
@@ -284,20 +268,22 @@ class HyperCLOVAXVisionV2IntegrationTest(unittest.TestCase):
         image_url = (
             "https://huggingface.co/datasets/hf-internal-testing/fixtures-captioning/resolve/main/cow_beach_1.png"
         )
-        image = load_image(image_url).convert("RGB")
-
         messages = [
             {
                 "role": "user",
                 "content": [
-                    {"type": "image_url", "image_url": {"url": image_url}},
+                    {"type": "image", "url": url_to_local_path(image_url)},
                     {"type": "text", "text": "What animal is in the image?"},
                 ],
             }
         ]
-        text = self.processor.tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
-        inputs = self.processor(text=[text], images=[image], return_tensors="pt")
-        inputs = inputs.to(torch_device)
+        inputs = self.processor.apply_chat_template(
+            messages,
+            tokenize=True,
+            return_dict=True,
+            add_generation_prompt=True,
+            return_tensors="pt",
+        ).to(torch_device)
 
         output = self.model.generate(**inputs, max_new_tokens=30, do_sample=False)
         output_text = self.processor.batch_decode(output, skip_special_tokens=True)
@@ -305,7 +291,7 @@ class HyperCLOVAXVisionV2IntegrationTest(unittest.TestCase):
         EXPECTED_TEXTS = Expectations(
             {
                 (None, None): [
-                    'user\n{"id": "image_00", "type": "image/jpeg", "filename": "image.jpg"}\n\nWhat animal is in the image?\nassistant\n<think>\n\n</think>\n\nThe animal in the image is a cow. It\'s a brown cow with a distinctive white stripe running down the middle of its face. The cow is'
+                    'user\n{"id": "image_00", "type": "image/jpeg", "filename": "a.jpg"}\n\nWhat animal is in the image?\nassistant\n<think>\nOkay, so I need to figure out what animal is in the image based on the details provided. Let me start by reading through the image carefully.\n\n'
                 ],
             }
         )
@@ -314,7 +300,6 @@ class HyperCLOVAXVisionV2IntegrationTest(unittest.TestCase):
         self.assertEqual(output_text, expected)
 
     @slow
-    @require_cv2
     def test_video_generate(self):
         video_url = "https://huggingface.co/datasets/hf-internal-testing/fixtures_videos/resolve/main/tennis.mp4"
 
@@ -322,31 +307,18 @@ class HyperCLOVAXVisionV2IntegrationTest(unittest.TestCase):
             {
                 "role": "user",
                 "content": [
-                    {"type": "image_url", "image_url": {"url": video_url}},
+                    {"type": "video", "url": url_to_local_path(video_url)},
                     {"type": "text", "text": "What is shown in this video?"},
                 ],
             }
         ]
-        text = self.processor.tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
-
-        with tempfile.NamedTemporaryFile(suffix=".mp4") as f:
-            f.write(requests.get(video_url).content)
-            f.flush()
-            cap = cv2.VideoCapture(f.name)
-            frames = []
-            idx = 0
-            while True:
-                ret, frame = cap.read()
-                if not ret:
-                    break
-                if idx % 4 == 0:  # sample every 4th frame for memory efficiency
-                    frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-                    frames.append(Image.fromarray(frame_rgb).resize((224, 224), Image.BICUBIC))
-                idx += 1
-            cap.release()
-
-        inputs = self.processor(text=[text], videos=[frames], return_tensors="pt")
-        inputs = inputs.to(torch_device)
+        inputs = self.processor.apply_chat_template(
+            messages,
+            tokenize=True,
+            return_dict=True,
+            add_generation_prompt=True,
+            return_tensors="pt",
+        ).to(torch_device)
 
         output = self.model.generate(**inputs, max_new_tokens=30, do_sample=False)
         output_text = self.processor.batch_decode(output, skip_special_tokens=True)
@@ -354,7 +326,7 @@ class HyperCLOVAXVisionV2IntegrationTest(unittest.TestCase):
         EXPECTED_TEXTS = Expectations(
             {
                 (None, None): [
-                    'user\n{"id": "video_00", "type": "video/mp4", "filename": "video.mp4"}\n<|video_aux_start|>다음 중 video_duration은 비디오 길이 정보입니다. 참고하여 답변하세요. {"video_duration": "<|video_meta_duration|>"}<|video_aux_end|>\n\n\nWhat is shown in this video?\nassistant\n<think>\n\n</think>\n\nThe video shows a person practicing tennis in an indoor court, focusing on their preparation and execution of serves.'
+                    'user\n{"id": "video_00", "type": "video/mp4", "filename": "a.mp4"}\n<|video_aux_start|>다음 중 video_duration은 비디오 길이 정보입니다. 참고하여 답변하세요. {"video_duration": <|video_duration|>}<|video_aux_end|>\n\nWhat is shown in this video?\nassistant\n<think>\nOkay, so I need to figure out what\'s shown in this video based on the image provided. Let me start by breaking down the details given.'
                 ],
             }
         )

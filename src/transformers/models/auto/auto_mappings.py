@@ -1062,7 +1062,6 @@ PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("grounding-dino", "GroundingDinoProcessor"),
         ("higgs_audio_v2", "HiggsAudioV2Processor"),
         ("hunyuan_vl", "HunYuanVLProcessor"),
-        ("hyperclovax_vision_v2", "HyperCLOVAXVisionV2Processor"),
         ("idefics", "IdeficsProcessor"),
         ("idefics2", "Idefics2Processor"),
         ("idefics3", "Idefics3Processor"),
