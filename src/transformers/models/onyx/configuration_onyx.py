@@ -17,8 +17,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from inspect import signature
-
 from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
@@ -33,31 +31,39 @@ logger = logging.get_logger(__name__)
 @strict
 class OnyxVisionConfig(PreTrainedConfig):
     r"""
-    TODO
+    pos_emb_height (`int`, *optional*):
+        Initial position embedding height.
+    pos_emb_width (`int`, *optional*):
+        Initial position embedding width.
+    patch_temporal (`int`, *optional*):
+        The temporal patch size used to embed inputs.
+    output_dim (`int`, *optional*):
+        Output dimension for encoded image last hidden states.
+    adapter_dim (`int`, *optional*):
+        Intermediate dimension used in multimodal projection.
+    sparse_attention_factor (`int`, *optional*):
+        Every n-th layer that is divisible by this value applies window-attention.
+    merge_kernel_size (`tuple[int] | list[int]`, *optional*):
+        Kernel size for patch merging.
     """
 
     model_type = "onyx_vision"
-    attribute_map = {
-        "hidden_size": "hidden_size",
-        "vision_heads": "num_attention_heads",
-        "vision_layers": "num_hidden_layers",
-    }
+
+    patch_size: int = 14
+    pos_emb_height: int = 32
+    pos_emb_width: int = 32
+    num_attention_heads: int = 16
+    num_hidden_layers: int = 50
 
     hidden_size: int = 1536
+    intermediate_size: int = 8960
+    hidden_act: str = "gelu"
+    merge_kernel_size: int = 2
+    rope_parameters: dict | None = None  # defaults set by `RopeConfigMixin`
+    max_position_embeddings: int = 32 * 32  # == `pos_h * pos_w`
     output_dim: int = 6144
-    num_hidden_layers: int = 50
-    num_attention_heads: int = 16
-    mlp_ratio: float = 8960 / 1536
-    patch_size: int = 14
     patch_temporal: int = 2
-    downsample_factor: int = 2
-    pos_emb_grid_h: int = 32
-    pos_emb_grid_w: int = 32
     adapter_dim: int = 4096
-    video_num_frames: int = 96
-    video_sampling_fps: float = 2.0
-    rope_parameters: dict | None = None
-    max_position_embeddings: int = 32 * 32
     layer_norm_eps: float = 1e-05
     layer_types: list[str] | None = None
 
@@ -75,6 +81,14 @@ class OnyxVisionConfig(PreTrainedConfig):
 @strict
 class OnyxTextConfig(PreTrainedConfig):
     r"""
+    query_pre_attn_scalar (`float`, *optional*, defaults to 256):
+        scaling factor used on the attention scores
+    final_logit_softcapping (`float`, *optional*, defaults to 30.0):
+        scaling factor when applying tanh softcapping on the logits.
+    attn_logit_softcapping (`float`, *optional*, defaults to 50.0):
+        scaling factor when applying tanh softcapping on the attention scores.
+    use_bidirectional_attention (`bool`, *optional*):
+        If True, the model will attend to all text tokens instead of using a causal mask.
     qk_scale_factor (`float`, *optional*, defaults to 43.7840518911):
         Multiplier applied to Q after QK-norm, before the standard `1/sqrt(head_dim)` attention scaling.
     use_qk_norm (`bool`, *optional*, defaults to `True`):
@@ -171,32 +185,6 @@ class OnyxTextConfig(PreTrainedConfig):
             )
 
 
-# TODO: temporary shim for checkpoints saved with the original flat (non-nested) config format.
-# Drop the two maps and the legacy branch in `OnyxConfig.__post_init__` once the hub repo ships
-# an updated nested config (+ tokenizer).
-_LEGACY_FLAT_VISION_KEYS = {
-    "vision_latent_dim": "hidden_size",
-    "vision_heads": "num_attention_heads",
-    "vision_layers": "num_hidden_layers",
-    "vision_mlp_ratio": "mlp_ratio",
-    "vision_output_dim": "output_dim",
-    "vision_adapter_dim": "adapter_dim",
-    "vision_downsample_factor": "downsample_factor",
-    "vision_patch_size": "patch_size",
-    "vision_patch_temporal": "patch_temporal",
-    "vision_pos_emb_grid_h": "pos_emb_grid_h",
-    "vision_pos_emb_grid_w": "pos_emb_grid_w",
-    "video_num_frames": "video_num_frames",
-    "video_sampling_fps": "video_sampling_fps",
-}
-_LEGACY_FLAT_TOKEN_ID_KEYS = {
-    "patch_token_id": "image_token_id",
-    "vid_start_id": "video_start_id",
-    "vid_end_id": "video_end_id",
-    "vid_frame_sep_id": "video_frame_sep_id",
-}
-
-
 @auto_docstring
 @strict
 class OnyxConfig(PreTrainedConfig):
@@ -214,34 +202,8 @@ class OnyxConfig(PreTrainedConfig):
     vision_config: dict | PreTrainedConfig | None = None
     image_token_id: int = 200092
     video_token_id: int = 200091
-    video_start_id: int = 200082
-    video_end_id: int = 200083
-    video_frame_sep_id: int = 200087
 
     def __post_init__(self, **kwargs):
-        for legacy_key, key in _LEGACY_FLAT_TOKEN_ID_KEYS.items():
-            if legacy_key in kwargs:
-                setattr(self, key, kwargs.pop(legacy_key))
-
-        if self.text_config is None and "rope_theta" in kwargs:
-            text_field_names = set(signature(OnyxTextConfig.__init__).parameters)
-            text_kwargs = {key: kwargs.pop(key) for key in list(kwargs) if key in text_field_names}
-            text_kwargs["rope_parameters"] = {"rope_type": "default", "rope_theta": kwargs.pop("rope_theta")}
-            if (legacy_softcap := kwargs.pop("output_soft_cap_temp", None)) is not None:
-                text_kwargs["final_logit_softcapping"] = legacy_softcap
-            if (legacy_act := kwargs.pop("hidden_act", None)) is not None:
-                text_kwargs["hidden_activation"] = legacy_act
-            self.text_config = OnyxTextConfig(**text_kwargs)
-
-        if self.vision_config is None and any(legacy_key in kwargs for legacy_key in _LEGACY_FLAT_VISION_KEYS):
-            self.vision_config = OnyxVisionConfig(
-                **{
-                    key: kwargs.pop(legacy_key)
-                    for legacy_key, key in _LEGACY_FLAT_VISION_KEYS.items()
-                    if legacy_key in kwargs
-                }
-            )
-
         if self.text_config is None:
             self.text_config = OnyxTextConfig()
             logger.info("text_config is None, using default OnyxTextConfig text config.")
