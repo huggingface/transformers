@@ -395,6 +395,47 @@ class DiffusionGemmaVisionText2TextModelTest(ModelTesterMixin, unittest.TestCase
         self.assertEqual(mask_mapping["sliding_attention"].sum(), expected_non_zero)
         self.assertEqual(mask_mapping["sliding_attention"][0, 0, :, :left_padding_length].sum(), 0)
 
+    def test_diffusion_decoder_mask_dynamic_cache_int_padding_mask(self):
+        """
+        Same as `test_diffusion_decoder_mask_dynamic_cache_left_padding`, but the padding mask holds `1`/`0` integers,
+        the way a tokenizer returns it, instead of booleans. It must produce the same boolean mask.
+        """
+
+        prefill_length = 8
+        canvas_length = 4
+        concat_kv_length = prefill_length + canvas_length
+        batch_size = 2
+        left_padding_length = 2  # only applied on batch item 0
+        expected_non_zero = (
+            ((concat_kv_length - left_padding_length) * canvas_length)  # batch item 0
+            + (concat_kv_length * canvas_length)  # batch item 1
+        )
+        expected_attention_mask_shape = (batch_size, 1, canvas_length, concat_kv_length)
+
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        model = DiffusionGemmaForBlockDiffusion(config=config).to(torch_device).eval()
+
+        # Apply prefill (smaller than sliding window)
+        past_key_values = DynamicCache(config=config)
+        prefill_input_ids = torch.ones((batch_size, prefill_length), dtype=torch.int32, device=torch_device) * 50
+        past_key_values = model.model.encoder(prefill_input_ids, past_key_values=past_key_values).past_key_values
+
+        # Get the mask
+        decoder_attention_mask = torch.ones((batch_size, concat_kv_length), dtype=torch.long, device=torch_device)
+        decoder_attention_mask[0, :left_padding_length] = 0
+        dummy_canvas = torch.ones((batch_size, canvas_length), dtype=torch.int32, device=torch_device)
+        mask_mapping = model.model.decoder.create_diffusion_decoder_attention_mask(
+            config=config.text_config,
+            inputs_embeds=dummy_canvas.unsqueeze(-1),
+            past_key_values=past_key_values,
+            decoder_attention_mask=decoder_attention_mask,
+        )
+        for layer_pattern in ("full_attention", "sliding_attention"):
+            self.assertEqual(mask_mapping[layer_pattern].dtype, torch.bool)
+            self.assertEqual(mask_mapping[layer_pattern].shape, expected_attention_mask_shape)
+            self.assertEqual(mask_mapping[layer_pattern].sum(), expected_non_zero)
+            self.assertEqual(mask_mapping[layer_pattern][0, 0, :, :left_padding_length].sum(), 0)
+
     def test_diffusion_decoder_mask_dynamic_cache_beyond_sliding_window(self):
         """
         This tests builds upon `test_diffusion_decoder_mask_dynamic_cache_left_padding`: it tests the case with
