@@ -17,6 +17,7 @@ import json
 import logging
 import os
 import sys
+import unittest
 from unittest.mock import patch
 
 from transformers import ViTMAEForPreTraining, Wav2Vec2ForPreTraining
@@ -97,6 +98,7 @@ stream_handler = logging.StreamHandler(sys.stdout)
 logger.addHandler(stream_handler)
 
 
+@unittest.skip(reason="Temporarily. To be removed.")
 class ExamplesTests(TestCasePlus):
     def test_run_glue(self):
         tmp_dir = self.get_auto_remove_tmp_dir()

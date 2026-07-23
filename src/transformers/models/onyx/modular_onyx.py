@@ -252,7 +252,11 @@ class OnyxConfig(PreTrainedConfig):
 
         if self.vision_config is None and any(legacy_key in kwargs for legacy_key in _LEGACY_FLAT_VISION_KEYS):
             self.vision_config = OnyxVisionConfig(
-                **{key: kwargs.pop(legacy_key) for legacy_key, key in _LEGACY_FLAT_VISION_KEYS.items() if legacy_key in kwargs}
+                **{
+                    key: kwargs.pop(legacy_key)
+                    for legacy_key, key in _LEGACY_FLAT_VISION_KEYS.items()
+                    if legacy_key in kwargs
+                }
             )
 
         if self.text_config is None:
