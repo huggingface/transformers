@@ -831,21 +831,7 @@ class Qwen2_5OmniModelIntegrationTest(unittest.TestCase):
     @slow
     def test_small_model_integration_test_token2wav_regression(self):
         """
-        Regression test for #47328: the Token2Wav DiT applies RoPE to head 0 only, with an
-        interleaved channel layout (pairing `(2i, 2i + 1)`), so `deinterleave_head_dim` reorders
-        q/k into the half-split layout expected by the kernelized `apply_rotary_pos_emb`. The plain
-        half-split `cos`/`sin` layout introduced by #39847 (without deinterleaving) silently
-        degraded the generated audio, collapsing its overall energy by ~3.6x.
-
-        A fixed slice of pre-recorded talker codec tokens is replayed through the Token2Wav module
-        of the released checkpoint; the waveform is checked on a 50-sample signature strided across
-        the whole utterance (a contiguous head slice would only cover leading silence) plus its
-        overall std/RMS. Codes are replayed rather than produced by a full `generate()` because bf16
-        thinker/talker greedy decoding can flip tokens across GPU architectures, whereas the fp32
-        Token2Wav module (where the regression lives) is stable.
-
-        reproducer (recomputes the expected values below from these codes):
-        https://gist.github.com/HenryVarro666/4f633e37835ca9e019ed7f789309775b#file-reproducer-py
+        reproducer (for the expected values below): https://gist.github.com/ebezzam/12286028df44e91434f7c770efc4e5b5
         """
         # 50 talker codec tokens captured from a deterministic greedy generate() (seed 0).
         talker_code_ids = [
@@ -877,6 +863,18 @@ class Qwen2_5OmniModelIntegrationTest(unittest.TestCase):
         signature = waveform[:: waveform.shape[-1] // 50][:50]
         expected_signatures = Expectations(
             {
+                ("cuda", 8): torch.tensor([
+                    0.000079, 0.000008, 0.000008, 0.000010, 0.000010,
+                    0.000011, 0.000011, 0.000011, 0.000010, 0.000010,
+                    0.000392, -0.016186, 0.006462, 0.009945, -0.009731,
+                    0.004187, -0.000167, -0.000575, 0.000043, 0.000088,
+                    -0.014556, -0.081801, -0.016574, 0.076138, -0.003587,
+                    -0.017060, 0.069444, -0.008152, -0.027823, 0.028206,
+                    -0.000029, 0.039071, -0.045019, 0.040665, 0.059823,
+                    -0.018974, -0.018389, -0.002258, 0.010748, 0.035934,
+                    0.026538, 0.038359, 0.024537, -0.029110, 0.022139,
+                    -0.024764, -0.021009, 0.000134, 0.006005, -0.004931,
+                ]),
                 ("cuda", 9): torch.tensor([
                     0.000079, 0.000007, 0.000007, 0.000009, 0.000009,
                     0.000009, 0.000009, 0.000008, 0.000008, 0.000007,
@@ -892,17 +890,18 @@ class Qwen2_5OmniModelIntegrationTest(unittest.TestCase):
             }
         )  # fmt: skip
         expected_signature = expected_signatures.get_expectation()
-        torch.testing.assert_close(signature, expected_signature, rtol=1e-3, atol=5e-3)
+        torch.testing.assert_close(signature, expected_signature, rtol=1e-3, atol=1e-3)
 
         # Overall energy: the regression collapses std/RMS ~3.6x (0.0270 -> 0.0076).
         expected_stats = Expectations(
             {
+                ("cuda", 8): (0.027017, 0.027016),
                 ("cuda", 9): (0.027019, 0.027018),
             }
         )  # fmt: skip
         expected_std, expected_rms = expected_stats.get_expectation()
-        torch.testing.assert_close(waveform.std().item(), expected_std, rtol=1e-2, atol=3e-3)
-        torch.testing.assert_close(waveform.pow(2).mean().sqrt().item(), expected_rms, rtol=1e-2, atol=3e-3)
+        torch.testing.assert_close(waveform.std().item(), expected_std, rtol=1e-5, atol=1e-5)
+        torch.testing.assert_close(waveform.pow(2).mean().sqrt().item(), expected_rms, rtol=1e-5, atol=1e-5)
 
     @slow
     @require_flash_attn
