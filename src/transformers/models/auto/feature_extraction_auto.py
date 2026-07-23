@@ -70,6 +70,8 @@ FEATURE_EXTRACTOR_MAPPING_NAMES = OrderedDict(
         ("moshi", {"torch": "EncodecAudioProcessor", "numpy": "EncodecAudioProcessorNumpy"}),
         ("musicgen", {"torch": "EncodecAudioProcessor", "numpy": "EncodecAudioProcessorNumpy"}),
         ("musicgen_melody", {"torch": "MusicgenMelodyAudioProcessor"}),
+        ("nemotron3_5_asr", {"torch": "NemotronAsrStreamingAudioProcessor"}),
+        ("nemotron_asr_streaming_encoder", {"torch": "NemotronAsrStreamingAudioProcessor"}),
         ("parakeet_ctc", {"torch": "ParakeetAudioProcessor", "numpy": "ParakeetAudioProcessorNumpy"}),
         ("parakeet_encoder", {"torch": "ParakeetAudioProcessor", "numpy": "ParakeetAudioProcessorNumpy"}),
         ("parakeet_rnnt", {"torch": "ParakeetAudioProcessor", "numpy": "ParakeetAudioProcessorNumpy"}),
