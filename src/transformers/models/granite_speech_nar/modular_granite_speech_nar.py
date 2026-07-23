@@ -819,7 +819,6 @@ class GraniteSpeechNarForCTC(GraniteSpeechNarPreTrainedModel):
                     logits.squeeze(0), ce_targets.long(), reduction="mean", ignore_index=-100
                 )
                 loss += self.config.ce_loss_lambda * ce_loss
-           
 
             if self.config.encoder_ctc_loss_lambda > 0.0:
                 bpe_lengths = model_out.bpe_lengths
