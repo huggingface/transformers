@@ -190,3 +190,68 @@ def test_require_flash_attn_decorators_accept_kernels_fallback():
     with mock_flash_attn_env(kernels_available=True):
         assert require_flash_attn(DummyTest) is not None
         assert require_all_flash_attn(DummyTest) is not None
+
+
+@run_test_using_subprocess
+def test_broken_torchaudio_does_not_break_import():
+    """
+    ``loss/loss_rnnt.py`` is imported eagerly from ``modeling_utils``, so it must NOT import torchaudio at
+    module scope: a torchaudio whose compiled extension was built against a different torch ABI raises
+    ``OSError`` on import, which would otherwise break ``import transformers`` -- and pytest collection for
+    the whole suite (the daily quantization CI collapse, Jul 2026). torchaudio is imported lazily inside
+    ``rnnt_loss`` instead, so:
+      * importing the module (hence ``import transformers``) never touches torchaudio;
+      * a broken install surfaces its own ``OSError`` at the call site -- we don't mask it;
+      * a genuinely missing torchaudio yields a clean ``ImportError``.
+    """
+    import builtins
+
+    import torch
+
+    # Importing loss_rnnt (and thus transformers) must succeed regardless of torchaudio's state, and must
+    # not have imported torchaudio at module scope.
+    from transformers.loss import loss_rnnt
+
+    assert not hasattr(loss_rnnt, "torchaudio"), "torchaudio must be imported lazily, not at module scope"
+
+    def _call_rnnt_loss():
+        loss_rnnt.rnnt_loss(
+            logits=torch.zeros(1, 2, 3, 4),
+            targets=torch.zeros(1, 3),
+            logit_lengths=torch.ones(1),
+            target_lengths=torch.ones(1),
+            blank_token_id=0,
+        )
+
+    # torchaudio is installed (is_torchaudio_available() is True) but its C extension won't load: the raw
+    # OSError must surface at the call site, not be swallowed.
+    real_import = builtins.__import__
+
+    def failing_import(name, *args, **kwargs):
+        if name == "torchaudio" or name.startswith("torchaudio."):
+            raise OSError("_torchaudio.abi3.so: undefined symbol: simulated_abi_mismatch")
+        return real_import(name, *args, **kwargs)
+
+    for name in list(sys.modules):
+        if name == "torchaudio" or name.startswith("torchaudio."):
+            del sys.modules[name]
+
+    with (
+        patch.object(loss_rnnt, "is_torchaudio_available", return_value=True),
+        patch.object(builtins, "__import__", failing_import),
+    ):
+        try:
+            _call_rnnt_loss()
+        except OSError:
+            pass
+        else:
+            raise AssertionError("rnnt_loss must surface the torchaudio OSError at call time")
+
+    # torchaudio genuinely absent: rnnt_loss raises a clean ImportError.
+    with patch.object(loss_rnnt, "is_torchaudio_available", return_value=False):
+        try:
+            _call_rnnt_loss()
+        except ImportError:
+            pass
+        else:
+            raise AssertionError("rnnt_loss must raise ImportError when torchaudio is unavailable")
