@@ -885,7 +885,6 @@ class Pop2PianoForConditionalGeneration(Pop2PianoPreTrainedModel, GenerationMixi
             config.vocab_size - 1]`. All labels set to `-100` are ignored (masked), the loss is only computed for
             labels in `[0, ..., config.vocab_size]`
         """
-        use_cache = use_cache if use_cache is not None else self.config.use_cache
 
         if inputs_embeds is not None and input_features is not None:
             raise ValueError("Both `inputs_embeds` and `input_features` received! Please provide only one of them")
