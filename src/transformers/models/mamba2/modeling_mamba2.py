@@ -183,7 +183,6 @@ class Mamba2Mixer(nn.Module):
         self.act = ACT2FN[config.hidden_act]
 
         self.layer_norm_epsilon = config.layer_norm_epsilon
-        self.rms_norm = config.rms_norm
 
         self.n_groups = config.n_groups
         self.head_dim = config.head_dim

@@ -440,7 +440,6 @@ class BambaMixer(nn.Module):
         self.activation = config.hidden_act
         self.act = ACT2FN[config.hidden_act]
         self.layer_norm_epsilon = config.rms_norm_eps
-        self.rms_norm = config.rms_norm
         self.n_groups = config.mamba_n_groups
         self.head_dim = config.mamba_d_head
         self.chunk_size = config.mamba_chunk_size

@@ -477,7 +477,6 @@ class Zamba2MambaMixer(nn.Module):
         self.activation = "silu"
         self.act = nn.SiLU()
         self.layer_norm_epsilon = config.rms_norm_eps
-        self.rms_norm = config.rms_norm
         self.n_groups = config.mamba_ngroups
         self.head_dim = config.mamba_headdim
         self.chunk_size = config.chunk_size

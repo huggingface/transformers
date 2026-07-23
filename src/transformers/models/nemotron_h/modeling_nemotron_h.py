@@ -186,7 +186,6 @@ class NemotronHMamba2Mixer(nn.Module):
         self.activation = config.mamba_hidden_act
         self.act = ACT2FN[config.mamba_hidden_act]
         self.layer_norm_epsilon = config.rms_norm_eps
-        self.rms_norm = config.rms_norm
 
         self.n_groups = config.n_groups
         self.head_dim = config.mamba_head_dim
