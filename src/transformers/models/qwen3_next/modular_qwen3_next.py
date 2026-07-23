@@ -466,7 +466,7 @@ class Qwen3NextGatedDeltaNet(nn.Module):
         mixed_qkv = mixed_qkv.transpose(1, 2)
 
         if use_precomputed_states and seq_len == 1 and not cache_params.layers[self.layer_idx].record_past:
-            conv_state = cache_params.layers[self.layer_idx].conv_states[self.conv_idx]
+            conv_state = cache_params.layers[self.layer_idx].conv_states[0]
             # Single-token cached decode: the fused per-step kernel updates the conv state in-place.
             mixed_qkv = causal_conv1d_update(
                 mixed_qkv,

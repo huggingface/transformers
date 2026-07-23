@@ -226,6 +226,8 @@ class Zamba2MambaMixer(BambaMixer):
             self.intermediate_size, group_size=self.intermediate_size // self.n_groups, eps=1e-5
         )
         self.out_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=config.add_bias_linear)
+        del self.layer_norm_epsilon
+        del self.use_bias
 
 
 class Zamba2MLP(nn.Module):

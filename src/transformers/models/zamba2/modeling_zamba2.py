@@ -466,7 +466,6 @@ class Zamba2MambaMixer(nn.Module):
     def __init__(self, config: Zamba2Config, layer_idx: int | None = None, initialize_mixer_weights: bool = True):
         super().__init__()
         self.config = config
-        self.use_bias = config.mamba_proj_bias
         self.num_heads = self.config.n_mamba_heads
         self.hidden_size = config.hidden_size
         self.ssm_state_size = config.mamba_d_state
@@ -476,7 +475,6 @@ class Zamba2MambaMixer(nn.Module):
         self.use_conv_bias = config.use_conv_bias
         self.activation = "silu"
         self.act = nn.SiLU()
-        self.layer_norm_epsilon = config.rms_norm_eps
         self.n_groups = config.mamba_ngroups
         self.head_dim = config.mamba_headdim
         self.chunk_size = config.chunk_size

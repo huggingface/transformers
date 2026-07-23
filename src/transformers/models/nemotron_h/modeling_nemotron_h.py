@@ -175,7 +175,6 @@ class NemotronHMamba2Mixer(nn.Module):
     def __init__(self, config: NemotronHConfig, layer_idx: int | None = None, initialize_mixer_weights: bool = True):
         super().__init__()
         self.config = config
-        self.use_bias = config.mamba_proj_bias
         self.num_heads = config.mamba_num_heads
         self.hidden_size = config.hidden_size
         self.ssm_state_size = config.ssm_state_size
@@ -185,7 +184,6 @@ class NemotronHMamba2Mixer(nn.Module):
         self.use_conv_bias = config.use_conv_bias
         self.activation = config.mamba_hidden_act
         self.act = ACT2FN[config.mamba_hidden_act]
-        self.layer_norm_epsilon = config.rms_norm_eps
 
         self.n_groups = config.n_groups
         self.head_dim = config.mamba_head_dim

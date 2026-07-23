@@ -216,7 +216,7 @@ class FalconMambaMixer(nn.Module):
         init.ones_(self.dt_rms)
 
     def warn_slow_implementation(self):
-        is_fast_path_available = all((causal_conv1d, mamba_ssm))  # noqa
+        is_fast_path_available = all((causal_conv1d, falcon_mamba_ssm))  # noqa
         if not is_fast_path_available:
             if self.use_falcon_mambapy:
                 if is_mambapy_available():
