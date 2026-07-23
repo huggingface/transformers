@@ -31,11 +31,7 @@ if is_torch_available():
         tiny_llama_config,
     )
     from transformers import DynamicCache, LlamaForCausalLM, StaticCache
-    from transformers.cache_utils import (
-        DynamicSlidingWindowLayer,
-        StaticSlidingWindowLayer,
-        get_layer_types_and_kwargs,
-    )
+    from transformers.cache_utils import DynamicSlidingWindowLayer, StaticSlidingWindowLayer
     from transformers.integrations.executorch import export_with_dynamic_cache
 
 
@@ -242,7 +238,7 @@ class TestHeterogeneousCache(unittest.TestCase):
         self.assertEqual(layers[2].sliding_window, 16)
         self.assertFalse(layers[3].is_sliding)
 
-    def test_cache_kwargs_use_per_layer_conv_state_counts(self):
+    def test_dynamic_cache_uses_per_layer_conv_state_counts(self):
         config = tiny_llama_config()
         config.number_of_conv_states = 1
         config.layer_types = ["linear_attention", "hybrid", "full_attention", "conv"]
@@ -252,16 +248,11 @@ class TestHeterogeneousCache(unittest.TestCase):
             3: {"number_of_conv_states": 4},
         }
 
-        _, per_layer_kwargs = get_layer_types_and_kwargs(config)
+        layers = DynamicCache(config=config).layers
 
         self.assertEqual(
-            per_layer_kwargs,
-            [
-                {"number_of_states": 2},
-                {"number_of_states": 3},
-                {},
-                {"number_of_states": 4},
-            ],
+            [getattr(layer, "number_of_states", None) for layer in layers],
+            [2, 3, None, 4],
         )
 
     def test_static_cache_heterogeneous_sliding_window(self):

@@ -54,6 +54,7 @@ def create_attention_masks_by_attribute_value(
                 layer_idx = representative_layer_idx
 
         layer_config = config.per_layer_config[layer_idx]
-        attention_masks[attribute_value] = create_mask_fn(layer_config, *args, **kwargs, layer_idx=layer_idx)
+        mask_kwargs = {**kwargs, "layer_idx": layer_idx}
+        attention_masks[attribute_value] = create_mask_fn(layer_config, *args, **mask_kwargs)
 
     return attention_masks

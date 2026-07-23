@@ -25,7 +25,11 @@ from safetensors import safe_open
 from .cache_utils import Cache
 from .conversion_mapping import get_model_conversion_mapping
 from .core_model_loading import WeightRenaming, convert_and_load_state_dict_in_model
-from .integrations.heterogeneity import HeterogeneousModelingSpec, SkipDescriptor, get_heterogeneous_modeling_spec
+from .integrations.heterogeneity import (
+    HeterogeneousModelingSpec,
+    get_heterogeneous_modeling_spec,
+    nest_skip_descriptor_paths,
+)
 from .masking_utils import LAYER_PATTERN_TO_MASK_FUNCTION_MAPPING, create_causal_mask
 from .modeling_outputs import (
     BaseModelOutputWithPast,
@@ -47,31 +51,6 @@ if TYPE_CHECKING:
 
 
 logger = logging.get_logger(__name__)
-
-
-def _prefix_skip_descriptors(
-    skip_descriptors: dict[str, SkipDescriptor] | None, member_prefix: str
-) -> dict[str, SkipDescriptor] | None:
-    if skip_descriptors is None:
-        return None
-
-    prefixed_descriptors = {}
-    for skip_type, descriptor in skip_descriptors.items():
-        replacements = {}
-        for key, replacement in descriptor.replacements.items():
-            if isinstance(key, tuple):
-                member_path, member_cls = key
-                prefixed_key = (f"{member_prefix}.{member_path}", member_cls)
-            else:
-                prefixed_key = f"{member_prefix}.{key}"
-            replacements[prefixed_key] = replacement
-
-        prefixed_descriptors[skip_type] = SkipDescriptor(
-            replacements=replacements,
-            replaces_kv_cache_updater=descriptor.replaces_kv_cache_updater,
-        )
-
-    return prefixed_descriptors
 
 
 class GradientCheckpointingLayer(nn.Module):
@@ -401,7 +380,9 @@ class MtpModel(PreTrainedModel):
             self._heterogeneous_modeling_spec = HeterogeneousModelingSpec(
                 layer_cls=MtpLayer,
                 layer_idx_variable_name="layer_idx",
-                skip_descriptors=_prefix_skip_descriptors(main_modeling_spec.skip_descriptors, "mtp_block"),
+                skip_descriptors=nest_skip_descriptor_paths(
+                    main_modeling_spec.skip_descriptors, parent_path="mtp_block"
+                ),
             )
 
         super().__init__(mtp_config)

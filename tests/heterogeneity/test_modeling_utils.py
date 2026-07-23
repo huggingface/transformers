@@ -254,7 +254,7 @@ class TestHeterogeneousModeling(unittest.TestCase):
 
         self.assertIsInstance(model.layer.block.self_attn, _ClassSpecificNestedNoOpAttention)
 
-    def test_mtp_model_uses_mtp_layer_spec_and_prefixed_skip_paths(self):
+    def test_mtp_model_uses_mtp_layer_spec_and_nested_skip_paths(self):
         config = tiny_llama_config(num_hidden_layers=2)
         config.num_mtp_layers = 2
         config.mtp_per_layer_config = {

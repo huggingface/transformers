@@ -23,7 +23,12 @@ from transformers.testing_utils import cleanup, is_torch_available, require_torc
 if is_torch_available():
     import torch
 
-    from transformers.integrations.heterogeneity import HeterogeneousModelingSpec, get_heterogeneous_modeling_spec
+    from transformers.integrations.heterogeneity import (
+        HeterogeneousModelingSpec,
+        SkipDescriptor,
+        get_heterogeneous_modeling_spec,
+        nest_skip_descriptor_paths,
+    )
 
 
 @require_torch
@@ -33,6 +38,27 @@ class TestHeterogeneousModelingSpec(unittest.TestCase):
 
     def tearDown(self):
         cleanup(torch_device, gc_collect=True)
+
+    def test_nest_skip_descriptor_paths_returns_nested_copies(self):
+        skip_descriptors = {
+            "mixer": SkipDescriptor(
+                replacements={
+                    "norm": torch.nn.Identity,
+                    ("mixer", torch.nn.Linear): torch.nn.Identity,
+                },
+                replaces_kv_cache_updater=True,
+            )
+        }
+
+        nested_descriptors = nest_skip_descriptor_paths(skip_descriptors, parent_path="wrapper.block")
+
+        self.assertEqual(
+            set(nested_descriptors["mixer"].replacements),
+            {"wrapper.block.norm", ("wrapper.block.mixer", torch.nn.Linear)},
+        )
+        self.assertTrue(nested_descriptors["mixer"].replaces_kv_cache_updater)
+        self.assertEqual(set(skip_descriptors["mixer"].replacements), {"norm", ("mixer", torch.nn.Linear)})
+        self.assertIsNone(nest_skip_descriptor_paths(None, parent_path="wrapper.block"))
 
     def test_get_heterogeneous_modeling_spec_uses_custom_model_spec(self):
         spec = HeterogeneousModelingSpec(layer_cls=torch.nn.Linear, layer_idx_variable_name="layer_idx")

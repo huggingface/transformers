@@ -1629,7 +1629,7 @@ class Cache:
         return self.batch_size
 
 
-def get_layer_types_and_kwargs(config: PreTrainedConfig) -> tuple[list[str], list[dict]]:
+def _get_layer_types_and_kwargs(config: PreTrainedConfig) -> tuple[list[str], list[dict]]:
     """
     From a `config`, extract the layer types if not present already, as well as the kwargs needed to initialize
     the corresponding layer caches. In order to support heterogeneous configs as well, the kwargs are returned
@@ -1730,7 +1730,7 @@ class DynamicCache(Cache):
         # If a config is passed, use it to infer the layer types and initialize accordingly
         if config is not None:
             decoder_config = config.get_text_config(decoder=True)
-            layer_types, per_layer_kwargs = get_layer_types_and_kwargs(decoder_config)
+            layer_types, per_layer_kwargs = _get_layer_types_and_kwargs(decoder_config)
             # Dispatch the layer types
             layers = [
                 DYNAMIC_LAYER_TYPE_MAPPING[layer_type](**layer_kwargs)
@@ -1820,7 +1820,7 @@ class StaticCache(Cache):
         **kwargs,
     ):
         config = config.get_text_config(decoder=True)
-        layer_types, per_layer_kwargs = get_layer_types_and_kwargs(config)
+        layer_types, per_layer_kwargs = _get_layer_types_and_kwargs(config)
         disabled_kv_layer_indices = config.get_disabled_kv_layer_indices()
         # Dispatch the layer types
         layers = []
@@ -1898,7 +1898,7 @@ class QuantizedCache(Cache):
             raise ValueError(f"Unknown quantization backend `{backend}`")
 
         config = config.get_text_config(decoder=True)
-        layer_types, _ = get_layer_types_and_kwargs(config)
+        layer_types, _ = _get_layer_types_and_kwargs(config)
         invalid_layer_types = set(layer_types) - {"full_attention"}
         if len(invalid_layer_types) > 0:
             raise ValueError(

@@ -81,6 +81,11 @@ def _validate_layer_indices(config: PreTrainedConfig, per_layer_overrides: dict[
         )
 
 
+def _validate_per_layer_config_is_not_nested(per_layer_overrides: dict[int, dict[str, Any]]) -> None:
+    if any("per_layer_config" in layer_overrides for layer_overrides in per_layer_overrides.values()):
+        raise ValueError("`per_layer_config` cannot be nested within itself.")
+
+
 def _validate_sliding_window_and_attention_chunk_size(
     config: PreTrainedConfig, per_layer_overrides: dict[int, dict[str, Any]]
 ) -> None:
@@ -191,6 +196,7 @@ def _apply_heterogeneous_config(
     }
 
     _validate_layer_indices(config, normalized_per_layer_overrides)
+    _validate_per_layer_config_is_not_nested(normalized_per_layer_overrides)
     _validate_sliding_window_and_attention_chunk_size(config, normalized_per_layer_overrides)
 
     config._heterogeneity_spec = _modify_config_and_create_heterogeneity_spec(config, normalized_per_layer_overrides)

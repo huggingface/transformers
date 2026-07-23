@@ -270,13 +270,16 @@ def _apply_skip_descriptor(
             member_name = key
             cls = None
 
-        _, _, member = _resolve_layer_member(layer=layer, member_path=member_name, layer_idx=layer_idx)
+        if not _hasattr_by_path(layer, member_name):
+            raise AttributeError(
+                f"Layer {layer_idx} in class {layer.__class__.__name__} has no attribute {member_name}"
+            )
 
         if cls is None:
             generic_replacements[member_name] = replacement_module
             continue
 
-        if not isinstance(member, cls):
+        if not isinstance(_getattr_by_path(layer, member_name), cls):
             continue
 
         if member_name in class_specific_replacements:
@@ -287,34 +290,31 @@ def _apply_skip_descriptor(
         class_specific_replacements[member_name] = replacement_module
 
     for member_name, replacement_module in class_specific_replacements.items():
-        parent, attribute_name, _ = _resolve_layer_member(layer=layer, member_path=member_name, layer_idx=layer_idx)
-        setattr(parent, attribute_name, replacement_module())
+        _setattr_by_path(layer, member_name, replacement_module())
 
     for member_name, replacement_module in generic_replacements.items():
         if member_name not in class_specific_replacements:
-            parent, attribute_name, _ = _resolve_layer_member(
-                layer=layer, member_path=member_name, layer_idx=layer_idx
-            )
-            setattr(parent, attribute_name, replacement_module())
+            _setattr_by_path(layer, member_name, replacement_module())
 
 
-def _resolve_layer_member(*, layer, member_path: str, layer_idx: int):
-    path_parts = member_path.split(".")
-    parent = layer
-    for path_part in path_parts[:-1]:
-        if not hasattr(parent, path_part):
-            raise AttributeError(
-                f"Layer {layer_idx} in class {layer.__class__.__name__} has no attribute path {member_path}"
-            )
-        parent = getattr(parent, path_part)
+def _getattr_by_path(obj: Any, attribute_path: str) -> Any:
+    for attribute_name in attribute_path.split("."):
+        obj = getattr(obj, attribute_name)
+    return obj
 
-    attribute_name = path_parts[-1]
-    if not hasattr(parent, attribute_name):
-        raise AttributeError(
-            f"Layer {layer_idx} in class {layer.__class__.__name__} has no attribute path {member_path}"
-        )
 
-    return parent, attribute_name, getattr(parent, attribute_name)
+def _hasattr_by_path(obj: Any, attribute_path: str) -> bool:
+    try:
+        _getattr_by_path(obj, attribute_path)
+    except AttributeError:
+        return False
+    return True
+
+
+def _setattr_by_path(obj: Any, attribute_path: str, value: Any) -> None:
+    parent_path, _, attribute_name = attribute_path.rpartition(".")
+    parent = _getattr_by_path(obj, parent_path) if parent_path else obj
+    setattr(parent, attribute_name, value)
 
 
 def _get_variable_from_passed_arguments(*, func: Callable, args: tuple, kwargs: dict, names: list[str]) -> Any | None:

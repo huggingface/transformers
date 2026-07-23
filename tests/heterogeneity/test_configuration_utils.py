@@ -110,6 +110,10 @@ class TestHeterogeneousConfig(unittest.TestCase):
         self.assertEqual(config.to_dict()["per_layer_config"], {"1": {"num_key_value_heads": 2}})
         self.assertEqual(config.per_layer_config[1].num_key_value_heads, 2)
 
+    def test_per_layer_config_cannot_be_nested(self):
+        with self.assertRaisesRegex(ValueError, "cannot be nested within itself"):
+            tiny_llama_config(per_layer_config={0: {"per_layer_config": {0: {"intermediate_size": 32}}}})
+
     def test_per_layer_config_and_fallback(self):
         """Per-layer values should override, and non-overridden layers should fall back to global."""
         config = tiny_llama_config(per_layer_config={1: {"num_key_value_heads": 2}, 3: {"num_key_value_heads": 1}})

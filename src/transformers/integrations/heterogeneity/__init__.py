@@ -14,7 +14,12 @@
 # limitations under the License.
 
 from .configuration_utils import AmbiguousGlobalPerLayerAttributeError, HeterogeneousConfigMixin
-from .heterogeneous_modeling_spec import HeterogeneousModelingSpec, SkipDescriptor, get_heterogeneous_modeling_spec
+from .heterogeneous_modeling_spec import (
+    HeterogeneousModelingSpec,
+    SkipDescriptor,
+    get_heterogeneous_modeling_spec,
+    nest_skip_descriptor_paths,
+)
 from .modeling_utils import (
     apply_heterogeneous_modeling,
     wrap_model_init_with_heterogeneous_cleanup,
@@ -31,5 +36,6 @@ __all__ = [
     "apply_heterogeneous_modeling",
     "get_heterogeneous_modeling_spec",
     "get_skip_replacement",
+    "nest_skip_descriptor_paths",
     "wrap_model_init_with_heterogeneous_cleanup",
 ]

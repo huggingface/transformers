@@ -56,6 +56,40 @@ class HeterogeneousModelingSpec:
     skip_descriptors: dict[str, SkipDescriptor] | None = None
 
 
+def nest_skip_descriptor_paths(
+    skip_descriptors: dict[str, SkipDescriptor] | None, parent_path: str
+) -> dict[str, SkipDescriptor] | None:
+    """Return new skip descriptors whose replacement paths are nested under a parent attribute path.
+
+    Args:
+        skip_descriptors: Skip descriptors to adapt, or `None`.
+        parent_path: Attribute path under which to nest every replacement path.
+
+    Returns:
+        New skip descriptors with nested replacement paths, or `None` when `skip_descriptors` is `None`.
+    """
+    if skip_descriptors is None:
+        return None
+
+    nested_descriptors = {}
+    for skip_type, descriptor in skip_descriptors.items():
+        replacements = {}
+        for key, replacement in descriptor.replacements.items():
+            if isinstance(key, tuple):
+                member_path, member_cls = key
+                nested_key = (f"{parent_path}.{member_path}", member_cls)
+            else:
+                nested_key = f"{parent_path}.{key}"
+            replacements[nested_key] = replacement
+
+        nested_descriptors[skip_type] = SkipDescriptor(
+            replacements=replacements,
+            replaces_kv_cache_updater=descriptor.replaces_kv_cache_updater,
+        )
+
+    return nested_descriptors
+
+
 def get_heterogeneous_modeling_spec(model: PreTrainedModel) -> HeterogeneousModelingSpec:
     heterogeneous_modeling_spec = getattr(model, "_heterogeneous_modeling_spec", None)
 

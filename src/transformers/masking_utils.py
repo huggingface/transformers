@@ -1180,18 +1180,17 @@ def create_sliding_window_causal_mask(
         "or_mask_function": or_mask_function,
         "and_mask_function": and_mask_function,
         "block_sequence_ids": block_sequence_ids,
+        "layer_idx": layer_idx,
     }
-    if layer_idx is not None:
-        if config.is_heterogeneous:
+    if config.is_heterogeneous:
+        if layer_idx is not None:
             mask_kwargs["config"] = config.per_layer_config[layer_idx]
-        return _create_sliding_window_causal_mask(**mask_kwargs, layer_idx=layer_idx)
-
-    if config.is_heterogeneous and attribute_name in config.per_layer_attributes:
-        return create_attention_masks_by_attribute_value(
-            _create_sliding_window_causal_mask,
-            attribute_name,
-            **mask_kwargs,
-        )
+        elif attribute_name in config.per_layer_attributes:
+            return create_attention_masks_by_attribute_value(
+                _create_sliding_window_causal_mask,
+                attribute_name,
+                **mask_kwargs,
+            )
     return _create_sliding_window_causal_mask(**mask_kwargs)
 
 
@@ -1433,18 +1432,17 @@ def create_chunked_causal_mask(
         "position_ids": position_ids,
         "or_mask_function": or_mask_function,
         "and_mask_function": and_mask_function,
+        "layer_idx": layer_idx,
     }
-    if layer_idx is not None:
-        if config.is_heterogeneous:
+    if config.is_heterogeneous:
+        if layer_idx is not None:
             mask_kwargs["config"] = config.per_layer_config[layer_idx]
-        return _create_chunked_causal_mask(**mask_kwargs, layer_idx=layer_idx)
-
-    if config.is_heterogeneous and attribute_name in config.per_layer_attributes:
-        return create_attention_masks_by_attribute_value(
-            _create_chunked_causal_mask,
-            attribute_name,
-            **mask_kwargs,
-        )
+        elif attribute_name in config.per_layer_attributes:
+            return create_attention_masks_by_attribute_value(
+                _create_chunked_causal_mask,
+                attribute_name,
+                **mask_kwargs,
+            )
     return _create_chunked_causal_mask(**mask_kwargs)
 
 
