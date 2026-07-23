@@ -145,6 +145,7 @@ config_class_to_model_tester_map = {
     "Gemma3nConfig": "Gemma3nVision2TextModelTester",
     "Gemma3Config": "Gemma3Vision2TextModelTester",
     "VideoLlama3Config": "VideoLlama3VisionText2TextModelTester",
+    "Cosmos3EdgeConfig": "Cosmos3EdgeVisionText2TextModelTester",
     "JanusConfig": "JanusVisionText2TextModelTester",
     "Emu3Config": "Emu3Vision2TextModelTester",
     # Need `torchcodec` and `ffmpeg` --> fixed now
@@ -639,6 +640,10 @@ def get_tiny_config(config_class, model_class=None, **model_tester_kwargs):
             # This is to avoid `T5EncoderOnlyModelTest` is used instead of `T5ModelTest`, which has
             # `is_encoder_decoder=False` and causes some pipeline tests failing (also failures in `Optimum` CI).
             # TODO: More fine grained control of the desired tester class.
+            # TODO: Instead of picking a single tester by shortest name, try all testers in order and use the first
+            # one whose config output is an instance of `config_class`. This would eliminate the need for manual
+            # entries in `config_class_to_model_tester_map` for multimodal models where a sub-tester (e.g.
+            # `Cosmos3EdgeTextModelTester`) appears before the full-model tester in the test file.
             model_tester_class = min(tester_classes, key=lambda x: (len(x.__name__), x.__name__))
 
             # TODO: SpeechT5ForSpeechToText needs a particular tester to get the working config
