@@ -281,9 +281,7 @@ class Pix2StructPreTrainedModel(PreTrainedModel):
     input_modalities = ("image", "text")
 
     _can_compile_fullgraph = False
-    # The relative position bias flows through the attention interface as a separate `position_bias` kwarg: eager and
-    # sdpa add it to the scores/mask directly, while flex consumes it in its score_mod. Flash attention can't take an
-    # arbitrary additive bias, so it stays unsupported.
+    # Using position bias API for attention; not yet supported for FA
     _supports_flash_attn = False
     _supports_flex_attn = True
     _supports_sdpa = True

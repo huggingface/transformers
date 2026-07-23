@@ -398,7 +398,7 @@ class Pop2PianoLayerSelfAttention(nn.Module):
             past_key_values=past_key_values,
             **kwargs,
         )
-        attention_output = attention_output + self.dropout(attention_output)
+        attention_output = hidden_states + self.dropout(attention_output)
         return attention_output, position_bias, attn_weights
 
 
@@ -525,6 +525,7 @@ class Pop2PianoPreTrainedModel(PreTrainedModel):
     _no_split_modules = ["Pop2PianoBlock"]
     _keep_in_fp32_modules = ["wo"]
 
+    # Using position bias API for attention; not yet supported for FA
     _supports_flash_attn = False
     _supports_flex_attn = True
     _supports_sdpa = True
@@ -624,6 +625,7 @@ class Pop2PianoStack(Pop2PianoPreTrainedModel):
 
     @merge_with_config_defaults
     @capture_outputs
+    @auto_docstring
     def forward(
         self,
         input_ids=None,
@@ -635,7 +637,6 @@ class Pop2PianoStack(Pop2PianoPreTrainedModel):
         use_cache=None,
         **kwargs: Unpack[TransformersKwargs],
     ):
-
         if input_ids is not None and inputs_embeds is not None:
             err_msg_prefix = "decoder_" if self.is_decoder else ""
             raise ValueError(

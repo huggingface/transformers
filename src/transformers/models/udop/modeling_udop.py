@@ -1116,30 +1116,26 @@ class UdopStack(UdopPreTrainedModel):
     ) -> BaseModelOutputWithAttentionMask:
         # input embeddings processing
 
-        if input_ids is not None and inputs_embeds is not None:
+        if (input_ids is None) ^ (inputs_embeds is not None):
             err_msg_prefix = "decoder_" if self.is_decoder else ""
             raise ValueError(
-                f"You cannot specify both {err_msg_prefix}inputs and {err_msg_prefix}inputs_embeds at the same time"
+                f"You must specify exactly one of {err_msg_prefix}input_ids or {err_msg_prefix}inputs_embeds"
             )
-        elif input_ids is not None and torch.numel(input_ids) > 0:
-            input_shape = input_ids.size()
-            input_ids = input_ids.view(-1, input_shape[-1])
-        elif inputs_embeds is None and input_ids is not None and torch.numel(input_ids) == 0:
+
+        if input_ids is not None and torch.numel(input_ids) == 0:
             input_ids = torch.full((4, 1024), self.config.pad_token_id, device=input_ids.device, dtype=input_ids.dtype)
             attention_mask = torch.zeros((4, 1024), device=input_ids.device, dtype=input_ids.dtype)
             bbox = torch.zeros((4, 1024, 4), device=input_ids.device, dtype=input_ids.dtype)
-            input_shape = input_ids.size()
             position_bias = torch.zeros_like(attention_mask[:, None, None, :]).to(self.dtype)
             logger.warning("Empty batch")
-        elif inputs_embeds is not None:
-            input_shape = inputs_embeds.size()[:-1]
+
+        if input_ids is not None:
+            input_shape = input_ids.size()
+            input_ids = input_ids.view(-1, input_shape[-1])
         else:
-            err_msg_prefix = "decoder_" if self.is_decoder else ""
-            raise ValueError(f"You have to specify either {err_msg_prefix}inputs or {err_msg_prefix}inputs_embeds")
+            input_shape = inputs_embeds.size()[:-1]
 
         if inputs_embeds is None:
-            if self.embed_tokens is None:
-                raise ValueError("You have to initialize the model with valid token embeddings")
             inputs_embeds = self.embed_tokens(input_ids)
 
         if pixel_values is not None:

@@ -223,8 +223,6 @@ class SwitchTransformersLayerFF(nn.Module):
         return output
 
 
-# The relative position bias is added as a separate `position_bias` kwarg so that eager and sdpa can consume it while
-# flex attention handles it in its score_mod; it is therefore not folded into the attention mask.
 def eager_attention_forward(
     module: nn.Module,
     query: torch.Tensor,
