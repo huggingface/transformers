@@ -422,7 +422,7 @@ class Step3p7VisionModel(Step3p7PreTrainedModel):
     @capture_outputs(tie_last_hidden_states=False)
     @auto_docstring
     def forward(self, pixel_values: torch.Tensor, **kwargs: Unpack[TransformersKwargs]) -> BaseModelOutput:
-        _, _, height, width = pixel_values.shape
+        batch_size, _, height, width = pixel_values.shape
         grid_h = height // self.embeddings.patch_size
         grid_w = width // self.embeddings.patch_size
         hidden_state = self.embeddings(pixel_values, interpolate_pos_encoding=True)
@@ -435,9 +435,8 @@ class Step3p7VisionModel(Step3p7PreTrainedModel):
         position_embeddings = self.rotary_emb(hidden_state, position_ids)
         for layer in self.layers:
             hidden_state = layer(hidden_state, position_embeddings=position_embeddings, **kwargs)
-        batch_size, num_patches, channels = hidden_state.shape
-        # `num_patches == grid_h * grid_w` (no CLS token is ever prepended), so reuse the grid
-        # dimensions already computed above instead of assuming a square grid via `num_patches**0.5`.
+        # `hidden_state.shape[1] == grid_h * grid_w`
+        channels = hidden_state.shape[-1]
         hidden_state = hidden_state.permute(0, 2, 1).view(batch_size, channels, grid_h, grid_w)
         hidden_state = self.downsampler1(hidden_state)
         hidden_state = self.downsampler2(hidden_state)
@@ -836,7 +835,10 @@ class Step3p7TextModel(Step3p7PreTrainedModel):
     config: Step3p7TextConfig
     input_modalities = ("text",)
     _no_split_modules = ["Step3p7DecoderLayer"]
-    _can_record_outputs = {"hidden_states": Step3p7DecoderLayer}
+    _can_record_outputs = {
+        "hidden_states": Step3p7DecoderLayer,
+        "attentions": Step3p7Attention,
+    }
 
     def __init__(self, config: Step3p7TextConfig):
         super().__init__(config)
