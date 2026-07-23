@@ -16,7 +16,7 @@ from __future__ import annotations
 import math
 from typing import TYPE_CHECKING
 
-from ..utils import is_torch_available
+from ..utils import is_torch_available, is_torch_greater_or_equal
 
 
 if TYPE_CHECKING:
@@ -25,17 +25,14 @@ if TYPE_CHECKING:
 
 _dtensor_available = False
 
-if is_torch_available():
+if is_torch_available() and is_torch_greater_or_equal("2.5"):
     import torch
 
-    try:
-        from torch.distributed.tensor import DTensor
-        from torch.distributed.tensor._utils import compute_local_shape_and_global_offset
-        from torch.distributed.tensor.placement_types import Shard
+    from torch.distributed.tensor import DTensor
+    from torch.distributed.tensor._utils import compute_local_shape_and_global_offset
+    from torch.distributed.tensor.placement_types import Shard
 
-        _dtensor_available = True
-    except ImportError:
-        _dtensor_available = False
+    _dtensor_available = True
 
 if _dtensor_available:
     # torch < 2.10 names as an underscore before `local_shard_size_and_offset`: alias it the non-underscored version
