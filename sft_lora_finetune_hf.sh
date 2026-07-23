@@ -7,8 +7,8 @@ set -euo pipefail
 # ---------------------------------------------------------------------------
 # Parallelism
 # ---------------------------------------------------------------------------
-export TP_SIZE=${TP_SIZE:-2}
-NUM_PROC=${NUM_PROC:-2}
+export TP_SIZE=${TP_SIZE:-1}
+NUM_PROC=${NUM_PROC:-1}
 
 # ---------------------------------------------------------------------------
 # Neuron runtime environment
@@ -23,10 +23,12 @@ export HF_DEACTIVATE_ASYNC_LOAD=1
 
 export TORCH_NEURONX_ENABLE_HOST_CC=1
 export TORCH_NEURONX_ENABLE_ASYNC_NRT=1
-export NEURON_RT_NUM_CORES=4
-export NEURON_LOGICAL_NC_CONFIG=2
-export NEURON_RT_VIRTUAL_CORE_SIZE=2
-
+export NEURON_RT_NUM_CORES=1
+# export NEURON_LOGICAL_NC_CONFIG=2
+# export NEURON_RT_VIRTUAL_CORE_SIZE=2
+TIMESTAMP=$(date +%H:%M-%d-%m)
+export NEURON_PROFILER_OUTPUT_DIR="./profile-hf-$TIMESTAMP"
+export TORCH_NEURONX_NEFF_CACHE_DIR=$NEURON_PROFILER_OUTPUT_DIR
 export XLA_IR_DEBUG=1
 export XLA_HLO_DEBUG=1
 export NEURON_FRAMEWORK_DEBUG=1
@@ -65,7 +67,13 @@ echo "  LoRA alpha:      $LORA_ALPHA"
 echo "  Output dir:      $OUTPUT_DIR"
 echo "=========================================="
 
-torchrun --nproc_per_node="${NUM_PROC}" \
+if [ "$NUM_PROC" -eq 1 ]; then
+    LAUNCHER="python"
+else
+    LAUNCHER="torchrun --nproc_per_node=${NUM_PROC}"
+fi
+
+$LAUNCHER \
     sft_lora_finetune_hf.py \
     --model_name_or_path "$MODEL_NAME" \
     --dataset_name "$DATASET_NAME" \

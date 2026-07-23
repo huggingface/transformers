@@ -7,8 +7,8 @@ set -euo pipefail
 # ---------------------------------------------------------------------------
 # Parallelism
 # ---------------------------------------------------------------------------
-export TP_SIZE=${TP_SIZE:-2}
-NUM_PROC=${NUM_PROC:-2}
+export TP_SIZE=${TP_SIZE:-1}
+NUM_PROC=${NUM_PROC:-1}
 
 # ---------------------------------------------------------------------------
 # Neuron runtime environment
@@ -18,7 +18,7 @@ export ON_NEURON_EAGER=1
 # export TORCH_NEURONX_MLIR_ATEN_OPS=1
 export TORCH_NEURONX_FALLBACK_ONLY_FOR_UNIMPLEMENTED_OPS=1
 export NEURON_EAGER_MODEL_CACHE_SIZE=10000
-export NEURON_RT_VISIBLE_CORES=2,3
+export NEURON_RT_NUM_CORES=1
 export OMP_NUM_THREADS=128
 export HF_DEACTIVATE_ASYNC_LOAD=1
 
@@ -26,10 +26,12 @@ export HF_DEACTIVATE_ASYNC_LOAD=1
 export NEURON_FRAMEWORK_DEBUG=1
 
 # PyTorch/Neuron profiler window (private beta API). 0 disables.
-PROFILE_STEP_START=${PROFILE_STEP_START:-10}
-PROFILE_NUM_STEPS=${PROFILE_NUM_STEPS:-5}
-PROFILE_OUTPUT_DIR=${PROFILE_OUTPUT_DIR:-./pt-profile-custom}
+PROFILE_STEP_START=${PROFILE_STEP_START:-5}
+PROFILE_NUM_STEPS=${PROFILE_NUM_STEPS:-1}
+TIMESTAMP=$(date +%H:%M-%d-%m)
+PROFILE_OUTPUT_DIR=${PROFILE_OUTPUT_DIR:-./profile-custom-$TIMESTAMP}
 PROFILE_MAX_EVENTS_PER_NC=${PROFILE_MAX_EVENTS_PER_NC:-4000000}
+export TORCH_NEURONX_NEFF_CACHE_DIR="$PROFILE_OUTPUT_DIR"
 
 # ---------------------------------------------------------------------------
 # Model / data / hyperparameters
@@ -67,7 +69,13 @@ echo "  torch.compile:   $COMPILE"
 echo "  Output dir:      $OUTPUT_DIR"
 echo "=========================================="
 
-torchrun --nproc_per_node="${NUM_PROC}" \
+if [ "$NUM_PROC" -eq 1 ]; then
+    LAUNCHER="python"
+else
+    LAUNCHER="torchrun --nproc_per_node=${NUM_PROC}"
+fi
+
+$LAUNCHER \
     sft_lora_finetune_custom.py \
     --model_name_or_path "$MODEL_NAME" \
     --dataset_name "$DATASET_NAME" \

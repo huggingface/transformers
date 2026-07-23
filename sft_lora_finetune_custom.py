@@ -5,6 +5,7 @@ Supports TP sharding across Neuron cores for memory-efficient training.
 """
 
 import argparse
+import contextlib
 import math
 import os
 import socket
@@ -19,7 +20,7 @@ from torch.distributed.tensor.parallel import (
     RowwiseParallel,
     parallelize_module,
 )
-from torch.profiler import profile, ProfilerActivity
+from torch.profiler import profile, ProfilerActivity, record_function
 from torch_neuronx.profiling import NeuronConfig, ProfileMode, NeuronProfiler
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from peft import LoraConfig, get_peft_model, TaskType
@@ -278,33 +279,29 @@ def main():
     if args.profile_num_steps > 0:
         log(f"Profiling steps {args.profile_step_start}-{args.profile_step_start + args.profile_num_steps - 1}")
         neuron_config = NeuronConfig(
-            modes=[ProfileMode.DEVICE, ProfileMode.RUNTIME],
+            modes=[ProfileMode.DEVICE, ProfileMode.RUNTIME, ProfileMode.CPU_UTIL, ProfileMode.HOST_MEMORY],
             profile_output_dir=args.profile_output_dir,
             max_events_per_nc=args.profile_max_events_per_nc,
-            capture_enabled_for_nc=os.environ.get("NEURON_RT_VISIBLE_CORES"),
         )
         exporter = NeuronProfiler(neuron_config)
 
     # Training loop
     step = 0
     _last_shape = None
-    profiler_ctx = None
     for epoch in range(args.num_train_epochs):
         batch_stride = args.per_device_train_batch_size * args.gradient_accumulation_steps
 
         for i in range(0, rows_per_dp, batch_stride):
-            if neuron_config is not None and step + 1 == args.profile_step_start:
-                profiler_ctx = profile(
-                    activities=[ProfilerActivity.CPU, ProfilerActivity.PrivateUse1],
-                    experimental_config=neuron_config,
-                    on_trace_ready=exporter.export_trace,
-                )
-                profiler_ctx.__enter__()
-
             t0 = time.perf_counter()
             optimizer.zero_grad()
             total_loss = 0.0
             total_tokens = 0
+
+            # 1-indexed update step this iteration is about to perform
+            current_update_step = step + 1
+            in_profile_window = neuron_config is not None and (
+                args.profile_step_start <= current_update_step < args.profile_step_start + args.profile_num_steps
+            )
 
             # Gradient accumulation loop
             for micro in range(args.gradient_accumulation_steps):
@@ -321,9 +318,26 @@ def main():
                     print(f"inputs: {inputs.shape}, labels: {labels.shape}")
                     _last_shape = inputs.shape
 
-                # Forward and backward
-                loss = model(inputs, labels=labels).loss
-                (loss / args.gradient_accumulation_steps).backward()
+                if in_profile_window and micro == args.gradient_accumulation_steps - 1:
+                    contexts = (
+                        profile(
+                            activities=[ProfilerActivity.CPU, ProfilerActivity.PrivateUse1],
+                            experimental_config=neuron_config,
+                            with_stack=True,
+                            on_trace_ready=exporter.export_trace,
+                        ),
+                        record_function("training_step"),
+                    )
+                else:
+                    contexts = ()
+
+                with contextlib.ExitStack() as stack:
+                    for context in contexts:
+                        stack.enter_context(context)
+
+                    # Forward and backward
+                    loss = model(inputs, labels=labels).loss
+                    (loss / args.gradient_accumulation_steps).backward()
 
                 total_loss += loss.item()
                 total_tokens += inputs.numel()
@@ -336,12 +350,6 @@ def main():
             optimizer.step()
             scheduler.step()
             step += 1
-
-            if profiler_ctx is not None:
-                torch.neuron.synchronize()  # Neuron is async; ensure the device finishes before export
-                if step == args.profile_step_start + args.profile_num_steps - 1:
-                    profiler_ctx.__exit__(None, None, None)
-                    profiler_ctx = None
 
             # Logging
             if step % args.logging_steps == 0:

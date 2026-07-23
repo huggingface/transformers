@@ -1708,9 +1708,8 @@ class Trainer:
 
         exp_config = NeuronConfig(
             modes=[ProfileMode.DEVICE, ProfileMode.RUNTIME, ProfileMode.CPU_UTIL, ProfileMode.HOST_MEMORY],
-            profile_output_dir="./profile-hf-trainer",
+            profile_output_dir=os.environ.get("NEURON_PROFILER_OUTPUT_DIR"),
             max_events_per_nc=100000,
-            capture_enabled_for_nc="0,1",
         )
         exporter = NeuronProfiler(exp_config)
 
@@ -1759,7 +1758,7 @@ class Trainer:
                 else:
                     sync_context = functools.partial(self.accelerator.no_sync, model=model)
 
-                if 5 < step // self.args.gradient_accumulation_steps <= 15:
+                if 3 < step // self.args.gradient_accumulation_steps <= 4 and i == len(batch_samples) - 1:
                     contexts = (
                         sync_context(),
                         profile(
