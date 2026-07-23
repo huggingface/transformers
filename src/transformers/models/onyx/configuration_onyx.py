@@ -58,7 +58,6 @@ class OnyxVisionConfig(PreTrainedConfig):
     hidden_size: int = 1536
     intermediate_size: int = 8960
     hidden_act: str = "gelu"
-    merge_kernel_size: tuple[int, int] | list[int] = (2, 2)
     rope_parameters: dict | None = None  # defaults set by `RopeConfigMixin`
     max_position_embeddings: int = 32 * 32  # == `pos_h * pos_w`
     output_dim: int = 6144

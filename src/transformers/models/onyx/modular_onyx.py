@@ -294,6 +294,7 @@ class OnyxVisionConfig(Kimi_K25VisionConfig):
     layer_norm_eps: float = 1e-05
     layer_types: list[str] | None = None
     pos_emb_time = AttributeError()
+    merge_kernel_size = AttributeError()
 
     def __post_init__(self, **kwargs):
         if self.layer_types is None:

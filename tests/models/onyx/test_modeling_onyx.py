@@ -83,15 +83,15 @@ class OnyxVision2TextModelTester(VLMModelTester):
         kwargs.setdefault("num_image_tokens", 1)
         kwargs.setdefault("patch_size", 2)
         kwargs.setdefault("patch_temporal", 2)
-        kwargs.setdefault("downsample_factor", 1)
-        kwargs.setdefault("sparse_attention_factor", 2)
-        kwargs.setdefault("pos_emb_grid_h", 4)
-        kwargs.setdefault("pos_emb_grid_w", 4)
-        kwargs.setdefault("mlp_ratio", 1.0)
+        kwargs.setdefault("merge_size", 1)
+        kwargs.setdefault("layer_types", ["full_attention", "sliding_attention"])
+        kwargs.setdefault("pos_emb_height", 4)
+        kwargs.setdefault("pos_emb_width", 4)
+        kwargs.setdefault("intermediate_size", 37)
         kwargs.setdefault("adapter_dim", 32)
         super().__init__(parent, **kwargs)
         self.image_grid_thw = (1, 1, 1)
-        self.output_dim = self.hidden_size * self.downsample_factor**2
+        self.output_dim = self.hidden_size * self.merge_size**2
 
     @property
     def _special_token_ids(self):
