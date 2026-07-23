@@ -134,6 +134,7 @@ class HfExporter(ABC):
         model: PreTrainedModel,
         sample_inputs: MutableMapping[str, torch.Tensor | Cache],
         config: ExportConfigMixin | dict[str, ExportConfigMixin],
+        multi_token: bool = False,
     ) -> dict[str, object]:
         """
         Decompose a generative model and export each component independently.
@@ -156,6 +157,10 @@ class HfExporter(ABC):
                 component, or a `dict` keyed by component name (e.g. `"image_encoder"`,
                 `"language_model"`, `"lm_head"`, `"decode"`) to override per-component —
                 all component names must be present in the dict.
+            multi_token (`bool`, *optional*, defaults to `False`):
+                Capture the `decode` component with multiple query tokens so its sequence axis stays
+                dynamic — one graph for ordinary decoding, chunked prefill, and continuation. Leave
+                `False` for a classic single-token decoder.
 
         Returns:
             `dict[str, Any]`: `{component_name: backend_specific_artifact}` — same keys as
@@ -163,7 +168,7 @@ class HfExporter(ABC):
             [`~HfExporter.export`] returns for the concrete backend (`ExportedProgram`,
             `ONNXProgram`, `ExecutorchProgramManager`).
         """
-        components = decompose_for_generation(model, sample_inputs)
+        components = decompose_for_generation(model, sample_inputs, multi_token=multi_token)
         if isinstance(config, dict):
             missing = set(components) - set(config)
             if missing:

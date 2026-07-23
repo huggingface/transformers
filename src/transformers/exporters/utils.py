@@ -653,14 +653,54 @@ def _capture_forward(module: torch.nn.Module):
         module.forward = original
 
 
+def _merge_decode_calls(decode_calls: list[dict]) -> dict:
+    """Merge consecutive single-token decode captures into one multi-token decode input.
+
+    Each `model.generate` decode step feeds a single new token, so `torch.export` (with
+    `Dim.AUTO`) sees a query-sequence axis of length 1 and specializes it to a constant — the
+    exported decode can then only ever run one token. Concatenating `N` consecutive decode steps
+    along that axis yields a genuine `N`-token decode input: the traced graph is identical (a
+    KV-cache forward), but the sequence axis now has hint `N > 1` so it stays dynamic. The
+    exported decode then handles both a single token (ordinary decoding) and many (chunked prefill
+    / continuation-from-past for multi-turn) — which is all a `past_key_values` forward really is.
+
+    The cache (`past_key_values`) is taken from the FIRST step (the state right after prefill,
+    before the chunk); the padding `attention_mask` from the LAST (it spans prefill + all `N`
+    tokens). The per-token tensors are concatenated along their sequence axis.
+    """
+    first, last = decode_calls[0], decode_calls[-1]
+    merged = copy.copy(first)
+
+    def concat_along(key: str, dim: int) -> None:
+        values = [call[key] for call in decode_calls if call.get(key) is not None]
+        if len(values) == len(decode_calls):
+            merged[key] = torch.cat(values, dim=dim)
+
+    concat_along("input_ids", 1)
+    concat_along("inputs_embeds", 1)
+    concat_along("cache_position", 0)
+    # `position_ids` is `[batch, seq]` or `[n_axes, batch, seq]` (m-rope) — the sequence axis is
+    # last in both, so a negative dim concatenates it correctly either way.
+    concat_along("position_ids", -1)
+    if last.get("attention_mask") is not None:
+        merged["attention_mask"] = last["attention_mask"]
+    return merged
+
+
 def decompose_prefill_decode(
     model: PreTrainedModel,
     inputs: dict[str, Any],
+    multi_token: bool = False,
 ) -> dict[str, tuple[torch.nn.Module, dict]]:
-    """Run `model.generate()` for 2 tokens and capture prefill and decode inputs.
+    """Run `model.generate()` and capture prefill and decode inputs.
 
     Reuses the full generation machinery so every architecture (decoder-only, SSM,
     encoder-decoder, multi-modal, …) gets correct inputs without reimplementing the loop.
+
+    `multi_token` (default False) captures the decode component with two tokens instead of one (by
+    merging two consecutive decode steps, see `_merge_decode_calls`) so the exported decode keeps a
+    dynamic sequence axis and can process multiple tokens at once — a single graph that serves
+    ordinary decoding, chunked prefill, and continuation-from-past.
 
     Some multi-modal models (Blip2, Kosmos-2, …) override `generate()` to run their encoders
     inline and delegate the generation loop to an inner language model, so the top-level
@@ -673,6 +713,8 @@ def decompose_prefill_decode(
         `{"prefill": (module, prefill_inputs), "decode": (module, decode_inputs)}` where
         `module` is `model` itself, or its decoder when `generate()` delegates to it.
     """
+    # 1 prefill forward + 1 decode (or 2, merged for `multi_token`) forward to capture.
+    n_new_tokens = 3 if multi_token else 2
     decoder = model.get_decoder()
     try:
         with contextlib.ExitStack() as stack:
@@ -682,7 +724,9 @@ def decompose_prefill_decode(
             )
             # `use_cache=True`: the prefill/decode split only makes sense with a KV cache, so force
             # it on regardless of the model's config default (some set `use_cache=False`).
-            model.generate(**copy.deepcopy(inputs), max_new_tokens=2, min_new_tokens=2, use_cache=True)
+            model.generate(
+                **copy.deepcopy(inputs), max_new_tokens=n_new_tokens, min_new_tokens=n_new_tokens, use_cache=True
+            )
     except Exception as e:
         raise RuntimeError(
             f"decompose_prefill_decode failed for {type(model).__name__}. "
@@ -690,17 +734,19 @@ def decompose_prefill_decode(
             f"Make sure the inputs are compatible with model.generate()."
         ) from e
 
-    module, module_calls = (model, calls) if len(calls) >= 2 else (decoder, decoder_calls)
-    if len(module_calls) < 2:
+    module, module_calls = (model, calls) if len(calls) >= n_new_tokens else (decoder, decoder_calls)
+    if len(module_calls) < n_new_tokens:
         raise RuntimeError(
-            f"decompose_prefill_decode expected at least 2 forward() calls on {type(model).__name__} "
-            f"or its decoder during generate(max_new_tokens=2), but captured {len(calls)} on the "
+            f"decompose_prefill_decode expected at least {n_new_tokens} forward() calls on {type(model).__name__} "
+            f"or its decoder during generate(max_new_tokens={n_new_tokens}), but captured {len(calls)} on the "
             f"top-level model and {len(decoder_calls)} on the decoder."
         )
 
+    decode_calls = module_calls[1:n_new_tokens]
+    decode_inputs = _merge_decode_calls(decode_calls) if multi_token else decode_calls[0]
     return {
         "prefill": (copy.copy(module), module_calls[0]),
-        "decode": (copy.copy(module), module_calls[1]),
+        "decode": (copy.copy(module), decode_inputs),
     }
 
 
@@ -801,7 +847,7 @@ def decompose_multimodal(model: PreTrainedModel, inputs: dict[str, Any]) -> dict
 
 
 def decompose_for_generation(
-    model: PreTrainedModel, inputs: dict[str, Any]
+    model: PreTrainedModel, inputs: dict[str, Any], multi_token: bool = False
 ) -> dict[str, tuple[torch.nn.Module, dict]]:
     """Decompose a generative model into independently exportable `(model, forward_inputs)` pairs.
 
@@ -814,13 +860,16 @@ def decompose_for_generation(
     Args:
         model: Generative model. Must support `model.generate(**inputs)`.
         inputs: **Generate** kwargs — what you'd pass to `model.generate(**inputs)`.
+        multi_token: When `True`, the `decode` component is captured with multiple tokens so its
+            sequence axis stays dynamic (one graph for ordinary decoding, chunked prefill, and
+            continuation); when `False`, single-token decode.
 
     Returns:
         `{component_name: (submodel, forward_inputs)}`. Keys are `"prefill"` / `"decode"` for
         plain generative models and `"<modality>_encoder"` / `"multi_modal_projector"` /
         `"language_model"` / `"lm_head"` / `"decode"` for multi-modal generative models.
     """
-    stages = decompose_prefill_decode(model, inputs)
+    stages = decompose_prefill_decode(model, inputs, multi_token=multi_token)
     prefill_model, prefill_inputs = stages["prefill"]
 
     if not is_multimodal(prefill_model):

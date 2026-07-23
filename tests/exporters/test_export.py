@@ -284,6 +284,14 @@ DYNAMIC_EXPORT_PARAMS = parameterized.expand(
     name_func=lambda f, _, p: f"{f.__name__}_{'dynamic' if p.args[0] else 'static'}",
 )
 
+# Generate tests additionally sweep `multi_token` (single- vs multi-token decode capture).
+DYNAMIC_MULTI_TOKEN_EXPORT_PARAMS = parameterized.expand(
+    [(dynamic, multi_token) for dynamic in (False, True) for multi_token in (False, True)],
+    name_func=lambda f, _, p: (
+        f"{f.__name__}_{'dynamic' if p.args[0] else 'static'}_{'multitoken' if p.args[1] else 'singletoken'}"
+    ),
+)
+
 # Maximum time (in seconds) for a single export test before it is killed.
 EXPORT_TEST_TIMEOUT = 1000
 
@@ -694,7 +702,7 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
     stage into individual submodules via :func:`decompose_multimodal`.
     """
 
-    def _prepare_export_generate_model_and_inputs(self, model_class):
+    def _prepare_export_generate_model_and_inputs(self, model_class, multi_token=False):
         """Decompose a generative model into exportable components.
 
         For multi-modal models: decomposes the prefill stage into individual submodules plus the decode stage.
@@ -711,17 +719,17 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
         model = model_class(config).eval().to(torch_device)
         set_model_for_less_flaky_test(model)
 
-        return model.config, decompose_for_generation(model, inputs_dict)
+        return model.config, decompose_for_generation(model, inputs_dict, multi_token=multi_token)
 
     # ──────────────────── torch.export tests ─────────────────────
 
-    @DYNAMIC_EXPORT_PARAMS
+    @DYNAMIC_MULTI_TOKEN_EXPORT_PARAMS
     @slow
     @pytest.mark.torch_export_test
     @pytest.mark.timeout(EXPORT_TEST_TIMEOUT)
     @require_torch_greater_or_equal(MIN_EXPORT_TORCH_VERSION)
     @disable_hub_kernels
-    def test_torch_export_generate(self, dynamic, atol=1e-4, rtol=1e-4):
+    def test_torch_export_generate(self, dynamic, multi_token, atol=1e-4, rtol=1e-4):
         """Export prefill and decode stages with ``torch.export`` and verify outputs match eager."""
         self._skip_if_not_exportable()
 
@@ -732,7 +740,7 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
             if self._should_skip(model_class, generate=True):
                 continue
 
-            model_config, components = self._prepare_export_generate_model_and_inputs(model_class)
+            model_config, components = self._prepare_export_generate_model_and_inputs(model_class, multi_token)
             eager_outputs = self._collect_eager_outputs(components)
 
             for name, (model, inputs) in components.items():
@@ -748,7 +756,7 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
 
     # ──────────────────────── ONNX tests ─────────────────────────
 
-    @DYNAMIC_EXPORT_PARAMS
+    @DYNAMIC_MULTI_TOKEN_EXPORT_PARAMS
     @slow
     @require_onnxscript
     @require_onnxruntime
@@ -756,7 +764,7 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
     @pytest.mark.timeout(EXPORT_TEST_TIMEOUT)
     @require_torch_greater_or_equal(MIN_EXPORT_TORCH_VERSION)
     @disable_hub_kernels
-    def test_onnx_export_generate(self, dynamic):
+    def test_onnx_export_generate(self, dynamic, multi_token):
         """Export prefill and decode stages to ONNX and verify output names match eager."""
         self._skip_if_not_exportable()
 
@@ -767,7 +775,7 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
             exporter = OnnxExporter()
             config = OnnxConfig(dynamic=dynamic)
 
-            model_config, components = self._prepare_export_generate_model_and_inputs(model_class)
+            model_config, components = self._prepare_export_generate_model_and_inputs(model_class, multi_token)
             eager_outputs = self._collect_eager_outputs(components)
 
             for name, (model, inputs) in components.items():
@@ -781,12 +789,12 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
     # ──────────────────── OpenVINO tests ─────────────────────────
 
     @slow
-    @DYNAMIC_EXPORT_PARAMS
+    @DYNAMIC_MULTI_TOKEN_EXPORT_PARAMS
     @require_openvino
     @pytest.mark.openvino_export_test
     @pytest.mark.timeout(EXPORT_TEST_TIMEOUT)
     @disable_hub_kernels
-    def test_openvino_export_generate(self, dynamic):
+    def test_openvino_export_generate(self, dynamic, multi_token):
         """Export prefill and decode stages to OpenVINO IR and verify output names match eager."""
         self._skip_if_not_exportable()
         exporter = OpenVINOExporter()
@@ -796,7 +804,7 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
             if self._should_skip(model_class, generate=True, dynamic=dynamic, backend="openvino"):
                 continue
 
-            model_config, components = self._prepare_export_generate_model_and_inputs(model_class)
+            model_config, components = self._prepare_export_generate_model_and_inputs(model_class, multi_token)
             eager_outputs = self._collect_eager_outputs(components)
 
             for name, (model, inputs) in components.items():
@@ -810,14 +818,14 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
 
     # ──────────────────── ExecuTorch tests ───────────────────────
 
-    @DYNAMIC_EXPORT_PARAMS
+    @DYNAMIC_MULTI_TOKEN_EXPORT_PARAMS
     @slow
     @require_executorch
     @pytest.mark.executorch_export_test
     @pytest.mark.timeout(EXPORT_TEST_TIMEOUT)
     @require_torch_greater_or_equal(MIN_EXPORT_TORCH_VERSION)
     @disable_hub_kernels
-    def test_executorch_export_generate(self, dynamic):
+    def test_executorch_export_generate(self, dynamic, multi_token):
         """Export prefill and decode stages to ExecuTorch and verify no errors."""
 
         self._skip_if_not_exportable()
@@ -828,7 +836,7 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
             if self._should_skip(model_class, generate=True, dynamic=dynamic, backend="executorch"):
                 continue
 
-            model_config, components = self._prepare_export_generate_model_and_inputs(model_class)
+            model_config, components = self._prepare_export_generate_model_and_inputs(model_class, multi_token)
 
             for name, (model, inputs) in components.items():
                 with self.subTest(f"{model_class.__name__}/{name}"):
