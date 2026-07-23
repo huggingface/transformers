@@ -19,8 +19,8 @@ from dataclasses import dataclass
 import numpy as np
 import torch
 from huggingface_hub.dataclasses import strict
-from PIL import Image
 from torch import nn
+from torchvision.transforms.v2 import functional as tvF
 
 from ... import initialization as init
 from ...activations import ACT2FN
@@ -28,6 +28,7 @@ from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import PreTrainedConfig
 from ...generation import GenerationMixin
 from ...image_processing_utils import BatchFeature
+from ...image_transforms import group_images_by_shape, reorder_images
 from ...image_utils import PILImageResampling, SizeDict
 from ...masking_utils import create_causal_mask
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, CausalLMOutputWithPast
@@ -35,12 +36,13 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...utils import TensorType, TransformersKwargs, auto_docstring, can_return_tuple
 from ...utils.generic import (
+    get_max_seqlen,
     is_flash_attention_requested,
     maybe_autocast,
 )
 from ...utils.import_utils import requires
 from ...utils.output_capturing import capture_outputs
-from ...vision_utils import get_vision_cu_seqlens
+from ...vision_utils import get_vision_attention_seqlens
 from ..hunyuan_v1_dense.configuration_hunyuan_v1_dense import HunYuanDenseV1Config
 from ..hunyuan_v1_dense.modeling_hunyuan_v1_dense import (
     HunYuanDenseV1Attention,
@@ -346,6 +348,90 @@ class HunYuanVLImageProcessor(Qwen2VLImageProcessor):
     spatial_patch_size = 1
     valid_kwargs = HunYuanVLImageProcessorKwargs
 
+    def _preprocess(
+        self,
+        images: list["torch.Tensor"],
+        do_resize: bool,
+        size: SizeDict,
+        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
+        do_rescale: bool,
+        rescale_factor: float,
+        do_normalize: bool,
+        image_mean: float | list[float] | None,
+        image_std: float | list[float] | None,
+        patch_size: int,
+        temporal_patch_size: int,
+        merge_size: int,
+        disable_grouping: bool | None,
+        return_tensors: str | TensorType | None,
+        **kwargs,
+    ) -> BatchFeature:
+        # HunYuanVL expects row-major patches, unlike Qwen2VL's block-major layout.
+        grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
+        resized_images_grouped = {}
+        for shape, stacked_images in grouped_images.items():
+            height, width = stacked_images.shape[-2:]
+            if do_resize:
+                resized_height, resized_width = smart_resize(
+                    height,
+                    width,
+                    factor=patch_size * merge_size,
+                    min_pixels=size.shortest_edge,
+                    max_pixels=size.longest_edge,
+                )
+                stacked_images = self.resize(
+                    image=stacked_images,
+                    size=SizeDict(height=resized_height, width=resized_width),
+                    resample=resample,
+                )
+            resized_images_grouped[shape] = stacked_images
+        resized_images = reorder_images(resized_images_grouped, grouped_images_index)
+
+        grouped_images, grouped_images_index = group_images_by_shape(resized_images, disable_grouping=disable_grouping)
+        processed_images_grouped = {}
+        processed_grids = {}
+        for shape, stacked_images in grouped_images.items():
+            resized_height, resized_width = stacked_images.shape[-2:]
+            patches = self.rescale_and_normalize(
+                stacked_images, do_rescale, rescale_factor, do_normalize, image_mean, image_std
+            )
+            batch_size, channel = patches.shape[:2]
+            grid_h, grid_w = resized_height // patch_size, resized_width // patch_size
+            patches = patches.reshape(
+                batch_size,
+                channel,
+                grid_h // merge_size,
+                merge_size,
+                patch_size,
+                grid_w // merge_size,
+                merge_size,
+                patch_size,
+            )
+            # Flatten patches in row-major order to match the PIL backend.
+            patches = patches.permute(0, 2, 3, 5, 6, 1, 4, 7)
+
+            flatten_patches = (
+                patches.unsqueeze(6)
+                .expand(-1, -1, -1, -1, -1, -1, temporal_patch_size, -1, -1)
+                .reshape(
+                    batch_size,
+                    grid_h * grid_w,
+                    channel * temporal_patch_size * patch_size * patch_size,
+                )
+            )
+
+            processed_images_grouped[shape] = flatten_patches
+            processed_grids[shape] = [[1, grid_h, grid_w]] * batch_size
+
+        processed_images = reorder_images(processed_images_grouped, grouped_images_index)
+        processed_grids_ordered = reorder_images(processed_grids, grouped_images_index)
+        pixel_values = torch.cat(processed_images, dim=0)
+        image_grid_thw = torch.tensor(processed_grids_ordered, dtype=torch.long)
+
+        return BatchFeature(
+            data={"pixel_values": pixel_values, "image_grid_thw": image_grid_thw}, tensor_type=return_tensors
+        )
+
     def get_number_of_image_patches(self, height: int, width: int, images_kwargs=None) -> tuple[int, int]:
         """Return the `(grid_h, grid_w)` patch counts used by HunYuanVL token accounting."""
         images_kwargs = images_kwargs or {}
@@ -392,13 +478,6 @@ class HunYuanVLImageProcessorPil(Qwen2VLImageProcessorPil):
 
         for image in images:
             height, width = image.shape[-2:]
-            # Match the original HunyuanOCR preprocessing with PIL.Image.resize
-            # FIXME: raushan, investiagte why the quality degrafes with our np-based transforms
-            if image.ndim == 3:
-                pil_image = Image.fromarray(np.transpose(image, (1, 2, 0)).astype(np.uint8))
-            else:
-                pil_image = Image.fromarray(image.astype(np.uint8))
-
             if do_resize:
                 resized_height, resized_width = smart_resize(
                     height,
@@ -407,15 +486,16 @@ class HunYuanVLImageProcessorPil(Qwen2VLImageProcessorPil):
                     min_pixels=size.shortest_edge,
                     max_pixels=size.longest_edge,
                 )
-                # Intentionally do not pass `resample`: the baseline implementation
-                # calls `image.resize((width, height))` directly. FIXME raushan
-                pil_image = pil_image.resize((resized_width, resized_height))
+                image = self.resize(
+                    image,
+                    size=SizeDict(height=resized_height, width=resized_width),
+                    # The reference HunyuanOCR processor calls `PIL.Image.resize` without a
+                    # resampling argument, which uses BICUBIC for RGB images. Its config has
+                    # `resample=1` (LANCZOS), but the original implementation never uses it.
+                    resample=PILImageResampling.BICUBIC,
+                )
             else:
                 resized_height, resized_width = height, width
-
-            image = np.array(pil_image)
-            if image.ndim == 3:
-                image = np.transpose(image, (2, 0, 1))
 
             image = image.astype(np.float32)
             if do_rescale:
@@ -669,6 +749,7 @@ class HunYuanVLVisionAttention(MllamaVisionAttention):
         self,
         hidden_states: torch.Tensor,
         cu_seqlens: torch.Tensor,
+        max_seqlen: int | None = None,
         **kwargs,
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
         query = self.q_proj(hidden_states)
@@ -687,7 +768,7 @@ class HunYuanVLVisionAttention(MllamaVisionAttention):
 
         if is_flash_attention_requested(self.config):
             # Flash Attention: Use cu_seqlens for variable length attention
-            max_seqlen = (cu_seqlens[1:] - cu_seqlens[:-1]).max()
+            max_seqlen = get_max_seqlen(cu_seqlens, self.config, kwargs={"max_seqlen": max_seqlen})
             attn_output, attn_weights = attention_interface(
                 self,
                 query_states,
@@ -862,10 +943,16 @@ class HunYuanVLVisionTransformer(HunYuanVLPreTrainedModel):
             The temporal, height and width dimensions for each image. Each row contains `[t, h, w]` patch counts.
         """
         hidden_states = self.embeddings(pixel_values, grid_thw)
-        cu_seqlens = get_vision_cu_seqlens(grid_thw, kwargs=kwargs)
+        cu_seqlens, max_seqlen = get_vision_attention_seqlens(grid_thw, self.config, kwargs=kwargs)
 
         for layer in self.layers:
-            hidden_states = layer(hidden_states, cu_seqlens=cu_seqlens, attention_mask=None, **kwargs)
+            hidden_states = layer(
+                hidden_states,
+                cu_seqlens=cu_seqlens,
+                max_seqlen=max_seqlen,
+                attention_mask=None,
+                **kwargs,
+            )
 
         split_sizes = grid_thw.prod(dim=-1).tolist()
         split_items = torch.split(hidden_states, split_sizes, dim=1)
