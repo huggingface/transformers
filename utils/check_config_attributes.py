@@ -175,6 +175,7 @@ SPECIAL_CASES_TO_ALLOW = {
     "GlmMoeDsaConfig": ["head_dim", "layer_types", "mlp_bias", "first_k_dense_replace", "n_routed_experts"],
     "EsmFoldConfig": ["esm_ablate_pairwise", "esm_ablate_sequence", "esm_input_dropout", "esm_type"],
     "TrunkConfig": ["cpu_grad_checkpoint", "layer_drop"],
+    "OpenPanguV2Config": ["swa_layers"],
     "SeamlessM4TConfig": True,
     "SeamlessM4Tv2Config": True,
     "ConditionalDetrConfig": True,

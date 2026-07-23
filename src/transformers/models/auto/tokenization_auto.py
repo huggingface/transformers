@@ -252,6 +252,7 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, str | None](
         ("omdet-turbo", "CLIPTokenizer" if is_tokenizers_available() else None),
         ("oneformer", "CLIPTokenizer" if is_tokenizers_available() else None),
         ("openai-gpt", "OpenAIGPTTokenizer" if is_tokenizers_available() else None),
+        ("openpangu_v2", "OpenPanguV2Tokenizer" if is_tokenizers_available() else None),
         ("opt", "GPT2Tokenizer" if is_tokenizers_available() else None),
         ("ovis2", "Qwen2Tokenizer" if is_tokenizers_available() else None),
         ("owlv2", "CLIPTokenizer" if is_tokenizers_available() else None),

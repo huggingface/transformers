@@ -87,6 +87,13 @@ EXPORT_SKIPS: dict[str, dict[str, str]] = {
             "`torch.export` can't carry that state between calls. "
             "TODO: refactor to a cache-based SSM pattern (like Mamba/Mamba2)."
         ),
+        "OpenPanguV2ForCausalLM": (
+            "WindowBuffer and DsaIndexer maintain non-Module stateful caches "
+            "(`cache`, `_cached_keys`) that torch.export cannot trace — their "
+            "shape comparisons and Python-level guards on symbolic seq_length "
+            "create unbacked symbols. TODO: register dynamo patches for "
+            "WindowBuffer.__call__ and DsaIndexer.forward."
+        ),
         "MoshiForConditionalGeneration": (
             "`generate()` creates `blank_user_audio_codes` outside the traced forward and "
             "passes it as a kwarg; the resulting ONNX input has mismatched rank (scalar vs 3D). "
