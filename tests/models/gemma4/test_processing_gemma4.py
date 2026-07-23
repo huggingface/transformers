@@ -41,6 +41,7 @@ class Gemma4ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def _setup_test_attributes(cls, processor):
         cls.image_token = processor.image_token
         cls.video_token = processor.video_token
+        cls.audio_token = processor.audio_token
 
     @classmethod
     def _setup_video_processor(cls):
@@ -107,7 +108,7 @@ class Gemma4ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     @staticmethod
     def prepare_processor_dict():
         return {
-            "chat_template": "{{ bos_token }}\n{%- if messages[0]['role'] == 'system' -%}\n    {%- set first_user_prefix = messages[0]['content'][0]['text'] + '\n\n' -%}\n    {%- set loop_messages = messages[1:] -%}\n{%- else -%}\n    {%- set first_user_prefix = \"\" -%}\n    {%- set loop_messages = messages -%}\n{%- endif -%}\n{%- for message in loop_messages -%}\n    {%- if (message['role'] == 'user') != (loop.index0 % 2 == 0) -%}\n        {{ raise_exception(\"Conversation roles must alternate user/assistant/user/assistant/...\") }}\n    {%- endif -%}\n    {%- if (message['role'] == 'assistant') -%}\n        {%- set role = \"model\" -%}\n    {%- else -%}\n        {%- set role = message['role'] -%}\n    {%- endif -%}\n    {{ '<start_of_turn>' + role + '\n' + (first_user_prefix if loop.first else \"\") }}\n    {%- if message['content'] is string -%}\n        {{ message['content'] | trim }}\n    {%- elif message['content'] is iterable -%}\n        {%- for item in message['content'] -%}\n            {%- if item['type'] == 'image' -%}\n                {{ '<|image|>' }}\n       {%- elif item['type'] == 'video' -%}\n{{ '<video_soft_token>' }}\n      {%- elif item['type'] == 'text' -%}\n                {{ item['text'] | trim }}\n            {%- endif -%}\n        {%- endfor -%}\n    {%- else -%}\n        {{ raise_exception(\"Invalid content type\") }}\n    {%- endif -%}\n    {{ '<end_of_turn>\n' }}\n{%- endfor -%}\n{%- if add_generation_prompt -%}\n    {{'<start_of_turn>model\n'}}\n{%- endif -%}\n",            "image_seq_length": 3,
+            "chat_template": "{{ bos_token }}\n{%- if messages[0]['role'] == 'system' -%}\n    {%- set first_user_prefix = messages[0]['content'][0]['text'] + '\n\n' -%}\n    {%- set loop_messages = messages[1:] -%}\n{%- else -%}\n    {%- set first_user_prefix = \"\" -%}\n    {%- set loop_messages = messages -%}\n{%- endif -%}\n{%- for message in loop_messages -%}\n    {%- if (message['role'] == 'user') != (loop.index0 % 2 == 0) -%}\n        {{ raise_exception(\"Conversation roles must alternate user/assistant/user/assistant/...\") }}\n    {%- endif -%}\n    {%- if (message['role'] == 'assistant') -%}\n        {%- set role = \"model\" -%}\n    {%- else -%}\n        {%- set role = message['role'] -%}\n    {%- endif -%}\n    {{ '<start_of_turn>' + role + '\n' + (first_user_prefix if loop.first else \"\") }}\n    {%- if message['content'] is string -%}\n        {{ message['content'] | trim }}\n    {%- elif message['content'] is iterable -%}\n        {%- for item in message['content'] -%}\n            {%- if item['type'] == 'image' -%}\n                {{ '<|image|>' }}\n       {%- elif item['type'] == 'video' -%}\n{{ '<video_soft_token>' }}\n      {%- elif item['type'] == 'audio' -%}\n{{ '<audio_soft_token>' }}\n      {%- elif item['type'] == 'text' -%}\n                {{ item['text'] | trim }}\n            {%- endif -%}\n        {%- endfor -%}\n    {%- else -%}\n        {{ raise_exception(\"Invalid content type\") }}\n    {%- endif -%}\n    {{ '<end_of_turn>\n' }}\n{%- endfor -%}\n{%- if add_generation_prompt -%}\n    {{'<start_of_turn>model\n'}}\n{%- endif -%}\n",            "image_seq_length": 3,
         }  # fmt: skip
 
     # Override as Gemma4 needs images to be an explicitly nested batch
@@ -230,6 +231,49 @@ class Gemma4ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         audio_lengths = list(expected_num_tokens)
         num_from_helper = processor._get_num_multimodal_tokens(audio_lengths=audio_lengths)["num_audio_tokens"]
         self.assertListEqual(num_from_helper, list(expected_num_tokens.values()))
+
+    def test_audio_inputs_require_audio_tokens(self):
+        processor = self.get_processor()
+        audio = [np.zeros(1600, dtype=np.float32)]
+
+        with self.assertRaisesRegex(ValueError, "audio"):
+            processor(text="Transcribe this.", audio=audio, return_tensors="np")
+        with self.assertRaisesRegex(ValueError, "audio"):
+            processor(text=f"{processor.audio_token} Transcribe this.", return_tensors="np")
+
+        outputs = processor(text=f"{processor.audio_token} Transcribe this.", audio=audio, return_tensors="np")
+        self.assertGreater(np.sum(outputs["input_ids"] == processor.audio_token_id), 0)
+
+        batch_audio = [
+            np.zeros(1600, dtype=np.float32),
+            np.zeros(3200, dtype=np.float32),
+            np.zeros(4800, dtype=np.float32),
+        ]
+        outputs = processor(
+            text=[processor.audio_token, f"{processor.audio_token} {processor.audio_token}"],
+            audio=batch_audio,
+            padding=True,
+            return_tensors="np",
+        )
+        self.assertEqual(outputs["input_features"].shape[0], len(batch_audio))
+
+    def test_text_only_input_without_audio_token(self):
+        processor = self.get_processor()
+        processor.audio_token = None
+
+        outputs = processor(text="hello", return_tensors="np")
+        self.assertIn("input_ids", outputs)
+        self.assertNotIn("input_features", outputs)
+
+    def test_textless_image_audio_inputs_add_both_placeholders(self):
+        processor = self.get_processor()
+        image = [[np.zeros((30, 30, 3), dtype=np.uint8)]]
+        audio = [np.zeros(1600, dtype=np.float32)]
+
+        outputs = processor(images=image, audio=audio, return_tensors="np")
+
+        self.assertGreater(np.sum(outputs["input_ids"] == processor.image_token_id), 0)
+        self.assertGreater(np.sum(outputs["input_ids"] == processor.audio_token_id), 0)
 
     @unittest.skip("This test seems to be loading a different video, check for all models and fix")
     def test_apply_chat_template_video_frame_sampling(self):
