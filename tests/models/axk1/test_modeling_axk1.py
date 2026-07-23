@@ -106,7 +106,6 @@ class AXK1ModelTest(CausalLMModelTest, unittest.TestCase):
         pass
 
 
-@unittest.skip(reason="")
 @slow
 @require_torch_accelerator
 class AXK1IntegrationTest(unittest.TestCase):
