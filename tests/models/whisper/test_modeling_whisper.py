@@ -1224,6 +1224,11 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
 @require_torch
 @require_torchaudio
 class WhisperModelIntegrationTests(unittest.TestCase):
+    # Batched tests assert exact token ids of length 20. Whisper's generate path accounts for
+    # decoder prefix tokens when applying max_length, so these need max_length=21 to emit 20 tokens.
+    # Transcript-only tests stop at EOS before hitting the limit and should keep max_length=20.
+    _exact_token_generation_max_length = 21
+
     _dataset = None
 
     @classmethod
@@ -1239,6 +1244,12 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         ds = self._dataset
         speech_samples = ds.sort("id")[:num_samples]["audio"]
         return [x["array"] for x in speech_samples]
+
+    def _feature_tensor_to_model(self, input_features, model):
+        return input_features.to(device=model.device, dtype=model.dtype)
+
+    def _batch_to_model(self, inputs, model):
+        return inputs.to(device=model.device, dtype=model.dtype)
 
     @slow
     def test_tiny_logits_librispeech(self):
@@ -1296,7 +1307,8 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         input_speech = self._load_datasamples(1)
 
         feature_extractor = WhisperFeatureExtractor()
-        input_features = feature_extractor(input_speech, return_tensors="pt").input_features.to(torch_device)
+        input_features = feature_extractor(input_speech, return_tensors="pt").input_features
+        input_features = self._feature_tensor_to_model(input_features, model)
 
         logits = model(
             input_features,
@@ -1339,7 +1351,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
             return_tensors="pt",
             sampling_rate=16_000,
         )
-        input_features = processed_inputs.input_features.to(torch_device)
+        input_features = self._feature_tensor_to_model(processed_inputs.input_features, model)
         decoder_input_ids = processed_inputs.labels.to(torch_device)
 
         logits = model(
@@ -1374,7 +1386,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
 
         input_speech = self._load_datasamples(1)
         input_features = processor(input_speech, return_tensors="pt", sampling_rate=16_000).input_features
-        input_features = input_features.to(torch_device)
+        input_features = self._feature_tensor_to_model(input_features, model)
 
         generated_ids = model.generate(input_features, num_beams=5, max_length=20)
         transcript = processor.tokenizer.batch_decode(generated_ids)[0]
@@ -1390,7 +1402,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
 
         input_speech = self._load_datasamples(1)
         input_features = processor(input_speech, return_tensors="pt", sampling_rate=16_000).input_features
-        input_features = input_features.to(torch_device)
+        input_features = self._feature_tensor_to_model(input_features, model)
 
         generated_ids = model.generate(input_features, num_beams=5, max_length=20)
         transcript = processor.tokenizer.decode(generated_ids[0])
@@ -1406,7 +1418,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
 
         input_speech = self._load_datasamples(1)
         input_features = processor(input_speech, return_tensors="pt", sampling_rate=16_000).input_features
-        input_features = input_features.to(torch_device)
+        input_features = self._feature_tensor_to_model(input_features, model)
 
         generated_ids = model.generate(
             input_features, do_sample=False, max_length=20, language="<|en|>", task="transcribe"
@@ -1427,7 +1439,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
 
         input_speech = next(iter(ds))["audio"]["array"]
         input_features = processor(input_speech, return_tensors="pt", sampling_rate=16_000).input_features
-        input_features = input_features.to(torch_device)
+        input_features = self._feature_tensor_to_model(input_features, model)
 
         generated_ids = model.generate(
             input_features, do_sample=False, max_length=20, language="<|de|>", task="transcribe"
@@ -1452,8 +1464,10 @@ class WhisperModelIntegrationTests(unittest.TestCase):
 
         input_speech = self._load_datasamples(4)
         input_features = processor(input_speech, return_tensors="pt", sampling_rate=16_000).input_features
-        input_features = input_features.to(torch_device)
-        generated_ids = model.generate(input_features, max_length=20, task="translate")
+        input_features = self._feature_tensor_to_model(input_features, model)
+        generated_ids = model.generate(
+            input_features, max_length=self._exact_token_generation_max_length, task="translate"
+        )
 
         # fmt: off
         EXPECTED_LOGITS = torch.tensor(
@@ -1495,9 +1509,9 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         ds = ds.cast_column("audio", datasets.Audio(sampling_rate=16_000))
 
         input_speech = next(iter(ds))["audio"]["array"]
-        input_features = processor.feature_extractor(raw_speech=input_speech, return_tensors="pt").input_features.to(
-            torch_device
-        )
+        input_features = processor.feature_extractor(raw_speech=input_speech, return_tensors="pt").input_features
+
+        input_features = self._feature_tensor_to_model(input_features, model)
 
         EXPECTED_TRANSCRIPTS = [
             "夏の時期の時期でした",
@@ -1507,7 +1521,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         generated_ids = model.generate(
             input_features.repeat(2, 1, 1),
             do_sample=False,
-            max_length=20,
+            max_length=self._exact_token_generation_max_length,
             language=["<|ja|>", "<|en|>"],
             task="transcribe",
         )
@@ -1523,8 +1537,8 @@ class WhisperModelIntegrationTests(unittest.TestCase):
 
         input_speech = self._load_datasamples(4)
         input_features = processor(input_speech, return_tensors="pt", sampling_rate=16_000).input_features
-        input_features = input_features.to(torch_device)
-        generated_ids = model.generate(input_features, max_length=20).to("cpu")
+        input_features = self._feature_tensor_to_model(input_features, model)
+        generated_ids = model.generate(input_features, max_length=self._exact_token_generation_max_length).to("cpu")
 
         # fmt: off
         EXPECTED_LOGITS = torch.tensor(
@@ -1561,7 +1575,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
 
         input_speech = np.concatenate(self._load_datasamples(4))
         input_features = processor(input_speech, return_tensors="pt", sampling_rate=16_000).input_features
-        input_features = input_features.to(torch_device)
+        input_features = self._feature_tensor_to_model(input_features, model)
 
         generated_ids = model.generate(input_features, max_length=448, return_timestamps=True).to("cpu")
 
@@ -1632,7 +1646,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
 
         input_speech = np.concatenate(self._load_datasamples(4))
         input_features = processor(input_speech, return_tensors="pt", sampling_rate=16_000).input_features
-        input_features = input_features.to(torch_device)
+        input_features = self._feature_tensor_to_model(input_features, model)
 
         _ = model.generate(
             input_features, max_length=448, return_timestamps=True, return_token_timestamps=True, return_segments=True
@@ -1651,7 +1665,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         input_features = processor(
             sample["array"], return_tensors="pt", truncation=False, sampling_rate=sample["sampling_rate"]
         )
-        input_features = input_features.to(torch_device)
+        input_features = self._feature_tensor_to_model(input_features, model)
 
         generated_ids = model.generate(**input_features, return_timestamps=True, return_segments=True)
 
@@ -1719,7 +1733,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
             return_tensors="pt",
         ).input_features
 
-        input_features = input_features.to(torch_device)
+        input_features = self._feature_tensor_to_model(input_features, model)
         generated_ids = model.generate(input_features, return_timestamps=True, return_segments=True)
         # fmt: off
         EXPECTED_XPU = [
@@ -1903,7 +1917,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
             return_tensors="pt",
             sampling_rate=16_000,
         ).input_features
-        input_features = input_features.to(torch_device)
+        input_features = self._feature_tensor_to_model(input_features, model)
 
         generated_ids = model.generate(
             input_features, max_length=448, return_timestamps=True, condition_on_prev_tokens=True
@@ -1973,7 +1987,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
 
         input_speech = self._load_datasamples(4)
         input_features = processor(input_speech, return_tensors="pt", sampling_rate=16_000).input_features
-        input_features = input_features.to(torch_device)
+        input_features = self._feature_tensor_to_model(input_features, model)
 
         generate_outputs = model.generate(
             input_features, max_length=448, return_timestamps=True, return_token_timestamps=True
@@ -2003,7 +2017,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         input_features = processor(
             input_speech, return_tensors="pt", sampling_rate=16_000, return_token_timestamps=True
         )
-        input_features = input_features.to(torch_device)
+        input_features = self._feature_tensor_to_model(input_features, model)
 
         generate_outputs = model.generate(
             **input_features, max_length=448, return_timestamps=True, return_token_timestamps=True
@@ -2035,7 +2049,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
 
         input_speech = self._load_datasamples(num_samples)
         input_features = processor(input_speech, return_tensors="pt", sampling_rate=16_000).input_features
-        input_features = input_features.to(torch_device)
+        input_features = self._feature_tensor_to_model(input_features, model)
 
         generate_outputs = model.generate(
             input_features,
@@ -2067,7 +2081,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
             padding=True,
         )
 
-        inputs = inputs.to(torch_device)
+        inputs = self._batch_to_model(inputs, model)
         generate_outputs = model.generate(
             **inputs, return_segments=True, return_token_timestamps=True, return_timestamps=True
         )
@@ -2143,7 +2157,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         model.to(torch_device)
         input_speech = self._load_datasamples(4)[-1:]
         input_features = processor(input_speech, return_tensors="pt", sampling_rate=16_000).input_features
-        input_features = input_features.to(torch_device)
+        input_features = self._feature_tensor_to_model(input_features, model)
 
         output_without_prompt = model.generate(input_features)
         prompt_ids = processor.get_prompt_ids("Leighton", return_tensors="pt").to(torch_device)
@@ -2169,7 +2183,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
 
         input_speech = next(iter(ds))["audio"]["array"]
         input_features = processor(input_speech, return_tensors="pt", sampling_rate=16_000).input_features
-        input_features = input_features.to(torch_device)
+        input_features = self._feature_tensor_to_model(input_features, model)
 
         forced_decoder_ids = processor.get_decoder_prompt_ids(
             task="transcribe",
@@ -2199,7 +2213,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         input_features = processor(
             input_speech, return_tensors="pt", truncation=False, padding="longest", sampling_rate=16_000
         )["input_features"]
-        input_features = input_features.to(device=torch_device)
+        input_features = self._feature_tensor_to_model(input_features, model)
 
         gen_kwargs = {
             "do_sample": False,
@@ -2221,7 +2235,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         model.to(torch_device)
         input_speech = self._load_datasamples(4)[-1:]
         input_features = processor(input_speech, return_tensors="pt", sampling_rate=16_000).input_features
-        input_features = input_features.to(torch_device)
+        input_features = self._feature_tensor_to_model(input_features, model)
 
         lang_id = model.detect_language(input_features)[0].item()
 
@@ -2235,7 +2249,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         input_speech = torchaudio.transforms.Resample(sr, 16_000)(raw_audio).numpy()
 
         input_features = processor(input_speech, return_tensors="pt", sampling_rate=16_000).input_features
-        input_features = input_features.to(torch_device)
+        input_features = self._feature_tensor_to_model(input_features, model)
 
         lang_id = model.detect_language(input_features)[0].item()
 
@@ -2253,7 +2267,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         input_speech = torchaudio.transforms.Resample(sr, 16_000)(raw_audio).numpy()
 
         input_features = processor(input_speech, return_tensors="pt", sampling_rate=16_000).input_features
-        input_features = input_features.to(torch_device)
+        input_features = self._feature_tensor_to_model(input_features, model)
 
         # task defaults to transcribe
         sequences = model.generate(input_features)
@@ -2282,7 +2296,8 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         input_speech = input_speech.repeat(1, 10).numpy()
         input_features = processor(
             input_speech, return_tensors="pt", padding="longest", truncation=False, sampling_rate=16_000
-        ).input_features.to(torch_device)
+        ).input_features
+        input_features = self._feature_tensor_to_model(input_features, model)
 
         # task defaults to transcribe
         sequences = model.generate(input_features, return_timestamps=True)
@@ -2318,7 +2333,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         sample = dataset[0]["audio"]
 
         input_features = processor(sample["array"], return_tensors="pt", sampling_rate=16_000).input_features
-        input_features = input_features.to(torch_device, dtype=torch.float16)
+        input_features = self._feature_tensor_to_model(input_features, model)
 
         # warm up assisted decoding
         _ = model.generate(input_features, assistant_model=assistant_model)
@@ -2366,7 +2381,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         sample = dataset[0]["audio"]
 
         input_features = processor(sample["array"], return_tensors="pt", sampling_rate=16_000).input_features
-        input_features = input_features.to(torch_device, dtype=torch.float16)
+        input_features = self._feature_tensor_to_model(input_features, model)
 
         # warm up assisted decoding
         _ = model.generate(input_features, assistant_model=assistant_model)
@@ -2410,7 +2425,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         input_features = processor(
             one_audio, return_tensors="pt", truncation=False, padding="longest", sampling_rate=16_000
         )["input_features"]
-        input_features = input_features.to(device=torch_device)
+        input_features = self._feature_tensor_to_model(input_features, model)
 
         result = model.generate(input_features, return_timestamps=True)
         decoded = processor.batch_decode(result, skip_special_tokens=True)
@@ -2449,7 +2464,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         input_features = processor(
             one_audio, return_tensors="pt", truncation=False, padding="longest", sampling_rate=16_000
         )["input_features"]
-        input_features = input_features.to(device=torch_device)
+        input_features = self._feature_tensor_to_model(input_features, model)
 
         result = model.generate(
             input_features,
@@ -2497,7 +2512,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         input_features = processor(
             one_audio, return_tensors="pt", truncation=False, padding="longest", sampling_rate=16_000
         )["input_features"]
-        input_features = input_features.to(device=torch_device)
+        input_features = self._feature_tensor_to_model(input_features, model)
 
         gen_kwargs = {
             "return_timestamps": True,
@@ -2539,7 +2554,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         one_audio = dataset[1]["audio"]["array"]
 
         input_features = processor(one_audio, return_tensors="pt", sampling_rate=16_000)["input_features"]
-        input_features = input_features.to(device=torch_device)
+        input_features = self._feature_tensor_to_model(input_features, model)
 
         gen_kwargs = {
             "return_timestamps": True,
@@ -2585,7 +2600,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         input_features = processor(
             one_audio, return_tensors="pt", truncation=False, padding="longest", sampling_rate=16_000
         )["input_features"]
-        input_features = input_features.to(device=torch_device)
+        input_features = self._feature_tensor_to_model(input_features, model)
 
         gen_kwargs = {
             "return_timestamps": True,
@@ -2628,7 +2643,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         decoded_single = []
         for audio in audios:
             inputs = processor(audio, return_tensors="pt", truncation=False, sampling_rate=16_000)
-            inputs = inputs.to(device=torch_device)
+            inputs = self._batch_to_model(inputs, model)
 
             result = model.generate(**inputs, return_timestamps=True)
             decoded_single.append(processor.batch_decode(result, skip_special_tokens=True))
@@ -2641,7 +2656,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
             return_attention_mask=True,
             sampling_rate=16_000,
         )
-        inputs = inputs.to(device=torch_device)
+        inputs = self._batch_to_model(inputs, model)
 
         result = model.generate(**inputs, return_timestamps=True)
         decoded_all = processor.batch_decode(result, skip_special_tokens=True)
@@ -2691,7 +2706,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         decoded_single = []
         for audio in audios:
             inputs = processor(audio, return_tensors="pt", truncation=False, sampling_rate=16_000)
-            inputs = inputs.to(device=torch_device)
+            inputs = self._batch_to_model(inputs, model)
 
             result = model.generate(**inputs, **gen_kwargs)
             decoded_single.append(processor.batch_decode(result, skip_special_tokens=True))
@@ -2765,7 +2780,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         decoded_single = []
         for audio in audios:
             inputs = processor(audio, return_tensors="pt", truncation=False, sampling_rate=16_000)
-            inputs = inputs.to(device=torch_device)
+            inputs = self._batch_to_model(inputs, model)
 
             result = model.generate(**inputs, **gen_kwargs)
             decoded_single += processor.batch_decode(result, skip_special_tokens=True)
@@ -2778,7 +2793,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
             return_attention_mask=True,
             sampling_rate=16_000,
         )
-        inputs = inputs.to(device=torch_device)
+        inputs = self._batch_to_model(inputs, model)
 
         result = model.generate(**inputs, return_timestamps=True)
         decoded_all = processor.batch_decode(result, skip_special_tokens=True)
@@ -2821,7 +2836,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
             return_attention_mask=True,
             sampling_rate=16_000,
         )
-        inputs = inputs.to(device=torch_device)
+        inputs = self._batch_to_model(inputs, model)
 
         gen_kwargs = {
             "return_timestamps": True,
@@ -2873,7 +2888,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
             return_tensors="pt",
             sampling_rate=16_000,
         )
-        inputs = inputs.to(device=torch_device)
+        inputs = self._batch_to_model(inputs, model)
 
         gen_kwargs = {
             "return_timestamps": True,
@@ -2928,7 +2943,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
             return_attention_mask=True,
             sampling_rate=16_000,
         )
-        inputs = inputs.to(device=torch_device)
+        inputs = self._batch_to_model(inputs, model)
 
         gen_kwargs = {
             "return_timestamps": True,
@@ -2970,7 +2985,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
             return_attention_mask=True,
             sampling_rate=16_000,
         )
-        inputs = inputs.to(device=torch_device)
+        inputs = self._batch_to_model(inputs, model)
 
         gen_kwargs = {
             "no_speech_threshold": 0.2,
@@ -3031,7 +3046,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
 
         input_speech = self._load_datasamples(4)
         input_features = processor(input_speech, return_tensors="pt", sampling_rate=16_000).input_features
-        input_features = input_features.to(torch_device)
+        input_features = self._feature_tensor_to_model(input_features, model)
         eager_generated_ids = model.generate(input_features, max_new_tokens=64)
 
         # Using statiic cache compiles forward for each decoding step, so we don't have to manually compile
@@ -3075,7 +3090,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
             return_attention_mask=True,
             sampling_rate=16_000,
         )
-        inputs = inputs.to(torch_device)
+        inputs = self._batch_to_model(inputs, model)
 
         gen_kwargs = {
             "return_timestamps": True,
