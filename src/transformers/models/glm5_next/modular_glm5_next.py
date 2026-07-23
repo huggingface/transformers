@@ -43,12 +43,11 @@ from ..auto.modeling_auto import AutoModel
 from ..deepseek_v3.modeling_deepseek_v3 import DeepseekV3MoE, DeepseekV3TopkRouter
 from ..deepseek_v4.modeling_deepseek_v4 import DeepseekV4HyperConnection
 from ..exaone4_5.modeling_exaone4_5 import Exaone4_5_Model
-from ..glm4.modeling_glm4 import apply_rotary_pos_emb
 from ..glm46v.modeling_glm46v import Glm46VForConditionalGeneration
 from ..glm_moe_dsa.configuration_glm_moe_dsa import GlmMoeDsaConfig
 from ..glm_moe_dsa.modeling_glm_moe_dsa import GlmMoeDsaAttention, GlmMoeDsaDecoderLayer, GlmMoeDsaIndexer
 from ..inkling.modeling_inkling import causal_conv1d_fn, causal_conv1d_update
-from ..llama.modeling_llama import LlamaRMSNorm, LlamaRotaryEmbedding, eager_attention_forward
+from ..llama.modeling_llama import LlamaRMSNorm, eager_attention_forward
 from ..minimax_m3_vl.modeling_minimax_m3_vl import MiniMaxM3VLExperts
 from ..mixtral.modeling_mixtral import load_balancing_loss_func
 from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeMLP
@@ -266,10 +265,6 @@ class Glm5NextConfig(PreTrainedConfig):
 
 
 class Glm5NextTextRMSNorm(LlamaRMSNorm):
-    pass
-
-
-class Glm5NextTextRotaryEmbedding(LlamaRotaryEmbedding):
     pass
 
 
@@ -731,7 +726,6 @@ class Glm5NextTextIndexer(GlmMoeDsaIndexer):
         self,
         hidden_states: torch.Tensor,
         q_resid: torch.Tensor,
-        position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: torch.BoolTensor,
         past_key_values: Cache | None,
     ) -> torch.LongTensor:
@@ -741,7 +735,6 @@ class Glm5NextTextIndexer(GlmMoeDsaIndexer):
         Args:
             hidden_states: Input hidden states `[B, S, hidden_size]`.
             q_resid: Query residual from `q_a_layernorm(q_a_proj(x))`, shape `[B, S, q_lora_rank]`.
-            position_embeddings: `(cos, sin)` from RotaryEmbedding.
             attention_mask: Local boolean padding mask of shape `[B, S]`.
             past_key_values: Cache object containing the indexer state cache for this layer.
 
@@ -754,9 +747,6 @@ class Glm5NextTextIndexer(GlmMoeDsaIndexer):
 
         q = self.wq_b(q_resid).view(hidden_shape)
         k = self.k_norm(self.wk(hidden_states)).view(hidden_shape)
-
-        cos, sin = position_embeddings
-        q, k = apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=2)
         k = k.squeeze(2)
 
         gate_scores = F.linear(hidden_states, self.index_kpool_compress_gate)
@@ -1003,7 +993,6 @@ class Glm5NextTextAttention(GlmMoeDsaAttention):
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor | None,
         past_key_values: Cache | None = None,
-        position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         prev_topk_indices: torch.Tensor | None = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor | None]:
@@ -1032,7 +1021,6 @@ class Glm5NextTextAttention(GlmMoeDsaAttention):
             topk_indices = self.indexer(
                 hidden_states=hidden_states,
                 q_resid=q_resid,
-                position_embeddings=position_embeddings,
                 attention_mask=attention_mask,
                 past_key_values=past_key_values,
             )
@@ -1260,7 +1248,6 @@ class Glm5NextTextModel(Glm5NextPreTrainedModel):
             [Glm5NextTextDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
         self.norm = Glm5NextTextRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.rotary_emb = Glm5NextTextRotaryEmbedding(config)
         self.gradient_checkpointing = False
         self.hc_head = Glm5NextTextHyperHead()
 
@@ -1315,7 +1302,6 @@ class Glm5NextTextModel(Glm5NextPreTrainedModel):
             }
 
         hidden_states = inputs_embeds.unsqueeze(2).expand(-1, -1, self.config.hc_mult, -1).contiguous()
-        position_embeddings = self.rotary_emb(inputs_embeds, position_ids=position_ids)
 
         topk_indices = None
         for i, decoder_layer in enumerate(self.layers[: self.config.num_hidden_layers]):
@@ -1323,7 +1309,7 @@ class Glm5NextTextModel(Glm5NextPreTrainedModel):
                 hidden_states,
                 attention_mask=causal_mask_mapping[self.config.layer_types[i]],
                 position_ids=position_ids,
-                position_embeddings=position_embeddings,
+                position_embeddings=None,
                 input_ids=input_ids,
                 past_key_values=past_key_values,
                 prev_topk_indices=topk_indices,
