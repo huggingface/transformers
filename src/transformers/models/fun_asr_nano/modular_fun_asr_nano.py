@@ -623,6 +623,7 @@ class FunAsrNanoForConditionalGeneration(AudioFlamingo3ForConditionalGeneration)
 
 
 __all__ = [
+    "FunAsrNanoAdaptorConfig",
     "FunAsrNanoConfig",
     "FunAsrNanoEncoderConfig",
     "FunAsrNanoProcessor",

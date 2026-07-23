@@ -183,4 +183,4 @@ class FunAsrNanoConfig(PreTrainedConfig):
         super().__post_init__(**kwargs)
 
 
-__all__ = ["FunAsrNanoConfig", "FunAsrNanoEncoderConfig"]
+__all__ = ["FunAsrNanoAdaptorConfig", "FunAsrNanoConfig", "FunAsrNanoEncoderConfig"]
