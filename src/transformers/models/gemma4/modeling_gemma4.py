@@ -1116,11 +1116,10 @@ class Gemma4TextRotaryEmbedding(nn.Module):
             self.rope_init_fns[layer_type] = rope_init_fn
             self.rope_type[layer_type] = rope_type
 
-            rope_init_fn_kwargs = {"device": device, "layer_type": layer_type}
-            if layer_type == "full_attention" and rope_type == "proportional":
-                rope_init_fn_kwargs["head_dim_key"] = "global_head_dim"
-
-            curr_inv_freq, curr_attention_scaling = rope_init_fn(self.config, **rope_init_fn_kwargs)
+            # `inv_freq` depends on the head dim, which varies by layer type, so initialise
+            # from a config resolved for this layer type rather than the global one.
+            rope_config = config.per_layer_config[layer_type]
+            curr_inv_freq, curr_attention_scaling = rope_init_fn(rope_config, device=device, layer_type=layer_type)
             self.register_buffer(f"{layer_type}_inv_freq", curr_inv_freq, persistent=False)
             self.register_buffer(f"{layer_type}_original_inv_freq", curr_inv_freq.clone(), persistent=False)
             setattr(self, f"{layer_type}_attention_scaling", curr_attention_scaling)
@@ -1191,12 +1190,10 @@ class Gemma4TextAttention(nn.Module):
         self.is_sliding = self.layer_type == "sliding_attention"
         self.sliding_window = config.sliding_window if self.is_sliding else None
 
-        self.head_dim = config.global_head_dim if not self.is_sliding and config.global_head_dim else config.head_dim
+        layer_config = config.per_layer_config[layer_idx]
+        self.head_dim = layer_config.head_dim
         self.use_alternative_attention = config.attention_k_eq_v and not self.is_sliding
-        num_key_value_heads = (
-            config.num_global_key_value_heads if self.use_alternative_attention else config.num_key_value_heads
-        )
-        self.num_key_value_groups = config.num_attention_heads // num_key_value_heads
+        self.num_key_value_groups = config.num_attention_heads // layer_config.num_key_value_heads
         self.scaling = 1.0
         self.attention_dropout = self.config.attention_dropout
         self.is_causal = config.use_bidirectional_attention != "all"
@@ -1220,10 +1217,12 @@ class Gemma4TextAttention(nn.Module):
             self.v_norm = Gemma4RMSNorm(self.head_dim, eps=config.rms_norm_eps, with_scale=False)
 
             self.k_proj = nn.Linear(
-                config.hidden_size, num_key_value_heads * self.head_dim, bias=config.attention_bias
+                config.hidden_size, layer_config.num_key_value_heads * self.head_dim, bias=config.attention_bias
             )
             self.v_proj = (
-                nn.Linear(config.hidden_size, num_key_value_heads * self.head_dim, bias=config.attention_bias)
+                nn.Linear(
+                    config.hidden_size, layer_config.num_key_value_heads * self.head_dim, bias=config.attention_bias
+                )
                 if not self.use_alternative_attention
                 else None
             )
@@ -1514,11 +1513,8 @@ class Gemma4PreTrainedModel(PreTrainedModel):
             init.zeros_(module.per_dim_scale)
         elif isinstance(module, Gemma4TextRotaryEmbedding):
             for layer_type, rope_init_fn in module.rope_init_fns.items():
-                rope_init_fn_kwargs = {"layer_type": layer_type}
-                if layer_type == "full_attention" and module.rope_type[layer_type] == "proportional":
-                    rope_init_fn_kwargs["head_dim_key"] = "global_head_dim"
-
-                curr_inv_freq, _ = rope_init_fn(module.config, **rope_init_fn_kwargs)
+                rope_config = module.config.per_layer_config[layer_type]
+                curr_inv_freq, _ = rope_init_fn(rope_config, layer_type=layer_type)
                 init.copy_(getattr(module, f"{layer_type}_inv_freq"), curr_inv_freq)
                 init.copy_(getattr(module, f"{layer_type}_original_inv_freq"), curr_inv_freq)
         elif isinstance(module, Gemma4VisionRotaryEmbedding):
@@ -2395,7 +2391,7 @@ class Gemma4Model(Gemma4PreTrainedModel):
             )
 
             inputs_embeds = inputs_embeds.masked_scatter(
-                audio_mask.to(inputs_embeds.device), audio_features.to(inputs_embeds.device)
+                audio_mask.to(inputs_embeds.device), audio_features.to(inputs_embeds.device, inputs_embeds.dtype)
             )
 
         # It may already have been prepared by, e.g., `generate`
