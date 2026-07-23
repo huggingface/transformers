@@ -911,12 +911,12 @@ class OnyxVisionModel(OnyxPreTrainedModel):
         position_embeddings = self.rotary_emb(hidden_states, position_ids)
 
         for i, block in enumerate(self.layers):
-            is_global = (i == len(self.layers) - 1) or ((i + 1) % self.config.sparse_attention_factor == 0)
+            is_global = self.config.layer_types[i] == "full_attention"
             hidden_states = block(
                 hidden_states,
                 position_ids=position_ids,
                 position_embeddings=position_embeddings,
-                cu_seqlens=cu_seqlens if is_global or self.config.sparse_attention_factor == 0 else cu_window_seqlens,
+                cu_seqlens=cu_seqlens if is_global else cu_window_seqlens,
             )
 
         reverse_indices = torch.argsort(window_index)
