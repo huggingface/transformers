@@ -13,8 +13,6 @@
 # limitations under the License.
 
 import inspect
-import shutil
-import tempfile
 import unittest
 
 import numpy as np
@@ -28,7 +26,7 @@ from ...test_processing_common import ProcessorTesterMixin
 
 
 if is_vision_available():
-    from transformers import Ernie4_5_VL_MoeImageProcessorFast, Ernie4_5_VL_MoeProcessor
+    from transformers import Ernie4_5_VLMoeImageProcessor, Ernie4_5_VLMoeProcessor
 
 if is_torch_available():
     import torch
@@ -37,19 +35,11 @@ if is_torch_available():
 @require_vision
 @require_torch
 @require_torchvision
-class Ernie4_5_VL_MoeProcessorTest(ProcessorTesterMixin, unittest.TestCase):
-    processor_class = Ernie4_5_VL_MoeProcessor
-
-    @classmethod
-    def setUpClass(cls):
-        cls.tmpdirname = tempfile.mkdtemp()
-        processor = Ernie4_5_VL_MoeProcessor.from_pretrained(
-            "hf-internal-testing/Ernie-VL-Moe-Small",
-            patch_size=4,
-            size={"shortest_edge": 28 * 28, "longest_edge": 56 * 56},
-        )
-        processor.save_pretrained(cls.tmpdirname)
-        cls.image_token = processor.image_token
+class Ernie4_5_VLMoeProcessorTest(ProcessorTesterMixin, unittest.TestCase):
+    processor_class = Ernie4_5_VLMoeProcessor
+    # Use tiny repos to avoid loading the full 100k-vocab tokenizer (~342 MB)
+    # Tiny processor created with make_tiny_processor.py from "hf-internal-testing/Ernie-VL-Moe-Small"
+    tiny_model_id = "hf-internal-testing/tiny-processor-ernie4_5_vl_moe"
 
     def get_tokenizer(self, **kwargs):
         return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).tokenizer
@@ -62,10 +52,6 @@ class Ernie4_5_VL_MoeProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     def get_processor(self, **kwargs):
         return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs)
-
-    @classmethod
-    def tearDownClass(cls):
-        shutil.rmtree(cls.tmpdirname, ignore_errors=True)
 
     # Copied from tests.models.llava.test_processing_llava.LlavaProcessorTest.test_get_num_vision_tokens
     def test_get_num_vision_tokens(self):
@@ -85,23 +71,23 @@ class Ernie4_5_VL_MoeProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         image_processor = self.get_image_processor()
         video_processor = self.get_video_processor()
 
-        processor = Ernie4_5_VL_MoeProcessor(
+        processor = Ernie4_5_VLMoeProcessor(
             tokenizer=tokenizer, image_processor=image_processor, video_processor=video_processor
         )
         processor.save_pretrained(self.tmpdirname)
-        processor = Ernie4_5_VL_MoeProcessor.from_pretrained(self.tmpdirname)
+        processor = Ernie4_5_VLMoeProcessor.from_pretrained(self.tmpdirname)
 
         self.assertEqual(processor.tokenizer.get_vocab(), tokenizer.get_vocab())
         self.assertEqual(processor.image_processor.to_json_string(), image_processor.to_json_string())
         self.assertIsInstance(processor.tokenizer, TokenizersBackend)
-        self.assertIsInstance(processor.image_processor, Ernie4_5_VL_MoeImageProcessorFast)
+        self.assertIsInstance(processor.image_processor, Ernie4_5_VLMoeImageProcessor)
 
     def test_image_processor(self):
         image_processor = self.get_image_processor()
         tokenizer = self.get_tokenizer()
         video_processor = self.get_video_processor()
 
-        processor = Ernie4_5_VL_MoeProcessor(
+        processor = Ernie4_5_VLMoeProcessor(
             tokenizer=tokenizer, image_processor=image_processor, video_processor=video_processor
         )
 
@@ -118,7 +104,7 @@ class Ernie4_5_VL_MoeProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         tokenizer = self.get_tokenizer()
         video_processor = self.get_video_processor()
 
-        processor = Ernie4_5_VL_MoeProcessor(
+        processor = Ernie4_5_VLMoeProcessor(
             tokenizer=tokenizer, image_processor=image_processor, video_processor=video_processor
         )
 
@@ -247,7 +233,11 @@ class Ernie4_5_VL_MoeProcessorTest(ProcessorTesterMixin, unittest.TestCase):
                 expected_video_token_count += thw[0] * thw[1] * thw[2]
             mm_len = expected_video_token_count
         else:
-            mm_len = batch_size * 192
+            # Calculate expected image token count based on image_grid_thw
+            expected_image_token_count = 0
+            for thw in out_dict["image_grid_thw"]:
+                expected_image_token_count += thw[0] * thw[1] * thw[2]
+            mm_len = expected_image_token_count
         self.assertEqual(len(out_dict[input_name]), mm_len)
 
         return_tensor_to_type = {"pt": torch.Tensor, "np": np.ndarray, None: list}
@@ -294,7 +284,7 @@ class Ernie4_5_VL_MoeProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         # Add video URL for return dict and load with `num_frames` arg
         messages[0][0]["content"][0] = {
             "type": "video",
-            "url": "https://huggingface.co/datasets/raushan-testing-hf/videos-test/resolve/main/tiny_video.mp4",
+            "url": "https://huggingface.co/datasets/hf-internal-testing/test-videos/resolve/main/tiny_video_320x240.mp4",
         }
         num_frames = 3
         out_dict_with_video = processor.apply_chat_template(
@@ -306,7 +296,7 @@ class Ernie4_5_VL_MoeProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             min_frames=3,  # default is 16
         )
         self.assertTrue(self.videos_input_name in out_dict_with_video)
-        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 720)
+        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 768)
 
         # Load with `fps` arg
         fps = 1
@@ -318,7 +308,7 @@ class Ernie4_5_VL_MoeProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             fps=fps,
         )
         self.assertTrue(self.videos_input_name in out_dict_with_video)
-        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 2160)
+        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 2304)
 
         # Load with `fps` and `num_frames` args, should raise an error
         with self.assertRaises(ValueError):
@@ -339,15 +329,15 @@ class Ernie4_5_VL_MoeProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             return_dict=True,
         )
         self.assertTrue(self.videos_input_name in out_dict_with_video)
-        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 2160)
+        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 2304)
 
         # Load video as a list of frames (i.e. images). NOTE: each frame should have same size
         # because we assume they come from one video
         messages[0][0]["content"][0] = {
             "type": "video",
             "url": [
-                "https://www.ilankelman.org/stopsigns/australia.jpg",
-                "https://www.ilankelman.org/stopsigns/australia.jpg",
+                "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/australia.jpg",
+                "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/australia.jpg",
             ],
         }
         out_dict_with_video = processor.apply_chat_template(

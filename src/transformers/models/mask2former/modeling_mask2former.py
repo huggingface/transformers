@@ -23,13 +23,13 @@ from torch import Tensor, nn
 
 from ... import initialization as init
 from ...activations import ACT2FN
+from ...backbone_utils import load_backbone
 from ...file_utils import ModelOutput, is_scipy_available, requires_backends
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithCrossAttentions
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import compile_compatible_method_lru_cache
-from ...utils import auto_docstring, is_accelerate_available, logging
-from ...utils.backbone_utils import load_backbone
+from ...utils import auto_docstring, is_accelerate_available, logging, torch_compilable_check
 from .configuration_mask2former import Mask2FormerConfig
 
 
@@ -43,13 +43,13 @@ if is_accelerate_available():
 logger = logging.get_logger(__name__)
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Mask2Former's pixel decoder module output, practically a Multi-Scale Deformable Attention based decoder. It returns
     the mask features and the multiscale features.
     """
 )
+@dataclass
 class Mask2FormerPixelDecoderOutput(ModelOutput):
     r"""
     multi_scale_features (`tuple(torch.FloatTensor)`):
@@ -69,7 +69,6 @@ class Mask2FormerPixelDecoderOutput(ModelOutput):
     attentions: tuple[torch.FloatTensor] | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for outputs of the Transformer decoder. This class adds two attributes to
@@ -77,6 +76,7 @@ class Mask2FormerPixelDecoderOutput(ModelOutput):
     i.e. the output of each decoder layer, each of them gone through a layernorm.
     """
 )
+@dataclass
 class Mask2FormerMaskedAttentionDecoderOutput(BaseModelOutputWithCrossAttentions):
     r"""
     hidden_states (`tuple(torch.FloatTensor)`, *optional*):
@@ -101,7 +101,6 @@ class Mask2FormerMaskedAttentionDecoderOutput(BaseModelOutputWithCrossAttentions
     intermediate_hidden_states: tuple[torch.FloatTensor] | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Mask2Former's pixel level module output. It returns the output of the encoder (optional) and all hidden states
@@ -112,6 +111,7 @@ class Mask2FormerMaskedAttentionDecoderOutput(BaseModelOutputWithCrossAttentions
     feature maps produced using **multi-scaling strategy** defined in the paper.
     """
 )
+@dataclass
 class Mask2FormerPixelLevelModuleOutput(ModelOutput):
     r"""
     encoder_last_hidden_state (`torch.FloatTensor`):
@@ -134,12 +134,12 @@ class Mask2FormerPixelLevelModuleOutput(ModelOutput):
     decoder_hidden_states: tuple[torch.FloatTensor] | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Class for outputs of [`Mask2FormerModel`]. This class returns all the needed hidden states to compute the logits.
     """
 )
+@dataclass
 class Mask2FormerModelOutput(ModelOutput):
     r"""
     encoder_last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`, *optional*):
@@ -182,7 +182,6 @@ class Mask2FormerModelOutput(ModelOutput):
     attentions: tuple[torch.FloatTensor] | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Class for outputs of [`Mask2FormerForUniversalSegmentationOutput`].
@@ -193,6 +192,7 @@ class Mask2FormerModelOutput(ModelOutput):
     [`~Mask2FormerImageProcessor] for details regarding usage.
     """
 )
+@dataclass
 class Mask2FormerForUniversalSegmentationOutput(ModelOutput):
     r"""
     loss (`torch.Tensor`, *optional*):
@@ -845,36 +845,56 @@ class Mask2FormerSinePositionEmbedding(nn.Module):
     """
 
     def __init__(
-        self, num_pos_feats: int = 64, temperature: int = 10000, normalize: bool = False, scale: float | None = None
+        self,
+        num_position_features: int = 64,
+        temperature: int = 10000,
+        normalize: bool = False,
+        scale: float | None = None,
     ):
         super().__init__()
         if scale is not None and normalize is False:
             raise ValueError("normalize should be True if scale is passed")
-        self.num_pos_feats = num_pos_feats
+        self.num_position_features = num_position_features
         self.temperature = temperature
         self.normalize = normalize
         self.scale = 2 * math.pi if scale is None else scale
 
+    @staticmethod
     @compile_compatible_method_lru_cache(maxsize=1)
-    def forward(
-        self,
+    def build_sine_position_embedding(
         shape: torch.Size,
         device: torch.device | str,
         dtype: torch.dtype,
-        mask: Tensor | None = None,
-    ) -> Tensor:
+        num_position_features: int,
+        normalize: bool = False,
+        scale: float | None = None,
+        temperature: int = 10000,
+        mask: torch.Tensor | None = None,
+    ) -> torch.Tensor:
+        batch_size, _, height, width = shape
         if mask is None:
-            mask = torch.zeros((shape[0], shape[2], shape[3]), device=device, dtype=torch.bool)
-        not_mask = (~mask).to(dtype)
-        y_embed = not_mask.cumsum(1)
-        x_embed = not_mask.cumsum(2)
-        if self.normalize:
+            # Without a mask this is just a cumsum over ones, written out as arange
+            # instead: inductor's cumsum(ones) rewrite drops the requested dtype
+            # (https://github.com/pytorch/pytorch/issues/189518), which breaks
+            # float16/bfloat16 under torch.compile — don't revert to cumsum here
+            # until that fix is widely released.
+            y_embed = torch.arange(1, height + 1, dtype=dtype, device=device)[None, :, None].expand(
+                batch_size, height, width
+            )
+            x_embed = torch.arange(1, width + 1, dtype=dtype, device=device)[None, None, :].expand(
+                batch_size, height, width
+            )
+        else:
+            embed_mask = mask.to(dtype)
+            y_embed = embed_mask.cumsum(1)
+            x_embed = embed_mask.cumsum(2)
+        if normalize:
             eps = 1e-6
-            y_embed = y_embed / (y_embed[:, -1:, :] + eps) * self.scale
-            x_embed = x_embed / (x_embed[:, :, -1:] + eps) * self.scale
+            y_embed = y_embed / (y_embed[:, -1:, :] + eps) * scale
+            x_embed = x_embed / (x_embed[:, :, -1:] + eps) * scale
 
-        dim_t = torch.arange(self.num_pos_feats, dtype=torch.int64, device=device).to(dtype)
-        dim_t = self.temperature ** (2 * torch.div(dim_t, 2, rounding_mode="floor") / self.num_pos_feats)
+        dim_t = torch.arange(num_position_features, dtype=torch.int64, device=device).to(dtype)
+        dim_t = temperature ** (2 * torch.div(dim_t, 2, rounding_mode="floor") / num_position_features)
 
         pos_x = x_embed[:, :, :, None] / dim_t
         pos_y = y_embed[:, :, :, None] / dim_t
@@ -882,6 +902,17 @@ class Mask2FormerSinePositionEmbedding(nn.Module):
         pos_y = torch.stack((pos_y[:, :, :, 0::2].sin(), pos_y[:, :, :, 1::2].cos()), dim=4).flatten(3)
         pos = torch.cat((pos_y, pos_x), dim=3).permute(0, 3, 1, 2)
         return pos
+
+    def forward(
+        self,
+        shape: torch.Size,
+        device: torch.device | str,
+        dtype: torch.dtype,
+        mask: torch.Tensor | None = None,
+    ) -> torch.Tensor:
+        return self.build_sine_position_embedding(
+            shape, device, dtype, self.num_position_features, self.normalize, self.scale, self.temperature, mask
+        )
 
 
 # Modified from transformers.models.detr.modeling_deformable_detr.DeformableDetrMultiscaleDeformableAttention
@@ -939,10 +970,10 @@ class Mask2FormerPixelDecoderEncoderMultiscaleDeformableAttention(nn.Module):
         batch_size, num_queries, _ = hidden_states.shape
         batch_size, sequence_length, _ = encoder_hidden_states.shape
         total_elements = sum(height * width for height, width in spatial_shapes_list)
-        if total_elements != sequence_length:
-            raise ValueError(
-                "Make sure to align the spatial shapes with the sequence length of the encoder hidden states"
-            )
+        torch_compilable_check(
+            total_elements == sequence_length,
+            "Make sure to align the spatial shapes with the sequence length of the encoder hidden states",
+        )
 
         value = self.value_proj(encoder_hidden_states)
         if attention_mask is not None:
@@ -1060,7 +1091,7 @@ class Mask2FormerPixelDecoderEncoderLayer(nn.Module):
         hidden_states = self.final_layer_norm(hidden_states)
 
         if self.training:
-            if torch.isinf(hidden_states).any() or torch.isnan(hidden_states).any():
+            if not torch.isfinite(hidden_states).all():
                 clamp_value = torch.finfo(hidden_states.dtype).max - 1000
                 hidden_states = torch.clamp(hidden_states, min=-clamp_value, max=clamp_value)
 
@@ -1166,7 +1197,7 @@ class Mask2FormerPixelDecoderEncoderOnly(nn.Module):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         hidden_states = inputs_embeds
         reference_points = self.get_reference_points(spatial_shapes_list, valid_ratios, device=inputs_embeds.device)
@@ -1212,7 +1243,9 @@ class Mask2FormerPixelDecoder(nn.Module):
         mask_dim = config.mask_feature_size
         num_pos_features = feature_dim // 2
 
-        self.position_embedding = Mask2FormerSinePositionEmbedding(num_pos_feats=num_pos_features, normalize=True)
+        self.position_embedding = Mask2FormerSinePositionEmbedding(
+            num_position_features=num_pos_features, normalize=True
+        )
         self.num_feature_levels = 3
         transformer_in_channels = feature_channels[-self.num_feature_levels :]
 
@@ -1298,19 +1331,19 @@ class Mask2FormerPixelDecoder(nn.Module):
         )
 
         # Apply 1x1 convolution to reduce the channel dimension to d_model (256 by default)
-        input_embeds = []
+        inputs_embeds = []
         position_embeddings = []
         for level, x in enumerate(features[::-1][: self.num_feature_levels]):
-            input_embeds.append(self.input_projections[level](x))
+            inputs_embeds.append(self.input_projections[level](x))
             position_embeddings.append(self.position_embedding(x.shape, x.device, x.dtype))
 
         masks = [
-            torch.zeros((x.size(0), x.size(2), x.size(3)), device=x.device, dtype=torch.bool) for x in input_embeds
+            torch.zeros((x.size(0), x.size(2), x.size(3)), device=x.device, dtype=torch.bool) for x in inputs_embeds
         ]
 
         # Prepare encoder inputs (by flattening)
-        spatial_shapes_list = [(embed.shape[2], embed.shape[3]) for embed in input_embeds]
-        input_embeds_flat = torch.cat([embed.flatten(2).transpose(1, 2) for embed in input_embeds], 1)
+        spatial_shapes_list = [(embed.shape[2], embed.shape[3]) for embed in inputs_embeds]
+        input_embeds_flat = torch.cat([embed.flatten(2).transpose(1, 2) for embed in inputs_embeds], 1)
         spatial_shapes = torch.as_tensor(spatial_shapes_list, dtype=torch.long, device=input_embeds_flat.device)
         masks_flat = torch.cat([mask.flatten(1) for mask in masks], 1)
 
@@ -1842,7 +1875,7 @@ class Mask2FormerMaskedAttentionDecoder(nn.Module):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         if inputs_embeds is not None:
             hidden_states = inputs_embeds
@@ -2032,7 +2065,9 @@ class Mask2FormerTransformerModule(nn.Module):
         super().__init__()
         hidden_dim = config.hidden_dim
         self.num_feature_levels = 3
-        self.position_embedder = Mask2FormerSinePositionEmbedding(num_pos_feats=hidden_dim // 2, normalize=True)
+        self.position_embedder = Mask2FormerSinePositionEmbedding(
+            num_position_features=hidden_dim // 2, normalize=True
+        )
         self.queries_embedder = nn.Embedding(config.num_queries, hidden_dim)
         self.queries_features = nn.Embedding(config.num_queries, hidden_dim)
         self.input_projections = []
@@ -2069,7 +2104,7 @@ class Mask2FormerTransformerModule(nn.Module):
                 + self.level_embed.weight[i][None, :, None]
             )
 
-            # Flatten (batch_size, num_channels, height, width) -> (height*width, batch_size, num_channels)
+            # Permute  NxCxHW to HWxNxC
             multi_stage_positional_embeddings[-1] = multi_stage_positional_embeddings[-1].permute(2, 0, 1)
             multi_stage_features[-1] = multi_stage_features[-1].permute(2, 0, 1)
 
@@ -2103,6 +2138,7 @@ class Mask2FormerPreTrainedModel(PreTrainedModel):
 
     @torch.no_grad()
     def _init_weights(self, module: nn.Module):
+        super()._init_weights(module)
         xavier_std = self.config.init_xavier_std
         std = self.config.init_std
 
@@ -2143,7 +2179,7 @@ class Mask2FormerPreTrainedModel(PreTrainedModel):
         elif isinstance(module, Mask2FormerPixelDecoder):
             init.normal_(module.level_embed, std=0)
 
-        elif isinstance(module, (nn.Linear, nn.Conv2d, nn.BatchNorm2d)):
+        elif isinstance(module, nn.BatchNorm2d):
             init.normal_(module.weight, mean=0.0, std=std)
             if module.bias is not None:
                 init.zeros_(module.bias)
@@ -2151,16 +2187,6 @@ class Mask2FormerPreTrainedModel(PreTrainedModel):
                 init.zeros_(module.running_mean)
                 init.ones_(module.running_var)
                 init.zeros_(module.num_batches_tracked)
-
-        elif isinstance(module, (nn.LayerNorm, nn.GroupNorm)):
-            init.ones_(module.weight)
-            init.zeros_(module.bias)
-
-        elif isinstance(module, nn.Embedding):
-            init.normal_(module.weight, mean=0.0, std=std)
-            # Here we need the check explicitly, as we slice the weight in the `zeros_` call, so it looses the flag
-            if module.padding_idx is not None and not getattr(module.weight, "_is_hf_initialized", False):
-                init.zeros_(module.weight[module.padding_idx])
 
         elif isinstance(module, Mask2FormerLoss):
             empty_weight = torch.ones(module.num_labels + 1)
@@ -2197,7 +2223,7 @@ class Mask2FormerModel(Mask2FormerPreTrainedModel):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         batch_size, _, height, width = pixel_values.shape
 
@@ -2331,7 +2357,8 @@ class Mask2FormerForUniversalSegmentation(Mask2FormerPreTrainedModel):
         ```python
         >>> from transformers import AutoImageProcessor, Mask2FormerForUniversalSegmentation
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
         >>> import torch
 
         >>> # Load Mask2Former trained on COCO instance segmentation dataset
@@ -2341,7 +2368,8 @@ class Mask2FormerForUniversalSegmentation(Mask2FormerPreTrainedModel):
         ... )
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
         >>> inputs = image_processor(image, return_tensors="pt")
 
         >>> with torch.no_grad():
@@ -2364,7 +2392,8 @@ class Mask2FormerForUniversalSegmentation(Mask2FormerPreTrainedModel):
         ```python
         >>> from transformers import AutoImageProcessor, Mask2FormerForUniversalSegmentation
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
         >>> import torch
 
         >>> # Load Mask2Former trained on ADE20k semantic segmentation dataset
@@ -2374,7 +2403,8 @@ class Mask2FormerForUniversalSegmentation(Mask2FormerPreTrainedModel):
         >>> url = (
         ...     "https://huggingface.co/datasets/hf-internal-testing/fixtures_ade20k/resolve/main/ADE_val_00000001.jpg"
         ... )
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
         >>> inputs = image_processor(image, return_tensors="pt")
 
         >>> with torch.no_grad():
@@ -2398,7 +2428,8 @@ class Mask2FormerForUniversalSegmentation(Mask2FormerPreTrainedModel):
         ```python
         >>> from transformers import AutoImageProcessor, Mask2FormerForUniversalSegmentation
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
         >>> import torch
 
         >>> # Load Mask2Former trained on CityScapes panoptic segmentation dataset
@@ -2408,7 +2439,8 @@ class Mask2FormerForUniversalSegmentation(Mask2FormerPreTrainedModel):
         ... )
 
         >>> url = "https://cdn-media.huggingface.co/Inference-API/Sample-results-on-the-Cityscapes-dataset-The-above-images-show-how-our-method-can-handle.png"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
         >>> inputs = image_processor(image, return_tensors="pt")
 
         >>> with torch.no_grad():
@@ -2431,7 +2463,7 @@ class Mask2FormerForUniversalSegmentation(Mask2FormerPreTrainedModel):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         outputs = self.model(
             pixel_values=pixel_values,

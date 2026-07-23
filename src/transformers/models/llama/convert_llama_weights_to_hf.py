@@ -465,7 +465,7 @@ class Llama3Converter(TikTokenConverter):
             eos_token="<|end_of_text|>" if not instruct else "<|eot_id|>",
             model_input_names=["input_ids", "attention_mask"],
             model_max_length=CONTEXT_LENGTH_FOR_VERSION[llama_version],
-            clean_up_tokenization_spaces=True,
+            clean_up_tokenization_spaces=False,
             **additional_kwargs,
         )
         self.update_post_processor(self.converted_tokenizer)

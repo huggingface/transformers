@@ -11,11 +11,15 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import hashlib
 from abc import ABC, abstractmethod
+from array import array
 from collections import deque
 from collections.abc import Iterator
 from math import ceil
 from typing import TypeVar
+
+import torch
 
 from .requests import logger
 
@@ -71,10 +75,11 @@ class BlockManager:
     it is in use.
     """
 
-    def __init__(self, num_blocks: int, block_size: int) -> None:
+    def __init__(self, num_blocks: int, block_size: int, tp_on: bool) -> None:
         """Initializes the block manager with a given number of blocks (num_blocks) of size (block_size)."""
         self.num_blocks = num_blocks
         self.block_size = block_size
+        self.tp_on = tp_on
         self._uninit_block_ids = deque(range(num_blocks))
         self._init_block_ids: dict[int, None] = {}  # effectively act as an ordered set
         self._hash_to_id: dict[int, int] = {}
@@ -99,14 +104,15 @@ class BlockManager:
         for _ in range(block_to_uninitialize):
             id_to_uninitialize = self._init_block_ids.popitem()[0]
             block = self._id_to_block[id_to_uninitialize]
-            self._hash_to_id.pop(block.hash)
+            # Since the block is initialized it must have a hash, thus no need to check .hash is not None
+            self._hash_to_id.pop(block.hash)  # ty:ignore[invalid-argument-type]
             self._uninit_block_ids.append(id_to_uninitialize)
         return True
 
     def get_free_blocks(
         self, n_blocks: int, last_block_id: int | None, shareable: bool, group_id: int
     ) -> list[int] | None:
-        """Returns a list of (n_blocks) free block and mark them as no longuer free in the internal data structures.
+        """Returns a list of (n_blocks) free block and mark them as no longer free in the internal data structures.
         If the (shareable) flag is set to True, a Block object is created to keep track of the block, with the
         (last_block_id) to indicate the last block id in the sequence, also named the parent block. If the manager
         cannot find enough free blocks, it returns None."""
@@ -124,7 +130,7 @@ class BlockManager:
 
     def fork_blocks(
         self, parent_blocks: list[int], num_forks: int, shareable: bool, group_id: int
-    ) -> tuple[list[list[int]], list[int], list[int]]:
+    ) -> tuple[list[list[int]] | None, list[int], list[int]]:
         """Fork a given list of (parent_blocks) as many times as (num_forks). If the blocks are (shareable), we use
         reference on the blocks that are complete. Otherwise, we allocate new blocks and keep track of their indices to
         later copy the physical cache. For instance, when forking 4 blocks for 2 children:
@@ -273,7 +279,19 @@ class BlockManager:
     def compute_hash(self, parent_hash: int | None, tokens: list[int], group_id: int) -> int:
         """Computes the hash of a block identified by the (tokens) it contains, its (parent_hash) and the layer
         (group_id) it belong to. If the block has no parent, the parent hash is None."""
-        return hash((parent_hash, tuple(tokens), group_id))
+        # If TP is on, we cannot use python `hash` because it depends on the process (it's per-process salted)
+        # TODO: figure out if this is really a problem. Even if hashes diverge per-process, does that break anything?
+        if self.tp_on:
+            h = hashlib.blake2b(digest_size=8)
+            if parent_hash is not None:
+                h.update(parent_hash.to_bytes(8, "little", signed=False))
+            h.update(array("i", tokens).tobytes())
+            h.update(group_id.to_bytes(4, "little", signed=False))
+            hash_ = int.from_bytes(h.digest(), "little", signed=False)
+        # Otherwise, use `hash`
+        else:
+            hash_ = hash((parent_hash, tuple(tokens), group_id))
+        return hash_
 
 
 class CacheAllocator(ABC):
@@ -308,8 +326,10 @@ class CacheAllocator(ABC):
         """Returns the physical indices of where to write request_id's cache in the cache tensor."""
 
     @abstractmethod
-    def get_seqlens_k(self, request_id: str, past_length: int, query_length: int) -> tuple[str, int]:
-        """Returns the attention type of the cache allocator and the key sequence length for the given request_id."""
+    def fill_block_table(
+        self, request_id: str, past_length: int, query_length: int, block_table: torch.Tensor
+    ) -> None:
+        """Fills the block table for a given request_id, past_length and query_length."""
 
     def fork_blocks(
         self, parent_request_id: str, children_request_ids: list[str], block_manager: BlockManager
@@ -381,13 +401,18 @@ class FullAttentionCacheAllocator(CacheAllocator):
         block_table = self.block_table.get(request_id)
         if block_table is None:
             raise ValueError(f"No block table found for request {request_id}")
+        # Compute auxiliary variable so we can perform only two loops
+        total_length = past_length + query_length
+        num_full_blocks = total_length // self.block_size
+        remainder = total_length % self.block_size
         # Compute the physical indices
         physical_indices = []
-        for i in range(past_length + query_length):
-            block_idx = i // self.block_size
-            block_offset = i % self.block_size
-            physical_index = block_table[block_idx] * self.block_size + block_offset
-            physical_indices.append(physical_index)
+        for b in range(num_full_blocks):
+            start = block_table[b] * self.block_size
+            physical_indices.extend(range(start, start + self.block_size))
+        if remainder:
+            start = block_table[num_full_blocks] * self.block_size
+            physical_indices.extend(range(start, start + remainder))
         return physical_indices
 
     def get_write_indices(self, request_id: str, past_length: int, query_length: int) -> list[int]:
@@ -396,35 +421,54 @@ class FullAttentionCacheAllocator(CacheAllocator):
         block_table = self.block_table.get(request_id)
         if block_table is None:
             raise ValueError(f"No block table found for request {request_id}")
+        # Compute auxiliary variables so we can perform only one loop
+        start_block = past_length // self.block_size
+        start_offset = past_length % self.block_size
+        end_pos = past_length + query_length
+        end_block = (end_pos - 1) // self.block_size  # -1 because if end_pos == block_size, we still end on block 0
         # Compute the physical indices
         physical_indices = []
-        for i in range(past_length, past_length + query_length):
-            block_idx = i // self.block_size
-            block_offset = i % self.block_size
-            physical_index = block_table[block_idx] * self.block_size + block_offset
-            physical_indices.append(physical_index)
+        for b in range(start_block, end_block + 1):
+            block_start = block_table[b] * self.block_size
+            # First block may start mid-block, last block may end mid-block
+            local_start = start_offset if b == start_block else 0
+            local_end = (end_pos - 1) % self.block_size + 1 if b == end_block else self.block_size
+            physical_indices.extend(range(block_start + local_start, block_start + local_end))
         return physical_indices
 
-    def get_seqlens_k(self, request_id: str, past_length: int, query_length: int) -> tuple[str, int]:
-        """Returns the attention type of the cache allocator and the key sequence length for the given request_id."""
-        seqlens_k = past_length + query_length
-        return "full_attention", seqlens_k
+    def fill_block_table(
+        self, request_id: str, past_length: int, query_length: int, block_table: torch.Tensor
+    ) -> None:
+        """Fills the block table for a given request_id, past_length and query_length."""
+        request_blocks = self.block_table.get(request_id)
+        if request_blocks is None:
+            raise ValueError(f"No block table found for request {request_id}")
+        total_length = past_length + query_length
+        # Use ceiling division to include the partial block at the end
+        num_blocks_needed = (total_length + self.block_size - 1) // self.block_size
+        block_table[:num_blocks_needed] = torch.tensor(
+            request_blocks[:num_blocks_needed], device=block_table.device, dtype=block_table.dtype
+        )
+        # TODO: this creates a lot of H2D transfers when not using async batching, but we will update to always using
+        # an IO pair in the future or a CPU-side block table. This also entails a small memory allocation.
 
 
 class SlidingAttentionCacheAllocator(CacheAllocator):
     """Cache manager for sliding window attention layers."""
 
-    def __init__(self, index: int, block_size: int, sliding_window: int) -> None:
-        """Initializes the cache manager for a group of sliding window attention layers.
-        Args:
-            - index: the index of the associated layer group
-            - block_size: the size of the blocks in the cache
-            - sliding_window: the size of the sliding window
+    def __init__(
+        self, index: int, block_size: int, sliding_window: int, sentinel_index: int, write_trash_index: int
+    ) -> None:
+        """Initializes the cache manager for a group of sliding window attention layers, with two special indices:
+        - ``sentinel_index`` marks the spot of a new token in the read indices
+        - ``write_trash_index`` is used by padding tokens to write their KV cache
         """
         self._index = index
         self.uses_block_sharing = False
         self.block_size = block_size
         self.sliding_window = sliding_window
+        self.sentinel_index = sentinel_index
+        self.write_trash_index = write_trash_index
         self._max_blocks_per_request = ceil(self.sliding_window / self.block_size)
         self.block_table = {}
 
@@ -454,8 +498,8 @@ class SlidingAttentionCacheAllocator(CacheAllocator):
         """Returns the physical indices of where to read request_id's cache in the cache tensor.
         For a group of sliding window attention layers, we read from the cache tensor before writing on it, because the
         new cache can overwrite the old one. To form the cache + new key / values states, we read the at most
-        sliding_window - 1 cache page and then manually add the new key / values states after. Hence the -1 indices
-        which indicate where to store the new key or values indices."""
+        sliding_window - 1 cache page and then manually add the new key / values states after. Hence the sentinel
+        indices which indicate where to store the new key or values indices."""
         # Retrieve the block table for the request and raise an error if it doesn't exist
         block_table = self.block_table.get(request_id)
         if block_table is None:
@@ -471,7 +515,7 @@ class SlidingAttentionCacheAllocator(CacheAllocator):
             block_offset = i % self.block_size
             physical_index = block_table[block_idx] * self.block_size + block_offset
             physical_indices.append(physical_index)
-        return physical_indices + [-1] * query_length
+        return physical_indices + [self.sentinel_index] * query_length
 
     def get_write_indices(self, request_id: str, past_length: int, query_length: int) -> list[int]:
         """Returns the physical indices of where to write request_id's cache in the cache tensor. For a group of
@@ -494,10 +538,11 @@ class SlidingAttentionCacheAllocator(CacheAllocator):
             physical_index = block_table[block_idx] * self.block_size + block_offset
             physical_indices.append(physical_index)
         if padding_length > 0:
-            physical_indices = [-1] * padding_length + physical_indices
+            physical_indices = [self.write_trash_index] * padding_length + physical_indices
         return physical_indices
 
-    def get_seqlens_k(self, request_id: str, past_length: int, query_length: int) -> tuple[str, int]:
-        """Returns the attention type of the cache allocator and the key sequence length for the given request_id."""
-        seqlens_k = query_length + min(past_length, self.sliding_window - 1)
-        return "sliding_attention", seqlens_k
+    # TODO: implement this
+    def fill_block_table(
+        self, request_id: str, past_length: int, query_length: int, block_table: torch.Tensor
+    ) -> None:
+        raise NotImplementedError("Sliding window attention layers do not support block table")

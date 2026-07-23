@@ -13,10 +13,8 @@
 # limitations under the License.
 """Fast Video processor class for InternVL."""
 
-from typing import Optional
-
 import torch
-from torchvision.transforms.v2 import functional as F
+import torchvision.transforms.v2.functional as tvF
 
 from ...image_processing_utils import BatchFeature
 from ...image_utils import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD, PILImageResampling, SizeDict
@@ -103,7 +101,7 @@ class InternVLVideoProcessor(BaseVideoProcessor):
         do_convert_rgb: bool,
         do_resize: bool,
         size: SizeDict,
-        interpolation: Optional["F.InterpolationMode"],
+        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
         do_center_crop: bool,
         crop_size: SizeDict,
         do_rescale: bool,
@@ -121,7 +119,7 @@ class InternVLVideoProcessor(BaseVideoProcessor):
             if do_convert_rgb:
                 stacked_videos = self.convert_to_rgb(stacked_videos)
             if do_resize:
-                stacked_videos = self.resize(stacked_videos, size=size, interpolation=interpolation)
+                stacked_videos = self.resize(stacked_videos, size=size, resample=resample)
             resized_videos_grouped[shape] = stacked_videos
         resized_videos = reorder_videos(resized_videos_grouped, grouped_videos_index)
 

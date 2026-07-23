@@ -18,8 +18,9 @@ from torch import nn
 
 from ...activations import ACT2FN
 from ...cache_utils import Cache
+from ...modeling_outputs import BaseModelOutputWithPooling
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging, torch_compilable_check
 from ..llava.modeling_llava import (
     LlavaCausalLMOutputWithPast,
     LlavaForConditionalGeneration,
@@ -75,6 +76,7 @@ class Lfm2VlMultiModalProjector(nn.Module):
 class Lfm2VlPreTrainedModel(LlavaPreTrainedModel):
     _can_compile_fullgraph = False
     base_model_prefix = "model"
+    _is_stateful = True
 
 
 class Lfm2VlCausalLMOutputWithPast(LlavaCausalLMOutputWithPast):
@@ -86,42 +88,42 @@ class Lfm2VlModelOutputWithPast(LlavaModelOutputWithPast):
 
 
 class Lfm2VlModel(LlavaModel):
-    _checkpoint_conversion_mapping = {}
-
     def __init__(self, config: Lfm2VlConfig):
         super().__init__(config)
 
+    @can_return_tuple
+    @auto_docstring(
+        custom_intro="Obtains image last hidden states from the vision tower and apply multimodal projection."
+    )
     def get_image_features(
         self,
         pixel_values: torch.FloatTensor,
         spatial_shapes: torch.Tensor,
         pixel_attention_mask: torch.Tensor,
-        **kwargs,
-    ) -> list[torch.Tensor]:
-        """
-        Obtains image last hidden states from the vision tower and apply multimodal projection.
-
-        Args:
-            pixel_values (`torch.FloatTensor]` of shape `(batch_size, channels, height, width)`):
-               The tensors corresponding to the input images.
-            spatial_shapes (`torch.Tensor` of shape `(batch_size, 2)`):
-                The spatial shapes of the input images.
-            pixel_attention_mask (`torch.Tensor` of shape `(batch_size, height, width)`):
-                The pixel attention mask of the input images.
-        Returns:
-            image_features (`list[torch.Tensor]`): Image feature tensor of shape `(num_images, image_length, embed_dim)`).
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutputWithPooling:
+        r"""
+        pixel_values (`torch.FloatTensor]` of shape `(batch_size, channels, height, width)`):
+            The tensors corresponding to the input images.
+        spatial_shapes (`torch.Tensor` of shape `(batch_size, 2)`):
+            The spatial shapes of the input images.
+        pixel_attention_mask (`torch.Tensor` of shape `(batch_size, height, width)`):
+            The pixel attention mask of the input images.
         """
         image_outputs = self.vision_tower(
             pixel_values=pixel_values,
             spatial_shapes=spatial_shapes,
             pixel_attention_mask=pixel_attention_mask,
-        ).last_hidden_state
+            return_dict=True,
+            **kwargs,
+        )
+        last_hidden_state = image_outputs.last_hidden_state
 
         img_feature_lengths = pixel_attention_mask.sum(dim=1)
         image_features = []
 
-        for img_idx in range(image_outputs.size(0)):
-            feature = image_outputs[img_idx]
+        for img_idx in range(last_hidden_state.size(0)):
+            feature = last_hidden_state[img_idx]
             # unpad the image representation
             feature = feature[: img_feature_lengths[img_idx], :].unsqueeze(0)
 
@@ -136,7 +138,8 @@ class Lfm2VlModel(LlavaModel):
             img_embedding = img_embedding.reshape(-1, img_embedding.size(-1))
             image_features.append(img_embedding)
 
-        return image_features
+        image_outputs.pooler_output = image_features
+        return image_outputs
 
     def get_placeholder_mask(
         self, input_ids: torch.LongTensor, inputs_embeds: torch.FloatTensor, image_features: torch.FloatTensor
@@ -154,12 +157,12 @@ class Lfm2VlModel(LlavaModel):
             special_image_mask = input_ids == self.config.image_token_id
 
         n_image_tokens = special_image_mask.sum()
-        special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
+        special_image_mask = special_image_mask.unsqueeze(-1).to(inputs_embeds.device)
         n_image_features = image_features.shape[0]
-        if inputs_embeds[special_image_mask].numel() != image_features.numel():
-            raise ValueError(
-                f"Image features and image tokens do not match: tokens: {n_image_tokens}, features {n_image_features}"
-            )
+        torch_compilable_check(
+            n_image_tokens * inputs_embeds.shape[-1] == image_features.numel(),
+            f"Image features and image tokens do not match, tokens: {n_image_tokens}, features: {n_image_features}",
+        )
         return special_image_mask
 
     @can_return_tuple
@@ -175,7 +178,6 @@ class Lfm2VlModel(LlavaModel):
         past_key_values: Cache | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         use_cache: bool | None = None,
-        cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | Lfm2VlModelOutputWithPast:
         r"""
@@ -196,7 +198,8 @@ class Lfm2VlModel(LlavaModel):
                 pixel_values=pixel_values,
                 spatial_shapes=spatial_shapes,
                 pixel_attention_mask=pixel_attention_mask,
-            )
+                return_dict=True,
+            ).pooler_output
             image_features = torch.cat(image_features, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
             special_image_mask = self.get_placeholder_mask(
                 input_ids=input_ids,
@@ -211,7 +214,6 @@ class Lfm2VlModel(LlavaModel):
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
-            cache_position=cache_position,
             **kwargs,
         )
 
@@ -225,15 +227,22 @@ class Lfm2VlModel(LlavaModel):
 
 
 class Lfm2VlForConditionalGeneration(LlavaForConditionalGeneration):
-    _checkpoint_conversion_mapping = {}
-
+    @auto_docstring
     def get_image_features(
         self,
         pixel_values: torch.FloatTensor,
         spatial_shapes: torch.Tensor,
         pixel_attention_mask: torch.Tensor,
-        **kwargs,
-    ):
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutputWithPooling:
+        r"""
+        pixel_values (`torch.FloatTensor]` of shape `(batch_size, channels, height, width)`):
+            The tensors corresponding to the input images.
+        spatial_shapes (`torch.Tensor` of shape `(batch_size, 2)`):
+            The spatial shapes of the input images.
+        pixel_attention_mask (`torch.Tensor` of shape `(batch_size, height, width)`):
+            The pixel attention mask of the input images.
+        """
         return self.model.get_image_features(
             pixel_values=pixel_values,
             spatial_shapes=spatial_shapes,
@@ -254,7 +263,6 @@ class Lfm2VlForConditionalGeneration(LlavaForConditionalGeneration):
         inputs_embeds: torch.FloatTensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
-        cache_position: torch.LongTensor | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | Lfm2VlCausalLMOutputWithPast:
@@ -274,7 +282,8 @@ class Lfm2VlForConditionalGeneration(LlavaForConditionalGeneration):
 
         ```python
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
         >>> from transformers import AutoProcessor, AutoModelForImageTextToText
         >>> from transformers.image_utils import load_image
 
@@ -321,7 +330,6 @@ class Lfm2VlForConditionalGeneration(LlavaForConditionalGeneration):
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
-            cache_position=cache_position,
             **kwargs,
         )
 

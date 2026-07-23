@@ -238,21 +238,6 @@ Come up with some text you'd like to translate to another language. For T5, you 
 >>> text = "translate English to French: Legumes share resources with nitrogen-fixing bacteria."
 ```
 
-The simplest way to try out your finetuned model for inference is to use it in a [`pipeline`]. Instantiate a `pipeline` for translation with your model, and pass your text to it:
-
-```py
->>> from transformers import pipeline
-
-# Change `xx` to the language of the input and `yy` to the language of the desired output.
-# Examples: "en" for English, "fr" for French, "de" for German, "es" for Spanish, "zh" for Chinese, etc; translation_en_to_fr translates English to French
-# You can view all the lists of languages here - https://huggingface.co/languages
->>> translator = pipeline("translation_xx_to_yy", model="username/my_awesome_opus_books_model")
->>> translator(text)
-[{'translation_text': 'Legumes partagent des ressources avec des bactéries azotantes.'}]
-```
-
-You can also manually replicate the results of the `pipeline` if you'd like:
-
 Tokenize the text and return the `input_ids` as PyTorch tensors:
 
 ```py

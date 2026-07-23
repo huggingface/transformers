@@ -225,7 +225,6 @@ class CanineModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     pipeline_model_mapping = (
         {
             "feature-extraction": CanineModel,
-            "question-answering": CanineForQuestionAnswering,
             "text-classification": CanineForSequenceClassification,
             "token-classification": CanineForTokenClassification,
             "zero-shot": CanineForSequenceClassification,
@@ -240,7 +239,7 @@ class CanineModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     def setUp(self):
         self.model_tester = CanineModelTester(self)
         # we set has_text_modality to False as the config has no vocab_size attribute
-        self.config_tester = ConfigTester(self, config_class=CanineConfig, has_text_modality=False, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=CanineConfig, has_text_modality=False, hidden_size=32)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -248,6 +247,22 @@ class CanineModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
+
+    def test_model_fp16_with_attention_mask(self):
+        config, input_ids, token_type_ids, input_mask, _, _, _ = self.model_tester.prepare_config_and_inputs()
+        # Force partial masking so the ndim==3 mask path in the shallow encoder is exercised.
+        input_mask[:, self.model_tester.seq_length // 2 :] = 0
+
+        model = CanineModel(config=config)
+        model.to(torch_device)
+        model.half()
+        model.eval()
+
+        with torch.no_grad():
+            output = model(input_ids, attention_mask=input_mask).last_hidden_state
+
+        self.assertEqual(output.dtype, torch.float16)
+        self.assertFalse(torch.isnan(output).any())
 
     def test_for_multiple_choice(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()

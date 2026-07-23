@@ -24,8 +24,8 @@ import torch.nn.functional as F
 
 from ... import initialization as init
 from ...activations import ACT2FN
+from ...image_processing_backends import TorchvisionBackend
 from ...image_processing_utils import BatchFeature, get_size_dict
-from ...image_processing_utils_fast import BaseImageProcessorFast
 from ...image_utils import (
     IMAGENET_DEFAULT_MEAN,
     IMAGENET_DEFAULT_STD,
@@ -33,21 +33,21 @@ from ...image_utils import (
     ImageInput,
     PILImageResampling,
     SizeDict,
-    pil_torch_interpolation_mapping,
 )
 from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_outputs import BaseModelOutputWithPooling
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import ImagesKwargs, Unpack
-from ...utils import (
-    ModelOutput,
-    TensorType,
-    auto_docstring,
-    logging,
+from ...utils import ModelOutput, TensorType, auto_docstring, can_return_tuple, logging
+from ...utils.generic import (
+    TransformersKwargs,
+    is_flash_attention_requested,
+    merge_with_config_defaults,
 )
-from ...utils.generic import TransformersKwargs, check_model_inputs, is_flash_attention_requested
+from ...utils.output_capturing import capture_outputs
 from ..auto import AutoModel
-from ..maskformer.modeling_maskformer import MaskFormerSinePositionEmbedding
-from ..sam.image_processing_sam_fast import SamImageProcessorFast
+from ..detr.modeling_detr import DetrSinePositionEmbedding
+from ..sam.image_processing_sam import SamImageProcessor
 from ..sam.modeling_sam import (
     SamLayerNorm,
     SamMaskDecoder,
@@ -71,7 +71,7 @@ from .configuration_sam2 import (
 logger = logging.get_logger(__name__)
 
 
-class Sam2FastImageProcessorKwargs(ImagesKwargs, total=False):
+class Sam2ImageProcessorKwargs(ImagesKwargs, total=False):
     r"""
     mask_size (`dict[str, int]`, *optional*):
         The size `{"height": int, "width": int}` to resize the segmentation maps to.
@@ -81,7 +81,7 @@ class Sam2FastImageProcessorKwargs(ImagesKwargs, total=False):
 
 
 @auto_docstring
-class Sam2ImageProcessorFast(SamImageProcessorFast):
+class Sam2ImageProcessor(SamImageProcessor):
     resample = PILImageResampling.BILINEAR
     image_mean = IMAGENET_DEFAULT_MEAN
     image_std = IMAGENET_DEFAULT_STD
@@ -92,15 +92,15 @@ class Sam2ImageProcessorFast(SamImageProcessorFast):
     do_normalize = True
     do_convert_rgb = True
 
-    valid_kwargs = Sam2FastImageProcessorKwargs
+    valid_kwargs = Sam2ImageProcessorKwargs
 
-    # modular artefacts
+    # disable SAM padding logic
     do_pad = None
     pad_size = None
     mask_pad_size = None
 
-    def __init__(self, **kwargs: Unpack[Sam2FastImageProcessorKwargs]):
-        BaseImageProcessorFast.__init__(self, **kwargs)
+    def __init__(self, **kwargs: Unpack[Sam2ImageProcessorKwargs]):
+        TorchvisionBackend.__init__(self, **kwargs)
 
     def _preprocess(
         self,
@@ -108,14 +108,14 @@ class Sam2ImageProcessorFast(SamImageProcessorFast):
         return_tensors: str | TensorType | None,
         **kwargs,
     ) -> "torch.Tensor":
-        return BaseImageProcessorFast._preprocess(self, images, return_tensors=return_tensors, **kwargs).pixel_values
+        return TorchvisionBackend._preprocess(self, images, return_tensors=return_tensors, **kwargs).pixel_values
 
     @auto_docstring
     def preprocess(
         self,
         images: ImageInput,
         segmentation_maps: ImageInput | None = None,
-        **kwargs: Unpack[Sam2FastImageProcessorKwargs],
+        **kwargs: Unpack[Sam2ImageProcessorKwargs],
     ) -> BatchFeature:
         r"""
         segmentation_maps (`ImageInput`, *optional*):
@@ -130,7 +130,7 @@ class Sam2ImageProcessorFast(SamImageProcessorFast):
         do_convert_rgb: bool,
         input_data_format: ChannelDimension,
         device: Union[str, "torch.device"] | None = None,
-        **kwargs: Unpack[Sam2FastImageProcessorKwargs],
+        **kwargs: Unpack[Sam2ImageProcessorKwargs],
     ) -> BatchFeature:
         """
         Preprocess image-like inputs.
@@ -159,7 +159,7 @@ class Sam2ImageProcessorFast(SamImageProcessorFast):
                 {
                     "do_normalize": False,
                     "do_rescale": False,
-                    "interpolation": pil_torch_interpolation_mapping[PILImageResampling.NEAREST],
+                    "resample": PILImageResampling.NEAREST,
                     "size": segmentation_maps_kwargs.pop("mask_size"),
                 }
             )
@@ -170,49 +170,18 @@ class Sam2ImageProcessorFast(SamImageProcessorFast):
 
         return BatchFeature(data=data, tensor_type=kwargs["return_tensors"])
 
-    def _further_process_kwargs(
+    def _standardize_kwargs(
         self,
-        size: SizeDict | None = None,
         mask_size: SizeDict | None = None,
-        default_to_square: bool | None = None,
-        image_mean: float | list[float] | None = None,
-        image_std: float | list[float] | None = None,
-        data_format: ChannelDimension | None = None,
         **kwargs,
     ) -> dict:
         """
-        Update kwargs that need further processing before being validated
-        Can be overridden by subclasses to customize the processing of kwargs.
+        Update kwargs that need further processing before being validated.
         """
-        if kwargs is None:
-            kwargs = {}
-        if size is not None:
-            size = SizeDict(**get_size_dict(size=size, default_to_square=default_to_square))
-        if mask_size is not None:
+        if mask_size is not None and not isinstance(mask_size, SizeDict):
             mask_size = SizeDict(**get_size_dict(mask_size, param_name="mask_size"))
-        if isinstance(image_mean, list):
-            image_mean = tuple(image_mean)
-        if isinstance(image_std, list):
-            image_std = tuple(image_std)
-        if data_format is None:
-            data_format = ChannelDimension.FIRST
-
-        kwargs["size"] = size
         kwargs["mask_size"] = mask_size
-        kwargs["image_mean"] = image_mean
-        kwargs["image_std"] = image_std
-        kwargs["data_format"] = data_format
-
-        # torch resize uses interpolation instead of resample
-        # Check if resample is an int before checking if it's an instance of PILImageResampling
-        # because if pillow < 9.1.0, resample is an int and PILImageResampling is a module.
-        # Checking PILImageResampling will fail with error `TypeError: isinstance() arg 2 must be a type or tuple of types`.
-        resample = kwargs.pop("resample")
-        kwargs["interpolation"] = (
-            pil_torch_interpolation_mapping[resample] if isinstance(resample, (PILImageResampling, int)) else resample
-        )
-
-        return kwargs
+        return TorchvisionBackend._standardize_kwargs(self, **kwargs)
 
     def _apply_non_overlapping_constraints(self, pred_masks: torch.Tensor) -> torch.Tensor:
         """
@@ -294,9 +263,9 @@ class Sam2ImageProcessorFast(SamImageProcessorFast):
         raise NotImplementedError("No need to override resize for SAM 2.")
 
 
-@dataclass
 @auto_docstring(custom_intro="Base class for the vision encoder's outputs.")
-class Sam2VisionEncoderOutput(ModelOutput):
+@dataclass
+class Sam2VisionEncoderOutput(BaseModelOutputWithPooling):
     r"""
     last_hidden_state (`torch.FloatTensor` of shape `(batch_size, height, width, hidden_size)`):
         Sequence of hidden-states at the output of the last layer of the model.
@@ -306,25 +275,14 @@ class Sam2VisionEncoderOutput(ModelOutput):
     fpn_position_encoding (`tuple(torch.FloatTensor)`):
         Tuple of `torch.FloatTensor` (one for each feature level, from high to low resolution) of shape
         `(batch_size, hidden_size, height, width)`. Positional encodings corresponding to the `fpn_hidden_states`.
-    hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-        Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
-        one for the output of each stage) of shape `(batch_size, height, width, hidden_size)`. Hidden-states of the
-        model at the output of each stage.
-    attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-        Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-        sequence_length)`. Attentions weights after the attention softmax, used to compute the weighted average in
-        the self-attention heads.
     """
 
-    last_hidden_state: torch.FloatTensor | None = None
     fpn_hidden_states: torch.FloatTensor | None = None
     fpn_position_encoding: torch.FloatTensor | None = None
-    hidden_states: tuple[torch.FloatTensor, ...] | None = None
-    attentions: tuple[torch.FloatTensor, ...] | None = None
 
 
-@dataclass
 @auto_docstring(custom_intro="Base class for the Sam2 model's output.")
+@dataclass
 class Sam2ImageSegmentationOutput(ModelOutput):
     r"""
     iou_scores (`torch.FloatTensor` of shape `(batch_size, point_batch_size, num_masks)`):
@@ -364,7 +322,7 @@ class Sam2PatchEmbeddings(nn.Module):
     Args:
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
             Pixel values. Pixel values can be obtained using
-            [`AutoImageProcessor`]. See [`Sam2ImageProcessorFast.__call__`] for details.
+            [`AutoImageProcessor`]. See [`Sam2ImageProcessor.__call__`] for details.
 
     Returns:
         embeddings (`torch.FloatTensor`):
@@ -390,7 +348,7 @@ class Sam2PatchEmbeddings(nn.Module):
         return embeddings
 
 
-class Sam2SinePositionEmbedding(MaskFormerSinePositionEmbedding):
+class Sam2SinePositionEmbedding(DetrSinePositionEmbedding):
     pass
 
 
@@ -399,7 +357,9 @@ class Sam2VisionNeck(nn.Module):
         super().__init__()
         self.config = config
 
-        self.position_encoding = Sam2SinePositionEmbedding(num_pos_feats=config.fpn_hidden_size // 2, normalize=True)
+        self.position_encoding = Sam2SinePositionEmbedding(
+            num_position_features=config.fpn_hidden_size // 2, normalize=True
+        )
         self.convs = nn.ModuleList()
         for in_channels in config.backbone_channel_list:
             self.convs.append(
@@ -501,9 +461,9 @@ class Sam2MultiScaleAttention(nn.Module):
         key = key.transpose(1, 2)
         value = value.transpose(1, 2)
 
-        attention_interface: Callable = eager_attention_forward
-        if self.config._attn_implementation != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
         attn_output, _ = attention_interface(
             self,
             query,
@@ -628,9 +588,8 @@ class Sam2MultiScaleBlock(GradientCheckpointingLayer):
             # Shapes have changed due to Q pooling
             window_size = self.window_size // self.query_stride[0]
             H, W = residual.shape[1:3]
-
-            pad_h = (window_size - H % window_size) % window_size
-            pad_w = (window_size - W % window_size) % window_size
+            pad_h = (-H) % window_size
+            pad_w = (-W) % window_size
             pad_hw = (H + pad_h, W + pad_w)
 
         # Reverse window partition
@@ -644,12 +603,12 @@ class Sam2MultiScaleBlock(GradientCheckpointingLayer):
         return hidden_states
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Hiera model's outputs that also contains a pooling of the last hidden states.
     """
 )
+@dataclass
 class Sam2HieraDetModelOutput(ModelOutput):
     r"""
     last_hidden_state (`torch.FloatTensor` of shape `(batch_size, height, width, hidden_size)`):
@@ -660,6 +619,8 @@ class Sam2HieraDetModelOutput(ModelOutput):
 
     last_hidden_state: torch.FloatTensor | None = None
     intermediate_hidden_states: tuple[torch.FloatTensor, ...] | None = None
+    hidden_states: tuple[torch.FloatTensor, ...] | None = None
+    attentions: tuple[torch.FloatTensor, ...] | None = None
 
 
 @auto_docstring
@@ -671,6 +632,15 @@ class Sam2PreTrainedModel(PreTrainedModel):
     _supports_sdpa = True
     _supports_flash_attn = True
     _supports_attention_backend = True
+    _keys_to_ignore_on_load_unexpected = [
+        r"^memory_.*",
+        r"^mask_downsample.*",
+        r"^object_pointer_proj.*",
+        r"^temporal_positional_encoding_projection_layer.*",
+        "no_memory_positional_encoding",
+        "no_object_pointer",
+        "occlusion_spatial_embedding_parameter",
+    ]
 
     @torch.no_grad()
     def _init_weights(self, module):
@@ -730,7 +700,8 @@ class Sam2HieraDetModel(Sam2PreTrainedModel):
         pos_embed = pos_embed.permute(0, 2, 3, 1)
         return pos_embed
 
-    @check_model_inputs
+    @merge_with_config_defaults
+    @capture_outputs
     def forward(
         self,
         pixel_values: torch.FloatTensor | None = None,
@@ -782,7 +753,7 @@ class Sam2VisionModel(Sam2PreTrainedModel):
     def get_input_embeddings(self):
         return self.backbone.get_input_embeddings()
 
-    @check_model_inputs
+    @can_return_tuple
     def forward(
         self,
         pixel_values: torch.FloatTensor | None = None,
@@ -805,6 +776,8 @@ class Sam2VisionModel(Sam2PreTrainedModel):
             last_hidden_state=hidden_states,
             fpn_hidden_states=fpn_hidden_states,
             fpn_position_encoding=fpn_position_encoding,
+            hidden_states=backbone_output.hidden_states,
+            attentions=backbone_output.attentions,
         )
 
 
@@ -928,9 +901,9 @@ class Sam2Attention(nn.Module):
         key = self.k_proj(key).view(*new_shape).transpose(1, 2)
         value = self.v_proj(value).view(*new_shape).transpose(1, 2)
 
-        attention_interface: Callable = eager_attention_forward
-        if self.config._attn_implementation != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
 
         if is_flash_attention_requested(self.config) and attention_similarity is not None:
             # Target guided masks are represented as float masks and are incompatible with Flash Attention
@@ -1179,15 +1152,7 @@ class Sam2MaskDecoder(SamMaskDecoder):
     """
 )
 class Sam2Model(SamModel):
-    _keys_to_ignore_on_load_unexpected = [
-        r"^memory_.*",
-        r"^mask_downsample.*",
-        r"^object_pointer_proj.*",
-        r"^temporal_positional_encoding_projection_layer.*",
-        "no_memory_positional_encoding",
-        "no_object_pointer",
-        "occlusion_spatial_embedding_parameter",
-    ]
+    _tied_weights_keys = {}
 
     def __init__(self, config: Sam2Config):
         PreTrainedModel.__init__(self, config)
@@ -1233,7 +1198,8 @@ class Sam2Model(SamModel):
                 Input pixel values
         """
         batch_size = pixel_values.shape[0]
-        feature_maps, _, _, _ = self.get_image_features(pixel_values, **kwargs)
+        image_outputs = self.get_image_features(pixel_values, return_dict=True, **kwargs)
+        feature_maps = image_outputs.fpn_hidden_states
 
         # add no memory embedding to the last feature map
         feature_maps[-1] = feature_maps[-1] + self.no_memory_embedding
@@ -1246,34 +1212,18 @@ class Sam2Model(SamModel):
 
         return image_embeddings
 
+    @can_return_tuple
+    @auto_docstring
     def get_image_features(
         self,
         pixel_values: torch.FloatTensor,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[
-        list[torch.Tensor],
-        list[torch.Tensor],
-        tuple[torch.FloatTensor, ...] | None,
-        tuple[torch.FloatTensor, ...] | None,
-    ]:
+    ) -> tuple | Sam2VisionEncoderOutput:
         r"""
-        Extract and preprocess image features using the vision encoder.
-
-        Args:
-            pixel_values (`torch.FloatTensor`):
-                Input pixel values of shape `(batch_size, num_channels, height, width)`.
-
-        Returns:
-            `tuple`: A tuple containing:
-                - feature_maps (`list[torch.Tensor]`): List of feature maps from different levels.
-                - feature_maps_position_embeddings (`list[torch.Tensor]`): List of positional embeddings for each feature level.
-                - vision_hidden_states (`tuple[torch.FloatTensor]`, *optional*): Hidden states from the vision encoder.
-                - vision_attentions (`tuple[torch.FloatTensor]`, *optional*): Attention weights from the vision encoder.
+        pixel_values (`torch.FloatTensor`):
+            Input pixel values of shape `(batch_size, num_channels, height, width)`.
         """
-        vision_outputs: Sam2VisionEncoderOutput = self.vision_encoder(
-            pixel_values,
-            **kwargs,
-        )
+        vision_outputs: Sam2VisionEncoderOutput = self.vision_encoder(pixel_values, return_dict=True, **kwargs)
 
         feature_maps = vision_outputs.fpn_hidden_states
         feature_maps_position_embeddings = vision_outputs.fpn_position_encoding
@@ -1287,13 +1237,16 @@ class Sam2Model(SamModel):
         # flatten NxCxHxW to HWxNxC
         feature_maps = [feature_map.flatten(2).permute(2, 0, 1) for feature_map in feature_maps]
         feature_maps_position_embeddings = [
-            feature_map_position_embedding.flatten(2).permute(2, 0, 1)
-            for feature_map_position_embedding in feature_maps_position_embeddings
+            feature_maps_position_embeddings.flatten(2).permute(2, 0, 1)
+            for feature_maps_position_embeddings in feature_maps_position_embeddings
         ]
+        vision_outputs.fpn_hidden_states = feature_maps
+        vision_outputs.fpn_position_encoding = feature_maps_position_embeddings
 
-        return feature_maps, feature_maps_position_embeddings, vision_outputs.hidden_states, vision_outputs.attentions
+        return vision_outputs
 
-    @check_model_inputs
+    @merge_with_config_defaults
+    @capture_outputs
     @auto_docstring
     def forward(
         self,
@@ -1366,14 +1319,16 @@ class Sam2Model(SamModel):
 
         ```python
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
         >>> from transformers import AutoModel, AutoProcessor
 
         >>> model = AutoModel.from_pretrained("danelcsb/sam2.1_hiera_tiny")
         >>> processor = AutoProcessor.from_pretrained("danelcsb/sam2.1_hiera_tiny")
 
-        >>> img_url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/sam-car.png"
-        >>> raw_image = Image.open(requests.get(img_url, stream=True).raw).convert("RGB")
+        >>> url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/sam-car.png"
+        >>> with httpx.stream("GET", url) as response:
+        ...     raw_image = Image.open(BytesIO(response.read())).convert("RGB")
         >>> input_points = [[[400, 650]]]  # 2D location of a window on the car
         >>> inputs = processor(images=raw_image, input_points=input_points, return_tensors="pt")
 
@@ -1403,10 +1358,10 @@ class Sam2Model(SamModel):
         vision_hidden_states = None
 
         if pixel_values is not None:
-            feature_maps, _, vision_hidden_states, vision_attentions = self.get_image_features(
-                pixel_values,
-                **kwargs,
-            )
+            image_outputs: Sam2VisionEncoderOutput = self.get_image_features(pixel_values, return_dict=True, **kwargs)
+            feature_maps = image_outputs.fpn_hidden_states
+            vision_hidden_states = image_outputs.hidden_states
+            vision_attentions = image_outputs.attentions
 
             # add no memory embedding to the last feature map
             feature_maps[-1] = feature_maps[-1] + self.no_memory_embedding
@@ -1471,6 +1426,6 @@ __all__ = [
     "Sam2Model",
     "Sam2VisionModel",
     "Sam2PreTrainedModel",
-    "Sam2ImageProcessorFast",
+    "Sam2ImageProcessor",
     "Sam2HieraDetModel",
 ]

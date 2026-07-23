@@ -18,7 +18,7 @@ import os
 from typing import Any, TypeVar
 
 import numpy as np
-from huggingface_hub import create_repo, is_offline_mode
+from huggingface_hub import is_offline_mode
 
 from .dynamic_module_utils import custom_object_save
 from .feature_extraction_utils import BatchFeature as BaseBatchFeature
@@ -31,7 +31,7 @@ from .utils import (
     logging,
     safe_load_json_file,
 )
-from .utils.hub import cached_file
+from .utils.hub import cached_file, hf_api
 
 
 ImageProcessorType = TypeVar("ImageProcessorType", bound="ImageProcessingMixin")
@@ -104,7 +104,7 @@ class ImageProcessingMixin(PushToHubMixin):
                 - a path to a *directory* containing a image processor file saved using the
                   [`~image_processing_utils.ImageProcessingMixin.save_pretrained`] method, e.g.,
                   `./my_model_directory/`.
-                - a path or url to a saved image processor JSON *file*, e.g.,
+                - a path to a saved image processor JSON *file*, e.g.,
                   `./my_model_directory/preprocessor_config.json`.
             cache_dir (`str` or `os.PathLike`, *optional*):
                 Path to a directory in which a downloaded pretrained model image processor should be cached if the
@@ -203,7 +203,7 @@ class ImageProcessingMixin(PushToHubMixin):
         if push_to_hub:
             commit_message = kwargs.pop("commit_message", None)
             repo_id = kwargs.pop("repo_id", save_directory.split(os.path.sep)[-1])
-            repo_id = create_repo(repo_id, exist_ok=True, **kwargs).repo_id
+            repo_id = hf_api().create_repo(repo_id, exist_ok=True, **kwargs).repo_id
             files_timestamps = self._get_files_timestamps(save_directory)
 
         # If we have a custom config, we copy the file defining it in the folder and set the attributes so it can be
@@ -369,10 +369,18 @@ class ImageProcessingMixin(PushToHubMixin):
         image_processor_dict.update({k: v for k, v in kwargs.items() if k in cls.valid_kwargs.__annotations__})
         image_processor = cls(**image_processor_dict)
 
-        # Remove kwargs that are used to initialize the image processor attributes
-        for key in list(kwargs):
-            if hasattr(image_processor, key):
-                kwargs.pop(key)
+        # Apply extra kwargs to instance (BC for remote code, e.g. phi4_multimodal)
+        extra_keys = []
+        for key in reversed(list(kwargs.keys())):
+            if hasattr(image_processor, key) and key not in cls.valid_kwargs.__annotations__:
+                setattr(image_processor, key, kwargs.pop(key, None))
+                extra_keys.append(key)
+        if extra_keys:
+            logger.warning_once(
+                f"Image processor {cls.__name__}: kwargs {extra_keys} were applied for backward compatibility. "
+                f"To avoid this warning, add them to valid_kwargs: create a custom TypedDict extending "
+                f"ImagesKwargs with these keys and set it as the `valid_kwargs` class attribute."
+            )
 
         logger.info(f"Image processor {image_processor}")
         if return_unused_kwargs:
@@ -469,7 +477,7 @@ class ImageProcessingMixin(PushToHubMixin):
         If a single url is passed, the return value will be a single object. If a list is passed a list of objects is
         returned.
         """
-        if isinstance(image_url_or_urls, list):
+        if isinstance(image_url_or_urls, (list, tuple)):
             return [self.fetch_images(x) for x in image_url_or_urls]
         elif isinstance(image_url_or_urls, str):
             return load_image(image_url_or_urls)

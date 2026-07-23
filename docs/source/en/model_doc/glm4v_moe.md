@@ -16,7 +16,7 @@ limitations under the License.
 ⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2025-08-12 and added to Hugging Face Transformers on 2025-08-08.*
+*This model was published in HF papers on 2025-07-01 and contributed to Hugging Face Transformers on 2025-08-08.*
 
 # Glm4vMoe
 
@@ -76,8 +76,12 @@ This model was contributed by [Raushan Turganbay](https://huggingface.co/Raushan
 
 [[autodoc]] Glm4vMoeModel
     - forward
+    - get_video_features
+    - get_image_features
 
 ## Glm4vMoeForConditionalGeneration
 
 [[autodoc]] Glm4vMoeForConditionalGeneration
     - forward
+    - get_video_features
+    - get_image_features

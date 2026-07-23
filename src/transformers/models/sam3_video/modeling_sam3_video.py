@@ -14,6 +14,7 @@
 
 
 from collections import OrderedDict, defaultdict
+from collections.abc import Iterator
 from copy import deepcopy
 from dataclasses import dataclass
 from typing import Any
@@ -54,7 +55,7 @@ def _load_cv_utils_kernel_once():
         return
 
     try:
-        cv_utils_kernel = get_kernel("kernels-community/cv_utils")
+        cv_utils_kernel = get_kernel("kernels-community/cv-utils", version=1)
     except Exception as e:
         logger.warning_once(
             f"Failed to load cv_utils kernel (your torch/cuda setup may not be supported): {e}. "
@@ -456,8 +457,8 @@ class Sam3VideoInferenceSession:
         self.cache.clear_all()
 
 
-@dataclass
 @auto_docstring(custom_intro="Base class for the Sam3Video model's output.")
+@dataclass
 class Sam3VideoSegmentationOutput(ModelOutput):
     r"""
     object_ids (`list[int]`, *optional*):
@@ -590,6 +591,7 @@ class Sam3VideoModel(Sam3VideoPreTrainedModel):
                 text_embeds = self.detector_model.get_text_features(
                     input_ids=inference_session.prompt_input_ids[prompt_id],
                     attention_mask=inference_session.prompt_attention_masks[prompt_id],
+                    return_dict=True,
                 )
                 inference_session.prompt_embeddings[prompt_id] = text_embeds
             else:
@@ -1131,7 +1133,7 @@ class Sam3VideoModel(Sam3VideoPreTrainedModel):
         pred_masks = torch.where(keep, pred_masks, torch.clamp(pred_masks, max=-10.0))
         return pred_masks
 
-    def _suppress_shrinked_masks(self, pred_masks, new_pred_masks, shrink_threshold=0.3):
+    def _suppress_shrunk_masks(self, pred_masks, new_pred_masks, shrink_threshold=0.3):
         area_before = (pred_masks > 0).sum(dim=(-1, -2))
         area_after = (new_pred_masks > 0).sum(dim=(-1, -2))
         area_before = torch.clamp(area_before, min=1.0)
@@ -1170,7 +1172,7 @@ class Sam3VideoModel(Sam3VideoPreTrainedModel):
             return pred_masks
 
         pixel_level_non_overlapping_masks = self._apply_non_overlapping_constraints(pred_masks)
-        pred_masks = self._suppress_shrinked_masks(pred_masks, pixel_level_non_overlapping_masks)
+        pred_masks = self._suppress_shrunk_masks(pred_masks, pixel_level_non_overlapping_masks)
         return pred_masks
 
     def _tracker_update_memories(
@@ -1780,20 +1782,31 @@ class Sam3VideoModel(Sam3VideoPreTrainedModel):
         return processing_order, end_frame_idx
 
     @torch.inference_mode()
+    @auto_docstring(
+        custom_intro="""
+        Propagate the prompts to get grounding results for the entire video. Used when initializing an inference session with a whole video.
+        Yields Sam3VideoSegmentationOutput for each frame.
+        """
+    )
     def propagate_in_video_iterator(
         self,
         inference_session: Sam3VideoInferenceSession,
-        start_frame_idx=0,
-        max_frame_num_to_track=None,
-        reverse=False,
-    ):
-        """
-        Propagate the prompts to get grounding results for the entire video. This method
-        is a generator and yields inference outputs for all frames in the range specified
-        by `start_frame_idx`, `max_frame_num_to_track`, and `reverse`.
-
-        Yields:
-            `Sam3VideoSegmentationOutput`: The segmentation output for each frame.
+        start_frame_idx: int = 0,
+        max_frame_num_to_track: int | None = None,
+        reverse: bool = False,
+        show_progress_bar: bool = False,
+    ) -> Iterator[Sam3VideoSegmentationOutput]:
+        r"""
+        inference_session (`Sam3VideoInferenceSession`):
+            The video inference session object.
+        start_frame_idx (`int`, *optional*, defaults to `0`):
+            The starting frame index for propagation.
+        max_frame_num_to_track (`int`, *optional*):
+            The maximum number of frames to track. If not provided, all frames in the video will be tracked.
+        reverse (`bool`, *optional*, defaults to `False`):
+            Whether to propagate in reverse.
+        show_progress_bar (`bool`, *optional*, defaults to `False`):
+            Whether to show a progress bar during propagation.
         """
         processing_order, end_frame_idx = self._get_processing_order(
             inference_session,
@@ -1803,7 +1816,7 @@ class Sam3VideoModel(Sam3VideoPreTrainedModel):
         )
 
         hotstart_buffer = []
-        for frame_idx in tqdm(processing_order):
+        for frame_idx in tqdm(processing_order, desc="propagate in video", disable=not show_progress_bar):
             out = self(inference_session=inference_session, frame_idx=frame_idx, reverse=reverse)
 
             if self.hotstart_delay > 0:

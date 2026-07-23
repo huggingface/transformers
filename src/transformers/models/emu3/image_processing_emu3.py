@@ -45,6 +45,11 @@ if is_vision_available():
 logger = logging.get_logger(__name__)
 
 
+# NOTE: this file is not consistent with image processing backends and is still using an old format.
+# Emu3 needs a fast image processor after which we can add the new backends. We keep it current way
+# for now so there's one model to test BC.
+
+
 class Emu3ImageProcessorKwargs(ImagesKwargs, total=False):
     """
     ratio (`str`, *optional*, defaults to `"1:1"`):
@@ -217,11 +222,10 @@ class Emu3ImageProcessor(BaseImageProcessor):
             # We assume that all images have the same channel dimension format.
             input_data_format = infer_channel_dimension_format(images[0])
 
-        height, width = get_image_size(images[0], channel_dim=input_data_format)
-        resized_height, resized_width = height, width
         processed_images = []
         for image in images:
             if do_resize:
+                height, width = get_image_size(image, channel_dim=input_data_format)
                 resized_height, resized_width = smart_resize(
                     height,
                     width,
@@ -244,8 +248,7 @@ class Emu3ImageProcessor(BaseImageProcessor):
             image = to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format)
             processed_images.append(image)
 
-        images = np.array(processed_images)
-        return images
+        return processed_images
 
     def _pad_for_batching(
         self,
@@ -402,7 +405,7 @@ class Emu3ImageProcessor(BaseImageProcessor):
                 )
                 pixel_values.extend(image)
 
-        image_sizes = [image.shape[-2:] for image in pixel_values]
+        image_sizes = [get_image_size(image, input_data_format) for image in pixel_values]
         if do_pad:
             pixel_values = self._pad_for_batching(pixel_values, image_sizes)
             pixel_values = np.array(pixel_values)

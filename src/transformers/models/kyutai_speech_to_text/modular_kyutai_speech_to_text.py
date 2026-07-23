@@ -351,7 +351,7 @@ class KyutaiSpeechToTextForConditionalGeneration(LlamaForCausalLM, GenerationMix
         # Add cache-related methods from GenerationMixin to codec model
         cache_methods = [
             "_prepare_cache_for_generation",
-            "_get_cache",
+            "_prepare_static_cache",
         ]
         for method in cache_methods:
             setattr(self.codec_model, method, types.MethodType(getattr(self, method).__func__, self.codec_model))
@@ -408,11 +408,14 @@ class KyutaiSpeechToTextForConditionalGeneration(LlamaForCausalLM, GenerationMix
         model_inputs = GenerationMixin.prepare_inputs_for_generation(self, *args, **kwargs)
 
         if input_values is not None:
-            cache_position = model_inputs["cache_position"]
+            seqlen, device = model_inputs["position_ids"].shape[-1], model_inputs["position_ids"].device
+            cache = model_inputs.get("past_key_values")
+            past_seen_tokens = cache.get_seq_length() if cache is not None else 0
+            positions = torch.arange(seqlen, device=device) + past_seen_tokens
             start, end = current_window[0]
 
             # first cache position is for bos token, so we need to offset by -1
-            if cache_position[-1] - 1 >= end:
+            if positions[-1] - 1 >= end:
                 # we need to encode the new audio tokens
                 with torch.no_grad():
                     input_values_start_idx = start * self.config.frame_size
@@ -425,7 +428,9 @@ class KyutaiSpeechToTextForConditionalGeneration(LlamaForCausalLM, GenerationMix
                     )
                     new_audio_tokens = codec_model_output.audio_codes.transpose(1, 2)
 
-                audio_tokens.copy_(new_audio_tokens)
+                # last window can be shorter than audio_window_size, copy only the overlap
+                n = min(audio_tokens.shape[1], new_audio_tokens.shape[1])
+                audio_tokens[:, :n].copy_(new_audio_tokens[:, :n])
 
                 start = end.clone()
                 end = end + audio_window_size
@@ -434,10 +439,10 @@ class KyutaiSpeechToTextForConditionalGeneration(LlamaForCausalLM, GenerationMix
                 )
 
             # first cache position is for bos token, so we need to offset by -1
-            current_audio_tokens_idxs = (cache_position - start - 1).clamp(min=0)
+            current_audio_tokens_idxs = (positions - start - 1).clamp(min=0)
             current_audio_tokens = audio_tokens[:, current_audio_tokens_idxs, :]
 
-            current_audio_tokens[:, cache_position == 0, :] = self.config.audio_bos_token_id
+            current_audio_tokens[:, positions == 0, :] = self.config.audio_bos_token_id
 
             input_ids = model_inputs.pop("input_ids")
             input_ids = torch.cat(

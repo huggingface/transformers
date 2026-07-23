@@ -28,8 +28,6 @@ rendered properly in your Markdown viewer.
 
 [[autodoc]] pipelines.ZeroShotClassificationArgumentHandler
 
-[[autodoc]] pipelines.QuestionAnsweringArgumentHandler
-
 ## 数据格式
 
 [[autodoc]] pipelines.PipelineDataFormat

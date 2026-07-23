@@ -158,12 +158,15 @@ class PaliGemmaVisionText2TextModelTester:
         config_and_inputs = self.prepare_config_and_inputs()
         config, pixel_values = config_and_inputs
         input_ids = ids_tensor([self.batch_size, self.seq_length], config.text_config.vocab_size - 1) + 1
-        attention_mask = input_ids.ne(self.pad_token_id).to(torch_device)
 
         # set the 16 first tokens to be image, and ensure that no other tokens are image tokens
         # do not change this unless you modified image size or patch size
         input_ids[input_ids == config.image_token_index] = self.pad_token_id
         input_ids[:, :16] = config.image_token_index
+
+        # Important! prepare the mask after adding more pad tokens
+        attention_mask = input_ids.ne(self.pad_token_id).to(torch_device)
+
         inputs_dict = {
             "pixel_values": pixel_values,
             "input_ids": input_ids,
@@ -213,7 +216,7 @@ class PaliGemmaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTes
 
             # remove one image but leave the image token in text
             curr_input_dict["pixel_values"] = curr_input_dict["pixel_values"][-1:, ...]
-            with self.assertRaises(ValueError):
+            with self.assertRaisesRegex(ValueError, "Image features and image tokens do not match"):
                 _ = model(**curr_input_dict)
 
             # simulate multi-image case by concatenating inputs where each has exactly one image/image-token
@@ -222,7 +225,7 @@ class PaliGemmaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTes
             input_ids = torch.cat([input_ids, input_ids], dim=0)
 
             # one image and two image tokens raise an error
-            with self.assertRaises(ValueError):
+            with self.assertRaisesRegex(ValueError, "Image features and image tokens do not match"):
                 _ = model(input_ids=input_ids, pixel_values=pixel_values)
 
             # two images and two image tokens don't raise an error

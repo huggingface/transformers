@@ -18,7 +18,6 @@ import tempfile
 import unittest
 
 import pytest
-from packaging import version
 
 from transformers import AutoTokenizer, BitsAndBytesConfig, DiffLlamaConfig, StaticCache, is_torch_available
 from transformers.testing_utils import (
@@ -185,7 +184,6 @@ class DiffLlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
             "text-classification": DiffLlamaForSequenceClassification,
             "text-generation": DiffLlamaForCausalLM,
             "zero-shot": DiffLlamaForSequenceClassification,
-            "question-answering": DiffLlamaForQuestionAnswering,
             "token-classification": DiffLlamaForTokenClassification,
         }
         if is_torch_available()
@@ -201,7 +199,7 @@ class DiffLlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
 
     def setUp(self):
         self.model_tester = DiffLlamaModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=DiffLlamaConfig, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=DiffLlamaConfig, hidden_size=32)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -457,11 +455,6 @@ class DiffLlamaIntegrationTest(unittest.TestCase):
     @require_torch_accelerator
     @pytest.mark.torch_compile_test
     def test_compile_static_cache(self):
-        # `torch==2.2` will throw an error on this test (as in other compilation tests), but torch==2.1.2 and torch>2.2
-        # work as intended. See https://github.com/pytorch/pytorch/issues/121943
-        if version.parse(torch.__version__) < version.parse("2.3.0"):
-            self.skipTest(reason="This test requires torch >= 2.3 to run.")
-
         NUM_TOKENS_TO_GENERATE = 40
         # Note on `EXPECTED_TEXT_COMPLETION`'s diff: the current value matches the original test if the original test
         # was changed to have a cache of 53 tokens (as opposed to 4096), on Ampere GPUs.
@@ -664,7 +657,6 @@ class Mask4DTestHard(unittest.TestCase):
             input_ids_shared_prefix,
             attention_mask=padded_attention_mask,
             position_ids=position_ids_shared_prefix,
-            cache_position=torch.arange(input_ids_shared_prefix.shape[-1], device=torch_device),
             past_key_values=past_key_values,
         ).logits
         logits_shared_prefix_last = logits_shared_prefix[
@@ -712,7 +704,6 @@ class Mask4DTestHard(unittest.TestCase):
             input_1a,
             attention_mask=padded_mask_1a,
             position_ids=position_ids_1a,
-            cache_position=torch.arange(part_a, device=torch_device),
             past_key_values=past_key_values,
         )
 
@@ -729,11 +720,6 @@ class Mask4DTestHard(unittest.TestCase):
             input_1b,
             attention_mask=padded_mask_1b,
             position_ids=position_ids_1b,
-            cache_position=torch.arange(
-                part_a,
-                input_ids_shared_prefix.shape[-1],
-                device=torch_device,
-            ),
             past_key_values=past_key_values,
         )
         decoded_1b = [

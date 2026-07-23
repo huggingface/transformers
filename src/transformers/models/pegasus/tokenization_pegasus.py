@@ -85,24 +85,32 @@ class PegasusTokenizer(TokenizersBackend):
         unk_token="<unk>",
         mask_token="<mask_2>",
         mask_token_sent="<mask_1>",
+        _spm_precompiled_charsmap=None,
         additional_special_tokens=None,
         offset=103,
         **kwargs,
     ):
         self.offset = offset
 
-        if additional_special_tokens is None:
+        if additional_special_tokens is None or mask_token_sent not in additional_special_tokens:
             additional_special_tokens = [mask_token_sent] if mask_token_sent is not None else []
-            additional_special_tokens += [f"<unk_{i}>" for i in range(2, self.offset)]
+        else:
+            additional_special_tokens = []
+        additional_special_tokens += [f"<unk_{i}>" for i in range(2, self.offset)]
 
         if vocab is None:
             vocab = [(str(unk_token), 0.0), (str(pad_token), 0.0), (str(eos_token), 0.0), (str(mask_token), 0.0)]
 
         self._vocab = vocab
         self._tokenizer = Tokenizer(Unigram(vocab=vocab, unk_id=self._vocab.index((str(unk_token), 0.0), 1)))
-        self._tokenizer.normalizer = normalizers.Sequence(
-            [normalizers.Replace(Regex(r"\n"), " "), normalizers.Replace(Regex(r" {2,}"), " ")]
-        )
+        if _spm_precompiled_charsmap is not None:
+            self._tokenizer.normalizer = normalizers.Sequence(
+                [normalizers.Precompiled(_spm_precompiled_charsmap), normalizers.Replace(Regex(r" {2,}"), " ")]
+            )
+        else:
+            self._tokenizer.normalizer = normalizers.Sequence(
+                [normalizers.Replace(Regex(r"\n"), " "), normalizers.Replace(Regex(r" {2,}"), " ")]
+            )
 
         self._tokenizer.pre_tokenizer = pre_tokenizers.Metaspace(replacement="▁", prepend_scheme="always", split=True)
         self._tokenizer.decoder = decoders.Metaspace(replacement="▁", prepend_scheme="always", split=True)

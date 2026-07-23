@@ -79,12 +79,12 @@ def get_masks(slen, lengths, causal, padding_mask=None):
     return mask, attn_mask
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for outputs of question answering models using a [`~modeling_utils.XLMSQuADHead`].
     """
 )
+@dataclass
 class XLMSquadHeadOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned if both `start_positions` and `end_positions` are provided):
@@ -514,7 +514,7 @@ class MultiHeadAttention(nn.Module):
         kv=None,
         cache=None,
         output_attentions=False,
-        cache_position=None,
+        **kwargs,
     ):
         """
         Self-attention (if kv is None) or attention over source sentence (provided by kv).
@@ -550,8 +550,7 @@ class MultiHeadAttention(nn.Module):
 
             if cache is not None:
                 # save all key/value_states to cache to be re-used for fast auto-regressive generation
-                cache_position = cache_position if not is_cross_attention else None
-                k, v = curr_past_key_values.update(k, v, self.layer_id, {"cache_position": cache_position})
+                k, v = curr_past_key_values.update(k, v, self.layer_id)
                 # set flag that curr layer for cross-attn is already updated so we can re-use in subsequent calls
                 if is_cross_attention:
                     cache.is_updated[self.layer_id] = True
@@ -612,20 +611,13 @@ class XLMPreTrainedModel(PreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights."""
+        super()._init_weights(module)
         if isinstance(module, nn.Embedding):
             if self.config is not None and self.config.embed_init_std is not None:
                 init.normal_(module.weight, mean=0, std=self.config.embed_init_std)
             # Here we need the check explicitly, as we slice the weight in the `zeros_` call, so it looses the flag
             if module.padding_idx is not None and not getattr(module.weight, "_is_hf_initialized", False):
                 init.zeros_(module.weight[module.padding_idx])
-        if isinstance(module, nn.Linear):
-            if self.config is not None and self.config.init_std is not None:
-                init.normal_(module.weight, mean=0, std=self.config.init_std)
-                if module.bias is not None:
-                    init.constant_(module.bias, 0.0)
-        if isinstance(module, nn.LayerNorm):
-            init.zeros_(module.bias)
-            init.ones_(module.weight)
         if isinstance(module, XLMModel):
             if self.config.sinusoidal_embeddings:
                 init.copy_(
@@ -639,12 +631,12 @@ class XLMPreTrainedModel(PreTrainedModel):
             init.copy_(module.position_ids, torch.arange(module.position_ids.shape[-1]).expand((1, -1)))
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for outputs of question answering models using a `XLMSQuADHead`.
     """
 )
+@dataclass
 class XLMForQuestionAnsweringOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned if both `start_positions` and `end_positions` are provided):
@@ -758,7 +750,6 @@ class XLMModel(XLMPreTrainedModel):
         output_attentions: bool | None = None,
         output_hidden_states: bool | None = None,
         return_dict: bool | None = None,
-        cache_position: torch.Tensor | None = None,
         **kwargs,  # Dummy kwargs for now
     ) -> tuple | BaseModelOutput:
         r"""
@@ -782,7 +773,7 @@ class XLMModel(XLMPreTrainedModel):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         if input_ids is not None:
             bs, slen = input_ids.size()
@@ -798,7 +789,7 @@ class XLMModel(XLMPreTrainedModel):
             if input_ids is not None:
                 lengths = (input_ids != self.pad_index).sum(dim=1).long()
             else:
-                lengths = torch.tensor([slen] * bs, device=device)
+                lengths = torch.full((bs,), slen, device=device, dtype=torch.long)
 
         # check inputs
         assert lengths.size(0) == bs
@@ -853,7 +844,6 @@ class XLMModel(XLMPreTrainedModel):
                 attn_mask,
                 cache=cache,
                 output_attentions=output_attentions,
-                cache_position=cache_position,
             )
             attn = attn_outputs[0]
             if output_attentions:
@@ -959,6 +949,7 @@ class XLMWithLMHeadModel(XLMPreTrainedModel, GenerationMixin):
         # They are calculated on the fly on XLMModel.forward()
         kwargs.pop("token_type_ids", None)
         kwargs.pop("attention_mask", None)
+        kwargs.pop("position_ids", None)
 
         # Forward ALL kwargs that are uninitialized (e.g. `use_cache`).
         for key, value in kwargs.items():
@@ -982,7 +973,6 @@ class XLMWithLMHeadModel(XLMPreTrainedModel, GenerationMixin):
         output_attentions: bool | None = None,
         output_hidden_states: bool | None = None,
         return_dict: bool | None = None,
-        cache_position: torch.Tensor | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs,
     ) -> tuple | MaskedLMOutput:
@@ -1007,7 +997,7 @@ class XLMWithLMHeadModel(XLMPreTrainedModel, GenerationMixin):
             `labels = input_ids` Indices are selected in `[-100, 0, ..., config.vocab_size]` All labels set to `-100`
             are ignored (masked), the loss is only computed for labels in `[0, ..., config.vocab_size]`
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         transformer_outputs = self.transformer(
             input_ids,
@@ -1021,7 +1011,6 @@ class XLMWithLMHeadModel(XLMPreTrainedModel, GenerationMixin):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
-            cache_position=cache_position,
             **kwargs,
         )
 
@@ -1100,7 +1089,7 @@ class XLMForSequenceClassification(XLMPreTrainedModel):
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         transformer_outputs = self.transformer(
             input_ids,
@@ -1205,7 +1194,7 @@ class XLMForQuestionAnsweringSimple(XLMPreTrainedModel):
             Instance of `EncoderDecoderCache` that contains precomputed KV states. Can be used to speed up sequential
             decoding.
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         transformer_outputs = self.transformer(
             input_ids,
@@ -1333,7 +1322,7 @@ class XLMForQuestionAnswering(XLMPreTrainedModel):
         >>> outputs = model(input_ids, start_positions=start_positions, end_positions=end_positions)
         >>> loss = outputs.loss
         ```"""
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         transformer_outputs = self.transformer(
             input_ids,
@@ -1425,7 +1414,7 @@ class XLMForTokenClassification(XLMPreTrainedModel):
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the token classification loss. Indices should be in `[0, ..., config.num_labels - 1]`.
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         outputs = self.transformer(
             input_ids,
@@ -1537,7 +1526,7 @@ class XLMForMultipleChoice(XLMPreTrainedModel):
             num_choices-1]` where `num_choices` is the size of the second dimension of the input tensors. (See
             `input_ids` above)
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
         num_choices = input_ids.shape[1] if input_ids is not None else inputs_embeds.shape[1]
 
         input_ids = input_ids.view(-1, input_ids.size(-1)) if input_ids is not None else None

@@ -17,6 +17,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+
 from dataclasses import dataclass
 
 import torch
@@ -25,17 +26,18 @@ from torch import nn
 from ...cache_utils import Cache
 from ...generation import GenerationMixin
 from ...integrations import use_kernel_forward_from_hub
-from ...modeling_outputs import BaseModelOutputWithPast, ModelOutput
+from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, ModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, torch_compilable_check
+from ...utils.generic import merge_with_config_defaults
 from ..auto import AutoModel
 from .configuration_lighton_ocr import LightOnOcrConfig
 
 
 @use_kernel_forward_from_hub("RMSNorm")
 class LightOnOcrRMSNorm(nn.Module):
-    def __init__(self, hidden_size, eps=1e-6):
+    def __init__(self, hidden_size, eps: float = 1e-6) -> None:
         """
         LightOnOcrRMSNorm is equivalent to T5LayerNorm
         """
@@ -43,7 +45,7 @@ class LightOnOcrRMSNorm(nn.Module):
         self.weight = nn.Parameter(torch.ones(hidden_size))
         self.variance_epsilon = eps
 
-    def forward(self, hidden_states):
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         input_dtype = hidden_states.dtype
         hidden_states = hidden_states.to(torch.float32)
         variance = hidden_states.pow(2).mean(-1, keepdim=True)
@@ -111,12 +113,12 @@ class LightOnOcrMultiModalProjector(nn.Module):
         return hidden_states
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for LightOnOcr outputs, with hidden states and attentions.
     """
 )
+@dataclass
 class LightOnOcrModelOutputWithPast(BaseModelOutputWithPast):
     r"""
     past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
@@ -138,7 +140,7 @@ class LightOnOcrPreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
     input_modalities = ("image", "text")
     supports_gradient_checkpointing = True
-    _skip_keys_device_placement = "past_key_values"
+    _skip_keys_device_placement = ["past_key_values"]
 
     _supports_flash_attn = True
     _supports_sdpa = True
@@ -154,7 +156,6 @@ class LightOnOcrPreTrainedModel(PreTrainedModel):
     """
 )
 class LightOnOcrModel(LightOnOcrPreTrainedModel):
-    _checkpoint_conversion_mapping = {}
     base_model_prefix = ""
 
     def __init__(self, config: LightOnOcrConfig):
@@ -164,33 +165,22 @@ class LightOnOcrModel(LightOnOcrPreTrainedModel):
         self.language_model = AutoModel.from_config(config.text_config)
         self.post_init()
 
-    def get_input_embeddings(self):
-        return self.language_model.get_input_embeddings()
-
-    def set_input_embeddings(self, value):
-        self.language_model.set_input_embeddings(value)
-
-    def get_image_features(self, pixel_values: torch.Tensor, image_sizes: torch.Tensor | list):
-        """
-        Obtains image features from the vision encoder and projection.
-
-        Args:
-            pixel_values: Image tensors
-            image_sizes: Tensor or list of (height, width) pairs for each image
-
-        Returns:
-            List of image feature tensors, one per image
-        """
-        visual_features = self.vision_encoder(pixel_values, image_sizes=image_sizes).last_hidden_state
-
-        image_features = self.vision_projection(visual_features.squeeze(0), image_sizes)
+    @can_return_tuple
+    @auto_docstring
+    def get_image_features(
+        self, pixel_values: torch.Tensor, image_sizes: torch.Tensor | list, **kwargs: Unpack[TransformersKwargs]
+    ) -> tuple | BaseModelOutputWithPooling:
+        image_outputs = self.vision_encoder(pixel_values, image_sizes=image_sizes, return_dict=True, **kwargs)
+        image_features = image_outputs.last_hidden_state
+        image_features = self.vision_projection(image_features.squeeze(0), image_sizes)
 
         # Split features per image based on the effective patch size
         downsample_ratio = self.config.vision_config.patch_size * self.config.spatial_merge_size
         split_sizes = [(height // downsample_ratio) * (width // downsample_ratio) for height, width in image_sizes]
         image_features = torch.split(image_features, split_sizes)
+        image_outputs.pooler_output = image_features
 
-        return image_features
+        return image_outputs
 
     def get_placeholder_mask(
         self, input_ids: torch.LongTensor, inputs_embeds: torch.FloatTensor, image_features: torch.FloatTensor
@@ -208,12 +198,12 @@ class LightOnOcrModel(LightOnOcrPreTrainedModel):
             special_image_mask = input_ids == self.config.image_token_id
 
         n_image_tokens = special_image_mask.sum()
-        special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
         n_image_features = image_features.shape[0] * image_features.shape[1]
-        if inputs_embeds[special_image_mask].numel() != image_features.numel():
-            raise ValueError(
-                f"Image features and image tokens do not match: tokens: {n_image_tokens}, features {n_image_features}"
-            )
+        special_image_mask = special_image_mask.unsqueeze(-1).to(inputs_embeds.device)
+        torch_compilable_check(
+            n_image_tokens * inputs_embeds.shape[-1] == image_features.numel(),
+            f"Image features and image tokens do not match, tokens: {n_image_tokens}, features: {n_image_features}",
+        )
         return special_image_mask
 
     @can_return_tuple
@@ -227,19 +217,9 @@ class LightOnOcrModel(LightOnOcrPreTrainedModel):
         past_key_values: Cache | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         use_cache: bool | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
-        cache_position: torch.LongTensor | None = None,
         image_sizes: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | LightOnOcrModelOutputWithPast:
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
@@ -247,7 +227,9 @@ class LightOnOcrModel(LightOnOcrPreTrainedModel):
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
         if pixel_values is not None:
-            image_features = self.get_image_features(pixel_values=pixel_values, image_sizes=image_sizes)
+            image_features = self.get_image_features(
+                pixel_values=pixel_values, image_sizes=image_sizes, return_dict=True
+            ).pooler_output
             image_features = torch.cat(image_features, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
             special_image_mask = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, image_features=image_features
@@ -260,10 +242,6 @@ class LightOnOcrModel(LightOnOcrPreTrainedModel):
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=True,
-            cache_position=cache_position,
             **kwargs,
         )
 
@@ -276,12 +254,12 @@ class LightOnOcrModel(LightOnOcrPreTrainedModel):
         )
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for LightOnOcr causal language model (or autoregressive) outputs.
     """
 )
+@dataclass
 class LightOnOcrCausalLMOutputWithPast(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
@@ -312,7 +290,6 @@ class LightOnOcrCausalLMOutputWithPast(ModelOutput):
     """
 )
 class LightOnOcrForConditionalGeneration(LightOnOcrPreTrainedModel, GenerationMixin):
-    _checkpoint_conversion_mapping = {}
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
 
     def __init__(self, config: LightOnOcrConfig):
@@ -321,18 +298,16 @@ class LightOnOcrForConditionalGeneration(LightOnOcrPreTrainedModel, GenerationMi
         self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
         self.post_init()
 
-    def get_input_embeddings(self):
-        return self.model.get_input_embeddings()
-
-    def set_input_embeddings(self, value):
-        self.model.set_input_embeddings(value)
-
     def get_output_embeddings(self) -> nn.Module:
         return self.lm_head
 
-    def get_image_features(self, pixel_values: torch.FloatTensor, image_sizes: torch.Tensor, **kwargs):
-        return self.model.get_image_features(pixel_values=pixel_values, image_sizes=image_sizes)
+    @auto_docstring
+    def get_image_features(
+        self, pixel_values: torch.FloatTensor, image_sizes: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
+    ) -> tuple | BaseModelOutputWithPooling:
+        return self.model.get_image_features(pixel_values=pixel_values, image_sizes=image_sizes, **kwargs)
 
+    @merge_with_config_defaults
     @can_return_tuple
     @auto_docstring
     def forward(
@@ -345,25 +320,17 @@ class LightOnOcrForConditionalGeneration(LightOnOcrPreTrainedModel, GenerationMi
         inputs_embeds: torch.FloatTensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
-        cache_position: torch.LongTensor | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         image_sizes: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | LightOnOcrCausalLMOutputWithPast:
         r"""
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
-            config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
-            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
-
         Example:
 
         ```python
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
         >>> from transformers import AutoProcessor, LightOnOcrForConditionalGeneration
 
         >>> model = LightOnOcrForConditionalGeneration.from_pretrained("mistralai/Mistral-Small-3.1-24B-Instruct-2503")
@@ -371,7 +338,8 @@ class LightOnOcrForConditionalGeneration(LightOnOcrPreTrainedModel, GenerationMi
 
         >>> prompt = "<s>[INST][IMG]What is the image?[/INST]"
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
 
         >>> inputs = processor(images=image, text=prompt, return_tensors="pt")
 
@@ -380,12 +348,6 @@ class LightOnOcrForConditionalGeneration(LightOnOcrPreTrainedModel, GenerationMi
         >>> processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
         "What is the image?The image depicts two cats lying on a pink blanket."
         ```"""
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
         outputs = self.model(
             input_ids=input_ids,
             pixel_values=pixel_values,
@@ -394,16 +356,11 @@ class LightOnOcrForConditionalGeneration(LightOnOcrPreTrainedModel, GenerationMi
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=True,
-            cache_position=cache_position,
             image_sizes=image_sizes,
             **kwargs,
         )
 
         hidden_states = outputs[0]
-        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
         slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
         logits = self.lm_head(hidden_states[:, slice_indices, :])
 
@@ -429,7 +386,6 @@ class LightOnOcrForConditionalGeneration(LightOnOcrPreTrainedModel, GenerationMi
         inputs_embeds=None,
         pixel_values=None,
         attention_mask=None,
-        cache_position=None,
         logits_to_keep=None,
         is_first_iteration=False,
         **kwargs,
@@ -441,7 +397,6 @@ class LightOnOcrForConditionalGeneration(LightOnOcrPreTrainedModel, GenerationMi
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
-            cache_position=cache_position,
             logits_to_keep=logits_to_keep,
             is_first_iteration=is_first_iteration,
             **kwargs,
@@ -449,7 +404,7 @@ class LightOnOcrForConditionalGeneration(LightOnOcrPreTrainedModel, GenerationMi
 
         if is_first_iteration or not kwargs.get("use_cache", True):
             # Pixel values are used only in the first iteration if available
-            # In subsquent iterations, they are already merged with text and cached
+            # In subsequent iterations, they are already merged with text and cached
             # NOTE: first iteration doesn't have to be prefill, it can be the first
             # iteration with a question and cached system prompt (continue generate from cache)
             model_inputs["pixel_values"] = pixel_values

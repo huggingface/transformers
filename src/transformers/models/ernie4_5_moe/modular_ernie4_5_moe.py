@@ -24,7 +24,8 @@ from ...modeling_outputs import MoeModelOutputWithPast
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
-from ...utils.generic import OutputRecorder, check_model_inputs, maybe_autocast
+from ...utils.generic import maybe_autocast, merge_with_config_defaults, no_inherit_decorator
+from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ..ernie4_5.modeling_ernie4_5 import Ernie4_5RotaryEmbedding, apply_rotary_pos_emb, rotate_half  # noqa: F401
 from ..llama.modeling_llama import LlamaAttention, LlamaRMSNorm
 from ..mixtral.modeling_mixtral import (
@@ -57,6 +58,7 @@ class Ernie4_5_MoeRotaryEmbedding(Ernie4_5RotaryEmbedding):
         super().__init__(config, device)
 
 
+@no_inherit_decorator
 class Ernie4_5_MoeAttention(LlamaAttention):
     def __init__(self, config: Ernie4_5_MoeConfig, layer_idx: int):
         super().__init__(config, layer_idx)
@@ -80,7 +82,7 @@ class Ernie4_5_MoeStatics(nn.Module):
         super().__init__()
 
         num_experts_groups = 1
-        num_experts = config.moe_num_experts
+        num_experts = config.num_experts
 
         self.e_score_correction_bias = nn.Parameter(
             torch.zeros(num_experts_groups, num_experts, dtype=torch.float32),
@@ -99,16 +101,17 @@ class Ernie4_5_MoeStatics(nn.Module):
 class Ernie4_5_MoeExperts(MixtralExperts):
     def __init__(self, config):
         super().__init__()
-        self.num_experts = config.moe_num_experts
+        self.num_experts = config.num_experts
         self.intermediate_dim = config.moe_intermediate_size
 
 
 class Ernie4_5_MoeTopKRouter(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.weight = nn.Parameter(torch.zeros(config.moe_num_experts, config.hidden_size, dtype=torch.float32))
+        self.weight = nn.Parameter(torch.zeros(config.num_experts, config.hidden_size, dtype=torch.float32))
         self.moe_statics = Ernie4_5_MoeStatics(config)
-        self.top_k = config.moe_k
+        self.top_k = config.num_experts_per_tok
+        self.num_experts = config.num_experts
         self.norm_min = config.moe_norm_min
 
     def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
@@ -127,15 +130,15 @@ class Ernie4_5_MoeTopKRouter(nn.Module):
                 routing_weights.sum(dim=-1, keepdim=True), min=self.norm_min
             )
         routing_weights = routing_weights.to(hidden_states.dtype)
-        return router_logits, selected_experts, routing_weights
+        return router_logits, routing_weights, selected_experts
 
 
 class Ernie4_5_MoeSparseMoeBlock(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.hidden_dim = config.hidden_size
-        self.num_experts = config.moe_num_experts
-        self.top_k = config.moe_k
+        self.num_experts = config.num_experts
+        self.top_k = config.num_experts_per_tok
         self.gate = Ernie4_5_MoeTopKRouter(config)
         self.experts = Ernie4_5_MoeExperts(config)
 
@@ -150,7 +153,7 @@ class Ernie4_5_MoeSparseMoeBlock(nn.Module):
         if self.shared_experts is not None:
             shared_output = self.shared_experts(hidden_states)
 
-        _, top_k_index, top_k_weights = self.gate(hidden_states)
+        _, top_k_weights, top_k_index = self.gate(hidden_states)
         final_hidden_states = self.experts(hidden_states, top_k_index, top_k_weights)
 
         if self.shared_experts is not None:
@@ -221,7 +224,8 @@ class Ernie4_5_MoeModel(Ernie4_5_MoePreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @check_model_inputs
+    @merge_with_config_defaults
+    @capture_outputs
     @auto_docstring
     def forward(
         self,
@@ -231,7 +235,6 @@ class Ernie4_5_MoeModel(Ernie4_5_MoePreTrainedModel):
         past_key_values: Cache | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         use_cache: bool | None = None,
-        cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> MoeModelOutputWithPast:
         if (input_ids is None) ^ (inputs_embeds is not None):
@@ -243,19 +246,15 @@ class Ernie4_5_MoeModel(Ernie4_5_MoePreTrainedModel):
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
 
-        if cache_position is None:
-            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
-            cache_position = torch.arange(
-                past_seen_tokens, past_seen_tokens + inputs_embeds.shape[1], device=inputs_embeds.device
-            )
         if position_ids is None:
-            position_ids = cache_position.unsqueeze(0)
+            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+            position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
+            position_ids = position_ids.unsqueeze(0)
 
         causal_mask = create_causal_mask(
             config=self.config,
-            input_embeds=inputs_embeds,
+            inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
-            cache_position=cache_position,
             past_key_values=past_key_values,
             position_ids=position_ids,
         )
@@ -273,7 +272,6 @@ class Ernie4_5_MoeModel(Ernie4_5_MoePreTrainedModel):
                 position_ids=position_ids,
                 past_key_values=past_key_values,
                 use_cache=use_cache,
-                cache_position=cache_position,
                 **kwargs,
             )
 
@@ -294,8 +292,8 @@ class Ernie4_5_MoeForCausalLM(MixtralForCausalLM):
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=config.use_bias)
 
         self.router_aux_loss_coef = config.router_aux_loss_coef
-        self.num_experts = config.moe_num_experts
-        self.num_experts_per_tok = config.moe_k
+        self.num_experts = config.num_experts
+        self.num_experts_per_tok = config.num_experts_per_tok
 
         # Initialize weights and apply final processing
         self.post_init()

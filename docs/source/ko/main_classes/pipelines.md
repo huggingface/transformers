@@ -108,7 +108,7 @@ from transformers import pipeline
 from transformers.pipelines.pt_utils import KeyDataset
 import datasets
 
-dataset = datasets.load_dataset("imdb", name="plain_text", split="unsupervised")
+dataset = datasets.load_dataset("stanfordnlp/imdb", name="plain_text", split="unsupervised")
 pipe = pipeline("text-classification", device=0)
 for out in pipe(KeyDataset(dataset, "text"), batch_size=8, truncation="only_first"):
     print(out)
@@ -325,12 +325,6 @@ my_pipeline = pipeline(model="xxxx", pipeline_class=MyPipeline)
     - __call__
     - all
 
-### ImageToImagePipeline [[transformers.ImageToImagePipeline]]
-
-[[autodoc]] ImageToImagePipeline
-    - __call__
-    - all
-
 ### ObjectDetectionPipeline [[transformers.ObjectDetectionPipeline]]
 
 [[autodoc]] ObjectDetectionPipeline
@@ -362,12 +356,6 @@ my_pipeline = pipeline(model="xxxx", pipeline_class=MyPipeline)
 ### FillMaskPipeline [[transformers.FillMaskPipeline]]
 
 [[autodoc]] FillMaskPipeline
-    - __call__
-    - all
-
-### QuestionAnsweringPipeline [[transformers.QuestionAnsweringPipeline]]
-
-[[autodoc]] QuestionAnsweringPipeline
     - __call__
     - all
 
@@ -431,12 +419,6 @@ my_pipeline = pipeline(model="xxxx", pipeline_class=MyPipeline)
 ### MaskGenerationPipeline [[transformers.MaskGenerationPipeline]]
 
 [[autodoc]] MaskGenerationPipeline
-    - __call__
-    - all
-
-### VisualQuestionAnsweringPipeline [[transformers.VisualQuestionAnsweringPipeline]]
-
-[[autodoc]] VisualQuestionAnsweringPipeline
     - __call__
     - all
 

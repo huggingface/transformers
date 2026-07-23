@@ -19,11 +19,11 @@ import torch
 from torch import nn
 
 from ... import initialization as init
+from ...backbone_utils import load_backbone
 from ...modeling_outputs import BackboneOutput
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import ModelOutput, TransformersKwargs, auto_docstring, logging
-from ...utils.backbone_utils import load_backbone
 from ...utils.generic import can_return_tuple
 from .configuration_vitpose import VitPoseConfig
 
@@ -33,12 +33,12 @@ logger = logging.get_logger(__name__)
 # General docstring
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Class for outputs of pose estimation models.
     """
 )
+@dataclass
 class VitPoseEstimatorOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
@@ -68,13 +68,11 @@ class VitPosePreTrainedModel(PreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module: nn.Linear | nn.Conv2d | nn.LayerNorm):
         """Initialize the weights"""
+        super()._init_weights(module)
         if isinstance(module, (nn.Linear, nn.Conv2d)):
             init.trunc_normal_(module.weight, mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
                 init.zeros_(module.bias)
-        elif isinstance(module, nn.LayerNorm):
-            init.zeros_(module.bias)
-            init.ones_(module.weight)
 
 
 def flip_back(output_flipped, flip_pairs, target_type="gaussian-heatmap"):
@@ -99,18 +97,20 @@ def flip_back(output_flipped, flip_pairs, target_type="gaussian-heatmap"):
 
     if output_flipped.ndim != 4:
         raise ValueError("output_flipped should be [batch_size, num_keypoints, height, width]")
+
     batch_size, num_keypoints, height, width = output_flipped.shape
     channels = 1
     if target_type == "combined-target":
         channels = 3
+        output_flipped = output_flipped.clone()  # clone to avoid mutation of output_flipped argument
         output_flipped[:, 1::3, ...] = -output_flipped[:, 1::3, ...]
     output_flipped = output_flipped.reshape(batch_size, -1, channels, height, width)
     output_flipped_back = output_flipped.clone()
 
     # Swap left-right parts
-    for left, right in flip_pairs.tolist():
-        output_flipped_back[:, left, ...] = output_flipped[:, right, ...]
-        output_flipped_back[:, right, ...] = output_flipped[:, left, ...]
+    left_indices, right_indices = flip_pairs.unbind(-1)
+    output_flipped_back[:, left_indices, ...] = output_flipped[:, right_indices, ...]
+    output_flipped_back[:, right_indices, ...] = output_flipped[:, left_indices, ...]
     output_flipped_back = output_flipped_back.reshape((batch_size, num_keypoints, height, width))
     # Flip horizontally
     output_flipped_back = output_flipped_back.flip(-1)
@@ -230,13 +230,15 @@ class VitPoseForPoseEstimation(VitPosePreTrainedModel):
         >>> from transformers import AutoImageProcessor, VitPoseForPoseEstimation
         >>> import torch
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
 
         >>> processor = AutoImageProcessor.from_pretrained("usyd-community/vitpose-base-simple")
         >>> model = VitPoseForPoseEstimation.from_pretrained("usyd-community/vitpose-base-simple")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
         >>> boxes = [[[412.8, 157.61, 53.05, 138.01], [384.43, 172.21, 15.12, 35.74]]]
         >>> inputs = processor(image, boxes=boxes, return_tensors="pt")
 

@@ -20,6 +20,8 @@ import requests
 
 from transformers.testing_utils import (
     backend_empty_cache,
+    is_torch_bf16_available_on_device,
+    is_torch_fp16_available_on_device,
     slow,
     torch_device,
 )
@@ -504,3 +506,77 @@ class EdgeTamVideoModelIntegrationTest(unittest.TestCase):
             atol=1e-2,
             rtol=1e-2,
         )
+
+    def test_inference_with_different_dtypes(self):
+        """Test that inference works correctly for float32, bfloat16, and float16 dtypes."""
+        raw_video = prepare_video()
+        dtypes_to_test = [
+            (torch.float32, None),  # float32 is always available
+            (torch.bfloat16, is_torch_bf16_available_on_device),
+            (torch.float16, is_torch_fp16_available_on_device),
+        ]
+
+        for dtype, availability_check in dtypes_to_test:
+            with self.subTest(dtype=dtype):
+                # Skip if dtype is not available on device
+                if availability_check is not None and not availability_check(torch_device):
+                    self.skipTest(f"{dtype} not supported on {torch_device}")
+
+                # Load model with specific dtype
+                video_model = EdgeTamVideoModel.from_pretrained("yonigozlan/EdgeTAM-hf", torch_dtype=dtype).to(
+                    torch_device
+                )
+                video_model.eval()
+
+                # Initialize inference session
+                inference_session = self.processor.init_video_session(
+                    video=raw_video, inference_device=torch_device, dtype=dtype
+                )
+                ann_frame_idx = 0
+                ann_obj_id = 1
+
+                # Add inputs
+                self.processor.add_inputs_to_inference_session(
+                    inference_session=inference_session,
+                    frame_idx=ann_frame_idx,
+                    obj_ids=ann_obj_id,
+                    input_points=[[[[210, 350]]]],
+                    input_labels=[[[1]]],
+                )
+
+                # Run inference on first frame
+                outputs = video_model(inference_session=inference_session, frame_idx=ann_frame_idx)
+                low_res_masks = outputs.pred_masks
+
+                # Verify output shape and dtype
+                self.assertEqual(low_res_masks.shape, (1, 1, 256, 256))
+                self.assertEqual(low_res_masks.dtype, dtype)
+
+                # Post-process masks
+                video_res_masks = self.processor.post_process_masks(
+                    [low_res_masks], [raw_video.shape[-3:-1]], binarize=False
+                )[0]
+                self.assertEqual(video_res_masks.shape, (1, 1, raw_video.shape[-3], raw_video.shape[-2]))
+
+                # Test propagation across multiple frames to test memory handling
+                frames = []
+                max_frame_num_to_track = 2
+                for sam2_video_output in video_model.propagate_in_video_iterator(
+                    inference_session=inference_session,
+                    start_frame_idx=ann_frame_idx,
+                    max_frame_num_to_track=max_frame_num_to_track,
+                ):
+                    video_res_masks = self.processor.post_process_masks(
+                        [sam2_video_output.pred_masks], [raw_video.shape[-3:-1]], binarize=False
+                    )[0]
+                    frames.append(video_res_masks)
+                    # Verify dtype is maintained during propagation
+                    self.assertEqual(sam2_video_output.pred_masks.dtype, dtype)
+
+                frames = torch.stack(frames, dim=0)
+                # Verify we got the expected number of frames (initial frame + max_frame_num_to_track)
+                self.assertEqual(
+                    frames.shape, (max_frame_num_to_track + 1, 1, 1, raw_video.shape[-3], raw_video.shape[-2])
+                )
+                # Verify dtype is maintained in stacked frames
+                self.assertEqual(frames.dtype, dtype)

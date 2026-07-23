@@ -16,10 +16,10 @@
 import torch
 from torch import nn
 
+from ...backbone_utils import load_backbone
 from ...modeling_outputs import DepthEstimatorOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import auto_docstring, logging
-from ...utils.backbone_utils import load_backbone
 from .configuration_depth_anything import DepthAnythingConfig
 
 
@@ -346,10 +346,12 @@ class DepthAnythingForDepthEstimation(DepthAnythingPreTrainedModel):
         >>> import torch
         >>> import numpy as np
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
 
         >>> image_processor = AutoImageProcessor.from_pretrained("LiheYoung/depth-anything-small-hf")
         >>> model = AutoModelForDepthEstimation.from_pretrained("LiheYoung/depth-anything-small-hf")
@@ -376,7 +378,7 @@ class DepthAnythingForDepthEstimation(DepthAnythingPreTrainedModel):
         if labels is not None:
             raise NotImplementedError("Training is not implemented yet")
 
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )

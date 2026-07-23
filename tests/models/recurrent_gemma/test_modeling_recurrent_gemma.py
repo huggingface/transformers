@@ -21,6 +21,7 @@ from parameterized import parameterized
 from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig, is_torch_available, set_seed
 from transformers.testing_utils import (
     Expectations,
+    cleanup,
     require_bitsandbytes,
     require_torch,
     require_torch_accelerator,
@@ -41,15 +42,76 @@ class RecurrentGemmaModelTester(CausalLMModelTester):
     if is_torch_available():
         base_model_class = RecurrentGemmaModel
 
+    def __init__(self, parent, **kwargs):
+        super().__init__(parent, **kwargs)
+        self.block_types = ("recurrent", "attention")
+
 
 @require_torch
 class RecurrentGemmaModelTest(CausalLMModelTest, unittest.TestCase):
-    has_attentions = False
+    has_attentions = True
     model_tester_class = RecurrentGemmaModelTester
 
-    @unittest.skip(reason="RecurrentGemma only supports sdpa")
-    def test_eager_matches_sdpa_generate(self):
-        pass
+    def test_attention_outputs(self):
+        """Only attention layers produce attention weights, not recurrent layers."""
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.return_dict = True
+
+        seq_len = getattr(self.model_tester, "seq_length", None)
+        encoder_seq_length = getattr(self.model_tester, "encoder_seq_length", seq_len)
+        encoder_key_length = getattr(self.model_tester, "key_length", encoder_seq_length)
+
+        expected_num_attentions = sum(1 for t in self.model_tester.block_types if t == "attention")
+
+        for model_class in self.all_model_classes:
+            inputs_dict["output_attentions"] = True
+            inputs_dict["output_hidden_states"] = False
+            config.return_dict = True
+            model = model_class._from_config(config, attn_implementation="eager")
+            config = model.config
+            model.to(torch_device)
+            model.eval()
+
+            with torch.no_grad():
+                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+            attentions = outputs.attentions
+            self.assertEqual(len(attentions), expected_num_attentions)
+
+            # check that output_attentions also work using config
+            del inputs_dict["output_attentions"]
+            config.output_attentions = True
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
+            with torch.no_grad():
+                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+            attentions = outputs.attentions
+            self.assertEqual(len(attentions), expected_num_attentions)
+
+            self.assertListEqual(
+                list(attentions[0].shape[-3:]),
+                [self.model_tester.num_attention_heads, encoder_seq_length, encoder_key_length],
+            )
+            out_len = len(outputs)
+
+            # Check attention is always last and order is fine
+            inputs_dict["output_attentions"] = True
+            inputs_dict["output_hidden_states"] = True
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
+            with torch.no_grad():
+                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+
+            added_hidden_states = 1
+            self.assertEqual(out_len + added_hidden_states, len(outputs))
+
+            self_attentions = outputs.attentions
+            self.assertEqual(len(self_attentions), expected_num_attentions)
+            self.assertListEqual(
+                list(self_attentions[0].shape[-3:]),
+                [self.model_tester.num_attention_heads, encoder_seq_length, encoder_key_length],
+            )
 
     @unittest.skip(reason="Past key values are not returned")
     def test_prompt_lookup_decoding_matches_greedy_search(self):
@@ -129,6 +191,12 @@ class RecurrentGemmaIntegrationTest(unittest.TestCase):
     input_long_text = ['<bos><s>Marseille, France (CNN)The French prosecutor leading an investigation into the crash of Germanwings Flight 9525 insisted Wednesday that he was not aware of any video footage from on board the plane. Marseille prosecutor Brice Robin told CNN that "so far no videos were used in the crash investigation." He added, "A person who has such a video needs to immediately give it to the investigators." Robin\'s comments follow claims by two magazines, German daily Bild and French Paris Match, of a cell phone video showing the harrowing final seconds from on board Germanwings Flight 9525 as it crashed into the French Alps. All 150 on board were killed. Paris Match and Bild reported that the video was recovered from a phone at the wreckage site. The two publications described the supposed video, but did not post it on their websites. The publications said that they watched the video, which was found by a source close to the investigation. "One can hear cries of \'My God\' in several languages," Paris Match reported. "Metallic banging can also be heard more than three times, perhaps of the pilot trying to open the cockpit door with a heavy object.  Towards the end, after a heavy shake, stronger than the others, the screaming intensifies. Then nothing." "It is a very disturbing scene," said Julian Reichelt, editor-in-chief of Bild online. An official with France\'s accident investigation agency, the BEA, said the agency is not aware of any such video. Lt. Col.']  # fmt: skip
     model_id = "google/recurrentgemma-2b"
 
+    def setup(self):
+        cleanup(torch_device, gc_collect=True)
+
+    def tearDown(self):
+        cleanup(torch_device, gc_collect=True)
+
     def test_2b_generate(self):
         EXPECTED_TEXTS = ['Hello I am doing a project on the topic of "The impact of the internet on the society" and I am looking for some information on the topic. I am looking for some information on the impact of the internet on the society. I am looking for some information on the impact of the internet on the society. I am looking for some', 'Hi today is a new app that allows you to make money by watching videos.\n\nThe app is very simple to use and you can earn money by watching videos.\n\nThe app is available for both Android and iOS devices and you can download it from the Google Play Store or the App Store.\n\nOnce you have downloaded the app']  # fmt: skip
         model = AutoModelForCausalLM.from_pretrained(
@@ -162,7 +230,7 @@ class RecurrentGemmaIntegrationTest(unittest.TestCase):
         self.assertEqual(output_text, EXPECTED_TEXTS)
 
     def test_2b_sample(self):
-        set_seed(0)
+        set_seed(42)
         expectations = Expectations(
             {
                 (None, None): [
@@ -218,7 +286,6 @@ class RecurrentGemmaIntegrationTest(unittest.TestCase):
         inputs = tokenizer(self.input_long_text, return_tensors="pt").to(torch_device)
         output = model.generate(**inputs, max_new_tokens=64, do_sample=False)
         output_text = tokenizer.batch_decode(output[:, inputs.input_ids.shape[1] :], skip_special_tokens=True)
-        print(output_text)
         self.assertEqual(output_text, EXPECTED_GENERATION)
 
     def test_longer_than_window(self):

@@ -116,7 +116,7 @@ from transformers import pipeline
 from transformers.pipelines.pt_utils import KeyDataset
 import datasets
 
-dataset = datasets.load_dataset("imdb", name="plain_text", split="unsupervised")
+dataset = datasets.load_dataset("stanfordnlp/imdb", name="plain_text", split="unsupervised")
 pipe = pipeline("text-classification", device=0)
 for out in pipe(KeyDataset(dataset, "text"), batch_size=8, truncation="only_first"):
     print(out)
@@ -352,12 +352,6 @@ Pipelines available for computer vision tasks include the following.
     - __call__
     - all
 
-### ImageToImagePipeline
-
-[[autodoc]] ImageToImagePipeline
-    - __call__
-    - all
-
 ### KeypointMatchingPipeline
 
 [[autodoc]] KeypointMatchingPipeline
@@ -395,12 +389,6 @@ Pipelines available for natural language processing tasks include the following.
 ### FillMaskPipeline
 
 [[autodoc]] FillMaskPipeline
-    - __call__
-    - all
-
-### QuestionAnsweringPipeline
-
-[[autodoc]] QuestionAnsweringPipeline
     - __call__
     - all
 
@@ -470,12 +458,6 @@ Pipelines available for multimodal tasks include the following.
 ### MaskGenerationPipeline
 
 [[autodoc]] MaskGenerationPipeline
-    - __call__
-    - all
-
-### VisualQuestionAnsweringPipeline
-
-[[autodoc]] VisualQuestionAnsweringPipeline
     - __call__
     - all
 

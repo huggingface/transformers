@@ -25,11 +25,10 @@ from torch import nn
 from ...cache_utils import Cache
 from ...generation import GenerationMixin
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
-from ...modeling_outputs import BaseModelOutputWithPast, ModelOutput
+from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, ModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring
-from ...utils.generic import check_model_inputs
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, torch_compilable_check
 from ..auto import AutoModel
 from .configuration_cohere2_vision import Cohere2VisionConfig
 
@@ -73,12 +72,12 @@ class Cohere2VisionMultiModalProjector(nn.Module):
         return hidden_states
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for Cohere2Vision outputs, with hidden states and attentions.
     """
 )
+@dataclass
 class Cohere2VisionModelOutputWithPast(BaseModelOutputWithPast):
     r"""
     past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
@@ -94,12 +93,12 @@ class Cohere2VisionModelOutputWithPast(BaseModelOutputWithPast):
     image_hidden_states: torch.FloatTensor | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for Cohere2Vision causal language model (or autoregressive) outputs.
     """
 )
+@dataclass
 class Cohere2VisionCausalLMOutputWithPast(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
@@ -130,17 +129,13 @@ class Cohere2VisionPreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
     input_modalities = ("image", "text")
     supports_gradient_checkpointing = True
-    _skip_keys_device_placement = "past_key_values"
+    _skip_keys_device_placement = ["past_key_values"]
 
     _supports_flash_attn = True
     _supports_sdpa = True
     _can_compile_fullgraph = False
     _supports_flex_attn = True
     _supports_attention_backend = True
-    _can_record_outputs = {
-        "hidden_states": "DecoderLayer",
-        "attentions": "Attention",
-    }
 
 
 @auto_docstring(
@@ -149,8 +144,6 @@ class Cohere2VisionPreTrainedModel(PreTrainedModel):
     """
 )
 class Cohere2VisionModel(Cohere2VisionPreTrainedModel):
-    _checkpoint_conversion_mapping = {}
-
     def __init__(self, config: Cohere2VisionConfig):
         super().__init__(config)
         self.vision_tower = AutoModel.from_config(config.vision_config)
@@ -159,28 +152,21 @@ class Cohere2VisionModel(Cohere2VisionPreTrainedModel):
         self.language_model = AutoModel.from_config(config.text_config)
         self.post_init()
 
-    def get_input_embeddings(self):
-        return self.language_model.get_input_embeddings()
+    @can_return_tuple
+    @auto_docstring(
+        custom_intro="Obtains image last hidden states from the vision tower and apply multimodal projection."
+    )
+    def get_image_features(
+        self, pixel_values: torch.FloatTensor, **kwargs: Unpack[TransformersKwargs]
+    ) -> tuple | BaseModelOutputWithPooling:
+        image_outputs = self.vision_tower(pixel_values, return_dict=True, **kwargs)
+        selected_image_feature = image_outputs.last_hidden_state
+        pooler_output = self.multi_modal_projector(selected_image_feature)
+        image_outputs.pooler_output = pooler_output.reshape(
+            selected_image_feature.shape[0], -1, self.config.text_config.hidden_size
+        )
 
-    def set_input_embeddings(self, value):
-        self.language_model.set_input_embeddings(value)
-
-    def get_image_features(self, pixel_values: torch.FloatTensor):
-        """
-        Obtains image last hidden states from the vision tower and apply multimodal projection.
-
-        Args:
-            pixel_values (`torch.FloatTensor]` of shape `(batch_size, num_patches, channels, height, width)`)
-               The tensors corresponding to the input images.
-        Returns:
-            image_features (List[`torch.Tensor`]): List of image feature tensor, each contains all the visual feature of all patches
-            and are of shape `(num_patches, image_length, embed_dim)`).
-        """
-
-        image_features = self.vision_tower(pixel_values, output_hidden_states=True)
-        selected_image_feature = image_features.last_hidden_state
-        image_features = self.multi_modal_projector(selected_image_feature)
-        return image_features
+        return image_outputs
 
     def get_placeholder_mask(
         self, input_ids: torch.LongTensor, inputs_embeds: torch.FloatTensor, image_features: torch.FloatTensor
@@ -198,15 +184,15 @@ class Cohere2VisionModel(Cohere2VisionPreTrainedModel):
             special_image_mask = input_ids == self.config.image_token_id
 
         n_image_tokens = special_image_mask.sum()
-        special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
         n_image_features = image_features.shape[0] * image_features.shape[1]
-        if inputs_embeds[special_image_mask].numel() != image_features.numel():
-            raise ValueError(
-                f"Image features and image tokens do not match: tokens: {n_image_tokens}, features {n_image_features}"
-            )
+        special_image_mask = special_image_mask.unsqueeze(-1).to(inputs_embeds.device)
+        torch_compilable_check(
+            n_image_tokens * inputs_embeds.shape[-1] == image_features.numel(),
+            f"Image features and image tokens do not match, tokens: {n_image_tokens}, features: {n_image_features}",
+        )
         return special_image_mask
 
-    @check_model_inputs
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -217,7 +203,6 @@ class Cohere2VisionModel(Cohere2VisionPreTrainedModel):
         past_key_values: Cache | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         use_cache: bool | None = None,
-        cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> tuple | Cohere2VisionModelOutputWithPast:
         if (input_ids is None) ^ (inputs_embeds is not None):
@@ -227,7 +212,7 @@ class Cohere2VisionModel(Cohere2VisionPreTrainedModel):
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
         if pixel_values is not None:
-            image_features = self.get_image_features(pixel_values)
+            image_features = self.get_image_features(pixel_values, return_dict=True).pooler_output
             image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
             special_image_mask = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, image_features=image_features
@@ -240,7 +225,6 @@ class Cohere2VisionModel(Cohere2VisionPreTrainedModel):
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
-            cache_position=cache_position,
             **kwargs,
         )
 
@@ -259,7 +243,6 @@ class Cohere2VisionModel(Cohere2VisionPreTrainedModel):
     """
 )
 class Cohere2VisionForConditionalGeneration(Cohere2VisionPreTrainedModel, GenerationMixin):
-    _checkpoint_conversion_mapping = {}
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
 
     def __init__(self, config: Cohere2VisionConfig):
@@ -268,19 +251,16 @@ class Cohere2VisionForConditionalGeneration(Cohere2VisionPreTrainedModel, Genera
         self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
         self.post_init()
 
-    def get_input_embeddings(self):
-        return self.model.get_input_embeddings()
-
-    def set_input_embeddings(self, value):
-        self.model.set_input_embeddings(value)
-
     def get_output_embeddings(self) -> nn.Module:
         return self.lm_head
 
-    def get_image_features(self, pixel_values: torch.FloatTensor):
-        return self.model.get_image_features(pixel_values=pixel_values)
+    @auto_docstring
+    def get_image_features(
+        self, pixel_values: torch.FloatTensor, **kwargs: Unpack[TransformersKwargs]
+    ) -> tuple | BaseModelOutputWithPooling:
+        return self.model.get_image_features(pixel_values=pixel_values, **kwargs)
 
-    @check_model_inputs
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -292,7 +272,6 @@ class Cohere2VisionForConditionalGeneration(Cohere2VisionPreTrainedModel, Genera
         inputs_embeds: torch.FloatTensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
-        cache_position: torch.LongTensor | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         image_sizes: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
@@ -340,7 +319,6 @@ class Cohere2VisionForConditionalGeneration(Cohere2VisionPreTrainedModel, Genera
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
-            cache_position=cache_position,
             image_sizes=image_sizes,
             **kwargs,
         )
@@ -372,7 +350,6 @@ class Cohere2VisionForConditionalGeneration(Cohere2VisionPreTrainedModel, Genera
         inputs_embeds=None,
         pixel_values=None,
         attention_mask=None,
-        cache_position=None,
         logits_to_keep=None,
         is_first_iteration=False,
         **kwargs,
@@ -384,7 +361,6 @@ class Cohere2VisionForConditionalGeneration(Cohere2VisionPreTrainedModel, Genera
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
-            cache_position=cache_position,
             logits_to_keep=logits_to_keep,
             is_first_iteration=is_first_iteration,
             **kwargs,
@@ -392,7 +368,7 @@ class Cohere2VisionForConditionalGeneration(Cohere2VisionPreTrainedModel, Genera
 
         if is_first_iteration or not kwargs.get("use_cache", True):
             # Pixel values are used only in the first iteration if available
-            # In subsquent iterations, they are already merged with text and cached
+            # In subsequent iterations, they are already merged with text and cached
             # NOTE: first iteration doesn't have to be prefill, it can be the first
             # iteration with a question and cached system prompt (continue generate from cache)
             model_inputs["pixel_values"] = pixel_values

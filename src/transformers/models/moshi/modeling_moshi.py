@@ -16,7 +16,7 @@
 import math
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any, Optional, Union
+from typing import Any, Optional
 
 import torch
 import torch.nn as nn
@@ -24,38 +24,29 @@ from torch.nn import CrossEntropyLoss
 
 from ... import initialization as init
 from ...activations import ACT2FN
-from ...cache_utils import Cache, DynamicCache, StaticCache
+from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationConfig, GenerationMixin
-from ...modeling_attn_mask_utils import AttentionMaskConverter
-from ...modeling_flash_attention_utils import flash_attn_supports_top_left_mask, is_flash_attn_available
+from ...masking_utils import create_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast, ModelOutput, Seq2SeqLMOutput
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
-from ...modeling_utils import PreTrainedModel
-from ...utils import auto_docstring, is_torch_flex_attn_available, logging
-from ...utils.generic import is_flash_attention_requested, maybe_autocast
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...processing_utils import Unpack
+from ...utils import TransformersKwargs, auto_docstring, logging
+from ...utils.generic import maybe_autocast
 from ..auto.modeling_auto import AutoModel
 from .configuration_moshi import MoshiConfig, MoshiDepthConfig
-
-
-if is_flash_attn_available():
-    from ...modeling_flash_attention_utils import _flash_attention_forward
-
-if is_torch_flex_attn_available():
-    from torch.nn.attention.flex_attention import BlockMask
-
-    from ...integrations.flex_attention import make_flex_block_causal_mask
 
 
 logger = logging.get_logger(__name__)
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Outputs of [`MoshiForConditionalConditionalGeneration.generate`].
     """
 )
+@dataclass
 class MoshiConditionalGenerationGenerateOutput(ModelOutput):
     r"""
     audio_sequences (`torch.LongTensor` of shape `(batch_size*num_return_sequences, 1, sequence_length)`, *optional*):
@@ -102,12 +93,12 @@ class MoshiConditionalGenerationGenerateOutput(ModelOutput):
     audio_codes: torch.LongTensor | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     `MoshiForCausalLM` outputs.
     """
 )
+@dataclass
 class MoshiCausalLMOutputWithPast(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
@@ -129,12 +120,12 @@ class MoshiCausalLMOutputWithPast(ModelOutput):
     attentions: tuple[torch.FloatTensor, ...] | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     `MoshiForConditionalGeneration` outputs.
     """
 )
+@dataclass
 class MoshiConditionalGenerationOutputWithPast(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `text_labels` is provided):
@@ -172,8 +163,8 @@ class MoshiConditionalGenerationOutputWithPast(ModelOutput):
     depth_attentions: tuple[torch.FloatTensor, ...] | None = None
 
 
-@dataclass
 @auto_docstring
+@dataclass
 class MoshiUnconditionalInput(ModelOutput):
     r"""
     input_ids (`torch.Tensor `of shape `(batch_size, sequence_length), *optional*):
@@ -408,6 +399,32 @@ def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
     return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
 
 
+# Copied from transformers.models.llama.modeling_llama.eager_attention_forward
+def eager_attention_forward(
+    module: nn.Module,
+    query: torch.Tensor,
+    key: torch.Tensor,
+    value: torch.Tensor,
+    attention_mask: torch.Tensor | None,
+    scaling: float,
+    dropout: float = 0.0,
+    **kwargs: Unpack[TransformersKwargs],
+):
+    key_states = repeat_kv(key, module.num_key_value_groups)
+    value_states = repeat_kv(value, module.num_key_value_groups)
+
+    attn_weights = torch.matmul(query, key_states.transpose(2, 3)) * scaling
+    if attention_mask is not None:
+        attn_weights = attn_weights + attention_mask
+
+    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
+    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
+    attn_output = torch.matmul(attn_weights, value_states)
+    attn_output = attn_output.transpose(1, 2).contiguous()
+
+    return attn_output, attn_weights
+
+
 class MoshiAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
@@ -415,12 +432,6 @@ class MoshiAttention(nn.Module):
         super().__init__()
         self.config = config
         self.layer_idx = layer_idx
-        if layer_idx is None:
-            logger.warning_once(
-                f"Instantiating {self.__class__.__name__} without passing a `layer_idx` is not recommended and will "
-                "lead to errors during the forward call if caching is used. Please make sure to provide a `layer_idx` "
-                "when creating this class."
-            )
 
         self.attention_dropout = config.attention_dropout
         self.hidden_size = config.hidden_size
@@ -428,7 +439,6 @@ class MoshiAttention(nn.Module):
         self.head_dim = config.head_dim
         self.num_key_value_heads = config.num_key_value_heads
         self.num_key_value_groups = self.num_heads // self.num_key_value_heads
-        self.max_position_embeddings = config.max_position_embeddings
         self.is_causal = True
         self.scaling = 1 / math.sqrt(self.head_dim)
 
@@ -462,284 +472,52 @@ class MoshiAttention(nn.Module):
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
-        output_attentions: bool = False,
-        use_cache: bool = False,
-        cache_position: torch.LongTensor | None = None,
-    ) -> tuple[torch.Tensor, torch.Tensor | None, tuple[torch.Tensor] | None]:
-        bsz, q_len, _ = hidden_states.size()
+        codebook_idx: torch.Tensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        input_shape = hidden_states.shape[:-1]
+        hidden_shape = (*input_shape, -1, self.head_dim)
 
-        query_states = self.q_proj(hidden_states, cache_position)  # Ignore copy
-        key_states = self.k_proj(hidden_states, cache_position)  # Ignore copy
-        value_states = self.v_proj(hidden_states, cache_position)  # Ignore copy
+        query_states = self.q_proj(hidden_states, codebook_idx).view(hidden_shape).transpose(1, 2)
+        key_states = self.k_proj(hidden_states, codebook_idx).view(hidden_shape).transpose(1, 2)
+        value_states = self.v_proj(hidden_states, codebook_idx).view(hidden_shape).transpose(1, 2)
 
-        query_states = query_states.view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
-        key_states = key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
-        value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
-
-        if self.rotary_emb is not None:  # Ignore copy
-            cos, sin = self.rotary_emb(value_states, position_ids)  # Ignore copy
-            query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)  # Ignore copy
+        if self.rotary_emb is not None:
+            cos, sin = self.rotary_emb(value_states, position_ids)
+            query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
         if past_key_values is not None:
-            # sin and cos are specific to RoPE models; cache_position needed for the static cache
-            cache_kwargs = (
-                {"sin": sin, "cos": cos, "cache_position": cache_position}
-                if self.rotary_emb is not None
-                else {"cache_position": cache_position}
-            )  # Ignore copy
-            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx, cache_kwargs)
+            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
 
-        key_states = repeat_kv(key_states, self.num_key_value_groups)
-        value_states = repeat_kv(value_states, self.num_key_value_groups)
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
 
-        attn_weights = torch.matmul(query_states, key_states.transpose(2, 3)) * self.scaling
+        attn_output, attn_weights = attention_interface(
+            self,
+            query_states,
+            key_states,
+            value_states,
+            attention_mask,
+            dropout=0.0 if not self.training else self.attention_dropout,
+            scaling=self.scaling,
+            **kwargs,
+        )
 
-        if attention_mask is not None:  # no matter the length, we just slice it
-            causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
-            attn_weights = attn_weights + causal_mask
-
-        # upcast attention to fp32
-        attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query_states.dtype)
-        attn_weights = nn.functional.dropout(attn_weights, p=self.attention_dropout, training=self.training)
-        attn_output = torch.matmul(attn_weights, value_states)
-
-        if attn_output.size() != (bsz, self.num_heads, q_len, self.head_dim):
-            raise ValueError(
-                f"`attn_output` should be of size {(bsz, self.num_heads, q_len, self.head_dim)}, but is"
-                f" {attn_output.size()}"
-            )
-
-        attn_output = attn_output.transpose(1, 2).contiguous()
-
-        attn_output = attn_output.view(bsz, q_len, -1)
-        attn_output = self.o_proj(attn_output, cache_position)  # Ignore copy
-
-        if not output_attentions:
-            attn_weights = None
-
+        attn_output = attn_output.reshape(*input_shape, -1).contiguous()
+        attn_output = self.o_proj(attn_output, codebook_idx)
         return attn_output, attn_weights
 
 
 # NO LONGER EXIST Copied from transformers.models.gemma.modeling_gemma.GemmaFlashAttention2 with Gemma->Moshi
 # TODO cyril: modular
-class MoshiFlashAttention2(MoshiAttention):
-    """
-    Moshi flash attention module. This module inherits from `MoshiAttention` as the weights of the module stays
-    untouched. The only required change would be on the forward pass where it needs to correctly call the public API of
-    flash attention and deal with padding tokens in case the input contains any of them.
-    """
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-
-        # TODO: Should be removed once Flash Attention for RoCm is bumped to 2.1.
-        # flash_attn<2.1 generates top-left aligned causal mask, while what is needed here is bottom-right alignment, that was made default for flash_attn>=2.1. This attribute is used to handle this difference. Reference: https://github.com/Dao-AILab/flash-attention/releases/tag/v2.1.0.
-        # Beware that with flash_attn<2.1, using q_seqlen != k_seqlen (except for the case q_seqlen == 1) produces a wrong mask (top-left).
-        self._flash_attn_uses_top_left_mask = flash_attn_supports_top_left_mask()
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        attention_mask: torch.LongTensor | None = None,
-        position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
-        output_attentions: bool = False,
-        use_cache: bool = False,
-        cache_position: torch.LongTensor | None = None,
-    ) -> tuple[torch.Tensor, torch.Tensor | None, tuple[torch.Tensor] | None]:
-        if isinstance(past_key_values, StaticCache):
-            raise ValueError(
-                "`static` cache implementation is not compatible with `attn_implementation==flash_attention_2` "
-                "make sure to use `sdpa` in the mean time, and open an issue at https://github.com/huggingface/transformers"
-            )
-
-        output_attentions = False
-
-        bsz, q_len, _ = hidden_states.size()
-
-        query_states = self.q_proj(hidden_states, cache_position)  # Ignore copy
-        key_states = self.k_proj(hidden_states, cache_position)  # Ignore copy
-        value_states = self.v_proj(hidden_states, cache_position)  # Ignore copy
-
-        # Flash attention requires the input to have the shape
-        # batch_size x seq_length x head_dim x hidden_dim
-        # therefore we just need to keep the original shape
-        query_states = query_states.view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
-        key_states = key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
-        value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
-
-        if self.rotary_emb is not None:  # Ignore copy
-            cos, sin = self.rotary_emb(value_states, position_ids)  # Ignore copy
-            query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)  # Ignore copy
-
-        if past_key_values is not None:
-            # sin and cos are specific to RoPE models; cache_position needed for the static cache
-            cache_kwargs = (
-                {"sin": sin, "cos": cos, "cache_position": cache_position}
-                if self.rotary_emb is not None
-                else {"cache_position": cache_position}
-            )  # Ignore copy
-            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx, cache_kwargs)
-
-        # TODO: These transpose are quite inefficient but Flash Attention requires the layout [batch_size, sequence_length, num_heads, head_dim]. We would need to refactor the KV cache
-        # to be able to avoid many of these transpose/reshape/view.
-        query_states = query_states.transpose(1, 2)
-        key_states = key_states.transpose(1, 2)
-        value_states = value_states.transpose(1, 2)
-
-        dropout_rate = self.attention_dropout if self.training else 0.0
-
-        # In PEFT, usually we cast the layer norms in float32 for training stability reasons
-        # therefore the input hidden states gets silently casted in float32. Hence, we need
-        # cast them back in the correct dtype just to be sure everything works as expected.
-        # This might slowdown training & inference so it is recommended to not cast the LayerNorms
-        # in fp32. (MoshiRMSNorm handles it correctly)
-
-        input_dtype = query_states.dtype
-        device_type = query_states.device.type if query_states.device.type != "mps" else "cpu"
-        if input_dtype == torch.float32:
-            if torch.is_autocast_enabled():
-                # NOTE: `torch.get_autocast_dtype` is there starting from PyTorch 2.4
-                target_dtype = (
-                    torch.get_autocast_dtype(device_type)
-                    if hasattr(torch, "get_autocast_dtype")
-                    else torch.get_autocast_gpu_dtype()
-                )
-            # Handle the case where the model is quantized
-            elif hasattr(self.config, "_is_quantized"):
-                target_dtype = self.config.dtype
-            else:
-                target_dtype = self.q_proj.weight.dtype
-
-            logger.warning_once(
-                f"The input hidden states seems to be silently casted in float32, this might be related to"
-                f" the fact you have upcasted embedding or layer norm layers in float32. We will cast back the input in"
-                f" {target_dtype}."
-            )
-
-            query_states = query_states.to(target_dtype)
-            key_states = key_states.to(target_dtype)
-            value_states = value_states.to(target_dtype)
-
-        attn_output = _flash_attention_forward(
-            query_states,
-            key_states,
-            value_states,
-            attention_mask,
-            q_len,
-            position_ids=position_ids,
-            dropout=dropout_rate,
-            sliding_window=getattr(self, "sliding_window", None),
-            is_causal=self.is_causal,
-            use_top_left_mask=self._flash_attn_uses_top_left_mask,
-        )
-
-        attn_output = attn_output.reshape(bsz, q_len, -1).contiguous()
-        attn_output = self.o_proj(attn_output, cache_position)  # Ignore copy
-
-        if not output_attentions:
-            attn_weights = None
-
-        return attn_output, attn_weights
-
-
-# Copied from transformers.models.mimi.modeling_mimi.MimiSdpaAttention with Mimi->Moshi
-class MoshiSdpaAttention(MoshiAttention):
-    """
-    Moshi attention module using torch.nn.functional.scaled_dot_product_attention. This module inherits from
-    `MoshiAttention` as the weights of the module stays untouched. The only changes are on the forward pass to adapt to
-    SDPA API.
-    """
-
-    # Adapted from MoshiAttention.forward
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        attention_mask: torch.Tensor | None = None,
-        position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
-        output_attentions: bool = False,
-        use_cache: bool = False,
-        cache_position: torch.LongTensor | None = None,
-        **kwargs,
-    ) -> tuple[torch.Tensor, torch.Tensor | None, tuple[torch.Tensor] | None]:
-        if output_attentions:
-            logger.warning_once(
-                f"{self.__class__.__name__} does not support `output_attentions=True`. The returned attention weights will "
-                "be `None`. If you want to get attention weights, please set `attn_implementation='eager'` when loading the model."
-            )
-        bsz, q_len, _ = hidden_states.size()
-
-        query_states = self.q_proj(hidden_states, cache_position)  # Ignore copy
-        key_states = self.k_proj(hidden_states, cache_position)  # Ignore copy
-        value_states = self.v_proj(hidden_states, cache_position)  # Ignore copy
-
-        query_states = query_states.view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
-        key_states = key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
-        value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
-
-        if self.rotary_emb is not None:  # Ignore copy
-            cos, sin = self.rotary_emb(value_states, position_ids)  # Ignore copy
-            query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)  # Ignore copy
-
-        if past_key_values is not None:
-            # sin and cos are specific to RoPE models; cache_position needed for the static cache
-            cache_kwargs = (
-                {"sin": sin, "cos": cos, "cache_position": cache_position}
-                if self.rotary_emb is not None
-                else {"cache_position": cache_position}
-            )  # Ignore copy
-            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx, cache_kwargs)
-
-        key_states = repeat_kv(key_states, self.num_key_value_groups)
-        value_states = repeat_kv(value_states, self.num_key_value_groups)
-
-        causal_mask = attention_mask
-        if attention_mask is not None:
-            causal_mask = causal_mask[:, :, :, : key_states.shape[-2]]
-
-        # SDPA with memory-efficient backend is currently (torch==2.1.2) bugged with non-contiguous inputs with custom attn_mask,
-        # Reference: https://github.com/pytorch/pytorch/issues/112577.
-        if query_states.device.type == "cuda" and causal_mask is not None:
-            query_states = query_states.contiguous()
-            key_states = key_states.contiguous()
-            value_states = value_states.contiguous()
-
-        # We dispatch to SDPA's Flash Attention or Efficient kernels via this `is_causal` if statement instead of an inline conditional assignment
-        # in SDPA to support both torch.compile's dynamic shapes and full graph options. An inline conditional prevents dynamic shapes from compiling.
-        is_causal = causal_mask is None and q_len > 1
-
-        attn_output = torch.nn.functional.scaled_dot_product_attention(
-            query_states,
-            key_states,
-            value_states,
-            attn_mask=causal_mask,
-            dropout_p=self.attention_dropout if self.training else 0.0,
-            is_causal=is_causal,
-        )
-
-        attn_output = attn_output.transpose(1, 2).contiguous()
-        attn_output = attn_output.view(bsz, q_len, -1)
-
-        attn_output = self.o_proj(attn_output, cache_position)  # Ignore copy
-
-        return attn_output, None
-
-
-MOSHI_ATTENTION_CLASSES = {
-    "eager": MoshiAttention,
-    "flash_attention_2": MoshiFlashAttention2,
-    "sdpa": MoshiSdpaAttention,
-}
-
-
 class MoshiDecoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: MoshiConfig, layer_idx: int, use_flexible_linear: bool, use_rope=True):
         super().__init__()
         self.hidden_size = config.hidden_size
         self.use_flexible_linear = use_flexible_linear
 
-        self.self_attn = MOSHI_ATTENTION_CLASSES[config._attn_implementation](
+        self.self_attn = MoshiAttention(
             config=config, layer_idx=layer_idx, use_flexible_linear=use_flexible_linear, use_rope=use_rope
         )
 
@@ -758,28 +536,9 @@ class MoshiDecoderLayer(GradientCheckpointingLayer):
         past_key_values: Cache | None = None,
         output_attentions: bool | None = False,
         use_cache: bool | None = False,
-        cache_position: torch.LongTensor | None = None,
+        codebook_idx: torch.Tensor | None = None,
         **kwargs,
     ) -> tuple[torch.FloatTensor, tuple[torch.FloatTensor, torch.FloatTensor] | None]:
-        """
-        Args:
-            hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
-            attention_mask (`torch.FloatTensor`, *optional*):
-                attention mask of size `(batch_size, sequence_length)` if flash attention is used or `(batch_size, 1,
-                query_sequence_length, key_sequence_length)` if default attention is used.
-            output_attentions (`bool`, *optional*):
-                Whether or not to return the attentions tensors of all attention layers. See `attentions` under
-                returned tensors for more detail.
-            use_cache (`bool`, *optional*):
-                If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding
-                (see `past_key_values`).
-            past_key_values (`Cache`, *optional*): cached past key and value projection states
-            cache_position (`torch.LongTensor` of shape `(sequence_length)`, *optional*):
-                Indices depicting the position of the input sequence tokens in the sequence
-            kwargs (`dict`, *optional*):
-                Arbitrary kwargs to be ignored, used for FSDP and other methods that injects code
-                into the model
-        """
         residual = hidden_states
 
         hidden_states = self.input_layernorm(hidden_states)
@@ -792,7 +551,7 @@ class MoshiDecoderLayer(GradientCheckpointingLayer):
             past_key_values=past_key_values,
             output_attentions=output_attentions,
             use_cache=use_cache,
-            cache_position=cache_position,
+            codebook_idx=codebook_idx,
             **kwargs,
         )
         hidden_states = residual + hidden_states
@@ -801,7 +560,7 @@ class MoshiDecoderLayer(GradientCheckpointingLayer):
         residual = hidden_states
         hidden_states = self.post_attention_layernorm(hidden_states)
         hidden_states = (
-            self.mlp(hidden_states) if not self.use_flexible_linear else self.mlp(hidden_states, cache_position)
+            self.mlp(hidden_states) if not self.use_flexible_linear else self.mlp(hidden_states, codebook_idx)
         )
         hidden_states = residual + hidden_states
 
@@ -822,6 +581,8 @@ class MoshiPreTrainedModel(PreTrainedModel):
     _no_split_modules = ["MoshiDecoderLayer", "MimiTransformerLayer"]
     _supports_flash_attn = True
     _supports_sdpa = True
+    _supports_flex_attn = True
+    _supports_attention_backend = True
 
     main_input_name = "input_ids"
 
@@ -881,14 +642,13 @@ class MoshiDepthDecoder(MoshiPreTrainedModel, GenerationMixin):
         return_dict: bool | None = None,
         position_ids: torch.LongTensor | None = None,
         labels: torch.LongTensor | None = None,
-        cache_position: torch.LongTensor | None = None,
         **kwargs,
     ) -> tuple | BaseModelOutputWithPast:
         """
         Args:
             input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
                 Indices of input sequence tokens. The first element of the sequence must the text token associated to the audio codebooks.
-                The rest of the elements must be flatten audio codebooks. The `cache_position` argument can be used to indicate to which index is associated each token.
+                The rest of the elements must be flatten audio codebooks.
             last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
                 Sequence of hidden-states at the output of the last layer of the main decoder. Used to contextualize `input_ids`
             attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -941,8 +701,6 @@ class MoshiDepthDecoder(MoshiPreTrainedModel, GenerationMixin):
                 Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
                 config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
                 (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
-            cache_position (`torch.Tensor`):
-                Indices depicting the position of the input sequence tokens in the sequence.
         """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -950,7 +708,7 @@ class MoshiDepthDecoder(MoshiPreTrainedModel, GenerationMixin):
         )
         use_cache = use_cache if use_cache is not None else self.config.use_cache
 
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         if self.gradient_checkpointing and self.training and use_cache:
             logger.warning_once(
@@ -962,18 +720,15 @@ class MoshiDepthDecoder(MoshiPreTrainedModel, GenerationMixin):
             past_key_values = DynamicCache(config=self.config)
 
         past_seen_tokens = 0 if past_key_values is None else past_key_values.get_seq_length()
-        if cache_position is None:
-            cache_position = torch.arange(
-                past_seen_tokens, past_seen_tokens + input_ids.shape[1], device=input_ids.device
-            )
+        codebook_idx = torch.arange(input_ids.shape[1], device=input_ids.device) + past_seen_tokens
 
         if position_ids is None:
-            position_ids = cache_position.unsqueeze(0)
+            position_ids = codebook_idx.unsqueeze(0)
 
         # If inputs_embeds is provided, it has the priority over input_ids, which won't be used
         if inputs_embeds is None:
             inputs_embeds = []
-            for position_idx in cache_position:
+            for position_idx in codebook_idx:
                 position_idx = position_idx.item()
                 if position_idx == 0:
                     inputs_embeds.append(self.text_embed_tokens(input_ids[:, [position_idx]]))
@@ -984,12 +739,16 @@ class MoshiDepthDecoder(MoshiPreTrainedModel, GenerationMixin):
 
             inputs_embeds = torch.cat(inputs_embeds, dim=1)
 
-        inputs_embeds += self.input_projections(last_hidden_state, cache_position)
+        inputs_embeds += self.input_projections(last_hidden_state, codebook_idx)
 
         causal_mask = None
         if attention_mask is not None:
-            causal_mask = self._update_causal_mask(
-                attention_mask, inputs_embeds, cache_position, past_key_values, output_attentions
+            causal_mask = create_causal_mask(
+                config=self.config,
+                inputs_embeds=inputs_embeds,
+                attention_mask=attention_mask,
+                past_key_values=past_key_values,
+                position_ids=position_ids,
             )
 
         # decoder layers
@@ -1007,7 +766,7 @@ class MoshiDepthDecoder(MoshiPreTrainedModel, GenerationMixin):
                 past_key_values=past_key_values,
                 output_attentions=output_attentions,
                 use_cache=use_cache,
-                cache_position=cache_position,
+                codebook_idx=codebook_idx,
             )
 
             hidden_states = layer_outputs[0]
@@ -1019,7 +778,7 @@ class MoshiDepthDecoder(MoshiPreTrainedModel, GenerationMixin):
         if output_hidden_states:
             all_hidden_states += (hidden_states,)
 
-        logits = self.lm_heads(hidden_states, cache_position)
+        logits = self.lm_heads(hidden_states, codebook_idx)
 
         loss = None
         if labels is not None:
@@ -1043,157 +802,6 @@ class MoshiDepthDecoder(MoshiPreTrainedModel, GenerationMixin):
             hidden_states=past_key_values,
             attentions=all_self_attns,
         )
-
-    def _update_causal_mask(
-        self,
-        attention_mask: Union[torch.Tensor, "BlockMask"],
-        input_tensor: torch.Tensor,
-        cache_position: torch.Tensor,
-        past_key_values: Cache,
-        output_attentions: bool = False,
-    ):
-        if is_flash_attention_requested(self.config):
-            if attention_mask is not None and past_key_values is not None:
-                is_padding_right = attention_mask[:, -1].sum().item() != input_tensor.size()[0]
-                if is_padding_right:
-                    raise ValueError(
-                        "You are attempting to perform batched generation with padding_side='right'"
-                        " this may lead to unexpected behaviour for Flash Attention version of Moshi. Make sure to "
-                        " call `tokenizer.padding_side  = 'left'` before tokenizing the input. "
-                    )
-            if attention_mask is not None and 0.0 in attention_mask:
-                return attention_mask
-            return None
-        if self.config._attn_implementation == "flex_attention":
-            if isinstance(attention_mask, torch.Tensor):
-                attention_mask = make_flex_block_causal_mask(attention_mask)
-            return attention_mask
-
-        # For SDPA, when possible, we will rely on its `is_causal` argument instead of its `attn_mask` argument, in
-        # order to dispatch on Flash Attention 2. This feature is not compatible with static cache, as SDPA will fail
-        # to infer the attention mask.
-        past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
-        using_static_cache = isinstance(past_key_values, StaticCache)
-
-        # When output attentions is True, sdpa implementation's forward method calls the eager implementation's forward
-        if self.config._attn_implementation == "sdpa" and not using_static_cache and not output_attentions:
-            if AttentionMaskConverter._ignore_causal_mask_sdpa(
-                attention_mask,
-                inputs_embeds=input_tensor,
-                past_key_values_length=past_seen_tokens,
-                sliding_window=self.config.sliding_window,
-                is_training=self.training,
-            ):
-                return None
-
-        dtype = input_tensor.dtype
-        min_dtype = torch.finfo(dtype).min
-        sequence_length = input_tensor.shape[1]
-        # StaticCache
-        if using_static_cache:
-            target_length = past_key_values.get_max_cache_shape()
-        # DynamicCache or no cache
-        else:
-            target_length = (
-                attention_mask.shape[-1]
-                if isinstance(attention_mask, torch.Tensor)
-                else past_seen_tokens + sequence_length + 1
-            )
-
-        # In case the provided `attention` mask is 2D, we generate a causal mask here (4D).
-        causal_mask = self._prepare_4d_causal_attention_mask_with_cache_position(
-            attention_mask,
-            sequence_length=sequence_length,
-            target_length=target_length,
-            dtype=dtype,
-            cache_position=cache_position,
-            batch_size=input_tensor.shape[0],
-            config=self.config,
-            past_key_values=past_key_values,
-        )
-
-        if (
-            self.config._attn_implementation == "sdpa"
-            and attention_mask is not None
-            and attention_mask.device.type in ["cuda", "xpu", "npu"]
-            and not output_attentions
-        ):
-            # Attend to all tokens in fully masked rows in the causal_mask, for example the relevant first rows when
-            # using left padding. This is required by F.scaled_dot_product_attention memory-efficient attention path.
-            # Details: https://github.com/pytorch/pytorch/issues/110213
-            causal_mask = AttentionMaskConverter._unmask_unattended(causal_mask, min_dtype)
-
-        return causal_mask
-
-    @staticmethod
-    def _prepare_4d_causal_attention_mask_with_cache_position(
-        attention_mask: torch.Tensor,
-        sequence_length: int,
-        target_length: int,
-        dtype: torch.dtype,
-        cache_position: torch.Tensor,
-        batch_size: int,
-        config: MoshiDepthConfig,
-        past_key_values: Cache,
-    ):
-        """
-        Creates a causal 4D mask of shape `(batch_size, 1, query_length, key_value_length)` from a 2D mask of shape
-        `(batch_size, key_value_length)`, or if the input `attention_mask` is already 4D, do nothing.
-
-        Args:
-            attention_mask (`torch.Tensor`):
-                A 2D attention mask of shape `(batch_size, key_value_length)` or a 4D attention mask of shape `(batch_size, 1, query_length, key_value_length)`.
-            sequence_length (`int`):
-                The sequence length being processed.
-            target_length (`int`):
-                The target length: when generating with static cache, the mask should be as long as the static cache, to account for the 0 padding, the part of the cache that is not filled yet.
-            dtype (`torch.dtype`):
-                The dtype to use for the 4D attention mask.
-            cache_position (`torch.Tensor`):
-                Indices depicting the position of the input sequence tokens in the sequence.
-            batch_size (`torch.Tensor`):
-                Batch size.
-            config (`MoshiDepthConfig`):
-                The model's configuration class
-            past_key_values (`Cache`):
-                The cache class that is being used currently to generate
-        """
-        if attention_mask is not None and attention_mask.dim() == 4:
-            # In this case we assume that the mask comes already in inverted form and requires no inversion or slicing.
-            causal_mask = attention_mask
-        else:
-            min_dtype = torch.finfo(dtype).min
-            causal_mask = torch.full(
-                (sequence_length, target_length), fill_value=min_dtype, dtype=dtype, device=cache_position.device
-            )
-            diagonal_attend_mask = torch.arange(target_length, device=cache_position.device) > cache_position.reshape(
-                -1, 1
-            )
-            text_config = config.get_text_config()
-            if getattr(text_config, "use_sliding_window", True) and text_config.sliding_window is not None:
-                # if we have sliding window, we should not attend to tokens beyond sliding window length, so we mask them out also
-                # the check is needed to verify is current checkpoint was trained with sliding window or not
-                is_static_sliding_cache = isinstance(past_key_values, StaticCache) and all(past_key_values.is_sliding)
-                if not is_static_sliding_cache or sequence_length > target_length:
-                    sliding_attend_mask = torch.arange(target_length, device=cache_position.device) <= (
-                        cache_position.reshape(-1, 1) - text_config.sliding_window
-                    )
-                    diagonal_attend_mask.bitwise_or_(sliding_attend_mask)
-            causal_mask *= diagonal_attend_mask
-            causal_mask = causal_mask[None, None, :, :].expand(batch_size, 1, -1, -1)
-            if attention_mask is not None:
-                causal_mask = causal_mask.clone()  # copy to contiguous memory for in-place edit
-                if attention_mask.shape[-1] > target_length:
-                    attention_mask = attention_mask[:, :target_length]
-                mask_length = attention_mask.shape[-1]
-                padding_mask = causal_mask[:, :, :, :mask_length] + attention_mask[:, None, None, :].to(
-                    causal_mask.device
-                )
-                padding_mask = padding_mask == 0
-                causal_mask[:, :, :, :mask_length] = causal_mask[:, :, :, :mask_length].masked_fill(
-                    padding_mask, min_dtype
-                )
-        return causal_mask
 
 
 @auto_docstring
@@ -1228,7 +836,6 @@ class MoshiModel(MoshiPreTrainedModel):
         output_attentions: bool | None = None,
         output_hidden_states: bool | None = None,
         return_dict: bool | None = None,
-        cache_position: torch.LongTensor | None = None,
         **kwargs,
     ) -> tuple | BaseModelOutputWithPast:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
@@ -1236,7 +843,7 @@ class MoshiModel(MoshiPreTrainedModel):
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
         use_cache = use_cache if use_cache is not None else self.config.use_cache
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         if self.gradient_checkpointing and self.training and use_cache:
             logger.warning_once(
@@ -1247,19 +854,19 @@ class MoshiModel(MoshiPreTrainedModel):
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
 
-        if cache_position is None:
-            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
-            cache_position = torch.arange(
-                past_seen_tokens, past_seen_tokens + inputs_embeds.shape[1], device=inputs_embeds.device
-            )
-
         if position_ids is None:
-            position_ids = cache_position.unsqueeze(0)
+            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+            position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
+            position_ids = position_ids.unsqueeze(0)
 
         causal_mask = None
         if attention_mask is not None:
-            causal_mask = self._update_causal_mask(
-                attention_mask, inputs_embeds, cache_position, past_key_values, output_attentions
+            causal_mask = create_causal_mask(
+                config=self.config,
+                inputs_embeds=inputs_embeds,
+                attention_mask=attention_mask,
+                past_key_values=past_key_values,
+                position_ids=position_ids,
             )
 
         # embed positions
@@ -1283,7 +890,6 @@ class MoshiModel(MoshiPreTrainedModel):
                 past_key_values=past_key_values,
                 output_attentions=output_attentions,
                 use_cache=use_cache,
-                cache_position=cache_position,
             )
 
             hidden_states = layer_outputs[0]
@@ -1307,157 +913,6 @@ class MoshiModel(MoshiPreTrainedModel):
             hidden_states=all_hidden_states,
             attentions=all_self_attns,
         )
-
-    def _update_causal_mask(
-        self,
-        attention_mask: Union[torch.Tensor, "BlockMask"],
-        input_tensor: torch.Tensor,
-        cache_position: torch.Tensor,
-        past_key_values: Cache,
-        output_attentions: bool = False,
-    ):
-        if is_flash_attention_requested(self.config):
-            if attention_mask is not None and past_key_values is not None:
-                is_padding_right = attention_mask[:, -1].sum().item() != input_tensor.size()[0]
-                if is_padding_right:
-                    raise ValueError(
-                        "You are attempting to perform batched generation with padding_side='right'"
-                        " this may lead to unexpected behaviour for Flash Attention version of Moshi. Make sure to "
-                        " call `tokenizer.padding_side  = 'left'` before tokenizing the input. "
-                    )
-            if attention_mask is not None and 0.0 in attention_mask:
-                return attention_mask
-            return None
-        if self.config._attn_implementation == "flex_attention":
-            if isinstance(attention_mask, torch.Tensor):
-                attention_mask = make_flex_block_causal_mask(attention_mask)
-            return attention_mask
-
-        # For SDPA, when possible, we will rely on its `is_causal` argument instead of its `attn_mask` argument, in
-        # order to dispatch on Flash Attention 2. This feature is not compatible with static cache, as SDPA will fail
-        # to infer the attention mask.
-        past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
-        using_static_cache = isinstance(past_key_values, StaticCache)
-
-        # When output attentions is True, sdpa implementation's forward method calls the eager implementation's forward
-        if self.config._attn_implementation == "sdpa" and not using_static_cache and not output_attentions:
-            if AttentionMaskConverter._ignore_causal_mask_sdpa(
-                attention_mask,
-                inputs_embeds=input_tensor,
-                past_key_values_length=past_seen_tokens,
-                sliding_window=self.config.sliding_window,
-                is_training=self.training,
-            ):
-                return None
-
-        dtype = input_tensor.dtype
-        min_dtype = torch.finfo(dtype).min
-        sequence_length = input_tensor.shape[1]
-        # StaticCache
-        if using_static_cache:
-            target_length = past_key_values.get_max_cache_shape()
-        # DynamicCache or no cache
-        else:
-            target_length = (
-                attention_mask.shape[-1]
-                if isinstance(attention_mask, torch.Tensor)
-                else past_seen_tokens + sequence_length + 1
-            )
-
-        # In case the provided `attention` mask is 2D, we generate a causal mask here (4D).
-        causal_mask = self._prepare_4d_causal_attention_mask_with_cache_position(
-            attention_mask,
-            sequence_length=sequence_length,
-            target_length=target_length,
-            dtype=dtype,
-            cache_position=cache_position,
-            batch_size=input_tensor.shape[0],
-            config=self.config,
-            past_key_values=past_key_values,
-        )
-
-        if (
-            self.config._attn_implementation == "sdpa"
-            and attention_mask is not None
-            and attention_mask.device.type in ["cuda", "xpu", "npu"]
-            and not output_attentions
-        ):
-            # Attend to all tokens in fully masked rows in the causal_mask, for example the relevant first rows when
-            # using left padding. This is required by F.scaled_dot_product_attention memory-efficient attention path.
-            # Details: https://github.com/pytorch/pytorch/issues/110213
-            causal_mask = AttentionMaskConverter._unmask_unattended(causal_mask, min_dtype)
-
-        return causal_mask
-
-    @staticmethod
-    def _prepare_4d_causal_attention_mask_with_cache_position(
-        attention_mask: torch.Tensor,
-        sequence_length: int,
-        target_length: int,
-        dtype: torch.dtype,
-        cache_position: torch.Tensor,
-        batch_size: int,
-        config: MoshiConfig,
-        past_key_values: Cache,
-    ):
-        """
-        Creates a causal 4D mask of shape `(batch_size, 1, query_length, key_value_length)` from a 2D mask of shape
-        `(batch_size, key_value_length)`, or if the input `attention_mask` is already 4D, do nothing.
-
-        Args:
-            attention_mask (`torch.Tensor`):
-                A 2D attention mask of shape `(batch_size, key_value_length)` or a 4D attention mask of shape `(batch_size, 1, query_length, key_value_length)`.
-            sequence_length (`int`):
-                The sequence length being processed.
-            target_length (`int`):
-                The target length: when generating with static cache, the mask should be as long as the static cache, to account for the 0 padding, the part of the cache that is not filled yet.
-            dtype (`torch.dtype`):
-                The dtype to use for the 4D attention mask.
-            cache_position (`torch.Tensor`):
-                Indices depicting the position of the input sequence tokens in the sequence.
-            batch_size (`torch.Tensor`):
-                Batch size.
-            config (`MoshiConfig`):
-                The model's configuration class
-            past_key_values (`Cache`):
-                The cache class that is being used currently to generate
-        """
-        if attention_mask is not None and attention_mask.dim() == 4:
-            # In this case we assume that the mask comes already in inverted form and requires no inversion or slicing.
-            causal_mask = attention_mask
-        else:
-            min_dtype = torch.finfo(dtype).min
-            causal_mask = torch.full(
-                (sequence_length, target_length), fill_value=min_dtype, dtype=dtype, device=cache_position.device
-            )
-            diagonal_attend_mask = torch.arange(target_length, device=cache_position.device) > cache_position.reshape(
-                -1, 1
-            )
-            text_config = config.get_text_config()
-            if getattr(text_config, "use_sliding_window", True) and text_config.sliding_window is not None:
-                # if we have sliding window, we should not attend to tokens beyond sliding window length, so we mask them out also
-                # the check is needed to verify is current checkpoint was trained with sliding window or not
-                is_static_sliding_cache = isinstance(past_key_values, StaticCache) and all(past_key_values.is_sliding)
-                if not is_static_sliding_cache or sequence_length > target_length:
-                    sliding_attend_mask = torch.arange(target_length, device=cache_position.device) <= (
-                        cache_position.reshape(-1, 1) - text_config.sliding_window
-                    )
-                    diagonal_attend_mask.bitwise_or_(sliding_attend_mask)
-            causal_mask *= diagonal_attend_mask
-            causal_mask = causal_mask[None, None, :, :].expand(batch_size, 1, -1, -1)
-            if attention_mask is not None:
-                causal_mask = causal_mask.clone()  # copy to contiguous memory for in-place edit
-                if attention_mask.shape[-1] > target_length:
-                    attention_mask = attention_mask[:, :target_length]
-                mask_length = attention_mask.shape[-1]
-                padding_mask = causal_mask[:, :, :, :mask_length] + attention_mask[:, None, None, :].to(
-                    causal_mask.device
-                )
-                padding_mask = padding_mask == 0
-                causal_mask[:, :, :, :mask_length] = causal_mask[:, :, :, :mask_length].masked_fill(
-                    padding_mask, min_dtype
-                )
-        return causal_mask
 
 
 @auto_docstring(
@@ -1490,7 +945,6 @@ class MoshiForCausalLM(MoshiPreTrainedModel, GenerationMixin):
         output_attentions: bool | None = None,
         output_hidden_states: bool | None = None,
         return_dict: bool | None = None,
-        cache_position: torch.LongTensor | None = None,
         labels: torch.LongTensor | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs,
@@ -1521,7 +975,7 @@ class MoshiForCausalLM(MoshiPreTrainedModel, GenerationMixin):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         # decoder outputs consists of (dec_features, layer_state, dec_hidden, dec_attn)
         outputs = self.model(
@@ -1534,7 +988,6 @@ class MoshiForCausalLM(MoshiPreTrainedModel, GenerationMixin):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
-            cache_position=cache_position,
         )
 
         hidden_states = outputs[0]
@@ -1589,6 +1042,8 @@ class MoshiForConditionalGeneration(MoshiPreTrainedModel, GenerationMixin):
     supports_gradient_checkpointing = True
     _supports_flash_attn = True
     _supports_sdpa = True
+    _supports_flex_attn = True
+    _supports_attention_backend = True
 
     def __init__(self, config: MoshiConfig):
         super().__init__(config)
@@ -1664,7 +1119,7 @@ class MoshiForConditionalGeneration(MoshiPreTrainedModel, GenerationMixin):
         >>> logits.shape  # (bsz, seq_len, text_vocab_size)
         torch.Size([1, 1, 32000])
         ```"""
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         kwargs_audio_encoder = {
             argument[len("audio_encoder_")]: value
@@ -2170,7 +1625,6 @@ class MoshiForConditionalGeneration(MoshiPreTrainedModel, GenerationMixin):
         past_key_values=None,
         attention_mask=None,
         inputs_embeds=None,
-        cache_position=None,
         position_ids=None,
         use_cache=True,
         logits_to_keep=None,
@@ -2183,18 +1637,11 @@ class MoshiForConditionalGeneration(MoshiPreTrainedModel, GenerationMixin):
     ):
         # Overwritten -- Moshi has custom post-processing on the prepared inputs.
 
-        # If we have cache: let's slice `input_ids` through `cache_position`, to keep only the unprocessed tokens
-        # Exception 1: when passing input_embeds, input_ids may be missing entries
-        # Exception 2: some generation methods do special slicing of input_ids, so we don't need to do it here
-        # Exception 3: with synced GPUs cache_position may go out of bounds, but we only want dummy token in that case.
-        # (we can't check exception 3 while compiling)
-
         model_inputs = super().prepare_inputs_for_generation(
             input_ids,
             past_key_values=past_key_values,
             attention_mask=attention_mask,
             inputs_embeds=inputs_embeds,
-            cache_position=cache_position,
             position_ids=position_ids,
             use_cache=use_cache,
             logits_to_keep=logits_to_keep,
@@ -2255,11 +1702,13 @@ class MoshiForConditionalGeneration(MoshiPreTrainedModel, GenerationMixin):
             outputs, model_kwargs, is_encoder_decoder, num_new_tokens
         )
 
-        # update last_hidden_state that'll be used in the depth decoder
-        model_kwargs["last_hidden_state"] = outputs.get("last_hidden_state")[:, -1:]
-
+        # update last_hidden_state that'll be used in the depth decoder. ``.clone()`` breaks the
+        # view into the main decoder's cudagraph output buffer — otherwise the depth decoder reads
+        # the slice *after* the next main-decoder step has already overwritten it.
+        last_hidden_state = outputs.get("last_hidden_state")[:, -1:].clone()
+        model_kwargs["last_hidden_state"] = last_hidden_state
         # dirty, but we need to make a last depth_decoder.generate
-        self.last_hidden_state = outputs.get("last_hidden_state")[:, -1:]
+        self.last_hidden_state = last_hidden_state
         return model_kwargs
 
     def get_input_embeddings(self):

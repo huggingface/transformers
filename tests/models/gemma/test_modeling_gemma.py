@@ -16,7 +16,6 @@
 import unittest
 
 import pytest
-from packaging import version
 
 from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig, is_torch_available
 from transformers.generation.configuration_utils import GenerationConfig
@@ -321,11 +320,6 @@ class GemmaIntegrationTest(unittest.TestCase):
     @require_torch_accelerator
     @pytest.mark.torch_compile_test
     def test_compile_static_cache(self):
-        # `torch==2.2` will throw an error on this test (as in other compilation tests), but torch==2.1.2 and torch>2.2
-        # work as intended. See https://github.com/pytorch/pytorch/issues/121943
-        if version.parse(torch.__version__) < version.parse("2.3.0"):
-            self.skipTest(reason="This test requires torch >= 2.3 to run.")
-
         NUM_TOKENS_TO_GENERATE = 40
         EXPECTED_TEXT_COMPLETION = [
             "Hello I am doing a project on the 1990s and I need to know what the most popular music was in the 1990s. I have looked on the internet and I have found",
@@ -360,9 +354,6 @@ class GemmaIntegrationTest(unittest.TestCase):
     @pytest.mark.torch_export_test
     @slow
     def test_export_static_cache(self):
-        if version.parse(torch.__version__) < version.parse("2.3.0"):
-            self.skipTest(reason="This test requires torch >= 2.3 to run.")
-
         from transformers.integrations.executorch import (
             TorchExportableModuleWithStaticCache,
         )
@@ -449,38 +440,3 @@ class GemmaIntegrationTest(unittest.TestCase):
         EXPECTED_TEXT_COMPLETION = expectations.get_expectation()
 
         self.assertEqual(EXPECTED_TEXT_COMPLETION, ep_generated_text)
-
-    # TODO joao, manuel: remove this in v4.62.0
-    def test_model_2b_bf16_dola(self):
-        model_id = "google/gemma-2b"
-        # ground truth text generated with dola_layers="low", repetition_penalty=1.2
-        expectations = Expectations(
-            {
-                (None, None): [
-                    "Hello I am doing an experiment and need to get the mass of a block. The problem is, it has no scale",
-                    "Hi today we have the review for a <strong>2016/2017</strong> season of",
-                ],
-                ("cuda", 8): [
-                    "Hello I am doing an experiment and need to get the mass of a block. The only tool I have is a scale",
-                    "Hi today we have the review for a <strong>2016/2017</strong> season of",
-                ],
-            }
-        )
-        EXPECTED_TEXTS = expectations.get_expectation()
-
-        model = AutoModelForCausalLM.from_pretrained(model_id, dtype=torch.bfloat16).to(torch_device)
-
-        tokenizer = AutoTokenizer.from_pretrained(model_id)
-        inputs = tokenizer(self.input_text, return_tensors="pt", padding=True).to(torch_device)
-
-        output = model.generate(
-            **inputs,
-            max_new_tokens=20,
-            do_sample=False,
-            dola_layers="low",
-            repetition_penalty=1.2,
-            trust_remote_code=True,
-            custom_generate="transformers-community/dola",
-        )
-        output_text = tokenizer.batch_decode(output, skip_special_tokens=True)
-        self.assertEqual(output_text, EXPECTED_TEXTS)

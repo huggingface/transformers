@@ -19,13 +19,23 @@ All Mixture-of-Experts (MoE) implementations perform the same high-level computa
 
 The [`ExpertsInterface`] provides optimized experts backends. It decouples the experts implementation from the model code to simplify experimentation with different functions. Add new backends through the same interface.
 
-| experts backend | description                                                                                                                                  |
-| --------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
-| `"eager"`       | Reference implementation that loops over active experts and applies projections per-expert.                                                  |
-| `"batched_mm"`  | Uses [torch.bmm](https://docs.pytorch.org/docs/stable/generated/torch.bmm.html) to compute per-(token, expert) projections in a batched way. |
-| `"grouped_mm"`  | Uses `torch._grouped_mm` to group tokens by expert and run grouped GEMMs (requires PyTorch 2.9+).                                            |
 
-`batched_mm` is fastest for very small inputs and compilation speeds it up further. `grouped_mm` performs best for larger inputs.
+| experts backend | description | GPU | CPU |
+| --- | --- | --- | --- |
+| `"eager"` | Reference implementation that loops over selected experts and applies projections on their tokens. | Reasonable baseline performance without requiring compilation. | Slower than `grouped_mm` but faster than `batched_mm`. |
+| `"batched_mm"` | Duplicates selected expert parameters for each token and projects all tokens in a single batched GEMM using [torch.bmm](https://docs.pytorch.org/docs/stable/generated/torch.bmm.html). | Fastest for small inputs, especially with compilation. Uses more memory due to parameter duplication. | Not recommended (significantly slower than other backends). |
+| `"grouped_mm"` | Orders tokens by selected experts and uses [torch.nn.functional.grouped_mm](https://docs.pytorch.org/docs/stable/generated/torch.nn.functional.grouped_mm.html) to project all tokens in a single grouped GEMM (requires PyTorch 2.9+). | Best for larger inputs and more memory efficient as it avoids duplicating expert parameters. Fast with compilation. | Most efficient backend for all input sizes. |
+| `"deepgemm"` | Sorts tokens by selected expert and projects all tokens in a single TMA-aligned grouped GEMM using the [DeepGEMM](https://github.com/deepseek-ai/DeepGEMM) kernels from [kernels-community/deep-gemm](https://huggingface.co/kernels-community/deep-gemm). | Native backend for DeepSeek models on Hopper (SM90+) and Blackwell (SM100+); supports `bfloat16` and FP8/FP4-quantized experts. | Not supported (CUDA-only). |
+| `"deepgemm_megamoe"` | Fuses expert-parallel dispatch, the gated MLP (up projection, SwiGLU, down projection), and the EP combine into a single DeepGEMM Mega MoE kernel, overlapping NVLink transfers with tensor-core compute. | Blackwell (SM100+) only, for FP4-quantized experts run with expert parallelism. | Not supported (CUDA-only). |
+| `"sonicmoe"` | Fuses the routed `bfloat16` MoE forward (router dispatch, gated up projection, activation, down projection) into CuteDSL grouped-GEMM kernels (from the [quack](https://github.com/Dao-AILab/quack) library) from [kernels-community/sonic-moe](https://huggingface.co/kernels-community/sonic-moe). | State-of-the-art throughput on Hopper (SM90+) for `bfloat16` experts with a gated activation (SwiGLU/GeGLU/ReGLU), especially for training. | Not supported (CUDA-only). |
+
+The `"batched_mm"` and `"grouped_mm"` backends also run FP8 and FP4 (`int8`-packed) quantized experts through the Triton finegrained-fp8 kernel, reading either `float32` or UE8M0 scales. They act as the fallback for quantized checkpoints when the `"deepgemm"` backend is unavailable.
+
+## Decode-stage switching
+
+On GPU, a model loaded with `experts_implementation="grouped_mm"` automatically switches to `"batched_mm"` for the decode stage of generation, which is significantly faster on lower token counts. The original backend is restored once generation finishes. On CPU, `grouped_mm` stays active throughout generation because it's more efficient at every input size.
+
+The switch reaches MoE layers in the top-level model and in any sub-config backbone, such as the `text_config` of a vision-language model. Only `grouped_mm` entries switch to `batched_mm`. Experts running any other backend keep it.
 
 ## Set an experts backend
 
@@ -45,6 +55,13 @@ Switch between experts backends at runtime without reloading the model using [`~
 
 ```py
 model.set_experts_implementation("eager")
+```
+
+Read the backend that's currently running with [`~PreTrainedModel.get_experts_implementation`]. It returns a `dict` with one entry for the model, and one entry per sub-config.
+
+```py
+model.get_experts_implementation()
+# {"": "grouped_mm", "text_config": "grouped_mm", "vision_config": "eager"}
 ```
 
 ## Backbone-specific experts backend
@@ -76,15 +93,112 @@ model = AutoModelForCausalLM.from_pretrained(
 )
 ```
 
+## DeepGEMM
+
+The `"deepgemm"` backend routes expert matmuls through the [DeepGEMM](https://github.com/deepseek-ai/DeepGEMM) kernels distributed by [kernels-community/deep-gemm](https://huggingface.co/kernels-community/deep-gemm). It works with unquantized `bfloat16` experts and with FP8/FP4-quantized experts loaded through [Fine-grained FP8](./quantization/finegrained_fp8).
+
+The `"deepgemm"` backend requires:
+
+- CUDA GPU with compute capability ≥ 9.0 (Hopper or newer).
+- A full CUDA toolkit with `nvcc` for the kernel's JIT compilation, version 12.3 or later on Hopper and 12.9 or later on Blackwell. A runtime-only install has no `nvcc` and is rejected. Transformers locates the toolkit through `CUDA_HOME`, `CUDA_PATH`, `nvcc` on `PATH`, then `/usr/local/cuda`.
+- The [kernels](https://github.com/huggingface/kernels) package.
+
+```py
+from transformers import AutoModelForCausalLM
+
+model = AutoModelForCausalLM.from_pretrained(
+    "deepseek-ai/DeepSeek-V3",
+    dtype="bfloat16",
+    experts_implementation="deepgemm",
+)
+```
+
+The kernel is loaded lazily on the first forward.
+
+### FP8 and FP4 quantized experts
+
+DeepSeek-style checkpoints are usually pre-quantized and carry their own quantization config, so you don't need to pass a [`FineGrainedFP8Config`]. The `"deepgemm"` backend automatically picks the FP8 (or FP4 on Blackwell) grouped-GEMM kernel. DeepGEMM requires dynamic per-row activation scales (`activation_scheme="dynamic"`) and rejects static (per-tensor) activation quantization.
+
+```py
+from transformers import AutoModelForCausalLM
+
+model = AutoModelForCausalLM.from_pretrained(
+    "deepseek-ai/DeepSeek-V3",
+    experts_implementation="deepgemm",
+)
+```
+
+For FP4-packed expert weights (DeepSeek V4-style), the GPU must be SM100+ (Blackwell). The checkpoint config typically sets `expert_dtype="fp4"` and `scale_fmt="ue8m0"`.
+
+> [!NOTE]
+> On Blackwell (SM100+), the `"deepgemm"` and `"deepgemm_megamoe"` experts kernels require power-of-two UE8M0 expert scales. A checkpoint quantized with plain `float32` scales (`scale_fmt="float"`) raises a `ValueError` on the first forward instead of silently corrupting the output. Load a checkpoint quantized with `scale_fmt="ue8m0"`, or switch to `grouped_mm` or `batched_mm`, which consume `float32` block scales directly. Hopper (SM90+) consumes `float32` scales on the DeepGEMM path without conversion.
+
+The main reason to pass a [`FineGrainedFP8Config`] for a pre-quantized checkpoint is to dequantize it back to `bfloat16`, in which case the experts run in `bfloat16` rather than on the FP8/FP4 DeepGEMM path.
+
+```py
+from transformers import AutoModelForCausalLM, FineGrainedFP8Config
+
+model = AutoModelForCausalLM.from_pretrained(
+    "deepseek-ai/DeepSeek-V3",
+    quantization_config=FineGrainedFP8Config(dequantize=True),
+    experts_implementation="deepgemm",
+)
+```
+
+### Fused Mega MoE on Blackwell
+
+On Blackwell (SM100+), set `experts_implementation="deepgemm_megamoe"` to run a single fused kernel that combines expert-parallel dispatch, the up projection, SwiGLU, the down projection, and the EP combine, overlapping NVLink transfers with tensor-core compute.
+
+This backend requires:
+
+- A Blackwell GPU (compute capability ≥ 10.0) with a CUDA toolkit (`nvcc`) 12.9 or later.
+- FP4-packed expert weights paired with UE8M0 weight scales (the pre-quantized checkpoint typically declares `expert_dtype="fp4"` and `scale_fmt="ue8m0"` in its config).
+- A `torch.distributed` process group for the expert-parallel group, which the tensor-parallel wrapping supplies automatically.
+
+```py
+from transformers import AutoModelForCausalLM
+
+model = AutoModelForCausalLM.from_pretrained(
+    "deepseek-ai/DeepSeek-V4",
+    experts_implementation="deepgemm_megamoe",
+    tp_plan="auto",
+)
+```
+
+## SonicMoE
+
+The `"sonicmoe"` backend fuses the routed MoE forward (dispatch, gated up projection, activation, down projection) into a set of highly optimized CuteDSL grouped-GEMM kernels, built on the [quack](https://github.com/Dao-AILab/quack) library and distributed by [kernels-community/sonic-moe](https://huggingface.co/kernels-community/sonic-moe).
+
+The `"sonicmoe"` backend requires:
+
+- CUDA GPU with compute capability ≥ 9.0 (Hopper or newer).
+- The [kernels](https://github.com/huggingface/kernels) package and the `nvidia-cutlass-dsl` package.
+- Experts with a gated activation (`silu`, `gelu`, or `relu`, mapped to SwiGLU/GeGLU/ReGLU).
+
+```py
+from transformers import AutoModelForCausalLM
+
+model = AutoModelForCausalLM.from_pretrained(
+    "Qwen/Qwen1.5-MoE-A2.7B",
+    dtype="bfloat16",
+    experts_implementation="sonicmoe",
+)
+```
+
+If the requirements aren't met, the forward raises `ImportError` and you should pick a different `experts_implementation`.
+
 ## torch.compile
 
-All three backends (`"eager"`, `"batched_mm"`, `"grouped_mm"`) are compatible with `torch.compile` to certain extents. The following table summarizes compatibility:
+The `"eager"`, `"batched_mm"`, and `"grouped_mm"` backends are compatible with `torch.compile` to varying degrees. The following table summarizes their compatibility. The `"deepgemm"`, `"deepgemm_megamoe"`, and `"sonicmoe"` backends route through external CUDA kernels and aren't covered by this table.
 
-| Implementation | compilation modes                    | dtypes                           | `fullgraph=True` |
-| -------------- | ------------------------------------ | -------------------------------- | ---------------- |
-| `grouped_mm`   | `None`, `max-autotune-no-cudagraphs` | `bfloat16`                       | Yes              |
-| `batched_mm`   | all                                  | `bfloat16`, `float16`, `float32` | Yes              |
-| `eager`        | all                                  | `bfloat16`, `float16`, `float32` | No               |
+
+| Implementation          | compilation modes                    | dtypes                           | `fullgraph=True` |
+| ----------------------- | ------------------------------------ | -------------------------------- | ---------------- |
+| `grouped_mm`            | `None`, `max-autotune-no-cudagraphs` | `bfloat16`                       | Yes              |
+| `grouped_mm` (fallback) | `None`, `max-autotune-no-cudagraphs` | `bfloat16`, `float16`, `float32` | Yes              |
+| `batched_mm`            | all                                  | `bfloat16`, `float16`, `float32` | Yes              |
+| `eager`                 | all                                  | `bfloat16`, `float16`, `float32` | No               |
+
 
 Notes:
 
@@ -108,59 +222,3 @@ model.forward = torch.compile(model.forward, mode="max-autotune-no-cudagraphs")
 ## Benchmarks
 
 This [benchmark](https://github.com/user-attachments/files/24125816/bench.py) compares different input sizes and experts implementations with and without `torch.compile`.
-
-### Batch Size 1, Sequence Length 16
-
-| Torch Compile              | Implementation | Mean Latency (ms)                            | Median Latency (ms)                          | P90 Latency (ms)                             | Peak Mem (MB) |
-| -------------------------- | -------------- | -------------------------------------------- | -------------------------------------------- | -------------------------------------------- | ------------- |
-| False                      | eager          | 271.80                                       | 272.94                                       | 295.34                                       | 27324.65      |
-| True                       | eager          | 351.86                                       | 351.64                                       | 384.64                                       | 27329.29      |
-| max-autotune-no-cudagraphs | eager          | 352.52                                       | 352.15                                       | 382.79                                       | 27329.29      |
-| False                      | batched_mm     | 52.03                                        | 52.07                                        | 52.67                                        | 28382.50      |
-| True                       | batched_mm     | 53.04                                        | 53.04                                        | 53.11                                        | 28029.63      |
-| max-autotune-no-cudagraphs | batched_mm     | **<span style="color: green;">23.87</span>** | **<span style="color: green;">23.86</span>** | **<span style="color: green;">24.02</span>** | **27329.29**  |
-| False                      | grouped_mm     | 64.27                                        | 64.09                                        | 65.49                                        | 27329.29      |
-| True                       | grouped_mm     | 59.45                                        | 59.52                                        | 60.99                                        | 27329.29      |
-| max-autotune-no-cudagraphs | grouped_mm     | 59.61                                        | 59.55                                        | 60.89                                        | 27329.29      |
-
-### Batch Size 1, Sequence Length 128
-
-| Torch Compile              | Implementation | Mean Latency (ms)                            | Median Latency (ms)                          | P90 Latency (ms)                             | Peak Mem (MB) |
-| -------------------------- | -------------- | -------------------------------------------- | -------------------------------------------- | -------------------------------------------- | ------------- |
-| False                      | eager          | 471.73                                       | 472.65                                       | 487.97                                       | 27396.46      |
-| True                       | eager          | <span style="color: red;">637.32</span>      | 613.70                                       | <span style="color: red;">845.01</span>      | 27429.82      |
-| max-autotune-no-cudagraphs | eager          | 620.21                                       | 619.35                                       | 657.74                                       | 27429.82      |
-| False                      | batched_mm     | 316.67                                       | 316.94                                       | 317.92                                       | 35854.56      |
-| True                       | batched_mm     | 370.29                                       | 370.29                                       | 370.57                                       | 33031.64      |
-| max-autotune-no-cudagraphs | batched_mm     | 151.87                                       | 150.38                                       | 158.01                                       | 27429.82      |
-| False                      | grouped_mm     | 78.50                                        | 78.53                                        | 80.00                                        | **27429.82**  |
-| True                       | grouped_mm     | 72.95                                        | 72.99                                        | 74.60                                        | **27429.82**  |
-| max-autotune-no-cudagraphs | grouped_mm     | **<span style="color: green;">72.71</span>** | **<span style="color: green;">72.89</span>** | **<span style="color: green;">73.55</span>** | **27429.82**  |
-
-### Batch Size 4, Sequence Length 16
-
-| Torch Compile              | Implementation | Mean Latency (ms)                            | Median Latency (ms)                          | P90 Latency (ms)                             | Peak Mem (MB) |
-| -------------------------- | -------------- | -------------------------------------------- | -------------------------------------------- | -------------------------------------------- | ------------- |
-| False                      | eager          | 431.87                                       | 433.38                                       | 448.01                                       | 27391.57      |
-| True                       | eager          | <span style="color: red;">566.63</span>      | <span style="color: red;">569.74</span>      | <span style="color: red;">598.98</span>      | 27372.12      |
-| max-autotune-no-cudagraphs | eager          | 563.13                                       | 567.79                                       | 588.25                                       | 27372.12      |
-| False                      | batched_mm     | 163.41                                       | 163.38                                       | 164.84                                       | 31585.54      |
-| True                       | batched_mm     | 189.18                                       | 189.08                                       | 189.79                                       | 30173.45      |
-| max-autotune-no-cudagraphs | batched_mm     | 79.15                                        | 79.10                                        | 79.74                                        | 27372.11      |
-| False                      | grouped_mm     | 75.23                                        | 75.18                                        | 76.74                                        | 27372.11      |
-| True                       | grouped_mm     | 70.35                                        | 70.40                                        | 71.71                                        | **27372.12**  |
-| max-autotune-no-cudagraphs | grouped_mm     | **<span style="color: green;">70.26</span>** | **<span style="color: green;">70.43</span>** | **<span style="color: green;">71.32</span>** | **27372.12**  |
-
-### Batch Size 4, Sequence Length 128
-
-| Torch Compile              | Implementation | Mean Latency (ms)                            | Median Latency (ms)                          | P90 Latency (ms)                             | Peak Mem (MB)                             |
-| -------------------------- | -------------- | -------------------------------------------- | -------------------------------------------- | -------------------------------------------- | ----------------------------------------- |
-| False                      | eager          | 526.88                                       | 522.75                                       | 570.01                                       | 27632.62                                  |
-| True                       | eager          | 678.18                                       | 677.54                                       | 690.97                                       | 27762.46                                  |
-| max-autotune-no-cudagraphs | eager          | 676.22                                       | 677.07                                       | 681.91                                       | 27762.45                                  |
-| False                      | batched_mm     | 1235.25                                      | 1235.33                                      | 1237.90                                      | <span style="color: red;">61465.85</span> |
-| True                       | batched_mm     | <span style="color: red;">1505.00</span>     | <span style="color: red;">1503.31</span>     | <span style="color: red;">1536.10</span>     | 50174.26                                  |
-| max-autotune-no-cudagraphs | batched_mm     | 572.37                                       | 570.81                                       | 589.74                                       | **27762.45**                              |
-| False                      | grouped_mm     | 80.95                                        | 81.06                                        | 81.70                                        | **27762.45**                              |
-| True                       | grouped_mm     | **<span style="color: green;">79.67</span>** | **<span style="color: green;">79.69</span>** | **<span style="color: green;">80.54</span>** | **27762.45**                              |
-| max-autotune-no-cudagraphs | grouped_mm     | 83.29                                        | 79.83                                        | 111.83                                       | **27762.46**                              |

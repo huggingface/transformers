@@ -29,7 +29,7 @@ from transformers.testing_utils import (
     torch_device,
 )
 
-from ...generation.test_utils import GenerationTesterMixin, has_similar_generate_outputs
+from ...generation.test_utils import GenerationTesterMixin, assert_similar_generate_outputs
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
@@ -584,10 +584,7 @@ class T5GemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
     pipeline_model_mapping = (
         {
             "feature-extraction": T5GemmaModel,
-            "summarization": T5GemmaForConditionalGeneration,
             "text-classification": T5GemmaForSequenceClassification,
-            "text2text-generation": T5GemmaForConditionalGeneration,
-            "translation": T5GemmaForConditionalGeneration,
             "zero-shot": T5GemmaForSequenceClassification,
         }
         if is_torch_available()
@@ -610,7 +607,7 @@ class T5GemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
             self,
             config_class=T5GemmaConfig,
             # For faking the testing.
-            hidden_size=37,
+            hidden_size=32,
             vocab_size=self.model_tester.vocab_size,
             num_attention_heads=self.model_tester.num_attention_heads,
             num_hidden_layers=self.model_tester.num_hidden_layers,
@@ -1085,7 +1082,7 @@ class T5GemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
             outputs_cached.scores = full_cached_scores
 
             # The two sets of generated text and past kv should be equal to each other
-            self.assertTrue(has_similar_generate_outputs(outputs, outputs_cached))
+            assert_similar_generate_outputs(outputs, outputs_cached)
             self._check_caches_are_equal(outputs.past_key_values, outputs_cached.past_key_values)
 
     # Based on tests.test_modeling_common.ModelTesterMixin.test_inputs_embeds_matches_input_ids
@@ -1284,6 +1281,24 @@ class T5GemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         # Only generate beyond prefill, we don't care about the output as it only checks for crashes
         _ = model.generate(input_ids, attention_mask=attention_mask, max_new_tokens=2, use_cache=True)
 
+    def test_generate_cross_attention_cache_is_not_sliding(self):
+        # Fast (CPU-friendly, no flash-attn) regression test for the same fix as
+        # `test_generate_beyond_sliding_window_with_flash_attn`: even when the decoder declares sliding-window
+        # layers, `_prepare_cache_for_generation` must build a full-attention cross-attention cache.
+        config, input_ids, _, attention_mask, _, _ = self.model_tester.prepare_config_and_inputs()
+        config.decoder.sliding_window = 2  # arbitrary but less than seq_len
+
+        model = self.model_tester.causal_lm_class(config=config).to(torch_device).eval()
+
+        out = model.generate(
+            input_ids,
+            attention_mask=attention_mask,
+            max_new_tokens=4,  # beyond the sliding window
+            use_cache=True,
+            return_dict_in_generate=True,
+        )
+        self.assertFalse(any(out.past_key_values.cross_attention_cache.is_sliding))
+
 
 class T5GemmaEncoderOnlyModelTester:
     config_class = T5GemmaConfig
@@ -1479,7 +1494,7 @@ class T5GemmaEncoderOnlyModelTest(ModelTesterMixin, unittest.TestCase):
             self,
             config_class=T5GemmaConfig,
             # For faking the testing.
-            hidden_size=37,
+            hidden_size=32,
             vocab_size=self.model_tester.vocab_size,
             num_attention_heads=self.model_tester.num_attention_heads,
             num_hidden_layers=self.model_tester.num_hidden_layers,

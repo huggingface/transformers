@@ -21,22 +21,22 @@ from torch import nn
 
 from ... import initialization as init
 from ...activations import ACT2FN
+from ...backbone_utils import load_backbone
 from ...modeling_outputs import DepthEstimatorOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import ModelOutput, auto_docstring, logging
-from ...utils.backbone_utils import load_backbone
 from .configuration_zoedepth import ZoeDepthConfig
 
 
 logger = logging.get_logger(__name__)
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Extension of `DepthEstimatorOutput` to include domain logits (ZoeDepth specific).
     """
 )
+@dataclass
 class ZoeDepthDepthEstimatorOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
@@ -414,8 +414,8 @@ class LogBinomialSoftmax(nn.Module):
         if probabilities.ndim == 3:
             probabilities = probabilities.unsqueeze(1)  # make it (batch_size, num_channels, height, width)
 
-        one_minus_probabilities = torch.clamp(1 - probabilities, eps, 1)
-        probabilities = torch.clamp(probabilities, eps, 1)
+        one_minus_probabilities = (1 - probabilities).clamp(min=eps, max=1.0)
+        probabilities = probabilities.clamp(min=eps, max=1.0)
         y = (
             log_binom(self.k_minus_1, self.k_idx)
             + self.k_idx * torch.log(probabilities)
@@ -1268,10 +1268,12 @@ class ZoeDepthForDepthEstimation(ZoeDepthPreTrainedModel):
         >>> import torch
         >>> import numpy as np
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
 
         >>> image_processor = AutoImageProcessor.from_pretrained("Intel/zoedepth-nyu-kitti")
         >>> model = ZoeDepthForDepthEstimation.from_pretrained("Intel/zoedepth-nyu-kitti")
@@ -1298,7 +1300,7 @@ class ZoeDepthForDepthEstimation(ZoeDepthPreTrainedModel):
         if labels is not None:
             raise NotImplementedError("Training is not implemented yet")
 
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )

@@ -175,6 +175,7 @@ class RTDetrLoss(nn.Module):
         ious = torch.diag(ious)
 
         src_logits = outputs["logits"]
+        dtype = src_logits.dtype
         target_classes_original = torch.cat([_target["class_labels"][i] for _target, (_, i) in zip(targets, indices)])
         target_classes = torch.full(
             src_logits.shape[:2], self.num_classes, dtype=torch.int64, device=src_logits.device
@@ -182,12 +183,13 @@ class RTDetrLoss(nn.Module):
         target_classes[idx] = target_classes_original
         target = F.one_hot(target_classes, num_classes=self.num_classes + 1)[..., :-1]
 
-        target_score_original = torch.zeros_like(target_classes, dtype=src_logits.dtype)
-        target_score_original[idx] = ious.to(target_score_original.dtype)
+        target_score_original = torch.zeros_like(target_classes, dtype=dtype)
+        target_score_original[idx] = ious.to(dtype)
         target_score = target_score_original.unsqueeze(-1) * target
 
         pred_score = F.sigmoid(src_logits.detach())
-        weight = self.alpha * pred_score.pow(self.gamma) * (1 - target) + target_score
+        # pow promotes to float32 under float16 CUDA autocast; cast back to preserve original dtype
+        weight = (self.alpha * pred_score.pow(self.gamma) * (1 - target) + target_score).to(dtype)
 
         loss = F.binary_cross_entropy_with_logits(src_logits, target_score, weight=weight, reduction="none")
         loss = loss.mean(1).sum() * src_logits.shape[1] / num_boxes
@@ -222,8 +224,8 @@ class RTDetrLoss(nn.Module):
         logits = outputs["logits"]
         device = logits.device
         target_lengths = torch.as_tensor([len(v["class_labels"]) for v in targets], device=device)
-        # Count the number of predictions that are NOT "no-object" (which is the last class)
-        card_pred = (logits.argmax(-1) != logits.shape[-1] - 1).sum(1)
+        # Count the number of predictions that are NOT "no-object" (sigmoid > 0.5 threshold)
+        card_pred = (logits.sigmoid().max(-1).values > 0.5).sum(1)
         card_err = nn.functional.l1_loss(card_pred.float(), target_lengths.float())
         losses = {"cardinality_error": card_err}
         return losses

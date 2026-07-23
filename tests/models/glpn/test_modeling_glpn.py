@@ -33,7 +33,7 @@ if is_torch_available():
 if is_vision_available():
     from PIL import Image
 
-    from transformers import GLPNImageProcessor
+    from transformers import GLPNImageProcessorPil
 
 
 class GLPNConfigTester(ConfigTester):
@@ -149,7 +149,6 @@ class GLPNModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     )
 
     test_resize_embeddings = False
-    test_torch_exportable = True
 
     def setUp(self):
         self.model_tester = GLPNModelTester(self)
@@ -326,7 +325,7 @@ def prepare_img():
 class GLPNModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_depth_estimation(self):
-        image_processor = GLPNImageProcessor.from_pretrained("vinvino02/glpn-kitti")
+        image_processor = GLPNImageProcessorPil.from_pretrained("vinvino02/glpn-kitti")
         model = GLPNForDepthEstimation.from_pretrained("vinvino02/glpn-kitti").to(torch_device)
 
         image = prepare_img()

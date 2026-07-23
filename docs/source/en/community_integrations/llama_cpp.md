@@ -21,19 +21,12 @@ rendered properly in your Markdown viewer.
 > [!TIP]
 > Browse the [Hub](https://huggingface.co/models?apps=llama.cpp&sort=trending) for models already available in GGUF format.
 
-llama.cpp can convert and run Transformers models as standalone C++ executables with the [convert_hf_to_gguf.py](https://github.com/ggml-org/llama.cpp/blob/master/convert_hf_to_gguf.py) script.
+Convert any Transformers model to GGUF format with the [convert_hf_to_gguf.py](https://github.com/ggml-org/llama.cpp/blob/master/convert_hf_to_gguf.py) script.
 
 ```bash
-python3 convert_hf_to_gguf.py ./models/openai/gpt-oss-20b
+python3 convert_hf_to_gguf.py ./models/openai/gpt-oss-20b \
+  --outfile gpt-oss-20b.gguf \
 ```
-
-The conversion process works as follows.
-
-1. The script loads the model configuration with [`AutoConfig.from_pretrained`] and extracts the 
-vocabulary with [`AutoTokenizer.from_pretrained`].
-2. Based on the config's architecture field, the script selects a converter class from its internal registry. The registry maps Transformers architecture names (like [`LlamaForCausalLM`]) to corresponding converter classes.
-3. The converter class extracts config parameters, maps Transformers tensor names to GGUF tensor names, transforms tensors, and packages the vocabulary.
-4. The output is a single GGUF file containing the model weights, tokenizer, and metadata.
 
 Deploy the model locally from the command line with [llama-cli](https://github.com/ggml-org/llama.cpp/tree/master#llama-cli) or start a web UI with [llama-server](https://github.com/ggml-org/llama.cpp/tree/master#llama-server). Add the `-hf` flag to indicate the model is from the Hub.
 
@@ -41,7 +34,7 @@ Deploy the model locally from the command line with [llama-cli](https://github.c
 <hfoption id="llama-cli">
 
 ```bash
-llama-cli -hf openai/gpt-oss-20b
+llama-cli -hf ggml-org/gpt-oss-20b-GGUF
 ```
 
 </hfoption>
@@ -53,6 +46,14 @@ llama-server -hf ggml-org/gpt-oss-20b-GGUF
 
 </hfoption>
 </hfoptions>
+
+## Transformers integration
+
+1. [`AutoConfig.from_pretrained`] loads the model's `config.json` file to extract metadata.
+2. [`AutoTokenizer.from_pretrained`] extracts the vocabulary and tokenizer configuration.
+3. Based on the `architectures` field in the config, the script selects a converter class from its internal registry. The registry maps Transformers architecture names (like [`LlamaForCausalLM`]) to corresponding converter classes.
+4. The converter maps Transformers tensor names (for example, `model.layers.0.self_attn.q_proj.weight`) to GGUF tensor names, transforms tensors, and packages the vocabulary.
+5. The output is a single GGUF file containing the model weights, tokenizer, and metadata.
 
 ## Resources
 

@@ -259,7 +259,7 @@ class SwitchTransformersModelTester:
             output_router_logits=True,
             output_hidden_states=True,
         )
-        self.parent.assertEqual(len(outputs), 13)
+        self.parent.assertEqual(len(outputs), 15)
         self.parent.assertEqual(outputs["logits"].size(), (self.batch_size, self.decoder_seq_length, self.vocab_size))
         self.parent.assertEqual(outputs["loss"].size(), ())
 
@@ -481,9 +481,6 @@ class SwitchTransformersModelTest(ModelTesterMixin, GenerationTesterMixin, Pipel
     pipeline_model_mapping = (
         {
             "feature-extraction": SwitchTransformersModel,
-            "summarization": SwitchTransformersForConditionalGeneration,
-            "text2text-generation": SwitchTransformersForConditionalGeneration,
-            "translation": SwitchTransformersForConditionalGeneration,
         }
         if is_torch_available()
         else {}
@@ -620,7 +617,7 @@ class SwitchTransformersModelTest(ModelTesterMixin, GenerationTesterMixin, Pipel
     @slow
     def test_model_from_pretrained(self):
         model_name = "google/switch-base-8"
-        model = SwitchTransformersModel.from_pretrained(model_name)
+        model = SwitchTransformersModel.from_pretrained(model_name, use_safetensors=False)
         self.assertIsNotNone(model)
 
     @unittest.skip(
@@ -818,8 +815,9 @@ class SwitchTransformerRouterTest(unittest.TestCase):
         num_experts=2,
         hidden_size=8,
         d_ff=16,
-        router_jitter_noise=0,
+        router_jitter_noise=0.0,
         expert_capacity=4,
+        num_heads=4,
     )
 
     def test_equivalency_balancy_loss(self):
@@ -945,7 +943,9 @@ class SwitchTransformerModelIntegrationTests(unittest.TestCase):
         and `transformers` implementation of Switch-C transformers. We only check the logits
         of the first batch.
         """
-        model = SwitchTransformersModel.from_pretrained("google/switch-base-8", dtype=torch.bfloat16).to(torch_device)
+        model = SwitchTransformersModel.from_pretrained(
+            "google/switch-base-8", use_safetensors=False, dtype=torch.bfloat16
+        ).to(torch_device)
         input_ids = torch.ones((32, 64), dtype=torch.long).to(torch_device)
         decoder_input_ids = torch.ones((32, 64), dtype=torch.long).to(torch_device)
 

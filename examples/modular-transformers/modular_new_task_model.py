@@ -18,17 +18,6 @@ class NewTaskModelForNewTask(PaliGemmaForConditionalGeneration):
         self.embedding_dim = self.config.embedding_dim
         self.custom_text_proj = nn.Linear(self.config.text_config.hidden_size, self.embedding_dim)
 
-        if self.language_model._tied_weights_keys is not None:
-            prefix = "model.language_model."
-            prefixed_mapping = {
-                f"{prefix}{target}": f"{prefix}{source}"
-                for target, source in self.language_model._tied_weights_keys.items()
-            }
-            if isinstance(self._tied_weights_keys, dict):
-                self._tied_weights_keys.update(prefixed_mapping)
-            else:
-                self._tied_weights_keys = prefixed_mapping
-
         self.post_init()
 
     def forward(
@@ -39,7 +28,6 @@ class NewTaskModelForNewTask(PaliGemmaForConditionalGeneration):
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
         token_type_ids: torch.LongTensor | None = None,
-        cache_position: torch.LongTensor | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
@@ -58,7 +46,6 @@ class NewTaskModelForNewTask(PaliGemmaForConditionalGeneration):
             position_ids=position_ids,
             past_key_values=past_key_values,
             token_type_ids=token_type_ids,
-            cache_position=cache_position,
             inputs_embeds=inputs_embeds,
             labels=labels,
             use_cache=use_cache,

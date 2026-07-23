@@ -1,4 +1,4 @@
-# Copyright 2024 Microsoft Research and The HuggingFace Inc. team. All rights reserved.
+# Copyright 2025 Microsoft Research and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -15,33 +15,14 @@
 
 import math
 
-import numpy as np
+import torch
 
-from ...image_processing_utils import BaseImageProcessor, BatchFeature
-from ...image_transforms import (
-    convert_to_rgb,
-    normalize,
-    to_channel_dimension_format,
-)
-from ...image_utils import (
-    ChannelDimension,
-    ImageInput,
-    get_image_size,
-    infer_channel_dimension_format,
-    make_flat_list_of_images,
-    to_numpy_array,
-    valid_images,
-)
-from ...processing_utils import ImagesKwargs
-from ...utils import TensorType, is_torch_available, logging
-from ...utils.import_utils import requires_backends
-
-
-if is_torch_available():
-    import torch
-
-logger = logging.get_logger(__name__)
-DEFAULT_FONT_PATH = "ybelkada/fonts"
+from ...image_processing_backends import TorchvisionBackend
+from ...image_processing_utils import BatchFeature, get_size_dict
+from ...image_transforms import group_images_by_shape, reorder_images
+from ...image_utils import ChannelDimension, ImageInput, SizeDict, get_image_size
+from ...processing_utils import ImagesKwargs, Unpack
+from ...utils import TensorType, auto_docstring
 
 
 class Kosmos2_5ImageProcessorKwargs(ImagesKwargs, total=False):
@@ -53,15 +34,15 @@ class Kosmos2_5ImageProcessorKwargs(ImagesKwargs, total=False):
         [KOSMOS 2.5 paper](https://huggingface.co/papers/2309.11419).
     """
 
-    patch_size: dict[str, int]
+    patch_size: SizeDict | None
     max_patches: int
 
 
-# Copied from transformers.models.pix2struct.image_processing_pix2struct.torch_extract_patches
+# Similar to transformers.models.pix2struct.image_processing_pix2struct.torch_extract_patches but dealing with a batch of images directly.
 def torch_extract_patches(image_tensor, patch_height, patch_width):
     """
-    Utility function to extract patches from a given image tensor. Returns a tensor of shape
-    (1, `rows`, `columns`, `num_channels`x `patch_height` x `patch_width`).
+    Utility function to extract patches from a given tensor representing a batch of images. Returns a tensor of shape
+    (batch_size, `rows`, `columns`, `num_channels` x `patch_height` x `patch_width`).
 
     Args:
         image_tensor (torch.Tensor):
@@ -71,85 +52,98 @@ def torch_extract_patches(image_tensor, patch_height, patch_width):
         patch_width (int):
             The width of the patches to extract.
     """
-    requires_backends(torch_extract_patches, ["torch"])
-
-    image_tensor = image_tensor.unsqueeze(0)
     patches = torch.nn.functional.unfold(image_tensor, (patch_height, patch_width), stride=(patch_height, patch_width))
     patches = patches.reshape(image_tensor.size(0), image_tensor.size(1), patch_height, patch_width, -1)
     patches = patches.permute(0, 4, 2, 3, 1).reshape(
+        image_tensor.size(0),
         image_tensor.size(2) // patch_height,
         image_tensor.size(3) // patch_width,
         image_tensor.size(1) * patch_height * patch_width,
     )
-    return patches.unsqueeze(0)
+    return patches
 
 
-# similar to transformers.models.pix2struct.image_processing_pix2struct.Pix2StructImageProcessor, but delete is_vqa and additionally return width and height after resizing
-class Kosmos2_5ImageProcessor(BaseImageProcessor):
-    r"""
-    Constructs a Kosmos2_5 image processor.
-
-    Args:
-        do_convert_rgb (`bool`, *optional*, defaults to `True`):
-            Whether to convert the image to RGB.
-        do_normalize (`bool`, *optional*, defaults to `True`):
-            Whether to normalize the image. Can be overridden by the `do_normalize` parameter in the `preprocess`
-            method. According to Kosmos2_5 paper and code, the image is normalized with its own mean and standard
-            deviation.
-        patch_size (`Dict[str, int]`, *optional*, defaults to `{"height": 16, "width": 16}`):
-            The patch size to use for the image. According to Kosmos2_5 paper and code, the patch size is 16x16.
-        max_patches (`int`, *optional*, defaults to 4096):
-            The maximum number of patches to extract from the image as per the
-            [KOSMOS 2.5 paper](https://huggingface.co/papers/2309.11419).
-    """
-
-    model_input_names = ["flattened_patches"]
+@auto_docstring
+class Kosmos2_5ImageProcessor(TorchvisionBackend):
+    do_normalize = True
+    do_convert_rgb = True
+    patch_size = {"height": 16, "width": 16}
+    max_patches = 4096
+    rescale_factor = None
     valid_kwargs = Kosmos2_5ImageProcessorKwargs
 
-    def __init__(
-        self,
-        do_convert_rgb: bool = True,
-        do_normalize: bool = True,
-        patch_size: dict[str, int] | None = None,
-        max_patches: int = 4096,
-        **kwargs,
-    ) -> None:
+    def __init__(self, **kwargs: Unpack[Kosmos2_5ImageProcessorKwargs]):
         super().__init__(**kwargs)
-        self.patch_size = patch_size if patch_size is not None else {"height": 16, "width": 16}
-        self.do_normalize = do_normalize
-        self.do_convert_rgb = do_convert_rgb
-        self.max_patches = max_patches
+
+    @auto_docstring
+    def preprocess(self, images: ImageInput, **kwargs: Unpack[Kosmos2_5ImageProcessorKwargs]) -> BatchFeature:
+        return super().preprocess(images, **kwargs)
+
+    def normalize(
+        self,
+        image: "torch.Tensor",
+        **kwargs,
+    ) -> "torch.Tensor":
+        """
+        Normalize an image. image = (image - image_mean) / image_std.
+
+        Args:
+            image (`torch.Tensor`):
+                Image to normalize.
+        """
+        if image.dtype == torch.uint8:
+            image = image.to(dtype=torch.float32)
+
+        # take mean across the whole `image` except the batch dim (= 0).
+        dim = list(range(1, image.ndim))
+        mean = torch.mean(image, dim=dim)
+        std = torch.std(image, dim=dim)
+        # num_elements in a single image
+        num_elements = torch.tensor(torch.numel(image[0]))
+        adjusted_stddev = torch.max(std, 1.0 / torch.sqrt(num_elements))
+
+        # change `image` from [batch_size, n_channels, width, height] to [n_channels, batch_size, width, height]
+        image = torch.transpose(image, 0, 1)
+
+        # 'torchvision.transforms.Normalize` works on the usual channel dimension (dim=1) which is the batch
+        # dimension before we use `transpose`.
+        image = super().normalize(
+            image,
+            mean=mean,
+            std=adjusted_stddev,
+            **kwargs,
+        )
+        # back to [batch_size, n_channels, width, height]
+        normalized_image = torch.transpose(image, 0, 1)
+
+        return normalized_image
 
     def extract_flattened_patches(
         self,
-        image: np.ndarray,
+        image: "torch.Tensor",
         max_patches: int,
-        patch_size: dict,
-        input_data_format: str | ChannelDimension | None = None,
-        **kwargs,
-    ) -> np.ndarray:
+        patch_size: SizeDict,
+    ) -> tuple["torch.Tensor", int, int, int, int]:
         """
         Extract flattened patches from an image.
 
         Args:
-            image (`np.ndarray`):
+            image (`torch.Tensor`):
                 Image to extract flattened patches from.
             max_patches (`int`):
                 Maximum number of patches to extract.
-            patch_size (`dict`):
+            patch_size (`SizeDict`):
                 Dictionary containing the patch height and width.
 
         Returns:
-            result (`np.ndarray`):
-                A sequence of `max_patches` flattened patches.
+            tuple: A tuple containing:
+                - result (`torch.Tensor`): A sequence of `max_patches` flattened patches.
+                - resized_width (`int`): Width after resizing.
+                - resized_height (`int`): Height after resizing.
+                - rows (`int`): Number of patch rows.
+                - columns (`int`): Number of patch columns.
         """
-        requires_backends(self.extract_flattened_patches, "torch")
-
-        # convert to torch
-        image = to_channel_dimension_format(image, ChannelDimension.FIRST, input_data_format)
-        image = torch.from_numpy(image)
-
-        patch_height, patch_width = patch_size["height"], patch_size["width"]
+        patch_height, patch_width = patch_size.height, patch_size.width
         image_height, image_width = get_image_size(image, ChannelDimension.FIRST)
 
         # maximize scale s.t.
@@ -160,23 +154,24 @@ class Kosmos2_5ImageProcessor(BaseImageProcessor):
         resized_width = max(num_feasible_cols * patch_width, 1)
 
         image = torch.nn.functional.interpolate(
-            image.unsqueeze(0),
+            image,
             size=(resized_height, resized_width),
             mode="bilinear",
             align_corners=False,
             antialias=True,
-        ).squeeze(0)
+        )
 
-        # [1, rows, columns, patch_height * patch_width * image_channels]
+        # [batch_size, rows, columns, patch_height * patch_width * image_channels]
         patches = torch_extract_patches(image, patch_height, patch_width)
 
         patches_shape = patches.shape
+        batch_size = patches_shape[0]
         rows = patches_shape[1]
         columns = patches_shape[2]
         depth = patches_shape[3]
 
-        # [rows * columns, patch_height * patch_width * image_channels]
-        patches = patches.reshape([rows * columns, depth])
+        # [batch_size, rows * columns, patch_height * patch_width * image_channels]
+        patches = patches.reshape([batch_size, rows * columns, depth])
 
         # [rows * columns, 1]
         row_ids = (
@@ -197,146 +192,66 @@ class Kosmos2_5ImageProcessor(BaseImageProcessor):
         col_ids += 1
 
         # Prepare additional patch features.
-        # [rows * columns, 1]
-        row_ids = row_ids.to(torch.float32)
-        col_ids = col_ids.to(torch.float32)
+        # [batch_size, rows * columns, 1]
+        row_ids = row_ids.unsqueeze(0).repeat(batch_size, 1, 1).to(torch.float32)
+        col_ids = col_ids.unsqueeze(0).repeat(batch_size, 1, 1).to(torch.float32)
 
         # [rows * columns, 2 + patch_height * patch_width * image_channels]
         result = torch.cat([row_ids, col_ids, patches], -1)
 
-        # [max_patches, 2 + patch_height * patch_width * image_channels]
+        # [batch_size, max_patches, 2 + patch_height * patch_width * image_channels]
         result = torch.nn.functional.pad(result, [0, 0, 0, max_patches - (rows * columns)]).float()
-
-        result = to_numpy_array(result)
 
         return result, resized_width, resized_height, rows, columns
 
-    # Copied from transformers.models.pix2struct.image_processing_pix2struct.Pix2StructImageProcessor.normalize
-    def normalize(
+    def _preprocess(
         self,
-        image: np.ndarray,
-        data_format: str | ChannelDimension | None = None,
-        input_data_format: str | ChannelDimension | None = None,
+        images: list["torch.Tensor"],
+        do_normalize: bool,
+        max_patches: int,
+        patch_size: SizeDict,
+        disable_grouping: bool | None,
+        return_tensors: str | TensorType | None,
         **kwargs,
-    ) -> np.ndarray:
-        """
-        Normalize an image. image = (image - image_mean) / image_std.
+    ) -> BatchFeature:
+        width, height, rows, cols, attention_masks = [], [], [], [], []
+        obj_idx_to_new_index_map = {}
+        current_index = -1
 
-        Args:
-            image (`np.ndarray`):
-                Image to normalize.
-            data_format (`str` or `ChannelDimension`, *optional*):
-                The channel dimension format for the output image. If unset, the channel dimension format of the input
-                image is used.
-            input_data_format (`str` or `ChannelDimension`, *optional*):
-                The channel dimension format of the input image. If not provided, it will be inferred.
-        """
-        if image.dtype == np.uint8:
-            image = image.astype(np.float32)
-
-        # take mean across the whole `image`
-        mean = np.mean(image)
-        std = np.std(image)
-        adjusted_stddev = max(std, 1.0 / math.sqrt(np.prod(image.shape)))
-
-        return normalize(
-            image,
-            mean=mean,
-            std=adjusted_stddev,
-            data_format=data_format,
-            input_data_format=input_data_format,
-            **kwargs,
-        )
-
-    def preprocess(
-        self,
-        images: ImageInput,
-        do_convert_rgb: bool | None = None,
-        do_normalize: bool | None = None,
-        max_patches: int | None = None,
-        patch_size: dict[str, int] | None = None,
-        return_tensors: str | TensorType | None = None,
-        data_format: ChannelDimension = ChannelDimension.FIRST,
-        input_data_format: str | ChannelDimension | None = None,
-        **kwargs,
-    ) -> ImageInput:
-        """
-        Preprocess an image or batch of images. The processor first computes the maximum possible number of
-        aspect-ratio preserving patches of size `patch_size` that can be extracted from the image. It then pads the
-        image with zeros to make the image respect the constraint of `max_patches`.
-
-
-        Args:
-            images (`ImageInput`):
-                Image to preprocess. Expects a single or batch of images.
-            do_convert_rgb (`bool`, *optional*, defaults to `self.do_convert_rgb`):
-                Whether to convert the image to RGB.
-            do_normalize (`bool`, *optional*, defaults to `self.do_normalize`):
-                Whether to normalize the image.
-            max_patches (`int`, *optional*, defaults to `self.max_patches`):
-                Maximum number of patches to extract.
-            patch_size (`dict`, *optional*, defaults to `self.patch_size`):
-                Dictionary containing the patch height and width.
-            return_tensors (`str` or `TensorType`, *optional*):
-                The type of tensors to return. Can be one of:
-                    - Unset: Return a list of `np.ndarray`.
-                    - `TensorType.PYTORCH` or `'pt'`: Return a batch of type `torch.Tensor`.
-                    - `TensorType.NUMPY` or `'np'`: Return a batch of type `np.ndarray`.
-            data_format (`ChannelDimension` or `str`, *optional*, defaults to `ChannelDimension.FIRST`):
-                The channel dimension format for the output image. Can be one of:
-                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
-                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
-                - Unset: Use the channel dimension format of the input image.
-            input_data_format (`ChannelDimension` or `str`, *optional*):
-                The channel dimension format for the input image. If unset, the channel dimension format is inferred
-                from the input image. Can be one of:
-                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
-                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
-                - `"none"` or `ChannelDimension.NONE`: image in (height, width) format.
-        """
-        do_normalize = do_normalize if do_normalize is not None else self.do_normalize
-        do_convert_rgb = do_convert_rgb if do_convert_rgb is not None else self.do_convert_rgb
-        patch_size = patch_size if patch_size is not None else self.patch_size
-        max_patches = max_patches if max_patches is not None else self.max_patches
-
-        if kwargs.get("data_format") is not None:
-            raise ValueError("data_format is not an accepted input as the outputs are ")
-
-        images = make_flat_list_of_images(images)
-
-        if not valid_images(images):
-            raise ValueError("Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, or torch.Tensor")
-
-        # PIL RGBA images are converted to RGB
-        if do_convert_rgb:
-            images = [convert_to_rgb(image) for image in images]
-
-        # All transformations expect numpy arrays.
-        images = [to_numpy_array(image) for image in images]
-
-        if input_data_format is None:
-            # We assume that all images have the same channel dimension format.
-            input_data_format = infer_channel_dimension_format(images[0])
-
-        flattened_patches, width, height, rows, cols, attention_masks = [], [], [], [], [], []
-        for image in images:
+        # Group images by size for batched resizing
+        processed_image_patches_grouped = {}
+        grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
+        for shape, stacked_images in grouped_images.items():
             if do_normalize:
-                image = self.normalize(image=image, input_data_format=input_data_format)
+                stacked_images = self.normalize(stacked_images, **kwargs)
 
-            # convert to torch tensor and permute
             patches, resized_width, resized_height, n_rows, n_columns = self.extract_flattened_patches(
-                image=image,
+                image=stacked_images,
                 max_patches=max_patches,
                 patch_size=patch_size,
-                input_data_format=input_data_format,
             )
-            flattened_patches.append(patches)
-            width.append(resized_width)
-            height.append(resized_height)
-            rows.append(n_rows)
-            cols.append(n_columns)
-            # create attention mask in numpy
-            attention_masks.append((patches.sum(axis=-1) != 0).astype(np.float32))
+            n_of_stacked_images = stacked_images.size()[0]
+            width.extend([resized_width] * n_of_stacked_images)
+            height.extend([resized_height] * n_of_stacked_images)
+            rows.extend([n_rows] * n_of_stacked_images)
+            cols.extend([n_columns] * n_of_stacked_images)
+            # create attention mask
+            attention_masks.extend(list((patches.sum(axis=-1) != 0).to(dtype=torch.float32)))
+            processed_image_patches_grouped[shape] = list(patches)
+            for x in processed_image_patches_grouped[shape]:
+                current_index += 1
+                obj_idx_to_new_index_map[id(x)] = current_index
+
+        processed_images = reorder_images(processed_image_patches_grouped, grouped_images_index)
+        orig_idx_to_new_idx_map = {
+            orig_idx: obj_idx_to_new_index_map[id(image)] for orig_idx, image in enumerate(processed_images)
+        }
+
+        flattened_patches = processed_images
+        width = [width[orig_idx_to_new_idx_map[orig_idx]] for orig_idx in orig_idx_to_new_idx_map]
+        height = [height[orig_idx_to_new_idx_map[orig_idx]] for orig_idx in orig_idx_to_new_idx_map]
+        rows = [rows[orig_idx_to_new_idx_map[orig_idx]] for orig_idx in orig_idx_to_new_idx_map]
+        cols = [cols[orig_idx_to_new_idx_map[orig_idx]] for orig_idx in orig_idx_to_new_idx_map]
 
         encoded_outputs = BatchFeature(
             data={
@@ -351,6 +266,26 @@ class Kosmos2_5ImageProcessor(BaseImageProcessor):
         )
 
         return encoded_outputs
+
+    def _validate_preprocess_kwargs(self, **kwargs):
+        """
+        Skip standard validation as Kosmos2_5 uses custom preprocessing with per-image normalization.
+        """
+        pass
+
+    def _standardize_kwargs(
+        self,
+        patch_size: dict[str, int] | SizeDict | None = None,
+        **kwargs,
+    ) -> dict:
+        """
+        Process Kosmos2_5-specific kwargs before validation.
+        """
+        kwargs = super()._standardize_kwargs(**kwargs)
+        if patch_size is not None and not isinstance(patch_size, SizeDict):
+            patch_size = SizeDict(**get_size_dict(patch_size, param_name="patch_size"))
+        kwargs["patch_size"] = patch_size
+        return kwargs
 
 
 __all__ = ["Kosmos2_5ImageProcessor"]

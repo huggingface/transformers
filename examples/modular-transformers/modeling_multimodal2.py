@@ -10,15 +10,14 @@ from collections.abc import Callable
 import torch
 from torch import nn
 
-from transformers.utils import add_start_docstrings
-
 from ...activations import ACT2FN
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, torch_int
-from ...utils.generic import check_model_inputs
+from ...utils.generic import merge_with_config_defaults
+from ...utils.output_capturing import capture_outputs
 from .configuration_multimodal2 import Multimodal2Config, Multimodal2TextConfig, Multimodal2VisionConfig
 
 
@@ -52,11 +51,6 @@ class Multimodal2VisionAttention(nn.Module):
         self.embed_dim = config.hidden_size
         self.num_heads = config.num_attention_heads
         self.head_dim = self.embed_dim // self.num_heads
-        if self.head_dim * self.num_heads != self.embed_dim:
-            raise ValueError(
-                f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim} and `num_heads`:"
-                f" {self.num_heads})."
-            )
         self.scale = self.head_dim**-0.5
         self.dropout = config.attention_dropout
         self.is_causal = False
@@ -74,19 +68,20 @@ class Multimodal2VisionAttention(nn.Module):
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
         """Input shape: Batch x Time x Channel"""
 
-        batch_size, seq_length, embed_dim = hidden_states.shape
+        input_shape = hidden_states.shape[:-1]
 
+        hidden_shape = (*input_shape, -1, self.head_dim)
         queries = self.q_proj(hidden_states)
         keys = self.k_proj(hidden_states)
         values = self.v_proj(hidden_states)
 
-        queries = queries.view(batch_size, seq_length, -1, self.head_dim).transpose(1, 2)
-        keys = keys.view(batch_size, seq_length, -1, self.head_dim).transpose(1, 2)
-        values = values.view(batch_size, seq_length, -1, self.head_dim).transpose(1, 2)
+        queries = queries.view(hidden_shape).transpose(1, 2)
+        keys = keys.view(hidden_shape).transpose(1, 2)
+        values = values.view(hidden_shape).transpose(1, 2)
 
-        attention_interface: Callable = eager_attention_forward
-        if self.config._attn_implementation != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
 
         attn_output, attn_weights = attention_interface(
             self,
@@ -99,7 +94,7 @@ class Multimodal2VisionAttention(nn.Module):
             **kwargs,
         )
 
-        attn_output = attn_output.reshape(batch_size, seq_length, -1).contiguous()
+        attn_output = attn_output.reshape(*input_shape, -1).contiguous()
         attn_output = self.out_proj(attn_output)
 
         return attn_output, attn_weights
@@ -174,20 +169,6 @@ class Multimodal2VisionEncoder(nn.Module):
         attention_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutput:
-        r"""
-        Args:
-            inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
-                Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation.
-                This is useful if you want more control over how to convert `input_ids` indices into associated vectors
-                than the model's internal embedding lookup matrix.
-            attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
-                Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
-
-                - 1 for tokens that are **not masked**,
-                - 0 for tokens that are **masked**.
-
-                [What are attention masks?](../glossary#attention-mask)
-        """
         hidden_states = inputs_embeds
         for encoder_layer in self.layers:
             hidden_states = encoder_layer(
@@ -199,6 +180,34 @@ class Multimodal2VisionEncoder(nn.Module):
         return BaseModelOutput(
             last_hidden_state=hidden_states,
         )
+
+
+@auto_docstring
+class Multimodal2VisionPreTrainedModel(PreTrainedModel):
+    config: Multimodal2Config
+    base_model_prefix = "multimodal2_vision"
+    input_modalities = ("image", "text")
+    _no_split_modules = [
+        "Multimodal2VisionTextEmbeddings",
+        "Multimodal2VisionEncoderLayer",
+        "Multimodal2VisionVisionEmbeddings",
+    ]
+
+    supports_gradient_checkpointing = True
+    _supports_sdpa = True
+    _supports_flash_attn = True
+    _supports_flex_attn = True
+    _supports_attention_backend = True
+    _can_record_outputs = {
+        "hidden_states": Multimodal2VisionEncoderLayer,
+        "attentions": Multimodal2VisionAttention,
+    }
+
+    @torch.no_grad()
+    def _init_weights(self, module):
+        """Initialize the weights"""
+        if isinstance(module, Multimodal2VisionMLP):
+            pass
 
 
 class Multimodal2VisionEmbeddings(nn.Module):
@@ -284,17 +293,30 @@ class Multimodal2VisionEmbeddings(nn.Module):
         return embeddings
 
 
-class Multimodal2VisionTransformer(nn.Module):
+@auto_docstring(
+    custom_intro="""
+    The vision model from MULTIMODAL2 without any head or projection on top.
+    """
+)
+class Multimodal2VisionModel(Multimodal2VisionPreTrainedModel):
+    config: Multimodal2VisionConfig
+    main_input_name = "pixel_values"
+    input_modalities = ("image",)
+    _input_embed_layer = "patch_embedding"
+    _no_split_modules = ["Multimodal2VisionEncoderLayer"]
+
     def __init__(self, config):
-        super().__init__()
-        self.config = config
+        super().__init__(config)
         embed_dim = config.hidden_size
 
         self.embeddings = Multimodal2VisionEmbeddings(config)
         self.pre_layrnorm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
         self.encoder = Multimodal2VisionEncoder(config)
         self.post_layernorm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
+        self.post_init()
 
+    @merge_with_config_defaults
+    @capture_outputs(tie_last_hidden_states=False)
     @auto_docstring
     def forward(
         self,
@@ -302,9 +324,28 @@ class Multimodal2VisionTransformer(nn.Module):
         interpolate_pos_encoding: bool | None = False,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPooling:
-        if pixel_values is None:
-            raise ValueError("You have to specify pixel_values")
+        r"""
+        Example:
 
+        ```python
+        >>> from PIL import Image
+        >>> import httpx
+        >>> from io import BytesIO
+        >>> from transformers import AutoProcessor, Multimodal2VisionModel
+
+        >>> model = Multimodal2VisionModel.from_pretrained("openai/multimodal2-vit-base-patch32")
+        >>> processor = AutoProcessor.from_pretrained("openai/multimodal2-vit-base-patch32")
+
+        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
+
+        >>> inputs = processor(images=image, return_tensors="pt")
+
+        >>> outputs = model(**inputs)
+        >>> last_hidden_state = outputs.last_hidden_state
+        >>> pooled_output = outputs.pooler_output  # pooled CLS states
+        ```"""
         hidden_states = self.embeddings(pixel_values, interpolate_pos_encoding=interpolate_pos_encoding)
         hidden_states = self.pre_layrnorm(hidden_states)
 
@@ -320,81 +361,4 @@ class Multimodal2VisionTransformer(nn.Module):
         return BaseModelOutputWithPooling(
             last_hidden_state=last_hidden_state,
             pooler_output=pooled_output,
-        )
-
-
-@auto_docstring
-class Multimodal2VisionPreTrainedModel(PreTrainedModel):
-    config: Multimodal2Config
-    base_model_prefix = "multimodal2_vision"
-    input_modalities = ("image", "text")
-    supports_gradient_checkpointing = True
-    _supports_sdpa = True
-    _supports_flash_attn = True
-    _supports_flex_attn = True
-    _supports_attention_backend = True
-    _can_record_outputs = {
-        "hidden_states": Multimodal2VisionEncoderLayer,
-        "attentions": Multimodal2VisionAttention,
-    }
-
-    @torch.no_grad()
-    def _init_weights(self, module):
-        """Initialize the weights"""
-        if isinstance(module, Multimodal2VisionMLP):
-            pass
-
-
-MULTIMODAL2_VISION_START_DOCSTRING = "doc"
-
-
-@add_start_docstrings("New doc", MULTIMODAL2_VISION_START_DOCSTRING)
-class Multimodal2VisionModel(Multimodal2VisionPreTrainedModel):
-    config: Multimodal2VisionConfig
-    main_input_name = "pixel_values"
-    input_modalities = ("image",)
-    _no_split_modules = ["Multimodal2VisionEncoderLayer"]
-
-    def __init__(self, config: Multimodal2VisionConfig):
-        super().__init__(config)
-        self.vision_model = Multimodal2VisionTransformer(config)
-        # Initialize weights and apply final processing
-        self.post_init()
-
-    def get_input_embeddings(self) -> nn.Module:
-        return self.vision_model.embeddings.patch_embedding
-
-    @check_model_inputs(tie_last_hidden_states=False)
-    @auto_docstring
-    def forward(
-        self,
-        pixel_values: torch.FloatTensor | None = None,
-        interpolate_pos_encoding: bool = False,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> BaseModelOutputWithPooling:
-        r"""
-        Example:
-
-        ```python
-        >>> from PIL import Image
-        >>> import requests
-        >>> from transformers import AutoProcessor, Multimodal2VisionModel
-
-        >>> model = Multimodal2VisionModel.from_pretrained("openai/multimodal2-vit-base-patch32")
-        >>> processor = AutoProcessor.from_pretrained("openai/multimodal2-vit-base-patch32")
-
-        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
-
-        >>> inputs = processor(images=image, return_tensors="pt")
-
-        >>> outputs = model(**inputs)
-        >>> last_hidden_state = outputs.last_hidden_state
-        >>> pooled_output = outputs.pooler_output  # pooled CLS states
-        ```"""
-
-        return self.vision_model(
-            pixel_values=pixel_values,
-            interpolate_pos_encoding=interpolate_pos_encoding,
-            **kwargs,
         )

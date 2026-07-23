@@ -17,11 +17,12 @@ import argparse
 import json
 import os
 import pickle
+from io import BytesIO
 from pathlib import Path
 
 import haiku as hk
+import httpx
 import numpy as np
-import requests
 import torch
 from huggingface_hub import hf_hub_download
 from PIL import Image
@@ -49,8 +50,9 @@ logger = logging.get_logger(__name__)
 def prepare_img():
     # We will verify our results on an image of a dog
     url = "https://storage.googleapis.com/perceiver_io/dalmation.jpg"
-    im = Image.open(requests.get(url, stream=True).raw)
-    return im
+    with httpx.stream("GET", url) as response:
+        image = Image.open(BytesIO(response.read()))
+    return image
 
 
 def rename_keys(state_dict, architecture):

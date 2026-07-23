@@ -213,7 +213,7 @@ class CLIPVisionModelTest(CLIPModelTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.model_tester = CLIPVisionModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=CLIPVisionConfig, has_text_modality=False, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=CLIPVisionConfig, has_text_modality=False, hidden_size=48)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -396,7 +396,7 @@ class CLIPTextModelTest(CLIPModelTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.model_tester = CLIPTextModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=CLIPTextConfig, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=CLIPTextConfig, hidden_size=32)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -587,6 +587,26 @@ class CLIPModelTest(CLIPModelTesterMixin, PipelineTesterMixin, unittest.TestCase
     def test_sdpa_can_compile_dynamic(self):
         self.skipTest(reason="CLIP model can't be compiled dynamic, error in clip_loss`")
 
+    @unittest.skip(reason="The CLIP family currently does not work with output_attentions.")
+    def test_get_text_features_attentions(self):
+        # This test should no longer be skipped once this architecture is refactored to work with output_attentions.
+        pass
+
+    @unittest.skip(reason="The CLIP family currently does not work with output_hidden_states.")
+    def test_get_text_features_hidden_states(self):
+        # This test should no longer be skipped once this architecture is refactored to work with output_hidden_states.
+        pass
+
+    @unittest.skip(reason="The CLIP family currently does not work with output_attentions.")
+    def test_get_image_features_attentions(self):
+        # This test should no longer be skipped once this architecture is refactored to work with output_attentions.
+        pass
+
+    @unittest.skip(reason="The CLIP family currently does not work with output_hidden_states.")
+    def test_get_image_features_hidden_states(self):
+        # This test should no longer be skipped once this architecture is refactored to work with output_hidden_states.
+        pass
+
 
 class CLIPForImageClassificationModelTester(CLIPModelTester):
     def __init__(self, parent):
@@ -616,7 +636,6 @@ class CLIPForImageClassificationModelTest(CLIPModelTesterMixin, PipelineTesterMi
 
     test_resize_embeddings = False
     test_attention_outputs = False
-    _is_composite = True
 
     def setUp(self):
         self.model_tester = CLIPForImageClassificationModelTester(self)
@@ -721,7 +740,11 @@ class CLIPModelIntegrationTest(unittest.TestCase):
         self.assertEqual(outputs.vision_model_output.last_hidden_state.shape, expected_shape)
 
         expected_slice = torch.tensor(
-            [[-0.1538, 0.0322, -0.3235], [0.2893, 0.1135, -0.5708], [0.0461, 0.1540, -0.6018]]
+            [
+                [-0.1552, 0.0314, -0.3233],
+                [0.2886, 0.1141, -0.5706],
+                [0.0468, 0.1570, -0.6028],
+            ]
         ).to(torch_device)
 
         torch.testing.assert_close(

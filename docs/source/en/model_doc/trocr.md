@@ -12,13 +12,8 @@ Unless required by applicable law or agreed to in writing, software distributed 
 rendered properly in your Markdown viewer.
 
 specific language governing permissions and limitations under the License. -->
-*This model was released on 2021-09-21 and added to Hugging Face Transformers on 2021-10-13.*
+*This model was published in HF papers on 2021-09-21 and contributed to Hugging Face Transformers on 2021-10-13.*
 
-<div style="float: right;">
-    <div class="flex flex-wrap space-x-1">
-           <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-    </div>
-</div>
 
 # TrOCR
 
@@ -41,18 +36,20 @@ The example below demonstrates how to perform optical character recognition (OCR
 <hfoption id="AutoModel">
 
 ```python
-from transformers import TrOCRProcessor, VisionEncoderDecoderModel
 import requests
 from PIL import Image
 
+from transformers import TrOCRProcessor, VisionEncoderDecoderModel
+
+
 processor = TrOCRProcessor.from_pretrained("microsoft/trocr-base-handwritten")
-model = VisionEncoderDecoderModel.from_pretrained("microsoft/trocr-base-handwritten")
+model = VisionEncoderDecoderModel.from_pretrained("microsoft/trocr-base-handwritten", device_map="auto")
 
 # load image from the IAM dataset
 url = "https://fki.tic.heia-fr.ch/static/img/a01-122-02.jpg"
 image = Image.open(requests.get(url, stream=True).raw).convert("RGB")
 
-pixel_values = processor(image, return_tensors="pt").pixel_values
+pixel_values = processor(image, return_tensors="pt").to(model.device).pixel_values
 generated_ids = model.generate(pixel_values)
 
 generated_text = processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
@@ -82,13 +79,13 @@ processor = TrOCRProcessor.from_pretrained("microsoft/trocr-large-handwritten")
 model = VisionEncoderDecoderModel.from_pretrained(
     "microsoft/trocr-large-handwritten",
     quantization_config=quantization_config
-)
+ device_map="auto")
 
 # load image from the IAM dataset
 url = "[https://fki.tic.heia-fr.ch/static/img/a01-122-02.jpg](https://fki.tic.heia-fr.ch/static/img/a01-122-02.jpg)"
 image = Image.open(requests.get(url, stream=True).raw).convert("RGB")
 
-pixel_values = processor(image, return_tensors="pt").pixel_values
+pixel_values = processor(image, return_tensors="pt").to(model.device).pixel_values
 generated_ids = model.generate(pixel_values)
 
 generated_text = processor.batch_decode(generated_ids, skip_special_tokens=True)[0]

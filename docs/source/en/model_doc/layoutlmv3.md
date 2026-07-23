@@ -13,7 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2022-04-18 and added to Hugging Face Transformers on 2022-05-24.*
+*This model was published in HF papers on 2022-04-18 and contributed to Hugging Face Transformers on 2022-05-24.*
 
 # LayoutLMv3
 
@@ -85,9 +85,9 @@ LayoutLMv3 is nearly identical to LayoutLMv2, so we've also included LayoutLMv2 
 [[autodoc]] LayoutLMv3ImageProcessor
     - preprocess
 
-## LayoutLMv3ImageProcessorFast
+## LayoutLMv3ImageProcessorPil
 
-[[autodoc]] LayoutLMv3ImageProcessorFast
+[[autodoc]] LayoutLMv3ImageProcessorPil
     - preprocess
 
 ## LayoutLMv3Tokenizer

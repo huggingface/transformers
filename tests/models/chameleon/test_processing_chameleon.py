@@ -34,10 +34,11 @@ class ChameleonProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     @classmethod
     def _setup_tokenizer(cls):
         tokenizer_class = cls._get_component_class_from_processor("tokenizer")
+        print("SAMPLE_VOCAB", SAMPLE_VOCAB)
         tokenizer = tokenizer_class.from_pretrained(SAMPLE_VOCAB)
         tokenizer.pad_token_id = 0
         tokenizer.sep_token_id = 1
-        tokenizer.add_special_tokens({"additional_special_tokens": ["<image>"]})
+        tokenizer.add_special_tokens({"additional_special_tokens": ["<image>", "<racm3:break>", "<eoss>"]})
         return tokenizer
 
     @unittest.skip("Chameleon processor add a sep_token at the end of each sample")

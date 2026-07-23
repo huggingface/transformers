@@ -220,10 +220,7 @@ class MarianModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
     pipeline_model_mapping = (
         {
             "feature-extraction": MarianModel,
-            "summarization": MarianMTModel,
             "text-generation": MarianForCausalLM,
-            "text2text-generation": MarianMTModel,
-            "translation": MarianMTModel,
         }
         if is_torch_available()
         else {}
@@ -407,8 +404,9 @@ class MarianIntegrationTest(unittest.TestCase):
     def model(self):
         model: MarianMTModel = MarianMTModel.from_pretrained(self.model_name).to(torch_device)
         c = model.config
-        self.assertListEqual(c.bad_words_ids, [[c.pad_token_id]])
-        self.assertEqual(c.max_length, 512)
+        generation_config = model.generation_config
+        self.assertListEqual(generation_config.bad_words_ids, [[c.pad_token_id]])
+        self.assertEqual(generation_config.max_length, 512)
         self.assertEqual(c.decoder_start_token_id, c.pad_token_id)
 
         if torch_device == "cuda":

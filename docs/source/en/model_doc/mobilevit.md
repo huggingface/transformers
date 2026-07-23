@@ -9,15 +9,11 @@ Unless required by applicable law or agreed to in writing, software distributed 
 ⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be  rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2021-10-05 and added to Hugging Face Transformers on 2022-06-29.*
+*This model was published in HF papers on 2021-10-05 and contributed to Hugging Face Transformers on 2022-06-29.*
 
 # MobileViT
 
-<div style="float: right;">
-    <div class="flex flex-wrap space-x-2">
-        <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-    </div>
-</div>
+
 
 [MobileViT](https://huggingface.co/papers/2110.02178) is a lightweight vision transformer for mobile devices that merges CNNs's efficiency and inductive biases with transformers global context modeling. It treats transformers as convolutions, enabling global information processing without the heavy computational cost of standard ViTs.
 
@@ -39,14 +35,13 @@ The example below demonstrates how to do [Image Classification] with [`Pipeline`
 <hfoption id="Pipeline">
 
 ```python
-
-import torch
 from transformers import pipeline
+
 
 classifier = pipeline(
    task="image-classification",
    model="apple/mobilevit-small",
-   dtype=torch.float16, device=0,
+   device=0,
 )
 
 preds = classifier("https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg")
@@ -58,11 +53,12 @@ print(f"Prediction: {preds}\n")
 <hfoption id="AutoModel">
 
 ```python
-
-import torch
 import requests
+import torch
 from PIL import Image
+
 from transformers import AutoImageProcessor, MobileViTForImageClassification
+
 
 image_processor = AutoImageProcessor.from_pretrained(
    "apple/mobilevit-small",
@@ -105,9 +101,9 @@ print(f"The predicted class label is:{predicted_class_label}")
     - preprocess
     - post_process_semantic_segmentation
 
-## MobileViTImageProcessorFast
+## MobileViTImageProcessorPil
 
-[[autodoc]] MobileViTImageProcessorFast
+[[autodoc]] MobileViTImageProcessorPil
     - preprocess
     - post_process_semantic_segmentation
 

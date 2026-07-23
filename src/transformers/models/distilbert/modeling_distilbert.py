@@ -48,7 +48,8 @@ from ...utils import (
     auto_docstring,
     logging,
 )
-from ...utils.generic import can_return_tuple, check_model_inputs
+from ...utils.generic import can_return_tuple, merge_with_config_defaults
+from ...utils.output_capturing import capture_outputs
 from .configuration_distilbert import DistilBertConfig
 
 
@@ -93,13 +94,13 @@ class Embeddings(nn.Module):
     def forward(
         self,
         input_ids: torch.Tensor,
-        input_embeds: torch.Tensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
     ) -> torch.Tensor:
         if input_ids is not None:
-            input_embeds = self.word_embeddings(input_ids)  # (bs, max_seq_length, dim)
+            inputs_embeds = self.word_embeddings(input_ids)  # (bs, max_seq_length, dim)
 
-        seq_length = input_embeds.size(1)
+        seq_length = inputs_embeds.size(1)
 
         if position_ids is None:
             # Setting the position-ids to the registered buffer in constructor, it helps
@@ -113,7 +114,7 @@ class Embeddings(nn.Module):
 
         position_embeddings = self.position_embeddings(position_ids)  # (bs, max_seq_length, dim)
 
-        embeddings = input_embeds + position_embeddings  # (bs, max_seq_length, dim)
+        embeddings = inputs_embeds + position_embeddings  # (bs, max_seq_length, dim)
         embeddings = self.LayerNorm(embeddings)  # (bs, max_seq_length, dim)
         embeddings = self.dropout(embeddings)  # (bs, max_seq_length, dim)
         return embeddings
@@ -137,7 +138,6 @@ def eager_attention_forward(
     attn_weights = torch.matmul(query, key.transpose(2, 3)) * scaling
 
     if attention_mask is not None:
-        attention_mask = attention_mask[:, :, :, : key.shape[-2]]
         attn_weights = attn_weights + attention_mask
 
     attn_weights = nn.functional.softmax(attn_weights, dim=-1)
@@ -186,9 +186,9 @@ class DistilBertSelfAttention(nn.Module):
         key_layer = self.k_lin(hidden_states).view(*hidden_shape).transpose(1, 2)
         value_layer = self.v_lin(hidden_states).view(*hidden_shape).transpose(1, 2)
 
-        attention_interface: Callable = eager_attention_forward
-        if self.config._attn_implementation != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
 
         attn_output, attn_weights = attention_interface(
             self,
@@ -381,7 +381,8 @@ class DistilBertModel(DistilBertPreTrainedModel):
     def set_input_embeddings(self, new_embeddings: nn.Embedding):
         self.embeddings.word_embeddings = new_embeddings
 
-    @check_model_inputs
+    @merge_with_config_defaults
+    @capture_outputs
     @auto_docstring
     def forward(
         self,
@@ -411,7 +412,7 @@ class DistilBertModel(DistilBertPreTrainedModel):
 
         attention_mask = create_bidirectional_mask(
             config=self.config,
-            input_embeds=embeddings,
+            inputs_embeds=embeddings,
             attention_mask=attention_mask,
         )
 

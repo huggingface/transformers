@@ -17,10 +17,11 @@ import unittest
 
 import pytest
 
-from transformers import FalconH1Config, is_torch_available
+from transformers import DynamicCache, FalconH1Config, is_torch_available
 from transformers.testing_utils import (
     Expectations,
     get_device_properties,
+    require_kernels,
     require_torch,
     require_torch_accelerator,
     slow,
@@ -37,9 +38,6 @@ if is_torch_available():
     import torch
 
     from transformers import AutoTokenizer, FalconH1ForCausalLM, FalconH1Model
-    from transformers.models.falcon_h1.modeling_falcon_h1 import (
-        FalconHybridMambaAttentionDynamicCache,
-    )
 
 
 class FalconH1ModelTester:
@@ -206,17 +204,9 @@ class FalconH1ModelTester:
         model.eval()
 
         # first forward pass
-        # Attention: Jamba needs the cache to be initialized to return a cache!
-        past_key_values = FalconHybridMambaAttentionDynamicCache(
-            config,
-            input_ids.shape[0],
-            model.dtype,
-            devices=[model.device for _ in range(model.config.num_hidden_layers)],
-        )
         outputs = model(
             input_ids,
             attention_mask=input_mask,
-            past_key_values=past_key_values,
             use_cache=True,
         )
         past_key_values = outputs.past_key_values
@@ -239,9 +229,6 @@ class FalconH1ModelTester:
             attention_mask=next_attention_mask,
             past_key_values=past_key_values,
             output_hidden_states=True,
-            cache_position=torch.arange(
-                input_ids.shape[1], input_ids.shape[1] + next_tokens.shape[1], device=model.device
-            ),
         )["hidden_states"][0]
 
         # select random slice
@@ -253,6 +240,41 @@ class FalconH1ModelTester:
 
         # test that outputs are equal for slice
         self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3))
+
+    def create_and_check_mamba_chunked_prefill(self, config, input_ids, *args, device="cpu"):
+        """
+        Adapted from `test_linear_attention_multi_token_cached_forward_matches_single_token`
+        to check whether multi-token cached input is properly handled.
+
+        Can either be run on GPU (fast path) or CPU (slow path), see `test_mamba_chunked_prefill_*`
+        """
+        model = FalconH1Model(config=config)
+        model.to(device)
+        model.eval()
+
+        input_ids = input_ids[:1].to(device)
+        prefill_len = input_ids.shape[1] // 2 + 1
+        prompt = input_ids[:, :prefill_len]
+        next_token = input_ids[:, prefill_len : prefill_len + 1]
+        distractors = input_ids[:, prefill_len + 1 :]
+        multi_input = torch.cat([next_token, distractors], dim=1)
+
+        cache_single = DynamicCache(config=config)
+        with torch.no_grad():
+            model(input_ids=prompt, past_key_values=cache_single, use_cache=True)
+            single_out = model(input_ids=next_token, past_key_values=cache_single, use_cache=True)
+        ref_first = single_out.last_hidden_state[:, 0, :]
+
+        cache_multi = DynamicCache(config=config)
+        with torch.no_grad():
+            model(input_ids=prompt, past_key_values=cache_multi, use_cache=True)
+            multi_out = model(input_ids=multi_input, past_key_values=cache_multi, use_cache=True)
+        under_test_first = multi_out.last_hidden_state[:, 0, :]
+
+        self.parent.assertTrue(
+            torch.allclose(ref_first, under_test_first, atol=1e-4, rtol=1e-4),
+            msg=f"Max diff: {(ref_first - under_test_first).abs().max().item():.6f}",
+        )
 
 
 @require_torch
@@ -267,38 +289,19 @@ class FalconH1ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
         {"feature-extraction": FalconH1Model, "text-generation": FalconH1ForCausalLM} if is_torch_available() else {}
     )
 
-    def _check_past_key_values_for_generate(self, batch_size, past_key_values, seq_length, config):
-        self.assertIsInstance(past_key_values, FalconHybridMambaAttentionDynamicCache)
-
-        # (batch, kv heads, seq_length, head_dim)
-        num_heads = getattr(config, "num_key_value_heads", config.num_attention_heads)
-        head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
-        expected_shape = (batch_size, num_heads, seq_length, head_dim)
-
-        self.assertListEqual(
-            [key_tensor.shape for key_tensor in past_key_values.key_cache],
-            [expected_shape] * len(past_key_values.key_cache),
+    def _get_conv_state_shape(self, batch_size: int, config):
+        intermediate_size = (
+            config.mamba_d_ssm if config.mamba_d_ssm is not None else int(config.mamba_expand * config.hidden_size)
         )
-        self.assertListEqual(
-            [value_cache.shape for value_cache in past_key_values.value_cache],
-            [expected_shape] * len(past_key_values.value_cache),
+        conv_shape = (
+            batch_size,
+            intermediate_size + 2 * config.mamba_n_groups * config.mamba_d_state,
+            config.mamba_d_conv,
         )
+        return conv_shape
 
-    def _check_caches_are_equal(self, cache1, cache2):
-        if not isinstance(cache1, FalconHybridMambaAttentionDynamicCache) or not isinstance(
-            cache2, FalconHybridMambaAttentionDynamicCache
-        ):
-            raise ValueError("The wrong cache is being used!")
-
-        if not len(cache1) == len(cache2):
-            raise ValueError("Both caches do not have the same number of layers.")
-
-        num_layers = len(cache1)
-        for idx in range(num_layers):
-            torch.testing.assert_close(cache1.key_cache[idx], cache2.key_cache[idx])
-            torch.testing.assert_close(cache1.value_cache[idx], cache2.value_cache[idx])
-            torch.testing.assert_close(cache1.conv_states[idx], cache2.conv_states[idx])
-            torch.testing.assert_close(cache1.ssm_states[idx], cache2.ssm_states[idx])
+    def _get_recurrent_state_shape(self, batch_size: int, config):
+        return (batch_size, config.mamba_n_heads, config.mamba_d_head, config.mamba_d_state)
 
     def setUp(self):
         self.model_tester = FalconH1ModelTester(self)
@@ -318,6 +321,16 @@ class FalconH1ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
     def test_decoder_model_past_with_large_inputs(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_decoder_model_past_large_inputs(*config_and_inputs)
+
+    def test_mamba2_chunked_prefill_cpu(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_mamba_chunked_prefill(*config_and_inputs, device="cpu")
+
+    @require_torch_accelerator
+    @require_kernels
+    def test_mamba2_chunked_prefill_torch_device(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_mamba_chunked_prefill(*config_and_inputs, device=torch_device)
 
     def test_attention_outputs(self):
         r"""

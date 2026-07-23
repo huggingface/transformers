@@ -96,6 +96,7 @@ class Qwen3OmniMoeProcessorKwargs(ProcessingKwargs, total=False):
             },
         },
         "audio_kwargs": {
+            "n_window": 50,  # should match model config
             "sampling_rate": 16000,
             "padding": True,
             "truncation": False,
@@ -104,15 +105,14 @@ class Qwen3OmniMoeProcessorKwargs(ProcessingKwargs, total=False):
     }
 
 
-def _get_feat_extract_output_lengths(input_lengths):
+def _get_feat_extract_output_lengths(input_lengths, n_window=50):
     """
     Computes the output length of the convolutional layers and the output length of the audio encoder
     """
-
-    input_lengths_leave = input_lengths % 100
+    chunk_len = n_window * 2
+    input_lengths_leave = input_lengths % chunk_len
     feat_lengths = (input_lengths_leave - 1) // 2 + 1
-    output_lengths = ((feat_lengths - 1) // 2 + 1 - 1) // 2 + 1 + (input_lengths // 100) * 13
-    return output_lengths
+    return ((feat_lengths - 1) // 2 + 1 - 1) // 2 + 1 + (input_lengths // chunk_len) * 13
 
 
 @auto_docstring
@@ -151,6 +151,7 @@ class Qwen3OmniMoeProcessor(ProcessorMixin):
         position_id_per_seconds = output_kwargs["videos_kwargs"].pop("position_id_per_seconds")
         use_audio_in_video = output_kwargs["videos_kwargs"].pop("use_audio_in_video")
         fps = output_kwargs["videos_kwargs"].get("fps", 1.0)
+        n_window = output_kwargs["audio_kwargs"].pop("n_window", 50)
 
         if audio is not None:
             audio_inputs = self.feature_extractor(audio, **output_kwargs["audio_kwargs"])
@@ -160,7 +161,9 @@ class Qwen3OmniMoeProcessor(ProcessorMixin):
             audio_inputs["input_features"] = audio_inputs.pop(
                 "input_features"
             )  # rename input_features to prevent conflicts later on
-            audio_lengths = iter(_get_feat_extract_output_lengths(audio_inputs["feature_attention_mask"].sum(-1)))
+            audio_lengths = iter(
+                _get_feat_extract_output_lengths(audio_inputs["feature_attention_mask"].sum(-1), n_window)
+            )
         else:
             audio_inputs = {}
             audio_lengths = iter([])
@@ -318,9 +321,6 @@ class Qwen3OmniMoeProcessor(ProcessorMixin):
 
         return list(_iter())
 
-    def apply_chat_template(self, conversations, chat_template=None, **kwargs):
-        return super().apply_chat_template(conversations, chat_template, **kwargs)
-
     def post_process_image_text_to_text(self, generated_outputs, skip_special_tokens=True, **kwargs):
         """
         Post-process the output of a vlm to decode the text.
@@ -337,7 +337,9 @@ class Qwen3OmniMoeProcessor(ProcessorMixin):
         Returns:
             `list[str]`: The decoded text.
         """
-        return self.tokenizer.batch_decode(generated_outputs[0], skip_special_tokens=skip_special_tokens, **kwargs)
+        if isinstance(generated_outputs, (tuple, list)):
+            generated_outputs = generated_outputs[0]
+        return self.tokenizer.batch_decode(generated_outputs, skip_special_tokens=skip_special_tokens, **kwargs)
 
     def post_process_multimodal_output(
         self, generated_outputs, skip_special_tokens=True, generation_mode=None, **kwargs
@@ -391,6 +393,9 @@ class Qwen3OmniMoeProcessor(ProcessorMixin):
                 + ["video_second_per_grid"]
             )
         )
+
+    def apply_chat_template(self, conversations, chat_template=None, **kwargs):
+        return super().apply_chat_template(conversations, chat_template, **kwargs)
 
 
 __all__ = ["Qwen3OmniMoeProcessor"]

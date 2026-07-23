@@ -27,8 +27,8 @@ from ...utils import ModelOutput, auto_docstring
 from .configuration_dac import DacConfig
 
 
-@dataclass
 @auto_docstring
+@dataclass
 class DacOutput(ModelOutput):
     r"""
     loss (`torch.Tensor`):
@@ -50,8 +50,8 @@ class DacOutput(ModelOutput):
     projected_latents: torch.FloatTensor | None = None
 
 
-@dataclass
 @auto_docstring
+@dataclass
 class DacEncoderOutput(ModelOutput):
     r"""
     loss (`torch.Tensor`):
@@ -70,8 +70,8 @@ class DacEncoderOutput(ModelOutput):
     projected_latents: torch.FloatTensor | None = None
 
 
-@dataclass
 @auto_docstring
+@dataclass
 # Copied from transformers.models.encodec.modeling_encodec.EncodecDecoderOutput with Encodec->Dac, segment_length->input_length
 class DacDecoderOutput(ModelOutput):
     r"""
@@ -326,7 +326,7 @@ class DacResidualVectorQuantizer(nn.Module):
             )
 
             # Create mask to apply quantizer dropout
-            mask = torch.full((hidden_state.shape[0],), fill_value=i, device=hidden_state.device) < n_quantizers
+            mask = torch.full((hidden_state.shape[0],), i, device=hidden_state.device, dtype=torch.long) < n_quantizers
             quantized_representation = quantized_representation + quantized_representation_i * mask[:, None, None]
             residual = residual - quantized_representation_i
 
@@ -390,11 +390,13 @@ class DacResidualVectorQuantizer(nn.Module):
         n_codebooks = np.where(dims <= latents.shape[1])[0].max(axis=0, keepdims=True)[0]
         for i in range(n_codebooks):
             hidden_dim_j, hidden_dim_k = dims[i], dims[i + 1]
-            quantized_latents_i, codes_i = self.quantizers[i].decode_latents(latents[:, hidden_dim_j:hidden_dim_k, :])
+            latent_chunk = latents[:, hidden_dim_j:hidden_dim_k, :]
+            quantized_latents_i, codes_i = self.quantizers[i].decode_latents(latent_chunk)
             quantized_latents.append(quantized_latents_i)
             codes.append(codes_i)
 
-            quantized_representation_i = self.quantizers[i].out_proj(quantized_latents_i)
+            quantized_with_ste = latent_chunk + (quantized_latents_i - latent_chunk)
+            quantized_representation_i = self.quantizers[i].out_proj(quantized_with_ste)
             quantized_representation = quantized_representation + quantized_representation_i
 
         return quantized_representation, torch.cat(quantized_latents, dim=1)
@@ -443,18 +445,17 @@ class DacEncoder(nn.Module):
     def __init__(self, config: DacConfig):
         super().__init__()
 
-        strides = config.downsampling_ratios
         # Create first convolution
         self.conv1 = nn.Conv1d(1, config.encoder_hidden_size, kernel_size=7, padding=3)
 
         self.block = []
         # Create EncoderBlocks that double channels as they downsample by `stride`
-        for stride_index, stride in enumerate(strides):
+        for stride_index, stride in enumerate(config.downsampling_ratios):
             stride_index = stride_index + 1
             self.block += [DacEncoderBlock(config, stride=stride, stride_index=stride_index)]
 
         self.block = nn.ModuleList(self.block)
-        d_model = config.encoder_hidden_size * 2**stride_index
+        d_model = config.encoder_hidden_size * 2 ** len(config.downsampling_ratios)
         self.snake1 = Snake1d(d_model)
         self.conv2 = nn.Conv1d(d_model, config.hidden_size, kernel_size=3, padding=1)
 

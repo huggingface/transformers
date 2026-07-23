@@ -33,11 +33,11 @@ from ...utils import (
     can_return_tuple,
     torch_int,
 )
-from ...utils.generic import check_model_inputs, maybe_autocast
+from ...utils.generic import maybe_autocast, merge_with_config_defaults
+from ...utils.output_capturing import capture_outputs
 from .configuration_efficientloftr import EfficientLoFTRConfig
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for outputs of EfficientLoFTR keypoint matching models. Due to the nature of keypoint detection and matching, the number
@@ -45,6 +45,7 @@ from .configuration_efficientloftr import EfficientLoFTRConfig
     images, the maximum number of matches is set as the dimension of the matches and matching scores.
     """
 )
+@dataclass
 class EfficientLoFTRKeypointMatchingOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*):
@@ -358,8 +359,7 @@ def eager_attention_forward(
 
     attn_weights = torch.matmul(query, key_states.transpose(2, 3)) * scaling
     if attention_mask is not None:
-        causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
-        attn_weights = attn_weights + causal_mask
+        attn_weights = attn_weights + attention_mask
 
     attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
     attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
@@ -418,9 +418,9 @@ class EfficientLoFTRAttention(nn.Module):
         query_states = query_states.view(batch_size, seq_len, -1, self.head_dim).transpose(1, 2)
         key_states = key_states.view(batch_size, seq_len, -1, self.head_dim).transpose(1, 2)
 
-        attention_interface: Callable = eager_attention_forward
-        if self.config._attn_implementation != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
 
         attn_output, attn_weights = attention_interface(
             self,
@@ -678,7 +678,8 @@ class EfficientLoFTRPreTrainedModel(PreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module: nn.Module) -> None:
         """Initialize the weights"""
-        if isinstance(module, (nn.Linear, nn.Conv2d, nn.Conv1d, nn.BatchNorm2d)):
+        super()._init_weights(module)
+        if isinstance(module, nn.BatchNorm2d):
             init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
                 init.zeros_(module.bias)
@@ -686,18 +687,6 @@ class EfficientLoFTRPreTrainedModel(PreTrainedModel):
                 init.zeros_(module.running_mean)
                 init.ones_(module.running_var)
                 init.zeros_(module.num_batches_tracked)
-        elif isinstance(module, nn.LayerNorm):
-            init.zeros_(module.bias)
-            init.ones_(module.weight)
-        elif isinstance(module, EfficientLoFTRRotaryEmbedding):
-            rope_fn = (
-                ROPE_INIT_FUNCTIONS[module.rope_type]
-                if module.rope_type != "default"
-                else module.compute_default_rope_parameters
-            )
-            buffer_value, _ = rope_fn(module.config)
-            init.copy_(module.inv_freq, buffer_value)
-            init.copy_(module.original_inv_freq, buffer_value)
 
     # Copied from transformers.models.superpoint.modeling_superpoint.SuperPointPreTrainedModel.extract_one_channel_pixel_values with SuperPoint->EfficientLoFTR
     def extract_one_channel_pixel_values(self, pixel_values: torch.FloatTensor) -> torch.FloatTensor:
@@ -733,7 +722,8 @@ class EfficientLoFTRModel(EfficientLoFTRPreTrainedModel):
 
         self.post_init()
 
-    @check_model_inputs
+    @merge_with_config_defaults
+    @capture_outputs
     @auto_docstring
     def forward(
         self,
@@ -748,12 +738,17 @@ class EfficientLoFTRModel(EfficientLoFTRPreTrainedModel):
         >>> from transformers import AutoImageProcessor, AutoModel
         >>> import torch
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
 
         >>> url = "https://github.com/magicleap/SuperGluePretrainedNetwork/blob/master/assets/phototourism_sample_images/london_bridge_78916675_4568141288.jpg?raw=true"
-        >>> image1 = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image1 = Image.open(BytesIO(response.read()))
+
         >>> url = "https://github.com/magicleap/SuperGluePretrainedNetwork/blob/master/assets/phototourism_sample_images/london_bridge_19481797_2295892421.jpg?raw=true"
-        >>> image2 = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image2 = Image.open(BytesIO(response.read()))
+
         >>> images = [image1, image2]
 
         >>> processor = AutoImageProcessor.from_pretrained("zju-community/efficient_loftr")
@@ -1063,7 +1058,9 @@ class EfficientLoFTRForKeypointMatching(EfficientLoFTRPreTrainedModel):
         confidence = confidence.view(batch_size, height, width, height, width)
         matched_indices, matching_scores = self._get_matches_from_scores(confidence)
 
-        keypoints = torch.stack([matched_indices % width, matched_indices // width], dim=-1) * coarse_scale
+        width_t = torch.tensor(width, device=matched_indices.device)
+        # TorchDynamo makes width a SymInt and then complains about it not being a Tensor in the remainder op
+        keypoints = torch.stack([matched_indices % width_t, matched_indices // width_t], dim=-1) * coarse_scale
 
         return keypoints, matching_scores, matched_indices
 
@@ -1172,8 +1169,10 @@ class EfficientLoFTRForKeypointMatching(EfficientLoFTRPreTrainedModel):
 
         indices_0 = indices[:, 0]
         indices_1 = indices[:, 1]
-        indices_1_i = indices_1 // fine_kernel_size
-        indices_1_j = indices_1 % fine_kernel_size
+        fine_kernel_size_t = torch.tensor(fine_kernel_size, device=indices_1.device)
+        # TorchDynamo makes fine_kernel_size a SymInt and then complains about it not being a Tensor in the division and remainder ops
+        indices_1_i = indices_1 // fine_kernel_size_t
+        indices_1_j = indices_1 % fine_kernel_size_t
 
         # matches_indices, indices_0, indices_1_i, indices_1_j of shape (num_matches, 3, 3)
         batch_indices = torch.arange(batch_size, device=indices_0.device).reshape(batch_size, 1, 1, 1)
@@ -1315,12 +1314,17 @@ class EfficientLoFTRForKeypointMatching(EfficientLoFTRPreTrainedModel):
         >>> from transformers import AutoImageProcessor, AutoModel
         >>> import torch
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
 
         >>> url = "https://github.com/magicleap/SuperGluePretrainedNetwork/blob/master/assets/phototourism_sample_images/london_bridge_78916675_4568141288.jpg?raw=true"
-        >>> image1 = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image1 = Image.open(BytesIO(response.read()))
+
         >>> url = "https://github.com/magicleap/SuperGluePretrainedNetwork/blob/master/assets/phototourism_sample_images/london_bridge_19481797_2295892421.jpg?raw=true"
-        >>> image2 = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image2 = Image.open(BytesIO(response.read()))
+
         >>> images = [image1, image2]
 
         >>> processor = AutoImageProcessor.from_pretrained("zju-community/efficient_loftr")

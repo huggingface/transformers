@@ -1,54 +1,71 @@
-<!--Copyright 2025 the HuggingFace Team. All rights reserved.
+<!--Copyright 2025 The ZhipuAI Inc. and The HuggingFace Inc. team. All rights reserved.
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
+the License. You may obtain a copy of the License at
 
-    http://www.apache.org/licenses/LICENSE-2.0
+http://www.apache.org/licenses/LICENSE-2.0
 
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
+Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on
+an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
+specific language governing permissions and limitations under the License.
 
-
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be rendered properly in your Markdown viewer.
+⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+rendered properly in your Markdown viewer.
 
 -->
-*This model was released on {release_date} and added to Hugging Face Transformers on 2025-12-24.*
+*This model was contributed to Hugging Face Transformers on 2026-01-13.*
+
+<div style="float: right;">
+    <div class="flex flex-wrap space-x-1">
+        <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
+        <img alt="Tensor parallelism" src="https://img.shields.io/badge/Tensor%20parallelism-06b6d4?style=flat&logoColor=white">
+    </div>
+</div>
+
+# Glm4MoeLite
+
+Glm4MoeLite (GLM-4.7-Flash) is a 30B-parameter mixture-of-experts model with approximately 3B active parameters per token, designed for lightweight deployment that balances performance and efficiency. It is part of the GLM-4.7 family and supports interleaved thinking capabilities.
+
+The example below demonstrates how to generate text with [`Pipeline`] or the [`AutoModelForCausalLM`] class.
+
+<hfoptions id="usage">
+<hfoption id="Pipeline">
+
+```python
+from transformers import pipeline
 
 
-# y
+pipe = pipeline(
+    task="text-generation",
+    model="zai-org/GLM-4.7-Flash",
+)
+pipe("The key to efficient language models is")
+```
 
-## Overview
+</hfoption>
+<hfoption id="AutoModelForCausalLM">
 
-The y model was proposed in [<INSERT PAPER NAME HERE>](<INSERT PAPER LINK HERE>) by <INSERT AUTHORS HERE>.
-<INSERT SHORT SUMMARY HERE>
+```python
+from transformers import AutoModelForCausalLM, AutoTokenizer
 
-The abstract from the paper is the following:
 
-<INSERT PAPER ABSTRACT HERE>
+tokenizer = AutoTokenizer.from_pretrained("zai-org/GLM-4.7-Flash")
+model = AutoModelForCausalLM.from_pretrained(
+    "zai-org/GLM-4.7-Flash",
+    device_map="auto",
+)
+input_ids = tokenizer("The key to efficient language models is", return_tensors="pt").to(model.device)
 
-Tips:
+output = model.generate(**input_ids, max_new_tokens=50)
+print(tokenizer.decode(output[0], skip_special_tokens=True))
+```
 
-<INSERT TIPS ABOUT MODEL HERE>
-
-This model was contributed by [INSERT YOUR HF USERNAME HERE](https://huggingface.co/<INSERT YOUR HF USERNAME HERE>).
-The original code can be found [here](<INSERT LINK TO GITHUB REPO HERE>).
-
-## Usage examples
-
-<INSERT SOME NICE EXAMPLES HERE>
+</hfoption>
+</hfoptions>
 
 ## Glm4MoeLiteConfig
 
 [[autodoc]] Glm4MoeLiteConfig
-
-## Glm4MoeLitePreTrainedModel
-
-[[autodoc]] Glm4MoeLitePreTrainedModel
-    - forward
 
 ## Glm4MoeLiteModel
 

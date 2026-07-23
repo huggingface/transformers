@@ -12,13 +12,9 @@ _use_top_left_mask = flash_attn_supports_top_left_mask()
 def get_target_dtype(query: torch.Tensor, module: torch.nn.Module) -> torch.dtype:
     """If the query is in float32, return a target dtype compatible with flash attention. Return None otherwise."""
     if query.dtype == torch.float32:
-        if torch.is_autocast_enabled():
-            # NOTE: `torch.get_autocast_dtype` is there starting from PyTorch 2.4
-            return (
-                torch.get_autocast_dtype("cuda")
-                if hasattr(torch, "get_autocast_dtype")
-                else torch.get_autocast_gpu_dtype()
-            )
+        device_type = query.device.type
+        if torch.is_autocast_enabled(device_type):
+            return torch.get_autocast_dtype(device_type)
         # Handle the case where the model is quantized
         elif hasattr(module.config, "_is_quantized"):
             return module.config.dtype
@@ -38,6 +34,7 @@ def flash_attention_forward(
     sliding_window: int | None = None,
     softcap: float | None = None,
     is_causal: bool | None = None,
+    s_aux: torch.Tensor | None = None,  # alias: learnable attention sink
     **kwargs,
 ) -> tuple[torch.Tensor, None]:
     if kwargs.get("output_attentions", False):
@@ -59,6 +56,12 @@ def flash_attention_forward(
     query = query.transpose(1, 2)
     key = key.transpose(1, 2)
     value = value.transpose(1, 2)
+
+    # FlashAttention requires the query and value to share a head dim; pad `value` up to the
+    # query head dim (e.g. MLA, where `v_head_dim < qk_head_dim`) and crop the output below.
+    head_dim, v_head_dim = query.shape[-1], value.shape[-1]
+    if v_head_dim != head_dim:
+        value = torch.nn.functional.pad(value, [0, head_dim - v_head_dim])
 
     # In PEFT, usually we cast the layer norms in float32 for training stability reasons
     # therefore the input hidden states gets silently casted in float32. Hence, we need
@@ -85,7 +88,15 @@ def flash_attention_forward(
         target_dtype=target_dtype,
         attn_implementation=module.config._attn_implementation,
         layer_idx=module.layer_idx if hasattr(module, "layer_idx") else None,
+        s_aux=(
+            s_aux.to(query.dtype)  # FA only accepts half precision
+            if s_aux is not None
+            else None
+        ),
         **kwargs,
     )
+
+    if v_head_dim != head_dim:
+        attn_output = attn_output[..., :v_head_dim]
 
     return attn_output, None

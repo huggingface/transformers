@@ -24,11 +24,16 @@ from ... import initialization as init
 from ...activations import ACT2FN
 from ...generation import GenerationMixin
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
+from ...modeling_outputs import (
+    BaseModelOutput,
+    BaseModelOutputWithPooling,
+    BaseModelOutputWithPoolingAndCrossAttentions,
+)
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple, logging, torch_int
-from ...utils.generic import check_model_inputs
+from ...utils.generic import merge_with_config_defaults
+from ...utils.output_capturing import capture_outputs
 from .configuration_blip import BlipConfig, BlipTextConfig, BlipVisionConfig
 from .modeling_blip_text import BlipTextLMHeadModel, BlipTextModel
 
@@ -41,20 +46,20 @@ def contrastive_loss(logits: torch.Tensor) -> torch.Tensor:
     return nn.functional.cross_entropy(logits, torch.arange(len(logits), device=logits.device))
 
 
-# Copied from transformers.models.clip.modeling_clip.clip_loss with clip->blip
-def blip_loss(similarity: torch.Tensor) -> torch.Tensor:
+# Copied from transformers.models.clip.modeling_clip.image_text_contrastive_loss
+def image_text_contrastive_loss(similarity: torch.Tensor) -> torch.Tensor:
     caption_loss = contrastive_loss(similarity)
-    image_loss = contrastive_loss(similarity.t())
+    image_loss = contrastive_loss(similarity.T)
     return (caption_loss + image_loss) / 2.0
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Adapted from the base class for vision model's outputs that also contains image embeddings of the pooling of the
     last hidden states. This class also adds the loss term from the text decoder.
     """
 )
+@dataclass
 class BlipForConditionalGenerationModelOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor`, *optional*, returned when `labels` is provided, `torch.FloatTensor` of shape `(1,)`):
@@ -63,17 +68,6 @@ class BlipForConditionalGenerationModelOutput(ModelOutput):
         Prediction scores of the language modeling head of the text decoder model.
     image_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim)`, *optional*):
         The image embeddings obtained after applying the Vision Transformer model to the input image.
-    hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True`):
-        Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
-        one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
-
-        Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
-    attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed):
-        Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-        sequence_length)`.
-
-        Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
-        heads.
     """
 
     loss: tuple[torch.FloatTensor] | None = None
@@ -84,13 +78,13 @@ class BlipForConditionalGenerationModelOutput(ModelOutput):
     attentions: tuple[torch.FloatTensor, ...] | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Adapted from the base class for vision model's outputs that also contains image embeddings of the pooling of the
     last hidden states. This class also adds the loss term from the text decoder.
     """
 )
+@dataclass
 class BlipTextVisionModelOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
@@ -106,7 +100,6 @@ class BlipTextVisionModelOutput(ModelOutput):
     attentions: tuple[torch.FloatTensor, ...] | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Adapted from the base class for vision model's outputs that also contains image embeddings of the pooling of the
@@ -114,6 +107,7 @@ class BlipTextVisionModelOutput(ModelOutput):
     scores.
     """
 )
+@dataclass
 class BlipImageTextMatchingModelOutput(ModelOutput):
     r"""
     itm_score (`torch.FloatTensor`):
@@ -138,8 +132,8 @@ class BlipImageTextMatchingModelOutput(ModelOutput):
     question_embeds: tuple[torch.FloatTensor] | None = None
 
 
-@dataclass
 @auto_docstring
+@dataclass
 class BlipOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `return_loss` is `True`):
@@ -475,7 +469,8 @@ class BlipVisionModel(BlipPreTrainedModel):
 
         self.post_init()
 
-    @check_model_inputs(tie_last_hidden_states=False)
+    @merge_with_config_defaults
+    @capture_outputs(tie_last_hidden_states=False)
     @auto_docstring
     def forward(
         self,
@@ -558,18 +553,16 @@ class BlipModel(BlipPreTrainedModel):
     def set_input_embeddings(self, value):
         self.text_model.set_input_embeddings(value)
 
+    @can_return_tuple
     @auto_docstring
     def get_text_features(
         self,
         input_ids: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.Tensor | None = None,
-    ) -> torch.FloatTensor:
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutputWithPooling:
         r"""
-        Returns:
-            text_features (`torch.FloatTensor` of shape `(batch_size, output_dim`): The text embeddings obtained by
-            applying the projection layer to the pooled output of [`BlipTextModel`].
-
         Examples:
 
         ```python
@@ -581,55 +574,57 @@ class BlipModel(BlipPreTrainedModel):
         >>> inputs = processor(text=["a photo of a cat", "a photo of a dog"], padding=True, return_tensors="pt")
         >>> text_features = model.get_text_features(**inputs)
         ```"""
-        text_outputs = self.text_model(
+        text_outputs: BaseModelOutputWithPoolingAndCrossAttentions = self.text_model(
             input_ids=input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
+            return_dict=True,
+            **kwargs,
         )
+        pooled_output = text_outputs.pooler_output
+        text_outputs.pooler_output = self.text_projection(pooled_output)
 
-        pooled_output = text_outputs[1]
-        text_features = self.text_projection(pooled_output)
+        return text_outputs
 
-        return text_features
-
+    @can_return_tuple
     @auto_docstring
     def get_image_features(
         self,
         pixel_values: torch.FloatTensor | None = None,
         interpolate_pos_encoding: bool = False,
-    ) -> torch.FloatTensor:
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutputWithPooling:
         r"""
-        Returns:
-            image_features (`torch.FloatTensor` of shape `(batch_size, output_dim`): The image embeddings obtained by
-            applying the projection layer to the pooled output of [`BlipVisionModel`].
-
         Examples:
 
         ```python
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
         >>> from transformers import AutoProcessor, BlipModel
 
         >>> model = BlipModel.from_pretrained("Salesforce/blip-image-captioning-base")
         >>> processor = AutoProcessor.from_pretrained("Salesforce/blip-image-captioning-base")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
 
         >>> inputs = processor(images=image, return_tensors="pt")
 
         >>> image_features = model.get_image_features(**inputs)
         ```"""
 
-        vision_outputs = self.vision_model(
+        vision_outputs: BaseModelOutputWithPooling = self.vision_model(
             pixel_values=pixel_values,
             interpolate_pos_encoding=interpolate_pos_encoding,
+            return_dict=True,
+            **kwargs,
         )
+        pooled_output = vision_outputs.pooler_output
+        vision_outputs.pooler_output = self.visual_projection(pooled_output)
 
-        pooled_output = vision_outputs[1]  # pooled_output
-        image_features = self.visual_projection(pooled_output)
-
-        return image_features
+        return vision_outputs
 
     @auto_docstring
     def get_multimodal_features(
@@ -647,14 +642,16 @@ class BlipModel(BlipPreTrainedModel):
         Examples:
         ```python
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
         >>> from transformers import AutoProcessor, BlipModel
 
         >>> model = BlipModel.from_pretrained("Salesforce/blip-image-captioning-base")
         >>> processor = AutoProcessor.from_pretrained("Salesforce/blip-image-captioning-base")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
         >>> texts = ["a photo of a cat", "a photo of a dog"]
         >>> inputs = processor(images=image, text=texts, padding=True, return_tensors="pt")
 
@@ -700,14 +697,16 @@ class BlipModel(BlipPreTrainedModel):
 
         ```python
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
         >>> from transformers import AutoProcessor, BlipModel
 
         >>> model = BlipModel.from_pretrained("Salesforce/blip-image-captioning-base")
         >>> processor = AutoProcessor.from_pretrained("Salesforce/blip-image-captioning-base")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
 
         >>> inputs = processor(
         ...     text=["a photo of a cat", "a photo of a dog"], images=image, return_tensors="pt", padding=True
@@ -748,7 +747,7 @@ class BlipModel(BlipPreTrainedModel):
 
         loss = None
         if return_loss:
-            loss = blip_loss(logits_per_text)
+            loss = image_text_contrastive_loss(logits_per_text)
 
         return BlipOutput(
             loss=loss,
@@ -813,14 +812,16 @@ class BlipForConditionalGeneration(BlipPreTrainedModel, GenerationMixin):
 
         ```python
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
         >>> from transformers import AutoProcessor, BlipForConditionalGeneration
 
         >>> processor = AutoProcessor.from_pretrained("Salesforce/blip-image-captioning-base")
         >>> model = BlipForConditionalGeneration.from_pretrained("Salesforce/blip-image-captioning-base")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
         >>> text = "A picture of"
 
         >>> inputs = processor(images=image, text=text, return_tensors="pt")
@@ -879,14 +880,16 @@ class BlipForConditionalGeneration(BlipPreTrainedModel, GenerationMixin):
         Examples:
         ```python
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
         >>> from transformers import AutoProcessor, BlipForConditionalGeneration
 
         >>> model = BlipForConditionalGeneration.from_pretrained("Salesforce/blip-image-captioning-base")
         >>> processor = AutoProcessor.from_pretrained("Salesforce/blip-image-captioning-base")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
 
         >>> inputs = processor(images=image, return_tensors="pt")
 
@@ -984,14 +987,16 @@ class BlipForQuestionAnswering(BlipPreTrainedModel, GenerationMixin):
 
         ```python
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
         >>> from transformers import AutoProcessor, BlipForQuestionAnswering
 
         >>> model = BlipForQuestionAnswering.from_pretrained("Salesforce/blip-vqa-base")
         >>> processor = AutoProcessor.from_pretrained("Salesforce/blip-vqa-base")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
 
         >>> # training
         >>> text = "How many cats are in the picture?"
@@ -1091,14 +1096,16 @@ class BlipForQuestionAnswering(BlipPreTrainedModel, GenerationMixin):
         Examples:
         ```python
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
         >>> from transformers import AutoProcessor, BlipForQuestionAnswering
 
         >>> model = BlipForQuestionAnswering.from_pretrained("Salesforce/blip-vqa-base")
         >>> processor = AutoProcessor.from_pretrained("Salesforce/blip-vqa-base")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
         >>> text = "How many cats are in the picture?"
 
         >>> inputs = processor(images=image, text=text, return_tensors="pt")
@@ -1215,14 +1222,16 @@ class BlipForImageTextRetrieval(BlipPreTrainedModel):
 
         ```python
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
         >>> from transformers import AutoProcessor, BlipForImageTextRetrieval
 
         >>> model = BlipForImageTextRetrieval.from_pretrained("Salesforce/blip-itm-base-coco")
         >>> processor = AutoProcessor.from_pretrained("Salesforce/blip-itm-base-coco")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
         >>> text = "an image of a cat"
 
         >>> inputs = processor(images=image, text=text, return_tensors="pt")

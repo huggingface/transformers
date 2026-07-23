@@ -17,7 +17,6 @@ import copy
 import unittest
 
 import pytest
-import requests
 from parameterized import parameterized
 
 from transformers import (
@@ -28,7 +27,6 @@ from transformers import (
     LlavaForConditionalGeneration,
     LlavaModel,
     is_torch_available,
-    is_vision_available,
 )
 from transformers.testing_utils import (
     Expectations,
@@ -43,16 +41,13 @@ from transformers.testing_utils import (
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
+from ...test_image_processing_common import load_coco_image, load_test_image
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
     import torch
-
-
-if is_vision_available():
-    from PIL import Image
 
 
 class LlavaVisionText2TextModelTester:
@@ -187,7 +182,6 @@ class LlavaForConditionalGenerationModelTest(
     )
     pipeline_model_mapping = (
         {
-            "image-to-text": LlavaForConditionalGeneration,
             "image-text-to-text": LlavaForConditionalGeneration,
             "any-to-any": LlavaForConditionalGeneration,
         }
@@ -222,7 +216,7 @@ class LlavaForConditionalGenerationModelTest(
 
             # remove one image but leave the image token in text
             curr_input_dict["pixel_values"] = curr_input_dict["pixel_values"][-1:, ...]
-            with self.assertRaises(ValueError):
+            with self.assertRaisesRegex(ValueError, "Image features and image tokens do not match"):
                 _ = model(**curr_input_dict)
 
             # simulate multi-image case by concatenating inputs where each has exactly one image/image-token
@@ -231,7 +225,7 @@ class LlavaForConditionalGenerationModelTest(
             input_ids = torch.cat([input_ids, input_ids], dim=0)
 
             # one image and two image tokens raise an error
-            with self.assertRaises(ValueError):
+            with self.assertRaisesRegex(ValueError, "Image features and image tokens do not match"):
                 _ = model(input_ids=input_ids, pixel_values=pixel_values)
 
             # two images and two image tokens don't raise an error
@@ -306,7 +300,7 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         prompt = "<image>\nUSER: What are the things I should be cautious about when I visit this place?\nASSISTANT:"
         image_file = "https://llava-vl.github.io/static/images/view.jpg"
-        raw_image = Image.open(requests.get(image_file, stream=True).raw)
+        raw_image = load_test_image(image_file)
         inputs = self.processor(images=raw_image, text=prompt, return_tensors="pt").to(torch_device, torch.float16)
 
         output = model.generate(**inputs, max_new_tokens=20)
@@ -335,7 +329,7 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         prompt = "USER: <image>\nWhat are the things I should be cautious about when I visit this place? ASSISTANT:"
         image_file = "https://llava-vl.github.io/static/images/view.jpg"
-        raw_image = Image.open(requests.get(image_file, stream=True).raw)
+        raw_image = load_test_image(image_file)
         inputs = processor(images=raw_image, text=prompt, return_tensors="pt").to(torch_device, torch.float16)
 
         output = model.generate(**inputs, max_new_tokens=900, do_sample=False)
@@ -367,8 +361,8 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
             "USER: <image>\nWhat are the things I should be cautious about when I visit this place? What should I bring with me? ASSISTANT:",
             "USER: <image>\nWhat is this? ASSISTANT:",
         ]
-        image1 = Image.open(requests.get("https://llava-vl.github.io/static/images/view.jpg", stream=True).raw)
-        image2 = Image.open(requests.get("http://images.cocodataset.org/val2017/000000039769.jpg", stream=True).raw)
+        image1 = load_test_image("https://llava-vl.github.io/static/images/view.jpg")
+        image2 = load_coco_image("000000039769.jpg")
 
         inputs = processor(images=[image1, image2], text=prompts, return_tensors="pt", padding=True).to(torch_device)
 
@@ -418,8 +412,8 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
             "USER: <image>\nWhat are the things I should be cautious about when I visit this place? What should I bring with me?\nASSISTANT:",
             "USER: <image>\nWhat is this?\nASSISTANT:",
         ]
-        image1 = Image.open(requests.get("https://llava-vl.github.io/static/images/view.jpg", stream=True).raw)
-        image2 = Image.open(requests.get("http://images.cocodataset.org/val2017/000000039769.jpg", stream=True).raw)
+        image1 = load_test_image("https://llava-vl.github.io/static/images/view.jpg")
+        image2 = load_coco_image("000000039769.jpg")
 
         inputs = self.processor(images=[image1, image2], text=prompts, return_tensors="pt", padding=True).to(
             torch_device, torch.float16
@@ -471,8 +465,8 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
             "USER: <image>\nWhat are the things I should be cautious about when I visit this place? What should I bring with me?\nASSISTANT:",
             "USER: <image>\nWhat is this?\nASSISTANT: Two cats lying on a bed!\nUSER: <image>\nAnd this?\nASSISTANT:",
         ]
-        image1 = Image.open(requests.get("https://llava-vl.github.io/static/images/view.jpg", stream=True).raw)
-        image2 = Image.open(requests.get("http://images.cocodataset.org/val2017/000000039769.jpg", stream=True).raw)
+        image1 = load_test_image("https://llava-vl.github.io/static/images/view.jpg")
+        image2 = load_coco_image("000000039769.jpg")
 
         inputs = processor(images=[image1, image2, image1], text=prompts, return_tensors="pt", padding=True).to(
             torch_device
@@ -524,8 +518,8 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
         prompt3 = "<image>\nUSER: Describe the image.\nASSISTANT:"
         url1 = "https://images.unsplash.com/photo-1552053831-71594a27632d?q=80&w=3062&auto=format&fit=crop&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D"
         url2 = "https://images.unsplash.com/photo-1617258683320-61900b281ced?q=80&w=3087&auto=format&fit=crop&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D"
-        image1 = Image.open(requests.get(url1, stream=True).raw)
-        image2 = Image.open(requests.get(url2, stream=True).raw)
+        image1 = load_test_image(url1)
+        image2 = load_test_image(url2)
 
         inputs = processor(
             images=[image1, image2, image1, image2],
@@ -580,7 +574,7 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
         fast_tokenizer.add_tokens("<image>", True)
 
         prompt = "<|im_start|>system\nAnswer the questions.<|im_end|><|im_start|>user\n<image>\nWhat is shown in this image?<|im_end|><|im_start|>assistant\n"
-        EXPECTED_OUTPUT = ['<|im_start|>', 'sy', 'st', 'em', '\n', 'An', 'sw', 'er', ' ', 'the', ' ', 'qu', 'est', 'ions', '.', '<|im_end|>', '<|im_start|>', 'us', 'er', '\n', '<image>', '\n', 'What', ' ', 'is', ' ', 'sh', 'own', ' ', 'in', ' ', 'th', 'is', ' ', 'im', 'age', '?', '<|im_end|>', '<|im_start|>', 'ass', 'ist', 'ant', '\n']  # fmt: skip
+        EXPECTED_OUTPUT = ['<|im_start|>', 'system', '\n', 'Answer', '▁the', '▁questions', '.', '<|im_end|>', '<|im_start|>', 'user', '\n', '<image>', '\n', 'What', '▁is', '▁shown', '▁in', '▁this', '▁image', '?', '<|im_end|>', '<|im_start|>', 'ass', 'istant', '\n']  # fmt: skip
         self.assertEqual(slow_tokenizer.tokenize(prompt), EXPECTED_OUTPUT)
         self.assertEqual(fast_tokenizer.tokenize(prompt), EXPECTED_OUTPUT)
 
@@ -605,7 +599,7 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
         processor = AutoProcessor.from_pretrained(model_id)
 
         image_file = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        raw_image = Image.open(requests.get(image_file, stream=True).raw)
+        raw_image = load_test_image(image_file)
         inputs = processor(
             text="<|im_start|>user\n<image>\nWhat are these?<|im_end|>\n<|im_start|>assistant",
             images=raw_image,
@@ -632,25 +626,18 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
         processor = AutoProcessor.from_pretrained(model_id)
 
         IMG_URLS = [
-            Image.open(requests.get("https://picsum.photos/id/237/400/300", stream=True).raw),
-            Image.open(requests.get("https://picsum.photos/id/231/200/300", stream=True).raw),
+            load_test_image("https://picsum.photos/id/237/400/300"),
+            load_test_image("https://picsum.photos/id/231/200/300"),
         ]
         PROMPT = "<s>[INST]Describe the images.\n[IMG][IMG][/INST]"
 
         # image = Image.open(requests.get(url, stream=True).raw)
         inputs = processor(text=PROMPT, images=IMG_URLS, return_tensors="pt").to(torch_device, torch.float16)
-        generate_ids = model.generate(**inputs, max_new_tokens=100)
+        generate_ids = model.generate(**inputs, do_sample=False, max_new_tokens=100)
         output = processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
 
         # fmt: off
-        EXPECTED_GENERATION = """
-Describe the images.
-The first image shows a black dog sitting on a wooden surface. The dog has a glossy coat and is looking directly at the camera with a calm expression. The wooden background appears to be made of weathered wooden planks, giving the image a rustic feel.
-
-The second image depicts a scenic mountain landscape. The mountains are rugged and covered with patches of green vegetation. The sky is clear, and the scene conveys a sense of tranquility and natural beauty. The mountains extend into the
-"""
-        # Remove the first and last empty character.
-        EXPECTED_GENERATION = EXPECTED_GENERATION[1:-1]
+        EXPECTED_GENERATION = "Describe the images.\nThe first image shows a black dog sitting on a wooden surface. The dog has a glossy coat and is looking directly at the camera with a calm expression. The wooden background appears to be made of planks, providing a rustic and warm setting for the photograph.\n\nThe second image depicts a scenic mountain landscape. The view is from a high vantage point, looking down at a rugged terrain with rocky outcrops and patches of green vegetation. The mountains in the distance are covered with snow"
         # fmt: on
         # check that both inputs are handled correctly and generate the same output
         self.assertEqual(output, EXPECTED_GENERATION)
@@ -668,8 +655,8 @@ The second image depicts a scenic mountain landscape. The mountains are rugged a
         processor = AutoProcessor.from_pretrained(model_id)
 
         IMG_URLS = [
-            Image.open(requests.get("https://picsum.photos/id/237/400/300", stream=True).raw),
-            Image.open(requests.get("https://picsum.photos/id/231/200/300", stream=True).raw),
+            load_test_image("https://picsum.photos/id/237/400/300"),
+            load_test_image("https://picsum.photos/id/231/200/300"),
         ]
         PROMPT = "<s>[INST][IMG][IMG]Describe the images.[/INST]"
 
@@ -701,8 +688,8 @@ The second image depicts a scenic mountain landscape. The mountains are rugged a
         processor.tokenizer.pad_token_id = processor.tokenizer.eos_token_id
 
         IMG_URLS = [
-            Image.open(requests.get("https://picsum.photos/id/237/400/300", stream=True).raw),
-            Image.open(requests.get("https://picsum.photos/id/17/150/500", stream=True).raw),
+            load_test_image("https://picsum.photos/id/237/400/300"),
+            load_test_image("https://picsum.photos/id/17/150/500"),
         ]
         PROMPT = [
             "<s>[INST][IMG]What breed is the dog?[/INST]",
@@ -718,13 +705,13 @@ The second image depicts a scenic mountain landscape. The mountains are rugged a
         EXPECTED_GENERATIONS = Expectations(
             {
                 (None, None): [
-                                'What breed is the dog?The dog in the image is a black Labrador Retriever.',
-                                'What is shown in this image?The image depicts a narrow, winding dirt path surrounded by lush greenery. The path is flanked by grass and shrubs on both sides. On the left side, there are tall trees and dense foliage, while on the right side, there'
-                            ],
+                    "What breed is the dog?The dog in the image is a black Labrador Retriever.",
+                    "What is shown in this image?The image depicts a narrow, winding dirt path surrounded by lush greenery. The path is bordered by grass and shrubs on both sides. On the left side, there are tall trees and dense foliage, while on the right side, there"
+                ],
                 ("rocm", (9, 5)): [
-                                'What breed is the dog?The dog in the image is a black Labrador Retriever.',
-                                'What is shown in this image?A dirt path stretches into the distance, flanked by grassy areas on either side. The path appears to be well-trodden and leads towards a wooded area with tall trees. The sky is clear and blue, suggesting a bright and sunny day'
-                            ],
+                    'What breed is the dog?The dog in the image is a black Labrador Retriever.',
+                    'What is shown in this image?A dirt path stretches into the distance, flanked by grassy areas on either side. The path appears to be well-trodden and leads towards a wooded area with tall trees. The sky is clear and blue, suggesting a bright and sunny day'
+                ],
             }
         )  # fmt: skip
 

@@ -18,7 +18,6 @@ import unittest
 from transformers import Dinov2Config, DPTConfig
 from transformers.file_utils import is_torch_available, is_vision_available
 from transformers.testing_utils import Expectations, require_torch, require_vision, slow, torch_device
-from transformers.utils.import_utils import get_torch_major_and_minor_version
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
@@ -35,7 +34,7 @@ if is_torch_available():
 if is_vision_available():
     from PIL import Image
 
-    from transformers import DPTImageProcessor
+    from transformers import DPTImageProcessorPil
 
 
 class DPTModelTester:
@@ -138,12 +137,10 @@ class DPTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     pipeline_model_mapping = {"depth-estimation": DPTForDepthEstimation} if is_torch_available() else {}
 
     test_resize_embeddings = False
-    test_torch_exportable = True
-    test_torch_exportable_strictly = get_torch_major_and_minor_version() != "2.7"
 
     def setUp(self):
         self.model_tester = DPTModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=DPTConfig, has_text_modality=False, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=DPTConfig, has_text_modality=False, hidden_size=32)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -215,7 +212,7 @@ def prepare_img():
 @slow
 class DPTModelIntegrationTest(unittest.TestCase):
     def test_inference_depth_estimation_dinov2(self):
-        image_processor = DPTImageProcessor.from_pretrained("facebook/dpt-dinov2-small-kitti")
+        image_processor = DPTImageProcessorPil.from_pretrained("facebook/dpt-dinov2-small-kitti")
         model = DPTForDepthEstimation.from_pretrained("facebook/dpt-dinov2-small-kitti").to(torch_device)
 
         image = prepare_img()
@@ -241,7 +238,7 @@ class DPTModelIntegrationTest(unittest.TestCase):
         torch.testing.assert_close(outputs.predicted_depth[0, :3, :3], expected_slice, rtol=2e-4, atol=2e-4)
 
     def test_inference_depth_estimation_beit(self):
-        image_processor = DPTImageProcessor.from_pretrained("Intel/dpt-beit-base-384")
+        image_processor = DPTImageProcessorPil.from_pretrained("Intel/dpt-beit-base-384")
         model = DPTForDepthEstimation.from_pretrained("Intel/dpt-beit-base-384").to(torch_device)
 
         image = prepare_img()
@@ -275,7 +272,7 @@ class DPTModelIntegrationTest(unittest.TestCase):
         torch.testing.assert_close(outputs.predicted_depth[0, :3, :3], expected_slice, rtol=2e-4, atol=2e-4)
 
     def test_inference_depth_estimation_swinv2(self):
-        image_processor = DPTImageProcessor.from_pretrained("Intel/dpt-swinv2-tiny-256")
+        image_processor = DPTImageProcessorPil.from_pretrained("Intel/dpt-swinv2-tiny-256")
         model = DPTForDepthEstimation.from_pretrained("Intel/dpt-swinv2-tiny-256").to(torch_device)
 
         image = prepare_img()

@@ -216,11 +216,7 @@ class SplinterModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
         if is_torch_available()
         else ()
     )
-    pipeline_model_mapping = (
-        {"feature-extraction": SplinterModel, "question-answering": SplinterForQuestionAnswering}
-        if is_torch_available()
-        else {}
-    )
+    pipeline_model_mapping = {"feature-extraction": SplinterModel} if is_torch_available() else {}
 
     # TODO: Fix the failed tests when this model gets more usage
     def is_pipeline_test_to_skip(
@@ -274,7 +270,7 @@ class SplinterModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
 
     def setUp(self):
         self.model_tester = SplinterModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=SplinterConfig, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=SplinterConfig, hidden_size=32)
 
     def test_config(self):
         self.config_tester.run_common_tests()

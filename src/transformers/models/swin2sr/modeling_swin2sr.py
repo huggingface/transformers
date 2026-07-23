@@ -25,7 +25,6 @@ from ...activations import ACT2FN
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, ImageSuperResolutionOutput
 from ...modeling_utils import PreTrainedModel
-from ...pytorch_utils import meshgrid
 from ...utils import ModelOutput, auto_docstring, logging
 from .configuration_swin2sr import Swin2SRConfig
 
@@ -33,12 +32,12 @@ from .configuration_swin2sr import Swin2SRConfig
 logger = logging.get_logger(__name__)
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Swin2SR encoder's outputs, with potential hidden states and attentions.
     """
 )
+@dataclass
 class Swin2SREncoderOutput(ModelOutput):
     last_hidden_state: torch.FloatTensor | None = None
     hidden_states: tuple[torch.FloatTensor] | None = None
@@ -54,7 +53,7 @@ def window_partition(input_feature, window_size):
     input_feature = input_feature.view(
         batch_size, height // window_size, window_size, width // window_size, window_size, num_channels
     )
-    windows = input_feature.permute(0, 1, 3, 2, 4, 5).contiguous().view(-1, window_size, window_size, num_channels)
+    windows = input_feature.transpose(2, 3).contiguous().view(-1, window_size, window_size, num_channels)
     return windows
 
 
@@ -65,39 +64,8 @@ def window_reverse(windows, window_size, height, width):
     """
     num_channels = windows.shape[-1]
     windows = windows.view(-1, height // window_size, width // window_size, window_size, window_size, num_channels)
-    windows = windows.permute(0, 1, 3, 2, 4, 5).contiguous().view(-1, height, width, num_channels)
+    windows = windows.transpose(2, 3).contiguous().view(-1, height, width, num_channels)
     return windows
-
-
-# Copied from transformers.models.beit.modeling_beit.drop_path
-def drop_path(input: torch.Tensor, drop_prob: float = 0.0, training: bool = False) -> torch.Tensor:
-    """
-    Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks).
-
-    """
-    if drop_prob == 0.0 or not training:
-        return input
-    keep_prob = 1 - drop_prob
-    shape = (input.shape[0],) + (1,) * (input.ndim - 1)  # work with diff dim tensors, not just 2D ConvNets
-    random_tensor = keep_prob + torch.rand(shape, dtype=input.dtype, device=input.device)
-    random_tensor.floor_()  # binarize
-    output = input.div(keep_prob) * random_tensor
-    return output
-
-
-# Copied from transformers.models.swin.modeling_swin.SwinDropPath with Swin->Swin2SR
-class Swin2SRDropPath(nn.Module):
-    """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks)."""
-
-    def __init__(self, drop_prob: float | None = None) -> None:
-        super().__init__()
-        self.drop_prob = drop_prob
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        return drop_path(hidden_states, self.drop_prob, self.training)
-
-    def extra_repr(self) -> str:
-        return f"p={self.drop_prob}"
 
 
 class Swin2SREmbeddings(nn.Module):
@@ -330,7 +298,7 @@ class Swin2SRSelfAttention(nn.Module):
         relative_coords_h = torch.arange(-(self.window_size[0] - 1), self.window_size[0], dtype=torch.int64).float()
         relative_coords_w = torch.arange(-(self.window_size[1] - 1), self.window_size[1], dtype=torch.int64).float()
         relative_coords_table = (
-            torch.stack(meshgrid([relative_coords_h, relative_coords_w], indexing="ij"))
+            torch.stack(torch.meshgrid([relative_coords_h, relative_coords_w], indexing="ij"))
             .permute(1, 2, 0)
             .contiguous()
             .unsqueeze(0)
@@ -351,7 +319,7 @@ class Swin2SRSelfAttention(nn.Module):
         # get pair-wise relative position index for each token inside the window
         coords_h = torch.arange(self.window_size[0])
         coords_w = torch.arange(self.window_size[1])
-        coords = torch.stack(meshgrid([coords_h, coords_w], indexing="ij"))
+        coords = torch.stack(torch.meshgrid([coords_h, coords_w], indexing="ij"))
         coords_flatten = torch.flatten(coords, 1)
         relative_coords = coords_flatten[:, :, None] - coords_flatten[:, None, :]
         relative_coords = relative_coords.permute(1, 2, 0).contiguous()
@@ -363,7 +331,7 @@ class Swin2SRSelfAttention(nn.Module):
         return relative_coords_table, relative_position_index
 
 
-# Copied from transformers.models.swin.modeling_swin.SwinSelfOutput with Swin->Swin2SR
+# Todo - Refactor as part of vision refactor. Copied from transformers.models.swin.modeling_swin.SwinSelfOutput with Swin->Swin2SR
 class Swin2SRSelfOutput(nn.Module):
     def __init__(self, config, dim):
         super().__init__()
@@ -404,7 +372,7 @@ class Swin2SRAttention(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.swin.modeling_swin.SwinIntermediate with Swin->Swin2SR
+# Todo - Refactor as part of vision refactor. Copied from transformers.models.swin.modeling_swin.SwinIntermediate with Swin->Swin2SR
 class Swin2SRIntermediate(nn.Module):
     def __init__(self, config, dim):
         super().__init__()
@@ -420,7 +388,7 @@ class Swin2SRIntermediate(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.swin.modeling_swin.SwinOutput with Swin->Swin2SR
+# Todo - Refactor as part of vision refactor. Copied from transformers.models.swin.modeling_swin.SwinOutput with Swin->Swin2SR
 class Swin2SROutput(nn.Module):
     def __init__(self, config, dim):
         super().__init__()
@@ -431,6 +399,31 @@ class Swin2SROutput(nn.Module):
         hidden_states = self.dense(hidden_states)
         hidden_states = self.dropout(hidden_states)
         return hidden_states
+
+
+# Copied from transformers.models.swin.modular_swin.SwinDropPath with SwinDropPath->Swin2SRDropPath
+class Swin2SRDropPath(nn.Module):
+    """Stochastic depth (DropPath) per sample, for residual blocks.
+
+    Identity when ``drop_prob`` is 0 or outside training. See `Deep Networks with Stochastic Depth
+    <https://arxiv.org/abs/1603.09382>`_.
+    """
+
+    def __init__(self, drop_prob: float = 0.0) -> None:
+        super().__init__()
+        self.drop_prob = drop_prob
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        if self.drop_prob == 0.0 or not self.training:
+            return hidden_states
+        keep_prob = 1 - self.drop_prob
+        shape = (hidden_states.shape[0],) + (1,) * (hidden_states.ndim - 1)
+        random_tensor = torch.rand(shape, dtype=hidden_states.dtype, device=hidden_states.device)
+        random_tensor = torch.floor(random_tensor + keep_prob)
+        return hidden_states.div(keep_prob) * random_tensor
+
+    def extra_repr(self) -> str:
+        return f"p={self.drop_prob}"
 
 
 # Copied from transformers.models.swinv2.modeling_swinv2.Swinv2Layer with Swinv2->Swin2SR
@@ -466,31 +459,28 @@ class Swin2SRLayer(nn.Module):
         return window_size, shift_size
 
     def get_attn_mask(self, height, width, dtype):
-        if self.shift_size > 0:
-            # calculate attention mask for shifted window multihead self attention
-            img_mask = torch.zeros((1, height, width, 1), dtype=dtype)
-            height_slices = (
-                slice(0, -self.window_size),
-                slice(-self.window_size, -self.shift_size),
-                slice(-self.shift_size, None),
-            )
-            width_slices = (
-                slice(0, -self.window_size),
-                slice(-self.window_size, -self.shift_size),
-                slice(-self.shift_size, None),
-            )
-            count = 0
-            for height_slice in height_slices:
-                for width_slice in width_slices:
-                    img_mask[:, height_slice, width_slice, :] = count
-                    count += 1
+        """Build the cyclic-shift attention mask for shifted-window MSA; returns None when shift_size is 0.
 
-            mask_windows = window_partition(img_mask, self.window_size)
-            mask_windows = mask_windows.view(-1, self.window_size * self.window_size)
-            attn_mask = mask_windows.unsqueeze(1) - mask_windows.unsqueeze(2)
-            attn_mask = attn_mask.masked_fill(attn_mask != 0, -100.0).masked_fill(attn_mask == 0, 0.0)
-        else:
-            attn_mask = None
+        Each (h, w) position belongs to one of 9 cyclic-shift regions (3 along each axis), encoded
+        as ``h_region * 3 + w_region``. Regions per axis:
+        - 0: indices ``[0, axis - window_size)``
+        - 1: indices ``[axis - window_size, axis - shift_size)``
+        - 2: indices ``[axis - shift_size, axis)``
+        Implementation note: a single arithmetic pass on `torch.arange` (two comparisons +
+        broadcast add) replaces the original 9-iteration nested-Python-loop slice-assignment —
+        fully vectorised, no per-cell host-side scatter, no GPU↔host sync.
+        """
+        if self.shift_size <= 0:
+            return None
+        h_idx = torch.arange(height)
+        w_idx = torch.arange(width)
+        h_region = (h_idx >= height - self.window_size).long() + (h_idx >= height - self.shift_size).long()
+        w_region = (w_idx >= width - self.window_size).long() + (w_idx >= width - self.shift_size).long()
+        img_mask = (h_region[None, :, None, None] * 3 + w_region[None, None, :, None]).to(dtype)
+        mask_windows = window_partition(img_mask, self.window_size)
+        mask_windows = mask_windows.view(-1, self.window_size * self.window_size)
+        attn_mask = mask_windows.unsqueeze(1) - mask_windows.unsqueeze(2)
+        attn_mask = attn_mask.masked_fill(attn_mask != 0, -100.0).masked_fill(attn_mask == 0, 0.0)
         return attn_mask
 
     def maybe_pad(self, hidden_states, height, width):
@@ -698,13 +688,11 @@ class Swin2SRPreTrainedModel(PreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
+        super()._init_weights(module)
         if isinstance(module, (nn.Linear, nn.Conv2d)):
             init.trunc_normal_(module.weight, std=self.config.initializer_range)
             if module.bias is not None:
                 init.zeros_(module.bias)
-        elif isinstance(module, nn.LayerNorm):
-            init.zeros_(module.bias)
-            init.ones_(module.weight)
         elif isinstance(module, Swin2SRSelfAttention):
             init.constant_(module.logit_scale, math.log(10))
             relative_coords_table, relative_position_index = module.create_coords_table_and_index()
@@ -756,7 +744,7 @@ class Swin2SRModel(Swin2SRPreTrainedModel):
         pixel_values = nn.functional.pad(pixel_values, (0, modulo_pad_width, 0, modulo_pad_height), "reflect")
 
         # 2. normalize
-        mean = self.mean.type_as(pixel_values)
+        mean = self.mean.to(device=pixel_values.device, dtype=pixel_values.dtype)
         pixel_values = (pixel_values - mean) * self.img_range
 
         return pixel_values
@@ -774,7 +762,7 @@ class Swin2SRModel(Swin2SRPreTrainedModel):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         _, _, height, width = pixel_values.shape
 
@@ -995,7 +983,8 @@ class Swin2SRForImageSuperResolution(Swin2SRPreTrainedModel):
          >>> import torch
          >>> import numpy as np
          >>> from PIL import Image
-         >>> import requests
+         >>> import httpx
+        >>> from io import BytesIO
 
          >>> from transformers import AutoImageProcessor, Swin2SRForImageSuperResolution
 
@@ -1003,7 +992,8 @@ class Swin2SRForImageSuperResolution(Swin2SRPreTrainedModel):
          >>> model = Swin2SRForImageSuperResolution.from_pretrained("caidas/swin2SR-classical-sr-x2-64")
 
          >>> url = "https://huggingface.co/spaces/jjourney1125/swin2sr/resolve/main/samples/butterfly.jpg"
-         >>> image = Image.open(requests.get(url, stream=True).raw)
+         >>> with httpx.stream("GET", url) as response:
+         ...     image = Image.open(BytesIO(response.read()))
          >>> # prepare image for the model
          >>> inputs = processor(image, return_tensors="pt")
 
@@ -1016,7 +1006,7 @@ class Swin2SRForImageSuperResolution(Swin2SRPreTrainedModel):
          >>> output = (output * 255.0).round().astype(np.uint8)  # float32 to uint8
          >>> # you can visualize `output` with `Image.fromarray`
          ```"""
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         loss = None
         if labels is not None:

@@ -20,33 +20,37 @@ from dataclasses import dataclass
 from functools import lru_cache
 
 import torch
+import torch.nn as nn
 import torch.nn.functional as F
-from torch import Tensor, nn
+from torch import Tensor
 
 from ... import initialization as init
 from ...activations import ACT2CLS, ACT2FN
-from ...file_utils import (
-    ModelOutput,
-)
 from ...integrations import use_kernel_forward_from_hub
-from ...modeling_attn_mask_utils import _prepare_4d_attention_mask
+from ...masking_utils import create_bidirectional_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_utils import PreTrainedModel
-from ...utils import auto_docstring, logging
-from ...utils.backbone_utils import load_backbone
-from ..auto import AutoModel
+from ...processing_utils import Unpack
+from ...utils import (
+    ModelOutput,
+    TransformersKwargs,
+    auto_docstring,
+    logging,
+    torch_compilable_check,
+)
+from ..auto import AutoBackbone, AutoModel
 from .configuration_omdet_turbo import OmDetTurboConfig
 
 
 logger = logging.get_logger(__name__)
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for outputs of the OmDetTurboHybridEncoder.
     """
 )
+@dataclass
 class OmDetTurboEncoderOutput(ModelOutput):
     r"""
     last_hidden_state (`torch.FloatTensor`):
@@ -61,12 +65,12 @@ class OmDetTurboEncoderOutput(ModelOutput):
     extracted_states: tuple[torch.FloatTensor] | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for outputs of the OmDetTurboDecoder.
     """
 )
+@dataclass
 class OmDetTurboDecoderOutput(ModelOutput):
     r"""
     last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
@@ -96,12 +100,12 @@ class OmDetTurboDecoderOutput(ModelOutput):
     intermediate_reference_points: tuple[tuple[torch.FloatTensor]] = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Output type of [`OmDetTurboObjectDetectionOutput`].
     """
 )
+@dataclass
 class OmDetTurboObjectDetectionOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor`):
@@ -274,7 +278,7 @@ class OmDetTurboVisionBackbone(nn.Module):
     def __init__(self, config: OmDetTurboConfig):
         super().__init__()
         self.apply_layernorm_after_vision_backbone = config.apply_layernorm_after_vision_backbone
-        self.vision_backbone = load_backbone(config)
+        self.vision_backbone = AutoBackbone.from_config(config.backbone_config, **getattr(config, "timm_kwargs", {}))
         self.layer_norms = nn.ModuleList(
             [nn.LayerNorm(in_channel_dim, eps=config.layer_norm_eps) for in_channel_dim in config.encoder_in_channels]
         )
@@ -328,9 +332,6 @@ class OmDetTurboMultiscaleDeformableAttention(nn.Module):
 
         self.disable_custom_kernels = config.disable_custom_kernels
 
-    def with_pos_embed(self, tensor: torch.Tensor, position_embeddings: Tensor | None):
-        return tensor if position_embeddings is None else tensor + position_embeddings
-
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -342,20 +343,20 @@ class OmDetTurboMultiscaleDeformableAttention(nn.Module):
         spatial_shapes=None,
         spatial_shapes_list=None,
         level_start_index=None,
-        output_attentions: bool = False,
-    ):
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         # add position embeddings to the hidden states before projecting to queries and keys
         if position_embeddings is not None:
-            hidden_states = self.with_pos_embed(hidden_states, position_embeddings)
+            hidden_states = hidden_states + position_embeddings
 
         batch_size, num_queries, _ = hidden_states.shape
         batch_size, sequence_length, _ = encoder_hidden_states.shape
         # Ignore copy
         total_elements = sum(shape[0] * shape[1] for shape in spatial_shapes_list)
-        if total_elements != sequence_length:
-            raise ValueError(
-                "Make sure to align the spatial shapes with the sequence length of the encoder hidden states"
-            )
+        torch_compilable_check(
+            total_elements == sequence_length,
+            "Make sure to align the spatial shapes with the sequence length of the encoder hidden states",
+        )
 
         value = self.value_proj(encoder_hidden_states)
         if attention_mask is not None:
@@ -603,7 +604,7 @@ class OmDetTurboEncoderLayer(nn.Module):
         hidden_states = residual + hidden_states
         hidden_states = self.final_layer_norm(hidden_states)
         if self.training:
-            if torch.isinf(hidden_states).any() or torch.isnan(hidden_states).any():
+            if not torch.isfinite(hidden_states).all():
                 clamp_value = torch.finfo(hidden_states.dtype).max - 1000
                 hidden_states = torch.clamp(hidden_states, min=-clamp_value, max=clamp_value)
 
@@ -742,7 +743,7 @@ class OmDetTurboHybridEncoder(nn.Module):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         hidden_states = inputs_embeddings
 
@@ -988,6 +989,8 @@ class OmDetTurboPreTrainedModel(PreTrainedModel):
 
     @torch.no_grad()
     def _init_weights(self, module):
+        super()._init_weights(module)
+
         def linear_init_(module_to_init):
             bound = 1 / math.sqrt(module_to_init.weight.shape[0])
             init.uniform_(module_to_init.weight, -bound, bound)
@@ -1013,17 +1016,6 @@ class OmDetTurboPreTrainedModel(PreTrainedModel):
                 init.xavier_uniform_(layer[0].weight)
         elif isinstance(module, OmDetTurboLanguageBackbone):
             init.normal_(module.text_projection, std=self.config.text_projection_in_dim**-0.5)
-        elif isinstance(module, (nn.Linear, nn.Conv2d)):
-            init.normal_(module.weight, mean=0.0, std=self.config.init_std)
-            if module.bias is not None:
-                init.zeros_(module.bias)
-        elif isinstance(module, (nn.LayerNorm, nn.BatchNorm2d)):
-            init.ones_(module.weight)
-            init.zeros_(module.bias)
-            if getattr(module, "running_mean", None) is not None:
-                init.zeros_(module.running_mean)
-                init.ones_(module.running_var)
-                init.zeros_(module.num_batches_tracked)
 
     def _set_gradient_checkpointing(self, module, value=False):
         if isinstance(module, OmDetTurboDecoder):
@@ -1340,7 +1332,7 @@ class OmDetTurboDecoder(OmDetTurboPreTrainedModel):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         vision_features, vision_shapes, vision_shapes_list, level_start_index = self._get_encoder_input(
             vision_features
@@ -1359,11 +1351,15 @@ class OmDetTurboDecoder(OmDetTurboPreTrainedModel):
         fusion_size = attn_mask_len + task_features.shape[0]
         key_padding_mask = torch.zeros([batch_size, fusion_size], dtype=torch.bool).to(task_features.device)
         key_padding_mask[:, attn_mask_len:] = src_key_mask
-        attention_mask = _prepare_4d_attention_mask(~key_padding_mask, dtype=vision_features.dtype)
         decoder_embeddings, reference_points, encoder_bboxes, encoder_class_similarity, init_reference_points = (
             self._get_decoder_input(
                 vision_features, tuple(vision_shapes_list), class_features, denoise_embeddings, denoise_bboxes
             )
+        )
+        attention_mask = create_bidirectional_mask(
+            config=self.config,
+            inputs_embeds=torch.ones_like(key_padding_mask, dtype=decoder_embeddings.dtype)[..., None],
+            attention_mask=~key_padding_mask,
         )
 
         all_hidden_states = () if output_hidden_states else None
@@ -1539,7 +1535,8 @@ class OmDetTurboForObjectDetection(OmDetTurboPreTrainedModel):
         Examples:
 
         ```python
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
         >>> from PIL import Image
 
         >>> from transformers import AutoProcessor, OmDetTurboForObjectDetection
@@ -1548,7 +1545,8 @@ class OmDetTurboForObjectDetection(OmDetTurboPreTrainedModel):
         >>> model = OmDetTurboForObjectDetection.from_pretrained("omlab/omdet-turbo-swin-tiny-hf")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
         >>> classes = ["cat", "remote"]
         >>> task = "Detect {}.".format(", ".join(classes))
         >>> inputs = processor(image, text=classes, task=task, return_tensors="pt")
@@ -1581,7 +1579,7 @@ class OmDetTurboForObjectDetection(OmDetTurboPreTrainedModel):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         loss = None
         image_features = self.vision_backbone(pixel_values)

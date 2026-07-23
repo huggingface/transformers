@@ -22,6 +22,7 @@ from torch import Tensor, nn
 
 from ... import initialization as init
 from ...activations import ACT2FN
+from ...backbone_utils import BackboneMixin, filter_output_hidden_states
 from ...modeling_outputs import (
     BackboneOutput,
     BaseModelOutputWithNoAttention,
@@ -30,7 +31,7 @@ from ...modeling_outputs import (
 )
 from ...modeling_utils import PreTrainedModel
 from ...utils import auto_docstring, logging
-from ...utils.backbone_utils import BackboneMixin
+from ...utils.generic import can_return_tuple
 from .configuration_bit import BitConfig
 
 
@@ -272,32 +273,26 @@ class BitEmbeddings(nn.Module):
         return embedding
 
 
-# Copied from transformers.models.convnext.modeling_convnext.drop_path
-def drop_path(input: torch.Tensor, drop_prob: float = 0.0, training: bool = False) -> torch.Tensor:
-    """
-    Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks).
-
-    """
-    if drop_prob == 0.0 or not training:
-        return input
-    keep_prob = 1 - drop_prob
-    shape = (input.shape[0],) + (1,) * (input.ndim - 1)  # work with diff dim tensors, not just 2D ConvNets
-    random_tensor = keep_prob + torch.rand(shape, dtype=input.dtype, device=input.device)
-    random_tensor.floor_()  # binarize
-    output = input.div(keep_prob) * random_tensor
-    return output
-
-
-# Copied from transformers.models.beit.modeling_beit.BeitDropPath with Beit->Bit
+# Copied from transformers.models.swin.modular_swin.SwinDropPath with SwinDropPath->BitDropPath
 class BitDropPath(nn.Module):
-    """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks)."""
+    """Stochastic depth (DropPath) per sample, for residual blocks.
 
-    def __init__(self, drop_prob: float | None = None) -> None:
+    Identity when ``drop_prob`` is 0 or outside training. See `Deep Networks with Stochastic Depth
+    <https://arxiv.org/abs/1603.09382>`_.
+    """
+
+    def __init__(self, drop_prob: float = 0.0) -> None:
         super().__init__()
         self.drop_prob = drop_prob
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        return drop_path(hidden_states, self.drop_prob, self.training)
+        if self.drop_prob == 0.0 or not self.training:
+            return hidden_states
+        keep_prob = 1 - self.drop_prob
+        shape = (hidden_states.shape[0],) + (1,) * (hidden_states.ndim - 1)
+        random_tensor = torch.rand(shape, dtype=hidden_states.dtype, device=hidden_states.device)
+        random_tensor = torch.floor(random_tensor + keep_prob)
+        return hidden_states.div(keep_prob) * random_tensor
 
     def extra_repr(self) -> str:
         return f"p={self.drop_prob}"
@@ -629,6 +624,7 @@ class BitPreTrainedModel(PreTrainedModel):
 
     @torch.no_grad()
     def _init_weights(self, module):
+        super()._init_weights(module)
         if isinstance(module, nn.Conv2d):
             init.kaiming_normal_(module.weight, mode="fan_out", nonlinearity="relu")
         # copied from the `reset_parameters` method of `class Linear(Module)` in `torch`.
@@ -638,13 +634,6 @@ class BitPreTrainedModel(PreTrainedModel):
                 fan_in, _ = torch.nn.init._calculate_fan_in_and_fan_out(module.weight)
                 bound = 1 / math.sqrt(fan_in) if fan_in > 0 else 0
                 init.uniform_(module.bias, -bound, bound)
-        elif isinstance(module, (nn.BatchNorm2d, nn.GroupNorm)):
-            init.constant_(module.weight, 1)
-            init.constant_(module.bias, 0)
-            if getattr(module, "running_mean", None) is not None:
-                init.zeros_(module.running_mean)
-                init.ones_(module.running_var)
-                init.zeros_(module.num_batches_tracked)
 
 
 @auto_docstring
@@ -677,7 +666,7 @@ class BitModel(BitPreTrainedModel):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         embedding_output = self.embedder(pixel_values)
 
@@ -734,7 +723,7 @@ class BitForImageClassification(BitPreTrainedModel):
             Labels for computing the image classification/regression loss. Indices should be in `[0, ...,
             config.num_labels - 1]`. If `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         outputs = self.bit(pixel_values, output_hidden_states=output_hidden_states, return_dict=return_dict)
 
@@ -759,12 +748,11 @@ class BitForImageClassification(BitPreTrainedModel):
     BiT backbone, to be used with frameworks like DETR and MaskFormer.
     """
 )
-class BitBackbone(BitPreTrainedModel, BackboneMixin):
+class BitBackbone(BackboneMixin, BitPreTrainedModel):
     has_attentions = False
 
     def __init__(self, config):
         super().__init__(config)
-        super()._init_backbone(config)
 
         self.bit = BitModel(config)
         self.num_features = [config.embedding_size] + config.hidden_sizes
@@ -772,6 +760,8 @@ class BitBackbone(BitPreTrainedModel, BackboneMixin):
         # initialize weights and apply final processing
         self.post_init()
 
+    @can_return_tuple
+    @filter_output_hidden_states
     @auto_docstring
     def forward(
         self,
@@ -787,10 +777,12 @@ class BitBackbone(BitPreTrainedModel, BackboneMixin):
         >>> from transformers import AutoImageProcessor, AutoBackbone
         >>> import torch
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
 
         >>> processor = AutoImageProcessor.from_pretrained("google/bit-50")
         >>> model = AutoBackbone.from_pretrained("google/bit-50")
@@ -798,7 +790,7 @@ class BitBackbone(BitPreTrainedModel, BackboneMixin):
         >>> inputs = processor(image, return_tensors="pt")
         >>> outputs = model(**inputs)
         ```"""
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )

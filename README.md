@@ -53,6 +53,8 @@ limitations under the License.
         <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_ar.md">العربية</a> |
         <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_ur.md">اردو</a> |
         <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_bn.md">বাংলা</a> |
+        <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_fa.md">فارسی</a> |
+        <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_tr.md">Türkçe</a> |
     </p>
 </h4>
 
@@ -75,13 +77,13 @@ and adjacent modeling libraries (llama.cpp, mlx, ...) which leverage the model d
 We pledge to help support new state-of-the-art models and democratize their usage by having their model definition be
 simple, customizable, and efficient.
 
-There are over 1M+ Transformers [model checkpoints](https://huggingface.co/models?library=transformers&sort=trending) on the [Hugging Face Hub](https://huggingface.com/models) you can use.
+There are over 1M+ Transformers [model checkpoints](https://huggingface.co/models?library=transformers&sort=trending) on the [Hugging Face Hub](https://huggingface.co/models) you can use.
 
-Explore the [Hub](https://huggingface.com/) today to find a model and use Transformers to help you get started right away.
+Explore the [Hub](https://huggingface.co/) today to find a model and use Transformers to help you get started right away.
 
 ## Installation
 
-Transformers works with Python 3.9+, and [PyTorch](https://pytorch.org/get-started/locally/) 2.1+.
+Transformers works with Python 3.10+, and [PyTorch](https://pytorch.org/get-started/locally/) 2.4+.
 
 Create and activate a virtual environment with [venv](https://docs.python.org/3/library/venv.html) or [uv](https://docs.astral.sh/uv/), a fast Rust-based Python package and project manager.
 
@@ -222,7 +224,7 @@ pipeline(
 1. Lower compute costs, smaller carbon footprint:
     - Share trained models instead of training from scratch.
     - Reduce compute time and production costs.
-    - Dozens of model architectures with 1M+ pretrained checkpoints across all modalities.
+    - Hundreds of model architectures with 1M+ pretrained checkpoints across all modalities.
 
 1. Choose the right framework for every part of a model's lifetime:
     - Train state-of-the-art models in 3 lines of code.
@@ -238,7 +240,7 @@ pipeline(
     <img alt="Hugging Face Enterprise Hub" src="https://github.com/user-attachments/assets/247fb16d-d251-4583-96c4-d3d76dda4925">
 </a><br>
 
-## Why shouldn't I use Transformers?
+## When shouldn't I use Transformers?
 
 - This library is not a modular toolbox of building blocks for neural nets. The code in the model files is not refactored with additional abstractions on purpose, so that researchers can quickly iterate on each of the models without diving into additional abstractions/files.
 - The training API is optimized to work with PyTorch models provided by Transformers. For generic machine learning loops, you should use another library like [Accelerate](https://huggingface.co/docs/accelerate).
@@ -265,12 +267,12 @@ Expand each modality below to see a few example models for various use cases.
 <details>
 <summary>Audio</summary>
 
-- Audio classification with [Whisper](https://huggingface.co/openai/whisper-large-v3-turbo)
-- Automatic speech recognition with [Moonshine](https://huggingface.co/UsefulSensors/moonshine)
+- Audio classification with [CLAP](https://huggingface.co/laion/clap-htsat-fused)
+- Automatic speech recognition with [Parakeet](https://huggingface.co/nvidia/parakeet-ctc-1.1b#transcribing-using-transformers-%F0%9F%A4%97), [Whisper](https://huggingface.co/openai/whisper-large-v3-turbo), [GLM-ASR](https://huggingface.co/zai-org/GLM-ASR-Nano-2512) and [Moonshine-Streaming](https://huggingface.co/UsefulSensors/moonshine-streaming-medium)
 - Keyword spotting with [Wav2Vec2](https://huggingface.co/superb/wav2vec2-base-superb-ks)
 - Speech to speech generation with [Moshi](https://huggingface.co/kyutai/moshiko-pytorch-bf16)
 - Text to audio with [MusicGen](https://huggingface.co/facebook/musicgen-large)
-- Text to speech with [Bark](https://huggingface.co/suno/bark)
+- Text to speech with [CSM](https://huggingface.co/sesame/csm-1b)
 
 </details>
 
@@ -292,7 +294,7 @@ Expand each modality below to see a few example models for various use cases.
 <details>
 <summary>Multimodal</summary>
 
-- Audio or text to text with [Qwen2-Audio](https://huggingface.co/Qwen/Qwen2-Audio-7B)
+- Audio or text to text with [Voxtral](https://huggingface.co/mistralai/Voxtral-Mini-3B-2507), [Audio Flamingo](https://huggingface.co/nvidia/audio-flamingo-3-hf)
 - Document question answering with [LayoutLMv3](https://huggingface.co/microsoft/layoutlmv3-base)
 - Image or text to text with [Qwen-VL](https://huggingface.co/Qwen/Qwen2.5-VL-3B-Instruct)
 - Image captioning [BLIP-2](https://huggingface.co/Salesforce/blip2-opt-2.7b)
@@ -320,7 +322,7 @@ Expand each modality below to see a few example models for various use cases.
 
 ## Citation
 
-We now have a [paper](https://www.aclweb.org/anthology/2020.emnlp-demos.6/) you can cite for the 🤗 Transformers library:
+We now have a [paper](https://aclanthology.org/2020.emnlp-demos.6/) you can cite for the 🤗 Transformers library:
 ```bibtex
 @inproceedings{wolf-etal-2020-transformers,
     title = "Transformers: State-of-the-Art Natural Language Processing",
@@ -330,7 +332,7 @@ We now have a [paper](https://www.aclweb.org/anthology/2020.emnlp-demos.6/) you 
     year = "2020",
     address = "Online",
     publisher = "Association for Computational Linguistics",
-    url = "https://www.aclweb.org/anthology/2020.emnlp-demos.6",
+    url = "https://aclanthology.org/2020.emnlp-demos.6/",
     pages = "38--45"
 }
 ```

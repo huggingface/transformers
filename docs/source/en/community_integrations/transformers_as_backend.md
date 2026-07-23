@@ -16,17 +16,17 @@ rendered properly in your Markdown viewer.
 
 # Building a compatible model backend for inference
 
-Transformers models are compatible with inference engines like [vLLM](https://github.com/vllm-project/vllm) and [SGLang](https://docs.sglang.ai). Use the same Transformers model anywhere and avoid reimplementing a model from scratch for each inference engine. Models in Transformers that aren't natively supported by either inference engine work too.
+Transformers models are compatible with inference engines like [vLLM](https://github.com/vllm-project/vllm) and [SGLang](https://docs.sglang.ai). Use the same Transformers model anywhere and avoid reimplementing a model from scratch for each inference engine. This also helps with models that an engine does not natively reimplement, as long as the model supports the attention backend interface described below.
 
 This guide shows you how to implement a model in Transformers that works as a backend for any inference engine.
 
 ## Model implementation
 
-1. Follow the model [contribution guidelines](./add_new_model) or the [custom model contribution guidelines](./custom_models). The model must have a valid `config.json` in its directory and a valid `auto_map` field pointing to the model class in the config.
+1. Follow the model [contribution guidelines](../add_new_model) or the [custom model contribution guidelines](../custom_models). The model must have a valid `config.json` in its directory and a valid `auto_map` field pointing to the model class in the config.
 
 2. Use the [`AttentionInterface`] class for custom and optimized attention functions. This interface unlocks each inference engine's performance features. 
 
-   Use `ALL_ATTENTION_FUNCTIONS` when defining the attention layer and propagate `**kwargs**` from the base `MyModel` class to the attention layers. Set `_supports_attention_backend` to `True` in [`PreTrainedModel`].
+   Use `ALL_ATTENTION_FUNCTIONS` when defining the attention layer and propagate `**kwargs` from the base `MyModel` class to the attention layers. Set `_supports_attention_backend` to `True` in [`PreTrainedModel`].
    
    Expand the code below for an example.
 
@@ -35,6 +35,7 @@ This guide shows you how to implement a model in Transformers that works as a ba
 
     ```python
     from transformers import PreTrainedModel
+    from transformers.modeling_utils import ALL_ATTENTION_FUNCTIONS
     from torch import nn
 
     class MyAttention(nn.Module):
@@ -59,7 +60,7 @@ This guide shows you how to implement a model in Transformers that works as a ba
 
 3. Enable optional tensor or pipeline parallelism by adding the following keys to [`PreTrainedConfig`].
 
-    * `base_model_tp_plan` enables [tensor parallelism](./perf_infer_gpu_multi) by mapping fully qualified layer name patterns to tensor parallel styles. Supports only the `"colwise"` and `"rowwise"` partitioning strategies.
+    * `base_model_tp_plan` enables [tensor parallelism](../perf_infer_gpu_multi) by mapping fully qualified layer name patterns to tensor parallel styles. Supports only the `"colwise"` and `"rowwise"` partitioning strategies.
     * `base_model_pp_plan` enables pipeline parallelism by mapping direct child layer names to tuples of lists of strings. The first element of the tuple contains the names of the input arguments. The last element contains the variable names of the layer outputs in the modeling code.
 
     Expand the code below for an example.
@@ -91,7 +92,7 @@ This guide shows you how to implement a model in Transformers that works as a ba
 
 ## Multimodal models
 
-Multimodal models require additional changes beyond the [vision language model contribution checklist](./contributing#vision-language-model-contribution-checklist). These changes ensure multimodal inputs are properly processed.
+Multimodal models require additional changes beyond the [vision language model contribution checklist](../contributing#vision-language-model-contribution-checklist). These changes ensure multimodal inputs are properly processed.
 
 1. The [`ProcessorMixin`] class must include the `self.image_token` and `self.image_token_ids` attributes. These placeholder tokens indicate image positions in the input. The same token appears in the input prompt for images and in the model code to scatter image features.
 

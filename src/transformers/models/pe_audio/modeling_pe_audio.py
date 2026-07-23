@@ -30,15 +30,16 @@ from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...configuration_utils import PreTrainedConfig
-from ...integrations import use_kernel_forward_from_hub, use_kernelized_func
-from ...modeling_attn_mask_utils import _prepare_4d_attention_mask
+from ...integrations import use_kernel_forward_from_hub
+from ...masking_utils import create_bidirectional_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPooling, MaskedLMOutput
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple
-from ...utils.generic import check_model_inputs, maybe_autocast
+from ...utils.generic import maybe_autocast, merge_with_config_defaults
+from ...utils.output_capturing import capture_outputs
 from ..auto import AutoModel
 from .configuration_pe_audio import PeAudioConfig, PeAudioEncoderConfig
 
@@ -127,18 +128,17 @@ class PeAudioDacEncoder(nn.Module):
     def __init__(self, config: PreTrainedConfig):
         super().__init__()
 
-        strides = config.downsampling_ratios
         # Create first convolution
         self.conv1 = nn.Conv1d(1, config.encoder_hidden_size, kernel_size=7, padding=3)
 
         self.block = []
         # Create EncoderBlocks that double channels as they downsample by `stride`
-        for stride_index, stride in enumerate(strides):
+        for stride_index, stride in enumerate(config.downsampling_ratios):
             stride_index = stride_index + 1
             self.block += [PeAudioDacEncoderBlock(config, stride=stride, stride_index=stride_index)]
 
         self.block = nn.ModuleList(self.block)
-        d_model = config.encoder_hidden_size * 2**stride_index
+        d_model = config.encoder_hidden_size * 2 ** len(config.downsampling_ratios)
         self.snake1 = Snake1d(d_model)
         self.conv2 = nn.Conv1d(d_model, config.hidden_size, kernel_size=3, padding=1)
 
@@ -313,8 +313,7 @@ def eager_attention_forward(
 
     attn_weights = torch.matmul(query, key_states.transpose(2, 3)) * scaling
     if attention_mask is not None:
-        causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
-        attn_weights = attn_weights + causal_mask
+        attn_weights = attn_weights + attention_mask
 
     attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
     attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
@@ -361,7 +360,6 @@ class PeAudioEncoderRMSNorm(nn.Module):
         return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
 
 
-@use_kernelized_func(apply_rotary_pos_emb)
 class PeAudioEncoderAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
@@ -412,9 +410,9 @@ class PeAudioEncoderAttention(nn.Module):
         cos, sin = position_embeddings
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
-        attention_interface: Callable = eager_attention_forward
-        if self.config._attn_implementation != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
 
         attn_output, attn_weights = attention_interface(
             self,
@@ -466,7 +464,6 @@ class PeAudioEncoderLayer(GradientCheckpointingLayer):
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
         use_cache: bool | None = False,
-        cache_position: torch.LongTensor | None = None,
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
@@ -479,7 +476,6 @@ class PeAudioEncoderLayer(GradientCheckpointingLayer):
             position_ids=position_ids,
             past_key_values=past_key_values,
             use_cache=use_cache,
-            cache_position=cache_position,
             position_embeddings=position_embeddings,
             **kwargs,
         )
@@ -498,7 +494,7 @@ class PeAudioPreTrainedModel(PreTrainedModel):
     config: PeAudioConfig
     base_model_prefix = "audio_model"
     supports_gradient_checkpointing = True
-    _no_split_modules = ["PeAudioEncoderLayer"]
+    _no_split_modules = ["PeAudioEncoderLayer", "TimmWrapperForImageClassification"]
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = True
     _supports_sdpa = True
@@ -535,13 +531,22 @@ class PeAudioPreTrainedModel(PreTrainedModel):
             init.normal_(module.weight, mean=0.0, std=0.02)
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Class for outputs of [`PeAudioEncoder`].
     """
 )
+@dataclass
 class PeAudioEncoderOutput(BaseModelOutputWithPooling):
+    r"""
+    codec_features (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
+        Features extracted from the codec encoder, used as intermediate representations before the main encoder
+        processing.
+    output_mask (`tuple(torch.FloatTensor)`, *optional*):
+        Tuple of `torch.FloatTensor` masks corresponding to the encoder outputs, used to avoid performing attention
+        on padded regions.
+    """
+
     codec_features: torch.FloatTensor | None = None
     output_mask: tuple[torch.FloatTensor] | None = None
 
@@ -636,18 +641,23 @@ class PeAudioEncoder(PeAudioPreTrainedModel):
         self.post_init()
 
     @can_return_tuple
-    @check_model_inputs
+    @merge_with_config_defaults
+    @capture_outputs
     def forward(
         self,
         input_values: torch.Tensor,
         padding_mask: torch.Tensor | None = None,
         **kwargs,
-    ) -> BaseModelOutputWithPooling:
+    ) -> tuple | BaseModelOutputWithPooling:
         inputs_embeds, padding_mask = self.embedder(input_values, padding_mask=padding_mask)
         inputs_embeds, attention_mask = self.patch_embedder(inputs_embeds, padding_mask=padding_mask)
 
         if attention_mask is not None:
-            attention_mask = _prepare_4d_attention_mask(attention_mask, inputs_embeds.dtype)
+            attention_mask = create_bidirectional_mask(
+                config=self.config,
+                inputs_embeds=inputs_embeds,
+                attention_mask=attention_mask,
+            )
 
         position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device).unsqueeze(0)
         position_embeddings = self.rotary_emb(inputs_embeds, position_ids)
@@ -745,7 +755,9 @@ class PeAudioModel(PeAudioPreTrainedModel):
         text_audio_embeds = self.text_audio_head(text_audio_embeds)
 
         logits_audio_text = audio_embeds @ text_audio_embeds.T
-        logits_audio_text = logits_audio_text * self.text_audio_logit_scale + self.text_audio_logit_bias
+        logits_audio_text = logits_audio_text * self.text_audio_logit_scale.to(
+            logits_audio_text.device
+        ) + self.text_audio_logit_bias.to(logits_audio_text.device)
 
         loss = None
         if return_loss:

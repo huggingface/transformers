@@ -15,23 +15,18 @@
 
 import unittest
 
-import requests
-
 from transformers import AutoImageProcessor, EomtConfig, EomtForUniversalSegmentation, pipeline
 from transformers.testing_utils import require_torch, require_torch_accelerator, require_torch_fp16, slow, torch_device
-from transformers.utils import is_torch_available, is_vision_available
+from transformers.utils import is_torch_available
 
 from ...test_configuration_common import ConfigTester
+from ...test_image_processing_common import load_coco_image
 from ...test_modeling_common import ModelTesterMixin, floats_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
     import torch
-
-
-if is_vision_available():
-    from PIL import Image
 
 
 class EomtForUniversalSegmentationTester:
@@ -62,7 +57,7 @@ class EomtForUniversalSegmentationTester:
         self.num_register_tokens = num_register_tokens
 
         num_patches = (image_size // patch_size) ** 2
-        self.seq_length = num_patches + 1
+        self.seq_length = num_patches + 1 + self.num_register_tokens
 
     def get_config(self):
         config = {
@@ -107,7 +102,7 @@ class EomtForUniversalSegmentationTest(ModelTesterMixin, PipelineTesterMixin, un
     is_encoder_decoder = False
 
     test_missing_keys = False
-    test_torch_exportable = False
+    test_torch_exportable = False  # data-dependent control flow in segmentation head
 
     def setUp(self):
         self.model_tester = EomtForUniversalSegmentationTester(self)
@@ -129,78 +124,6 @@ class EomtForUniversalSegmentationTest(ModelTesterMixin, PipelineTesterMixin, un
         outputs = model(**inputs)
         self.assertTrue(outputs.loss is not None)
 
-    def test_attention_outputs(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        config.return_dict = True
-
-        for model_class in self.all_model_classes:
-            inputs_dict["output_attentions"] = True
-            inputs_dict["output_hidden_states"] = False
-            config.return_dict = True
-            model = model_class._from_config(config, attn_implementation="eager")
-            config = model.config
-            model.to(torch_device)
-            model.eval()
-            with torch.no_grad():
-                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
-            attentions = outputs.attentions
-            self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
-
-            # Check that output_attentions also work using config
-            del inputs_dict["output_attentions"]
-            config.output_attentions = True
-            model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-            with torch.no_grad():
-                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
-            attentions = outputs.attentions
-            self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
-
-            out_len = len(outputs)
-            # Check attention is always last and order is fine
-            inputs_dict["output_attentions"] = True
-            inputs_dict["output_hidden_states"] = True
-            model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-            with torch.no_grad():
-                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
-
-            added_hidden_states = 1
-            self.assertEqual(out_len + added_hidden_states, len(outputs))
-
-            self_attentions = outputs.attentions
-            self.assertEqual(len(self_attentions), self.model_tester.num_hidden_layers)
-
-    def test_hidden_states_output(self):
-        def check_hidden_states_output(inputs_dict, config, model_class):
-            model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-
-            with torch.no_grad():
-                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
-
-            hidden_states = outputs.encoder_hidden_states if config.is_encoder_decoder else outputs.hidden_states
-
-            expected_num_layers = getattr(
-                self.model_tester, "expected_num_hidden_layers", self.model_tester.num_hidden_layers + 1
-            )
-            self.assertEqual(len(hidden_states), expected_num_layers)
-
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            inputs_dict["output_hidden_states"] = True
-            check_hidden_states_output(inputs_dict, config, model_class)
-
-            # check that output_hidden_states also work using config
-            del inputs_dict["output_hidden_states"]
-            config.output_hidden_states = True
-
-            check_hidden_states_output(inputs_dict, config, model_class)
-
     @unittest.skip(reason="EoMT does not use inputs_embeds")
     def test_inputs_embeds(self):
         pass
@@ -218,6 +141,10 @@ class EomtForUniversalSegmentationTest(ModelTesterMixin, PipelineTesterMixin, un
         pass
 
     def test_training(self):
+        # We override this test because EoMT requires `mask_labels` and `class_labels` for training,
+        # which are not standard labels that `_prepare_for_class` can generate. We can't include
+        # these labels in `prepare_config_and_inputs_for_common` because that would break determinism
+        # tests (the Hungarian matching in the loss computation is non-deterministic).
         if not self.model_tester.is_training:
             self.skipTest(reason="ModelTester is not configured to run training tests")
 
@@ -243,7 +170,7 @@ class EomtForUniversalSegmentationIntegrationTest(unittest.TestCase):
         model = EomtForUniversalSegmentation.from_pretrained(self.model_id, device_map="auto")
         processor = AutoImageProcessor.from_pretrained(self.model_id)
 
-        image = Image.open(requests.get("http://images.cocodataset.org/val2017/000000039769.jpg", stream=True).raw)
+        image = load_coco_image("000000039769.jpg")
 
         inputs = processor(images=image, return_tensors="pt").to(model.device)
 
@@ -286,7 +213,7 @@ class EomtForUniversalSegmentationIntegrationTest(unittest.TestCase):
         model = EomtForUniversalSegmentation.from_pretrained(self.model_id, dtype=torch.float16, device_map="auto")
         processor = AutoImageProcessor.from_pretrained(self.model_id)
 
-        image = Image.open(requests.get("http://images.cocodataset.org/val2017/000000039769.jpg", stream=True).raw)
+        image = load_coco_image("000000039769.jpg")
 
         inputs = processor(images=image, return_tensors="pt").to(model.device)
 
@@ -302,7 +229,7 @@ class EomtForUniversalSegmentationIntegrationTest(unittest.TestCase):
         model = EomtForUniversalSegmentation.from_pretrained(model_id, device_map="auto")
         processor = AutoImageProcessor.from_pretrained(model_id)
 
-        image = Image.open(requests.get("http://images.cocodataset.org/val2017/000000039769.jpg", stream=True).raw)
+        image = load_coco_image("000000039769.jpg")
 
         inputs = processor(images=image, return_tensors="pt").to(model.device)
 
@@ -339,7 +266,7 @@ class EomtForUniversalSegmentationIntegrationTest(unittest.TestCase):
         model = EomtForUniversalSegmentation.from_pretrained(self.model_id, device_map="auto")
         processor = AutoImageProcessor.from_pretrained(self.model_id)
 
-        image = Image.open(requests.get("http://images.cocodataset.org/val2017/000000039769.jpg", stream=True).raw)
+        image = load_coco_image("000000039769.jpg")
 
         inputs = processor(images=image, return_tensors="pt").to(model.device)
 
@@ -388,7 +315,7 @@ class EomtForUniversalSegmentationIntegrationTest(unittest.TestCase):
         model = EomtForUniversalSegmentation.from_pretrained(model_id, device_map="auto")
         processor = AutoImageProcessor.from_pretrained(model_id)
 
-        image = Image.open(requests.get("http://images.cocodataset.org/val2017/000000039769.jpg", stream=True).raw)
+        image = load_coco_image("000000039769.jpg")
 
         inputs = processor(images=image, return_tensors="pt").to(model.device)
 
@@ -434,7 +361,7 @@ class EomtForUniversalSegmentationIntegrationTest(unittest.TestCase):
 
     @slow
     def test_segmentation_pipeline(self):
-        image = Image.open(requests.get("http://images.cocodataset.org/val2017/000000039769.jpg", stream=True).raw)
+        image = load_coco_image("000000039769.jpg")
 
         pipe = pipeline(model=self.model_id, subtask="panoptic", device=torch_device)
         output = pipe(image)

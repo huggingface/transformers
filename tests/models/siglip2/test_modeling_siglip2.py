@@ -280,7 +280,7 @@ class Siglip2VisionModelTest(Siglip2ModelTesterMixin, unittest.TestCase):
     def setUp(self):
         self.model_tester = Siglip2VisionModelTester(self)
         self.config_tester = ConfigTester(
-            self, config_class=Siglip2VisionConfig, has_text_modality=False, hidden_size=37
+            self, config_class=Siglip2VisionConfig, has_text_modality=False, hidden_size=32
         )
 
     def test_config(self):
@@ -422,7 +422,7 @@ class Siglip2TextModelTest(Siglip2ModelTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.model_tester = Siglip2TextModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=Siglip2TextConfig, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=Siglip2TextConfig, hidden_size=32)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -576,6 +576,26 @@ class Siglip2ModelTest(Siglip2ModelTesterMixin, PipelineTesterMixin, unittest.Te
             config.save_pretrained(tmp_dir_name)
             text_config = Siglip2TextConfig.from_pretrained(tmp_dir_name)
             self.assertDictEqual(config.text_config.to_dict(), text_config.to_dict())
+
+    @unittest.skip(reason="The SigLIP2 family currently does not work with output_attentions.")
+    def test_get_text_features_attentions(self):
+        # This test should no longer be skipped once this architecture is refactored to work with output_attentions.
+        pass
+
+    @unittest.skip(reason="The SigLIP2 family currently does not work with output_hidden_states.")
+    def test_get_text_features_hidden_states(self):
+        # This test should no longer be skipped once this architecture is refactored to work with output_hidden_states.
+        pass
+
+    @unittest.skip(reason="The SigLIP2 family currently does not work with output_attentions.")
+    def test_get_image_features_attentions(self):
+        # This test should no longer be skipped once this architecture is refactored to work with output_attentions.
+        pass
+
+    @unittest.skip(reason="The SigLIP2 family currently does not work with output_hidden_states.")
+    def test_get_image_features_hidden_states(self):
+        # This test should no longer be skipped once this architecture is refactored to work with output_hidden_states.
+        pass
 
     @slow
     def test_model_from_pretrained(self):

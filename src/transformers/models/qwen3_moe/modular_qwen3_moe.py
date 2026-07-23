@@ -20,7 +20,7 @@ from ...cache_utils import Cache
 from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPast
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, logging
-from ...utils.generic import OutputRecorder
+from ...utils.output_capturing import OutputRecorder
 from ..llama.modeling_llama import (
     LlamaForQuestionAnswering,
     LlamaForSequenceClassification,
@@ -66,7 +66,7 @@ class Qwen3MoeSparseMoeBlock(nn.Module):
         self.experts = Qwen3MoeExperts(config)
         self.gate = Qwen3MoeTopKRouter(config)
 
-    def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         batch_size, sequence_length, hidden_dim = hidden_states.shape
         hidden_states_reshaped = hidden_states.view(-1, hidden_dim)
         _, routing_weights, selected_experts = self.gate(hidden_states_reshaped)
@@ -84,7 +84,7 @@ class Qwen3MoeDecoderLayer(Qwen2MoeDecoderLayer):
 
 class Qwen3MoePreTrainedModel(MixtralPreTrainedModel):
     _can_record_outputs = {
-        "router_logits": OutputRecorder(Qwen3MoeTopKRouter, layer_name="mlp.gate", index=0),
+        "router_logits": OutputRecorder(Qwen3MoeTopKRouter, index=0),
         "hidden_states": Qwen3MoeDecoderLayer,
         "attentions": Qwen3MoeAttention,
     }
@@ -110,7 +110,6 @@ class Qwen3MoeForCausalLM(MixtralForCausalLM):
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
         output_router_logits: bool | None = None,
-        cache_position: torch.LongTensor | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
     ) -> MoeCausalLMOutputWithPast:
@@ -150,7 +149,6 @@ class Qwen3MoeForCausalLM(MixtralForCausalLM):
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
             output_router_logits=output_router_logits,
-            cache_position=cache_position,
             **kwargs,
         )
 

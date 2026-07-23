@@ -20,10 +20,11 @@ import torch.nn.functional as F
 
 from ... import initialization as init
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_attn_mask_utils import _prepare_4d_attention_mask
+from ...masking_utils import create_bidirectional_mask
 from ...modeling_outputs import BaseModelOutputWithPooling, MaskedLMOutput
 from ...utils import ModelOutput, auto_docstring, can_return_tuple
-from ...utils.generic import check_model_inputs
+from ...utils.generic import merge_with_config_defaults
+from ...utils.output_capturing import capture_outputs
 from ..auto import AutoModel
 from ..dac.modeling_dac import DacEncoder, DacEncoderBlock, Snake1d
 from ..pe_audio_video.modeling_pe_audio_video import (
@@ -75,6 +76,7 @@ class PeAudioContrastiveHead(PeAudioVideoContrastiveHead): ...
 
 class PeAudioPreTrainedModel(PeAudioVideoPreTrainedModel):
     base_model_prefix = "audio_model"
+    _no_split_modules = ["PeAudioEncoderLayer", "TimmWrapperForImageClassification"]
 
     @torch.no_grad()
     def _init_weights(self, module):
@@ -90,13 +92,22 @@ class PeAudioPreTrainedModel(PeAudioVideoPreTrainedModel):
             init.normal_(module.weight, mean=0.0, std=0.02)
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Class for outputs of [`PeAudioEncoder`].
     """
 )
+@dataclass
 class PeAudioEncoderOutput(BaseModelOutputWithPooling):
+    r"""
+    codec_features (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
+        Features extracted from the codec encoder, used as intermediate representations before the main encoder
+        processing.
+    output_mask (`tuple(torch.FloatTensor)`, *optional*):
+        Tuple of `torch.FloatTensor` masks corresponding to the encoder outputs, used to avoid performing attention
+        on padded regions.
+    """
+
     codec_features: torch.FloatTensor | None = None
     output_mask: tuple[torch.FloatTensor] | None = None
 
@@ -111,18 +122,23 @@ class PeAudioEncoder(PeAudioVideoEncoder):
     base_model_prefix = "audio_model.audio_encoder"
 
     @can_return_tuple
-    @check_model_inputs
+    @merge_with_config_defaults
+    @capture_outputs
     def forward(
         self,
         input_values: torch.Tensor,
         padding_mask: torch.Tensor | None = None,
         **kwargs,
-    ) -> BaseModelOutputWithPooling:
+    ) -> tuple | BaseModelOutputWithPooling:
         inputs_embeds, padding_mask = self.embedder(input_values, padding_mask=padding_mask)
         inputs_embeds, attention_mask = self.patch_embedder(inputs_embeds, padding_mask=padding_mask)
 
         if attention_mask is not None:
-            attention_mask = _prepare_4d_attention_mask(attention_mask, inputs_embeds.dtype)
+            attention_mask = create_bidirectional_mask(
+                config=self.config,
+                inputs_embeds=inputs_embeds,
+                attention_mask=attention_mask,
+            )
 
         position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device).unsqueeze(0)
         position_embeddings = self.rotary_emb(inputs_embeds, position_ids)
@@ -220,7 +236,9 @@ class PeAudioModel(PeAudioPreTrainedModel):
         text_audio_embeds = self.text_audio_head(text_audio_embeds)
 
         logits_audio_text = audio_embeds @ text_audio_embeds.T
-        logits_audio_text = logits_audio_text * self.text_audio_logit_scale + self.text_audio_logit_bias
+        logits_audio_text = logits_audio_text * self.text_audio_logit_scale.to(
+            logits_audio_text.device
+        ) + self.text_audio_logit_bias.to(logits_audio_text.device)
 
         loss = None
         if return_loss:

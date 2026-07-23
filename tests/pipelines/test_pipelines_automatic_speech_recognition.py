@@ -410,57 +410,53 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
 
     @slow
     @require_torch
-    @unittest.skip("TODO (joao, eustache): this test is failing, find the breaking PR and fix the cause or the test")
-    def test_return_timestamps_and_language_in_preprocess(self):
+    def test_return_timestamps_and_language(self):
         pipe = pipeline(
             task="automatic-speech-recognition",
             model="openai/whisper-tiny",
-            chunk_length_s=8,
-            stride_length_s=1,
-            return_language=True,
         )
         data = load_dataset("openslr/librispeech_asr", "clean", split="test", streaming=True)
         sample = next(iter(data))
 
-        res = pipe(sample["audio"]["array"])
+        res = pipe(sample["audio"]["array"], return_language=True)
         self.assertEqual(
             res,
             {
-                "text": " Conquered returned to its place amidst the tents.",
-                "chunks": [{"language": "english", "text": " Conquered returned to its place amidst the tents."}],
+                "text": " Concord returned to its place amidst the tents.",
+                "chunks": [{"language": "english", "text": " Concord returned to its place amidst the tents."}],
             },
         )
 
-        res = pipe(sample["audio"]["array"], return_timestamps=True)
+        res = pipe(sample["audio"]["array"], return_timestamps=True, return_language=True)
         self.assertEqual(
             res,
             {
-                "text": " Conquered returned to its place amidst the tents.",
+                "text": " Concord returned to its place amidst the tents.",
                 "chunks": [
                     {
                         "timestamp": (0.0, 3.36),
                         "language": "english",
-                        "text": " Conquered returned to its place amidst the tents.",
+                        "text": " Concord returned to its place amidst the tents.",
                     }
                 ],
             },
         )
 
-        res = pipe(sample["audio"]["array"], return_timestamps="word")
+        res = pipe(sample["audio"]["array"], return_timestamps="word", return_language=True)
         # fmt: off
         self.assertEqual(
             res,
             {
-                'text': ' Conquered returned to its place amidst the tents.',
-                'chunks': [
-                    {"language": "english",'text': ' Conquered', 'timestamp': (0.5, 1.2)},
-                    {"language": "english", 'text': ' returned', 'timestamp': (1.2, 1.64)},
-                    {"language": "english",'text': ' to', 'timestamp': (1.64, 1.84)},
-                    {"language": "english",'text': ' its', 'timestamp': (1.84, 2.02)},
-                    {"language": "english",'text': ' place', 'timestamp': (2.02, 2.28)},
-                    {"language": "english",'text': ' amidst', 'timestamp': (2.28, 2.8)},
-                    {"language": "english",'text': ' the', 'timestamp': (2.8, 2.98)},
-                    {"language": "english",'text': ' tents.', 'timestamp': (2.98, 3.48)},
+                "text": " Concord returned to its place amidst the tents.",
+                "chunks": [
+                    {"text": " Concord","timestamp": (1.04, 1.62),"language": "english",},
+                    {"text": " returned","timestamp": (1.62, 1.86),"language": "english",},
+                    {"text": " to", "timestamp": (1.86, 2.02), "language": "english"},
+                    {"text": " its", "timestamp": (2.02, 2.28), "language": "english"},
+                    {"text": " place","timestamp": (2.28, 2.64),"language": "english",},
+                    {"text": " amidst","timestamp": (2.64, 2.98),"language": "english",},
+                    {"text": " the", "timestamp": (2.98, 3.32), "language": "english"},
+                    {"text": " tents.","timestamp": (3.32, 3.48),"language": "english",},
                 ],
             },
         )
@@ -1448,6 +1444,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
             {
                 (None, None): " Folks, if you watch the show, you know, I spent a lot of time right over there. Patiently and astutely scrutinizing the boxwood and mahogany chest set of the day's biggest stories developing the central headline pawns, definitely maneuvering an oso topical night to F6, fainting a classic Sicilian, nade door variation on the news, all the while seeing eight moves deep and patiently marshalling the latest press releases into a fisher's shows in Lip Nitsky attack that culminates in the elegant lethal slow-played, all-passant checkmate that is my nightly monologue. But sometimes, sometimes, folks, I. CHEERING AND APPLAUSE Sometimes I startle away, cubside down in the monkey bars of a condemned playground on a super fun site. Get all hept up on goofballs. Rummage that were discarded tag bag of defective toys. Yank out a fist bowl of disembodied doll limbs, toss them on Saturday, Rusty Cargo, container down by the Wharf, and challenge toothless drifters to the godless bughouse lets of tournament that is my segment. MUSIC Meanwhile!",
                 ("xpu", None): " Folks, if you watch the show, you know, I spent a lot of time right over there. Patiently and astutely scrutinizing the boxwood and mahogany chest set of the day's biggest stories developing the central headline pawns, definitely maneuvering an oso topical night to F6, fainting of classics, Sicilian, nade door variation on the news, all the while seeing eight moves deep and patiently marshalling the latest press releases into a Fisher shows in Lip Nitsky attack that culminates in the elegant lethal slow-played, all-passant checkmate that is my nightly monologue. But sometimes, sometimes, folks, I... APPLAUSE Sometimes I... Startle away, upside down on the monkey bars of a condemned playground on a superfund site. Get all heaped up on goofballs, rummaged that would discard a tag bag of defective toys, yank out a fist bowl of disembodied doll limbs, toss them on a stain kid's place mat from a defunct denys, set up a table inside a rusty cargo container down by the Wharf and challenge toothless drifters to the godless bug house blitz of tournament that is my segment.",
+                ("rocm", (9, 4)): " Folks, if you watch the show, you know, I spent a lot of time right over there. Patiently and astutely scrutinizing the boxwood and mahogany chest set of the day's biggest stories developing the central headline pawns, definitely maneuvering an oso topical night to F6, fainting of classics, Sicilian, nade door variation on the news, all the while seeing eight moves deep and patiently marshalling the latest press releases into a Fisher shows in Lip Nitsky attack that culminates in the elegant lethal slow-played, all-passant checkmate that is my nightly monologue. But sometimes, sometimes, folks, I... APPLAUSE Sometimes I... Startle away, upside down on the monkey bars of a condemned playground on a superfund site. Get all heaped up on goofballs, rummaged that would discard a tag bag of defective toys, yank out a fist bowl of disembodied doll limbs, toss them on a stain kid's place mat from a defunct denys, set up a table inside a rusty cargo container down by the Wharf and challenge toothless drifters to the godless bug house blitz of tournament that is my segment."
             }
         )
         # fmt: on

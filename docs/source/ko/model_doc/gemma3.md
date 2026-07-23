@@ -99,13 +99,6 @@ print(processor.decode(output[0], skip_special_tokens=True))
 ```
 
 </hfoption>
-<hfoption id="transformers CLI">
-
-```bash
-echo -e "Plants create energy through a process known as" | transformers run --task text-generation --model google/gemma-3-1b-pt --device 0
-```
-
-</hfoption>
 </hfoptions>
 
 양자화는 가중치를 더 낮은 정밀도로 표현하여, 큰 모델의 메모리 부담을 줄여줍니다. 사용 가능한 양자화 백엔드에 대한 더 자세한 내용은 [양자화](../quantization/overview) 개요를 참고하세요.

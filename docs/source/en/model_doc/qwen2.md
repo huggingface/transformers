@@ -13,11 +13,10 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2024-07-15 and added to Hugging Face Transformers on 2024-01-17.*
+*This model was published in HF papers on 2024-07-15 and contributed to Hugging Face Transformers on 2024-01-17.*
 
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
-        <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
         <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
         <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
         <img alt="Tensor parallelism" src="https://img.shields.io/badge/Tensor%20parallelism-06b6d4?style=flat&logoColor=white">
@@ -39,13 +38,12 @@ The example below demonstrates how to generate text with [`Pipeline`], [`AutoMod
 <hfoption id="Pipeline">
 
 ```python
-import torch
 from transformers import pipeline
+
 
 pipe = pipeline(
     task="text-generation",
     model="Qwen/Qwen2-1.5B-Instruct",
-    dtype=torch.bfloat16,
     device_map=0
 )
 
@@ -61,12 +59,11 @@ print(outputs[0]["generated_text"][-1]['content'])
 <hfoption id="AutoModel">
 
 ```python
-import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
+
 
 model = AutoModelForCausalLM.from_pretrained(
     "Qwen/Qwen2-1.5B-Instruct",
-    dtype=torch.bfloat16,
     device_map="auto",
     attn_implementation="sdpa"
 )
@@ -118,12 +115,11 @@ The example below uses [bitsandbytes](../quantization/bitsandbytes) to quantize 
 
 ```python
 # pip install -U flash-attn --no-build-isolation
-import torch
-from transformers import AutoTokenizer, AutoModelForCausalLM, BitsAndBytesConfig
+from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
+
 
 quantization_config = BitsAndBytesConfig(
     load_in_4bit=True,
-    bnb_4bit_compute_dtype=torch.bfloat16,
     bnb_4bit_quant_type="nf4",
     bnb_4bit_use_double_quant=True,
 )
@@ -131,7 +127,6 @@ quantization_config = BitsAndBytesConfig(
 tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2-7B")
 model = AutoModelForCausalLM.from_pretrained(
     "Qwen/Qwen2-7B",
-    dtype=torch.bfloat16,
     device_map="auto",
     quantization_config=quantization_config,
     attn_implementation="flash_attention_2"

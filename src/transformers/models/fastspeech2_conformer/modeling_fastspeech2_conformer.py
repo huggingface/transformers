@@ -34,12 +34,12 @@ from .configuration_fastspeech2_conformer import (
 logger = logging.get_logger(__name__)
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Output type of [`FastSpeech2ConformerModel`].
     """
 )
+@dataclass
 class FastSpeech2ConformerModelOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
@@ -64,22 +64,14 @@ class FastSpeech2ConformerModelOutput(ModelOutput):
     energy_outputs: torch.FloatTensor | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Output type of [`FastSpeech2ConformerWithHifiGan`].
     """
 )
+@dataclass
 class FastSpeech2ConformerWithHifiGanOutput(FastSpeech2ConformerModelOutput):
     r"""
-    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
-        Spectrogram generation loss.
-    duration_outputs (`torch.LongTensor` of shape `(batch_size, max_text_length + 1)`, *optional*):
-        Outputs of the duration predictor.
-    pitch_outputs (`torch.FloatTensor` of shape `(batch_size, max_text_length + 1, 1)`, *optional*):
-        Outputs of the pitch predictor.
-    energy_outputs (`torch.FloatTensor` of shape `(batch_size, max_text_length + 1, 1)`, *optional*):
-        Outputs of the energy predictor.
     waveform (`torch.FloatTensor` of shape `(batch_size, audio_length)`):
         Speech output as a result of passing the predicted mel spectrogram through the vocoder.
     """
@@ -997,6 +989,7 @@ class FastSpeech2ConformerPreTrainedModel(PreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
+        super()._init_weights(module)
         if isinstance(module, nn.Linear):
             init.normal_(module.weight, std=1.0 / math.sqrt(module.weight.size(1)))
             if module.bias is not None:
@@ -1006,13 +999,6 @@ class FastSpeech2ConformerPreTrainedModel(PreTrainedModel):
             if module.bias is not None:
                 key = math.sqrt(module.groups / (module.in_channels * module.kernel_size[0]))
                 init.uniform_(module.bias, a=-key, b=key)
-        elif isinstance(module, (nn.LayerNorm, nn.BatchNorm1d)):
-            init.zeros_(module.bias)
-            init.ones_(module.weight)
-            if getattr(module, "running_mean", None) is not None:
-                init.zeros_(module.running_mean)
-                init.ones_(module.running_var)
-                init.zeros_(module.num_batches_tracked)
         elif isinstance(module, nn.Embedding):
             init.normal_(module.weight)
             # Here we need the check explicitly, as we slice the weight in the `zeros_` call, so it looses the flag
@@ -1169,7 +1155,7 @@ class FastSpeech2ConformerModel(FastSpeech2ConformerPreTrainedModel):
         torch.Size([1, 49664])
         ```
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -1563,7 +1549,7 @@ class FastSpeech2ConformerWithHifiGan(PreTrainedModel):
         torch.Size([1, 49664])
         ```
         """
-        return_dict = return_dict if return_dict is not None else self.config.model_config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.model_config.return_dict
         output_attentions = (
             output_attentions if output_attentions is not None else self.config.model_config.output_attentions
         )

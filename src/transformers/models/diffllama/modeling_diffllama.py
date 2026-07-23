@@ -29,11 +29,10 @@ from torch import nn
 
 from ... import initialization as init
 from ...activations import ACT2FN
-from ...cache_utils import Cache, DynamicCache, StaticCache
+from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
-from ...integrations import use_kernel_forward_from_hub, use_kernel_func_from_hub
+from ...integrations import use_kernel_forward_from_hub, use_kernel_func_from_hub, use_kernelized_func
 from ...masking_utils import create_causal_mask
-from ...modeling_flash_attention_utils import _flash_attention_forward, flash_attn_supports_top_left_mask
 from ...modeling_layers import (
     GenericForQuestionAnswering,
     GenericForSequenceClassification,
@@ -42,14 +41,12 @@ from ...modeling_layers import (
 )
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
-from ...modeling_utils import PreTrainedModel
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
-from ...utils.generic import check_model_inputs, maybe_autocast
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
+from ...utils.generic import maybe_autocast, merge_with_config_defaults
+from ...utils.output_capturing import capture_outputs
 from .configuration_diffllama import DiffLlamaConfig
-
-
-logger = logging.get_logger(__name__)
 
 
 class DiffLlamaMLP(nn.Module):
@@ -178,39 +175,84 @@ def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
     return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
 
 
+def eager_attention_forward(
+    module: nn.Module,
+    query: torch.Tensor,
+    key: torch.Tensor,
+    value: torch.Tensor,
+    attention_mask: torch.Tensor | None,
+    scaling: float,
+    dropout: float = 0.0,
+    **kwargs: Unpack[TransformersKwargs],
+):
+    key_states = repeat_kv(key, module.num_key_value_groups)
+    value_states = repeat_kv(value, module.num_key_value_groups)
+
+    attn_weights = torch.matmul(query, key_states.transpose(2, 3)) * scaling
+    if attention_mask is not None:
+        attn_weights = attn_weights + attention_mask
+
+    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
+    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
+    attn_output = torch.matmul(attn_weights, value_states)
+    attn_output = attn_output.transpose(1, 2).contiguous()
+
+    return attn_output, attn_weights
+
+
 def lambda_init_fn(layer_idx):
     return 0.8 - 0.6 * math.exp(-0.3 * layer_idx)
 
 
+@use_kernelized_func(apply_rotary_pos_emb)
 class DiffLlamaAttention(nn.Module):
-    """Multi-headed attention from 'Attention Is All You Need' paper"""
+    """Multi-headed differential attention (https://huggingface.co/papers/2410.05258).
+
+    Computes ``(softmax(Q1 K1ᵀ) - λ · softmax(Q2 K2ᵀ)) · V`` as two standard attention calls
+    sharing Q and K over the two halves of V. The two-call structure is ~30% faster than the
+    V-doubling shortcut at production shapes, since asymmetric V (``head_dim_v != head_dim_q``)
+    forces SDPA off Flash/cuDNN onto the memory-efficient/math kernel; Flash Attention 2 also
+    requires ``head_dim_v == head_dim_q``.
+    """
 
     def __init__(self, config: DiffLlamaConfig, layer_idx: int | None = None):
         super().__init__()
         self.config = config
         self.layer_idx = layer_idx
-        if layer_idx is None:
-            logger.warning_once(
-                f"Instantiating {self.__class__.__name__} without passing a `layer_idx` is not recommended and will "
-                "lead to errors during the forward call if caching is used. Please make sure to provide a `layer_idx` "
-                "when creating this class."
-            )
-
+        self.head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
+        self.num_key_value_groups = config.num_attention_heads // config.num_key_value_heads
+        self.scaling = self.head_dim**-0.5
         self.attention_dropout = config.attention_dropout
-        self.hidden_size = config.hidden_size
-        self.num_heads = config.num_attention_heads
-        self.head_dim = getattr(config, "head_dim", self.hidden_size // self.num_heads)
-        self.num_key_value_heads = config.num_key_value_heads
-        self.num_key_value_groups = self.num_heads // self.num_key_value_heads
-        # under this are not used
-        self.max_position_embeddings = config.max_position_embeddings
         self.is_causal = True
 
-        self.q_proj = nn.Linear(self.hidden_size, self.num_heads * self.head_dim, bias=config.attention_bias)
-        self.k_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=config.attention_bias)
-        self.v_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=config.attention_bias)
-        self.o_proj = nn.Linear(self.num_heads * self.head_dim, self.hidden_size, bias=config.attention_bias)
-
+        self.q_proj = nn.Linear(
+            config.hidden_size, config.num_attention_heads * self.head_dim, bias=config.attention_bias
+        )
+        self.k_proj = nn.Linear(
+            config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.attention_bias
+        )
+        self.v_proj = nn.Linear(
+            config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.attention_bias
+        )
+        self.o_proj = nn.Linear(
+            config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
+        )
+        # The Differential Transformer paper (https://huggingface.co/papers/2410.05258) does not
+        # specify how attention dropout should be applied to the differential combination, and our
+        # two-call implementation has no single softmax to share a dropout mask across. Refuse
+        # rather than pick semantics the paper doesn't define.
+        if config.attention_dropout > 0.0:
+            raise ValueError(
+                "DiffLlama does not support `attention_dropout > 0`: the differential attention "
+                "mechanism has no paper-defined dropout semantics."
+            )
+        # ``torch.chunk(value_states, 2, dim=1).repeat(1, 2, ...)`` below requires the KV-head axis
+        # to split evenly into the two halves of the differential combination.
+        if config.num_key_value_heads is None or config.num_key_value_heads % 2 != 0:
+            raise ValueError(
+                "DiffLlama requires `num_key_value_heads` to be even (and at least 2): the two-call "
+                f"differential attention splits the value tensor along KV heads, got {config.num_key_value_heads}."
+            )
         self.lambda_init = lambda_init_fn(layer_idx)
         self.lambda_q1 = nn.Parameter(torch.normal(0, config.lambda_std_dev, size=(self.head_dim,)))
         self.lambda_k1 = nn.Parameter(torch.normal(0, config.lambda_std_dev, size=(self.head_dim,)))
@@ -223,189 +265,57 @@ class DiffLlamaAttention(nn.Module):
         hidden_states: torch.Tensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: torch.Tensor | None = None,
-        position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
-        use_cache: bool = False,
-        cache_position: torch.LongTensor | None = None,
         **kwargs,
-    ) -> tuple[torch.Tensor, torch.Tensor | None, tuple[torch.Tensor] | None]:
-        bsz, target_len, _ = hidden_states.size()
-        q_len = target_len
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        input_shape = hidden_states.shape[:-1]
+        hidden_shape = (*input_shape, -1, self.head_dim)
 
-        query_states = self.q_proj(hidden_states)
-        key_states = self.k_proj(hidden_states)
-        value_states = self.v_proj(hidden_states)
-
-        query_states = query_states.view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
-        key_states = key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
-        value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
+        query_states = self.q_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+        key_states = self.k_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+        value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
 
         cos, sin = position_embeddings
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
         if past_key_values is not None:
-            # sin and cos are specific to RoPE models; cache_position needed for the static cache
-            cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
-            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx, cache_kwargs)
+            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
 
-        key_states = repeat_kv(key_states, self.num_key_value_groups)
-        value_states = repeat_kv(value_states, self.num_key_value_groups)
-        value_states = torch.cat(torch.chunk(value_states, 2, dim=1), dim=-1)
-        value_states = value_states.repeat(1, 2, 1, 1)
+        # Split V into two halves and broadcast each back to ``num_kv_heads`` heads (the dispatch's
+        # ``repeat_kv`` will then expand them to ``num_heads`` like K).
+        value_states1, value_states2 = (v.repeat(1, 2, 1, 1) for v in torch.chunk(value_states, 2, dim=1))
 
-        attn_weights = torch.matmul(query_states, key_states.transpose(2, 3)) / math.sqrt(self.head_dim)
-
-        if attention_mask is not None:  # no matter the length, we just slice it
-            causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
-            attn_weights = attn_weights + causal_mask
-
-        # upcast attention to fp32
-        attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query_states.dtype)
-        attn_weights = nn.functional.dropout(attn_weights, p=self.attention_dropout, training=self.training)
-        lambda_1 = torch.exp(torch.sum(self.lambda_q1 * self.lambda_k1, dim=-1, dtype=torch.float32)).to(
-            query_states.dtype
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
         )
-        lambda_2 = torch.exp(torch.sum(self.lambda_q2 * self.lambda_k2, dim=-1, dtype=torch.float32)).to(
-            query_states.dtype
-        )
-        lambda_full = lambda_1 - lambda_2 + self.lambda_init
-
-        attn_output = torch.matmul(attn_weights, value_states)
-        attn_output1, attn_output2 = torch.chunk(attn_output, 2, dim=1)
-
-        attn_output = attn_output1 - lambda_full * attn_output2
-        attn_output = (1 - self.lambda_init) * self.groupnorm(attn_output)
-        attn_output = attn_output.transpose(1, 2).contiguous()
-        attn_output = attn_output.reshape(bsz, q_len, -1)
-        attn_output = self.o_proj(attn_output)
-        return attn_output, attn_weights
-
-
-class DiffLlamaFlashAttention2(DiffLlamaAttention):
-    """
-    DiffLlama flash attention module. This module inherits from `DiffLlamaAttention` as the weights of the module stays
-    untouched. The only required change would be on the forward pass where it needs to correctly call the public API of
-    flash attention and deal with padding tokens in case the input contains any of them.
-    """
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-
-        # TODO: Should be removed once Flash Attention for RoCm is bumped to 2.1.
-        # flash_attn<2.1 generates top-left aligned causal mask, while what is needed here is bottom-right alignment, that was made default for flash_attn>=2.1. This attribute is used to handle this difference. Reference: https://github.com/Dao-AILab/flash-attention/releases/tag/v2.1.0.
-        # Beware that with flash_attn<2.1, using q_seqlen != k_seqlen (except for the case q_seqlen == 1) produces a wrong mask (top-left).
-        self._flash_attn_uses_top_left_mask = flash_attn_supports_top_left_mask()
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        position_embeddings: tuple[torch.Tensor, torch.Tensor],
-        attention_mask: torch.LongTensor | None = None,
-        position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
-        use_cache: bool = False,
-        cache_position: torch.LongTensor | None = None,
-    ) -> tuple[torch.Tensor, None]:
-        if isinstance(past_key_values, StaticCache):
-            raise ValueError(
-                "`static` cache implementation is not compatible with `attn_implementation==flash_attention_2` "
-                "make sure to use `sdpa` in the mean time, and open an issue at https://github.com/huggingface/transformers"
-            )
-
-        bsz, q_len, _ = hidden_states.size()
-
-        query_states = self.q_proj(hidden_states)
-        key_states = self.k_proj(hidden_states)
-        value_states = self.v_proj(hidden_states)
-
-        # Flash attention requires the input to have the shape
-        # batch_size x seq_length x head_dim x hidden_dim
-        # therefore we just need to keep the original shape
-        query_states = query_states.view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
-        key_states = key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
-        value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
-
-        cos, sin = position_embeddings
-        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
-
-        if past_key_values is not None:
-            # sin and cos are specific to RoPE models; cache_position needed for the static cache
-            cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
-            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx, cache_kwargs)
-
-        # TODO: These transpose are quite inefficient but Flash Attention requires the layout [batch_size, sequence_length, num_heads, head_dim]. We would need to refactor the KV cache
-        # to be able to avoid many of these transpose/reshape/view.
-        query_states = query_states.transpose(1, 2)
-        key_states = key_states.transpose(1, 2)
-        value_states = value_states.transpose(1, 2)
-
-        dropout_rate = self.attention_dropout if self.training else 0.0
-
-        # In PEFT, usually we cast the layer norms in float32 for training stability reasons
-        # therefore the input hidden states gets silently casted in float32. Hence, we need
-        # cast them back in the correct dtype just to be sure everything works as expected.
-        # This might slowdown training & inference so it is recommended to not cast the LayerNorms
-        # in fp32. (DiffLlamaRMSNorm handles it correctly)
-
-        input_dtype = query_states.dtype
-        device_type = query_states.device.type if query_states.device.type != "mps" else "cpu"
-        if input_dtype == torch.float32:
-            if torch.is_autocast_enabled():
-                # NOTE: `torch.get_autocast_dtype` is there starting from PyTorch 2.4
-                target_dtype = (
-                    torch.get_autocast_dtype(device_type)
-                    if hasattr(torch, "get_autocast_dtype")
-                    else torch.get_autocast_gpu_dtype()
-                )
-            # Handle the case where the model is quantized
-            elif hasattr(self.config, "_is_quantized"):
-                target_dtype = self.config.dtype
-            else:
-                target_dtype = self.q_proj.weight.dtype
-
-            logger.warning_once(
-                f"The input hidden states seems to be silently casted in float32, this might be related to"
-                f" the fact you have upcasted embedding or layer norm layers in float32. We will cast back the input in"
-                f" {target_dtype}."
-            )
-
-            query_states = query_states.to(target_dtype)
-            key_states = key_states.to(target_dtype)
-            value_states = value_states.to(target_dtype)
-
-        value_states1, value_states2 = torch.chunk(value_states, 2, dim=2)
-        value_states1 = value_states1.repeat(1, 1, 2, 1)
-        value_states2 = value_states2.repeat(1, 1, 2, 1)
-
-        attn_output1 = _flash_attention_forward(
+        # The first call's weights are returned; the second's are mathematically identical
+        # (shared Q/K). ``config.attention_dropout > 0`` is rejected in ``__init__`` because the
+        # two calls cannot share a single softmax-dropout mask the way V-doubling did.
+        attn_output1, attn_weights = attention_interface(
+            self,
             query_states,
             key_states,
             value_states1,
             attention_mask,
-            q_len,
-            position_ids=position_ids,
-            dropout=dropout_rate,
-            sliding_window=getattr(self, "sliding_window", None),
-            use_top_left_mask=self._flash_attn_uses_top_left_mask,
-            is_causal=self.is_causal,
+            dropout=0.0,
+            scaling=self.scaling,
+            **kwargs,
         )
-
-        attn_output2 = _flash_attention_forward(
+        attn_output2, _ = attention_interface(
+            self,
             query_states,
             key_states,
             value_states2,
             attention_mask,
-            q_len,
-            position_ids=position_ids,
-            dropout=dropout_rate,
-            sliding_window=getattr(self, "sliding_window", None),
-            use_top_left_mask=self._flash_attn_uses_top_left_mask,
-            is_causal=self.is_causal,
+            dropout=0.0,
+            scaling=self.scaling,
+            **kwargs,
         )
-
         attn_output = torch.cat([attn_output1, attn_output2], dim=-1)
+
+        # Chunk along the head axis and apply the learned lambda — realises the differential
+        # combination ``(softmax_1 - λ · softmax_2) · V`` head-pair by head-pair.
         attn_output1, attn_output2 = torch.chunk(attn_output, 2, dim=2)
-
         lambda_1 = torch.exp(torch.sum(self.lambda_q1 * self.lambda_k1, dim=-1, dtype=torch.float32)).to(
             query_states.dtype
         )
@@ -413,101 +323,16 @@ class DiffLlamaFlashAttention2(DiffLlamaAttention):
             query_states.dtype
         )
         lambda_full = lambda_1 - lambda_2 + self.lambda_init
-
         attn_output = attn_output1 - lambda_full * attn_output2
         attn_output = (1 - self.lambda_init) * self.groupnorm(attn_output)
-        attn_output = attn_output.reshape(bsz, q_len, -1).contiguous()
+        attn_output = attn_output.reshape(*input_shape, -1)
         attn_output = self.o_proj(attn_output)
-        return attn_output, None
-
-
-class DiffLlamaSdpaAttention(DiffLlamaAttention):
-    """
-    DiffLlama attention module using torch.nn.functional.scaled_dot_product_attention. This module inherits from
-    `DiffLlamaAttention` as the weights of the module stays untouched. The only changes are on the forward pass to adapt to
-    SDPA API.
-    """
-
-    # Adapted from DiffLlamaAttention.forward
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        position_embeddings: tuple[torch.Tensor, torch.Tensor],
-        attention_mask: torch.Tensor | None = None,
-        position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
-        use_cache: bool = False,
-        cache_position: torch.LongTensor | None = None,
-        **kwargs,
-    ) -> tuple[torch.Tensor, torch.Tensor | None, tuple[torch.Tensor] | None]:
-        bsz, q_len, _ = hidden_states.size()
-
-        query_states = self.q_proj(hidden_states)
-        key_states = self.k_proj(hidden_states)
-        value_states = self.v_proj(hidden_states)
-
-        query_states = query_states.view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
-        key_states = key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
-        value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
-
-        cos, sin = position_embeddings
-        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
-
-        if past_key_values is not None:
-            # sin and cos are specific to RoPE models; cache_position needed for the static cache
-            cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
-            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx, cache_kwargs)
-
-        key_states = repeat_kv(key_states, self.num_key_value_groups)
-        value_states = repeat_kv(value_states, self.num_key_value_groups)
-        value_states = torch.cat(torch.chunk(value_states, 2, dim=1), dim=-1)
-        value_states = value_states.repeat(1, 2, 1, 1)
-
-        causal_mask = attention_mask
-        if attention_mask is not None:
-            causal_mask = causal_mask[:, :, :, : key_states.shape[-2]]
-
-        # SDPA with memory-efficient backend is currently (torch==2.1.2) bugged with non-contiguous inputs with custom attn_mask,
-        # Reference: https://github.com/pytorch/pytorch/issues/112577.
-        if query_states.device.type == "cuda" and causal_mask is not None:
-            query_states = query_states.contiguous()
-            key_states = key_states.contiguous()
-            value_states = value_states.contiguous()
-
-        # We dispatch to SDPA's Flash Attention or Efficient kernels via this `is_causal` if statement instead of an inline conditional assignment
-        # in SDPA to support both torch.compile's dynamic shapes and full graph options. An inline conditional prevents dynamic shapes from compiling.
-        is_causal = causal_mask is None and q_len > 1
-
-        attn_output = torch.nn.functional.scaled_dot_product_attention(
-            query_states,
-            key_states,
-            value_states,
-            attn_mask=causal_mask,
-            dropout_p=self.attention_dropout if self.training else 0.0,
-            is_causal=is_causal,
-        )
-
-        attn_output1, attn_output2 = torch.chunk(attn_output, 2, dim=1)
-
-        lambda_1 = torch.exp(torch.sum(self.lambda_q1 * self.lambda_k1, dim=-1, dtype=torch.float32)).to(
-            query_states.dtype
-        )
-        lambda_2 = torch.exp(torch.sum(self.lambda_q2 * self.lambda_k2, dim=-1, dtype=torch.float32)).to(
-            query_states.dtype
-        )
-        lambda_full = lambda_1 - lambda_2 + self.lambda_init
-
-        attn_output = attn_output1 - lambda_full * attn_output2
-        attn_output = (1 - self.lambda_init) * self.groupnorm(attn_output)
-        attn_output = attn_output.transpose(1, 2).contiguous()
-        attn_output = attn_output.view(bsz, q_len, -1)
-        attn_output = self.o_proj(attn_output)
-        return attn_output, None
+        return attn_output, attn_weights
 
 
 @use_kernel_forward_from_hub("RMSNorm")
 class DiffLlamaRMSNorm(nn.Module):
-    def __init__(self, hidden_size, eps=1e-6):
+    def __init__(self, hidden_size, eps: float = 1e-6) -> None:
         """
         DiffLlamaRMSNorm is equivalent to T5LayerNorm
         """
@@ -515,7 +340,7 @@ class DiffLlamaRMSNorm(nn.Module):
         self.weight = nn.Parameter(torch.ones(hidden_size))
         self.variance_epsilon = eps
 
-    def forward(self, hidden_states):
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         input_dtype = hidden_states.dtype
         hidden_states = hidden_states.to(torch.float32)
         variance = hidden_states.pow(2).mean(-1, keepdim=True)
@@ -526,19 +351,12 @@ class DiffLlamaRMSNorm(nn.Module):
         return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
 
 
-DIFFLLAMA_ATTENTION_CLASSES = {
-    "eager": DiffLlamaAttention,
-    "flash_attention_2": DiffLlamaFlashAttention2,
-    "sdpa": DiffLlamaSdpaAttention,
-}
-
-
 class DiffLlamaDecoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: DiffLlamaConfig, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
 
-        self.self_attn = DIFFLLAMA_ATTENTION_CLASSES[config._attn_implementation](config=config, layer_idx=layer_idx)
+        self.self_attn = DiffLlamaAttention(config=config, layer_idx=layer_idx)
 
         self.mlp = DiffLlamaMLP(config)
         self.input_layernorm = DiffLlamaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
@@ -551,7 +369,6 @@ class DiffLlamaDecoderLayer(GradientCheckpointingLayer):
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
         use_cache: bool | None = False,
-        cache_position: torch.LongTensor | None = None,
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
@@ -564,7 +381,6 @@ class DiffLlamaDecoderLayer(GradientCheckpointingLayer):
             position_ids=position_ids,
             past_key_values=past_key_values,
             use_cache=use_cache,
-            cache_position=cache_position,
             position_embeddings=position_embeddings,
             **kwargs,
         )
@@ -587,10 +403,10 @@ class DiffLlamaPreTrainedModel(PreTrainedModel):
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = True
     _supports_sdpa = True
-    _supports_flex_attn = False
+    _supports_flex_attn = True
 
     _can_compile_fullgraph = True
-    _supports_attention_backend = False
+    _supports_attention_backend = True
     _can_record_outputs = {
         "hidden_states": DiffLlamaDecoderLayer,
         "attentions": DiffLlamaAttention,
@@ -624,7 +440,8 @@ class DiffLlamaModel(DiffLlamaPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @check_model_inputs
+    @merge_with_config_defaults
+    @capture_outputs
     @auto_docstring
     def forward(
         self,
@@ -633,7 +450,6 @@ class DiffLlamaModel(DiffLlamaPreTrainedModel):
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
-        cache_position: torch.LongTensor | None = None,
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPast:
@@ -646,20 +462,15 @@ class DiffLlamaModel(DiffLlamaPreTrainedModel):
         if use_cache and past_key_values is None:
             past_key_values = DynamicCache(config=self.config)
 
-        if cache_position is None:
-            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
-            cache_position: torch.Tensor = (
-                torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
-            )
-
         if position_ids is None:
-            position_ids = cache_position.unsqueeze(0)
+            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+            position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
+            position_ids = position_ids.unsqueeze(0)
 
         causal_mask = create_causal_mask(
             config=self.config,
-            input_embeds=inputs_embeds,
+            inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
-            cache_position=cache_position,
             past_key_values=past_key_values,
             position_ids=position_ids,
         )
@@ -675,7 +486,6 @@ class DiffLlamaModel(DiffLlamaPreTrainedModel):
                 position_ids=position_ids,
                 past_key_values=past_key_values,
                 use_cache=use_cache,
-                cache_position=cache_position,
                 **kwargs,
             )
 
@@ -689,7 +499,7 @@ class DiffLlamaModel(DiffLlamaPreTrainedModel):
 @auto_docstring
 class DiffLlamaForCausalLM(DiffLlamaPreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
-    _tp_plan = {"lm_head": "colwise_rep"}
+    _tp_plan = {"lm_head": "colwise_gather_output"}
     _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
 
     def __init__(self, config):
@@ -712,7 +522,6 @@ class DiffLlamaForCausalLM(DiffLlamaPreTrainedModel, GenerationMixin):
         inputs_embeds: torch.FloatTensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
-        cache_position: torch.LongTensor | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
     ) -> CausalLMOutputWithPast:
@@ -740,7 +549,6 @@ class DiffLlamaForCausalLM(DiffLlamaPreTrainedModel, GenerationMixin):
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
-            cache_position=cache_position,
             **kwargs,
         )
 

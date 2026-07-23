@@ -312,7 +312,6 @@ class VisionEncoderDecoderModel(PreTrainedModel, GenerationMixin):
         output_attentions: bool | None = None,
         output_hidden_states: bool | None = None,
         return_dict: bool | None = None,
-        cache_position: torch.LongTensor | None = None,
         **kwargs,
     ) -> tuple[torch.FloatTensor] | Seq2SeqLMOutput:
         r"""
@@ -345,7 +344,8 @@ class VisionEncoderDecoderModel(PreTrainedModel, GenerationMixin):
 
         ```python
         >>> from transformers import AutoProcessor, VisionEncoderDecoderModel
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
         >>> from PIL import Image
         >>> import torch
 
@@ -354,7 +354,8 @@ class VisionEncoderDecoderModel(PreTrainedModel, GenerationMixin):
 
         >>> # load image from the IAM dataset
         >>> url = "https://fki.tic.heia-fr.ch/static/img/a01-122-02.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw).convert("RGB")
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read())).convert("RGB")
 
         >>> # training
         >>> model.config.decoder_start_token_id = processor.tokenizer.eos_token_id
@@ -371,7 +372,7 @@ class VisionEncoderDecoderModel(PreTrainedModel, GenerationMixin):
         >>> generated_ids = model.generate(pixel_values)
         >>> generated_text = processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
         ```"""
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         kwargs_encoder = {argument: value for argument, value in kwargs.items() if not argument.startswith("decoder_")}
 
@@ -422,7 +423,6 @@ class VisionEncoderDecoderModel(PreTrainedModel, GenerationMixin):
             use_cache=use_cache,
             past_key_values=past_key_values,
             return_dict=return_dict,
-            cache_position=cache_position,
             **kwargs_decoder,
         )
 

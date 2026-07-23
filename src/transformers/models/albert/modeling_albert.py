@@ -38,7 +38,8 @@ from ...pytorch_utils import (
     apply_chunking_to_forward,
 )
 from ...utils import ModelOutput, TransformersKwargs, auto_docstring, logging
-from ...utils.generic import can_return_tuple, check_model_inputs
+from ...utils.generic import can_return_tuple, merge_with_config_defaults
+from ...utils.output_capturing import capture_outputs
 from .configuration_albert import AlbertConfig
 
 
@@ -127,7 +128,6 @@ def eager_attention_forward(
     attn_weights = torch.matmul(query, key.transpose(2, 3)) * scaling
 
     if attention_mask is not None:
-        attention_mask = attention_mask[:, :, :, : key.shape[-2]]
         attn_weights = attn_weights + attention_mask
 
     attn_weights = nn.functional.softmax(attn_weights, dim=-1)
@@ -181,9 +181,9 @@ class AlbertAttention(nn.Module):
         key_layer = self.key(hidden_states).view(*hidden_shape).transpose(1, 2)
         value_layer = self.value(hidden_states).view(*hidden_shape).transpose(1, 2)
 
-        attention_interface: Callable = eager_attention_forward
-        if self.config._attn_implementation != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
 
         attn_output, attn_weights = attention_interface(
             self,
@@ -304,31 +304,20 @@ class AlbertPreTrainedModel(PreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights."""
-        if isinstance(module, nn.Linear):
-            init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
-            if module.bias is not None:
-                init.zeros_(module.bias)
-        elif isinstance(module, nn.Embedding):
-            init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
-            # Here we need the check explicitly, as we slice the weight in the `zeros_` call, so it looses the flag
-            if module.padding_idx is not None and not getattr(module.weight, "_is_hf_initialized", False):
-                init.zeros_(module.weight[module.padding_idx])
-        elif isinstance(module, nn.LayerNorm):
-            init.zeros_(module.bias)
-            init.ones_(module.weight)
-        elif isinstance(module, AlbertMLMHead):
+        super()._init_weights(module)
+        if isinstance(module, AlbertMLMHead):
             init.zeros_(module.bias)
         elif isinstance(module, AlbertEmbeddings):
             init.copy_(module.position_ids, torch.arange(module.position_ids.shape[-1]).expand((1, -1)))
             init.zeros_(module.token_type_ids)
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Output type of [`AlbertForPreTraining`].
     """
 )
+@dataclass
 class AlbertForPreTrainingOutput(ModelOutput):
     r"""
     loss (*optional*, returned when `labels` is provided, `torch.FloatTensor` of shape `(1,)`):
@@ -381,7 +370,8 @@ class AlbertModel(AlbertPreTrainedModel):
     def set_input_embeddings(self, value: nn.Embedding) -> None:
         self.embeddings.word_embeddings = value
 
-    @check_model_inputs
+    @merge_with_config_defaults
+    @capture_outputs
     @auto_docstring
     def forward(
         self,
@@ -401,7 +391,7 @@ class AlbertModel(AlbertPreTrainedModel):
 
         attention_mask = create_bidirectional_mask(
             config=self.config,
-            input_embeds=embedding_output,
+            inputs_embeds=embedding_output,
             attention_mask=attention_mask,
         )
 

@@ -21,7 +21,6 @@ from copy import deepcopy
 
 import numpy as np
 import pytest
-from packaging import version
 
 from transformers import AutoVideoProcessor
 from transformers.testing_utils import (
@@ -47,7 +46,7 @@ def prepare_video(num_frames, num_channels, width=10, height=10, return_tensors=
     """This function prepares a video as a list of PIL images/NumPy arrays/PyTorch tensors."""
 
     video = []
-    for i in range(num_frames):
+    for frame_idx in range(num_frames):
         video.append(np.random.randint(255, size=(width, height, num_channels), dtype=np.uint8))
 
     if return_tensors == "pil":
@@ -55,7 +54,7 @@ def prepare_video(num_frames, num_channels, width=10, height=10, return_tensors=
         video = [Image.fromarray(frame) for frame in video]
     elif return_tensors == "torch":
         # Torch images are typically in channels first format
-        video = torch.tensor(video).permute(0, 3, 1, 2)
+        video = torch.from_numpy(np.array(video)).permute(0, 3, 1, 2)
     elif return_tensors == "np":
         # Numpy images are typically in channels last format
         video = np.array(video)
@@ -202,8 +201,6 @@ class VideoProcessingTestMixin:
     def test_can_compile_fast_video_processor(self):
         if self.fast_video_processing_class is None:
             self.skipTest("Skipping compilation test as fast video processor is not defined")
-        if version.parse(torch.__version__) < version.parse("2.3"):
-            self.skipTest(reason="This test requires torch >= 2.3 to run.")
 
         torch.compiler.reset()
         video_inputs = self.video_processor_tester.prepare_video_inputs(equal_resolution=False, return_tensors="torch")

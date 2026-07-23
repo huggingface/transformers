@@ -36,7 +36,7 @@ from ...integrations import (
     use_kernel_func_from_hub,
     use_kernelized_func,
 )
-from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
+from ...masking_utils import create_causal_mask, create_recurrent_attention_mask, create_sliding_window_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import (
     GenericForQuestionAnswering,
@@ -49,13 +49,14 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
-from ...utils.generic import OutputRecorder, check_model_inputs, maybe_autocast
+from ...utils.generic import maybe_autocast, merge_with_config_defaults
+from ...utils.output_capturing import OutputRecorder, capture_outputs
 from .configuration_minimax import MiniMaxConfig
 
 
 @use_kernel_forward_from_hub("RMSNorm")
 class MiniMaxRMSNorm(nn.Module):
-    def __init__(self, hidden_size, eps=1e-6):
+    def __init__(self, hidden_size, eps: float = 1e-6) -> None:
         """
         MiniMaxRMSNorm is equivalent to T5LayerNorm
         """
@@ -63,7 +64,7 @@ class MiniMaxRMSNorm(nn.Module):
         self.weight = nn.Parameter(torch.ones(hidden_size))
         self.variance_epsilon = eps
 
-    def forward(self, hidden_states):
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         input_dtype = hidden_states.dtype
         hidden_states = hidden_states.to(torch.float32)
         variance = hidden_states.pow(2).mean(-1, keepdim=True)
@@ -111,6 +112,18 @@ class MiniMaxCache(DynamicCache):
         raise RuntimeError("MiniMaxCache doesnot support `crop` method")
 
 
+def apply_mask_to_padding_states(hidden_states, attention_mask):
+    """
+    Tunes out the hidden states for padding tokens, see https://github.com/state-spaces/mamba/issues/66
+    """
+    # NOTE: attention mask is a 2D boolean tensor
+    if attention_mask is not None and attention_mask.shape[1] > 1 and attention_mask.shape[0] > 1:
+        dtype = hidden_states.dtype
+        hidden_states = (hidden_states * attention_mask[:, :, None]).to(dtype)
+
+    return hidden_states
+
+
 class MiniMaxLightningAttention(nn.Module):
     def __init__(self, config: MiniMaxConfig, layer_idx: int):
         super().__init__()
@@ -133,6 +146,8 @@ class MiniMaxLightningAttention(nn.Module):
         self.register_buffer("query_decay", query_decay)
         self.register_buffer("key_decay", key_decay)
         self.register_buffer("diagonal_decay", diagonal_decay)
+
+        self.layer_type = config.layer_types[layer_idx]
 
     def get_slope_rate(self):
         base = 1 / (2 ** (8 / self.num_attention_heads))
@@ -165,13 +180,13 @@ class MiniMaxLightningAttention(nn.Module):
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: torch.Tensor | None,
         past_key_values: Cache | None = None,
-        cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor | None, tuple[torch.Tensor] | None]:
         batch_size, seq_len, hidden_size = hidden_states.shape
         num_blocks = (seq_len + self.block_size - 1) // self.block_size
 
         qkv_states = self.act_fn(self.qkv_proj(hidden_states))
+        qkv_states = apply_mask_to_padding_states(qkv_states, attention_mask)
         qkv_states = qkv_states.reshape(batch_size, seq_len, self.num_attention_heads, 3 * self.head_dim)
 
         query_states, key_states, value_states = torch.split(qkv_states, self.head_dim, dim=3)
@@ -189,11 +204,6 @@ class MiniMaxLightningAttention(nn.Module):
             attn_weights_inter = torch.zeros(batch_size, self.num_attention_heads, self.head_dim, self.head_dim).to(
                 value_states
             )
-
-            # apply attention_mask
-            if attention_mask is not None:
-                attention_mask = attention_mask.to(dtype=torch.bool)  # Ensure it's a boolean tensor
-                value_states = value_states.masked_fill(~attention_mask.unsqueeze(1).unsqueeze(-1), 0)
 
             attn_output = []
             for i in range(num_blocks):
@@ -383,8 +393,7 @@ def eager_attention_forward(
 
     attn_weights = torch.matmul(query, key_states.transpose(2, 3)) * scaling
     if attention_mask is not None:
-        causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
-        attn_weights = attn_weights + causal_mask
+        attn_weights = attn_weights + attention_mask
 
     attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
     attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
@@ -418,7 +427,6 @@ class MiniMaxAttention(nn.Module):
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: torch.Tensor | None,
         past_key_values: Cache | None = None,
-        cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
         input_shape = hidden_states.shape[:-1]
@@ -432,13 +440,11 @@ class MiniMaxAttention(nn.Module):
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
         if past_key_values is not None:
-            # sin and cos are specific to RoPE models; cache_position needed for the static cache
-            cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
-            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx, cache_kwargs)
+            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
 
-        attention_interface: Callable = eager_attention_forward
-        if self.config._attn_implementation != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
 
         attn_output, attn_weights = attention_interface(
             self,
@@ -468,8 +474,8 @@ class MiniMaxTopKRouter(nn.Module):
     def forward(self, hidden_states):
         hidden_states = hidden_states.reshape(-1, self.hidden_dim)
         router_logits = F.linear(hidden_states, self.weight)  # (seq_len, num_experts)
-        router_logits = torch.nn.functional.softmax(router_logits.float(), dim=-1)
-        router_top_value, router_indices = torch.topk(router_logits, self.top_k, dim=-1)  # (seq_len, top_k)
+        router_probs = torch.nn.functional.softmax(router_logits.float(), dim=-1)
+        router_top_value, router_indices = torch.topk(router_probs, self.top_k, dim=-1)  # (seq_len, top_k)
         router_top_value /= router_top_value.sum(dim=-1, keepdim=True)
         router_scores = router_top_value
         return router_logits, router_scores, router_indices
@@ -544,11 +550,11 @@ class MiniMaxDecoderLayer(GradientCheckpointingLayer):
         self.post_attention_layernorm = MiniMaxRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
         self.layer_idx = layer_idx
-        self.layer_type = config.layer_types[layer_idx] if hasattr(config, "layer_types") else None
+        self.block_type = config.layer_types[layer_idx] if hasattr(config, "layer_types") else None
         self.mlp_alpha_factor = config.mlp_alpha_factor
         self.mlp_beta_factor = config.mlp_beta_factor
         self.mlp = MiniMaxSparseMoeBlock(config)
-        if self.layer_type == "linear_attention":
+        if self.block_type == "linear_attention":
             self.self_attn = MiniMaxLightningAttention(config, layer_idx)
             self.attn_alpha_factor = config.linear_attn_alpha_factor
             self.attn_beta_factor = config.linear_attn_beta_factor
@@ -565,7 +571,6 @@ class MiniMaxDecoderLayer(GradientCheckpointingLayer):
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
         use_cache: bool | None = False,
-        cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> tuple[torch.FloatTensor, tuple[torch.FloatTensor, torch.FloatTensor] | None]:
         hidden_states = self.input_layernorm(hidden_states)
@@ -577,7 +582,6 @@ class MiniMaxDecoderLayer(GradientCheckpointingLayer):
             position_ids=position_ids,
             past_key_values=past_key_values,
             use_cache=use_cache,
-            cache_position=cache_position,
             **kwargs,
         )
         hidden_states = residual * self.attn_alpha_factor + hidden_states * self.attn_beta_factor
@@ -643,7 +647,8 @@ class MiniMaxModel(MiniMaxPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @check_model_inputs
+    @merge_with_config_defaults
+    @capture_outputs
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -652,9 +657,8 @@ class MiniMaxModel(MiniMaxPreTrainedModel):
         past_key_values: MiniMaxCache | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         use_cache: bool | None = None,
-        cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> MoeModelOutputWithPast:
+    ) -> tuple | MoeModelOutputWithPast:
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
@@ -668,42 +672,38 @@ class MiniMaxModel(MiniMaxPreTrainedModel):
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
 
-        if cache_position is None:
-            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
-            cache_position = torch.arange(
-                past_seen_tokens, past_seen_tokens + inputs_embeds.shape[1], device=inputs_embeds.device
-            )
         if position_ids is None:
-            position_ids = cache_position.unsqueeze(0)
+            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+            position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
+            position_ids = position_ids.unsqueeze(0)
 
-        mask_function = create_causal_mask if self.config.sliding_window is None else create_sliding_window_causal_mask
-        causal_mask = mask_function(
-            config=self.config,
-            input_embeds=inputs_embeds,
-            attention_mask=attention_mask,
-            cache_position=cache_position,
-            past_key_values=past_key_values,
-            position_ids=position_ids,
-        )
+        if not isinstance(causal_mask_mapping := attention_mask, dict):
+            mask_function = (
+                create_causal_mask if self.config.sliding_window is None else create_sliding_window_causal_mask
+            )
+            mask_kwargs = {
+                "config": self.config,
+                "inputs_embeds": inputs_embeds,
+                "attention_mask": attention_mask,
+                "past_key_values": past_key_values,
+                "position_ids": position_ids,
+            }
+            causal_mask_mapping = {
+                "full_attention": mask_function(**mask_kwargs),
+                "linear_attention": create_recurrent_attention_mask(**mask_kwargs),
+            }
 
         hidden_states = inputs_embeds
         position_embeddings = self.rotary_emb(hidden_states, position_ids)
 
-        for decoder_layer in self.layers:
-            if decoder_layer.layer_type == "full_attention":
-                input_attention_mask = causal_mask
-            else:
-                # lightning attention uses original attention_mask, and uses it only for the first step
-                input_attention_mask = attention_mask
-
+        for i, decoder_layer in enumerate(self.layers):
             hidden_states = decoder_layer(
                 hidden_states,
-                attention_mask=input_attention_mask,
+                attention_mask=causal_mask_mapping[self.config.layer_types[i]],
                 position_embeddings=position_embeddings,
                 position_ids=position_ids,
                 past_key_values=past_key_values,
                 use_cache=use_cache,
-                cache_position=cache_position,
                 **kwargs,
             )
 
@@ -800,7 +800,7 @@ def load_balancing_loss_func(
 @auto_docstring
 class MiniMaxForCausalLM(MiniMaxPreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
-    _tp_plan = {"lm_head": "colwise_rep"}
+    _tp_plan = {"lm_head": "colwise_gather_output"}
     _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
 
     def __init__(self, config):
@@ -827,7 +827,6 @@ class MiniMaxForCausalLM(MiniMaxPreTrainedModel, GenerationMixin):
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
         output_router_logits: bool | None = None,
-        cache_position: torch.LongTensor | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
     ) -> MoeCausalLMOutputWithPast:
@@ -867,7 +866,6 @@ class MiniMaxForCausalLM(MiniMaxPreTrainedModel, GenerationMixin):
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
             output_router_logits=output_router_logits,
-            cache_position=cache_position,
             **kwargs,
         )
 

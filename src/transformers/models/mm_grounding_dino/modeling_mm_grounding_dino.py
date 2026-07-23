@@ -27,18 +27,13 @@ from torch import Tensor, nn
 
 from ... import initialization as init
 from ...activations import ACT2FN
-from ...file_utils import ModelOutput, is_timm_available, requires_backends
+from ...backbone_utils import load_backbone
+from ...file_utils import ModelOutput
 from ...integrations import use_kernel_forward_from_hub
 from ...modeling_utils import PreTrainedModel
-from ...pytorch_utils import meshgrid
-from ...utils import auto_docstring
-from ...utils.backbone_utils import load_backbone
+from ...utils import auto_docstring, torch_compilable_check
 from ..auto.modeling_auto import AutoModel
 from .configuration_mm_grounding_dino import MMGroundingDinoConfig
-
-
-if is_timm_available():
-    from timm import create_model
 
 
 class MMGroundingDinoContrastiveEmbedding(nn.Module):
@@ -182,9 +177,6 @@ class MMGroundingDinoMultiscaleDeformableAttention(nn.Module):
 
         self.disable_custom_kernels = config.disable_custom_kernels
 
-    def with_pos_embed(self, tensor: torch.Tensor, position_embeddings: Tensor | None):
-        return tensor if position_embeddings is None else tensor + position_embeddings
-
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -200,15 +192,15 @@ class MMGroundingDinoMultiscaleDeformableAttention(nn.Module):
     ):
         # add position embeddings to the hidden states before projecting to queries and keys
         if position_embeddings is not None:
-            hidden_states = self.with_pos_embed(hidden_states, position_embeddings)
+            hidden_states = hidden_states + position_embeddings
 
         batch_size, num_queries, _ = hidden_states.shape
         batch_size, sequence_length, _ = encoder_hidden_states.shape
         # Ignore copy
-        if (spatial_shapes[:, 0] * spatial_shapes[:, 1]).sum() != sequence_length:
-            raise ValueError(
-                "Make sure to align the spatial shapes with the sequence length of the encoder hidden states"
-            )
+        torch_compilable_check(
+            (spatial_shapes[:, 0] * spatial_shapes[:, 1]).sum() == sequence_length,
+            "Make sure to align the spatial shapes with the sequence length of the encoder hidden states",
+        )
 
         value = self.value_proj(encoder_hidden_states)
         if attention_mask is not None:
@@ -406,30 +398,25 @@ class MMGroundingDinoBiMultiHeadAttention(nn.Module):
         return (vision_attn_output, vision_attn_weights), (text_attn_output, text_attn_weights)
 
 
-def drop_path(input: torch.Tensor, drop_prob: float = 0.0, training: bool = False) -> torch.Tensor:
-    """
-    Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks).
-
-    """
-    if drop_prob == 0.0 or not training:
-        return input
-    keep_prob = 1 - drop_prob
-    shape = (input.shape[0],) + (1,) * (input.ndim - 1)  # work with diff dim tensors, not just 2D ConvNets
-    random_tensor = keep_prob + torch.rand(shape, dtype=input.dtype, device=input.device)
-    random_tensor.floor_()  # binarize
-    output = input.div(keep_prob) * random_tensor
-    return output
-
-
 class MMGroundingDinoDropPath(nn.Module):
-    """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks)."""
+    """Stochastic depth (DropPath) per sample, for residual blocks.
 
-    def __init__(self, drop_prob: float | None = None) -> None:
+    Identity when ``drop_prob`` is 0 or outside training. See `Deep Networks with Stochastic Depth
+    <https://arxiv.org/abs/1603.09382>`_.
+    """
+
+    def __init__(self, drop_prob: float = 0.0) -> None:
         super().__init__()
         self.drop_prob = drop_prob
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        return drop_path(hidden_states, self.drop_prob, self.training)
+        if self.drop_prob == 0.0 or not self.training:
+            return hidden_states
+        keep_prob = 1 - self.drop_prob
+        shape = (hidden_states.shape[0],) + (1,) * (hidden_states.ndim - 1)
+        random_tensor = torch.rand(shape, dtype=hidden_states.dtype, device=hidden_states.device)
+        random_tensor = torch.floor(random_tensor + keep_prob)
+        return hidden_states.div(keep_prob) * random_tensor
 
     def extra_repr(self) -> str:
         return f"p={self.drop_prob}"
@@ -507,8 +494,7 @@ class MMGroundingDinoPreTrainedModel(PreTrainedModel):
 
     @torch.no_grad()
     def _init_weights(self, module):
-        std = self.config.init_std
-
+        super()._init_weights(module)
         if isinstance(module, MMGroundingDinoLearnedPositionEmbedding):
             init.uniform_(module.row_embeddings.weight)
             init.uniform_(module.column_embeddings.weight)
@@ -550,18 +536,6 @@ class MMGroundingDinoPreTrainedModel(PreTrainedModel):
         elif isinstance(module, MMGroundingDinoFusionLayer):
             init.constant_(module.vision_param, 1e-4)
             init.constant_(module.text_param, 1e-4)
-        elif isinstance(module, (nn.Linear, nn.Conv2d)):
-            init.normal_(module.weight, mean=0.0, std=std)
-            if module.bias is not None:
-                init.zeros_(module.bias)
-        elif isinstance(module, (nn.LayerNorm, nn.GroupNorm)):
-            init.ones_(module.weight)
-            init.zeros_(module.bias)
-        elif isinstance(module, nn.Embedding):
-            init.normal_(module.weight, mean=0.0, std=std)
-            # Here we need the check explicitly, as we slice the weight in the `zeros_` call, so it looses the flag
-            if module.padding_idx is not None and not getattr(module.weight, "_is_hf_initialized", False):
-                init.zeros_(module.weight[module.padding_idx])
         elif isinstance(module, MMGroundingDinoMLPPredictionHead):
             init.constant_(module.layers[-1].weight, 0)
             init.constant_(module.layers[-1].bias, 0)
@@ -654,46 +628,23 @@ class MMGroundingDinoConvEncoder(nn.Module):
         super().__init__()
 
         self.config = config
-
-        if config.use_timm_backbone:
-            requires_backends(self, ["timm"])
-            backbone = create_model(
-                config.backbone,
-                pretrained=config.use_pretrained_backbone,
-                features_only=True,
-                **config.backbone_kwargs,
-            )
-        else:
-            backbone = load_backbone(config)
+        backbone = load_backbone(config)
 
         # replace batch norm by frozen batch norm
         with torch.no_grad():
             replace_batch_norm(backbone)
         self.model = backbone
-        self.intermediate_channel_sizes = (
-            self.model.feature_info.channels() if config.use_timm_backbone else self.model.channels
-        )
+        self.intermediate_channel_sizes = self.model.channels
 
-        backbone_model_type = None
-        if config.backbone is not None:
-            backbone_model_type = config.backbone
-        elif config.backbone_config is not None:
-            backbone_model_type = config.backbone_config.model_type
-        else:
-            raise ValueError("Either `backbone` or `backbone_config` should be provided in the config")
-
+        backbone_model_type = config.backbone_config.model_type
         if "resnet" in backbone_model_type:
             for name, parameter in self.model.named_parameters():
-                if config.use_timm_backbone:
-                    if "layer2" not in name and "layer3" not in name and "layer4" not in name:
-                        parameter.requires_grad_(False)
-                else:
-                    if "stage.1" not in name and "stage.2" not in name and "stage.3" not in name:
-                        parameter.requires_grad_(False)
+                if "stage.1" not in name and "stage.2" not in name and "stage.3" not in name:
+                    parameter.requires_grad_(False)
 
     def forward(self, pixel_values: torch.Tensor, pixel_mask: torch.Tensor):
         # send pixel_values through the model to get list of feature maps
-        features = self.model(pixel_values) if self.config.use_timm_backbone else self.model(pixel_values).feature_maps
+        features = self.model(pixel_values, return_dict=True).feature_maps
 
         out = []
         for feature_map in features:
@@ -703,6 +654,7 @@ class MMGroundingDinoConvEncoder(nn.Module):
         return out
 
 
+# TODO: use modular - Copied from transformers.models.detr.modeling_detr.DetrConvModel with Detr->MMGroundingDino
 class MMGroundingDinoConvModel(nn.Module):
     """
     This module adds 2D position embeddings to all intermediate feature maps of the convolutional encoder.
@@ -724,7 +676,6 @@ class MMGroundingDinoConvModel(nn.Module):
         return out, pos
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for outputs of the MMGroundingDinoEncoder. This class extends BaseModelOutput, due to:
@@ -732,6 +683,7 @@ class MMGroundingDinoConvModel(nn.Module):
     - vision and text intermediate hidden states
     """
 )
+@dataclass
 class MMGroundingDinoEncoderOutput(ModelOutput):
     r"""
     last_hidden_state_vision (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
@@ -986,48 +938,47 @@ class MMGroundingDinoDeformableLayer(nn.Module):
         hidden_states = self.final_layer_norm(hidden_states)
 
         if self.training:
-            if torch.isinf(hidden_states).any() or torch.isnan(hidden_states).any():
+            if not torch.isfinite(hidden_states).all():
                 clamp_value = torch.finfo(hidden_states.dtype).max - 1000
                 hidden_states = torch.clamp(hidden_states, min=-clamp_value, max=clamp_value)
 
         return hidden_states, attn_weights
 
 
-# Based on https://github.com/IDEA-Research/MMGroundingDino/blob/2b62f419c292ca9c518daae55512fabc3fead4a4/MMGroundingDino/models/MMGroundingDino/utils.py#L24
-def get_sine_pos_embed(
-    pos_tensor: torch.Tensor, num_pos_feats: int = 128, temperature: int = 10000, exchange_xy: bool = True
-) -> Tensor:
-    """
-    Generate sine position embeddings from a position tensor.
+def encode_sinusoidal_position_embedding(
+    pos_tensor: torch.Tensor,
+    num_pos_feats: int = 128,
+    temperature: int = 10000,
+) -> torch.Tensor:
+    """Sinusoidal position embeddings from normalized anchor coordinates.
+
+    Each coordinate in `pos_tensor` is independently encoded with ``num_pos_feats``
+    interleaved sin/cos components; per-coordinate embeddings are concatenated.
+    Handles 2-D ``(x, y)`` and N-D ``(x, y, w, h)`` inputs. For 2-D+ inputs the
+    x and y embeddings are swapped to follow the DETR ``[pos_y, pos_x, ...]`` convention.
 
     Args:
-        pos_tensor (torch.Tensor):
-            Tensor containing positions. Shape: [..., n].
-        num_pos_feats (`int`, *optional*, defaults to 128):
-            Projected shape for each float in the tensor.
-        temperature (`int`, *optional*, defaults to 10000):
-            Temperature in the sine/cosine function.
-        exchange_xy (`bool`, *optional*, defaults to `True`):
-            Exchange pos x and pos y. For example, input tensor is [x,y], the results will be [pos(y), pos(x)].
+        pos_tensor: Normalized coordinates in ``[0, 1]``, shape ``(..., n_coords)``.
+        num_pos_feats: Embedding dimension per coordinate.
+        temperature: Base for the frequency decay.
 
     Returns:
-        position_embeddings (torch.Tensor): shape: [..., n * hidden_size].
+        Tensor of shape ``(..., n_coords * num_pos_feats)``, same dtype as input.
     """
     scale = 2 * math.pi
     dim_t = torch.arange(num_pos_feats, dtype=torch.float32, device=pos_tensor.device)
     dim_t = temperature ** (2 * torch.div(dim_t, 2, rounding_mode="floor") / num_pos_feats)
 
-    def sine_func(x: torch.Tensor):
-        sin_x = x * scale / dim_t
-        sin_x = torch.stack((sin_x[..., 0::2].sin(), sin_x[..., 1::2].cos()), dim=3).flatten(2)
-        return sin_x
+    coords = pos_tensor.unbind(-1)  # list of (...,) tensors
+    embeddings = [coord[..., None] * scale / dim_t for coord in coords]  # each (..., num_pos_feats)
+    embeddings = [
+        torch.stack((e[..., 0::2].sin(), e[..., 1::2].cos()), dim=-1).flatten(-2) for e in embeddings
+    ]  # each (..., num_pos_feats)
 
-    pos_tensor = pos_tensor.split([1] * pos_tensor.shape[-1], dim=-1)
-    position_embeddings = [sine_func(x) for x in pos_tensor]
-    if exchange_xy:
-        position_embeddings[0], position_embeddings[1] = position_embeddings[1], position_embeddings[0]
-    position_embeddings = torch.cat(position_embeddings, dim=-1)
-    return position_embeddings
+    if len(embeddings) >= 2:
+        embeddings[0], embeddings[1] = embeddings[1], embeddings[0]
+
+    return torch.cat(embeddings, dim=-1).to(pos_tensor.dtype)
 
 
 class MMGroundingDinoEncoderLayer(nn.Module):
@@ -1052,12 +1003,12 @@ class MMGroundingDinoEncoderLayer(nn.Module):
             text_position_embedding = text_position_embedding.float()
             text_position_embedding = text_position_embedding.unsqueeze(0).unsqueeze(-1)
             text_position_embedding = text_position_embedding.repeat(batch_size, 1, 1)
-            text_position_embedding = get_sine_pos_embed(
-                text_position_embedding, num_pos_feats=self.d_model, exchange_xy=False
+            text_position_embedding = encode_sinusoidal_position_embedding(
+                text_position_embedding, num_pos_feats=self.d_model
             )
         if text_position_ids is not None:
-            text_position_embedding = get_sine_pos_embed(
-                text_position_ids[..., None], num_pos_feats=self.d_model, exchange_xy=False
+            text_position_embedding = encode_sinusoidal_position_embedding(
+                text_position_ids[..., None], num_pos_feats=self.d_model
             )
 
         return text_position_embedding
@@ -1131,12 +1082,12 @@ class MMGroundingDinoEncoder(MMGroundingDinoPreTrainedModel):
         self.post_init()
 
     @staticmethod
-    def get_reference_points(spatial_shapes, valid_ratios, device):
+    def get_reference_points(spatial_shapes_list, valid_ratios, device):
         """
         Get reference points for each feature map.
 
         Args:
-            spatial_shapes (`torch.LongTensor` of shape `(num_feature_levels, 2)`):
+            spatial_shapes_list (`list[tuple[int, int]]`):
                 Spatial shapes of each feature map.
             valid_ratios (`torch.FloatTensor` of shape `(batch_size, num_feature_levels, 2)`):
                 Valid ratios of each feature map.
@@ -1146,8 +1097,8 @@ class MMGroundingDinoEncoder(MMGroundingDinoPreTrainedModel):
             `torch.FloatTensor` of shape `(batch_size, num_queries, num_feature_levels, 2)`
         """
         reference_points_list = []
-        for level, (height, width) in enumerate(spatial_shapes):
-            ref_y, ref_x = meshgrid(
+        for level, (height, width) in enumerate(spatial_shapes_list):
+            ref_y, ref_x = torch.meshgrid(
                 torch.linspace(0.5, height - 0.5, height, dtype=torch.float32, device=device),
                 torch.linspace(0.5, width - 0.5, width, dtype=torch.float32, device=device),
                 indexing="ij",
@@ -1227,9 +1178,9 @@ class MMGroundingDinoEncoder(MMGroundingDinoPreTrainedModel):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
-        reference_points = self.get_reference_points(spatial_shapes, valid_ratios, device=vision_features.device)
+        reference_points = self.get_reference_points(spatial_shapes_list, valid_ratios, device=vision_features.device)
 
         encoder_vision_states = () if output_hidden_states else None
         encoder_text_states = () if output_hidden_states else None
@@ -1283,7 +1234,6 @@ class MMGroundingDinoEncoder(MMGroundingDinoPreTrainedModel):
         )
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for outputs of the MMGroundingDinoDecoder. This class adds two attributes to
@@ -1292,6 +1242,7 @@ class MMGroundingDinoEncoder(MMGroundingDinoPreTrainedModel):
     - a stacked tensor of intermediate reference points.
     """
 )
+@dataclass
 class MMGroundingDinoDecoderOutput(ModelOutput):
     r"""
     intermediate_hidden_states (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, hidden_size)`):
@@ -1520,7 +1471,7 @@ class MMGroundingDinoDecoder(MMGroundingDinoPreTrainedModel):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         if inputs_embeds is not None:
             hidden_states = inputs_embeds
@@ -1553,8 +1504,10 @@ class MMGroundingDinoDecoder(MMGroundingDinoPreTrainedModel):
             elif num_coordinates == 2:
                 reference_points_input = reference_points[:, :, None] * valid_ratios[:, None]
             else:
-                raise ValueError("Last dim of reference_points must be 2 or 4, but got {reference_points.shape[-1]}")
-            query_pos = get_sine_pos_embed(reference_points_input[:, :, 0, :], num_pos_feats=self.config.d_model // 2)
+                raise ValueError(f"Last dim of reference_points must be 2 or 4, but got {reference_points.shape[-1]}")
+            query_pos = encode_sinusoidal_position_embedding(
+                reference_points_input[:, :, 0, :], num_pos_feats=self.config.d_model // 2
+            )
             query_pos = self.reference_points_head(query_pos)
 
             # In original implementation they apply layer norm before outputting intermediate hidden states
@@ -1665,12 +1618,12 @@ class MMGroundingDinoDecoder(MMGroundingDinoPreTrainedModel):
         )
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for outputs of the Grounding DINO encoder-decoder model.
     """
 )
+@dataclass
 class MMGroundingDinoModelOutput(ModelOutput):
     r"""
     last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_size)`):
@@ -1783,33 +1736,42 @@ def generate_masks_with_special_tokens_and_transfer_map(input_ids: torch.LongTen
         - **attention_mask** (`torch.BoolTensor` of shape `(batch_size, sequence_length, sequence_length)`)
         - **position_ids** (`torch.LongTensor` of shape `(batch_size, sequence_length)`)
     """
-    batch_size, num_token = input_ids.shape
-    # special_tokens_mask: batch_size, num_token. 1 for special tokens. 0 for normal tokens
-    special_tokens_mask = torch.zeros((batch_size, num_token), device=input_ids.device).bool()
-    for special_token in SPECIAL_TOKENS:
-        special_tokens_mask = torch.logical_or(special_tokens_mask, input_ids == special_token)
+    batch_size, seq_len = input_ids.shape
+    device = input_ids.device
 
-    # idxs: each row is a list of indices of special tokens
-    idxs = torch.nonzero(special_tokens_mask)
+    # Identify special token positions
+    special_mask = torch.isin(input_ids, torch.tensor(SPECIAL_TOKENS, device=device))
 
-    # generate attention mask and positional ids
-    attention_mask = torch.eye(num_token, device=input_ids.device).bool().unsqueeze(0).repeat(batch_size, 1, 1)
-    position_ids = torch.zeros((batch_size, num_token), device=input_ids.device)
-    previous_col = 0
-    for i in range(idxs.shape[0]):
-        row, col = idxs[i]
-        if (col == 0) or (col == num_token - 1):
-            attention_mask[row, col, col] = True
-            position_ids[row, col] = 0
-        else:
-            attention_mask[row, previous_col + 1 : col + 1, previous_col + 1 : col + 1] = True
-            position_ids[row, previous_col + 1 : col + 1] = torch.arange(
-                0, col - previous_col, device=input_ids.device
-            )
+    # For each position, find the previous and next special token indices
+    indices = torch.arange(seq_len, device=device).unsqueeze(0).expand(batch_size, -1)
 
-        previous_col = col
+    # Previous special token: cummax of special token indices
+    prev_special = torch.where(special_mask, indices, torch.tensor(-1, device=device))
+    prev_special = torch.cummax(prev_special, dim=1)[0]
 
-    return attention_mask, position_ids.to(torch.long)
+    # Next special token: flip, cummin, flip back
+    next_special = torch.where(special_mask, indices, torch.tensor(seq_len, device=device))
+    next_special = torch.flip(torch.cummin(torch.flip(next_special, dims=[1]), dim=1)[0], dims=[1])
+
+    # Tokens with the same next_special belong to the same block
+    # Exclude blocks whose closing delimiter is at position 0 or seq_len-1
+    valid_block = (next_special != 0) & (next_special != seq_len - 1) & (next_special != seq_len)
+
+    # Build attention mask: tokens attend to each other if they share the same next_special
+    next_i = next_special.unsqueeze(2)  # (B, N, 1)
+    next_j = next_special.unsqueeze(1)  # (B, 1, N)
+    attention_mask = (next_i == next_j) & valid_block.unsqueeze(1)
+
+    # Always allow self-attention
+    identity = torch.eye(seq_len, device=device, dtype=torch.bool).unsqueeze(0).expand(batch_size, -1, -1)
+    attention_mask = identity | attention_mask
+
+    # Position IDs: distance from previous special token
+    position_ids = indices - prev_special - 1
+    position_ids = torch.where(valid_block, position_ids, torch.zeros_like(position_ids))
+    position_ids = torch.clamp(position_ids, min=0).to(torch.long)
+
+    return attention_mask, position_ids
 
 
 @auto_docstring(
@@ -1888,13 +1850,13 @@ class MMGroundingDinoModel(MMGroundingDinoPreTrainedModel):
         valid_ratio = torch.stack([valid_ratio_width, valid_ratio_height], -1)
         return valid_ratio
 
-    def generate_encoder_output_proposals(self, enc_output, padding_mask, spatial_shapes):
+    def generate_encoder_output_proposals(self, enc_output, padding_mask, spatial_shapes_list):
         """Generate the encoder output proposals from encoded enc_output.
 
         Args:
             enc_output (`torch.Tensor[batch_size, sequence_length, hidden_size]`): Output of the encoder.
             padding_mask (`torch.Tensor[batch_size, sequence_length]`): Padding mask for `enc_output`.
-            spatial_shapes (`torch.Tensor[num_feature_levels, 2]`): Spatial shapes of the feature maps.
+            spatial_shapes_list (`list[tuple[int, int]]`): Spatial shapes of each feature map.
 
         Returns:
             `tuple(torch.FloatTensor)`: A tuple of feature map and bbox prediction.
@@ -1906,13 +1868,13 @@ class MMGroundingDinoModel(MMGroundingDinoPreTrainedModel):
         batch_size = enc_output.shape[0]
         proposals = []
         current_position = 0
-        for level, (height, width) in enumerate(spatial_shapes):
+        for level, (height, width) in enumerate(spatial_shapes_list):
             mask_flatten_ = padding_mask[:, current_position : (current_position + height * width)]
             mask_flatten_ = mask_flatten_.view(batch_size, height, width, 1)
             valid_height = torch.sum(~mask_flatten_[:, :, 0, 0], 1)
             valid_width = torch.sum(~mask_flatten_[:, 0, :, 0], 1)
 
-            grid_y, grid_x = meshgrid(
+            grid_y, grid_x = torch.meshgrid(
                 torch.linspace(0, height - 1, height, dtype=torch.float32, device=enc_output.device),
                 torch.linspace(0, width - 1, width, dtype=torch.float32, device=enc_output.device),
                 indexing="ij",
@@ -1970,10 +1932,12 @@ class MMGroundingDinoModel(MMGroundingDinoPreTrainedModel):
         ```python
         >>> from transformers import AutoProcessor, AutoModel
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
         >>> text = "a cat."
 
         >>> processor = AutoProcessor.from_pretrained("IDEA-Research/grounding-dino-tiny")
@@ -1990,7 +1954,7 @@ class MMGroundingDinoModel(MMGroundingDinoPreTrainedModel):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         text_self_attention_masks, position_ids = generate_masks_with_special_tokens_and_transfer_map(input_ids)
 
@@ -2121,7 +2085,7 @@ class MMGroundingDinoModel(MMGroundingDinoPreTrainedModel):
         encoder_pred_boxes = None
         if self.config.two_stage:
             object_query_embedding, output_proposals = self.generate_encoder_output_proposals(
-                encoder_outputs[0], ~mask_flatten, spatial_shapes
+                encoder_outputs[0], ~mask_flatten, spatial_shapes_list
             )
 
             # hack implementation as in two-stage Deformable DETR
@@ -2218,8 +2182,6 @@ class MMGroundingDinoMLPPredictionHead(nn.Module):
     Very simple multi-layer perceptron (MLP, also called FFN), used to predict the normalized center coordinates,
     height and width of a bounding box w.r.t. an image.
 
-    Copied from https://github.com/facebookresearch/detr/blob/master/models/detr.py
-
     """
 
     def __init__(self, input_dim, hidden_dim, output_dim, num_layers):
@@ -2234,16 +2196,16 @@ class MMGroundingDinoMLPPredictionHead(nn.Module):
         return x
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Output type of [`MMGroundingDinoForObjectDetection`].
     """
 )
+@dataclass
 class MMGroundingDinoObjectDetectionOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` are provided)):
-        Total loss as a linear combination of a negative log-likehood (cross-entropy) for class prediction and a
+        Total loss as a linear combination of a negative log-likelihood (cross-entropy) for class prediction and a
         bounding box loss. The latter is defined as a linear combination of the L1 loss and the generalized
         scale-invariant IoU loss.
     loss_dict (`Dict`, *optional*):
@@ -2396,6 +2358,11 @@ class MMGroundingDinoForObjectDetection(MMGroundingDinoPreTrainedModel):
         "model.decoder.bbox_embed": "bbox_embed",
         "model.decoder.class_embed": "class_embed",
     }
+    _keys_to_ignore_on_load_unexpected = [
+        r".*attention\.self\.relative_position_index",
+        r".*attention\.relative_position_bias\.relative_position_index",
+    ]
+    _keys_to_ignore_on_load_missing = [r".*swin.layernorm.*"]
 
     def __init__(self, config: MMGroundingDinoConfig):
         super().__init__(config)
@@ -2454,7 +2421,8 @@ class MMGroundingDinoForObjectDetection(MMGroundingDinoPreTrainedModel):
         Examples:
 
         ```python
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
 
         >>> import torch
         >>> from PIL import Image
@@ -2466,8 +2434,9 @@ class MMGroundingDinoForObjectDetection(MMGroundingDinoPreTrainedModel):
         >>> processor = AutoProcessor.from_pretrained(model_id)
         >>> model = AutoModelForZeroShotObjectDetection.from_pretrained(model_id).to(device)
 
-        >>> image_url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(image_url, stream=True).raw)
+        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
         >>> # Check for cats and remote controls
         >>> text_labels = [["a cat", "a remote control"]]
 
@@ -2490,7 +2459,7 @@ class MMGroundingDinoForObjectDetection(MMGroundingDinoPreTrainedModel):
         Detected a cat with confidence 0.438 at location [12.27, 51.91, 316.86, 472.44]
         Detected a remote control with confidence 0.478 at location [38.57, 70.0, 176.78, 118.18]
         ```"""
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         if attention_mask is None:
             attention_mask = torch.ones_like(input_ids)

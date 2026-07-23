@@ -48,7 +48,7 @@ For a full list of options, run the command below.
 transformers chat -h
 ```
 
-The chat is implemented on top of the [AutoClass](./model_doc/auto), using tooling from [text generation](./llm_tutorial) and [chat](./chat_templating). It uses the `transformers serve` CLI under the hood ([docs](./serving.md#serve-cli)).
+The chat is implemented on top of the [AutoClass](./model_doc/auto), using tooling from [text generation](./llm_tutorial) and [chat](./chat_templating). It uses the `transformers serve` CLI under the hood ([docs](./serve-cli/serving)).
 
 ## TextGenerationPipeline
 
@@ -116,4 +116,4 @@ This is a bottleneck for LLM text generation and the main options for improving 
 You can also try techniques like [speculative decoding](./generation_strategies#speculative-decoding), where a smaller model generates candidate tokens that are verified by the larger model. If the candidate tokens are correct, the larger model can generate more than one token at a time. This significantly alleviates the bandwidth bottleneck and improves generation speed.
 
 > [!TIP]
-Mixture-of-Expert (MoE) models such as [Mixtral](./model_doc/mixtral), [Qwen2MoE](./model_doc/qwen2_moe), and [GPT-OSS](./model_doc/gpt-oss) have lots of parameters, but only "activate" a small fraction of them to generate each token. As a result, MoE models generally have much lower memory bandwidth requirements and can be faster than a regular LLM of the same size. However, techniques like speculative decoding are ineffective with MoE models because more parameters become activated with each new speculated token.
+Mixture-of-Expert (MoE) models such as [Mixtral](./model_doc/mixtral), [Qwen2MoE](./model_doc/qwen2_moe), and [GPT-OSS](./model_doc/gpt_oss) have lots of parameters, but only "activate" a small fraction of them to generate each token. As a result, MoE models generally have much lower memory bandwidth requirements and can be faster than a regular LLM of the same size. However, techniques like speculative decoding are ineffective with MoE models because more parameters become activated with each new speculated token.

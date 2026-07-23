@@ -22,7 +22,7 @@ Quantization techniques that aren't supported in Transformers can be added with 
 
 <Tip>
 
-Learn how to quantize models in the [Quantization](../quantization) guide.
+Learn how to quantize models in the [Quantization](../quantization/overview) guide.
 
 </Tip>
 
@@ -66,6 +66,10 @@ Learn how to quantize models in the [Quantization](../quantization) guide.
 
 [[autodoc]] HqqConfig
 
+## MetalConfig
+
+[[autodoc]] MetalConfig
+
 ## Mxfp4Config
 
 [[autodoc]] Mxfp4Config
@@ -98,6 +102,10 @@ Learn how to quantize models in the [Quantization](../quantization) guide.
 
 [[autodoc]] QuarkConfig
 
+## FourOverSixConfig
+
+[[autodoc]] FourOverSixConfig
+
 ## FPQuantConfig
 
 [[autodoc]] FPQuantConfig
@@ -105,3 +113,7 @@ Learn how to quantize models in the [Quantization](../quantization) guide.
 ## AutoRoundConfig
 
 [[autodoc]] AutoRoundConfig
+
+## SinqConfig
+
+[[autodoc]] SinqConfig

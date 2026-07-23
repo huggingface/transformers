@@ -41,11 +41,12 @@ from transformers import (
     Gemma3Processor,
     Gemma3TextConfig,
     Gemma3TextModel,
-    GemmaTokenizerFast,
+    GemmaTokenizer,
     GenerationConfig,
     SiglipVisionConfig,
 )
 from transformers.image_utils import PILImageResampling
+from transformers.tokenization_utils_sentencepiece import SentencePieceExtractor
 
 
 # ==== Internal Constants and Classes ====
@@ -642,8 +643,11 @@ def main(*args):
     del model
     del state_tree
 
-    tokenizer = GemmaTokenizerFast(
-        _TOKENIZER_PATH.value,
+    sentencepiece_extractor = SentencePieceExtractor(_TOKENIZER_PATH.value)
+    vocab, _, merges = sentencepiece_extractor.extract()
+    tokenizer = GemmaTokenizer(
+        vocab=vocab,
+        merges=merges,
         add_bos_token=True,
         add_eos_token=variant == _VARIANT_EMBEDDINGGEMMA,
         padding_side="right" if variant == _VARIANT_EMBEDDINGGEMMA else "left",
@@ -691,7 +695,7 @@ def main(*args):
     if variant == _VARIANT_EMBEDDINGGEMMA:
         from sentence_transformers import SentenceTransformer, models
 
-        # TODO: Support Retrieval tasks where we use `"title: {title} | text: {passage}"` interally and construct this
+        # TODO: Support Retrieval tasks where we use `"title: {title} | text: {passage}"` internally and construct this
         # from split-records cached data, but externally these come through as a single string with components
         # separated by a newline. This should be used for `passage` for SentenceTransformers and the relevant MTEB
         # Retrieval tasks.

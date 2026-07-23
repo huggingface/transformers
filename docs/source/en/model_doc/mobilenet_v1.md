@@ -13,7 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2017-04-17 and added to Hugging Face Transformers on 2022-11-21.*
+*This model was published in HF papers on 2017-04-17 and contributed to Hugging Face Transformers on 2022-11-21.*
 
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
@@ -36,13 +36,12 @@ The example below demonstrates how to classify an image with [`Pipeline`] or the
 <hfoption id="Pipeline">
 
 ```python
-import torch
 from transformers import pipeline
+
 
 pipeline = pipeline(
     task="image-classification",
     model="google/mobilenet_v1_1.0_224",
-    dtype=torch.float16,
     device=0
 )
 pipeline("https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg")
@@ -52,21 +51,24 @@ pipeline("https://huggingface.co/datasets/huggingface/documentation-images/resol
 <hfoption id="AutoModel">
 
 ```python
-import torch
 import requests
+import torch
 from PIL import Image
-from transformers import AutoModelForImageClassification, AutoImageProcessor
+
+from transformers import AutoImageProcessor, AutoModelForImageClassification
+
 
 image_processor = AutoImageProcessor.from_pretrained(
     "google/mobilenet_v1_1.0_224",
 )
 model = AutoModelForImageClassification.from_pretrained(
     "google/mobilenet_v1_1.0_224",
+    device_map="auto",
 )
 
 url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"
 image = Image.open(requests.get(url, stream=True).raw)
-inputs = image_processor(image, return_tensors="pt")
+inputs = image_processor(image, return_tensors="pt").to(model.device)
 
 with torch.no_grad():
   logits = model(**inputs).logits
@@ -111,9 +113,9 @@ print(f"The predicted class label is: {predicted_class_label}")
 [[autodoc]] MobileNetV1ImageProcessor
     - preprocess
 
-## MobileNetV1ImageProcessorFast
+## MobileNetV1ImageProcessorPil
 
-[[autodoc]] MobileNetV1ImageProcessorFast
+[[autodoc]] MobileNetV1ImageProcessorPil
     - preprocess
 
 ## MobileNetV1Model

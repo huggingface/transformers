@@ -15,7 +15,12 @@
 import unittest
 
 from transformers.models.gemma3n import Gemma3nProcessor
-from transformers.testing_utils import require_sentencepiece, require_torch, require_torchaudio, require_vision
+from transformers.testing_utils import (
+    require_sentencepiece,
+    require_torch,
+    require_torchaudio,
+    require_vision,
+)
 
 from ...test_processing_common import ProcessorTesterMixin
 from .test_feature_extraction_gemma3n import floats_list
@@ -28,7 +33,8 @@ from .test_feature_extraction_gemma3n import floats_list
 @require_sentencepiece
 class Gemma3nProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = Gemma3nProcessor
-    model_id = "hf-internal-testing/namespace-google-repo_name-gemma-3n-E4B-it"
+    # Tiny processor created with make_tiny_processor.py from "hf-internal-testing/namespace-google-repo_name-gemma-3n-E4B-it"
+    tiny_model_id = "hf-internal-testing/tiny-processor-gemma3n"
 
     def prepare_image_inputs(self, batch_size: int | None = None, nested: bool = False):
         return super().prepare_image_inputs(batch_size=batch_size, nested=True)

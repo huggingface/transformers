@@ -21,6 +21,7 @@ from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ... import initialization as init
 from ...activations import ACT2FN
+from ...masking_utils import create_bidirectional_mask
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPooling,
@@ -226,7 +227,8 @@ class SqueezeBertSelfAttention(nn.Module):
         attention_score = self.matmul_qk(query_layer, key_layer)
         attention_score = attention_score / math.sqrt(self.attention_head_size)
         # Apply the attention mask is (precomputed for all layers in BertModel forward() function)
-        attention_score = attention_score + attention_mask
+        if attention_mask is not None:
+            attention_score = attention_score + attention_mask
 
         # Normalize the attention scores to probabilities.
         attention_probs = self.softmax(attention_score)
@@ -449,7 +451,7 @@ class SqueezeBertModel(SqueezeBertPreTrainedModel):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
@@ -468,14 +470,19 @@ class SqueezeBertModel(SqueezeBertPreTrainedModel):
         if token_type_ids is None:
             token_type_ids = torch.zeros(input_shape, dtype=torch.long, device=device)
 
-        extended_attention_mask = self.get_extended_attention_mask(attention_mask, input_shape)
-
         embedding_output = self.embeddings(
             input_ids=input_ids, position_ids=position_ids, token_type_ids=token_type_ids, inputs_embeds=inputs_embeds
         )
+
+        attention_mask = create_bidirectional_mask(
+            config=self.config,
+            inputs_embeds=embedding_output,
+            attention_mask=attention_mask,
+        )
+
         encoder_outputs = self.encoder(
             hidden_states=embedding_output,
-            attention_mask=extended_attention_mask,
+            attention_mask=attention_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
@@ -537,7 +544,7 @@ class SqueezeBertForMaskedLM(SqueezeBertPreTrainedModel):
             config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-100` are ignored (masked), the
             loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         outputs = self.transformer(
             input_ids,
@@ -609,7 +616,7 @@ class SqueezeBertForSequenceClassification(SqueezeBertPreTrainedModel):
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         outputs = self.transformer(
             input_ids,
@@ -718,7 +725,7 @@ class SqueezeBertForMultipleChoice(SqueezeBertPreTrainedModel):
             num_choices-1]` where *num_choices* is the size of the second dimension of the input tensors. (see
             *input_ids* above)
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
         num_choices = input_ids.shape[1] if input_ids is not None else inputs_embeds.shape[1]
 
         input_ids = input_ids.view(-1, input_ids.size(-1)) if input_ids is not None else None
@@ -796,7 +803,7 @@ class SqueezeBertForTokenClassification(SqueezeBertPreTrainedModel):
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the token classification loss. Indices should be in `[0, ..., config.num_labels - 1]`.
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         outputs = self.transformer(
             input_ids,
@@ -858,7 +865,7 @@ class SqueezeBertForQuestionAnswering(SqueezeBertPreTrainedModel):
         return_dict: bool | None = None,
         **kwargs,
     ) -> tuple | QuestionAnsweringModelOutput:
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         outputs = self.transformer(
             input_ids,

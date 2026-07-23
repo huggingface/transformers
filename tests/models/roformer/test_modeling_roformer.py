@@ -384,7 +384,6 @@ class RoFormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
         {
             "feature-extraction": RoFormerModel,
             "fill-mask": RoFormerForMaskedLM,
-            "question-answering": RoFormerForQuestionAnswering,
             "text-classification": RoFormerForSequenceClassification,
             "text-generation": RoFormerForCausalLM,
             "token-classification": RoFormerForTokenClassification,
@@ -396,7 +395,7 @@ class RoFormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
 
     def setUp(self):
         self.model_tester = RoFormerModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=RoFormerConfig, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=RoFormerConfig, hidden_size=32)
 
     def test_config(self):
         self.config_tester.run_common_tests()

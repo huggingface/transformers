@@ -22,14 +22,19 @@ from collections.abc import Callable
 from typing import Optional, TypedDict
 
 import torch
+import torch.nn.functional as F
 from torch import nn
-from torch.nn import functional as F
 
 from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
-from ...integrations import use_kernel_forward_from_hub, use_kernel_func_from_hub, use_kernelized_func
+from ...integrations import (
+    use_experts_implementation,
+    use_kernel_forward_from_hub,
+    use_kernel_func_from_hub,
+    use_kernelized_func,
+)
 from ...masking_utils import create_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPast
@@ -37,7 +42,8 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring
-from ...utils.generic import can_return_tuple, check_model_inputs, maybe_autocast
+from ...utils.generic import can_return_tuple, maybe_autocast, merge_with_config_defaults
+from ...utils.output_capturing import capture_outputs
 from .configuration_granitemoeshared import GraniteMoeSharedConfig
 
 
@@ -93,7 +99,7 @@ class GraniteMoeSharedMLP(nn.Module):
 
 @use_kernel_forward_from_hub("RMSNorm")
 class GraniteMoeSharedRMSNorm(nn.Module):
-    def __init__(self, hidden_size, eps=1e-6):
+    def __init__(self, hidden_size, eps: float = 1e-6) -> None:
         """
         GraniteMoeSharedRMSNorm is equivalent to T5LayerNorm
         """
@@ -101,7 +107,7 @@ class GraniteMoeSharedRMSNorm(nn.Module):
         self.weight = nn.Parameter(torch.ones(hidden_size))
         self.variance_epsilon = eps
 
-    def forward(self, hidden_states):
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         input_dtype = hidden_states.dtype
         hidden_states = hidden_states.to(torch.float32)
         variance = hidden_states.pow(2).mean(-1, keepdim=True)
@@ -112,145 +118,83 @@ class GraniteMoeSharedRMSNorm(nn.Module):
         return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
 
 
-class GraniteMoeSharedParallelExperts(nn.Module):
-    def __init__(self, num_experts: int, input_size: int, output_size: int) -> None:
-        """
-        Initialize the GraniteMoeSharedParallelExperts module.
-        The experts weights are stored in [num_experts, output_size, input_size] format. Such that it's compatible with
-        many MoE libraries, such as [Megablock](https://github.com/databricks/megablocks) and
-        [ScatterMoE](https://github.com/shawntan/scattermoe), as well as the
-        [MoE kernel](https://github.com/vllm-project/vllm/blob/main/vllm/model_executor/layers/fused_moe/fused_moe.py)
-        used in vllm.
+class GraniteMoeSharedTopKRouter(nn.Module):
+    """Top-k gating that returns the routing decisions without grouping tokens by expert.
 
-        Args:
-            num_experts (int):
-                Number of experts.
-            input_size (int):
-                Size of the input.
-            output_size (int):
-                Size of the output.
-        """
-        super().__init__()
-        self.weight = nn.Parameter(torch.empty(num_experts, output_size, input_size))
-        self.num_experts = num_experts
-        self.input_size = input_size
-        self.output_size = output_size
-
-    def forward(self, inputs, expert_size):
-        """
-        Forward pass of the GraniteMoeSharedParallelExperts module.
-
-        Args:
-            inputs (Tensor):
-                Input tensor.
-            expert_size:
-                Expert size information.
-
-        Returns:
-            Tensor: Output tensor.
-        """
-        input_list = inputs.split(expert_size, dim=0)
-        output_list = []
-        for i in range(self.num_experts):
-            output_list.append(F.linear(input_list[i], self.weight[i]))
-        results = torch.cat(output_list, dim=0)
-        return results
-
-
-class GraniteMoeSharedTopKGating(nn.Module):
-    def __init__(self, input_size: int, num_experts: int, top_k: int):
-        """
-        Initialize the top-k gating mechanism.
-
-        Args:
-            input_size (`int`):
-                Size of the input.
-            num_experts (`int`):
-                Number of experts.
-            top_k (`int`):
-                Number of top experts to select.
-        """
-        super().__init__()
-
-        self.num_experts = num_experts
-        self.input_size = input_size
-        self.top_k = top_k
-
-        self.layer = nn.Linear(input_size, num_experts, bias=False)
-
-    def forward(self, hidden_states):
-        # compute the top_k routing decision
-        logits = self.layer(hidden_states).float()  # [batch_size x seq_len, num_experts]
-        top_k_logits, top_k_indices = logits.topk(self.top_k, dim=1)  # [num_tokens, top_k]
-        top_k_gates = torch.softmax(top_k_logits, dim=1).type_as(hidden_states)  # [num_tokens, top_k]
-
-        # compute number of input given to each expert
-        zeros = torch.zeros(
-            [top_k_gates.size(0), self.num_experts], dtype=top_k_gates.dtype, device=top_k_gates.device
-        )  # [num_tokens, num_experts]
-        gates = zeros.scatter(1, top_k_indices, 1)  # [num_tokens, num_experts]
-        expert_size = gates.long().sum(0)  # [num_experts,]
-        # (This cause torch.compile to fail with `torch._dynamo.exc.Unsupported: Backend compiler failed with a fake tensor exception at`)
-        # (and `DataDependentOutputException`)
-        expert_size = expert_size.tolist()
-
-        # sort and group input tokens according to expert assignment
-        top_k_experts = top_k_indices.flatten()  # [num_tokens * top_k]
-        _, index_sorted_experts = top_k_experts.sort(0)  # [num_tokens * top_k]
-        batch_index = index_sorted_experts.div(self.top_k, rounding_mode="trunc")  # [num_tokens * top_k]
-
-        # gather the gate values for grouped input tokens
-        top_k_gates = top_k_gates.flatten()  # [num_tokens * top_k]
-        batch_gates = top_k_gates[index_sorted_experts]  # [num_tokens * top_k]
-
-        return index_sorted_experts, batch_index, batch_gates, expert_size, logits
-
-
-class GraniteMoeSharedMoE(nn.Module):
-    """
-    A Sparsely gated mixture of experts layer with 1-layer Feed-Forward networks as experts.
-
-    Args:
-        config:
-            Configuration object with model hyperparameters.
+    Returns ``(top_k_index, top_k_weights, router_logits)``; the grouping/scattering used to live
+    here (via ``expert_size.tolist()``, which broke fullgraph compile) and now happens inside the
+    experts forward via ``use_experts_implementation`` so the default ``grouped_mm`` / ``batched_mm``
+    paths can compile cleanly.
     """
 
     def __init__(self, config: GraniteMoeSharedConfig):
         super().__init__()
+        self.num_experts = config.num_local_experts
+        self.top_k = config.num_experts_per_tok
+        self.weight = nn.Parameter(torch.empty(self.num_experts, config.hidden_size))
 
+    def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        router_logits = F.linear(hidden_states, self.weight).float()  # (num_tokens, num_experts)
+        top_k_logits, top_k_index = router_logits.topk(self.top_k, dim=-1)  # (num_tokens, top_k)
+        top_k_weights = torch.softmax(top_k_logits, dim=-1).type_as(hidden_states)  # (num_tokens, top_k)
+        return top_k_index, top_k_weights, router_logits
+
+
+@use_experts_implementation
+class GraniteMoeSharedExperts(nn.Module):
+    """Collection of expert weights stored as 3D tensors."""
+
+    def __init__(self, config: GraniteMoeSharedConfig):
+        super().__init__()
+        self.num_experts = config.num_local_experts
+        self.hidden_dim = config.hidden_size
+        self.intermediate_dim = config.intermediate_size
+        self.gate_up_proj = nn.Parameter(torch.empty(self.num_experts, 2 * self.intermediate_dim, self.hidden_dim))
+        self.down_proj = nn.Parameter(torch.empty(self.num_experts, self.hidden_dim, self.intermediate_dim))
+        self.act_fn = ACT2FN[config.hidden_act]
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        top_k_index: torch.Tensor,
+        top_k_weights: torch.Tensor,
+    ) -> torch.Tensor:
+        final_hidden_states = torch.zeros_like(hidden_states)
+        with torch.no_grad():
+            expert_mask = torch.nn.functional.one_hot(top_k_index, num_classes=self.num_experts)
+            expert_mask = expert_mask.permute(2, 1, 0)
+            expert_hit = torch.greater(expert_mask.sum(dim=(-1, -2)), 0).nonzero()
+
+        for expert_idx in expert_hit:
+            expert_idx = expert_idx[0]
+            if expert_idx == self.num_experts:
+                continue
+            top_k_pos, token_idx = torch.where(expert_mask[expert_idx])
+            current_state = hidden_states[token_idx]
+            gate, up = nn.functional.linear(current_state, self.gate_up_proj[expert_idx]).chunk(2, dim=-1)
+            current_hidden_states = self.act_fn(gate) * up
+            current_hidden_states = nn.functional.linear(current_hidden_states, self.down_proj[expert_idx])
+            current_hidden_states = current_hidden_states * top_k_weights[token_idx, top_k_pos, None]
+            final_hidden_states.index_add_(0, token_idx, current_hidden_states.to(final_hidden_states.dtype))
+
+        return final_hidden_states
+
+
+class GraniteMoeSharedMoE(nn.Module):
+    """Sparsely-gated mixture-of-experts block: router decides, experts compute."""
+
+    def __init__(self, config: GraniteMoeSharedConfig):
+        super().__init__()
         self.input_size = config.hidden_size
-        self.hidden_size = config.intermediate_size
-        self.activation = ACT2FN[config.hidden_act]
-        self.input_linear = GraniteMoeSharedParallelExperts(
-            config.num_local_experts, self.input_size, self.hidden_size * 2
-        )
-        self.output_linear = GraniteMoeSharedParallelExperts(
-            config.num_local_experts, self.hidden_size, self.input_size
-        )
+        self.router = GraniteMoeSharedTopKRouter(config)
+        self.experts = GraniteMoeSharedExperts(config)
 
-        self.router = GraniteMoeSharedTopKGating(
-            input_size=self.input_size,
-            num_experts=config.num_local_experts,
-            top_k=config.num_experts_per_tok,
-        )
-
-    def forward(self, layer_input):
+    def forward(self, layer_input: torch.Tensor) -> torch.Tensor:
         bsz, length, emb_size = layer_input.size()
-        layer_input = layer_input.reshape(-1, emb_size)
-        _, batch_index, batch_gates, expert_size, _ = self.router(layer_input)
-
-        expert_inputs = layer_input[batch_index]
-        hidden_states = self.input_linear(expert_inputs, expert_size)
-        chunked_hidden_states = hidden_states.chunk(2, dim=-1)
-        hidden_states = self.activation(chunked_hidden_states[0]) * chunked_hidden_states[1]
-        expert_outputs = self.output_linear(hidden_states, expert_size)
-
-        expert_outputs = expert_outputs * batch_gates[:, None]
-
-        zeros = torch.zeros((bsz * length, self.input_size), dtype=expert_outputs.dtype, device=expert_outputs.device)
-        layer_output = zeros.index_add(0, batch_index, expert_outputs)
-        layer_output = layer_output.view(bsz, length, self.input_size)
-        return layer_output
+        hidden_states = layer_input.reshape(-1, emb_size)
+        top_k_index, top_k_weights, _ = self.router(hidden_states)
+        layer_output = self.experts(hidden_states, top_k_index, top_k_weights)
+        return layer_output.view(bsz, length, self.input_size)
 
 
 def rotate_half(x):
@@ -313,8 +257,7 @@ def eager_attention_forward(
 
     attn_weights = torch.matmul(query, key_states.transpose(2, 3)) * scaling
     if attention_mask is not None:
-        causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
-        attn_weights = attn_weights + causal_mask
+        attn_weights = attn_weights + attention_mask
 
     attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
     attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
@@ -357,7 +300,6 @@ class GraniteMoeSharedAttention(nn.Module):
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         attention_mask: torch.Tensor | None = None,
         past_key_values: Cache | None = None,
-        cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor]:
         input_shape = hidden_states.shape[:-1]
@@ -371,13 +313,11 @@ class GraniteMoeSharedAttention(nn.Module):
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
         if past_key_values is not None:
-            # sin and cos are specific to RoPE models; cache_position needed for the static cache
-            cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
-            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx, cache_kwargs)
+            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
 
-        attention_interface: Callable = eager_attention_forward
-        if self.config._attn_implementation != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
 
         attn_output, attn_weights = attention_interface(
             self,
@@ -414,7 +354,6 @@ class GraniteMoeSharedDecoderLayer(GradientCheckpointingLayer):
         past_key_values: Cache | None = None,
         output_attentions: bool | None = False,
         use_cache: bool | None = False,
-        cache_position: torch.LongTensor | None = None,
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         **kwargs: Unpack[GraniteFlashAttentionKwargs],
     ) -> tuple[torch.FloatTensor, tuple[torch.FloatTensor, torch.FloatTensor] | None]:
@@ -429,7 +368,6 @@ class GraniteMoeSharedDecoderLayer(GradientCheckpointingLayer):
             past_key_values=past_key_values,
             output_attentions=output_attentions,
             use_cache=use_cache,
-            cache_position=cache_position,
             position_embeddings=position_embeddings,
             **kwargs,
         )
@@ -458,7 +396,7 @@ class GraniteMoeSharedPreTrainedModel(PreTrainedModel):
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True
-    _can_compile_fullgraph = False  # TopK gating fails fullgraph compilation at "expert_size = expert_size.tolist()"
+    _can_compile_fullgraph = True
     _supports_attention_backend = True
     _can_record_outputs = {
         "hidden_states": GraniteMoeSharedDecoderLayer,
@@ -468,7 +406,10 @@ class GraniteMoeSharedPreTrainedModel(PreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
-        if isinstance(module, GraniteMoeSharedParallelExperts):
+        if isinstance(module, GraniteMoeSharedExperts):
+            init.normal_(module.gate_up_proj, mean=0.0, std=self.config.initializer_range)
+            init.normal_(module.down_proj, mean=0.0, std=self.config.initializer_range)
+        elif isinstance(module, GraniteMoeSharedTopKRouter):
             init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
 
 
@@ -556,7 +497,8 @@ class GraniteMoeSharedModel(GraniteMoeSharedPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @check_model_inputs
+    @merge_with_config_defaults
+    @capture_outputs
     @auto_docstring
     def forward(
         self,
@@ -566,7 +508,6 @@ class GraniteMoeSharedModel(GraniteMoeSharedPreTrainedModel):
         past_key_values: Cache | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         use_cache: bool | None = None,
-        cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> MoeModelOutputWithPast:
         if (input_ids is None) ^ (inputs_embeds is not None):
@@ -578,19 +519,15 @@ class GraniteMoeSharedModel(GraniteMoeSharedPreTrainedModel):
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
 
-        if cache_position is None:
-            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
-            cache_position = torch.arange(
-                past_seen_tokens, past_seen_tokens + inputs_embeds.shape[1], device=inputs_embeds.device
-            )
         if position_ids is None:
-            position_ids = cache_position.unsqueeze(0)
+            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+            position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
+            position_ids = position_ids.unsqueeze(0)
 
         causal_mask = create_causal_mask(  # ONLY DIFF WITH MIXTRAL: NO SLIDING
             config=self.config,
-            input_embeds=inputs_embeds,
+            inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
-            cache_position=cache_position,
             past_key_values=past_key_values,
             position_ids=position_ids,
         )
@@ -608,7 +545,6 @@ class GraniteMoeSharedModel(GraniteMoeSharedPreTrainedModel):
                 position_ids=position_ids,
                 past_key_values=past_key_values,
                 use_cache=use_cache,
-                cache_position=cache_position,
                 **kwargs,
             )
 
@@ -705,7 +641,7 @@ def load_balancing_loss_func(
 @auto_docstring
 class GraniteMoeSharedForCausalLM(GraniteMoeSharedPreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
-    _tp_plan = {"lm_head": "colwise_rep"}
+    _tp_plan = {"lm_head": "colwise_gather_output"}
     _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
 
     def __init__(self, config: GraniteMoeSharedConfig):
@@ -732,7 +668,6 @@ class GraniteMoeSharedForCausalLM(GraniteMoeSharedPreTrainedModel, GenerationMix
         inputs_embeds: torch.FloatTensor | None = None,
         labels: torch.LongTensor | None = None,
         output_router_logits: bool | None = None,
-        cache_position: torch.LongTensor | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs,
     ) -> tuple | MoeCausalLMOutputWithPast:
@@ -768,7 +703,6 @@ class GraniteMoeSharedForCausalLM(GraniteMoeSharedPreTrainedModel, GenerationMix
             position_ids=position_ids,
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
-            cache_position=cache_position,
             **kwargs,
         )
 

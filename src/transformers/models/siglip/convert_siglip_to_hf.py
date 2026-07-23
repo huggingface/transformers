@@ -19,9 +19,10 @@ URL: https://github.com/google-research/big_vision/tree/main
 import argparse
 import collections
 import os
+from io import BytesIO
 
+import httpx
 import numpy as np
-import requests
 import torch
 from huggingface_hub import hf_hub_download
 from numpy import load
@@ -71,17 +72,17 @@ MODEL_CONFIGS = {
 
 model_name_to_checkpoint = {
     # base checkpoints
-    "siglip-base-patch16-224": "/Users/nielsrogge/Documents/SigLIP/webli_en_b16_224_63724782.npz",
-    "siglip-base-patch16-256": "/Users/nielsrogge/Documents/SigLIP/webli_en_b16_256_60500360.npz",
-    "siglip-base-patch16-384": "/Users/nielsrogge/Documents/SigLIP/webli_en_b16_384_68578854.npz",
-    "siglip-base-patch16-512": "/Users/nielsrogge/Documents/SigLIP/webli_en_b16_512_68580893.npz",
+    "siglip-base-patch16-224": "https://storage.googleapis.com/big_vision/siglip/webli_en_b16_224_63724782.npz",
+    "siglip-base-patch16-256": "https://storage.googleapis.com/big_vision/siglip/webli_en_b16_256_60500360.npz",
+    "siglip-base-patch16-384": "https://storage.googleapis.com/big_vision/siglip/webli_en_b16_384_68578854.npz",
+    "siglip-base-patch16-512": "https://storage.googleapis.com/big_vision/siglip/webli_en_b16_512_68580893.npz",
     # large checkpoints
-    "siglip-large-patch16-256": "/Users/nielsrogge/Documents/SigLIP/webli_en_l16_256_60552751.npz",
-    "siglip-large-patch16-384": "/Users/nielsrogge/Documents/SigLIP/webli_en_l16_384_63634585.npz",
+    "siglip-large-patch16-256": "https://storage.googleapis.com/big_vision/siglip/webli_en_l16_256_60552751.npz",
+    "siglip-large-patch16-384": "https://storage.googleapis.com/big_vision/siglip/webli_en_l16_384_63634585.npz",
     # multilingual checkpoint
-    "siglip-base-patch16-256-i18n": "/Users/nielsrogge/Documents/SigLIP/webli_i18n_b16_256_66117334.npz",
+    "siglip-base-patch16-256-i18n": "https://storage.googleapis.com/big_vision/siglip/webli_i18n_b16_256_66117334.npz",
     # so400m checkpoints
-    "siglip-so400m-patch14-384": "/Users/nielsrogge/Documents/SigLIP/webli_en_so400m_384_58765454.npz",
+    "siglip-so400m-patch14-384": "https://storage.googleapis.com/big_vision/siglip/webli_en_so400m_384_58765454.npz",
     # ----------------- v2 -----------------
     # base checkpoints
     "siglip2-base-patch32-256": "gv-hf/siglip2/siglip2_b32_256.npz",
@@ -133,11 +134,12 @@ def get_vocab_size_from_model_name(model_name: str) -> int:
 
 
 def get_vocab_file_from_model_name(model_name: str) -> str:
-    # get vocab file
     if "i18n" in model_name:
-        vocab_file = "/Users/nielsrogge/Documents/SigLIP/multilingual_vocab/sentencepiece.model"
+        repo_id = "google/siglip-base-patch16-256-multilingual"
     else:
-        vocab_file = "/Users/nielsrogge/Documents/SigLIP/english_vocab/sentencepiece.model"
+        repo_id = "google/siglip-base-patch16-224"
+
+    vocab_file = hf_hub_download(repo_id=repo_id, filename="spiece.model")
     return vocab_file
 
 
@@ -358,7 +360,8 @@ def read_in_q_k_v_head(state_dict, config):
 # We will verify our results on an image of cute cats
 def prepare_img():
     url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-    image = Image.open(requests.get(url, stream=True).raw)
+    with httpx.stream("GET", url) as response:
+        image = Image.open(BytesIO(response.read()))
     return image
 
 
@@ -387,8 +390,17 @@ def convert_siglip_checkpoint(model_name, pytorch_dump_folder_path, verify_logit
     # Get checkpoint
     checkpoint = model_name_to_checkpoint[model_name]
     if not os.path.exists(checkpoint):
-        org, repo_id, *filepath = checkpoint.split("/")
-        checkpoint = hf_hub_download(repo_id=f"{org}/{repo_id}", filename="/".join(filepath))
+        if checkpoint.startswith("http"):
+            import tempfile
+
+            with httpx.stream("GET", checkpoint) as response:
+                with tempfile.NamedTemporaryFile(delete=False, suffix=".npz") as tmp_file:
+                    for chunk in response.iter_bytes():
+                        tmp_file.write(chunk)
+                    checkpoint = tmp_file.name
+        else:
+            org, repo_id, *filepath = checkpoint.split("/")
+            checkpoint = hf_hub_download(repo_id=f"{org}/{repo_id}", filename="/".join(filepath))
 
     # Load original state dict
     data = load(checkpoint)
@@ -413,10 +425,12 @@ def convert_siglip_checkpoint(model_name, pytorch_dump_folder_path, verify_logit
     processor = SiglipProcessor(image_processor=image_processor, tokenizer=tokenizer)
 
     # Verify forward pass on dummy images and texts
-    url_1 = "https://cdn.openai.com/multimodal-neurons/assets/apple/apple-ipod.jpg"
-    image_1 = Image.open(requests.get(url_1, stream=True).raw).convert("RGB")
-    url_2 = "https://cdn.openai.com/multimodal-neurons/assets/apple/apple-blank.jpg"
-    image_2 = Image.open(requests.get(url_2, stream=True).raw).convert("RGB")
+    url = "https://cdn.openai.com/multimodal-neurons/assets/apple/apple-ipod.jpg"
+    with httpx.stream("GET", url) as response:
+        image_1 = Image.open(BytesIO(response.read())).convert("RGB")
+    url = "https://cdn.openai.com/multimodal-neurons/assets/apple/apple-blank.jpg"
+    with httpx.stream("GET", url) as response:
+        image_2 = Image.open(BytesIO(response.read())).convert("RGB")
     texts = ["an apple", "a picture of an apple"]
 
     inputs = processor(images=[image_1, image_2], text=texts, padding="max_length", max_length=64, return_tensors="pt")

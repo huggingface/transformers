@@ -13,13 +13,8 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2020-05-26 and added to Hugging Face Transformers on 2021-06-09.*
+*This model was published in HF papers on 2020-05-26 and contributed to Hugging Face Transformers on 2021-06-09.*
 
-<div style="float: right;">
- <div class="flex flex-wrap space-x-1">
-  <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
- </div>
-</div>
 
 # DETR
 
@@ -38,13 +33,13 @@ The example below demonstrates how to perform object detection with the [`Pipeli
 <hfoption id="Pipeline">
 
 ```python
+
 from transformers import pipeline
-import torch
+
 
 pipeline = pipeline(
-    "object-detection", 
+    "object-detection",
     model="facebook/detr-resnet-50",
-    dtype=torch.float16,
     device_map=0
 )
 
@@ -55,19 +50,21 @@ pipeline("http://images.cocodataset.org/val2017/000000039769.jpg")
 <hfoption id="AutoModel">
 
 ```python
-from transformers import AutoImageProcessor, AutoModelForObjectDetection
-from PIL import Image
 import requests
 import torch
+from PIL import Image
+
+from transformers import AutoImageProcessor, AutoModelForObjectDetection
+
 
 url = "http://images.cocodataset.org/val2017/000000039769.jpg"
 image = Image.open(requests.get(url, stream=True).raw)
 
 image_processor = AutoImageProcessor.from_pretrained("facebook/detr-resnet-50")
-model = AutoModelForObjectDetection.from_pretrained("facebook/detr-resnet-50")
+model = AutoModelForObjectDetection.from_pretrained("facebook/detr-resnet-50", device_map="auto")
 
 # prepare image for the model
-inputs = image_processor(images=image, return_tensors="pt")
+inputs = image_processor(images=image, return_tensors="pt").to(model.device)
 
 with torch.no_grad():
     outputs = model(**inputs)
@@ -117,13 +114,15 @@ There are three other ways to instantiate a DETR model (depending on what you pr
 ```python
 from transformers import DetrForObjectDetection
 
-model = DetrForObjectDetection.from_pretrained("facebook/detr-resnet-50")
+
+model = DetrForObjectDetection.from_pretrained("facebook/detr-resnet-50", device_map="auto")
 ```
 
 - Option 2: Instantiate DETR with randomly initialized weights for Transformer, but pre-trained weights for backbone
 
 ```python
 from transformers import DetrConfig, DetrForObjectDetection
+
 
 config = DetrConfig()
 model = DetrForObjectDetection(config)
@@ -132,7 +131,7 @@ model = DetrForObjectDetection(config)
 - Option 3: Instantiate DETR with randomly initialized weights for backbone + Transformer
 
 ```python
-config = DetrConfig(use_pretrained_backbone=False)
+config = DetrConfig()
 model = DetrForObjectDetection(config)
 ```
 
@@ -145,7 +144,7 @@ As a summary, consider the following table:
 | **Example dataset** | COCO detection | COCO detection, COCO panoptic | COCO panoptic                           |
 | **Format of annotations to provide to**  [`~transformers.DetrImageProcessor`] | {'image_id': `int`, 'annotations': `list[Dict]`} each Dict being a COCO object annotation  | {'image_id': `int`, 'annotations': `list[Dict]`}  (in case of COCO detection) or {'file_name': `str`, 'image_id': `int`, 'segments_info': `list[Dict]`} (in case of COCO panoptic) | {'file_name': `str`, 'image_id': `int`, 'segments_info': `list[Dict]`} and masks_path (path to directory containing PNG files of the masks) |
 | **Postprocessing** (i.e. converting the output of the model to Pascal VOC format) | [`~transformers.DetrImageProcessor.post_process`] | [`~transformers.DetrImageProcessor.post_process_segmentation`] | [`~transformers.DetrImageProcessor.post_process_segmentation`], [`~transformers.DetrImageProcessor.post_process_panoptic`] |
-| **evaluators** | `CocoEvaluator` with `iou_types="bbox"` | `CocoEvaluator` with `iou_types="bbox"` or `"segm"` | `CocoEvaluator` with `iou_tupes="bbox"` or `"segm"`, `PanopticEvaluator` |
+| **evaluators** | `CocoEvaluator` with `iou_types="bbox"` | `CocoEvaluator` with `iou_types="bbox"` or `"segm"` | `CocoEvaluator` with `iou_types="bbox"` or `"segm"`, `PanopticEvaluator` |
 
 - In short, one should prepare the data either in COCO detection or COCO panoptic format, then use [`~transformers.DetrImageProcessor`] to create `pixel_values`, `pixel_mask` and optional `labels`, which can then be used to train (or fine-tune) a model.
 - For evaluation, one should first convert the outputs of the model using one of the postprocessing methods of [`~transformers.DetrImageProcessor`]. These can be provided to either `CocoEvaluator` or `PanopticEvaluator`, which allow you to calculate metrics like mean Average Precision (mAP) and Panoptic Quality (PQ). The latter objects are implemented in the [original repository](https://github.com/facebookresearch/detr). See the [example notebooks](https://github.com/NielsRogge/Transformers-Tutorials/tree/master/DETR) for more info regarding evaluation.
@@ -167,9 +166,9 @@ As a summary, consider the following table:
     - post_process_instance_segmentation
     - post_process_panoptic_segmentation
 
-## DetrImageProcessorFast
+## DetrImageProcessorPil
 
-[[autodoc]] DetrImageProcessorFast
+[[autodoc]] DetrImageProcessorPil
     - preprocess
     - post_process_object_detection
     - post_process_semantic_segmentation

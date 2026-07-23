@@ -40,6 +40,14 @@ import re
 from pathlib import Path
 
 
+CHECKER_CONFIG = {
+    "name": "inits",
+    "label": "Init files",
+    "cache_globs": ["src/transformers/**/__init__.py"],
+    "check_args": [],
+    "fix_args": None,
+}
+
 # Path is set with the intent you should run this script from the root of the repo.
 PATH_TO_TRANSFORMERS = "src/transformers"
 
@@ -307,7 +315,6 @@ def get_transformers_submodules() -> list[str]:
 IGNORE_SUBMODULES = [
     "convert_pytorch_checkpoint_to_tf2",
     "models.esm.openfold_utils",
-    "modeling_attn_mask_utils",
     "safetensors_conversion",
     "modeling_gguf_pytorch_utils",
     "kernels.falcon_mamba",

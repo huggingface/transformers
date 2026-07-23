@@ -39,7 +39,7 @@ if is_torch_available():
 if is_vision_available():
     from PIL import Image
 
-    from transformers import ImageGPTImageProcessor
+    from transformers import ImageGPTImageProcessorPil
 
 
 class ImageGPTModelTester:
@@ -228,7 +228,6 @@ class ImageGPTModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
         else {}
     )
     test_missing_keys = False
-    test_torch_exportable = True
 
     # as ImageGPTForImageClassification isn't included in any auto mapping, we add labels here
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
@@ -309,7 +308,7 @@ def prepare_img():
 class ImageGPTModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_image_processor(self):
-        return ImageGPTImageProcessor.from_pretrained("openai/imagegpt-small") if is_vision_available() else None
+        return ImageGPTImageProcessorPil.from_pretrained("openai/imagegpt-small") if is_vision_available() else None
 
     @slow
     def test_inference_causal_lm_head(self):
