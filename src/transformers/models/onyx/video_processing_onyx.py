@@ -41,7 +41,7 @@ class OnyxVideoProcessorInitKwargs(VideosKwargs, total=False):
     patch_size: int
     temporal_patch_size: int
     max_video_frame_tokens: int
-    downsample_factor: int
+    merge_size: int
 
 
 @auto_docstring
@@ -57,7 +57,7 @@ class OnyxVideoProcessor(BaseVideoProcessor):
     do_normalize = True
     patch_size = 14
     temporal_patch_size = 2
-    downsample_factor = 2
+    merge_size = 2
     max_video_frame_tokens = 144
     num_frames = 96
     fps = 2.0
@@ -150,7 +150,7 @@ class OnyxVideoProcessor(BaseVideoProcessor):
         patch_size: int,
         temporal_patch_size: int,
         max_video_frame_tokens: int,
-        downsample_factor: int,
+        merge_size: int,
         disable_grouping: bool = False,
         **kwargs,
     ) -> BatchFeature:
@@ -163,7 +163,7 @@ class OnyxVideoProcessor(BaseVideoProcessor):
             if do_resize:
                 stacked_videos = self.aspect_ratio_preserving_resize(
                     image=stacked_videos,
-                    patch_size=patch_size * downsample_factor,
+                    patch_size=patch_size * merge_size,
                     max_tokens=max_video_frame_tokens,
                     resample=resample,
                 )

@@ -35,15 +35,18 @@ from ...utils.constants import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD
 
 class OnyxImageProcessorKwargs(ImagesKwargs, total=False):
     """
-    patch_size (`int`, *optional*):
-        Size of each image patch in pixels.
-    TODO:
+    patch_size (`int`, *optional*, defaults to 14):
+        The spatial patch size of the vision encoder.
+    temporal_patch_size (`int`, *optional*, defaults to 2):
+        The temporal patch size of the vision encoder.
+    merge_size (`int`, *optional*, defaults to 2):
+        The merge size of the vision encoder to llm encoder.
     """
 
     patch_size: int
     temporal_patch_size: int
+    merge_size: int
     max_image_tokens: int
-    merge_kernel_size: int
 
 
 def get_aspect_ratio_preserving_size(
@@ -85,6 +88,7 @@ class OnyxImageProcessor(TorchvisionBackend):
     size = None
     default_to_square = False
     do_rescale = True
+    rescale_factor = 1 / 255
     do_normalize = True
     image_mean = IMAGENET_STANDARD_MEAN
     image_std = IMAGENET_STANDARD_STD
@@ -94,18 +98,13 @@ class OnyxImageProcessor(TorchvisionBackend):
     merge_size = 2
     valid_kwargs = OnyxImageProcessorKwargs
     model_input_names = ["pixel_values", "image_grid_thw"]
-    merge_kernel_size = 2
     max_image_tokens = 4096
 
     def __init__(self, **kwargs: Unpack[OnyxImageProcessorKwargs]):
         super().__init__(**kwargs)
 
     @auto_docstring
-    def preprocess(
-        self,
-        images: ImageInput,
-        **kwargs: Unpack[OnyxImageProcessorKwargs],
-    ) -> BatchFeature:
+    def preprocess(self, images: ImageInput, **kwargs: Unpack[OnyxImageProcessorKwargs]) -> BatchFeature:
         return super().preprocess(images, **kwargs)
 
     def _preprocess(
@@ -122,10 +121,13 @@ class OnyxImageProcessor(TorchvisionBackend):
         patch_size: int,
         temporal_patch_size: int,
         max_image_tokens: int,
-        merge_kernel_size: int,
+        merge_size: int,
         disable_grouping: bool = False,
         **kwargs,
     ) -> BatchFeature:
+        """
+        Preprocess an image or batch of images.
+        """
         # Different from Qwen-VL, we use new way to infer `resized_height/width` and we swap `channel` and `temporal_patch` dim before flattening
         grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
         resized_images_grouped = {}
@@ -135,7 +137,7 @@ class OnyxImageProcessor(TorchvisionBackend):
                 resized_height, resized_width = get_aspect_ratio_preserving_size(
                     height=height,
                     width=width,
-                    patch_size=patch_size * merge_kernel_size,
+                    patch_size=patch_size * merge_size,
                     max_tokens=max_image_tokens,
                 )
                 stacked_images = self.resize(
@@ -211,13 +213,13 @@ class OnyxImageProcessor(TorchvisionBackend):
             `int`: Number of image patches per image.
         """
         patch_size = images_kwargs.get("patch_size", self.patch_size)
-        merge_kernel_size = images_kwargs.get("merge_kernel_size", self.merge_kernel_size)
+        merge_size = images_kwargs.get("merge_size", self.merge_size)
         max_image_tokens = images_kwargs.get("max_image_tokens", self.max_image_tokens)
 
         resized_height, resized_width = get_aspect_ratio_preserving_size(
             height=height,
             width=width,
-            patch_size=patch_size * merge_kernel_size,
+            patch_size=patch_size * merge_size,
             max_tokens=max_image_tokens,
         )
         grid_h, grid_w = resized_height // patch_size, resized_width // patch_size

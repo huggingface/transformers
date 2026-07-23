@@ -100,7 +100,7 @@ class OnyxProcessor(ProcessorMixin):
 
     # maybe chat template should add start-end tokens?
     def replace_image_token(self, image_inputs: dict, image_idx: int) -> str:
-        merge_length = self.image_processor.merge_kernel_size**2
+        merge_length = self.image_processor.merge_size**2
         num_image_tokens = image_inputs["image_grid_thw"][image_idx].prod() // merge_length
         return self.image_start_token + self.patch_token * num_image_tokens + self.image_end_token
 

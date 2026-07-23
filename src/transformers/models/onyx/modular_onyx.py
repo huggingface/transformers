@@ -31,7 +31,7 @@ from ...image_transforms import group_images_by_shape, reorder_images
 from ...image_utils import PILImageResampling, SizeDict
 from ...modeling_outputs import BaseModelOutputWithPooling, CausalLMOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
-from ...processing_utils import ImagesKwargs, Unpack
+from ...processing_utils import Unpack
 from ...utils import TensorType, TransformersKwargs, auto_docstring, logging
 from ...utils.constants import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD
 from ...utils.generic import (
@@ -62,6 +62,7 @@ from ..gemma3.modeling_gemma3 import (
     Gemma3ModelOutputWithPast,
 )
 from ..gemma4.modeling_gemma4 import Gemma4RMSNorm, Gemma4VisionRotaryEmbedding
+from ..glm4v.image_processing_glm4v import Glm4vImageProcessor, Glm4vImageProcessorKwargs
 from ..kimi_k25.configuration_kimi_k25 import Kimi_K25VisionConfig
 from ..kimi_k25.modeling_kimi_k25 import (
     Kimi_K25ForConditionalGeneration,
@@ -71,7 +72,6 @@ from ..kimi_k25.modeling_kimi_k25 import (
     Kimi_K25VisionMLP,
 )
 from ..paddleocr_vl.modeling_paddleocr_vl import PaddleOCRVisionEmbeddings
-from ..qwen2_vl.image_processing_qwen2_vl import Qwen2VLImageProcessor
 
 
 logger = logging.get_logger(__name__)
@@ -109,25 +109,16 @@ def get_aspect_ratio_preserving_size(
     return nph * patch_size, npw * patch_size
 
 
-class OnyxImageProcessorKwargs(ImagesKwargs, total=False):
-    """
-    patch_size (`int`, *optional*):
-        Size of each image patch in pixels.
-    TODO:
-    """
-
-    patch_size: int
-    temporal_patch_size: int
+class OnyxImageProcessorKwargs(Glm4vImageProcessorKwargs):
     max_image_tokens: int
-    merge_kernel_size: int
 
 
-class OnyxImageProcessor(Qwen2VLImageProcessor):
+class OnyxImageProcessor(Glm4vImageProcessor):
     resample = PILImageResampling.LANCZOS
     image_mean = IMAGENET_STANDARD_MEAN
     image_std = IMAGENET_STANDARD_STD
     size = None
-    merge_kernel_size = 2
+    merge_size = 2
     max_image_tokens = 4096
 
     def __init__(self, **kwargs: Unpack[OnyxImageProcessorKwargs]):
@@ -157,7 +148,7 @@ class OnyxImageProcessor(Qwen2VLImageProcessor):
         patch_size: int,
         temporal_patch_size: int,
         max_image_tokens: int,
-        merge_kernel_size: int,
+        merge_size: int,
         disable_grouping: bool = False,
         **kwargs,
     ) -> BatchFeature:
@@ -170,7 +161,7 @@ class OnyxImageProcessor(Qwen2VLImageProcessor):
                 resized_height, resized_width = get_aspect_ratio_preserving_size(
                     height=height,
                     width=width,
-                    patch_size=patch_size * merge_kernel_size,
+                    patch_size=patch_size * merge_size,
                     max_tokens=max_image_tokens,
                 )
                 stacked_images = self.resize(
@@ -246,13 +237,13 @@ class OnyxImageProcessor(Qwen2VLImageProcessor):
             `int`: Number of image patches per image.
         """
         patch_size = images_kwargs.get("patch_size", self.patch_size)
-        merge_kernel_size = images_kwargs.get("merge_kernel_size", self.merge_kernel_size)
+        merge_size = images_kwargs.get("merge_size", self.merge_size)
         max_image_tokens = images_kwargs.get("max_image_tokens", self.max_image_tokens)
 
         resized_height, resized_width = get_aspect_ratio_preserving_size(
             height=height,
             width=width,
-            patch_size=patch_size * merge_kernel_size,
+            patch_size=patch_size * merge_size,
             max_tokens=max_image_tokens,
         )
         grid_h, grid_w = resized_height // patch_size, resized_width // patch_size
@@ -283,7 +274,7 @@ class OnyxVisionConfig(Kimi_K25VisionConfig):
         Intermediate dimension used in multimodal projection.
     sparse_attention_factor (`int`, *optional*):
         Every n-th layer that is divisible by this value applies window-attention.
-    merge_kernel_size (`tuple[int] | list[int]`, *optional*):
+    merge_size (`tuple[int] | list[int]`, *optional*):
         Kernel size for patch merging.
     """
 
@@ -294,7 +285,7 @@ class OnyxVisionConfig(Kimi_K25VisionConfig):
     num_hidden_layers: int = 50
     intermediate_size: int = 8960
     patch_temporal: int = 2
-    merge_kernel_size: int = 2
+    merge_size: int = 2
     pos_emb_height: int = 32
     pos_emb_width: int = 32
     adapter_dim: int = 4096
@@ -640,7 +631,7 @@ class OnyxVisionModel(OnyxPreTrainedModel):
         self.ln_post = nn.LayerNorm(config.hidden_size)
 
     def pixel_shuffle(self, hidden_states: torch.Tensor, grid_thw: torch.Tensor) -> torch.Tensor:
-        factor = self.config.merge_kernel_size
+        factor = self.config.merge_size
         dim = hidden_states.shape[-1]
 
         output = []

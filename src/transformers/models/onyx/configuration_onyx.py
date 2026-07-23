@@ -43,7 +43,7 @@ class OnyxVisionConfig(PreTrainedConfig):
         Intermediate dimension used in multimodal projection.
     sparse_attention_factor (`int`, *optional*):
         Every n-th layer that is divisible by this value applies window-attention.
-    merge_kernel_size (`tuple[int] | list[int]`, *optional*):
+    merge_size (`tuple[int] | list[int]`, *optional*):
         Kernel size for patch merging.
     """
 
@@ -58,11 +58,12 @@ class OnyxVisionConfig(PreTrainedConfig):
     hidden_size: int = 1536
     intermediate_size: int = 8960
     hidden_act: str = "gelu"
-    merge_kernel_size: int = 2
+    merge_kernel_size: tuple[int, int] | list[int] = (2, 2)
     rope_parameters: dict | None = None  # defaults set by `RopeConfigMixin`
     max_position_embeddings: int = 32 * 32  # == `pos_h * pos_w`
     output_dim: int = 6144
     patch_temporal: int = 2
+    merge_size: int = 2
     adapter_dim: int = 4096
     layer_norm_eps: float = 1e-05
     layer_types: list[str] | None = None

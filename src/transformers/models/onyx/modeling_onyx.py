@@ -795,7 +795,7 @@ class OnyxVisionModel(OnyxPreTrainedModel):
         self.ln_post = nn.LayerNorm(config.hidden_size)
 
     def pixel_shuffle(self, hidden_states: torch.Tensor, grid_thw: torch.Tensor) -> torch.Tensor:
-        factor = self.config.merge_kernel_size
+        factor = self.config.merge_size
         dim = hidden_states.shape[-1]
 
         output = []
