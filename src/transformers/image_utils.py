@@ -462,6 +462,43 @@ def valid_coco_panoptic_annotations(annotations: Iterable[dict[str, list | tuple
     return all(is_valid_annotation_coco_panoptic(ann) for ann in annotations)
 
 
+def _validate_image_url(url: str) -> None:
+    """Validate that a URL does not point to internal/private addresses (SSRF prevention).
+
+    Blocks link-local (169.254.x.x — cloud metadata), loopback (127.x.x.x),
+    and private ranges (10.x, 172.16-31.x, 192.168.x) before the HTTP request
+    is made. This prevents SSRF via image URLs passed to pipelines.
+    """
+    import ipaddress
+    import socket
+    from urllib.parse import urlparse
+
+    parsed = urlparse(url)
+    hostname = parsed.hostname
+    if not hostname:
+        return
+
+    # Resolve hostname and check all resulting IPs.
+    try:
+        infos = socket.getaddrinfo(hostname, None)
+    except socket.gaierror:
+        return  # let httpx handle the error
+
+    for info in infos:
+        ip = info[4][0]
+        try:
+            ip_obj = ipaddress.ip_address(ip)
+        except ValueError:
+            continue
+        if ip_obj.is_private or ip_obj.is_loopback or ip_obj.is_link_local:
+            raise ValueError(
+                f"URL hostname '{hostname}' resolves to a private/loopback/link-local "
+                f"address ({ip}). Requests to internal addresses are blocked to prevent SSRF. "
+                f"If this is a legitimate local image server, download the image and pass "
+                f"the file path or base64 string instead."
+            )
+
+
 def load_image(
     image: Union[str, "PIL.Image.Image"],
     timeout: float | None = None,
@@ -483,6 +520,10 @@ def load_image(
         if image.startswith("http://") or image.startswith("https://"):
             # We need to actually check for a real protocol, otherwise it's impossible to use a local file
             # like http_huggingface_co.png
+            # Security: validate the URL to prevent SSRF (cloud metadata, internal
+            # services). Block link-local (169.254.x.x), loopback (127.x.x.x),
+            # and private ranges before making the request.
+            _validate_image_url(image)
             image = PIL.Image.open(BytesIO(httpx.get(image, timeout=timeout, follow_redirects=True).content))
         elif os.path.isfile(image):
             image = PIL.Image.open(image)
