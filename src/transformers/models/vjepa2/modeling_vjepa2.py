@@ -198,7 +198,7 @@ class VJEPA2Embeddings(nn.Module):
 
         is_image = self.config.use_image_patch_embedder and num_frames == 1
 
-        if is_image and self.patch_embeddings_img is not None:
+        if is_image:
             target_dtype = self.patch_embeddings_img.proj.weight.dtype
             pixel_values_videos = pixel_values_videos.to(dtype=target_dtype)
             embeddings = self.patch_embeddings_img(pixel_values_videos)
@@ -341,10 +341,9 @@ class VJEPA2RopeAttention(nn.Module):
         width_ids = (ids - tokens_per_frame * frame_ids) - tokens_per_row * height_ids
 
         if self.interpolate_rope and self.grid_size > 1:
-            h_scale = (self.pretrained_grid_size - 1.0) / max(self.grid_size - 1.0, 1.0)
-            w_scale = (self.pretrained_grid_size - 1.0) / max(self.grid_size - 1.0, 1.0)
-            height_ids = height_ids.float() * h_scale
-            width_ids = width_ids.float() * w_scale
+            scale = (self.pretrained_grid_size - 1.0) / max(self.grid_size - 1.0, 1.0)
+            height_ids = height_ids.float() * scale
+            width_ids = width_ids.float() * scale
 
         return frame_ids, height_ids, width_ids
 
@@ -1010,6 +1009,15 @@ class VJEPA2PreTrainedModel(PreTrainedModel):
                 init.zeros_(module.mask_tokens)
             else:
                 init.trunc_normal_(module.mask_tokens, std=init_std)
+            if hasattr(module, "img_mod_embed"):
+                init.normal_(module.img_mod_embed, std=1e-6)
+            if hasattr(module, "video_mod_embed"):
+                init.normal_(module.video_mod_embed, std=1e-6)
+        elif isinstance(module, VJEPA2Embeddings):
+            if hasattr(module, "img_mod_embed"):
+                init.normal_(module.img_mod_embed, std=1e-6)
+            if hasattr(module, "video_mod_embed"):
+                init.normal_(module.video_mod_embed, std=1e-6)
         elif isinstance(module, (nn.Linear, nn.Conv2d, nn.Conv3d)):
             init.trunc_normal_(module.weight, std=init_std)
             if module.bias is not None:
@@ -1105,6 +1113,8 @@ class VJEPA2Model(VJEPA2PreTrainedModel):
 
     def get_vision_features(self, pixel_values_videos) -> torch.Tensor:
         encoder_output = self.forward(pixel_values_videos, skip_predictor=True)
+        if encoder_output.hierarchical_hidden_state is not None:
+            return encoder_output.hierarchical_hidden_state
         return encoder_output.last_hidden_state
 
 
