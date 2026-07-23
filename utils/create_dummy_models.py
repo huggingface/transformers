@@ -543,6 +543,10 @@ def _get_exact_config(_config, config_class):
     for key in keys:
         sub_config = getattr(_config, key) if not isinstance(_config, dict) else _config[key]
         if sub_config is not None:
+            # Skip primitives (bool, int, str, …) that happen to have a name ending in `_config`
+            # (e.g. `serialize_explicit_per_layer_config` on PreTrainedConfig is a bool).
+            if not (isinstance(sub_config, dict) or hasattr(sub_config, "to_dict")):
+                continue
             # TODO: `VibeVoiceAcousticTokenizerEncoder/DecoderConfig` needs some protection!!!
             if sub_config.__class__ == _config.__class__:
                 continue
