@@ -33,32 +33,33 @@ logger = logging.get_logger(__name__)
 @strict
 class OnyxVisionConfig(PreTrainedConfig):
     r"""
-    TODO
+    pos_emb_height (`int`, *optional*):
+        Initial position embedding height.
+    pos_emb_width (`int`, *optional*):
+        Initial position embedding width.
+    pos_emb_time (`int`, *optional*):
+        Initial position embedding time dimension.
+    merge_kernel_size (`tuple[int] | list[int]`, *optional*):
+        Kernel size for patch merging.
     """
 
     model_type = "onyx_vision"
-    attribute_map = {
-        "hidden_size": "hidden_size",
-        "vision_heads": "num_attention_heads",
-        "vision_layers": "num_hidden_layers",
-    }
 
-    hidden_size: int = 1536
-    output_dim: int = 6144
-    num_hidden_layers: int = 50
-    num_attention_heads: int = 16
-    mlp_ratio: float = 8960 / 1536
     patch_size: int = 14
+    pos_emb_height: int = 32
+    pos_emb_width: int = 32
+    num_attention_heads: int = 16
+    num_hidden_layers: int = 50
+    hidden_size: int = 1536
+    intermediate_size: int = 8960
+    hidden_act: str = "gelu"
+    merge_kernel_size: int = 2
+    rope_parameters: dict | None = None  # defaults set by `RopeConfigMixin`
+    max_position_embeddings: int = 32 * 32  # == `pos_h * pos_w`
+    output_dim: int = 6144
     patch_temporal: int = 2
-    downsample_factor: int = 2
     sparse_attention_factor: int = 4
-    pos_emb_grid_h: int = 32
-    pos_emb_grid_w: int = 32
     adapter_dim: int = 4096
-    video_num_frames: int = 96
-    video_sampling_fps: float = 2.0
-    rope_parameters: dict | None = None
-    max_position_embeddings: int = 32 * 32
     layer_norm_eps: float = 1e-05
 
 
@@ -178,14 +179,14 @@ _LEGACY_FLAT_VISION_KEYS = {
     "vision_mlp_ratio": "mlp_ratio",
     "vision_output_dim": "output_dim",
     "vision_adapter_dim": "adapter_dim",
-    "vision_downsample_factor": "downsample_factor",
+    "vision_merge_kernel_size": "merge_kernel_size",
     "vision_patch_size": "patch_size",
     "vision_patch_temporal": "patch_temporal",
-    "vision_pos_emb_grid_h": "pos_emb_grid_h",
-    "vision_pos_emb_grid_w": "pos_emb_grid_w",
+    "vision_pos_emb_height": "pos_emb_height",
+    "vision_pos_emb_width": "pos_emb_width",
     "vision_sparse_attention_factor": "sparse_attention_factor",
-    "video_num_frames": "video_num_frames",
-    "video_sampling_fps": "video_sampling_fps",
+    "video_num_frames": "video_num_frames",  # UNUSED CONFIG ATTR
+    "video_sampling_fps": "video_sampling_fps",  # UNUSED CONFIG ATTR
 }
 _LEGACY_FLAT_TOKEN_ID_KEYS = {
     "patch_token_id": "image_token_id",

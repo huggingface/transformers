@@ -156,7 +156,11 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(source_patterns=r"post_ffn_norm", target_patterns=r"post_feedforward_layernorm"),
         ],
         "onyx_vision": [
-            WeightRenaming(source_patterns=r"attn.o_proj", target_patterns=r"attn.out_proj"),
+            WeightRenaming(source_patterns=r"attn.o_proj", target_patterns=r"attn.proj"),
+            WeightRenaming(source_patterns=r"mlp.c_fc.", target_patterns=r"mlp.fc1."),
+            WeightRenaming(source_patterns=r"mlp.c_proj.", target_patterns=r"mlp.fc2."),
+            WeightRenaming(source_patterns=r"layers.(\d+).ln_1", target_patterns=r"layers.\1.norm1"),
+            WeightRenaming(source_patterns=r"layers.(\d+).ln_2", target_patterns=r"layers.\1.norm2"),
             WeightRenaming(
                 source_patterns=r"position_embedding_table$", target_patterns=r"position_embedding_table.weight"
             ),
@@ -172,6 +176,8 @@ def _build_checkpoint_conversion_mapping():
             ),
         ],
         "onyx": [
+            WeightRenaming(source_patterns=r"c_fc.weight", target_patterns=r"fc1.weight"),
+            WeightRenaming(source_patterns=r"c_proj.weight", target_patterns=r"fc2.weight"),
             WeightRenaming(source_patterns=r"vision_encoder.transformer", target_patterns=r"vision_tower.layers"),
             WeightRenaming(
                 source_patterns=r"vision_encoder.conv1_linear",
@@ -184,7 +190,7 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(source_patterns=r"vision_encoder.ln_pre", target_patterns=r"vision_tower.ln_pre"),
             WeightRenaming(source_patterns=r"vision_encoder.ln_post", target_patterns=r"vision_tower.ln_post"),
             WeightRenaming(
-                source_patterns=r"^model(?!\.(language_model|vision_tower|vision_encoder))",
+                source_patterns=r"^model(?!\.(language_model|vision_tower|vision_adapter))",
                 target_patterns="model.language_model",
             ),
         ],
