@@ -1059,7 +1059,7 @@ class InklingVisionModel(InklingPreTrainedModel):
             hidden_states = layer(hidden_states=hidden_states)
 
         hidden_states = self.final_norm(hidden_states)
-        hidden_states = hidden_states.reshape(num_patches, -1)
+        hidden_states = hidden_states.reshape(num_patches, 1, -1)
         return BaseModelOutputWithPooling(
             last_hidden_state=hidden_states,
             pooler_output=hidden_states,
