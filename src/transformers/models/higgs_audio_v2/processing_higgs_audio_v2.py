@@ -21,6 +21,7 @@ from ...feature_extraction_utils import BatchFeature
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import is_soundfile_available, is_torch_available, logging
+from ...utils.import_utils import requires, requires_backends
 
 
 if is_torch_available():
@@ -48,6 +49,7 @@ class HiggsAudioV2ProcessorKwargs(ProcessingKwargs, total=False):
     }
 
 
+@requires(backends=("torch",))
 class HiggsAudioV2Processor(ProcessorMixin):
     r"""
     Constructs a Higgs Audio processor which wraps a [`DacFeatureExtractor`], a [`AutoTokenizer`],
@@ -200,14 +202,14 @@ class HiggsAudioV2Processor(ProcessorMixin):
             audio_input_ids_list = [torch.cat(batch_el, dim=0) for batch_el in audio_input_ids_list]
 
             # pad and stack
-            lenghts = [ids.shape[0] for ids in audio_input_ids_list]
-            max_length = max(lenghts)
+            lengths = [ids.shape[0] for ids in audio_input_ids_list]
+            max_length = max(lengths)
             audio_input_ids_list = [
                 F.pad(ids, (0, 0, 0, max_length - ids.shape[0]), value=self.audio_stream_eos_id)
                 for ids in audio_input_ids_list
             ]
             audio_input_ids = torch.stack(audio_input_ids_list, dim=0)
-            audio_input_ids_mask = torch.arange(max_length)[None, :] < torch.tensor(lenghts)[:, None]
+            audio_input_ids_mask = torch.arange(max_length)[None, :] < torch.tensor(lengths)[:, None]
 
         # tokenize text
         data = self.tokenizer(text, **text_kwargs)
@@ -327,8 +329,7 @@ class HiggsAudioV2Processor(ProcessorMixin):
         **kwargs: Unpack[HiggsAudioV2ProcessorKwargs],
     ):
         # TODO: @eustlb, this should be in AudioProcessor
-        if not is_soundfile_available():
-            raise ImportError("Please install `soundfile` to save audio files.")
+        requires_backends(self, ["soundfile"])
 
         # ensure correct audio input
         audio = make_list_of_audio(audio)

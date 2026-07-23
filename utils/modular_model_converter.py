@@ -1307,12 +1307,12 @@ def _ensure_utils_availability_imports(imports: list[cst.CSTNode], needed: set[s
     return [new_import] + imports
 
 
-def protect_torch_imports_for_pil(imports: list[cst.CSTNode]) -> list[cst.CSTNode]:
+def protect_torch_imports(imports: list[cst.CSTNode]) -> list[cst.CSTNode]:
     """
-    For PIL image processor files, collect all torch/torchvision imports — whether bare or
-    already wrapped in a guard — into a single `if is_torch_available():` /
-    `if is_torchvision_available():` block each. Add the required availability checks to the
-    utils import.
+    For files where torch is only a soft dependency (PIL image processors, feature extractors),
+    collect all torch/torchvision imports — whether bare or already wrapped in a guard — into a
+    single `if is_torch_available():` / `if is_torchvision_available():` block each. Add the
+    required availability checks to the utils import.
 
     Pre-existing guarded blocks (no else clause) are absorbed so we never emit duplicate guards
     for the same library.
@@ -1383,7 +1383,8 @@ def replace_unprotected_image_processing_imports(files: dict, all_imports: list)
         if isinstance(import_node, cst.SimpleStatementLine) and isinstance(import_node.body[0], cst.ImportFrom):
             import_node = import_node.body[0]
             full_name = get_full_attribute_name(import_node.module)
-            if re.search(r"^image_processing_(?!(?:backends)|(?:utils))", full_name):
+            # modules from which to import directly without duplicating nodes
+            if re.search(r"^image_processing_(?!(?:backends)|(?:utils)|(?:outputs))", full_name):
                 import_from_image_processing = import_node
                 break
 
@@ -1961,8 +1962,8 @@ def create_modules(
         new_body = [k[1]["node"] for k in sorted(body.items(), key=lambda x: x[1]["insert_idx"])]
         needed_imports = get_needed_imports(body, all_imports)
 
-        if file == "image_processing_pil":
-            needed_imports = protect_torch_imports_for_pil(needed_imports)
+        if file in ("image_processing_pil", "feature_extraction"):
+            needed_imports = protect_torch_imports(needed_imports)
 
         if package_name != "transformers":
             # Convert all transformers relative imports to absolute ones

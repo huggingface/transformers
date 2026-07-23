@@ -25,6 +25,7 @@ from .utils import (
     is_flash_attn_2_available,
     is_flash_attn_3_available,
     is_flash_attn_4_available,
+    is_rocm_platform,
     is_torch_cuda_available,
     is_torch_mlu_available,
     is_torch_npu_available,
@@ -59,10 +60,13 @@ def is_flash_attn_available():
     )
 
 
-# Mapping from flash attention implementations to their kernel fallback repositories
+# Mapping from flash attention implementations to their kernel fallback repositories.
+
 FLASH_ATTN_KERNEL_FALLBACK = {
     "flash_attention_2": "kernels-community/flash-attn2",
-    "flash_attention_3": "kernels-community/vllm-flash-attn3",
+    "flash_attention_3": (
+        "kernels-community/aiter-flash-attn" if is_rocm_platform() else "kernels-community/vllm-flash-attn3"
+    ),
     "flash_attention_4": "kernels-community/flash-attn4",
 }
 
@@ -312,7 +316,8 @@ def _unpad_input(hidden_states, attention_mask, unused_mask=None):
     seqlens_in_batch = all_masks.sum(dim=-1, dtype=torch.int32)
     used_seqlens_in_batch = attention_mask.sum(dim=-1, dtype=torch.int32)
     indices = torch.nonzero(all_masks.flatten(), as_tuple=False).flatten()
-    max_seqlen_in_batch = seqlens_in_batch.max()
+    # using .item() here is required to prevent a performance regression (#46693)
+    max_seqlen_in_batch = seqlens_in_batch.max().item()
     cu_seqlens = F.pad(torch.cumsum(seqlens_in_batch, dim=0, dtype=torch.int32), (1, 0))
 
     return (
@@ -361,7 +366,8 @@ def _get_unpad_data(attention_mask: torch.Tensor) -> tuple[torch.Tensor, torch.T
     """
     seqlens_in_batch = attention_mask.sum(dim=-1, dtype=torch.int32)
     indices = torch.nonzero(attention_mask.flatten(), as_tuple=False).flatten()
-    max_seqlen_in_batch = seqlens_in_batch.max()
+    # using .item() here is required to prevent a performance regression (#46693)
+    max_seqlen_in_batch = seqlens_in_batch.max().item()
     cu_seqlens = F.pad(torch.cumsum(seqlens_in_batch, dim=0, dtype=torch.int32), (1, 0))
     return (
         indices,

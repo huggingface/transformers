@@ -288,18 +288,23 @@ def _convert_moe_packed_tensors(
         exp = scales[r0:r1]
         sub = out[r0:r1]
 
-        # This vector is only used to index into `lut`, but is hugeee in GPU memory so we delete it immediately
-        idx_lo = (blk & 0x0F).to(torch.int)
-        sub[:, 0::2] = lut[idx_lo]
-        del idx_lo
+        # With device_map="auto", tensors sitting on a non-current accelerator device are not
+        # ordered after their async H2D copy, so the compute below may read garbage and emit
+        # out-of-bounds `lut` indices (illegal memory access on CUDA, indexing abort on XPU).
+        # Aligning the active device with the tensor's device orders it correctly (no-op on CPU).
+        with on_device(blk.device):
+            # This vector is only used to index into `lut`, but is hugeee in GPU memory so we delete it immediately
+            idx_lo = (blk & 0x0F).to(torch.int)
+            sub[:, 0::2] = lut[idx_lo]
+            del idx_lo
 
-        # This vector is only used to index into `lut`, but is hugeee in GPU memory so we delete it immediately
-        idx_hi = (blk >> 4).to(torch.int)
-        sub[:, 1::2] = lut[idx_hi]
-        del idx_hi
+            # This vector is only used to index into `lut`, but is hugeee in GPU memory so we delete it immediately
+            idx_hi = (blk >> 4).to(torch.int)
+            sub[:, 1::2] = lut[idx_hi]
+            del idx_hi
 
-        # Perform op
-        torch.ldexp(sub, exp, out=sub)
+            # Perform op
+            torch.ldexp(sub, exp, out=sub)
         del blk, exp, sub
 
     out = out.reshape(*prefix_shape, G, B * 2).view(*prefix_shape, G * B * 2)
@@ -325,7 +330,7 @@ def convert_moe_packed_tensors(
     try:
         return _convert_moe_packed_tensors(blocks, scales, dtype=dtype, rows_per_chunk=rows_per_chunk)
     # In the case of OOM due to very tight device_map, we convert and return on cpu - it will then be put back on correct
-    # devide with the accelerate dispatch (doing it right away may still lead to OOM, but more memory is available later)
+    # device with the accelerate dispatch (doing it right away may still lead to OOM, but more memory is available later)
     except torch.OutOfMemoryError:
         blocks = blocks.to("cpu")
         scales = scales.to("cpu")
@@ -664,7 +669,7 @@ def replace_with_mxfp4_linear(model, quantization_config=None, modules_to_not_co
     from .hub_kernels import get_kernel
 
     global triton_kernels_hub
-    triton_kernels_hub = get_kernel("kernels-community/gpt-oss-triton-kernels")
+    triton_kernels_hub = get_kernel("kernels-community/gpt-oss-triton-kernels", version=1)
 
     has_been_replaced = False
     for module_name, module in model.named_modules():
