@@ -368,6 +368,65 @@ class Mxfp4GptOssExperts(nn.Module):
         self.down_proj_precision_config = None
         self.limit = getattr(config, "swiglu_limit", 7.0)
 
+    def _dequantize_weights(self, dtype: torch.dtype):
+        """Dequantize the packed MXFP4 expert weights to `dtype` on the fly.
+
+        Converts the (possibly hardware-swizzled) triton weight tensors back to
+        a strided layout, then upcasts per expert to bound the fp32 padding
+        intermediates of `upcast_from_mxfp_torch` to 1/num_experts of the
+        whole-tensor spike. Returns (gate_up_proj, down_proj) shaped exactly
+        like the eager `GptOssExperts` parameters.
+        """
+        tensor_mod = triton_kernels_hub.tensor
+        layout = triton_kernels_hub.tensor_details.layout
+        upcast = triton_kernels_hub.numerics_details.mxfp.upcast_from_mxfp_torch
+
+        out = []
+        for w, pc in (
+            (self.gate_up_proj, self.gate_up_proj_precision_config),
+            (self.down_proj, self.down_proj_precision_config),
+        ):
+            w_strided = tensor_mod.convert_layout(w, layout.StridedLayout)
+            scale_strided = tensor_mod.convert_layout(pc.weight_scale, layout.StridedLayout)
+            data, scale = w_strided.storage.data, scale_strided.storage.data
+            out.append(torch.stack([upcast(data[e], scale[e], dtype, 0) for e in range(data.shape[0])]))
+        return out[0], out[1]
+
+    def forward_dequantized(self, hidden_states: torch.Tensor, router_indices, routing_weights) -> torch.Tensor:
+        """Autograd-visible eager expert forward over on-the-fly dequantized weights.
+
+        This mirrors `GptOssExperts.forward` (the eager reference math) with
+        weights materialized in the activation dtype. The packed MXFP4 storage
+        is untouched; the dequantized tensors are transients whose lifetime is
+        bounded by the autograd graph — with gradient checkpointing enabled,
+        at most ~one decoder layer's worth is alive at a time.
+        """
+        gate_up_proj, down_proj = self._dequantize_weights(hidden_states.dtype)
+        gate_up_proj_bias = self.gate_up_proj_bias.to(hidden_states.dtype)
+        down_proj_bias = self.down_proj_bias.to(hidden_states.dtype)
+
+        next_states = torch.zeros_like(hidden_states)
+        with torch.no_grad():
+            expert_mask = torch.nn.functional.one_hot(router_indices, num_classes=self.num_experts)
+            expert_mask = expert_mask.permute(2, 1, 0)
+            expert_hit = torch.greater(expert_mask.sum(dim=(-1, -2)), 0).nonzero()
+        for expert_idx in expert_hit:
+            expert_idx = expert_idx[0]
+            if expert_idx == self.num_experts:
+                continue
+            top_k_pos, token_idx = torch.where(expert_mask[expert_idx])
+            current_state = hidden_states[token_idx]
+            gate_up = current_state @ gate_up_proj[expert_idx] + gate_up_proj_bias[expert_idx]
+            gate, up = gate_up[..., ::2], gate_up[..., 1::2]
+            gate = gate.clamp(min=None, max=self.limit)
+            up = up.clamp(min=-self.limit, max=self.limit)
+            glu = gate * torch.sigmoid(gate * self.alpha)
+            gated_output = (up + 1) * glu
+            out = gated_output @ down_proj[expert_idx] + down_proj_bias[expert_idx]
+            weighted_output = out * routing_weights[token_idx, top_k_pos, None]
+            next_states.index_add_(0, token_idx, weighted_output.to(hidden_states.dtype))
+        return next_states
+
     def forward(self, hidden_states: torch.Tensor, routing_data, gather_idx, scatter_idx) -> torch.Tensor:
         FnSpecs, FusedActivation, matmul_ogs = (
             triton_kernels_hub.matmul_ogs.FnSpecs,
@@ -474,6 +533,21 @@ def routing_torch_dist(
 
 def mlp_forward(self, hidden_states):
     import torch.distributed as dist
+
+    # Training fallback: the triton MXFP4 kernels implement forward only, so
+    # under autograd their outputs are constants and gradients would silently
+    # flow through residual connections alone (biased LoRA/adapter training).
+    # When gradients are required, run the eager reference path (router +
+    # experts) over weights dequantized on the fly; MXFP4 storage is untouched.
+    if torch.is_grad_enabled() and (hidden_states.requires_grad or self.router.weight.requires_grad):
+        batch_size = hidden_states.shape[0]
+        flat = hidden_states.reshape(-1, self.router.hidden_dim)
+        router_logits = nn.functional.linear(flat, self.router.weight, self.router.bias)
+        router_top_value, router_indices = torch.topk(router_logits, self.router.top_k, dim=-1)
+        router_scores = torch.nn.functional.softmax(router_top_value, dim=1, dtype=router_top_value.dtype)
+        routed_out = self.experts.forward_dequantized(flat, router_indices, router_scores)
+        routed_out = routed_out.reshape(batch_size, -1, self.router.hidden_dim)
+        return routed_out, router_logits
 
     if dist.is_available() and dist.is_initialized() and hasattr(self, "_is_hooked"):
         routing = routing_torch_dist

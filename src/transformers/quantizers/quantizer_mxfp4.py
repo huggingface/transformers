@@ -275,9 +275,12 @@ class Mxfp4HfQuantizer(HfQuantizer):
     @property
     def is_trainable(self) -> bool:
         logger.warning_once(
-            "MXFP4 quantization don't support training, please consider dequantizing the model first by passing quantization_config=Mxfp4Config(dequantize=True) to .from_pretrained()"
+            "MXFP4 training uses a dequantize-on-the-fly fallback for the quantized MoE experts: forward/backward "
+            "run the eager reference math over transiently dequantized weights (the packed MXFP4 storage is "
+            "unchanged, and inference keeps the fast triton kernels). Enable gradient checkpointing to bound the "
+            "dequantized transients to roughly one decoder layer."
         )
-        return False
+        return True
 
     def get_quantize_ops(self):
         from ..integrations.mxfp4 import Mxfp4Quantize
