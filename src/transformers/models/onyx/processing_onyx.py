@@ -58,7 +58,7 @@ ONYX_MM_CHAT_TEMPLATE = (
     "{{- '<|eot|>' -}}"
     "{%- endif -%}"
     "{%- endfor -%}"
-    "{%- if add_generation_prompt -%}{{- '<|start|>assistant' -}}{%- endif -%}"
+    "{%- if add_generation_prompt -%}{{- '<|start|>assistant to=user<|message|>' -}}{%- endif -%}"
 )
 
 
