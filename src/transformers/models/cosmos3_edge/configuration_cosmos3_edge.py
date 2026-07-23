@@ -23,7 +23,7 @@ from ...configuration_utils import PreTrainedConfig
 from ...utils import auto_docstring
 
 
-@auto_docstring(checkpoint="nvidia/Cosmos3-Edge-Reasoner")
+@auto_docstring(checkpoint="nvidia/Cosmos3-Edge")
 @strict
 class Cosmos3EdgeTextConfig(PreTrainedConfig):
     r"""
@@ -114,7 +114,7 @@ class Cosmos3EdgeTextConfig(PreTrainedConfig):
             )
 
 
-@auto_docstring(checkpoint="nvidia/Cosmos3-Edge-Reasoner")
+@auto_docstring(checkpoint="nvidia/Cosmos3-Edge")
 @strict
 class Cosmos3EdgeVisionConfig(PreTrainedConfig):
     r"""
@@ -137,7 +137,7 @@ class Cosmos3EdgeVisionConfig(PreTrainedConfig):
     spatial_merge_size: int = 2
 
 
-@auto_docstring(checkpoint="nvidia/Cosmos3-Edge-Reasoner")
+@auto_docstring(checkpoint="nvidia/Cosmos3-Edge")
 @strict
 class Cosmos3EdgeConfig(PreTrainedConfig):
     r"""
