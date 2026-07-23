@@ -25,12 +25,12 @@ from transformers.testing_utils import (
     cleanup,
     get_device_properties,
     require_bitsandbytes,
+    require_deterministic_for_xpu,
     require_flash_attn,
     require_torch,
     require_torch_accelerator,
     slow,
     torch_device,
-    require_deterministic_for_xpu,
 )
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
