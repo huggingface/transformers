@@ -29,7 +29,7 @@ from ...image_processing_backends import TorchvisionBackend
 from ...image_processing_utils import BatchFeature
 from ...image_transforms import group_images_by_shape, reorder_images
 from ...image_utils import PILImageResampling, SizeDict
-from ...modeling_outputs import BaseModelOutputWithPooling, CausalLMOutputWithPast
+from ...modeling_outputs import BaseModelOutputWithPooling
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TensorType, TransformersKwargs, auto_docstring, logging
@@ -56,11 +56,7 @@ from ..gemma2.modeling_gemma2 import (
     Gemma2RotaryEmbedding,
     eager_attention_forward,
 )
-from ..gemma3.modeling_gemma3 import (
-    Gemma3CausalLMOutputWithPast,
-    Gemma3ForCausalLM,
-    Gemma3ModelOutputWithPast,
-)
+from ..gemma3.modeling_gemma3 import Gemma3CausalLMOutputWithPast, Gemma3ModelOutputWithPast
 from ..gemma4.modeling_gemma4 import Gemma4RMSNorm, Gemma4VisionRotaryEmbedding
 from ..glm4v.image_processing_glm4v import Glm4vImageProcessor, Glm4vImageProcessorKwargs
 from ..kimi_k25.configuration_kimi_k25 import Kimi_K25VisionConfig
@@ -300,7 +296,7 @@ class OnyxVisionConfig(Kimi_K25VisionConfig):
         if self.layer_types is None:
             stride = 4
             self.layer_types = [
-                "full_attention" if (i + 1) % stride == 0 or i == self.num_hidden_layers - 1 else "sliding_attention"
+                "full_attention" if (i + 1) % stride == 0 or i == self.num_hidden_layers - 1 else "window_attention"
                 for i in range(self.num_hidden_layers)
             ]
         PreTrainedConfig.__post_init__(self, **kwargs)
@@ -765,54 +761,6 @@ class OnyxModel(Kimi_K25Model):
         return vision_outputs
 
 
-class OnyxForCausalLM(Gemma3ForCausalLM):
-    def forward(
-        self,
-        input_ids: torch.LongTensor | None = None,
-        attention_mask: torch.Tensor | None = None,
-        position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
-        labels: torch.LongTensor | None = None,
-        use_cache: bool | None = None,
-        logits_to_keep: int | torch.Tensor = 0,
-        **kwargs: Unpack[TransformersKwargs],
-    ):
-        outputs = self.model(
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-            position_ids=position_ids,
-            past_key_values=past_key_values,
-            inputs_embeds=inputs_embeds,
-            use_cache=use_cache,
-            **kwargs,
-        )
-
-        hidden_states = outputs.last_hidden_state
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(hidden_states[:, slice_indices, :])
-
-        # Onyx pre-scales logits by `output_multiplier` before the Gemma-style tanh softcap.
-        # Together with `final_logit_softcapping = T`, this gives `T * tanh(logits * mult / T)`.
-        logits = logits * self.config.output_multiplier
-        if self.config.final_logit_softcapping is not None:
-            logits = logits / self.config.final_logit_softcapping
-            logits = torch.tanh(logits)
-            logits = logits * self.config.final_logit_softcapping
-
-        loss = None
-        if labels is not None:
-            loss = self.loss_function(logits, labels, self.vocab_size, **kwargs)
-
-        return CausalLMOutputWithPast(
-            loss=loss,
-            logits=logits,
-            past_key_values=outputs.past_key_values,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
-        )
-
-
 class OnyxForConditionalGeneration(Kimi_K25ForConditionalGeneration):
     def forward(
         self,
@@ -878,7 +826,6 @@ __all__ = [
     "OnyxTextModel",
     "OnyxVisionModel",
     "OnyxModel",
-    "OnyxForCausalLM",
     "OnyxForConditionalGeneration",
     "OnyxImageProcessor",
 ]
