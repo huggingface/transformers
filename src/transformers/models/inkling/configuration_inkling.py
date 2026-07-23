@@ -22,6 +22,7 @@
 from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
+from ...utils import auto_docstring
 
 
 # TODO: Fix the undocumented attributes then uncomment

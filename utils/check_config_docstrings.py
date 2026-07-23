@@ -67,7 +67,22 @@ CONFIG_CLASSES_TO_IGNORE_FOR_DOCSTRING_CHECKPOINT_CHECK = {
 
 def get_checkpoint_from_config_class(config_class):
     # source code of `config_class`
-    config_source = inspect.getsource(config_class)
+    source_lines, start_lineno = inspect.getsourcelines(config_class)
+    config_source = "".join(source_lines)
+
+    # Also scan lines immediately before the class definition (e.g. commented-out decorators
+    # like `# @auto_docstring(checkpoint=...)`), stopping at the first blank line.
+    try:
+        all_lines = open(inspect.getfile(config_class), encoding="utf-8").readlines()
+        prefix = []
+        idx = start_lineno - 2  # start_lineno is 1-indexed; step back one line
+        while idx >= 0 and all_lines[idx].strip():
+            prefix.insert(0, all_lines[idx])
+            idx -= 1
+        config_source = "".join(prefix) + config_source
+    except (OSError, TypeError):
+        pass
+
     checkpoints = _re_checkpoint.findall(config_source)
     return checkpoints[0] if checkpoints else None
 
