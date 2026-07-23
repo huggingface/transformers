@@ -410,16 +410,16 @@ def prepare_protein_features(sequence: str) -> dict[str, Tensor]:
         res_type_vals.append(res_type)
         input_id_vals.append(input_id)
 
-    n_real_atoms = len(atom_records)
-    n_atoms = math.ceil(n_real_atoms / 32) * 32 if n_real_atoms > 0 else 32
+    number_of_real_atoms = len(atom_records)
+    number_of_atoms = math.ceil(number_of_real_atoms / 32) * 32 if number_of_real_atoms > 0 else 32
 
-    ref_pos = torch.zeros(n_atoms, 3, dtype=torch.float32)
-    ref_element = torch.zeros(n_atoms, dtype=torch.int64)
-    ref_charge = torch.zeros(n_atoms, dtype=torch.int8)
-    ref_atom_name_chars = torch.zeros(n_atoms, 4, dtype=torch.int64)
-    ref_space_uid = torch.zeros(n_atoms, dtype=torch.int64)
-    atom_attention_mask = torch.zeros(n_atoms, dtype=torch.bool)
-    atom_to_token = torch.zeros(n_atoms, dtype=torch.int64)
+    ref_pos = torch.zeros(number_of_atoms, 3, dtype=torch.float32)
+    ref_element = torch.zeros(number_of_atoms, dtype=torch.int64)
+    ref_charge = torch.zeros(number_of_atoms, dtype=torch.int8)
+    ref_atom_name_chars = torch.zeros(number_of_atoms, 4, dtype=torch.int64)
+    ref_space_uid = torch.zeros(number_of_atoms, dtype=torch.int64)
+    atom_attention_mask = torch.zeros(number_of_atoms, dtype=torch.bool)
+    atom_to_token = torch.zeros(number_of_atoms, dtype=torch.int64)
 
     for i, (t_idx, name, element, charge, pos) in enumerate(atom_records):
         ref_pos[i] = torch.tensor(pos, dtype=torch.float32)

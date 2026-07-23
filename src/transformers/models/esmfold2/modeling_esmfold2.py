@@ -50,14 +50,13 @@ class EsmFold2AtomInputs:
 
 @dataclass
 class EsmFold2AtomAttention:
-    """Per-fold, layer-invariant inputs for the SWA atom-stack attention: the 3D-RoPE ``cos``/``sin``,
-    the valid-token indices used to zero padded outputs, and the sliding-window attention mask.
-    Computed once in ``EsmFold2AtomEncoder._compute_step_invariants`` and threaded through every
-    atom-stack layer (replaces the old positional ``attention_params`` tuple)."""
+    """Per-fold, layer-invariant inputs for the SWA atom-stack attention: the 3D-RoPE ``cos``/``sin``
+    (the attention's ``position_embeddings``) and the sliding-window ``attention_mask``. Computed once
+    in ``EsmFold2AtomEncoder._compute_step_invariants`` and threaded through every atom-stack layer,
+    which unpacks it into the attention's standard ``(attention_mask, position_embeddings)`` args."""
 
     cos: Tensor
     sin: Tensor
-    valid_indices: Tensor
     swa_mask: Tensor
 
 
@@ -98,28 +97,28 @@ class EsmFold2LayerNorm(nn.LayerNorm):
     (upcast here, cast back); an fp32 load is a no-op.
     """
 
-    def forward(self, x: Tensor) -> Tensor:
+    def forward(self, hidden_states: Tensor) -> Tensor:
         weight = self.weight.float() if self.weight is not None else None
         bias = self.bias.float() if self.bias is not None else None
-        return F.layer_norm(x.float(), self.normalized_shape, weight, bias, self.eps).to(x.dtype)
+        return F.layer_norm(hidden_states.float(), self.normalized_shape, weight, bias, self.eps).to(
+            hidden_states.dtype
+        )
 
 
 class EsmFold2TransitionLayer(nn.Module):
-    """EsmFold2SwiGLU transition: norm -> a_proj/b_proj -> silu(gate) * up -> out_proj."""
+    """Norm + SwiGLU transition (no residual; the caller adds it).
+
+    Reuses the single ``EsmFold2SwiGLU`` feed-forward op so there is one SwiGLU implementation across
+    the model: the gate/up projections are the fused ``ffn.gate_up_proj`` and the output is ``ffn.down_proj``.
+    """
 
     def __init__(self, d_model: int, n: int, eps: float = 1e-5) -> None:
         super().__init__()
-        hidden = n * d_model
         self.norm = EsmFold2LayerNorm(d_model, eps=eps)
-        self.a_proj = nn.Linear(d_model, hidden, bias=False)
-        self.b_proj = nn.Linear(d_model, hidden, bias=False)
-        self.out_proj = nn.Linear(hidden, d_model, bias=False)
+        self.ffn = EsmFold2SwiGLU(d_model, n * d_model, d_model)
 
-    def forward(self, x: Tensor) -> Tensor:
-        x = self.norm(x)
-        gate = self.a_proj(x)
-        up = self.b_proj(x)
-        return self.out_proj(F.silu(gate) * up)
+    def forward(self, hidden_states: Tensor) -> Tensor:
+        return self.ffn(self.norm(hidden_states))
 
 
 class EsmFold2AdaptiveLayerNorm(nn.Module):
@@ -157,8 +156,6 @@ class EsmFold2FourierEmbedding(nn.Module):
         self.register_buffer("phases", torch.randn(embedding_dim))
 
     def forward(self, t_hat: Tensor) -> Tensor:
-        # frequencies/phases are kept fp32 (see EsmFold2Model._keep_in_fp32_modules_strict) so the
-        # cos embedding is full precision.
         t = t_hat.to(dtype=self.frequencies.dtype).reshape(-1)
         return torch.cos(2.0 * torch.pi * (t[:, None] * self.frequencies[None, :] + self.phases[None, :]))
 
@@ -182,8 +179,8 @@ class EsmFold2SwiGLU(nn.Module):
         self.down_proj = nn.Linear(intermediate_size, out_features, bias=False)
         self.intermediate_size = intermediate_size
 
-    def forward(self, x: Tensor) -> Tensor:
-        gate_up = self.gate_up_proj(x)
+    def forward(self, hidden_states: Tensor) -> Tensor:
+        gate_up = self.gate_up_proj(hidden_states)
         gate, up = gate_up.split(self.intermediate_size, dim=-1)
         hidden = F.silu(gate) * up
         return self.down_proj(hidden)
@@ -286,19 +283,18 @@ def _resolve_atom_config(config: EsmFold2Config, structure_prediction: bool):
 
 
 def _swa_window_mask_function(valid: Tensor, half_window: int) -> Callable:
-    """Sliding-window ``and`` mask over token index, with self-attention always allowed.
+    """Sliding-window ``and`` mask over token index.
 
-    A token attends to another iff both are valid (non-padding) and their indices differ by at
-    most ``half_window`` (inputs are right-padded, so index distance is the window distance). The
-    diagonal is always allowed so that fully padded query rows keep a single valid key and do not
-    produce ``NaN`` in the softmax — which is why this stays a small ``and`` mask rather than the
-    stock ``create_bidirectional_sliding_window_mask``.
+    A token attends to another iff both are valid (non-padding) and their indices differ by at most
+    ``half_window`` (inputs are right-padded, so index distance is the window distance). Fully padded
+    query rows end up all-masked and produce ``NaN`` in the softmax; the attention forward cleans
+    those up with ``torch.nan_to_num`` (their outputs are dropped downstream by
+    ``scatter_atom_to_token`` regardless).
     """
 
     def inner_mask(batch_idx: int, head_idx: int, q_idx: int, kv_idx: int) -> bool:
         within = abs(q_idx - kv_idx) <= half_window
-        in_window = within & valid[batch_idx, q_idx] & valid[batch_idx, kv_idx]
-        return in_window | (q_idx == kv_idx)
+        return within & valid[batch_idx, q_idx] & valid[batch_idx, kv_idx]
 
     return inner_mask
 
@@ -330,51 +326,47 @@ class EsmFold2SWA3DRoPEAttention(nn.Module):
         self.q_proj = nn.Linear(d_model, d_model, bias=False)
         self.k_proj = nn.Linear(d_model, d_model, bias=False)
         self.v_proj = nn.Linear(d_model, d_model, bias=False)
-        self.out_proj = nn.Linear(d_model, d_model, bias=False)
+        self.o_proj = nn.Linear(d_model, d_model, bias=False)
         self.gate_proj = nn.Linear(d_model, d_model, bias=False)
 
-    def forward(self, x: Tensor, attention: EsmFold2AtomAttention) -> Tensor:
-        B, N = x.shape[:2]
-        cos, sin = attention.cos, attention.sin
+    def forward(
+        self,
+        hidden_states: Tensor,
+        attention_mask: Tensor,
+        position_embeddings: tuple[Tensor, Tensor],
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> Tensor:
+        B, N = hidden_states.shape[:2]
+        cos, sin = position_embeddings
 
-        x_input = x
-        q = self.q_proj(x).view(B, N, self.n_heads, self.head_dim)
-        k = self.k_proj(x).view(B, N, self.n_heads, self.head_dim)
-        v = self.v_proj(x).view(B, N, self.n_heads, self.head_dim)
+        q = self.q_proj(hidden_states).view(B, N, self.n_heads, self.head_dim)
+        k = self.k_proj(hidden_states).view(B, N, self.n_heads, self.head_dim)
+        v = self.v_proj(hidden_states).view(B, N, self.n_heads, self.head_dim)
         q, k = qk_norm(q), qk_norm(k)
 
         q = apply_rotary_emb_3d(q, cos, sin)
         k = apply_rotary_emb_3d(k, cos, sin)
 
-        input_dtype = q.dtype
-        if q.dtype not in (torch.float16, torch.bfloat16):
-            q, k, v = q.bfloat16(), k.bfloat16(), v.bfloat16()
-
-        attn_impl = self.config._attn_implementation
-
-        # Sliding-window mask is built once per fold in EsmFold2AtomEncoder._compute_step_invariants
-        # (it is identical across all atom-stack layers); reuse it here. ``valid`` is still needed to
-        # zero out padded-token outputs below.
-        valid = torch.zeros(B * N, dtype=torch.bool, device=q.device)
-        valid[attention.valid_indices] = True
-        valid = valid.view(B, N)
-        attn_mask = attention.swa_mask
-
-        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(attn_impl, eager_attention_forward)
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
         out, _ = attention_interface(
             self,
             q.transpose(1, 2),
             k.transpose(1, 2),
             v.transpose(1, 2),
-            attn_mask,
+            attention_mask,
             dropout=0.0,
             scaling=self.scale,
+            **kwargs,
         )
-        out = out * valid.unsqueeze(-1).unsqueeze(-1)
+        # Fully padded query rows are all-masked -> NaN in the softmax; zero them (their outputs are
+        # dropped downstream by scatter_atom_to_token regardless). Replaces the old post-hoc valid mul.
+        out = torch.nan_to_num(out)
 
-        out = out.to(input_dtype).reshape(B, N, -1)
-        out = out * torch.sigmoid(self.gate_proj(x_input))
-        return self.out_proj(out)
+        out = out.reshape(B, N, -1)
+        out = out * torch.sigmoid(self.gate_proj(hidden_states))
+        return self.o_proj(out)
 
 
 class EsmFold2SWAAtomLayer(nn.Module):
@@ -394,20 +386,20 @@ class EsmFold2SWAAtomLayer(nn.Module):
         self.attn = EsmFold2SWA3DRoPEAttention(config, structure_prediction)
         self.ffn = EsmFold2SwiGLU(d_atom, ffn_intermediate_size, d_atom)
 
-    def forward(self, x: Tensor, atom_cond: Tensor, attention: EsmFold2AtomAttention) -> Tensor:
+    def forward(self, hidden_states: Tensor, atom_cond: Tensor, attention: EsmFold2AtomAttention) -> Tensor:
         modulation = self.adaln_linear(F.silu(atom_cond))
         if modulation.dim() == 2:
             modulation = modulation.unsqueeze(1)
         shift_a, scale_a, gate_a, shift_f, scale_f, gate_f = modulation.chunk(6, dim=-1)
 
-        attn_input = F.rms_norm(x, (x.shape[-1],)) * (1 + scale_a) + shift_a
-        attn_out = self.attn(attn_input, attention)
-        x = x + gate_a * attn_out
+        attn_input = F.rms_norm(hidden_states, (hidden_states.shape[-1],)) * (1 + scale_a) + shift_a
+        attn_out = self.attn(attn_input, attention.swa_mask, (attention.cos, attention.sin))
+        hidden_states = hidden_states + gate_a * attn_out
 
-        ffn_input = F.rms_norm(x, (x.shape[-1],)) * (1 + scale_f) + shift_f
+        ffn_input = F.rms_norm(hidden_states, (hidden_states.shape[-1],)) * (1 + scale_f) + shift_f
         ffn_out = self.ffn(ffn_input)
-        x = x + gate_f * ffn_out
-        return x
+        hidden_states = hidden_states + gate_f * ffn_out
+        return hidden_states
 
 
 class EsmFold2RotaryEmbedding3D(nn.Module):
@@ -474,16 +466,19 @@ def scatter_atom_to_token(
     Returns:
         [B, L, d]
     """
-    B, A, d = atom_features.shape
-    n_out = n_tokens
+    batch_size, _, hidden_dim = atom_features.shape
     idx = atom_to_token_idx
     if atom_mask is not None:
-        idx = torch.where(atom_mask, atom_to_token_idx, n_tokens)
-        n_out = n_tokens + 1
-    idx_expanded = idx.unsqueeze(-1).expand(B, A, d)
-    out = torch.zeros(B, n_out, d, device=atom_features.device, dtype=atom_features.dtype)
-    out.scatter_reduce_(1, idx_expanded, atom_features, reduce="mean", include_self=False)
-    return out[:, :n_tokens, :]
+        idx = idx.masked_fill(~atom_mask, n_tokens)
+    out = atom_features.new_zeros(batch_size, n_tokens + int(atom_mask is not None), hidden_dim)
+    out.scatter_reduce_(
+        dim=1,
+        index=idx.unsqueeze(-1).expand_as(atom_features),
+        src=atom_features,
+        reduce="mean",
+        include_self=False,
+    )
+    return out[:, :n_tokens]
 
 
 class EsmFold2AtomEncoder(nn.Module):
@@ -547,7 +542,6 @@ class EsmFold2AtomEncoder(nn.Module):
         cos = cos.repeat_interleave(num_diffusion_samples, 0)
         sin = sin.repeat_interleave(num_diffusion_samples, 0)
         mask_exp = atom_inputs.atom_attention_mask.repeat_interleave(num_diffusion_samples, 0)
-        indices = torch.nonzero(mask_exp.flatten(), as_tuple=False).flatten()
         # The SWA mask depends only on the (step- and layer-invariant) valid-token mask and window,
         # so build it once here rather than in every atom-stack layer's forward. ``cos`` (bf16, same
         # batch/seq as the attention queries) supplies the mask metadata (dtype/device/shape).
@@ -558,7 +552,7 @@ class EsmFold2AtomEncoder(nn.Module):
             attention_mask=None,
             and_mask_function=_swa_window_mask_function(valid, self.config.sliding_window // 2),
         )
-        attention = EsmFold2AtomAttention(cos, sin, indices, swa_mask)
+        attention = EsmFold2AtomAttention(cos, sin, swa_mask)
         n_tokens = int(atom_inputs.atom_to_token.max().item()) + 1
         return c_base, attention, mask_exp, n_tokens
 
@@ -675,9 +669,10 @@ class EsmFold2AttentionPairBias(nn.Module):
         self.out_gate = nn.Linear(d_cond, d_model, bias=True)
 
         self.q_proj = nn.Linear(d_model, d_model, bias=True)
-        self.kv_proj = nn.Linear(d_model, 2 * d_model, bias=False)
+        self.k_proj = nn.Linear(d_model, d_model, bias=False)
+        self.v_proj = nn.Linear(d_model, d_model, bias=False)
         self.g_proj = nn.Linear(d_model, d_model, bias=False)
-        self.out_proj = nn.Linear(d_model, d_model, bias=False)
+        self.o_proj = nn.Linear(d_model, d_model, bias=False)
 
         self.pair_norm = EsmFold2LayerNorm(d_pair)
         self.pair_bias_proj = nn.Linear(d_pair, num_heads, bias=False)
@@ -711,10 +706,8 @@ class EsmFold2AttentionPairBias(nn.Module):
 
         n_keys = x.shape[1]
         q = self.q_proj(x).view(bsz, n_queries, self.num_heads, self.head_dim)
-        kv = self.kv_proj(x)
-        k, v = kv.chunk(2, dim=-1)
-        k = k.view(bsz, n_keys, self.num_heads, self.head_dim)
-        v = v.view(bsz, n_keys, self.num_heads, self.head_dim)
+        k = self.k_proj(x).view(bsz, n_keys, self.num_heads, self.head_dim)
+        v = self.v_proj(x).view(bsz, n_keys, self.num_heads, self.head_dim)
 
         if attention_mask is not None and attention_mask.shape[0] != bsz and num_diffusion_samples > 1:
             attention_mask = attention_mask.repeat_interleave(num_diffusion_samples, dim=0)
@@ -739,7 +732,7 @@ class EsmFold2AttentionPairBias(nn.Module):
         context, _ = attention_interface(self, qh, kh, vh, attn_bias.to(qh.dtype), dropout=0.0, scaling=self.scale)
 
         context = gate * context
-        out = self.out_proj(context.reshape(bsz, n_queries, d_model).to(v.dtype))
+        out = self.o_proj(context.reshape(bsz, n_queries, d_model).to(v.dtype))
         out = torch.sigmoid(self.out_gate(single_repr)) * out
         return out
 
@@ -759,8 +752,8 @@ class EsmFold2ConditionedTransitionBlock(nn.Module):
         self.ffn = EsmFold2SwiGLU(d_model, intermediate_size, d_model)
 
     def forward(self, token_acts: Tensor, single_repr: Tensor) -> Tensor:
-        x = self.adaln(token_acts, single_repr)
-        out = self.ffn(x)
+        hidden_states = self.adaln(token_acts, single_repr)
+        out = self.ffn(hidden_states)
         return torch.sigmoid(self.output_gate(single_repr)) * out
 
 
@@ -1273,13 +1266,16 @@ class EsmFold2SingleToPair(nn.Module):
         self.output_fc1 = nn.Linear(2 * downproject_dim, output_dim)
         self.output_fc2 = nn.Linear(output_dim, output_dim)
 
-    def forward(self, x: Tensor) -> Tensor:
-        x = self.downproject(x)
-        x = torch.cat(
-            [(x.unsqueeze(2) * x.unsqueeze(1)), (x.unsqueeze(2) - x.unsqueeze(1))],
+    def forward(self, hidden_states: Tensor) -> Tensor:
+        hidden_states = self.downproject(hidden_states)
+        hidden_states = torch.cat(
+            [
+                (hidden_states.unsqueeze(2) * hidden_states.unsqueeze(1)),
+                (hidden_states.unsqueeze(2) - hidden_states.unsqueeze(1)),
+            ],
             dim=3,
         )
-        return self.output_fc2(F.gelu(self.output_fc1(x)))
+        return self.output_fc2(F.gelu(self.output_fc1(hidden_states)))
 
 
 class EsmFold2LanguageModelShim(nn.Module):
@@ -1330,13 +1326,10 @@ class EsmFold2TriangleMultiplicativeUpdate(nn.Module):
     ``(pair_grid, visibility)`` signature and returning the residual-free delta.
     """
 
-    _FLOW_TO_EINSUM = {"outgoing": "bikd,bjkd->bijd", "incoming": "bkid,bkjd->bijd"}
-
     def __init__(self, dim: int, outgoing: bool = True, chunk_size: int | None = 64) -> None:
         super().__init__()
         self.dim = dim
         self.flow = "outgoing" if outgoing else "incoming"
-        self._einsum_equation = self._FLOW_TO_EINSUM[self.flow]
         self.norm_start = EsmFold2LayerNorm(dim)
         self.norm_mix = EsmFold2LayerNorm(dim)
         self.proj_bundle = nn.Linear(dim, 4 * dim, bias=False)
@@ -1350,7 +1343,9 @@ class EsmFold2TriangleMultiplicativeUpdate(nn.Module):
         self._chunk_size = chunk_size
 
     def _triangular_contract(self, left_stream: Tensor, right_stream: Tensor) -> Tensor:
-        return torch.einsum(self._einsum_equation, left_stream, right_stream)
+        if self.flow == "outgoing":
+            return torch.einsum("bikd,bjkd->bijd", left_stream, right_stream)
+        return torch.einsum("bkid,bkjd->bijd", left_stream, right_stream)
 
     def _triangular_contract_chunked(self, left_stream: Tensor, right_stream: Tensor, chunk_size: int) -> Tensor:
         """Compute the triangular einsum in chunks along the output i-dimension."""
@@ -1359,9 +1354,9 @@ class EsmFold2TriangleMultiplicativeUpdate(nn.Module):
         for start in range(0, L, chunk_size):
             end = min(start + chunk_size, L)
             if self.flow == "outgoing":
-                chunk = torch.einsum(self._einsum_equation, left_stream[:, start:end], right_stream)
+                chunk = torch.einsum("bikd,bjkd->bijd", left_stream[:, start:end], right_stream)
             else:
-                chunk = torch.einsum(self._einsum_equation, left_stream[:, :, start:end], right_stream)
+                chunk = torch.einsum("bkid,bkjd->bijd", left_stream[:, :, start:end], right_stream)
             chunks.append(chunk)
         return torch.cat(chunks, dim=1)
 
@@ -1400,14 +1395,14 @@ class EsmFold2Transition(nn.Module):
     def set_chunk_size(self, chunk_size: int | None) -> None:
         self._chunk_size = chunk_size
 
-    def forward(self, x: Tensor) -> Tensor:
-        if self._chunk_size is None or x.shape[1] <= self._chunk_size:
-            return x + self.ffn(self.norm(x))
+    def forward(self, hidden_states: Tensor) -> Tensor:
+        if self._chunk_size is None or hidden_states.shape[1] <= self._chunk_size:
+            return hidden_states + self.ffn(self.norm(hidden_states))
         out_list: list[Tensor] = []
-        for start in range(0, x.shape[1], self._chunk_size):
-            end = min(start + self._chunk_size, x.shape[1])
-            chunk_x = x[:, start:end]
-            out_list.append(chunk_x + self.ffn(self.norm(chunk_x)))
+        for start in range(0, hidden_states.shape[1], self._chunk_size):
+            end = min(start + self._chunk_size, hidden_states.shape[1])
+            chunk = hidden_states[:, start:end]
+            out_list.append(chunk + self.ffn(self.norm(chunk)))
         return torch.cat(out_list, dim=1)
 
 

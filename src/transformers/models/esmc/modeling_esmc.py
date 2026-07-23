@@ -463,7 +463,7 @@ class EsmcForMaskedLM(EsmcPreTrainedModel):
 
         loss: torch.Tensor | None = None
         if labels is not None:
-            loss = CrossEntropyLoss(ignore_index=-100)(logits.view(-1, self.config.vocab_size), labels.view(-1))
+            loss = self.loss_function(logits, labels, vocab_size=self.config.vocab_size, **kwargs)
 
         return MaskedLMOutput(
             loss=loss,
@@ -568,8 +568,6 @@ class EsmcForSequenceClassification(EsmcPreTrainedModel):
 
 
 class EsmcForTokenClassification(GenericForTokenClassification, EsmcPreTrainedModel):
-    # ``dropout`` (from ``config.classifier_dropout``) + a ``score`` linear over the
-    # per-token hidden states, identical to the ESM token-classification head.
     pass
 
 

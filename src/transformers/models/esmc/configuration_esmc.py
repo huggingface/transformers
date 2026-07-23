@@ -22,6 +22,7 @@ from huggingface_hub.dataclasses import strict
 from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring
+from ...utils.type_validators import interval
 
 
 @auto_docstring(checkpoint="biohub/ESMC-6B")
@@ -73,7 +74,9 @@ class EsmcConfig(PreTrainedConfig):
         "norm": (["hidden_states"], ["hidden_states"]),
     }
 
-    # Llama fields re-declared with ESMC defaults.
+    # Llama fields re-declared where ESMC's default differs from the parent's; fields whose
+    # defaults match Llama (hidden_act, max_position_embeddings, initializer_range,
+    # tie_word_embeddings, attention_bias, attention_dropout, mlp_bias) are left inherited.
     vocab_size: int = 64
     hidden_size: int = 2560
     intermediate_size: int | None = None
@@ -82,14 +85,14 @@ class EsmcConfig(PreTrainedConfig):
     num_key_value_heads: int | None = None
     hidden_act: str = "silu"
     max_position_embeddings: int = 2048
-    initializer_range: float = 0.02
+    initializer_range: float = interval(min=0.0, max=1.0)(default=0.02)
     pad_token_id: int | None = 1
     bos_token_id: int | None = None
     eos_token_id: int | list[int] | None = None
     tie_word_embeddings: bool = False
     rope_parameters: RopeParameters | dict | None = None
     attention_bias: bool = False
-    attention_dropout: float | int = 0.0
+    attention_dropout: int | float | None = 0.0
     mlp_bias: bool = False
     head_dim: int | None = None
     attribute_map = {
