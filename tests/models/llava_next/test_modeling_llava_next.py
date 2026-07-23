@@ -270,7 +270,7 @@ class LlavaNextForConditionalGenerationIntegrationTest(unittest.TestCase):
         # fmt: off
         EXPECTED_DECODED_TEXT = Expectations(
             {
-                ("cuda", None): '[INST]  \nWhat is shown in this image? [/INST] The image shows two deer, likely fawns, in a grassy area with trees in the background. The setting appears to be a forest or woodland, and the photo is taken during what seems to be either dawn or dusk, given',
+                (None, None): '[INST]  \nWhat is shown in this image? [/INST] The image shows two deer, likely fawns, in a grassy area with trees in the background. The setting appears to be a forest or woodland, and the photo is taken during what seems to be either dawn or dusk, given',
                 ("xpu", 5): '[INST]  \nWhat is shown in this image? [/INST] The image shows two deer, likely fawns, in a grassy area with trees in the background. The setting appears to be a forest or woodland, and the time of day seems to be either dawn or dusk, given the soft',
             }
         )
