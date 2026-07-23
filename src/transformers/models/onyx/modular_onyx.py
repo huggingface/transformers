@@ -16,6 +16,7 @@ from __future__ import annotations
 import itertools
 import math
 from collections.abc import Callable
+
 import torch
 import torch.nn as nn
 from huggingface_hub.dataclasses import strict
@@ -307,8 +308,7 @@ class OnyxVisionConfig(Kimi_K25VisionConfig):
         if self.layer_types is None:
             stride = 4
             self.layer_types = [
-                "full_attention" if (i + 1) % stride == 0 or i == self.num_hidden_layers - 1
-                else "sliding_attention"
+                "full_attention" if (i + 1) % stride == 0 or i == self.num_hidden_layers - 1 else "sliding_attention"
                 for i in range(self.num_hidden_layers)
             ]
         PreTrainedConfig.__post_init__(self, **kwargs)
@@ -378,8 +378,7 @@ class OnyxTextConfig(Gemma2Config, PreTrainedConfig):
         if self.no_rope_layers is None:
             stride = 4
             self.no_rope_layers = [
-                0 if (self.num_hidden_layers - 1 - i) % stride == 0 else 1
-                for i in range(self.num_hidden_layers)
+                0 if (self.num_hidden_layers - 1 - i) % stride == 0 else 1 for i in range(self.num_hidden_layers)
             ]
 
         # Full attention for NoPE layers, sliding otherwise (Onyx's default layout matches

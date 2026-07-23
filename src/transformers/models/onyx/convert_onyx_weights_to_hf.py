@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2026 the HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -21,10 +20,13 @@ Usage:
         --tokenizer_path         pytorch_weights/tokenizer/l4_200k_base \\
         --output_path            onyx-hf-converted
 """
+
 import argparse
 from pathlib import Path
 
 import torch
+from tokenizers import processors
+
 from transformers import (
     OnyxConfig,
     OnyxForConditionalGeneration,
@@ -35,9 +37,7 @@ from transformers import (
     OnyxVisionConfig,
     TokenizersBackend,
 )
-from tokenizers import processors
 from transformers.convert_slow_tokenizer import TikTokenConverter
-
 from transformers.models.onyx.processing_onyx import ONYX_MM_CHAT_TEMPLATE
 
 
@@ -70,10 +70,7 @@ O200K_PATTERN = (
 
 def _ordered_special_tokens() -> list[str]:
     """Return the 2048-entry ordered table; index i maps to id NUM_BASE_TOKENS + i."""
-    return [
-        KEEP_SPECIAL_TOKENS.get(i, f"<|reserved_special_token_{i}|>")
-        for i in range(NUM_RESERVED_SPECIAL_TOKENS)
-    ]
+    return [KEEP_SPECIAL_TOKENS.get(i, f"<|reserved_special_token_{i}|>") for i in range(NUM_RESERVED_SPECIAL_TOKENS)]
 
 
 def build_config():
@@ -175,7 +172,12 @@ def convert_text_state_dict(source: dict[str, torch.Tensor], config) -> dict[str
         for suffix, target_suffix in TEXT_LAYER_RENAMES.items():
             out[f"{dst}.{target_suffix}"] = source.pop(f"{src}.{suffix}")
 
-    leftover = [k for k in source if k.startswith("layers.") or k in {"tok_embeddings.weight", "output.weight", "output.norm.weight", "vision_projection.weight"}]
+    leftover = [
+        k
+        for k in source
+        if k.startswith("layers.")
+        or k in {"tok_embeddings.weight", "output.weight", "output.norm.weight", "vision_projection.weight"}
+    ]
     if leftover:
         raise RuntimeError(f"Unconsumed LLM keys after conversion: {leftover}")
 
