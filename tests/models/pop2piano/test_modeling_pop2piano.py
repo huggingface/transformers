@@ -419,6 +419,12 @@ class Pop2PianoModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
         self.model_tester = Pop2PianoModelTester(self)
         self.config_tester = ConfigTester(self, config_class=Pop2PianoConfig, d_model=37)
 
+    @unittest.skip(
+        reason="Pop2Piano always adds the relative position bias as a float attention mask, so SDPA can't dispatch to the flash-attention backend."
+    )
+    def test_sdpa_can_dispatch_on_flash(self):
+        pass
+
     def test_config(self):
         self.config_tester.run_common_tests()
 

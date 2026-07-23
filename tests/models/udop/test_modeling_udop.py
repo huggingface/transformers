@@ -254,7 +254,6 @@ class UdopModelTester:
             "bbox": bbox,
             "decoder_input_ids": decoder_input_ids,
             "decoder_attention_mask": decoder_attention_mask,
-            "use_cache": False,
         }
         return config, inputs_dict
 
@@ -286,6 +285,12 @@ class UdopModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
     def setUp(self):
         self.model_tester = UdopModelTester(self)
         self.config_tester = ConfigTester(self, config_class=UdopConfig, d_model=32)
+
+    @unittest.skip(
+        reason="Udop always adds the relative position bias as a float attention mask, so SDPA can't dispatch to the flash-attention backend."
+    )
+    def test_sdpa_can_dispatch_on_flash(self):
+        pass
 
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
         inputs_dict = copy.deepcopy(inputs_dict)
@@ -554,6 +559,12 @@ class UdopEncoderOnlyModelTest(ModelTesterMixin, unittest.TestCase):
     def setUp(self):
         self.model_tester = UdopEncoderOnlyModelTester(self)
         self.config_tester = ConfigTester(self, config_class=UdopConfig, d_model=32)
+
+    @unittest.skip(
+        reason="Udop always adds the relative position bias as a float attention mask, so SDPA can't dispatch to the flash-attention backend."
+    )
+    def test_sdpa_can_dispatch_on_flash(self):
+        pass
 
     def test_config(self):
         self.config_tester.run_common_tests()

@@ -943,6 +943,8 @@ class RelativePositionBiasBase(nn.Module, ABC):
                 rp_bucket[idx, :num_prefix_row, num_prefix_row:] = self.relative_attention_num_buckets
                 rp_bucket[idx, num_prefix_row:, :num_prefix_row] = self.relative_attention_num_buckets + 1
 
+        # Clamp to a provable range so torch.compile can bound the gather index (float->long bucketing loses it).
+        rp_bucket = rp_bucket.clamp(0, self.relative_attention_bias.num_embeddings - 1)
         values: Tensor = self.relative_attention_bias(rp_bucket)
         if values.dim() != 4:
             raise ValueError("Wrong dimension of values tensor")

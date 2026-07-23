@@ -4209,6 +4209,8 @@ class ModelTesterMixin(ExportTesterMixin):
                 config.attention_dropout = 0.0
             if hasattr(config, "attention_probs_dropout_prob"):
                 config.attention_probs_dropout_prob = 0.0
+            if hasattr(config, "dropout_rate"):
+                config.dropout_rate = 0.0
 
             # Update the head dim and try to update hidden size as well if present in config
             # NOTE: some models may have none if the values in sub-config, thus we check for `Noneness`
@@ -4221,6 +4223,19 @@ class ModelTesterMixin(ExportTesterMixin):
             if hasattr(config, "cross_head_dim") and config.cross_head_dim is not None:
                 cross_head_dim = config.cross_head_dim
                 config.cross_head_dim = max(requested_dim, config.cross_head_dim)
+
+            # T5-like models keep their head dim in `d_kv` (no `head_dim` alias). Some (e.g. Pix2Struct) hardwire
+            # q/k/v to `hidden_size`, needing `hidden_size == num_heads * d_kv`, so scale `hidden_size` alongside.
+            if hasattr(config, "d_kv") and config.d_kv is not None and getattr(config, "head_dim", None) is None:
+                d_kv = config.d_kv
+                config.d_kv = max(requested_dim, config.d_kv)
+                num_heads = getattr(config, "num_heads", getattr(config, "num_attention_heads", None))
+                if (
+                    num_heads is not None
+                    and getattr(config, "hidden_size", None) is not None
+                    and config.hidden_size == num_heads * d_kv
+                ):
+                    config.hidden_size = num_heads * config.d_kv
 
             if (
                 getattr(config, "hidden_size", None) is not None

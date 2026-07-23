@@ -747,9 +747,8 @@ class Pix2StructTextAttention(nn.Module):
                     input_shape[1], key_length, device=query_states.device, past_seen_tokens=past_seen_tokens
                 )
 
-        if mask is not None:
-            # Pix2Struct may receive a mask that is wider than the current key length (e.g. a decoder mask built from
-            # the encoder sequence length), so we crop it to the key length before handing it to the attention backend.
+        if mask is not None and isinstance(mask, torch.Tensor):
+            # Crop an over-wide tensor mask to the key length; skip flex_attention's BlockMask (slicing breaks mask_mod).
             mask = mask[:, :, :, : key_states.shape[-2]]
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
