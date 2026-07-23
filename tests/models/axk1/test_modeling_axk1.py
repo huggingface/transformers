@@ -17,6 +17,7 @@ import unittest
 
 from transformers import AutoTokenizer, is_torch_available
 from transformers.testing_utils import (
+    Expectations,
     cleanup,
     require_torch,
     require_torch_accelerator,
@@ -109,10 +110,7 @@ class AXK1IntegrationTest(unittest.TestCase):
     def tearDown(self):
         cleanup(torch_device, gc_collect=False)
 
-    @require_torch_accelerator
-    def test_dynamic_cache(self):
-        EXPECTED_TEXT_COMPLETION = "대한민국의 수도는 **서울특별시**입니다."
-
+    def _generate(self, cache_implementation=None):
         tokenizer = AutoTokenizer.from_pretrained("skt/A.X-K1")
         model = AXK1ForCausalLM.from_pretrained("skt/A.X-K1", dtype=torch.bfloat16, device_map="auto")
 
@@ -120,25 +118,59 @@ class AXK1IntegrationTest(unittest.TestCase):
         text = tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
         inputs = tokenizer(text, return_tensors="pt").to(model.device)
 
-        # Dynamic Cache
-        generated_ids = model.generate(**inputs, max_new_tokens=32, do_sample=False)
-        dynamic_text = tokenizer.decode(generated_ids[0][inputs["input_ids"].shape[1] :], skip_special_tokens=True)
+        generate_kwargs = {"max_new_tokens": 32, "do_sample": False}
+        if cache_implementation is not None:
+            generate_kwargs["cache_implementation"] = cache_implementation
+        generated_ids = model.generate(**inputs, **generate_kwargs)
+        return tokenizer.decode(generated_ids[0][inputs["input_ids"].shape[1] :], skip_special_tokens=True)
+
+    @require_torch_accelerator
+    def test_dynamic_cache(self):
+        expected_texts = Expectations(
+            {
+                ("cuda", 8): "대한민국의 수도는 **서울특별시**입니다.",
+            }
+        )
+        EXPECTED_TEXT_COMPLETION = expected_texts.get_expectation()
+
+        dynamic_text = self._generate()
         self.assertEqual(EXPECTED_TEXT_COMPLETION, dynamic_text.strip())
 
     @require_torch_accelerator
     def test_static_cache(self):
-        EXPECTED_TEXT_COMPLETION = "대한민국의 수도는 **서울특별시**입니다."
+        expected_texts = Expectations(
+            {
+                ("cuda", 8): "대한민국의 수도는 **서울특별시**입니다.",
+            }
+        )
+        EXPECTED_TEXT_COMPLETION = expected_texts.get_expectation()
 
-        tokenizer = AutoTokenizer.from_pretrained("skt/A.X-K1")
+        static_text = self._generate(cache_implementation="static")
+        self.assertEqual(EXPECTED_TEXT_COMPLETION, static_text.strip())
+
+    @require_torch_accelerator
+    def test_model_logits_batched(self):
+        dummy_input = torch.LongTensor([[0, 0, 0, 0, 0, 0, 1, 2, 3], [1, 1, 2, 3, 4, 5, 6, 7, 8]]).to(torch_device)
+        attention_mask = dummy_input.ne(0).to(torch.long)
+
         model = AXK1ForCausalLM.from_pretrained("skt/A.X-K1", dtype=torch.bfloat16, device_map="auto")
 
-        messages = [{"role": "user", "content": "대한민국의 수도는?"}]
-        text = tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
-        inputs = tokenizer(text, return_tensors="pt").to(model.device)
-
-        # Static Cache
-        generated_ids = model.generate(
-            **inputs, max_new_tokens=32, do_sample=False, cache_implementation="static"
+        EXPECTED_LOGITS_LEFT_PADDED = Expectations(
+            {
+                ("cuda", 8): [[236.0, 235.0, 236.0], [234.0, 234.0, 235.0], [372.0, 372.0, 372.0]],
+            }
         )
-        static_text = tokenizer.decode(generated_ids[0][inputs["input_ids"].shape[1] :], skip_special_tokens=True)
-        self.assertEqual(EXPECTED_TEXT_COMPLETION, static_text.strip())
+        expected_left_padded = torch.tensor(EXPECTED_LOGITS_LEFT_PADDED.get_expectation(), device=torch_device)
+
+        EXPECTED_LOGITS_UNPADDED = Expectations(
+            {
+                ("cuda", 8): [[368.0, 368.0, 368.0], [370.0, 372.0, 372.0], [372.0, 372.0, 372.0]],
+            }
+        )
+        expected_unpadded = torch.tensor(EXPECTED_LOGITS_UNPADDED.get_expectation(), device=torch_device)
+
+        with torch.no_grad():
+            logits = model(dummy_input, attention_mask=attention_mask).logits
+        logits = logits.float()
+        torch.testing.assert_close(logits[0, -3:, -3:], expected_left_padded, atol=1e-3, rtol=1e-3)
+        torch.testing.assert_close(logits[1, -3:, -3:], expected_unpadded, atol=1e-3, rtol=1e-3)
