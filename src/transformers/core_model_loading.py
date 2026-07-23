@@ -705,6 +705,20 @@ class SplitFusedMLAGate(ConversionOps):
     (pre-norm -> gate); the extraction is therefore loss-free.
     """
 
+    def _split(self, weight: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor | None]:
+        num_heads = self.config.num_attention_heads
+        qk_head_dim = self.config.qk_head_dim
+        v_head_dim = self.config.v_head_dim
+        q_lora_rank = self.config.q_lora_rank
+        # An already-unfused `q_b_proj` (e.g. a transformers-saved state dict) passes through unchanged;
+        # `g_proj` then loads from its own key. Only the fused vLLM layout (`2 * q_lora_rank` columns) is split.
+        if weight.shape[-1] != 2 * q_lora_rank:
+            return weight, None
+        weight = weight.view(num_heads, qk_head_dim + v_head_dim, 2 * q_lora_rank)
+        q_weight = weight[:, :qk_head_dim, :q_lora_rank].reshape(num_heads * qk_head_dim, q_lora_rank)
+        gate_weight = weight[:, qk_head_dim:, q_lora_rank:].reshape(num_heads * v_head_dim, q_lora_rank)
+        return q_weight, gate_weight
+
     @torch.no_grad
     def convert(
         self,
@@ -714,20 +728,12 @@ class SplitFusedMLAGate(ConversionOps):
         config,
         **kwargs,
     ) -> dict[str, torch.Tensor]:
-        tensors = next(iter(input_dict.values()))
-        weight = tensors[0] if isinstance(tensors, list) else tensors
-        num_heads = config.num_attention_heads
-        qk_head_dim = config.qk_head_dim
-        v_head_dim = config.v_head_dim
-        q_lora_rank = config.q_lora_rank
+        self.config = config
         q_target, gate_target = target_patterns[0], target_patterns[1]
-        # An already-unfused `q_b_proj` (e.g. a transformers-saved state dict) passes through unchanged;
-        # `g_proj` then loads from its own key. Only the fused vLLM layout (`2 * q_lora_rank` columns) is split.
-        if weight.shape[-1] != 2 * q_lora_rank:
-            return {q_target: weight}
-        weight = weight.view(num_heads, qk_head_dim + v_head_dim, 2 * q_lora_rank)
-        q_weight = weight[:, :qk_head_dim, :q_lora_rank].reshape(num_heads * qk_head_dim, q_lora_rank)
-        gate_weight = weight[:, qk_head_dim:, q_lora_rank:].reshape(num_heads * v_head_dim, q_lora_rank)
+        tensors = next(iter(input_dict.values()))
+        q_weight, gate_weight = self._split(tensors[0] if isinstance(tensors, list) else tensors)
+        if gate_weight is None:
+            return {q_target: q_weight}
         return {q_target: q_weight, gate_target: gate_weight}
 
     @property
@@ -741,6 +747,16 @@ class FuseMLAGate(ConversionOps):
     MLA ``q_b_proj`` layout stored in the released checkpoint (used on ``save_pretrained``).
     """
 
+    def _fuse(self, q_weight: torch.Tensor, gate_weight: torch.Tensor) -> torch.Tensor:
+        num_heads = self.config.num_attention_heads
+        qk_head_dim = self.config.qk_head_dim
+        v_head_dim = self.config.v_head_dim
+        q_lora_rank = self.config.q_lora_rank
+        fused = q_weight.new_zeros(num_heads, qk_head_dim + v_head_dim, 2 * q_lora_rank)
+        fused[:, :qk_head_dim, :q_lora_rank] = q_weight.view(num_heads, qk_head_dim, q_lora_rank)
+        fused[:, qk_head_dim:, q_lora_rank:] = gate_weight.view(num_heads, v_head_dim, q_lora_rank)
+        return fused.reshape(num_heads * (qk_head_dim + v_head_dim), 2 * q_lora_rank)
+
     @torch.no_grad
     def convert(
         self,
@@ -750,20 +766,14 @@ class FuseMLAGate(ConversionOps):
         config,
         **kwargs,
     ) -> dict[str, torch.Tensor]:
+        self.config = config
+
         def _tensor(pattern):
             tensors = input_dict[pattern]
             return tensors[0] if isinstance(tensors, list) else tensors
 
-        q_weight = _tensor(source_patterns[0])
-        gate_weight = _tensor(source_patterns[1])
-        num_heads = config.num_attention_heads
-        qk_head_dim = config.qk_head_dim
-        v_head_dim = config.v_head_dim
-        q_lora_rank = config.q_lora_rank
-        fused = q_weight.new_zeros(num_heads, qk_head_dim + v_head_dim, 2 * q_lora_rank)
-        fused[:, :qk_head_dim, :q_lora_rank] = q_weight.view(num_heads, qk_head_dim, q_lora_rank)
-        fused[:, qk_head_dim:, q_lora_rank:] = gate_weight.view(num_heads, v_head_dim, q_lora_rank)
-        return {target_patterns[0]: fused.reshape(num_heads * (qk_head_dim + v_head_dim), 2 * q_lora_rank)}
+        fused = self._fuse(_tensor(source_patterns[0]), _tensor(source_patterns[1]))
+        return {target_patterns[0]: fused}
 
     @property
     def reverse_op(self) -> ConversionOps:

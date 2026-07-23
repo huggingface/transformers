@@ -30,7 +30,6 @@ from transformers.core_model_loading import (
     Concatenate,
     Conv3dToLinear,
     ErnieFuseAndSplitTextVisionExperts,
-    FuseMLAGate,
     GroupWeightRename,
     LinearToConv3d,
     MergeModulelist,
@@ -241,6 +240,25 @@ class DummyRoot(PreTrainedModel):
         self.model = DummyTopModel(add_extra_moe)
         if with_mlp:
             self.mlp = DummyMLP()
+        self.post_init()
+
+
+class DummyMLAGateAttn(nn.Module):
+    """Minimal MLA attention holding A.X-K2's unfused `q_b_proj` (query) + `g_proj` (output gate)."""
+
+    def __init__(self, config):
+        super().__init__()
+        self.q_b_proj = DummyParamModule((config.num_attention_heads * config.qk_head_dim, config.q_lora_rank))
+        self.g_proj = DummyParamModule((config.num_attention_heads * config.v_head_dim, config.q_lora_rank))
+
+
+class DummyMLAGateModel(PreTrainedModel):
+    base_model_prefix = "model"
+    config: PreTrainedConfig
+
+    def __init__(self, config):
+        super().__init__(config)
+        self.self_attn = DummyMLAGateAttn(config)
         self.post_init()
 
 
@@ -517,6 +535,75 @@ class TestConvertAndLoadStateDict(unittest.TestCase):
 
         # Make sure both saved state_dict are identical
         self.assertTrue(compare_state_dicts(reversed_state_dict, state_dict))
+
+    def test_split_fused_mla_gate(self):
+        # A.X-K2 stores the MLA query projection and the attention output gate fused into a single
+        # block-diagonal `q_b_proj`: per head the query rows read only the first (post-norm) half of the
+        # input and the gate rows only the second (pre-norm) half. Loading must split that into `q_b_proj`
+        # (query) + `g_proj` (gate), and saving must fuse them back losslessly.
+        config = PreTrainedConfig()
+        config.num_attention_heads, config.qk_head_dim, config.v_head_dim, config.q_lora_rank = 4, 6, 3, 5
+        nh, qk, v, qlr = 4, 6, 3, 5
+
+        q_block = torch.randn(nh, qk, qlr)
+        gate_block = torch.randn(nh, v, qlr)
+        fused = torch.zeros(nh, qk + v, 2 * qlr)
+        fused[:, :qk, :qlr] = q_block
+        fused[:, qk:, qlr:] = gate_block
+        fused = fused.reshape(nh * (qk + v), 2 * qlr)
+
+        model = DummyMLAGateModel(config)
+        weight_mapping = [
+            WeightConverter(
+                "self_attn.q_b_proj.weight",
+                ["self_attn.q_b_proj.weight", "self_attn.g_proj.weight"],
+                operations=[SplitFusedMLAGate()],
+            ),
+        ]
+        state_dict = {"self_attn.q_b_proj.weight": fused.clone()}
+        load_config = LoadStateDictConfig(weight_mapping=weight_mapping)
+        loading_info, _ = convert_and_load_state_dict_in_model(model, state_dict, load_config, tp_plan=None)
+
+        self.assertEqual(loading_info.missing_keys, set())
+        self.assertEqual(loading_info.unexpected_keys, set())
+        self.assertEqual(loading_info.conversion_errors, {})
+
+        model_state = model.state_dict()
+        torch.testing.assert_close(model_state["self_attn.q_b_proj.weight"], q_block.reshape(nh * qk, qlr))
+        torch.testing.assert_close(model_state["self_attn.g_proj.weight"], gate_block.reshape(nh * v, qlr))
+
+        # Saving fuses the two blocks back into the original block-diagonal matrix, bit for bit.
+        reversed_state_dict = revert_weight_conversion(model, model.state_dict())
+        self.assertTrue(compare_state_dicts(reversed_state_dict, state_dict))
+
+    def test_split_fused_mla_gate_already_unfused_passthrough(self):
+        # A `q_b_proj` that is already unfused (a transformers-saved checkpoint, `q_lora_rank` columns
+        # instead of `2 * q_lora_rank`) must pass through untouched so load/save round-trips; `g_proj`
+        # then loads from its own separate key.
+        config = PreTrainedConfig()
+        config.num_attention_heads, config.qk_head_dim, config.v_head_dim, config.q_lora_rank = 4, 6, 3, 5
+        nh, qk, v, qlr = 4, 6, 3, 5
+
+        model = DummyMLAGateModel(config)
+        unfused_q = torch.randn(nh * qk, qlr)
+        gate = torch.randn(nh * v, qlr)
+        weight_mapping = [
+            WeightConverter(
+                "self_attn.q_b_proj.weight",
+                ["self_attn.q_b_proj.weight", "self_attn.g_proj.weight"],
+                operations=[SplitFusedMLAGate()],
+            ),
+        ]
+        state_dict = {"self_attn.q_b_proj.weight": unfused_q.clone(), "self_attn.g_proj.weight": gate.clone()}
+        load_config = LoadStateDictConfig(weight_mapping=weight_mapping)
+        loading_info, _ = convert_and_load_state_dict_in_model(model, state_dict, load_config, tp_plan=None)
+
+        self.assertEqual(loading_info.missing_keys, set())
+        self.assertEqual(loading_info.unexpected_keys, set())
+
+        model_state = model.state_dict()
+        torch.testing.assert_close(model_state["self_attn.q_b_proj.weight"], unfused_q)
+        torch.testing.assert_close(model_state["self_attn.g_proj.weight"], gate)
 
     def test_qkv_chunk_rope_permute_with_fp8_quantization(self):
         if is_triton_available():
@@ -1617,64 +1704,6 @@ class TestConversionMapping(unittest.TestCase):
         # Only one unscoped transform (from the root); child must be suppressed.
         self.assertEqual(len(transforms), 1)
         self.assertIsNone(transforms[0].scope_prefix)
-
-
-class TestSplitFusedMLAGate(unittest.TestCase):
-    """A.X-K2's fused MLA `q_b_proj` -> `q_b_proj` + output gate `g_proj` split, and its reverse fuse."""
-
-    def _config(self):
-        return SimpleNamespace(num_attention_heads=4, qk_head_dim=6, v_head_dim=3, q_lora_rank=5)
-
-    def _block_diagonal_fused(self, config):
-        # The released checkpoint's fused q_b_proj is block-diagonal: per head, the query rows read only
-        # the first (post-norm) half of the input and the gate rows only the second (pre-norm) half.
-        nh, qk, v, qlr = (
-            config.num_attention_heads,
-            config.qk_head_dim,
-            config.v_head_dim,
-            config.q_lora_rank,
-        )
-        fused = torch.zeros(nh, qk + v, 2 * qlr)
-        fused[:, :qk, :qlr] = torch.randn(nh, qk, qlr)
-        fused[:, qk:, qlr:] = torch.randn(nh, v, qlr)
-        return fused.reshape(nh * (qk + v), 2 * qlr)
-
-    def test_split_shapes_and_lossless_roundtrip(self):
-        config = self._config()
-        nh, qk, v, qlr = (
-            config.num_attention_heads,
-            config.qk_head_dim,
-            config.v_head_dim,
-            config.q_lora_rank,
-        )
-        fused = self._block_diagonal_fused(config)
-        q_key, gate_key = "self_attn.q_b_proj.weight", "self_attn.g_proj.weight"
-
-        split = SplitFusedMLAGate().convert({q_key: [fused]}, [q_key], [q_key, gate_key], config=config)
-        self.assertEqual(tuple(split[q_key].shape), (nh * qk, qlr))
-        self.assertEqual(tuple(split[gate_key].shape), (nh * v, qlr))
-
-        # Fusing the two blocks back reconstructs the original block-diagonal matrix exactly.
-        refused = FuseMLAGate().convert(
-            {q_key: [split[q_key]], gate_key: [split[gate_key]]}, [q_key, gate_key], [q_key], config=config
-        )[q_key]
-        self.assertEqual(tuple(refused.shape), tuple(fused.shape))
-        torch.testing.assert_close(refused, fused)
-
-    def test_already_unfused_passthrough(self):
-        # An already-unfused q_b_proj (transformers-saved state dict) must pass through untouched, so
-        # load/save round-trips work; g_proj then loads from its own key.
-        config = self._config()
-        nh, qk, qlr = config.num_attention_heads, config.qk_head_dim, config.q_lora_rank
-        unfused = torch.randn(nh * qk, qlr)
-        q_key, gate_key = "self_attn.q_b_proj.weight", "self_attn.g_proj.weight"
-        out = SplitFusedMLAGate().convert({q_key: [unfused]}, [q_key], [q_key, gate_key], config=config)
-        self.assertEqual(set(out), {q_key})
-        torch.testing.assert_close(out[q_key], unfused)
-
-    def test_reverse_ops(self):
-        self.assertIsInstance(SplitFusedMLAGate().reverse_op, FuseMLAGate)
-        self.assertIsInstance(FuseMLAGate().reverse_op, SplitFusedMLAGate)
 
 
 if __name__ == "__main__":

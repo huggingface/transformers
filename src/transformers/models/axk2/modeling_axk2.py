@@ -18,34 +18,33 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import math
 from collections.abc import Callable
+from typing import Optional
 
 import torch
 import torch.nn.functional as F
 from torch import nn
 
 from ... import initialization as init
-from ...cache_utils import Cache
-from ...modeling_flash_attention_utils import FlashAttentionKwargs
-from ...modeling_layers import GenericForSequenceClassification, GenericForTokenClassification
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
-from ...processing_utils import Unpack
-from ...utils import auto_docstring
 from ...activations import ACT2FN
-from ...masking_utils import create_causal_mask
-from ...modeling_layers import GradientCheckpointingLayer
-from ...utils import (
-    TransformersKwargs)
-from ...utils.generic import can_return_tuple, merge_with_config_defaults
-from ...utils.output_capturing import capture_outputs
-import math
-from typing import Optional
-from ...cache_utils import DynamicCache
+from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
 from ...integrations import use_experts_implementation, use_kernel_forward_from_hub, use_kernel_func_from_hub
+from ...masking_utils import create_causal_mask
+from ...modeling_flash_attention_utils import FlashAttentionKwargs
+from ...modeling_layers import (
+    GenericForSequenceClassification,
+    GenericForTokenClassification,
+    GradientCheckpointingLayer,
+)
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
-from ...utils.generic import maybe_autocast
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...processing_utils import Unpack
+from ...utils import TransformersKwargs, auto_docstring
+from ...utils.generic import can_return_tuple, maybe_autocast, merge_with_config_defaults
+from ...utils.output_capturing import capture_outputs
 from .configuration_axk2 import AXK2Config
 
 
@@ -76,7 +75,8 @@ class AXK2GateMLP(nn.Module):
     Reuses `CLIPMLP`'s two-linear structure, overriding the projections to be bias-free and sized to the
     gate bottleneck (`gated_norm_rank`), and the activation to SiLU — matching A.X-K2's trained gate.
     """
-    def __init__(self, config: "AXK2Config"):
+
+    def __init__(self, config: AXK2Config):
         super().__init__()
         self.config = config
         self.activation_fn = nn.SiLU()
@@ -93,11 +93,11 @@ class AXK2GateMLP(nn.Module):
 class AXK2GatedRMSNorm(nn.Module):
     """RMSNorm followed by a low-rank input-dependent sigmoid gate (Megatron `GatedNormWrapper`):
 
-        y = RMSNorm(x)
-        return y * sigmoid(gate_mlp(y))
+    y = RMSNorm(x)
+    return y * sigmoid(gate_mlp(y))
     """
 
-    def __init__(self, config: "AXK2Config", eps: float):
+    def __init__(self, config: AXK2Config, eps: float):
         super().__init__()
         self.norm = AXK2RMSNorm(config.hidden_size, eps=eps)
         self.mlp = AXK2GateMLP(config)
@@ -211,7 +211,7 @@ class AXK2Indexer(nn.Module):
     `past_key_values.update_indexer`), not on the module.
     """
 
-    def __init__(self, config: "AXK2Config", layer_idx: int):
+    def __init__(self, config: AXK2Config, layer_idx: int):
         super().__init__()
         self.config = config
         self.layer_idx = layer_idx
@@ -304,7 +304,8 @@ class AXK2TopkRouter(nn.Module):
     and runs routing in fp32; only `__init__` (bias buffer + routed scaling + norm flag) and `forward` are
     overridden over `MiniMaxM2TopKRouter`.
     """
-    def __init__(self, config: "AXK2Config"):
+
+    def __init__(self, config: AXK2Config):
         super().__init__()
         self.top_k = config.num_experts_per_tok
         self.num_experts = config.num_local_experts
@@ -319,8 +320,9 @@ class AXK2TopkRouter(nn.Module):
         router_logits = F.linear(hidden_states.type(torch.float32), self.weight.type(torch.float32))
         scores = router_logits.sigmoid()
         scores_for_choice = scores + self.e_score_correction_bias
-        topk_indices = torch.topk(scores_for_choice, k=self.top_k, dim=-1, sorted=False)[1]
+        _, topk_indices = torch.topk(scores_for_choice, k=self.top_k, dim=-1, sorted=False)
         topk_weights = scores.gather(1, topk_indices)
+        # A.X-K2 additions over MiniMax-M2's router: optional top-k normalization and routed scaling.
         if self.norm_topk_prob:
             denominator = topk_weights.sum(dim=-1, keepdim=True) + 1e-20
             topk_weights /= denominator
@@ -589,7 +591,12 @@ class AXK2Attention(nn.Module):
         # The indexer scores against a 3D `[B, S, T]` mask; the attention mask is 4D `[B, 1, S, T]`.
         indexer_mask = attention_mask[:, 0, :, :] if attention_mask is not None else None
         topk_indices = self.indexer(
-            hidden_states, q_compressed, position_embeddings, indexer_mask, position_ids, past_key_values=past_key_values
+            hidden_states,
+            q_compressed,
+            position_embeddings,
+            indexer_mask,
+            position_ids,
+            past_key_values=past_key_values,
         )
 
         sparse_indices = None
@@ -868,4 +875,10 @@ class AXK2ForTokenClassification(GenericForTokenClassification, AXK2PreTrainedMo
     pass
 
 
-__all__ = ["AXK2PreTrainedModel", "AXK2Model", "AXK2ForCausalLM", "AXK2ForSequenceClassification", "AXK2ForTokenClassification"]
+__all__ = [
+    "AXK2PreTrainedModel",
+    "AXK2Model",
+    "AXK2ForCausalLM",
+    "AXK2ForSequenceClassification",
+    "AXK2ForTokenClassification",
+]

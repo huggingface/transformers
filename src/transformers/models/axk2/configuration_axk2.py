@@ -18,10 +18,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 from huggingface_hub.dataclasses import strict
-from ...utils import auto_docstring
 
 from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import RotaryEmbeddingConfigMixin
+from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="skt/A.X-K2")
@@ -125,6 +125,10 @@ class AXK2Config(PreTrainedConfig, RotaryEmbeddingConfigMixin):
     gated_norm_rank: int = 16
 
     def __post_init__(self, **kwargs):
+        self.qk_head_dim = self.qk_nope_head_dim + self.qk_rope_head_dim
+        # RoPE applies only to the rope slice, so `head_dim` points at it (the inherited rotary embedding
+        # reads `config.head_dim`).
+        self.head_dim = self.qk_rope_head_dim
         # `mlp_layer_types` is the canonical dense/MoE pattern; derive it from the legacy
         # `first_k_dense_replace` / `moe_layer_freq` kwargs when a checkpoint does not provide it.
         if self.mlp_layer_types is None:
@@ -134,25 +138,22 @@ class AXK2Config(PreTrainedConfig, RotaryEmbeddingConfigMixin):
                 "sparse" if i >= first_k_dense_replace and i % moe_layer_freq == 0 else "dense"
                 for i in range(self.num_hidden_layers)
             ]
-        self.qk_head_dim = self.qk_nope_head_dim + self.qk_rope_head_dim
-        # RoPE applies only to the rope slice, so point `head_dim` at it: the inherited (Llama) rotary
-        # embedding reads `config.head_dim` and then computes the right frequencies with no override needed.
-        self.head_dim = self.qk_rope_head_dim
-        # MLP layer types: the first `first_k_dense_replace` layers are dense, the rest are MoE.
-        if self.mlp_layer_types is None:
-            n_dense = min(self.first_k_dense_replace, self.num_hidden_layers)
-            self.mlp_layer_types = ["dense"] * n_dense + ["sparse"] * (self.num_hidden_layers - n_dense)
-        # Every layer is DSA — drives cache-class dispatch.
+        # Every layer runs the SGA indexer; drives the indexed-cache dispatch.
         if self.layer_types is None:
             self.layer_types = ["deepseek_sparse_attention"] * self.num_hidden_layers
-        # BC: re-route `num_experts` to `n_routed_experts`
-        if (num_experts := kwargs.get("num_experts")) is not None:
-            self.n_routed_experts = num_experts
-        # Default to MoE from the second layer and on
-        if self.mlp_layer_types is None:
-            self.mlp_layer_types = ["dense"] + ["sparse"] * (self.num_hidden_layers - 1)
-        self.qk_head_dim = self.qk_nope_head_dim + self.qk_rope_head_dim
+        # Skip DeepseekV32Config.__post_init__ (its head-dim / dense-MoE derivation is replicated above) and
+        # run only the base config's, so A.X-K2 keeps just the logic it needs.
         super().__post_init__(**kwargs)
+
+    def validate_architecture(self):
+        # `PreTrainedConfig.validate_architecture(self)` rather than `super()` so the modular converter does
+        # not try to inline a `validate_architecture` from `DeepseekV32Config` (which does not define one).
+        super().validate_architecture()
+        if self.q_lora_rank is None or self.q_lora_rank <= 0:
+            raise ValueError(
+                "A.X-K2 requires a positive `q_lora_rank` (the indexer and output gate read the query LoRA "
+                f"bottleneck), got {self.q_lora_rank}."
+            )
 
 
 __all__ = ["AXK2Config"]

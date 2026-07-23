@@ -33,6 +33,7 @@ from torch import nn
 
 from ... import initialization as init
 from ...cache_utils import Cache
+from ...configuration_utils import PreTrainedConfig
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GenericForSequenceClassification, GenericForTokenClassification
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
@@ -125,6 +126,10 @@ class AXK2Config(DeepseekV32Config):
     first_k_dense_replace = AttributeError()
 
     def __post_init__(self, **kwargs):
+        self.qk_head_dim = self.qk_nope_head_dim + self.qk_rope_head_dim
+        # RoPE applies only to the rope slice, so `head_dim` points at it (the inherited rotary embedding
+        # reads `config.head_dim`).
+        self.head_dim = self.qk_rope_head_dim
         # `mlp_layer_types` is the canonical dense/MoE pattern; derive it from the legacy
         # `first_k_dense_replace` / `moe_layer_freq` kwargs when a checkpoint does not provide it.
         if self.mlp_layer_types is None:
@@ -134,7 +139,22 @@ class AXK2Config(DeepseekV32Config):
                 "sparse" if i >= first_k_dense_replace and i % moe_layer_freq == 0 else "dense"
                 for i in range(self.num_hidden_layers)
             ]
-        super().__post_init__(**kwargs)
+        # Every layer runs the SGA indexer; drives the indexed-cache dispatch.
+        if self.layer_types is None:
+            self.layer_types = ["deepseek_sparse_attention"] * self.num_hidden_layers
+        # Skip DeepseekV32Config.__post_init__ (its head-dim / dense-MoE derivation is replicated above) and
+        # run only the base config's, so A.X-K2 keeps just the logic it needs.
+        PreTrainedConfig.__post_init__(self, **kwargs)
+
+    def validate_architecture(self):
+        # `PreTrainedConfig.validate_architecture(self)` rather than `super()` so the modular converter does
+        # not try to inline a `validate_architecture` from `DeepseekV32Config` (which does not define one).
+        PreTrainedConfig.validate_architecture(self)
+        if self.q_lora_rank is None or self.q_lora_rank <= 0:
+            raise ValueError(
+                "A.X-K2 requires a positive `q_lora_rank` (the indexer and output gate read the query LoRA "
+                f"bottleneck), got {self.q_lora_rank}."
+            )
 
 
 class AXK2RMSNorm(DeepseekV3RMSNorm):
@@ -148,7 +168,7 @@ class AXK2GateMLP(CLIPMLP):
     gate bottleneck (`gated_norm_rank`), and the activation to SiLU — matching A.X-K2's trained gate.
     """
 
-    def __init__(self, config: "AXK2Config"):
+    def __init__(self, config: AXK2Config):
         super().__init__(config)
         self.activation_fn = nn.SiLU()
         self.fc1 = nn.Linear(config.hidden_size, config.gated_norm_rank, bias=False)
@@ -158,11 +178,11 @@ class AXK2GateMLP(CLIPMLP):
 class AXK2GatedRMSNorm(nn.Module):
     """RMSNorm followed by a low-rank input-dependent sigmoid gate (Megatron `GatedNormWrapper`):
 
-        y = RMSNorm(x)
-        return y * sigmoid(gate_mlp(y))
+    y = RMSNorm(x)
+    return y * sigmoid(gate_mlp(y))
     """
 
-    def __init__(self, config: "AXK2Config", eps: float):
+    def __init__(self, config: AXK2Config, eps: float):
         super().__init__()
         self.norm = AXK2RMSNorm(config.hidden_size, eps=eps)
         self.mlp = AXK2GateMLP(config)
@@ -182,7 +202,7 @@ class AXK2Indexer(DeepseekV32Indexer):
     `past_key_values.update_indexer`), not on the module.
     """
 
-    def __init__(self, config: "AXK2Config", layer_idx: int):
+    def __init__(self, config: AXK2Config, layer_idx: int):
         super().__init__(config, layer_idx)
         self.k_norm = nn.LayerNorm(self.head_dim, eps=1e-5)
 
@@ -195,7 +215,7 @@ class AXK2TopkRouter(MiniMaxM2TopKRouter):
     overridden over `MiniMaxM2TopKRouter`.
     """
 
-    def __init__(self, config: "AXK2Config"):
+    def __init__(self, config: AXK2Config):
         super().__init__(config)
         self.routed_scaling_factor = config.routed_scaling_factor
         self.norm_topk_prob = config.norm_topk_prob
@@ -206,8 +226,9 @@ class AXK2TopkRouter(MiniMaxM2TopKRouter):
         router_logits = F.linear(hidden_states.type(torch.float32), self.weight.type(torch.float32))
         scores = router_logits.sigmoid()
         scores_for_choice = scores + self.e_score_correction_bias
-        topk_indices = torch.topk(scores_for_choice, k=self.top_k, dim=-1, sorted=False)[1]
+        _, topk_indices = torch.topk(scores_for_choice, k=self.top_k, dim=-1, sorted=False)
         topk_weights = scores.gather(1, topk_indices)
+        # A.X-K2 additions over MiniMax-M2's router: optional top-k normalization and routed scaling.
         if self.norm_topk_prob:
             denominator = topk_weights.sum(dim=-1, keepdim=True) + 1e-20
             topk_weights /= denominator
@@ -276,7 +297,12 @@ class AXK2Attention(DeepseekV32Attention):
         # The indexer scores against a 3D `[B, S, T]` mask; the attention mask is 4D `[B, 1, S, T]`.
         indexer_mask = attention_mask[:, 0, :, :] if attention_mask is not None else None
         topk_indices = self.indexer(
-            hidden_states, q_compressed, position_embeddings, indexer_mask, position_ids, past_key_values=past_key_values
+            hidden_states,
+            q_compressed,
+            position_embeddings,
+            indexer_mask,
+            position_ids,
+            past_key_values=past_key_values,
         )
 
         sparse_indices = None
