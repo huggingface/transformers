@@ -733,8 +733,8 @@ class ChameleonImageVocabularyMapping:
     """
 
     def __init__(self, vocab_map):
-        self.vocab_map = vocab_map
-        self.image_token_id = vocab_map.get("<image>")
+        self.vocab_map = vocab_map or {}
+        self.image_token_id = self.vocab_map.get("<image>")
 
     @cached_property
     def val2name(self):

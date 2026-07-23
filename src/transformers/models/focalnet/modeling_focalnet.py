@@ -856,7 +856,7 @@ class FocalNetBackbone(BackboneMixin, FocalNetPreTrainedModel):
     def __init__(self, config: FocalNetConfig):
         super().__init__(config)
 
-        self.num_features = [config.embed_dim] + config.hidden_sizes
+        self.num_features = [config.embed_dim] + list(config.hidden_sizes)
         self.focalnet = FocalNetModel(config)
 
         # initialize weights and apply final processing
