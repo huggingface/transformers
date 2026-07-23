@@ -92,6 +92,8 @@ class Emu3Processor(ProcessorMixin):
 
         # take different processing path when generarating images cond on text
         if return_for_image_generation:
+            if images is not None:
+                raise ValueError("You should not provide `images` when `return_for_image_generation=True`")
             height, width = self.calculate_generate_size(ratio, image_area, self.downsample_ratio)
             image_prompt = f"{self.image_start_token}{height}*{width}{self.fake_token_around_image}"
             if isinstance(text, str):
@@ -102,17 +104,6 @@ class Emu3Processor(ProcessorMixin):
         if return_for_image_generation:
             model_inputs["image_sizes"] = [[height, width]] * len(text)
         return model_inputs
-
-    def validate_inputs(
-        self,
-        images: ImageInput | list[ImageInput] | None = None,
-        text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] = None,
-        **kwargs: Unpack[ProcessingKwargs],
-    ):
-        super().validate_inputs(images=images, text=text, **kwargs)
-
-        if kwargs.get("return_for_image_generation") and images is not None:
-            raise ValueError("You should not provide `images` when `return_for_image_generation=True`")
 
     def prepare_inputs_layout(self, images=None, text=None, **kwargs):
         images, text, *_ = super().prepare_inputs_layout(images=images, text=text, **kwargs)
