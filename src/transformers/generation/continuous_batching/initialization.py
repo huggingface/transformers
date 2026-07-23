@@ -35,7 +35,7 @@ FALLBACK_DEFAULTS = {
     "kv_padding_interval_size": 64 * 256,  # 64 blocks of 256 tokens ie. 16384 tokens
 }
 BOUNDS = {
-    "block_size": (4, 2**32),
+    "fa_page_size": (4, 2**32),
 }
 
 
@@ -93,7 +93,7 @@ def resolve_using_hints(cb_config: ContinuousBatchingConfig, workload_hints: Wor
     if cb_config.max_blocks_per_request is None and workload_hints is not None:
         max_sequence_length = workload_hints.max_prompt_length + workload_hints.max_generated_length
         if max_sequence_length > 0:
-            blocks_per_request = int(ceil(max_sequence_length / cb_config.block_size)) + 1
+            blocks_per_request = int(ceil(max_sequence_length / cb_config.fa_page_size)) + 1
             cb_config.max_blocks_per_request = blocks_per_request + (blocks_per_request % 2)
     # The maximum number of requests per batch is the minimum of the workload hints and the fallback default
     if cb_config.max_requests_per_batch is None and workload_hints is not None:
@@ -296,5 +296,7 @@ def update_cb_config_after_cache_creation(
 
 def check_cb_values_bounds(cb_config: ContinuousBatchingConfig) -> None:
     """Checks the bounds on some values of the continuous batching config."""
-    if cb_config.block_size < BOUNDS["block_size"][0]:
-        raise ValueError(f"block_size must be at least {BOUNDS['block_size'][0]} but got {cb_config.block_size = }")
+    if cb_config.fa_page_size < BOUNDS["fa_page_size"][0]:
+        raise ValueError(
+            f"fa_page_size must be at least {BOUNDS['fa_page_size'][0]} but got {cb_config.fa_page_size = }"
+        )
