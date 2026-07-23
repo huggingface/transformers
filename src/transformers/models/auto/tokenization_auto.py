@@ -25,6 +25,7 @@ from transformers.utils.import_utils import is_mistral_common_available
 
 from ...configuration_utils import PreTrainedConfig
 from ...dynamic_module_utils import get_class_from_dynamic_module, resolve_trust_remote_code
+from ...integrations.mistral.constants import TEKKEN_VOCAB_FILE
 from ...modeling_gguf_pytorch_utils import load_gguf_checkpoint
 from ...tokenization_utils_base import TOKENIZER_CONFIG_FILE
 from ...utils import (
@@ -452,7 +453,7 @@ def _has_tekken_tokenizer_file(
     **kwargs,
 ) -> bool:
     subfolder = kwargs.get("subfolder", "")
-    tekken_filename = os.path.join(subfolder, "tekken.json") if subfolder else "tekken.json"
+    tekken_filename = os.path.join(subfolder, TEKKEN_VOCAB_FILE) if subfolder else TEKKEN_VOCAB_FILE
     try:
         return has_file(
             pretrained_model_name_or_path,
