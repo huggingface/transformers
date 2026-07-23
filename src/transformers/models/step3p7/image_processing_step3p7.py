@@ -43,11 +43,15 @@ class Step3p7ImageProcessorKwargs(ImagesKwargs, total=False):
     num_patch_features (`int`, *optional*, defaults to 81):
         Number of placeholder tokens the processor expands each local patch crop into; the
         `patch_size` analogue of `num_image_features`.
+    max_image_size (`int`, *optional*, defaults to 3024):
+        Images larger than this (on their longest side) are scaled down uniformly before patch
+        planning.
     """
 
     patch_size: int
     num_image_features: int
     num_patch_features: int
+    max_image_size: int
 
 
 @auto_docstring
@@ -58,16 +62,6 @@ class Step3p7ImageProcessor(TorchvisionBackend):
     Each input image is split into a global down-scaled view plus zero or more
     local patch crops via a sliding-window strategy, then every sub-image is
     resized and normalised independently.
-
-    Args:
-        size (`dict[str, int]`, *optional*, defaults to `{"height": 728, "width": 728}`):
-            Target size for the global image view.
-        patch_size (`int`, *optional*, defaults to 504):
-            Target size (height = width) for each local patch crop.
-        image_mean (`list[float]`, *optional*):
-            Per-channel mean for normalisation; defaults to ``OPENAI_CLIP_MEAN``.
-        image_std (`list[float]`, *optional*):
-            Per-channel std for normalisation; defaults to ``OPENAI_CLIP_STD``.
     """
 
     resample = PILImageResampling.BILINEAR
@@ -83,10 +77,13 @@ class Step3p7ImageProcessor(TorchvisionBackend):
     valid_kwargs = Step3p7ImageProcessorKwargs
     model_input_names = ["pixel_values", "pixel_values_local", "num_local_patches"]
 
-    MAX_IMAGE_SIZE: int = 3024
+    max_image_size: int = 3024
     # (image_size / patch_size / downsampler_stride)^2: 728→169 tokens, 504→81 tokens
     num_image_features: int = 169
     num_patch_features: int = 81
+
+    def __init__(self, **kwargs: Unpack[Step3p7ImageProcessorKwargs]):
+        super().__init__(**kwargs)
 
     @staticmethod
     def _is_extreme_aspect(width: int, height: int) -> bool:
@@ -104,7 +101,7 @@ class Step3p7ImageProcessor(TorchvisionBackend):
 
         Step 1 = normalise extreme inputs:
           - extreme-aspect images (min_side < 32, ratio > 4) are squared
-          - images larger than ``MAX_IMAGE_SIZE`` are scaled down uniformly
+          - images larger than ``max_image_size`` are scaled down uniformly
 
         Step 2 — choose window size from the normalised aspect ratio:
           - fits in global view (long_side ≤ image_size): tile only if elongated
@@ -127,8 +124,8 @@ class Step3p7ImageProcessor(TorchvisionBackend):
         needs_square_pad = self._is_extreme_aspect(width, height)
         if needs_square_pad:
             width = height = max(width, height)
-        if max(height, width) > self.MAX_IMAGE_SIZE:
-            scale = self.MAX_IMAGE_SIZE / max(height, width)
+        if max(height, width) > self.max_image_size:
+            scale = self.max_image_size / max(height, width)
             width, height = int(width * scale), int(height * scale)
 
         short_side, long_side = min(height, width), max(height, width)

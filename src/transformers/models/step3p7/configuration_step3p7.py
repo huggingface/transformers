@@ -87,61 +87,42 @@ class Step3p7TextConfig(PreTrainedConfig):
     share_expert_dim (`int`, *optional*, defaults to 1280):
         Intermediate size of the always-active shared expert.
     layer_types (`list[str]`, *optional*):
-        Per-layer attention type; `"full_attention"` or `"sliding_attention"`. Defaults to all
-        `"full_attention"` if not provided.
+        Per-layer attention type: `"full_attention"` or `"sliding_attention"`. Defaults to all
+        `"full_attention"`.
     mlp_layer_types (`list[str]`, *optional*):
-        Per-layer MLP type; `"sparse"` for MoE layers, `"dense"` otherwise. If not provided, derived
-        from the legacy `moe_layers_enum` hub-config kwarg (a comma-separated string or list of MoE
-        layer indices), defaulting to all layers from index 3 onward being MoE.
+        Per-layer MLP type: `"sparse"` (MoE) or `"dense"`. If not provided, derived from the legacy
+        `moe_layers_enum` hub-config kwarg (comma-separated string or list of MoE layer indices),
+        defaulting to all layers from index 3 onward being MoE.
     swiglu_limits (`list[float | None]`, *optional*):
         Per-layer gate/up clamping bound; `None` means no clamping.
     num_nextn_predict_layers (`int`, *optional*):
         Legacy hub-config kwarg: number of trailing speculative-decoding ("MTP") layers this
-        implementation doesn't model. When set, every per-layer list above (plus `rope_theta` and
-        `partial_rotary_factors` below) is trimmed from `num_hidden_layers + num_nextn_predict_layers`
-        back down to `num_hidden_layers` entries. Example: with `num_hidden_layers=4` and
-        `num_nextn_predict_layers=1`, an incoming
-        `layer_types=["full_attention", "sliding_attention", "sliding_attention", "sliding_attention", "full_attention"]`
-        (5 entries: 4 real layers + 1 MTP layer) is trimmed to
-        `["full_attention", "sliding_attention", "sliding_attention", "sliding_attention"]` (the
-        trailing MTP entry is dropped). Persisted as `self.num_nextn_predict_layers` (rather than
-        only consumed here and discarded) so `Step3p7TextModel` can compute which trailing layer
-        indices are MTP layers at load time, instead of a hardcoded checkpoint-specific range. Also
-        exposed generically as `num_mtp_layers` (via `attribute_map`, the same convention used by
-        `DeepseekV3Config`/`Glm4MoeConfig`), which lets `PreTrainedConfig.get_mtp_config()` build the
-        real MTP submodel for `generate(..., use_mtp=True)`.
+        implementation doesn't model. Real checkpoints pad every per-layer list above (plus
+        `rope_theta`/`partial_rotary_factors`) with this many extra trailing entries, trimmed back
+        down to `num_hidden_layers`. Persisted (also exposed as `num_mtp_layers` via `attribute_map`)
+        so `Step3p7TextModel` can locate the MTP layers at load time and
+        `PreTrainedConfig.get_mtp_config()` can build the MTP submodel for `generate(..., use_mtp=True)`.
     rope_theta (`float | list[float]`, *optional*, defaults to 10000.0):
-        Legacy hub-config kwarg. Real checkpoints give one value *per decoder layer* rather than one
-        value for the whole model; since it only ever varies by `layer_types[layer_idx]`, this is
-        collapsed into one theta per layer type. Superseded by `rope_parameters` once set.
+        Legacy hub-config kwarg giving one value per decoder layer; collapsed into one theta per layer
+        type (it only ever varies by `layer_types[layer_idx]`). Superseded by `rope_parameters` once set.
     partial_rotary_factors (`list[float]`, *optional*):
-        Legacy hub-config kwarg, one value per decoder layer; collapsed into one value per layer type
-        the same way as `rope_theta`.
+        Legacy hub-config kwarg, one value per decoder layer; collapsed per layer type like `rope_theta`.
     max_seq_len (`int`, *optional*, defaults to 128000):
-        Legacy hub-config kwarg mirroring `max_position_embeddings` (real checkpoints ship both); not
-        currently read by the modeling code.
+        Legacy hub-config kwarg mirroring `max_position_embeddings`; not read by the modeling code.
     norm_expert_weight (`bool`, *optional*, defaults to `True`):
-        Legacy hub-config kwarg from the original checkpoint; not currently read by the modeling code
-        (`Step3p7TopKRouter` always normalizes top-k expert weights to sum to 1).
+        Legacy hub-config kwarg; not read by the modeling code (`Step3p7TopKRouter` always normalizes
+        top-k expert weights to sum to 1).
     num_sliding_attention_heads (`int`, *optional*):
-        Number of attention heads for `"sliding_attention"` layers, when different from
-        `num_attention_heads`. Derived from `attention_other_setting` if not provided.
-    attention_other_setting (`dict`, *optional*):
-        Legacy hub-config dict overriding `num_attention_heads`/`num_key_value_heads`/`head_dim` for
-        `"sliding_attention"` layers (real checkpoints use a different head count per attention type).
+        Attention head count for `"sliding_attention"` layers, if different from `num_attention_heads`.
+        Defaults to the legacy `attention_other_setting` hub-config kwarg's `num_attention_heads` entry.
     num_attention_heads_per_layer (`list[int]`, *optional*):
-        Resolved (not a hub-config kwarg) per-layer head count, one entry per decoder layer: each
-        entry is `num_sliding_attention_heads` or `num_attention_heads` depending on
-        `layer_types[layer_idx]`. Computed once here (the same pattern `LagunaConfig` uses) so
-        `Step3p7Attention` takes its head count as a plain constructor argument instead of picking
-        between the two scalar fields itself.
+        Resolved (not a hub-config kwarg) per-layer head count, so `Step3p7Attention` takes it as a
+        plain constructor argument instead of picking between the two scalar fields itself.
     query_pre_attn_scalar (`int` or `float`, *optional*):
-        `Gemma3Attention.__init__` hook point (`Step3p7Attention` inherits from it): defaults to
-        `head_dim`, giving the standard `head_dim ** -0.5` attention scaling rather than Gemma3's own
-        hyperparameter of the same name.
+        `Gemma3Attention.__init__` hook point: defaults to `head_dim`, giving standard
+        `head_dim ** -0.5` scaling instead of Gemma3's own hyperparameter of the same name.
     attn_logit_softcapping (`float`, *optional*):
-        `Gemma3Attention.__init__` hook point; unused by Step3p7's own `eager_attention_forward`, so
-        always `None` (no softcapping).
+        `Gemma3Attention.__init__` hook point; unused by Step3p7's own attention, so always `None`.
     use_head_wise_attn_gate (`bool`, *optional*, defaults to `False`):
         Legacy hub-config kwarg from the original checkpoint; not currently read by the modeling code.
     use_moe_router_bias (`bool`, *optional*, defaults to `False`):
@@ -165,18 +146,7 @@ class Step3p7TextConfig(PreTrainedConfig):
     """
 
     model_type = "step3p5"
-    base_config_key = "text_config"
-    attribute_map = {
-        "num_local_experts": "n_routed_experts",
-        "num_attention_groups": "num_key_value_heads",
-        "moe_num_experts": "n_routed_experts",
-        "moe_top_k": "num_experts_per_tok",
-        "share_expert_dims": "share_expert_dim",
-        "num_mtp_layers": "num_nextn_predict_layers",
-    }
-    # Copied (not inherited) from `MiniMaxM3VLTextConfig`: `Step3p7Attention`/`Step3p7SparseMoeBlock`
-    # reuse its `q_proj`/`k_proj`/`v_proj`/`o_proj` and `experts.gate_up_proj`/`down_proj`/`gate`
-    # submodule naming verbatim, so the same TP/PP/EP plans apply unchanged.
+    keys_to_ignore_at_inference = ["past_key_values"]
     base_model_tp_plan = {
         "layers.*.self_attn.q_proj": "colwise_gather_output",
         "layers.*.self_attn.k_proj": "colwise_gather_output",
@@ -197,35 +167,52 @@ class Step3p7TextConfig(PreTrainedConfig):
         "layers.*.mlp.experts.down_proj": "grouped_gemm",
         "layers.*.mlp.experts": "moe_tp_experts",
     }
+    attribute_map = {
+        "num_local_experts": "n_routed_experts",
+        "num_attention_groups": "num_key_value_heads",
+        "moe_num_experts": "n_routed_experts",
+        "moe_top_k": "num_experts_per_tok",
+        "share_expert_dims": "share_expert_dim",
+        "num_mtp_layers": "num_nextn_predict_layers",
+    }
+    default_theta = 10000.0
+    vocab_size: int = 128815
 
     hidden_size: int = 4096
     intermediate_size: int = 11264
+    num_hidden_layers: int = 45
     num_attention_heads: int = 64
     num_key_value_heads: int = 8
-    num_hidden_layers: int = 45
+    head_dim: int = 128
+    hidden_act: str = "silu"
     max_position_embeddings: int = 128000
-    max_seq_len: int = 128000
-    vocab_size: int = 128815
+    initializer_range: float = 0.02
     rms_norm_eps: float = 1e-5
+    use_cache: bool = True
+    pad_token_id: int = 1
+    bos_token_id: int | None = None
+    eos_token_id: int | list[int] | None = None
+    tie_word_embeddings: bool = False
+    attention_dropout: float | int = 0.0
+    num_experts_per_tok: int = 8
+    num_local_experts: int = 128
+    output_router_logits: bool = False
+    router_aux_loss_coef: float = 0.001
+    router_jitter_noise: float = 0.0
+    rope_parameters: RopeParameters | dict | None = None
+    base_config_key = "text_config"
+    routed_scaling_factor: float = 2.0
+    mlp_layer_types: list[str] | None = None
+    layer_types: list[str] | None = None
+    max_seq_len: int = 128000
     moe_intermediate_size: int = 1280
     n_routed_experts: int = 288
-    num_experts_per_tok: int = 8
-    rope_parameters: RopeParameters | dict | None = None
     share_expert_dim: int = 1280
-    head_dim: int = 128
     norm_expert_weight: bool = True
-    layer_types: list[str] | None = None
-    mlp_layer_types: list[str] | None = None
     sliding_window: int | None = None
     num_sliding_attention_heads: int | None = None
     num_attention_heads_per_layer: list[int] | None = None
-    attention_other_setting: dict | None = None
-    pad_token_id: int = 1
-    attention_dropout: float = 0.0
     attention_bias: bool = False
-    # `Gemma3Attention.__init__` hook points (`Step3p7Attention` inherits from it): `None` resolves
-    # to the standard `head_dim ** -0.5` scaling below instead of Gemma3's own hyperparameter, and
-    # Step3p7 never applies logit softcapping (its own `eager_attention_forward` doesn't read it).
     query_pre_attn_scalar: int | float | None = None
     attn_logit_softcapping: float | None = None
     use_head_wise_attn_gate: bool = False
@@ -233,7 +220,6 @@ class Step3p7TextConfig(PreTrainedConfig):
     moe_router_activation: str = "softmax"
     moe_router_scaling_factor: float = 1.0
     need_fp32_gate: bool = False
-    hidden_act: str = "silu"
     mlp_bias: bool = False
     swiglu_limits: list[float | int | None] | None = None
     swiglu_limits_shared: list[float | int | None] | None = None
@@ -289,8 +275,12 @@ class Step3p7TextConfig(PreTrainedConfig):
             self.mlp_layer_types = ["sparse" if i in moe_set else "dense" for i in range(self.num_hidden_layers)]
 
         if self.num_sliding_attention_heads is None:
-            if self.attention_other_setting:
-                self.num_sliding_attention_heads = self.attention_other_setting.get(
+            # `attention_other_setting` is a legacy hub-config dict overriding num_attention_heads/
+            # num_key_value_heads/head_dim for "sliding_attention" layers; only its `num_attention_heads`
+            # entry is consumed here, then discarded (not persisted as a config field).
+            attention_other_setting = kwargs.pop("attention_other_setting", None)
+            if attention_other_setting:
+                self.num_sliding_attention_heads = attention_other_setting.get(
                     "num_attention_heads", self.num_attention_heads
                 )
             else:
@@ -304,8 +294,38 @@ class Step3p7TextConfig(PreTrainedConfig):
 
         if self.query_pre_attn_scalar is None:
             self.query_pre_attn_scalar = self.head_dim
-
+        sparse_cfg = kwargs.pop("sparse_attention_config", None) or {}
+        moe_layer_freq = kwargs.pop("moe_layer_freq", None)
         super().__post_init__(**kwargs)
+        # Checkpoint declares "swigluoai", but the gate is computed inline from swiglu_alpha/limit; hidden_act
+        # is only the pointwise fallback and must be a real ACT2FN key, so normalize it to silu.
+        self.hidden_act = "silu"
+
+        for flat, legacy in {
+            "index_n_heads": "sparse_num_index_heads",
+            "index_head_dim": "sparse_index_dim",
+            "index_block_size": "sparse_block_size",
+            "index_topk_blocks": "sparse_topk_blocks",
+            "index_local_blocks": "sparse_local_block",
+        }.items():
+            if legacy in sparse_cfg:
+                setattr(self, flat, sparse_cfg[legacy])
+
+        # `layer_types` is the canonical per-layer attention dispatch: it tells
+        # `DynamicCache(config=...)` which layers want the sparse cache and tells
+        # `Step3p7Attention` which layers build a sparse Lightning Indexer.
+        if self.layer_types is None and "sparse_attention_freq" in sparse_cfg:
+            self.layer_types = [
+                "minimax_m3_sparse" if f else "full_attention" for f in sparse_cfg["sparse_attention_freq"]
+            ]
+        if self.layer_types is None:
+            self.layer_types = ["full_attention"] * self.num_hidden_layers
+
+        # `mlp_layer_types` is the per-layer MLP dispatch read by `Step3p7DecoderLayer`:
+        if self.mlp_layer_types is None and moe_layer_freq is not None:
+            self.mlp_layer_types = ["sparse" if f else "dense" for f in moe_layer_freq]
+        if self.mlp_layer_types is None:
+            self.mlp_layer_types = ["sparse"] * self.num_hidden_layers
 
     def convert_rope_params_to_dict(self, **kwargs):
         # Overridden: the generic version's `setdefault("rope_theta", ...)` on the outer dict would
@@ -353,7 +373,6 @@ class Step3p7Config(PreTrainedConfig):
     text_config: dict | PreTrainedConfig | None = None
     projector_bias: bool = False
     image_token_id: int = 151679
-    max_position_embeddings: int | None = None
 
     def __post_init__(self, **kwargs):
         if self.vision_config is None:
@@ -368,7 +387,6 @@ class Step3p7Config(PreTrainedConfig):
         elif isinstance(self.text_config, dict):
             self.text_config = Step3p7TextConfig(**{k: v for k, v in self.text_config.items() if k != "model_type"})
 
-        self.max_position_embeddings = self.text_config.max_position_embeddings
         super().__post_init__(**kwargs)
 
 
