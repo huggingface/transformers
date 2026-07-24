@@ -98,7 +98,7 @@ class GraniteSWAConfig(PreTrainedConfig):
     attention_multiplier: float | int = 1.0
     sliding_window: int | None = 128
     layer_types: list[str] | None = None
-    layer_rope_theta: list[float] | None = None
+    layer_rope_theta: list[float | int] | None = None
 
     def __post_init__(self, **kwargs):
         if self.layer_types is None:
