@@ -311,7 +311,7 @@ class ZambaMambaMixer(nn.Module):
 
         self.layer_type = config.layer_types[layer_idx]
 
-    def convolution(
+    def _convoluton(
         self,
         hidden_states: torch.Tensor,
         cache_params: Cache | None = None,
@@ -367,7 +367,7 @@ class ZambaMambaMixer(nn.Module):
         gate = gate.reshape(batch_size, self.n_mamba_heads, -1, seq_len).transpose(0, 1)
 
         # Apply the conv
-        hidden_states = self.convolution(hidden_states, cache_params, attention_mask, **kwargs)
+        hidden_states = self._convoluton(hidden_states, cache_params, attention_mask, **kwargs)
 
         if attention_mask is not None:
             hidden_states = hidden_states * attention_mask.unsqueeze(1)
@@ -446,7 +446,7 @@ class ZambaMambaMixer(nn.Module):
         gate = gate.reshape(batch_size, self.n_mamba_heads, -1, seq_len).transpose(0, 1)
 
         # Apply the convolution
-        hidden_states = self.convolution(hidden_states, cache_params, attention_mask, **kwargs)
+        hidden_states = self._convoluton(hidden_states, cache_params, attention_mask, **kwargs)
 
         if attention_mask is not None:
             hidden_states = hidden_states * attention_mask.unsqueeze(1)

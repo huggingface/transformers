@@ -196,7 +196,7 @@ class JambaMambaMixer(MambaMixer):
         hidden_states, gate = projected_states.chunk(2, dim=1)
 
         # Apply the conv
-        hidden_states = self.convolution(hidden_states, cache_params, attention_mask, **kwargs)
+        hidden_states = self._convolution(hidden_states, cache_params, attention_mask, **kwargs)
 
         if attention_mask is not None:
             hidden_states = hidden_states * attention_mask.unsqueeze(1)
@@ -277,7 +277,7 @@ class JambaMambaMixer(MambaMixer):
         hidden_states, gate = projected_states.chunk(2, dim=1)
 
         # Apply the convolution
-        hidden_states = self.convolution(hidden_states, cache_params, attention_mask, **kwargs)
+        hidden_states = self._convolution(hidden_states, cache_params, attention_mask, **kwargs)
 
         if attention_mask is not None:
             hidden_states = hidden_states * attention_mask.unsqueeze(1)

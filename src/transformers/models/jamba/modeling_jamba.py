@@ -323,7 +323,7 @@ class JambaMambaMixer(nn.Module):
 
         self.layer_type = config.layer_types[layer_idx]
 
-    def convolution(
+    def _convoluton(
         self,
         hidden_states: torch.Tensor,
         cache_params: Cache | None = None,
@@ -384,7 +384,7 @@ class JambaMambaMixer(nn.Module):
         hidden_states, gate = projected_states.chunk(2, dim=1)
 
         # Apply the conv
-        hidden_states = self.convolution(hidden_states, cache_params, attention_mask, **kwargs)
+        hidden_states = self._convolution(hidden_states, cache_params, attention_mask, **kwargs)
 
         if attention_mask is not None:
             hidden_states = hidden_states * attention_mask.unsqueeze(1)
@@ -465,7 +465,7 @@ class JambaMambaMixer(nn.Module):
         hidden_states, gate = projected_states.chunk(2, dim=1)
 
         # Apply the convolution
-        hidden_states = self.convolution(hidden_states, cache_params, attention_mask, **kwargs)
+        hidden_states = self._convolution(hidden_states, cache_params, attention_mask, **kwargs)
 
         if attention_mask is not None:
             hidden_states = hidden_states * attention_mask.unsqueeze(1)

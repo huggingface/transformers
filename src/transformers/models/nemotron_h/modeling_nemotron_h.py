@@ -266,7 +266,7 @@ class NemotronHMamba2Mixer(nn.Module):
         init.ones_(self.D)
         init.ones_(self.dt_bias)
 
-    def convolution(
+    def _convoluton(
         self,
         hidden_states: torch.Tensor,
         cache_params: Cache | None = None,
@@ -355,7 +355,7 @@ class NemotronHMamba2Mixer(nn.Module):
         )
 
         # Apply the conv
-        hidden_states_B_C = self.convolution(hidden_states_B_C, cache_params, attention_mask, **kwargs)
+        hidden_states_B_C = self._convoluton(hidden_states_B_C, cache_params, attention_mask, **kwargs)
         hidden_states_B_C = apply_mask_to_padding_states(hidden_states_B_C, attention_mask)
         hidden_states, B, C = torch.split(
             hidden_states_B_C,
@@ -445,7 +445,7 @@ class NemotronHMamba2Mixer(nn.Module):
         )
 
         # 2. Convolution sequence transformation
-        hidden_states_B_C = self.convolution(hidden_states_B_C, cache_params, attention_mask, **kwargs)
+        hidden_states_B_C = self._convoluton(hidden_states_B_C, cache_params, attention_mask, **kwargs)
         hidden_states_B_C = apply_mask_to_padding_states(hidden_states_B_C, attention_mask)
         hidden_states, B, C = torch.split(
             hidden_states_B_C,

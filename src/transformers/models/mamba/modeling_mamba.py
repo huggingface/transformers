@@ -213,7 +213,7 @@ class MambaMixer(nn.Module):
                     " install the kernels library using `pip install kernels` or https://github.com/Dao-AILab/causal-conv1d for causal-conv1d. For the mamba.py backend, follow https://github.com/alxndrTL/mamba.py."
                 )
 
-    def convolution(
+    def _convoluton(
         self,
         hidden_states: torch.Tensor,
         cache_params: Cache | None = None,
@@ -286,7 +286,7 @@ class MambaMixer(nn.Module):
         use_precomputed_states = cache_params is not None and cache_params.has_previous_state(self.layer_idx)
 
         # Apply the conv
-        hidden_states = self.convolution(hidden_states, cache_params, attention_mask, **kwargs)
+        hidden_states = self._convoluton(hidden_states, cache_params, attention_mask, **kwargs)
 
         if attention_mask is not None:
             hidden_states = hidden_states * attention_mask.unsqueeze(1)
@@ -350,7 +350,7 @@ class MambaMixer(nn.Module):
         hidden_states, gate = projected_states.chunk(2, dim=1)
 
         # Apply the convolution
-        hidden_states = self.convolution(hidden_states, cache_params, attention_mask, **kwargs)
+        hidden_states = self._convoluton(hidden_states, cache_params, attention_mask, **kwargs)
 
         if attention_mask is not None:
             hidden_states = hidden_states * attention_mask.unsqueeze(1)

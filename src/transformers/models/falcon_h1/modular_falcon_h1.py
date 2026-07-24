@@ -221,7 +221,7 @@ class FalconH1Mixer(BambaMixer):
         )
 
         # Apply the conv
-        hidden_states_B_C = self.convolution(hidden_states_B_C, cache_params, attention_mask, **kwargs)
+        hidden_states_B_C = self._convolution(hidden_states_B_C, cache_params, attention_mask, **kwargs)
         hidden_states_B_C = apply_mask_to_padding_states(hidden_states_B_C, attention_mask)
         hidden_states, B, C = torch.split(
             hidden_states_B_C,
@@ -313,7 +313,7 @@ class FalconH1Mixer(BambaMixer):
         )
 
         # 2. Convolution sequence transformation
-        hidden_states_B_C = self.convolution(hidden_states_B_C, cache_params, attention_mask, **kwargs)
+        hidden_states_B_C = self._convolution(hidden_states_B_C, cache_params, attention_mask, **kwargs)
         hidden_states_B_C = apply_mask_to_padding_states(hidden_states_B_C, attention_mask)
         hidden_states, B, C = torch.split(
             hidden_states_B_C,
