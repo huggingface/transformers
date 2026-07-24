@@ -45,15 +45,17 @@ class CacheAllocator(ABC):
 
     # ________________________________________________ INITIALIZATION ________________________________________________ #
 
-    def _before_cache_tensor_init(self, index: int, layer_indices: list[int], tokens_per_page: int, bytes_per_page: int):
+    def _before_cache_tensor_init(
+        self, index: int, layer_indices: list[int], tokens_per_page: int, bytes_per_page: int
+    ) -> None:
         # Model-related attributes
         self.index = index
         self.layer_indices = layer_indices
         self.pages_per_block = len(layer_indices)
         # Cache dimensions attributes
-        self.rows_per_block = self.rows_per_token * self.tokens_per_block
         self.tokens_per_page = tokens_per_page
         self.tokens_per_block = tokens_per_page * self.pages_per_block
+        self.rows_per_block = self.rows_per_token * self.tokens_per_block
         self.bytes_per_page = bytes_per_page
         self.bytes_per_block = bytes_per_page * self.pages_per_block
         # Bookkeeping attributes
@@ -64,7 +66,9 @@ class CacheAllocator(ABC):
     def register_cache_tensor(self, bytes_per_sector: int, non_trash_bytes: int, cache_tensor: torch.Tensor) -> None:
         """Registers the cache tensor so the allocator can use it for updates."""
 
-    def _after_cache_tensor_init(self, non_trash_bytes: int, bytes_per_sector: int, cache_tensor: torch.Tensor) -> None:
+    def _after_cache_tensor_init(
+        self, non_trash_bytes: int, bytes_per_sector: int, cache_tensor: torch.Tensor
+    ) -> None:
         # Cache dimensions attributes
         self.num_pages = exact_div(non_trash_bytes, self.bytes_per_page)
         self.num_blocks = exact_div(self.num_pages, self.pages_per_block)

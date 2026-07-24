@@ -23,6 +23,8 @@ class FullAttentionCacheAllocator(CacheAllocator):
     """Cache allocator for a group of full attention layers."""
 
     supports_block_sharing = True
+    # One row for the keys and one for the values of each token
+    rows_per_token = 2
 
     def __init__(
         self,
@@ -62,12 +64,9 @@ class FullAttentionCacheAllocator(CacheAllocator):
         """
         self.bytes_per_sector = bytes_per_sector
 
-        # Infer the number of allocatable pages and blocks, which excludes the trash sectors
-        num_blocks = non_trash_bytes // self.bytes_per_block
-        num_pages = num_blocks * self.pages_per_block
-
-        # Reshape the cache
-        total_tokens = num_pages * self.tokens_per_page
+        # Reshape the cache. The views span the entire tensor, including the two leading trash sectors
+        total_bytes = non_trash_bytes + 2 * bytes_per_sector
+        total_tokens = (total_bytes // self.bytes_per_page) * self.tokens_per_page
         cache_shape = (total_tokens, 2, self.num_key_value_heads, self.head_dim)
         numel = torch.Size(cache_shape).numel()
 
@@ -79,12 +78,14 @@ class FullAttentionCacheAllocator(CacheAllocator):
         flattened_view = self.cache_tensor.view(total_tokens * 2, self.num_key_value_heads, self.head_dim)
         self._kv_views: dict[int, tuple[torch.Tensor, torch.Tensor]] = {}
         for i, layer_idx in enumerate(self.layer_indices):
-            k_view = flattened_view[(2 * i + 0) * self.tokens_per_page:]
-            v_view = flattened_view[(2 * i + 1) * self.tokens_per_page:]
+            k_view = flattened_view[(2 * i + 0) * self.tokens_per_page :]
+            v_view = flattened_view[(2 * i + 1) * self.tokens_per_page :]
             self._kv_views[layer_idx] = (k_view, v_view)
 
     @classmethod
-    def get_bytes_per_page(cls, num_key_value_heads: int, head_dim: int, cache_dtype: torch.dtype, page_size: int) -> int:
+    def get_bytes_per_page(
+        cls, num_key_value_heads: int, head_dim: int, cache_dtype: torch.dtype, page_size: int
+    ) -> int:
         """Computes the number of bytes in a full attention page: the keys and values of page_size tokens for one
         layer, hence the 2."""
         return 2 * num_key_value_heads * head_dim * cache_dtype.itemsize * page_size
