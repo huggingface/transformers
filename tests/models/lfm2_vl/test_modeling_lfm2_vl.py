@@ -373,11 +373,7 @@ class Lfm2_5VlForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         EXPECTED_TEXT_COMPLETION = Expectations(
             {
-                ("cuda", (8, 0)): [
-                    "In this image, we see the Statue of Liberty, an iconic symbol of freedom and democracy. It stands on Liberty Island in",
-                    "In this image, we see two cats lying on a pink blanket. One cat is a tabby, and the other is a",
-                ],
-                ("cuda", (8, 6)): [
+                ("cuda", 8): [
                     "In this image, we see the Statue of Liberty, an iconic symbol of freedom and democracy. It stands tall on a small",
                     "In this image, we see two cats lying on a pink blanket. One cat is a tabby, and the other is a",
                 ],

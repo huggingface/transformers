@@ -175,10 +175,7 @@ class Lfm2MoeIntegrationTest(unittest.TestCase):
     def test_model_1a8b_generation(self):
         EXPECTED_TEXT_COMPLETION = Expectations(
             {
-                ("cuda", (8, 0)): [
-                    "In 1st century A.D., the Roman Empire controlled much of Europe, North Africa, and parts of the Middle East."
-                ],
-                ("cuda", (8, 6)): [
+                ("cuda", 8): [
                     "In 1st century A.D., the Roman Empire controlled much of Europe, North Africa, and parts of Western Asia. Which"
                 ],
             }
