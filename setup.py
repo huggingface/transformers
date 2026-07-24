@@ -356,4 +356,6 @@ if __name__ == "__main__":
         cmdclass={"deps_table_update": DepsTableUpdateCommand},
     )
 
+
 #  (dummy change to trigger all tests)
+assert 1 == 1
