@@ -15,6 +15,7 @@
 
 from __future__ import annotations
 
+import functools
 import math
 import os
 import re
@@ -33,7 +34,7 @@ import torch
 from .distributed.sharding_utils import DtensorShardOperation, _dtensor_from_local_like
 from .integrations.accelerate import get_device, offload_weight
 from .integrations.tensor_parallel import ALL_PARALLEL_STYLES
-from .utils import is_env_variable_true
+from .utils import is_env_variable_true, is_torch_cuda_available
 from .utils.loading_report import LoadStateDictInfo
 from .utils.logging import get_logger, tqdm
 
@@ -1210,9 +1211,55 @@ class WeightConverter(WeightTransform):
 GLOBAL_WORKERS = min(4, os.cpu_count() or 4)
 
 
+@functools.cache
+def _accelerator_is_integrated(device_type: str, index: int) -> bool:
+    """Whether the device at ``device_type:index`` uses unified memory, i.e. shares its
+    physical memory with the host, as on NVIDIA GB10/GH200 and Jetson.
+
+    Only CUDA (including ROCm, which reuses the ``torch.cuda`` API) reports this through
+    ``is_integrated``; every other backend is treated as discrete. Cached because a
+    device's properties are constant for the lifetime of the process.
+    """
+    if device_type != "cuda" or not is_torch_cuda_available():
+        return False
+    return bool(getattr(torch.cuda.get_device_properties(index), "is_integrated", False))
+
+
+def _should_break_mmap_alias(tensor: torch.Tensor, device, dtype) -> bool:
+    """Whether to copy ``tensor`` off its (mmap-backed) storage before an H2D copy.
+
+    On unified-memory accelerators (e.g. NVIDIA GB10/GH200, Jetson), copying a weight to
+    the device straight from the ``MAP_PRIVATE`` safetensors mmap makes the driver pin —
+    and copy-on-write-duplicate — every transferred page into unreclaimable host memory.
+    As tensors stream in with all shard handles still open, this grows ~1 byte of
+    anonymous memory per byte loaded and is only released once the whole load finishes,
+    transiently doubling the footprint and OOM-ing large models. Breaking the alias with
+    a plain ``clone()`` first avoids it, and is a no-op on discrete GPUs whose
+    separate-VRAM copy path does not duplicate into the host memory budget.
+
+    Only the zero-copy path reads from the mmap: a genuine dtype cast materializes a
+    fresh tensor, so ``dtype`` different from the source needs no clone, but a no-op cast
+    (``dtype`` equal to the source dtype) still reads it and must be broken like the
+    no-cast path.
+    """
+    if device is None or tensor.device.type != "cpu":
+        return False
+    if dtype is not None and dtype != tensor.dtype:
+        return False
+    device = torch.device(device)
+    if device.type in ("cpu", "meta"):
+        return False
+    index = device.index if device.index is not None else 0
+    return _accelerator_is_integrated(device.type, index)
+
+
 def _materialize_copy(tensor: torch.Tensor, device=None, dtype=None) -> torch.Tensor:
     # This slicing is what actually loads the tensor from the safetensors slice object
     tensor = tensor[...]
+    if _should_break_mmap_alias(tensor, device, dtype):
+        # Break the aliasing with the MAP_PRIVATE checkpoint mmap so the H2D copy
+        # does not COW-duplicate it into unreclaimable host memory (see helper).
+        tensor = tensor.clone()
     if dtype is not None or device is not None:
         tensor = tensor.to(device=device, dtype=dtype)
     return tensor
