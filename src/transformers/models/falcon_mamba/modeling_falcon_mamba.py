@@ -131,13 +131,13 @@ class FalconMambaMixer(nn.Module):
         causal_conv1d_update = getattr(causal_conv1d, "causal_conv1d_update", None)
         causal_conv1d_fn = getattr(causal_conv1d, "causal_conv1d_fn", None)
 
-        global falcon_mamba_ssm, selective_state_update, selective_scan_fn, falcon_mamba_inner_fn
-        falcon_mamba_ssm = lazy_load_kernel("falcon_mamba-ssm")
+        global mamba_ssm, selective_state_update, selective_scan_fn, falcon_mamba_inner_fn
+        mamba_ssm = lazy_load_kernel("falcon_mamba-ssm")
         selective_state_update = resolve_internal_import(
-            falcon_mamba_ssm, chained_path="ops.triton.selective_state_update.selective_state_update"
+            mamba_ssm, chained_path="ops.triton.selective_state_update.selective_state_update"
         )
-        selective_scan_fn = getattr(falcon_mamba_ssm, "selective_scan_fn", None)
-        falcon_mamba_inner_fn = getattr(falcon_mamba_ssm, "falcon_mamba_inner_fn", None)
+        selective_scan_fn = getattr(mamba_ssm, "selective_scan_fn", None)
+        falcon_mamba_inner_fn = getattr(mamba_ssm, "falcon_mamba_inner_fn", None)
 
         self.warn_slow_implementation()
 
