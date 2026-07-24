@@ -171,6 +171,60 @@ class NemotronH_Omni_Reasoning_V3PixelShuffle(nn.Module):
         return x
 
 
+class NemotronH_Omni_Reasoning_V3VisionProjector(nn.Module):
+    """Single-forward vision pipeline: run the vision tower (image, or temporally-packed video) through
+    pixel-shuffle downsampling and the projection MLP into LLM-space embeddings. The weight-bearing
+    `vision_model` and `mlp1` are passed in so their checkpoint keys stay at the top level.
+    """
+
+    def __init__(self, config):
+        super().__init__()
+        self.downsample_ratio = config.downsample_ratio
+        self.video_temporal_patch_dim = config.video_temporal_patch_size
+        self.pixel_shuffle = NemotronH_Omni_Reasoning_V3PixelShuffle(config)
+
+    def _project(self, vit_embeds, h, w, mlp1):
+        vit_embeds = vit_embeds.to(dtype=torch.bfloat16)
+        vit_embeds = vit_embeds.reshape(vit_embeds.shape[0], h, w, -1)
+        vit_embeds = self.pixel_shuffle(vit_embeds, scale_factor=self.downsample_ratio)
+        vit_embeds = vit_embeds.reshape(vit_embeds.shape[0], -1, vit_embeds.shape[-1])
+        return mlp1(vit_embeds)
+
+    def forward(self, pixel_values, vision_model, mlp1):
+        if isinstance(pixel_values, (list, tuple)):
+            return torch.cat([self.forward(pv, vision_model, mlp1) for pv in pixel_values], dim=0)
+        pixel_values = pixel_values.to(dtype=vision_model.config.torch_dtype)
+        vit_embeds = vision_model(pixel_values).features
+        _, _, H, W = pixel_values.shape
+        patch_size = vision_model.patch_size
+        return self._project(vit_embeds, H // patch_size, W // patch_size, mlp1)
+
+    def forward_video(self, pixel_values_videos, vision_model, mlp1):
+        pixel_values_videos = pixel_values_videos.to(dtype=vision_model.config.torch_dtype)
+        embeddings = vision_model.embeddings
+        T = self.video_temporal_patch_dim
+        N, C, H, W = pixel_values_videos.shape
+
+        if N % T != 0:
+            pad = pixel_values_videos[-1:].expand(T - (N % T), -1, -1, -1)
+            pixel_values_videos = torch.cat([pixel_values_videos, pad], dim=0)
+            N = pixel_values_videos.shape[0]
+        num_groups = N // T
+
+        x = pixel_values_videos.reshape(num_groups, T * C, H, W)
+
+        # Temporally-packed video patches use the dedicated `video_patch_projection`.
+        orig_projection = embeddings.patch_projection
+        embeddings.patch_projection = embeddings.video_patch_projection
+        try:
+            vit_embeds = vision_model(x).features
+        finally:
+            embeddings.patch_projection = orig_projection
+
+        patch_size = embeddings.patch_size
+        return self._project(vit_embeds, H // patch_size, W // patch_size, mlp1)
+
+
 def compute_retention_mask(
     *,
     video_embeds: torch.FloatTensor,
@@ -269,7 +323,9 @@ class NemotronH_Omni_Reasoning_V3(PreTrainedModel):
 
         self.video_pruning_rate = config.video_pruning_rate
 
-        self.pixel_shuffle = NemotronH_Omni_Reasoning_V3PixelShuffle(config)
+        # Vision feature pipeline (tower + pixel-shuffle + projection) is isolated in its own module;
+        # `mlp1` stays here so its checkpoint keys remain top-level.
+        self.vision_projector = NemotronH_Omni_Reasoning_V3VisionProjector(config)
         self.mlp1 = nn.Sequential(
             NemotronH_Omni_RMSNorm(vit_hidden_size * int(1 / self.downsample_ratio) ** 2, eps=1e-5),
             nn.Linear(
@@ -333,7 +389,7 @@ class NemotronH_Omni_Reasoning_V3(PreTrainedModel):
         input_ids = input_ids.reshape(B * N)
         selected = input_ids == self.img_context_token_id
 
-        vit_embeds = self.extract_feature(pixel_values)
+        vit_embeds = self.vision_projector(pixel_values, self.vision_model, self.mlp1)
         del pixel_values
 
         vit_embeds = vit_embeds[image_flags == 1]
@@ -385,57 +441,6 @@ class NemotronH_Omni_Reasoning_V3(PreTrainedModel):
             attentions=outputs.attentions,
         )
 
-    def extract_feature(self, pixel_values):
-        if isinstance(pixel_values, (list, tuple)):
-            outs = [self._extract_feature_single(pv) for pv in pixel_values]
-            return torch.cat(outs, dim=0)
-        return self._extract_feature_single(pixel_values)
-
-    def _extract_feature_single(self, pixel_values):
-        pixel_values = pixel_values.to(dtype=self.vision_model.config.torch_dtype)
-        vit_embeds = self.vision_model(pixel_values).features
-        vit_embeds = vit_embeds.to(dtype=torch.bfloat16)
-        patch_size = self.vision_model.patch_size
-        B, _, H, W = pixel_values.shape
-        h = H // patch_size
-        w = W // patch_size
-        vit_embeds = vit_embeds.reshape(B, h, w, -1)
-        vit_embeds = self.pixel_shuffle(vit_embeds, scale_factor=self.downsample_ratio)
-        vit_embeds = vit_embeds.reshape(B, -1, vit_embeds.shape[-1])
-        vit_embeds = self.mlp1(vit_embeds)
-        return vit_embeds
-
-    def extract_video_feature(self, pixel_values_videos):
-        embeddings = self.vision_model.embeddings
-        T = self.video_temporal_patch_dim
-        N, C, H, W = pixel_values_videos.shape
-
-        if N % T != 0:
-            pad = pixel_values_videos[-1:].expand(T - (N % T), -1, -1, -1)
-            pixel_values_videos = torch.cat([pixel_values_videos, pad], dim=0)
-            N = pixel_values_videos.shape[0]
-        num_groups = N // T
-
-        x = pixel_values_videos.reshape(num_groups, T * C, H, W)
-
-        # Temporally-packed video patches use the dedicated `video_patch_projection`.
-        orig_projection = embeddings.patch_projection
-        embeddings.patch_projection = embeddings.video_patch_projection
-        try:
-            vit_embeds = self.vision_model(x).features
-        finally:
-            embeddings.patch_projection = orig_projection
-
-        vit_embeds = vit_embeds.to(dtype=torch.bfloat16)
-        patch_size = embeddings.patch_size
-        h = H // patch_size
-        w = W // patch_size
-        vit_embeds = vit_embeds.reshape(vit_embeds.shape[0], h, w, -1)
-        vit_embeds = self.pixel_shuffle(vit_embeds, scale_factor=self.downsample_ratio)
-        vit_embeds = vit_embeds.reshape(vit_embeds.shape[0], -1, vit_embeds.shape[-1])
-        vit_embeds = self.mlp1(vit_embeds)
-        return vit_embeds
-
     @torch.no_grad()
     def generate(
         self,
@@ -460,12 +465,12 @@ class NemotronH_Omni_Reasoning_V3(PreTrainedModel):
             image_vit_embeds, video_vit_embeds, sound_embeds = None, None, None
 
             if has_images:
-                pixel_values = pixel_values.to(dtype=self.vision_model.config.torch_dtype)
-                image_vit_embeds = self.extract_feature(pixel_values)
+                image_vit_embeds = self.vision_projector(pixel_values, self.vision_model, self.mlp1)
 
             if has_videos:
-                pixel_values_videos = pixel_values_videos.to(dtype=self.vision_model.config.torch_dtype)
-                video_vit_embeds = self.extract_video_feature(pixel_values_videos)
+                video_vit_embeds = self.vision_projector.forward_video(
+                    pixel_values_videos, self.vision_model, self.mlp1
+                )
 
             if has_sound:
                 sound_embeds = self.sound_projector(sound_clips, self.sound_encoder, self.sound_projection)
