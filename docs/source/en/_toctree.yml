@@ -1143,6 +1143,8 @@
         title: Nemotron 3.5 ASR
       - local: model_doc/nemotron_asr_streaming
         title: Nemotron ASR Streaming
+      - local: model_doc/neucodec
+        title: NeuCodec
       - local: model_doc/parakeet
         title: Parakeet
       - local: model_doc/pe_audio
