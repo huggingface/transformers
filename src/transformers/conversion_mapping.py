@@ -25,7 +25,6 @@ from .core_model_loading import (
     GroupWeightRename,
     Interleave,
     MergeModulelist,
-    PermuteForRope,
     PrefixChange,
     Transpose,
     VisionUnfuseAndPermuteForRope,
@@ -142,52 +141,6 @@ _MODEL_TO_CONVERSION_PATTERN = {
 
 def _build_checkpoint_conversion_mapping():
     mapping = {
-        "onyx_text": [
-            GroupWeightRename(
-                source_patterns=[
-                    r"post_attention_layernorm",
-                    r"post_attn_norm",
-                ],
-                target_patterns=[
-                    r"pre_feedforward_layernorm",
-                    r"post_attention_layernorm",
-                ],
-            ),
-            WeightRenaming(source_patterns=r"post_ffn_norm", target_patterns=r"post_feedforward_layernorm"),
-        ],
-        "onyx_vision": [
-            WeightRenaming(source_patterns=r"attn.o_proj", target_patterns=r"attn.out_proj"),
-            WeightRenaming(
-                source_patterns=r"position_embedding_table$", target_patterns=r"position_embedding_table.weight"
-            ),
-            WeightConverter(
-                source_patterns=[r"attn.q_proj"],
-                target_patterns=[r"attn.q_proj"],
-                operations=[PermuteForRope(subconfig_key="vision_config")],
-            ),
-            WeightConverter(
-                source_patterns=[r"attn.k_proj"],
-                target_patterns=[r"attn.k_proj"],
-                operations=[PermuteForRope(subconfig_key="vision_config")],
-            ),
-        ],
-        "onyx": [
-            WeightRenaming(source_patterns=r"vision_encoder.transformer", target_patterns=r"vision_tower.layers"),
-            WeightRenaming(
-                source_patterns=r"vision_encoder.conv1_linear",
-                target_patterns=r"vision_tower.patch_embedder.patch_embedding",
-            ),
-            WeightRenaming(
-                source_patterns=r"vision_encoder.positional_embedding_vlm",
-                target_patterns=r"vision_tower.patch_embedder.position_embedding_table",
-            ),
-            WeightRenaming(source_patterns=r"vision_encoder.ln_pre", target_patterns=r"vision_tower.ln_pre"),
-            WeightRenaming(source_patterns=r"vision_encoder.ln_post", target_patterns=r"vision_tower.ln_post"),
-            WeightRenaming(
-                source_patterns=r"^model(?!\.(language_model|vision_tower|vision_encoder))",
-                target_patterns="model.language_model",
-            ),
-        ],
         "inkling_mm_model": [
             WeightRenaming(source_patterns=r"model\.llm\.layers", target_patterns=r"model.language_model.layers"),
             WeightRenaming(

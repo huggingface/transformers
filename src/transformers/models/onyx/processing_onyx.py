@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from ...processing_utils import ProcessingKwargs, ProcessorMixin
+from ...processing_utils import ProcessorMixin
 from ...utils import auto_docstring, logging
 
 
@@ -62,17 +62,8 @@ ONYX_MM_CHAT_TEMPLATE = (
 )
 
 
-class OnyxProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {
-        "text_kwargs": {"add_special_tokens": False},
-        "videos_kwargs": {"return_metadata": True},
-    }
-
-
 @auto_docstring
 class OnyxProcessor(ProcessorMixin):
-    valid_processor_kwargs = OnyxProcessorKwargs
-
     def __init__(
         self,
         image_processor=None,
@@ -100,7 +91,7 @@ class OnyxProcessor(ProcessorMixin):
 
     # maybe chat template should add start-end tokens?
     def replace_image_token(self, image_inputs: dict, image_idx: int) -> str:
-        merge_length = self.image_processor.downsample_factor**2
+        merge_length = self.image_processor.merge_size**2
         num_image_tokens = image_inputs["image_grid_thw"][image_idx].prod() // merge_length
         return self.image_start_token + self.patch_token * num_image_tokens + self.image_end_token
 

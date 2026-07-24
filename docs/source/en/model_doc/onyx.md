@@ -16,6 +16,7 @@ limitations under the License.
 ⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be rendered properly in your Markdown viewer.
 
 -->
+*This model was contributed to Hugging Face Transformers on 2026-07-24.*
 
 
 # Onyx
@@ -44,24 +45,46 @@ The original code can be found [here](<INSERT LINK TO GITHUB REPO HERE>).
 
 [[autodoc]] OnyxConfig
 
-## OnyxForCausalLM
+## OnyxTextConfig
 
-[[autodoc]] OnyxForCausalLM
+[[autodoc]] OnyxTextConfig
+
+## OnyxVisionConfig
+
+[[autodoc]] OnyxVisionConfig
+
+## OnyxImageProcessor
+
+[[autodoc]] OnyxImageProcessor
+
+## OnyxVideoProcessor
+
+[[autodoc]] OnyxVideoProcessor
+
+## OnyxProcessor
+
+[[autodoc]] OnyxProcessor
+
+## OnyxPreTrainedModel
+
+[[autodoc]] OnyxPreTrainedModel
+
+## OnyxTextModel
+
+[[autodoc]] OnyxTextModel
+    - forward
+
+## OnyxVisionModel
+
+[[autodoc]] OnyxVisionModel
+    - forward
 
 ## OnyxModel
 
 [[autodoc]] OnyxModel
     - forward
 
-## OnyxPreTrainedModel
+## OnyxForConditionalGeneration
 
-[[autodoc]] OnyxPreTrainedModel
+[[autodoc]] OnyxForConditionalGeneration
     - forward
-
-## OnyxForSequenceClassification
-
-[[autodoc]] OnyxForSequenceClassification
-
-## OnyxForTokenClassification
-
-[[autodoc]] OnyxForTokenClassification

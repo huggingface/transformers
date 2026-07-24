@@ -27,7 +27,6 @@ from transformers.testing_utils import (
     torch_device,
 )
 
-from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 from ...test_modeling_common import floats_tensor
 from ...vlm_tester import VLMModelTest, VLMModelTester
 
@@ -37,36 +36,12 @@ if is_torch_available():
 
     from transformers import (
         AutoProcessor,
-        OnyxForCausalLM,
         OnyxForConditionalGeneration,
         OnyxModel,
-        OnyxTextModel,
     )
 
 
 ONYX_CHECKPOINT_DIR = os.environ.get("ONYX_CHECKPOINT_DIR", "/raid/pablo/onyx_early/onyx-hf")
-
-
-class OnyxTextModelTester(CausalLMModelTester):
-    if is_torch_available():
-        base_model_class = OnyxTextModel
-        causal_lm_class = OnyxForCausalLM
-
-    def __init__(self, parent):
-        super().__init__(parent=parent)
-        self.attention_probs_dropout_prob = 0.0
-
-
-@require_torch
-class OnyxTextModelTest(CausalLMModelTest, unittest.TestCase):
-    model_tester_class = OnyxTextModelTester
-    # `output_multiplier` + tanh soft-capping shrink logit gradients, so the overfit test needs a
-    # higher learning rate to reach the loss-reduction threshold.
-    training_overfit_learning_rate = 3e-3
-
-    @unittest.skip("Onyx tanh soft-capping (`final_logit_softcapping`) amplifies TP numerical noise")
-    def test_tp_generation_quantized(self):
-        pass
 
 
 class OnyxVision2TextModelTester(VLMModelTester):
@@ -83,15 +58,15 @@ class OnyxVision2TextModelTester(VLMModelTester):
         kwargs.setdefault("num_image_tokens", 1)
         kwargs.setdefault("patch_size", 2)
         kwargs.setdefault("patch_temporal", 2)
-        kwargs.setdefault("downsample_factor", 1)
-        kwargs.setdefault("sparse_attention_factor", 2)
-        kwargs.setdefault("pos_emb_grid_h", 4)
-        kwargs.setdefault("pos_emb_grid_w", 4)
-        kwargs.setdefault("mlp_ratio", 1.0)
+        kwargs.setdefault("merge_size", 1)
+        kwargs.setdefault("layer_types", ["full_attention", "sliding_attention"])
+        kwargs.setdefault("pos_emb_height", 4)
+        kwargs.setdefault("pos_emb_width", 4)
+        kwargs.setdefault("intermediate_size", 37)
         kwargs.setdefault("adapter_dim", 32)
         super().__init__(parent, **kwargs)
         self.image_grid_thw = (1, 1, 1)
-        self.output_dim = self.hidden_size * self.downsample_factor**2
+        self.output_dim = self.hidden_size * self.merge_size**2
 
     @property
     def _special_token_ids(self):

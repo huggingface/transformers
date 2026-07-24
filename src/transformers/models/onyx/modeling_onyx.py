@@ -17,7 +17,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
 import warnings
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -25,22 +24,26 @@ from typing import Optional
 
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
-from torch.nn import init
 
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
-from ...integrations import use_kernelized_func
-from ...masking_utils import create_causal_mask, create_masks_for_generate, create_sliding_window_causal_mask
+from ...integrations import use_kernel_func_from_hub, use_kernelized_func
+from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, CausalLMOutputWithPast
+from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import ModelOutput, TransformersKwargs, auto_docstring, torch_compilable_check
+from ...utils import (
+    ModelOutput,
+    TransformersKwargs,
+    auto_docstring,
+    can_return_tuple,
+    torch_compilable_check,
+)
 from ...utils.deprecation import deprecate_kwarg
-from ...utils.generic import can_return_tuple, is_flash_attention_requested, maybe_autocast, merge_with_config_defaults
+from ...utils.generic import is_flash_attention_requested, maybe_autocast, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ...vision_utils import (
     get_vision_bilinear_indices_and_weights,
@@ -99,55 +102,32 @@ class OnyxCausalLMOutputWithPast(ModelOutput):
 
 
 class OnyxRMSNorm(nn.Module):
-    def __init__(self, dim: int, eps: float = 1e-6):
+    def __init__(self, dim: int | None = None, eps: float = 1e-6, with_scale: bool = True, weight_offset: int = 0):
         super().__init__()
         self.eps = eps
-        self.weight = nn.Parameter(torch.zeros(dim))
+        self.with_scale = with_scale
 
-    def _norm(self, x):
-        return x * torch.rsqrt(x.pow(2).mean(-1, keepdim=True) + self.eps)
+        if self.with_scale:
+            self.weight = nn.Parameter(torch.ones(dim), requires_grad=True)
+        # can we bake it in weights, i suppose this was needed for train-time stability?
+        self.weight_offset = weight_offset
 
-    def forward(self, x):
-        output = self._norm(x.float())
-        # Llama does x.to(float16) * w whilst Onyx is (x * w).to(float16)
-        # See https://github.com/huggingface/transformers/pull/29402
-        output = output * (1.0 + self.weight.float())
-        return output.type_as(x)
+    def _norm(self, hidden_states: torch.Tensor):
+        mean_squared = hidden_states.pow(2).mean(-1, keepdim=True) + self.eps
+        # Use torch.pow() (over torch.sqrt() or torch.rsqrt()) to address compiler differences between Torch and JAX
+        return hidden_states * torch.pow(mean_squared, -0.5)
 
-    def extra_repr(self):
-        return f"{tuple(self.weight.shape)}, eps={self.eps}"
-
-
-class OnyxScalelessRMSNorm(torch.nn.Module):
-    def __init__(self, eps: float = 1e-6):
-        super().__init__()
-        self.eps = eps
-
-    def _norm(self, x):
-        return x * torch.rsqrt(x.pow(2).mean(-1, keepdim=True) + self.eps)
-
-    def forward(self, x):
-        return self._norm(x.float()).type_as(x)
-
-    def extra_repr(self):
-        return f"eps={self.eps}"
-
-
-# Weight-as-scale, no offset — used only for the final norm.
-class OnyxFinalRMSNorm(nn.Module):
-    def __init__(self, dim: int, eps: float = 1e-5):
-        super().__init__()
-        self.eps = eps
-        self.weight = nn.Parameter(torch.ones(dim))
-
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        return F.rms_norm(x.float(), (x.shape[-1],), self.weight.float(), self.eps).to(x.dtype)
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        normed_output = self._norm(hidden_states.float())
+        if self.with_scale:
+            normed_output = normed_output * (self.weight.float() + self.weight_offset)
+        return normed_output.type_as(hidden_states)
 
 
 class OnyxNormalizedEmbedding(nn.Embedding):
     def __init__(self, num_embeddings: int, embedding_dim: int, padding_idx: int | None = None, eps: float = 1e-5):
         super().__init__(num_embeddings, embedding_dim, padding_idx)
-        self.norm = OnyxScalelessRMSNorm(eps)
+        self.norm = OnyxRMSNorm(eps=eps, with_scale=False)
 
     def forward(self, input_ids: torch.Tensor) -> torch.Tensor:
         return self.norm(super().forward(input_ids))
@@ -241,11 +221,13 @@ def rotate_half(x):
     return torch.cat((-x2, x1), dim=-1)
 
 
-def apply_rotary_pos_emb(x: torch.Tensor, cos: torch.Tensor, sin: torch.Tensor, unsqueeze_dim: int = 1):
+@use_kernel_func_from_hub("rotary_pos_emb")
+def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
     """Applies Rotary Position Embedding to the query and key tensors.
 
     Args:
-        x (`torch.Tensor`): The tensor to embed.
+        q (`torch.Tensor`): The query tensor.
+        k (`torch.Tensor`): The key tensor.
         cos (`torch.Tensor`): The cosine part of the rotary embedding.
         sin (`torch.Tensor`): The sine part of the rotary embedding.
         unsqueeze_dim (`int`, *optional*, defaults to 1):
@@ -260,7 +242,9 @@ def apply_rotary_pos_emb(x: torch.Tensor, cos: torch.Tensor, sin: torch.Tensor, 
     """
     cos = cos.unsqueeze(unsqueeze_dim)
     sin = sin.unsqueeze(unsqueeze_dim)
-    return (x * cos) + (rotate_half(x) * sin)
+    q_embed = (q * cos) + (rotate_half(q) * sin)
+    k_embed = (k * cos) + (rotate_half(k) * sin)
+    return q_embed, k_embed
 
 
 def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
@@ -382,7 +366,7 @@ class OnyxAttention(nn.Module):
 
         self.use_qk_norm = config.use_qk_norm
         if self.use_qk_norm:
-            self.qk_norm = OnyxScalelessRMSNorm(eps=config.rms_norm_eps)
+            self.qk_norm = OnyxRMSNorm(eps=config.rms_norm_eps, with_scale=False)
             self.scale_query_by = config.qk_scale_factor / (config.head_dim**0.5)
 
         self.use_output_gate = config.use_attn_output_gate
@@ -450,11 +434,11 @@ class OnyxDecoderLayer(GradientCheckpointingLayer):
         self.config = config
         self.self_attn = OnyxAttention(config=config, layer_idx=layer_idx)
         self.mlp = OnyxMLP(config)
-        self.input_layernorm = OnyxRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.post_attention_layernorm = OnyxRMSNorm(config.hidden_size, eps=config.post_norm_eps)
-
-        self.pre_feedforward_layernorm = OnyxRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.post_feedforward_layernorm = OnyxRMSNorm(config.hidden_size, eps=config.post_norm_eps)
+        # Add an offset
+        self.input_layernorm = OnyxRMSNorm(config.hidden_size, eps=config.rms_norm_eps, weight_offset=1)
+        self.post_attention_layernorm = OnyxRMSNorm(config.hidden_size, eps=config.post_norm_eps, weight_offset=1)
+        self.pre_feedforward_layernorm = OnyxRMSNorm(config.hidden_size, eps=config.rms_norm_eps, weight_offset=1)
+        self.post_feedforward_layernorm = OnyxRMSNorm(config.hidden_size, eps=config.post_norm_eps, weight_offset=1)
 
     def forward(
         self,
@@ -547,6 +531,7 @@ class OnyxVisionRotaryEmbedding(nn.Module):
     @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
     def forward(self, x, position_ids):
+        # We interleave as `[freq_w, freq_h, freq_w, freq_h]` in Onyx
         inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1).to(x.device)
         device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
 
@@ -562,44 +547,56 @@ class OnyxVisionRotaryEmbedding(nn.Module):
         return cos.to(x.dtype), sin.to(x.dtype)
 
 
+def apply_rotary_pos_emb_vision(
+    q: torch.Tensor, k: torch.Tensor, cos: torch.Tensor, sin: torch.Tensor
+) -> tuple[torch.Tensor, torch.Tensor]:
+    orig_q_dtype = q.dtype
+    orig_k_dtype = k.dtype
+    q, k = q.float(), k.float()
+    cos, sin = cos.unsqueeze(-2).float(), sin.unsqueeze(-2).float()
+    q_embed = (q * cos) + (rotate_half(q) * sin)
+    k_embed = (k * cos) + (rotate_half(k) * sin)
+    q_embed = q_embed.to(orig_q_dtype)
+    k_embed = k_embed.to(orig_k_dtype)
+    return q_embed, k_embed
+
+
 class OnyxVisionAttention(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config: OnyxVisionConfig) -> None:
         super().__init__()
-        self.config = config
-        self.embed_dim = config.hidden_size
+        self.dim = config.hidden_size
         self.num_heads = config.num_attention_heads
-        self.head_dim = self.embed_dim // self.num_heads
-        self.scale = self.head_dim**-0.5
+        self.head_dim = self.dim // self.num_heads
+        self.num_key_value_groups = 1  # needed for eager attention
+        self.proj = nn.Linear(self.dim, self.dim)
+        self.scaling = self.head_dim**-0.5
+        self.config = config
+        self.attention_dropout = 0.0
         self.is_causal = False
-        self.num_key_value_groups = 1
+        self.q_proj = nn.Linear(self.dim, self.dim, bias=True)
+        self.k_proj = nn.Linear(self.dim, self.dim, bias=True)
+        self.v_proj = nn.Linear(self.dim, self.dim, bias=True)
 
-        self.k_proj = nn.Linear(self.embed_dim, self.num_heads * self.head_dim)
-        self.v_proj = nn.Linear(self.embed_dim, self.num_heads * self.head_dim)
-        self.q_proj = nn.Linear(self.embed_dim, self.num_heads * self.head_dim)
-        self.out_proj = nn.Linear(self.num_heads * self.head_dim, self.embed_dim)
-
+    @deprecate_kwarg("rotary_pos_emb", version="v5.10")
     def forward(
         self,
         hidden_states: torch.Tensor,
-        position_embeddings: torch.Tensor | None = None,
-        cu_seqlens: torch.Tensor | None = None,
-        position_ids: torch.LongTensor | None = None,
+        cu_seqlens: torch.Tensor,
+        position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         **kwargs,
     ) -> torch.Tensor:
-        seq_length = hidden_states.shape[1]
+        seq_length = hidden_states.shape[0]
 
-        hidden_shape = (1, seq_length, -1, self.head_dim)
-        query_states = self.q_proj(hidden_states).view(hidden_shape)
-        key_states = self.k_proj(hidden_states).view(hidden_shape)
-        value_states = self.v_proj(hidden_states).view(hidden_shape)
+        query_states = self.q_proj(hidden_states).reshape(1, seq_length, -1, self.head_dim)
+        key_states = self.k_proj(hidden_states).reshape(1, seq_length, -1, self.head_dim)
+        value_states = self.v_proj(hidden_states).reshape(1, seq_length, -1, self.head_dim)
 
         cos, sin = position_embeddings
-        query_states = apply_rotary_pos_emb(query_states, cos, sin, unsqueeze_dim=2)
-        key_states = apply_rotary_pos_emb(key_states, cos, sin, unsqueeze_dim=2)
+        query_states, key_states = apply_rotary_pos_emb_vision(query_states, key_states, cos, sin)
 
-        query_states = query_states.transpose(1, 2)
-        key_states = key_states.transpose(1, 2)
-        value_states = value_states.transpose(1, 2)
+        query_states = query_states.transpose(2, 1)
+        key_states = key_states.transpose(2, 1)
+        value_states = value_states.transpose(2, 1)
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
@@ -614,12 +611,13 @@ class OnyxVisionAttention(nn.Module):
                 key_states,
                 value_states,
                 attention_mask=None,
-                scaling=self.scale,
+                scaling=self.scaling,
+                dropout=0.0 if not self.training else self.attention_dropout,
                 cu_seq_lens_q=cu_seqlens,
                 cu_seq_lens_k=cu_seqlens,
                 max_length_q=max_seqlen,
                 max_length_k=max_seqlen,
-                is_causal=self.is_causal,
+                is_causal=False,
                 **kwargs,
             )
         else:
@@ -636,8 +634,9 @@ class OnyxVisionAttention(nn.Module):
                     k,
                     v,
                     attention_mask=None,
-                    scaling=self.scale,
-                    is_causal=self.is_causal,
+                    scaling=self.scaling,
+                    dropout=0.0 if not self.training else self.attention_dropout,
+                    is_causal=False,
                     **kwargs,
                 )[0]
                 for q, k, v in zip(*splits)
@@ -645,62 +644,45 @@ class OnyxVisionAttention(nn.Module):
             attn_output = torch.cat(attn_outputs, dim=1)
 
         attn_output = attn_output.reshape(seq_length, -1).contiguous()
-        attn_output = self.out_proj(attn_output)
+        attn_output = self.proj(attn_output)
         return attn_output
 
 
 class OnyxVisionMLP(nn.Module):
-    def __init__(self, dim: int, hidden_size: int):
+    def __init__(self, dim: int, hidden_dim: int, hidden_act: str) -> None:
         super().__init__()
-        self.c_fc = nn.Linear(dim, hidden_size, bias=True)
-        self.c_proj = nn.Linear(hidden_size, dim, bias=True)
+        self.fc1 = nn.Linear(dim, hidden_dim)
+        self.act = ACT2FN[hidden_act]
+        self.fc2 = nn.Linear(hidden_dim, dim)
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        return self.c_proj(F.gelu(self.c_fc(x)))
+    def forward(self, x) -> torch.Tensor:
+        return self.fc2(self.act(self.fc1(x)))
 
 
 class OnyxVisionEncoderLayer(GradientCheckpointingLayer):
-    def __init__(self, config):
+    def __init__(self, config) -> None:
         super().__init__()
-        self.ln_1 = nn.LayerNorm(config.hidden_size)
-        self.attn = OnyxVisionAttention(config)
-        self.ln_2 = nn.LayerNorm(config.hidden_size)
-        self.mlp = OnyxVisionMLP(config.hidden_size, int(config.hidden_size * config.mlp_ratio))
+        self.norm1 = nn.LayerNorm(config.hidden_size, eps=1e-5)
+        self.norm2 = nn.LayerNorm(config.hidden_size, eps=1e-5)
+        self.attn = OnyxVisionAttention(config=config)
+        self.mlp = OnyxVisionMLP(config.hidden_size, config.intermediate_size, config.hidden_act)
 
+    @deprecate_kwarg("rotary_pos_emb", version="v5.10")
     def forward(
         self,
         hidden_states: torch.Tensor,
-        position_embeddings: torch.Tensor | None = None,
-        cu_seqlens: torch.Tensor | None = None,
-        position_ids: torch.Tensor | None = None,
+        cu_seqlens: torch.Tensor,
+        position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
+        **kwargs,
     ) -> torch.Tensor:
-        bs, s, d = hidden_states.shape
-
-        residual = hidden_states
-        hidden_states = self.ln_1(hidden_states.view(bs * s, d)).reshape(bs, s, d)
-        hidden_states = self.attn(
-            hidden_states,
-            position_embeddings=position_embeddings,
+        hidden_states = hidden_states + self.attn(
+            self.norm1(hidden_states),
             cu_seqlens=cu_seqlens,
-            position_ids=position_ids,
+            position_embeddings=position_embeddings,
+            **kwargs,
         )
-        hidden_states = residual + hidden_states
-
-        residual = hidden_states
-        hidden_states = self.ln_2(hidden_states.view(bs * s, d)).reshape(bs, s, d)
-        hidden_states = self.mlp(hidden_states)
-        hidden_states = residual + hidden_states
+        hidden_states = hidden_states + self.mlp(self.norm2(hidden_states))
         return hidden_states
-
-
-class OnyxVisionAdapter(nn.Module):
-    def __init__(self, config: OnyxConfig):
-        super().__init__()
-        self.c_fc = nn.Linear(config.output_dim, config.adapter_dim, bias=False)
-        self.c_proj = nn.Linear(config.adapter_dim, config.adapter_dim, bias=False)
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        return F.gelu(self.c_proj(F.gelu(self.c_fc(hidden_states))))
 
 
 class OnyxVisionPatchEmbedder(nn.Module):
@@ -711,10 +693,10 @@ class OnyxVisionPatchEmbedder(nn.Module):
         self.patch_size = config.patch_temporal * 3 * config.patch_size**2
 
         self.patch_embedding = nn.Linear(self.patch_size, self.hidden_size, bias=False)
-        self.position_embedding_table = nn.Embedding(config.pos_emb_grid_h * config.pos_emb_grid_w, self.hidden_size)
+        self.position_embedding_table = nn.Embedding(config.pos_emb_height * config.pos_emb_width, self.hidden_size)
         # FIXME: only if square images - vision utils don't yet support non-square
-        # For now assume pos_emb_grid_h == pos_emb_grid_w always, i.e. as in shared ckpt
-        self.num_grid_per_side = config.pos_emb_grid_h
+        # For now assume pos_emb_height == pos_emb_width always, i.e. as in shared ckpt
+        self.num_grid_per_side = config.pos_emb_height
 
     def interpolate_pos_encoding(self, embeddings: torch.Tensor, height: int, width: int) -> torch.Tensor:
         """
@@ -772,20 +754,6 @@ class OnyxVisionPatchEmbedder(nn.Module):
         return embeddings
 
 
-class OnyxTextScaledWordEmbedding(nn.Embedding):
-    """
-    This module overrides nn.Embeddings' forward by multiplying with embeddings scale.
-    """
-
-    def __init__(self, num_embeddings: int, embedding_dim: int, padding_idx: int, embed_scale: float = 1.0):
-        super().__init__(num_embeddings, embedding_dim, padding_idx)
-        self.scalar_embed_scale = embed_scale
-        self.register_buffer("embed_scale", torch.tensor(embed_scale), persistent=False)
-
-    def forward(self, input_ids: torch.Tensor):
-        return super().forward(input_ids) * self.embed_scale.to(self.weight.dtype)
-
-
 @auto_docstring
 class OnyxPreTrainedModel(PreTrainedModel):
     config: OnyxConfig
@@ -806,25 +774,13 @@ class OnyxPreTrainedModel(PreTrainedModel):
 
     @torch.no_grad()
     def _init_weights(self, module):
-        # Gemma2's init assumes every RMSNorm has a `weight`, but OnyxScalelessRMSNorm doesn't.
-        # Route it to the base PreTrainedModel init (which handles Linear/Embedding via initializer_range)
-        # and skip the RMSNorm branch for the scaleless variant.
-        if isinstance(module, OnyxScalelessRMSNorm):
-            return
         super()._init_weights(module)
-        # We initialize with 0s to be 1 centered as the RMSNorm here does (1 + weight)
-        if "RMSNorm" in module.__class__.__name__:
-            init.zeros_(module.weight)
-        elif isinstance(module, OnyxTextScaledWordEmbedding):
-            init.constant_(module.embed_scale, module.scalar_embed_scale)
-        if isinstance(module, OnyxFinalRMSNorm):
-            init.ones_(module.weight)
 
 
 class OnyxVisionModel(OnyxPreTrainedModel):
     config: OnyxVisionConfig
     main_input_name = "pixel_values"
-    input_modalities = ("image",)
+    input_modalities = ("image", "video")
     _can_record_outputs = {
         "hidden_states": OnyxVisionEncoderLayer,
         "attentions": OnyxVisionAttention,
@@ -834,35 +790,27 @@ class OnyxVisionModel(OnyxPreTrainedModel):
         super().__init__(config)
         self.patch_embedder = OnyxVisionPatchEmbedder(config)
         self.rotary_emb = OnyxVisionRotaryEmbedding(config)
-        self.ln_pre = nn.LayerNorm(config.hidden_size)
+        self.ln_pre = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.layers = nn.ModuleList([OnyxVisionEncoderLayer(config) for _ in range(config.num_hidden_layers)])
-        self.ln_post = nn.LayerNorm(config.hidden_size)
+        self.ln_post = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
-    def _pixel_shuffle_downsample(
-        self, hidden_states: torch.Tensor, grid_thw: torch.Tensor
-    ) -> tuple[torch.Tensor, torch.Tensor]:
-        """
-        x: (total_tokens, d) - packed, token order matches grid_thw
-        grid_thw: (num_images, 3)
-        Returns: downsampled pixels of size `(new_total_tokens, d * f * f)`
-        """
-        f = self.config.downsample_factor
-        d = hidden_states.shape[-1]
+    def pixel_shuffle(self, hidden_states: torch.Tensor, grid_thw: torch.Tensor) -> torch.Tensor:
+        factor = self.config.merge_size
+        dim = hidden_states.shape[-1]
 
         output = []
         offset = 0
 
-        for i, (t, h, w) in enumerate(grid_thw.tolist()):
+        for t, h, w in grid_thw:
             t, h, w = int(t), int(h), int(w)
             n_tokens = t * h * w
-            assert h % f == 0 and w % f == 0, f"grid_h={h}, grid_w={w} must be divisible by downsample_factor={f}"
 
             hidden_states_chunk = hidden_states[offset : offset + n_tokens]
 
             # per-frame downsample (t frames share the same h,w perm)
-            n_out_per_frame = (h // f) * (w // f)
+            n_out_per_frame = (h // factor) * (w // factor)
             ds_perm = torch.arange(h * w, device=hidden_states.device)
-            ds_perm = ds_perm.view(h // f, f, w // f, f).permute(0, 2, 1, 3).reshape(-1)
+            ds_perm = ds_perm.view(h // factor, factor, w // factor, factor).permute(0, 2, 1, 3).reshape(-1)
 
             if t > 1:
                 # offset the perm per frame so it indexes correctly into the flattened (t*h*w) sequence
@@ -872,9 +820,11 @@ class OnyxVisionModel(OnyxPreTrainedModel):
                 ds_perm_all = ds_perm
 
             hidden_states_downsampled = hidden_states_chunk[ds_perm_all]
-            hidden_states_downsampled = hidden_states_downsampled.view(t * n_out_per_frame, f * f, d)
+            hidden_states_downsampled = hidden_states_downsampled.view(t * n_out_per_frame, factor * factor, dim)
             hidden_states_downsampled = (
-                hidden_states_downsampled.permute(0, 2, 1).contiguous().view(t * n_out_per_frame, d * f * f)
+                hidden_states_downsampled.permute(0, 2, 1)
+                .contiguous()
+                .view(t * n_out_per_frame, dim * factor * factor)
             )
 
             output.append(hidden_states_downsampled)
@@ -894,15 +844,15 @@ class OnyxVisionModel(OnyxPreTrainedModel):
         window_index, cu_window_seqlens = get_vision_window_index(
             grid_thw,
             spatial_merge_size=1,
-            # assumes pos_emb_grid_h==pos_emb_grid_w, adapt to non-square if needed
-            window_size=self.config.pos_emb_grid_h * self.config.patch_size,
+            # assumes pos_emb_height==pos_emb_width, adapt to non-square if needed
+            window_size=self.config.pos_emb_height * self.config.patch_size,
             patch_size=self.config.patch_size,
             kwargs=kwargs,
         )
 
         inputs_embeds = self.patch_embedder(pixel_values, grid_thw)
         hidden_states = self.ln_pre(inputs_embeds)
-        hidden_states = hidden_states[None, window_index, :]  # unsqueeze single batch size
+        hidden_states = hidden_states[window_index, :]
 
         # Add `1` because ref implementation's position offset is `1`!
         position_ids = get_vision_position_ids(grid_thw, spatial_merge_size=1)
@@ -911,19 +861,18 @@ class OnyxVisionModel(OnyxPreTrainedModel):
         position_embeddings = self.rotary_emb(hidden_states, position_ids)
 
         for i, block in enumerate(self.layers):
-            is_global = (i == len(self.layers) - 1) or ((i + 1) % self.config.sparse_attention_factor == 0)
+            is_global = self.config.layer_types[i] == "full_attention"
             hidden_states = block(
                 hidden_states,
-                position_ids=position_ids,
                 position_embeddings=position_embeddings,
-                cu_seqlens=cu_seqlens if is_global or self.config.sparse_attention_factor == 0 else cu_window_seqlens,
+                cu_seqlens=cu_seqlens if is_global else cu_window_seqlens,
             )
 
         reverse_indices = torch.argsort(window_index)
-        hidden_states = hidden_states.squeeze(0)[reverse_indices, :]
+        hidden_states = hidden_states[reverse_indices, :]
 
         hidden_states = self.ln_post(hidden_states)
-        hidden_states = self._pixel_shuffle_downsample(hidden_states, grid_thw)
+        hidden_states = self.pixel_shuffle(hidden_states, grid_thw)
         return BaseModelOutputWithPooling(last_hidden_state=hidden_states)
 
 
@@ -943,7 +892,7 @@ class OnyxTextModel(OnyxPreTrainedModel):
             [OnyxDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
         # Final norm uses weight-as-scale (no offset), unlike the per-layer OnyxRMSNorm.
-        self.norm = OnyxFinalRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.norm = OnyxRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.rotary_emb = OnyxRotaryEmbedding(config)
         self.gradient_checkpointing = False
 
@@ -1015,37 +964,47 @@ class OnyxTextModel(OnyxPreTrainedModel):
         )
 
 
-@auto_docstring(
-    custom_intro="""
-    The Base Onyx model which consists of a vision backbone and a language model without language modeling head.,
-    """
-)
-class OnyxModel(OnyxPreTrainedModel):
-    # we are filtering the logits/labels so we shouldn't divide the loss based on num_items_in_batch
-    accepts_loss_kwargs = False
+class OnyxVisionAdapter(nn.Module):
+    def __init__(self, config) -> None:
+        super().__init__()
+        self.fc1 = nn.Linear(config.output_dim, config.adapter_dim, bias=False)
+        self.act = ACT2FN[config.hidden_act]
+        self.fc2 = nn.Linear(config.adapter_dim, config.adapter_dim, bias=False)
 
+    def forward(self, x) -> torch.Tensor:
+        return self.act(self.fc2(self.act(self.fc1(x))))
+
+
+class OnyxModel(OnyxPreTrainedModel):
     def __init__(self, config: OnyxConfig):
         super().__init__(config)
-        self.vision_tower = AutoModel.from_config(config=config.vision_config)
-        self.vocab_size = config.text_config.vocab_size
-
-        language_model = AutoModel.from_config(config=config.text_config)
-        self.language_model = language_model
+        self.vision_tower = OnyxVisionModel._from_config(config.vision_config)
+        self.language_model = AutoModel.from_config(config.text_config)
         self.vision_adapter = OnyxVisionAdapter(config.vision_config)
         self.vision_projection = nn.Linear(
             config.vision_config.adapter_dim, config.text_config.hidden_size, bias=False
         )
-        self.perception_emb_norm = OnyxScalelessRMSNorm(config.text_config.rms_norm_eps)
+        self.perception_emb_norm = OnyxRMSNorm(eps=config.text_config.rms_norm_eps, with_scale=False)
         self.post_init()
 
+    def get_input_embeddings(self):
+        return self.language_model.get_input_embeddings()
+
+    def set_input_embeddings(self, value):
+        self.language_model.set_input_embeddings(value)
+
     @can_return_tuple
-    @auto_docstring(custom_intro="Projects the last hidden state from the vision model into language model space.")
+    @auto_docstring
     def get_image_features(
         self,
         pixel_values: torch.FloatTensor,
         image_grid_thw: torch.LongTensor,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPooling:
+        r"""
+        image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
+            The temporal, height and width of feature shape of each image in LLM.
+        """
         vision_outputs = self.vision_tower(
             pixel_values=pixel_values,
             grid_thw=image_grid_thw,
@@ -1055,6 +1014,20 @@ class OnyxModel(OnyxPreTrainedModel):
         vision_features = self.vision_projection(vision_features)
         vision_outputs.pooler_output = self.perception_emb_norm(vision_features)
         return vision_outputs
+
+    def get_video_features(
+        self,
+        pixel_values_videos: torch.FloatTensor,
+        video_grid_thw: torch.LongTensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutputWithPooling:
+        r"""
+        pixel_values_videos (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
+            The tensors corresponding to the input videos.
+        video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
+            The temporal, height and width of feature shape of each video in LLM.
+        """
+        return self.get_image_features(pixel_values_videos, video_grid_thw, **kwargs)
 
     def get_placeholder_mask(
         self,
@@ -1102,81 +1075,76 @@ class OnyxModel(OnyxPreTrainedModel):
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        pixel_values: torch.FloatTensor | None = None,
-        image_grid_thw: torch.LongTensor | None = None,
-        pixel_values_videos: torch.FloatTensor | None = None,
-        video_grid_thw: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         use_cache: bool | None = None,
+        pixel_values: torch.Tensor | None = None,
+        image_grid_thw: torch.LongTensor | None = None,
+        pixel_values_videos: torch.Tensor | None = None,
+        video_grid_thw: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | OnyxModelOutputWithPast:
         r"""
-        Example:
-
-        ```python
-        TODO
-        ```"""
-        if (input_ids is None) ^ (inputs_embeds is not None):
-            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
+        image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
+            The temporal, height and width of feature shape of each image in LLM.
+        video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
+            The temporal, height and width of feature shape of each video in LLM.
+        """
 
         if inputs_embeds is None:
-            inputs_embeds = self.get_input_embeddings()(input_ids)
+            multimodal_mask = (input_ids == self.config.image_token_id) | (input_ids == self.config.video_token_id)
+            llm_input_ids = input_ids.clone()
+            llm_input_ids[multimodal_mask] = 0
+            inputs_embeds = self.get_input_embeddings()(llm_input_ids)
 
         if pixel_values is not None:
-            image_features = self.get_image_features(
-                pixel_values, image_grid_thw=image_grid_thw, return_dict=True
-            ).pooler_output
-            image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
-            special_image_mask, _ = self.get_placeholder_mask(
-                input_ids, inputs_embeds=inputs_embeds, image_features=image_features
+            image_embeds = self.get_image_features(pixel_values, image_grid_thw).pooler_output
+            image_embeds = image_embeds.to(device=inputs_embeds.device, dtype=inputs_embeds.dtype)
+            image_mask, _ = self.get_placeholder_mask(
+                input_ids, inputs_embeds=inputs_embeds, image_features=image_embeds
             )
-            inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, image_features)
+            inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_embeds)
 
         if pixel_values_videos is not None:
-            video_features = self.get_video_features(
-                pixel_values_videos, video_grid_thw=video_grid_thw, return_dict=True
-            ).pooler_output
-            video_features = video_features.to(inputs_embeds.device, inputs_embeds.dtype)
-            _, special_video_mask = self.get_placeholder_mask(
-                input_ids, inputs_embeds=inputs_embeds, video_features=video_features
+            video_embeds = self.get_video_features(pixel_values_videos, video_grid_thw).pooler_output
+            video_embeds = video_embeds.to(device=inputs_embeds.device, dtype=inputs_embeds.dtype)
+            _, video_mask = self.get_placeholder_mask(
+                input_ids, inputs_embeds=inputs_embeds, video_features=video_embeds
             )
-            inputs_embeds = inputs_embeds.masked_scatter(special_video_mask, video_features)
-
-        # It may already have been prepared by e.g. `generate`
-        if not isinstance(causal_mask_mapping := attention_mask, dict):
-            mask_kwargs = {
-                "config": self.config.get_text_config(),
-                "inputs_embeds": inputs_embeds,
-                "attention_mask": attention_mask,
-                "past_key_values": past_key_values,
-                "position_ids": position_ids,
-            }
-
-            causal_mask_mapping = create_masks_for_generate(**mask_kwargs)
+            inputs_embeds = inputs_embeds.masked_scatter(video_mask, video_embeds)
 
         outputs = self.language_model(
-            attention_mask=causal_mask_mapping,
+            input_ids=None,
             position_ids=position_ids,
+            attention_mask=attention_mask,
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
-            return_dict=True,
             **kwargs,
         )
-
         return OnyxModelOutputWithPast(
             last_hidden_state=outputs.last_hidden_state,
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            image_hidden_states=image_features if pixel_values is not None else None,
         )
 
-    @can_return_tuple
-    @auto_docstring(custom_intro="Projects the last hidden state from the vision model into language model space.")
+
+class OnyxForConditionalGeneration(OnyxPreTrainedModel, GenerationMixin):
+    _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
+    # Reference: fix gemma3 grad acc #37208
+    accepts_loss_kwargs = False
+
+    def __init__(self, config):
+        super().__init__(config)
+        self.model = OnyxModel(config)
+        self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
+
+        self.post_init()
+
+    @auto_docstring
     def get_video_features(
         self,
         pixel_values_videos: torch.FloatTensor,
@@ -1184,122 +1152,27 @@ class OnyxModel(OnyxPreTrainedModel):
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
+        pixel_values_videos (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
+            The tensors corresponding to the input videos.
         video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
             The temporal, height and width of feature shape of each video in LLM.
         """
-        vision_outputs = self.vision_tower(
-            pixel_values=pixel_values_videos,
-            grid_thw=video_grid_thw,
-            **kwargs,
-        )
-        vision_features = self.vision_adapter(vision_outputs.last_hidden_state)
-        vision_features = self.vision_projection(vision_features)
-        vision_outputs.pooler_output = self.perception_emb_norm(vision_features)
-        return vision_outputs
+        return self.model.get_video_features(pixel_values_videos, video_grid_thw, **kwargs)
 
-
-@auto_docstring
-class OnyxForCausalLM(OnyxPreTrainedModel, GenerationMixin):
-    _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
-    _tp_plan = {"lm_head": "colwise_gather_output"}
-    _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
-    config: OnyxTextConfig
-
-    def __init__(self, config: OnyxTextConfig):
-        super().__init__(config)
-        self.model = OnyxTextModel(config)
-        self.vocab_size = config.vocab_size
-        self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
-
-        # Initialize weights and apply final processing
-        self.post_init()
-
-    @can_return_tuple
     @auto_docstring
-    def forward(
+    def get_image_features(
         self,
-        input_ids: torch.LongTensor | None = None,
-        attention_mask: torch.Tensor | None = None,
-        position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
-        labels: torch.LongTensor | None = None,
-        use_cache: bool | None = None,
-        logits_to_keep: int | torch.Tensor = 0,
+        pixel_values: torch.FloatTensor,
+        image_grid_thw: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> CausalLMOutputWithPast:
+    ) -> tuple | BaseModelOutputWithPooling:
         r"""
-        Example:
-
-        ```python
-        >>> from transformers import AutoTokenizer, OnyxForCausalLM
-
-        >>> model = OnyxForCausalLM.from_pretrained("google/gemma-2-9b")
-        >>> tokenizer = AutoTokenizer.from_pretrained("google/gemma-2-9b")
-
-        >>> prompt = "What is your favorite condiment?"
-        >>> inputs = tokenizer(prompt, return_tensors="pt")
-
-        >>> # Generate
-        >>> generate_ids = model.generate(inputs.input_ids, max_length=30)
-        >>> tokenizer.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
-        "What is your favorite condiment?"
-        ```"""
-        outputs = self.model(
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-            position_ids=position_ids,
-            past_key_values=past_key_values,
-            inputs_embeds=inputs_embeds,
-            use_cache=use_cache,
-            **kwargs,
-        )
-
-        hidden_states = outputs.last_hidden_state
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(hidden_states[:, slice_indices, :])
-
-        # Onyx pre-scales logits by `output_multiplier` before the Gemma-style tanh softcap.
-        # Together with `final_logit_softcapping = T`, this gives `T * tanh(logits * mult / T)`.
-        logits = logits * self.config.output_multiplier
-        if self.config.final_logit_softcapping is not None:
-            logits = logits / self.config.final_logit_softcapping
-            logits = torch.tanh(logits)
-            logits = logits * self.config.final_logit_softcapping
-
-        loss = None
-        if labels is not None:
-            loss = self.loss_function(logits, labels, self.vocab_size, **kwargs)
-
-        return CausalLMOutputWithPast(
-            loss=loss,
-            logits=logits,
-            past_key_values=outputs.past_key_values,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
-        )
-
-
-@auto_docstring(
-    custom_intro="""
-    The Base Onyx model which consists of a vision backbone and a language model without language modeling head.,
-    """
-)
-class OnyxForConditionalGeneration(OnyxPreTrainedModel, GenerationMixin):
-    _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
-    # we are filtering the logits/labels so we shouldn't divide the loss based on num_items_in_batch
-    # Fix: https://github.com/huggingface/transformers/issues/40564
-    accepts_loss_kwargs = False
-
-    def __init__(self, config: OnyxConfig):
-        super().__init__(config)
-        self.model = OnyxModel(config)
-        self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
-        self.post_init()
-
-    @auto_docstring
-    def get_image_features(self, pixel_values: torch.FloatTensor, **kwargs: Unpack[TransformersKwargs]):
-        return self.model.get_image_features(pixel_values, **kwargs)
+        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
+            The tensors corresponding to the input images.
+        image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
+            The temporal, height and width of feature shape of each image in LLM.
+        """
+        return self.model.get_image_features(pixel_values, image_grid_thw, **kwargs)
 
     @can_return_tuple
     @auto_docstring
@@ -1322,46 +1195,47 @@ class OnyxForConditionalGeneration(OnyxPreTrainedModel, GenerationMixin):
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
-            config.text_config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
-            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.text_config.vocab_size]`.
+            config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
+            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
+        image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
+            The temporal, height and width of feature shape of each image in LLM.
+        video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
+            The temporal, height and width of feature shape of each video in LLM.
 
         Example:
 
         ```python
-        >>> from PIL import Image
-        >>> import httpx
-        >>> from io import BytesIO
         >>> from transformers import AutoProcessor, OnyxForConditionalGeneration
 
-        >>> model = OnyxForConditionalGeneration.from_pretrained("google/gemma-3-4b-it")
-        >>> processor = AutoProcessor.from_pretrained("google/gemma-3-4b-it")
+        >>> model = OnyxForConditionalGeneration.from_pretrained("moonshotai/Kimi-K2.6")
+        >>> processor = AutoProcessor.from_pretrained("moonshotai/Kimi-K2.6")
 
         >>> messages = [
-        ...     {
-        ...         "role": "system",
-        ...         "content": [
-        ...             {"type": "text", "text": "You are a helpful assistant."}
-        ...         ]
-        ...     },
-        ...     {
-        ...         "role": "user", "content": [
-        ...             {"type": "image", "url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"},
-        ...             {"type": "text", "text": "Where is the cat standing?"},
-        ...         ]
-        ...     },
-        ... ]
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "image",
+                        "image": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg",
+                    },
+                    {"type": "text", "text": "Describe the image."},
+                ],
+            }
+        ]
 
         >>> inputs = processor.apply_chat_template(
-        ...     messages,
-        ...     tokenize=True,
-        ...     return_dict=True,
-        ...     return_tensors="pt",
-        ...     add_generation_prompt=True
-        ... )
+            messages,
+            tokenize=True,
+            add_generation_prompt=True,
+            return_dict=True,
+            return_tensors="pt",
+        )
+
         >>> # Generate
-        >>> generate_ids = model.generate(**inputs)
-        >>> processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
-        "user\nYou are a helpful assistant.\n\n\n\n\n\nWhere is the cat standing?\nmodel\nBased on the image, the cat is standing in a snowy area, likely outdoors. It appears to"
+        >>> generated_ids = model.generate(**inputs, max_new_tokens=1024)
+        >>> generated_ids_trimmed = [out_ids[len(in_ids) :] for in_ids, out_ids in zip(inputs.input_ids, generated_ids)]
+        >>> output_text = processor.batch_decode(generated_ids_trimmed, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
+        >>> print(output_text)
         ```
         """
         outputs = self.model(
@@ -1407,45 +1281,39 @@ class OnyxForConditionalGeneration(OnyxPreTrainedModel, GenerationMixin):
         self,
         input_ids,
         past_key_values=None,
+        attention_mask=None,
         inputs_embeds=None,
         position_ids=None,
+        use_cache=True,
         pixel_values=None,
         pixel_values_videos=None,
-        attention_mask=None,
         image_grid_thw=None,
         video_grid_thw=None,
-        use_cache=True,
-        logits_to_keep=None,
         is_first_iteration=False,
         **kwargs,
     ):
-        # Overwritten -- custom `pixel_values` handling
+        # Overwritten -- in specific circumstances we don't want to forward image inputs to the model
+
         model_inputs = super().prepare_inputs_for_generation(
             input_ids,
             past_key_values=past_key_values,
-            inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
+            inputs_embeds=inputs_embeds,
             position_ids=position_ids,
+            pixel_values=pixel_values,
+            pixel_values_videos=pixel_values_videos,
+            image_grid_thw=image_grid_thw,
+            video_grid_thw=video_grid_thw,
             use_cache=use_cache,
-            logits_to_keep=logits_to_keep,
             is_first_iteration=is_first_iteration,
             **kwargs,
         )
 
-        if is_first_iteration or not use_cache:
-            model_inputs["pixel_values"] = pixel_values
-            model_inputs["image_grid_thw"] = image_grid_thw
-            model_inputs["pixel_values_videos"] = pixel_values_videos
-            model_inputs["video_grid_thw"] = video_grid_thw
+        if not is_first_iteration and use_cache:
+            model_inputs["pixel_values"] = None
+            model_inputs["pixel_values_videos"] = None
 
         return model_inputs
 
 
-__all__ = [
-    "OnyxPreTrainedModel",
-    "OnyxTextModel",
-    "OnyxVisionModel",
-    "OnyxModel",
-    "OnyxForCausalLM",
-    "OnyxForConditionalGeneration",
-]
+__all__ = ["OnyxPreTrainedModel", "OnyxTextModel", "OnyxVisionModel", "OnyxModel", "OnyxForConditionalGeneration"]
