@@ -493,23 +493,26 @@ class WhisperTokenizer(TokenizersBackend):
             remove_diacritics=remove_diacritics,
             **kwargs,
         )
-        if decode_with_timestamps:
-            # legacy method to decode timestamps when not included in the tokenizer vocabulary
-            text = self._decode_with_timestamps(
-                filtered_ids, time_precision=time_precision, skip_special_tokens=skip_special_tokens
-            )
-        else:
-            # Handle both single string and batch (list of strings) outputs
-            if isinstance(text, list):
-                text = [self._filter_timestamp_ids(t) for t in text]
-            else:
-                text = self._filter_timestamp_ids(text)
 
-        # retrieve offsets
+        # decode/ batch decode is now unified
+        is_batch = isinstance(text, list)
+        texts = text if is_batch else [text]
+        token_ids = token_ids if is_batch else [token_ids]
+
+        if decode_with_timestamps:
+            texts = [
+                self._decode_with_timestamps(t, time_precision=time_precision, skip_special_tokens=skip_special_tokens)
+                for t in texts
+            ]
+        else:
+            texts = [self._filter_timestamp_ids(t) for t in texts]
+
         if output_offsets:
-            offsets = self._compute_offsets(token_ids, time_precision=time_precision)
-            return {"text": text, "offsets": offsets}
-        return text
+            offsets = [self._compute_offsets(t, time_precision=time_precision) for t in token_ids]
+            results = [{"text": t, "offsets": o} for t, o in zip(texts, offsets)]
+            return results if is_batch else results[0]
+
+        return texts if is_batch else texts[0]
 
     def _decode(
         self, *args, normalize: bool = False, basic_normalize: bool = False, remove_diacritics: bool = False, **kwargs
