@@ -270,14 +270,24 @@ class AXK2GroupedRoutingTest(unittest.TestCase):
 
 @require_torch
 class AXK2HubCheckpointLayoutTest(unittest.TestCase):
-    def test_hub_checkpoint_layout_roundtrip(self):
-        # The A.X-K2 hub checkpoints store per-expert projections (`experts.{i}.gate_proj/...`),
-        # `W_down`/`W_up` gated-norm MLP names, and the output gate fused into `q_b_proj`.
-        # `save_pretrained` reverts the load-time conversions, so a save/load cycle exercises the whole
-        # hub layout in both directions and must reproduce the exact same logits.
+    def test_fused_gate_and_hub_layout_roundtrip(self):
+        # A.X-K2 fuses the query up-projection and the output gate into a single `q_gate_proj` (doubled
+        # input, no separate `g_proj`). The hub checkpoints store it under the vLLM name `q_b_proj`, with
+        # per-expert projections (`experts.{i}.gate_proj/...`) and `W_down`/`W_up` gated-norm MLP names.
+        # `save_pretrained` reverts the load-time conversions, so a save/load cycle exercises the whole hub
+        # layout in both directions and must reproduce the exact same logits.
         config = _tiny_grouped_config()
         torch.manual_seed(0)
         model = AXK2ForCausalLM(config).eval()
+
+        attn = model.model.layers[0].self_attn
+        self.assertEqual(attn.q_gate_proj.weight.shape[-1], 2 * config.q_lora_rank)
+        self.assertEqual(
+            attn.q_gate_proj.weight.shape[0], config.num_attention_heads * (config.qk_head_dim + config.v_head_dim)
+        )
+        self.assertFalse(hasattr(attn, "q_b_proj"))
+        self.assertFalse(hasattr(attn, "g_proj"))
+
         input_ids = torch.randint(0, config.vocab_size, (2, 7))
         with torch.no_grad():
             expected_logits = model(input_ids).logits
@@ -291,6 +301,8 @@ class AXK2HubCheckpointLayoutTest(unittest.TestCase):
             self.assertIn("model.layers.0.input_layernorm.W_down.weight", saved)
             self.assertIn("model.layers.0.input_layernorm.W_up.weight", saved)
             self.assertNotIn("model.layers.0.self_attn.g_proj.weight", saved)
+            self.assertNotIn("model.layers.0.self_attn.q_gate_proj.weight", saved)
+            # The fused projection is saved back under the vLLM `q_b_proj` name.
             fused_q_b_proj = saved["model.layers.0.self_attn.q_b_proj.weight"]
             self.assertEqual(fused_q_b_proj.shape[-1], 2 * config.q_lora_rank)
 
@@ -299,39 +311,6 @@ class AXK2HubCheckpointLayoutTest(unittest.TestCase):
                 reloaded_logits = reloaded(input_ids).logits
 
         torch.testing.assert_close(reloaded_logits, expected_logits, rtol=0.0, atol=0.0)
-
-
-@require_torch
-class AXK2FusedGateTest(unittest.TestCase):
-    def test_fused_gate_layout_and_roundtrip(self):
-        # The fp8 A.X-K2 releases keep the output gate fused into `q_b_proj` (`attn_gate_fused=True`): the
-        # model must keep it fused (no `g_proj`, doubled input) instead of splitting at load, and a
-        # save/load cycle must be bit-exact.
-        config = _tiny_grouped_config()
-        config.attn_gate_fused = True
-        torch.manual_seed(0)
-        model = AXK2ForCausalLM(config).eval()
-
-        attn = model.model.layers[0].self_attn
-        self.assertEqual(attn.q_b_proj.weight.shape[-1], 2 * config.q_lora_rank)
-        self.assertEqual(
-            attn.q_b_proj.weight.shape[0], config.num_attention_heads * (config.qk_head_dim + config.v_head_dim)
-        )
-        self.assertFalse(hasattr(attn, "g_proj") and attn.g_proj is not None)
-
-        input_ids = torch.randint(0, config.vocab_size, (2, 9))
-        with torch.no_grad():
-            expected = model(input_ids).logits
-
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            model.save_pretrained(tmp_dir)
-            saved = load_file(os.path.join(tmp_dir, "model.safetensors"))
-            self.assertIn("model.layers.0.self_attn.q_b_proj.weight", saved)
-            self.assertNotIn("model.layers.0.self_attn.g_proj.weight", saved)
-            reloaded = AXK2ForCausalLM.from_pretrained(tmp_dir).eval()
-            with torch.no_grad():
-                got = reloaded(input_ids).logits
-        torch.testing.assert_close(got, expected, rtol=0.0, atol=0.0)
 
 
 @slow

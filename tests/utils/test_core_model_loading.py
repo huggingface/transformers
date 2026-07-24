@@ -35,7 +35,6 @@ from transformers.core_model_loading import (
     MergeModulelist,
     PermuteForRope,
     PrefixChange,
-    SplitFusedMLAGate,
     VisionFuseAndPermuteForRope,
     VisionUnfuseAndPermuteForRope,
     WeightConverter,
@@ -240,25 +239,6 @@ class DummyRoot(PreTrainedModel):
         self.model = DummyTopModel(add_extra_moe)
         if with_mlp:
             self.mlp = DummyMLP()
-        self.post_init()
-
-
-class DummyMLAGateAttn(nn.Module):
-    """Minimal MLA attention holding A.X-K2's unfused `q_b_proj` (query) + `g_proj` (output gate)."""
-
-    def __init__(self, config):
-        super().__init__()
-        self.q_b_proj = DummyParamModule((config.num_attention_heads * config.qk_head_dim, config.q_lora_rank))
-        self.g_proj = DummyParamModule((config.num_attention_heads * config.v_head_dim, config.q_lora_rank))
-
-
-class DummyMLAGateModel(PreTrainedModel):
-    base_model_prefix = "model"
-    config: PreTrainedConfig
-
-    def __init__(self, config):
-        super().__init__(config)
-        self.self_attn = DummyMLAGateAttn(config)
         self.post_init()
 
 
@@ -535,114 +515,6 @@ class TestConvertAndLoadStateDict(unittest.TestCase):
 
         # Make sure both saved state_dict are identical
         self.assertTrue(compare_state_dicts(reversed_state_dict, state_dict))
-
-    def test_split_fused_mla_gate(self):
-        # A.X-K2 stores the MLA query projection and the attention output gate fused into a single
-        # block-diagonal `q_b_proj`: per head the query rows read only the first (post-norm) half of the
-        # input and the gate rows only the second (pre-norm) half. Loading must split that into `q_b_proj`
-        # (query) + `g_proj` (gate), and saving must fuse them back losslessly.
-        num_heads, qk_head_dim, v_head_dim, q_lora_rank = 4, 6, 3, 5
-        config = PreTrainedConfig()
-        config.num_attention_heads, config.qk_head_dim, config.v_head_dim, config.q_lora_rank = (
-            num_heads,
-            qk_head_dim,
-            v_head_dim,
-            q_lora_rank,
-        )
-
-        q_block = torch.randn(num_heads, qk_head_dim, q_lora_rank)
-        gate_block = torch.randn(num_heads, v_head_dim, q_lora_rank)
-        fused = torch.zeros(num_heads, qk_head_dim + v_head_dim, 2 * q_lora_rank)
-        fused[:, :qk_head_dim, :q_lora_rank] = q_block
-        fused[:, qk_head_dim:, q_lora_rank:] = gate_block
-        fused = fused.reshape(num_heads * (qk_head_dim + v_head_dim), 2 * q_lora_rank)
-
-        model = DummyMLAGateModel(config)
-        weight_mapping = [
-            WeightConverter(
-                "self_attn.q_b_proj.weight",
-                ["self_attn.q_b_proj.weight", "self_attn.g_proj.weight"],
-                operations=[SplitFusedMLAGate()],
-            ),
-        ]
-        state_dict = {"self_attn.q_b_proj.weight": fused.clone()}
-        load_config = LoadStateDictConfig(weight_mapping=weight_mapping)
-        loading_info, _ = convert_and_load_state_dict_in_model(model, state_dict, load_config, tp_plan=None)
-
-        self.assertEqual(loading_info.missing_keys, set())
-        self.assertEqual(loading_info.unexpected_keys, set())
-        self.assertEqual(loading_info.conversion_errors, {})
-
-        model_state = model.state_dict()
-        torch.testing.assert_close(
-            model_state["self_attn.q_b_proj.weight"], q_block.reshape(num_heads * qk_head_dim, q_lora_rank)
-        )
-        torch.testing.assert_close(
-            model_state["self_attn.g_proj.weight"], gate_block.reshape(num_heads * v_head_dim, q_lora_rank)
-        )
-
-        # Saving fuses the two blocks back into the original block-diagonal matrix, bit for bit.
-        reversed_state_dict = revert_weight_conversion(model, model.state_dict())
-        self.assertTrue(compare_state_dicts(reversed_state_dict, state_dict))
-
-    def test_split_fused_mla_gate_already_unfused_passthrough(self):
-        # A `q_b_proj` that is already unfused (a transformers-saved checkpoint, `q_lora_rank` columns
-        # instead of `2 * q_lora_rank`) must pass through untouched so load/save round-trips; `g_proj`
-        # then loads from its own separate key.
-        num_heads, qk_head_dim, v_head_dim, q_lora_rank = 4, 6, 3, 5
-        config = PreTrainedConfig()
-        config.num_attention_heads, config.qk_head_dim, config.v_head_dim, config.q_lora_rank = (
-            num_heads,
-            qk_head_dim,
-            v_head_dim,
-            q_lora_rank,
-        )
-
-        model = DummyMLAGateModel(config)
-        unfused_q = torch.randn(num_heads * qk_head_dim, q_lora_rank)
-        gate = torch.randn(num_heads * v_head_dim, q_lora_rank)
-        weight_mapping = [
-            WeightConverter(
-                "self_attn.q_b_proj.weight",
-                ["self_attn.q_b_proj.weight", "self_attn.g_proj.weight"],
-                operations=[SplitFusedMLAGate()],
-            ),
-        ]
-        state_dict = {"self_attn.q_b_proj.weight": unfused_q.clone(), "self_attn.g_proj.weight": gate.clone()}
-        load_config = LoadStateDictConfig(weight_mapping=weight_mapping)
-        loading_info, _ = convert_and_load_state_dict_in_model(model, state_dict, load_config, tp_plan=None)
-
-        self.assertEqual(loading_info.missing_keys, set())
-        self.assertEqual(loading_info.unexpected_keys, set())
-
-        model_state = model.state_dict()
-        torch.testing.assert_close(model_state["self_attn.q_b_proj.weight"], unfused_q)
-        torch.testing.assert_close(model_state["self_attn.g_proj.weight"], gate)
-
-    def test_split_fused_mla_gate_tp_row_shard(self):
-        # Under tensor parallelism the conversion runs per rank on a row shard of the fused matrix
-        # (colwise sharding cuts on head boundaries). Splitting a head-aligned shard must give exactly
-        # the corresponding rows of the full split, so the op derives the head count from the tensor.
-        num_heads, qk_head_dim, v_head_dim, q_lora_rank = 4, 6, 3, 5
-        config = PreTrainedConfig()
-        config.num_attention_heads, config.qk_head_dim, config.v_head_dim, config.q_lora_rank = (
-            num_heads,
-            qk_head_dim,
-            v_head_dim,
-            q_lora_rank,
-        )
-
-        fused = torch.randn(num_heads * (qk_head_dim + v_head_dim), 2 * q_lora_rank)
-        source = "self_attn.q_b_proj.weight"
-        targets = ["self_attn.q_b_proj.weight", "self_attn.g_proj.weight"]
-
-        full = SplitFusedMLAGate().convert({source: [fused]}, [source], targets, config)
-        local_heads = num_heads // 2
-        shard = fused[: local_heads * (qk_head_dim + v_head_dim)]
-        sharded = SplitFusedMLAGate().convert({source: [shard]}, [source], targets, config)
-
-        torch.testing.assert_close(sharded[targets[0]], full[targets[0]][: local_heads * qk_head_dim])
-        torch.testing.assert_close(sharded[targets[1]], full[targets[1]][: local_heads * v_head_dim])
 
     def test_qkv_chunk_rope_permute_with_fp8_quantization(self):
         if is_triton_available():

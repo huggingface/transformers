@@ -45,12 +45,6 @@ class AXK2Config(PreTrainedConfig, RotaryEmbeddingConfigMixin):
     gated_norm_rank (`int`, *optional*, defaults to 16):
         Bottleneck rank for the low-rank input-dependent gate used by `AXK2GatedRMSNorm`. The gate wraps
         `input_layernorm` on every layer and `post_attention_layernorm` on MoE layers.
-    attn_gate_fused (`bool`, *optional*, defaults to `False`):
-        Whether the attention output gate is stored fused into `q_b_proj` (vLLM layout: a doubled-input
-        block-diagonal matrix carrying both the query projection and the gate). When `True` the model keeps
-        `q_b_proj` fused and splits the *activation* in the forward — required for the released fp8
-        checkpoints, whose 128-block scales cannot be split along the per-head query/gate boundary. When
-        `False` the fused checkpoint is split into `q_b_proj` + `g_proj` at load (bf16 only).
 
     ```python
     >>> from transformers import AXK2Config, AXK2Model
@@ -69,9 +63,9 @@ class AXK2Config(PreTrainedConfig, RotaryEmbeddingConfigMixin):
     keys_to_ignore_at_inference = ["past_key_values"]
 
     base_model_tp_plan = {
-        "layers.*.self_attn.q_b_proj": "colwise",
-        # The output gate emits one scalar per attention-output column, so it shards with the heads.
-        "layers.*.self_attn.g_proj": "colwise",
+        # Fused query + output-gate up-projection; colwise shards it by head (each rank keeps whole heads,
+        # so the per-head query/gate split in the forward stays local).
+        "layers.*.self_attn.q_gate_proj": "colwise",
         "layers.*.self_attn.kv_a_proj_with_mqa": "mla_kv_a_proj",
         "layers.*.self_attn.kv_b_proj": "colwise",
         "layers.*.self_attn.o_proj": "rowwise",
@@ -140,7 +134,6 @@ class AXK2Config(PreTrainedConfig, RotaryEmbeddingConfigMixin):
     head_dim: int = 64
     layer_types: list[str] | None = None
     gated_norm_rank: int = 16
-    attn_gate_fused: bool = False
 
     def __post_init__(self, **kwargs):
         self.qk_head_dim = self.qk_nope_head_dim + self.qk_rope_head_dim

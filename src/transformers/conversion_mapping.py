@@ -26,7 +26,6 @@ from .core_model_loading import (
     Interleave,
     MergeModulelist,
     PrefixChange,
-    SplitFusedMLAGate,
     Transpose,
     VisionUnfuseAndPermuteForRope,
     WeightConverter,
@@ -254,19 +253,11 @@ def _build_checkpoint_conversion_mapping():
             # (`fc1` / `fc2`). Bridge the names on load (and back on save).
             WeightRenaming(source_patterns=r"\.W_down\.", target_patterns=".mlp.fc1."),
             WeightRenaming(source_patterns=r"\.W_up\.", target_patterns=".mlp.fc2."),
-            # The released A.X-K2 checkpoint fuses the attention output gate into `q_b_proj` (vLLM layout):
-            # a block-diagonal `[num_heads * (qk_head_dim + v_head_dim), 2 * q_lora_rank]` matrix. Split it
-            # back into the canonical `q_b_proj` (post-norm -> query) + `g_proj` (pre-norm -> gate) at load
-            # time; the reverse op re-fuses it on save. Experts are already stored stacked, so no MoE
-            # conversion is needed.
-            WeightConverter(
-                source_patterns="self_attn.q_b_proj.weight",
-                target_patterns=[
-                    "self_attn.q_b_proj.weight",
-                    "self_attn.g_proj.weight",
-                ],
-                operations=[SplitFusedMLAGate()],
-            ),
+            # The released checkpoints fuse the query up-projection and the attention output gate into a
+            # single `q_b_proj` (vLLM layout); the model keeps it fused under the clearer name `q_gate_proj`
+            # and splits the activation in the forward. A plain rename (kept fp8-safe: no weight split, and
+            # the prefix also renames the `weight_scale_inv` companion).
+            WeightRenaming(source_patterns=r"self_attn\.q_b_proj\.", target_patterns="self_attn.q_gate_proj."),
         ],
         "gemma4_unified": [
             WeightRenaming(source_patterns=r"vision_embedder\.patch_ln1", target_patterns="embed_vision.patch_ln1"),
@@ -2023,14 +2014,6 @@ def get_model_conversion_mapping(
 
     if add_legacy:
         weight_conversions.extend(get_checkpoint_conversion_mapping("legacy"))
-
-    # Let a model drop registered conversions that do not apply to its particular config (the mapping is
-    # keyed by `model_type`/class name and cannot see the config). E.g. A.X-K2 keeps `q_b_proj` fused when
-    # `attn_gate_fused=True`, so its `SplitFusedMLAGate` converter must not run (splitting is impossible for
-    # the fp8 releases and unnecessary for a fused model).
-    filter_conversions = getattr(model, "filter_checkpoint_conversions", None)
-    if filter_conversions is not None:
-        weight_conversions = filter_conversions(weight_conversions)
 
     # Let the quantizer rewrite / augment the conversion pipeline. This is where the
     # FP8 dequantizer (when `dequantize=True`) prepends a `Fp8Dequantize` op to

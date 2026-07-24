@@ -526,81 +526,60 @@ def apply_rotary_pos_emb_interleave(q, k, cos, sin, position_ids=None, unsqueeze
 class AXK2Attention(nn.Module):
     """DeepSeek-V3.2 MLA + SGA indexer, plus an input-dependent sigmoid gate on the attention output.
 
-    The output gate is stored fused into `q_b_proj` in the vLLM-style released checkpoints (a doubled-input
-    block-diagonal matrix). Two layouts are supported:
+    A.X-K2 fuses the query up-projection and the output gate into a single `q_gate_proj` (the vLLM-style
+    released layout): a doubled input `[post-norm q | pre-norm q]` maps to a per-head `[query | gate]`
+    output, which the forward splits at the *activation* level. This is kept fused (rather than split into
+    separate `q_b_proj` + `g_proj` at load) because the released fp8 checkpoints cannot be split — their
+    128-block scales straddle the per-head query/gate boundary — while the fused matrix is 128-aligned and
+    loads directly. Named distinctly from DeepSeek's query-only `q_b_proj` since it also carries the gate.
 
-    * `attn_gate_fused=False` (default): the weight converter splits that matrix into `q_b_proj` (query) +
-      `g_proj` (gate) at load, giving the canonical unfused modeling form. bf16 only.
-    * `attn_gate_fused=True`: `q_b_proj` is kept fused and the *activation* is split into query and gate in
-      the forward. Required for the fp8 releases, whose 128-block scales cannot be split along the per-head
-      query/gate boundary; a fused `q_b_proj` loads directly (its dims are 128-aligned).
-
-    The forward otherwise mirrors DeepSeek-V3.2's, differing only in: the indexer/output-gate read the
-    pre-norm q bottleneck, and the sigmoid gate is applied before `o_proj`.
+    Standalone (not inheriting `DeepseekV32Attention`) so the module has `q_gate_proj` and no leftover
+    `q_b_proj`; the forward differs from DeepSeek-V3.2 only in: the fused query/gate projection, the
+    indexer/output-gate reading the pre-norm q bottleneck, and the sigmoid gate applied before `o_proj`.
     """
 
     def __init__(self, config: AXK2Config, layer_idx: int):
+        # A.X-K2 always uses the query LoRA bottleneck, so the `q_lora_rank is None` branch is dropped.
         super().__init__()
         self.config = config
         self.layer_idx = layer_idx
         self.num_key_value_groups = config.num_attention_heads // config.num_key_value_heads
         self.attention_dropout = config.attention_dropout
         self.num_heads = config.num_attention_heads
-
         self.q_lora_rank = config.q_lora_rank
         self.qk_rope_head_dim = config.qk_rope_head_dim
         self.kv_lora_rank = config.kv_lora_rank
         self.v_head_dim = config.v_head_dim
         self.qk_nope_head_dim = config.qk_nope_head_dim
         self.qk_head_dim = config.qk_head_dim
-
         self.is_causal = True
-        if self.q_lora_rank is None:
-            self.q_proj = nn.Linear(config.hidden_size, self.num_heads * self.qk_head_dim, bias=False)
-        else:
-            self.q_a_proj = nn.Linear(config.hidden_size, config.q_lora_rank, bias=config.attention_bias)
-            self.q_a_layernorm = AXK2RMSNorm(config.q_lora_rank)
-            self.q_b_proj = nn.Linear(config.q_lora_rank, self.num_heads * self.qk_head_dim, bias=False)
 
+        self.q_a_proj = nn.Linear(config.hidden_size, config.q_lora_rank, bias=config.attention_bias)
+        self.q_a_layernorm = AXK2RMSNorm(config.q_lora_rank)
+        # Fused query up-projection + output gate: doubled input [q_post | q_pre], per-head output
+        # [query (qk_head_dim) | gate (v_head_dim)]; the forward splits the activation.
+        self.q_gate_proj = nn.Linear(
+            2 * config.q_lora_rank, self.num_heads * (self.qk_head_dim + self.v_head_dim), bias=False
+        )
         self.kv_a_proj_with_mqa = nn.Linear(
-            config.hidden_size,
-            self.kv_lora_rank + self.qk_rope_head_dim,
-            bias=config.attention_bias,
+            config.hidden_size, self.kv_lora_rank + self.qk_rope_head_dim, bias=config.attention_bias
         )
         self.kv_a_layernorm = AXK2RMSNorm(self.kv_lora_rank)
         self.kv_b_proj = nn.Linear(
-            self.kv_lora_rank,
-            self.num_heads * (self.qk_nope_head_dim + self.v_head_dim),
-            bias=False,
+            self.kv_lora_rank, self.num_heads * (self.qk_nope_head_dim + self.v_head_dim), bias=False
         )
-
-        self.o_proj = nn.Linear(
-            self.num_heads * self.v_head_dim,
-            config.hidden_size,
-            bias=config.attention_bias,
-        )
+        self.o_proj = nn.Linear(self.num_heads * self.v_head_dim, config.hidden_size, bias=config.attention_bias)
 
         self.scaling = self.qk_head_dim ** (-0.5)
         self.scaling = yarn_apply_mscale(config.rope_parameters, self.scaling)
         self.indexer = AXK2Indexer(config, layer_idx)
-        self.attn_gate_fused = config.attn_gate_fused
-        if self.attn_gate_fused:
-            # Doubled input [q_post | q_pre], per-head output [query (qk_head_dim) | gate (v_head_dim)].
-            self.q_b_proj = nn.Linear(
-                2 * config.q_lora_rank, self.num_heads * (self.qk_head_dim + self.v_head_dim), bias=False
-            )
-        else:
-            self.g_proj = nn.Linear(config.q_lora_rank, self.num_heads * self.v_head_dim, bias=False)
 
     def expand_kv(self, k_nope: torch.Tensor, k_pe: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         key_shape = (*k_nope.shape[:-1], -1, self.qk_nope_head_dim + self.v_head_dim)
-
         k_nope = self.kv_b_proj(k_nope).view(key_shape).transpose(1, 2)
         k_nope, value_states = torch.split(k_nope, [self.qk_nope_head_dim, self.v_head_dim], dim=-1)
-
         k_pe = k_pe.expand(*k_nope.shape[:-1], -1)
         key_states = torch.cat((k_nope, k_pe), dim=-1)
-
         return key_states, value_states
 
     def forward(
@@ -613,22 +592,18 @@ class AXK2Attention(nn.Module):
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
         batch_size, seq_length = hidden_states.shape[:-1]
-        query_shape = (batch_size, seq_length, -1, self.qk_head_dim)
 
         # `q_compressed` (pre-norm) feeds the indexer and the output gate; `q_resid` (post-norm) feeds the
-        # main query projection.
+        # main query projection. One fused projection over [post-norm | pre-norm], split per head into query
+        # + gate. `-1` for the head count keeps this correct under tensor-parallel (colwise) sharding, where
+        # each rank holds only a subset of heads.
         q_compressed = self.q_a_proj(hidden_states)
         q_resid = self.q_a_layernorm(q_compressed)
-        if self.attn_gate_fused:
-            # One projection over [post-norm | pre-norm]; split the per-head output into query + gate.
-            qg = self.q_b_proj(torch.cat([q_resid, q_compressed], dim=-1))
-            qg = qg.view(batch_size, seq_length, self.num_heads, self.qk_head_dim + self.v_head_dim)
-            q_states, gate = torch.split(qg, [self.qk_head_dim, self.v_head_dim], dim=-1)
-            q_states = q_states.transpose(1, 2)
-            gate = gate.reshape(batch_size, seq_length, self.num_heads * self.v_head_dim)
-        else:
-            q_states = self.q_b_proj(q_resid).view(query_shape).transpose(1, 2)
-            gate = None
+        qg = self.q_gate_proj(torch.cat([q_resid, q_compressed], dim=-1))
+        qg = qg.view(batch_size, seq_length, -1, self.qk_head_dim + self.v_head_dim)
+        q_states, gate = torch.split(qg, [self.qk_head_dim, self.v_head_dim], dim=-1)
+        q_states = q_states.transpose(1, 2)
+        gate = gate.reshape(batch_size, seq_length, -1)
         q_pass, q_rot = torch.split(q_states, [self.qk_nope_head_dim, self.qk_rope_head_dim], dim=-1)
 
         compressed_kv = self.kv_a_proj_with_mqa(hidden_states)
@@ -688,9 +663,7 @@ class AXK2Attention(nn.Module):
         )
 
         attn_output = attn_output.reshape(batch_size, seq_length, -1).contiguous()
-        # Input-dependent sigmoid gate on the attention output (from the fused projection, or `g_proj`).
-        if gate is None:
-            gate = self.g_proj(q_compressed)
+        # Input-dependent sigmoid gate on the attention output (the gate half of the fused projection).
         attn_output = (attn_output * torch.sigmoid(gate.float())).to(attn_output.dtype)
         attn_output = self.o_proj(attn_output)
         return attn_output, attn_weights
@@ -776,21 +749,6 @@ class AXK2PreTrainedModel(PreTrainedModel):
         elif isinstance(module, AXK2Experts):
             init.normal_(module.gate_up_proj, mean=0.0, std=self.config.initializer_range)
             init.normal_(module.down_proj, mean=0.0, std=self.config.initializer_range)
-
-    def filter_checkpoint_conversions(self, conversions):
-        # When `q_b_proj` is kept fused (`attn_gate_fused`), it loads directly (a single fp8-safe linear),
-        # so the `SplitFusedMLAGate` converter must not run: splitting is impossible for the fp8 releases
-        # (128-block scales straddle the per-head query/gate boundary) and the loader's fp8 scale-folding
-        # only supports merge-style converters, so a split converter trips the many-to-many arity guard.
-        if not getattr(self.config, "attn_gate_fused", False):
-            return conversions
-        from ...core_model_loading import SplitFusedMLAGate
-
-        return [
-            conversion
-            for conversion in conversions
-            if not any(isinstance(op, SplitFusedMLAGate) for op in getattr(conversion, "operations", []))
-        ]
 
 
 @auto_docstring
