@@ -35,50 +35,50 @@ _LEGACY_FIELD_MAP = {
     "n_relative_chain_bins": "n_relative_chain_bins",
     "num_loops": "num_loops",
     "num_diffusion_samples": "num_diffusion_samples",
-    "msa_encoder_overwrite": "msa_encoder_overwrite",
+    "msa_encoder.overwrite": "msa_encoder_overwrite",
     "folding_trunk_num_hidden_layers": "folding_trunk.n_layers",
-    "atom_encoder_hidden_size": "inputs.atom_encoder.d_atom",
-    "atom_encoder_token_hidden_size": "inputs.atom_encoder.d_token",
-    "atom_encoder_num_hidden_layers": "inputs.atom_encoder.n_blocks",
-    "atom_encoder_num_attention_heads": "inputs.atom_encoder.n_heads",
-    "atom_encoder_expansion_ratio": "inputs.atom_encoder.expansion_ratio",
-    "atom_encoder_spatial_rope_base_frequency": "inputs.atom_encoder.spatial_rope_base_frequency",
-    "atom_encoder_n_spatial_rope_pairs_per_axis": "inputs.atom_encoder.n_spatial_rope_pairs_per_axis",
-    "atom_encoder_n_uid_rope_pairs": "inputs.atom_encoder.n_uid_rope_pairs",
-    "atom_encoder_uid_rope_base_frequency": "inputs.atom_encoder.uid_rope_base_frequency",
-    "diffusion_sigma_data": "structure_head.diffusion_module.sigma_data",
-    "diffusion_atom_hidden_size": "structure_head.diffusion_module.c_atom",
-    "diffusion_token_hidden_size": "structure_head.diffusion_module.c_token",
-    "diffusion_fourier_dim": "structure_head.diffusion_module.fourier_dim",
-    "diffusion_atom_num_blocks": "structure_head.diffusion_module.atom_num_blocks",
-    "diffusion_atom_num_heads": "structure_head.diffusion_module.atom_num_heads",
-    "diffusion_token_num_blocks": "structure_head.diffusion_module.token_num_blocks",
-    "diffusion_token_num_heads": "structure_head.diffusion_module.token_num_heads",
-    "diffusion_transition_multiplier": "structure_head.diffusion_module.transition_multiplier",
-    "structure_head_distogram_bins": "structure_head.distogram_bins",
-    "structure_head_gamma_0": "structure_head.gamma_0",
-    "structure_head_gamma_min": "structure_head.gamma_min",
-    "structure_head_noise_scale": "structure_head.noise_scale",
-    "structure_head_step_scale": "structure_head.step_scale",
-    "structure_head_inference_s_max": "structure_head.inference_s_max",
-    "structure_head_inference_s_min": "structure_head.inference_s_min",
-    "structure_head_inference_p": "structure_head.inference_p",
-    "structure_head_inference_num_steps": "structure_head.inference_num_steps",
-    "confidence_head_num_hidden_layers": "confidence_head.folding_trunk.n_layers",
-    "confidence_head_num_plddt_bins": "confidence_head.num_plddt_bins",
-    "confidence_head_num_pde_bins": "confidence_head.num_pde_bins",
-    "confidence_head_num_pae_bins": "confidence_head.num_pae_bins",
-    "confidence_head_min_dist": "confidence_head.min_dist",
-    "confidence_head_max_dist": "confidence_head.max_dist",
-    "confidence_head_distogram_bins": "confidence_head.distogram_bins",
-    "msa_encoder_hidden_size": "msa_encoder.d_msa",
-    "msa_encoder_outer_hidden_size": "msa_encoder.d_hidden",
-    "msa_encoder_num_hidden_layers": "msa_encoder.n_layers",
-    "msa_encoder_num_attention_heads": "msa_encoder.n_heads_msa",
-    "msa_encoder_head_width": "msa_encoder.msa_head_width",
-    "lm_encoder_num_hidden_layers": "lm_encoder.n_layers",
-    "lm_encoder_lm_dropout": "lm_encoder.lm_dropout",
-    "lm_encoder_per_loop_lm_dropout": "lm_encoder.per_loop_lm_dropout",
+    "atom_encoder.hidden_size": "inputs.atom_encoder.d_atom",
+    "atom_encoder.token_hidden_size": "inputs.atom_encoder.d_token",
+    "atom_encoder.num_hidden_layers": "inputs.atom_encoder.n_blocks",
+    "atom_encoder.num_attention_heads": "inputs.atom_encoder.n_heads",
+    "atom_encoder.expansion_ratio": "inputs.atom_encoder.expansion_ratio",
+    "atom_encoder.spatial_rope_base_frequency": "inputs.atom_encoder.spatial_rope_base_frequency",
+    "atom_encoder.n_spatial_rope_pairs_per_axis": "inputs.atom_encoder.n_spatial_rope_pairs_per_axis",
+    "atom_encoder.n_uid_rope_pairs": "inputs.atom_encoder.n_uid_rope_pairs",
+    "atom_encoder.uid_rope_base_frequency": "inputs.atom_encoder.uid_rope_base_frequency",
+    "structure_head.diffusion_module.sigma_data": "structure_head.diffusion_module.sigma_data",
+    "structure_head.diffusion_module.atom_hidden_size": "structure_head.diffusion_module.c_atom",
+    "structure_head.diffusion_module.token_hidden_size": "structure_head.diffusion_module.c_token",
+    "structure_head.diffusion_module.fourier_dim": "structure_head.diffusion_module.fourier_dim",
+    "structure_head.diffusion_module.atom_num_blocks": "structure_head.diffusion_module.atom_num_blocks",
+    "structure_head.diffusion_module.atom_num_heads": "structure_head.diffusion_module.atom_num_heads",
+    "structure_head.diffusion_module.token_num_blocks": "structure_head.diffusion_module.token_num_blocks",
+    "structure_head.diffusion_module.token_num_heads": "structure_head.diffusion_module.token_num_heads",
+    "structure_head.diffusion_module.transition_multiplier": "structure_head.diffusion_module.transition_multiplier",
+    "structure_head.distogram_bins": "structure_head.distogram_bins",
+    "structure_head.gamma_0": "structure_head.gamma_0",
+    "structure_head.gamma_min": "structure_head.gamma_min",
+    "structure_head.noise_scale": "structure_head.noise_scale",
+    "structure_head.step_scale": "structure_head.step_scale",
+    "structure_head.inference_s_max": "structure_head.inference_s_max",
+    "structure_head.inference_s_min": "structure_head.inference_s_min",
+    "structure_head.inference_p": "structure_head.inference_p",
+    "structure_head.inference_num_steps": "structure_head.inference_num_steps",
+    "confidence_head.num_hidden_layers": "confidence_head.folding_trunk.n_layers",
+    "confidence_head.num_plddt_bins": "confidence_head.num_plddt_bins",
+    "confidence_head.num_pde_bins": "confidence_head.num_pde_bins",
+    "confidence_head.num_pae_bins": "confidence_head.num_pae_bins",
+    "confidence_head.min_dist": "confidence_head.min_dist",
+    "confidence_head.max_dist": "confidence_head.max_dist",
+    "confidence_head.distogram_bins": "confidence_head.distogram_bins",
+    "msa_encoder.hidden_size": "msa_encoder.d_msa",
+    "msa_encoder.outer_hidden_size": "msa_encoder.d_hidden",
+    "msa_encoder.num_hidden_layers": "msa_encoder.n_layers",
+    "msa_encoder.num_attention_heads": "msa_encoder.n_heads_msa",
+    "msa_encoder.head_width": "msa_encoder.msa_head_width",
+    "lm_encoder.num_hidden_layers": "lm_encoder.n_layers",
+    "lm_encoder.lm_dropout": "lm_encoder.lm_dropout",
+    "lm_encoder.per_loop_lm_dropout": "lm_encoder.per_loop_lm_dropout",
     "parcae_num_coda_layers": "parcae.coda_n_layers",
 }
 
@@ -182,14 +182,22 @@ def _leaf_paths(cfg: dict, prefix: str = "") -> set[str]:
     return paths
 
 
-def flatten_legacy_config(old: dict) -> dict:
-    flat = {flat_key: _get_path(old, old_path) for flat_key, old_path in _LEGACY_FIELD_MAP.items()}
+def build_legacy_config(old: dict) -> dict:
+    """Reshape the research checkpoint's nested config into the port's nested EsmFold2Config layout
+    (``_LEGACY_FIELD_MAP`` maps each dotted port path to its dotted source path)."""
+    config: dict = {}
+    for port_path, old_path in _LEGACY_FIELD_MAP.items():
+        node = config
+        parts = port_path.split(".")
+        for part in parts[:-1]:
+            node = node.setdefault(part, {})
+        node[parts[-1]] = _get_path(old, old_path)
     if "dtype" in old:
-        flat["dtype"] = old["dtype"]
+        config["dtype"] = old["dtype"]
     unexpected = _leaf_paths(old) - (set(_LEGACY_FIELD_MAP.values()) | _LEGACY_DROP_PATHS | {"dtype"})
     if unexpected:
         raise ValueError(f"unmapped fields in the source ESMFold2 config: {sorted(unexpected)}")
-    return flat
+    return config
 
 
 def _resolve_dir(path_or_repo: str) -> str:
@@ -207,10 +215,10 @@ def _load_state_dict(directory: str) -> dict[str, torch.Tensor]:
 
 
 def build_config(esmfold2_dir: str, esmc_dir: str) -> EsmFold2Config:
-    flat = flatten_legacy_config(_read_json(esmfold2_dir))
-    flat["architectures"] = ["EsmFold2Model"]  # experimental repos ship a now-removed architecture string
-    flat["esmc_config"] = _read_json(esmc_dir)
-    return EsmFold2Config.from_dict(flat)
+    config = build_legacy_config(_read_json(esmfold2_dir))
+    config["architectures"] = ["EsmFold2Model"]  # experimental repos ship a now-removed architecture string
+    config["esmc_config"] = _read_json(esmc_dir)
+    return EsmFold2Config.from_dict(config)
 
 
 def rename_trunk_keys(trunk: dict[str, torch.Tensor]) -> dict[str, torch.Tensor]:

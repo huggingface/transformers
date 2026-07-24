@@ -54,9 +54,9 @@ def get_tiny_config(**overrides) -> "EsmFold2Config":
     """A minimal but internally consistent ESMFold2 config for CPU testing.
 
     Constraints (see modeling): 3D RoPE needs ``3*n_spatial + n_uid <= head_dim//2``
-    (head_dim = atom_encoder_hidden_size / atom_encoder_num_attention_heads =
-    diffusion_atom_hidden_size / diffusion_atom_num_heads = 8 here), and
-    ``single_inputs_size == 67 + atom_encoder_token_hidden_size//2`` (the feature-concat
+    (head_dim = atom_encoder.hidden_size / atom_encoder.num_attention_heads =
+    structure_head.diffusion_module.atom_hidden_size / .atom_num_heads = 8 here), and
+    ``single_inputs_size == 67 + atom_encoder.token_hidden_size//2`` (the feature-concat
     width; 83 = 67 + 32//2), which also feeds the diffusion conditioning.
     """
     kwargs = {
@@ -68,26 +68,34 @@ def get_tiny_config(**overrides) -> "EsmFold2Config":
         "esmc_config": {"d_model": 32, "n_heads": 2, "n_layers": 1, "vocab_size": 64},
         "folding_trunk_num_hidden_layers": 1,
         "sliding_window": 8,
-        "atom_encoder_hidden_size": 16,
-        "atom_encoder_token_hidden_size": 32,
-        "atom_encoder_num_hidden_layers": 1,
-        "atom_encoder_num_attention_heads": 2,
-        "atom_encoder_n_spatial_rope_pairs_per_axis": 1,
-        "atom_encoder_n_uid_rope_pairs": 1,
-        "diffusion_atom_hidden_size": 16,
-        "diffusion_token_hidden_size": 32,
-        "diffusion_atom_num_blocks": 1,
-        "diffusion_atom_num_heads": 2,
-        "diffusion_token_num_blocks": 1,
-        "diffusion_token_num_heads": 2,
-        "structure_head_distogram_bins": 8,
-        "confidence_head_num_plddt_bins": 4,
-        "confidence_head_num_pde_bins": 4,
-        "confidence_head_num_pae_bins": 4,
-        "confidence_head_distogram_bins": 8,
-        "confidence_head_num_hidden_layers": 1,
         "parcae_num_coda_layers": 1,
-        "lm_encoder_num_hidden_layers": 1,
+        "atom_encoder": {
+            "hidden_size": 16,
+            "token_hidden_size": 32,
+            "num_hidden_layers": 1,
+            "num_attention_heads": 2,
+            "n_spatial_rope_pairs_per_axis": 1,
+            "n_uid_rope_pairs": 1,
+        },
+        "structure_head": {
+            "distogram_bins": 8,
+            "diffusion_module": {
+                "atom_hidden_size": 16,
+                "token_hidden_size": 32,
+                "atom_num_blocks": 1,
+                "atom_num_heads": 2,
+                "token_num_blocks": 1,
+                "token_num_heads": 2,
+            },
+        },
+        "confidence_head": {
+            "num_plddt_bins": 4,
+            "num_pde_bins": 4,
+            "num_pae_bins": 4,
+            "distogram_bins": 8,
+            "num_hidden_layers": 1,
+        },
+        "lm_encoder": {"num_hidden_layers": 1},
     }
     kwargs.update(overrides)
     return EsmFold2Config(**kwargs)
@@ -111,7 +119,7 @@ class EsmFold2ConfigTest(unittest.TestCase):
         self.config_tester.run_common_tests()
 
     def test_config_round_trip(self):
-        config = EsmFold2Config(pairwise_hidden_size=72, single_inputs_size=99, atom_encoder_hidden_size=64)
+        config = EsmFold2Config(pairwise_hidden_size=72, single_inputs_size=99, atom_encoder={"hidden_size": 64})
         with tempfile.TemporaryDirectory() as tmp:
             config.save_pretrained(tmp)
             reloaded = EsmFold2Config.from_pretrained(tmp)
@@ -119,7 +127,7 @@ class EsmFold2ConfigTest(unittest.TestCase):
         self.assertEqual(reloaded.to_dict(), config.to_dict())
         self.assertEqual(reloaded.pairwise_hidden_size, 72)
         self.assertEqual(reloaded.single_inputs_size, 99)
-        self.assertEqual(reloaded.atom_encoder_hidden_size, 64)
+        self.assertEqual(reloaded.atom_encoder.hidden_size, 64)
         # The bundled ESMC backbone round-trips as a PreTrainedConfig sub-config, not a dict.
         self.assertEqual(type(reloaded.esmc_config).__name__, "EsmcConfig")
 
@@ -155,7 +163,7 @@ class EsmFold2ModelTest(unittest.TestCase):
                 self.assertEqual(coords.shape[0], 1)  # num_diffusion_samples
                 self.assertEqual(coords.shape[-1], 3)  # xyz
                 self.assertTrue(torch.isfinite(coords).all())
-                self.assertEqual(out["distogram_logits"].shape[-1], model.config.structure_head_distogram_bins)
+                self.assertEqual(out["distogram_logits"].shape[-1], model.config.structure_head.distogram_bins)
 
     def test_attention_dispatch_attached(self):
         model = self._build("eager")
