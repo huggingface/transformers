@@ -1732,6 +1732,18 @@ class ConfigArgs:
     """,
     }
 
+    image_grid_thw = {
+        "description": """
+    The temporal, height and width of feature shape of each image in LLM.
+    """,
+    }
+
+    video_grid_thw = {
+        "description": """
+    The temporal, height and width of feature shape of each video in LLM.
+    """,
+    }
+
     mamba_d_state = state_size
     mamba_num_heads = mamba_n_heads
     mamba_head_dim = mamba_d_head
@@ -1840,6 +1852,20 @@ class ConfigArgs:
 
 
 class ModelArgs:
+    image_grid_thw = {
+        "description": """
+    The temporal, height and width of feature shape of each image in LLM.
+    """,
+        "shape": "of shape `(num_images, 3)`",
+    }
+
+    video_grid_thw = {
+        "description": """
+    The temporal, height and width of feature shape of each video in LLM.
+    """,
+        "shape": "of shape `(num_videos, 3)`",
+    }
+
     labels = {
         "description": """
     Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,

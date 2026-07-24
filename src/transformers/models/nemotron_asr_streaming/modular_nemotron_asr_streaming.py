@@ -131,10 +131,6 @@ class NemotronAsrStreamingEncoderConfig(ParakeetEncoderConfig):
 @strict
 class NemotronAsrStreamingConfig(ParakeetRNNTConfig):
     r"""
-    This is the NemotronAsrStreaming transducer configuration. The RNN-T (RNN Transducer) joint network emits token
-    logits only (so the joint head outputs just `vocab_size` logits), and during greedy decoding the encoder
-    frame pointer advances by exactly one frame on each blank emission.
-
     decoder_hidden_size (`int`, *optional*, defaults to 640):
         Hidden size of the LSTM prediction network (NeMo's `pred_hidden`). The joint network projects both
         encoder and decoder outputs to this size (NeMo's `joint_hidden`, which all known checkpoints set equal
@@ -830,11 +826,11 @@ class NemotronAsrStreamingEncoder(ParakeetEncoder):
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutput:
         r"""
-        output_attention_mask (`bool`, *optional*, defaults to `True`):
-            Whether to return the output attention mask. Only effective when `attention_mask` is provided.
         past_key_values (`Cache`, *optional*):
             Sliding-window K/V cache (`DynamicCache` built from `config.sliding_window`) for cache-aware
             streaming attention.
+        output_attention_mask (`bool`, *optional*, defaults to `True`):
+            Whether to return the output attention mask. Only effective when `attention_mask` is provided.
         padding_cache (`NemotronAsrStreamingEncoderCausalConvPaddingCache`, *optional*):
             Unified streaming cache backing the subsampling Conv2d layers and the conformer depthwise Conv1d.
         num_lookahead_tokens (`int`, *optional*):
