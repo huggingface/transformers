@@ -72,6 +72,9 @@ class GradientCheckpointingLayer(nn.Module):
     """
 
     gradient_checkpointing = False
+    # Layers that only read the KV cache can set this to keep it under gradient checkpointing (the recompute reads the
+    # same states). Writers must leave it `False`, otherwise the cache is updated a second time on the backward replay.
+    _can_checkpoint_with_cache = False
 
     def __call__(self, *args, **kwargs):
         if self.gradient_checkpointing and self.training:
@@ -84,22 +87,23 @@ class GradientCheckpointingLayer(nn.Module):
                 message += " `use_cache=False`,"
                 do_warn = True
 
-            # different names for the same thing in different layers
-            # TODO cyril: this one without `S` can be removed after deprecation cycle
-            if "past_key_value" in kwargs and kwargs["past_key_value"] is not None:
-                kwargs["past_key_value"] = None
-                message += " `past_key_value=None`,"
-                do_warn = True
+            if not self._can_checkpoint_with_cache:
+                # different names for the same thing in different layers
+                # TODO cyril: this one without `S` can be removed after deprecation cycle
+                if "past_key_value" in kwargs and kwargs["past_key_value"] is not None:
+                    kwargs["past_key_value"] = None
+                    message += " `past_key_value=None`,"
+                    do_warn = True
 
-            if "past_key_values" in kwargs and kwargs["past_key_values"] is not None:
-                kwargs["past_key_values"] = None
-                message += " `past_key_values=None`,"
-                do_warn = True
+                if "past_key_values" in kwargs and kwargs["past_key_values"] is not None:
+                    kwargs["past_key_values"] = None
+                    message += " `past_key_values=None`,"
+                    do_warn = True
 
-            if "layer_past" in kwargs and kwargs["layer_past"] is not None:
-                kwargs["layer_past"] = None
-                message += " `layer_past=None`,"
-                do_warn = True
+                if "layer_past" in kwargs and kwargs["layer_past"] is not None:
+                    kwargs["layer_past"] = None
+                    message += " `layer_past=None`,"
+                    do_warn = True
 
             # warn if anything was changed
             if do_warn:
