@@ -60,6 +60,10 @@ FEATURE_EXTRACTOR_MAPPING_NAMES = OrderedDict(
         ("encodec", {"torch": "EncodecAudioProcessor", "numpy": "EncodecAudioProcessorNumpy"}),
         ("gemma3n", {"torch": "Gemma3nAudioProcessor", "numpy": "Gemma3nAudioProcessorNumpy"}),
         ("gemma4", {"torch": "Gemma4AudioProcessor", "numpy": "Gemma4AudioProcessorNumpy"}),
+        (
+            "gemma4_unified",
+            {"torch": "Gemma4UnifiedAudioProcessor", "numpy": "Gemma4UnifiedAudioProcessorNumpy"},
+        ),
         ("glmasr", {"torch": "WhisperAudioProcessor", "numpy": "WhisperAudioProcessorNumpy"}),
         ("granite_speech", {"torch": "GraniteSpeechAudioProcessor"}),
         ("granite_speech_plus", {"torch": "GraniteSpeechAudioProcessor"}),
@@ -90,6 +94,7 @@ FEATURE_EXTRACTOR_MAPPING_NAMES = OrderedDict(
         ("pop2piano", {"torch": "Pop2PianoAudioProcessor", "numpy": "Pop2PianoAudioProcessorNumpy"}),
         ("qwen2_5_omni", {"torch": "WhisperAudioProcessor", "numpy": "WhisperAudioProcessorNumpy"}),
         ("qwen2_audio", {"torch": "WhisperAudioProcessor", "numpy": "WhisperAudioProcessorNumpy"}),
+        ("qwen3_asr", {"torch": "Qwen3ASRAudioProcessor", "numpy": "Qwen3ASRAudioProcessorNumpy"}),
         ("qwen3_omni_moe", {"torch": "WhisperAudioProcessor", "numpy": "WhisperAudioProcessorNumpy"}),
         ("seamless_m4t", {"torch": "SeamlessM4tAudioProcessor", "numpy": "SeamlessM4tAudioProcessorNumpy"}),
         ("seamless_m4t_v2", {"torch": "SeamlessM4tAudioProcessor", "numpy": "SeamlessM4tAudioProcessorNumpy"}),
@@ -110,6 +115,7 @@ FEATURE_EXTRACTOR_MAPPING_NAMES = OrderedDict(
         ("wavlm", {"torch": "Wav2Vec2AudioProcessor", "numpy": "Wav2Vec2AudioProcessorNumpy"}),
         ("whisper", {"torch": "WhisperAudioProcessor", "numpy": "WhisperAudioProcessorNumpy"}),
         ("xcodec", {"torch": "DacAudioProcessor", "numpy": "DacAudioProcessorNumpy"}),
+        ("xcodec2", {"torch": "Xcodec2AudioProcessor", "numpy": "Xcodec2AudioProcessorNumpy"}),
     ]
 )
 
@@ -120,6 +126,7 @@ LEGACY_FEATURE_EXTRACTOR_NAME_MAP = {
     "ASTFeatureExtractor": "AudioSpectrogramTransformerAudioProcessor",
     "Gemma3nAudioFeatureExtractor": "Gemma3nAudioProcessor",
     "Gemma4AudioFeatureExtractor": "Gemma4AudioProcessor",
+    "Gemma4UnifiedAudioFeatureExtractor": "Gemma4UnifiedAudioProcessor",
     "Speech2TextFeatureExtractor": "SpeechToTextAudioProcessor",
     "SeamlessM4TFeatureExtractor": "SeamlessM4tAudioProcessor",
     "VibeVoiceAcousticTokenizerFeatureExtractor": "VibevoiceAcousticTokenizerAudioProcessor",

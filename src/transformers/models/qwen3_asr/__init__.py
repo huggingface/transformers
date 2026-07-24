@@ -18,6 +18,8 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
+    from .audio_processing_numpy_qwen3_asr import *
+    from .audio_processing_qwen3_asr import *
     from .configuration_qwen3_asr import *
     from .feature_extraction_qwen3_asr import *
     from .modeling_qwen3_asr import *
