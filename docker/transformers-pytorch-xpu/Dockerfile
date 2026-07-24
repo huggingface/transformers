@@ -82,7 +82,7 @@ RUN pip install pydantic openai uvicorn fastapi --no-cache-dir
 RUN pip install git+https://github.com/linkedin/Liger-Kernel.git --extra-index-url https://download.pytorch.org/whl/xpu
 
 # install mergekit
-RUN pip install mergekit
+RUN pip install --no-deps git+https://github.com/arcee-ai/mergekit.git
 
 ENV OCL_ICD_VENDORS=/etc/OpenCL/vendors
 ENV I_MPI_ROOT=/usr/local
