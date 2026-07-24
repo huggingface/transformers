@@ -831,6 +831,61 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(source_patterns=r"^vision_model", target_patterns="model.vision_model"),
             WeightRenaming(source_patterns=r"^multi_modal_projector", target_patterns="model.multi_modal_projector"),
         ],
+        "molmo2": [
+            WeightRenaming(
+                source_patterns=r"(?<!image_vit\.)transformer\.(?!ln_f\.|blocks\.)", target_patterns="language_model."
+            ),
+            WeightRenaming(
+                source_patterns=r"(?<!image_vit\.)transformer\.ln_f\.", target_patterns="language_model.norm."
+            ),
+            WeightRenaming(
+                source_patterns=r"(?<!image_vit\.)transformer\.blocks\.", target_patterns="language_model.layers."
+            ),
+            WeightRenaming(source_patterns=r"self_attn\.att_proj", target_patterns="self_attn.qkv_proj"),
+            WeightRenaming(source_patterns=r"self_attn\.attn_out", target_patterns="self_attn.o_proj"),
+            WeightRenaming(source_patterns=r"mlp\.ff_out", target_patterns="mlp.down_proj"),
+            WeightConverter(
+                source_patterns="mlp.ff_proj.weight",
+                target_patterns=["mlp.up_proj.weight", "mlp.gate_proj.weight"],
+                operations=[Chunk(dim=0)],
+            ),
+            WeightConverter(
+                source_patterns=["wte.embedding", "wte.new_embedding"],
+                target_patterns="embed_tokens.weight",
+                operations=[Concatenate(dim=0)],
+            ),
+            WeightRenaming(
+                source_patterns=r"vision_backbone\.image_vit\.(?!transformer\.resblocks\.)",
+                target_patterns="vision_tower.",
+            ),
+            WeightRenaming(
+                source_patterns=r"vision_backbone\.image_vit\.transformer\.resblocks\.",
+                target_patterns="vision_tower.encoder.layers.",
+            ),
+            WeightRenaming(
+                source_patterns=r"vision_backbone\.image_pooling_2d\.",
+                target_patterns="multi_modal_projector.image_pooling_2d.",
+            ),
+            WeightRenaming(
+                source_patterns=r"vision_backbone\.image_projector\.",
+                target_patterns="multi_modal_projector.image_projector.",
+            ),
+            WeightRenaming(source_patterns=r"\.attention\.wq", target_patterns=".self_attn.q_proj"),
+            WeightRenaming(source_patterns=r"\.attention\.wk", target_patterns=".self_attn.k_proj"),
+            WeightRenaming(source_patterns=r"\.attention\.wv", target_patterns=".self_attn.v_proj"),
+            WeightRenaming(source_patterns=r"\.attention\.wo", target_patterns=".self_attn.out_proj"),
+            WeightRenaming(source_patterns=r"\.feed_forward\.w1", target_patterns=".mlp.fc1"),
+            WeightRenaming(source_patterns=r"\.feed_forward\.w2", target_patterns=".mlp.fc2"),
+            WeightRenaming(source_patterns=r"\.attention_norm", target_patterns=".layer_norm1"),
+            WeightRenaming(source_patterns=r"\.ffn_norm", target_patterns=".layer_norm2"),
+            WeightRenaming(source_patterns=r"image_pooling_2d\.wq", target_patterns="image_pooling_2d.q_proj"),
+            WeightRenaming(source_patterns=r"image_pooling_2d\.wk", target_patterns="image_pooling_2d.k_proj"),
+            WeightRenaming(source_patterns=r"image_pooling_2d\.wv", target_patterns="image_pooling_2d.v_proj"),
+            WeightRenaming(source_patterns=r"image_pooling_2d\.wo", target_patterns="image_pooling_2d.out_proj"),
+            WeightRenaming(source_patterns=r"image_projector\.w1", target_patterns="image_projector.gate_proj"),
+            WeightRenaming(source_patterns=r"image_projector\.w2", target_patterns="image_projector.down_proj"),
+            WeightRenaming(source_patterns=r"image_projector\.w3", target_patterns="image_projector.up_proj"),
+        ],
         "Emu3Model": [
             WeightRenaming(source_patterns=r"^text_model.model", target_patterns="text_model"),
         ],

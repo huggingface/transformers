@@ -251,6 +251,10 @@ IGNORE_NON_TESTED = (
         "Qwen3OmniMoeThinkerTextModel",
         "Qwen3OmniMoeForConditionalGeneration",  # Bigger model tested through Qwen3OmniMoeForConditionalGenerationIntegrationTest.
         "Qwen3OmniMoeTalkerCodePredictorModelForConditionalGeneration",  # Building part of bigger (tested) model. Tested implicitly through Qwen3OmniMoeForConditionalGenerationIntegrationTest.
+        "Molmo2TextModel",  # Building part of bigger (tested) model. Tested implicitly through Molmo2ForConditionalGeneration.
+        "Molmo2VisionModel",  # Building part of bigger (tested) model. Tested implicitly through Molmo2ForConditionalGeneration.
+        "Molmo2VisionBackbone",  # Building part of bigger (tested) model. Tested implicitly through Molmo2ForConditionalGeneration.
+        "Molmo2Adapter",  # Building part of bigger (tested) model. Tested implicitly through Molmo2ForConditionalGeneration.
         "MllamaTextModel",  # Building part of bigger (tested) model. # TODO: add tests
         "MllamaVisionModel",  # Building part of bigger (tested) model. # TODO: add tests
         "Llama4TextModel",  # Building part of bigger (tested) model. # TODO: add tests
@@ -491,6 +495,8 @@ IGNORE_NON_AUTO_CONFIGURED = (
         "MetaClip2TextModelWithProjection",
         "MetaClip2VisionModel",
         "MetaClip2VisionModelWithProjection",
+        "Molmo2VisionModel",
+        "Molmo2VisionBackbone",
         "MoshiForConditionalGeneration",  # no auto class for speech-to-speech
         "Emu3VQVAE",  # no autoclass for VQ-VAE models
         "Emu3TextModel",  # Building part of bigger (tested) model
