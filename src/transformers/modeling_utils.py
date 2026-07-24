@@ -3471,10 +3471,8 @@ class PreTrainedModel(
 
         # if any model parameters are offloaded, we need to know it for later
         is_offloaded = False
-        if (
-            hasattr(self, "hf_device_map")
-            and len(set(self.hf_device_map.values())) > 1
-            and ("cpu" in self.hf_device_map.values() or "disk" in self.hf_device_map.values())
+        if hasattr(self, "hf_device_map") and (
+            "cpu" in self.hf_device_map.values() or "disk" in self.hf_device_map.values()
         ):
             is_offloaded = True
             warnings.warn(
@@ -3583,7 +3581,7 @@ class PreTrainedModel(
                         shard_state_dict = revert_weight_conversion(model_to_save, shard_state_dict)
                         # Save the weight_map, since some names etc may have changed due to conversion compared to initial `state_dict_split`
                         if state_dict_split.is_sharded:
-                            weight_map.update({k: os.path.basename(shard_file)} for k in shard_state_dict.keys())  # ty: ignore[unresolved-attribute]
+                            weight_map.update({k: os.path.basename(shard_file) for k in shard_state_dict.keys()})  # ty: ignore[unresolved-attribute]
                     except Exception:
                         raise RuntimeError(
                             "We could not revert some weight conversions because of offlading, and several weights needed for a single "
