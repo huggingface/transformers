@@ -241,6 +241,7 @@ def pytest_configure(config):
             if getattr(_mod, "hf_hub_download", None) is _original_hf_hub_download:
                 _mod.hf_hub_download = _wrapped_hf_hub_download
 
+    config.addinivalue_line("markers", "slow: mark test as slow")
     config.addinivalue_line("markers", "is_pipeline_test: mark test to run only when pipelines are tested")
     config.addinivalue_line("markers", "is_staging_test: mark test to run only in the staging environment")
     config.addinivalue_line("markers", "accelerate_tests: mark test that require accelerate")

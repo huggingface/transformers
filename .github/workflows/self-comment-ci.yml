@@ -188,6 +188,7 @@ jobs:
       commit_sha: ${{ needs.check-timestamps.outputs.PR_MERGE_SHA }}
       subdirs: ${{ needs.get-tests.outputs.models }}
       pr_number: ${{ needs.get-pr-number.outputs.PR_NUMBER }}
+      pytest_marker: slow
     secrets: inherit
 
   quantization-ci:
