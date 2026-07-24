@@ -428,8 +428,11 @@ def slow(test_case):
     Slow tests are skipped by default. Set the RUN_SLOW environment variable to a truthy value to run them.
 
     """
-    import pytest  # We don't need a hard dependency on pytest in the main library
-    test_case = pytest.mark.slow(test_case)
+    try:
+        import pytest  # We don't need a hard dependency on pytest in the main library
+        test_case = pytest.mark.slow(test_case)
+    except ImportError:
+        pass
     return unittest.skipUnless(_run_slow_tests, "test is slow")(test_case)
 
 
