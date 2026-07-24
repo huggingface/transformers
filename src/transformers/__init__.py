@@ -793,13 +793,17 @@ if TYPE_CHECKING:
 else:
     _import_structure = {k: set(v) for k, v in _import_structure.items()}
 
-    import_structure = define_import_structure(Path(__file__).parent / "models", prefix="models")
+    # Copy before mutating so we never alter define_import_structure's lru_cache entry.
+    import_structure = {
+        backends: dict(modules) for backends, modules in define_import_structure(Path(__file__).parent / "models", prefix="models").items()
+    }
     import_structure[frozenset({})].update(_import_structure)
 
-    # Keep Source links on the real module even when mistral-common is missing.
+    # Backend-aware export: keep __module__ on tokenization_mistral_common even when
+    # mistral-common is missing (LazyModule Placeholder), instead of dummy_* objects.
     mistral_backends = frozenset({"mistral-common"})
-    import_structure.setdefault(mistral_backends, {})
-    import_structure[mistral_backends]["tokenization_mistral_common"] = {"MistralCommonBackend"}
+    mistral_modules = import_structure.setdefault(mistral_backends, {})
+    mistral_modules.setdefault("tokenization_mistral_common", set()).update({"MistralCommonBackend"})
 
     sys.modules[__name__] = _LazyModule(
         __name__,
