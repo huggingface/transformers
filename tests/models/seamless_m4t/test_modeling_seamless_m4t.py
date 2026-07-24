@@ -17,8 +17,10 @@ import copy
 import tempfile
 import unittest
 from functools import cached_property
+from unittest.mock import patch
 
 import pytest
+from parameterized import parameterized
 
 from transformers import SeamlessM4TConfig, is_speech_available, is_torch_available
 from transformers.testing_utils import require_speech, require_torch, slow, torch_device
@@ -26,7 +28,9 @@ from transformers.trainer_utils import set_seed
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
+    TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION,
     ModelTesterMixin,
+    _test_eager_matches_sdpa_inference,
     floats_tensor,
     ids_tensor,
     random_attention_mask,
@@ -364,6 +368,23 @@ class SeamlessM4TModelWithSpeechInputTest(ModelTesterMixin, unittest.TestCase):
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
+
+    @parameterized.expand(TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION)
+    def test_eager_matches_sdpa_inference(
+        self, name, dtype, padding_side, use_attention_mask, output_attentions, enable_kernels
+    ):
+        # `SeamlessM4TModel` defaults to text and switches its `main_input_name` to `input_features` only at
+        # generation. Pin it to speech so the generic helper feeds the speech encoder for every model class here.
+        with patch.object(SeamlessM4TModel, "main_input_name", "input_features"):
+            _test_eager_matches_sdpa_inference(
+                self, name, dtype, padding_side, use_attention_mask, output_attentions, enable_kernels
+            )
+
+    @unittest.skip(
+        reason="Conformer speech encoder uses relative positional embeddings producing dense attention biases incompatible with flash attention"
+    )
+    def test_sdpa_can_dispatch_on_flash(self):
+        pass
 
     @slow
     def test_model_from_pretrained(self):
