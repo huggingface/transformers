@@ -1314,14 +1314,24 @@ class TrainingArguments:
     train_sampling_strategy: str = field(
         default="random",
         metadata={
-            "help": "Sampler for training: 'random' (default), 'sequential', or 'group_by_length'.",
-            "choices": ["random", "sequential", "group_by_length"],
+            "help": "Sampler for training: 'random' (default), 'sequential', 'group_by_length', or 'batch_rebalance'.",
+            "choices": ["random", "sequential", "group_by_length", "batch_rebalance"],
         },
     )
     length_column_name: str = field(
         default="length",
         metadata={
-            "help": "Column name for precomputed lengths. Ignored unless `train_sampling_strategy` is 'group_by_length'."
+            "help": "Column name for precomputed lengths. Ignored unless `train_sampling_strategy` is 'group_by_length' or 'batch_rebalance'."
+        },
+    )
+    batch_rebalance_alpha: float = field(
+        default=0.001,
+        metadata={"help": "Quadratic cost weight for BatchRebalanceSampler (attention O(L^2) term)."},
+    )
+    batch_rebalance_max_tokens: int = field(
+        default=0,
+        metadata={
+            "help": "Max padded tokens (bs * max_len) per micro-batch for BatchRebalanceSampler. 0 = unlimited."
         },
     )
 

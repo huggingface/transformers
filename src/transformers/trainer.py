@@ -80,7 +80,7 @@ from .models.auto.modeling_auto import (
 )
 from .optimization import GreedyLR, get_scheduler
 from .processing_utils import ProcessorMixin
-from .tokenization_utils_base import PreTrainedTokenizerBase
+from .tokenization_utils_base import BatchEncoding, PreTrainedTokenizerBase
 from .trainer_callback import (
     CallbackHandler,
     DefaultFlowCallback,
@@ -98,6 +98,7 @@ from .trainer_optimizer import (
     is_optimizer_factory,
 )
 from .trainer_pt_utils import (
+    BatchRebalanceSampler,
     EvalLoopContainer,
     IterableDatasetShard,
     LabelSmoother,
@@ -989,7 +990,6 @@ class Trainer:
         should_fork = torch.backends.mps.is_available() and self.args.dataloader_num_workers > 1
 
         dataloader_params = {
-            "batch_size": batch_size,
             "collate_fn": data_collator,
             "num_workers": self.args.dataloader_num_workers,
             "pin_memory": self.args.dataloader_pin_memory,
@@ -998,14 +998,26 @@ class Trainer:
         }
 
         if not isinstance(dataset, torch.utils.data.IterableDataset):
-            if sampler_fn is not None:
-                dataloader_params["sampler"] = sampler_fn(dataset)
-            dataloader_params["drop_last"] = self.args.dataloader_drop_last
-            dataloader_params["prefetch_factor"] = self.args.dataloader_prefetch_factor
+            sampler = sampler_fn(dataset) if sampler_fn is not None else None
+            if isinstance(sampler, BatchRebalanceSampler):
+                # `BatchRebalanceSampler` yields a full batch of sample indices per iteration (it
+                # implements `BatchSampler` semantics), so it must be passed as `batch_sampler`
+                # rather than `sampler`. `batch_size`/`drop_last` are mutually exclusive with
+                # `batch_sampler` in `DataLoader`.
+                dataloader_params["batch_sampler"] = sampler
+                dataloader_params["prefetch_factor"] = self.args.dataloader_prefetch_factor
+            else:
+                dataloader_params["batch_size"] = batch_size
+                if sampler is not None:
+                    dataloader_params["sampler"] = sampler
+                dataloader_params["drop_last"] = self.args.dataloader_drop_last
+                dataloader_params["prefetch_factor"] = self.args.dataloader_prefetch_factor
             if is_training:
                 dataloader_params["worker_init_fn"] = partial(
                     seed_worker, num_workers=self.args.dataloader_num_workers, rank=self.args.process_index
                 )
+        else:
+            dataloader_params["batch_size"] = batch_size
 
         dataloader = self.accelerator.prepare(DataLoader(dataset, **dataloader_params))
 
@@ -1049,6 +1061,44 @@ class Trainer:
                 dataset=train_dataset,
                 lengths=lengths,
                 model_input_name=model_input_name,
+            )
+        elif self.args.train_sampling_strategy == "batch_rebalance":
+            if is_datasets_available() and isinstance(train_dataset, datasets.Dataset):
+                lengths = (
+                    train_dataset[self.args.length_column_name]
+                    if self.args.length_column_name in train_dataset.column_names
+                    else None
+                )
+            else:
+                lengths = None
+            model_input_name = (
+                self.processing_class.model_input_names[0] if self.processing_class is not None else None
+            )
+            if lengths is None:
+                model_input_name = model_input_name if model_input_name is not None else "input_ids"
+                if not isinstance(train_dataset[0], (dict, BatchEncoding)) or model_input_name not in train_dataset[0]:
+                    raise ValueError(
+                        "Can only automatically infer lengths for datasets whose items are dictionaries with an "
+                        f"'{model_input_name}' key."
+                    )
+                lengths = [len(feature[model_input_name]) for feature in train_dataset]
+            elif isinstance(lengths, torch.Tensor):
+                lengths = lengths.tolist()
+
+            world_size = max(1, self.args.world_size)
+            rank = self.args.process_index if self.args.world_size > 1 else 0
+            micro_batch_size = self.args.train_batch_size // max(1, self.args.world_size)
+            grad_accum = self.args.gradient_accumulation_steps
+            effective_batch_size = micro_batch_size * grad_accum * world_size
+
+            return BatchRebalanceSampler(
+                lengths=lengths,
+                effective_batch_size=effective_batch_size,
+                dp_size=world_size,
+                grad_accum=grad_accum,
+                rank=rank,
+                alpha=self.args.batch_rebalance_alpha,
+                max_tokens=self.args.batch_rebalance_max_tokens,
             )
         elif self.args.train_sampling_strategy == "sequential":
             return SequentialSampler(train_dataset)

@@ -35,6 +35,7 @@ from transformers import (
 from transformers.data.data_collator import default_data_collator as _default_data_collator
 from transformers.modeling_outputs import SequenceClassifierOutput
 from transformers.testing_utils import (
+    CaptureLogger,
     TestCasePlus,
     backend_device_count,
     require_accelerate,
@@ -43,6 +44,7 @@ from transformers.testing_utils import (
 )
 from transformers.tokenization_utils_base import BatchEncoding
 from transformers.trainer_pt_utils import (
+    BatchRebalanceSampler,
     DistributedLengthGroupedSampler,
     DistributedSamplerWithLoop,
     EvalLoopContainer,
@@ -532,6 +534,360 @@ class TrainerSamplerTest(unittest.TestCase):
 
             self.check_shard_sampler(dataset, 4, drop_last=True, num_processes=3)
             self.check_shard_sampler(dataset, 4, drop_last=False, num_processes=3)
+
+    def test_batch_rebalance_basic(self):
+        """Test that BatchRebalanceSampler yields correct number of micro-batches and covers all samples."""
+        lengths = [
+            100,
+            500,
+            200,
+            800,
+            300,
+            1000,
+            50,
+            600,
+            150,
+            400,
+            250,
+            700,
+            120,
+            900,
+            350,
+            2000,
+            450,
+            550,
+            80,
+            300,
+            650,
+            750,
+            180,
+            1200,
+        ]
+        dp_size = 2
+        grad_accum = 2
+        micro_batch_size = 1
+        effective_batch_size = micro_batch_size * grad_accum * dp_size  # = 4
+
+        for rank in range(dp_size):
+            sampler = BatchRebalanceSampler(
+                lengths=lengths,
+                effective_batch_size=effective_batch_size,
+                dp_size=dp_size,
+                grad_accum=grad_accum,
+                rank=rank,
+            )
+            batches = list(sampler)
+            # Should yield num_global_batches * grad_accum micro-batches per rank
+            self.assertEqual(len(batches), sampler.num_global_batches * grad_accum)
+
+        # All ranks combined should cover all samples
+        all_indices = set()
+        for rank in range(dp_size):
+            sampler = BatchRebalanceSampler(
+                lengths=lengths,
+                effective_batch_size=effective_batch_size,
+                dp_size=dp_size,
+                grad_accum=grad_accum,
+                rank=rank,
+            )
+            for batch in sampler:
+                all_indices.update(batch)
+        self.assertEqual(all_indices, set(range(len(lengths))))
+
+    def test_batch_rebalance_no_overlap_between_ranks(self):
+        """Test that different ranks never get the same sample in the same global batch."""
+        lengths = [100 * (i + 1) for i in range(48)]
+        dp_size = 4
+        grad_accum = 2
+        effective_batch_size = 2 * 2 * 4  # = 16
+
+        samplers = [
+            BatchRebalanceSampler(
+                lengths=lengths,
+                effective_batch_size=effective_batch_size,
+                dp_size=dp_size,
+                grad_accum=grad_accum,
+                rank=r,
+            )
+            for r in range(dp_size)
+        ]
+
+        all_batches_per_rank = [list(s) for s in samplers]
+
+        # For each global batch, check no overlap between ranks
+        num_global = len(all_batches_per_rank[0]) // grad_accum
+        for gb in range(num_global):
+            for slot in range(grad_accum):
+                micro_idx = gb * grad_accum + slot
+                indices_per_rank = [set(all_batches_per_rank[r][micro_idx]) for r in range(dp_size)]
+                combined = set()
+                for s in indices_per_rank:
+                    self.assertEqual(len(combined & s), 0, f"Overlap in gb={gb}, slot={slot}")
+                    combined |= s
+
+    def test_batch_rebalance_eff_batch_size(self):
+        """Test that each global batch has exactly effective_batch_size total samples."""
+        lengths = [
+            50,
+            300,
+            100,
+            800,
+            200,
+            500,
+            150,
+            700,
+            400,
+            1000,
+            250,
+            600,
+            120,
+            900,
+            350,
+            2000,
+            450,
+            550,
+            80,
+            300,
+            650,
+            750,
+            180,
+            1200,
+            60,
+            400,
+            220,
+            850,
+            330,
+            480,
+            130,
+            1100,
+        ]
+        dp_size = 2
+        grad_accum = 2
+        effective_batch_size = 2 * 2 * 2  # = 8
+
+        samplers = [
+            BatchRebalanceSampler(
+                lengths=lengths,
+                effective_batch_size=effective_batch_size,
+                dp_size=dp_size,
+                grad_accum=grad_accum,
+                rank=r,
+            )
+            for r in range(dp_size)
+        ]
+
+        all_batches = [list(s) for s in samplers]
+        num_global = len(all_batches[0]) // grad_accum
+
+        for gb in range(num_global):
+            total = 0
+            for slot in range(grad_accum):
+                for r in range(dp_size):
+                    total += len(all_batches[r][gb * grad_accum + slot])
+            self.assertEqual(
+                total, effective_batch_size, f"gb={gb}: expected {effective_batch_size} samples, got {total}"
+            )
+
+    def test_batch_rebalance_max_tokens(self):
+        """Test that max_tokens constraint limits padded tokens per micro-batch."""
+        lengths = [100] * 40 + [3000] * 8  # 48 samples
+        dp_size = 2
+        grad_accum = 2
+        effective_batch_size = 12
+        max_tokens = 4000
+
+        for rank in range(dp_size):
+            sampler = BatchRebalanceSampler(
+                lengths=lengths,
+                effective_batch_size=effective_batch_size,
+                dp_size=dp_size,
+                grad_accum=grad_accum,
+                rank=rank,
+                max_tokens=max_tokens,
+            )
+            for batch in sampler:
+                if batch:
+                    max_len = max(lengths[i] for i in batch)
+                    padded = len(batch) * max_len
+                    self.assertLessEqual(
+                        padded, max_tokens + max(lengths), f"bs={len(batch)}, max_len={max_len}, padded={padded}"
+                    )
+
+    def test_batch_rebalance_max_tokens_infeasible_no_data_loss(self):
+        """
+        Test that when `max_tokens` cannot be satisfied for a group (no other group has spare
+        capacity to donate/receive samples), the sampler does not silently drop samples. Instead it
+        should keep all samples (falling back to exceeding `max_tokens` for that group) and emit a
+        warning via `logger.warning_once`.
+
+        Regression test for a bug where `counts[gi] -= 1` was applied unconditionally before checking
+        whether any other group could absorb the extra sample, causing `sum(counts) < n` and therefore
+        silently dropping samples from the batch.
+        """
+        # K = dp_size * grad_accum = 1, so the "donor" search loop (`for r in range(K): if r != gi`)
+        # can never find a candidate — this deterministically reproduces the infeasible case.
+        lengths = [100] * 10 + [5000] * 2  # 12 samples
+        dp_size = 1
+        grad_accum = 1
+        effective_batch_size = 12
+        max_tokens = 1  # impossibly small, guarantees the limit can never be satisfied
+
+        sampler = BatchRebalanceSampler(
+            lengths=lengths,
+            effective_batch_size=effective_batch_size,
+            dp_size=dp_size,
+            grad_accum=grad_accum,
+            rank=0,
+            max_tokens=max_tokens,
+        )
+
+        from transformers.trainer_pt_utils import logger as trainer_pt_utils_logger
+
+        with CaptureLogger(trainer_pt_utils_logger) as cl:
+            all_indices = []
+            for batch in sampler:
+                all_indices.extend(batch)
+
+        # No samples should have been dropped.
+        self.assertEqual(sorted(all_indices), list(range(len(lengths))))
+        # A warning should have been emitted since the `max_tokens` constraint could not be satisfied.
+        self.assertIn("max_tokens", cl.out)
+
+    def test_batch_rebalance_deterministic(self):
+        """Test that same seed produces same results, and different ranks produce same partition."""
+        lengths = [100 * (i + 1) for i in range(32)]
+        dp_size = 4
+        grad_accum = 2
+        effective_batch_size = 8
+
+        for rank in range(dp_size):
+            s1 = BatchRebalanceSampler(
+                lengths=lengths,
+                effective_batch_size=effective_batch_size,
+                dp_size=dp_size,
+                grad_accum=grad_accum,
+                rank=rank,
+                seed=42,
+            )
+            s2 = BatchRebalanceSampler(
+                lengths=lengths,
+                effective_batch_size=effective_batch_size,
+                dp_size=dp_size,
+                grad_accum=grad_accum,
+                rank=rank,
+                seed=42,
+            )
+            self.assertEqual(list(s1), list(s2))
+
+    def test_batch_rebalance_cost_fn(self):
+        """Test that a custom `cost_fn` overrides the default cost model."""
+        lengths = [100, 200, 500, 1000, 2000, 3000, 50, 150]
+
+        def my_cost(bs, max_len):
+            return bs * max_len + max_len * max_len * 0.01
+
+        sampler_default = BatchRebalanceSampler(
+            lengths=lengths,
+            effective_batch_size=8,
+            dp_size=2,
+            grad_accum=2,
+            rank=0,
+            alpha=0.001,
+        )
+        sampler_custom = BatchRebalanceSampler(
+            lengths=lengths,
+            effective_batch_size=8,
+            dp_size=2,
+            grad_accum=2,
+            rank=0,
+            cost_fn=my_cost,
+        )
+
+        for bs, max_len in [(1, 100), (2, 500), (4, 2000), (8, 3000)]:
+            # Default sampler should use the built-in cost formula, not `my_cost`.
+            self.assertEqual(
+                sampler_default._cost(bs, max_len),
+                0.0 + bs * max_len + 0.001 * bs * max_len * max_len,
+            )
+            # Custom sampler should delegate directly to `my_cost`, overriding
+            # `alpha`/`intercept` entirely.
+            self.assertEqual(sampler_custom._cost(bs, max_len), my_cost(bs, max_len))
+
+    def test_batch_rebalance_converges_for_large_effective_batch_size(self):
+        """
+        Regression test for the rebalance iteration budget.
+
+        With a large `effective_batch_size` and a small `dp_size * grad_accum` (K), the old
+        fixed cap `K * 30` was smaller than the number of single-sample moves needed to
+        converge, so the loop could hit the ceiling with a non-optimal spread. The budget is
+        now `max(K * 30, effective_batch_size)`, which is O(n) and matches the worst-case
+        move count. This test builds a heavily skewed batch (a few very long sequences plus
+        many short ones) under exactly that regime (large n=246, small K=2) and asserts that:
+
+          1. Every sample is still covered across all ranks combined (no data loss), and
+          2. The rebalanced partition reaches the brute-force-optimal cost spread over all
+             contiguous K=2 partitions — i.e. the algorithm actually ran to convergence
+             instead of being truncated at the old `K * 30` cap (which stops at ~63 moves
+             and never reaches the optimum at counts[0] == 6).
+        """
+        lengths = [100] * 240 + [8000, 6000, 5000, 4000, 3000, 2000]  # 246 samples
+        dp_size = 2
+        grad_accum = 1
+        effective_batch_size = 246  # K = 2, so the old cap K * 30 = 60 < 246 = n
+
+        # (1) Full coverage across ALL ranks combined — no samples dropped. Each rank only
+        # yields its own group, so the union over ranks must equal the whole batch.
+        all_indices = set()
+        for rank in range(dp_size):
+            sampler = BatchRebalanceSampler(
+                lengths=lengths,
+                effective_batch_size=effective_batch_size,
+                dp_size=dp_size,
+                grad_accum=grad_accum,
+                rank=rank,
+                alpha=0.001,
+            )
+            for batch in sampler:
+                all_indices.update(batch)
+        self.assertEqual(all_indices, set(range(len(lengths))))
+
+        # (2) Convergence: the produced spread must equal the brute-force optimum over all
+        # contiguous K=2 partitions. Under the old `K * 30` (=60) cap the loop truncated
+        # around counts[0] == 63 (spread ~4.5e6); the optimum is counts[0] == 6 (spread
+        # ~4.06e5), which only the larger budget reaches.
+        sampler = BatchRebalanceSampler(
+            lengths=lengths,
+            effective_batch_size=effective_batch_size,
+            dp_size=dp_size,
+            grad_accum=grad_accum,
+            rank=0,
+            alpha=0.001,
+        )
+        indices = list(range(effective_batch_size))
+        batch_lengths = [lengths[i] for i in indices]
+        sorted_pairs = sorted(zip(indices, batch_lengths), key=lambda x: x[1], reverse=True)
+
+        rebalanced_groups = sampler._assign(indices, batch_lengths)
+        # `rank_mbs` is nested as [rank][slot] -> list of sample indices; rebuild each
+        # micro-batch's cost from its indices -> lengths.
+        rebalanced_costs = []
+        for rank_slots in rebalanced_groups:
+            for slot_indices in rank_slots:
+                bs = len(slot_indices)
+                max_len = max((lengths[i] for i in slot_indices), default=0)
+                rebalanced_costs.append(sampler._cost(bs, max_len))
+        rebalanced_spread = max(rebalanced_costs) - min(rebalanced_costs)
+
+        n = effective_batch_size
+        optimal_spread = float("inf")
+        for c in range(1, n):
+            g0 = sorted_pairs[:c]
+            g1 = sorted_pairs[c:]
+            spread = abs(sampler._group_cost(g0) - sampler._group_cost(g1))
+            if spread < optimal_spread:
+                optimal_spread = spread
+
+        self.assertAlmostEqual(rebalanced_spread, optimal_spread, places=6)
 
 
 # ---------------------------------------------------------------------------
