@@ -95,7 +95,7 @@ class VibeVoiceAsrProcessor(ProcessorMixin):
     def __call__(
         self,
         text: TextInput | list[TextInput],
-        audio: AudioInput,
+        audio: AudioInput | None = None,
         output_labels: bool | None = False,
         **kwargs: Unpack[VibeVoiceAsrProcessorKwargs],
     ) -> BatchFeature:
@@ -137,23 +137,26 @@ class VibeVoiceAsrProcessor(ProcessorMixin):
         elif not isinstance(text, (list, tuple)):
             raise ValueError("text input must be a string or list of strings")
 
-        audio = make_list_of_audio(audio)
-        if len(text) != len(audio):
-            raise ValueError(f"Got {len(text)} text but {len(audio)} audios; they must match 1:1.")
-        data = self.feature_extractor(audio, **audio_kwargs)
+        if audio is not None:
+            audio = make_list_of_audio(audio)
+            data = self.feature_extractor(audio, **audio_kwargs)
+            audio_lengths = data["padding_mask"].sum(dim=-1).cpu().numpy()
 
-        # Replace audio duration placeholders in text
-        audio_lengths = data["padding_mask"].sum(dim=-1).cpu().numpy()
-        audio_durations = audio_lengths / self.feature_extractor.sampling_rate
-        audio_duration_pattern = re.compile(re.escape(self.audio_duration_token))
-        for i in range(len(text)):
-            text[i] = audio_duration_pattern.sub(f"{audio_durations[i]:.2f}", text[i])
+            # Replace audio duration placeholders in text
+            audio_durations = audio_lengths / self.feature_extractor.sampling_rate
+            audio_durations_iter = iter(audio_durations)
+            audio_duration_pattern = re.compile(re.escape(self.audio_duration_token))
+            for i in range(len(text)):
+                text[i] = audio_duration_pattern.sub(lambda _: f"{next(audio_durations_iter):.2f}", text[i])
 
-        # Expand audio tokens in text
-        num_audio_tokens = np.ceil(audio_lengths / audio_kwargs["pad_to_multiple_of"]).astype(int).tolist()
-        audio_token_pattern = re.compile(re.escape(self.audio_token))
-        for i, num_tokens in enumerate(num_audio_tokens):
-            text[i] = audio_token_pattern.sub(self.audio_token * num_tokens, text[i])
+            # Expand audio tokens in text
+            num_audio_tokens = np.ceil(audio_lengths / audio_kwargs["pad_to_multiple_of"]).astype(int).tolist()
+            num_audio_tokens_iter = iter(num_audio_tokens)
+            audio_token_pattern = re.compile(re.escape(self.audio_token))
+            for i in range(len(text)):
+                text[i] = audio_token_pattern.sub(lambda _: self.audio_token * next(num_audio_tokens_iter), text[i])
+        else:
+            data = {}
 
         text_inputs = self.tokenizer(text, **text_kwargs)
         data.update(text_inputs)
