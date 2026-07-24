@@ -203,16 +203,7 @@ class ViTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         else {}
     )
 
-
-
-
-
     test_resize_embeddings = False
-
-
-
-
-
 
     a = 3
 
