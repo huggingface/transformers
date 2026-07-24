@@ -18,7 +18,15 @@ from typing import Any, Unpack
 import numpy as np
 
 from .audio_processing_base import AudioProcessingMixin
-from .audio_utils import AudioInput, SpectrogramConfig, make_list_of_audio
+from .audio_utils import (
+    AudioInput,
+    SpectrogramConfig,
+    _array_namespace,
+    _clamp_min,
+    amplitude_to_db,
+    make_list_of_audio,
+    power_to_db,
+)
 from .feature_extraction_utils import BatchFeature
 from .processing_utils import AudioKwargs
 from .tokenization_utils_base import TruncationStrategy
@@ -369,9 +377,10 @@ class BaseAudioProcessor(AudioProcessingMixin):
         raise NotImplementedError
 
     def _get_mask(self, ranges, padded_length):
-        """Create a binary mask array of shape (len(ranges), padded_length) with 1s at each
-        (start, end) range. Implemented by backend subclasses."""
-        raise NotImplementedError
+        mask = self._zeros_int32((len(ranges), padded_length))
+        for i, (start, end) in enumerate(ranges):
+            mask[i, start:end] = 1
+        return mask
 
     # ── Spectrogram core ─────────────────────────────────────────────────
 
@@ -531,8 +540,13 @@ class BaseAudioProcessor(AudioProcessingMixin):
         raise NotImplementedError
 
     def _prepare_window_and_framing(self, window, win_length, n_fft, needs_manual_framing):
-        """Pad/reshape window and determine frame length. Implemented by backend subclasses."""
-        raise NotImplementedError
+        if needs_manual_framing and win_length < n_fft:
+            return window, win_length
+        if win_length < n_fft:
+            left_pad = (n_fft - win_length) // 2
+            right_pad = n_fft - win_length - left_pad
+            window = self._pad_window(window, left_pad, right_pad)
+        return window, n_fft
 
     def _frame_audio(self, audio, window, frame_length, hop_length, n_fft, stft_cfg):
         """Extract overlapping frames from the audio signal.
@@ -578,17 +592,77 @@ class BaseAudioProcessor(AudioProcessingMixin):
         """Apply mel filterbank to spectrogram features."""
         raise NotImplementedError
 
-    def _normalize_magnitude(self, features, *, spectrogram_config, **kwargs):
+    def _normalize_magnitude(self, features, *, spectrogram_config,
+                             reference=1.0, min_value=1e-10, db_range=None, **kwargs):
         """Apply pointwise magnitude normalization (log, log10, or dB scaling) to a single utterance.
 
         This hook is **pointwise only**: no batch-shape assumptions, no `audio_ranges`/`feature_ranges`
-        kwargs, no cross-frame statistics. Override here for per-utterance log/dB compression and
-        simple element-wise transforms (e.g. Whisper's max-clip + rescale).
+        kwargs, no cross-frame statistics. Written once here so both backends share it bit-for-bit;
+        backends only supply the array-API primitives (`_astype`, `_amax_over_features`). Override
+        here (calling `super()`) for per-utterance log/dB compression and simple element-wise
+        transforms (e.g. Whisper's max-clip + rescale).
 
         For normalization that needs to know per-utterance ranges across a padded batch (e.g.
         Parakeet's per-utterance mean/var, Speech2Text's CMVN), override `_postprocess_output`
         instead. See [ADR 0005](docs/adr/0005-hook-surface-boundary.md).
         """
+        log_mel = spectrogram_config.log_mode
+        if log_mel is None:
+            return self._astype(features, "float32")
+
+        if spectrogram_config.pre_log_offset is not None:
+            result = features + spectrogram_config.pre_log_offset
+        else:
+            result = _clamp_min(features, spectrogram_config.mel_floor)
+
+        if log_mel == "log":
+            result = self._astype(_array_namespace(result).log(result), "float32")
+        elif log_mel == "log10":
+            result = self._astype(_array_namespace(result).log10(result), "float32")
+        elif log_mel == "dB":
+            power = spectrogram_config.stft_config.power
+            if power == 2.0:
+                result = power_to_db(result, reference, min_value, db_range)
+            elif power == 1.0:
+                result = amplitude_to_db(result, reference, min_value, db_range)
+            else:
+                raise ValueError(f"Cannot use log_mel option 'dB' with power {power}")
+            result = self._astype(result, "float32")
+        else:
+            raise ValueError(f"Unknown log_mel option: {log_mel}")
+
+        if spectrogram_config.skip_last_frame:
+            result = result[..., :-1]
+        return self._apply_post_log_normalization(result, spectrogram_config)
+
+    def _apply_post_log_normalization(self, result, spectrogram_config):
+        """Shared post-log clamp + affine rescale (ADR 0004). Whisper/Voxtral max-clip is the only
+        widely-shared post-log shape in the base; per-bin norm stays in each model's override."""
+        if spectrogram_config.clip_max_offset is not None:
+            max_vals = self._amax_over_features(result)
+            result = _array_namespace(result).maximum(result, max_vals - spectrogram_config.clip_max_offset)
+        if spectrogram_config.post_log_shift is not None:
+            result = result + spectrogram_config.post_log_shift
+        if spectrogram_config.post_log_scale is not None:
+            result = result * spectrogram_config.post_log_scale
+        return result
+
+    # ── Backend array-API primitives ─────────────────────────────────────
+
+    def _astype(self, x, dtype_name):
+        """Cast array/tensor `x` to the named dtype. Implemented by backend subclasses."""
+        raise NotImplementedError
+
+    def _amax_over_features(self, x):
+        """Per-utterance max over the feature axes (keepdims). Implemented by backend subclasses."""
+        raise NotImplementedError
+
+    def _zeros_int32(self, shape):
+        """Return an int32 zeros array/tensor of `shape`. Implemented by backend subclasses."""
+        raise NotImplementedError
+
+    def _pad_window(self, window, left_pad, right_pad):
+        """Zero-pad the 1-D window by (left_pad, right_pad). Implemented by backend subclasses."""
         raise NotImplementedError
 
     def _mel_filter_bank(self, spectrogram_config: SpectrogramConfig):

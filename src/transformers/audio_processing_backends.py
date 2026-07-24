@@ -32,10 +32,8 @@ import numpy as np
 from .audio_processing_utils import BaseAudioProcessor
 from .audio_utils import (
     _create_triangular_filter_bank,
-    amplitude_to_db,
     hertz_to_mel,
     mel_to_hertz,
-    power_to_db,
 )
 from .processing_utils import AudioKwargs
 from .utils import is_speech_available, is_torch_available, logging
@@ -106,13 +104,21 @@ class NumpyAudioBackend(BaseAudioProcessor):
     def _stack_features(self, features):
         return np.stack(features)
 
-    # ── Masking ───────────────────────────────────────────────────────────
+    # ── Backend array-API primitives ─────────────────────────────────────
 
-    def _get_mask(self, ranges, padded_length):
-        mask = np.zeros((len(ranges), padded_length), dtype=np.int32)
-        for i, (start, end) in enumerate(ranges):
-            mask[i, start:end] = 1
-        return mask
+    def _astype(self, x, dtype_name):
+        return x.astype(np.dtype(dtype_name))
+
+    def _amax_over_features(self, x):
+        if x.ndim > 2:
+            return x.max(axis=tuple(range(1, x.ndim)), keepdims=True)
+        return x.max()
+
+    def _zeros_int32(self, shape):
+        return np.zeros(shape, dtype=np.int32)
+
+    def _pad_window(self, window, left_pad, right_pad):
+        return np.pad(window, (left_pad, right_pad))
 
     # ── STFT pipeline ─────────────────────────────────────────────────────
 
@@ -131,15 +137,6 @@ class NumpyAudioBackend(BaseAudioProcessor):
         else:
             raise ValueError(f"Unknown window function '{name}'")
         return w[:win_length] if stft_cfg.periodic else w
-
-    def _prepare_window_and_framing(self, window, win_length, n_fft, needs_manual_framing):
-        if needs_manual_framing and win_length < n_fft:
-            return window, win_length
-        if win_length < n_fft:
-            left_pad = (n_fft - win_length) // 2
-            right_pad = n_fft - win_length - left_pad
-            window = np.pad(window, (left_pad, right_pad))
-        return window, n_fft
 
     @staticmethod
     def _np_frame(x, frame_length, hop_length):
@@ -353,57 +350,6 @@ class NumpyAudioBackend(BaseAudioProcessor):
             mel_spec = np.matmul(mel_filters.T, features)
         return np.maximum(spectrogram_config.mel_floor, mel_spec)
 
-    def _normalize_magnitude(self, features, *, spectrogram_config,
-                             reference=1.0, min_value=1e-10, db_range=None,
-                             dtype=np.float32, **kwargs):
-        log_mel = spectrogram_config.log_mode
-        if log_mel is None:
-            return features.astype(dtype)
-
-        if spectrogram_config.pre_log_offset is not None:
-            result = features + spectrogram_config.pre_log_offset
-        else:
-            result = np.maximum(spectrogram_config.mel_floor, features)
-
-        if log_mel == "log":
-            result = np.log(result).astype(dtype)
-        elif log_mel == "log10":
-            result = np.log10(result).astype(dtype)
-        elif log_mel == "dB":
-            power = spectrogram_config.stft_config.power
-            if power == 1.0:
-                result = amplitude_to_db(result, reference, min_value, db_range).astype(dtype)
-            elif power == 2.0:
-                result = power_to_db(result, reference, min_value, db_range).astype(dtype)
-            else:
-                raise ValueError(f"Cannot use log_mel option 'dB' with power {power}")
-        else:
-            raise ValueError(f"Unknown log_mel option: {log_mel}")
-        if spectrogram_config.skip_last_frame:
-            result = result[..., :-1]
-        return self._apply_post_log_normalization(result, spectrogram_config)
-
-    def _apply_post_log_normalization(self, result, spectrogram_config):
-        """Shared post-log clamp + affine rescale (ADR 0004). The Whisper/Voxtral max-clip
-        pattern is the only widely-shared post-log shape that lives in the base; per-bin
-        normalization is too Gemma-family-specific and stays in each model's own
-        `_normalize_magnitude` override."""
-        if spectrogram_config.clip_max_offset is not None:
-            # Per-utterance amax over (mel, time) axes — matches the torch sibling's
-            # `amax(dim=(-2, -1), keepdim=True)`. A global `result.max()` would diverge on
-            # batched inputs.
-            if result.ndim > 2:
-                max_axes = tuple(range(1, result.ndim))
-                max_vals = result.max(axis=max_axes, keepdims=True)
-            else:
-                max_vals = result.max()
-            result = np.maximum(result, max_vals - spectrogram_config.clip_max_offset)
-        if spectrogram_config.post_log_shift is not None:
-            result = result + spectrogram_config.post_log_shift
-        if spectrogram_config.post_log_scale is not None:
-            result = result * spectrogram_config.post_log_scale
-        return result
-
     # ── Kaldi fbank helper ────────────────────────────────────────────────
 
     def _kaldi_fbank(self, waveform, num_mel_bins, sample_frequency=None, **kwargs):
@@ -484,13 +430,19 @@ class TorchAudioBackend(BaseAudioProcessor):
     def _stack_features(self, features):
         return torch.stack(features)
 
-    # ── Masking ───────────────────────────────────────────────────────────
+    # ── Backend array-API primitives ─────────────────────────────────────
 
-    def _get_mask(self, ranges, padded_length):
-        mask = torch.zeros((len(ranges), padded_length), dtype=torch.int32)
-        for i, (start, end) in enumerate(ranges):
-            mask[i, start:end] = 1
-        return mask
+    def _astype(self, x, dtype_name):
+        return x.to(getattr(torch, dtype_name))
+
+    def _amax_over_features(self, x):
+        return x.amax(dim=(-2, -1), keepdim=True)
+
+    def _zeros_int32(self, shape):
+        return torch.zeros(shape, dtype=torch.int32)
+
+    def _pad_window(self, window, left_pad, right_pad):
+        return torch.nn.functional.pad(window, (left_pad, right_pad))
 
     # ── STFT pipeline ─────────────────────────────────────────────────────
 
@@ -512,15 +464,6 @@ class TorchAudioBackend(BaseAudioProcessor):
         else:
             raise ValueError(f"Unknown window function '{name}'")
         return window.to(device=audio.device)
-
-    def _prepare_window_and_framing(self, window, win_length, n_fft, needs_manual_framing):
-        if needs_manual_framing and win_length < n_fft:
-            return window, win_length
-        if win_length < n_fft:
-            left_pad = (n_fft - win_length) // 2
-            right_pad = n_fft - win_length - left_pad
-            window = torch.nn.functional.pad(window, (left_pad, right_pad))
-        return window, n_fft
 
     def _frame_audio(self, audio, window, frame_length, hop_length, n_fft, stft_cfg):
         if stft_cfg.center:
@@ -677,63 +620,3 @@ class TorchAudioBackend(BaseAudioProcessor):
             # F.linear matches torchaudio's MelScale implementation exactly
             mel_spec = torch.nn.functional.linear(features.transpose(-2, -1), mel_filters.T).transpose(-2, -1)
         return torch.clamp(mel_spec, min=spectrogram_config.mel_floor)
-
-    def _normalize_magnitude(self, features, *, spectrogram_config,
-                             reference=1.0, min_value=1e-10, db_range=None,
-                             dtype=None, **kwargs):
-        log_mel = spectrogram_config.log_mode
-        power = spectrogram_config.stft_config.power
-        if dtype is None:
-            dtype = torch.float32
-
-        if log_mel is None:
-            return features
-
-        if spectrogram_config.pre_log_offset is not None:
-            result = features + spectrogram_config.pre_log_offset
-        else:
-            result = torch.clamp(features, min=spectrogram_config.mel_floor)
-
-        if log_mel == "log":
-            result = torch.log(result).to(dtype)
-        elif log_mel == "log10":
-            result = torch.log10(result).to(dtype)
-        elif log_mel == "dB":
-            if reference <= 0.0:
-                raise ValueError("reference must be greater than zero")
-            if min_value <= 0.0:
-                raise ValueError("min_value must be greater than zero")
-            reference = max(min_value, reference)
-            multiplier = 10.0 if power == 2.0 else 20.0 if power == 1.0 else None
-            if multiplier is None:
-                raise ValueError(f"Cannot use log_mel option 'dB' with power {power}")
-            log_ref = torch.log10(torch.tensor(reference, dtype=result.dtype, device=result.device))
-            result = torch.clamp(result, min=min_value)
-            result = multiplier * (torch.log10(result) - log_ref)
-            if db_range is not None:
-                if db_range <= 0.0:
-                    raise ValueError("db_range must be greater than zero")
-                max_vals = result.amax(dim=-2, keepdim=True) if result.ndim > 2 else result.max()
-                result = torch.clamp(result, min=max_vals - db_range)
-            result = result.to(dtype)
-        else:
-            raise ValueError(f"Unknown log_mel option: {log_mel}")
-
-        if spectrogram_config.skip_last_frame:
-            result = result[..., :-1]
-
-        return self._apply_post_log_normalization(result, spectrogram_config)
-
-    def _apply_post_log_normalization(self, result, spectrogram_config):
-        """Shared post-log clamp + affine rescale (ADR 0004). The Whisper/Voxtral max-clip
-        pattern is the only widely-shared post-log shape that lives in the base; per-bin
-        normalization is too Gemma-family-specific and stays in each model's own
-        `_normalize_magnitude` override."""
-        if spectrogram_config.clip_max_offset is not None:
-            max_vals = result.amax(dim=(-2, -1), keepdim=True)
-            result = torch.maximum(result, max_vals - spectrogram_config.clip_max_offset)
-        if spectrogram_config.post_log_shift is not None:
-            result = result + spectrogram_config.post_log_shift
-        if spectrogram_config.post_log_scale is not None:
-            result = result * spectrogram_config.post_log_scale
-        return result
