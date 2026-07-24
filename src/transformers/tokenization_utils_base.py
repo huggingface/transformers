@@ -24,6 +24,7 @@ import copy
 import json
 import os
 import re
+import shutil
 import warnings
 from collections import OrderedDict, UserDict
 from collections.abc import Callable, Collection, Mapping, Sequence, Sized
@@ -1990,6 +1991,7 @@ class PreTrainedTokenizerBase(PushToHubMixin):
         legacy_format: bool | None = None,
         filename_prefix: str | None = None,
         push_to_hub: bool = False,
+        save_format: str | None = None,
         **kwargs,
     ) -> tuple[str, ...]:
         """
@@ -2021,12 +2023,19 @@ class PreTrainedTokenizerBase(PushToHubMixin):
                 Whether or not to push your model to the Hugging Face model hub after saving it. You can specify the
                 repository you want to push to with `repo_id` (will default to the name of `save_directory` in your
                 namespace).
+            save_format (`str`, *optional*):
+                `"mistral"` to save as native `tekken.json` by copying the original file (requires the original
+                `tekken.json` to be available via `vocab_file`).  `"hf"` or *None* for the default HuggingFace
+                format.
             kwargs (`dict[str, Any]`, *optional*):
                 Additional key word arguments passed along to the [`~utils.PushToHubMixin.push_to_hub`] method.
 
         Returns:
             A tuple of `str`: The files saved.
         """
+
+        if save_format is not None and save_format not in ("hf", "mistral"):
+            raise ValueError(f"Unknown save_format={save_format!r}. Supported values: 'hf', 'mistral'.")
 
         if os.path.isfile(save_directory):
             logger.error(f"Provided path ({save_directory}) should be a directory, not a file")
@@ -2039,6 +2048,35 @@ class PreTrainedTokenizerBase(PushToHubMixin):
             repo_id = kwargs.pop("repo_id", str(save_directory).split(os.path.sep)[-1])
             repo_id = hf_api().create_repo(repo_id, exist_ok=True, **kwargs).repo_id
             files_timestamps = self._get_files_timestamps(save_directory)
+
+        # Native Mistral format: copy the original tekken.json into save_directory.
+        if save_format == "mistral":
+            from .integrations.mistral.constants import TEKKEN_VOCAB_FILE
+
+            vocab_file = self.init_kwargs.get("vocab_file") or getattr(self, "vocab_file", None)
+            if (
+                isinstance(vocab_file, str)
+                and os.path.basename(vocab_file) == TEKKEN_VOCAB_FILE
+                and os.path.isfile(vocab_file)
+            ):
+                dest = os.path.join(save_directory, TEKKEN_VOCAB_FILE)
+                shutil.copy(vocab_file, dest)
+                save_files = (dest,)
+            else:
+                raise OSError(
+                    "Cannot save in 'mistral' format: the original tekken.json is not available. "
+                    "Load a native checkpoint (that still contains tekken.json) or install "
+                    "mistral-common to use MistralCommonBackend."
+                )
+            if push_to_hub:
+                self._upload_modified_files(
+                    save_directory,
+                    repo_id,
+                    files_timestamps,
+                    commit_message=commit_message,
+                    token=kwargs.get("token"),
+                )
+            return save_files
 
         tokenizer_config_file = os.path.join(
             save_directory, (filename_prefix + "-" if filename_prefix else "") + TOKENIZER_CONFIG_FILE

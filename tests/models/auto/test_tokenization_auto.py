@@ -25,6 +25,7 @@ import pytest
 from parameterized import parameterized
 
 import transformers
+from tests.integrations.mistral.tekken_fixtures import build_fake_tekken_dict
 from transformers import (
     AutoTokenizer,
     BertConfig,
@@ -243,7 +244,8 @@ class AutoTokenizerTest(unittest.TestCase):
     @require_mistral_common
     def test_mistral_common_backend_skips_incorrect_hub_tokenizer_class(self):
         """Some Mistral checkpoint have tokenizer_class=LlamaTokenizer in its hub tokenizer_config.json.
-        When tekken.json is available, the wrong hub class should be ignored and MistralCommonBackend should be loaded."""
+        When tekken.json is present, tekken-first detection should return MistralCommonBackend
+        regardless of HF-format files also being present."""
         from transformers.tokenization_mistral_common import MistralCommonBackend
 
         tokenizer = AutoTokenizer.from_pretrained("mistralai/Ministral-8B-Instruct-2410")
@@ -275,6 +277,58 @@ class AutoTokenizerTest(unittest.TestCase):
         tokenizer = AutoTokenizer.from_pretrained("HuggingFaceH4/zephyr-7b-beta")
         self.assertIsInstance(tokenizer, TokenizersBackend)
         self.assertGreater(len(tokenizer("zephyr")["input_ids"]), 0)
+
+    @require_tokenizers
+    @require_mistral_common
+    def test_native_first_both_formats_local_dir(self):
+        """Tekken-first: local dir with tekken.json AND HF-format files → MistralCommonBackend.
+
+        When a checkpoint contains both tekken.json and HF-format markers
+        (tokenizer_config.json / tokenizer.json), AutoTokenizer must return
+        MistralCommonBackend because tekken.json takes priority.
+        """
+        from transformers.models.mistral.configuration_mistral import MistralConfig
+        from transformers.tokenization_mistral_common import MistralCommonBackend
+
+        # Build fake tekken.json matching the minimal required structure.
+        tekken_data = build_fake_tekken_dict()
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            # Save any real HF tokenizer into the dir (provides tokenizer.json + tokenizer_config.json).
+            hf_tokenizer = AutoTokenizer.from_pretrained(SMALL_MODEL_IDENTIFIER)
+            hf_tokenizer.save_pretrained(tmp_dir)
+
+            # Add fake tekken.json alongside the HF files.
+            with open(os.path.join(tmp_dir, "tekken.json"), "w", encoding="utf-8") as f:
+                json.dump(tekken_data, f)
+
+            # With MistralConfig, the registered tokenizer is MistralCommonBackend and tekken.json
+            # is present, so tekken-first logic selects MistralCommonBackend.
+            tokenizer = AutoTokenizer.from_pretrained(tmp_dir, config=MistralConfig())
+
+        self.assertIsInstance(tokenizer, MistralCommonBackend)
+
+    @require_mistral_common
+    def test_native_only_local_dir(self):
+        """Tekken-first: local dir with ONLY tekken.json → MistralCommonBackend.
+
+        When a checkpoint contains tekken.json and NO HF-format markers, AutoTokenizer
+        should select MistralCommonBackend (mistral-common native path).
+        """
+        from transformers.models.mistral.configuration_mistral import MistralConfig
+        from transformers.tokenization_mistral_common import MistralCommonBackend
+
+        tekken_data = build_fake_tekken_dict()
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            # Write ONLY tekken.json — no config.json, tokenizer_config.json, or tokenizer.json.
+            with open(os.path.join(tmp_dir, "tekken.json"), "w", encoding="utf-8") as f:
+                json.dump(tekken_data, f)
+
+            # Config must be supplied externally because no config.json is present.
+            tokenizer = AutoTokenizer.from_pretrained(tmp_dir, config=MistralConfig())
+
+        self.assertIsInstance(tokenizer, MistralCommonBackend)
 
     @require_tokenizers
     def test_do_lower_case(self):

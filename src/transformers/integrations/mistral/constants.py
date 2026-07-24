@@ -12,28 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Mistral native format integration: tekken tokenizer conversion."""
+"""Lightweight constants for the Mistral native-format integration."""
 
-from typing import TYPE_CHECKING
-
-from ...utils import _LazyModule
-
-
-_import_structure = {
-    "tokenizer": [
-        "MistralConverter",
-        "convert_tekken_tokenizer",
-        "resolve_mistral_format",
-    ],
-}
-
-if TYPE_CHECKING:
-    from .tokenizer import (
-        MistralConverter,
-        convert_tekken_tokenizer,
-        resolve_mistral_format,
-    )
-else:
-    import sys
-
-    sys.modules[__name__] = _LazyModule(__name__, globals()["__file__"], _import_structure, module_spec=__spec__)
+# File name of the native Mistral tekken tokenizer vocabulary.
+TEKKEN_VOCAB_FILE = "tekken.json"
