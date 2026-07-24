@@ -427,6 +427,25 @@ def _patch_expand(original):
     return patch
 
 
+@register_patch("executorch", "torch.reshape", "torch.Tensor.reshape")
+def _patch_reshape(original):
+    """Materialise a non-contiguous input before ``reshape``.
+
+    ExecuTorch's edge-lowering reshape reference refuses a non-contiguous input (e.g. the
+    ``transpose(1, 2).reshape(...)`` in the packed vision-attention forward). A plain
+    ``.contiguous()`` gets folded away by functionalization, but a ``.clone()`` survives. Eager
+    ``reshape`` already copies a non-contiguous tensor, so this adds no extra work — it just moves
+    the copy where ExecuTorch's lowering needs it.
+    """
+
+    def patch(input, *shape):
+        if not input.is_contiguous():
+            input = input.clone()
+        return original(input, *shape)
+
+    return patch
+
+
 # ── Stage 3: ExecuTorch patches ───────────────────────────────────────────────
 # Reversible swaps of ExecuTorch internals (passes, verifiers, op dicts) that crash
 # on legitimate dynamic-shape patterns: `SpecPropPass.update_placeholder_tensor_specs`,

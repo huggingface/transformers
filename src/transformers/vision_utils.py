@@ -35,22 +35,30 @@ from .configuration_utils import PreTrainedConfig
 from .utils.generic import get_max_seqlen
 
 
-def get_vision_cu_seqlens(grid_thw: torch.Tensor, kwargs: dict | None = None) -> torch.Tensor:
+def get_vision_cu_seqlens(
+    grid_thw: torch.Tensor, merge_temporal: bool = False, kwargs: dict | None = None
+) -> torch.Tensor:
     """Get cumulative sequence lengths from vision grid info, or pop from `kwargs` if precomputed.
 
     Args:
         grid_thw: `(num_images_or_videos, 3)` — temporal, height, width per entry.
+        merge_temporal: when `False` (default), each frame is its own attention segment (`h * w`
+            per frame, `t` segments per entry — the qwen2_vl / glm4v convention). When `True`,
+            the whole clip is a single segment (`t * h * w`), i.e. attention spans all frames
+            jointly (the kimi_k25 convention).
         kwargs: optional caller kwargs — if it contains `"cu_seqlens"` it is popped and returned.
 
     Returns:
-        `cu_seqlens`: `(total_patches + 1,)` int32 cumulative sequence boundaries.
+        `cu_seqlens`: `(num_segments + 1,)` int32 cumulative sequence boundaries.
     """
     if kwargs is not None and (cu_seqlens := kwargs.pop("cu_seqlens", None)) is not None:
         return cu_seqlens
-    cu_seqlens = torch.repeat_interleave(grid_thw[:, 1] * grid_thw[:, 2], grid_thw[:, 0]).cumsum(
-        dim=0, dtype=grid_thw.dtype if torch.jit.is_tracing() else torch.int32
-    )
-    return F.pad(cu_seqlens, (1, 0), value=0)
+    dtype = grid_thw.dtype if torch.jit.is_tracing() else torch.int32
+    if merge_temporal:
+        seqlens = grid_thw[:, 0] * grid_thw[:, 1] * grid_thw[:, 2]
+    else:
+        seqlens = torch.repeat_interleave(grid_thw[:, 1] * grid_thw[:, 2], grid_thw[:, 0])
+    return F.pad(seqlens.cumsum(dim=0, dtype=dtype), (1, 0), value=0)
 
 
 def get_vision_attention_seqlens(
