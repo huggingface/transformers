@@ -2268,8 +2268,8 @@ class ProcessorMixin(PushToHubMixin):
                 this is needed to parse correctly. For a batched `response`, pass either a single prefix
                 (broadcast to every item) or one prefix per item. Only supported with new-style templates.
             tools (`list[dict]`, *optional*):
-                OpenAI-style tool definitions. When provided with a new-style template, tool-call
-                arguments are typed from the calling tool's JSON Schema as each region closes.
+                OpenAI-style tool definitions. Tool-call arguments are typed from the calling tool's
+                JSON Schema as each region closes.
         """
         if not hasattr(self, "tokenizer"):
             raise ValueError("Can't use parse_response on a processor class without a tokenizer!")

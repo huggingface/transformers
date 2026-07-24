@@ -3375,10 +3375,10 @@ class PreTrainedTokenizerBase(PushToHubMixin):
                 pre-write part of the message, so we need to see the prompt to parse correctly. For a batched
                 `response`, pass either a single prefix (broadcast to every item) or one prefix per item.
             tools (`list[dict]`, *optional*):
-                OpenAI-style tool definitions. When provided with a new-style `response_template`,
-                tool-call arguments are typed from the calling tool's JSON Schema, so `"7"` becomes
-                `7` for an integer parameter while a string parameter keeps `"7"`. Already-typed
-                values and arguments the schema does not describe are left untouched.
+                OpenAI-style tool definitions. Tool-call arguments are typed from the calling tool's
+                JSON Schema, so `"7"` becomes `7` for an integer parameter while a string parameter
+                keeps `"7"`. Already-typed values and arguments the schema does not describe are
+                left untouched.
 
         Returns:
             A parsed message `dict` for a single sequence, or a `list` of such dicts for a batch.

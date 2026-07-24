@@ -107,9 +107,9 @@ Each streamed parsing event is a dict with a `type` key. There are three kinds:
 
 | Type           | Description                                                                         | Contents                                                                                                                        |
 |----------------|-------------------------------------------------------------------------------------|---------------------------------------------------------------------------------------------------------------------------------|
-| `region_open`  | Indicates that the model has started a new region, such as `content` or `thinking`. | `field` (str): the field name. `captures` (dict): named groups matched by the open pattern; `{}` when there are none.           |
+| `region_open`  | Indicates that the model has started a new region, such as `content` or `thinking`. | `field` (str): the field name.                                                                                                  |
 | `region_chunk` | A chunk of text for the current region.                                             | `field` (str): the field name. `text` (str): the new chunk. `dirty` (bool): `True` if the chunk is raw text that needs parsing. |
-| `region_close` | Indicates that a region has finished, and that key is now finalized.                | `field` (str): the field name. `value` (any): the fully parsed value for the region.                                            |
+| `region_close` | Indicates that a region has finished, and that key is now finalized.                | `field` (str): the field name. `value` (any): the fully parsed value for the region                                             |
 
 `region_chunk` events are emitted for every region as bytes arrive, so a streaming UI can render progress
 even for structured regions. For text-like regions (`text`, `int`, `float`, `bool`) chunks are flagged
@@ -126,16 +126,16 @@ assistant prefill started a response before handing off to the model), the parse
 that were opened *and* closed inside the prefix produce a full `region_open` / `region_chunk` / `region_close`
 sequence and their parsed value lands in the output dict, exactly as if the model itself had written them.
 
-A typical event stream might look like this, for a template whose `tool_calls` field captures the
-function name in its `open_pattern` and writes each argument as its own tag:
+A typical event stream might look like this:
 
 ```python
-{"type": "region_open",  "field": "thinking", "captures": {}}
+{"type": "region_open",  "field": "thinking"}
 {"type": "region_chunk", "field": "thinking", "text": "I should ", "dirty": False}
 {"type": "region_chunk", "field": "thinking", "text": "greet the user", "dirty": False}
 {"type": "region_close", "field": "thinking", "value": "I should greet the user"}
-{"type": "region_open",  "field": "tool_calls", "captures": {"name": "greet_user"}}
-{"type": "region_chunk", "field": "tool_calls", "text": '<parameter=greeting>\nHi!\n</parameter>\n', "dirty": True}
+{"type": "region_open",  "field": "tool_calls"}
+{"type": "region_chunk", "field": "tool_calls", "text": '{"name": "greet_user", ', "dirty": True}
+{"type": "region_chunk", "field": "tool_calls", "text": '"arguments": {"greeting": "Hi!"}}', "dirty": True}
 {"type": "region_close", "field": "tool_calls", "value": {"type": "function", "function": {"name": "greet_user", "arguments": {"greeting": "Hi!"}}}}
 ```
 
@@ -146,13 +146,6 @@ restructured to generate the final tool call dict. As a result, the final output
 very different from the raw text. This final parsing will only happen when `region_close` is reached. It's
 up to you what you want to do with the `dirty` chunks until then - you can display them as-is to show the user the 
 "raw" output, or you can simply wait until you have something clean to display.
-
-Every `region_open` carries `captures`, the named groups matched by the field's `open_pattern`. These
-are the same values a `transform` refers to as `{name}` placeholders (see [Transform](#transform)),
-handed to you the moment the region opens instead of at the end. Tool-call fields usually capture the
-function name there, as `tool_calls` does above, so a UI can render the call header right away and
-fill in the arguments when `region_close` arrives. Regions opened by a literal `open`, by a pattern
-with no named groups, or implicitly report `captures={}`.
 
 This concludes most of what you need to know to use response templates. The rest of this document is focused on
 the internals of the parsing system and how to write response templates. This is mostly relevant for developers

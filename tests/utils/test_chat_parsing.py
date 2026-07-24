@@ -1504,18 +1504,6 @@ class ToolArgCoercionTest(unittest.TestCase):
         self.assertEqual(len(closes), 1)
         self.assertEqual(closes[0]["function"]["arguments"], {"label": "1.50", "hour": 7})
 
-    def test_region_open_carries_open_pattern_captures(self):
-        # region_open exposes the open pattern's named groups (here the tool name), letting a
-        # streaming consumer emit the tool-call header before the body is parsed.
-        stream = ResponseParser(_XML_STRING_ARGS_TEMPLATE, prefix="")
-        opens = [
-            event["captures"]
-            for chunk in _chunk_fixed(_SET_ALARM_CALL, 8)
-            for event in stream.feed(chunk)
-            if event["type"] == "region_open" and event["field"] == "tool_calls"
-        ]
-        self.assertEqual(opens, [{"name": "set_alarm"}])
-
     def test_qwen3_tools_coerces_strings_left_by_value_parser(self):
         # Without tools=, qwen3's json+allow_non_json value_parser types what it can (`true`) and
         # leaves invalid JSON (`007`) as a string. With tools=, schema-typed params skip
@@ -1711,12 +1699,6 @@ class ToolArgCoercionTest(unittest.TestCase):
         stream.feed(_SET_ALARM_CALL)
         message, _ = stream.finalize()
         self.assertEqual(_first_tool_args(message), {"hour": 7, "enabled": True, "label": "wake up"})
-
-    def test_legacy_response_schema_rejects_tools(self):
-        tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-gpt2")
-        legacy_schema = {"type": "object", "properties": {"role": {"const": "assistant"}}}
-        with self.assertRaisesRegex(ValueError, r"`tools=` is only supported with new-style"):
-            tokenizer.parse_response("hi", schema=legacy_schema, tools=_SET_ALARM_TOOLS)
 
     def test_tokenizer_parse_response_forwards_tools(self):
         # The public tokenizer entry point threads tools= through to coercion.

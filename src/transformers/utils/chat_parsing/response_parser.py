@@ -61,8 +61,6 @@ class ResponseParser:
     as each region closes. Anything the schema does not describe is left alone.
 
     Events can be either "region_open", "region_chunk", or "region_close".
-    "region_open" carries `captures`, the named groups from the field's open pattern
-    (typically the tool name), or `{}` when there are none.
 
     ResponseParser requires the chat `prefix` (i.e. the chat history, the prefill before the current generation).
     This is because chat templates or assistant prefills can sometimes write part of the message, and if we
@@ -286,7 +284,7 @@ class ResponseParser:
             return
         field = self._spec.fields[self._current]
         if not self._opened:
-            events.append({"type": "region_open", "field": self._current, "captures": {}})
+            events.append({"type": "region_open", "field": self._current})
             self._opened = True
         self._body += text
         dirty = field.content not in STREAMABLE_PARSERS
@@ -297,7 +295,7 @@ class ResponseParser:
         self._captures = {k: v for k, v in m.groupdict().items() if v is not None}
         self._body = ""
         self._opened = True
-        events.append({"type": "region_open", "field": field.name, "captures": dict(self._captures)})
+        events.append({"type": "region_open", "field": field.name})
 
     def _close_current(self, events: list[dict]) -> None:
         """Close the current region and reset to the implicit/null region.
