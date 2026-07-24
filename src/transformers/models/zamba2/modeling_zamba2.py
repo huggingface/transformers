@@ -479,7 +479,8 @@ class Zamba2MambaMixer(nn.Module):
         self.n_groups = config.mamba_ngroups
         self.head_dim = config.mamba_headdim
         self.chunk_size = config.chunk_size
-        self.time_step_limit = (config.time_step_min, config.time_step_max)
+        # No upper limit
+        self.time_step_limit = (config.time_step_min, float("inf"))
 
         self.conv_dim = self.intermediate_size + 2 * self.n_groups * self.ssm_state_size
 

@@ -204,7 +204,8 @@ class Zamba2MambaMixer(BambaMixer):
         self.head_dim = config.mamba_headdim
         self.num_heads = self.config.n_mamba_heads
         self.chunk_size = config.chunk_size
-        self.time_step_limit = (config.time_step_min, config.time_step_max)
+        # No upper limit
+        self.time_step_limit = (config.time_step_min, float("inf"))
 
         self.conv1d = nn.Conv1d(
             in_channels=self.conv_dim,
