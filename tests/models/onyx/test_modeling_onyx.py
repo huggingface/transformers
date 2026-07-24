@@ -171,7 +171,7 @@ class OnyxIntegrationTest(unittest.TestCase):
         image_grid_thw = image_inputs["image_grid_thw"]
         self.assertEqual(image_grid_thw.tolist(), [[1, 34, 46]])
 
-        num_vision_tokens = int(image_grid_thw.prod(dim=-1).sum() // processor.image_processor.downsample_factor**2)
+        num_vision_tokens = int(image_grid_thw.prod(dim=-1).sum() // processor.image_processor.merge_size**2)
         self.assertEqual(num_vision_tokens, 391)
 
         prompt_ids = tokenizer("In this photo we can see", add_special_tokens=False).input_ids
