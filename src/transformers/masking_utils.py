@@ -1474,7 +1474,7 @@ def create_recurrent_attention_mask(
     if not is_tracing(attention_mask) and torch.all(attention_mask == 1):
         return None
     # ``.contiguous()`` keeps the stride stable across decode steps so ``torch.compile`` doesn't recompile.
-    return attention_mask[:, -inputs_embeds.shape[1] :].contiguous()
+    return attention_mask[:, -inputs_embeds.shape[1] :].contiguous().bool()
 
 
 LAYER_PATTERN_TO_MASK_FUNCTION_MAPPING = {
