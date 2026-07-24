@@ -15,8 +15,6 @@ import subprocess
 import tempfile
 import unittest
 
-from parameterized import parameterized
-
 from transformers import is_torch_available
 from transformers.testing_utils import (
     backend_device_count,
@@ -141,19 +139,6 @@ class DeepseekV4ModelTest(CausalLMModelTest, unittest.TestCase):
                 self.assertIsInstance(layer_attention, torch.Tensor)
                 self.assertEqual(layer_attention.shape[0], batch_size)
                 self.assertEqual(layer_attention.shape[1], config.num_attention_heads)
-
-    @unittest.skip(
-        "V4's rotary uses per-layer-type inv_freq buffers (Gemma3 pattern); the common test calls forward without `layer_type` and reads `.inv_freq`, neither of which apply."
-    )
-    def test_model_rope_scaling_frequencies(self):
-        pass
-
-    @parameterized.expand([("linear",), ("dynamic",), ("yarn",)])
-    @unittest.skip(
-        "V4's rotary uses per-layer-type rope_parameters; the common test sets a flat dict and skips for multi-layer-type rotaries."
-    )
-    def test_model_rope_scaling_from_config(self, scaling_type):
-        pass
 
     def test_hidden_states_output(self):
         # V4 layers emit a 4D ``[B, S, hc_mult, hidden]`` tensor — the hc_mult streams

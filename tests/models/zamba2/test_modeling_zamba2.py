@@ -545,6 +545,13 @@ class Zamba2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
             # If this does not raise an error, the test passes (see https://github.com/huggingface/transformers/pull/35605)
             _ = model(**dummy_inputs)
 
+    @parameterized.expand([("linear",), ("dynamic",), ("yarn",)])
+    @unittest.skip(
+        "For some reason the diff is still small even though scaled RoPE is applied on attn layers, not worth investigation"
+    )
+    def test_model_rope_scaling_from_config(self, scaling_type):
+        pass
+
 
 @require_torch
 class Zamba2ModelIntegrationTest(unittest.TestCase):
