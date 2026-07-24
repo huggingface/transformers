@@ -20,7 +20,7 @@ class AudioSpectrogramTransformerAudioProcessorNumpy(NumpyAudioBackend):
     """NumPy sibling of [`AudioSpectrogramTransformerAudioProcessor`]. Uses kaldi-compatible
     fbank features via `_kaldi_fbank` (which delegates to torchaudio under the hood)."""
 
-    sample_rate = 16000
+    sampling_rate = 16000
     force_mono = True
     return_padding_mask = False
     do_batch_spectrogram = False

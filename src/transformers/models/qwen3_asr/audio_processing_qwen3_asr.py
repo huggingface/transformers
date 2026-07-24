@@ -29,7 +29,7 @@ class Qwen3ASRAudioProcessor(TorchAudioBackend):
       ``2 * n_window`` frames, as required by ``Qwen3ASREncoder``'s chunked attention.
     """
 
-    sample_rate = 16000
+    sampling_rate = 16000
     force_mono = True
     padding = "max_length"
     max_length = 480000  # 30 seconds at 16000 Hz

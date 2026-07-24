@@ -18,7 +18,7 @@ from ...audio_processing_backends import NumpyAudioBackend
 class DiaAudioProcessorNumpy(NumpyAudioBackend):
     """NumPy sibling of [`DiaAudioProcessor`]. Bit-exact to the torch sibling (ADR 0001)."""
 
-    sample_rate = 44100
+    sampling_rate = 44100
     force_mono = True
     add_channel_dim = True
     pad_to_multiple_of = 512

@@ -16,7 +16,7 @@ from ...audio_processing_backends import TorchAudioBackend
 
 
 class EncodecAudioProcessor(TorchAudioBackend):
-    sample_rate = 24000
+    sampling_rate = 24000
     force_mono = True
     add_channel_dim = True
 

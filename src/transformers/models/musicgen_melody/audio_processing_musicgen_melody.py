@@ -17,7 +17,7 @@ from ...utils.import_utils import requires
 
 
 class MusicgenMelodyAudioProcessor(TorchAudioBackend):
-    sample_rate = 32000
+    sampling_rate = 32000
     force_mono = True
     do_extract_spectrogram = True
     return_padding_mask = False
@@ -33,7 +33,7 @@ class MusicgenMelodyAudioProcessor(TorchAudioBackend):
         import torch
 
         self.chroma_filters = torch.from_numpy(
-            librosa.filters.chroma(sr=self.sample_rate, n_fft=self.n_fft, tuning=0, n_chroma=self.n_chroma)
+            librosa.filters.chroma(sr=self.sampling_rate, n_fft=self.n_fft, tuning=0, n_chroma=self.n_chroma)
         ).float()
 
     def extract_spectrogram(self, audio, **kwargs):

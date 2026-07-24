@@ -25,6 +25,7 @@ the test-spectrogram harness (ADR 0001/0003):
 """
 
 import math
+from typing import Unpack
 
 import numpy as np
 
@@ -36,6 +37,7 @@ from .audio_utils import (
     mel_to_hertz,
     power_to_db,
 )
+from .processing_utils import AudioKwargs
 from .utils import is_speech_available, is_torch_available, logging
 
 
@@ -53,6 +55,10 @@ if is_torch_available():
 
 class NumpyAudioBackend(BaseAudioProcessor):
     """NumPy backend for portable CPU-only audio processing."""
+
+    def __init__(self, *args, **kwargs: Unpack[AudioKwargs]):
+        super().__init__(*args, **kwargs)
+        self._set_attributes(**kwargs)
 
     @property
     def backend(self) -> str:
@@ -406,7 +412,7 @@ class NumpyAudioBackend(BaseAudioProcessor):
         Returns numpy array of shape (time, num_mel_bins).
         """
         if sample_frequency is None:
-            sample_frequency = self.sample_rate
+            sample_frequency = self.sampling_rate
 
         if is_speech_available():
             import torchaudio.compliance.kaldi as ta_kaldi
@@ -428,6 +434,10 @@ class NumpyAudioBackend(BaseAudioProcessor):
 
 class TorchAudioBackend(BaseAudioProcessor):
     """Torch backend for audio processing."""
+
+    def __init__(self, *args, **kwargs: Unpack[AudioKwargs]):
+        super().__init__(*args, **kwargs)
+        self._set_attributes(**kwargs)
 
     @property
     def backend(self) -> str:

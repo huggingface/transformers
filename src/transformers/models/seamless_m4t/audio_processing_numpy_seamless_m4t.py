@@ -22,7 +22,7 @@ class SeamlessM4tAudioProcessorNumpy(NumpyAudioBackend):
     """NumPy sibling of [`SeamlessM4tAudioProcessor`]. Per-utterance mean/var normalization
     plus stride concatenation reshape, matching the legacy `SeamlessM4TFeatureExtractor`."""
 
-    sample_rate = 16000
+    sampling_rate = 16000
     force_mono = True
     do_batch_spectrogram = False
     stride = 2

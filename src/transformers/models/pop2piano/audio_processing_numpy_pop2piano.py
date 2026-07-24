@@ -25,7 +25,7 @@ class Pop2PianoAudioProcessorNumpy(NumpyAudioBackend):
     """NumPy sibling of [`Pop2PianoAudioProcessor`]. Pure-config: log10 mel spectrogram
     pipeline shared by both backends via the base class hooks (ADR 0001)."""
 
-    sample_rate = 22050
+    sampling_rate = 22050
     force_mono = True
     spectrogram_config = SpectrogramConfig(
         stft_config=StftConfig(n_fft=4096, hop_length=1024, power=2.0),

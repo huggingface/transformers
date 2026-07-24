@@ -25,7 +25,7 @@ class Xcodec2AudioProcessor(TorchAudioBackend):
     The fbank path is bit-exact against `torchaudio.compliance.kaldi.fbank` as used by the
     legacy `Xcodec2FeatureExtractor`."""
 
-    sample_rate = 16000
+    sampling_rate = 16000
     force_mono = True
     add_channel_dim = True
     padding_value = 0.0

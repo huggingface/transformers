@@ -23,7 +23,7 @@ class ClapAudioProcessorNumpy(NumpyAudioBackend):
     """NumPy sibling of [`ClapAudioProcessor`]. Supports both `rand_trunc` (single view) and
     `fusion` (4-view chunking with bilinear-downsampled global view) truncation modes (ADR 0001)."""
 
-    sample_rate = 48000
+    sampling_rate = 48000
     force_mono = True
     max_length = 480000
     truncation_mode = "rand_trunc"  # "fusion" or "rand_trunc"

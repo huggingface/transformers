@@ -16,7 +16,7 @@ from ...audio_processing_backends import TorchAudioBackend
 
 
 class PeAudioAudioProcessor(TorchAudioBackend):
-    sample_rate = 16000
+    sampling_rate = 16000
     force_mono = True
 
 

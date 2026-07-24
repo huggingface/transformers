@@ -19,7 +19,7 @@ from ...audio_utils import MelScaleConfig, SpectrogramConfig, StftConfig
 
 
 class Phi4MultimodalAudioProcessor(TorchAudioBackend):
-    sample_rate = 16000
+    sampling_rate = 16000
     force_mono = True
     audio_compression_rate = 8
     audio_downsample_rate = 1

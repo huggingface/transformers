@@ -26,7 +26,7 @@ class ClapAudioProcessor(TorchAudioBackend):
     and `fusion` (4-view chunking with bilinear-downsampled global view) truncation modes.
     Random offsets are drawn from `np.random` to match the numpy sibling when seeded."""
 
-    sample_rate = 48000
+    sampling_rate = 48000
     force_mono = True
     max_length = 480000
     truncation_mode = "rand_trunc"  # "fusion" or "rand_trunc"

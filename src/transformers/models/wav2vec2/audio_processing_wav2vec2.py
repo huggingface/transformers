@@ -18,7 +18,7 @@ from ...audio_processing_backends import TorchAudioBackend
 
 
 class Wav2Vec2AudioProcessor(TorchAudioBackend):
-    sample_rate = 16000
+    sampling_rate = 16000
     force_mono = True
     do_normalize = True
 

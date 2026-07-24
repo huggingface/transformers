@@ -17,7 +17,7 @@ from .audio_processing_numpy_audio_spectrogram_transformer import AudioSpectrogr
 
 
 class AudioSpectrogramTransformerAudioProcessor(TorchAudioBackend):
-    sample_rate = 16000
+    sampling_rate = 16000
     force_mono = True
     return_padding_mask = False
     do_batch_spectrogram = False

@@ -34,14 +34,14 @@ def _unfold(array, dimension, size, step):
 
 
 def _gemma4_frame_length_ms_to_win_length(value, config_dict):
-    sr = config_dict.get("sample_rate") or config_dict.get("sampling_rate") or 16000
+    sr = config_dict.get("sampling_rate") or 16000
     spec = config_dict.setdefault("spectrogram_config", {})
     stft = spec.setdefault("stft_config", {})
     stft.setdefault("win_length", int(round(sr * value / 1000.0)))
 
 
 def _gemma4_hop_length_ms_to_hop_length(value, config_dict):
-    sr = config_dict.get("sample_rate") or config_dict.get("sampling_rate") or 16000
+    sr = config_dict.get("sampling_rate") or 16000
     spec = config_dict.setdefault("spectrogram_config", {})
     stft = spec.setdefault("stft_config", {})
     stft.setdefault("hop_length", int(round(sr * value / 1000.0)))
@@ -53,7 +53,7 @@ class Gemma4AudioProcessorNumpy(NumpyAudioBackend):
     seeded for parity, so the parity fixture disables dither. See [`Gemma4AudioProcessor`]
     for the full pipeline description."""
 
-    sample_rate = 16000
+    sampling_rate = 16000
     force_mono = True
     padding = "longest"
     padding_value = 0.0

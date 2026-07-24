@@ -22,7 +22,7 @@ class SpeechToTextAudioProcessorNumpy(NumpyAudioBackend):
     """NumPy sibling of [`SpeechToTextAudioProcessor`]. Per-waveform kaldi fbank features
     followed by per-utterance CMVN on the padded batch (ADR 0001)."""
 
-    sample_rate = 16000
+    sampling_rate = 16000
     force_mono = True
     do_batch_spectrogram = False
 

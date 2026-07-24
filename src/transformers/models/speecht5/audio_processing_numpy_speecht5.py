@@ -19,7 +19,7 @@ class SpeechT5AudioProcessorNumpy(NumpyAudioBackend):
     """NumPy sibling of [`SpeechT5AudioProcessor`]. Bit-exact to the torch sibling within
     the float32 noise floor (ADR 0001)."""
 
-    sample_rate = 16000
+    sampling_rate = 16000
     force_mono = True
 
 

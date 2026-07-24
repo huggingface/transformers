@@ -22,7 +22,7 @@ class ClvpAudioProcessor(TorchAudioBackend):
     """Torch sibling of [`ClvpAudioProcessorNumpy`]. Applies log compression and an optional
     per-mel-bin normalization (``mel_norms`` ~ per-bin stddev with implicit zero mean)."""
 
-    sample_rate = 22050
+    sampling_rate = 22050
     force_mono = True
     max_length = 132300  # 6 seconds at 22050 Hz
     truncation = True

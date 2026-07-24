@@ -22,7 +22,7 @@ class ParakeetAudioProcessorNumpy(NumpyAudioBackend):
     """NumPy sibling of [`ParakeetAudioProcessor`]. Bit-exact to the torch sibling within
     the float32 noise floor (ADR 0001)."""
 
-    sample_rate = 16000
+    sampling_rate = 16000
     force_mono = True
     spectrogram_config = SpectrogramConfig(
         stft_config=StftConfig(

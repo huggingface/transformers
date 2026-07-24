@@ -18,7 +18,7 @@ from ...audio_processing_backends import NumpyAudioBackend
 class PeAudioAudioProcessorNumpy(NumpyAudioBackend):
     """NumPy sibling of [`PeAudioAudioProcessor`] (ADR 0001)."""
 
-    sample_rate = 16000
+    sampling_rate = 16000
     force_mono = True
 
 

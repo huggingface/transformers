@@ -19,7 +19,7 @@ from .audio_processing_numpy_whisper import WhisperAudioProcessorNumpy
 
 
 class WhisperAudioProcessor(TorchAudioBackend):
-    sample_rate = 16000
+    sampling_rate = 16000
     force_mono = True
     return_padding_mask = False
     truncation = True

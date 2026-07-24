@@ -39,7 +39,7 @@ class CohereAsrAudioProcessor(TorchAudioBackend):
     6. Per-utterance mean/variance normalization on the padded batch, applied in
        ``_postprocess_output`` (ADR 0005)."""
 
-    sample_rate = 16000
+    sampling_rate = 16000
     force_mono = True
     padding = "longest"
 
@@ -169,8 +169,8 @@ class CohereAsrAudioProcessor(TorchAudioBackend):
     # Implemented as an override of `_preprocess_audio_like_inputs` so the chunking happens
     # on the prepared (per-item) audio list before padding/extraction.
 
-    def _preprocess_audio_like_inputs(self, audio, *args, sample_rate=None, **kwargs):
-        prepared = self._prepare_audio_like_inputs(audio=audio, sample_rate=sample_rate)
+    def _preprocess_audio_like_inputs(self, audio, *args, sampling_rate=None, **kwargs):
+        prepared = self._prepare_audio_like_inputs(audio=audio, sampling_rate=sampling_rate)
         chunked, audio_chunk_index = self._split_audio_chunks(prepared)
         result = self._preprocess(chunked, *args, **kwargs)
         # Materialise `audio_chunk_index` as an integer tensor so it survives both
@@ -195,7 +195,7 @@ class CohereAsrAudioProcessor(TorchAudioBackend):
         chunked: list = []
         audio_chunk_index: list[tuple[int, int | None]] = []
         for sample_idx, waveform in enumerate(prepared_audio):
-            duration_s = waveform.shape[0] / self.sample_rate
+            duration_s = waveform.shape[0] / self.sampling_rate
             if duration_s <= fast_path_threshold_s:
                 chunked.append(waveform)
                 audio_chunk_index.append((sample_idx, None))
@@ -207,8 +207,8 @@ class CohereAsrAudioProcessor(TorchAudioBackend):
         return chunked, audio_chunk_index
 
     def _split_single_audio(self, waveform):
-        chunk_size = max(1, int(round(self.max_audio_clip_s * self.sample_rate)))
-        boundary_context_size = max(1, int(round(self.overlap_chunk_second * self.sample_rate)))
+        chunk_size = max(1, int(round(self.max_audio_clip_s * self.sampling_rate)))
+        boundary_context_size = max(1, int(round(self.overlap_chunk_second * self.sampling_rate)))
         total_samples = waveform.shape[0]
         if total_samples <= chunk_size:
             return [waveform]

@@ -20,7 +20,7 @@ from .audio_processing_numpy_seamless_m4t import SeamlessM4tAudioProcessorNumpy
 
 
 class SeamlessM4tAudioProcessor(TorchAudioBackend):
-    sample_rate = 16000
+    sampling_rate = 16000
     force_mono = True
     do_batch_spectrogram = False
     stride = 2

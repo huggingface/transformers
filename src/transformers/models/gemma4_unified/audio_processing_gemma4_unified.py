@@ -31,7 +31,7 @@ class Gemma4UnifiedAudioProcessor(TorchAudioBackend):
 
     Unlike the standard Gemma4 audio processor there is no mel spectrogram stage."""
 
-    sample_rate = 16000
+    sampling_rate = 16000
     force_mono = True
     padding = "longest"
     padding_value = 0.0

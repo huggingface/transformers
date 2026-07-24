@@ -28,7 +28,7 @@ class Gemma4UnifiedAudioProcessorNumpy(NumpyAudioBackend):
     (ADR 0001): the pipeline is pure chunking with no floating-point arithmetic. See
     [`Gemma4UnifiedAudioProcessor`] for the full pipeline description."""
 
-    sample_rate = 16000
+    sampling_rate = 16000
     force_mono = True
     padding = "longest"
     padding_value = 0.0

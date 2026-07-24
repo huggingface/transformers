@@ -23,7 +23,7 @@ class SpeechToTextAudioProcessor(TorchAudioBackend):
     """Torch sibling of [`SpeechToTextAudioProcessorNumpy`]. Per-waveform kaldi fbank features
     followed by per-utterance CMVN on the padded batch."""
 
-    sample_rate = 16000
+    sampling_rate = 16000
     force_mono = True
     do_batch_spectrogram = False
 

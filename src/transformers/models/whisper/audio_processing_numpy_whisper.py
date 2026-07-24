@@ -20,17 +20,16 @@ from ...audio_utils import MelScaleConfig, SpectrogramConfig, StftConfig
 
 def _whisper_chunk_length_to_max_length(value, config_dict):
     # Legacy Whisper hub configs store `chunk_length=30` (seconds); the new API uses `max_length`
-    # in samples. Translate using the sampling rate (already-translated to `sample_rate` by the
-    # base mapping by the time this runs, or still the legacy key if not yet processed).
-    sample_rate = config_dict.get("sample_rate") or config_dict.get("sampling_rate") or 16000
-    config_dict.setdefault("max_length", value * sample_rate)
+    # in samples. Translate using the sampling rate carried by the pass-through `sampling_rate` key.
+    sampling_rate = config_dict.get("sampling_rate") or 16000
+    config_dict.setdefault("max_length", value * sampling_rate)
 
 
 class WhisperAudioProcessorNumpy(NumpyAudioBackend):
     """NumPy sibling of [`WhisperAudioProcessor`]. Required to produce bit-exact outputs
     against the torch sibling (ADR 0001)."""
 
-    sample_rate = 16000
+    sampling_rate = 16000
     force_mono = True
     return_padding_mask = False
     truncation = True

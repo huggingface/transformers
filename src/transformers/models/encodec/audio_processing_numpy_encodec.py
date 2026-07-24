@@ -18,7 +18,7 @@ from ...audio_processing_backends import NumpyAudioBackend
 class EncodecAudioProcessorNumpy(NumpyAudioBackend):
     """NumPy sibling of [`EncodecAudioProcessor`]. Bit-exact to the torch sibling (ADR 0001)."""
 
-    sample_rate = 24000
+    sampling_rate = 24000
     force_mono = True
     add_channel_dim = True
 

@@ -20,7 +20,7 @@ from .audio_processing_numpy_parakeet import ParakeetAudioProcessorNumpy
 
 
 class ParakeetAudioProcessor(TorchAudioBackend):
-    sample_rate = 16000
+    sampling_rate = 16000
     force_mono = True
 
     spectrogram_config = ParakeetAudioProcessorNumpy.spectrogram_config

@@ -36,7 +36,7 @@ class Gemma4AudioProcessor(TorchAudioBackend):
     7. Frame-aware mask: a mel frame is valid only when every sample in its analysis window
        is real audio (we check the last sample's attention_mask value)."""
 
-    sample_rate = 16000
+    sampling_rate = 16000
     force_mono = True
     padding = "longest"
     padding_value = 0.0

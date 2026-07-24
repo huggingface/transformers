@@ -30,7 +30,7 @@ class InklingAudioProcessor(TorchAudioBackend):
     `InklingProcessor`, not here.
     """
 
-    sample_rate = 16000
+    sampling_rate = 16000
     force_mono = True
     model_input_names = ["input_features", "input_features_mask"]
     spectrogram_config = SpectrogramConfig(

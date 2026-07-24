@@ -21,7 +21,7 @@ from ...audio_utils import MelScaleConfig, SpectrogramConfig, StftConfig
 
 
 class GraniteSpeechAudioProcessor(TorchAudioBackend):
-    sample_rate = 16000
+    sampling_rate = 16000
     force_mono = True
     return_padding_mask = False
     do_extract_spectrogram = True

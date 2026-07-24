@@ -24,7 +24,7 @@ class Gemma3nAudioProcessor(TorchAudioBackend):
     `win_length + 1` samples so `_apply_frame_processing` can apply HTK-style preemphasis
     before reducing to `win_length`."""
 
-    sample_rate = 16000
+    sampling_rate = 16000
     force_mono = True
     max_length = 480000  # 30 seconds
     truncation = True

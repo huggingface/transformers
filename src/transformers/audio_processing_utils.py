@@ -13,7 +13,7 @@
 # limitations under the License.
 
 from dataclasses import fields, replace
-from typing import Any, TypedDict, Unpack
+from typing import Any, Unpack
 
 import numpy as np
 
@@ -21,63 +21,48 @@ from .audio_processing_base import AudioProcessingMixin
 from .audio_utils import AudioInput, SpectrogramConfig, make_list_of_audio
 from .feature_extraction_utils import BatchFeature
 from .processing_utils import AudioKwargs
-from .tokenization_utils_base import PaddingStrategy, TruncationStrategy
+from .tokenization_utils_base import TruncationStrategy
 from .utils import PaddingStrategy, TensorType, logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class AudioKwargs(TypedDict, total=False):
-    sampling_rate: int | None
-    spectrogram_config: dict | SpectrogramConfig | None
-    do_extract_spectrogram: bool | None
-    do_batch_spectrogram: bool | None
-    do_resample: bool | None
-    return_tensors: str | TensorType | None
-    padding: bool | str | PaddingStrategy | None
-    max_length: int | None
-    truncation: bool | str | TruncationStrategy | None
-    pad_to_multiple_of: int | None
-
-
 class BaseAudioProcessor(AudioProcessingMixin):
     model_input_names = ["audio"]
     valid_kwargs = AudioKwargs
-    unused_kwargs = None
 
-    # global defaults
-    sample_rate: int = None
+    # Only attributes with a meaningful non-None default (or that are read directly rather than
+    # through `valid_kwargs`) are declared here. `AudioKwargs` fields that default to None
+    # (max_length, truncation, pad_to_multiple_of, spectrogram_config, do_extract_spectrogram)
+    # are materialized on the instance by `_init_kwargs_from_valid_kwargs`, mirroring how
+    # BaseImageProcessor omits its None-default ImagesKwargs fields.
+
+    # identity (required; validated in __init__)
+    sampling_rate: int = None
     force_mono: bool = None
-    add_channel_dim: bool = False
 
-    # padding defaults
+    add_channel_dim: bool = False
     padding = True
     padding_side = "right"
     padding_value = 0.0
-    max_length = None
-    truncation = None
-    pad_to_multiple_of = None
-
     return_padding_mask = True
     mask_level = None  # None = auto (features for spectrogram, audio for raw), "audio" = always audio-level
-    spectrogram_config = None
-    do_extract_spectrogram = None
     do_batch_spectrogram = True
 
     # ── Core ─────────────────────────────────────────────────────────────
 
     def __init__(
         self,
-        sample_rate: int | None = None,
+        sampling_rate: int | None = None,
         force_mono: bool | None = None,
-        **kwargs,
+        **kwargs: Unpack[AudioKwargs],
     ):
-        if sample_rate is not None:
-            self.sample_rate = sample_rate
-        if self.sample_rate is None:
+        if sampling_rate is not None:
+            self.sampling_rate = sampling_rate
+        if self.sampling_rate is None:
             raise ValueError(
-                f"`sample_rate` must be set either as a class attribute on {self.__class__.__name__} "
+                f"`sampling_rate` must be set either as a class attribute on {self.__class__.__name__} "
                 "or passed to __init__."
             )
 
@@ -90,10 +75,17 @@ class BaseAudioProcessor(AudioProcessingMixin):
             )
 
         super().__init__(**kwargs)
+        # We don't call self._set_attributes here for backward compatibility with remote code;
+        # the backend subclasses (NumpyAudioBackend, TorchAudioBackend) call it in their __init__.
+        # Mirrors BaseImageProcessor, whose TorchvisionBackend/PilBackend do the same.
 
-        # Standardize init attributes (coerce dicts to config dataclasses)
-        self._set_attributes()
+    def _set_attributes(self, **kwargs):
+        """Standardize instance attributes, then precompute audio-specific init state.
 
+        Coerces dict configs to dataclasses (via ``PreprocessingMixin`` / ``_standardize_kwargs``),
+        then precomputes the mel filter bank and initializes the STFT window cache. Called from the
+        backend subclasses' ``__init__`` (not the base, for remote-code BC)."""
+        super()._set_attributes(**kwargs)
         # Pre-compute mel filters from spectrogram_config
         if self.spectrogram_config is not None:
             if self.spectrogram_config.mel_scale_config is not None and not hasattr(self, "mel_filters"):
@@ -118,24 +110,24 @@ class BaseAudioProcessor(AudioProcessingMixin):
         self,
         audio: AudioInput,
         *args,
-        sample_rate: int | None = None,
+        sampling_rate: int | None = None,
         **kwargs: Unpack[AudioKwargs],
     ) -> BatchFeature:
-        audio = self._prepare_audio_like_inputs(audio=audio, sample_rate=sample_rate)
+        audio = self._prepare_audio_like_inputs(audio=audio, sampling_rate=sampling_rate)
         return self._preprocess(audio, *args, **kwargs)
 
-    def _prepare_audio_like_inputs(self, audio: AudioInput, *args, sample_rate: int | None = None, **kwargs) -> list:
+    def _prepare_audio_like_inputs(self, audio: AudioInput, *args, sampling_rate: int | None = None, **kwargs) -> list:
         """
         Prepare audio-like inputs for processing by structuring and then converting each
         audio item via `process_audio`.
 
         Analogous to `_prepare_image_like_inputs` in the image processing pipeline.
         """
-        audio = self._prepare_audio_structure(audio, sample_rate=sample_rate)
+        audio = self._prepare_audio_structure(audio, sampling_rate=sampling_rate)
         audio = [self.process_audio(audio_el) for audio_el in audio]
         return audio
 
-    def _prepare_audio_structure(self, audio: AudioInput, sample_rate: int | None = None) -> list:
+    def _prepare_audio_structure(self, audio: AudioInput, sampling_rate: int | None = None) -> list:
         """
         Prepare the audio structure for processing: fetch URL inputs, validate sample rate,
         and flatten into a list of audio arrays.
@@ -150,18 +142,14 @@ class BaseAudioProcessor(AudioProcessingMixin):
             # URL inputs: load directly at the correct sample rate
             audio = self.fetch_audio(audio)
         else:
-            # Array inputs: validate that the user-provided sample rate matches the model's
-            if sample_rate is not None:
-                if sample_rate != self.sample_rate:
-                    raise ValueError(
-                        f"The model corresponding to this audio processor: {self.__class__.__name__} was trained using a"
-                        f" sample rate of {self.sample_rate}. Please make sure that the provided `audio` input"
-                        f" was sampled with {self.sample_rate} and not {sample_rate}."
-                    )
-            else:
-                logger.warning(
-                    f"It is strongly recommended to pass the `sample_rate` argument to `{self.__class__.__name__}()`. "
-                    "Failing to do so can result in silent errors that might be hard to debug."
+            # Array inputs: validate that the caller-asserted sampling rate matches the model's.
+            # `PreprocessingMixin.preprocess` setdefaults `sampling_rate` from the model's own
+            # `self.sampling_rate`, so an omitted rate no-ops here; only a genuine mismatch raises.
+            if sampling_rate is not None and sampling_rate != self.sampling_rate:
+                raise ValueError(
+                    f"The model corresponding to this audio processor: {self.__class__.__name__} was trained using a"
+                    f" sampling rate of {self.sampling_rate}. Please make sure that the provided `audio` input"
+                    f" was sampled with {self.sampling_rate} and not {sampling_rate}."
                 )
 
         audio = make_list_of_audio(audio)
@@ -309,7 +297,7 @@ class BaseAudioProcessor(AudioProcessingMixin):
 
     def _validate_preprocess_kwargs(
         self,
-        sample_rate: int | None = None,
+        sampling_rate: int | None = None,
         max_length: int | None = None,
         truncation: bool | None = None,
         pad_to_multiple_of: int | None = None,
@@ -689,23 +677,23 @@ class BaseAudioProcessor(AudioProcessingMixin):
         num_frequency_bins = 1 + stft_cfg.n_fft // 2
         n_fft = (num_frequency_bins - 1) * 2
         min_frequency = mel_cfg.f_min
-        max_frequency = mel_cfg.f_max if mel_cfg.f_max is not None else self.sample_rate / 2
+        max_frequency = mel_cfg.f_max if mel_cfg.f_max is not None else self.sampling_rate / 2
         computation_dtype = mel_cfg.computation_dtype or spectrogram_config.computation_dtype
 
         if mel_cfg.triangularize_in_mel_space and mel_cfg.bands_to_zero == 0:
             mel_filters = self._kaldi_exact_mel_banks(
                 mel_cfg.n_mels, num_frequency_bins, min_frequency, max_frequency,
-                self.sample_rate, n_fft, mel_cfg, computation_dtype,
+                self.sampling_rate, n_fft, mel_cfg, computation_dtype,
             )
         elif mel_cfg.triangularize_in_mel_space:
             mel_filters = self._kaldi_mel_banks_with_zero_bands(
                 mel_cfg.n_mels, num_frequency_bins, min_frequency, max_frequency,
-                self.sample_rate, n_fft, mel_cfg, computation_dtype,
+                self.sampling_rate, n_fft, mel_cfg, computation_dtype,
             )
         else:
             mel_filters = self._standard_mel_banks(
                 mel_cfg.n_mels, num_frequency_bins, min_frequency, max_frequency,
-                self.sample_rate, n_fft, mel_cfg, computation_dtype,
+                self.sampling_rate, n_fft, mel_cfg, computation_dtype,
             )
 
         # Cast back when only the mel-level dtype requested higher precision.

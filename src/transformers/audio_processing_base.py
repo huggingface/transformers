@@ -112,13 +112,14 @@ class AudioProcessingMixin(PreprocessingMixin):
     #                Whisper's ``chunk_length`` → derived ``max_length = chunk_length * sampling_rate``.
     #   - None:      drop the legacy key with no translation.
     #
-    # The base mapping covers both universal keys (`sampling_rate`, `return_attention_mask`,
+    # The base mapping covers both universal keys (`return_attention_mask`, `feature_extractor_type`,
     # …) and spectrogram-domain keys (`n_fft`, `hop_length`, …). For non-spectrogram models
     # the spectrogram keys are simply absent from the hub config — translation is a no-op.
     # See docs/adr/0002-legacy-field-mapping.md.
     _legacy_field_mapping_base: dict = {
-        # Universal keys (apply to every audio processor)
-        "sampling_rate": "sample_rate",
+        # Universal keys (apply to every audio processor).
+        # NOTE: `sampling_rate` is intentionally not listed — the hub key matches the modern
+        # instance attribute `sampling_rate` verbatim, so it passes through `from_dict` untranslated.
         "feature_extractor_type": None,
         "audio_processor_type": None,
         "processor_class": None,
@@ -207,7 +208,7 @@ class AudioProcessingMixin(PreprocessingMixin):
         returned.
         """
         if sampling_rate is None:
-            sampling_rate = getattr(self, "sample_rate", 16000)
+            sampling_rate = getattr(self, "sampling_rate", 16000)
         if isinstance(audio_url_or_urls, list):
             return [self.fetch_audio(x, sampling_rate=sampling_rate) for x in audio_url_or_urls]
         elif isinstance(audio_url_or_urls, str):

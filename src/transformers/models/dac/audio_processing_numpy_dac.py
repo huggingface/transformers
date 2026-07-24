@@ -19,7 +19,7 @@ class DacAudioProcessorNumpy(NumpyAudioBackend):
     """NumPy sibling of [`DacAudioProcessor`]. Pure-config: no spectrogram extraction, just
     raw-audio passthrough with mono coercion and a leading channel axis (ADR 0001)."""
 
-    sample_rate = 16000
+    sampling_rate = 16000
     force_mono = True
     add_channel_dim = True
 

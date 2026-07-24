@@ -36,7 +36,7 @@ class Gemma3nAudioProcessorNumpy(NumpyAudioBackend):
     preemphasis on `win_length + 1` frames, matching the legacy `Gemma3nAudioFeatureExtractor`
     bit-exact (ADR 0001)."""
 
-    sample_rate = 16000
+    sampling_rate = 16000
     force_mono = True
     max_length = 480000  # 30 seconds
     truncation = True

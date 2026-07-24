@@ -15,17 +15,16 @@
 import numpy as np
 
 from ...audio_processing_backends import NumpyAudioBackend
-from ...audio_processing_utils import AudioKwargs
 from ...audio_utils import MelScaleConfig, SpectrogramConfig, StftConfig
+from ...processing_utils import AudioKwargs
 
 
 def _qwen3_asr_chunk_length_to_max_length(value, config_dict):
     # Legacy Qwen3 ASR hub configs store `chunk_length=30` (seconds); the new API uses
-    # `max_length` in samples. Translate using the sampling rate (already translated to
-    # `sample_rate` by the base mapping by the time this runs, or still the legacy key
-    # if not yet processed).
-    sample_rate = config_dict.get("sample_rate") or config_dict.get("sampling_rate") or 16000
-    config_dict.setdefault("max_length", value * sample_rate)
+    # `max_length` in samples. Translate using the sampling rate carried by the pass-through
+    # `sampling_rate` key.
+    sampling_rate = config_dict.get("sampling_rate") or 16000
+    config_dict.setdefault("max_length", value * sampling_rate)
 
 
 class Qwen3ASRAudioKwargs(AudioKwargs, total=False):
@@ -45,7 +44,7 @@ class Qwen3ASRAudioProcessorNumpy(NumpyAudioBackend):
       ``2 * n_window`` frames, as required by ``Qwen3ASREncoder``'s chunked attention.
     """
 
-    sample_rate = 16000
+    sampling_rate = 16000
     force_mono = True
     padding = "max_length"
     max_length = 480000  # 30 seconds at 16000 Hz

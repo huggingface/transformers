@@ -27,7 +27,7 @@ class CohereAsrAudioProcessorNumpy(NumpyAudioBackend):
     cannot be reproduced bit-exactly with numpy's RNG, so the parity test disables it. See
     [`CohereAsrAudioProcessor`] for the full pipeline description."""
 
-    sample_rate = 16000
+    sampling_rate = 16000
     force_mono = True
     padding = "longest"
 
@@ -137,8 +137,8 @@ class CohereAsrAudioProcessorNumpy(NumpyAudioBackend):
 
     # ── Long-audio chunking (mirrors the torch sibling) ─────────────────────────────────
 
-    def _preprocess_audio_like_inputs(self, audio, *args, sample_rate=None, **kwargs):
-        prepared = self._prepare_audio_like_inputs(audio=audio, sample_rate=sample_rate)
+    def _preprocess_audio_like_inputs(self, audio, *args, sampling_rate=None, **kwargs):
+        prepared = self._prepare_audio_like_inputs(audio=audio, sampling_rate=sampling_rate)
         chunked, audio_chunk_index = self._split_audio_chunks(prepared)
         result = self._preprocess(chunked, *args, **kwargs)
         return_tensors = kwargs.get("return_tensors")
@@ -158,7 +158,7 @@ class CohereAsrAudioProcessorNumpy(NumpyAudioBackend):
         chunked: list = []
         audio_chunk_index: list[tuple[int, int | None]] = []
         for sample_idx, waveform in enumerate(prepared_audio):
-            duration_s = waveform.shape[0] / self.sample_rate
+            duration_s = waveform.shape[0] / self.sampling_rate
             if duration_s <= fast_path_threshold_s:
                 chunked.append(waveform)
                 audio_chunk_index.append((sample_idx, None))
@@ -170,8 +170,8 @@ class CohereAsrAudioProcessorNumpy(NumpyAudioBackend):
         return chunked, audio_chunk_index
 
     def _split_single_audio(self, waveform):
-        chunk_size = max(1, int(round(self.max_audio_clip_s * self.sample_rate)))
-        boundary_context_size = max(1, int(round(self.overlap_chunk_second * self.sample_rate)))
+        chunk_size = max(1, int(round(self.max_audio_clip_s * self.sampling_rate)))
+        boundary_context_size = max(1, int(round(self.overlap_chunk_second * self.sampling_rate)))
         total_samples = waveform.shape[0]
         if total_samples <= chunk_size:
             return [waveform]

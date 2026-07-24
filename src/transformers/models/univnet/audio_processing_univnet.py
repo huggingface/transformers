@@ -22,7 +22,7 @@ class UnivNetAudioProcessor(TorchAudioBackend):
     """Torch sibling of [`UnivNetAudioProcessorNumpy`]. Reflect-padded STFT with mel_floor
     added inside the magnitude sqrt, no mel-floor clamp, and a `(frames, n_mels)` output layout."""
 
-    sample_rate = 24000
+    sampling_rate = 24000
     force_mono = True
     mask_level = "audio"
     mel_floor = 1e-9
@@ -37,7 +37,7 @@ class UnivNetAudioProcessor(TorchAudioBackend):
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        self.num_max_samples = self.max_length_s * self.sample_rate
+        self.num_max_samples = self.max_length_s * self.sampling_rate
 
     def _stft(self, audio, *, spectrogram_config, **kwargs):
         # UnivNet uses reflect padding with (n_fft - hop_length) / 2 instead of center padding

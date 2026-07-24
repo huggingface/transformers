@@ -24,7 +24,7 @@ class Xcodec2AudioProcessorNumpy(NumpyAudioBackend):
     for the semantic encoder (`audio_features`), computed in `_postprocess_output` from the
     padded audio batch (matching the legacy `Xcodec2FeatureExtractor`)."""
 
-    sample_rate = 16000
+    sampling_rate = 16000
     force_mono = True
     add_channel_dim = True
     padding_value = 0.0

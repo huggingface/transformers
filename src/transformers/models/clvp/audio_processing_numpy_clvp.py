@@ -22,7 +22,7 @@ class ClvpAudioProcessorNumpy(NumpyAudioBackend):
     """NumPy sibling of [`ClvpAudioProcessor`]. Bit-exact to the legacy `ClvpFeatureExtractor`
     via float64 log + per-mel-norm division before float32 cast (ADR 0001)."""
 
-    sample_rate = 22050
+    sampling_rate = 22050
     force_mono = True
     max_length = 132300  # 6 seconds at 22050 Hz
     truncation = True
