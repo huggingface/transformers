@@ -1124,7 +1124,12 @@ def convert_transformer_weights(
             head_dim = weights.shape[-1]  # Last dimension is head_dim
         else:
             # Fall back to config-based determination
-            head_dim = config.per_layer_config[layer_idx].head_dim
+            head_dim = (
+                config.global_head_dim
+                if config.layer_types[layer_idx] == "full_attention" and config.global_head_dim
+                else config.head_dim
+            )
+
         # Note: In new format, weights are per-layer (not batched), so no enumerate loop needed
         matrix = weights
 
@@ -1152,7 +1157,7 @@ def convert_transformer_weights(
             converted_paths.append(f"{base_path}.self_attn.k_proj.weight")
             converted_weights.append(
                 matrix.transpose(1, 0, 2)
-                .reshape(config.hidden_size, config.per_layer_config[layer_idx].num_key_value_heads * head_dim)
+                .reshape(config.hidden_size, config.num_global_key_value_heads * head_dim)
                 .transpose()
             )
         elif path.endswith("attn/q_einsum"):
@@ -1213,7 +1218,12 @@ def convert_transformer_weights(
             layer_idx = _SLIDING_WINDOW_PATTERN * i + attention_type_index
             is_kv_shared_layer = layer_idx >= first_kv_shared_layer_idx >= 0
             base_path = f"layers.{layer_idx}"
-            head_dim = config.per_layer_config[layer_idx].head_dim
+            head_dim = (
+                config.global_head_dim
+                if config.layer_types[layer_idx] == "full_attention" and config.global_head_dim
+                else config.head_dim
+            )
+
             if param == "skip_scale":
                 converted_paths.append(f"{base_path}.layer_scalar")
                 converted_weights.append(matrix)
@@ -1241,7 +1251,7 @@ def convert_transformer_weights(
                 converted_paths.append(f"{base_path}.self_attn.k_proj.weight")
                 converted_weights.append(
                     matrix.transpose(1, 0, 2)
-                    .reshape(config.hidden_size, config.per_layer_config[layer_idx].num_key_value_heads * head_dim)
+                    .reshape(config.hidden_size, config.num_global_key_value_heads * head_dim)
                     .transpose()
                 )
             elif path.endswith("attn/q_einsum"):
@@ -2090,7 +2100,7 @@ def convert_quantized_transformer_weights(
         # No additional post-processing needed here.
         return zip(all_paths, all_weights)
 
-    head_dim = config.per_layer_config[layer_idx].head_dim
+    head_dim = config.head_dim if config.layer_types[layer_idx] == "sliding_attention" else config.global_head_dim
 
     # Map the quantized parameter suffix to the HF buffer name suffix.
     # The main routing loop may pass virtual param names with _input/_output
@@ -2215,7 +2225,7 @@ def convert_quantized_transformer_weights(
             if w.ndim == 3:
                 return (
                     w.transpose(1, 0, 2)
-                    .reshape(config.hidden_size, config.per_layer_config[layer_idx].num_key_value_heads * head_dim)
+                    .reshape(config.hidden_size, config.num_global_key_value_heads * head_dim)
                     .transpose()
                 )
             elif w.ndim == 2:

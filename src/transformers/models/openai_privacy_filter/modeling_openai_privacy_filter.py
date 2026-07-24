@@ -419,13 +419,7 @@ class OpenAIPrivacyFilterPreTrainedModel(PreTrainedModel):
         "attentions": OpenAIPrivacyFilterAttention,
     }
     _keep_in_fp32_modules = []
-    # metal-flash-sdpa carries the sliding-window + attention-sink path on MPS (Apple Silicon);
-    # the others remain the defaults on CUDA.
-    _compatible_flash_implementations = [
-        "kernels-community/vllm-flash-attn3",
-        "flash_attention_4",
-        "kernels-community/metal-flash-sdpa",
-    ]
+    _compatible_flash_implementations = ["kernels-community/vllm-flash-attn3", "flash_attention_4"]
     _keep_in_fp32_modules_strict = ["sinks"]
 
     @torch.no_grad()
