@@ -48,8 +48,8 @@ jobs:
                     if echo "$COMMIT_MSG" | grep -q "\[run-circleci\]"; then
                         echo "Commit message check passed."
                     else
-                        echo "Commit message does not contain [run-circleci]. Halting."
-                        circleci-agent step halt
+                        echo "Commit message does not contain [run-circleci]. Failing."
+                        exit 1
                     fi
             - run: uv pip install -U -e .
             - run: echo 'export "GIT_COMMIT_MESSAGE=$(git show -s --format=%s)"' >> "$BASH_ENV" && source "$BASH_ENV"
@@ -114,8 +114,8 @@ jobs:
                     if echo "$COMMIT_MSG" | grep -q "\[run-circleci\]"; then
                         echo "Commit message check passed."
                     else
-                        echo "Commit message does not contain [run-circleci]. Halting."
-                        circleci-agent step halt
+                        echo "Commit message does not contain [run-circleci]. Failing."
+                        exit 1
                     fi
             - run: uv pip install -e ".[quality,serving]"
             - run:
@@ -144,8 +144,8 @@ jobs:
                     if echo "$COMMIT_MSG" | grep -q "\[run-circleci\]"; then
                         echo "Commit message check passed."
                     else
-                        echo "Commit message does not contain [run-circleci]. Halting."
-                        circleci-agent step halt
+                        echo "Commit message does not contain [run-circleci]. Failing."
+                        exit 1
                     fi
             - run: apt-get update && apt-get install -y make
             - run: uv pip install -e ".[quality]"
