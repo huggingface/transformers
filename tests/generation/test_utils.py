@@ -17,7 +17,9 @@ import collections
 import copy
 import gc
 import inspect
+import os
 import random
+import re
 import tempfile
 import unittest
 import warnings
@@ -62,6 +64,7 @@ from transformers.utils.generic import is_flash_attention_requested
 if is_torch_available():
     import torch
     import torch.nn.functional as F
+    from safetensors.torch import load_file, save_file
     from torch.nn.attention import SDPBackend, sdpa_kernel
 
     from transformers import (
@@ -107,7 +110,8 @@ if is_torch_available():
         AssistedCandidateGenerator,
         AssistedCandidateGeneratorDifferentTokenizers,
     )
-    from transformers.generation.utils import _speculative_sampling
+    from transformers.generation.utils import ALL_CACHE_NAMES, _speculative_sampling
+    from transformers.modeling_layers import MtpModel
 
 from unittest.mock import patch
 
@@ -695,8 +699,6 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
             #    the assistant model is correct
             # c) there are at least two forward passes in the main model, to ensure the input preparation of
             #    the main model is correct
-            # d) use a cache type compatible with rollbacks (only dynamic cache atm). Otherwise, there may be
-            #     differences vs model-specific default cache
             generation_kwargs = {
                 "eos_token_id": -1,  # see a)
                 "max_new_tokens": 4,  # see c)
@@ -708,7 +710,6 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
                 "output_attentions": self.has_attentions,
                 "return_dict_in_generate": True,
                 "use_cache": True,
-                "cache_implementation": "dynamic_full",  # see d)
             }
             logits_processor_kwargs = self._get_logits_processor_kwargs(config=model.config)
 
@@ -793,8 +794,6 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
             #    prompt lookup is correct
             # c) there are at least two forward passes in the main model, to ensure the input preparation of
             #    the main model is correct
-            # d) use a cache type compatible with rollbacks (only dynamic cache atm). Otherwise, there may be
-            #     differences vs model-specific default cache
             generation_kwargs = {
                 "eos_token_id": -1,  # see a)
                 "max_new_tokens": 4,  # see c)
@@ -806,7 +805,6 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
                 "output_attentions": self.has_attentions,
                 "return_dict_in_generate": True,
                 "use_cache": True,
-                "cache_implementation": "dynamic_full",  # see d)
             }
             logits_processor_kwargs = self._get_logits_processor_kwargs(config=model.config)
 
@@ -868,8 +866,6 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
             #    the assistant model is correct
             # c) there are at least two forward passes in the main model, to ensure the input preparation of
             #    the main model is correct
-            # d) use a cache type compatible with rollbacks (only dynamic cache atm). Otherwise, there may be
-            #     differences vs model-specific default cache
             assistant_model = model
             assistant_model.generation_config.num_assistant_tokens = 2  # see b)
             assistant_model.generation_config.num_assistant_tokens_schedule = "constant"  # see b)
@@ -885,7 +881,6 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
                 "output_attentions": self.has_attentions,
                 "return_dict_in_generate": True,
                 "use_cache": True,
-                "cache_implementation": "dynamic_full",  # see d)
             }
             logits_processor_kwargs = self._get_logits_processor_kwargs(config=model.config)
             output_assisted = model.generate(**generation_kwargs, **inputs_dict, **logits_processor_kwargs)
@@ -1368,6 +1363,73 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
                 atol = rtol = 1e-5
             assert_similar_generate_outputs(outputs, outputs_cached, atol=atol, rtol=rtol)
             self._check_caches_are_equal(outputs.past_key_values, outputs_cached.past_key_values)
+
+    @pytest.mark.generate
+    def test_recurrent_layers_mask_padding_on_continued_forward(self):
+        """
+        Recurrent (linear-attention / short-conv) layers must zero padding out of their state on
+        *continued* forwards too, not only on the first one. Splitting a left-padded batch into a
+        first forward plus a cached continuation must therefore match the single full forward.
+        Regression test for #47086.
+        """
+        # Any model declaring recurrent layer types keeps padding-sensitive state, whether it is a
+        # hybrid or a purely recurrent model — both size the padding mask for their recurrent layers
+        # via `create_recurrent_attention_mask` (pure Mamba1's own inline path can't run this
+        # scenario at all; those models are skip-listed in their test files).
+        recurrent_layer_types = {"linear_attention", "conv", "hybrid", "hybrid_sliding"}
+
+        for model_class in self.all_generative_model_classes:
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            layer_types = set(getattr(config.get_text_config(), "layer_types", None) or ())
+            if not (layer_types & recurrent_layer_types):
+                self.skipTest(reason=f"{model_class.__name__} declares no recurrent layer types")
+
+            model = model_class(config).to(torch_device).eval()
+            input_ids = inputs_dict["input_ids"][:2].to(torch_device)
+            # An ordinary token id: padding is defined by the attention mask, not the token value. A random
+            # init zeroes the `padding_idx` embedding row, which would hide the bug if we padded with it.
+            pad_token_id = 7
+
+            # Split the prepared inputs into a first forward and a continuation whose row 1 is left-padded
+            seq_len = input_ids.shape[1]
+            turn1_len = seq_len // 2 + 1
+            pad_len = max(1, seq_len - turn1_len - 1)
+            turn1, turn2 = input_ids[:, :turn1_len], input_ids[:, turn1_len:].clone()
+            turn2[1, :pad_len] = pad_token_id
+            attention_mask = torch.ones_like(input_ids)
+            attention_mask[1, turn1_len : turn1_len + pad_len] = 0
+            position_ids = (attention_mask.cumsum(-1) - 1).clamp(min=0)
+
+            with torch.no_grad():
+                # single full forward of the padded batch is the ground truth
+                single = model(
+                    input_ids=torch.cat([turn1, turn2], dim=-1),
+                    attention_mask=attention_mask,
+                    position_ids=position_ids,
+                ).logits
+                # same batch, but the padded segment arrives as a continuation on top of the turn-1 cache
+                out1 = model(
+                    input_ids=turn1,
+                    attention_mask=attention_mask[:, :turn1_len],
+                    position_ids=position_ids[:, :turn1_len],
+                    use_cache=True,
+                )
+                # Models name their cache output differently (e.g. Mamba-family `cache_params`)
+                cache_kwarg, cache = next(
+                    ((name, getattr(out1, name)) for name in ALL_CACHE_NAMES if getattr(out1, name, None) is not None),
+                    ("past_key_values", None),
+                )
+                out2 = model(
+                    input_ids=turn2,
+                    attention_mask=attention_mask,
+                    position_ids=position_ids[:, turn1_len:],
+                    use_cache=True,
+                    **{cache_kwarg: cache},
+                )
+
+            # Tight tolerance on purpose: the fixed residual is fp-floor (~1e-7) while the unmasked-padding
+            # bug diverges by ~1e-3, so an MoE-style relaxation would swallow exactly what we test for.
+            torch.testing.assert_close(out2.logits[:, -1], single[:, -1], rtol=1e-4, atol=1e-5)
 
     @pytest.mark.generate
     def test_generate_continue_from_inputs_embeds(self):
@@ -2354,6 +2416,76 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
                 "`position_ids` may be accepted but are expected to produce invalid outputs."
             )
 
+    def test_generate_with_mtp(self):
+        """Test that speculative decoding with mtp works correctly if we have mtp layers in the checkpoints. This checks
+        that layers saved under `mtp.xxx` and `model.layers.{num_hidden_layers+1}` patterns can correctly be reloaded, which
+        correspond to the 2 usual patterns we always have in real checkpoints."""
+        for model_class in self.all_generative_model_classes:
+            config, inputs_dict = self.prepare_config_and_inputs_for_generate(batch_size=1)
+
+            keys_to_ignore_unexpected = model_class._keys_to_ignore_on_load_unexpected or []
+            # If we don't have any mtp patterns, skip
+            if not hasattr(config.get_text_config(), "num_mtp_layers") or not any(
+                "mtp" in x or re.search(r"layers\.\d+", x) is not None for x in keys_to_ignore_unexpected
+            ):
+                self.skipTest("No MTP keys registered")
+
+            config.get_text_config().num_mtp_layers = 1
+            model = model_class(config).to(torch_device).eval()
+            mtp_model = MtpModel(model, num_mtp_layers=1)
+            mtp_non_shared_state_dict = {
+                k: v
+                for k, v in mtp_model.state_dict().items()
+                if k not in ("embed_tokens.weight", "shared_head.weight")
+            }
+
+            # This block tests that keys saved under `mtp.xxx` inside the model weights can be loaded and used correctly
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                model.save_pretrained(tmpdirname)
+                weight_filename = os.path.join(tmpdirname, "model.safetensors")
+                saved_state_dict = load_file(weight_filename)
+                # add mtp weights and resave
+                saved_state_dict.update({f"mtp.{k}": v for k, v in mtp_non_shared_state_dict.items()})
+                save_file(saved_state_dict, weight_filename)
+
+                with patch.object(
+                    model_class, "_keys_to_ignore_on_load_unexpected", keys_to_ignore_unexpected + [r"^mtp."]
+                ):
+                    # Reload model WITHOUT mtp
+                    reloaded_model = model_class.from_pretrained(tmpdirname).to(torch_device)
+
+                    # This will load the mtp weights and use them - check that it does not create any errors (results are random
+                    # since the mtp model was randomly created)
+                    _ = reloaded_model.generate(**inputs_dict, use_mtp=True, do_sample=False, max_new_tokens=10)
+
+            # This block tests that keys saved under `model.layers.{num_hidden_layers+1}.xxx` inside the model weights can be loaded
+            # and used correctly
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                model.save_pretrained(tmpdirname)
+                weight_filename = os.path.join(tmpdirname, "model.safetensors")
+                saved_state_dict = load_file(weight_filename)
+                # add mtp weights and resave
+                layer_mapped_mtp_dict = {
+                    k.replace(".0.", f".{config.num_hidden_layers}.").replace(".mtp_block.", "."): v
+                    for k, v in mtp_non_shared_state_dict.items()
+                }
+                saved_state_dict.update(
+                    {f"{model.base_model_prefix}.{k}": v for k, v in layer_mapped_mtp_dict.items()}
+                )
+                save_file(saved_state_dict, weight_filename)
+
+                with patch.object(
+                    model_class,
+                    "_keys_to_ignore_on_load_unexpected",
+                    keys_to_ignore_unexpected + [f"{model.base_model_prefix}.layers.{config.num_hidden_layers}"],
+                ):
+                    # Reload model WITHOUT mtp
+                    reloaded_model = model_class.from_pretrained(tmpdirname).to(torch_device)
+
+                    # This will load the mtp weights and use them - check that it does not create any errors (results are random
+                    # since the mtp model was randomly created)
+                    _ = reloaded_model.generate(**inputs_dict, use_mtp=True, do_sample=False, max_new_tokens=10)
+
     def _check_generate_outputs(self, output, config, use_cache=False, num_return_sequences=1, num_beams=1):
         input_batch_size = int(output.sequences.shape[0] / num_return_sequences)
         internal_batch_size = (
@@ -2597,24 +2729,6 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
         # Use the correct config
         config = config.get_text_config(decoder=True)
 
-        # (batch, kv heads, seq_length, head_dim)
-        # Only pure mamba models do not have num_attention_heads defined in config, so it can never be 1 in practice for attention models
-        num_attention_heads = getattr(config, "num_attention_heads", 1)
-        num_kv_heads = getattr(config, "num_key_value_heads", num_attention_heads)
-        hidden_size = getattr(config, "d_model", config.hidden_size)
-        head_dim = getattr(config, "head_dim", hidden_size // num_attention_heads)
-
-        # For cross attention cache, the seq_length depends on the model, so we remove that dim
-        attention_shape = (
-            (batch_size, num_kv_heads, seq_length, head_dim)
-            if seq_length is not None
-            else (batch_size, num_kv_heads, head_dim)
-        )
-
-        # For mamba layers
-        conv_shape = self._get_conv_state_shape(batch_size, config)
-        recurrent_shape = self._get_recurrent_state_shape(batch_size, config)
-
         # Check the size is coherent
         num_hidden_layers = config.num_hidden_layers
         if getattr(config, "num_kv_shared_layers", None) is not None:
@@ -2622,7 +2736,12 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
         self.assertEqual(num_hidden_layers, len(past_key_values))
 
         # Check each layer has the correct shape
-        for layer in past_key_values.layers:
+        for layer_idx, layer in enumerate(past_key_values.layers):
+            # Fields may vary by layer on a heterogeneous config, so resolve the shapes per layer.
+            layer_config = config.per_layer_config[layer_idx]
+            conv_shape = self._get_conv_state_shape(batch_size, layer_config)
+            recurrent_shape = self._get_recurrent_state_shape(batch_size, layer_config)
+            attention_shape = self._get_attention_shape(batch_size, seq_length, layer_config)
             # Mamba + Attention layer cache
             if type(layer) is LinearAttentionAndFullAttentionLayer:
                 # Remove the seq_length dim for cross-attention cache (it changes based on the model)
@@ -2630,16 +2749,16 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
                 values = layer.values if seq_length is not None else layer.values[:, :, 0, :]
                 self.assertEqual(keys.shape, attention_shape)
                 self.assertEqual(values.shape, attention_shape)
-                self.assertEqual(layer.conv_states.shape, conv_shape)
+                self.assertEqual(layer.conv_states[0].shape, conv_shape)
                 # May not be used (e.g. lfm2)
-                if layer.is_recurrent_states_initialized:
-                    self.assertEqual(layer.recurrent_states.shape, recurrent_shape)
+                if layer.is_recurrent_states_initialized[0]:
+                    self.assertEqual(layer.recurrent_states[0].shape, recurrent_shape)
             # Mamba only layer cache
             elif type(layer) is LinearAttentionLayer:
-                self.assertEqual(layer.conv_states.shape, conv_shape)
+                self.assertEqual(layer.conv_states[0].shape, conv_shape)
                 # May not be used (e.g. lfm2)
-                if layer.is_recurrent_states_initialized:
-                    self.assertEqual(layer.recurrent_states.shape, recurrent_shape)
+                if layer.is_recurrent_states_initialized[0]:
+                    self.assertEqual(layer.recurrent_states[0].shape, recurrent_shape)
             # Attention only layer type
             else:
                 # Remove the seq_length dim for cross-attention cache (it changes based on the model)
@@ -2647,6 +2766,20 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
                 values = layer.values if seq_length is not None else layer.values[:, :, 0, :]
                 self.assertEqual(keys.shape, attention_shape)
                 self.assertEqual(values.shape, attention_shape)
+
+    def _get_attention_shape(self, batch_size: int, seq_length: int | None, config):
+        # Only pure mamba models do not have num_attention_heads defined in config, so it can never be 1 in practice for attention models
+        num_attention_heads = getattr(config, "num_attention_heads", 1)
+        num_kv_heads = getattr(config, "num_key_value_heads", num_attention_heads)
+        hidden_size = getattr(config, "d_model", config.hidden_size)
+        head_dim = getattr(config, "head_dim", hidden_size // num_attention_heads)
+
+        # For cross attention cache, the seq_length depends on the model, so we remove that dim
+        return (
+            (batch_size, num_kv_heads, seq_length, head_dim)
+            if seq_length is not None
+            else (batch_size, num_kv_heads, head_dim)
+        )
 
     def _check_sequence_inside_sequence(self, tensor_1, tensor_2):
         # check if tensor_1 inside tensor_2 or tensor_2 inside tensor_1.
@@ -2692,19 +2825,19 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
             if type(cache1.layers[idx]) is LinearAttentionAndFullAttentionLayer:
                 torch.testing.assert_close(cache1.layers[idx].keys, cache2.layers[idx].keys)
                 torch.testing.assert_close(cache1.layers[idx].values, cache2.layers[idx].values)
-                torch.testing.assert_close(cache1.layers[idx].conv_states, cache2.layers[idx].conv_states)
+                torch.testing.assert_close(cache1.layers[idx].conv_states[0], cache2.layers[idx].conv_states[0])
                 # May not be used (e.g. lfm2)
-                if cache1.layers[idx].is_recurrent_states_initialized:
+                if cache1.layers[idx].is_recurrent_states_initialized[0]:
                     torch.testing.assert_close(
-                        cache1.layers[idx].recurrent_states, cache2.layers[idx].recurrent_states
+                        cache1.layers[idx].recurrent_states[0], cache2.layers[idx].recurrent_states[0]
                     )
             # Mamba layer
             elif type(cache1.layers[idx]) is LinearAttentionLayer:
-                torch.testing.assert_close(cache1.layers[idx].conv_states, cache2.layers[idx].conv_states)
+                torch.testing.assert_close(cache1.layers[idx].conv_states[0], cache2.layers[idx].conv_states[0])
                 # May not be used (e.g. lfm2)
-                if cache1.layers[idx].is_recurrent_states_initialized:
+                if cache1.layers[idx].is_recurrent_states_initialized[0]:
                     torch.testing.assert_close(
-                        cache1.layers[idx].recurrent_states, cache2.layers[idx].recurrent_states
+                        cache1.layers[idx].recurrent_states[0], cache2.layers[idx].recurrent_states[0]
                     )
             # Attention layer
             else:

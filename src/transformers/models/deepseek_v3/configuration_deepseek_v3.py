@@ -33,6 +33,10 @@ class DeepseekV3Config(PreTrainedConfig):
                                                         \--k dense layers--/
     rope_interleave (`bool`, *optional*, defaults to `True`):
         Whether to interleave the rotary position embeddings.
+    num_mtp_layers (`int`, *optional*, defaults to 1):
+        Number of Multi-Token Prediction (MTP) modules available to append after the base transformer model. When `0`,
+        the model behaves as a standard decoder. When `>0`, each extra module can predict one additional future token at inference
+        time (speculative decoding via `generate(..., use_mtp=True)`).
 
     Example:
 
@@ -72,6 +76,7 @@ class DeepseekV3Config(PreTrainedConfig):
     }
     attribute_map = {
         "num_local_experts": "n_routed_experts",
+        "num_mtp_layers": "num_nextn_predict_layers",
     }
 
     vocab_size: int = 129280
@@ -108,6 +113,7 @@ class DeepseekV3Config(PreTrainedConfig):
     rope_interleave: bool | None = True
     attention_bias: bool = False
     attention_dropout: float | int | None = 0.0
+    num_mtp_layers: int = 1
 
     def __post_init__(self, **kwargs):
         if self.num_key_value_heads is None:
