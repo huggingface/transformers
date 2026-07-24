@@ -210,7 +210,9 @@ class Serve:
             asyncio.set_event_loop(loop)
             loop.run_until_complete(self.server.serve())
 
-        self._thread = threading.Thread(target=_run, name="uvicorn-thread", daemon=False)
+        # Daemon so a stuck uvicorn cannot keep the Python process alive after
+        # kill_server()'s join timeout (tests use non_blocking=True).
+        self._thread = threading.Thread(target=_run, name="uvicorn-thread", daemon=True)
         self._thread.start()
 
     def reset_loaded_models(self):
@@ -223,6 +225,8 @@ class Serve:
         if not self._thread or not self._thread.is_alive():
             return
         self.server.should_exit = True
+        # force_exit asks uvicorn to abandon a stuck graceful shutdown.
+        self.server.force_exit = True
         self._thread.join(timeout=2)
 
 
