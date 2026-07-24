@@ -242,7 +242,7 @@ class FalconMambaMixer(nn.Module):
                     " For the mamba.py backend, follow https://github.com/alxndrTL/mamba.py."
                 )
 
-    def _convoluton(
+    def _convolution(
         self,
         hidden_states: torch.Tensor,
         cache_params: Cache | None = None,

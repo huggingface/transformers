@@ -515,7 +515,7 @@ class FalconH1Mixer(nn.Module):
         init.ones_(self.D)
         init.ones_(self.dt_bias)
 
-    def _convoluton(
+    def _convolution(
         self,
         hidden_states: torch.Tensor,
         cache_params: Cache | None = None,

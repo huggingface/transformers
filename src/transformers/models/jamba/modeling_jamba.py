@@ -323,7 +323,7 @@ class JambaMambaMixer(nn.Module):
 
         self.layer_type = config.layer_types[layer_idx]
 
-    def _convoluton(
+    def _convolution(
         self,
         hidden_states: torch.Tensor,
         cache_params: Cache | None = None,
