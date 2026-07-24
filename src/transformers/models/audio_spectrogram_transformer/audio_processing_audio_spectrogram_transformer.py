@@ -29,7 +29,7 @@ class AudioSpectrogramTransformerAudioProcessor(TorchAudioBackend):
     ast_mean = -4.2677393
     ast_std = 4.5689974
 
-    # Single source of truth for the config lives on the numpy sibling (importable without torch).
+
     spectrogram_config = AudioSpectrogramTransformerAudioProcessorNumpy.spectrogram_config
 
     def extract_spectrogram(self, audio, **kwargs):

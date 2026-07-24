@@ -52,7 +52,7 @@ class Gemma4AudioProcessor(TorchAudioBackend):
     dither: float = 0.0
     input_scale_factor: float = 1.0
 
-    # Single source of truth for the config lives on the numpy sibling (importable without torch).
+
     # NB: ``n_fft`` is set to 512 (= 2 ** ceil(log2(320))) for the default win_length=320.
     # When the loaded config uses a different ``win_length`` or sets ``fft_overdrive``, the
     # ``__init__`` below recomputes ``n_fft`` and rebuilds the spectrogram_config.

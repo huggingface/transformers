@@ -52,7 +52,7 @@ class CohereAsrAudioProcessor(TorchAudioBackend):
         "feature_size": "spectrogram_config.mel_scale_config.n_mels",
     }
 
-    # Single source of truth for the config lives on the numpy sibling (importable without torch).
+
     spectrogram_config = CohereAsrAudioProcessorNumpy.spectrogram_config
 
     def __init__(

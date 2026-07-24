@@ -32,7 +32,7 @@ class Gemma3nAudioProcessor(TorchAudioBackend):
     pad_to_multiple_of = 128
     preemphasis_htk_flavor = True
 
-    # Single source of truth for the config lives on the numpy sibling (importable without torch).
+
     spectrogram_config = Gemma3nAudioProcessorNumpy.spectrogram_config
 
     def __init__(self, per_bin_mean=None, per_bin_stddev=None, **kwargs):

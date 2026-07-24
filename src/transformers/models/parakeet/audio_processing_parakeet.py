@@ -19,7 +19,7 @@ from .audio_processing_numpy_parakeet import ParakeetAudioProcessorNumpy
 class ParakeetAudioProcessor(TorchAudioBackend):
     sample_rate = 16000
     force_mono = True
-    # Single source of truth for the config lives on the numpy sibling (importable without torch).
+
     spectrogram_config = ParakeetAudioProcessorNumpy.spectrogram_config
 
     def _mel_filter_bank(self, spectrogram_config):

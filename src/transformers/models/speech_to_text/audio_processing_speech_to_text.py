@@ -27,7 +27,7 @@ class SpeechToTextAudioProcessor(TorchAudioBackend):
     force_mono = True
     do_batch_spectrogram = False
 
-    # Single source of truth for the config lives on the numpy sibling (importable without torch).
+
     spectrogram_config = SpeechToTextAudioProcessorNumpy.spectrogram_config
 
     def __init__(self, normalize_means=True, normalize_vars=True, **kwargs):

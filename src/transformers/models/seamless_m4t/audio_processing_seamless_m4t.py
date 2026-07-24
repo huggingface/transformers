@@ -27,7 +27,7 @@ class SeamlessM4tAudioProcessor(TorchAudioBackend):
     stride = 2
     pad_to_multiple_of = 2  # Align feature padding to stride
 
-    # Single source of truth for the config lives on the numpy sibling (importable without torch).
+
     spectrogram_config = SeamlessM4tAudioProcessorNumpy.spectrogram_config
     waveform_scale = 32768.0
 

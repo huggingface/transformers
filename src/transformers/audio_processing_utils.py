@@ -21,8 +21,8 @@ from huggingface_hub.dataclasses import validate_typed_dict
 from .audio_processing_base import AudioProcessingMixin
 from .audio_utils import AudioInput, SpectrogramConfig, make_list_of_audio
 from .feature_extraction_utils import BatchFeature
-from .tokenization_utils_base import PaddingStrategy, TruncationStrategy
 from .processing_utils import AudioKwargs
+from .tokenization_utils_base import PaddingStrategy, TruncationStrategy
 from .utils import PaddingStrategy, TensorType, logging
 
 

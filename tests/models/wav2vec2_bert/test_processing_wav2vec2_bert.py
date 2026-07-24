@@ -19,8 +19,7 @@ import unittest
 from transformers.models.wav2vec2.tokenization_wav2vec2 import VOCAB_FILES_NAMES
 from transformers.models.wav2vec2_bert import Wav2Vec2BertProcessor
 
-from ...test_processing_common import ProcessorTesterMixin
-from ...test_processing_common import floats_list
+from ...test_processing_common import ProcessorTesterMixin, floats_list
 
 
 class Wav2Vec2BertProcessorTest(ProcessorTesterMixin, unittest.TestCase):

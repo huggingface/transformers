@@ -24,7 +24,7 @@ from .audio_processing_numpy_pop2piano import Pop2PianoAudioProcessorNumpy
 class Pop2PianoAudioProcessor(TorchAudioBackend):
     sample_rate = 22050
     force_mono = True
-    # Single source of truth for the config lives on the numpy sibling (importable without torch).
+
     spectrogram_config = Pop2PianoAudioProcessorNumpy.spectrogram_config
 
 

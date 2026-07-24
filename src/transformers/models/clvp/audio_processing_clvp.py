@@ -29,7 +29,7 @@ class ClvpAudioProcessor(TorchAudioBackend):
     truncation = True
     mask_level = "audio"
 
-    # Single source of truth for the config lives on the numpy sibling (importable without torch).
+
     spectrogram_config = ClvpAudioProcessorNumpy.spectrogram_config
 
     def __init__(self, mel_norms=None, **kwargs):

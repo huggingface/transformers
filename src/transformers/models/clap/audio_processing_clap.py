@@ -32,7 +32,7 @@ class ClapAudioProcessor(TorchAudioBackend):
     truncation_mode = "rand_trunc"  # "fusion" or "rand_trunc"
     return_padding_mask = False  # CLAP returns is_longer instead of a padding mask
 
-    # Single source of truth for the config lives on the numpy sibling (importable without torch).
+
     _mel_configs = ClapAudioProcessorNumpy._mel_configs
 
     def __init__(self, **kwargs):

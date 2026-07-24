@@ -18,10 +18,10 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_speech_to_text import *
-    from .audio_processing_speech_to_text import *
-    from .feature_extraction_speech_to_text import *
     from .audio_processing_numpy_speech_to_text import *
+    from .audio_processing_speech_to_text import *
+    from .configuration_speech_to_text import *
+    from .feature_extraction_speech_to_text import *
     from .modeling_speech_to_text import *
     from .processing_speech_to_text import *
     from .tokenization_speech_to_text import *

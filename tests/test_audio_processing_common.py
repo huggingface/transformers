@@ -20,7 +20,6 @@ import os
 import pathlib
 import sys
 import tempfile
-import unittest
 
 import numpy as np
 

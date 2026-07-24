@@ -33,7 +33,7 @@ class UnivNetAudioProcessor(TorchAudioBackend):
     normalize_min = -11.512925148010254
     normalize_max = 2.3143386840820312
     max_length_s = 10
-    # Single source of truth for the config lives on the numpy sibling (importable without torch).
+
     spectrogram_config = UnivNetAudioProcessorNumpy.spectrogram_config
 
     def __init__(self, **kwargs):

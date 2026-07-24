@@ -3,6 +3,7 @@
 import unittest
 
 from transformers.testing_utils import require_torch
+
 from ...test_audio_processing_common import AudioProcessingTestMixin
 
 

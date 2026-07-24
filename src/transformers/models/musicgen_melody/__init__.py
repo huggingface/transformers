@@ -18,8 +18,8 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .feature_extraction_musicgen_melody import *
     from .configuration_musicgen_melody import *
+    from .feature_extraction_musicgen_melody import *
     from .modeling_musicgen_melody import *
 else:
     import sys

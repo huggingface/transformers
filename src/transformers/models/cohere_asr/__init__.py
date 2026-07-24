@@ -20,9 +20,9 @@ from ...utils.import_utils import define_import_structure
 
 if TYPE_CHECKING:
     from .audio_processing_cohere_asr import *
-    from .feature_extraction_cohere_asr import *
     from .audio_processing_numpy_cohere_asr import *
     from .configuration_cohere_asr import *
+    from .feature_extraction_cohere_asr import *
     from .modeling_cohere_asr import *
     from .processing_cohere_asr import *
 else:

@@ -25,7 +25,6 @@ class WhisperAudioProcessor(TorchAudioBackend):
     truncation = True
     max_length = 480000  # 30 seconds at 16000 Hz
 
-    # Single source of truth for the config lives on the numpy sibling (importable without torch).
     spectrogram_config = WhisperAudioProcessorNumpy.spectrogram_config
     legacy_field_mapping = WhisperAudioProcessorNumpy.legacy_field_mapping
 
