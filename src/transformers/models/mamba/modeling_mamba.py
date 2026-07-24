@@ -369,19 +369,22 @@ class MambaMixer(nn.Module):
             ssm_parameters, [self.time_step_rank, self.ssm_state_size, self.ssm_state_size], dim=-1
         )
         discrete_time_step = self.dt_proj(time_step)
+        # [batch, intermediate_size, seq_len]
         discrete_time_step = nn.functional.softplus(discrete_time_step).transpose(1, 2)
 
         # 3.b. Discretization: B and C to [batch, seq_len, intermediate_size, ssm_state_size] (SRAM)
-        A = -torch.exp(self.A_log.float())
+        A = -torch.exp(self.A_log.float())  # [intermediate_size, ssm_state_size]
+        # Both discrete_A/B are shape [batch, intermediate_size, seq_len, ssm_state_size]
         discrete_A = torch.exp(A[None, :, None, :] * discrete_time_step[:, :, :, None])
         discrete_B = discrete_time_step[:, :, :, None] * B[:, None, :, :].float()
         deltaB_u = discrete_B * hidden_states[:, :, :, None].float()
 
         # 3.c perform the recurrence y ← SSM(A, B, C)(x)
         if self.use_mambapy and self.training and cache_params is None:
+            # [batch, seq_len, intermediate_size, ssm_state_size]
             hs = pscan(discrete_A.transpose(1, 2), deltaB_u.transpose(1, 2))
 
-            scan_output = (hs @ C.unsqueeze(-1)).squeeze(3).transpose(1, 2)
+            scan_output = (hs @ C.unsqueeze(-1)).squeeze(3).transpose(1, 2)  # [batch, intermediate_size, seq_len]
             scan_output = scan_output + hidden_states * self.D[None, :, None]
             scan_output = scan_output * self.act(gate)
         else:
@@ -409,7 +412,9 @@ class MambaMixer(nn.Module):
                 # Sequential loop for decoding or when associative_scan unavailable
                 scan_outputs = []
                 for i in range(seq_len):
+                    # [batch, intermediate_size, ssm_state]
                     ssm_state = discrete_A[:, :, i, :] * ssm_state + deltaB_u[:, :, i, :]
+                    # [batch, intermediate_size, 1]
                     scan_output = torch.matmul(ssm_state.to(dtype), C[:, i, :].unsqueeze(-1))
                     scan_outputs.append(scan_output[:, :, 0])
                 scan_output = torch.stack(scan_outputs, dim=-1)
