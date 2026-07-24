@@ -1710,6 +1710,20 @@ class Trainer:
             train_dataloader.set_epoch(epoch)
         epoch_iterator = iter(train_dataloader)
 
+        # Neuron profiling
+        import contextlib
+
+        import torch_neuronx
+        from torch.profiler import ProfilerActivity, profile, record_function
+        from torch_neuronx.profiling import NeuronConfig, NeuronProfiler, ProfileMode
+
+        exp_config = NeuronConfig(
+            modes=[ProfileMode.DEVICE, ProfileMode.RUNTIME, ProfileMode.CPU_UTIL, ProfileMode.HOST_MEMORY],
+            profile_output_dir=os.environ.get("NEURON_PROFILER_OUTPUT_DIR"),
+            max_events_per_nc=100000,
+        )
+        exporter = NeuronProfiler(exp_config)
+
         # We chunkify the epoch iterator into gradient accumulation steps `n` batches
         remainder = steps_in_epoch % self.args.gradient_accumulation_steps
         if remainder == 0:
@@ -1754,7 +1768,23 @@ class Trainer:
                     sync_context = contextlib.nullcontext
                 else:
                     sync_context = functools.partial(self.accelerator.no_sync, model=model)
-                with sync_context():
+
+                if 3 < step // self.args.gradient_accumulation_steps <= 4 and i == len(batch_samples) - 1:
+                    contexts = (
+                        sync_context(),
+                        profile(
+                            activities=[ProfilerActivity.CPU, ProfilerActivity.PrivateUse1],
+                            experimental_config=exp_config,
+                            with_stack=True,
+                            on_trace_ready=exporter.export_trace,
+                        ),
+                        record_function("training_step"),
+                    )
+                else:
+                    contexts = (sync_context(),)
+                with contextlib.ExitStack() as stack:
+                    for context in contexts:
+                        stack.enter_context(context)
                     tr_loss_step = self.training_step(model, inputs, num_items_in_batch)
 
                 if (
@@ -1813,6 +1843,10 @@ class Trainer:
                     break
             if self.control.should_epoch_stop or self.control.should_training_stop:
                 break
+
+        # Waiting for profiling.
+        torch_neuronx.synchronize()
+        torch.distributed.barrier()
 
         # PyTorch/XLA relies on the dataloader to insert mark_step each iteration.
         # When we break out of the loop early, we flush the pending graph manually.
