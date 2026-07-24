@@ -535,7 +535,7 @@ class InklingShortConvolution(nn.Module):
             )
 
             # Drop the additional previous states
-            if use_precomputed_states:
+            if past_key_values is not None:
                 hidden_states = hidden_states[:, :, -seq_len:]
 
         hidden_states = hidden_states.transpose(1, 2)
@@ -985,7 +985,7 @@ class InklingVisionModel(InklingPreTrainedModel):
             hidden_states = layer(hidden_states=hidden_states)
 
         hidden_states = self.final_norm(hidden_states)
-        hidden_states = hidden_states.reshape(num_patches, -1)
+        hidden_states = hidden_states.reshape(num_patches, 1, -1)
         return BaseModelOutputWithPooling(
             last_hidden_state=hidden_states,
             pooler_output=hidden_states,
