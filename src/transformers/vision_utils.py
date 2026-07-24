@@ -31,6 +31,9 @@ from __future__ import annotations
 import torch
 import torch.nn.functional as F
 
+from .configuration_utils import PreTrainedConfig
+from .utils.generic import get_max_seqlen
+
 
 def get_vision_cu_seqlens(grid_thw: torch.Tensor, kwargs: dict | None = None) -> torch.Tensor:
     """Get cumulative sequence lengths from vision grid info, or pop from `kwargs` if precomputed.
@@ -50,35 +53,62 @@ def get_vision_cu_seqlens(grid_thw: torch.Tensor, kwargs: dict | None = None) ->
     return F.pad(cu_seqlens, (1, 0), value=0)
 
 
+def get_vision_attention_seqlens(
+    grid_thw: torch.Tensor,
+    config: PreTrainedConfig,
+    kwargs: dict | None = None,
+) -> tuple[torch.Tensor, int | None]:
+    """Get cumulative and maximum sequence lengths for packed vision attention."""
+    cu_seqlens = get_vision_cu_seqlens(grid_thw, kwargs=kwargs)
+    max_seqlen = get_max_seqlen(cu_seqlens, config, kwargs=kwargs)
+    return cu_seqlens, max_seqlen
+
+
 def get_vision_position_ids(
-    grid_thw: torch.Tensor, spatial_merge_size: int | torch.Tensor, kwargs: dict | None = None
+    grid_thw: torch.Tensor,
+    spatial_merge_size: int | torch.Tensor,
+    include_temporal: bool = False,
+    kwargs: dict | None = None,
 ) -> torch.Tensor:
-    """Get (row, col) position IDs for vision rotary embeddings, or pop from `kwargs` if precomputed.
+    """Get position IDs for vision rotary embeddings, or pop from `kwargs` if precomputed.
 
     Args:
         grid_thw: `(num_images_or_videos, 3)`
         spatial_merge_size: merge block size — either a single `int` (same for all images)
             or a `(num_images_or_videos,)` tensor (per-image).
         kwargs: optional caller kwargs — if it contains `"position_ids"` it is popped and returned.
+        include_temporal: when ``True``, prepend a temporal-index column and return
+            `(total_tokens, 3)` — for encoders whose rotary embedding rotates T/H/W axes
+            (minimax_m3_vl). When ``False`` (default), return `(total_tokens, 2)` for the
+            2-axis (h, w) case (qwen2_5_vl / qwen3_vl / glm4v / paddleocr_vl); the h/w
+            indices are still repeated ``t`` times for video inputs.
 
     Returns:
-        `position_ids`: `(total_tokens, 2)` long — (row, col) position per token.
+        `position_ids`: `(total_tokens, 3)` long if ``include_temporal`` else `(total_tokens, 2)`,
+        with the spatial indices laid out block-major over ``m×m`` spatial-merge blocks.
     """
     if kwargs is not None and (position_ids := kwargs.pop("position_ids", None)) is not None:
         return position_ids
+
     device = grid_thw.device
     if isinstance(spatial_merge_size, int):
         spatial_merge_size = torch.tensor([spatial_merge_size], device=device).expand(len(grid_thw))
 
     position_ids = []
     for (t, h, w), merge_size in zip(grid_thw.tolist(), spatial_merge_size.tolist()):
-        t, h, w, merge_size = int(t), int(h), int(w), int(merge_size)
-        hpos_ids = torch.arange(h, device=device).unsqueeze(1).expand(-1, w)
-        hpos_ids = hpos_ids.reshape(h // merge_size, merge_size, w // merge_size, merge_size).transpose(1, 2).flatten()
-
-        wpos_ids = torch.arange(w, device=device).unsqueeze(0).expand(h, -1)
-        wpos_ids = wpos_ids.reshape(h // merge_size, merge_size, w // merge_size, merge_size).transpose(1, 2).flatten()
-        position_ids.append(torch.stack([hpos_ids, wpos_ids], dim=-1).repeat(t, 1))
+        hpos_ids, wpos_ids = torch.meshgrid(
+            torch.arange(h, device=device),
+            torch.arange(w, device=device),
+            indexing="ij",
+        )
+        block_shape = (h // merge_size, merge_size, w // merge_size, merge_size)
+        hpos_ids = hpos_ids.reshape(block_shape).transpose(1, 2).flatten()
+        wpos_ids = wpos_ids.reshape(block_shape).transpose(1, 2).flatten()
+        if include_temporal:
+            tpos_ids = torch.arange(t, device=device).repeat_interleave(h * w)
+            position_ids.append(torch.stack([tpos_ids, hpos_ids.repeat(t), wpos_ids.repeat(t)], dim=-1))
+        else:
+            position_ids.append(torch.stack([hpos_ids, wpos_ids], dim=-1).repeat(t, 1))
 
     return torch.cat(position_ids, dim=0)
 
@@ -215,3 +245,59 @@ def get_vision_bilinear_indices_and_weights(
     bilinear_indices = torch.stack([torch.cat(p) for p in idx_parts])
     bilinear_weights = torch.stack([torch.cat(p) for p in weight_parts])
     return bilinear_indices, bilinear_weights
+
+
+def get_vision_nearest_position_ids(
+    target_sizes: torch.Tensor, num_patches_per_side: int, kwargs: dict | None = None
+) -> torch.Tensor:
+    """Get nearest-neighbor position IDs into a `num_patches_per_side**2` 2-D table, or pop
+    from `kwargs` if precomputed.
+
+    For each image of size `(h, w)`, maps fractional grid coordinates `i/h` to the nearest
+    bucket on a `num_patches_per_side` grid (via `bucketize`) and flattens to 1-D embedding
+    indices, concatenated across all images. Used by NaViT-style packers (e.g. MiniCPM-V).
+
+    Args:
+        target_sizes: `(num_images, 2)` int — `(h, w)` per image.
+        num_patches_per_side: side length of the learned 2-D position-embedding grid.
+        kwargs: optional caller kwargs — if it contains `"position_ids"` it is popped and returned.
+
+    Returns:
+        `position_ids`: `(sum(h_i * w_i),)` long — flat indices into a `num_patches_per_side**2` table.
+    """
+    if kwargs is not None and (pos_ids := kwargs.pop("position_ids", None)) is not None:
+        return pos_ids
+    device = target_sizes.device
+    boundaries = torch.arange(1 / num_patches_per_side, 1.0, 1 / num_patches_per_side, device=device)
+    pos_ids_list = []
+    for height, width in target_sizes.tolist():
+        height, width = int(height), int(width)
+        h_coords = torch.arange(height, device=device) / height
+        w_coords = torch.arange(width, device=device) / width
+        bucket_h = torch.bucketize(h_coords, boundaries, right=True)
+        bucket_w = torch.bucketize(w_coords, boundaries, right=True)
+        pos_ids_list.append((bucket_h[:, None] * num_patches_per_side + bucket_w).flatten())
+    return torch.cat(pos_ids_list)
+
+
+def get_vision_merged_shape(
+    target_sizes: torch.Tensor, window_kernel_size: tuple[int, int], kwargs: dict | None = None
+) -> tuple[int, int]:
+    """Get post-window-merge `(merged_h, merged_w)` Python ints, or pop from `kwargs` if precomputed.
+
+    `.view()` needs Python ints, but `target_sizes[0].item()` is non-traceable. Callers must pop
+    the precomputed value from `kwargs` when running under `torch.export`. Assumes uniform
+    `target_sizes` across the batch (standard NaViT preprocessing output).
+
+    Args:
+        target_sizes: `(num_images, 2)` int — `(h, w)` per image.
+        window_kernel_size: `(window_h, window_w)` window-attention kernel.
+        kwargs: optional caller kwargs — if it contains `"merged_shape"` it is popped and returned.
+
+    Returns:
+        `(merged_h, merged_w)`: per-image grid size after window merging, as Python ints.
+    """
+    if kwargs is not None and (merged := kwargs.pop("merged_shape", None)) is not None:
+        return merged
+    window_h, window_w = window_kernel_size
+    return int(target_sizes[0, 0].item()) // window_h, int(target_sizes[0, 1].item()) // window_w

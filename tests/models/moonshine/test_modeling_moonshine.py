@@ -30,12 +30,14 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 
 if is_torch_available():
     import torch
+    from torch.nn import CrossEntropyLoss
 
     from transformers import (
         AutoProcessor,
         MoonshineForConditionalGeneration,
         MoonshineModel,
     )
+    from transformers.models.moonshine.modeling_moonshine import MoonshineEncoderModelOutput
 
 from datasets import load_dataset
 
@@ -150,6 +152,54 @@ class MoonshineModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
 
     def test_config(self):
         self.config_tester.run_common_tests()
+
+    def test_training_loss_no_double_shift(self):
+        # forward shifts labels into decoder_input_ids, so loss must be plain CE against the labels (no second shift)
+        config = self.model_tester.get_config()
+        config.pad_token_id = self.model_tester.pad_token_id
+        model = MoonshineForConditionalGeneration(config).to(torch_device).eval()
+        vocab_size = config.vocab_size
+
+        torch.manual_seed(0)
+        bsz, enc_len, dec_len = 2, 10, 6
+        enc_hidden = torch.randn(bsz, enc_len, config.hidden_size, device=torch_device)
+        encoder_outputs = MoonshineEncoderModelOutput(last_hidden_state=enc_hidden, attention_mask=None)
+        labels = torch.randint(3, vocab_size, (bsz, dec_len), device=torch_device)
+        padded = labels.clone()
+        padded[0, -1] = -100
+        padded[1, -2:] = -100
+
+        def aligned_ce(logits, lbl):
+            return CrossEntropyLoss()(logits.reshape(-1, vocab_size), lbl.reshape(-1))
+
+        def double_shift_ce(logits, lbl):
+            return CrossEntropyLoss()(logits[..., :-1, :].reshape(-1, vocab_size), lbl[..., 1:].reshape(-1))
+
+        for lbl in (labels, padded):
+            # Moonshine is the only model here that moves off a plain `CrossEntropyLoss` onto the shared
+            # `self.loss_function`, so it also needs to start honoring `num_items_in_batch`: the loss is a
+            # summed cross-entropy divided by that count, so passing the true count reproduces the aligned
+            # mean cross-entropy, and doubling the count must halve the loss. A plain `CrossEntropyLoss`
+            # (mean over tokens) would ignore the count and leave both losses unchanged.
+            n = int((lbl != -100).sum())
+            with torch.no_grad():
+                out = model(encoder_outputs=encoder_outputs, labels=lbl, num_items_in_batch=n, use_cache=False)
+                loss_2n = model(
+                    encoder_outputs=encoder_outputs, labels=lbl, num_items_in_batch=2 * n, use_cache=False
+                ).loss
+            self.assertTrue(torch.allclose(out.loss, aligned_ce(out.logits, lbl)))
+            self.assertFalse(torch.allclose(out.loss, double_shift_ce(out.logits, lbl)))
+            self.assertTrue(torch.allclose(out.loss, 2 * loss_2n))
+
+        # A caller supplied `shift_labels` is popped out of `kwargs` and used verbatim, rather than colliding
+        # with the one `forward` derives from `labels`.
+        caller_shift_labels = labels.roll(shifts=1, dims=1)
+        with torch.no_grad():
+            out = model(
+                encoder_outputs=encoder_outputs, labels=labels, shift_labels=caller_shift_labels, use_cache=False
+            )
+        self.assertTrue(torch.allclose(out.loss, aligned_ce(out.logits, caller_shift_labels)))
+        self.assertFalse(torch.allclose(out.loss, aligned_ce(out.logits, labels)))
 
     def test_attention_outputs(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()

@@ -25,20 +25,18 @@ from ...test_processing_common import ProcessorTesterMixin
 @require_vision
 class DeepseekOcr2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = DeepseekOcr2Processor
+    # Tiny processor created with make_tiny_processor.py from "deepseek-community/DeepSeek-OCR-2"
+    tiny_model_id = "hf-internal-testing/tiny-processor-deepseek_ocr2"
 
     @classmethod
     def _setup_image_processor(cls):
+        # Small size (64×64) reduces the number of tiles produced by the tiling logic,
+        # keeping token counts low. tile_size=512 is a safe sentinel above the image size.
         image_processor_class = cls._get_component_class_from_processor("image_processor")
         image_processor = image_processor_class()
         image_processor.size = {"height": 64, "width": 64}
         image_processor.tile_size = 512
         return image_processor
-
-    @classmethod
-    def _setup_tokenizer(cls):
-        tokenizer_class = cls._get_component_class_from_processor("tokenizer")
-        tokenizer = tokenizer_class.from_pretrained("deepseek-community/DeepSeek-OCR-2")
-        return tokenizer
 
     @classmethod
     def _setup_test_attributes(cls, processor):
@@ -73,8 +71,8 @@ class DeepseekOcr2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         processor.image_processor.size = {"height": 1024, "width": 1024}
         processor.image_processor.tile_size = 768
 
-        # Large image: max(2448, 3264) > 768 → local patches
-        image = torch.randint(0, 256, (3, 3264, 2448), dtype=torch.uint8)
+        # Large image: max(769, 577) > 768 → local patches; same 2×3 grid as 3264×2448 (ar≈0.75)
+        image = torch.randint(0, 256, (3, 769, 577), dtype=torch.uint8)
         prompt = "<image>\nFree OCR."
 
         inputs = processor(images=image, text=prompt, return_tensors="pt")

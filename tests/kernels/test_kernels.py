@@ -22,6 +22,7 @@ import types
 from unittest.mock import MagicMock, patch
 
 import torch
+from huggingface_hub import snapshot_download
 
 from transformers import AutoModelForCausalLM, AutoTokenizer, KernelConfig
 from transformers.integrations.hub_kernels import (
@@ -38,16 +39,17 @@ from transformers.testing_utils import (
     TestCasePlus,
     cleanup,
     require_kernels,
+    require_rocm,
     require_torch_accelerator,
     slow,
     torch_device,
 )
 from transformers.utils.import_utils import is_kernels_available
+from transformers.utils.kernel_config import add_to_mapping_local
 
 
 if is_kernels_available():
-    import kernels as kernels_pkg
-    from kernels import Device, Mode, kernelize
+    from kernels import Device, LocalLayerRepository, Mode, kernelize
 
     import transformers.integrations.hub_kernels as hub_kernels_pkg
 
@@ -112,6 +114,23 @@ class TestHubKernels(TestCasePlus):
         self.EXPECTED_OUTPUT.add("Hello! I'm excited to be a part of this")
 
         self.assertTrue(output in self.EXPECTED_OUTPUT)
+
+    @require_rocm
+    def test_rocm_rotary_kernel_forward_matches_baseline(self):
+        """
+        Regression test for the ROCm `rotary_pos_emb` function kernel (`kernels-community/aiter-rope`).
+
+        On ROCm, `use_kernels=True` dispatches `apply_rotary_pos_emb` to the `aiter-rope` shim. A stale shim
+        (e.g. the dropped `position_ids` signature mismatch fixed in
+        https://github.com/huggingface/transformers/pull/46810) only blows up at runtime here, so comparing the
+        kernelized forward against the non-kernelized baseline catches such breakages.
+        """
+        tokenized_input = self.tokenizer(self.input, return_tensors="pt").input_ids.to(torch_device)
+        with torch.no_grad():
+            kernelized_out = self.model_kernelized(tokenized_input).logits
+            baseline_out = self.model_not_kernelized(tokenized_input).logits
+
+        torch.testing.assert_close(baseline_out, kernelized_out, atol=1e-3, rtol=1e-3)
 
     def test_getter_use_kernels(self):
         self.assertTrue(self.model_kernelized.use_kernels)
@@ -570,6 +589,32 @@ class TestAttentionKernelRegistration(TestCasePlus):
             except Exception as e:
                 print(f"Could not clean up `ALL_MASK_ATTENTION_FUNCTIONS`: {e}")
 
+    def test_add_to_mapping_local(self):
+        repo_path = "/abs/path/kernel"
+        compatible_mapping = {}
+        add_to_mapping_local("RMSNorm", "cuda", f"{repo_path}:LlamaRMSNorm", Mode.INFERENCE, compatible_mapping)
+
+        repo = compatible_mapping["RMSNorm"]["cuda"][Mode.INFERENCE]
+        self.assertIsInstance(repo, LocalLayerRepository)
+        self.assertEqual(repo.layer_name, "LlamaRMSNorm")
+
+        with self.assertRaisesRegex(ValueError, "Only cuda, rocm, xpu, npu, neuron and tpu devices supported"):
+            add_to_mapping_local("RMSNorm", "cpu", f"{repo_path}:LlamaRMSNorm", Mode.INFERENCE, compatible_mapping)
+
+    @slow
+    @require_torch_accelerator
+    def test_add_to_mapping_local_then_load(self):
+        repo_path = snapshot_download("kernels-community/layer-norm")
+        compatible_mapping = {}
+        add_to_mapping_local("RMSNorm", "cuda", f"{repo_path}:LlamaRMSNorm", Mode.INFERENCE, compatible_mapping)
+
+        repo = compatible_mapping["RMSNorm"]["cuda"][Mode.INFERENCE]
+        self.assertIsInstance(repo, LocalLayerRepository)
+        self.assertEqual(repo.layer_name, "LlamaRMSNorm")
+
+        layer_cls = repo.load()
+        self.assertTrue(issubclass(layer_cls, torch.nn.Module))
+
 
 @require_kernels
 class TestUseKernelsLifecycle(TestCasePlus):
@@ -592,17 +637,21 @@ class TestUseKernelsLifecycle(TestCasePlus):
         cleanup(torch_device, gc_collect=True)
 
     def test_setting_use_kernels_twice_does_not_rekernelize(self):
-        call_count = {"n": 0}
-
-        def spy_kernelize(*args, **kwargs):
-            call_count["n"] += 1
-
-        with patch.object(kernels_pkg, "kernelize", side_effect=spy_kernelize):
+        with (
+            patch.object(hub_kernels_pkg, "register_kernel_mapping_transformers") as mock_register,
+            patch.object(hub_kernels_pkg, "_kernels_kernelize") as mock_kernelize,
+        ):
             self.model.use_kernels = True
+
             self.assertTrue(self.model.use_kernels)
-            self.assertEqual(call_count["n"], 1)
+            # Check that both registraton and the underlying kernelize call happened
+            mock_register.assert_called_once_with()
+            self.assertEqual(mock_kernelize.call_count, 1)
+
             self.model.use_kernels = True
-            self.assertEqual(call_count["n"], 1)
+
+            mock_register.assert_called_once_with()
+            self.assertEqual(mock_kernelize.call_count, 1)
 
     def test_train_eval_calls_kernelize_with_correct_mode(self):
         last_modes = []
@@ -610,7 +659,7 @@ class TestUseKernelsLifecycle(TestCasePlus):
         def spy_kernelize(model, device=None, mode=None):
             last_modes.append(mode)
 
-        with patch.object(kernels_pkg, "kernelize", side_effect=spy_kernelize):
+        with patch.object(hub_kernels_pkg, "_kernels_kernelize", side_effect=spy_kernelize):
             self.model.use_kernels = True
             self.model.train(True)
             self.assertTrue(any(m == Mode.TRAINING for m in last_modes))

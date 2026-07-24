@@ -467,6 +467,10 @@ class PPFormulaNetForConditionalGeneration(Florence2ForConditionalGeneration):
         >>> print(result)
         ['\\zeta_{0}(\\nu)=-\\frac{\\nu\\varrho^{-2\\nu}}{\\pi}\\int_{\\mu}^{\\infty}d\\omega\\int_{C_{+}}d z\\frac{2z^{2}}{(z^{2}+\\omega^{2})^{\\nu+1}}\\breve{\\Psi}(\\omega;z)e^{i\\epsilon z}\\quad,']
         ```"""
+        # `shift_labels` is consumed by the loss below (the decoder inputs are already right-shifted), so pop it
+        # before the inner model call rather than letting it flow down through `**kwargs`.
+        shift_labels = kwargs.pop("shift_labels", None)
+
         outputs = self.model(
             input_ids=input_ids,
             pixel_values=pixel_values,
@@ -488,8 +492,14 @@ class PPFormulaNetForConditionalGeneration(Florence2ForConditionalGeneration):
 
         loss = None
         if labels is not None:
+            # Encoder-decoder logits are position-aligned with the targets, so pass them as `shift_labels`
+            # (with `labels=None`) to stop `ForCausalLMLoss` shifting them a second time.
             loss = self.loss_function(
-                logits=logits, labels=labels, vocab_size=self.config.text_config.vocab_size, **kwargs
+                logits=logits,
+                labels=None,
+                vocab_size=self.config.text_config.vocab_size,
+                shift_labels=shift_labels if shift_labels is not None else labels,
+                **kwargs,
             )
 
         return Seq2SeqLMOutput(
@@ -505,8 +515,8 @@ class PPFormulaNetForConditionalGeneration(Florence2ForConditionalGeneration):
         )
 
     # override this function to compatible with `_prepare_encoder_decoder_kwargs_for_generation`
-    def get_encoder(self):
-        return self.model.get_encoder()
+    def get_encoder(self, modality: str | None = None):
+        return self.model.get_encoder(modality=modality)
 
     def get_placeholder_mask(self):
         raise AttributeError("The PPFormulaNet does not need placeholder mask.")
