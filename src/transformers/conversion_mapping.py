@@ -1809,6 +1809,12 @@ def _build_checkpoint_conversion_mapping():
         WeightRenaming("mlp.shared_expert.", "mlp.shared_experts."),
     ]
 
+    # A.X-K1 checkpoints store the MoE output norm at the decoder-layer level.
+    mapping["axk1"] = mapping["qwen2_moe"].copy()
+    mapping["axk1"] += [
+        WeightRenaming("post_mlp_layernorm", "mlp.post_mlp_layernorm"),
+    ]
+
     mapping["MtpModel"] = [
         PrefixChange(prefix_to_remove="model"),
         PrefixChange(prefix_to_remove="mtp"),
