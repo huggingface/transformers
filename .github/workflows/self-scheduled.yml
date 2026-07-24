@@ -108,7 +108,7 @@ jobs:
         env:
           job: ${{ inputs.job }}
           subdirs: ${{ inputs.subdirs }}
-          NUM_SLICES: 2
+          NUM_SLICES: 3
         run: |
           if [ "$job" = "run_models_gpu" ]; then
             python3 ../utils/split_model_tests.py --subdirs "$subdirs" --num_splits "$NUM_SLICES" > folder_slices.txt

@@ -75,6 +75,7 @@ HARDCODED_CONFIG_FOR_MODELS = {
     "x-clip": "XCLIPConfig",
     "kosmos2": "Kosmos2Config",
     "kosmos2-5": "Kosmos2_5Config",
+    "inkling": "InklingConfig",
     "donut": "DonutSwinConfig",
     "esmfold": "EsmConfig",
     "parakeet": "ParakeetCTCConfig",
@@ -82,6 +83,7 @@ HARDCODED_CONFIG_FOR_MODELS = {
     "lasr": "LasrCTCConfig",
     "wav2vec2-with-lm": "Wav2Vec2Config",
     "radio": "RADIOConfig",
+    "cosmos3-edge": "Cosmos3EdgeConfig",
 }
 
 _re_checkpoint = re.compile(r"\[(.+?)\]\((https://huggingface\.co/.+?)\)")

@@ -69,6 +69,8 @@ def _normalize_text(text):
 
 
 class Gemma4UnifiedTextModelTester(CausalLMModelTester):
+    forced_config_args = ["pad_token_id", "per_layer_config"]
+
     if is_torch_available():
         config_class = Gemma4UnifiedTextConfig
         base_model_class = Gemma4UnifiedTextModel
@@ -84,7 +86,11 @@ class Gemma4UnifiedTextModelTester(CausalLMModelTester):
             "sliding_attention",
             "full_attention",
         ]  # similarly we want to test sharing on both types
-        self.global_head_dim = self.head_dim  # gemma4 use a different head_dim for full and sliding layers
+        self.per_layer_config = {
+            layer_idx: {"head_dim": 2 * self.head_dim}
+            for layer_idx, layer_type in enumerate(self.layer_types)
+            if layer_type == "full_attention"
+        }  # gemma4 use a different head_dim for full and sliding layers
 
         # Test if bidirectional image mask path works
         self.use_bidirectional_attention = "vision"

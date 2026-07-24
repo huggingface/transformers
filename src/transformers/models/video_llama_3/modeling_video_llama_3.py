@@ -34,9 +34,14 @@ from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, Mod
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, torch_compilable_check
-from ...utils.generic import accepts_precomputed_kwargs, is_flash_attention_requested, merge_with_config_defaults
+from ...utils.generic import (
+    accepts_precomputed_kwargs,
+    get_max_seqlen,
+    is_flash_attention_requested,
+    merge_with_config_defaults,
+)
 from ...utils.output_capturing import capture_outputs
-from ...vision_utils import get_vision_cu_seqlens, get_vision_position_ids
+from ...vision_utils import get_vision_attention_seqlens, get_vision_position_ids
 from ..auto.modeling_auto import AutoModel
 from .configuration_video_llama_3 import VideoLlama3Config, VideoLlama3VisionConfig
 
@@ -179,6 +184,7 @@ class VideoLlama3VisionAttention(nn.Module):
         hidden_states: torch.Tensor,
         cu_seqlens: torch.Tensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
+        max_seqlen: int | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
         """
@@ -208,7 +214,7 @@ class VideoLlama3VisionAttention(nn.Module):
 
         if is_flash_attention_requested(self.config):
             # Flash Attention 2: Use cu_seqlens for variable length attention
-            max_seqlen = (cu_seqlens[1:] - cu_seqlens[:-1]).max()
+            max_seqlen = get_max_seqlen(cu_seqlens, self.config, kwargs={"max_seqlen": max_seqlen})
             attn_output, attn_weights = attention_interface(
                 self,
                 query_states,
@@ -423,7 +429,7 @@ class VideoLlama3VisionModel(VideoLlama3PreTrainedModel):
             The spatial downsampling ratio of each image or video feature.
         """
         position_ids = get_vision_position_ids(grid_thw, merge_sizes, kwargs=kwargs)
-        cu_seqlens = get_vision_cu_seqlens(grid_thw, kwargs=kwargs)
+        cu_seqlens, max_seqlen = get_vision_attention_seqlens(grid_thw, self.config, kwargs=kwargs)
 
         hidden_states = self.embeddings(pixel_values.type(self.dtype))
         rotary_pos_emb = self.rotary_pos_emb(position_ids)
@@ -433,6 +439,7 @@ class VideoLlama3VisionModel(VideoLlama3PreTrainedModel):
         encoder_outputs: BaseModelOutput = self.encoder(
             hidden_states,
             cu_seqlens=cu_seqlens,
+            max_seqlen=max_seqlen,
             position_embeddings=position_embeddings,
             **kwargs,
         )
