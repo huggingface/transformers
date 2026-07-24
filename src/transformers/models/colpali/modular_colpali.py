@@ -93,10 +93,6 @@ class ColPaliProcessor(PaliGemmaProcessor):
         suffix = output_kwargs["text_kwargs"].pop("suffix", self.query_augmentation_token * 10)
 
         if text is not None:
-            # Query mode: augment text before base class tokenizes it
-            if suffix is None:
-                suffix = self.query_augmentation_token * 10
-
             text = [f"{self.tokenizer.bos_token}{self.query_prefix}{sample}{suffix}\n" for sample in text]
             if output_kwargs["text_kwargs"].get("max_length", None) is not None:
                 output_kwargs["text_kwargs"]["max_length"] += self.image_seq_length

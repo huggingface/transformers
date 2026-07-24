@@ -19,16 +19,10 @@
 # limitations under the License.
 
 
-import re
-
-import numpy as np
-
-from ...image_processing_utils import BatchFeature
-from ...image_utils import ImageInput, concatenate_list
+from ...image_utils import ImageInput
 from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import auto_docstring
-from ...video_utils import VideoInput
 
 
 class QianfanOCRProcessorKwargs(ProcessingKwargs, total=False):
@@ -81,63 +75,6 @@ class QianfanOCRProcessor(ProcessorMixin):
     @property
     def image_token_ids(self) -> list[int]:
         return [self.image_token_id, self.start_image_token_id, self.end_image_token_id]
-
-    @auto_docstring
-    def __call__(
-        self,
-        images: ImageInput | None = None,
-        text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] | None = None,
-        videos: VideoInput | None = None,
-        **kwargs: Unpack[QianfanOCRProcessorKwargs],
-    ) -> BatchFeature:
-        r"""
-        Returns:
-            [`BatchFeature`]: A [`BatchFeature`] with the following fields:
-
-            - **input_ids** -- List of token ids to be fed to a model. Returned when `text` is not `None`.
-            - **attention_mask** -- List of indices specifying which tokens should be attended to by the model (when
-              `return_attention_mask=True` or if *"attention_mask"* is in `self.model_input_names` and if `text` is not
-              `None`).
-            - **pixel_values** -- Pixel values to be fed to a model. Returned when `images` is not `None`.
-        """
-        output_kwargs = self._merge_kwargs(
-            QianfanOCRProcessorKwargs,
-            tokenizer_init_kwargs=self.tokenizer.init_kwargs,
-            **kwargs,
-        )
-        return_tensors = output_kwargs["text_kwargs"].get("return_tensors")
-
-        # Keep track of how many image/videos per sample we have, and in which order
-        text = [text] if isinstance(text, str) else text
-        visuals_order = [match.lastgroup for sample in text for match in re.finditer(self.pattern, sample)]
-        model_inputs = super().__call__(images=images, text=text, videos=videos, **output_kwargs)
-
-        # Merge image and video pixel into a single array, as model expects only `pixel_values` as arg
-        if images is not None:
-            image_num_patches_indices = np.cumsum(model_inputs.pop("num_patches"))
-        if videos is not None:
-            video_pixel_values = model_inputs.pop("pixel_values_videos")
-            batch_size, num_frames, *_ = video_pixel_values.shape
-            video_pixel_values = video_pixel_values.flatten(0, 1)
-            video_patch_indices = np.arange(num_frames * batch_size + 1, step=num_frames)
-
-        image_index = video_index = 0
-        image_video_patches = []
-        for vision_type in visuals_order:
-            if vision_type == "image":
-                start_index = image_num_patches_indices[image_index - 1] if image_index > 0 else 0
-                end_index = image_num_patches_indices[image_index]
-                image_video_patches.append(model_inputs["pixel_values"][start_index:end_index])
-                image_index += 1
-            else:
-                start_index = video_patch_indices[video_index]
-                end_index = video_patch_indices[video_index + 1]
-                image_video_patches.append(video_pixel_values[start_index:end_index])
-                video_index += 1
-
-        if image_video_patches:
-            model_inputs["pixel_values"] = concatenate_list(image_video_patches)
-        return BatchFeature(data=model_inputs, tensor_type=return_tensors)
 
     def validate_inputs(
         self,

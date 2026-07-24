@@ -336,6 +336,9 @@ class QianfanOCRProcessor(InternVLProcessor):
         if videos is not None:
             raise ValueError("QianfanOCR does not support video input.")
 
+    def __call__(self, **super_kwargs) -> BatchFeature:
+        raise NotImplementedError("QianfanOCR does not need to override")
+    
     def replace_video_token(self, video_inputs: dict, video_idx: int, **kwargs) -> str:
         raise NotImplementedError("QianfanOCR does not support video input")
 
