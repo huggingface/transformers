@@ -87,17 +87,6 @@ class GlmgaVideoProcessor(BaseVideoProcessor):
     def __init__(self, **kwargs: Unpack[GlmgaVideoProcessorInitKwargs]):
         super().__init__(**kwargs)
 
-    def _standardize_kwargs(self, **kwargs) -> dict:
-        """
-        Update kwargs that need further processing before being validated
-        Can be overridden by subclasses to customize the processing of kwargs.
-        """
-        kwargs = super()._standardize_kwargs(**kwargs)
-        size = kwargs.get("size", self.size)
-        if not size.shortest_edge or not size.longest_edge:
-            raise ValueError("size must contain 'shortest_edge' and 'longest_edge' keys.")
-        return kwargs
-
     def sample_frames(
         self,
         metadata: VideoMetadata,
@@ -164,6 +153,74 @@ class GlmgaVideoProcessor(BaseVideoProcessor):
             uniq.append(uniq[-1])
 
         return np.array(uniq)
+
+    def resize(
+        self,
+        videos: "torch.Tensor",
+        size: SizeDict,
+        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
+        factor: int,
+        temporal_factor: int,
+        **kwargs,
+    ) -> "torch.Tensor":
+        """Resize dynamically based on input video aspect ratio."""
+        if not size.shortest_edge or not size.longest_edge:
+            raise ValueError(f"`size` dict must contain 'shortest_edge' and 'longest_edge' keys but got {size}.")
+
+        height, width = videos.shape[-2:]
+        resized_height, resized_width = smart_resize(
+            height,
+            width,
+            num_frames=videos.shape[1],
+            factor=factor,
+            temporal_factor=temporal_factor,
+            min_pixels=size.shortest_edge,
+            max_pixels=size.longest_edge,
+        )
+        return super().resize(
+            image=videos,
+            size=SizeDict(height=resized_height, width=resized_width),
+            resample=resample,
+        )
+
+    def patchify(
+        self,
+        videos: "torch.Tensor",
+        patch_size: int,
+        merge_size: int,
+        temporal_patch_size: int,
+    ) -> tuple["torch.Tensor", int, int]:
+        "Patchifies each video into flat layout of shape (`seq_len`, `patch_dim`) so we can concat dynamically shaped pixels."
+        batch_size, num_frames, channel, resized_height, resized_width = videos.shape
+
+        # Check that videos have `num_frames` divisible by `temporal_patch_size`
+        if pad := -num_frames % temporal_patch_size:
+            repeats = videos[:, -1:].expand(-1, pad, -1, -1, -1)
+            videos = torch.cat((videos, repeats), dim=1)
+
+        grid_t = num_frames // temporal_patch_size
+        grid_h, grid_w = resized_height // patch_size, resized_width // patch_size
+
+        patches = videos.view(
+            batch_size,
+            grid_t,
+            temporal_patch_size,
+            channel,
+            grid_h // merge_size,
+            merge_size,
+            patch_size,
+            grid_w // merge_size,
+            merge_size,
+            patch_size,
+        )
+        patches = patches.permute(0, 1, 4, 7, 5, 8, 3, 2, 6, 9)
+        flatten_patches = patches.reshape(
+            batch_size,
+            grid_t * grid_h * grid_w,
+            channel * temporal_patch_size * patch_size * patch_size,
+        )
+
+        return flatten_patches, grid_t, grid_h, grid_w
 
     def _preprocess(
         self,

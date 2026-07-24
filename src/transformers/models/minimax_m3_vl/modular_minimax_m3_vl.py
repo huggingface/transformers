@@ -59,6 +59,7 @@ from ..minimax_m2.modeling_minimax_m2 import (
 )
 from ..mixtral.modeling_mixtral import MixtralDecoderLayer
 from ..qwen2_5_vl.modeling_qwen2_5_vl import Qwen2_5_VisionPatchEmbed
+from ..qwen2_vl.image_processing_qwen2_vl import Qwen2VLImageProcessor
 from ..qwen2_vl.processing_qwen2_vl import Qwen2VLProcessor, Qwen2VLProcessorKwargs
 
 
@@ -1230,6 +1231,10 @@ class MiniMaxM3SparseForConditionalGeneration(LlavaForConditionalGeneration):
             model_inputs["pixel_values_videos"] = pixel_values_videos
 
         return model_inputs
+
+
+class MiniMaxM3VLImageProcessor(Qwen2VLImageProcessor):
+    size = {"shortest_edge": 4 * 28 * 28, "longest_edge": 451584}
 
 
 class MiniMaxM3VLProcessorKwargs(Qwen2VLProcessorKwargs):
