@@ -123,22 +123,23 @@ class OnyxRMSNorm(nn.Module):
 
 
 class OnyxCenteredRMSNorm(nn.Module):
-    """Stores the scale as an offset around 1: `output = norm(x) * (1 + weight)`."""
-
     def __init__(self, dim: int, eps: float = 1e-6):
         super().__init__()
         self.eps = eps
         self.weight = nn.Parameter(torch.zeros(dim))
 
-    def _norm(self, hidden_states: torch.Tensor):
-        # torch.pow() (over torch.sqrt() or torch.rsqrt()) to match OnyxRMSNorm exactly.
-        mean_squared = hidden_states.pow(2).mean(-1, keepdim=True) + self.eps
-        return hidden_states * torch.pow(mean_squared, -0.5)
+    def _norm(self, x):
+        return x * torch.rsqrt(x.pow(2).mean(-1, keepdim=True) + self.eps)
 
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        normed_output = self._norm(hidden_states.float())
-        normed_output = normed_output * (self.weight.float() + 1)
-        return normed_output.type_as(hidden_states)
+    def forward(self, x):
+        output = self._norm(x.float())
+        # Llama does x.to(float16) * w whilst OnyxCentered is (x * w).to(float16)
+        # See https://github.com/huggingface/transformers/pull/29402
+        output = output * (1.0 + self.weight.float())
+        return output.type_as(x)
+
+    def extra_repr(self):
+        return f"{tuple(self.weight.shape)}, eps={self.eps}"
 
 
 class OnyxNormalizedEmbedding(nn.Embedding):
@@ -964,10 +965,10 @@ class OnyxTextModel(OnyxPreTrainedModel):
 
 
 class OnyxVisionAdapter(nn.Module):
-    def __init__(self, config) -> None:
+    def __init__(self, config: OnyxConfig) -> None:
         super().__init__()
         self.fc1 = nn.Linear(config.out_hidden_size, config.adapter_dim, bias=False)
-        self.act = ACT2FN[config.hidden_act]
+        self.act = ACT2FN[config.projector_hidden_act]
         self.fc2 = nn.Linear(config.adapter_dim, config.adapter_dim, bias=False)
 
     def forward(self, x) -> torch.Tensor:
@@ -979,10 +980,8 @@ class OnyxModel(OnyxPreTrainedModel):
         super().__init__(config)
         self.vision_tower = OnyxVisionModel._from_config(config.vision_config)
         self.language_model = AutoModel.from_config(config.text_config)
-        self.vision_adapter = OnyxVisionAdapter(config.vision_config)
-        self.vision_projection = nn.Linear(
-            config.vision_config.adapter_dim, config.text_config.hidden_size, bias=False
-        )
+        self.vision_adapter = OnyxVisionAdapter(config)
+        self.vision_projection = nn.Linear(config.adapter_dim, config.text_config.hidden_size, bias=False)
         self.perception_emb_norm = OnyxRMSNorm(eps=config.text_config.rms_norm_eps, with_scale=False)
         self.post_init()
 

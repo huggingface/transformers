@@ -35,14 +35,10 @@ class OnyxVisionConfig(PreTrainedConfig):
         Initial position embedding height.
     pos_emb_width (`int`, *optional*):
         Initial position embedding width.
-    out_hidden_size (`int`, *optional*):
-        Output dimension of the vision encoder after patch merging (input width of the multimodal projection).
     patch_temporal (`int`, *optional*):
         The temporal patch size used to embed inputs.
     merge_size (`tuple[int] | list[int]`, *optional*):
         Kernel size for patch merging.
-    adapter_dim (`int`, *optional*):
-        Intermediate dimension used in multimodal projection.
     """
 
     model_type = "onyx_vision"
@@ -58,10 +54,8 @@ class OnyxVisionConfig(PreTrainedConfig):
     hidden_act: str = "gelu"
     rope_parameters: dict | None = None  # defaults set by `RopeConfigMixin`
     max_position_embeddings: int = 32 * 32  # == `pos_h * pos_w`
-    out_hidden_size: int = 6144
     patch_temporal: int = 2
     merge_size: int = 2
-    adapter_dim: int = 4096
     layer_norm_eps: float = 1e-05
     layer_types: list[str] | None = None
 
@@ -172,15 +166,25 @@ class OnyxTextConfig(PreTrainedConfig):
 @strict
 class OnyxConfig(PreTrainedConfig):
     r"""
-    text_config (`OnyxTextConfig` or `dict`, *optional*):
-        Configuration of the text decoder. Defaults to the released checkpoint's text config.
-    vision_config (`OnyxVisionConfig` or `dict`, *optional*):
-        Configuration of the vision encoder. Defaults to the released checkpoint's vision config.
-    image_token_id (`int`, *optional*, defaults to 200092):
-        Token id used as the placeholder for image patch embeddings.
-    video_token_id (`int`, *optional*, defaults to 200091):
-        Token id used as the placeholder for video patch embeddings.
-    """
+    out_hidden_size (`int`, *optional*, defaults to 6144):
+        Output dimension of the vision encoder after patch merging (input width of the multimodal projection).
+    adapter_dim (`int`, *optional*, defaults to 4096):
+        Intermediate dimension of the multimodal projection.
+
+    Example:
+
+    ```python
+    >>> from transformers import OnyxForConditionalGeneration, OnyxConfig
+
+    >>> # Initializing an Onyx style configuration
+    >>> configuration = OnyxConfig()
+
+    >>> # Initializing a model from the configuration
+    >>> model = OnyxForConditionalGeneration(configuration)
+
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
+    ```"""
 
     model_type = "onyx"
     sub_configs = {
@@ -192,6 +196,9 @@ class OnyxConfig(PreTrainedConfig):
     vision_config: dict | PreTrainedConfig | None = None
     image_token_id: int = 200092
     video_token_id: int = 200091
+    out_hidden_size: int = 6144
+    adapter_dim: int = 4096
+    projector_hidden_act: str = "gelu"
 
     def __post_init__(self, **kwargs):
         if self.text_config is None:

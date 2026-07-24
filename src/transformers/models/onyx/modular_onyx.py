@@ -56,6 +56,7 @@ from ..gemma2.modeling_gemma2 import (
     Gemma2MLP,
     Gemma2Model,
     Gemma2PreTrainedModel,
+    Gemma2RMSNorm,
     Gemma2RotaryEmbedding,
 )
 from ..gemma3.modeling_gemma3 import Gemma3CausalLMOutputWithPast, Gemma3ModelOutputWithPast
@@ -263,16 +264,6 @@ class OnyxVideoProcessorInitKwargs(VideosKwargs, total=False):
         Maximum number of vision tokens per video frame; frames are resized to stay under this cap.
     merge_size (`int`, *optional*):
         Factor by which the patch grid is downsampled by pixel shuffling after the vision encoder.
-    do_sample_frames (`bool`, *optional*):
-        Whether to sample frames from the video before processing or to process the whole video.
-    video_metadata (`VideoMetadata` or `dict`, *optional*):
-        Metadata of the video containing information about total duration, fps and total number of frames.
-    num_frames (`int`, *optional*):
-        Maximum number of frames to sample when `do_sample_frames=True`.
-    fps (`int` or `float`, *optional*):
-        Target frames to sample per second when `do_sample_frames=True`.
-    return_metadata (`bool`, *optional*):
-        Whether to return video metadata or not.
     """
 
     patch_size: int
@@ -484,27 +475,21 @@ class OnyxVisionConfig(Kimi_K25VisionConfig):
         Initial position embedding height.
     pos_emb_width (`int`, *optional*):
         Initial position embedding width.
-    out_hidden_size (`int`, *optional*):
-        Output dimension of the vision encoder after patch merging (input width of the multimodal projection).
     patch_temporal (`int`, *optional*):
         The temporal patch size used to embed inputs.
     merge_size (`tuple[int] | list[int]`, *optional*):
         Kernel size for patch merging.
-    adapter_dim (`int`, *optional*):
-        Intermediate dimension used in multimodal projection.
     """
 
     model_type = "onyx_vision"
 
     hidden_size: int = 1536
-    out_hidden_size: int = 6144
     num_hidden_layers: int = 50
     intermediate_size: int = 8960
     patch_temporal: int = 2
     merge_size: int = 2
     pos_emb_height: int = 32
     pos_emb_width: int = 32
-    adapter_dim: int = 4096
     hidden_act: str = "gelu"
     max_position_embeddings: int = 32 * 32  # == `pos_h * pos_w`
     layer_norm_eps: float = 1e-05
@@ -603,15 +588,25 @@ class OnyxTextConfig(Gemma2Config, PreTrainedConfig):
 @strict
 class OnyxConfig(PreTrainedConfig):
     r"""
-    text_config (`OnyxTextConfig` or `dict`, *optional*):
-        Configuration of the text decoder. Defaults to the released checkpoint's text config.
-    vision_config (`OnyxVisionConfig` or `dict`, *optional*):
-        Configuration of the vision encoder. Defaults to the released checkpoint's vision config.
-    image_token_id (`int`, *optional*, defaults to 200092):
-        Token id used as the placeholder for image patch embeddings.
-    video_token_id (`int`, *optional*, defaults to 200091):
-        Token id used as the placeholder for video patch embeddings.
-    """
+    out_hidden_size (`int`, *optional*, defaults to 6144):
+        Output dimension of the vision encoder after patch merging (input width of the multimodal projection).
+    adapter_dim (`int`, *optional*, defaults to 4096):
+        Intermediate dimension of the multimodal projection.
+
+    Example:
+
+    ```python
+    >>> from transformers import OnyxForConditionalGeneration, OnyxConfig
+
+    >>> # Initializing an Onyx style configuration
+    >>> configuration = OnyxConfig()
+
+    >>> # Initializing a model from the configuration
+    >>> model = OnyxForConditionalGeneration(configuration)
+
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
+    ```"""
 
     model_type = "onyx"
     sub_configs = {
@@ -623,6 +618,9 @@ class OnyxConfig(PreTrainedConfig):
     vision_config: dict | PreTrainedConfig | None = None
     image_token_id: int = 200092
     video_token_id: int = 200091
+    out_hidden_size: int = 6144
+    adapter_dim: int = 4096
+    projector_hidden_act: str = "gelu"
 
     def __post_init__(self, **kwargs):
         if self.text_config is None:
@@ -645,23 +643,8 @@ class OnyxRMSNorm(Gemma4RMSNorm):
         super().__init__(dim, eps, with_scale)
 
 
-class OnyxCenteredRMSNorm(nn.Module):
-    """Stores the scale as an offset around 1: `output = norm(x) * (1 + weight)`."""
-
-    def __init__(self, dim: int, eps: float = 1e-6):
-        super().__init__()
-        self.eps = eps
-        self.weight = nn.Parameter(torch.zeros(dim))
-
-    def _norm(self, hidden_states: torch.Tensor):
-        # torch.pow() (over torch.sqrt() or torch.rsqrt()) to match OnyxRMSNorm exactly.
-        mean_squared = hidden_states.pow(2).mean(-1, keepdim=True) + self.eps
-        return hidden_states * torch.pow(mean_squared, -0.5)
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        normed_output = self._norm(hidden_states.float())
-        normed_output = normed_output * (self.weight.float() + 1)
-        return normed_output.type_as(hidden_states)
+class OnyxCenteredRMSNorm(Gemma2RMSNorm):
+    pass
 
 
 class OnyxNormalizedEmbedding(nn.Embedding):
@@ -1008,10 +991,10 @@ class OnyxTextModel(Gemma2Model):
 
 
 class OnyxVisionAdapter(nn.Module):
-    def __init__(self, config) -> None:
+    def __init__(self, config: OnyxConfig) -> None:
         super().__init__()
         self.fc1 = nn.Linear(config.out_hidden_size, config.adapter_dim, bias=False)
-        self.act = ACT2FN[config.hidden_act]
+        self.act = ACT2FN[config.projector_hidden_act]
         self.fc2 = nn.Linear(config.adapter_dim, config.adapter_dim, bias=False)
 
     def forward(self, x) -> torch.Tensor:
@@ -1022,10 +1005,8 @@ class OnyxModel(Kimi_K25Model):
     def __init__(self, config: OnyxConfig):
         super().__init__(config)
         del self.mm_projector
-        self.vision_adapter = OnyxVisionAdapter(config.vision_config)
-        self.vision_projection = nn.Linear(
-            config.vision_config.adapter_dim, config.text_config.hidden_size, bias=False
-        )
+        self.vision_adapter = OnyxVisionAdapter(config)
+        self.vision_projection = nn.Linear(config.adapter_dim, config.text_config.hidden_size, bias=False)
         self.perception_emb_norm = OnyxRMSNorm(eps=config.text_config.rms_norm_eps, with_scale=False)
 
     def get_image_features(

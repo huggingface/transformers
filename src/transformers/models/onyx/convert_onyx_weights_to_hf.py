@@ -101,16 +101,14 @@ def build_config():
 
     vision_config = OnyxVisionConfig(
         hidden_size=1536,
-        out_hidden_size=6144,
         num_hidden_layers=50,
         num_attention_heads=16,
         intermediate_size=8960,
         patch_size=14,
         patch_temporal=2,
-        merge_kernel_size=2,
+        merge_size=2,
         pos_emb_height=32,
         pos_emb_width=32,
-        adapter_dim=4096,
         hidden_act="gelu",
         rope_parameters={"rope_type": "default", "rope_theta": 10_000.0},
         max_position_embeddings=32 * 32,
@@ -122,6 +120,8 @@ def build_config():
         vision_config=vision_config,
         image_token_id=200_092,
         video_token_id=200_091,
+        out_hidden_size=6144,
+        adapter_dim=4096,
     )
 
 
