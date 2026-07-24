@@ -8,6 +8,7 @@ on:
       - main
       - ci-*
       - v*-release
+      - test-datasets-main
 
 concurrency:
   # Group by PR number, commit SHA (main) to avoid cross-branch cancellation, or branch ref for cancellation within each branch
@@ -20,5 +21,5 @@ permissions:
 jobs:
   pr-ci:
     # DON'T use commit sha here before the CI migration is finished
-    uses: huggingface/transformers-ci/.github/workflows/pr-ci_dynamic_caller_example.yml@main # main
+    uses: lhoestq/transformers-ci/.github/workflows/pr-ci_dynamic_caller_example.yml@test-datasets-main # datasets@main
 
