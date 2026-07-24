@@ -723,10 +723,6 @@ class Exaone4_5_Model(Exaone4_5_PreTrainedModel):
         video_grid_thw: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPast:
-        r"""
-        second_per_grid_ts (`torch.Tensor` of shape `(num_videos)`, *optional*):
-            The time interval (in seconds) for each grid along the temporal dimension in the 3D position IDs.
-        """
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
