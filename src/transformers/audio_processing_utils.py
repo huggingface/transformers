@@ -344,37 +344,52 @@ class BaseAudioProcessor(AudioProcessingMixin):
         return features, [(0, length) for length in actual_lengths]
 
     def _pad_feature_single(self, feature, max_length):
-        """Right-pad one feature array/tensor along its first (time) axis with
-        `padding_value`. Implemented by backend subclasses."""
-        raise NotImplementedError
+        """Right-pad one feature array/tensor along its first (time) axis with `padding_value`."""
+        return self._pad_axis(feature, 0, max_length - feature.shape[0], axis=0, value=self.padding_value)
 
-
-    def _process_audio(self, *args, **kwargs):
+    def _process_audio(self, audio_el):
         """
         Process a single raw audio input into the backend's working format.
 
-        Implemented by backend subclasses (e.g., `TorchAudioBackend`). Converts a raw input
-        (NumPy array) to the backend's internal format (e.g., `torch.Tensor`), handles
-        mono conversion if needed.
+        Converts a raw input (NumPy array) to the backend's internal format
+        (e.g., `torch.Tensor`) and handles mono conversion if needed.
         """
-        raise NotImplementedError
+        audio_el = self._as_backend_array(audio_el)
+        if audio_el.ndim > 1:
+            if self.force_mono and audio_el.shape[0] > 1:
+                audio_el = self._mean_axis0(audio_el)
+            elif audio_el.shape[0] == 1:
+                audio_el = self._squeeze_axis0(audio_el)
+            else:
+                raise ValueError("Audio has more than one channel but force_mono is False")
+        return audio_el
 
     def _to_batch(self, audio):
-        """Stack a list of audio arrays/tensors into a batch. Implemented by backend subclasses."""
-        raise NotImplementedError
+        """Stack a list of audio arrays/tensors into a batch, optionally adding a channel dim."""
+        batch = self._stack(audio)
+        if self.add_channel_dim:
+            batch = self._insert_channel_dim(batch)
+        return batch
 
     def _pad_single(self, audio, max_length: int) -> AudioInput:
         """
         Pad a single input (on left/right) up to predefined length or max length in the batch.
-
-        Implemented by backend subclasses.
         """
-        raise NotImplementedError
+        current_length = audio.shape[-1]
+        if current_length >= max_length:
+            return audio
+        pad = max_length - current_length
+        if self.padding_side == "right":
+            left, right = 0, pad
+        elif self.padding_side == "left":
+            left, right = pad, 0
+        else:
+            raise ValueError(f"Invalid padding side: {self.padding_side}")
+        return self._pad_axis(audio, left, right, axis=-1, value=self.padding_value)
 
     def _stack_features(self, features):
-        """Stack a list of feature arrays/tensors into a batch.
-        Implemented by backend subclasses."""
-        raise NotImplementedError
+        """Stack a list of feature arrays/tensors into a batch."""
+        return self._stack(features)
 
     def _get_mask(self, ranges, padded_length):
         mask = self._zeros_int32((len(ranges), padded_length))
@@ -545,7 +560,7 @@ class BaseAudioProcessor(AudioProcessingMixin):
         if win_length < n_fft:
             left_pad = (n_fft - win_length) // 2
             right_pad = n_fft - win_length - left_pad
-            window = self._pad_window(window, left_pad, right_pad)
+            window = self._pad_axis(window, left_pad, right_pad, axis=-1, value=0.0)
         return window, n_fft
 
     def _frame_audio(self, audio, window, frame_length, hop_length, n_fft, stft_cfg):
@@ -559,14 +574,21 @@ class BaseAudioProcessor(AudioProcessingMixin):
     def _apply_frame_processing(self, frames, *, spectrogram_config, **kwargs):
         """Hook: per-frame signal conditioning after frame extraction.
 
-        Called after framing, before windowing and FFT. Default backend
-        implementations apply dither, DC-offset removal, and standard
-        preemphasis.
+        Called after framing, before windowing and FFT. Applies DC-offset
+        removal and standard per-frame preemphasis.
 
         Override for non-standard frame processing, e.g. HTK-style
         preemphasis (Gemma3n).
         """
-        raise NotImplementedError
+        if spectrogram_config.remove_dc_offset:
+            frames = frames - self._mean_last(frames)
+        preemphasis = spectrogram_config.preemphasis
+        if preemphasis is not None and spectrogram_config.preemphasis_mode == "per_frame":
+            # Replicate-pad first sample (x0 - p*x0, not x0*(1-p)): bit-exact with kaldi.
+            first = frames[..., :1] - preemphasis * frames[..., :1]
+            rest = frames[..., 1:] - preemphasis * frames[..., :-1]
+            frames = self._concat_last([first, rest])
+        return frames
 
     def _preemphasize_waveform(self, audio, preemphasis, audio_ranges=None):
         """Waveform-level preemphasis (first sample unchanged), zeroing padded samples via
@@ -661,8 +683,36 @@ class BaseAudioProcessor(AudioProcessingMixin):
         """Return an int32 zeros array/tensor of `shape`. Implemented by backend subclasses."""
         raise NotImplementedError
 
-    def _pad_window(self, window, left_pad, right_pad):
-        """Zero-pad the 1-D window by (left_pad, right_pad). Implemented by backend subclasses."""
+    def _as_backend_array(self, x):
+        """Convert a raw input to the backend's array/tensor type. Implemented by backend subclasses."""
+        raise NotImplementedError
+
+    def _mean_axis0(self, x):
+        """Mean over axis 0 (channel-mixing to mono). Implemented by backend subclasses."""
+        raise NotImplementedError
+
+    def _squeeze_axis0(self, x):
+        """Squeeze the leading (size-1 channel) axis. Implemented by backend subclasses."""
+        raise NotImplementedError
+
+    def _pad_axis(self, x, left, right, axis, value=0.0):
+        """Constant-pad `x` by (left, right) along `axis`. Implemented by backend subclasses."""
+        raise NotImplementedError
+
+    def _stack(self, seq):
+        """Stack a sequence of arrays/tensors along a new leading axis. Implemented by backend subclasses."""
+        raise NotImplementedError
+
+    def _insert_channel_dim(self, batch):
+        """Insert a channel axis at position 1 (2D->3D). Implemented by backend subclasses."""
+        raise NotImplementedError
+
+    def _mean_last(self, x):
+        """Mean over the last axis (keepdims). Implemented by backend subclasses."""
+        raise NotImplementedError
+
+    def _concat_last(self, parts):
+        """Concatenate a list of arrays/tensors along the last axis. Implemented by backend subclasses."""
         raise NotImplementedError
 
     def _mel_filter_bank(self, spectrogram_config: SpectrogramConfig):

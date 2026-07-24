@@ -62,48 +62,6 @@ class NumpyAudioBackend(BaseAudioProcessor):
     def backend(self) -> str:
         return "numpy"
 
-    # ── Audio input processing ────────────────────────────────────────────
-
-    def _process_audio(self, audio_el):
-        if not isinstance(audio_el, np.ndarray):
-            audio_el = np.asarray(audio_el)
-        if audio_el.ndim > 1:
-            if self.force_mono and audio_el.shape[0] > 1:
-                audio_el = audio_el.mean(axis=0)
-            elif audio_el.shape[0] == 1:
-                audio_el = np.squeeze(audio_el, axis=0)
-            else:
-                raise ValueError("Audio has more than one channel but force_mono is False")
-        return audio_el
-
-    # ── Padding & batching ────────────────────────────────────────────────
-
-    def _pad_single(self, audio: np.ndarray, max_length: int) -> np.ndarray:
-        current_length = audio.shape[-1]
-        if current_length >= max_length:
-            return audio
-        pad_length = max_length - current_length
-        if self.padding_side == "right":
-            pad_width = [(0, 0)] * (audio.ndim - 1) + [(0, pad_length)]
-        elif self.padding_side == "left":
-            pad_width = [(0, 0)] * (audio.ndim - 1) + [(pad_length, 0)]
-        else:
-            raise ValueError(f"Invalid padding side: {self.padding_side}")
-        return np.pad(audio, pad_width, mode="constant", constant_values=self.padding_value)
-
-    def _to_batch(self, audio):
-        batch = np.stack(audio)
-        if self.add_channel_dim:
-            batch = batch[:, np.newaxis, :]
-        return batch
-
-    def _pad_feature_single(self, feature, max_length):
-        pad_width = [(0, max_length - feature.shape[0])] + [(0, 0)] * (feature.ndim - 1)
-        return np.pad(feature, pad_width, mode="constant", constant_values=self.padding_value)
-
-    def _stack_features(self, features):
-        return np.stack(features)
-
     # ── Backend array-API primitives ─────────────────────────────────────
 
     def _astype(self, x, dtype_name):
@@ -117,8 +75,31 @@ class NumpyAudioBackend(BaseAudioProcessor):
     def _zeros_int32(self, shape):
         return np.zeros(shape, dtype=np.int32)
 
-    def _pad_window(self, window, left_pad, right_pad):
-        return np.pad(window, (left_pad, right_pad))
+    def _as_backend_array(self, x):
+        return x if isinstance(x, np.ndarray) else np.asarray(x)
+
+    def _mean_axis0(self, x):
+        return x.mean(axis=0)
+
+    def _squeeze_axis0(self, x):
+        return np.squeeze(x, axis=0)
+
+    def _pad_axis(self, x, left, right, axis, value=0.0):
+        pad_width = [(0, 0)] * x.ndim
+        pad_width[axis] = (left, right)
+        return np.pad(x, pad_width, mode="constant", constant_values=value)
+
+    def _stack(self, seq):
+        return np.stack(seq)
+
+    def _insert_channel_dim(self, batch):
+        return batch[:, np.newaxis, :]
+
+    def _mean_last(self, x):
+        return x.mean(axis=-1, keepdims=True)
+
+    def _concat_last(self, parts):
+        return np.concatenate(parts, axis=-1)
 
     # ── STFT pipeline ─────────────────────────────────────────────────────
 
@@ -202,18 +183,6 @@ class NumpyAudioBackend(BaseAudioProcessor):
         frames, _ = self._frame_waveform(audio, frame_length, hop_length, n_fft, stft_cfg.center, stft_cfg.pad_mode)
         compute_dtype = np.result_type(audio.dtype, window.dtype)
         return frames.astype(compute_dtype, copy=False)
-
-    def _apply_frame_processing(self, frames, *, spectrogram_config, **kwargs):
-        if spectrogram_config.remove_dc_offset:
-            frames = frames - frames.mean(axis=-1, keepdims=True)
-        preemphasis = spectrogram_config.preemphasis
-        if preemphasis is not None and spectrogram_config.preemphasis_mode == "per_frame":
-            preemph_src = preemphasis * frames[..., :-1]
-            # First sample uses the replicate-pad form x0 - p*x0 (not x0*(1-p)):
-            # bit-exact match with kaldi, visible when the window is nonzero at sample 0
-            frames[..., 0] = frames[..., 0] - preemphasis * frames[..., 0]
-            frames[..., 1:] = frames[..., 1:] - preemph_src
-        return frames
 
     def _preemphasize_waveform(self, audio, preemphasis, audio_ranges=None):
         out = audio.copy()
@@ -389,47 +358,6 @@ class TorchAudioBackend(BaseAudioProcessor):
     def backend(self) -> str:
         return "torch"
 
-    # ── Audio input processing ────────────────────────────────────────────
-
-    def _process_audio(self, audio_el):
-        if isinstance(audio_el, np.ndarray):
-            audio_el = torch.from_numpy(audio_el)
-        if audio_el.ndim > 1:
-            if self.force_mono and audio_el.shape[0] > 1:
-                audio_el = audio_el.mean(dim=0)
-            elif audio_el.shape[0] == 1:
-                audio_el = audio_el.squeeze(0)
-            else:
-                raise ValueError("Audio has more than one channel but force_mono is False")
-        return audio_el
-
-    # ── Padding & batching ────────────────────────────────────────────────
-
-    def _pad_single(self, audio, max_length):
-        current_length = audio.shape[-1]
-        if current_length >= max_length:
-            return audio
-        if self.padding_side == "right":
-            pad_args = (0, max_length - current_length)
-        elif self.padding_side == "left":
-            pad_args = (max_length - current_length, 0)
-        else:
-            raise ValueError(f"Invalid padding side: {self.padding_side}")
-        return torch.nn.functional.pad(audio, pad_args, "constant", self.padding_value)
-
-    def _to_batch(self, audio):
-        batch = torch.stack(audio)
-        if self.add_channel_dim:
-            batch = batch.unsqueeze(1)
-        return batch
-
-    def _pad_feature_single(self, feature, max_length):
-        pad_args = [0, 0] * (feature.ndim - 1) + [0, max_length - feature.shape[0]]
-        return torch.nn.functional.pad(feature, pad_args, "constant", self.padding_value)
-
-    def _stack_features(self, features):
-        return torch.stack(features)
-
     # ── Backend array-API primitives ─────────────────────────────────────
 
     def _astype(self, x, dtype_name):
@@ -441,8 +369,31 @@ class TorchAudioBackend(BaseAudioProcessor):
     def _zeros_int32(self, shape):
         return torch.zeros(shape, dtype=torch.int32)
 
-    def _pad_window(self, window, left_pad, right_pad):
-        return torch.nn.functional.pad(window, (left_pad, right_pad))
+    def _as_backend_array(self, x):
+        return torch.from_numpy(x) if isinstance(x, np.ndarray) else x
+
+    def _mean_axis0(self, x):
+        return x.mean(dim=0)
+
+    def _squeeze_axis0(self, x):
+        return x.squeeze(0)
+
+    def _pad_axis(self, x, left, right, axis, value=0.0):
+        axis = axis % x.ndim
+        pad = [0, 0] * (x.ndim - 1 - axis) + [left, right]
+        return torch.nn.functional.pad(x, pad, "constant", value)
+
+    def _stack(self, seq):
+        return torch.stack(seq)
+
+    def _insert_channel_dim(self, batch):
+        return batch.unsqueeze(1)
+
+    def _mean_last(self, x):
+        return x.mean(dim=-1, keepdim=True)
+
+    def _concat_last(self, parts):
+        return torch.cat(parts, dim=-1)
 
     # ── STFT pipeline ─────────────────────────────────────────────────────
 
@@ -469,19 +420,6 @@ class TorchAudioBackend(BaseAudioProcessor):
         if stft_cfg.center:
             audio = torch.nn.functional.pad(audio, (frame_length // 2, frame_length // 2), mode=stft_cfg.pad_mode)
         return audio.unfold(-1, frame_length, hop_length)
-
-    def _apply_frame_processing(self, frames, *, spectrogram_config, **kwargs):
-        if spectrogram_config.remove_dc_offset:
-            frames = frames - frames.mean(dim=-1, keepdim=True)
-        preemphasis = spectrogram_config.preemphasis
-        if preemphasis is not None and spectrogram_config.preemphasis_mode == "per_frame":
-            frames = torch.cat([
-                # Replicate-pad form x0 - p*x0 (not x0*(1-p)): bit-exact match with
-                # kaldi, visible when the window is nonzero at sample 0
-                frames[..., :1] - preemphasis * frames[..., :1],
-                frames[..., 1:] - preemphasis * frames[..., :-1],
-            ], dim=-1)
-        return frames
 
     def _preemphasize_waveform(self, audio, preemphasis, audio_ranges=None):
         audio = torch.cat([audio[..., :1], audio[..., 1:] - preemphasis * audio[..., :-1]], dim=-1)
