@@ -353,6 +353,10 @@ class GgufModelTests(unittest.TestCase):
     q4_k_m_lfm2_model_id = "LFM2-1.2B-Q4_K_M.gguf"
     gpt_oss_model_id = "unsloth/gpt-oss-20b-GGUF"
     gpt_oss_gguf_file = "gpt-oss-20b-Q5_K_M.gguf"
+    # Moonlight-16B is a DeepseekV3ForCausalLM model (GGUF architecture `deepseek2`) small enough for CI.
+    # NOTE: the deepseek-v3-tiny-random GGUF mirrors on the Hub contain corrupted (all-zero) files.
+    deepseek_v3_model_id = "gabriellarson/Moonlight-16B-A3B-Instruct-GGUF"
+    deepseek_v3_gguf_file = "Moonlight-16B-A3B-Instruct-Q4_K_M.gguf"
 
     example_text = "Hello"
 
@@ -432,6 +436,60 @@ class GgufModelTests(unittest.TestCase):
             if layer_name in quantized_state_dict:
                 self.assertTrue(original_params.shape == quantized_state_dict[layer_name].shape)
                 torch.testing.assert_close(original_params, quantized_state_dict[layer_name])
+
+    def test_deepseek_v3(self):
+        # DeepSeek-V3 architecture (GGUF arch `deepseek2`) exercises MLA attention (split attn_k_b/attn_v_b
+        # tensors) + MoE (fused experts, e_score_correction_bias routing).
+        tokenizer = AutoTokenizer.from_pretrained(self.deepseek_v3_model_id, gguf_file=self.deepseek_v3_gguf_file)
+        model = AutoModelForCausalLM.from_pretrained(
+            self.deepseek_v3_model_id,
+            gguf_file=self.deepseek_v3_gguf_file,
+            dtype=torch.float16,
+        ).to(torch_device)
+
+        self.assertEqual(model.config.model_type, "deepseek_v3")
+        self.assertEqual(model.config.num_key_value_heads, model.config.num_attention_heads)
+        # Moonlight has no query compression and no grouped expert routing.
+        self.assertIsNone(model.config.q_lora_rank)
+        self.assertEqual(model.config.n_group, 1)
+
+        text = tokenizer(self.example_text, return_tensors="pt").to(torch_device)
+        out = model.generate(**text, max_new_tokens=10, do_sample=False)
+
+        EXPECTED_TEXT = "Hello, I am trying to create a function that will"
+        self.assertEqual(tokenizer.decode(out[0], skip_special_tokens=True), EXPECTED_TEXT)
+
+    def test_deepseek_v3_config_mapping(self):
+        """Test that the DeepSeek-V3 GGUF config mapping is registered correctly."""
+        from transformers.integrations.ggml import GGUF_CONFIG_MAPPING
+
+        self.assertIn("deepseek2", GGUF_CONFIG_MAPPING)
+        mapping = GGUF_CONFIG_MAPPING["deepseek2"]
+
+        expected_mappings = {
+            "block_count": "num_hidden_layers",
+            "embedding_length": "hidden_size",
+            "feed_forward_length": "intermediate_size",
+            "rope.dimension_count": "qk_rope_head_dim",
+            "attention.kv_lora_rank": "kv_lora_rank",
+            "attention.q_lora_rank": "q_lora_rank",
+            "attention.value_length_mla": "v_head_dim",
+            "expert_count": "n_routed_experts",
+            "expert_shared_count": "n_shared_experts",
+            "expert_feed_forward_length": "moe_intermediate_size",
+            "expert_weights_scale": "routed_scaling_factor",
+            "leading_dense_block_count": "first_k_dense_replace",
+        }
+        for gguf_key, transformers_key in expected_mappings.items():
+            self.assertEqual(mapping[gguf_key], transformers_key)
+
+    def test_deepseek_v3_architecture_mapping(self):
+        """Test that DeepSeek-V3 is wired to the right converter and tensor processor."""
+        from transformers.integrations.ggml import GGUF_TO_FAST_CONVERTERS, GGUFGPTConverter
+        from transformers.modeling_gguf_pytorch_utils import TENSOR_PROCESSORS, DeepseekV3TensorProcessor
+
+        self.assertEqual(GGUF_TO_FAST_CONVERTERS["deepseek_v3"], GGUFGPTConverter)
+        self.assertEqual(TENSOR_PROCESSORS["deepseek2"], DeepseekV3TensorProcessor)
 
     def test_phi3_q4_0(self):
         tokenizer = AutoTokenizer.from_pretrained(self.phi3_model_id, gguf_file=self.q4_0_phi3_model_id)
