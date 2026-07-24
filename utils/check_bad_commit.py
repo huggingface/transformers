@@ -149,7 +149,9 @@ def find_bad_commit(target_test, start_commit, end_commit):
     #   - if both failing and passing at end_commit: mark it as flaky
 
     # check if `end_commit` fails the test
-    failed_before, n_failed, n_passed, failure_at_base_commit = is_bad_commit(target_test, end_commit, flake_runs=flake_runs)
+    failed_before, n_failed, n_passed, failure_at_base_commit = is_bad_commit(
+        target_test, end_commit, flake_runs=flake_runs
+    )
     # We only need one failure to conclude the test is flaky on the previous run with `end_commit`.
     # However, when running on CI, we need at least one failure and one pass to conclude.
     is_flaky_at_end_commit = ((not is_pr_ci) and n_failed > 0) or (is_pr_ci and n_failed > 0 and n_passed > 0)
