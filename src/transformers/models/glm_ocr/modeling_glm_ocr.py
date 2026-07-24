@@ -41,7 +41,6 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, torch_compilable_check
-from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import (
     accepts_precomputed_kwargs,
     get_max_seqlen,
@@ -395,7 +394,6 @@ class GlmOcrVisionAttention(nn.Module):
         self.q_norm = GlmOcrRMSNorm(self.head_dim, eps=config.rms_norm_eps)
         self.k_norm = GlmOcrRMSNorm(self.head_dim, eps=config.rms_norm_eps)
 
-    @deprecate_kwarg("rotary_pos_emb", version="v5.10")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -476,7 +474,6 @@ class GlmOcrVisionBlock(GradientCheckpointingLayer):
         self.attn = GlmOcrVisionAttention(config)
         self.mlp = GlmOcrVisionMlp(config, bias=config.attention_bias)
 
-    @deprecate_kwarg("rotary_pos_emb", version="v5.10")
     @auto_docstring
     def forward(
         self,
@@ -1119,7 +1116,6 @@ class GlmOcrModel(GlmOcrPreTrainedModel):
             position_ids = None
         return position_ids
 
-    @deprecate_kwarg("rope_deltas", version="v5.10")
     @auto_docstring
     @can_return_tuple
     def forward(
@@ -1244,7 +1240,6 @@ class GlmOcrForConditionalGeneration(GlmOcrPreTrainedModel, GenerationMixin):
         """
         return self.model.get_image_features(pixel_values, image_grid_thw, **kwargs)
 
-    @deprecate_kwarg("rope_deltas", version="v5.10")
     @can_return_tuple
     @auto_docstring
     def forward(
