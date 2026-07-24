@@ -3413,7 +3413,9 @@ class Qwen2_5OmniToken2WavDiTModel(Qwen2_5OmniPreTrainedModel):
     ):
         batch_size = hidden_states.shape[0]
         if time_step.ndim == 0:
-            time_step = time_step.repeat(batch_size)
+            time_step = time_step.repeat(batch_size * 2 if apply_cfg else batch_size)
+        elif apply_cfg and time_step.shape[0] == batch_size:
+            time_step = torch.cat([time_step, time_step], dim=0)
 
         # Compute embeddings
         time_embedding = self.time_embed(time_step)
@@ -3432,7 +3434,7 @@ class Qwen2_5OmniToken2WavDiTModel(Qwen2_5OmniPreTrainedModel):
 
         # Compute positional encodings
         position_ids = torch.arange(hidden_states.shape[1], device=hidden_states.device)
-        position_ids = position_ids[None, :].repeat(batch_size, 1)
+        position_ids = position_ids[None, :].repeat(hidden_states.shape[0], 1)
         position_embeddings = self.rotary_embed(hidden_states, position_ids)
         blockwise_difference = self._create_block_diff(hidden_states)
 
@@ -3462,8 +3464,6 @@ class Qwen2_5OmniToken2WavDiTModel(Qwen2_5OmniPreTrainedModel):
     ):
         maximum_duration = quantized_code.shape[1] * self.repeats
         batch_size = reference_mel_spectrogram.shape[0]
-        if batch_size != 1:
-            raise ValueError("Only batch size = 1 is currently supported")
 
         if maximum_duration > self.config.max_position_embeddings:
             raise ValueError(
@@ -3733,8 +3733,7 @@ class Qwen2_5OmniForConditionalGeneration(Qwen2_5OmniPreTrainedModel, Generation
             )
         if return_audio is None:
             return_audio = self.has_talker
-        if input_ids.shape[0] != 1 and return_audio:
-            raise NotImplementedError("Qwen2.5-Omni currently does not support batched inference with audio output")
+        batch_size = input_ids.shape[0]
 
         shared_kwargs = {"use_audio_in_video": use_audio_in_video}
         thinker_kwargs = {
@@ -3747,6 +3746,7 @@ class Qwen2_5OmniForConditionalGeneration(Qwen2_5OmniPreTrainedModel, Generation
             "top_p": talker_top_p,
             "temperature": talker_temperature,
             "eos_token_id": talker_eos_token_id,
+            "pad_token_id": self.talker.codec_pad_token,
             "repetition_penalty": talker_repetition_penalty,
         }
         token2wav_kwargs = {}
@@ -3834,7 +3834,7 @@ class Qwen2_5OmniForConditionalGeneration(Qwen2_5OmniPreTrainedModel, Generation
         talker_input_text_ids = torch.cat(
             [
                 input_ids,
-                torch.tensor([[talker_text_bos_token]], dtype=torch.long, device=input_ids.device),
+                torch.full((batch_size, 1), talker_text_bos_token, dtype=torch.long, device=input_ids.device),
                 thinker_generate_ids[:, :1],
             ],
             dim=-1,
@@ -3843,8 +3843,8 @@ class Qwen2_5OmniForConditionalGeneration(Qwen2_5OmniPreTrainedModel, Generation
         talker_input_ids = torch.cat(
             [
                 torch.full_like(input_ids, fill_value=self.talker.codec_mask_token),
-                torch.tensor([[self.talker.codec_pad_token]], dtype=torch.long, device=input_ids.device),
-                torch.tensor([[self.talker.codec_bos_token]], dtype=torch.long, device=input_ids.device),
+                torch.full((batch_size, 1), self.talker.codec_pad_token, dtype=torch.long, device=input_ids.device),
+                torch.full((batch_size, 1), self.talker.codec_bos_token, dtype=torch.long, device=input_ids.device),
             ],
             dim=1,
         )
@@ -3852,7 +3852,9 @@ class Qwen2_5OmniForConditionalGeneration(Qwen2_5OmniPreTrainedModel, Generation
         thinker_embed_tokens = self.thinker.get_input_embeddings()
         thinker_reply_part = torch.cat(thinker_hidden_states[1:], dim=1) + torch.cat(thinker_token_embeds[1:], dim=1)
         talker_inputs_embeds = thinker_hidden_states[0] + thinker_token_embeds[0]
-        talker_text_bos_token = torch.tensor([[talker_text_bos_token]], dtype=torch.long, device=input_ids.device)
+        talker_text_bos_token = torch.full(
+            (batch_size, 1), talker_text_bos_token, dtype=torch.long, device=input_ids.device
+        )
         talker_text_bos_embed = thinker_embed_tokens(talker_text_bos_token).to(input_ids.device)
         talker_inputs_embeds = torch.cat(
             [
@@ -3863,10 +3865,10 @@ class Qwen2_5OmniForConditionalGeneration(Qwen2_5OmniPreTrainedModel, Generation
             dim=1,
         )
 
-        eos_token = torch.tensor([[self.talker.text_eos_token]], dtype=torch.long, device=input_ids.device)
+        eos_token = torch.full((batch_size, 1), self.talker.text_eos_token, dtype=torch.long, device=input_ids.device)
         eos_embedding = thinker_embed_tokens(eos_token).to(input_ids.device)
 
-        pad_token = torch.tensor([[self.talker.text_pad_token]], dtype=torch.long, device=input_ids.device)
+        pad_token = torch.full((batch_size, 1), self.talker.text_pad_token, dtype=torch.long, device=input_ids.device)
         pad_embedding = thinker_embed_tokens(pad_token).to(input_ids.device)
 
         thinker_reply_part = torch.cat(
@@ -3881,7 +3883,7 @@ class Qwen2_5OmniForConditionalGeneration(Qwen2_5OmniPreTrainedModel, Generation
         talker_attention_mask = None
         if "attention_mask" in kwargs:
             talker_attention_mask = torch.cat(
-                [kwargs["attention_mask"], kwargs["attention_mask"].new_ones((1, 2))], dim=1
+                [kwargs["attention_mask"], kwargs["attention_mask"].new_ones((batch_size, 2))], dim=1
             ).to(input_ids.device)
 
         talker_result = self.talker.generate(
@@ -3893,18 +3895,35 @@ class Qwen2_5OmniForConditionalGeneration(Qwen2_5OmniPreTrainedModel, Generation
             suppress_tokens=[self.talker.codec_bos_token],
             **{k: (v.to(input_ids.device) if torch.is_tensor(v) else v) for k, v in talker_kwargs.items()},
         )
-        talker_generate_codes = talker_result[:, talker_input_ids.shape[1] : -1]
+        talker_generate_codes = talker_result[:, talker_input_ids.shape[1] :]
+        eos_token_ids = torch.as_tensor(talker_kwargs["eos_token_id"], device=talker_generate_codes.device).flatten()
+        eos_mask = (talker_generate_codes.unsqueeze(-1) == eos_token_ids).any(dim=-1)
+        code_positions = torch.arange(talker_generate_codes.shape[-1], device=talker_generate_codes.device)
+        talker_code_lengths = torch.where(eos_mask, code_positions, talker_generate_codes.shape[-1]).min(dim=-1).values
 
         # 3. Generate wavs from code
         if self.token2wav.dtype != torch.float:
             self.token2wav.float()
 
-        wav = self.token2wav(
-            talker_generate_codes.to(input_ids.device),
-            conditioning=speaker_params["cond"].to(input_ids.device).float(),
-            reference_mel=speaker_params["ref_mel"].to(input_ids.device).float(),
-            **token2wav_kwargs,
-        )
+        conditioning = speaker_params["cond"].to(input_ids.device).float().expand(batch_size, -1)
+        reference_mel = speaker_params["ref_mel"].to(input_ids.device).float().expand(batch_size, -1, -1)
+        # Token2Wav starts its diffusion process from random noise. Decoding each sample separately makes batched
+        # generation reproduce single-item generation when the random seed is controlled.
+        wavs = []
+        for index, code_length in enumerate(talker_code_lengths.tolist()):
+            sample_wav = self.token2wav(
+                talker_generate_codes[index : index + 1, :code_length],
+                conditioning=conditioning[index : index + 1],
+                reference_mel=reference_mel[index : index + 1],
+                **token2wav_kwargs,
+            )
+            # The BigVGAN vocoder squeezes its output, so a single-item decode comes back as `(num_samples,)`.
+            wavs.append(sample_wav.reshape(-1))
+
+        max_waveform_length = max(sample_wav.shape[-1] for sample_wav in wavs)
+        wav = wavs[0].new_zeros((batch_size, max_waveform_length))
+        for index, sample_wav in enumerate(wavs):
+            wav[index, : sample_wav.shape[-1]] = sample_wav
 
         return thinker_result.sequences, wav.float()
 

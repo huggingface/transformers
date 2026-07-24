@@ -33,7 +33,6 @@ The abstract from the technical report is the following:
 ## Notes
 
 - Use [`Qwen3OmniMoeForConditionalGeneration`] to generate audio and text output. To generate only one output type, use [`Qwen3OmniMoeThinkerForConditionalGeneration`] for text-only and [`Qwen3OmniMoeTalkerForConditionalGeneration`] for audio-only outputs.
-- Audio generation with [`Qwen3OmniMoeForConditionalGeneration`] supports only single batch size at the moment.
 - In case out out-of-memory errors hwen working with video input, decrease `processor.max_pixels`. By default the maximum is set to a very arge value and high resolution visuals will not be resized, unless resolution exceeds `processor.max_pixels`.
 - The processor has its own [`~ProcessorMixin.apply_chat_template`] method to convert chat messages to model inputs.
 
@@ -257,6 +256,67 @@ text = processor.batch_decode(text_ids, skip_special_tokens=True, clean_up_token
 print(text)
 ```
 
+### Batch audio generation
+
+[`Qwen3OmniMoeForConditionalGeneration`] supports batched audio output generation. For example, below for text-to-speech batch generation.
+
+```python
+import soundfile as sf
+from transformers import AutoModelForTextToWaveform, AutoProcessor
+import torch
+
+model_id = "Qwen/Qwen3-Omni-30B-A3B-Instruct"
+model = AutoModelForTextToWaveform.from_pretrained(model_id, device_map="auto")
+processor = AutoProcessor.from_pretrained(model_id)
+sampling_rate = 24000  # output sampling rate
+max_new_tokens = 128  # maximum number of tokens to generate
+
+system_text = (
+    "You are Qwen, a virtual human developed by the Qwen Team, Alibaba Group, capable of "
+    "perceiving auditory and visual inputs, as well as generating text and speech."
+)
+texts = [
+    "Hello, I'm Qwen. How can I help you today?",
+    "The weather is nice today. Let's go for a walk.",
+]
+inputs = processor.apply_chat_template(
+    [
+        [
+            {"role": "system", "content": [{"type": "text", "text": system_text}]},
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "text",
+                        "text": (
+                            "Please read the following text aloud exactly as written, with no "
+                            f"additional commentary:\n\n{text}"
+                        ),
+                    }
+                ],
+            },
+        ]
+        for text in texts
+    ],
+    tokenize=True,
+    add_generation_prompt=True,
+    return_dict=True,
+    return_tensors="pt",
+    processor_kwargs={"padding": True},
+).to(model.device, dtype=model.dtype)
+
+gen_kwargs = {
+    "talker_do_sample": True,
+    "speaker": "Ethan",     # Ethan, Chelsie
+    "thinker_max_new_tokens": max_new_tokens,
+}
+_, pred_waveform = model.generate(**inputs, **gen_kwargs)
+
+for audio, sample_id in zip(pred_waveform, range(len(texts))):
+    sf.write(f"qwen3_omni_output_{sample_id}.wav", audio.reshape(-1).detach().to(torch.float32).cpu().numpy(), sampling_rate)
+    print(f"Saved audio to qwen3_omni_output_{sample_id}.wav")
+```
+
 ### Usage Tips
 
 #### Image Resolution trade-off
@@ -306,14 +366,14 @@ text_ids = model.generate(**inputs, return_audio=False)
 
 #### Change voice type of output audio
 
-Qwen3-Omni-MOE supports the ability to change the voice of the output audio. Users can use the `spk` parameter of `generate` function to specify the voice type. The `"Qwen/Qwen3-Omni-30B-A3B-Instruct"` checkpoint support two voice types: `Chelsie` and `Ethan`, while `Chelsie` is a female voice and `Ethan` is a male voice. By default, if `spk` is not specified, the default voice type is `Chelsie`.
+Qwen3-Omni-MOE supports the ability to change the voice of the output audio. Users can use the `speaker` parameter of `generate` function to specify the voice type. The `"Qwen/Qwen3-Omni-30B-A3B-Instruct"` checkpoint support two voice types: `Chelsie` and `Ethan`, while `Chelsie` is a female voice and `Ethan` is a male voice. By default, if `speaker` is not specified, the default voice type is `Chelsie`.
 
 ```python
-text_ids, audio = model.generate(**inputs, spk="Chelsie")
+text_ids, audio = model.generate(**inputs, speaker="Chelsie")
 ```
 
 ```python
-text_ids, audio = model.generate(**inputs, spk="Ethan")
+text_ids, audio = model.generate(**inputs, speaker="Ethan")
 ```
 
 #### Flash-Attention 2 to speed up generation

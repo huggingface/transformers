@@ -78,6 +78,19 @@ class Qwen2_5OmniProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         audio_inputs = [np.random.rand(160000) * 2 - 1] * batch_size
         return audio_inputs
 
+    def test_post_process_multimodal_output_batched_audio(self):
+        processor = self.processor_class.__new__(self.processor_class)
+        generated_outputs = (
+            torch.ones((2, 3), dtype=torch.long),
+            torch.arange(12, dtype=torch.float32).reshape(2, 1, 6),
+        )
+
+        audio_outputs = processor.post_process_multimodal_output(generated_outputs, generation_mode="audio")
+
+        self.assertEqual(len(audio_outputs), 2)
+        self.assertTrue(np.array_equal(audio_outputs[0], np.arange(6, dtype=np.float32)))
+        self.assertTrue(np.array_equal(audio_outputs[1], np.arange(6, 12, dtype=np.float32)))
+
     @require_torch
     def _test_apply_chat_template(
         self,

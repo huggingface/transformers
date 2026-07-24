@@ -31,7 +31,11 @@ from transformers import (
     is_torch_available,
     is_vision_available,
 )
-from transformers.models.qwen3_omni_moe.configuration_qwen3_omni_moe import Qwen3OmniMoeTalkerCodePredictorConfig
+from transformers.models.qwen3_omni_moe.configuration_qwen3_omni_moe import (
+    Qwen3OmniMoeTalkerCodePredictorConfig,
+    Qwen3OmniMoeTalkerConfig,
+)
+from transformers.models.qwen3_omni_moe.modeling_qwen3_omni_moe import Qwen3OmniMoeTalkerForConditionalGeneration
 from transformers.testing_utils import (
     Expectations,
     cleanup,
@@ -687,6 +691,74 @@ class Qwen3OmniMoeThinkerForConditionalGenerationModelTest(ModelTesterMixin, Gen
 
 
 @require_torch
+class Qwen3OmniMoeTalkerForConditionalGenerationTest(unittest.TestCase):
+    def test_greedy_batch_generation_matches_single(self):
+        torch.manual_seed(0)
+        common_config = {
+            "vocab_size": 64,
+            "hidden_size": 16,
+            "intermediate_size": 32,
+            "shared_expert_intermediate_size": 32,
+            "num_hidden_layers": 1,
+            "num_attention_heads": 4,
+            "num_key_value_heads": 2,
+            "max_position_embeddings": 64,
+            "rms_norm_eps": 1e-6,
+            "rope_theta": 10000.0,
+            "pad_token_id": 0,
+            "bos_token_id": 1,
+            "eos_token_id": 2,
+            "num_experts": 2,
+            "num_experts_per_tok": 1,
+        }
+        config = Qwen3OmniMoeTalkerConfig(
+            text_config=common_config,
+            code_predictor_config={**common_config, "num_code_groups": 4},
+            num_code_groups=4,
+            thinker_hidden_size=16,
+            codec_eos_token_id=63,
+            codec_nothink_id=3,
+            codec_think_bos_id=4,
+            codec_think_eos_id=5,
+            codec_pad_id=6,
+            codec_bos_id=7,
+            spatial_merge_size=1,
+        )
+        model = Qwen3OmniMoeTalkerForConditionalGeneration(config).eval()
+        inputs_embeds = torch.randn(2, 8, 16)
+        trailing_text_hidden = torch.randn(2, 8, 16)
+        tts_pad_embed = torch.randn(2, 1, 16)
+
+        def generate(batch_slice):
+            batch_size = inputs_embeds[batch_slice].shape[0]
+            return model.generate(
+                inputs_embeds=inputs_embeds[batch_slice],
+                trailing_text_hidden=trailing_text_hidden[batch_slice],
+                tts_pad_embed=tts_pad_embed[batch_slice],
+                talker_input_ids=torch.zeros(batch_size, 8, dtype=torch.long),
+                attention_mask=torch.ones(batch_size, 8, dtype=torch.long),
+                max_new_tokens=3,
+                do_sample=False,
+                eos_token_id=63,
+                code_predictor_do_sample=False,
+                return_dict_in_generate=True,
+                output_hidden_states=True,
+            )
+
+        def get_codes(output):
+            return torch.stack([hidden[-1] for hidden in output.hidden_states if hidden[-1] is not None], dim=-1)
+
+        with torch.inference_mode():
+            batch_output = generate(slice(None))
+            first_output = generate(slice(0, 1))
+            second_output = generate(slice(1, 2))
+
+        batch_codes = get_codes(batch_output)
+        self.assertTrue(torch.equal(batch_codes[0], get_codes(first_output)[0]))
+        self.assertTrue(torch.equal(batch_codes[1], get_codes(second_output)[0]))
+
+
+@require_torch
 class Qwen3OmniModelIntegrationTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -929,6 +1001,72 @@ class Qwen3OmniModelIntegrationTest(unittest.TestCase):
             EXPECTED_DECODED_TEXT,
         )
         self.assertFalse(torch.isnan(output[1]).any().item())
+
+    @slow
+    def test_small_model_integration_test_batch_audio(self):
+        model = self.get_model()
+        texts = [
+            "Hello, I'm Qwen. How can I help you today?",
+            "The weather is nice today. Let's go for a walk.",
+        ]
+        conversations = [
+            [
+                {
+                    "role": "system",
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": "You are Qwen, a virtual human developed by the Qwen Team, Alibaba Group, capable of perceiving auditory and visual inputs, as well as generating text and speech.",
+                        }
+                    ],
+                },
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": f"Please read the following text aloud exactly as written, with no additional commentary:\n\n{text}",
+                        }
+                    ],
+                },
+            ]
+            for text in texts
+        ]
+
+        def generate_batch_audio(batch_conversations):
+            inputs = self.processor.apply_chat_template(
+                batch_conversations,
+                tokenize=True,
+                add_generation_prompt=True,
+                return_dict=True,
+                return_tensors="pt",
+                processor_kwargs={"padding": True},
+            ).to(torch_device, dtype=torch.bfloat16)
+            self.assertIn("attention_mask", inputs)
+            output = model.generate(
+                **inputs,
+                return_audio=True,
+                thinker_temperature=0,
+                thinker_do_sample=False,
+                thinker_max_new_tokens=20,
+                talker_do_sample=False,
+                talker_max_new_tokens=10,
+            )
+            return output[1]
+
+        batch_audio_output = generate_batch_audio(conversations)
+        self.assertEqual(batch_audio_output.shape[0], len(conversations))
+        waveforms = [row.reshape(-1).float() for row in batch_audio_output]
+        for waveform in waveforms:
+            self.assertGreater(waveform.std().item(), 1e-2)
+        self.assertFalse(torch.allclose(waveforms[0], waveforms[1], rtol=1e-3, atol=1e-3))
+        duplicate_audio_output = generate_batch_audio([conversations[0], conversations[0]])
+        torch.testing.assert_close(
+            duplicate_audio_output[0].reshape(-1),
+            duplicate_audio_output[1].reshape(-1),
+            rtol=1e-3,
+            atol=1e-3,
+        )
 
     # Run this test first because it needs to load the model with `flash_attention_2`. For other tests, we need to keep
     # the loaded model (without FA) in `cls.model`. If this test is not run first, when loading the flash attention

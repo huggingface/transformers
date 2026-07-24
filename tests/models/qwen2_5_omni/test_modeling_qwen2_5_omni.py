@@ -17,6 +17,7 @@
 import tempfile
 import unittest
 from io import BytesIO
+from types import SimpleNamespace
 from urllib.request import urlopen
 
 import librosa
@@ -594,6 +595,96 @@ class Qwen2_5OmniThinkerForConditionalGenerationModelTest(
 
 
 @require_torch
+class Qwen2_5OmniBatchAudioGenerationTest(unittest.TestCase):
+    def test_generate_trims_padded_talker_codes(self):
+        class DummyThinker:
+            def __init__(self):
+                self.embed_tokens = torch.nn.Embedding(16, 4)
+
+            def generate(self, input_ids, **kwargs):
+                batch_size, sequence_length = input_ids.shape
+                input_hidden_states = torch.ones(batch_size, sequence_length, 4)
+                generated_hidden_states = torch.ones(batch_size, 1, 4)
+                return SimpleNamespace(
+                    sequences=torch.cat([input_ids, torch.full((batch_size, 1), 7, dtype=torch.long)], dim=-1),
+                    hidden_states=(
+                        (input_hidden_states, input_hidden_states),
+                        (generated_hidden_states, generated_hidden_states),
+                    ),
+                )
+
+            def get_input_embeddings(self):
+                return self.embed_tokens
+
+        class DummyTalker:
+            codec_mask_token = 10
+            codec_pad_token = 8292
+            codec_bos_token = 11
+            text_bos_token = 4
+            text_eos_token = 5
+            text_pad_token = 6
+
+            def generate(self, input_ids, attention_mask, **kwargs):
+                self.attention_mask = attention_mask
+                generated_codes = torch.tensor([[100, 8294, 8292], [101, 102, 8294]], device=input_ids.device)
+                return torch.cat([input_ids, generated_codes], dim=-1)
+
+        class DummyToken2Wav:
+            dtype = torch.float
+
+            def __init__(self):
+                self.codes = []
+
+            def float(self):
+                return self
+
+            def __call__(self, code, **kwargs):
+                self.codes.append(code)
+                # `Qwen2_5OmniToken2WavBigVGANModel` ends its forward with `.squeeze()`, so a single-item
+                # decode comes back one-dimensional. Mirror that, and make every sample distinct so a
+                # waveform that is broadcast from a single value cannot pass.
+                num_samples = code.shape[1] * 2
+                waveform = torch.arange(1, num_samples + 1, dtype=torch.float, device=code.device)
+                return (waveform * (code[0, 0] + 1)).squeeze()
+
+        token2wav = DummyToken2Wav()
+        talker = DummyTalker()
+        model = SimpleNamespace(
+            speaker_map={
+                "Chelsie": {
+                    "bos_token": 4,
+                    "cond": torch.ones(1, 4),
+                    "ref_mel": torch.ones(1, 1, 4),
+                }
+            },
+            has_talker=True,
+            thinker=DummyThinker(),
+            talker=talker,
+            token2wav=token2wav,
+        )
+        input_ids = torch.tensor([[1, 2, 3], [1, 2, 0]])
+        attention_mask = torch.tensor([[1, 1, 1], [1, 1, 0]])
+
+        _, waveform = Qwen2_5OmniForConditionalGeneration.generate(
+            model,
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            generation_mode="audio",
+            talker_do_sample=False,
+        )
+
+        self.assertTrue(torch.equal(talker.attention_mask, torch.tensor([[1, 1, 1, 1, 1], [1, 1, 0, 1, 1]])))
+        self.assertEqual([codes.tolist() for codes in token2wav.codes], [[[100]], [[101, 102]]])
+        # One waveform per batch row, right-padded to the longest. The shorter row keeps its own samples
+        # instead of being stretched, and neither row is a constant broadcast of its first sample.
+        self.assertEqual(waveform.shape, (2, 4))
+        torch.testing.assert_close(
+            waveform,
+            torch.tensor([[101.0, 202.0, 0.0, 0.0], [102.0, 204.0, 306.0, 408.0]]),
+        )
+
+
+@require_torch
 class Qwen2_5OmniModelIntegrationTest(unittest.TestCase):
     def setUp(self):
         self.processor = AutoProcessor.from_pretrained("Qwen/Qwen2.5-Omni-7B")
@@ -829,6 +920,87 @@ class Qwen2_5OmniModelIntegrationTest(unittest.TestCase):
         self.assertFalse(torch.isnan(output[1]).any().item())
 
     @slow
+    def test_small_model_integration_test_batch_audio_matches_single(self):
+        model = Qwen2_5OmniForConditionalGeneration.from_pretrained(
+            "Qwen/Qwen2.5-Omni-7B", dtype=torch.bfloat16, device_map="auto"
+        )
+        texts = [
+            "Hello, I'm Qwen. How can I help you today?",
+            "The weather is nice today. Let's go for a walk.",
+        ]
+        conversations = [
+            [
+                {
+                    "role": "system",
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": "You are Qwen, a virtual human developed by the Qwen Team, Alibaba Group, capable of perceiving auditory and visual inputs, as well as generating text and speech.",
+                        }
+                    ],
+                },
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": f"Please read the following text aloud exactly as written, with no additional commentary:\n\n{text}",
+                        }
+                    ],
+                },
+            ]
+            for text in texts
+        ]
+
+        torch.manual_seed(0)
+        single_audio_outputs = []
+        for conversation in conversations:
+            inputs = self.processor.apply_chat_template(
+                [conversation],
+                tokenize=True,
+                add_generation_prompt=True,
+                return_dict=True,
+                return_tensors="pt",
+                processor_kwargs={"padding": True},
+            ).to(torch_device, dtype=torch.bfloat16)
+            output = model.generate(
+                **inputs,
+                generation_mode="audio",
+                thinker_temperature=0,
+                thinker_do_sample=False,
+                thinker_max_new_tokens=20,
+                talker_do_sample=False,
+                talker_max_new_tokens=10,
+            )
+            single_audio_outputs.append(output[1][0] if output[1].ndim > 1 else output[1])
+
+        torch.manual_seed(0)
+        inputs = self.processor.apply_chat_template(
+            conversations,
+            tokenize=True,
+            add_generation_prompt=True,
+            return_dict=True,
+            return_tensors="pt",
+            processor_kwargs={"padding": True},
+        ).to(torch_device, dtype=torch.bfloat16)
+        self.assertIn("attention_mask", inputs)
+        output = model.generate(
+            **inputs,
+            generation_mode="audio",
+            thinker_temperature=0,
+            thinker_do_sample=False,
+            thinker_max_new_tokens=20,
+            talker_do_sample=False,
+            talker_max_new_tokens=10,
+        )
+        batch_audio_output = output[1]
+
+        self.assertEqual(batch_audio_output.shape[0], len(conversations))
+        for batch_audio, single_audio in zip(batch_audio_output, single_audio_outputs):
+            self.assertEqual(batch_audio.shape, single_audio.shape)
+            torch.testing.assert_close(batch_audio, single_audio, rtol=1e-3, atol=1e-3)
+
+    @slow
     def test_small_model_integration_test_token2wav_regression(self):
         """
         reproducer (for the expected values below): https://gist.github.com/ebezzam/12286028df44e91434f7c770efc4e5b5
@@ -1031,3 +1203,26 @@ class Qwen2_5OmniToken2WavMaxPositionEmbeddingsTest(unittest.TestCase):
         self.assertEqual(output.shape[0], batch_size)
         self.assertEqual(output.shape[1], self.config.mel_dim)
         self.assertEqual(output.shape[2], 100)  # 50 tokens * 2 repeats
+
+    def test_batched_sample_with_classifier_free_guidance(self):
+        """Verify batched Token2Wav sampling works with classifier-free guidance enabled."""
+        batch_size = 2
+        num_speech_tokens = 4
+        num_frames = 200
+
+        conditioning_vector = torch.randn(batch_size, self.config.enc_emb_dim, device=torch_device)
+        reference_mel = torch.randn(batch_size, num_frames, self.config.mel_dim, device=torch_device)
+        quantized_code = torch.randint(0, self.config.num_embeds, (batch_size, num_speech_tokens), device=torch_device)
+
+        output = self.model.sample(
+            conditioning_vector=conditioning_vector,
+            reference_mel_spectrogram=reference_mel,
+            quantized_code=quantized_code,
+            num_steps=2,
+            guidance_scale=0.5,
+        )
+
+        self.assertEqual(len(output.shape), 3)
+        self.assertEqual(output.shape[0], batch_size)
+        self.assertEqual(output.shape[1], self.config.mel_dim)
+        self.assertEqual(output.shape[2], num_speech_tokens * self.config.repeats)

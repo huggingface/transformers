@@ -368,9 +368,10 @@ class Qwen3OmniMoeProcessor(ProcessorMixin):
             )
 
         elif generation_mode == "audio":
-            # model supports only bs=1, so we will never get several audio outputs
-            audio = generated_outputs[1].reshape(-1).detach().cpu().numpy()
-            return [audio]
+            audio_outputs = generated_outputs[1].detach().cpu()
+            if audio_outputs.ndim == 1:
+                return [audio_outputs.numpy()]
+            return [audio.reshape(-1).numpy() for audio in audio_outputs]
 
         else:
             raise ValueError(
