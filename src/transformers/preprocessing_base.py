@@ -24,6 +24,7 @@ from typing import Any, TypeVar
 
 import numpy as np
 from huggingface_hub import create_repo, is_offline_mode
+from huggingface_hub.dataclasses import validate_typed_dict
 
 from .dynamic_module_utils import custom_object_save
 from .utils import (
@@ -106,6 +107,55 @@ class PreprocessingMixin(PushToHubMixin):
             else:
                 setattr(self, key, deepcopy(getattr(self, key, None)))
         self._valid_kwargs_names = list(self.valid_kwargs.__annotations__.keys())
+
+    def _set_attributes(self, **kwargs):
+        """Standardize instance attributes for all valid kwargs (e.g. coerce dicts to their canonical form)."""
+        attributes = {key: getattr(self, key) for key in self._valid_kwargs_names}
+        attributes = self._standardize_kwargs(**attributes)
+        for key, value in attributes.items():
+            setattr(self, key, value)
+
+    def _standardize_kwargs(self, **kwargs) -> dict:
+        """
+        Hook: standardize kwargs to canonical format before validation (e.g. coerce dicts to
+        `SizeDict`/`SpectrogramConfig`). Overridden by modality base classes; default is a no-op.
+        """
+        return kwargs
+
+    def _validate_preprocess_kwargs(self, **kwargs):
+        """
+        Hook: validate the kwargs for the preprocess method. Overridden by modality base classes;
+        default is a no-op.
+        """
+
+    def preprocess(self, inputs, *args, **kwargs):
+        """
+        Common preprocess entrypoint: validate received kwargs against `valid_kwargs`, fill in
+        defaults from `self`, standardize and validate them, then dispatch to the modality-specific
+        `_preprocess_*_like_inputs` implementation via `_preprocess_like_inputs`.
+        """
+        # Perform type validation on received kwargs
+        validate_typed_dict(self.valid_kwargs, kwargs)
+
+        # Set default kwargs from self
+        for kwarg_name in self._valid_kwargs_names:
+            kwargs.setdefault(kwarg_name, getattr(self, kwarg_name, None))
+
+        # Update kwargs that need further processing before being validated
+        kwargs = self._standardize_kwargs(**kwargs)
+
+        # Validate kwargs
+        self._validate_preprocess_kwargs(**kwargs)
+
+        return self._preprocess_like_inputs(inputs, *args, **kwargs)
+
+    def _preprocess_like_inputs(self, inputs, *args, **kwargs):
+        """
+        Dispatch to the modality-specific `_preprocess_*_like_inputs` method
+        (e.g. `_preprocess_image_like_inputs`, `_preprocess_audio_like_inputs`).
+        Implemented by modality base classes.
+        """
+        raise NotImplementedError
 
     def filter_out_unused_kwargs(self, kwargs: dict) -> dict:
         """

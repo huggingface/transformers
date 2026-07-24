@@ -16,7 +16,6 @@ from dataclasses import fields, replace
 from typing import Any, TypedDict, Unpack
 
 import numpy as np
-from huggingface_hub.dataclasses import validate_typed_dict
 
 from .audio_processing_base import AudioProcessingMixin
 from .audio_utils import AudioInput, SpectrogramConfig, make_list_of_audio
@@ -93,10 +92,7 @@ class BaseAudioProcessor(AudioProcessingMixin):
         super().__init__(**kwargs)
 
         # Standardize init attributes (coerce dicts to config dataclasses)
-        attributes = {key: getattr(self, key) for key in self._valid_kwargs_names}
-        attributes = self._standardize_kwargs(**attributes)
-        for key, value in attributes.items():
-            setattr(self, key, value)
+        self._set_attributes()
 
         # Pre-compute mel filters from spectrogram_config
         if self.spectrogram_config is not None:
@@ -111,19 +107,11 @@ class BaseAudioProcessor(AudioProcessingMixin):
         """
         Preprocess an audio or a batch of audio.
         """
-        # Perform type validation on received kwargs
-        validate_typed_dict(self.valid_kwargs, kwargs)
+        # Common validate/setdefault/standardize/dispatch logic lives in `PreprocessingMixin.preprocess`.
+        return super().preprocess(audio, *args, **kwargs)
 
-        # Set default kwargs from self.
-        for kwarg_name in self._valid_kwargs_names:
-            kwargs.setdefault(kwarg_name, getattr(self, kwarg_name, None))
-
-        # Standardize kwargs (coerce dicts to config dataclasses)
-        kwargs = self._standardize_kwargs(**kwargs)
-
-        # Validate kwargs
-        self._validate_preprocess_kwargs(**kwargs)
-
+    def _preprocess_like_inputs(self, audio: AudioInput, *args, **kwargs) -> BatchFeature:
+        """Dispatch hook called by `PreprocessingMixin.preprocess` with validated kwargs."""
         return self._preprocess_audio_like_inputs(audio, *args, **kwargs)
 
     def _preprocess_audio_like_inputs(

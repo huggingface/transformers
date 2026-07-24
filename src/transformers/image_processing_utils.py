@@ -18,7 +18,6 @@ from functools import partial
 from typing import Any
 
 import numpy as np
-from huggingface_hub.dataclasses import validate_typed_dict
 
 from .image_processing_base import BatchFeature, ImageProcessingMixin
 from .image_transforms import center_crop, normalize, rescale
@@ -196,13 +195,6 @@ class BaseImageProcessor(ImageProcessingMixin):
         # We don't call self._set_attributes in BaseImageProcessor for backward compatibility with remote code
         # We call it instead in the backend subclasses' __init__ methods.
 
-    def _set_attributes(self, **kwargs):
-        """Standardize instance attributes for all valid kwargs (e.g. coerce dicts to SizeDict)."""
-        attributes = {key: getattr(self, key) for key in self._valid_kwargs_names}
-        attributes = self._standardize_kwargs(**attributes)
-        for key, value in attributes.items():
-            setattr(self, key, value)
-
     def __call__(self, images: ImageInput, *args, **kwargs: Unpack[ImagesKwargs]) -> BatchFeature:
         """Preprocess an image or a batch of images."""
         return self.preprocess(images, *args, **kwargs)
@@ -375,19 +367,11 @@ class BaseImageProcessor(ImageProcessingMixin):
         """
         Preprocess an image or a batch of images.
         """
-        # Perform type validation on received kwargs
-        validate_typed_dict(self.valid_kwargs, kwargs)
+        # Common validate/setdefault/standardize/dispatch logic lives in `PreprocessingMixin.preprocess`.
+        return super().preprocess(images, *args, **kwargs)
 
-        # Set default kwargs from self
-        for kwarg_name in self._valid_kwargs_names:
-            kwargs.setdefault(kwarg_name, getattr(self, kwarg_name, None))
-
-        # Update kwargs that need further processing before being validated
-        kwargs = self._standardize_kwargs(**kwargs)
-
-        # Validate kwargs
-        self._validate_preprocess_kwargs(**kwargs)
-
+    def _preprocess_like_inputs(self, images: ImageInput, *args, **kwargs) -> BatchFeature:
+        """Dispatch hook called by `PreprocessingMixin.preprocess` with validated kwargs."""
         return self._preprocess_image_like_inputs(images, *args, **kwargs)
 
     def to_dict(self) -> dict[str, Any]:
