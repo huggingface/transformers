@@ -383,15 +383,16 @@ class AudioKwargs(TypedDict, total=False):
     Keyword arguments for audio processing. For extended documentation, check the appropriate AudioProcessor
     class methods and docstrings.
 
-    Note on naming: a model's native sampling rate is a processor *identity* attribute, set once at init time
-    as `sample_rate` (e.g. `WhisperAudioProcessor.sample_rate == 16000`). The per-call `sampling_rate` keyword
-    below is the *caller's assertion* of the rate at which the provided arrays were actually sampled; it is
-    checked against the processor's `sample_rate` and never modifies it.
+    Note on `sampling_rate`: a model's native sampling rate is a processor *identity* attribute, set once at
+    init time as `sampling_rate` (e.g. `WhisperAudioProcessor.sampling_rate == 16000`). The per-call
+    `sampling_rate` keyword below reuses the same name as the *caller's assertion* of the rate at which the
+    provided arrays were actually sampled; it is checked against the processor's own `sampling_rate` and never
+    modifies it.
 
     Attributes:
         sampling_rate (`int`, *optional*):
             The sampling rate at which the input audio was sampled, asserted by the caller. Passing it lets the
-            processor verify it matches the model's native `sample_rate` and avoid silent errors.
+            processor verify it matches the model's native `sampling_rate` and avoid silent errors.
         spectrogram_config (`dict` or [`~audio_utils.SpectrogramConfig`], *optional*):
             Per-call override of the spectrogram extraction parameters (STFT, mel filterbank, log scaling).
             A plain dict is coerced to [`~audio_utils.SpectrogramConfig`].
@@ -401,7 +402,7 @@ class AudioKwargs(TypedDict, total=False):
             Whether to extract the spectrogram on the padded batch at once (`True`) or per waveform with
             feature-level padding (`False`).
         do_resample (`bool`, *optional*):
-            Whether to resample the input audio to the model's native `sample_rate`.
+            Whether to resample the input audio to the model's native `sampling_rate`.
         padding (`bool`, `str` or [`~utils.PaddingStrategy`], *optional*):
             Select a strategy to pad the returned sequences (according to the model's padding side and padding
             index) among:
