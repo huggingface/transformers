@@ -28,14 +28,14 @@ from ...utils import auto_docstring
 @strict
 class AXK2Config(PreTrainedConfig, RotaryEmbeddingConfigMixin):
     r"""
-    mlp_layer_types (`list`, *optional*):
-        MLP type pattern for each layer (`"dense"` or `"sparse"`). Derived from the (legacy) kwargs
-        `first_k_dense_replace` / `moe_layer_freq` when not provided.
     n_group (`int`, *optional*):
         Number of expert groups for grouped routing, used by the larger A.X-K2 releases. `None` (the
         A.X-K2-Light default) routes over all experts without group restriction.
     topk_group (`int`, *optional*):
         Number of expert groups the top-k selection is restricted to when `n_group` is set.
+    mlp_layer_types (`list`, *optional*):
+        MLP type pattern for each layer (`"dense"` or `"sparse"`). Derived from the (legacy) kwargs
+        `first_k_dense_replace` / `moe_layer_freq` when not provided.
     index_topk (`int`, *optional*, defaults to 2048):
         Number of top tokens selected by the indexer for sparse attention.
     index_head_dim (`int`, *optional*, defaults to 128):
@@ -63,8 +63,6 @@ class AXK2Config(PreTrainedConfig, RotaryEmbeddingConfigMixin):
     keys_to_ignore_at_inference = ["past_key_values"]
 
     base_model_tp_plan = {
-        # Fused query + output-gate up-projection; colwise shards it by head (each rank keeps whole heads,
-        # so the per-head query/gate split in the forward stays local).
         "layers.*.self_attn.q_gate_proj": "colwise",
         "layers.*.self_attn.kv_a_proj_with_mqa": "mla_kv_a_proj",
         "layers.*.self_attn.kv_b_proj": "colwise",
@@ -140,8 +138,8 @@ class AXK2Config(PreTrainedConfig, RotaryEmbeddingConfigMixin):
         # RoPE applies only to the rope slice, so `head_dim` points at it (the inherited rotary embedding
         # reads `config.head_dim`).
         self.head_dim = self.qk_rope_head_dim
-        # `mlp_layer_types` is the canonical dense/MoE pattern; derive it from the legacy
-        # `first_k_dense_replace` / `moe_layer_freq` kwargs when a checkpoint does not provide it.
+
+        # Convert from legacy args to mlp layer types
         if self.mlp_layer_types is None:
             first_k_dense_replace = kwargs.pop("first_k_dense_replace", 1)
             moe_layer_freq = kwargs.pop("moe_layer_freq", 1)
@@ -149,9 +147,11 @@ class AXK2Config(PreTrainedConfig, RotaryEmbeddingConfigMixin):
                 "sparse" if i >= first_k_dense_replace and i % moe_layer_freq == 0 else "dense"
                 for i in range(self.num_hidden_layers)
             ]
-        # Every layer runs the SGA indexer; drives the indexed-cache dispatch.
+
+        # Indexer cache needed so DSA to indicate correct cache
         if self.layer_types is None:
             self.layer_types = ["deepseek_sparse_attention"] * self.num_hidden_layers
+
         super().__post_init__(**kwargs)
 
     def validate_architecture(self):

@@ -11,19 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""PyTorch A.X-K2 model (modular).
-
-A.X-K2 is SK Telecom's flagship LLM. Architecturally it is DeepSeek-V3.2 (Multi-head Latent Attention +
-DeepSeek Sparse Attention) with three SK Telecom modifications:
-
-  * sigmoid top-k expert routing (optionally restricted to expert groups on the larger releases),
-  * a low-rank input-dependent gate on the RMSNorms (`AXK2GatedRMSNorm`), and
-  * an input-dependent sigmoid gate on the attention output, fused with the query up-projection into a
-    single `q_gate_proj` (matching the released vLLM-style checkpoints).
-
-Everything else — MLA, the SGA lightning indexer and its cache, the MoE experts, and RoPE — is
-inherited from DeepSeek-V3 / DeepSeek-V3.2.
-"""
+"""PyTorch A.X-K2 model."""
 
 from collections.abc import Callable
 
@@ -45,10 +33,10 @@ from ..deepseek_v3.modeling_deepseek_v3 import (
     DeepseekV3RMSNorm,
     apply_rotary_pos_emb_interleave,
     eager_attention_forward,
-    yarn_apply_mscale,
 )
 from ..deepseek_v32.configuration_deepseek_v32 import DeepseekV32Config
 from ..deepseek_v32.modeling_deepseek_v32 import (
+    DeepseekV32Attention,
     DeepseekV32DecoderLayer,
     DeepseekV32Experts,
     DeepseekV32ForCausalLM,
@@ -57,8 +45,8 @@ from ..deepseek_v32.modeling_deepseek_v32 import (
     DeepseekV32MoE,
     DeepseekV32PreTrainedModel,
     DeepseekV32RotaryEmbedding,
+    DeepseekV32TopkRouter,
 )
-from ..minimax_m2.modeling_minimax_m2 import MiniMaxM2TopKRouter
 
 
 logger = logging.get_logger(__name__)
@@ -68,14 +56,14 @@ logger = logging.get_logger(__name__)
 @strict
 class AXK2Config(DeepseekV32Config):
     r"""
-    mlp_layer_types (`list`, *optional*):
-        MLP type pattern for each layer (`"dense"` or `"sparse"`). Derived from the (legacy) kwargs
-        `first_k_dense_replace` / `moe_layer_freq` when not provided.
     n_group (`int`, *optional*):
         Number of expert groups for grouped routing, used by the larger A.X-K2 releases. `None` (the
         A.X-K2-Light default) routes over all experts without group restriction.
     topk_group (`int`, *optional*):
         Number of expert groups the top-k selection is restricted to when `n_group` is set.
+    mlp_layer_types (`list`, *optional*):
+        MLP type pattern for each layer (`"dense"` or `"sparse"`). Derived from the (legacy) kwargs
+        `first_k_dense_replace` / `moe_layer_freq` when not provided.
     index_topk (`int`, *optional*, defaults to 2048):
         Number of top tokens selected by the indexer for sparse attention.
     index_head_dim (`int`, *optional*, defaults to 128):
@@ -125,17 +113,14 @@ class AXK2Config(DeepseekV32Config):
     index_head_dim: int = 128
     index_n_heads: int = 16
     gated_norm_rank: int = 16
-    # The dense/MoE split is expressed via `mlp_layer_types` (derived in `__post_init__` from the
-    # legacy kwargs), so the inherited layer counter is dropped.
-    first_k_dense_replace = AttributeError()
     # A.X-K2-Light routes without expert groups; the larger A.X-K2 releases set `n_group`/`topk_group`
     # for DeepSeek-V3-style grouped routing, so both modes are supported (`None` = non-grouped).
     n_group: int | None = None
     topk_group: int | None = None
 
+    first_k_dense_replace = AttributeError()
+
     base_model_tp_plan = {
-        # Fused query + output-gate up-projection; colwise shards it by head (each rank keeps whole heads,
-        # so the per-head query/gate split in the forward stays local).
         "layers.*.self_attn.q_gate_proj": "colwise",
         "layers.*.self_attn.kv_a_proj_with_mqa": "mla_kv_a_proj",
         "layers.*.self_attn.kv_b_proj": "colwise",
@@ -156,8 +141,8 @@ class AXK2Config(DeepseekV32Config):
         # RoPE applies only to the rope slice, so `head_dim` points at it (the inherited rotary embedding
         # reads `config.head_dim`).
         self.head_dim = self.qk_rope_head_dim
-        # `mlp_layer_types` is the canonical dense/MoE pattern; derive it from the legacy
-        # `first_k_dense_replace` / `moe_layer_freq` kwargs when a checkpoint does not provide it.
+
+        # Convert from legacy args to mlp layer types
         if self.mlp_layer_types is None:
             first_k_dense_replace = kwargs.pop("first_k_dense_replace", 1)
             moe_layer_freq = kwargs.pop("moe_layer_freq", 1)
@@ -165,9 +150,11 @@ class AXK2Config(DeepseekV32Config):
                 "sparse" if i >= first_k_dense_replace and i % moe_layer_freq == 0 else "dense"
                 for i in range(self.num_hidden_layers)
             ]
-        # Every layer runs the SGA indexer; drives the indexed-cache dispatch.
+
+        # Indexer cache needed so DSA to indicate correct cache
         if self.layer_types is None:
             self.layer_types = ["deepseek_sparse_attention"] * self.num_hidden_layers
+
         PreTrainedConfig.__post_init__(self, **kwargs)
 
     def validate_architecture(self):
@@ -196,12 +183,6 @@ class AXK2RMSNorm(DeepseekV3RMSNorm):
 
 
 class AXK2GateMLP(CLIPMLP):
-    """Low-rank gate MLP for `AXK2GatedRMSNorm`: `fc2(silu(fc1(x)))`.
-
-    Reuses `CLIPMLP`'s two-linear structure, overriding the projections to be bias-free and sized to the
-    gate bottleneck (`gated_norm_rank`), and the activation to SiLU — matching A.X-K2's trained gate.
-    """
-
     def __init__(self, config: AXK2Config):
         super().__init__(config)
         self.activation_fn = nn.SiLU()
@@ -231,59 +212,43 @@ class AXK2RotaryEmbedding(DeepseekV32RotaryEmbedding):
 
 
 class AXK2Indexer(DeepseekV32Indexer):
-    """SGA lightning indexer, identical to DeepSeek-V3.2's DSA indexer except the key `LayerNorm` keeps
-    A.X-K2's training eps (`1e-5`). The indexer key cache lives on the shared `DynamicIndexedLayer` (via
-    `past_key_values.update_indexer`), not on the module.
-    """
-
     def __init__(self, config: AXK2Config, layer_idx: int):
         super().__init__(config, layer_idx)
         self.k_norm = nn.LayerNorm(self.head_dim, eps=1e-5)
 
 
-class AXK2TopkRouter(MiniMaxM2TopKRouter):
-    """Sigmoid top-k router (MiniMax-M2 style), specialized for A.X-K2.
-
-    A.X-K2 keeps `e_score_correction_bias` on the router (checkpoint key `mlp.gate.e_score_correction_bias`)
-    and runs routing in fp32. A.X-K2-Light routes over all experts (`n_group=None`); the larger A.X-K2
-    releases restrict the top-k to `topk_group` of `n_group` expert groups first (DeepSeek-V3-style), so the
-    forward supports both.
-    """
-
-    def __init__(self, config: AXK2Config):
-        super().__init__(config)
-        self.routed_scaling_factor = config.routed_scaling_factor
-        self.norm_topk_prob = config.norm_topk_prob
-        self.n_group = config.n_group
-        self.topk_group = config.topk_group
-        self.register_buffer("e_score_correction_bias", torch.zeros(self.num_experts, dtype=torch.float32))
+class AXK2TopkRouter(DeepseekV32TopkRouter):
+    def apply_group_scoring(self, scores_for_choice):
+        """Apply DeepSeek style grouped scoring"""
+        group_scores = (
+            scores_for_choice.view(-1, self.num_group, self.num_experts // self.num_group)
+            .topk(2, dim=-1)[0]
+            .sum(dim=-1)
+        )
+        group_idx = torch.topk(group_scores, k=self.topk_group, dim=-1, sorted=False)[1]
+        group_mask = torch.zeros_like(group_scores)
+        group_mask.scatter_(1, group_idx, 1)
+        score_mask = (
+            group_mask.unsqueeze(-1)
+            .expand(-1, self.num_group, self.num_experts // self.num_group)
+            .reshape(-1, self.num_experts)
+        )
+        # NOTE: fill with `0.0` intentionally to match reference implementation
+        scores_for_choice = scores_for_choice.masked_fill(~score_mask.bool(), 0.0)
+        return scores_for_choice
 
     def forward(self, hidden_states):
         hidden_states = hidden_states.view(-1, self.hidden_dim)
         router_logits = F.linear(hidden_states.type(torch.float32), self.weight.type(torch.float32))
         scores = router_logits.sigmoid()
         scores_for_choice = scores + self.e_score_correction_bias
-        if self.n_group is not None:
-            # Grouped routing: keep the `topk_group` best groups (a group is scored by its top-2 experts)
-            # and zero out the rest before the expert top-k. Masked-with-zero (not `-inf`) matches the
-            # reference A.X-K2 implementation.
-            group_scores = (
-                scores_for_choice.view(-1, self.n_group, self.num_experts // self.n_group)
-                .topk(2, dim=-1)[0]
-                .sum(dim=-1)
-            )
-            group_idx = torch.topk(group_scores, k=self.topk_group, dim=-1, sorted=False)[1]
-            group_mask = torch.zeros_like(group_scores)
-            group_mask.scatter_(1, group_idx, 1)
-            score_mask = (
-                group_mask.unsqueeze(-1)
-                .expand(-1, self.n_group, self.num_experts // self.n_group)
-                .reshape(-1, self.num_experts)
-            )
-            scores_for_choice = scores_for_choice.masked_fill(~score_mask.bool(), 0.0)
-        _, topk_indices = torch.topk(scores_for_choice, k=self.top_k, dim=-1, sorted=False)
+
+        # Key difference: light checkpoints do not use group based routing and skip this path
+        if self.num_group is not None:
+            scores_for_choice = self.apply_group_scoring(scores_for_choice)
+
+        topk_indices = torch.topk(scores_for_choice, k=self.top_k, dim=-1, sorted=False)[1]
         topk_weights = scores.gather(1, topk_indices)
-        # A.X-K2 additions over MiniMax-M2's router: optional top-k normalization and routed scaling.
         if self.norm_topk_prob:
             denominator = topk_weights.sum(dim=-1, keepdim=True) + 1e-20
             topk_weights /= denominator
@@ -299,64 +264,16 @@ class AXK2MoE(DeepseekV32MoE):
     pass
 
 
-class AXK2Attention(nn.Module):
-    """DeepSeek-V3.2 MLA + SGA indexer, plus an input-dependent sigmoid gate on the attention output.
-
-    A.X-K2 fuses the query up-projection and the output gate into a single `q_gate_proj` (the vLLM-style
-    released layout): a doubled input `[post-norm q | pre-norm q]` maps to a per-head `[query | gate]`
-    output, which the forward splits at the *activation* level. This is kept fused (rather than split into
-    separate `q_b_proj` + `g_proj` at load) because the released fp8 checkpoints cannot be split — their
-    128-block scales straddle the per-head query/gate boundary — while the fused matrix is 128-aligned and
-    loads directly. Named distinctly from DeepSeek's query-only `q_b_proj` since it also carries the gate.
-
-    Standalone (not inheriting `DeepseekV32Attention`) so the module has `q_gate_proj` and no leftover
-    `q_b_proj`; the forward differs from DeepSeek-V3.2 only in: the fused query/gate projection, the
-    indexer/output-gate reading the pre-norm q bottleneck, and the sigmoid gate applied before `o_proj`.
-    """
-
+class AXK2Attention(DeepseekV32Attention):
     def __init__(self, config: AXK2Config, layer_idx: int):
-        # A.X-K2 always uses the query LoRA bottleneck, so the `q_lora_rank is None` branch is dropped.
         super().__init__()
-        self.config = config
-        self.layer_idx = layer_idx
-        self.num_key_value_groups = config.num_attention_heads // config.num_key_value_heads
-        self.attention_dropout = config.attention_dropout
-        self.num_heads = config.num_attention_heads
-        self.q_lora_rank = config.q_lora_rank
-        self.qk_rope_head_dim = config.qk_rope_head_dim
-        self.kv_lora_rank = config.kv_lora_rank
-        self.v_head_dim = config.v_head_dim
-        self.qk_nope_head_dim = config.qk_nope_head_dim
-        self.qk_head_dim = config.qk_head_dim
-        self.is_causal = True
+        # Fused projection for q and gate, needs to be kept fused as the FP8 scales won't match otherwise in split variation
+        del self.q_proj
+        del self.q_b_proj
 
-        self.q_a_proj = nn.Linear(config.hidden_size, config.q_lora_rank, bias=config.attention_bias)
-        self.q_a_layernorm = AXK2RMSNorm(config.q_lora_rank)
-        # Fused query up-projection + output gate: doubled input [q_post | q_pre], per-head output
-        # [query (qk_head_dim) | gate (v_head_dim)]; the forward splits the activation.
         self.q_gate_proj = nn.Linear(
             2 * config.q_lora_rank, self.num_heads * (self.qk_head_dim + self.v_head_dim), bias=False
         )
-        self.kv_a_proj_with_mqa = nn.Linear(
-            config.hidden_size, self.kv_lora_rank + self.qk_rope_head_dim, bias=config.attention_bias
-        )
-        self.kv_a_layernorm = AXK2RMSNorm(self.kv_lora_rank)
-        self.kv_b_proj = nn.Linear(
-            self.kv_lora_rank, self.num_heads * (self.qk_nope_head_dim + self.v_head_dim), bias=False
-        )
-        self.o_proj = nn.Linear(self.num_heads * self.v_head_dim, config.hidden_size, bias=config.attention_bias)
-
-        self.scaling = self.qk_head_dim ** (-0.5)
-        self.scaling = yarn_apply_mscale(config.rope_parameters, self.scaling)
-        self.indexer = AXK2Indexer(config, layer_idx)
-
-    def expand_kv(self, k_nope: torch.Tensor, k_pe: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
-        key_shape = (*k_nope.shape[:-1], -1, self.qk_nope_head_dim + self.v_head_dim)
-        k_nope = self.kv_b_proj(k_nope).view(key_shape).transpose(1, 2)
-        k_nope, value_states = torch.split(k_nope, [self.qk_nope_head_dim, self.v_head_dim], dim=-1)
-        k_pe = k_pe.expand(*k_nope.shape[:-1], -1)
-        key_states = torch.cat((k_nope, k_pe), dim=-1)
-        return key_states, value_states
 
     def forward(
         self,
@@ -368,25 +285,24 @@ class AXK2Attention(nn.Module):
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
         batch_size, seq_length = hidden_states.shape[:-1]
+        query_gate_shape = (batch_size, seq_length, -1, self.qk_head_dim + self.v_head_dim)
 
-        # `q_compressed` (pre-norm) feeds the indexer and the output gate; `q_resid` (post-norm) feeds the
-        # main query projection. One fused projection over [post-norm | pre-norm], split per head into query
-        # + gate. `-1` for the head count keeps this correct under tensor-parallel (colwise) sharding, where
-        # each rank holds only a subset of heads.
+        # Key change: Additional gate and fused projection (blocked to split due to FP8 scale mismatches)
         q_compressed = self.q_a_proj(hidden_states)
         q_resid = self.q_a_layernorm(q_compressed)
-        qg = self.q_gate_proj(torch.cat([q_resid, q_compressed], dim=-1))
-        qg = qg.view(batch_size, seq_length, -1, self.qk_head_dim + self.v_head_dim)
-        q_states, gate = torch.split(qg, [self.qk_head_dim, self.v_head_dim], dim=-1)
-        q_states = q_states.transpose(1, 2)
-        gate = gate.reshape(batch_size, seq_length, -1)
-        q_pass, q_rot = torch.split(q_states, [self.qk_nope_head_dim, self.qk_rope_head_dim], dim=-1)
+
+        query_gate_states = self.q_gate_proj(torch.cat([q_resid, q_compressed], dim=-1)).view(query_gate_shape)
+        query_states, gate_states = torch.split(query_gate_states, [self.qk_head_dim, self.v_head_dim], dim=-1)
+        query_states = query_states.transpose(1, 2)
+        gate_states = gate_states.reshape(batch_size, seq_length, -1)
+
+        q_pass, q_rot = torch.split(query_states, [self.qk_nope_head_dim, self.qk_rope_head_dim], dim=-1)
 
         compressed_kv = self.kv_a_proj_with_mqa(hidden_states)
         kv_pass, k_rot = torch.split(compressed_kv, [self.kv_lora_rank, self.qk_rope_head_dim], dim=-1)
         k_pass = self.kv_a_layernorm(kv_pass)
-
         k_rot = k_rot.view(batch_size, 1, seq_length, self.qk_rope_head_dim)
+
         cos, sin = position_embeddings
         q_rot, k_rot = apply_rotary_pos_emb_interleave(q_rot, k_rot, cos, sin)
 
@@ -440,7 +356,7 @@ class AXK2Attention(nn.Module):
 
         attn_output = attn_output.reshape(batch_size, seq_length, -1).contiguous()
         # Input-dependent sigmoid gate on the attention output (the gate half of the fused projection).
-        attn_output = (attn_output * torch.sigmoid(gate.float())).to(attn_output.dtype)
+        attn_output = (attn_output * torch.sigmoid(gate_states.float())).to(attn_output.dtype)
         attn_output = self.o_proj(attn_output)
         return attn_output, attn_weights
 
@@ -448,7 +364,6 @@ class AXK2Attention(nn.Module):
 class AXK2DecoderLayer(DeepseekV32DecoderLayer):
     def __init__(self, config: AXK2Config, layer_idx: int):
         super().__init__(config, layer_idx)
-        # A.X-K2 gates the norms: `input_layernorm` on every layer, `post_attention_layernorm` on MoE layers.
         self.input_layernorm = AXK2GatedRMSNorm(config, eps=config.rms_norm_eps)
         self.post_attention_layernorm = (
             AXK2GatedRMSNorm(config, eps=config.rms_norm_eps)
