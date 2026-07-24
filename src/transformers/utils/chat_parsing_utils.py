@@ -37,7 +37,7 @@ def _gemma4_json_to_json(text: str) -> str:
     # Grab the inside of gemma-quotes and store them for later
     text = re.sub(r'<\|"\|>(.*?)<\|"\|>', _capture, text, flags=re.DOTALL)
     # Add quotes to the bare keys elsewhere
-    text = re.sub(r"(?<=[{,])(\w+):", r'"\1":', text)
+    text = re.sub(r'([\{,])\s*(\w+)\s*:', r'\1"\2":', text)
 
     # Put the inside of the quotes back afterwards
     for i, s in enumerate(strings):
