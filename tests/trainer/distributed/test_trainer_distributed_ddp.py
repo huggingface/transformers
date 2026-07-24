@@ -222,8 +222,11 @@ class TestTrainerDistributedDDP(DDPCommandsMixin, TestCasePlus):
                 self.assertEqual(info["accelerator_is_main_process"], rank == 0)
                 self.assertEqual(info["accelerator_is_local_main_process"], rank == 0)
 
-                # DDP: distributed type is MULTI_GPU
-                self.assertEqual(info["accelerator_distributed_type"], "DistributedType.MULTI_GPU")
+                # DDP: distributed type follows the accelerator backend.
+                expected_distributed_type = (
+                    "DistributedType.MULTI_XPU" if torch_device == "xpu" else "DistributedType.MULTI_GPU"
+                )
+                self.assertEqual(info["accelerator_distributed_type"], expected_distributed_type)
 
                 # Each rank on its own device
                 self.assertIn(f"{torch_device}:{rank}", info["accelerator_device"])
