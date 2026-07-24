@@ -157,7 +157,11 @@ class JambaMambaMixer(MambaMixer):
         selective_scan_fn = getattr(mamba_ssm, "selective_scan_fn", None)
 
         global is_fast_path_available
-        is_fast_path_available = all((causal_conv1d, mamba_ssm))
+        is_fast_path_available = (
+            all((selective_state_update, selective_scan_fn))
+            and hasattr(causal_conv1d, "causal_conv1d_update")
+            and hasattr(causal_conv1d, "causal_conv1d_fn")
+        )
 
         if not is_fast_path_available:
             logger.warning_once(

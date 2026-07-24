@@ -161,7 +161,11 @@ class MambaMixer(nn.Module):
         mamba_inner_fn = getattr(mamba_ssm, "mamba_inner_fn", None)
 
         global is_fast_path_available
-        is_fast_path_available = all((causal_conv1d, mamba_ssm))
+        is_fast_path_available = (
+            all((selective_state_update, selective_scan_fn, mamba_inner_fn))
+            and hasattr(causal_conv1d, "causal_conv1d_update")
+            and hasattr(causal_conv1d, "causal_conv1d_fn")
+        )
 
         self.warn_slow_implementation()
 

@@ -490,7 +490,11 @@ class FalconH1Mixer(nn.Module):
         )
 
         global is_fast_path_available
-        is_fast_path_available = all((causal_conv1d, mamba_ssm))
+        is_fast_path_available = (
+            all((selective_state_update, mamba_chunk_scan_combined, mamba_split_conv1d_scan_combined))
+            and hasattr(causal_conv1d, "causal_conv1d_update")
+            and hasattr(causal_conv1d, "causal_conv1d_fn")
+        )
 
         if not is_fast_path_available:
             logger.warning_once(

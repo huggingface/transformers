@@ -181,7 +181,11 @@ class FalconMambaMixer(nn.Module):
         falcon_mamba_inner_fn = getattr(falcon_mamba_ssm, "falcon_mamba_inner_fn", None)
 
         global is_fast_path_available
-        is_fast_path_available = all((causal_conv1d, falcon_mamba_ssm))
+        is_fast_path_available = (
+            all((selective_state_update, selective_scan_fn, falcon_mamba_inner_fn))
+            and hasattr(causal_conv1d, "causal_conv1d_update")
+            and hasattr(causal_conv1d, "causal_conv1d_fn")
+        )
 
         self.warn_slow_implementation()
 
@@ -216,8 +220,7 @@ class FalconMambaMixer(nn.Module):
         init.ones_(self.dt_rms)
 
     def warn_slow_implementation(self):
-        is_fast_path_available = all((causal_conv1d, falcon_mamba_ssm))  # noqa
-        if not is_fast_path_available:
+        if not is_fast_path_available:  # noqa
             if self.use_falcon_mambapy:
                 if is_mambapy_available():
                     logger.warning_once(
