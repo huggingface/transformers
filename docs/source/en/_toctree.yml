@@ -505,6 +505,8 @@
     - sections:
       - local: model_doc/axk1
         title: A.X-K1
+      - local: model_doc/axk2
+        title: A.X-K2
       - local: model_doc/afmoe
         title: AFMoE
       - local: model_doc/albert
