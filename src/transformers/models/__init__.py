@@ -57,6 +57,7 @@ if TYPE_CHECKING:
     from .bros import *
     from .byt5 import *
     from .camembert import *
+    from .canary import *
     from .canine import *
     from .chameleon import *
     from .chinese_clip import *

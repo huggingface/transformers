@@ -1874,6 +1874,17 @@ class ParakeetConverter(SpmConverter):
         return tokenizer
 
 
+class CanaryConverter(ParakeetConverter):
+    def __init__(self, vocab_file=None, *args):
+        super().__init__(vocab_file, *args)
+        # Only the `<|...|>` (type 4) control tokens are special; other type-4 pieces (digits, `<pad>`) are plain text.
+        self.special_tokens = {
+            piece.piece
+            for piece in self.proto.pieces
+            if piece.type == 4 and piece.piece.startswith("<|") and piece.piece.endswith("|>")
+        }
+
+
 def bytes_to_unicode():
     """
     Returns list of utf-8 byte and a mapping to unicode strings. We specifically avoids mapping to whitespace/control
