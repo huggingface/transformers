@@ -284,27 +284,20 @@ class ExamplesTests(TestCasePlus):
 
     def test_run_swag(self):
         tmp_dir = self.get_auto_remove_tmp_dir()
-        # Keep this CI-light: multiple-choice expands each example to 4 sequences, and the
-        # script defaults max_seq_length to the tokenizer max (512 for BERT), which OOMs
-        # (exit 137) on constrained runners.
         testargs = f"""
             run_swag.py
             --model_name_or_path google-bert/bert-base-uncased
             --train_file tests/fixtures/tests_samples/swag/sample.json
             --validation_file tests/fixtures/tests_samples/swag/sample.json
             --output_dir {tmp_dir}
-            --max_steps=10
+            --max_steps=20
             --warmup_steps=2
             --do_train
             --do_eval
             --learning_rate=2e-4
-            --per_device_train_batch_size=1
+            --per_device_train_batch_size=2
             --per_device_eval_batch_size=1
-            --max_seq_length=128
         """.split()
-
-        if is_torch_fp16_available_on_device(torch_device):
-            testargs.append("--fp16")
 
         with patch.object(sys, "argv", testargs):
             run_swag.main()
