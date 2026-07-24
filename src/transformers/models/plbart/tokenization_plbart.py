@@ -214,6 +214,7 @@ class PLBartTokenizer(SentencePieceBackend):
                 token, special=True, normalized=False, lstrip=False, rstrip=False
             )
             synced = True
+        self._sync_added_tokens()
         if synced:
             self._update_trie()
             self._update_total_vocab_size()

@@ -183,6 +183,7 @@ class SentencePieceBackend(PreTrainedTokenizer):
             if self.verbose:
                 logger.info(f"Adding {token} to the vocabulary")
 
+        self._added_tokens_sorted_cache = None
         self._update_trie()
         self._update_total_vocab_size()
         return num_added

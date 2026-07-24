@@ -153,6 +153,35 @@ class TokenizerUtilsTest(unittest.TestCase):
                 self.assertEqual(decoded_flat, "##：")
                 self.assertEqual(decoded_list, "##：")
 
+    def test_added_tokens_views_follow_mutations(self):
+        # The `added_tokens_encoder` / `added_tokens_decoder` properties serve a cached sorted view. Check the
+        # cache is dropped on every mutation path and that mutating a returned dict does not affect the tokenizer.
+        import json as _json
+
+        from transformers.models.ctrl.tokenization_ctrl import VOCAB_FILES_NAMES, CTRLTokenizer
+
+        vocab = ["adapt", "re@@", "a@@", "apt", "c@@", "t", "<unk>"]
+        merges = ["#version: 0.2", "a p", "ap t</w>", "r e", "a d", "ad apt</w>", ""]
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            vocab_file = os.path.join(tmp_dir, VOCAB_FILES_NAMES["vocab_file"])
+            merges_file = os.path.join(tmp_dir, VOCAB_FILES_NAMES["merges_file"])
+            with open(vocab_file, "w", encoding="utf-8") as f:
+                f.write(_json.dumps(dict(zip(vocab, range(len(vocab))))))
+            with open(merges_file, "w", encoding="utf-8") as f:
+                f.write("\n".join(merges))
+            tokenizer = CTRLTokenizer(vocab_file, merges_file, unk_token="<unk>")
+
+        tokenizer.add_tokens(["<new>"])
+        self.assertIn("<new>", tokenizer.added_tokens_encoder)
+
+        tokenizer.added_tokens_decoder = {999: "<via_setter>"}
+        self.assertIn("<via_setter>", tokenizer.added_tokens_encoder)
+        self.assertEqual(list(tokenizer.added_tokens_decoder), sorted(tokenizer.added_tokens_decoder))
+
+        returned = tokenizer.added_tokens_encoder
+        returned.pop("<new>")
+        self.assertIn("<new>", tokenizer.added_tokens_encoder)
+
     def test_extra_special_tokens_multimodal(self):
         attribute_special_tokens_list = [
             "bos_token",

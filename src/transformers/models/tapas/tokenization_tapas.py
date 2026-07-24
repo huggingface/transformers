@@ -341,6 +341,7 @@ class TapasTokenizer(PreTrainedTokenizer):
                 self._added_tokens_decoder.pop(added_id, None)
                 removed_overlap = True
         if removed_overlap:
+            self._sync_added_tokens()
             self.tokens_trie = Trie()
             self._update_trie()
 
