@@ -237,8 +237,12 @@ class CodeLlamaTokenizer(TokenizersBackend):
         clean_up_tokenization_spaces: bool | None = None,
         **kwargs,
     ) -> str:
+        # Normalize to a list of ids up front (matching the base) so the re-encode
+        # comparison below sees the same ids the base decoded.
         if isinstance(token_ids, int):
             token_ids = [token_ids]
+        if isinstance(token_ids, dict):
+            token_ids = token_ids["input_ids"]
         text = super()._decode(
             token_ids,
             skip_special_tokens=skip_special_tokens,
@@ -248,11 +252,17 @@ class CodeLlamaTokenizer(TokenizersBackend):
         # Decoding leaves one extra leading space from the synthetic `▁` prefix, but
         # that is indistinguishable from a real leading space in the decoded string.
         # Only strip it when doing so re-encodes to the same ids, i.e. when it really
-        # was just the synthetic prefix. A single leading space is unrecoverable
-        # (" x" and "x" encode identically), so it is treated as the prefix.
+        # was just the synthetic prefix. When a leading space is the whole content
+        # (" hello" encodes like "hello") it is unrecoverable and treated as the prefix.
         if text.startswith(" "):
             stripped = text[1:]
-            if self.encode(stripped, add_special_tokens=False) == list(token_ids):
+            # `text` has special tokens removed when they were skipped, so compare the
+            # re-encoded ids against `token_ids` with the special ids dropped too.
+            reference_ids = token_ids
+            if skip_special_tokens:
+                special_ids = set(self.all_special_ids)
+                reference_ids = [token_id for token_id in token_ids if token_id not in special_ids]
+            if self.encode(stripped, add_special_tokens=False) == list(reference_ids):
                 return stripped
         return text
 

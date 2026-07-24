@@ -220,6 +220,18 @@ class LlamaIntegrationTest(unittest.TestCase):
         for text in ["hello", "def foo():", "import numpy"]:
             ids = tokenizer.encode(text, add_special_tokens=False)
             self.assertEqual(tokenizer.decode(ids), text)
+        # The same holds when the ids carry special tokens (e.g. BOS) that are
+        # skipped on decode: the synthetic prefix is still removed.
+        for text in ["hello", "Hello world", "  hello", "    indented_line"]:
+            ids = tokenizer.encode(text, add_special_tokens=True)
+            self.assertEqual(tokenizer.decode(ids, skip_special_tokens=True), text)
+        # batch_decode routes each sequence through the same path.
+        batch = ["  hello", "world", "\tindented"]
+        batch_ids = [tokenizer.encode(text, add_special_tokens=False) for text in batch]
+        self.assertEqual(tokenizer.batch_decode(batch_ids), batch)
+        # A dict of ids (as returned by the tokenizer call) decodes the same way.
+        encoded = tokenizer("  hello", add_special_tokens=True)
+        self.assertEqual(tokenizer.decode(encoded["input_ids"], skip_special_tokens=True), "  hello")
 
     @unittest.skip(
         "Skipped in v5 - CodeLlama tokenization differences related to SPM legacy flag and Metaspace handling. "
