@@ -13,11 +13,11 @@
 # limitations under the License.
 
 from abc import ABC, abstractmethod
-from collections import deque
 
 import torch
 
 from ..utils import exact_div
+from .cache_pool import CachePool
 
 
 class CacheAllocator(ABC):
@@ -60,14 +60,15 @@ class CacheAllocator(ABC):
         self.bytes_per_block = bytes_per_page * self.pages_per_block
         # Bookkeeping attributes
         self.block_table: dict[str, list[int]] = {}
-        self.free_block_ids: deque[int] = deque()
 
     @abstractmethod
-    def register_cache_tensor(self, bytes_per_sector: int, non_trash_bytes: int, cache_tensor: torch.Tensor) -> None:
+    def register_cache_tensor(
+        self, bytes_per_sector: int, non_trash_bytes: int, cache_tensor: torch.Tensor, pool: CachePool
+    ) -> None:
         """Registers the cache tensor so the allocator can use it for updates."""
 
     def _after_cache_tensor_init(
-        self, non_trash_bytes: int, bytes_per_sector: int, cache_tensor: torch.Tensor
+        self, non_trash_bytes: int, bytes_per_sector: int, cache_tensor: torch.Tensor, pool: CachePool
     ) -> None:
         # Cache dimensions attributes
         self.num_pages = exact_div(non_trash_bytes, self.bytes_per_page)
@@ -76,6 +77,9 @@ class CacheAllocator(ABC):
         # Cache is a static tensor with shape [num_pages * tokens_per_page, ...]
         self.cache_tensor = cache_tensor
         torch._dynamo.mark_static_address(self.cache_tensor)
+        # Cache pool to keep track of the free blocks
+        self.pool = pool
+        self.pool.blocks_per_sector[self.index] = self.blocks_per_sector
         # The first two sectors of the tensor are the trash sectors, and no allocator ever allocates from them.
         # Sector 0 holds the read trash, from which padding tokens read their (zeroed, never written) cache, and the
         # sentinel index, marking where to insert the new key or value states for sliding window attention groups.
@@ -89,16 +93,12 @@ class CacheAllocator(ABC):
     def needs_new_sectors(self, request_id: str, past_length: int, query_length: int) -> int:
         """Returns the number of new sectors needed to store the new tokens for a given request. It can be zero."""
         num_blocks_needed = self.needs_new_blocks(request_id, past_length, query_length)
-        num_free_blocks = len(self.free_block_ids)
+        num_free_blocks = self.pool.count_free_blocks(self.index)
         fresh_blocks_needed = num_blocks_needed - num_free_blocks
         if fresh_blocks_needed <= 0:
             return 0
         # Round up: a partially needed sector is still a whole sector
         return (fresh_blocks_needed + self.blocks_per_sector - 1) // self.blocks_per_sector
-
-    def allocate_new_sector(self, sector_id: int) -> None:
-        """Allocates a new sector to the allocator, which translates as new free blocks for this allocator."""
-        self.free_block_ids.extend(range(sector_id * self.blocks_per_sector, (sector_id + 1) * self.blocks_per_sector))
 
     # _________________________________________________ BLOCK LEVEL __________________________________________________ #
 
@@ -113,7 +113,7 @@ class CacheAllocator(ABC):
     def free_blocks(self, request_id: str) -> None:
         """Mark the blocks owned by the request as free."""
         block_ids = self.block_table.pop(request_id, [])
-        self.free_block_ids.extend(block_ids)
+        self.pool.free_blocks(self.index, block_ids)
 
     def free_all_requests(self) -> None:
         """Mark all blocks owned by all requests as free."""

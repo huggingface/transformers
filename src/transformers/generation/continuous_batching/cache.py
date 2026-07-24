@@ -22,6 +22,7 @@ from .cache_allocators import (
     FULL_ATTENTION,
     SLIDING_ATTENTION,
     CacheAllocator,
+    CachePool,
     FullAttentionCacheAllocator,
     SlidingAttentionCacheAllocator,
 )
@@ -179,26 +180,23 @@ class PagedAttentionCache:
             sync = torch.tensor([max_batch_tokens, num_sectors], device=self.device, dtype=torch.int64)
             distributed_helper.tp_all_reduce_min(sync)
             max_batch_tokens, num_sectors = int(sync[0].item()), int(sync[1].item())
-
         # Add the inferred attributes to the class
-        self.max_batch_tokens = max_batch_tokens
-        self.num_sectors = num_sectors
-        mb_per_sector = self.bytes_per_sector / 1024**2
+        self.max_batch_tokens, self.num_sectors = max_batch_tokens, num_sectors
+        mb_per_sector = self.bytes_per_sector // 1024**2
         logger.info(f"Paged cache initialized: {self.max_batch_tokens = }, {self.num_sectors = }, {mb_per_sector = }")
 
-        # The cache holds two trash sectors followed by the data sectors. The trash sectors are never allocated:
-        # sector 0 is zeroed and never written to (read trash and sentinel index) and sector 1 is only ever written
-        # to (write trash), so reads and writes stay disjoint whatever geometry each allocator uses.
-        # TODO: could be reduced to 1 sector under certain hit / miss conditions
-        self.non_trash_bytes = self.num_sectors * self.bytes_per_sector
+        # TODO: could be reduced to 1 trash sector under certain hit / miss conditions
+        # The cache holds two trash sectors followed by the data sectors. The trash sectors are never allocated.
+        non_trash_bytes = self.num_sectors * self.bytes_per_sector
         trash_bytes = 2 * self.bytes_per_sector
-        self.cache_tensor = torch.zeros(self.non_trash_bytes + trash_bytes, dtype=torch.uint8, device=self.device)
+        self.cache_tensor = torch.zeros(non_trash_bytes + trash_bytes, dtype=torch.uint8, device=self.device)
+        # Cache pool, which keeps track of the free sectors and their allocation
+        self.pool = CachePool(self.num_sectors, len(self.cache_allocators))
         # Distribute the cache across all allocators
         for allocator in self.cache_allocators.values():
-            allocator.register_cache_tensor(self.bytes_per_sector, self.non_trash_bytes, self.cache_tensor)
+            allocator.register_cache_tensor(self.bytes_per_sector, non_trash_bytes, self.cache_tensor, self.pool)
 
         # Sector-tracking data structures. Sectors 0 and 1 are the trash sectors, so they are never free for allocation.
-        self.free_sectors = list(range(2, self.num_sectors + 2))
         # Block management data structures
         self.allow_block_sharing = continuous_batching_config.allow_block_sharing
         allocators_can_share = all(ca.supports_block_sharing for ca in self.cache_allocators.values())
@@ -209,7 +207,7 @@ class PagedAttentionCache:
         self._block_table_key = None
 
         # Helper attribute: the cache capacity expressed in full-attention pages
-        self.num_fa_pages = self.non_trash_bytes // bytes_per_fa_page
+        self.num_fa_pages = non_trash_bytes // bytes_per_fa_page
         # Helper attributes for the scheduler
         self.read_cache_limit = self._infer_read_cache_limit()
         self.max_decode_fast_path_length = self._infer_max_decode_fast_path_length()
@@ -243,7 +241,7 @@ class PagedAttentionCache:
                 sectors_needed[name] = new_sectors
 
         # Stop here if this is a dry run or if there are not enough free sectors
-        enough_free_sectors = len(self.free_sectors) >= sum(sectors_needed.values())
+        enough_free_sectors = self.pool.check_has_enough_free_sectors(sum(sectors_needed.values()))
         if dry_run or not enough_free_sectors:
             return enough_free_sectors
 
@@ -251,8 +249,7 @@ class PagedAttentionCache:
         for name, new_sectors in sectors_needed.items():
             allocator = self.cache_allocators[name]
             for _ in range(new_sectors):
-                sector_id = self.free_sectors.pop()
-                allocator.allocate_new_sector(sector_id)
+                self.pool.allocate_sector(allocator.index)
 
         # For each allocator, allocate the cache to the request
         for allocator in self.cache_allocators.values():
@@ -309,16 +306,14 @@ class PagedAttentionCache:
     def reset(self) -> None:
         """Frees the cache of all requests and returns all sectors to the global pool."""
         self.free_all_requests()
-        for allocator in self.cache_allocators.values():
-            allocator.free_block_ids.clear()
-        self.free_sectors = list(range(2, self.num_sectors + 2))
+        self.pool.reset()
 
     def compute_free_capacity(self, relative: bool = True) -> int | float:
         """Returns the free capacity of the cache in bytes or as a percentage of the total capacity."""
-        free_bytes = len(self.free_sectors) * self.bytes_per_sector
+        free_bytes = len(self.pool.free_sectors) * self.bytes_per_sector
         for allocator in self.cache_allocators.values():
-            free_bytes += len(allocator.free_block_ids) * allocator.bytes_per_block
-        return free_bytes / (self.non_trash_bytes if relative else 1)
+            free_bytes += self.pool.count_free_blocks(allocator.index) * allocator.bytes_per_block
+        return free_bytes / (self.num_sectors * self.bytes_per_sector if relative else 1)
 
     # def blocks_needed(self, num_requested_blocks: int, allocated_blocks: int) -> int:
     #     """Returns the number of physical blocks needed to allocate (num_requested_blocks) blocks to a request that

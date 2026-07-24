@@ -17,6 +17,7 @@ import torch
 from ....configuration_utils import PreTrainedConfig
 from ..utils import find_head_dim
 from .cache_allocator import CacheAllocator
+from .cache_pool import CachePool
 
 
 class FullAttentionCacheAllocator(CacheAllocator):
@@ -52,7 +53,9 @@ class FullAttentionCacheAllocator(CacheAllocator):
             index=index, layer_indices=layer_indices, tokens_per_page=page_size, bytes_per_page=bytes_per_page
         )
 
-    def register_cache_tensor(self, bytes_per_sector: int, non_trash_bytes: int, cache_tensor: torch.Tensor) -> None:
+    def register_cache_tensor(
+        self, bytes_per_sector: int, non_trash_bytes: int, cache_tensor: torch.Tensor, pool: CachePool
+    ) -> None:
         """Registers the cache tensor so the allocator can use it for updates. For a full attention KV cache allocator
         with 2 layers, the cache is arranged this way:
 
@@ -72,7 +75,7 @@ class FullAttentionCacheAllocator(CacheAllocator):
 
         cache_tensor = cache_tensor.view(self.cache_dtype)
         cache_tensor = cache_tensor[:numel].view(*cache_shape)
-        self._after_cache_tensor_init(non_trash_bytes, bytes_per_sector, cache_tensor)
+        self._after_cache_tensor_init(non_trash_bytes, bytes_per_sector, cache_tensor, pool)
 
         # Precompute the per-layer shifted views used by update()
         flattened_view = self.cache_tensor.view(total_tokens * 2, self.num_key_value_heads, self.head_dim)
@@ -109,7 +112,7 @@ class FullAttentionCacheAllocator(CacheAllocator):
             self.block_table[request_id] = []
         block_table = self.block_table[request_id]
         blocks_needed = self._compute_blocks_needed(len(block_table), past_length, query_length)
-        block_table.extend([self.free_block_ids.pop() for _ in range(blocks_needed)])
+        block_table.extend(self.pool.get_free_blocks(self.index, blocks_needed))
 
     # ______________________________________________ INPUT PREPARATION _______________________________________________ #
 
