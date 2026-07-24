@@ -251,6 +251,11 @@ model = Qwen2_5_VLForConditionalGeneration.from_pretrained(
 [[autodoc]] Qwen2_5_VLTextModel
     - forward
 
+## Qwen2_5_VisionTransformerPretrainedModel
+
+[[autodoc]] Qwen2_5_VisionTransformerPretrainedModel
+    - forward
+
 ## Qwen2_5_VLModel
 
 [[autodoc]] Qwen2_5_VLModel
