@@ -31,7 +31,7 @@ from ... import initialization as init
 from ...activations import ACT2CLS, ACT2FN
 from ...backbone_utils import filter_output_hidden_states
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import BaseModelOutput, ModelOutput
+from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
@@ -266,6 +266,22 @@ class SLANeXtPreTrainedModel(PreTrainedModel):
                             init.uniform_(layer.bias, -std, std)
 
 
+@dataclass
+@auto_docstring(
+    custom_intro="""
+    Base class for slanext vision model's outputs that also contains image embeddings obtained by applying the projection
+    layer to the pooler_output.
+    """
+)
+class SLANeXtVisionEncoderOutput(BaseModelOutputWithPooling):
+    r"""
+    image_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim)` *optional* returned when model is initialized with `with_projection=True`):
+        The image embeddings obtained by applying the projection layer to the pooler_output.
+    """
+
+    image_embeds: torch.FloatTensor | None = None
+
+
 class SLANeXtMLPBlock(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -362,25 +378,6 @@ class SLANeXtVisionLayer(GradientCheckpointingLayer):
         layernorm_output = self.layer_norm2(hidden_states)
         hidden_states = hidden_states + self.mlp(layernorm_output)
         return hidden_states
-
-
-@auto_docstring(
-    custom_intro="""
-    Base class for slanext vision model's outputs that also contains image embeddings obtained by applying the projection
-    layer to the pooler_output.
-    """
-)
-@dataclass
-class SLANeXtVisionEncoderOutput(ModelOutput):
-    r"""
-    image_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim)` *optional* returned when model is initialized with `with_projection=True`):
-        The image embeddings obtained by applying the projection layer to the pooler_output.
-    """
-
-    image_embeds: torch.FloatTensor | None = None
-    last_hidden_state: torch.FloatTensor | None = None
-    hidden_states: tuple[torch.FloatTensor, ...] | None = None
-    attentions: tuple[torch.FloatTensor, ...] | None = None
 
 
 class SLANeXtPatchEmbeddings(nn.Module):

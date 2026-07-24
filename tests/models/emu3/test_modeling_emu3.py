@@ -354,7 +354,7 @@ class Emu3IntegrationTest(unittest.TestCase):
         image = Image.open(requests.get("https://picsum.photos/id/237/200/200", stream=True).raw)
         prompt = "USER: <image>Describe what do you see here and tell me about the history behind it? ASSISTANT:"
 
-        inputs = processor(images=image, text=prompt, return_tensors="pt").to(model.device, torch.float16)
+        inputs = processor(images=image, text=prompt, return_tensors="pt").to(model.device)
 
         # greedy generation outputs
         EXPECTED_TEXT_COMPLETION = ['USER: 64*64Describe what do you see here and tell me about the history behind it? ASSISTANT: The image captures a moment of tranquility with a black Labrador Retriever resting on a wooden floor. The dog, with its glossy black coat, is lying down with its front legs stretched out in']  # fmt: skip
@@ -379,9 +379,7 @@ class Emu3IntegrationTest(unittest.TestCase):
             "USER: <image>What can you say about the image? ASSISTANT:",
         ]
 
-        inputs = processor(images=[image, image_2], text=prompts, padding=True, return_tensors="pt").to(
-            model.device, torch.float16
-        )
+        inputs = processor(images=[image, image_2], text=prompts, padding=True, return_tensors="pt").to(model.device)
 
         # greedy generation outputs
         EXPECTED_TEXT_COMPLETIONS = Expectations(
@@ -420,7 +418,7 @@ class Emu3IntegrationTest(unittest.TestCase):
         image_2 = Image.open(requests.get("https://picsum.photos/id/247/50/50", stream=True).raw)
         prompt = "USER: <image><image>What do these two images have in common? ASSISTANT:"
 
-        inputs = processor(images=[image, image_2], text=prompt, return_tensors="pt").to(model.device, torch.float16)
+        inputs = processor(images=[image, image_2], text=prompt, return_tensors="pt").to(model.device)
 
         # greedy generation outputs
         EXPECTED_TEXT_COMPLETIONS = Expectations(

@@ -504,6 +504,8 @@ class GenerationMixin(ContinuousMixin):
         past_key_values: Cache | None = None,
         attention_mask: torch.LongTensor | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
+        image_outputs: dict | None = None,
+        video_outputs: dict | None = None,
         is_first_iteration: bool | None = False,
         **kwargs,
     ):
@@ -603,6 +605,10 @@ class GenerationMixin(ContinuousMixin):
             past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
             cache_position = torch.arange(sequence_length, device=input_ids.device) + past_seen_tokens
             model_inputs["cache_position"] = cache_position
+
+        if is_first_iteration or not kwargs.get("use_cache", True):
+            model_inputs["image_outputs"] = image_outputs
+            model_inputs["video_outputs"] = video_outputs
 
         # 6. Move the tensors the forward consumes onto the model device, right before the call.
         # It lets the caller intentionally keep inputs on a different device (e.g. Neuron/TPU) so
@@ -819,6 +825,57 @@ class GenerationMixin(ContinuousMixin):
 
         return model_kwargs
 
+    def _prepare_multimodal_encoder_kwargs_for_generation(
+        self: "GenerativePreTrainedModel",
+        model_kwargs,
+    ) -> torch.FloatTensor:
+        # Prepare image/video hidden states if the model support the given modality so we don't re-compute it
+        if (
+            "image" in self.input_modalities
+            and model_kwargs.get("image_outputs") is None
+            and hasattr(self.base_model, "get_image_features")
+        ):
+            image_signature = {
+                k: v
+                for k, v in inspect.signature(self.base_model.get_image_features).parameters.items()
+                if k != "kwargs"
+            }
+            required_args = [
+                name for name, param in image_signature.items() if param.default is inspect.Parameter.empty
+            ]
+            if all(model_kwargs.get(n) is not None for n in required_args):
+                image_encoder_kwargs = {
+                    argument: model_kwargs.get(argument, None) for argument in set(image_signature)
+                }
+                image_encoder_kwargs["return_dict"] = True
+                model_kwargs["image_outputs"]: torch.FloatTensor = self.base_model.get_image_features(
+                    **image_encoder_kwargs
+                )
+
+        if (
+            "video" in self.input_modalities
+            and model_kwargs.get("video_outputs") is None
+            and hasattr(self.base_model, "get_video_features")
+        ):
+            video_signature = {
+                k: v
+                for k, v in inspect.signature(self.base_model.get_video_features).parameters.items()
+                if k != "kwargs"
+            }
+            required_args = [
+                name for name, param in video_signature.items() if param.default is inspect.Parameter.empty
+            ]
+            if all(model_kwargs.get(n) is not None for n in required_args):
+                video_encoder_kwargs = {
+                    argument: model_kwargs.get(argument, None) for argument in set(video_signature)
+                }
+                video_encoder_kwargs["return_dict"] = True
+                model_kwargs["video_outputs"]: torch.FloatTensor = self.base_model.get_video_features(
+                    **video_encoder_kwargs
+                )
+
+        return model_kwargs
+
     def _prepare_decoder_input_ids_for_generation(
         self: "GenerativePreTrainedModel",
         batch_size: int,
@@ -883,6 +940,7 @@ class GenerationMixin(ContinuousMixin):
         expand_size: int = 1,
         is_encoder_decoder: bool = False,
         input_ids: torch.LongTensor | None = None,
+        model: Optional["PreTrainedModel"] = None,
         **model_kwargs,
     ) -> tuple[torch.LongTensor, dict[str, Any]]:
         """Expands tensors from [batch_size, ...] to [batch_size * expand_size, ...]"""
@@ -890,6 +948,49 @@ class GenerationMixin(ContinuousMixin):
         # the input tensor and thus requires more memory although no change is applied
         if expand_size == 1:
             return input_ids, model_kwargs
+
+        # Infer the length per sample from pooler output and interleave per sample with images
+        # IMPORTANT to expand mm data before expanding text ids/embeds!
+        def repeat_tensor_or_list(inputs: list | torch.Tensor, repeat_times: int):
+            if isinstance(inputs, torch.Tensor):
+                return inputs.repeat_interleave(repeat_times, dim=0)
+            else:
+                return inputs * repeat_times
+
+        def _expand_multimodal_outputs(outputs_key, token_id_key):
+            outputs = model_kwargs.get(outputs_key)
+            if outputs is None:
+                return
+            if input_ids is None or input_ids.numel() == 0:
+                special_image_mask = model_kwargs["inputs_embeds"] == model.get_input_embeddings()(
+                    torch.tensor(
+                        getattr(model.config, token_id_key),
+                        dtype=torch.long,
+                        device=model_kwargs["inputs_embeds"].device,
+                    )
+                )
+                num_image_tokens_in_text = special_image_mask.all(-1).sum(-1)
+            else:
+                num_image_tokens_in_text = (input_ids == getattr(model.config, token_id_key)).sum(-1)
+            num_image_tokens_in_text = torch.tensor(num_image_tokens_in_text).cumsum(-1)
+            num_image_tokens_in_vision = [len(out) for out in outputs.pooler_output]
+            num_image_tokens_in_vision = torch.tensor(num_image_tokens_in_vision).cumsum(-1)
+            offsets = [0] + [
+                i + 1 for i, num in enumerate(num_image_tokens_in_vision) if num in num_image_tokens_in_text
+            ]
+            expanded_pooler_output = [
+                out
+                for start, end in zip(offsets[:-1], offsets[1:])
+                for out in repeat_tensor_or_list(outputs.pooler_output[start:end], expand_size)
+            ]
+
+            if isinstance(outputs.pooler_output, torch.Tensor):
+                outputs.pooler_output = torch.stack(expanded_pooler_output, dim=0)
+            else:
+                outputs.pooler_output = expanded_pooler_output
+
+        _expand_multimodal_outputs("image_outputs", "image_token_id")
+        _expand_multimodal_outputs("video_outputs", "video_token_id")
 
         def _expand_dict_for_generation(dict_to_expand):
             for key in dict_to_expand:
@@ -1579,6 +1680,10 @@ class GenerationMixin(ContinuousMixin):
         if self.config.is_encoder_decoder:
             for key in ["decoder_input_ids"]:
                 model_kwargs.pop(key, None)
+
+        # Excludes arguments that might not be in signature of older models
+        for key in ["image_outputs", "video_outputs"]:
+            model_kwargs.pop(key, None)
 
         unused_model_args = []
         model_args = set(inspect.signature(self.prepare_inputs_for_generation).parameters)
@@ -2529,7 +2634,8 @@ class GenerationMixin(ContinuousMixin):
                         "generation results, please set `padding_side='left'` when initializing the tokenizer."
                     )
 
-        # 4. Define other model kwargs
+        # 4. Define other model kwargs (encoder-decoder kwargs / multimodal kwargs / kwargs for consistency)
+
         # decoder-only models with inputs_embeds forwarding must use caching (otherwise we can't detect whether we are
         # generating the first new token or not, and we only want to use the embeddings for the first new token)
         if not self.config.is_encoder_decoder and model_input_name == "inputs_embeds":
@@ -2548,6 +2654,8 @@ class GenerationMixin(ContinuousMixin):
         accepts_position_ids = "position_ids" in set(inspect.signature(self.forward).parameters.keys())
         if not kwargs_has_position_ids and accepts_position_ids and not self.config.is_encoder_decoder:
             model_kwargs["position_ids"] = self._prepare_position_ids_for_generation(inputs_tensor, model_kwargs)
+
+        model_kwargs = self._prepare_multimodal_encoder_kwargs_for_generation(model_kwargs)
 
         if self.config.is_encoder_decoder and "encoder_outputs" not in model_kwargs:
             # if model is encoder decoder encoder_outputs are created and added to `model_kwargs`
@@ -2572,6 +2680,7 @@ class GenerationMixin(ContinuousMixin):
             input_ids=input_ids,
             expand_size=max(generation_config.num_beams, generation_config.num_return_sequences),
             is_encoder_decoder=self.config.is_encoder_decoder,
+            model=self,
             **model_kwargs,
         )
 

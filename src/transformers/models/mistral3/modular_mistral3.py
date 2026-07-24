@@ -130,15 +130,14 @@ class Mistral3Model(LlavaModel):
         pixel_values: torch.FloatTensor,
         image_sizes: torch.Tensor,
         vision_feature_layer: int | list[int] | list[int] | None = None,
-        output_hidden_states: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
+        kwargs["output_hidden_states"] = True  # Ignore arg on purpose
         kwargs = {k: v for k, v in kwargs.items() if v is not None}
         # this is not memory efficient at all (output_hidden_states=True) will save all the hidden states.
         image_outputs = self.vision_tower(
             pixel_values,
             image_sizes=image_sizes,
-            output_hidden_states=True,  # Ignore arg on purpose
             return_dict=True,
             **kwargs,
         )
@@ -156,7 +155,7 @@ class Mistral3Model(LlavaModel):
             (torch.as_tensor(image_sizes, device=image_features.device) // downsample_ratio).prod(dim=-1).tolist()
         )
         image_features = torch.split(image_features.squeeze(0), split_sizes)
-        image_outputs.pooler_output = image_features
+        image_outputs.pooler_output = list(image_features)
 
         return image_outputs
 
@@ -174,6 +173,7 @@ class Mistral3Model(LlavaModel):
         vision_feature_layer: int | list[int] | list[int] | None = None,
         use_cache: bool | None = None,
         image_sizes: torch.Tensor | None = None,
+        image_outputs: BaseModelOutputWithPooling | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | Mistral3ModelOutputWithPast:
         if (input_ids is None) ^ (inputs_embeds is not None):
@@ -182,14 +182,18 @@ class Mistral3Model(LlavaModel):
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
-        if pixel_values is not None:
-            image_features = self.get_image_features(
+        if image_outputs is None and pixel_values is not None:
+            image_outputs = self.get_image_features(
                 pixel_values=pixel_values,
                 vision_feature_layer=vision_feature_layer,
                 image_sizes=image_sizes,
                 return_dict=True,
-            ).pooler_output
-            image_features = torch.cat(image_features, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
+            )
+
+        if image_outputs is not None:
+            image_features = torch.cat(image_outputs.pooler_output, dim=0).to(
+                inputs_embeds.device, inputs_embeds.dtype
+            )
             special_image_mask = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, image_features=image_features
             )
@@ -209,7 +213,7 @@ class Mistral3Model(LlavaModel):
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            image_hidden_states=image_features if pixel_values is not None else None,
+            image_hidden_states=image_features if image_outputs is not None else None,
         )
 
 
@@ -246,6 +250,7 @@ class Mistral3ForConditionalGeneration(LlavaForConditionalGeneration):
         use_cache: bool | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         image_sizes: torch.Tensor | None = None,
+        image_outputs: BaseModelOutputWithPooling | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | Mistral3CausalLMOutputWithPast:
         r"""
@@ -281,6 +286,7 @@ class Mistral3ForConditionalGeneration(LlavaForConditionalGeneration):
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
             image_sizes=image_sizes,
+            image_outputs=image_outputs,
             **kwargs,
         )
 
