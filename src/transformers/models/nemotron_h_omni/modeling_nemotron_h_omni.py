@@ -184,6 +184,33 @@ class SoundEncoder(nn.Module):
         return self.config.hidden_size
 
 
+class NemotronH_Omni_Reasoning_V3PixelShuffle(nn.Module):
+    """Pixel-shuffle downsampling of the RADIO vision features (`scale_factor = downsample_ratio`)."""
+
+    def __init__(self, config: NemotronH_Omni_Reasoning_V3_Config):
+        super().__init__()
+        self.ps_version = config.ps_version
+
+    def forward(self, x: torch.Tensor, scale_factor: float = 0.5) -> torch.Tensor:
+        n, w, h, c = x.size()
+        x = x.view(n, w, int(h * scale_factor), int(c / scale_factor))
+        x = x.permute(0, 2, 1, 3).contiguous()
+        x = x.view(
+            n,
+            int(h * scale_factor),
+            int(w * scale_factor),
+            int(c / (scale_factor * scale_factor)),
+        )
+        if self.ps_version == "v1":
+            warnings.warn(
+                "In ps_version 'v1', the height and width have not been swapped back, "
+                "which results in a transposed image."
+            )
+        else:
+            x = x.permute(0, 2, 1, 3).contiguous()
+        return x
+
+
 class NemotronH_Omni_Reasoning_V3(PreTrainedModel):
     config_class = NemotronH_Omni_Reasoning_V3_Config
     main_input_name = "pixel_values"
@@ -200,13 +227,11 @@ class NemotronH_Omni_Reasoning_V3(PreTrainedModel):
         self.template = config.template
         self.num_image_token = int((image_size // patch_size) ** 2 * (config.downsample_ratio**2))
         self.downsample_ratio = config.downsample_ratio
-        self.ps_version = config.ps_version
         self.image_tag_type = config.image_tag_type
         self.img_context_token_id = config.img_context_token_id
         self.video_context_token_id = config.video_context_token_id
 
         logger.info(f"num_image_token: {self.num_image_token}")
-        logger.info(f"ps_version: {self.ps_version}")
 
         self.language_model = AutoModelForCausalLM.from_config(config.llm_config)
         self.vision_model = AutoModel.from_config(config.vision_config)
@@ -233,6 +258,7 @@ class NemotronH_Omni_Reasoning_V3(PreTrainedModel):
 
         self.video_pruning_rate = config.video_pruning_rate
 
+        self.pixel_shuffle = NemotronH_Omni_Reasoning_V3PixelShuffle(config)
         self.mlp1 = nn.Sequential(
             NemotronH_Omni_RMSNorm(vit_hidden_size * int(1 / self.downsample_ratio) ** 2, eps=1e-5),
             nn.Linear(
@@ -360,25 +386,6 @@ class NemotronH_Omni_Reasoning_V3(PreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
-
-    def pixel_shuffle(self, x, scale_factor=0.5):
-        n, w, h, c = x.size()
-        x = x.view(n, w, int(h * scale_factor), int(c / scale_factor))
-        x = x.permute(0, 2, 1, 3).contiguous()
-        x = x.view(
-            n,
-            int(h * scale_factor),
-            int(w * scale_factor),
-            int(c / (scale_factor * scale_factor)),
-        )
-        if self.ps_version == "v1":
-            warnings.warn(
-                "In ps_version 'v1', the height and width have not been swapped back, "
-                "which results in a transposed image."
-            )
-        else:
-            x = x.permute(0, 2, 1, 3).contiguous()
-        return x
 
     def extract_feature(self, pixel_values):
         if isinstance(pixel_values, (list, tuple)):

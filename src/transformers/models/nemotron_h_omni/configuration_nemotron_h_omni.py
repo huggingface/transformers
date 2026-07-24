@@ -62,7 +62,8 @@ class NemotronH_Omni_Reasoning_V3_Config(PreTrainedConfig):
     template (`str`, *optional*):
         Conversation template name (legacy; the chat template is carried by the processor).
     ps_version (`str`, *optional*, defaults to `"v1"`):
-        Pixel-shuffle implementation version.
+        Pixel-shuffle implementation version (`"v2"` swaps height/width back; `"v1"` is the legacy
+        transposed variant).
     image_tag_type (`str`, *optional*, defaults to `"internvl"`):
         Image-tag convention used when expanding image placeholders.
     projector_hidden_size (`int`, *optional*, defaults to 4096):
