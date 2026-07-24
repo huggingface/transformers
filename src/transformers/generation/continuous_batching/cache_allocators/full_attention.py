@@ -35,6 +35,7 @@ class FullAttentionCacheAllocator(CacheAllocator):
         cache_dtype: torch.dtype,
         page_size: int,
         layer_indices: list[int],
+        allow_block_sharing: bool,
     ) -> None:
         """Initializes the cache allocator for a group of full attention layers.
 
@@ -44,13 +45,14 @@ class FullAttentionCacheAllocator(CacheAllocator):
             - cache_dtype: the dtype of the cache, also used to determine the number of bytes per token
             - page_size: the number of tokens per page
             - layer_indices: the indices of the layers which cache is handled by this allocator
+            - allow_block_sharing: whether to allow block sharing or not. Can be disabled for diagnostics or perfs.
         """
         self.head_dim = find_head_dim(config)
         self.num_key_value_heads = num_key_value_heads
         self.cache_dtype = cache_dtype
         bytes_per_page = self.get_bytes_per_page(num_key_value_heads, self.head_dim, cache_dtype, page_size)
         self._before_cache_tensor_init(
-            index=index, layer_indices=layer_indices, tokens_per_page=page_size, bytes_per_page=bytes_per_page
+            index=index, layer_indices=layer_indices, tokens_per_page=page_size, bytes_per_page=bytes_per_page, allow_block_sharing=allow_block_sharing
         )
 
     def register_cache_tensor(
@@ -66,6 +68,8 @@ class FullAttentionCacheAllocator(CacheAllocator):
         The FIRST TWO sectors of the tensor are the trash sectors, shared by all allocators and never allocated from.
         """
         self.bytes_per_sector = bytes_per_sector
+        # Byte view of the whole tensor as one row per block, used to copy blocks when forking
+        self._copy_view = cache_tensor.view(-1, self.bytes_per_block)
 
         # Reshape the cache. The views span the entire tensor, including the two leading trash sectors
         total_bytes = non_trash_bytes + 2 * bytes_per_sector

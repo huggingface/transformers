@@ -135,7 +135,7 @@ class PagedAttentionCache:
             "config": config,
             "cache_dtype": self.dtype,
             "page_size": continuous_batching_config.fa_page_size,
-            # "allow_block_sharing": self.allow_block_sharing,
+            "allow_block_sharing": continuous_batching_config.allow_block_sharing,
             # "is_tp_enabled": distributed_helper.tp_size > 1,
         }
         self.cache_allocators: dict[str, CacheAllocator] = {}
@@ -261,10 +261,12 @@ class PagedAttentionCache:
         for allocator in self.cache_allocators.values():
             allocator.free_blocks(request_id)
 
-    def free_all_requests(self) -> None:
-        """Signals all cache allocators that all requests' caches can be freed."""
+    def free_all_requests(self, clear_ledgers: bool = False) -> None:
+        """Signals all cache allocators that all requests' caches can be freed. Also clears the ledgers if requested."""
         for allocator in self.cache_allocators.values():
             allocator.free_all_requests()
+            if clear_ledgers:
+                allocator.ref_counts.clear()
 
     def extend_read_and_write_indices(
         self,
@@ -305,8 +307,57 @@ class PagedAttentionCache:
 
     def reset(self) -> None:
         """Frees the cache of all requests and returns all sectors to the global pool."""
-        self.free_all_requests()
+        self.free_all_requests(clear_ledgers=True)
         self.pool.reset()
+
+    def prepare_fork_request(
+        self,
+        src_state: RequestState,
+        dst_req_ids: list[str],
+        copy_src_and_dst: dict[str, tuple[list[int], list[int]]]
+    ) -> list[str]:
+        """Forks the cache of the source request into new requests: fully-written blocks are shared when block sharing
+        is allowed, the others will be copied. Children are forked in order while the cache has room, and the ids
+        actually forked are returned. The caller must handle the remaining ids another way and call perform_cache_copy.
+        """
+        past_length = src_state.current_len()
+
+        # Count the number of blocks needed for each allocator
+        blocks_needed = {
+            name: allocator.count_non_shareable_blocks(src_state.request_id, past_length)
+            for name, allocator in self.cache_allocators.items()
+        }
+
+        # Loop over the destination request ids
+        forked_ids = []
+        for dest_request_id in dst_req_ids:
+            # Check that the child fits, in the same way as can_store_request_tokens but with direct block counts
+            # TODO: this could probably be merged with can_store_request_tokens
+            sectors_needed = {}
+            for name, allocator in self.cache_allocators.items():
+                missing_blocks = blocks_needed[name] - self.pool.count_free_blocks(allocator.index)
+                if missing_blocks > 0:
+                    sectors_needed[name] = ceil(missing_blocks / allocator.blocks_per_sector)
+            # Stop here if the child doesn't fit
+            if self.pool.num_free_sectors < sum(sectors_needed.values()):
+                break
+            # Allocate the needed sectors and build the child's block table
+            for name, new_sectors in sectors_needed.items():
+                for _ in range(new_sectors):
+                    self.pool.allocate_sector(self.cache_allocators[name].index)
+            for name, allocator in self.cache_allocators.items():
+                src_blocks, dst_blocks = allocator.fork_blocks(src_state.request_id, dest_request_id, past_length)
+                copy_src_and_dst[name][0].extend(src_blocks)
+                copy_src_and_dst[name][1].extend(dst_blocks)
+            forked_ids.append(dest_request_id)
+
+        return forked_ids
+
+    def perform_cache_copy(self, copy_src_and_dst: dict[str, tuple[list[int], list[int]]]) -> None:
+        """Performs the cache copy for the given source and destination blocks."""
+        for name, (src_blocks, dst_blocks) in copy_src_and_dst.items():
+            if src_blocks:
+                self.cache_allocators[name].copy_blocks(src_blocks, dst_blocks)
 
     def compute_free_capacity(self, relative: bool = True) -> int | float:
         """Returns the free capacity of the cache in bytes or as a percentage of the total capacity."""
@@ -431,47 +482,6 @@ class PagedAttentionCache:
     #                 allocated_blocks=cm.block_table[state.request_id],
     #                 prompt_ids=(state.initial_tokens + state.generated_tokens),
     #             )
-
-    # def copy_cache(self, list_source_blocks: list[int], list_forked_blocks: list[int]) -> None:
-    #     """Copy the cache from the source blocks to the forked blocks."""
-    #     source_blocks = torch.tensor(list_source_blocks, device=self.device, dtype=torch.int32)
-    #     forked_blocks = torch.tensor(list_forked_blocks, device=self.device, dtype=torch.int32)
-    #     for key_cache, value_cache in zip(self.key_cache, self.value_cache):
-    #         key_cache = key_cache.view(-1, self.block_size, self.num_key_value_heads, self.head_dim)
-    #         value_cache = value_cache.view(-1, self.block_size, self.num_key_value_heads, self.head_dim)
-    #         key_cache[forked_blocks] = key_cache[source_blocks]
-    #         value_cache[forked_blocks] = value_cache[source_blocks]
-    #     # FIXME: consolidate the cache into a single tensor of shape (group_size, 2, *self.k_or_v_cache_shape)
-    #     # This will allow for  better .update and a single copy instead of one per cache tensor
-
-    # def compute_max_num_forks(self, source_request_id: str) -> int:
-    #     """Computes the maximum number of children requests that can be forked from the source request."""
-    #     # Count, across all groups, the new blocks each fork would have to allocate (i.e. non-shareable blocks)
-    #     blocks_needed_per_fork = 0
-    #     for cm in self.group_cache_managers:
-    #         block_ids = cm.block_table[source_request_id]
-    #         shareable_blocks = 0
-    #         if cm.uses_block_sharing:
-    #             for block_id in block_ids:
-    #                 if not self._block_manager._id_to_block[block_id].is_complete:
-    #                     break
-    #                 shareable_blocks += 1
-    #         blocks_needed_per_fork += len(block_ids) - shareable_blocks
-    #     # If every block can be shared, no new allocations are needed and any number of forks is possible
-    #     if blocks_needed_per_fork == 0:
-    #         return 2**31  # absurdly large number, virtually infinite number of forks
-    #     return self.get_num_free_blocks() // blocks_needed_per_fork
-
-    # def fork_request(self, source_request_id: str, destination_request_ids: list[str]) -> tuple[list[int], list[int]]:
-    #     """Fork the cache of a request (state) into the one of a list of requests with the given (dst_request_ids)."""
-    #     # These lists will be the accumulators for the source and destination blocks for the cache copy
-    #     source_blocks, destination_blocks = [], []
-    #     # Main fork loop
-    #     for cm in self.group_cache_managers:
-    #         src_blocks, dst_blocks = cm.fork_blocks(source_request_id, destination_request_ids, self._block_manager)
-    #         source_blocks.extend(src_blocks)
-    #         destination_blocks.extend(dst_blocks)
-    #     return source_blocks, destination_blocks
 
 
 # TODO: BUG: check this class in details (moving on rn)

@@ -35,6 +35,7 @@ class SlidingAttentionCacheAllocator(FullAttentionCacheAllocator):
         cache_dtype: torch.dtype,
         page_size: int,
         layer_indices: list[int],
+        allow_block_sharing: bool,
     ) -> None:
         """Initializes the cache allocator for a group of sliding attention layers.
 
@@ -44,6 +45,7 @@ class SlidingAttentionCacheAllocator(FullAttentionCacheAllocator):
             - cache_dtype: the dtype of the cache, also used to determine the number of bytes per token
             - page_size: the number of tokens per page
             - layer_indices: the indices of the layers which cache is handled by this allocator
+            - allow_block_sharing: whether to allow block sharing or not. Can be disabled for diagnostics or perfs.
         """
         # Retrieve the sliding window from the config
         sliding_window = getattr(config, "sliding_window", None)
@@ -57,6 +59,7 @@ class SlidingAttentionCacheAllocator(FullAttentionCacheAllocator):
             cache_dtype=cache_dtype,
             page_size=page_size,
             layer_indices=layer_indices,
+            allow_block_sharing=allow_block_sharing,
         )
 
     # _________________________________________________ BLOCK LEVEL __________________________________________________ #

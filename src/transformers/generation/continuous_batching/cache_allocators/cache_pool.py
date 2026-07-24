@@ -1,5 +1,4 @@
 class RegularTrees:
-
     def __init__(self, elems_per_tree: int) -> None:
         self.elems_per_tree = elems_per_tree
         self.trees: dict[int, list[int]] = {}
@@ -46,9 +45,7 @@ class RegularTrees:
         return leaves
 
     def delete_full_trees(self) -> list[int]:
-        deleted_roots = [
-            root for root, tree in self.trees.items() if len(tree) == self.elems_per_tree
-        ]
+        deleted_roots = [root for root, tree in self.trees.items() if len(tree) == self.elems_per_tree]
         self._length -= len(deleted_roots) * self.elems_per_tree
         for root in deleted_roots:
             self.trees.pop(root)

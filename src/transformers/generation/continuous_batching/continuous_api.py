@@ -18,7 +18,7 @@ import queue
 import threading
 from abc import abstractmethod
 from collections.abc import Callable, Generator
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 from time import perf_counter
 from typing import Any
 
@@ -450,46 +450,39 @@ class ContinuousBatchProcessor:
                     pending_outputs.append(state.to_generation_output())
             #  Otherwise, the request is still prefilling, but the prefill has been split
             # elif state.status == RequestStatus.PREFILLING:
-                # self.cache.mark_shareable_blocks_as_complete(state, future_state.complete_blocks)
+            # self.cache.mark_shareable_blocks_as_complete(state, future_state.complete_blocks)
 
         if pending_outputs:
             self.output_router.deliver_batch(pending_outputs)
 
-        # If some requests need to be forked, we do it now
-        # copy_source, copy_destination = [], []
-        # while self.scheduler._requests_to_fork:
-        #     # Get the number of children and reset it so it's not forked again
-        #     state_to_fork = self.scheduler._requests_to_fork.pop()
-        #     num_children = state_to_fork.num_children
-        #     state_to_fork.num_children = 0
-        #     new_request_ids = [f"{state_to_fork.request_id}__child#{i}" for i in range(num_children)]
-        #     # If there are not enough free blocks, some children are created as new pending requests rather than forked
-        #     num_to_fork = min(num_children, self.cache.compute_max_num_forks(state_to_fork.request_id))
-        #     num_to_schedule = num_children - num_to_fork
-        #     for _ in range(num_to_schedule):
-        #         new_request_id = new_request_ids.pop()
-        #         child_state = state_to_fork.create_equivalent_initial_request()
-        #         child_state.request_id = new_request_id
-        #         self.scheduler.add_waiting_request(child_state)
-        #     # Early stop if no forks can be done
-        #     if num_to_fork == 0:
-        #         continue
-        #     # Create the new request and add them to the scheduler
-        #     for new_request_id in new_request_ids:
-        #         self.scheduler.active_requests[new_request_id] = state_to_fork.fork(new_request_id)
-        #     # Fork the cache
-        #     copy_src, copy_dst = self.cache.fork_request(state_to_fork.request_id, new_request_ids)
-        #     copy_source.extend(copy_src)
-        #     copy_destination.extend(copy_dst)
+        # If some requests need to be forked, we do it now. The block copies run on the compute stream so they cannot
+        # race with the in-flight forward when async batching is used.
+        if self.scheduler._requests_to_fork:
+            self.cache.pool.try_to_free_sectors()  # once to maximize the nb of free sectors available for the forks
 
-        # The copy induced by the fork is done in one go (if it's even needed)
-        # if copy_source:
-        #     # FIXME: this will avoid any race condition, but it can cause issue when using async batching with a sliding
-        #     # window model. Fix will be fixed in a PR in the near future (tempfix, v5.3)
-        #     compute_stream = self.inputs_and_outputs.compute_stream
-        #     maybe_stream = torch.cuda.stream(compute_stream) if compute_stream is not None else nullcontext()
-        #     with maybe_stream:
-        #         self.cache.copy_cache(copy_source, copy_destination)
+            # Loop over the requests to fork and accumulate the block copies to do
+            fork_src_and_dst = {name: ([], []) for name in self.cache.cache_allocators}
+            while self.scheduler._requests_to_fork:
+                # Get the number of children and reset it so the request is not forked again
+                state_to_fork = self.scheduler._requests_to_fork.pop()
+                num_children = state_to_fork.num_children
+                state_to_fork.num_children = 0
+                new_request_ids = [f"{state_to_fork.request_id}__child#{i}" for i in range(num_children)]
+                # Fork the cache of as many children as it can hold and register them as active requests
+                forked_ids = self.cache.prepare_fork_request(state_to_fork, new_request_ids, fork_src_and_dst)
+                for new_request_id in forked_ids:
+                    self.scheduler.active_requests[new_request_id] = state_to_fork.fork(new_request_id)
+                # Children that did not fit become new pending requests instead, prefilled from scratch
+                for new_request_id in new_request_ids[len(forked_ids) :]:
+                    child_state = state_to_fork.create_equivalent_initial_request()
+                    child_state.request_id = new_request_id
+                    self.scheduler.add_waiting_request(child_state)
+
+            # Actually perform the block copies
+            compute_stream = self.inputs_and_outputs.compute_stream
+            maybe_stream = torch.cuda.stream(compute_stream) if compute_stream is not None else nullcontext()
+            with maybe_stream:
+                self.cache.perform_cache_copy(fork_src_and_dst)
 
     def has_pending_requests(self) -> bool:
         """Check if there are any active or waiting requests."""

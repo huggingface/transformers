@@ -42,11 +42,12 @@ class CacheAllocator(ABC):
     blocks_per_sector: int
     num_pages: int
     num_blocks: int
+    _copy_view: torch.Tensor  # cache tensor viewed as [num_blocks, bytes_per_block] for copying
 
     # ________________________________________________ INITIALIZATION ________________________________________________ #
 
     def _before_cache_tensor_init(
-        self, index: int, layer_indices: list[int], tokens_per_page: int, bytes_per_page: int
+        self, index: int, layer_indices: list[int], tokens_per_page: int, bytes_per_page: int, allow_block_sharing: bool
     ) -> None:
         # Model-related attributes
         self.index = index
@@ -60,6 +61,9 @@ class CacheAllocator(ABC):
         self.bytes_per_block = bytes_per_page * self.pages_per_block
         # Bookkeeping attributes
         self.block_table: dict[str, list[int]] = {}
+        # Reference counts of shared blocks: a block has an entry only when it is referenced by 2+ requests
+        self.use_block_sharing = allow_block_sharing and self.supports_block_sharing
+        self.ref_counts: dict[int, int] = {}
 
     @abstractmethod
     def register_cache_tensor(
@@ -110,10 +114,52 @@ class CacheAllocator(ABC):
     def allocate_cache_to_request(self, request_id: str, past_length: int, query_length: int) -> None:
         """Allocates the cache to the request."""
 
+    def _can_free_block(self, block_id: int) -> bool:
+        """Returns True if the block can be freed, False otherwise. Also decrements the reference count of the block."""
+        new_ref_count = self.ref_counts.pop(block_id, 1) - 1
+        if new_ref_count > 1:
+            self.ref_counts[block_id] = new_ref_count
+        return new_ref_count == 0
+
     def free_blocks(self, request_id: str) -> None:
-        """Mark the blocks owned by the request as free."""
-        block_ids = self.block_table.pop(request_id, [])
-        self.pool.free_blocks(self.index, block_ids)
+        """Marks the blocks owned by the request as free, or decrements their reference count if they are shared."""
+        blocks_ids = self.block_table.pop(request_id, [])
+        freed_blocks = list(filter(self._can_free_block, blocks_ids))
+        self.pool.free_blocks(self.index, freed_blocks)
+
+    def count_shareable_blocks(self, source_request_id: str, past_length: int) -> int:
+        """Counts the number of the source request's blocks a fork can share instead of copying."""
+        if not self.use_block_sharing:
+            return 0
+        return min(past_length // self.tokens_per_page, len(self.block_table[source_request_id]))
+
+    def count_non_shareable_blocks(self, source_request_id: str, past_length: int) -> int:
+        """Counts the number of fresh blocks a fork of the source request would need, i.e. its non-shareable blocks."""
+        num_blocks = len(self.block_table[source_request_id])
+        return num_blocks - self.count_shareable_blocks(source_request_id, past_length)
+
+    def fork_blocks(
+        self, source_request_id: str, dest_request_id: str, past_length: int
+    ) -> tuple[list[int], list[int]]:
+        """Builds the block table of a fork of the source request: fully-written blocks are shared (their reference
+        count increases) if allowed, and others are backed by fresh blocks. Returns the (source, destination) block
+        id pairs which content the caller must copy."""
+        source_table = self.block_table[source_request_id]
+        num_shared = self.count_shareable_blocks(source_request_id, past_length)
+        # It's always the first num_shared blocks that are shareable, so the rest we have to copy
+        shared_blocks, blocks_to_copy = source_table[:num_shared], source_table[num_shared:]
+        for block_id in shared_blocks:
+            self.ref_counts[block_id] = self.ref_counts.get(block_id, 1) + 1
+        fresh_blocks = self.pool.get_free_blocks(self.index, len(blocks_to_copy))
+        self.block_table[dest_request_id] = shared_blocks + fresh_blocks
+        return blocks_to_copy, fresh_blocks
+
+    def copy_blocks(self, source_block_ids: list[int], dest_block_ids: list[int]) -> None:
+        """Copies whole blocks (keys and values of every layer of the group) inside the cache tensor."""
+        device = self._copy_view.device
+        source = torch.tensor(source_block_ids, device=device, dtype=torch.long)
+        dest = torch.tensor(dest_block_ids, device=device, dtype=torch.long)
+        self._copy_view.index_copy_(0, dest, self._copy_view.index_select(0, source))
 
     def free_all_requests(self) -> None:
         """Mark all blocks owned by all requests as free."""
