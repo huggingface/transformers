@@ -1,0 +1,359 @@
+# Copyright 2026 OpenMOSS and The HuggingFace Inc. team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+"""Testing suite for the PyTorch MOSS-TTS Delay model."""
+
+import tempfile
+import unittest
+
+from transformers import is_torch_available
+from transformers.testing_utils import cleanup, require_torch, require_torch_accelerator, slow, torch_device
+
+from ...test_configuration_common import ConfigTester
+
+
+if is_torch_available():
+    import torch
+
+    from transformers import (
+        AutoConfig,
+        AutoModel,
+        AutoModelForTextToWaveform,
+        AutoTokenizer,
+        MossTTSDelayConfig,
+        MossTTSDelayModel,
+        MossTTSDelayProcessor,
+    )
+    from transformers.models.moss_tts_delay.convert_moss_tts_delay_to_hf import convert_config
+
+
+class MossTTSDelayModelTester:
+    def __init__(
+        self,
+        parent,
+        batch_size=2,
+        seq_length=5,
+        n_codebooks=2,
+        codebook_size=16,
+        text_vocab_size=99,
+        hidden_size=32,
+    ):
+        self.parent = parent
+        self.batch_size = batch_size
+        self.seq_length = seq_length
+        self.n_codebooks = n_codebooks
+        self.codebook_size = codebook_size
+        self.text_vocab_size = text_vocab_size
+        self.hidden_size = hidden_size
+
+    def get_config(self):
+        return MossTTSDelayConfig(
+            language_config={
+                "vocab_size": self.text_vocab_size,
+                "hidden_size": self.hidden_size,
+                "intermediate_size": 64,
+                "num_hidden_layers": 2,
+                "num_attention_heads": 4,
+                "num_key_value_heads": 4,
+                "max_position_embeddings": 64,
+                "use_cache": True,
+                "tie_word_embeddings": False,
+            },
+            n_codebooks=self.n_codebooks,
+            codebook_size=self.codebook_size,
+            codebook_pad_token_id=self.codebook_size,
+            pad_token_id=0,
+            im_start_token_id=1,
+            im_end_token_id=2,
+            audio_start_token_id=3,
+            audio_end_token_id=4,
+            audio_user_slot_token_id=5,
+            audio_assistant_gen_slot_token_id=6,
+            audio_assistant_delay_slot_token_id=7,
+        )
+
+    def prepare_config_and_inputs(self):
+        config = self.get_config()
+        text_ids = torch.randint(
+            low=0,
+            high=config.vocab_size,
+            size=(self.batch_size, self.seq_length, 1),
+            device=torch_device,
+        )
+        audio_ids = torch.randint(
+            low=0,
+            high=config.codebook_size,
+            size=(self.batch_size, self.seq_length, config.n_codebooks),
+            device=torch_device,
+        )
+        input_ids = torch.cat([text_ids, audio_ids], dim=-1)
+        attention_mask = torch.ones((self.batch_size, self.seq_length), dtype=torch.bool, device=torch_device)
+        return config, input_ids, attention_mask
+
+    def prepare_config_and_inputs_for_common(self):
+        config, input_ids, attention_mask = self.prepare_config_and_inputs()
+        return config, {"input_ids": input_ids, "attention_mask": attention_mask}
+
+    def create_labels(self, input_ids):
+        labels = input_ids.clone()
+        labels[:, 0, :] = -100
+        return labels
+
+
+@require_torch
+class MossTTSDelayModelTest(unittest.TestCase):
+    all_model_classes = (MossTTSDelayModel,) if is_torch_available() else ()
+
+    def setUp(self):
+        self.model_tester = MossTTSDelayModelTester(self)
+        self.config_tester = ConfigTester(self, config_class=MossTTSDelayConfig, has_text_modality=False)
+
+    def test_config(self):
+        self.config_tester.run_common_tests()
+        config = self.model_tester.get_config()
+        self.assertEqual(config.model_type, "moss_tts_delay")
+        self.assertEqual(config.language_config.model_type, "qwen3")
+        self.assertEqual(config.hidden_size, config.language_config.hidden_size)
+        self.assertEqual(config.vocab_size, config.language_config.vocab_size)
+        self.assertEqual(config.n_codebooks, self.model_tester.n_codebooks)
+        self.assertEqual(config.codebook_size, self.model_tester.codebook_size)
+        self.assertEqual(config.codebook_pad_token_id, self.model_tester.codebook_size)
+        config_dict = config.to_dict()
+        self.assertIn("n_codebooks", config_dict)
+        self.assertIn("codebook_size", config_dict)
+        self.assertIn("codebook_pad_token_id", config_dict)
+        self.assertNotIn("n_vq", config_dict)
+        self.assertNotIn("audio_vocab_size", config_dict)
+        self.assertNotIn("audio_pad_code", config_dict)
+
+    def test_convert_config_renames_original_keys(self):
+        config = convert_config(
+            {
+                "language_config": {
+                    "vocab_size": self.model_tester.text_vocab_size,
+                    "hidden_size": self.model_tester.hidden_size,
+                    "intermediate_size": 64,
+                    "num_hidden_layers": 2,
+                    "num_attention_heads": 4,
+                    "num_key_value_heads": 4,
+                },
+                "n_vq": 3,
+                "audio_vocab_size": 17,
+                "audio_pad_code": 17,
+                "pad_token_id": 0,
+                "im_start_token_id": 1,
+                "im_end_token_id": 2,
+                "audio_start_token_id": 3,
+                "audio_end_token_id": 4,
+                "audio_user_slot_token_id": 5,
+                "audio_assistant_gen_slot_token_id": 6,
+                "audio_assistant_delay_slot_token_id": 7,
+            }
+        )
+
+        self.assertEqual(config.n_codebooks, 3)
+        self.assertEqual(config.codebook_size, 17)
+        self.assertEqual(config.codebook_pad_token_id, 17)
+        config_dict = config.to_dict()
+        self.assertNotIn("n_vq", config_dict)
+        self.assertNotIn("audio_vocab_size", config_dict)
+        self.assertNotIn("audio_pad_code", config_dict)
+
+    def test_model_from_config(self):
+        config = self.model_tester.get_config()
+        model = MossTTSDelayModel(config).to(torch_device).eval()
+        self.assertIsInstance(model, MossTTSDelayModel)
+        self.assertEqual(len(model.emb_ext), config.n_codebooks)
+        self.assertEqual(len(model.lm_heads), config.n_codebooks + 1)
+
+    def test_forward(self):
+        config, input_ids, attention_mask = self.model_tester.prepare_config_and_inputs()
+        model = MossTTSDelayModel(config).to(torch_device).eval()
+
+        with torch.no_grad():
+            outputs = model(input_ids=input_ids, attention_mask=attention_mask)
+
+        self.assertEqual(len(outputs.logits), config.n_codebooks + 1)
+        self.assertEqual(
+            outputs.logits[0].shape,
+            (self.model_tester.batch_size, self.model_tester.seq_length, config.vocab_size),
+        )
+        for logits in outputs.logits[1:]:
+            self.assertEqual(
+                logits.shape,
+                (self.model_tester.batch_size, self.model_tester.seq_length, config.codebook_size + 1),
+            )
+
+    def test_forward_with_labels(self):
+        config, input_ids, attention_mask = self.model_tester.prepare_config_and_inputs()
+        model = MossTTSDelayModel(config).to(torch_device).eval()
+        labels = self.model_tester.create_labels(input_ids)
+
+        outputs = model(input_ids=input_ids, attention_mask=attention_mask, labels=labels)
+
+        self.assertIsNotNone(outputs.loss)
+        self.assertEqual(outputs.all_sum_losses.shape, (self.model_tester.batch_size, config.n_codebooks + 1))
+        self.assertEqual(outputs.all_token_nums.shape, (self.model_tester.batch_size, config.n_codebooks + 1))
+        self.assertEqual(outputs.channel_losses.shape, (config.n_codebooks + 1,))
+
+    def test_forward_with_channelwise_loss_weight(self):
+        config, input_ids, attention_mask = self.model_tester.prepare_config_and_inputs()
+        model = MossTTSDelayModel(config).to(torch_device).eval()
+        labels = self.model_tester.create_labels(input_ids)
+        weights = [1.0] + [0.5] * config.n_codebooks
+
+        outputs = model(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            labels=labels,
+            channelwise_loss_weight=weights,
+        )
+
+        self.assertIsNotNone(outputs.loss)
+        self.assertEqual(outputs.sample_losses.shape, (self.model_tester.batch_size,))
+
+    def test_forward_rejects_wrong_input_rank(self):
+        config = self.model_tester.get_config()
+        model = MossTTSDelayModel(config).to(torch_device).eval()
+        input_ids = torch.zeros(
+            (self.model_tester.batch_size, self.model_tester.seq_length), dtype=torch.long, device=torch_device
+        )
+
+        with self.assertRaisesRegex(ValueError, "shape should be exactly"):
+            model(input_ids=input_ids)
+
+    def test_get_input_embeddings_standard_and_multichannel(self):
+        config, input_ids, _ = self.model_tester.prepare_config_and_inputs()
+        model = MossTTSDelayModel(config).to(torch_device).eval()
+
+        self.assertIs(model.get_input_embeddings(), model.language_model.get_input_embeddings())
+        inputs_embeds = model.get_input_embeddings(input_ids)
+        self.assertEqual(
+            inputs_embeds.shape,
+            (self.model_tester.batch_size, self.model_tester.seq_length, config.hidden_size),
+        )
+
+    def test_auto_classes(self):
+        config = self.model_tester.get_config()
+
+        self.assertIsInstance(AutoConfig.for_model("moss_tts_delay"), MossTTSDelayConfig)
+        self.assertIsInstance(AutoModel.from_config(config), MossTTSDelayModel)
+        self.assertIsInstance(AutoModelForTextToWaveform.from_config(config), MossTTSDelayModel)
+
+    def test_auto_classes_from_pretrained(self):
+        config = self.model_tester.get_config()
+        model = MossTTSDelayModel(config)
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            model.save_pretrained(tmp_dir)
+            loaded_config = AutoConfig.from_pretrained(tmp_dir)
+            loaded_model = AutoModel.from_pretrained(tmp_dir)
+            loaded_tta_model = AutoModelForTextToWaveform.from_pretrained(tmp_dir)
+
+        self.assertIsInstance(loaded_config, MossTTSDelayConfig)
+        self.assertIsInstance(loaded_model, MossTTSDelayModel)
+        self.assertIsInstance(loaded_tta_model, MossTTSDelayModel)
+
+
+@require_torch
+class MossTTSDelayIntegrationTest(unittest.TestCase):
+    model_id = "OpenMOSS-Team/MOSS-TTS-v1.5"
+
+    def setUp(self):
+        cleanup(torch_device, gc_collect=True)
+
+    def tearDown(self):
+        cleanup(torch_device, gc_collect=True)
+
+    @slow
+    @require_torch_accelerator
+    def test_model_logits(self):
+        config = AutoConfig.from_pretrained(self.model_id)
+        tokenizer = AutoTokenizer.from_pretrained(self.model_id)
+        processor = MossTTSDelayProcessor(tokenizer=tokenizer, model_config=config)
+        model = AutoModelForTextToWaveform.from_pretrained(self.model_id, dtype="auto", device_map="auto")
+
+        message = processor.build_user_message(text="The sun rises in the east.", language="English")
+        inputs = processor([message], mode="generation").to(model.device)
+
+        # Reference targets were produced with the original MOSS-TTS-v1.5 remote-code implementation.
+        expected_text_input_prefix = torch.tensor(
+            [151644, 872, 198, 27, 872, 17740, 397, 12, 17207, 1141], device=inputs.input_ids.device
+        )
+        expected_text_input_suffix = torch.tensor(
+            [624, 522, 872, 17740, 29, 151645, 198, 151644, 77091, 198], device=inputs.input_ids.device
+        )
+        self.assertEqual(inputs.input_ids.shape, (1, 64, config.n_codebooks + 1))
+        torch.testing.assert_close(inputs.input_ids[0, :10, 0], expected_text_input_prefix)
+        torch.testing.assert_close(inputs.input_ids[0, -10:, 0], expected_text_input_suffix)
+
+        with torch.no_grad():
+            outputs = model(**inputs)
+
+        self.assertEqual(len(outputs.logits), config.n_codebooks + 1)
+        self.assertEqual(outputs.logits[0].shape[:2], inputs.input_ids.shape[:2])
+        self.assertEqual(outputs.logits[0].shape[-1], config.vocab_size)
+        self.assertEqual(outputs.logits[1].shape[-1], config.codebook_size + 1)
+        self.assertTrue(torch.isfinite(outputs.logits[0][..., :10]).all().item())
+
+        expected_text_argmax = torch.tensor(
+            [151662, 151652, 151656, 151652, 151652, 151652, 151652, 151652],
+            device=outputs.logits[0].device,
+        )
+        expected_audio_argmax = torch.tensor(
+            [169, 746, 13, 845, 126, 818, 183, 409],
+            device=outputs.logits[1].device,
+        )
+        expected_text_logits_slice = torch.tensor(
+            [-368.0, -368.0, -366.0, -366.0, -366.0, -368.0, -366.0, -368.0],
+            device=outputs.logits[0].device,
+        )
+        torch.testing.assert_close(outputs.logits[0].argmax(-1)[0, -8:], expected_text_argmax)
+        torch.testing.assert_close(outputs.logits[1].argmax(-1)[0, -8:], expected_audio_argmax)
+        torch.testing.assert_close(
+            outputs.logits[0][0, -1, :8].float(), expected_text_logits_slice, atol=1e-3, rtol=1e-3
+        )
+
+    @slow
+    @require_torch_accelerator
+    def test_model_generation(self):
+        config = AutoConfig.from_pretrained(self.model_id)
+        tokenizer = AutoTokenizer.from_pretrained(self.model_id)
+        processor = MossTTSDelayProcessor(tokenizer=tokenizer, model_config=config)
+        model = AutoModelForTextToWaveform.from_pretrained(self.model_id, dtype="auto", device_map="auto")
+
+        message = processor.build_user_message(text="Hello.", language="English")
+        inputs = processor([message], mode="generation").to(model.device)
+
+        outputs = model.generate(
+            **inputs,
+            max_new_tokens=4,
+            text_temperature=0.0,
+            audio_temperature=0.0,
+        )
+
+        self.assertEqual(len(outputs), 1)
+        start_length, generated_ids = outputs[0]
+        expected_generated_ids = torch.tensor(
+            [
+                [151652] + [1024] * 32,
+                [151656, 1021] + [1024] * 31,
+                [151656, 545, 175] + [1024] * 30,
+                [151656, 141, 621, 760] + [1024] * 29,
+            ],
+            device=generated_ids.device,
+        )
+
+        self.assertEqual(start_length, 0)
+        self.assertEqual(generated_ids.shape, (4, config.n_codebooks + 1))
+        torch.testing.assert_close(generated_ids, expected_generated_ids)

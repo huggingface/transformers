@@ -128,6 +128,7 @@ MODALITY_TO_BASE_CLASS_MAPPING = {
     "audio_tokenizer": (
         "HiggsAudioV2TokenizerModel",
         "DacModel",
+        "MossAudioTokenizerModel",
     ),  # TODO: @eustlb, to be replaced with PreTrainedAudioTokenizerBase
     "audio_processor": "FeatureExtractionMixin",
     "tokenizer": ("PreTrainedTokenizerBase", "MistralCommonBackend"),
@@ -994,7 +995,15 @@ class ProcessorMixin(PushToHubMixin):
             argument_name = _get_modality_for_attribute(argument_name)
         class_name = MODALITY_TO_BASE_CLASS_MAPPING.get(argument_name)
         if isinstance(class_name, tuple):
-            proper_class = tuple(self.get_possibly_dynamic_module(n) for n in class_name if n is not None)
+            proper_classes = []
+            for name in class_name:
+                if name is None:
+                    continue
+                try:
+                    proper_classes.append(self.get_possibly_dynamic_module(name))
+                except (ModuleNotFoundError, RuntimeError, AttributeError, ImportError) as error:
+                    logger.debug(f"Could not import optional processor class {name}: {error}")
+            proper_class = tuple(proper_classes)
         else:
             proper_class = self.get_possibly_dynamic_module(class_name)
 
