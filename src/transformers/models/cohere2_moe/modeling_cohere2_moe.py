@@ -142,6 +142,7 @@ class Cohere2MoeTopKRouter(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.top_k = config.num_experts_per_tok
+        self.num_experts = config.num_experts
         self.expert_selection_fn = config.expert_selection_fn
         self.norm_topk_prob = config.norm_topk_prob
         self.weight = nn.Parameter(torch.empty(config.num_experts, config.hidden_size))
@@ -582,6 +583,7 @@ class Cohere2MoeForCausalLM(Cohere2MoePreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
     _tp_plan = {"lm_head": "colwise_gather_output"}
     _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
+    _fsdp_plan = {"lm_head": "keep_full_weight"}
 
     def __init__(self, config):
         super().__init__(config)

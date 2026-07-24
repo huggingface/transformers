@@ -299,6 +299,22 @@ def eager_attention_forward(
     return attn_output, attn_weights
 
 
+def yarn_get_mscale(scale=1, mscale=1):
+    if scale <= 1:
+        return 1.0
+    return 0.1 * mscale * math.log(scale) + 1.0
+
+
+def yarn_apply_mscale(rope_parameters, scaling):
+    if rope_parameters.get("rope_type", "default") != "default":
+        mscale_all_dim = rope_parameters.get("mscale_all_dim", 0)
+        scaling_factor = rope_parameters["factor"]
+        if mscale_all_dim:
+            mscale = yarn_get_mscale(scaling_factor, mscale_all_dim)
+            scaling = scaling * mscale * mscale
+    return scaling
+
+
 def apply_rotary_pos_emb_interleave(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
     r"""
     Applies interleaved Rotary Position Embedding to the query and key tensors.
@@ -336,12 +352,6 @@ def apply_rotary_pos_emb_interleave(q, k, cos, sin, position_ids=None, unsqueeze
     q_embed = torch.cat([q1 * cos - q2 * sin, q2 * cos + q1 * sin], dim=-1)
     k_embed = torch.cat([k1 * cos - k2 * sin, k2 * cos + k1 * sin], dim=-1)
     return q_embed, k_embed
-
-
-def yarn_get_mscale(scale=1, mscale=1):
-    if scale <= 1:
-        return 1.0
-    return 0.1 * mscale * math.log(scale) + 1.0
 
 
 class DeepseekV32Attention(nn.Module):
@@ -392,13 +402,19 @@ class DeepseekV32Attention(nn.Module):
         )
 
         self.scaling = self.qk_head_dim ** (-0.5)
-        if self.config.rope_parameters.get("rope_type", "default") != "default":
-            mscale_all_dim = self.config.rope_parameters.get("mscale_all_dim", 0)
-            scaling_factor = self.config.rope_parameters["factor"]
-            if mscale_all_dim:
-                mscale = yarn_get_mscale(scaling_factor, mscale_all_dim)
-                self.scaling = self.scaling * mscale * mscale
+        self.scaling = yarn_apply_mscale(config.rope_parameters, self.scaling)
         self.indexer = DeepseekV32Indexer(config, layer_idx)
+
+    def expand_kv(self, k_nope: torch.Tensor, k_pe: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+        key_shape = (*k_nope.shape[:-1], -1, self.qk_nope_head_dim + self.v_head_dim)
+
+        k_nope = self.kv_b_proj(k_nope).view(key_shape).transpose(1, 2)
+        k_nope, value_states = torch.split(k_nope, [self.qk_nope_head_dim, self.v_head_dim], dim=-1)
+
+        k_pe = k_pe.expand(*k_nope.shape[:-1], -1)
+        key_states = torch.cat((k_nope, k_pe), dim=-1)
+
+        return key_states, value_states
 
     def forward(
         self,
@@ -411,24 +427,22 @@ class DeepseekV32Attention(nn.Module):
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
         batch_size, seq_length = hidden_states.shape[:-1]
         query_shape = (batch_size, seq_length, -1, self.qk_head_dim)
-        key_shape = (batch_size, seq_length, -1, self.qk_nope_head_dim + self.v_head_dim)
 
         q_resid = self.q_a_layernorm(self.q_a_proj(hidden_states))
         q_states = self.q_b_proj(q_resid).view(query_shape).transpose(1, 2)
         q_pass, q_rot = torch.split(q_states, [self.qk_nope_head_dim, self.qk_rope_head_dim], dim=-1)
 
         compressed_kv = self.kv_a_proj_with_mqa(hidden_states)
-        k_pass, k_rot = torch.split(compressed_kv, [self.kv_lora_rank, self.qk_rope_head_dim], dim=-1)
-        k_pass = self.kv_b_proj(self.kv_a_layernorm(k_pass)).view(key_shape).transpose(1, 2)
-        k_pass, value_states = torch.split(k_pass, [self.qk_nope_head_dim, self.v_head_dim], dim=-1)
+        kv_pass, k_rot = torch.split(compressed_kv, [self.kv_lora_rank, self.qk_rope_head_dim], dim=-1)
+        k_pass = self.kv_a_layernorm(kv_pass)
 
         k_rot = k_rot.view(batch_size, 1, seq_length, self.qk_rope_head_dim)
         cos, sin = position_embeddings
         q_rot, k_rot = apply_rotary_pos_emb_interleave(q_rot, k_rot, cos, sin)
-        k_rot = k_rot.expand(*k_pass.shape[:-1], -1)
 
         query_states = torch.cat((q_pass, q_rot), dim=-1)
-        key_states = torch.cat((k_pass, k_rot), dim=-1)
+
+        key_states, value_states = self.expand_kv(k_pass, k_rot)
 
         if past_key_values is not None:
             key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
@@ -494,25 +508,46 @@ class DeepseekV32MLP(nn.Module):
 class DeepseekV32TopkRouter(nn.Module):
     def __init__(self, config: DeepseekV32Config):
         super().__init__()
-        self.config = config
         self.top_k = config.num_experts_per_tok
-        self.n_routed_experts = config.n_routed_experts
+        self.num_experts = config.num_local_experts
+        self.hidden_dim = config.hidden_size
+        self.weight = nn.Parameter(torch.zeros(self.num_experts, self.hidden_dim))
         self.routed_scaling_factor = config.routed_scaling_factor
-        self.n_group = config.n_group
+        self.num_group = config.n_group
         self.topk_group = config.topk_group
         self.norm_topk_prob = config.norm_topk_prob
-
-        self.weight = nn.Parameter(torch.empty((self.n_routed_experts, config.hidden_size)))
-        self.register_buffer("e_score_correction_bias", torch.zeros((self.n_routed_experts), dtype=torch.float32))
+        self.register_buffer("e_score_correction_bias", torch.zeros((self.num_experts), dtype=torch.float32))
 
     def forward(self, hidden_states):
-        hidden_states = hidden_states.view(-1, self.config.hidden_size)
+        hidden_states = hidden_states.view(-1, self.hidden_dim)
         router_logits = F.linear(hidden_states.type(torch.float32), self.weight.type(torch.float32))
-        return router_logits
+        scores = router_logits.sigmoid()
+        scores_for_choice = scores + self.e_score_correction_bias
+        group_scores = (
+            scores_for_choice.view(-1, self.num_group, self.num_experts // self.num_group)
+            .topk(2, dim=-1)[0]
+            .sum(dim=-1)
+        )
+        group_idx = torch.topk(group_scores, k=self.topk_group, dim=-1, sorted=False)[1]
+        group_mask = torch.zeros_like(group_scores)
+        group_mask.scatter_(1, group_idx, 1)
+        score_mask = (
+            group_mask.unsqueeze(-1)
+            .expand(-1, self.num_group, self.num_experts // self.num_group)
+            .reshape(-1, self.num_experts)
+        )
+        scores_for_choice = scores_for_choice.masked_fill(~score_mask.bool(), float("-inf"))
+        topk_indices = torch.topk(scores_for_choice, k=self.top_k, dim=-1, sorted=False)[1]
+        topk_weights = scores.gather(1, topk_indices)
+        if self.norm_topk_prob:
+            denominator = topk_weights.sum(dim=-1, keepdim=True) + 1e-20
+            topk_weights /= denominator
+        topk_weights = topk_weights * self.routed_scaling_factor
+        return router_logits, topk_weights, topk_indices
 
 
 @use_experts_implementation
-class DeepseekV32NaiveMoe(nn.Module):
+class DeepseekV32Experts(nn.Module):
     """Collection of expert weights stored as 3D tensors."""
 
     def __init__(self, config):
@@ -556,51 +591,19 @@ class DeepseekV32MoE(nn.Module):
     A mixed expert module containing shared experts.
     """
 
-    def __init__(self, config):
+    def __init__(self, config: DeepseekV32Config):
         super().__init__()
         self.config = config
-        self.experts = DeepseekV32NaiveMoe(config)
+        self.experts = DeepseekV32Experts(config)
         self.gate = DeepseekV32TopkRouter(config)
         self.shared_experts = DeepseekV32MLP(
             config=config, intermediate_size=config.moe_intermediate_size * config.n_shared_experts
         )
-        self.n_routed_experts = config.n_routed_experts
-        self.n_group = config.n_group
-        self.topk_group = config.topk_group
-        self.norm_topk_prob = config.norm_topk_prob
-        self.routed_scaling_factor = config.routed_scaling_factor
-        self.top_k = config.num_experts_per_tok
 
-    def route_tokens_to_experts(self, router_logits):
-        router_logits = router_logits.sigmoid()
-        router_logits_for_choice = router_logits + self.gate.e_score_correction_bias
-        group_scores = (
-            router_logits_for_choice.view(-1, self.n_group, self.n_routed_experts // self.n_group)
-            .topk(2, dim=-1)[0]
-            .sum(dim=-1)
-        )
-        group_idx = torch.topk(group_scores, k=self.topk_group, dim=-1, sorted=False)[1]
-        group_mask = torch.zeros_like(group_scores)
-        group_mask.scatter_(1, group_idx, 1)
-        score_mask = (
-            group_mask.unsqueeze(-1)
-            .expand(-1, self.n_group, self.n_routed_experts // self.n_group)
-            .reshape(-1, self.n_routed_experts)
-        )
-        scores_for_choice = router_logits_for_choice.masked_fill(~score_mask.bool(), float("-inf"))
-        topk_indices = torch.topk(scores_for_choice, k=self.top_k, dim=-1, sorted=False)[1]
-        topk_weights = router_logits.gather(1, topk_indices)
-        if self.norm_topk_prob:
-            denominator = topk_weights.sum(dim=-1, keepdim=True) + 1e-20
-            topk_weights /= denominator
-        topk_weights = topk_weights * self.routed_scaling_factor
-        return topk_indices, topk_weights
-
-    def forward(self, hidden_states):
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         residuals = hidden_states
         orig_shape = hidden_states.shape
-        router_logits = self.gate(hidden_states)
-        topk_indices, topk_weights = self.route_tokens_to_experts(router_logits)
+        _, topk_weights, topk_indices = self.gate(hidden_states)
         hidden_states = hidden_states.view(-1, hidden_states.shape[-1])
         hidden_states = self.experts(hidden_states, topk_indices, topk_weights).view(*orig_shape)
         hidden_states = hidden_states + self.shared_experts(residuals)
@@ -680,7 +683,7 @@ class DeepseekV32PreTrainedModel(PreTrainedModel):
         if isinstance(module, DeepseekV32TopkRouter):
             init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
             init.zeros_(module.e_score_correction_bias)
-        elif isinstance(module, DeepseekV32NaiveMoe):
+        elif isinstance(module, DeepseekV32Experts):
             init.normal_(module.gate_up_proj, mean=0.0, std=self.config.initializer_range)
             init.normal_(module.down_proj, mean=0.0, std=self.config.initializer_range)
 
@@ -730,21 +733,24 @@ class DeepseekV32Model(DeepseekV32PreTrainedModel):
             position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
             position_ids = position_ids.unsqueeze(0)
 
-        causal_mask = create_causal_mask(
-            config=self.config,
-            inputs_embeds=inputs_embeds,
-            attention_mask=attention_mask,
-            past_key_values=past_key_values,
-            position_ids=position_ids,
-        )
+        # It may already have been prepared by e.g. `generate`
+        if not isinstance(causal_mask_mapping := attention_mask, dict):
+            mask_kwargs = {
+                "config": self.config,
+                "inputs_embeds": inputs_embeds,
+                "attention_mask": attention_mask,
+                "past_key_values": past_key_values,
+                "position_ids": position_ids,
+            }
+            causal_mask_mapping = {"deepseek_sparse_attention": create_causal_mask(**mask_kwargs)}
 
         hidden_states = inputs_embeds
         position_embeddings = self.rotary_emb(hidden_states, position_ids=position_ids)
 
-        for decoder_layer in self.layers[: self.config.num_hidden_layers]:
+        for i, decoder_layer in enumerate(self.layers[: self.config.num_hidden_layers]):
             hidden_states = decoder_layer(
                 hidden_states,
-                attention_mask=causal_mask,
+                attention_mask=causal_mask_mapping[self.config.layer_types[i]],
                 position_embeddings=position_embeddings,
                 position_ids=position_ids,
                 past_key_values=past_key_values,

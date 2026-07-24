@@ -36,10 +36,14 @@ from ...configuration_utils import PreTrainedConfig
 from ...generation import GenerationMixin
 from ...integrations import use_experts_implementation
 from ...masking_utils import (
+    _preprocess_mask_arguments,
+    blockwise_overlay,
     create_bidirectional_mask,
     create_causal_mask,
     create_masks_for_generate,
     create_sliding_window_causal_mask,
+    maybe_pad_block_sequence_ids,
+    sliding_window_overlay,
 )
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
@@ -201,7 +205,7 @@ class Gemma4RMSNorm(nn.Module):
 
     def _norm(self, hidden_states: torch.Tensor):
         mean_squared = hidden_states.pow(2).mean(-1, keepdim=True) + self.eps
-        # Use torch.pow() (over torch.sqrt() or torch.rsqrt()) to addess compiler differences between Torch and JAX
+        # Use torch.pow() (over torch.sqrt() or torch.rsqrt()) to address compiler differences between Torch and JAX
         return hidden_states * torch.pow(mean_squared, -0.5)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
@@ -610,7 +614,9 @@ class Gemma4VisionPatchEmbedder(nn.Module):
     ) -> torch.Tensor:
         # Gemma4 applies no normalization and instead scales in model code
         pixel_values = 2 * (pixel_values - 0.5)
-        hidden_states = self.input_proj(pixel_values.to(self.input_proj.weight.dtype))
+        if (target_dtype := self.input_proj.weight.dtype).is_floating_point:
+            pixel_values = pixel_values.to(target_dtype)
+        hidden_states = self.input_proj(pixel_values)
         position_embeddings = self._position_embeddings(pixel_position_ids, padding_positions)
         return hidden_states + position_embeddings
 
@@ -1110,11 +1116,10 @@ class Gemma4TextRotaryEmbedding(nn.Module):
             self.rope_init_fns[layer_type] = rope_init_fn
             self.rope_type[layer_type] = rope_type
 
-            rope_init_fn_kwargs = {"device": device, "layer_type": layer_type}
-            if layer_type == "full_attention" and rope_type == "proportional":
-                rope_init_fn_kwargs["head_dim_key"] = "global_head_dim"
-
-            curr_inv_freq, curr_attention_scaling = rope_init_fn(self.config, **rope_init_fn_kwargs)
+            # `inv_freq` depends on the head dim, which varies by layer type, so initialise
+            # from a config resolved for this layer type rather than the global one.
+            rope_config = config.per_layer_config[layer_type]
+            curr_inv_freq, curr_attention_scaling = rope_init_fn(rope_config, device=device, layer_type=layer_type)
             self.register_buffer(f"{layer_type}_inv_freq", curr_inv_freq, persistent=False)
             self.register_buffer(f"{layer_type}_original_inv_freq", curr_inv_freq.clone(), persistent=False)
             setattr(self, f"{layer_type}_attention_scaling", curr_attention_scaling)
@@ -1185,12 +1190,10 @@ class Gemma4TextAttention(nn.Module):
         self.is_sliding = self.layer_type == "sliding_attention"
         self.sliding_window = config.sliding_window if self.is_sliding else None
 
-        self.head_dim = config.global_head_dim if not self.is_sliding and config.global_head_dim else config.head_dim
+        layer_config = config.per_layer_config[layer_idx]
+        self.head_dim = layer_config.head_dim
         self.use_alternative_attention = config.attention_k_eq_v and not self.is_sliding
-        num_key_value_heads = (
-            config.num_global_key_value_heads if self.use_alternative_attention else config.num_key_value_heads
-        )
-        self.num_key_value_groups = config.num_attention_heads // num_key_value_heads
+        self.num_key_value_groups = config.num_attention_heads // layer_config.num_key_value_heads
         self.scaling = 1.0
         self.attention_dropout = self.config.attention_dropout
         self.is_causal = config.use_bidirectional_attention != "all"
@@ -1214,10 +1217,12 @@ class Gemma4TextAttention(nn.Module):
             self.v_norm = Gemma4RMSNorm(self.head_dim, eps=config.rms_norm_eps, with_scale=False)
 
             self.k_proj = nn.Linear(
-                config.hidden_size, num_key_value_heads * self.head_dim, bias=config.attention_bias
+                config.hidden_size, layer_config.num_key_value_heads * self.head_dim, bias=config.attention_bias
             )
             self.v_proj = (
-                nn.Linear(config.hidden_size, num_key_value_heads * self.head_dim, bias=config.attention_bias)
+                nn.Linear(
+                    config.hidden_size, layer_config.num_key_value_heads * self.head_dim, bias=config.attention_bias
+                )
                 if not self.use_alternative_attention
                 else None
             )
@@ -1348,7 +1353,8 @@ class Gemma4TextRouter(nn.Module):
         hidden_states = hidden_states * self.scale * self.scalar_root_size
 
         expert_scores = self.proj(hidden_states)  # [B*S, E]
-        router_probabilities = nn.functional.softmax(expert_scores, dim=-1)
+        # fp32 for numerical stability
+        router_probabilities = nn.functional.softmax(expert_scores, dim=-1, dtype=torch.float32)
 
         # topk returns both values (probabilities) and indices directly
         top_k_weights, top_k_index = torch.topk(
@@ -1507,11 +1513,8 @@ class Gemma4PreTrainedModel(PreTrainedModel):
             init.zeros_(module.per_dim_scale)
         elif isinstance(module, Gemma4TextRotaryEmbedding):
             for layer_type, rope_init_fn in module.rope_init_fns.items():
-                rope_init_fn_kwargs = {"layer_type": layer_type}
-                if layer_type == "full_attention" and module.rope_type[layer_type] == "proportional":
-                    rope_init_fn_kwargs["head_dim_key"] = "global_head_dim"
-
-                curr_inv_freq, _ = rope_init_fn(module.config, **rope_init_fn_kwargs)
+                rope_config = module.config.per_layer_config[layer_type]
+                curr_inv_freq, _ = rope_init_fn(rope_config, layer_type=layer_type)
                 init.copy_(getattr(module, f"{layer_type}_inv_freq"), curr_inv_freq)
                 init.copy_(getattr(module, f"{layer_type}_original_inv_freq"), curr_inv_freq)
         elif isinstance(module, Gemma4VisionRotaryEmbedding):
@@ -1859,8 +1862,8 @@ class Gemma4ForCausalLM(Gemma4PreTrainedModel, GenerationMixin):
         ```python
         >>> from transformers import AutoTokenizer, Gemma4ForCausalLM
 
-        >>> model = Gemma4ForCausalLM.from_pretrained("google/gemma-2-9b")
-        >>> tokenizer = AutoTokenizer.from_pretrained("google/gemma-2-9b")
+        >>> model = Gemma4ForCausalLM.from_pretrained("google/gemma-4-E2B-it")
+        >>> tokenizer = AutoTokenizer.from_pretrained("google/gemma-4-E2B-it")
 
         >>> prompt = "What is your favorite condiment?"
         >>> inputs = tokenizer(prompt, return_tensors="pt")
@@ -2102,6 +2105,61 @@ class Gemma4MultimodalEmbedder(nn.Module):
         return self.embedding_projection(embs_normed)
 
 
+def create_masks_for_vision_model(
+    config: PreTrainedConfig,
+    inputs_embeds: torch.Tensor,
+    attention_mask: torch.Tensor | None,
+    past_key_values: Cache | None,
+    position_ids: torch.Tensor | None,
+    block_sequence_ids: torch.Tensor,
+) -> dict:
+    """Create full_attention and sliding_attention masks with correct composition.
+
+    For global (full attention) layers:  causal only (no bidirectional)
+    For local (sliding window) layers:  AND(sliding_window, OR(causal, blockwise))
+
+    Unlike Gemma 3 (which applies bidirectional attention on all layers), Gemma 4
+    explicitly disables bidirectional attention on global attention layers.
+    """
+    mask_kwargs = {
+        "config": config,
+        "inputs_embeds": inputs_embeds,
+        "attention_mask": attention_mask,
+        "past_key_values": past_key_values,
+        "position_ids": position_ids,
+    }
+
+    # Full attention: causal only — no bidirectional blockwise overlay.
+    full_mask = create_causal_mask(**mask_kwargs)
+
+    # We need to manually pad the sequence IDs for the sliding mask
+    # as it's passed as an `or_mask_function` which bypasses internal padding.
+    early_exit, _, _, _, kv_length, _, kv_offset = _preprocess_mask_arguments(
+        **mask_kwargs,
+        layer_idx=0,
+    )
+    if early_exit:
+        padded_block_sequence_ids = block_sequence_ids
+    else:
+        padded_block_sequence_ids = maybe_pad_block_sequence_ids(
+            block_sequence_ids, attention_mask, kv_length, kv_offset
+        )
+
+    # Sliding attention: AND(sliding_window, OR(causal, blockwise))
+    # Pass blockwise as or_mask_function (applied as step 2 in create_causal_mask)
+    # Pass sliding_window as and_mask_function (applied as step 3, after OR)
+    sliding_mask = create_causal_mask(
+        **mask_kwargs,
+        or_mask_function=blockwise_overlay(padded_block_sequence_ids),
+        and_mask_function=sliding_window_overlay(config.sliding_window),
+    )
+
+    return {
+        "full_attention": full_mask,
+        "sliding_attention": sliding_mask,
+    }
+
+
 def get_block_sequence_ids_for_mask(mm_token_type_ids: torch.Tensor, device: torch.device) -> torch.Tensor:
     mm_token_type_ids = mm_token_type_ids.to(device)
 
@@ -2163,7 +2221,13 @@ class Gemma4Model(Gemma4PreTrainedModel):
             **kwargs,
         )
         last_hidden_state = vision_outputs.last_hidden_state
-        vision_outputs.pooler_output = self.embed_vision(inputs_embeds=last_hidden_state)
+        pooler_output = self.embed_vision(inputs_embeds=last_hidden_state)
+
+        output_length = pixel_values.shape[-2] // (self.config.vision_config.pooling_kernel_size**2)
+        k_squared = int((image_position_ids.shape[1] // output_length) ** 0.5) ** 2
+        non_pad_mask = (image_position_ids != -1).all(dim=-1)
+        split_sizes = (non_pad_mask.sum(dim=-1) // k_squared).tolist()
+        vision_outputs.pooler_output = torch.split(pooler_output, split_sizes)
         return vision_outputs
 
     def get_placeholder_mask(
@@ -2273,7 +2337,7 @@ class Gemma4Model(Gemma4PreTrainedModel):
         # Merge text and images
         if pixel_values is not None:
             image_features = self.get_image_features(pixel_values, image_position_ids, return_dict=True).pooler_output
-            image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
+            image_features = torch.cat(image_features, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
 
             # Confirm the number of soft tokens from the vision tower matches the number of slots in the embeddings.
             n_image_tokens = image_mask.sum()
@@ -2327,7 +2391,7 @@ class Gemma4Model(Gemma4PreTrainedModel):
             )
 
             inputs_embeds = inputs_embeds.masked_scatter(
-                audio_mask.to(inputs_embeds.device), audio_features.to(inputs_embeds.device)
+                audio_mask.to(inputs_embeds.device), audio_features.to(inputs_embeds.device, inputs_embeds.dtype)
             )
 
         # It may already have been prepared by, e.g., `generate`
@@ -2345,19 +2409,19 @@ class Gemma4Model(Gemma4PreTrainedModel):
                 "position_ids": position_ids,
             }
 
-            # Larger Gemma 4 models use Gemma 3's bidirectional attention mask for vision inputs
-            # Smaller Gemma models use a conventional casual attention mask
-            if self.config.get_text_config().use_bidirectional_attention == "vision":
-                block_sequence_ids = torch.full([*inputs_embeds.size()[:-1]], -1, device=inputs_embeds.device)
-                if mm_token_type_ids is not None:
-                    block_sequence_ids = get_block_sequence_ids_for_mask(
-                        mm_token_type_ids, device=inputs_embeds.device
-                    )
+            text_config = self.config.get_text_config()
+            use_bidir = text_config.use_bidirectional_attention == "vision"
 
-                mask_kwargs["block_sequence_ids"] = block_sequence_ids
-
-            # Create the masks
-            causal_mask_mapping = create_masks_for_generate(**mask_kwargs)
+            if use_bidir and mm_token_type_ids is not None:
+                block_sequence_ids = get_block_sequence_ids_for_mask(mm_token_type_ids, device=inputs_embeds.device)
+                causal_mask_mapping = create_masks_for_vision_model(
+                    block_sequence_ids=block_sequence_ids,
+                    **mask_kwargs,
+                )
+            else:
+                # Smaller Gemma models (use_bidirectional_attention=None) or
+                # text-only inputs use standard causal masking
+                causal_mask_mapping = create_masks_for_generate(**mask_kwargs)
 
         outputs = self.language_model(
             per_layer_inputs=per_layer_inputs,
@@ -2425,14 +2489,20 @@ class Gemma4Model(Gemma4PreTrainedModel):
             Passed through to the vision encoder for positional embedding computation.
         """
         pixel_values_videos = pixel_values_videos.flatten(0, 1)
-        video_position_ids = video_position_ids.flatten(0, 1)
         vision_outputs = self.vision_tower(
             pixel_values=pixel_values_videos,
-            pixel_position_ids=video_position_ids,
+            pixel_position_ids=video_position_ids.flatten(0, 1),
             **kwargs,
         )
         last_hidden_state = vision_outputs.last_hidden_state
-        vision_outputs.pooler_output = self.embed_vision(inputs_embeds=last_hidden_state)
+        pooler_output = self.embed_vision(inputs_embeds=last_hidden_state)
+
+        output_length = pixel_values_videos.shape[-2] // (self.config.vision_config.pooling_kernel_size**2)
+        k_squared = int((pixel_values_videos.shape[-2] // output_length) ** 0.5) ** 2
+        non_pad_mask = (video_position_ids != -1).all(dim=-1)
+        split_sizes = (non_pad_mask.sum(dim=(-2, -1)) // k_squared).tolist()
+
+        vision_outputs.pooler_output = torch.split(pooler_output, split_sizes)
         return vision_outputs
 
 
@@ -2622,14 +2692,15 @@ class Gemma4ForConditionalGeneration(Gemma4PreTrainedModel, GenerationMixin):
             "position_ids": position_ids,
         }
 
-        # Larger Gemma 4 models use Gemma 3's bidirectional attention mask for vision inputs
-        # Smaller Gemma models use a conventional casual attention mask
-        if getattr(config.get_text_config(), "use_bidirectional_attention", None) == "vision":
-            block_sequence_ids = torch.full([*inputs_embeds.size()[:-1]], -1, device=inputs_embeds.device)
-            if mm_token_type_ids is not None:
-                block_sequence_ids = get_block_sequence_ids_for_mask(mm_token_type_ids, device=inputs_embeds.device)
+        text_config = config.get_text_config()
+        use_bidir = getattr(text_config, "use_bidirectional_attention", None) == "vision"
 
-            mask_kwargs["block_sequence_ids"] = block_sequence_ids
+        if use_bidir and mm_token_type_ids is not None:
+            block_sequence_ids = get_block_sequence_ids_for_mask(mm_token_type_ids, device=inputs_embeds.device)
+            return create_masks_for_vision_model(
+                block_sequence_ids=block_sequence_ids,
+                **mask_kwargs,
+            )
 
         return create_masks_for_generate(**mask_kwargs)
 

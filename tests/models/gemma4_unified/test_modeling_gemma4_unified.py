@@ -69,6 +69,8 @@ def _normalize_text(text):
 
 
 class Gemma4UnifiedTextModelTester(CausalLMModelTester):
+    forced_config_args = ["pad_token_id", "per_layer_config"]
+
     if is_torch_available():
         config_class = Gemma4UnifiedTextConfig
         base_model_class = Gemma4UnifiedTextModel
@@ -84,7 +86,11 @@ class Gemma4UnifiedTextModelTester(CausalLMModelTester):
             "sliding_attention",
             "full_attention",
         ]  # similarly we want to test sharing on both types
-        self.global_head_dim = self.head_dim  # gemma4 use a different head_dim for full and sliding layers
+        self.per_layer_config = {
+            layer_idx: {"head_dim": 2 * self.head_dim}
+            for layer_idx, layer_type in enumerate(self.layer_types)
+            if layer_type == "full_attention"
+        }  # gemma4 use a different head_dim for full and sliding layers
 
         # Test if bidirectional image mask path works
         self.use_bidirectional_attention = "vision"
@@ -202,7 +208,7 @@ class Gemma4UnifiedAudio2TextModelTester:
 
     def prepare_config_and_inputs(self):
         input_features = floats_tensor([self.batch_size, self.audio_seq_length, self.audio_num_channels])
-        input_features_mask = torch.ones(self.batch_size, self.audio_seq_length, dtype=torch.bool)
+        input_features_mask = torch.ones(self.batch_size, self.audio_seq_length, dtype=torch.bool, device=torch_device)
         config = self.get_config()
         return config, input_features, input_features_mask
 

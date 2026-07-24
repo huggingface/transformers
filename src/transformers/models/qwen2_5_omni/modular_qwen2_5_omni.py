@@ -44,11 +44,20 @@ from ...utils import (
     torch_compilable_check,
 )
 from ...utils.deprecation import deprecate_kwarg
-from ...utils.generic import accepts_precomputed_kwargs, is_flash_attention_requested, merge_with_config_defaults
+from ...utils.generic import (
+    accepts_precomputed_kwargs,
+    get_max_seqlen,
+    is_flash_attention_requested,
+    merge_with_config_defaults,
+)
 from ...utils.hub import cached_file
 from ...utils.output_capturing import capture_outputs
-from ...vision_utils import get_vision_cu_seqlens, get_vision_position_ids, get_vision_window_index
-from ..llama.modeling_llama import LlamaRotaryEmbedding, rotate_half
+from ...vision_utils import (
+    get_vision_attention_seqlens,
+    get_vision_position_ids,
+    get_vision_window_index,
+)
+from ..llama.modeling_llama import LlamaRotaryEmbedding, apply_rotary_pos_emb, rotate_half
 from ..qwen2_5_vl.configuration_qwen2_5_vl import Qwen2_5_VLVisionConfig
 from ..qwen2_5_vl.modeling_qwen2_5_vl import (
     Qwen2_5_VisionRotaryEmbedding,
@@ -760,14 +769,12 @@ class Qwen2_5OmniPreTrainedModel(Qwen2_5_VLPreTrainedModel):
     def _init_weights(self, module):
         PreTrainedModel._init_weights(self, module)
         if isinstance(module, SinusoidsPositionEmbedding):
-            log_timescale_increment = np.log(module.max_timescale) / (module.channels // 2 - 1)
-            inv_timescales = torch.exp(-log_timescale_increment * torch.arange(module.channels // 2).float())
-            scaled_time = torch.arange(module.length)[:, np.newaxis] * inv_timescales[np.newaxis, :]
-            init.copy_(module.positional_embedding, torch.cat([torch.sin(scaled_time), torch.cos(scaled_time)], dim=1))
-        elif isinstance(module, UpSample1d):
+            position_embeddings = module.compute_default_singular_positional_embedding()
+            init.copy_(module.positional_embedding, position_embeddings)
+        elif isinstance(module, Qwen2_5OmniUpSample1d):
             filter_tensor = kaiser_sinc_filter1d(0.5 / module.ratio, 0.6 / module.ratio, module.kernel_size)
             init.copy_(module.filter, filter_tensor)
-        elif isinstance(module, DownSample1d):
+        elif isinstance(module, Qwen2_5OmniDownSample1d):
             filter_tensor = kaiser_sinc_filter1d(module.cutoff, module.half_width, module.kernel_size)
             init.copy_(module.filter, filter_tensor)
         elif isinstance(module, Qwen2_5_VisionRotaryEmbedding):
@@ -1176,6 +1183,7 @@ class Qwen2_5OmniAudioAttention(nn.Module):
         self,
         hidden_states: torch.Tensor,
         cu_seqlens: torch.Tensor,
+        max_seqlen: int | None = None,
         **kwargs,
     ) -> torch.Tensor:
         """Input shape: Batch x Time x Channel"""
@@ -1196,7 +1204,7 @@ class Qwen2_5OmniAudioAttention(nn.Module):
 
         if is_flash_attention_requested(self.config):
             # Flash Attention: Use cu_seqlens for variable length attention
-            max_seqlen = (cu_seqlens[1:] - cu_seqlens[:-1]).max()
+            max_seqlen = get_max_seqlen(cu_seqlens, self.config, kwargs={"max_seqlen": max_seqlen})
             attn_output, _ = attention_interface(
                 self,
                 query_states,
@@ -1283,14 +1291,14 @@ class SinusoidsPositionEmbedding(nn.Module):
         self.max_timescale = max_timescale
         if channels % 2 != 0:
             raise ValueError("SinusoidsPositionEmbedding needs even channels input")
-        log_timescale_increment = np.log(max_timescale) / (channels // 2 - 1)
-        inv_timescales = torch.exp(-log_timescale_increment * torch.arange(channels // 2).float())
-        scaled_time = torch.arange(length)[:, np.newaxis] * inv_timescales[np.newaxis, :]
-        self.register_buffer(
-            "positional_embedding",
-            torch.cat([torch.sin(scaled_time), torch.cos(scaled_time)], dim=1),
-            persistent=False,
-        )
+        position_embedding = self.compute_default_singular_positional_embedding()
+        self.register_buffer("positional_embedding", position_embedding, persistent=False)
+
+    def compute_default_singular_positional_embedding(self):
+        log_timescale_increment = np.log(self.max_timescale) / (self.channels // 2 - 1)
+        inv_timescales = torch.exp(-log_timescale_increment * torch.arange(self.channels // 2).float())
+        scaled_time = torch.arange(self.length)[:, np.newaxis] * inv_timescales[np.newaxis, :]
+        return torch.cat([torch.sin(scaled_time), torch.cos(scaled_time)], dim=1)
 
     def forward(self, seqlen: int):
         return self.positional_embedding[:seqlen, :]
@@ -1363,6 +1371,7 @@ class Qwen2_5OmniAudioEncoder(Qwen2_5OmniPreTrainedModel):
         valid_indices = get_valid_indices(chunk_lengths, kwargs=kwargs)
         pool_indices = get_pool_indices(feature_lens, kwargs=kwargs)
         cu_seqlens = get_audio_cu_seqlens(chunk_lengths, kwargs=kwargs)
+        max_seqlen = get_max_seqlen(cu_seqlens, self.config, kwargs=kwargs)
 
         # Derive masks from chunk_lengths (traceable arithmetic + arange broadcasting)
         padded_feature = padded_feature.to(self.conv1.weight.dtype)
@@ -1382,6 +1391,7 @@ class Qwen2_5OmniAudioEncoder(Qwen2_5OmniPreTrainedModel):
             layer_outputs = encoder_layer(
                 hidden_states,
                 cu_seqlens=cu_seqlens,
+                max_seqlen=max_seqlen,
                 **kwargs,
             )
             hidden_states = layer_outputs[0]
@@ -1478,6 +1488,7 @@ class Qwen2_5OmniVisionAttention(nn.Module):
         hidden_states: torch.Tensor,
         cu_seqlens: torch.Tensor,
         position_embeddings: torch.Tensor | None = None,
+        max_seqlen: int | None = None,
         **kwargs,
     ) -> torch.Tensor:
         seq_length = hidden_states.shape[0]
@@ -1498,7 +1509,7 @@ class Qwen2_5OmniVisionAttention(nn.Module):
 
         if is_flash_attention_requested(self.config):
             # Flash Attention 2: Use cu_seqlens for variable length attention
-            max_seqlen = (cu_seqlens[1:] - cu_seqlens[:-1]).max()
+            max_seqlen = get_max_seqlen(cu_seqlens, self.config, kwargs={"max_seqlen": max_seqlen})
             attn_output, _ = attention_interface(
                 self,
                 query_states,
@@ -1599,13 +1610,16 @@ class Qwen2_5OmniVisionEncoder(Qwen2_5_VisionTransformerPretrainedModel):
             `torch.Tensor`: hidden_states.
         """
         position_ids = get_vision_position_ids(grid_thw, self.spatial_merge_size, kwargs=kwargs)
-        cu_seqlens = get_vision_cu_seqlens(grid_thw, kwargs=kwargs)
+        cu_seqlens, max_seqlen = get_vision_attention_seqlens(grid_thw, self.config, kwargs=kwargs)
         window_index, cu_window_seqlens = get_vision_window_index(
             grid_thw,
             spatial_merge_size=self.spatial_merge_size,
             window_size=self.window_size,
             patch_size=self.patch_size,
             kwargs=kwargs,
+        )
+        max_window_seqlen = get_max_seqlen(
+            cu_window_seqlens, self.config, kwargs=kwargs, kwarg_name="max_window_seqlen"
         )
 
         hidden_states = self.patch_embed(hidden_states)
@@ -1625,12 +1639,15 @@ class Qwen2_5OmniVisionEncoder(Qwen2_5_VisionTransformerPretrainedModel):
         for layer_num, blk in enumerate(self.blocks):
             if layer_num in self.fullatt_block_indexes:
                 cu_seqlens_now = cu_seqlens
+                max_seqlen_now = max_seqlen
             else:
                 cu_seqlens_now = cu_window_seqlens
+                max_seqlen_now = max_window_seqlen
 
             hidden_states = blk(
                 hidden_states,
                 cu_seqlens=cu_seqlens_now,
+                max_seqlen=max_seqlen_now,
                 position_embeddings=rotary_pos_emb,
                 **kwargs,
             )
@@ -1721,6 +1738,11 @@ class Qwen2_5OmniThinkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCo
     def set_input_embeddings(self, value):
         self.model.set_input_embeddings(value)
 
+    def get_decoder(self):
+        # `base_model_prefix = "thinker"` means `self.base_model` falls back to `self`, so
+        # the default `get_decoder` can't find the LLM. The text model lives on `self.model`.
+        return self.model
+
     @accepts_precomputed_kwargs(modality="video")
     @can_return_tuple
     @auto_docstring
@@ -1737,7 +1759,11 @@ class Qwen2_5OmniThinkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCo
             The temporal, height and width of feature shape of each video in LLM.
         """
         pixel_values_videos = pixel_values_videos.type(self.visual.dtype)
-        return self.visual(pixel_values_videos, grid_thw=video_grid_thw, **kwargs)
+        vision_outputs = self.visual(pixel_values_videos, grid_thw=video_grid_thw, **kwargs)
+        split_sizes = (video_grid_thw.prod(-1) // self.visual.spatial_merge_size**2).tolist()
+        video_embeds = torch.split(vision_outputs.pooler_output, split_sizes)
+        vision_outputs.pooler_output = list(video_embeds)
+        return vision_outputs
 
     @accepts_precomputed_kwargs(modality="image")
     @can_return_tuple
@@ -1755,7 +1781,11 @@ class Qwen2_5OmniThinkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCo
             The temporal, height and width of feature shape of each image in LLM.
         """
         pixel_values = pixel_values.type(self.visual.dtype)
-        return self.visual(pixel_values, grid_thw=image_grid_thw, **kwargs)
+        vision_outputs = self.visual(pixel_values, grid_thw=image_grid_thw, **kwargs)
+        split_sizes = (image_grid_thw.prod(-1) // self.visual.spatial_merge_size**2).tolist()
+        image_embeds = torch.split(vision_outputs.pooler_output, split_sizes)
+        vision_outputs.pooler_output = list(image_embeds)
+        return vision_outputs
 
     @can_return_tuple
     @auto_docstring
@@ -1936,7 +1966,7 @@ class Qwen2_5OmniThinkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCo
             image_embeds = self.get_image_features(
                 pixel_values, image_grid_thw, return_dict=True, **kwargs
             ).pooler_output
-            image_embeds = image_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
+            image_embeds = torch.cat(image_embeds, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
             image_mask, _, _ = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, image_features=image_embeds
             )
@@ -1946,7 +1976,7 @@ class Qwen2_5OmniThinkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCo
             video_embeds = self.get_video_features(
                 pixel_values_videos, video_grid_thw, return_dict=True, **kwargs
             ).pooler_output
-            video_embeds = video_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
+            video_embeds = torch.cat(video_embeds, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
             _, video_mask, _ = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, video_features=video_embeds
             )
@@ -2335,38 +2365,11 @@ class Qwen2_5OmniDiTRotaryEmbedding(LlamaRotaryEmbedding):
         )
 
 
-# Modified from Llama with a different rotate function, will fixed in next release
-def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
-    """Applies Rotary Position Embedding to the query and key tensors.
-
-    Args:
-        q (`torch.Tensor`): The query tensor.
-        k (`torch.Tensor`): The key tensor.
-        cos (`torch.Tensor`): The cosine part of the rotary embedding.
-        sin (`torch.Tensor`): The sine part of the rotary embedding.
-        unsqueeze_dim (`int`, *optional*, defaults to 1):
-            The 'unsqueeze_dim' argument specifies the dimension along which to unsqueeze cos[position_ids] and
-            sin[position_ids] so that they can be properly broadcasted to the dimensions of q and k. For example, note
-            that cos[position_ids] and sin[position_ids] have the shape [batch_size, seq_len, head_dim]. Then, if q and
-            k have the shape [batch_size, heads, seq_len, head_dim], then setting unsqueeze_dim=1 makes
-            cos[position_ids] and sin[position_ids] broadcastable to the shapes of q and k. Similarly, if q and k have
-            the shape [batch_size, seq_len, heads, head_dim], then set unsqueeze_dim=2.
-    Returns:
-        `tuple(torch.Tensor)` comprising of the query and key tensors rotated using the Rotary Position Embedding.
+def deinterleave_head_dim(x: torch.Tensor) -> torch.Tensor:
+    """Reorder the head dim from interleaved RoPE layout `(x0, x1, x2, x3, ...)` to the standard half-split layout
+    `(x0, x2, ..., x1, x3, ...)` so the kernelized `apply_rotary_pos_emb` can be used.
     """
-
-    def rotate_half_codec(x):
-        # x = rearrange(x, "... (d r) -> ... d r", r=2)
-        x = x.reshape(*x.shape[:-1], -1, 2)
-        x1, x2 = x.unbind(dim=-1)
-        x = torch.stack((-x2, x1), dim=-1)
-        return x.reshape(*x.shape[:-2], -1)
-
-    cos = cos.unsqueeze(unsqueeze_dim)
-    sin = sin.unsqueeze(unsqueeze_dim)
-    q_embed = (q * cos) + (rotate_half_codec(q) * sin)
-    k_embed = (k * cos) + (rotate_half_codec(k) * sin)
-    return q_embed, k_embed
+    return torch.cat((x[..., 0::2], x[..., 1::2]), dim=-1)
 
 
 class TimeDelayNetBlock(nn.Module):
@@ -2818,8 +2821,11 @@ class DiTAttention(nn.Module):
 
         # apply rotary position embedding
         # Due to training process, only first head is applied with RoPE, will be fixed at next release
+        # The checkpoint uses interleaved RoPE, so deinterleave q/k before the half-split rotation.
         cos, sin = position_embeddings
-        query[:, :1], key[:, :1] = apply_rotary_pos_emb(query[:, :1], key[:, :1], cos, sin)
+        query[:, :1], key[:, :1] = apply_rotary_pos_emb(
+            deinterleave_head_dim(query[:, :1]), deinterleave_head_dim(key[:, :1]), cos, sin
+        )
 
         attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
         attention_weights, _ = attention_interface(
@@ -2907,7 +2913,7 @@ class DiTDecoderLayer(nn.Module):
         return hidden_states
 
 
-class SnakeBeta(nn.Module):
+class Qwen2_5OmniSnakeBeta(nn.Module):
     """
     A modified Snake function which uses separate parameters for the magnitude of the periodic components
     Shape:
@@ -2994,7 +3000,7 @@ def kaiser_sinc_filter1d(cutoff, half_width, kernel_size):
     return normalized_filter.view(1, 1, kernel_size)
 
 
-class UpSample1d(nn.Module):
+class Qwen2_5OmniUpSample1d(nn.Module):
     def __init__(self, ratio=2, kernel_size=None):
         super().__init__()
         self.ratio = ratio
@@ -3019,7 +3025,7 @@ class UpSample1d(nn.Module):
         return hidden_states
 
 
-class DownSample1d(nn.Module):
+class Qwen2_5OmniDownSample1d(nn.Module):
     def __init__(self, ratio=2, kernel_size=None):
         super().__init__()
         cutoff = 0.5 / ratio
@@ -3047,7 +3053,7 @@ class DownSample1d(nn.Module):
         return out
 
 
-class TorchActivation1d(nn.Module):
+class Qwen2_5OmniAntiAliasedActivation1d(nn.Module):
     def __init__(
         self,
         activation,
@@ -3060,8 +3066,8 @@ class TorchActivation1d(nn.Module):
         if not callable(activation):
             raise TypeError("Activation function must be callable")
         self.act = activation
-        self.upsample = UpSample1d(up_ratio, up_kernel_size)
-        self.downsample = DownSample1d(down_ratio, down_kernel_size)
+        self.upsample = Qwen2_5OmniUpSample1d(up_ratio, up_kernel_size)
+        self.downsample = Qwen2_5OmniDownSample1d(down_ratio, down_kernel_size)
 
     def forward(self, hidden_states):
         hidden_states = self.upsample(hidden_states)
@@ -3071,7 +3077,7 @@ class TorchActivation1d(nn.Module):
         return hidden_states
 
 
-class AMPBlock(torch.nn.Module):
+class Qwen2_5OmniAMPBlock(torch.nn.Module):
     def __init__(
         self,
         channels,
@@ -3141,7 +3147,10 @@ class AMPBlock(torch.nn.Module):
         self.num_layers = len(self.convs1) + len(self.convs2)  # total number of conv layers
 
         self.activations = nn.ModuleList(
-            [TorchActivation1d(activation=SnakeBeta(channels)) for _ in range(self.num_layers)]
+            [
+                Qwen2_5OmniAntiAliasedActivation1d(activation=Qwen2_5OmniSnakeBeta(channels))
+                for _ in range(self.num_layers)
+            ]
         )
 
     def _get_padding(self, kernel_size, dilation=1):
@@ -3158,6 +3167,47 @@ class AMPBlock(torch.nn.Module):
             hidden_states = residual + hidden_states
 
         return hidden_states
+
+
+# Alias for BC
+class Activation1d(Qwen2_5OmniAntiAliasedActivation1d):
+    """Deprecated alias for `Qwen2_5OmniAntiAliasedActivation1d`; will be removed in a future release."""
+
+    def __init__(self, *args, **kwargs):
+        logger.warning_once("`Activation1d` is deprecated; please use `Qwen2_5OmniAntiAliasedActivation1d` instead.")
+        super().__init__(*args, **kwargs)
+
+
+class UpSample1d(Qwen2_5OmniUpSample1d):
+    """Deprecated alias for `Qwen2_5OmniUpSample1d`; will be removed in a future release."""
+
+    def __init__(self, *args, **kwargs):
+        logger.warning_once("`UpSample1d` is deprecated; please use `Qwen2_5OmniUpSample1d` instead.")
+        super().__init__(*args, **kwargs)
+
+
+class DownSample1d(Qwen2_5OmniDownSample1d):
+    """Deprecated alias for `Qwen2_5OmniDownSample1d`; will be removed in a future release."""
+
+    def __init__(self, *args, **kwargs):
+        logger.warning_once("`DownSample1d` is deprecated; please use `Qwen2_5OmniDownSample1d` instead.")
+        super().__init__(*args, **kwargs)
+
+
+class SnakeBeta(Qwen2_5OmniSnakeBeta):
+    """Deprecated alias for `Qwen2_5OmniSnakeBeta`; will be removed in a future release."""
+
+    def __init__(self, *args, **kwargs):
+        logger.warning_once("`SnakeBeta` is deprecated; please use `Qwen2_5OmniSnakeBeta` instead.")
+        super().__init__(*args, **kwargs)
+
+
+class AMPBlock(Qwen2_5OmniAMPBlock):
+    """Deprecated alias for `Qwen2_5OmniAMPBlock`; will be removed in a future release."""
+
+    def __init__(self, *args, **kwargs):
+        logger.warning_once("`AMPBlock` is deprecated; please use `Qwen2_5OmniAMPBlock` instead.")
+        super().__init__(*args, **kwargs)
 
 
 @auto_docstring(
@@ -3195,14 +3245,14 @@ class Qwen2_5OmniToken2WavBigVGANModel(Qwen2_5OmniPreTrainedModel):
 
         self.resblocks = nn.ModuleList(
             [
-                AMPBlock(config.upsample_initial_channel // (2 ** (layer_idx + 1)), kernel_size, dilation)
+                Qwen2_5OmniAMPBlock(config.upsample_initial_channel // (2 ** (layer_idx + 1)), kernel_size, dilation)
                 for layer_idx in range(self.num_upsample_layers)
                 for kernel_size, dilation in zip(config.resblock_kernel_sizes, config.resblock_dilation_sizes)
             ]
         )
 
-        self.activation_post = TorchActivation1d(
-            activation=SnakeBeta(config.upsample_initial_channel // (2**self.num_upsample_layers))
+        self.activation_post = Qwen2_5OmniAntiAliasedActivation1d(
+            activation=Qwen2_5OmniSnakeBeta(config.upsample_initial_channel // (2**self.num_upsample_layers))
         )
         self.conv_post = nn.Conv1d(
             config.upsample_initial_channel // (2**self.num_upsample_layers), 1, 7, 1, padding=3, bias=False

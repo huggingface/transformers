@@ -274,6 +274,40 @@ scores = results[0]["scores"]
 
 </hfoption>
 
+<hfoption id="Pose estimation training">
+
+The example below shows how to compute the supervised Masked Mean Squared Error (MSE) loss with [`Sapiens2ForPoseEstimation`] by passing `labels` and optional `label_weights`. This is useful for fine-tuning using the `Trainer` API.
+
+```python
+import torch
+from transformers import AutoImageProcessor, AutoModelForPoseEstimation
+from transformers.image_utils import load_image
+
+image = load_image("http://images.cocodataset.org/val2017/000000004016.jpg")
+
+image_processor = AutoImageProcessor.from_pretrained("facebook/sapiens2-pose-0.4b")
+model = AutoModelForPoseEstimation.from_pretrained("facebook/sapiens2-pose-0.4b", device_map="auto")
+
+# Provide bounding boxes in COCO format (x, y, width, height) for each person
+boxes = [[[270.8, 0.6, 294.1, 379.5]]]
+inputs = image_processor(image, boxes=boxes, return_tensors="pt").to(model.device)
+
+# Create dummy labels (heatmaps) and visibility weights to simulate ground truth
+# 1.0 for visible keypoints, 0.0 for occluded/invisible keypoints
+batch_size, num_keypoints = 1, 308
+heatmap_height, heatmap_width = 1024, 768
+labels = torch.randn(batch_size, num_keypoints, heatmap_height, heatmap_width, device=model.device)
+label_weights = torch.ones(batch_size, num_keypoints, 1, 1, device=model.device)
+
+# Forward pass with loss calculation
+outputs = model(**inputs, labels=labels, label_weights=label_weights)
+
+print("Loss:", outputs.loss.item())
+```
+
+</hfoption>
+
+
 <hfoption id="Semantic segmentation">
 
 The example below shows how to perform body-part segmentation with [`Sapiens2ForSemanticSegmentation`].

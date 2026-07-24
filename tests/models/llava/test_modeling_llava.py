@@ -17,7 +17,6 @@ import copy
 import unittest
 
 import pytest
-import requests
 from parameterized import parameterized
 
 from transformers import (
@@ -28,7 +27,6 @@ from transformers import (
     LlavaForConditionalGeneration,
     LlavaModel,
     is_torch_available,
-    is_vision_available,
 )
 from transformers.testing_utils import (
     Expectations,
@@ -43,16 +41,13 @@ from transformers.testing_utils import (
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
+from ...test_image_processing_common import load_coco_image, load_test_image
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
     import torch
-
-
-if is_vision_available():
-    from PIL import Image
 
 
 class LlavaVisionText2TextModelTester:
@@ -305,7 +300,7 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         prompt = "<image>\nUSER: What are the things I should be cautious about when I visit this place?\nASSISTANT:"
         image_file = "https://llava-vl.github.io/static/images/view.jpg"
-        raw_image = Image.open(requests.get(image_file, stream=True).raw)
+        raw_image = load_test_image(image_file)
         inputs = self.processor(images=raw_image, text=prompt, return_tensors="pt").to(torch_device, torch.float16)
 
         output = model.generate(**inputs, max_new_tokens=20)
@@ -334,7 +329,7 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         prompt = "USER: <image>\nWhat are the things I should be cautious about when I visit this place? ASSISTANT:"
         image_file = "https://llava-vl.github.io/static/images/view.jpg"
-        raw_image = Image.open(requests.get(image_file, stream=True).raw)
+        raw_image = load_test_image(image_file)
         inputs = processor(images=raw_image, text=prompt, return_tensors="pt").to(torch_device, torch.float16)
 
         output = model.generate(**inputs, max_new_tokens=900, do_sample=False)
@@ -366,8 +361,8 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
             "USER: <image>\nWhat are the things I should be cautious about when I visit this place? What should I bring with me? ASSISTANT:",
             "USER: <image>\nWhat is this? ASSISTANT:",
         ]
-        image1 = Image.open(requests.get("https://llava-vl.github.io/static/images/view.jpg", stream=True).raw)
-        image2 = Image.open(requests.get("http://images.cocodataset.org/val2017/000000039769.jpg", stream=True).raw)
+        image1 = load_test_image("https://llava-vl.github.io/static/images/view.jpg")
+        image2 = load_coco_image("000000039769.jpg")
 
         inputs = processor(images=[image1, image2], text=prompts, return_tensors="pt", padding=True).to(torch_device)
 
@@ -417,8 +412,8 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
             "USER: <image>\nWhat are the things I should be cautious about when I visit this place? What should I bring with me?\nASSISTANT:",
             "USER: <image>\nWhat is this?\nASSISTANT:",
         ]
-        image1 = Image.open(requests.get("https://llava-vl.github.io/static/images/view.jpg", stream=True).raw)
-        image2 = Image.open(requests.get("http://images.cocodataset.org/val2017/000000039769.jpg", stream=True).raw)
+        image1 = load_test_image("https://llava-vl.github.io/static/images/view.jpg")
+        image2 = load_coco_image("000000039769.jpg")
 
         inputs = self.processor(images=[image1, image2], text=prompts, return_tensors="pt", padding=True).to(
             torch_device, torch.float16
@@ -470,8 +465,8 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
             "USER: <image>\nWhat are the things I should be cautious about when I visit this place? What should I bring with me?\nASSISTANT:",
             "USER: <image>\nWhat is this?\nASSISTANT: Two cats lying on a bed!\nUSER: <image>\nAnd this?\nASSISTANT:",
         ]
-        image1 = Image.open(requests.get("https://llava-vl.github.io/static/images/view.jpg", stream=True).raw)
-        image2 = Image.open(requests.get("http://images.cocodataset.org/val2017/000000039769.jpg", stream=True).raw)
+        image1 = load_test_image("https://llava-vl.github.io/static/images/view.jpg")
+        image2 = load_coco_image("000000039769.jpg")
 
         inputs = processor(images=[image1, image2, image1], text=prompts, return_tensors="pt", padding=True).to(
             torch_device
@@ -523,8 +518,8 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
         prompt3 = "<image>\nUSER: Describe the image.\nASSISTANT:"
         url1 = "https://images.unsplash.com/photo-1552053831-71594a27632d?q=80&w=3062&auto=format&fit=crop&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D"
         url2 = "https://images.unsplash.com/photo-1617258683320-61900b281ced?q=80&w=3087&auto=format&fit=crop&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D"
-        image1 = Image.open(requests.get(url1, stream=True).raw)
-        image2 = Image.open(requests.get(url2, stream=True).raw)
+        image1 = load_test_image(url1)
+        image2 = load_test_image(url2)
 
         inputs = processor(
             images=[image1, image2, image1, image2],
@@ -604,7 +599,7 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
         processor = AutoProcessor.from_pretrained(model_id)
 
         image_file = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        raw_image = Image.open(requests.get(image_file, stream=True).raw)
+        raw_image = load_test_image(image_file)
         inputs = processor(
             text="<|im_start|>user\n<image>\nWhat are these?<|im_end|>\n<|im_start|>assistant",
             images=raw_image,
@@ -631,8 +626,8 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
         processor = AutoProcessor.from_pretrained(model_id)
 
         IMG_URLS = [
-            Image.open(requests.get("https://picsum.photos/id/237/400/300", stream=True).raw),
-            Image.open(requests.get("https://picsum.photos/id/231/200/300", stream=True).raw),
+            load_test_image("https://picsum.photos/id/237/400/300"),
+            load_test_image("https://picsum.photos/id/231/200/300"),
         ]
         PROMPT = "<s>[INST]Describe the images.\n[IMG][IMG][/INST]"
 
@@ -660,8 +655,8 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
         processor = AutoProcessor.from_pretrained(model_id)
 
         IMG_URLS = [
-            Image.open(requests.get("https://picsum.photos/id/237/400/300", stream=True).raw),
-            Image.open(requests.get("https://picsum.photos/id/231/200/300", stream=True).raw),
+            load_test_image("https://picsum.photos/id/237/400/300"),
+            load_test_image("https://picsum.photos/id/231/200/300"),
         ]
         PROMPT = "<s>[INST][IMG][IMG]Describe the images.[/INST]"
 
@@ -693,8 +688,8 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
         processor.tokenizer.pad_token_id = processor.tokenizer.eos_token_id
 
         IMG_URLS = [
-            Image.open(requests.get("https://picsum.photos/id/237/400/300", stream=True).raw),
-            Image.open(requests.get("https://picsum.photos/id/17/150/500", stream=True).raw),
+            load_test_image("https://picsum.photos/id/237/400/300"),
+            load_test_image("https://picsum.photos/id/17/150/500"),
         ]
         PROMPT = [
             "<s>[INST][IMG]What breed is the dog?[/INST]",

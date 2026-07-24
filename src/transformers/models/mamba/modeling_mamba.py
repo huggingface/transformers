@@ -25,6 +25,7 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
 from ...integrations import lazy_load_kernel
+from ...integrations.accelerate import force_accelerate_hooks
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
@@ -119,6 +120,8 @@ class MambaMixer(nn.Module):
 
         self.warn_slow_implementation()
 
+        self.layer_type = config.layer_types[layer_idx]
+
     @torch.no_grad()
     def init_mamba_weights(self):
         A = torch.arange(1, self.ssm_state_size + 1, dtype=torch.float32, device=self.A_log.device)[None, :]
@@ -203,7 +206,7 @@ class MambaMixer(nn.Module):
             if is_decoding:
                 hidden_states = causal_conv1d_update(
                     hidden_states.squeeze(-1),
-                    cache_params.layers[self.layer_idx].conv_states,
+                    cache_params.layers[self.layer_idx].conv_states[0],
                     conv_weights,
                     self.conv1d.bias,
                     self.activation,
@@ -235,7 +238,7 @@ class MambaMixer(nn.Module):
             time_proj_bias = self.dt_proj.bias.float() if hasattr(self.dt_proj, "bias") else None
             if is_decoding:
                 scan_outputs = selective_state_update(
-                    cache_params.layers[self.layer_idx].recurrent_states,
+                    cache_params.layers[self.layer_idx].recurrent_states[0],
                     hidden_states[..., 0],
                     discrete_time_step[..., 0],
                     A,
@@ -278,7 +281,7 @@ class MambaMixer(nn.Module):
             hidden_states = hidden_states * attention_mask.unsqueeze(1)
 
         if cache_params is not None and cache_params.has_previous_state(self.layer_idx):
-            ssm_state = cache_params.layers[self.layer_idx].recurrent_states.clone()
+            ssm_state = cache_params.layers[self.layer_idx].recurrent_states[0].clone()
         else:
             ssm_state = torch.zeros(
                 (batch_size, self.intermediate_size, self.ssm_state_size),
@@ -296,7 +299,7 @@ class MambaMixer(nn.Module):
                 cache_params.update_conv_state(conv_state, self.layer_idx)
                 hidden_states = self.act(self.conv1d(hidden_states)[..., :seq_len])     # [batch, intermediate_size, seq_len]
             else:
-                conv_state = cache_params.update_conv_state(hidden_states, self.layer_idx)
+                conv_state = cache_params.update_conv_state(hidden_states, self.layer_idx)[..., -self.conv_kernel_size:]
                 conv_state = conv_state.to(self.conv1d.weight.device)
                 hidden_states = torch.sum(conv_state * self.conv1d.weight[:, 0, :], dim=-1)
                 if self.use_conv_bias:
@@ -363,6 +366,7 @@ class MambaMixer(nn.Module):
         return contextualized_states
     # fmt: on
 
+    @force_accelerate_hooks("conv1d")
     def forward(
         self,
         hidden_states,
@@ -435,7 +439,7 @@ class MambaPreTrainedModel(PreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights."""
-        std = self.config.initializer_range
+        super()._init_weights(module)
         if isinstance(module, MambaMixer):
             # S4D real initialization. These are not discretized!
             # The core is to load them, compute the discrete states, then write the updated state. Keeps the memory bounded
@@ -459,15 +463,6 @@ class MambaPreTrainedModel(PreTrainedModel):
                 # Having just p *= scale would repeatedly scale it down
                 p = module.out_proj.weight
                 p /= math.sqrt(self.config.num_hidden_layers)
-
-        if isinstance(module, nn.Linear):
-            init.normal_(module.weight, std=std)
-            if module.bias is not None:
-                init.zeros_(module.bias)
-        elif isinstance(module, MambaRMSNorm):
-            init.ones_(module.weight)
-        elif isinstance(module, nn.Embedding):
-            init.normal_(module.weight, std=std)
 
 
 @auto_docstring(

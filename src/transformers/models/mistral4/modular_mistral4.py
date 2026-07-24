@@ -24,12 +24,12 @@ from ...modeling_layers import GenericForSequenceClassification, GenericForToken
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import logging
-from ...utils.generic import is_flash_attention_requested
+from ..deepseek_v2.modeling_deepseek_v2 import DeepseekV2TopkRouter, yarn_apply_mscale
 from ..deepseek_v3.modeling_deepseek_v3 import (
     DeepseekV3Attention,
     DeepseekV3DecoderLayer,
+    DeepseekV3Experts,
     DeepseekV3MoE,
-    DeepseekV3NaiveMoe,
     apply_rotary_pos_emb_interleave,
 )
 from ..llama.modeling_llama import (
@@ -60,46 +60,44 @@ class Mistral4MLP(Qwen2MoeMLP):
     pass
 
 
-class Mistral4TopkRouter(nn.Module):
+class Mistral4TopkRouter(DeepseekV2TopkRouter):
     def __init__(self, config):
-        super().__init__()
-        self.config = config
-        self.n_routed_experts = config.n_routed_experts
-
-        self.weight = nn.Parameter(torch.empty((self.n_routed_experts, config.hidden_size)))
+        super().__init__(config)
+        del self.topk_method
+        self.num_experts = config.num_local_experts
+        self.norm_topk_prob = config.norm_topk_prob
 
     def forward(self, hidden_states):
-        hidden_states = hidden_states.view(-1, self.config.hidden_size)
+        hidden_states = hidden_states.view(-1, self.hidden_dim)
         router_logits = F.linear(hidden_states, self.weight)
-        return router_logits
-
-
-class Mistral4NaiveMoe(DeepseekV3NaiveMoe):
-    pass
-
-
-class Mistral4MoE(DeepseekV3MoE):
-    def route_tokens_to_experts(self, router_logits: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
-        router_logits = router_logits.softmax(-1)
+        scores = router_logits.softmax(-1)
         group_scores = (
-            router_logits.view(-1, self.n_group, self.n_routed_experts // self.n_group).topk(2, dim=-1)[0].sum(dim=-1)
+            scores.view(-1, self.num_group, self.num_experts // self.num_group).topk(2, dim=-1)[0].sum(dim=-1)
         )
         group_idx = torch.topk(group_scores, k=self.topk_group, dim=-1, sorted=False)[1]
         group_mask = torch.zeros_like(group_scores)
         group_mask.scatter_(1, group_idx, 1)
         score_mask = (
             group_mask.unsqueeze(-1)
-            .expand(-1, self.n_group, self.n_routed_experts // self.n_group)
-            .reshape(-1, self.n_routed_experts)
+            .expand(-1, self.num_group, self.num_experts // self.num_group)
+            .reshape(-1, self.num_experts)
         )
-        scores_for_choice = router_logits.masked_fill(~score_mask.bool(), 0.0)
+        scores_for_choice = scores.masked_fill(~score_mask.bool(), 0.0)
         topk_indices = torch.topk(scores_for_choice, k=self.top_k, dim=-1, sorted=False)[1]
-        topk_weights = router_logits.gather(1, topk_indices)
+        topk_weights = scores.gather(1, topk_indices)
         if self.norm_topk_prob:
             denominator = topk_weights.sum(dim=-1, keepdim=True) + 1e-20
             topk_weights /= denominator
         topk_weights = topk_weights * self.routed_scaling_factor
-        return topk_indices, topk_weights
+        return router_logits, topk_weights, topk_indices
+
+
+class Mistral4Experts(DeepseekV3Experts):
+    pass
+
+
+class Mistral4MoE(DeepseekV3MoE):
+    pass
 
 
 class Mistral4Attention(DeepseekV3Attention):
@@ -145,6 +143,18 @@ class Mistral4Attention(DeepseekV3Attention):
         )
 
         self.scaling = self.qk_head_dim ** (-0.5)
+        self.scaling = yarn_apply_mscale(config.rope_parameters, self.scaling)
+
+    def expand_kv(self, k_nope: torch.Tensor, k_pe: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+        key_shape = (*k_nope.shape[:-1], -1, self.qk_nope_head_dim + self.v_head_dim)
+
+        k_nope = self.kv_b_proj(k_nope).view(key_shape).transpose(1, 2)
+        k_nope, value_states = torch.split(k_nope, [self.qk_nope_head_dim, self.v_head_dim], dim=-1)
+
+        k_pe = k_pe.expand(*k_nope.shape[:-1], -1)
+        key_states = torch.cat((k_nope, k_pe), dim=-1)
+
+        return key_states, value_states
 
     def forward(
         self,
@@ -157,7 +167,6 @@ class Mistral4Attention(DeepseekV3Attention):
     ) -> tuple[torch.Tensor, torch.Tensor | None, tuple[torch.Tensor] | None]:
         batch_size, seq_length = hidden_states.shape[:-1]
         query_shape = (batch_size, seq_length, -1, self.qk_head_dim)
-        key_shape = (batch_size, seq_length, -1, self.qk_nope_head_dim + self.v_head_dim)
 
         if self.q_lora_rank is None:
             q_states = self.q_proj(hidden_states)
@@ -167,11 +176,8 @@ class Mistral4Attention(DeepseekV3Attention):
         q_pass, q_rot = torch.split(q_states, [self.qk_nope_head_dim, self.qk_rope_head_dim], dim=-1)
 
         compressed_kv = self.kv_a_proj_with_mqa(hidden_states)
-        k_pass, k_rot = torch.split(compressed_kv, [self.kv_lora_rank, self.qk_rope_head_dim], dim=-1)
-
-        k_pass = self.kv_b_proj(self.kv_a_layernorm(k_pass)).view(key_shape).transpose(1, 2)
-        k_pass, value_states = torch.split(k_pass, [self.qk_nope_head_dim, self.v_head_dim], dim=-1)
-
+        kv_pass, k_rot = torch.split(compressed_kv, [self.kv_lora_rank, self.qk_rope_head_dim], dim=-1)
+        k_pass = self.kv_a_layernorm(kv_pass)
         k_rot = k_rot.view(batch_size, 1, seq_length, self.qk_rope_head_dim)
 
         cos, sin = position_embeddings
@@ -179,10 +185,8 @@ class Mistral4Attention(DeepseekV3Attention):
             q_rot, k_rot = apply_rotary_pos_emb_interleave(q_rot, k_rot, cos, sin)
         else:
             q_rot, k_rot = apply_rotary_pos_emb(q_rot, k_rot, cos, sin)
-        k_rot = k_rot.expand(*k_pass.shape[:-1], -1)
 
         query_states = torch.cat((q_pass, q_rot), dim=-1)
-        key_states = torch.cat((k_pass, k_rot), dim=-1)
 
         query_states = query_states * get_llama_4_attn_scale(
             position_ids,
@@ -190,11 +194,10 @@ class Mistral4Attention(DeepseekV3Attention):
             self.config.rope_parameters.get("original_max_position_embeddings"),
         ).to(query_states.dtype)
 
+        key_states, value_states = self.expand_kv(k_pass, k_rot)
+
         if past_key_values is not None:
             key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
-
-        if is_flash_attention_requested(self.config) and self.qk_head_dim != self.v_head_dim:
-            value_states = F.pad(value_states, [0, self.qk_head_dim - self.v_head_dim])
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
@@ -210,9 +213,6 @@ class Mistral4Attention(DeepseekV3Attention):
             scaling=self.scaling,
             **kwargs,
         )
-
-        if is_flash_attention_requested(self.config) and self.qk_head_dim != self.v_head_dim:
-            attn_output = attn_output[:, :, :, : self.v_head_dim]
 
         attn_output = attn_output.reshape(batch_size, seq_length, -1).contiguous()
         attn_output = self.o_proj(attn_output)
@@ -259,7 +259,7 @@ class Mistral4PreTrainedModel(PreTrainedModel):
         super()._init_weights(module)
         if isinstance(module, Mistral4TopkRouter):
             init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
-        elif isinstance(module, Mistral4NaiveMoe):
+        elif isinstance(module, Mistral4Experts):
             init.normal_(module.gate_up_proj, mean=0.0, std=self.config.initializer_range)
             init.normal_(module.down_proj, mean=0.0, std=self.config.initializer_range)
 
