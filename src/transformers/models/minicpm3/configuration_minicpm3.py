@@ -82,6 +82,11 @@ class MiniCPM3Config(PreTrainedConfig):
         "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
         "norm": (["hidden_states"], ["hidden_states"]),
     }
+    base_model_fsdp_plan = {
+        "embed_tokens": "free_full_weight",
+        "layers.*": "free_full_weight",
+        "norm": "keep_full_weight",
+    }
 
     # Only fields whose defaults differ from `LlamaConfig` are redeclared here; the rest are inherited.
     # Defaults match the `openbmb/MiniCPM3-4B` checkpoint.

@@ -136,6 +136,12 @@ class DeepseekV4Config(PreTrainedConfig):
         "layers.*.self_attn.compressor.indexer.scorer": "all_reduce",
     }
 
+    base_model_fsdp_plan = {
+        "embed_tokens": "free_full_weight",
+        "layers.*": "free_full_weight",
+        "norm": "keep_full_weight",
+    }
+
     vocab_size: int = 129280
     hidden_size: int = 4096
     moe_intermediate_size: int = 2048

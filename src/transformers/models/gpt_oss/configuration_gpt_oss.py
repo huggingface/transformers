@@ -41,6 +41,12 @@ class GptOssConfig(PreTrainedConfig):
         "layers.*.mlp.experts": "moe_tp_experts",
     }
 
+    base_model_fsdp_plan = {
+        "embed_tokens": "free_full_weight",
+        "layers.*": "free_full_weight",
+        "norm": "keep_full_weight",
+    }
+
     num_hidden_layers: int = 36
     num_local_experts: int = 128
     vocab_size: int = 201088

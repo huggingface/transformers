@@ -58,6 +58,11 @@ class Xcodec2Config(PreTrainedConfig):
 
     model_type = "xcodec2"
     keys_to_ignore_at_inference = ["past_key_values"]
+    base_model_fsdp_plan = {
+        "embed_tokens": "free_full_weight",
+        "layers.*": "free_full_weight",
+        "norm": "keep_full_weight",
+    }
     hidden_size: int = 1024
     intermediate_size: int = 4096
     num_hidden_layers: int = 12

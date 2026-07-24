@@ -82,6 +82,12 @@ class GlmMoeDsaConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
         "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
         "norm": (["hidden_states"], ["hidden_states"]),
     }
+
+    base_model_fsdp_plan = {
+        "embed_tokens": "free_full_weight",
+        "layers.*": "free_full_weight",
+        "norm": "keep_full_weight",
+    }
     base_model_ep_plan = {
         "layers.*.mlp.gate": "ep_router",
         "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
@@ -90,7 +96,6 @@ class GlmMoeDsaConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
     }
 
     attribute_map = {"num_local_experts": "n_routed_experts"}
-
     vocab_size: int = 154880
     hidden_size: int = 6144
     intermediate_size: int = 12288

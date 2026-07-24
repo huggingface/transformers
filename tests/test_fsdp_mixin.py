@@ -70,7 +70,14 @@ DDP_FSDP_RTOL = 1e-5
 DDP_FSDP_ATOL = 1e-5
 
 # Set to None to run distributed FSDP tests for every model with a plan.
-FSDP_DISTRIBUTED_TEST_MODEL_TYPES = {"cohere2_moe"}
+FSDP_DISTRIBUTED_TEST_MODEL_TYPES = {
+    "cohere2_moe",
+    "llama",
+    "mistral",
+    "mixtral",
+    "qwen3",
+    "qwen3_moe",
+}
 
 
 # =============================================================================

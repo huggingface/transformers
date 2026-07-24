@@ -257,6 +257,13 @@ class Gemma4VisionConfig(PreTrainedConfig):
         "encoder.layers.*.mlp.up_proj": "colwise",
         "encoder.layers.*.mlp.down_proj": "rowwise",
     }
+
+    base_model_fsdp_plan = {
+        "embed_tokens": "free_full_weight",
+        "layers.*": "free_full_weight",
+        "norm": "keep_full_weight",
+    }
+
     default_theta = 100.0
 
     hidden_size: int = 768
