@@ -24,11 +24,6 @@ from dataclasses import dataclass
 from functools import wraps
 from typing import TYPE_CHECKING
 
-# Imported for the module namespace: on torch < 2.7, dynamo resolves reconstructed guard expressions
-# against the wrapped forward's `__globals__` (this module), and errors with `NameError: name 'torch'
-# is not defined` when compiling any `@capture_outputs`-decorated forward.
-import torch  # noqa: F401
-
 from .import_utils import is_torchdynamo_compiling, requires
 
 
