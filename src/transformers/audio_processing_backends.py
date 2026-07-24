@@ -30,11 +30,9 @@ import numpy as np
 
 from .audio_processing_utils import BaseAudioProcessor
 from .audio_utils import (
-    SpectrogramConfig,
     _create_triangular_filter_bank,
     amplitude_to_db,
     hertz_to_mel,
-    mel_filter_bank,
     mel_to_hertz,
     power_to_db,
 )
@@ -246,23 +244,100 @@ class NumpyAudioBackend(BaseAudioProcessor):
         return np.abs(stft_out) ** power
 
     # ── Mel scale & normalization ─────────────────────────────────────────
+    #
+    # The base `_mel_filter_bank` dispatcher (audio_processing_utils) resolves geometry
+    # and dtype; the three leaves below own the numerical construction. Each backend's
+    # leaves deliberately implement their own ecosystem's rounding pattern: these numpy
+    # leaves are bit-exact against librosa and the legacy numpy feature extractors, the
+    # torch leaves against torchaudio / torchaudio.compliance.kaldi. The two backends are
+    # numerically equivalent but NOT bit-identical.
 
-    def _mel_filter_bank(self, spectrogram_config: SpectrogramConfig):
-        stft_cfg = spectrogram_config.stft_config
-        mel_cfg = spectrogram_config.mel_scale_config
-        # float32 dtype matches librosa's per-band rounding; computation_dtype keeps float64
-        filter_dtype = None if spectrogram_config.computation_dtype else np.float32
-        return mel_filter_bank(
-            num_frequency_bins=1 + stft_cfg.n_fft // 2,
-            num_mel_filters=mel_cfg.n_mels,
-            min_frequency=mel_cfg.f_min,
-            max_frequency=mel_cfg.f_max if mel_cfg.f_max is not None else self.sample_rate / 2,
-            sampling_rate=self.sample_rate,
-            norm=mel_cfg.norm,
-            mel_scale=mel_cfg.mel_scale,
-            triangularize_in_mel_space=mel_cfg.triangularize_in_mel_space,
-            dtype=filter_dtype,
+    @staticmethod
+    def _np_triangular_banks(fft_freqs, filter_freqs, computation_dtype):
+        """Triangular bank with the numpy ecosystem's dtype policy.
+
+        With no computation dtype, replicate librosa's per-band float32 rounding:
+        slopes computed in float64 with each band's column cast to float32 on
+        assignment (librosa assigns rows into a float32-initialized array, which
+        rounds differently than casting a float64 matrix at the end). With a dtype,
+        plain full-precision construction cast to that dtype.
+        """
+        if computation_dtype is None:
+            num_frequency_bins = fft_freqs.shape[0]
+            num_mel_filters = filter_freqs.shape[0] - 2
+            filter_diff = np.diff(filter_freqs)
+            ramps = np.subtract.outer(filter_freqs, fft_freqs)  # (num_mel_filters+2, num_frequency_bins)
+            mel_filters = np.zeros((num_frequency_bins, num_mel_filters), dtype=np.float32)
+            for i in range(num_mel_filters):
+                lower = -ramps[i] / filter_diff[i]
+                upper = ramps[i + 2] / filter_diff[i + 1]
+                mel_filters[:, i] = np.maximum(0, np.minimum(lower, upper)).astype(np.float32)
+            return mel_filters
+        return _create_triangular_filter_bank(fft_freqs, filter_freqs).astype(
+            np.dtype(computation_dtype), copy=False
         )
+
+    def _kaldi_exact_mel_banks(self, num_mel_filters, num_frequency_bins, min_frequency,
+                               max_frequency, sampling_rate, n_fft, mel_cfg, computation_dtype):
+        """Mel-space triangularization, numpy-ecosystem semantics.
+
+        Bit-exact against the legacy numpy feature extractors (e.g. SeamlessM4T):
+        ``hertz_to_mel(mel_scale=...)`` on float64 bin frequencies and filter edges from
+        ``np.linspace`` in mel space. Deliberately NOT torchaudio's hardcoded
+        ``1127 * log`` float32 ``get_mel_banks`` arithmetic — the torch leaf owns that
+        rounding pattern; the two leaves are numerically equivalent, not bit-identical.
+        """
+        mel_min = hertz_to_mel(min_frequency, mel_scale=mel_cfg.mel_scale)
+        mel_max = hertz_to_mel(max_frequency, mel_scale=mel_cfg.mel_scale)
+        filter_freqs = np.linspace(mel_min, mel_max, num_mel_filters + 2)
+        fft_bin_width = sampling_rate / n_fft
+        fft_freqs = hertz_to_mel(fft_bin_width * np.arange(num_frequency_bins), mel_scale=mel_cfg.mel_scale)
+        return self._np_triangular_banks(fft_freqs, filter_freqs, computation_dtype)
+
+    def _kaldi_mel_banks_with_zero_bands(self, num_mel_filters, num_frequency_bins, min_frequency,
+                                         max_frequency, sampling_rate, n_fft, mel_cfg, computation_dtype):
+        """Mel-space triangularization (numpy-ecosystem semantics, see
+        `_kaldi_exact_mel_banks`) with the lowest ``bands_to_zero`` bins zeroed."""
+        mel_min = hertz_to_mel(min_frequency, mel_scale=mel_cfg.mel_scale)
+        mel_max = hertz_to_mel(max_frequency, mel_scale=mel_cfg.mel_scale)
+        filter_freqs = np.linspace(mel_min, mel_max, num_mel_filters + 2)
+        fft_bin_width = sampling_rate / n_fft
+        fft_freqs = hertz_to_mel(
+            fft_bin_width * np.arange(mel_cfg.bands_to_zero, num_frequency_bins), mel_scale=mel_cfg.mel_scale
+        )
+        mel_filters = self._np_triangular_banks(fft_freqs, filter_freqs, computation_dtype)
+        if mel_cfg.bands_to_zero > 0:
+            mel_filters = np.pad(mel_filters, ((mel_cfg.bands_to_zero, 0), (0, 0)))
+        return mel_filters
+
+    def _standard_mel_banks(self, num_mel_filters, num_frequency_bins, min_frequency,
+                            max_frequency, sampling_rate, n_fft, mel_cfg, computation_dtype):
+        """Standard triangular mel filter bank, numpy-ecosystem semantics.
+
+        Bit-exact against librosa's filters (and the legacy numpy feature extractors
+        built on them): FFT bin frequencies always use the float64
+        ``linspace(0, sr // 2, bins)`` form regardless of ``frequency_bin_mode``, and
+        the slaney area-norm is applied after the dtype policy (i.e. after the per-band
+        float32 cast when no computation dtype is set — librosa's rounding order).
+        The torch leaf implements torchaudio's rounding instead; the two leaves are
+        numerically equivalent, not bit-identical.
+        """
+        mel_min = hertz_to_mel(min_frequency, mel_scale=mel_cfg.mel_scale)
+        mel_max = hertz_to_mel(max_frequency, mel_scale=mel_cfg.mel_scale)
+        mel_freqs = np.linspace(mel_min, mel_max, num_mel_filters + 2)
+        filter_freqs = mel_to_hertz(mel_freqs, mel_scale=mel_cfg.mel_scale)
+        fft_freqs = np.linspace(0, sampling_rate // 2, num_frequency_bins)
+        mel_filters = self._np_triangular_banks(fft_freqs, filter_freqs, computation_dtype)
+        if mel_cfg.norm == "slaney":
+            # Slaney-style mel is scaled to be approx constant energy per channel
+            enorm = 2.0 / (filter_freqs[2 : num_mel_filters + 2] - filter_freqs[:num_mel_filters])
+            mel_filters *= np.expand_dims(enorm, 0)
+        if mel_cfg.bands_to_zero > 0:
+            mel_filters = np.pad(mel_filters, ((mel_cfg.bands_to_zero, 0), (0, 0)))
+        return mel_filters
+
+    def _cast_mel_filters_to_default_float(self, mel_filters):
+        return mel_filters.astype(np.float32, copy=False)
 
     def _apply_mel_scale(self, features, *, spectrogram_config, **kwargs):
         mel_filters = self.mel_filters.astype(features.dtype, copy=False)
@@ -491,60 +566,42 @@ class TorchAudioBackend(BaseAudioProcessor):
         return stft_out.abs() ** power
 
     # ── Mel scale & normalization ─────────────────────────────────────────
-
-    def _mel_filter_bank(self, spectrogram_config: SpectrogramConfig):
-        stft_cfg = spectrogram_config.stft_config
-        mel_cfg = spectrogram_config.mel_scale_config
-        computation_dtype = getattr(torch, mel_cfg.computation_dtype) if mel_cfg.computation_dtype else None
-        num_frequency_bins = 1 + stft_cfg.n_fft // 2
-        num_mel_filters = mel_cfg.n_mels
-        min_frequency = mel_cfg.f_min
-        max_frequency = mel_cfg.f_max if mel_cfg.f_max is not None else self.sample_rate / 2
-        n_fft = (num_frequency_bins - 1) * 2
-
-        if mel_cfg.triangularize_in_mel_space and mel_cfg.bands_to_zero == 0:
-            # Kaldi-exact path: matches torchaudio.compliance.kaldi.get_mel_banks
-            mel_filters = self._kaldi_exact_mel_banks(
-                num_mel_filters, num_frequency_bins, min_frequency, max_frequency,
-                self.sample_rate, n_fft,
-            )
-        elif mel_cfg.triangularize_in_mel_space:
-            mel_filters = self._kaldi_mel_banks_with_zero_bands(
-                num_mel_filters, num_frequency_bins, min_frequency, max_frequency,
-                self.sample_rate, n_fft, mel_cfg, computation_dtype,
-            )
-        else:
-            mel_filters = self._standard_mel_banks(
-                num_mel_filters, num_frequency_bins, min_frequency, max_frequency,
-                self.sample_rate, n_fft, mel_cfg, computation_dtype,
-            )
-
-        # Cast back when mel computation_dtype doesn't match spectrogram computation_dtype
-        if computation_dtype is not None and not spectrogram_config.computation_dtype:
-            mel_filters = mel_filters.to(torch.get_default_dtype())
-        return mel_filters
+    #
+    # The base `_mel_filter_bank` dispatcher (audio_processing_utils) resolves geometry
+    # and dtype; the three leaves below own the numerical construction. Each backend's
+    # leaves deliberately implement their own ecosystem's rounding pattern: these torch
+    # leaves are bit-exact against torchaudio / torchaudio.compliance.kaldi, the numpy
+    # leaves against librosa and the legacy numpy feature extractors. The two backends
+    # are numerically equivalent but NOT bit-identical.
 
     @staticmethod
     def _kaldi_exact_mel_banks(num_mel_filters, num_frequency_bins, min_frequency,
-                               max_frequency, sampling_rate, n_fft):
-        """Matches torchaudio.compliance.kaldi.get_mel_banks exactly."""
+                               max_frequency, sampling_rate, n_fft, mel_cfg, computation_dtype):
+        """Matches torchaudio.compliance.kaldi.get_mel_banks exactly.
+
+        Hardcoded ``1127 * log`` kaldi mel scale and ``get_mel_banks``'s edge arithmetic,
+        in torch's default float32 when no computation dtype is set. The numpy leaf owns
+        the legacy numpy-FE construction instead (``hertz_to_mel`` + linspace in float64);
+        the two leaves are numerically equivalent, not bit-identical.
+        """
+        dtype = getattr(torch, computation_dtype) if computation_dtype else None
         num_fft_bins = n_fft // 2
         fft_bin_width = sampling_rate / n_fft
         mel_low = 1127.0 * math.log(1.0 + min_frequency / 700.0)
         mel_high = 1127.0 * math.log(1.0 + max_frequency / 700.0)
         mel_delta = (mel_high - mel_low) / (num_mel_filters + 1)
 
-        bin_idx = torch.arange(num_mel_filters).unsqueeze(1)
+        bin_idx = torch.arange(num_mel_filters, dtype=dtype).unsqueeze(1)
         left_mel = mel_low + bin_idx * mel_delta
         center_mel = mel_low + (bin_idx + 1.0) * mel_delta
         right_mel = mel_low + (bin_idx + 2.0) * mel_delta
 
-        mel = 1127.0 * (1.0 + fft_bin_width * torch.arange(num_fft_bins) / 700.0).log()
+        mel = 1127.0 * (1.0 + fft_bin_width * torch.arange(num_fft_bins, dtype=dtype) / 700.0).log()
         mel = mel.unsqueeze(0)
 
         up_slope = (mel - left_mel) / (center_mel - left_mel)
         down_slope = (right_mel - mel) / (right_mel - center_mel)
-        banks = torch.max(torch.zeros(1), torch.min(up_slope, down_slope))
+        banks = torch.max(torch.zeros(1, dtype=dtype), torch.min(up_slope, down_slope))
         banks = torch.nn.functional.pad(banks, (0, 1), mode="constant", value=0)
         return banks.T
 
@@ -552,12 +609,13 @@ class TorchAudioBackend(BaseAudioProcessor):
     def _kaldi_mel_banks_with_zero_bands(num_mel_filters, num_frequency_bins, min_frequency,
                                          max_frequency, sampling_rate, n_fft, mel_cfg, computation_dtype):
         """Kaldi-style (triangularize in mel space) with optional zeroed low bands."""
+        dtype = getattr(torch, computation_dtype) if computation_dtype else None
         mel_min = hertz_to_mel(min_frequency, mel_scale=mel_cfg.mel_scale)
         mel_max = hertz_to_mel(max_frequency, mel_scale=mel_cfg.mel_scale)
-        filter_freqs = torch.linspace(mel_min, mel_max, num_mel_filters + 2, dtype=computation_dtype)
+        filter_freqs = torch.linspace(mel_min, mel_max, num_mel_filters + 2, dtype=dtype)
 
         fft_bin_width = sampling_rate / n_fft
-        hz_freqs = fft_bin_width * torch.arange(mel_cfg.bands_to_zero, num_frequency_bins, dtype=computation_dtype)
+        hz_freqs = fft_bin_width * torch.arange(mel_cfg.bands_to_zero, num_frequency_bins, dtype=dtype)
         fft_freqs = hertz_to_mel(hz_freqs, mel_scale=mel_cfg.mel_scale)
 
         mel_filters = _create_triangular_filter_bank(fft_freqs, filter_freqs)
@@ -568,18 +626,25 @@ class TorchAudioBackend(BaseAudioProcessor):
     @staticmethod
     def _standard_mel_banks(num_mel_filters, num_frequency_bins, min_frequency,
                             max_frequency, sampling_rate, n_fft, mel_cfg, computation_dtype):
-        """Standard (non-kaldi) triangular mel filter bank."""
+        """Standard (non-kaldi) triangular mel filter bank, torchaudio-ecosystem semantics.
+
+        Bit-exact against ``torchaudio.functional.melscale_fbanks`` in the default-dtype
+        case. The numpy leaf owns librosa's rounding pattern instead (float64 linspace
+        bins, per-band float32 casts); the two leaves are numerically equivalent, not
+        bit-identical.
+        """
+        dtype = getattr(torch, computation_dtype) if computation_dtype else None
         mel_min = hertz_to_mel(min_frequency, mel_scale=mel_cfg.mel_scale)
         mel_max = hertz_to_mel(max_frequency, mel_scale=mel_cfg.mel_scale)
-        mel_freqs = torch.linspace(mel_min, mel_max, num_mel_filters + 2, dtype=computation_dtype)
+        mel_freqs = torch.linspace(mel_min, mel_max, num_mel_filters + 2, dtype=dtype)
         filter_freqs = mel_to_hertz(mel_freqs, mel_scale=mel_cfg.mel_scale)
 
         if mel_cfg.frequency_bin_mode == "rfft":
             fft_freqs = torch.fft.rfftfreq(n=n_fft, d=1.0 / sampling_rate)
         else:
             fft_freqs = torch.linspace(0, sampling_rate // 2, num_frequency_bins)
-        if computation_dtype is not None:
-            fft_freqs = fft_freqs.to(computation_dtype)
+        if dtype is not None:
+            fft_freqs = fft_freqs.to(dtype)
 
         mel_filters = _create_triangular_filter_bank(fft_freqs, filter_freqs)
 
@@ -590,6 +655,9 @@ class TorchAudioBackend(BaseAudioProcessor):
         if mel_cfg.bands_to_zero > 0:
             mel_filters = torch.nn.functional.pad(mel_filters, (0, 0, mel_cfg.bands_to_zero, 0))
         return mel_filters
+
+    def _cast_mel_filters_to_default_float(self, mel_filters):
+        return mel_filters.to(torch.get_default_dtype())
 
     def _apply_mel_scale(self, features, *, spectrogram_config, **kwargs):
         mel_filters = self.mel_filters.to(device=features.device)

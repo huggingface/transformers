@@ -15,7 +15,6 @@
 import torch
 
 from ...audio_processing_backends import TorchAudioBackend
-from ...audio_utils import mel_filter_bank
 from .audio_processing_numpy_univnet import UnivNetAudioProcessorNumpy
 
 
@@ -48,22 +47,9 @@ class UnivNetAudioProcessor(TorchAudioBackend):
         audio = torch.nn.functional.pad(audio, (pad_amount, pad_amount), mode="reflect")
         return super()._stft(audio, spectrogram_config=spectrogram_config, **kwargs)
 
-    def _mel_filter_bank(self, spectrogram_config):
-        # The legacy FE builds its filters with the numpy `mel_filter_bank` in float64; the torch
-        # backend's default builds them in float32. Reuse the numpy path (same as the numpy
-        # sibling) so the float64 filter values are bit-identical to the legacy extractor's.
-        stft_cfg = spectrogram_config.stft_config
-        mel_cfg = spectrogram_config.mel_scale_config
-        filters = mel_filter_bank(
-            num_frequency_bins=1 + stft_cfg.n_fft // 2,
-            num_mel_filters=mel_cfg.n_mels,
-            min_frequency=mel_cfg.f_min,
-            max_frequency=mel_cfg.f_max if mel_cfg.f_max is not None else self.sample_rate / 2,
-            sampling_rate=self.sample_rate,
-            norm=mel_cfg.norm,
-            mel_scale=mel_cfg.mel_scale,
-        )
-        return torch.from_numpy(filters)
+    # Mel filters: the base dispatcher resolves the top-level `computation_dtype="float64"`
+    # into float64 torch-native filters (matching the legacy FE's float64 numpy build
+    # within ~1e-16), kept float64 for the mel matmul below.
 
     def _compute_magnitudes(self, stft_out, power, spectrogram_config=None):
         # UnivNet adds mel_floor inside the sqrt: sqrt(real² + imag² + mel_floor).

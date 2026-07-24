@@ -22,7 +22,7 @@ class NemotronAsrStreamingAudioProcessor(ParakeetAudioProcessor):
     (`n_fft=512`, `hop_length=160`, `win_length=400`, `power=2.0`,
     `pad_mode="constant"`, `periodic=False`, slaney mel, `preemphasis=0.97`,
     `log_mode="log"`, `mel_floor=2**-24`), including the librosa-bit-exact
-    `_mel_filter_bank`. Unlike Parakeet, NemotronAsrStreaming never applies
+    `_standard_mel_banks`. Unlike Parakeet, NemotronAsrStreaming never applies
     per-utterance mean/variance normalization — it only zeroes the padded frames
     and emits the legacy output keys the model consumes (`input_features` /
     `attention_mask`).

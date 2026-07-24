@@ -16,6 +16,7 @@ import numpy as np
 import torch
 
 from ...audio_processing_backends import TorchAudioBackend
+from ...audio_utils import _create_triangular_filter_bank, hertz_to_mel, mel_to_hertz
 from .audio_processing_numpy_cohere_asr import CohereAsrAudioProcessorNumpy
 
 
@@ -34,7 +35,7 @@ class CohereAsrAudioProcessor(TorchAudioBackend):
        Parakeet pattern in [ADR 0005](docs/adr/0005-hook-surface-boundary.md)).
     4. Native ``torch.stft`` with ``pad_mode="constant"`` and a non-periodic Hann window.
     5. ``log(mel @ |X|^2 + 2^-24)`` mel-filterbank projection (librosa-style per-band
-       float32 truncation in ``_mel_filter_bank``).
+       float32 truncation in ``_standard_mel_banks``).
     6. Per-utterance mean/variance normalization on the padded batch, applied in
        ``_postprocess_output`` (ADR 0005)."""
 
@@ -73,29 +74,30 @@ class CohereAsrAudioProcessor(TorchAudioBackend):
         if min_energy_window_samples is not None:
             self.min_energy_window_samples = min_energy_window_samples
 
-    # ── Mel filter bank (librosa-bit-exact, shared with the numpy sibling) ────────────────
+    # ── Mel filter bank (librosa-bit-exact, matching the numpy sibling's values) ──────────
 
-    def _mel_filter_bank(self, spectrogram_config):
-        """Build the filters with librosa's per-band float32 pattern for bit-exact FE parity.
+    def _standard_mel_banks(self, num_mel_filters, num_frequency_bins, min_frequency,
+                            max_frequency, sampling_rate, n_fft, mel_cfg, computation_dtype):
+        """Torch-native build of librosa's per-band float32 rounding pattern.
 
-        `audio_utils.mel_filter_bank` with a float32 dtype replicates librosa's truncation;
-        the base torch implementation instead matches torchaudio's float32 ops.
+        The legacy FE's filters are librosa's: triangular weights computed in float64,
+        cast to float32, then the slaney area-norm applied *after* that cast with a
+        second float32 rounding. The base torch leaf matches torchaudio instead
+        (float32-native ops), and a float64 build with the norm applied before the
+        final cast differs in the last ulp — only librosa's exact rounding order
+        reproduces the legacy filters bit-exactly. Torch ops only (float64 linspace /
+        exp match numpy's bitwise here); no numpy construction.
         """
-        from ...audio_utils import mel_filter_bank
-
-        stft_cfg = spectrogram_config.stft_config
-        mel_cfg = spectrogram_config.mel_scale_config
-        filters = mel_filter_bank(
-            num_frequency_bins=1 + stft_cfg.n_fft // 2,
-            num_mel_filters=mel_cfg.n_mels,
-            min_frequency=mel_cfg.f_min,
-            max_frequency=mel_cfg.f_max if mel_cfg.f_max is not None else self.sample_rate / 2,
-            sampling_rate=self.sample_rate,
-            norm=mel_cfg.norm,
-            mel_scale=mel_cfg.mel_scale,
-            dtype=np.float32,
-        )
-        return torch.from_numpy(filters)
+        mel_min = hertz_to_mel(min_frequency, mel_scale=mel_cfg.mel_scale)
+        mel_max = hertz_to_mel(max_frequency, mel_scale=mel_cfg.mel_scale)
+        mel_freqs = torch.linspace(mel_min, mel_max, num_mel_filters + 2, dtype=torch.float64)
+        filter_freqs = mel_to_hertz(mel_freqs, mel_scale=mel_cfg.mel_scale)
+        fft_freqs = torch.linspace(0, sampling_rate // 2, num_frequency_bins, dtype=torch.float64)
+        mel_filters = _create_triangular_filter_bank(fft_freqs, filter_freqs).to(torch.float32)
+        if mel_cfg.norm == "slaney":
+            enorm = 2.0 / (filter_freqs[2 : num_mel_filters + 2] - filter_freqs[:num_mel_filters])
+            mel_filters = (mel_filters * enorm[None, :]).to(torch.float32)
+        return mel_filters
 
     # ── STFT pipeline ────────────────────────────────────────────────────────────────────
 

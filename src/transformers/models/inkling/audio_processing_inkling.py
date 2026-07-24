@@ -23,8 +23,8 @@ from ...audio_utils import MelScaleConfig, SpectrogramConfig, StftConfig
 class InklingAudioProcessor(TorchAudioBackend):
     """Audio processor for Inkling.
 
-    Produces log10 mel-filterbank features (mel energies in log10 space). Uses the canonical
-    `mel_filter_bank` (slaney norm + slaney mel scale — no librosa), a magnitude (not power)
+    Produces log10 mel-filterbank features (mel energies in log10 space). Uses the base
+    `_standard_mel_banks` (slaney norm + slaney mel scale — no librosa), a magnitude (not power)
     spectrogram, and Inkling's fixed framing: `center=False` with a left pad of `n_fft - hop`
     and a right pad up to a multiple of `hop`. Downstream dMel quantization is done by
     `InklingProcessor`, not here.

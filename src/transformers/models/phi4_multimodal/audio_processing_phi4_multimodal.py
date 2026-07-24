@@ -15,7 +15,7 @@
 import torch
 
 from ...audio_processing_backends import TorchAudioBackend
-from ...audio_utils import MelScaleConfig, SpectrogramConfig, StftConfig, mel_filter_bank
+from ...audio_utils import MelScaleConfig, SpectrogramConfig, StftConfig
 
 
 class Phi4MultimodalAudioProcessor(TorchAudioBackend):
@@ -43,25 +43,14 @@ class Phi4MultimodalAudioProcessor(TorchAudioBackend):
             mel_scale="kaldi",
             triangularize_in_mel_space=True,
             matmul_order="features_first",
+            # The legacy FE builds the kaldi bank in float64 numpy then casts to float32;
+            # a float64 build (cast back to the default float by the base dispatcher)
+            # reproduces those filters bit-exactly, unlike the default float32 kaldi path.
+            computation_dtype="float64",
         ),
         mel_floor=1.0,
         log_mode="log",
     )
-
-    def _mel_filter_bank(self, spectrogram_config):
-        stft_cfg = spectrogram_config.stft_config
-        mel_cfg = spectrogram_config.mel_scale_config
-        mel_filters_np = mel_filter_bank(
-            num_frequency_bins=1 + stft_cfg.n_fft // 2,
-            num_mel_filters=mel_cfg.n_mels,
-            min_frequency=mel_cfg.f_min,
-            max_frequency=mel_cfg.f_max if mel_cfg.f_max is not None else self.sample_rate / 2,
-            sampling_rate=self.sample_rate,
-            norm=mel_cfg.norm,
-            mel_scale=mel_cfg.mel_scale,
-            triangularize_in_mel_space=mel_cfg.triangularize_in_mel_space,
-        )
-        return torch.from_numpy(mel_filters_np).to(torch.float32)
 
     def _apply_frame_processing(self, frames, *, spectrogram_config, audio_ranges=None, **kwargs):
         # Mask frames that overlap the boundary between real audio and padding

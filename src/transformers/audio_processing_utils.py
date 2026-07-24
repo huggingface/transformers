@@ -678,4 +678,77 @@ class BaseAudioProcessor(AudioProcessingMixin):
         raise NotImplementedError
 
     def _mel_filter_bank(self, spectrogram_config: SpectrogramConfig):
+        """Build the mel filter bank described by ``spectrogram_config.mel_scale_config``.
+
+        Backend-agnostic dispatcher: derives the geometry (number of frequency bins, FFT
+        size, frequency range) and the computation dtype, then delegates the numerical
+        construction to one of three backend leaves:
+
+        - ``_kaldi_exact_mel_banks``: ``triangularize_in_mel_space`` with no zeroed bands
+        - ``_kaldi_mel_banks_with_zero_bands``: ``triangularize_in_mel_space`` with ``bands_to_zero``
+        - ``_standard_mel_banks``: standard triangular (librosa/torchaudio-style) filters
+
+        Dtype policy: the dtype name is resolved as ``mel_scale_config.computation_dtype``
+        falling back to the top-level ``spectrogram_config.computation_dtype`` (pipelines
+        that run in float64 for legacy-FE parity need float64 filters as well), and passed
+        to the leaves as a string (or None); each backend resolves it natively. When only
+        the mel-level dtype is set, the filters are built in that dtype and cast back to
+        the backend's default float afterwards, since the rest of the pipeline runs in
+        default precision.
+        """
+        stft_cfg = spectrogram_config.stft_config
+        mel_cfg = spectrogram_config.mel_scale_config
+        num_frequency_bins = 1 + stft_cfg.n_fft // 2
+        n_fft = (num_frequency_bins - 1) * 2
+        min_frequency = mel_cfg.f_min
+        max_frequency = mel_cfg.f_max if mel_cfg.f_max is not None else self.sample_rate / 2
+        computation_dtype = mel_cfg.computation_dtype or spectrogram_config.computation_dtype
+
+        if mel_cfg.triangularize_in_mel_space and mel_cfg.bands_to_zero == 0:
+            mel_filters = self._kaldi_exact_mel_banks(
+                mel_cfg.n_mels, num_frequency_bins, min_frequency, max_frequency,
+                self.sample_rate, n_fft, mel_cfg, computation_dtype,
+            )
+        elif mel_cfg.triangularize_in_mel_space:
+            mel_filters = self._kaldi_mel_banks_with_zero_bands(
+                mel_cfg.n_mels, num_frequency_bins, min_frequency, max_frequency,
+                self.sample_rate, n_fft, mel_cfg, computation_dtype,
+            )
+        else:
+            mel_filters = self._standard_mel_banks(
+                mel_cfg.n_mels, num_frequency_bins, min_frequency, max_frequency,
+                self.sample_rate, n_fft, mel_cfg, computation_dtype,
+            )
+
+        # Cast back when only the mel-level dtype requested higher precision.
+        if mel_cfg.computation_dtype is not None and not spectrogram_config.computation_dtype:
+            mel_filters = self._cast_mel_filters_to_default_float(mel_filters)
+        return mel_filters
+
+    def _kaldi_exact_mel_banks(self, num_mel_filters, num_frequency_bins, min_frequency,
+                               max_frequency, sampling_rate, n_fft, mel_cfg, computation_dtype):
+        """Mel filter bank triangularized in mel space, without zeroed bands.
+
+        Each backend leaf owns its ecosystem's rounding pattern: the torch leaf matches
+        ``torchaudio.compliance.kaldi.get_mel_banks`` arithmetic, the numpy leaf matches
+        the legacy numpy feature extractors. Numerically equivalent, not bit-identical.
+        Implemented by backend subclasses."""
+        raise NotImplementedError
+
+    def _kaldi_mel_banks_with_zero_bands(self, num_mel_filters, num_frequency_bins, min_frequency,
+                                         max_frequency, sampling_rate, n_fft, mel_cfg, computation_dtype):
+        """Mel filter bank triangularized in mel space with the lowest ``bands_to_zero``
+        frequency bins zeroed out. Implemented by backend subclasses."""
+        raise NotImplementedError
+
+    def _standard_mel_banks(self, num_mel_filters, num_frequency_bins, min_frequency,
+                            max_frequency, sampling_rate, n_fft, mel_cfg, computation_dtype):
+        """Standard (non-kaldi) triangular mel filter bank. Each backend leaf owns its
+        ecosystem's rounding pattern (numpy: librosa/legacy numpy FEs; torch: torchaudio).
+        Implemented by backend subclasses."""
+        raise NotImplementedError
+
+    def _cast_mel_filters_to_default_float(self, mel_filters):
+        """Cast a built filter bank to the backend's default float dtype (torch:
+        ``torch.get_default_dtype()``, numpy: float32). Implemented by backend subclasses."""
         raise NotImplementedError

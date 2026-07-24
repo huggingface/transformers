@@ -13,13 +13,11 @@
 # limitations under the License.
 
 import math
-import warnings
 
 import numpy as np
 import torch
 
 from ...audio_processing_backends import TorchAudioBackend
-from ...audio_utils import mel_filter_bank
 from .audio_processing_numpy_gemma4 import Gemma4AudioProcessorNumpy
 
 
@@ -114,26 +112,9 @@ class Gemma4AudioProcessor(TorchAudioBackend):
             # Recompute mel filters with the new n_fft.
             self.mel_filters = self._mel_filter_bank(self.spectrogram_config)
 
-    # ── Mel filter bank — uses the HTK helper, no slaney norm ───────────────────────────
-
-    def _mel_filter_bank(self, spectrogram_config):
-        stft_cfg = spectrogram_config.stft_config
-        mel_cfg = spectrogram_config.mel_scale_config
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore")
-            mel = mel_filter_bank(
-                num_frequency_bins=stft_cfg.n_fft // 2 + 1,
-                num_mel_filters=mel_cfg.n_mels,
-                min_frequency=mel_cfg.f_min,
-                max_frequency=mel_cfg.f_max if mel_cfg.f_max is not None else self.sample_rate / 2,
-                sampling_rate=self.sample_rate,
-                norm=None,
-                mel_scale=mel_cfg.mel_scale,
-            )
-        # mel_filter_bank returns numpy; the legacy multiplies as numpy float64 then casts
-        # the result to float32 (`prepared_speech.astype(np.float32)`). Keep float64 here
-        # for the matmul to match.
-        return torch.from_numpy(mel)
+    # Mel filters: the base dispatcher resolves the top-level `computation_dtype="float64"`
+    # (set on the numpy sibling's shared config) into float64 torch-native filters, kept
+    # float64 for the mel matmul the way the legacy extractor multiplies in numpy float64.
 
     # ── STFT pipeline ────────────────────────────────────────────────────────────────────
 

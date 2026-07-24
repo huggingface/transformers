@@ -12,9 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import warnings
+
 import numpy as np
 
-from ...audio_utils import mel_filter_bank
+from ...audio_utils import _create_triangular_filter_bank, hertz_to_mel, mel_to_hertz
 from ...feature_extraction_sequence_utils import SequenceFeatureExtractor
 from ...feature_extraction_utils import BatchFeature
 from ...utils import logging
@@ -25,6 +27,104 @@ if is_torch_available():
     import torch
 
 logger = logging.get_logger(__name__)
+
+
+def _mel_filter_bank(
+    num_frequency_bins: int,
+    num_mel_filters: int,
+    min_frequency: float,
+    max_frequency: float,
+    sampling_rate: int,
+    norm: str | None = None,
+    mel_scale: str = "htk",
+    triangularize_in_mel_space: bool = False,
+    dtype: np.dtype | None = None,
+) -> np.ndarray:
+    """
+    Module-private copy of the removed ``transformers.audio_utils.mel_filter_bank`` numpy
+    helper — this legacy feature extractor stays self-contained. New audio processors build
+    their filters through ``BaseAudioProcessor._mel_filter_bank`` instead.
+
+    Creates a frequency bin conversion matrix used to obtain a mel spectrogram. This is called a *mel filter bank*, and
+    various implementation exist, which differ in the number of filters, the shape of the filters, the way the filters
+    are spaced, the bandwidth of the filters, and the manner in which the spectrum is warped. The goal of these
+    features is to approximate the non-linear human perception of the variation in pitch with respect to the frequency.
+
+    Args:
+        num_frequency_bins (`int`):
+            Number of frequency bins (should be the same as `n_fft // 2 + 1` where `n_fft` is the size of the Fourier Transform used to compute the spectrogram).
+        num_mel_filters (`int`):
+            Number of mel filters to generate.
+        min_frequency (`float`):
+            Lowest frequency of interest in Hz.
+        max_frequency (`float`):
+            Highest frequency of interest in Hz. This should not exceed `sampling_rate / 2`.
+        sampling_rate (`int`):
+            Sample rate of the audio waveform.
+        norm (`str`, *optional*):
+            If `"slaney"`, divide the triangular mel weights by the width of the mel band (area normalization).
+        mel_scale (`str`, *optional*, defaults to `"htk"`):
+            The mel frequency scale to use, `"htk"`, `"kaldi"` or `"slaney"`.
+        triangularize_in_mel_space (`bool`, *optional*, defaults to `False`):
+            If this option is enabled, the triangular filter is applied in mel space rather than frequency space. This
+            should be set to `true` in order to get the same results as `torchaudio` when computing mel filters.
+
+    Returns:
+        `np.ndarray` of shape (`num_frequency_bins`, `num_mel_filters`): Triangular filter bank matrix. This is a
+        projection matrix to go from a spectrogram to a mel spectrogram.
+    """
+    if norm is not None and norm != "slaney":
+        raise ValueError('norm must be one of None or "slaney"')
+
+    if num_frequency_bins < 2:
+        raise ValueError(f"Require num_frequency_bins: {num_frequency_bins} >= 2")
+
+    if min_frequency > max_frequency:
+        raise ValueError(f"Require min_frequency: {min_frequency} <= max_frequency: {max_frequency}")
+
+    # center points of the triangular mel filters
+    mel_min = hertz_to_mel(min_frequency, mel_scale=mel_scale)
+    mel_max = hertz_to_mel(max_frequency, mel_scale=mel_scale)
+    mel_freqs = np.linspace(mel_min, mel_max, num_mel_filters + 2)
+    filter_freqs = mel_to_hertz(mel_freqs, mel_scale=mel_scale)
+
+    if triangularize_in_mel_space:
+        # frequencies of FFT bins in Hz, but filters triangularized in mel space
+        fft_bin_width = sampling_rate / ((num_frequency_bins - 1) * 2)
+        fft_freqs = hertz_to_mel(fft_bin_width * np.arange(num_frequency_bins), mel_scale=mel_scale)
+        filter_freqs = mel_freqs
+    else:
+        # frequencies of FFT bins in Hz
+        fft_freqs = np.linspace(0, sampling_rate // 2, num_frequency_bins)
+
+    if dtype is not None:
+        # Per-band computation matching librosa's precision path: compute slopes in float64,
+        # cast each band to dtype immediately. This replicates librosa's per-row assignment
+        # to a dtype-initialized array, which produces different rounding than computing all
+        # bands in float64 and casting at the end.
+        filter_diff = np.diff(filter_freqs)
+        ramps = np.subtract.outer(filter_freqs, fft_freqs)  # (num_mel_filters+2, num_frequency_bins)
+        mel_filters = np.zeros((num_frequency_bins, num_mel_filters), dtype=dtype)
+        for i in range(num_mel_filters):
+            lower = -ramps[i] / filter_diff[i]
+            upper = ramps[i + 2] / filter_diff[i + 1]
+            mel_filters[:, i] = np.maximum(0, np.minimum(lower, upper)).astype(dtype)
+    else:
+        mel_filters = _create_triangular_filter_bank(fft_freqs, filter_freqs)
+
+    if norm is not None and norm == "slaney":
+        # Slaney-style mel is scaled to be approx constant energy per channel
+        enorm = 2.0 / (filter_freqs[2 : num_mel_filters + 2] - filter_freqs[:num_mel_filters])
+        mel_filters *= np.expand_dims(enorm, 0)
+
+    if (mel_filters.max(axis=0) == 0.0).any():
+        warnings.warn(
+            "At least one mel filter has all zero values. "
+            f"The value for `num_mel_filters` ({num_mel_filters}) may be set too high. "
+            f"Or, the value for `num_frequency_bins` ({num_frequency_bins}) may be set too low."
+        )
+
+    return mel_filters
 
 
 @requires(backends=("torch",))
@@ -91,7 +191,7 @@ class Qwen3ASRFeatureExtractor(SequenceFeatureExtractor):
         self.sampling_rate = sampling_rate
         self.dither = dither
         self.n_window = n_window
-        self.mel_filters = mel_filter_bank(
+        self.mel_filters = _mel_filter_bank(
             num_frequency_bins=1 + n_fft // 2,
             num_mel_filters=feature_size,
             min_frequency=0.0,

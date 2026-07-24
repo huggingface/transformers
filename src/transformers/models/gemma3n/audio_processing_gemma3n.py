@@ -16,7 +16,6 @@ import numpy as np
 import torch
 
 from ...audio_processing_backends import TorchAudioBackend
-from ...audio_utils import mel_filter_bank
 from .audio_processing_numpy_gemma3n import Gemma3nAudioProcessorNumpy
 
 
@@ -77,22 +76,9 @@ class Gemma3nAudioProcessor(TorchAudioBackend):
         stft = torch.fft.rfft(frames, n=stft_cfg.n_fft, dim=-1)
         return stft.abs().transpose(-2, -1)
 
-    def _mel_filter_bank(self, spectrogram_config):
-        # The legacy FE builds its filters in float64 (create_fb_matrix); the numpy
-        # `mel_filter_bank` with default dtype reproduces it bit-exactly, so build there
-        # and convert, keeping the float64 dtype for the mel matmul.
-        stft_cfg = spectrogram_config.stft_config
-        mel_cfg = spectrogram_config.mel_scale_config
-        mel_filters_np = mel_filter_bank(
-            num_frequency_bins=1 + stft_cfg.n_fft // 2,
-            num_mel_filters=mel_cfg.n_mels,
-            min_frequency=mel_cfg.f_min,
-            max_frequency=mel_cfg.f_max if mel_cfg.f_max is not None else self.sample_rate / 2,
-            sampling_rate=self.sample_rate,
-            norm=mel_cfg.norm,
-            mel_scale=mel_cfg.mel_scale,
-        )
-        return torch.from_numpy(mel_filters_np)
+    # Mel filters: the base dispatcher resolves the top-level `computation_dtype="float64"`
+    # into float64 torch-native filters (matching the legacy FE's float64 create_fb_matrix
+    # build within float64 exp/pow rounding), kept float64 for the mel matmul.
 
     def _normalize_magnitude(self, features, *, spectrogram_config, **kwargs):
         result = super()._normalize_magnitude(features, spectrogram_config=spectrogram_config, **kwargs)

@@ -13,12 +13,11 @@
 # limitations under the License.
 
 import math
-import warnings
 
 import numpy as np
 
 from ...audio_processing_backends import NumpyAudioBackend
-from ...audio_utils import MelScaleConfig, SpectrogramConfig, StftConfig, mel_filter_bank
+from ...audio_utils import MelScaleConfig, SpectrogramConfig, StftConfig
 
 
 def _unfold(array, dimension, size, step):
@@ -95,6 +94,11 @@ class Gemma4AudioProcessorNumpy(NumpyAudioBackend):
         mel_floor=0.0,  # no clamp; the log guard is pre_log_offset
         pre_log_offset=1e-3,
         log_mode="log",
+        # Float64 mel filters, kept float64 for the mel matmul: the legacy extractor
+        # builds the bank in float64 and multiplies as numpy float64 before casting the
+        # log output to float32. Both siblings fully override `_stft`, so this only
+        # affects the filter-bank build (numpy's rfft promotes to float64 regardless).
+        computation_dtype="float64",
     )
 
     def __init__(
@@ -145,21 +149,6 @@ class Gemma4AudioProcessorNumpy(NumpyAudioBackend):
                 stft_config=replace(stft_cfg, n_fft=expected_n_fft),
             )
             self.mel_filters = self._mel_filter_bank(self.spectrogram_config)
-
-    def _mel_filter_bank(self, spectrogram_config):
-        stft_cfg = spectrogram_config.stft_config
-        mel_cfg = spectrogram_config.mel_scale_config
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore")
-            return mel_filter_bank(
-                num_frequency_bins=stft_cfg.n_fft // 2 + 1,
-                num_mel_filters=mel_cfg.n_mels,
-                min_frequency=mel_cfg.f_min,
-                max_frequency=mel_cfg.f_max if mel_cfg.f_max is not None else self.sample_rate / 2,
-                sampling_rate=self.sample_rate,
-                norm=None,
-                mel_scale=mel_cfg.mel_scale,
-            )
 
     def _stft(self, audio, *, spectrogram_config, **kwargs):
         stft_cfg = spectrogram_config.stft_config
