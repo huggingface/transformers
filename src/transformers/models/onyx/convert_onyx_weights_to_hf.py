@@ -121,7 +121,7 @@ def build_config():
         image_token_id=200_092,
         video_token_id=200_091,
         out_hidden_size=6144,
-        adapter_dim=4096,
+        projector_hidden_size=4096,
     )
 
 

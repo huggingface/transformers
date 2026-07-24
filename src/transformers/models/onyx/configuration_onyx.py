@@ -168,7 +168,7 @@ class OnyxConfig(PreTrainedConfig):
     r"""
     out_hidden_size (`int`, *optional*, defaults to 6144):
         Output dimension of the vision encoder after patch merging (input width of the multimodal projection).
-    adapter_dim (`int`, *optional*, defaults to 4096):
+    projector_hidden_size (`int`, *optional*, defaults to 4096):
         Intermediate dimension of the multimodal projection.
 
     Example:
@@ -197,7 +197,7 @@ class OnyxConfig(PreTrainedConfig):
     image_token_id: int = 200092
     video_token_id: int = 200091
     out_hidden_size: int = 6144
-    adapter_dim: int = 4096
+    projector_hidden_size: int = 4096
     projector_hidden_act: str = "gelu"
 
     def __post_init__(self, **kwargs):

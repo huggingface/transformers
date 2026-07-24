@@ -967,9 +967,9 @@ class OnyxTextModel(OnyxPreTrainedModel):
 class OnyxVisionAdapter(nn.Module):
     def __init__(self, config: OnyxConfig) -> None:
         super().__init__()
-        self.fc1 = nn.Linear(config.out_hidden_size, config.adapter_dim, bias=False)
+        self.fc1 = nn.Linear(config.out_hidden_size, config.projector_hidden_size, bias=False)
         self.act = ACT2FN[config.projector_hidden_act]
-        self.fc2 = nn.Linear(config.adapter_dim, config.adapter_dim, bias=False)
+        self.fc2 = nn.Linear(config.projector_hidden_size, config.projector_hidden_size, bias=False)
 
     def forward(self, x) -> torch.Tensor:
         return self.act(self.fc2(self.act(self.fc1(x))))
@@ -981,7 +981,7 @@ class OnyxModel(OnyxPreTrainedModel):
         self.vision_tower = OnyxVisionModel._from_config(config.vision_config)
         self.language_model = AutoModel.from_config(config.text_config)
         self.vision_adapter = OnyxVisionAdapter(config)
-        self.vision_projection = nn.Linear(config.adapter_dim, config.text_config.hidden_size, bias=False)
+        self.vision_projection = nn.Linear(config.projector_hidden_size, config.text_config.hidden_size, bias=False)
         self.perception_emb_norm = OnyxRMSNorm(eps=config.text_config.rms_norm_eps, with_scale=False)
         self.post_init()
 

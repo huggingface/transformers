@@ -590,7 +590,7 @@ class OnyxConfig(PreTrainedConfig):
     r"""
     out_hidden_size (`int`, *optional*, defaults to 6144):
         Output dimension of the vision encoder after patch merging (input width of the multimodal projection).
-    adapter_dim (`int`, *optional*, defaults to 4096):
+    projector_hidden_size (`int`, *optional*, defaults to 4096):
         Intermediate dimension of the multimodal projection.
 
     Example:
@@ -619,7 +619,7 @@ class OnyxConfig(PreTrainedConfig):
     image_token_id: int = 200092
     video_token_id: int = 200091
     out_hidden_size: int = 6144
-    adapter_dim: int = 4096
+    projector_hidden_size: int = 4096
     projector_hidden_act: str = "gelu"
 
     def __post_init__(self, **kwargs):
@@ -993,9 +993,9 @@ class OnyxTextModel(Gemma2Model):
 class OnyxVisionAdapter(nn.Module):
     def __init__(self, config: OnyxConfig) -> None:
         super().__init__()
-        self.fc1 = nn.Linear(config.out_hidden_size, config.adapter_dim, bias=False)
+        self.fc1 = nn.Linear(config.out_hidden_size, config.projector_hidden_size, bias=False)
         self.act = ACT2FN[config.projector_hidden_act]
-        self.fc2 = nn.Linear(config.adapter_dim, config.adapter_dim, bias=False)
+        self.fc2 = nn.Linear(config.projector_hidden_size, config.projector_hidden_size, bias=False)
 
     def forward(self, x) -> torch.Tensor:
         return self.act(self.fc2(self.act(self.fc1(x))))
@@ -1006,7 +1006,7 @@ class OnyxModel(Kimi_K25Model):
         super().__init__(config)
         del self.mm_projector
         self.vision_adapter = OnyxVisionAdapter(config)
-        self.vision_projection = nn.Linear(config.adapter_dim, config.text_config.hidden_size, bias=False)
+        self.vision_projection = nn.Linear(config.projector_hidden_size, config.text_config.hidden_size, bias=False)
         self.perception_emb_norm = OnyxRMSNorm(eps=config.text_config.rms_norm_eps, with_scale=False)
 
     def get_image_features(

@@ -63,7 +63,7 @@ class OnyxVision2TextModelTester(VLMModelTester):
         kwargs.setdefault("pos_emb_height", 4)
         kwargs.setdefault("pos_emb_width", 4)
         kwargs.setdefault("intermediate_size", 37)
-        kwargs.setdefault("adapter_dim", 32)
+        kwargs.setdefault("projector_hidden_size", 32)
         super().__init__(parent, **kwargs)
         self.image_grid_thw = (1, 1, 1)
         self.out_hidden_size = self.hidden_size * self.merge_size**2
