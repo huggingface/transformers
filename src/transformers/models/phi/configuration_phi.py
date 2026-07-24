@@ -87,7 +87,6 @@ class PhiConfig(PreTrainedConfig):
 
         kwargs.setdefault("partial_rotary_factor", 0.5)  # assign default for BC
 
-
         super().__post_init__(**kwargs)
 
 

@@ -86,7 +86,6 @@ class Ernie4_5Config(PreTrainedConfig):
 
         self.head_dim = self.head_dim if self.head_dim is not None else self.hidden_size // self.num_attention_heads
 
-
         super().__post_init__(**kwargs)
 
 
