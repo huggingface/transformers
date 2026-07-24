@@ -109,18 +109,6 @@ def segment_sum(input_tensor):
     return tensor_segsum
 
 
-def apply_mask_to_padding_states(hidden_states, attention_mask):
-    """
-    Tunes out the hidden states for padding tokens, see https://github.com/state-spaces/mamba/issues/66
-    """
-    # NOTE: attention mask is a 2D boolean tensor
-    if attention_mask is not None and attention_mask.shape[1] > 1 and attention_mask.shape[0] > 1:
-        dtype = hidden_states.dtype
-        hidden_states = (hidden_states * attention_mask[:, :, None]).to(dtype)
-
-    return hidden_states
-
-
 is_fast_path_available = False
 
 
@@ -303,7 +291,10 @@ class NemotronHMamba2Mixer(nn.Module):
             out = self.out_proj(hidden_states.to(self.out_proj.weight.dtype))[:, None, ...]
         # Multi-token forward: fresh prefill, or chunked-prefill / speculative verify with a primed cache
         else:
-            hidden_states = apply_mask_to_padding_states(hidden_states, attention_mask)
+            if attention_mask is not None and not torch.all(attention_mask == 1):
+                # tune out hidden states for pad tokens, see https://github.com/state-spaces/mamba/issues/66
+                dtype = hidden_states.dtype
+                hidden_states = (hidden_states * attention_mask[:, :, None]).to(dtype)
             # 1. Gated MLP's linear projection
             projected_states = self.in_proj(hidden_states)
             A = -torch.exp(self.A_log.float())  # (num_heads) or (intermediate_size, state_size)
@@ -370,7 +361,10 @@ class NemotronHMamba2Mixer(nn.Module):
                     [self.intermediate_size, groups_time_state_size, groups_time_state_size],
                     dim=-1,
                 )
-                hidden_states = apply_mask_to_padding_states(hidden_states, attention_mask)
+                if attention_mask is not None and not torch.all(attention_mask == 1):
+                    # tune out hidden states for pad tokens, see https://github.com/state-spaces/mamba/issues/66
+                    dtype = hidden_states.dtype
+                    hidden_states = (hidden_states * attention_mask[:, :, None]).to(dtype)
                 scan_output, ssm_state = mamba_chunk_scan_combined(
                     hidden_states.view(batch_size, seq_len, -1, self.head_dim),
                     time_step,
@@ -402,9 +396,14 @@ class NemotronHMamba2Mixer(nn.Module):
     def torch_forward(self, input_states, cache_params: Cache | None=None, attention_mask: torch.Tensor | None = None):
         batch_size, seq_len, _ = input_states.shape
         dtype = input_states.dtype
-        # 1. Gated MLP's linear projection
-        input_states = apply_mask_to_padding_states(input_states, attention_mask)
-        projected_states = self.in_proj(input_states)
+        # Gated MLP's linear projection
+        if cache_params is not None and cache_params.has_previous_state(self.layer_idx):
+            projected_states = self.in_proj(input_states)
+        else:
+            if attention_mask is not None:
+                # tune out hidden states for pad tokens, see https://github.com/state-spaces/mamba/issues/66
+                input_states = (input_states * attention_mask[:, :, None]).to(dtype)
+            projected_states = self.in_proj(input_states)
         d_mlp = (projected_states.shape[-1] - 2 * self.intermediate_size - 2 * self.n_groups * self.ssm_state_size- self.num_heads) // 2
         _, _, gate, hidden_states, dt = projected_states.split(
                 [d_mlp, d_mlp, self.intermediate_size,  self.conv_dim, self.num_heads], dim=-1
@@ -436,7 +435,10 @@ class NemotronHMamba2Mixer(nn.Module):
             hidden_states = self.act(self.conv1d(hidden_states)[..., :hidden_states.shape[-1]].transpose(1, 2))
             if use_precomputed_state:
                 hidden_states = hidden_states[:, -seq_len:, :]
-            hidden_states = apply_mask_to_padding_states(hidden_states, attention_mask)
+            if attention_mask is not None:
+                dtype = hidden_states.dtype
+                # tune out hidden states for pad tokens, see https://github.com/state-spaces/mamba/issues/66
+                hidden_states = (hidden_states * attention_mask[:, :, None]).to(dtype)
 
         hidden_states, B, C = torch.split(hidden_states, [self.intermediate_size, self.n_groups * self.ssm_state_size, self.n_groups * self.ssm_state_size], dim=-1)
         A = -torch.exp(self.A_log.float())                            # [num_heads]

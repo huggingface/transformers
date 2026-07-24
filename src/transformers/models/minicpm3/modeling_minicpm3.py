@@ -195,22 +195,6 @@ def eager_attention_forward(
     return attn_output, attn_weights
 
 
-def yarn_get_mscale(scale=1, mscale=1):
-    if scale <= 1:
-        return 1.0
-    return 0.1 * mscale * math.log(scale) + 1.0
-
-
-def yarn_apply_mscale(rope_parameters, scaling):
-    if rope_parameters.get("rope_type", "default") != "default":
-        mscale_all_dim = rope_parameters.get("mscale_all_dim", 0)
-        scaling_factor = rope_parameters["factor"]
-        if mscale_all_dim:
-            mscale = yarn_get_mscale(scaling_factor, mscale_all_dim)
-            scaling = scaling * mscale * mscale
-    return scaling
-
-
 def rotate_half(x):
     """Rotates half the hidden dims of the input."""
     x1 = x[..., : x.shape[-1] // 2]
@@ -298,7 +282,6 @@ class MiniCPM3Attention(nn.Module):
         )
 
         self.scaling = self.qk_head_dim ** (-0.5)
-        self.scaling = yarn_apply_mscale(config.rope_parameters, self.scaling)
 
     def expand_kv(self, k_nope: torch.Tensor, k_pe: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         key_shape = (*k_nope.shape[:-1], -1, self.qk_nope_head_dim + self.v_head_dim)
