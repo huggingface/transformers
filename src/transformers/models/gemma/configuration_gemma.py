@@ -82,8 +82,5 @@ class GemmaConfig(PreTrainedConfig):
     attention_dropout: float | int = 0.0
     use_bidirectional_attention: bool | None = None
 
-    def __post_init__(self, **kwargs):
-        super().__post_init__(**kwargs)
-
 
 __all__ = ["GemmaConfig"]

@@ -86,7 +86,6 @@ class PhiConfig(PreTrainedConfig):
             self.num_key_value_heads = self.num_attention_heads
 
         kwargs.setdefault("partial_rotary_factor", 0.5)  # assign default for BC
-
         super().__post_init__(**kwargs)
 
 

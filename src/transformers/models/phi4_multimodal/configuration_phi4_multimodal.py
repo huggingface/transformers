@@ -231,6 +231,7 @@ class Phi4MultimodalConfig(PreTrainedConfig):
             self.audio_config = Phi4MultimodalAudioConfig()
         if self.num_key_value_heads is None:
             self.num_key_value_heads = self.num_attention_heads
+
         super().__post_init__(**kwargs)
 
     def convert_rope_params_to_dict(

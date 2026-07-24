@@ -108,7 +108,7 @@ class FlexOlmoConfig(PreTrainedConfig):
         if self.num_key_value_heads is None:
             self.num_key_value_heads = self.num_attention_heads
 
-            super().__post_init__(**kwargs)
+        super().__post_init__(**kwargs)
 
 
 # FlexOlmo RMS norm reuses Olmo2 RMS norm, which handles low precision slightly differently than the original Olmoe.

@@ -117,6 +117,7 @@ class Qwen3_5TextConfig(PreTrainedConfig):
             ]
         else:
             self.layer_types = remap_legacy_layer_types(self.layer_types)
+
         super().__post_init__(**kwargs)
 
 

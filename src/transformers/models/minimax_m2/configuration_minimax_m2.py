@@ -96,8 +96,5 @@ class MiniMaxM2Config(PreTrainedConfig):
     router_jitter_noise: float = 0.0
     rope_parameters: RopeParameters | dict | None = None
 
-    def __post_init__(self, **kwargs):
-        super().__post_init__(**kwargs)
-
 
 __all__ = ["MiniMaxM2Config"]

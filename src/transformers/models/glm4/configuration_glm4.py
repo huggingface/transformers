@@ -77,8 +77,7 @@ class Glm4Config(PreTrainedConfig):
         kwargs.setdefault("partial_rotary_factor", 0.5)  # assign default for BC
         if self.eos_token_id is None:
             self.eos_token_id = [151329, 151336, 151338]
-
-            super().__post_init__(**kwargs)
+        super().__post_init__(**kwargs)
 
 
 __all__ = ["Glm4Config"]

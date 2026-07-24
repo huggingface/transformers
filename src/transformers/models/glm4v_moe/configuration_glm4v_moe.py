@@ -109,7 +109,6 @@ class Glm4vMoeTextConfig(PreTrainedConfig):
 
     def __post_init__(self, **kwargs):
         kwargs.setdefault("partial_rotary_factor", 0.5)  # assign default for BC
-
         super().__post_init__(**kwargs)
 
 

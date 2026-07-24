@@ -90,11 +90,6 @@ class Cohere2MoeConfig(PreTrainedConfig):
         "layers.*.mlp.experts.down_proj": "grouped_gemm",
         "layers.*.mlp.experts": "moe_tp_experts",
     }
-    base_model_fsdp_plan = {
-        "embed_tokens": "free_full_weight",
-        "layers.*": "free_full_weight",
-        "norm": "keep_full_weight",
-    }
 
     vocab_size: int = 256000
     hidden_size: int = 8192
@@ -160,6 +155,7 @@ class Cohere2MoeConfig(PreTrainedConfig):
             self.mlp_layer_types = [
                 "dense" if i < first_k_dense_replace else "sparse" for i in range(self.num_hidden_layers)
             ]
+
         super().__post_init__(**kwargs)
 
 

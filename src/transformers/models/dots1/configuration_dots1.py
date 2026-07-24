@@ -122,6 +122,7 @@ class Dots1Config(PreTrainedConfig):
                 else "full_attention"
                 for i in range(self.num_hidden_layers)
             ]
+
         super().__post_init__(**kwargs)
 
 

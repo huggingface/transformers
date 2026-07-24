@@ -116,6 +116,7 @@ class LongcatFlashConfig(PreTrainedConfig):
 
         if self.qk_head_dim is None:
             self.qk_head_dim = self.qk_nope_head_dim + self.qk_rope_head_dim
+
         super().__post_init__(**kwargs)
 
 

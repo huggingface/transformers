@@ -92,7 +92,6 @@ class SolarOpenConfig(PreTrainedConfig):
     def __post_init__(self, **kwargs):
         kwargs.setdefault("partial_rotary_factor", 1.0)
         kwargs.setdefault("partial_rotary_factor", 0.5)  # assign default for BC
-
         super().__post_init__(**kwargs)
 
 

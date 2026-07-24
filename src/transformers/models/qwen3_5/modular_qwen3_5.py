@@ -135,8 +135,8 @@ class Qwen3_5TextConfig(Qwen3NextConfig):
     router_aux_loss_coef = AttributeError()
 
     def __post_init__(self, **kwargs):
-        super().__post_init__(**kwargs)
         del self.mlp_only_layers
+        super().__post_init__(**kwargs)
 
 
 @auto_docstring(checkpoint="Qwen/Qwen3.5-27B")

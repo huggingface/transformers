@@ -102,8 +102,6 @@ class GraniteSpeechPlusConfig(GraniteSpeechConfig):
     ```"""
 
     def __post_init__(self, **kwargs):
-        super().__post_init__(**kwargs)
-
         if self.encoder_config.cat_hidden_layers is not None:
             for idx in self.encoder_config.cat_hidden_layers:
                 if idx < 0 or idx >= self.encoder_config.num_layers:
@@ -118,6 +116,8 @@ class GraniteSpeechPlusConfig(GraniteSpeechConfig):
                     f"must equal encoder hidden_dim * {num_concat} = "
                     f"{self.encoder_config.hidden_dim * num_concat}."
                 )
+
+        super().__post_init__(**kwargs)
 
 
 class GraniteSpeechPlusPreTrainedModel(GraniteSpeechPreTrainedModel): ...

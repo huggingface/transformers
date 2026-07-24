@@ -76,8 +76,5 @@ class HeliumConfig(PreTrainedConfig):
     attention_bias: bool = False
     mlp_bias: bool = False
 
-    def __post_init__(self, **kwargs):
-        super().__post_init__(**kwargs)
-
 
 __all__ = ["HeliumConfig"]

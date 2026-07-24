@@ -80,8 +80,5 @@ class Starcoder2Config(PreTrainedConfig):
     use_bias: bool = True
     tie_word_embeddings: bool = True
 
-    def __post_init__(self, **kwargs):
-        super().__post_init__(**kwargs)
-
 
 __all__ = ["Starcoder2Config"]

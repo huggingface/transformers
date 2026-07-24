@@ -114,9 +114,6 @@ class Ernie4_5_VLMoeVisionConfig(Qwen2VLVisionConfig):
     mlp_ratio = AttributeError()
     temporal_patch_size = AttributeError()
 
-    def __post_init__(self, **kwargs):
-        super().__post_init__(**kwargs)
-
 
 @auto_docstring(checkpoint="baidu/ERNIE-4.5-VL-28B-A3B-PT")
 @strict
@@ -176,7 +173,8 @@ class Ernie4_5_VLMoeTextConfig(Ernie4_5_MoeConfig):
 @strict
 class Ernie4_5_VLMoeConfig(PreTrainedConfig):
     r"""
-    image_start_token_id (`int`, *optional*, defaults to 101304):        The image token index to encode the start of image.
+    image_start_token_id (`int`, *optional*, defaults to 101304):
+        The image token index to encode the start of image.
     image_end_token_id (`int`, *optional*, defaults to 101305):
         The image token index to encode the end of image.
     image_token_id (`int`, *optional*, defaults to 100295):

@@ -119,7 +119,6 @@ class Glm4MoeLiteConfig(PreTrainedConfig):
         if self.mlp_layer_types is None:
             self.mlp_layer_types = ["dense"] + ["sparse"] * (self.num_hidden_layers - 1)
         self.qk_head_dim = self.qk_nope_head_dim + self.qk_rope_head_dim
-
         super().__post_init__(**kwargs)
 
 

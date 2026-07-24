@@ -89,7 +89,6 @@ class MistralConfig(PreTrainedConfig):
             logger.warning_once(
                 "Detected Mistral model with layer_types. Consider using AutoModel or Ministral classes instead to enable alternating attention compatibility."
             )
-
         return super().__post_init__(**kwargs)
 
 

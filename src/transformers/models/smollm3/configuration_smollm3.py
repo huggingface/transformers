@@ -111,6 +111,7 @@ class SmolLM3Config(PreTrainedConfig):
                     self.layer_types.append("sliding_attention")
                 else:
                     self.layer_types.append("full_attention")
+
         super().__post_init__(**kwargs)
 
 

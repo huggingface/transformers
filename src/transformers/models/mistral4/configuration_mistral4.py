@@ -129,7 +129,6 @@ class Mistral4Config(PreTrainedConfig):
         self.qk_head_dim = self.qk_nope_head_dim + self.qk_rope_head_dim
         self.head_dim = self.qk_nope_head_dim + self.qk_rope_head_dim
         self.rope_parameters.setdefault("partial_rotary_factor", self.qk_rope_head_dim / self.head_dim)
-
         super().__post_init__(
             ignore_keys_at_rope_validation={"llama_4_scaling_beta", "max_position_embeddings"}, **kwargs
         )
