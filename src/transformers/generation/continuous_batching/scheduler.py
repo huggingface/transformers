@@ -199,6 +199,7 @@ class Scheduler(ABC):
         request_budget = self.max_requests_per_batch
 
         # Check safety margin
+        self.cache.pool.try_to_free_sectors()  # once before the loop starts to free sectors for the next batch
         cache_free_percent = self.cache.compute_free_capacity()
         outside_safety_margin = cache_free_percent < self.safety_margin
         if outside_safety_margin:

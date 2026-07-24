@@ -241,7 +241,7 @@ class PagedAttentionCache:
                 sectors_needed[name] = new_sectors
 
         # Stop here if this is a dry run or if there are not enough free sectors
-        enough_free_sectors = self.pool.check_has_enough_free_sectors(sum(sectors_needed.values()))
+        enough_free_sectors = self.pool.num_free_sectors >= sum(sectors_needed.values())
         if dry_run or not enough_free_sectors:
             return enough_free_sectors
 
@@ -312,7 +312,7 @@ class PagedAttentionCache:
         """Returns the free capacity of the cache in bytes or as a percentage of the total capacity."""
         free_bytes = len(self.pool.free_sectors) * self.bytes_per_sector
         for allocator in self.cache_allocators.values():
-            free_bytes += self.pool.count_free_blocks(allocator.index) * allocator.bytes_per_block
+            free_bytes += allocator.pool.count_free_blocks(allocator.index) * allocator.bytes_per_block
         return free_bytes / (self.num_sectors * self.bytes_per_sector if relative else 1)
 
     # def blocks_needed(self, num_requested_blocks: int, allocated_blocks: int) -> int:

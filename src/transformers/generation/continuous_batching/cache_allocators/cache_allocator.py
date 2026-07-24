@@ -79,7 +79,7 @@ class CacheAllocator(ABC):
         torch._dynamo.mark_static_address(self.cache_tensor)
         # Cache pool to keep track of the free blocks
         self.pool = pool
-        self.pool.blocks_per_sector[self.index] = self.blocks_per_sector
+        self.pool.set_blocks_per_sector(self.index, self.blocks_per_sector)
         # The first two sectors of the tensor are the trash sectors, and no allocator ever allocates from them.
         # Sector 0 holds the read trash, from which padding tokens read their (zeroed, never written) cache, and the
         # sentinel index, marking where to insert the new key or value states for sliding window attention groups.
