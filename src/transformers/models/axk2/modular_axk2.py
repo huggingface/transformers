@@ -119,6 +119,7 @@ class AXK2Config(DeepseekV32Config):
     topk_group: int | None = None
 
     first_k_dense_replace = AttributeError()
+    mlp_bias = AttributeError()
 
     base_model_tp_plan = {
         "layers.*.self_attn.q_gate_proj": "colwise",

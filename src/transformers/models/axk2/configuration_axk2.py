@@ -128,7 +128,6 @@ class AXK2Config(PreTrainedConfig, RotaryEmbeddingConfigMixin):
     index_topk: int = 2048
     index_head_dim: int = 128
     index_n_heads: int = 16
-    mlp_bias: bool = False
     head_dim: int = 64
     layer_types: list[str] | None = None
     gated_norm_rank: int = 16

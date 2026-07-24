@@ -87,3 +87,13 @@ print(tokenizer.decode(outputs[0], skip_special_tokens=True))
 
 [[autodoc]] AXK2ForCausalLM
     - forward
+
+## AXK2ForSequenceClassification
+
+[[autodoc]] AXK2ForSequenceClassification
+    - forward
+
+## AXK2ForTokenClassification
+
+[[autodoc]] AXK2ForTokenClassification
+    - forward
