@@ -2097,11 +2097,6 @@ class Gemma3nModel(Gemma3nPreTrainedModel):
         if input_ids is not None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
-            # Prepare per-layer inputs from inputs_ids
-            per_layer_inputs_mask = torch.logical_and(input_ids >= 0, input_ids < self.vocab_size_per_layer_input)
-            per_layer_inputs_tokens = torch.where(per_layer_inputs_mask, input_ids, torch.zeros_like(input_ids))
-            per_layer_inputs = self.language_model.get_per_layer_inputs(per_layer_inputs_tokens)
-
             # Handle vision tokens (>= embed_vision.vocab_offset and < embed_audio.vocab_offset)
             vision_mask = torch.logical_and(
                 input_ids >= self.embed_vision.vocab_offset, input_ids < self.embed_audio.vocab_offset
@@ -2113,14 +2108,22 @@ class Gemma3nModel(Gemma3nPreTrainedModel):
             expanded_vision_mask = vision_mask.unsqueeze(-1)
             inputs_embeds = torch.where(expanded_vision_mask, vision_embeds, inputs_embeds)
 
-            # Handle audio tokens (>= embed_audio.vocab_offset)
-            audio_mask = input_ids >= self.embed_audio.vocab_offset
+            # Handle audio tokens (bounded to actual audio vocab range)
+            audio_mask = torch.logical_and(
+                input_ids >= self.embed_audio.vocab_offset,
+                input_ids < self.embed_audio.vocab_offset + self.embed_audio.vocab_size,
+            )
             dummy_audio_token_id = self.embed_audio.vocab_offset + self.embed_audio.vocab_size - 1
             audio_input_ids = torch.where(audio_mask, input_ids, dummy_audio_token_id).to(inputs_embeds.device)
             audio_embeds = self.embed_audio(input_ids=audio_input_ids)
             audio_embeds = audio_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
             expanded_audio_mask = audio_mask.unsqueeze(-1)
             inputs_embeds = torch.where(expanded_audio_mask, audio_embeds, inputs_embeds)
+
+            # Prepare per-layer inputs: exclude multimodal tokens which have their own embeddings
+            per_layer_inputs_mask = (input_ids >= 0) & ~vision_mask & ~audio_mask
+            per_layer_inputs_tokens = torch.where(per_layer_inputs_mask, input_ids, torch.zeros_like(input_ids))
+            per_layer_inputs = self.language_model.get_per_layer_inputs(per_layer_inputs_tokens)
         else:
             per_layer_inputs = None
 
