@@ -47,8 +47,8 @@ is_fast_path_available = False
 
 
 class NemotronHMamba2Mixer(Zamba2MambaMixer):
-    def __init__(self, config: NemotronHConfig, layer_idx: int | None = None):
-        super().__init__(config, layer_idx)
+    def __init__(self, config: NemotronHConfig, layer_idx: int | None = None, initialize_mixer_weights: bool = True):
+        super().__init__(config, layer_idx, initialize_mixer_weights)
         self.ssm_state_size = config.ssm_state_size
         self.conv_kernel_size = config.conv_kernel
         self.intermediate_size = config.mamba_num_heads * config.mamba_head_dim
@@ -69,20 +69,16 @@ class NemotronHMamba2Mixer(Zamba2MambaMixer):
             groups=self.conv_dim,
             padding=self.conv_kernel_size - 1,
         )
-
         # projection of the input hidden states
         projection_size = self.intermediate_size + self.conv_dim + self.num_heads
-
         self.in_proj = nn.Linear(
             self.hidden_size,
             projection_size,
             bias=config.use_bias,
         )
-
         self.norm = Zamba2RMSNormGated(
             self.intermediate_size, group_size=self.intermediate_size // self.n_groups, eps=config.layer_norm_epsilon
         )
-
         self.out_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=config.use_bias)
 
     def forward(

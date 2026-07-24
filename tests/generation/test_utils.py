@@ -85,6 +85,7 @@ if is_torch_available():
         DynamicCache,
         EncoderDecoderCache,
         LinearAttentionAndFullAttentionLayer,
+        LinearAttentionAndSlidingWindowAttentionLayer,
         LinearAttentionLayer,
         QuantoQuantizedLayer,
         StaticCache,
@@ -2735,37 +2736,46 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
             num_hidden_layers -= config.num_kv_shared_layers
         self.assertEqual(num_hidden_layers, len(past_key_values))
 
+        def check_attention_shapes(layer, attention_shape):
+            # Remove the seq_length dim for cross-attention cache (it changes based on the model)
+            keys = layer.keys if seq_length is not None else layer.keys[:, :, 0, :]
+            values = layer.values if seq_length is not None else layer.values[:, :, 0, :]
+            self.assertEqual(keys.shape, attention_shape)
+            self.assertEqual(values.shape, attention_shape)
+
+        def check_linear_attention_shapes(layer, num_conv_states, conv_shape, recurrent_shape):
+            # assert we have as many conv states as necessary
+            self.assertEqual(num_conv_states, layer.number_of_states)
+            for i in range(num_conv_states):
+                # Fix sized only if we do not record the past
+                if not layer.record_past:
+                    self.assertEqual(layer.conv_states[i].shape, conv_shape)
+                # If we record the past, just make sure it's larger
+                else:
+                    self.assertEqual(layer.conv_states[i].shape[:-1], conv_shape[:-1])
+                    self.assertTrue(layer.conv_states[i].shape[-1] >= conv_shape[-1])
+                # May not be used (e.g. lfm2)
+                if layer.is_recurrent_states_initialized[i]:
+                    self.assertEqual(layer.recurrent_states[i].shape, recurrent_shape)
+
         # Check each layer has the correct shape
         for layer_idx, layer in enumerate(past_key_values.layers):
             # Fields may vary by layer on a heterogeneous config, so resolve the shapes per layer.
             layer_config = config.per_layer_config[layer_idx]
+            num_conv_states = getattr(layer_config, "number_of_conv_states", 1)
             conv_shape = self._get_conv_state_shape(batch_size, layer_config)
             recurrent_shape = self._get_recurrent_state_shape(batch_size, layer_config)
             attention_shape = self._get_attention_shape(batch_size, seq_length, layer_config)
             # Mamba + Attention layer cache
-            if type(layer) is LinearAttentionAndFullAttentionLayer:
-                # Remove the seq_length dim for cross-attention cache (it changes based on the model)
-                keys = layer.keys if seq_length is not None else layer.keys[:, :, 0, :]
-                values = layer.values if seq_length is not None else layer.values[:, :, 0, :]
-                self.assertEqual(keys.shape, attention_shape)
-                self.assertEqual(values.shape, attention_shape)
-                self.assertEqual(layer.conv_states[0].shape, conv_shape)
-                # May not be used (e.g. lfm2)
-                if layer.is_recurrent_states_initialized[0]:
-                    self.assertEqual(layer.recurrent_states[0].shape, recurrent_shape)
+            if type(layer) in (LinearAttentionAndFullAttentionLayer, LinearAttentionAndSlidingWindowAttentionLayer):
+                check_attention_shapes(layer, attention_shape)
+                check_linear_attention_shapes(layer, num_conv_states, conv_shape, recurrent_shape)
             # Mamba only layer cache
             elif type(layer) is LinearAttentionLayer:
-                self.assertEqual(layer.conv_states[0].shape, conv_shape)
-                # May not be used (e.g. lfm2)
-                if layer.is_recurrent_states_initialized[0]:
-                    self.assertEqual(layer.recurrent_states[0].shape, recurrent_shape)
+                check_linear_attention_shapes(layer, num_conv_states, conv_shape, recurrent_shape)
             # Attention only layer type
             else:
-                # Remove the seq_length dim for cross-attention cache (it changes based on the model)
-                keys = layer.keys if seq_length is not None else layer.keys[:, :, 0, :]
-                values = layer.values if seq_length is not None else layer.values[:, :, 0, :]
-                self.assertEqual(keys.shape, attention_shape)
-                self.assertEqual(values.shape, attention_shape)
+                check_attention_shapes(layer, attention_shape)
 
     def _get_attention_shape(self, batch_size: int, seq_length: int | None, config):
         # Only pure mamba models do not have num_attention_heads defined in config, so it can never be 1 in practice for attention models
@@ -2817,32 +2827,34 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
         if not len(cache1) == len(cache2):
             raise ValueError("Both caches do not have the same number of layers.")
 
+        def check_attentions(layer1, layer2):
+            torch.testing.assert_close(layer1.keys, layer2.keys)
+            torch.testing.assert_close(layer1.values, layer2.values)
+
+        def check_linear_attention(layer1, layer2):
+            self.assertEqual(layer1.number_of_states, layer2.number_of_states)
+            for i in range(layer1.number_of_states):
+                torch.testing.assert_close(layer1.conv_states[i], layer2.conv_states[i])
+                # May not be used (e.g. lfm2)
+                if layer1.is_recurrent_states_initialized[i]:
+                    torch.testing.assert_close(layer1.recurrent_states[i], layer2.recurrent_states[i])
+
         num_layers = len(cache1)
         for idx in range(num_layers):
             self.assertEqual(type(cache1.layers[idx]), type(cache2.layers[idx]))
-
             # Mamba + Attention layer
-            if type(cache1.layers[idx]) is LinearAttentionAndFullAttentionLayer:
-                torch.testing.assert_close(cache1.layers[idx].keys, cache2.layers[idx].keys)
-                torch.testing.assert_close(cache1.layers[idx].values, cache2.layers[idx].values)
-                torch.testing.assert_close(cache1.layers[idx].conv_states[0], cache2.layers[idx].conv_states[0])
-                # May not be used (e.g. lfm2)
-                if cache1.layers[idx].is_recurrent_states_initialized[0]:
-                    torch.testing.assert_close(
-                        cache1.layers[idx].recurrent_states[0], cache2.layers[idx].recurrent_states[0]
-                    )
+            if type(cache1.layers[idx]) in (
+                LinearAttentionAndFullAttentionLayer,
+                LinearAttentionAndSlidingWindowAttentionLayer,
+            ):
+                check_attentions(cache1.layers[idx], cache2.layers[idx])
+                check_linear_attention(cache1.layers[idx], cache2.layers[idx])
             # Mamba layer
             elif type(cache1.layers[idx]) is LinearAttentionLayer:
-                torch.testing.assert_close(cache1.layers[idx].conv_states[0], cache2.layers[idx].conv_states[0])
-                # May not be used (e.g. lfm2)
-                if cache1.layers[idx].is_recurrent_states_initialized[0]:
-                    torch.testing.assert_close(
-                        cache1.layers[idx].recurrent_states[0], cache2.layers[idx].recurrent_states[0]
-                    )
+                check_linear_attention(cache1.layers[idx], cache2.layers[idx])
             # Attention layer
             else:
-                torch.testing.assert_close(cache1.layers[idx].keys, cache2.layers[idx].keys)
-                torch.testing.assert_close(cache1.layers[idx].values, cache2.layers[idx].values)
+                check_attentions(cache1.layers[idx], cache2.layers[idx])
 
 
 @require_torch

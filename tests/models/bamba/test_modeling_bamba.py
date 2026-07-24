@@ -548,7 +548,7 @@ class BambaModelIntegrationTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         model_id = "ibm-fms/Bamba-9B"
-        cls.model = BambaForCausalLM.from_pretrained(model_id, dtype=torch.bfloat16)
+        cls.model = BambaForCausalLM.from_pretrained(model_id, dtype=torch.bfloat16, device_map=torch_device)
         cls.tokenizer = AutoTokenizer.from_pretrained(model_id)
 
         # feels a bit forced to have to do this for the generation test
@@ -567,8 +567,6 @@ class BambaModelIntegrationTest(unittest.TestCase):
             }
         )
         # fmt: on
-
-        self.model.to(torch_device)
 
         input_ids = self.tokenizer("Hey how are you doing on this lovely evening?", return_tensors="pt")[
             "input_ids"
@@ -620,8 +618,6 @@ class BambaModelIntegrationTest(unittest.TestCase):
         )
         # fmt: on
         EXPECTED_TEXT = EXPECTED_TEXTS.get_expectation()
-
-        self.model.to(torch_device)
 
         inputs = self.tokenizer(
             ["Hey how are you doing on this lovely evening?", "I am late! I need to"],
