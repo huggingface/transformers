@@ -50,7 +50,6 @@ from ...utils import (
     can_return_tuple,
     logging,
 )
-from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import (
     accepts_precomputed_kwargs,
     maybe_autocast,
@@ -999,7 +998,6 @@ class Ernie4_5_VLMoeModel(Qwen2VLModel):
         image_outputs.pooler_output = image_embeds
         return image_outputs
 
-    @deprecate_kwarg("rope_deltas", version="v5.10")
     @auto_docstring
     @can_return_tuple
     def forward(
@@ -1133,7 +1131,6 @@ class Ernie4_5_VLMoeForConditionalGeneration(Glm4vForConditionalGeneration, Gene
 
         return model_inputs
 
-    @deprecate_kwarg("rope_deltas", version="v5.10")
     @auto_docstring
     @can_return_tuple
     def forward(

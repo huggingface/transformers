@@ -40,7 +40,6 @@ from ...modeling_rope_utils import dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging, torch_compilable_check
-from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import (
     accepts_precomputed_kwargs,
     get_max_seqlen,
@@ -584,7 +583,6 @@ class Ernie4_5_VLMoeVisionAttention(nn.Module):
         self.attention_dropout = 0.0
         self.is_causal = False
 
-    @deprecate_kwarg("rotary_pos_emb", version="v5.10")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -667,7 +665,6 @@ class Ernie4_5_VLMoeVisionBlock(GradientCheckpointingLayer):
             hidden_act=config.hidden_act,
         )
 
-    @deprecate_kwarg("rotary_pos_emb", version="v5.10")
     @auto_docstring
     def forward(
         self,
@@ -1369,7 +1366,6 @@ class Ernie4_5_VLMoeModel(Ernie4_5_VLMoePreTrainedModel):
             position_ids = None
         return position_ids
 
-    @deprecate_kwarg("rope_deltas", version="v5.10")
     @auto_docstring
     @can_return_tuple
     def forward(
@@ -1581,7 +1577,6 @@ class Ernie4_5_VLMoeForConditionalGeneration(Ernie4_5_VLMoePreTrainedModel, Gene
         """
         return self.model.get_image_features(pixel_values, image_grid_thw, **kwargs)
 
-    @deprecate_kwarg("rope_deltas", version="v5.10")
     @auto_docstring
     @can_return_tuple
     def forward(

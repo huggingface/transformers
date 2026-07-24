@@ -39,7 +39,6 @@ from ...utils import (
     logging,
     torch_compilable_check,
 )
-from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import (
     accepts_precomputed_kwargs,
     maybe_autocast,
@@ -893,7 +892,6 @@ class Glm4vModel(Qwen2VLModel):
 
         return super().get_rope_index(video_grid_thw=video_grid_thw, **super_kwargs)
 
-    @deprecate_kwarg("rope_deltas", version="v5.10")
     @auto_docstring
     @can_return_tuple
     def forward(

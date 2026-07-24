@@ -55,7 +55,6 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import auto_docstring, can_return_tuple, logging, torch_compilable_check
-from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import (
     TransformersKwargs,
     accepts_precomputed_kwargs,
@@ -898,7 +897,6 @@ class Qwen3OmniMoeVisionAttention(nn.Module):
         self.attention_dropout = 0.0
         self.is_causal = False
 
-    @deprecate_kwarg("rotary_pos_emb", version="v5.10")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -1045,7 +1043,6 @@ class Qwen3OmniMoeVisionBlock(GradientCheckpointingLayer):
         self.attn = Qwen3OmniMoeVisionAttention(config=config)
         self.mlp = Qwen3OmniMoeVisionMLP(config=config)
 
-    @deprecate_kwarg("rotary_pos_emb", version="v5.10")
     @auto_docstring
     def forward(
         self,

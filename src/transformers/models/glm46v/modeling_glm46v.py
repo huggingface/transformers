@@ -37,7 +37,6 @@ from ...utils import (
     can_return_tuple,
     torch_compilable_check,
 )
-from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import accepts_precomputed_kwargs
 from ..auto import AutoModel
 from .configuration_glm46v import Glm46VConfig
@@ -378,7 +377,6 @@ class Glm46VModel(Glm46VPreTrainedModel):
             position_ids = None
         return position_ids
 
-    @deprecate_kwarg("rope_deltas", version="v5.10")
     @auto_docstring
     @can_return_tuple
     def forward(
@@ -503,7 +501,6 @@ class Glm46VForConditionalGeneration(Glm46VPreTrainedModel, GenerationMixin):
         """
         return self.model.get_image_features(pixel_values, image_grid_thw, **kwargs)
 
-    @deprecate_kwarg("rope_deltas", version="v5.10")
     @can_return_tuple
     @auto_docstring
     def forward(
