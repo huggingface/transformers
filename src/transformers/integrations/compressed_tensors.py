@@ -18,9 +18,15 @@ from torch import nn
 
 from ..core_model_loading import ConversionOps
 from ..utils import logging
+from ..utils.import_utils import is_torch_greater_or_equal
 
 
 logger = logging.get_logger(__name__)
+
+# The version-check helper transitively calls `importlib.util.find_spec`, which dynamo refuses to
+# trace. `assume_constant_result` makes dynamo evaluate it once at trace time and inline the bool
+# (same treatment as in `integrations/moe.py`).
+is_torch_greater_or_equal = torch._dynamo.assume_constant_result(is_torch_greater_or_equal)
 
 
 def get_experts_scheme(quantization_config):
@@ -183,10 +189,45 @@ def quantize_fp8_per_row(x: torch.Tensor):
     return x_fp8, scales
 
 
+def _scaled_mm_rowwise(
+    input: torch.Tensor,
+    weight: torch.Tensor,
+    scale_a: torch.Tensor,
+    scale_b: torch.Tensor,
+    out_dtype: torch.dtype,
+    bias: torch.Tensor | None = None,
+) -> torch.Tensor:
+    """Row-wise scaled FP8 matmul dispatcher that uses the public `torch.nn.functional.scaled_mm`
+    (torch >= 2.10) if available, else falls back to `torch._scaled_mm`.
+
+    Args:
+        input (`torch.Tensor`): FP8 input of shape (M, K), scaled per-row.
+        weight (`torch.Tensor`): FP8 weight of shape (K, N), scaled per-column.
+        scale_a (`torch.Tensor`): Input scales of shape (M, 1), float32.
+        scale_b (`torch.Tensor`): Weight scales of shape (1, N), float32.
+    Returns:
+        `torch.Tensor`: Output tensor of shape (M, N) in `out_dtype`.
+    """
+    # `torch.nn.functional.scaled_mm` is the public API for scaled matmuls, added in torch 2.10.
+    if is_torch_greater_or_equal("2.10", accept_dev=True):
+        ScalingType = torch.nn.functional.ScalingType
+        return torch.nn.functional.scaled_mm(
+            input,
+            weight,
+            scale_a,
+            ScalingType.RowWise,
+            scale_b,
+            ScalingType.RowWise,
+            bias=bias,
+            output_dtype=out_dtype,
+        )
+    return torch._scaled_mm(input, weight, scale_a=scale_a, scale_b=scale_b, out_dtype=out_dtype, bias=bias)
+
+
 class CompressedTensorsFP8Linear(nn.Linear):
     """Linear layer for compressed-tensors FP8 models.
 
-    Stores weights in FP8 format and uses ``torch._scaled_mm`` for FP8 matmul.
+    Stores weights in FP8 format and uses a row-wise scaled matmul (`_scaled_mm_rowwise`) for FP8 matmul.
     Activations are always dynamically quantized per-row via ``quantize_fp8_per_row``,
     which works for both ``dynamic`` and ``static`` checkpoints (the checkpoint's
     static input scale, if any, is simply not needed). The weight scale (per-channel
@@ -198,9 +239,7 @@ class CompressedTensorsFP8Linear(nn.Linear):
 
         self.has_bias = has_bias
         self.weight = nn.Parameter(torch.empty(out_features, in_features, dtype=_FP8_DTYPE))
-
-        # Weight scale: per-channel (out_features, 1) or per-tensor (1, 1); reshaped at load.
-        self.weight_scale = nn.Parameter(torch.zeros((out_features, 1), dtype=torch.float32))
+        self.weight_scale = nn.Parameter(torch.zeros((1, out_features), dtype=torch.float32))
 
         if self.has_bias:
             self.bias = nn.Parameter(torch.empty(self.out_features))
@@ -215,22 +254,11 @@ class CompressedTensorsFP8Linear(nn.Linear):
 
         x_quantized, x_scale = quantize_fp8_per_row(x)
 
-        # Ensure scale_b has shape (1, out_features) for row-wise _scaled_mm.
-        # weight_scale is already float32 (declared as such), so no cast needed.
-        # Per-channel: (out_features, 1) → .t() → (1, out_features) ✓
-        # Per-tensor:  (1, 1) → need to expand to (1, out_features)
-        scale_b = self.weight_scale.t()
-        is_per_tensor = scale_b.shape[-1] == 1 and self.out_features > 1
-        if is_per_tensor:
-            # expand() creates a stride-0 view; _scaled_mm requires contiguous scales.
-            # The scale tensor is tiny so .contiguous() cost is negligible.
-            scale_b = scale_b.expand(1, self.out_features).contiguous()
-
-        output = torch._scaled_mm(
+        output = _scaled_mm_rowwise(
             x_quantized,
             self.weight.t(),
             scale_a=x_scale.unsqueeze(-1),
-            scale_b=scale_b,
+            scale_b=self.weight_scale,
             out_dtype=input.dtype,
             bias=self.bias,
         )
@@ -280,3 +308,71 @@ def replace_with_compressed_tensors_fp8_linear(model, targets=None, ignore=None,
             "Please double check your model architecture."
         )
     return replaced_names
+
+
+def _get_fp8_linear(model, full_layer_name):
+    """Return the `CompressedTensorsFP8Linear` owning `full_layer_name` (a `weight_scale` key),
+    or None if the key belongs to another kind of module (e.g. a non-FP8 group of a mixed config)."""
+    module = model.get_submodule(full_layer_name.rsplit(".", 1)[0])
+    return module if isinstance(module, CompressedTensorsFP8Linear) else None
+
+
+class ConvertFP8LinearScale(ConversionOps):
+    """Reshape the checkpoint ``weight_scale`` into the row-wise kernel layout at load time.
+
+    compressed-tensors checkpoints store the dequantization scale as ``(out_features, 1)``
+    (channel strategy) or a single element (tensor strategy). The row-wise scaled matmul in
+    :class:`CompressedTensorsFP8Linear` needs a contiguous float32 ``(1, out_features)`` scale;
+    converting once at load time avoids a transpose + expand + copy on every forward call.
+    Scales of modules that were not replaced with :class:`CompressedTensorsFP8Linear` pass
+    through untouched.
+    """
+
+    def convert(self, input_dict, model=None, full_layer_name=None, **kwargs):
+        key, scale = next(iter(input_dict.items()))
+        scale = scale[0] if isinstance(scale, list) else scale
+        module = _get_fp8_linear(model, full_layer_name)
+        if module is None:
+            return {key: scale}
+        scale = scale.to(torch.float32).reshape(1, -1)
+        if scale.shape[1] != module.out_features:
+            # Tensor strategy: a single scale for all rows. The row-wise kernel cannot mix a
+            # row-wise input scale with a tensor-wise weight scale, so expand it once here.
+            scale = scale.expand(1, module.out_features).contiguous()
+        return {key: scale}
+
+    @property
+    def reverse_op(self) -> ConversionOps:
+        return RevertFP8LinearScale()
+
+
+class RevertFP8LinearScale(ConversionOps):
+    """Save-time inverse of :class:`ConvertFP8LinearScale`: restore the checkpoint layout,
+    ``(out_features, 1)`` for the channel strategy and ``(1, 1)`` for the tensor strategy.
+    The strategy is read from the config group targeting the module, so the saved checkpoint
+    stays loadable by other compressed-tensors consumers (llm-compressor, vLLM)."""
+
+    def convert(self, input_dict, model=None, full_layer_name=None, **kwargs):
+        from compressed_tensors.utils.match import is_match
+
+        key, scale = next(iter(input_dict.items()))
+        scale = scale[0] if isinstance(scale, list) else scale
+        module = _get_fp8_linear(model, full_layer_name)
+        if module is None:
+            return {key: scale}
+
+        module_name = full_layer_name.rsplit(".", 1)[0]
+        ct_config = model.config.quantization_config.quantization_config
+        strategy = None
+        for group in ct_config.config_groups.values():
+            if group.weights is not None and is_match(module_name, module, group.targets, ct_config.ignore or ()):
+                strategy = group.weights.strategy
+                break
+        if strategy == "tensor":
+            # The scale was expanded from a single element at load time; collapse it back.
+            return {key: scale[:, :1].clone()}
+        return {key: scale.t().contiguous()}
+
+    @property
+    def reverse_op(self) -> ConversionOps:
+        return ConvertFP8LinearScale()

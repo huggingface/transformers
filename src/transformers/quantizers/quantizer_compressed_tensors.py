@@ -170,12 +170,32 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
         """Models quantized using compressed tensors can be saved to disk"""
         return True
 
+    def get_weight_conversions(self):
+        """On the FP8 kernel path, a generic converter reshapes the checkpoint ``weight_scale``
+        tensors into the row-wise kernel layout once at load time — see
+        :class:`ConvertFP8LinearScale`."""
+        if not self.use_fp8_kernel:
+            return []
+
+        from ..integrations.compressed_tensors import ConvertFP8LinearScale
+
+        return [
+            WeightConverter(
+                source_patterns=["weight_scale"],
+                target_patterns=["weight_scale"],
+                operations=[ConvertFP8LinearScale()],
+            )
+        ]
+
     def update_weight_conversions(self, weight_conversions):
         """Attach the quantization sources (scales, packed weights) of MoE expert converters
         to their bucket and prepend a :class:`DecompressExperts` op, so the per-expert
         (weight, scale) pairs are dequantized *before* the merge / concat ops collapse the
         per-expert structure. FP8 checkpoints keep the plain ``weight`` name; packed formats
         use ``weight_packed`` / ``weight_shape``.
+
+        The generic converters from :meth:`get_weight_conversions` are appended at the end:
+        converters are matched in order, so the expert converters keep their scale keys.
         """
         updated: list = []
         for conv in weight_conversions:
@@ -205,4 +225,6 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
                     operations=new_ops,
                 )
             updated.append(conv)
+
+        updated.extend(self.get_weight_conversions())
         return updated
