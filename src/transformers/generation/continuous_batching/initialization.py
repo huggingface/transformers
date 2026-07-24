@@ -121,6 +121,16 @@ def ensure_decode_fast_path_is_available(
 ) -> None:
     """Ensures the decode fast path is available. If it is not, set the max blocks per request to 0. If it is
     available, and no user-provided max blocks per request, set it to the fallback default."""
+    # TODO: the decode fast path is temporarily disabled with the sector-based cache rework: force it off. Remove
+    # this block once the fast path is restored in flash_paged.py.
+    if cb_config.max_blocks_per_request != 0:
+        if user_requested:
+            logger.warning(
+                "The decode fast path is temporarily disabled with the sector-based cache rework: forcing "
+                "max_blocks_per_request to 0."
+            )
+        cb_config.max_blocks_per_request = 0
+
     # Then, if the decode fast path is not turned off, check if it is available
     if cb_config.max_blocks_per_request != 0:
         cuda_available = torch.cuda.is_available()
