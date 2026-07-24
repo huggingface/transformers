@@ -286,9 +286,9 @@ def recursive_parse(
                 raise TypeError(
                     f"Expected a string or bool for schema node with type boolean, got {type(node_content).__name__}: {node_content}"
                 )
-            if node_content.lower() in ("true", "1"):
+            if node_content.strip().lower() in ("true", "1"):
                 return True
-            elif node_content.lower() in ("false", "0"):
+            elif node_content.strip().lower() in ("false", "0"):
                 return False
             else:
                 raise ValueError(f"Invalid boolean value: {node_content}")
