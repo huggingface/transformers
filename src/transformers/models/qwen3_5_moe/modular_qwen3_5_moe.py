@@ -118,8 +118,8 @@ class Qwen3_5MoeTextConfig(Qwen3NextConfig):
     mlp_only_layers = AttributeError()
 
     def __post_init__(self, **kwargs):
-        del self.mlp_only_layers
         super().__post_init__(**kwargs)
+        del self.mlp_only_layers
 
 
 @auto_docstring(checkpoint="Qwen/Qwen3.5-35B-A3B")

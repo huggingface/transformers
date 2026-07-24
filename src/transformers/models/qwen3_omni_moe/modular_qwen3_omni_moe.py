@@ -395,8 +395,8 @@ class Qwen3OmniMoeTalkerCodePredictorConfig(Qwen3Config):
     use_sliding_window = AttributeError()
 
     def __post_init__(self, **kwargs):
-        self.sliding_window = self.sliding_window
         super().__post_init__(**kwargs)
+        self.sliding_window = self.sliding_window
 
 
 @auto_docstring(checkpoint="Qwen/Qwen3-Omni-30B-A3B-Instruct")
@@ -420,8 +420,8 @@ class Qwen3OmniMoeTalkerTextConfig(Qwen3MoeConfig):
     use_sliding_window = AttributeError()
 
     def __post_init__(self, **kwargs):
-        self.sliding_window = self.sliding_window
         super().__post_init__(**kwargs)
+        self.sliding_window = self.sliding_window
 
 
 @auto_docstring(checkpoint="Qwen/Qwen3-Omni-30B-A3B-Instruct")
