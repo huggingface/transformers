@@ -43,6 +43,7 @@ import copy
 import importlib
 import inspect
 import sys
+import types
 from collections.abc import MutableMapping
 from contextlib import contextmanager
 from typing import Any
@@ -98,6 +99,13 @@ class DynamoExporter(HfExporter):
 
         dynamic_shapes = config.dynamic_shapes
         if config.dynamic and dynamic_shapes is None:
+            logger.warning_once(
+                "`dynamic=True` with no explicit `dynamic_shapes` marks every input axis `Dim.AUTO`, so "
+                "torch.export resolves symbolic shapes for all of them — including axes that are actually "
+                "fixed (batch, a size-1 decode step, num_heads/head_dim). Passing explicit `dynamic_shapes` "
+                "that mark only the axes which vary bypasses that symbolic-shape resolution and exports "
+                "significantly faster."
+            )
             dynamic_shapes = get_auto_dynamic_shapes(sample_inputs)
 
         register_cache_pytrees_for_model(model)
@@ -425,6 +433,18 @@ def _path_to_class(path: str) -> type:
     return obj
 
 
+def _maybe_sym_constant(sym: Any) -> Any:
+    """The concrete value a ``Sym*`` has already specialized to, or ``None`` if it's still dynamic.
+    Each ``Sym*`` type has its own accessor (``maybe_as_bool``/``maybe_as_float``/``maybe_as_int``);
+    there is no generic one."""
+    node = sym.node
+    if isinstance(sym, torch.SymBool):
+        return node.maybe_as_bool()
+    if isinstance(sym, torch.SymFloat):
+        return node.maybe_as_float()
+    return node.maybe_as_int()
+
+
 def _flatten_to_context(obj: Any, tensors: list) -> Any:
     """Single-pass: recursively build a JSON-native context while collecting tensors into `tensors`."""
     # --- Pure Python / JSON-native (exact type check — subclasses fall through to stateful objects) ---
@@ -449,6 +469,17 @@ def _flatten_to_context(obj: Any, tensors: list) -> Any:
     if isinstance(obj, torch.layout):
         return {"_t": "layout", "n": str(obj).removeprefix("torch.")}
     if isinstance(obj, (torch.SymInt, torch.SymFloat, torch.SymBool)):
+        # A Sym* that has already specialized to a concrete constant is not a genuine dynamic
+        # graph output — bake it as a plain scalar instead of a leaf. Leaving it as a leaf makes
+        # flatten non-deterministic: the same field can be a constant-valued SymInt at one trace
+        # point (the dynamo out_spec capture) and an already-materialized python scalar at another
+        # (the aot-decomposition retrace), so the leaf count flips and `treespec.unflatten` fails
+        # with an off-by-one. deepseek_v4 hits this via two sibling cache layers
+        # (DeepseekV4HCACache / DeepseekV4CSACache) sharing a `cumulative_length` counter that one
+        # path leaves as a constant SymInt and the other as a python int.
+        const = _maybe_sym_constant(obj)
+        if const is not None:
+            return const
         idx = len(tensors)
         tensors.append(obj)
         return {"_t": "sym", "i": idx}
@@ -471,12 +502,15 @@ def _flatten_to_context(obj: Any, tensors: list) -> Any:
             "p": _class_to_path(cls),
             "v": [_flatten_to_context(i, tensors) for i in obj],
         }
+    if isinstance(obj, types.MethodType):
+        # A bound method can't be flattened into pytree context. Models shouldn't bind methods onto
+        # objects they return at forward time (e.g. recurrent_gemma binds `get_seq_length`/
+        # `get_mask_sizes` onto its `DynamicCache`) — that pattern isn't exportable; such a model is
+        # skipped until the binding is refactored away (e.g. into a `Cache` subclass).
+        raise TypeError("Cannot flatten a bound method for pytree context")
     if hasattr(obj, "__dict__"):
-        return {
-            "_t": "obj",
-            "p": _class_to_path(cls),
-            "s": {k: _flatten_to_context(v, tensors) for k, v in vars(obj).items()},
-        }
+        state = {k: _flatten_to_context(v, tensors) for k, v in vars(obj).items()}
+        return {"_t": "obj", "p": _class_to_path(cls), "s": state}
 
     raise TypeError(f"Cannot flatten {type(obj).__name__} for pytree context")
 
@@ -523,9 +557,9 @@ def _unflatten_from_context(ctx: Any, tensors: list) -> Any:
             return cls(*items)  # NamedTuple (requires positional args)
     if t == "obj":
         cls = _path_to_class(ctx["p"])
-        state = {k: _unflatten_from_context(v, tensors) for k, v in ctx["s"].items()}
         instance = cls.__new__(cls)
-        instance.__dict__.update(state)
+        for k, v in ctx["s"].items():
+            instance.__dict__[k] = _unflatten_from_context(v, tensors)
         return instance
 
     raise TypeError(f"Unknown tag {t!r} in pytree context")

@@ -776,7 +776,7 @@ class Xcodec2ISTFTHead(nn.Module):
         phase = phase.float()
         # Clamp like original: https://huggingface.co/HKUSTAudio/xcodec2/blob/main/vq/codec_decoder_vocos.py#L138
         magnitude = torch.exp(magnitude).clamp(max=1e2)
-        spectrogram_complex = magnitude * torch.exp(1j * phase)
+        spectrogram_complex = torch.polar(magnitude, phase)
 
         # Back to audio (ISTFT with manual "same" padding: torch.istft lacks a native same-padding mode,
         # so we use irfft + fold with explicit pre-computed padding to replicate it)

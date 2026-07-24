@@ -618,19 +618,33 @@ def _capture_forward(module: torch.nn.Module):
 def decompose_prefill_decode(
     model: PreTrainedModel,
     inputs: dict[str, Any],
+    generation_config: Any = None,
 ) -> dict[str, tuple[torch.nn.Module, dict]]:
     """Run `model.generate()` for 2 tokens and capture prefill and decode inputs.
 
     Reuses the full generation machinery so every architecture (decoder-only, SSM,
     encoder-decoder, multi-modal, …) gets correct inputs without reimplementing the loop.
 
+    `generation_config` is forwarded to `generate()` (defaulting to the model's own), so the captured
+    inputs use whatever cache `generate()` would build. Pass one with `cache_implementation="static"`
+    and `max_cache_len=N` to capture a **statically sized** cache in the decode inputs — the basis for
+    a static-cache export. `max_cache_len` sizes the cache independently of the 2-token capture, so the
+    exported decode takes a fixed `[..., N, ...]` cache rather than a growing one.
+
     Returns:
         `dict[str, tuple[torch.nn.Module, dict]]`:
         `{"prefill": (model, prefill_inputs), "decode": (model, decode_inputs)}`
     """
+    # Set the 2-token capture window on the config itself, not as generate() kwargs — passing a
+    # `generation_config` alongside generation kwargs is deprecated. Base it on the model's own config
+    # when none is given (preserving its defaults), and deep-copy into a distinct `capture_config` so
+    # the caller's `generation_config` is never mutated.
+    capture_config = copy.deepcopy(generation_config if generation_config is not None else model.generation_config)
+    capture_config.max_new_tokens = 2
+    capture_config.min_new_tokens = 2
     try:
         with _capture_forward(model) as calls:
-            model.generate(**copy.deepcopy(inputs), max_new_tokens=2, min_new_tokens=2)
+            model.generate(**copy.deepcopy(inputs), generation_config=capture_config)
     except Exception as e:
         raise RuntimeError(
             f"decompose_prefill_decode failed for {type(model).__name__}. "
@@ -745,7 +759,7 @@ def decompose_multimodal(model: PreTrainedModel, inputs: dict[str, Any]) -> dict
 
 
 def decompose_for_generation(
-    model: PreTrainedModel, inputs: dict[str, Any]
+    model: PreTrainedModel, inputs: dict[str, Any], generation_config: Any = None
 ) -> dict[str, tuple[torch.nn.Module, dict]]:
     """Decompose a generative model into independently exportable `(model, forward_inputs)` pairs.
 
@@ -757,13 +771,16 @@ def decompose_for_generation(
     Args:
         model: Generative model. Must support `model.generate(**inputs)`.
         inputs: **Generate** kwargs — what you'd pass to `model.generate(**inputs)`.
+        generation_config: Optional `GenerationConfig` forwarded to `generate()` during capture. Pass
+            one with `cache_implementation="static"` + `max_cache_len=N` to export against a statically
+            sized cache (see `decompose_prefill_decode`).
 
     Returns:
         `{component_name: (submodel, forward_inputs)}`. Keys are `"prefill"` / `"decode"` for
         plain generative models and `"<modality>_encoder"` / `"multi_modal_projector"` /
         `"language_model"` / `"lm_head"` / `"decode"` for multi-modal generative models.
     """
-    stages = decompose_prefill_decode(model, inputs)
+    stages = decompose_prefill_decode(model, inputs, generation_config=generation_config)
     prefill_model, prefill_inputs = stages["prefill"]
 
     if not is_multimodal(prefill_model):

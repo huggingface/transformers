@@ -13,22 +13,27 @@
 # limitations under the License.
 
 import copy
+import functools
 import inspect
+import itertools
 import re
 
 import pytest
 import torch
 from parameterized import parameterized
 
-from transformers import set_seed
+from transformers import GenerationConfig, set_seed
 from transformers.exporters.exporter_dynamo import DynamoConfig, DynamoExporter
 from transformers.exporters.exporter_executorch import ExecutorchConfig, ExecutorchExporter
 from transformers.exporters.exporter_onnx import OnnxConfig, OnnxExporter
 from transformers.exporters.utils import (
+    cast_leaf_tensors,
     decompose_for_generation,
     decompose_multimodal,
     get_leaf_tensors,
     is_multimodal,
+    module_device,
+    module_dtype,
 )
 from transformers.testing_utils import (
     require_executorch,
@@ -107,6 +112,14 @@ EXPORT_SKIPS: dict[str, dict[str, str]] = {
             "Same shape as Voxtral. TODO: align the generate-decomposition path."
         ),
     },
+    # torch.export (Dynamo), dynamic-shape only.
+    "dynamo.dynamic": {
+        "Sam2Model": (
+            "`torch.export` of the Hiera vision backbone under dynamic shapes exceeds the "
+            "10-minute test timeout (12 attention blocks × 3 Q-pool stage transitions on "
+            "symbolic H/W). Same budget overrun as the ONNX/ExecuTorch dynamic Sam2 skips."
+        ),
+    },
     # ONNX, every variant.
     "onnx": {
         "CHMv2ForDepthEstimation": (
@@ -114,6 +127,8 @@ EXPORT_SKIPS: dict[str, dict[str, str]] = {
             "pair the functional-graph assertion rejects (independent of any source `.detach()` — "
             "verified). Torch export works. TODO: file upstream `torch.export` issue."
         ),
+        "PixioModel": ("Lowering exceeds the 10-minute test timeout."),
+        "PixioBackbone": "Same `timeout` failure as `PixioModel`.",
     },
     # ONNX, generate path only.
     "onnx.generate": {
@@ -140,120 +155,105 @@ EXPORT_SKIPS: dict[str, dict[str, str]] = {
             "× 3 Q-pool stage transitions on symbolic H/W). ONNX + ORT push past 1000s timeout."
         ),
         "Sam2Model": "Same Hiera-backbone dynamic-shape budget overrun as `Sam2VisionModel`.",
+        "BigBirdModel": ("Lowering exceeds the 10-minute test timeout under dynamic shapes."),
+        "BigBirdForCausalLM": "Same `timeout` failure as `BigBirdModel`.",
+        "BigBirdForMaskedLM": "Same `timeout` failure as `BigBirdModel`.",
+        "BigBirdForMultipleChoice": "Same `timeout` failure as `BigBirdModel`.",
+        "BigBirdForPreTraining": "Same `timeout` failure as `BigBirdModel`.",
+        "BigBirdForQuestionAnswering": "Same `timeout` failure as `BigBirdModel`.",
+        "BigBirdForSequenceClassification": "Same `timeout` failure as `BigBirdModel`.",
+        "BigBirdForTokenClassification": "Same `timeout` failure as `BigBirdModel`.",
+        "DonutSwinModel": "Same `timeout` failure as `BigBirdModel`.",
+        "DonutSwinForImageClassification": "Same `timeout` failure as `BigBirdModel`.",
+        "MaskFormerSwinModel": "Same `timeout` failure as `BigBirdModel`.",
+        "MaskFormerSwinBackbone": "Same `timeout` failure as `BigBirdModel`.",
+        "Mask2FormerModel": "Same `timeout` failure as `BigBirdModel`.",
+        "Mask2FormerForUniversalSegmentation": "Same `timeout` failure as `BigBirdModel`.",
+        "SwinModel": "Same `timeout` failure as `BigBirdModel`.",
+        "SwinBackbone": "Same `timeout` failure as `BigBirdModel`.",
+        "SwinForImageClassification": "Same `timeout` failure as `BigBirdModel`.",
+        "SwinForMaskedImageModeling": "Same `timeout` failure as `BigBirdModel`.",
+        "Swinv2Model": "Same `timeout` failure as `BigBirdModel`.",
+        "Swinv2Backbone": "Same `timeout` failure as `BigBirdModel`.",
+        "Swinv2ForImageClassification": "Same `timeout` failure as `BigBirdModel`.",
+        "Swinv2ForMaskedImageModeling": "Same `timeout` failure as `BigBirdModel`.",
     },
     # ExecuTorch — lowering failures grouped by root cause; see the first entry of each
     # `Same ... as` chain for the full description.
     "executorch": {
-        "BarkFineModel": (
-            "ExecuTorch memory planning miscomputes the tensor spec (`buffer of size N, expected nbytes of M`) — a dtype-size mismatch in the lowered program."
+        "JetMoeModel": (
+            "MoE and mixture-of-attention route tokens with a data-dependent `inputs.split(expert_size)` "
+            "(per-expert token counts), which ExecuTorch's ahead-of-time memory planner can't size "
+            "(`GuardOnDataDependentSymNode`). A static rewrite exists (per-token weight gather) but "
+            "duplicates expert weights per token, so it's only viable for low-batch decode — not as the "
+            "eager default — and the framework's `@use_experts_implementation` is MLP-only, so it can't "
+            "host the mixture-of-attention experts. Exports fine on torch.export/ONNX (dynamic dim at runtime)."
         ),
-        "ClvpModelForConditionalGeneration": (
-            "A pass-through output aliases an input (`Output node is already in the inputs`)."
+        "JetMoeForCausalLM": "Same data-dependent MoE/MoA routing as `JetMoeModel`.",
+        "JetMoeForSequenceClassification": "Same data-dependent MoE/MoA routing as `JetMoeModel`.",
+        "FastVlmForConditionalGeneration": (
+            "ExecuTorch lowering of the vision stack crashes the process (native segfault/OOM) — the "
+            "failure is uncatchable in-process, so the pytest worker dies rather than raising."
         ),
-        "ColQwen2ForRetrieval": (
-            "ExecuTorch dim-order lowering requires a copying view (`Cannot view a tensor ... with shape/strides`)."
+        "FastVlmModel": "Same native ExecuTorch crash as `FastVlmForConditionalGeneration`.",
+        "LlavaOnevisionForConditionalGeneration": "Same native ExecuTorch vision-stack crash as `FastVlmForConditionalGeneration`.",
+        "LlavaOnevisionModel": "Same native ExecuTorch crash as `LlavaOnevisionForConditionalGeneration`.",
+        "PaddleOCRVLForConditionalGeneration": "Same native ExecuTorch vision-stack crash as `FastVlmForConditionalGeneration`.",
+        "PaddleOCRVLModel": "Same native ExecuTorch crash as `PaddleOCRVLForConditionalGeneration`.",
+        "Qwen3ASRForConditionalGeneration": (
+            "Audio encoder packs valid frames with a data-dependent `.nonzero()`; the unbacked "
+            "packed length can't be sized by ExecuTorch's ahead-of-time memory planner "
+            "(`GuardOnDataDependentSymNode`). Exports fine on torch.export/ONNX, which carry the "
+            "dynamic dim at runtime."
         ),
-        "DabDetrModel": ("XNNPACK partitioner: `Attempting to convert non-NHWC compatible node to NHWC`."),
-        "DabDetrForObjectDetection": "Same `nhwc` failure as `DabDetrModel`.",
-        "Ernie4_5_VLMoeModel": "Same `view` failure as `ColQwen2ForRetrieval`.",
-        "Ernie4_5_VLMoeForConditionalGeneration": "Same `view` failure as `ColQwen2ForRetrieval`.",
-        "FlavaForPreTraining": ("XNNPACK partitioner: `Invalid partition, found dependency cycles`."),
-        "GPT2Model": "Same `view` failure as `ColQwen2ForRetrieval`.",
-        "GPT2LMHeadModel": "Same `view` failure as `ColQwen2ForRetrieval`.",
-        "GPT2DoubleHeadsModel": "Same `view` failure as `ColQwen2ForRetrieval`.",
-        "GPT2ForQuestionAnswering": "Same `view` failure as `ColQwen2ForRetrieval`.",
-        "GPT2ForSequenceClassification": "Same `view` failure as `ColQwen2ForRetrieval`.",
-        "GPT2ForTokenClassification": "Same `view` failure as `ColQwen2ForRetrieval`.",
-        "Gemma3nModel": "Same `spec` failure as `BarkFineModel`.",
-        "Gemma3nForConditionalGeneration": "Same `spec` failure as `BarkFineModel`.",
-        "Glm46VModel": "Same `view` failure as `ColQwen2ForRetrieval`.",
-        "Glm46VForConditionalGeneration": "Same `view` failure as `ColQwen2ForRetrieval`.",
-        "Glm4vModel": "Same `view` failure as `ColQwen2ForRetrieval`.",
-        "Glm4vForConditionalGeneration": "Same `view` failure as `ColQwen2ForRetrieval`.",
-        "Glm4vMoeModel": "Same `view` failure as `ColQwen2ForRetrieval`.",
-        "Glm4vMoeForConditionalGeneration": "Same `view` failure as `ColQwen2ForRetrieval`.",
-        "GlmImageModel": "Same `view` failure as `ColQwen2ForRetrieval`.",
-        "GlmImageForConditionalGeneration": "Same `view` failure as `ColQwen2ForRetrieval`.",
-        "GlmOcrModel": "Same `view` failure as `ColQwen2ForRetrieval`.",
-        "GlmOcrForConditionalGeneration": "Same `view` failure as `ColQwen2ForRetrieval`.",
-        "GroundingDinoModel": ("Lowering exceeds the test timeout under dynamic shapes."),
-        "GroundingDinoForObjectDetection": "Same `timeout` failure as `GroundingDinoModel`.",
-        "InstructBlipModel": "Same `spec` failure as `BarkFineModel`.",
-        "InstructBlipForConditionalGeneration": "Same `spec` failure as `BarkFineModel`.",
-        "InstructBlipVideoForConditionalGeneration": "Same `spec` failure as `BarkFineModel`.",
-        "InstructBlipVideoModel": "Same `spec` failure as `BarkFineModel`.",
-        "MMGroundingDinoModel": "Same `timeout` failure as `GroundingDinoModel`.",
-        "MMGroundingDinoForObjectDetection": "Same `timeout` failure as `GroundingDinoModel`.",
-        "MiniMaxM3VLModel": ("Serialization rejects an i64 constant (`bad number for type int32`)."),
-        "MiniMaxM3SparseForConditionalGeneration": "Same `int32` failure as `MiniMaxM3VLModel`.",
-        "PPDocLayoutV3ForObjectDetection": ("Delegation drops a referenced weight (`KeyError` on a state-dict key)."),
-        "PaddleOCRVLForConditionalGeneration": "Same `view` failure as `ColQwen2ForRetrieval`.",
-        "PerceptionLMModel": "Same `passthrough` failure as `ClvpModelForConditionalGeneration`.",
-        "PerceptionLMForConditionalGeneration": "Same `passthrough` failure as `ClvpModelForConditionalGeneration`.",
-        "Qwen2VLModel": "Same `spec` failure as `BarkFineModel`.",
-        "Qwen2VLForConditionalGeneration": "Same `spec` failure as `BarkFineModel`.",
-        "Qwen2_5OmniThinkerForConditionalGeneration": "Same `view` failure as `ColQwen2ForRetrieval`.",
-        "Qwen2_5_VLModel": "Same `spec` failure as `BarkFineModel`.",
-        "Qwen2_5_VLForConditionalGeneration": "Same `spec` failure as `BarkFineModel`.",
-        "Qwen3OmniMoeThinkerForConditionalGeneration": "Same `view` failure as `ColQwen2ForRetrieval`.",
-        "Qwen3_5Model": "Same `spec` failure as `BarkFineModel`.",
-        "Qwen3_5ForConditionalGeneration": "Same `spec` failure as `BarkFineModel`.",
-        "Qwen3_5ForSequenceClassification": "Same `spec` failure as `BarkFineModel`.",
-        "Qwen3_5ForTokenClassification": "Same `spec` failure as `BarkFineModel`.",
-        "Qwen3_5MoeModel": "Same `spec` failure as `BarkFineModel`.",
-        "Qwen3_5MoeForConditionalGeneration": "Same `spec` failure as `BarkFineModel`.",
-    },
-    "executorch.generate": {
-        "PPFormulaNetForConditionalGeneration": (
-            "ExecuTorch memory planning miscomputes the tensor spec (`buffer of size N, expected nbytes of M`) — a dtype-size mismatch in the lowered program."
+        "Qwen3ASRModel": "Same data-dependent audio-encoder `.nonzero()` as `Qwen3ASRForConditionalGeneration`.",
+        "Qwen3ASRForTokenClassification": (
+            "Same data-dependent audio-encoder `.nonzero()` as `Qwen3ASRForConditionalGeneration`."
+        ),
+        "FlavaModel": (
+            "The interleaved text/image/multimodal encoder streams make XNNPACK's disjoint-set partitioner "
+            "emit partitions that form a dependency cycle once fused (`Invalid partition, found dependency "
+            "cycles`). The single-stream sub-models (image/text/multimodal/codebook) export fine."
+        ),
+        "FlavaForPreTraining": "Same fused-partition dependency cycle as `FlavaModel` (wraps it).",
+        "PPDocLayoutV3ForObjectDetection": (
+            "A single detection head applied at every decoder layer and tied to the encoder head is "
+            "duplicated by the constant-dedup pass; `_unsafe_adjust_original_program` then deletes the "
+            "shared target once and raises `KeyError` on the next copy while stripping delegated params."
         ),
     },
+    "executorch.generate": {},
     "executorch.dynamic": {
-        "BigBirdModel": ("Lowering exceeds the test timeout under dynamic shapes."),
-        "BigBirdForPreTraining": "Same `timeout` failure as `BigBirdModel`.",
-        "BigBirdForMaskedLM": "Same `timeout` failure as `BigBirdModel`.",
-        "BigBirdForCausalLM": "Same `timeout` failure as `BigBirdModel`.",
-        "BigBirdForMultipleChoice": "Same `timeout` failure as `BigBirdModel`.",
-        "BigBirdForQuestionAnswering": "Same `timeout` failure as `BigBirdModel`.",
-        "BigBirdForSequenceClassification": "Same `timeout` failure as `BigBirdModel`.",
-        "BigBirdForTokenClassification": "Same `timeout` failure as `BigBirdModel`.",
-        "DepthProModel": (
-            "`_ViewSpec is incompatible with its base` — mixed shape dynamism between a view and its base."
+        "Mask2FormerModel": ("Lowering exceeds the 10-minute test timeout under dynamic shapes."),
+        "Mask2FormerForUniversalSegmentation": "Same `timeout` failure as `Mask2FormerModel`.",
+        "BigBirdModel": "Same `timeout` failure as `Mask2FormerModel`.",
+        "BigBirdForPreTraining": "Same `timeout` failure as `Mask2FormerModel`.",
+        "BigBirdForMaskedLM": "Same `timeout` failure as `Mask2FormerModel`.",
+        "BigBirdForCausalLM": "Same `timeout` failure as `Mask2FormerModel`.",
+        "BigBirdForMultipleChoice": "Same `timeout` failure as `Mask2FormerModel`.",
+        "BigBirdForQuestionAnswering": "Same `timeout` failure as `Mask2FormerModel`.",
+        "BigBirdForSequenceClassification": "Same `timeout` failure as `Mask2FormerModel`.",
+        "BigBirdForTokenClassification": "Same `timeout` failure as `Mask2FormerModel`.",
+        "GroundingDinoModel": "Same `timeout` failure as `Mask2FormerModel`.",
+        "GroundingDinoForObjectDetection": "Same `timeout` failure as `Mask2FormerModel`.",
+        "MMGroundingDinoModel": "Same `timeout` failure as `Mask2FormerModel`.",
+        "MMGroundingDinoForObjectDetection": "Same `timeout` failure as `Mask2FormerModel`.",
+        "Sam2Model": "Same `timeout` failure as `Mask2FormerModel`.",
+        "Sam2VisionModel": "Same `timeout` failure as `Mask2FormerModel`.",
+        "Swinv2Model": "Same `timeout` failure as `Mask2FormerModel`.",
+        "Swinv2ForImageClassification": "Same `timeout` failure as `Mask2FormerModel`.",
+        "Swinv2ForMaskedImageModeling": "Same `timeout` failure as `Mask2FormerModel`.",
+        "Swinv2Backbone": "Same `timeout` failure as `Mask2FormerModel`.",
+    },
+    "executorch.static": {
+        "Wav2Vec2BertModel": (
+            "ExecuTorch *runtime* execution of the Conformer encoder exceeds the 15-min test timeout "
+            "under static shapes (~1350s in the runtime, not lowering). Dynamic shapes stay under budget."
         ),
-        "DepthProForDepthEstimation": "Same `viewspec` failure as `DepthProModel`.",
-        "DonutSwinModel": (
-            "ExecuTorch memory planning overflows under unbounded dynamic shapes (`mem_offset does not fit in 64 bits`)."
-        ),
-        "DonutSwinForImageClassification": "Same `overflow` failure as `DonutSwinModel`.",
-        "Mask2FormerModel": "Same `timeout` failure as `BigBirdModel`.",
-        "Mask2FormerForUniversalSegmentation": "Same `timeout` failure as `BigBirdModel`.",
-        "MaskFormerModel": "Same `timeout` failure as `BigBirdModel`.",
-        "MaskFormerForInstanceSegmentation": "Same `timeout` failure as `BigBirdModel`.",
-        "MaskFormerSwinModel": "Same `overflow` failure as `DonutSwinModel`.",
-        "MaskFormerSwinBackbone": "Same `overflow` failure as `DonutSwinModel`.",
-        "MllamaModel": "Same `overflow` failure as `DonutSwinModel`.",
-        "MllamaForConditionalGeneration": "Same `overflow` failure as `DonutSwinModel`.",
-        "PvtModel": "Same `viewspec` failure as `DepthProModel`.",
-        "PvtForImageClassification": "Same `viewspec` failure as `DepthProModel`.",
-        "Sam2Model": ("Delegation drops a referenced weight (`KeyError` on a state-dict key)."),
-        "Sam2VisionModel": "Same `timeout` failure as `BigBirdModel`.",
-        "Swin2SRModel": "Same `overflow` failure as `DonutSwinModel`.",
-        "Swin2SRForImageSuperResolution": "Same `overflow` failure as `DonutSwinModel`.",
-        "SwinModel": "Same `overflow` failure as `DonutSwinModel`.",
-        "SwinBackbone": "Same `overflow` failure as `DonutSwinModel`.",
-        "SwinForImageClassification": "Same `overflow` failure as `DonutSwinModel`.",
-        "SwinForMaskedImageModeling": "Same `overflow` failure as `DonutSwinModel`.",
-        "Swinv2Model": "Same `overflow` failure as `DonutSwinModel`.",
-        "Swinv2ForImageClassification": "Same `overflow` failure as `DonutSwinModel`.",
-        "Swinv2ForMaskedImageModeling": "Same `overflow` failure as `DonutSwinModel`.",
-        "Swinv2Backbone": "Same `overflow` failure as `DonutSwinModel`.",
-        "VitDetModel": "Same `viewspec` failure as `DepthProModel`.",
-        "VitDetBackbone": "Same `viewspec` failure as `DepthProModel`.",
-        "Wav2Vec2BertForCTC": ("`flatc` schema compilation fails when serializing the program."),
-        "Wav2Vec2BertModel": "Same `flatc` failure as `Wav2Vec2BertForCTC`.",
-        "Wav2Vec2BertForSequenceClassification": "Same `flatc` failure as `Wav2Vec2BertForCTC`.",
-        "Wav2Vec2BertForAudioFrameClassification": "Same `flatc` failure as `Wav2Vec2BertForCTC`.",
-        "Wav2Vec2BertForXVector": "Same `flatc` failure as `Wav2Vec2BertForCTC`.",
+        "Wav2Vec2BertForCTC": "Same Conformer-encoder runtime `timeout` as `Wav2Vec2BertModel`.",
+        "Wav2Vec2BertForSequenceClassification": "Same Conformer-encoder runtime `timeout` as `Wav2Vec2BertModel`.",
+        "Wav2Vec2BertForAudioFrameClassification": "Same Conformer-encoder runtime `timeout` as `Wav2Vec2BertModel`.",
+        "Wav2Vec2BertForXVector": "Same Conformer-encoder runtime `timeout` as `Wav2Vec2BertModel`.",
     },
 }
 
@@ -303,8 +303,31 @@ DYNAMIC_EXPORT_PARAMS = parameterized.expand(
     name_func=lambda f, _, p: f"{f.__name__}_{'dynamic' if p.args[0] else 'static'}",
 )
 
+# Generation export tests run the cartesian product of two axes: dynamic vs static shapes, and the
+# generation config used for the capture. `generation_config=None` is the model's own config (growing
+# `DynamicCache`); `cache_implementation="static"` exports against a `StaticCache`. Every cache runs
+# under both shape modes — under dynamic shapes a static cache still keeps a symbolic (resizable) size,
+# it just writes at fixed positions. Add a config to `_EXPORT_GENERATION_CONFIGS` to cross it with both.
+_EXPORT_SHAPE_MODES = [False, True]  # dynamic=False (static shapes) / dynamic=True
+_EXPORT_GENERATION_CONFIGS = [None, GenerationConfig(cache_implementation="static")]
+
+GENERATE_EXPORT_PARAMS = parameterized.expand(
+    list(itertools.product(_EXPORT_SHAPE_MODES, _EXPORT_GENERATION_CONFIGS)),
+    name_func=lambda f, _, p: (
+        f"{f.__name__}_{'dynamic' if p.args[0] else 'static'}"
+        + (f"_{p.args[1].cache_implementation}_cache" if p.args[1] is not None else "")
+    ),
+)
+
+
+def _needs_static_cache(generation_config) -> bool:
+    """True if `generation_config` requests a cache the model must explicitly support (a static impl).
+    Such variants only run on models that can (see the `_can_compile_fullgraph` gate in the tests)."""
+    return generation_config is not None and generation_config.cache_implementation is not None
+
+
 # Maximum time (in seconds) for a single export test before it is killed.
-EXPORT_TEST_TIMEOUT = 1000
+EXPORT_TEST_TIMEOUT = 15 * 60  # 15 minutes
 
 # Minimum torch version the exporters target — older releases lack `torch.export` features the
 # exporters rely on, so the export sweep is skipped (not failed) below this. Sourced from the
@@ -315,15 +338,32 @@ MIN_EXPORT_TORCH_VERSION = DynamoExporter.min_versions["torch"]
 # ──────────────────────────── helpers ────────────────────────────
 
 
-def _cast_inputs(obj, device, dtype):
-    """Recursively move tensors to `device`, casting floating-point tensors to `dtype`."""
-    if isinstance(obj, torch.Tensor):
-        return obj.to(device=device, dtype=dtype) if obj.is_floating_point() else obj.to(device=device)
-    if isinstance(obj, dict):
-        return {k: _cast_inputs(v, device, dtype) for k, v in obj.items()}
-    if isinstance(obj, (list, tuple)):
-        return type(obj)(_cast_inputs(v, device, dtype) for v in obj)
-    return obj
+def disable_hub_kernels(test_fn):
+    """Force `is_kernels_available()` to `False` for the duration of an export test.
+
+    Export must trace the pure-PyTorch path, never a Hub kernel (`mamba-ssm`, `causal-conv1d`, …): those
+    need optional deps (`einops`, triton, …) and aren't exportable anyway. Kernels load lazily on the first
+    (eager) forward — outside the exporter's own trace-time patch — so the whole test is wrapped. With
+    `is_kernels_available()` False, `lazy_load_kernel` short-circuits to `None` and the fallback runs.
+    """
+
+    @functools.wraps(test_fn)
+    def wrapper(*args, **kwargs):
+        from transformers.integrations import hub_kernels
+        from transformers.utils import import_utils
+
+        # `lazy_load_kernel` gates on `hub_kernels`'s own binding; patch the canonical def too.
+        targets = [(hub_kernels, "is_kernels_available"), (import_utils, "is_kernels_available")]
+        saved = [(obj, name, getattr(obj, name)) for obj, name in targets]
+        for obj, name in targets:
+            setattr(obj, name, lambda *args, **kwargs: False)
+        try:
+            return test_fn(*args, **kwargs)
+        finally:
+            for obj, name, original in saved:
+                setattr(obj, name, original)
+
+    return wrapper
 
 
 def _clean_inputs_for_export(inputs_dict, config):
@@ -342,6 +382,102 @@ def _run_onnx_program(onnx_program, inputs) -> dict:
     onnx_outputs = onnx_program(**onnx_inputs)
     onnx_names = (re.sub(r"^output\.", "", node.name) for node in onnx_program.model_proto.graph.output)
     return dict(zip(onnx_names, onnx_outputs))
+
+
+def _run_executorch_program(program_manager, inputs):
+    """Load and run an ExecuTorch program, returning its outputs — or ``None`` to skip this component.
+
+    ``None`` means "move on to the next component" and is returned when either:
+    - the export is valid but ExecuTorch's own runtime can't service it — a missing portable kernel
+      (``0x14``), an oversized arena (``0x21`` / ``bad_alloc``), or a portable-kernel / XNNPACK-delegate
+      failure at execute (``0x12`` / ``0x1``): a runtime limitation, not a transformers export defect; or
+    - the inputs couldn't be reconstructed for this program (a derived symint slot with no eager leaf).
+
+    Otherwise the model's declared outputs are returned for the caller to check against eager.
+    ``torch.export`` also appends mutated inputs (in-place-modified ``pixel_values``, recurrent state,
+    …) to the program outputs; those are dropped here — keeping only ``USER_OUTPUT`` slots — so the
+    result matches eager's returned leaves.
+
+    Inputs are bound *positionally* against the program's declared slots (``num_inputs`` /
+    ``input_tensor_meta``), filled in order from the eager pytree leaves — tensor leaves for tensor
+    slots, scalars for the rest.
+    """
+    from executorch.runtime import Runtime, Verification
+
+    set_seed(1234)
+    leaves = torch.utils._pytree.tree_leaves(inputs)
+    # The runtime rejects non-contiguous inputs, so materialise tensor leaves. `int` covers `bool`.
+    tensors = [t.contiguous() for t in leaves if isinstance(t, torch.Tensor)]
+    scalars = (t for t in leaves if isinstance(t, (int, float)))
+
+    # Load — surfaces ExecuTorch resource limits (missing portable kernel / oversized arena).
+    try:
+        program = Runtime.get().load_program(program_manager.buffer, verification=Verification.Minimal)
+        method = program.load_method("forward")
+    except (RuntimeError, MemoryError) as e:
+        if _is_executorch_runtime_limit(e):
+            return None
+        raise
+
+    # Each slot declares its shape; match it to an eager tensor leaf of that shape so the right tensor
+    # lands in the right slot (count alone isn't enough — a wrong-shape tensor crashes conv/copy
+    # kernels at execute). Under dynamic shapes the declared shape is an upper bound and won't match a
+    # leaf, so fall back to the next unused leaf (leaf order tracks the program's input order). If a
+    # slot can't be filled — a derived symint, or no leaf of the right shape — reconstruction isn't
+    # possible; return None and rely on the load check rather than run with bogus inputs.
+    args = []
+    for i in range(method.metadata.num_inputs()):
+        try:
+            shape = tuple(method.metadata.input_tensor_meta(i).sizes())
+        except Exception:  # non-tensor slot
+            args.append(next(scalars, None))
+        else:
+            match = next((t for t in tensors if tuple(t.shape) == shape), tensors[0] if tensors else None)
+            if match is not None:
+                tensors.remove(match)
+            args.append(match)
+        if args[-1] is None:
+            return None
+
+    try:
+        outputs = method.execute(args)
+    except (RuntimeError, MemoryError) as e:
+        if _is_executorch_runtime_limit(e):
+            return None
+        raise
+
+    # Drop `torch.export`'s appended mutated-input outputs, keeping only the model's `USER_OUTPUT`s
+    # (in program-output order). Then keep tensors only, mirroring eager's `get_leaf_tensors`, so the
+    # returned outputs line up with eager's returned leaves for the caller's count check.
+    exported_program = program_manager.exported_program
+    exported_program = exported_program() if callable(exported_program) else exported_program
+    output_kinds = [spec.kind.name for spec in exported_program.graph_signature.output_specs]
+    if len(output_kinds) == len(outputs):
+        outputs = [out for out, kind in zip(outputs, output_kinds) if kind == "USER_OUTPUT"]
+    return [out for out in outputs if isinstance(out, torch.Tensor)]
+
+
+# ExecuTorch runtime error codes that mean "the export is valid (it produced a loadable program) but
+# ExecuTorch's own portable runtime / XNNPACK backend can't service it" — a runtime limitation, not a
+# transformers export defect (which surfaces earlier as a `torch.export` error or later as an output
+# mismatch). Load: 0x14 missing portable kernel, 0x21 arena can't be allocated, 0x1 XNNPACK partition
+# won't compile (`xnn_status_unsupported_parameter`). Execute: 0x12 portable-kernel InvalidArgument
+# (constant_pad_nd/convolution/upsample_aa out-tensor sizing), 0x1 XNNPACK delegate failure, 0x10
+# XNNPACK delegate can't resize a static tensor to the runtime shape.
+_ET_LOAD_LIMIT_CODES = {"1", "14", "21"}
+_ET_EXECUTE_LIMIT_CODES = {"0x1", "0x10", "0x12"}
+
+
+def _is_executorch_runtime_limit(exc):
+    """True if ``exc`` is a known ExecuTorch runtime limitation (missing kernel / arena / kernel bug)."""
+    msg = str(exc)
+    if isinstance(exc, MemoryError) or "bad_alloc" in msg:
+        return True
+    load = re.search(r"Failed to load method forward, error: 0x:?([0-9a-fA-F]+)", msg)
+    if load and load.group(1) in _ET_LOAD_LIMIT_CODES:
+        return True
+    execute = re.search(r"execute\(\) failed with error (0x[0-9a-fA-F]+)", msg)
+    return bool(execute and execute.group(1) in _ET_EXECUTE_LIMIT_CODES)
 
 
 def _onnx_optimize_enabled(model_class, dynamic: bool) -> bool:
@@ -387,14 +523,17 @@ class ExportTesterMixin:
             if "for expert" in source_code and "use_experts_implementation" not in source_code:
                 self.skipTest(reason="Model architecture uses eager MoE implementation which is not torch exportable")
 
-    def _should_skip(self, model_class, generate=False, dynamic=False, backend=None):
+    def _should_skip(self, model_class, generate=False, dynamic=False, backend=None, generation_config=None):
         """Return True if this model class should be skipped for export tests.
 
         Walks the scopes in ``EXPORT_SKIPS`` from broad to specific that match the current
         ``(backend, generate, dynamic)`` triple — ``"all"`` always applies, ``"generate"`` only
         for generate tests, ``"<backend>"`` for that backend, and ``"<backend>.<variant>"`` for
-        the more-specific intersections.
+        the more-specific intersections. Also skips static-cache variants (a ``generation_config``
+        requesting one) on models that can't compile fullgraph — they don't support a static cache.
         """
+        if _needs_static_cache(generation_config) and not model_class._can_compile_fullgraph:
+            return True
         name = model_class.__name__
         scopes = ["all"]
         if generate:
@@ -403,12 +542,15 @@ class ExportTesterMixin:
             scopes.append(backend)
             if generate:
                 scopes.append(f"{backend}.generate")
-            if dynamic:
-                scopes.append(f"{backend}.dynamic")
+            scopes.append(f"{backend}.dynamic" if dynamic else f"{backend}.static")
         return any(name in EXPORT_SKIPS.get(scope, {}) for scope in scopes)
 
-    def _prepare_export_model_and_inputs(self, model_class):
+    def _prepare_export_model_and_inputs(self, model_class, device=torch_device):
         """Create model and forward inputs ready for export.
+
+        ``device`` defaults to ``torch_device``; the ExecuTorch tests pass ``"cpu"`` since that
+        backend targets CPU anyway, keeping any pre-trace forward off the GPU (a device-side
+        assert during tracing would otherwise poison the whole xdist worker's CUDA context).
 
         Returns:
             Dict of `{name: (model, inputs)}` — one entry per component.
@@ -421,15 +563,10 @@ class ExportTesterMixin:
         inputs_dict = _clean_inputs_for_export(inputs_dict, config)
 
         set_config_for_less_flaky_test(config)
-        model = model_class(config).eval().to(torch_device)
+        model = model_class(config).eval().to(device)
         set_model_for_less_flaky_test(model)
 
-        # Cast inputs to model device/dtype
-        try:
-            model_param = next(iter(model.parameters()))
-            inputs_dict = _cast_inputs(inputs_dict, model_param.device, model_param.dtype)
-        except StopIteration:
-            pass
+        inputs_dict = cast_leaf_tensors(inputs_dict, dtype=module_dtype(model), device=module_device(model))
 
         if is_multimodal(model):
             return decompose_multimodal(model, inputs_dict)
@@ -464,6 +601,7 @@ class ExportTesterMixin:
     @pytest.mark.torch_export_test
     @pytest.mark.timeout(EXPORT_TEST_TIMEOUT)
     @require_torch_greater_or_equal(MIN_EXPORT_TORCH_VERSION)
+    @disable_hub_kernels
     def test_torch_export(self, dynamic, atol=1e-4, rtol=1e-4):
         """Export each model class with ``torch.export`` and verify outputs match eager within tolerance."""
         self._skip_if_not_exportable()
@@ -472,7 +610,7 @@ class ExportTesterMixin:
         config = DynamoConfig(dynamic=dynamic)
 
         for model_class in self.all_model_classes:
-            if self._should_skip(model_class):
+            if self._should_skip(model_class, dynamic=dynamic, backend="dynamo"):
                 continue
 
             components = self._prepare_export_model_and_inputs(model_class)
@@ -498,6 +636,7 @@ class ExportTesterMixin:
     @pytest.mark.onnx_export_test
     @pytest.mark.timeout(EXPORT_TEST_TIMEOUT)
     @require_torch_greater_or_equal(MIN_EXPORT_TORCH_VERSION)
+    @disable_hub_kernels
     def test_onnx_export(self, dynamic):
         """Export each model class to ONNX and verify output names match eager."""
         self._skip_if_not_exportable()
@@ -528,8 +667,9 @@ class ExportTesterMixin:
     @pytest.mark.executorch_export_test
     @pytest.mark.timeout(EXPORT_TEST_TIMEOUT)
     @require_torch_greater_or_equal(MIN_EXPORT_TORCH_VERSION)
+    @disable_hub_kernels
     def test_executorch_export(self, dynamic):
-        """Export each model class to ExecuTorch (xnnpack on CPU, cuda on GPU) and verify no errors."""
+        """Export each model class to ExecuTorch, run it, and verify output count matches eager."""
 
         self._skip_if_not_exportable()
         exporter = ExecutorchExporter()
@@ -539,11 +679,21 @@ class ExportTesterMixin:
             if self._should_skip(model_class, dynamic=dynamic, backend="executorch"):
                 continue
 
-            components = self._prepare_export_model_and_inputs(model_class)
+            # Trace on CPU: XNNPACK targets CPU, and CPU tracing yields device-consistent graphs.
+            # Tracing on CUDA surfaces per-model device bugs — models create in-`forward` tensors
+            # (arange/zeros/sinusoids) without `device=`, which default to CPU and then mismatch a
+            # CUDA model (`FakeTensor Device Propagation ... cuda:0, cpu`). The exporter *can* take a
+            # CUDA model, but the suite exercises the canonical CPU-traced path.
+            components = self._prepare_export_model_and_inputs(model_class, device="cpu")
+            eager_outputs = self._collect_eager_outputs(components)
 
             for name, (model, inputs) in components.items():
                 with self.subTest(f"{model_class.__name__}/{name}"):
-                    exporter.export(model, inputs, config=config)
+                    program = exporter.export(model, inputs, config=config)
+                    executorch_outputs = _run_executorch_program(program, inputs)
+                    if executorch_outputs is None:  # ExecuTorch runtime limit / inputs not reconstructible
+                        continue
+                    self.assertEqual(len(executorch_outputs), len(eager_outputs[name]))
 
 
 class ExportGenerateTesterMixin(ExportTesterMixin):
@@ -562,11 +712,19 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
     stage into individual submodules via :func:`decompose_multimodal`.
     """
 
-    def _prepare_export_generate_model_and_inputs(self, model_class):
+    def _prepare_export_generate_model_and_inputs(self, model_class, device=torch_device, generation_config=None):
         """Decompose a generative model into exportable components.
 
         For multi-modal models: decomposes the prefill stage into individual submodules plus the decode stage.
         For decoder-only models: returns prefill and decode components.
+
+        ``device`` defaults to ``torch_device``; the ExecuTorch tests pass ``"cpu"`` so the
+        ``generate()`` call inside :func:`decompose_for_generation` runs on CPU — a device-side
+        assert there (e.g. a VLM ``masked_scatter`` size mismatch) would otherwise poison the
+        xdist worker's CUDA context and cascade to every later test on it.
+
+        ``generation_config`` is forwarded to the ``generate()`` capture (default: the model's own).
+        Pass one with ``cache_implementation="static"`` to export against a fixed-size ``StaticCache``.
 
         Returns:
             Dict of `{name: (model, inputs)}` — one entry per component.
@@ -575,19 +733,22 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
         inputs_dict = _clean_inputs_for_export(inputs_dict, config)
 
         set_config_for_less_flaky_test(config)
-        model = model_class(config).eval().to(torch_device)
+        model = model_class(config).eval().to(device)
         set_model_for_less_flaky_test(model)
 
-        return decompose_for_generation(model, inputs_dict)
+        inputs_dict = cast_leaf_tensors(inputs_dict, dtype=module_dtype(model), device=module_device(model))
+
+        return decompose_for_generation(model, inputs_dict, generation_config=generation_config)
 
     # ──────────────────── torch.export tests ─────────────────────
 
-    @DYNAMIC_EXPORT_PARAMS
+    @GENERATE_EXPORT_PARAMS
     @slow
     @pytest.mark.torch_export_test
     @pytest.mark.timeout(EXPORT_TEST_TIMEOUT)
     @require_torch_greater_or_equal(MIN_EXPORT_TORCH_VERSION)
-    def test_torch_export_generate(self, dynamic, atol=1e-4, rtol=1e-4):
+    @disable_hub_kernels
+    def test_torch_export_generate(self, dynamic, generation_config, atol=1e-4, rtol=1e-4):
         """Export prefill and decode stages with ``torch.export`` and verify outputs match eager."""
         self._skip_if_not_exportable()
 
@@ -595,10 +756,13 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
         config = DynamoConfig(dynamic=dynamic)
 
         for model_class in self.all_generative_model_classes:
-            if self._should_skip(model_class, generate=True):
+            if self._should_skip(
+                model_class, generate=True, dynamic=dynamic, backend="dynamo", generation_config=generation_config
+            ):
                 continue
-
-            components = self._prepare_export_generate_model_and_inputs(model_class)
+            components = self._prepare_export_generate_model_and_inputs(
+                model_class, generation_config=generation_config
+            )
             eager_outputs = self._collect_eager_outputs(components)
 
             for name, (model, inputs) in components.items():
@@ -614,26 +778,31 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
 
     # ──────────────────────── ONNX tests ─────────────────────────
 
-    @DYNAMIC_EXPORT_PARAMS
+    @GENERATE_EXPORT_PARAMS
     @slow
     @require_onnxscript
     @require_onnxruntime
     @pytest.mark.onnx_export_test
     @pytest.mark.timeout(EXPORT_TEST_TIMEOUT)
     @require_torch_greater_or_equal(MIN_EXPORT_TORCH_VERSION)
-    def test_onnx_export_generate(self, dynamic):
+    @disable_hub_kernels
+    def test_onnx_export_generate(self, dynamic, generation_config):
         """Export prefill and decode stages to ONNX and verify output names match eager."""
         self._skip_if_not_exportable()
 
         for model_class in self.all_generative_model_classes:
-            if self._should_skip(model_class, generate=True, dynamic=dynamic, backend="onnx"):
+            if self._should_skip(
+                model_class, generate=True, dynamic=dynamic, backend="onnx", generation_config=generation_config
+            ):
                 continue
 
             optimize = _onnx_optimize_enabled(model_class, dynamic)
             exporter = OnnxExporter()
             config = OnnxConfig(dynamic=dynamic, optimize=optimize)
 
-            components = self._prepare_export_generate_model_and_inputs(model_class)
+            components = self._prepare_export_generate_model_and_inputs(
+                model_class, generation_config=generation_config
+            )
             eager_outputs = self._collect_eager_outputs(components)
 
             for name, (model, inputs) in components.items():
@@ -646,25 +815,35 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
 
     # ──────────────────── ExecuTorch tests ───────────────────────
 
-    @DYNAMIC_EXPORT_PARAMS
+    @GENERATE_EXPORT_PARAMS
     @slow
     @require_executorch
     @pytest.mark.executorch_export_test
     @pytest.mark.timeout(EXPORT_TEST_TIMEOUT)
     @require_torch_greater_or_equal(MIN_EXPORT_TORCH_VERSION)
-    def test_executorch_export_generate(self, dynamic):
-        """Export prefill and decode stages to ExecuTorch and verify no errors."""
+    @disable_hub_kernels
+    def test_executorch_export_generate(self, dynamic, generation_config):
+        """Export prefill and decode stages to ExecuTorch, run each, and verify output count matches eager."""
 
         self._skip_if_not_exportable()
         exporter = ExecutorchExporter()
         config = ExecutorchConfig(dynamic=dynamic)
 
         for model_class in self.all_generative_model_classes:
-            if self._should_skip(model_class, generate=True, dynamic=dynamic, backend="executorch"):
+            if self._should_skip(
+                model_class, generate=True, dynamic=dynamic, backend="executorch", generation_config=generation_config
+            ):
                 continue
 
-            components = self._prepare_export_generate_model_and_inputs(model_class)
+            components = self._prepare_export_generate_model_and_inputs(
+                model_class, device="cpu", generation_config=generation_config
+            )
+            eager_outputs = self._collect_eager_outputs(components)
 
             for name, (model, inputs) in components.items():
                 with self.subTest(f"{model_class.__name__}/{name}"):
-                    exporter.export(model, inputs, config=config)
+                    program = exporter.export(model, inputs, config=config)
+                    executorch_outputs = _run_executorch_program(program, inputs)
+                    if executorch_outputs is None:  # ExecuTorch runtime limit / inputs not reconstructible
+                        continue
+                    self.assertEqual(len(executorch_outputs), len(eager_outputs[name]))

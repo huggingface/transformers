@@ -337,6 +337,53 @@ def _patch_cummin(original):
     return _patch_cummax_or_cummin(original, mode="min")
 
 
+@register_patch("onnx", "torch.chunk", "torch.Tensor.chunk")
+def _patch_chunk(original):
+    """Lower `chunk` via `narrow` (→ ONNX `Slice`) under dynamic shapes.
+
+    `torch.chunk` lowers to an ONNX `SplitToSequence` whose split length is a symbolic floordiv of the
+    (dynamic) axis size; onnx_ir's `InlinePass` rejects that graph (e.g. diffllama's differential
+    attention splitting the head axis). Narrow-based slicing produces plain `Slice` ops instead, which
+    lower and inline cleanly. Only rewrites when the split axis is dynamic — a static axis lets torch's
+    own `chunk` lowering (fixed split sizes) through, which onnxscript handles fine.
+    """
+
+    def patch(input, chunks, dim=0):
+        total = input.size(dim)
+        if not isinstance(total, torch.SymInt):
+            return original(input, chunks, dim)
+        # `torch.chunk` splits into `chunks` pieces of `ceil(total / chunks)`, the last taking the
+        # remainder. Emit that as narrows so nothing lowers to `SplitToSequence`.
+        chunk_size = (total + chunks - 1) // chunks
+        splits, start = [], 0
+        for i in range(chunks):
+            length = (total - start) if i == chunks - 1 else chunk_size
+            splits.append(input.narrow(dim, start, length))
+            start = start + chunk_size
+        return tuple(splits)
+
+    return patch
+
+
+@register_patch("onnx", "torch.reshape", "torch.Tensor.reshape", "torch.Tensor.view")
+def _patch_reshape(original):
+    """Materialise a non-contiguous input before `reshape`/`view`.
+
+    `reshape`/`view` on a permuted/non-contiguous tensor lowers to `aten.view`, which torch.export
+    rejects (`Cannot view a tensor with shape ... and strides ... as ...`) because the ONNX optimizer
+    folds away a plain `aten.contiguous`. Cloning to contiguous first is semantically a no-op — a
+    contiguous view holds the same data reshaped — and only copies when the view would otherwise fail
+    (e.g. WavLM's gated relative-position attention does `permute(...).view(...)`).
+    """
+
+    def patch(input, *shape, **kwargs):
+        if isinstance(input, torch.Tensor) and not input.is_contiguous():
+            input = input.clone(memory_format=torch.contiguous_format)
+        return original(input, *shape, **kwargs)
+
+    return patch
+
+
 @register_patch("onnx", "torch.exp", "torch.Tensor.exp")
 def _patch_exp(original):
     """Lower `exp` on complex tensors via Euler — onnxscript has no dispatch for `aten.exp` on
