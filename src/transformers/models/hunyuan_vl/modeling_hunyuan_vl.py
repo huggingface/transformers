@@ -1081,7 +1081,6 @@ class HunYuanVLModel(HunYuanVLPreTrainedModel):
         self.rope_deltas = rope_deltas
         return rope_positions
 
-    @deprecate_kwarg("rope_deltas", version="v5.10")
     @can_return_tuple
     @auto_docstring
     def forward(
