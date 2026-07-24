@@ -68,7 +68,7 @@ class CompressedTensorsTest(unittest.TestCase):
         self._test_quantized_model(self.tinyllama_w8a16, 20.0, expect_quantized=False)
 
     def test_frozen_fp8_dequantized_on_load(self):
-        quantization_config = CompressedTensorsConfig(run_compressed=False)
+        quantization_config = CompressedTensorsConfig(dequantize=True)
         model = AutoModelForCausalLM.from_pretrained(
             self.llama3_fp8_frozen,
             device_map=torch_device,
