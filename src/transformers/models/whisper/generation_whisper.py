@@ -1060,11 +1060,15 @@ class WhisperGenerationMixin(GenerationMixin):
             new_decoder_input_ids = []
             new_decoder_attention_mask = []
 
+            eos_token_id = generation_config.eos_token_id
+            if isinstance(eos_token_id, int):
+                eos_token_id = [eos_token_id]
+
             for i, seek_sequence in enumerate(seek_sequences):
                 # remove all padding tokens, except for the eos token
                 if seek_sequence[-1] == generation_config.pad_token_id:
                     num_paddings = (seek_sequence == generation_config.pad_token_id).sum()
-                    if generation_config.pad_token_id == generation_config.eos_token_id:
+                    if eos_token_id is not None and generation_config.pad_token_id in eos_token_id:
                         # we do not remove the eos token id since it is needed for avg logprob calculation in _need_fallback
                         num_paddings -= 1
                     if num_paddings != 0:
@@ -1082,7 +1086,7 @@ class WhisperGenerationMixin(GenerationMixin):
                 )
 
                 # remove eos token
-                if seek_sequence[-1] == generation_config.eos_token_id:
+                if eos_token_id is not None and seek_sequence[-1].item() in eos_token_id:
                     seek_sequence = seek_sequence[:-1]
 
                 seek_sequence_list[fallback_index_map[i]] = seek_sequence
