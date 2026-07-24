@@ -37,6 +37,27 @@ logger = logging.get_logger(__name__)
 
 
 class OnyxVideoProcessorInitKwargs(VideosKwargs, total=False):
+    """
+    patch_size (`int`, *optional*):
+        The spatial patch size of the vision encoder, in pixels.
+    temporal_patch_size (`int`, *optional*):
+        The temporal patch size of the vision encoder, in frames.
+    max_video_frame_tokens (`int`, *optional*):
+        Maximum number of vision tokens per video frame; frames are resized to stay under this cap.
+    merge_size (`int`, *optional*):
+        Factor by which the patch grid is downsampled by pixel shuffling after the vision encoder.
+    do_sample_frames (`bool`, *optional*):
+        Whether to sample frames from the video before processing or to process the whole video.
+    video_metadata (`VideoMetadata` or `dict`, *optional*):
+        Metadata of the video containing information about total duration, fps and total number of frames.
+    num_frames (`int`, *optional*):
+        Maximum number of frames to sample when `do_sample_frames=True`.
+    fps (`int` or `float`, *optional*):
+        Target frames to sample per second when `do_sample_frames=True`.
+    return_metadata (`bool`, *optional*):
+        Whether to return video metadata or not.
+    """
+
     patch_size: int
     temporal_patch_size: int
     max_video_frame_tokens: int

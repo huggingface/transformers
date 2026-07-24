@@ -260,7 +260,6 @@ class OnyxTokenizerConverter(TikTokenConverter):
             tokenizer_object=tokenizer_obj,
             additional_special_tokens=self.additional_special_tokens,
             model_max_length=16_384,
-            add_special_tokens=False,
         )
         self.converted_tokenizer.bos_token = "<|begin_of_text|>"
         self.converted_tokenizer.eos_token = "<|end_of_text|>"

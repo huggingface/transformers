@@ -254,6 +254,27 @@ class OnyxImageProcessor(Glm4vImageProcessor):
 
 
 class OnyxVideoProcessorInitKwargs(VideosKwargs, total=False):
+    """
+    patch_size (`int`, *optional*):
+        The spatial patch size of the vision encoder, in pixels.
+    temporal_patch_size (`int`, *optional*):
+        The temporal patch size of the vision encoder, in frames.
+    max_video_frame_tokens (`int`, *optional*):
+        Maximum number of vision tokens per video frame; frames are resized to stay under this cap.
+    merge_size (`int`, *optional*):
+        Factor by which the patch grid is downsampled by pixel shuffling after the vision encoder.
+    do_sample_frames (`bool`, *optional*):
+        Whether to sample frames from the video before processing or to process the whole video.
+    video_metadata (`VideoMetadata` or `dict`, *optional*):
+        Metadata of the video containing information about total duration, fps and total number of frames.
+    num_frames (`int`, *optional*):
+        Maximum number of frames to sample when `do_sample_frames=True`.
+    fps (`int` or `float`, *optional*):
+        Target frames to sample per second when `do_sample_frames=True`.
+    return_metadata (`bool`, *optional*):
+        Whether to return video metadata or not.
+    """
+
     patch_size: int
     temporal_patch_size: int
     max_video_frame_tokens: int
@@ -582,7 +603,14 @@ class OnyxTextConfig(Gemma2Config, PreTrainedConfig):
 @strict
 class OnyxConfig(PreTrainedConfig):
     r"""
-    TODO still
+    text_config (`OnyxTextConfig` or `dict`, *optional*):
+        Configuration of the text decoder. Defaults to the released checkpoint's text config.
+    vision_config (`OnyxVisionConfig` or `dict`, *optional*):
+        Configuration of the vision encoder. Defaults to the released checkpoint's vision config.
+    image_token_id (`int`, *optional*, defaults to 200092):
+        Token id used as the placeholder for image patch embeddings.
+    video_token_id (`int`, *optional*, defaults to 200091):
+        Token id used as the placeholder for video patch embeddings.
     """
 
     model_type = "onyx"

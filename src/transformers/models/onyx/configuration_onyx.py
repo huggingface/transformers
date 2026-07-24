@@ -171,6 +171,16 @@ class OnyxTextConfig(PreTrainedConfig):
 @auto_docstring
 @strict
 class OnyxConfig(PreTrainedConfig):
+    r"""
+    text_config (`OnyxTextConfig` or `dict`, *optional*):
+        Configuration of the text decoder. Defaults to the released checkpoint's text config.
+    vision_config (`OnyxVisionConfig` or `dict`, *optional*):
+        Configuration of the vision encoder. Defaults to the released checkpoint's vision config.
+    image_token_id (`int`, *optional*, defaults to 200092):
+        Token id used as the placeholder for image patch embeddings.
+    video_token_id (`int`, *optional*, defaults to 200091):
+        Token id used as the placeholder for video patch embeddings.
+    """
 
     model_type = "onyx"
     sub_configs = {
