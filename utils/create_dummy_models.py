@@ -158,6 +158,14 @@ config_class_to_model_tester_map = {
     "FastSpeech2ConformerWithHifiGanConfig": "FastSpeech2ConformerWithHifiGanTester",
     "Gemma3nAudioConfig": "Gemma3nAudioModelTester",
     # "Blip2QFormerConfig": "Blip2QFormerModelTester",
+    "Gemma4Config": "Gemma4Vision2TextModelTest",
+    "Gemma4UnifiedConfig": "Gemma4UnifiedVision2TextModelTest",
+    "GraniteSpeechPlusConfig": "GraniteSpeechPlusForConditionalGenerationModelTest",
+    "NemotronAsrStreamingConfig": "NemotronAsrStreamingForRNNTModelTest",
+    "NemotronAsrStreamingEncoderConfig": "NemotronAsrStreamingEncoderModelTest",
+    "ParakeetRNNTConfig": "ParakeetForRNNTModelTest",
+    "ParakeetTDTConfig": "ParakeetForTDTModelTest",
+    "UVDocConfig": "UVDocModelTest",
 }
 
 
@@ -173,6 +181,10 @@ no_model_tester_at_all = {
     "Sam3VideoConfig",
     "ShieldGemma2Config",
     "PPChart2TableConfig",
+    "Cosmos3EdgeVisionConfig",
+    "Gemma4AudioConfig",
+    "Qwen3_5MoeVisionConfig",
+    "Qwen3_5VisionConfig",
 }
 
 deprecated_models = {
