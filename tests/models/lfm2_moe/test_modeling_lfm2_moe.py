@@ -175,9 +175,12 @@ class Lfm2MoeIntegrationTest(unittest.TestCase):
     def test_model_1a8b_generation(self):
         EXPECTED_TEXT_COMPLETION = Expectations(
             {
-                ("cuda", None): [
+                ("cuda", (8, 0)): [
                     "In 1st century A.D., the Roman Empire controlled much of Europe, North Africa, and parts of the Middle East."
-                ]
+                ],
+                ("cuda", (8, 6)): [
+                    "In 1st century A.D., the Roman Empire controlled much of Europe, North Africa, and parts of Western Asia. Which"
+                ],
             }
         )
         EXPECTED_TEXT_COMPLETION = EXPECTED_TEXT_COMPLETION.get_expectation()[0]
@@ -194,10 +197,15 @@ class Lfm2MoeIntegrationTest(unittest.TestCase):
         prompts = ["Who are you?", "Complete the text: Lorem ipsum dolor ", "The Meji Restoration in Japan ended"]
         EXPECTED_TEXT_COMPLETIONS = Expectations(
             {
-                ("cuda", None): [
-                    "Who are you? (AI) designed to assist?  \nI am an AI assistant developed to",
+                ("cuda", (8, 0)): [
+                    "Who are you?, a language model designed to assist with complex problem-solving and creative exploration?",
                     "Complete the text: Lorem ipsum dolor ipsum dolor ipsum dolor ipsum dolor ipsum.",
-                    "The Meji Restoration in Japan ended**  \n**A.** The shogunate was abolished, and imperial",
+                    "The Meji Restoration in Japan ended** was a pivotal period in Japanese history that marked the transition from feudal rule",
+                ],
+                ("cuda", (8, 6)): [
+                    "Who are you? (as AI) created by?  \nI am an artificial intelligence designed to",
+                    "Complete the text: Lorem ipsum dolor ipsum dolor ipsum dolor ipsum dolor ipsum dolor",
+                    "The Meji Restoration in Japan ended, which occurred in 1868, marked the:  \nA) Establish",
                 ],
                 ("xpu", None): [
                     "Who are you? (AI) designed to assist?  \nI am an AI language model developed",
