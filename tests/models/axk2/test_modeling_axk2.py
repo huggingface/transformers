@@ -198,11 +198,24 @@ class AXK2ModelTest(CausalLMModelTest, unittest.TestCase):
 @slow
 @require_torch_accelerator
 class AXK2IntegrationTest(unittest.TestCase):
-    # A.X-K2's released checkpoint is a 20B+ MoE that does not fit a CI GPU, so these tests run on a small
-    # *randomized* checkpoint (seeded, ~21M params) hosted on the Hub, generated with the same shapes as
-    # `AXK2ModelTester`. It exercises the full A.X-K2 stack: fused attention output gate, gated RMSNorm,
-    # and the SGA (sparse-gated) indexer.
-    model_id = "skt/A.X-K2-tiny-random"
+    # A.X-K2's released checkpoint is a 20B+ MoE that does not fit a CI GPU, so these tests run on a tiny
+    # *randomized* checkpoint (same layout as `tiny-axk1`) that still exercises the full stack: fused
+    # attention output gate, gated RMSNorm, and the SGA (sparse-gated) indexer. Regenerate it
+    # byte-identically (and upload) with:
+    #
+    #     torch.manual_seed(0)
+    #     config = AXK2Config(
+    #         vocab_size=163840, hidden_size=64, intermediate_size=128, moe_intermediate_size=32,
+    #         num_hidden_layers=4, num_attention_heads=4, num_key_value_heads=4, n_routed_experts=16,
+    #         num_experts_per_tok=2, kv_lora_rank=16, q_lora_rank=16, qk_nope_head_dim=8,
+    #         qk_rope_head_dim=8, v_head_dim=8, index_n_heads=2, index_head_dim=16, index_topk=8,
+    #         gated_norm_rank=4, max_position_embeddings=4096,
+    #         mlp_layer_types=["dense"] + ["sparse"] * 3,
+    #     )
+    #     AXK2ForCausalLM(config).to(torch.bfloat16).push_to_hub("hf-internal-testing/tiny-axk2")
+    #
+    # The logits expectations below were recorded from exactly this seeded model (bf16, eager, A100).
+    model_id = "hf-internal-testing/tiny-axk2"
 
     def test_generation(self):
         # Weights are randomly initialized so the decoded text is arbitrary; this just exercises the full
