@@ -2454,12 +2454,20 @@ class PreTrainedModel(
         if getattr(module, "_is_hf_initialized", False):
             return
 
-        # This check is for remote code that does NOT use either `torch.init` or `transformers.initialization` in `_init_weights`
-        # which allow to check the flag directly on param. As they don't and write the params in-place, params would be reinitialized
-        # otherwise
+        # Check per-parameter _is_hf_initialized flag to skip redundant _init_weights:
+        # - remote code that writes params in-place without using torch.nn.init (is_custom_code),
+        # - Ascend NPU where torch.Tensor.normal_ is >1000x slower than CUDA (~1s vs ~1ms
+        #   per large tensor), making redundant re-initialization prohibitively expensive
+        #   (e.g. 224s for UMT5 under FSDP on Ascend NPU).
+        #
+        # Safety: mark_tied_weights_as_initialized may set _is_hf_initialized on tied params
+        # that are still on meta device. Never skip _init_weights if any param is still on meta.
+        _check_per_param_flag = is_custom_code or is_torch_npu_available()
+
         if (
-            is_custom_code
+            _check_per_param_flag
             and all(getattr(param, "_is_hf_initialized", False) for param in module.parameters(recurse=False))
+            and not any(param.device.type == "meta" for param in module.parameters(recurse=False))
             and all(
                 getattr(buffer, "_is_hf_initialized", False)
                 for buffer in module.buffers(recurse=False)
