@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from ...processing_utils import ProcessingKwargs, ProcessorMixin
+from ...processing_utils import ProcessorMixin
 from ...utils import auto_docstring, logging
 
 
@@ -62,17 +62,8 @@ ONYX_MM_CHAT_TEMPLATE = (
 )
 
 
-class OnyxProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {
-        "text_kwargs": {"add_special_tokens": False},
-        "videos_kwargs": {"return_metadata": True},
-    }
-
-
 @auto_docstring
 class OnyxProcessor(ProcessorMixin):
-    valid_processor_kwargs = OnyxProcessorKwargs
-
     def __init__(
         self,
         image_processor=None,

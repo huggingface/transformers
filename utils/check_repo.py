@@ -300,6 +300,8 @@ IGNORE_NON_TESTED = (
         "DiffusionGemmaEncoderModel",  # TODO(joaogante)
         "DiffusionGemmaEncoderTextModel",  # TODO(joaogante)
         "Kimi_K25VisionModel",
+        "OnyxTextModel",  # Building part of bigger (tested) model. Tested implicitly through OnyxForConditionalGeneration.
+        "OnyxVisionModel",  # Building part of bigger (tested) model. Tested implicitly through OnyxForConditionalGeneration.
         "HunYuanVLTextModel",
         "HunYuanVLVisionTransformer",
         "InklingForCausalLM",  # Building part of bigger (tested) model. Tested implicitly through InklingForConditionalGeneration.

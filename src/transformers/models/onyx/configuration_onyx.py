@@ -41,8 +41,6 @@ class OnyxVisionConfig(PreTrainedConfig):
         Output dimension for encoded image last hidden states.
     adapter_dim (`int`, *optional*):
         Intermediate dimension used in multimodal projection.
-    sparse_attention_factor (`int`, *optional*):
-        Every n-th layer that is divisible by this value applies window-attention.
     merge_size (`tuple[int] | list[int]`, *optional*):
         Kernel size for patch merging.
     """
@@ -81,12 +79,8 @@ class OnyxVisionConfig(PreTrainedConfig):
 @strict
 class OnyxTextConfig(PreTrainedConfig):
     r"""
-    query_pre_attn_scalar (`float`, *optional*, defaults to 256):
-        scaling factor used on the attention scores
     final_logit_softcapping (`float`, *optional*, defaults to 30.0):
         scaling factor when applying tanh softcapping on the logits.
-    attn_logit_softcapping (`float`, *optional*, defaults to 50.0):
-        scaling factor when applying tanh softcapping on the attention scores.
     use_bidirectional_attention (`bool`, *optional*):
         If True, the model will attend to all text tokens instead of using a causal mask.
     qk_scale_factor (`float`, *optional*, defaults to 43.7840518911):
@@ -97,8 +91,6 @@ class OnyxTextConfig(PreTrainedConfig):
         Whether to gate the per-head attention output with `sigmoid(output_gate_proj(hidden))`.
     output_multiplier (`float`, *optional*, defaults to 0.19611613513818404):
         Scale applied to logits before the final tanh softcap.
-    normalize_tok_embeddings (`bool`, *optional*, defaults to `True`):
-        Whether to apply a scaleless RMSNorm to the token embeddings before the decoder stack.
     post_norm_eps (`float`, *optional*, defaults to 1e-8):
         Epsilon used for the post-attention and post-FFN norms (which sit between the sub-layer output and the residual).
     no_rope_layers (`list[int]`, *optional*):
@@ -142,11 +134,9 @@ class OnyxTextConfig(PreTrainedConfig):
     rope_parameters: RopeParameters | dict | None = None
     attention_bias: bool = False
     attention_dropout: int | float | None = 0.0
-    query_pre_attn_scalar: int = 256
     sliding_window: int | None = 2048
     layer_types: list[str] | None = None
     final_logit_softcapping: float | None = 20.0
-    attn_logit_softcapping: float | None = None
     use_bidirectional_attention: bool | None = None
 
     # Onyx-specific fields
@@ -154,7 +144,6 @@ class OnyxTextConfig(PreTrainedConfig):
     use_qk_norm: bool = True
     use_attn_output_gate: bool = True
     output_multiplier: float = 0.19611613513818404
-    normalize_tok_embeddings: bool = True
     post_norm_eps: float = 1e-8
     no_rope_layers: list[int] | None = None
 

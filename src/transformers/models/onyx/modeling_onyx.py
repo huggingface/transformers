@@ -790,9 +790,9 @@ class OnyxVisionModel(OnyxPreTrainedModel):
         super().__init__(config)
         self.patch_embedder = OnyxVisionPatchEmbedder(config)
         self.rotary_emb = OnyxVisionRotaryEmbedding(config)
-        self.ln_pre = nn.LayerNorm(config.hidden_size)
+        self.ln_pre = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.layers = nn.ModuleList([OnyxVisionEncoderLayer(config) for _ in range(config.num_hidden_layers)])
-        self.ln_post = nn.LayerNorm(config.hidden_size)
+        self.ln_post = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
     def pixel_shuffle(self, hidden_states: torch.Tensor, grid_thw: torch.Tensor) -> torch.Tensor:
         factor = self.config.merge_size

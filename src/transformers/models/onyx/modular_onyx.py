@@ -268,8 +268,6 @@ class OnyxVisionConfig(Kimi_K25VisionConfig):
         Output dimension for encoded image last hidden states.
     adapter_dim (`int`, *optional*):
         Intermediate dimension used in multimodal projection.
-    sparse_attention_factor (`int`, *optional*):
-        Every n-th layer that is divisible by this value applies window-attention.
     merge_size (`tuple[int] | list[int]`, *optional*):
         Kernel size for patch merging.
     """
@@ -306,12 +304,8 @@ class OnyxVisionConfig(Kimi_K25VisionConfig):
 @strict
 class OnyxTextConfig(Gemma2Config, PreTrainedConfig):
     r"""
-    query_pre_attn_scalar (`float`, *optional*, defaults to 256):
-        scaling factor used on the attention scores
     final_logit_softcapping (`float`, *optional*, defaults to 30.0):
         scaling factor when applying tanh softcapping on the logits.
-    attn_logit_softcapping (`float`, *optional*, defaults to 50.0):
-        scaling factor when applying tanh softcapping on the attention scores.
     use_bidirectional_attention (`bool`, *optional*):
         If True, the model will attend to all text tokens instead of using a causal mask.
     qk_scale_factor (`float`, *optional*, defaults to 43.7840518911):
@@ -322,8 +316,6 @@ class OnyxTextConfig(Gemma2Config, PreTrainedConfig):
         Whether to gate the per-head attention output with `sigmoid(output_gate_proj(hidden))`.
     output_multiplier (`float`, *optional*, defaults to 0.19611613513818404):
         Scale applied to logits before the final tanh softcap.
-    normalize_tok_embeddings (`bool`, *optional*, defaults to `True`):
-        Whether to apply a scaleless RMSNorm to the token embeddings before the decoder stack.
     post_norm_eps (`float`, *optional*, defaults to 1e-8):
         Epsilon used for the post-attention and post-FFN norms (which sit between the sub-layer output and the residual).
     no_rope_layers (`list[int]`, *optional*):
@@ -349,15 +341,15 @@ class OnyxTextConfig(Gemma2Config, PreTrainedConfig):
     pad_token_id: int | None = None
     sliding_window: int | None = 2048
     final_logit_softcapping: float | None = 20.0
-    attn_logit_softcapping: float | None = None
     layer_types: list[str] | None = None
+    query_pre_attn_scalar = AttributeError()
+    attn_logit_softcapping = AttributeError()
 
     # Onyx-specific fields
     qk_scale_factor: float = 43.7840518911
     use_qk_norm: bool = True
     use_attn_output_gate: bool = True
     output_multiplier: float = 0.19611613513818404
-    normalize_tok_embeddings: bool = True
     post_norm_eps: float = 1e-8
     no_rope_layers: list[int] | None = None
 
@@ -607,7 +599,7 @@ class OnyxPreTrainedModel(Gemma2PreTrainedModel):
 
     @torch.no_grad()
     def _init_weights(self, module):
-        PreTrainedModel._init_weights(module)
+        PreTrainedModel._init_weights(self, module)
 
 
 class OnyxVisionModel(OnyxPreTrainedModel):
@@ -623,9 +615,9 @@ class OnyxVisionModel(OnyxPreTrainedModel):
         super().__init__(config)
         self.patch_embedder = OnyxVisionPatchEmbedder(config)
         self.rotary_emb = OnyxVisionRotaryEmbedding(config)
-        self.ln_pre = nn.LayerNorm(config.hidden_size)
+        self.ln_pre = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.layers = nn.ModuleList([OnyxVisionEncoderLayer(config) for _ in range(config.num_hidden_layers)])
-        self.ln_post = nn.LayerNorm(config.hidden_size)
+        self.ln_post = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
     def pixel_shuffle(self, hidden_states: torch.Tensor, grid_thw: torch.Tensor) -> torch.Tensor:
         factor = self.config.merge_size

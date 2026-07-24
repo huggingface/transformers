@@ -90,13 +90,11 @@ def build_config():
         eos_token_id=200_001,
         sliding_window=2048,
         final_logit_softcapping=20.0,
-        attn_logit_softcapping=None,
         rope_parameters={"rope_type": "default", "rope_theta": 500_000.0},
         qk_scale_factor=43.7840518911,
         use_qk_norm=True,
         use_attn_output_gate=True,
         output_multiplier=0.19611613513818404,
-        normalize_tok_embeddings=True,
         post_norm_eps=1e-8,
     )
 
@@ -263,6 +261,7 @@ class OnyxTokenizerConverter(TikTokenConverter):
             tokenizer_object=tokenizer_obj,
             additional_special_tokens=self.additional_special_tokens,
             model_max_length=16_384,
+            add_special_tokens=False,
         )
         self.converted_tokenizer.bos_token = "<|begin_of_text|>"
         self.converted_tokenizer.eos_token = "<|end_of_text|>"
@@ -290,7 +289,7 @@ def convert_tokenizer(tokenizer_path: Path, output_dir: Path) -> None:
 
     processor = OnyxProcessor(
         image_processor=OnyxImageProcessor(),
-        video_processor=OnyxVideoProcessor(),
+        video_processor=OnyxVideoProcessor(return_metadata=True),
         tokenizer=tokenizer,
         chat_template=ONYX_MM_CHAT_TEMPLATE,
     )
