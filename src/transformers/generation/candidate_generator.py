@@ -188,9 +188,6 @@ class AssistedCandidateGenerator(CandidateGenerator):
             processor for processor in self.logits_processor if not isinstance(processor, MinLengthLogitsProcessor)
         ]
 
-        # We need to roll back the cache in assisted generation, only DynamicCache is supported
-        self.generation_config.cache_implementation = "dynamic_full"
-
         if (
             is_sklearn_available()
             and self.assistant_generation_config.assistant_confidence_threshold
@@ -295,8 +292,8 @@ class AssistedCandidateGenerator(CandidateGenerator):
         """Update past key values and attention masks for subsequent generation rounds."""
         has_past_key_values = self.assistant_kwargs.get("past_key_values", None) is not None
         if has_past_key_values:
-            new_cache_size = input_ids.shape[-1] - 1 - remove_from_pkv
-            self.assistant_kwargs["past_key_values"].crop(new_cache_size - num_added_tokens)
+            tokens_to_remove = remove_from_pkv + num_added_tokens
+            self.assistant_kwargs["past_key_values"].crop(-tokens_to_remove)
             self.assistant_kwargs = _prepare_attention_mask(
                 self.assistant_kwargs, input_ids.shape[-1], self.assistant_model.config.is_encoder_decoder
             )
@@ -304,10 +301,6 @@ class AssistedCandidateGenerator(CandidateGenerator):
                 self.assistant_kwargs, input_ids.shape[-1], self.assistant_model.config.is_encoder_decoder
             )
             self.assistant_kwargs = _prepare_token_type_ids(self.assistant_kwargs, input_ids.shape[-1])
-
-            # This unsets `dynamic_full`, needed to initialize a new cache for the assistant. After the first forward
-            # pass on each generation, we reuse the cache instead.
-            self.generation_config.cache_implementation = None
 
         return has_past_key_values
 
@@ -1434,13 +1427,7 @@ class MTPCandidateGenerator(AssistedCandidateGenerator):
         model_kwargs: dict[str, Any],
         logits_processor: Optional["LogitsProcessorList"] = None,
     ):
-        from ..cache_utils import (
-            DynamicLayer,
-            DynamicSlidingWindowLayer,
-            LinearAttentionAndFullAttentionLayer,
-            LinearAttentionAndSlidingWindowAttentionLayer,
-            MtpCache,
-        )
+        from ..cache_utils import MtpCache
         from ..modeling_layers import MtpModel
 
         self.num_mtp_layers = getattr(main_model.config.get_text_config(), "num_mtp_layers", None)
@@ -1456,18 +1443,7 @@ class MTPCandidateGenerator(AssistedCandidateGenerator):
         self.mtp_model = MtpModel.from_pretrained(main_model, device_map={"": self.device})
 
         # Create the mtp cache and allow it to keep its past before we crop it
-        mtp_cache = MtpCache(config=main_model.config.get_mtp_config())
-        # Use full attention for now on sliding layers, same as main_model cache
-        mtp_cache.layers = [
-            DynamicLayer() if type(layer) is DynamicSlidingWindowLayer else layer for layer in mtp_cache.layers
-        ]
-        mtp_cache.layers = [
-            LinearAttentionAndFullAttentionLayer(number_of_states=layer.number_of_states)
-            if type(layer) is LinearAttentionAndSlidingWindowAttentionLayer
-            else layer
-            for layer in mtp_cache.layers
-        ]
-        self.mtp_cache = mtp_cache
+        self.mtp_cache = MtpCache(config=main_model.config.get_mtp_config())
         self.mtp_cache.activate_past_recording()
 
         # Save those to know how to decode mtp tokens
