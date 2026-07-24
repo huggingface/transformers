@@ -104,7 +104,10 @@ class StackCompressedModelTest(unittest.TestCase):
 
 @require_compressed_tensors
 @require_torch
-class RunCompressedTest(unittest.TestCase):
+class DequantizeTest(unittest.TestCase):
+    """Non-FP8 schemes have no kernels: the model is always dequantized at load time,
+    whether or not `dequantize=True` (or the deprecated `run_compressed=False`) is passed."""
+
     tinyllama_w4a16 = "nm-testing/tinyllama-w4a16-compressed"
     tinyllama_w8a8 = "nm-testing/tinyllama-w8a8-compressed"
 
@@ -117,60 +120,49 @@ class RunCompressedTest(unittest.TestCase):
         backend_empty_cache(torch_device)
         gc.collect()
 
-    def test_default_run_compressed__True(self):
+    def test_default_load_is_dequantized(self):
         from compressed_tensors import QuantizationStatus
 
         for stub in self.stubs:
-            model = AutoModelForCausalLM.from_pretrained(
-                stub,
-            )
+            model = AutoModelForCausalLM.from_pretrained(stub)
+
             compressed_count = sum(
                 1 for m in model.modules() if getattr(m, "quantization_status", None) == QuantizationStatus.COMPRESSED
             )
+            self.assertEqual(compressed_count, 0, "no modules should be left in COMPRESSED state")
 
-            # some linear modules are not compressed - ex. lm_head
-            assert compressed_count > 0
+            # Weights are back to a dense floating-point layout.
+            self.assertFalse(any("weight_packed" in name for name, _ in model.named_parameters()))
+            self.assertTrue(model.model.layers[0].self_attn.q_proj.weight.is_floating_point())
 
-    def test_default_run_compressed__False(self):
-        from compressed_tensors import QuantizationStatus
-
-        from transformers.utils.quantization_config import CompressedTensorsConfig
-
+    def test_deprecated_run_compressed_maps_to_dequantize(self):
+        # `run_compressed=False` is deprecated and must behave as `dequantize=True`.
         quantization_config = CompressedTensorsConfig(run_compressed=False)
+        self.assertTrue(quantization_config.dequantize)
 
-        for stub in self.stubs:
-            model = AutoModelForCausalLM.from_pretrained(
-                stub,
-                quantization_config=quantization_config,
-            )
-            compressed_count = sum(
-                1 for m in model.modules() if getattr(m, "quantization_status", None) == QuantizationStatus.COMPRESSED
-            )
+        from compressed_tensors import QuantizationStatus
 
-            # No modules should be in COMPRESSED state
-            assert compressed_count == 0
+        model = AutoModelForCausalLM.from_pretrained(self.stubs[0], quantization_config=quantization_config)
+        compressed_count = sum(
+            1 for m in model.modules() if getattr(m, "quantization_status", None) == QuantizationStatus.COMPRESSED
+        )
+        self.assertEqual(compressed_count, 0)
 
-    def test_run_compressed_outputs_match(self):
-        """Check that run_compressed=True/False output are the same"""
-
+    def test_dequantize_outputs_match_default(self):
+        """An explicit `dequantize=True` must produce the same outputs as the default load
+        (both are dequantized)."""
         from transformers import AutoTokenizer
-        from transformers.utils.quantization_config import CompressedTensorsConfig
-
-        quantization_config = CompressedTensorsConfig(run_compressed=False)
 
         for stub in self.stubs:
             tokenizer = AutoTokenizer.from_pretrained(stub)
             input_ids = tokenizer(self.prompt, return_tensors="pt").input_ids
 
-            model_run_compressed__True = AutoModelForCausalLM.from_pretrained(
-                stub,
-            )
-            output_rc_true = model_run_compressed__True.generate(input_ids, max_new_tokens=100)
+            model_default = AutoModelForCausalLM.from_pretrained(stub)
+            output_default = model_default.generate(input_ids, max_new_tokens=100)
 
-            model_run_compressed__False = AutoModelForCausalLM.from_pretrained(
-                stub,
-                quantization_config=quantization_config,
+            model_dequantized = AutoModelForCausalLM.from_pretrained(
+                stub, quantization_config=CompressedTensorsConfig(dequantize=True)
             )
-            output_rc_false = model_run_compressed__False.generate(input_ids, max_new_tokens=100)
+            output_dequantized = model_dequantized.generate(input_ids, max_new_tokens=100)
 
-            assert tokenizer.decode(output_rc_true[0]) == tokenizer.decode(output_rc_false[0])
+            self.assertEqual(tokenizer.decode(output_default[0]), tokenizer.decode(output_dequantized[0]))
