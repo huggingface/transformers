@@ -43,6 +43,7 @@ removals as we follow upstream.
 | ---------------------- | -------------------------- | --------------------------------------------- |
 | [`DynamoExporter`]     | `ExportedProgram`          | Any PyTorch runtime, AOT compilation          |
 | [`OnnxExporter`]       | `ONNXProgram`              | Any ONNX runtime (ORT, TensorRT, OpenVINO, …) |
+| [`OpenVINOExporter`]   | `openvino.Model`           | OpenVINO runtime (Intel CPU/GPU/NPU)          |
 | [`ExecutorchExporter`] | `ExecutorchProgramManager` | Mobile and edge devices (ExecuTorch)          |
 
 [`AutoHfExporter`] picks the right exporter from a config and [`AutoExportConfig`] picks the right
@@ -70,6 +71,13 @@ pip install transformers "torch==2.12.0" "onnx==1.21.0" "onnxscript==0.7.0" onnx
 
 ```bash
 pip install transformers "torch==2.12.0" "executorch==1.3.1"
+```
+
+</hfoption>
+<hfoption id="OpenVINO">
+
+```bash
+pip install transformers "torch==2.12.0" "openvino==2025.0.0"
 ```
 
 </hfoption>
@@ -154,6 +162,30 @@ from executorch.runtime import Runtime
 program = Runtime.get().load_program("model.pte")
 method = program.load_method("forward")
 outputs = method.execute(list(inputs.values()))
+```
+
+</hfoption>
+<hfoption id="OpenVINO">
+
+```python
+from transformers import AutoModelForCausalLM, AutoTokenizer
+from transformers.exporters import OpenVINOExporter, OpenVINOConfig
+
+model = AutoModelForCausalLM.from_pretrained("Qwen/Qwen3-0.6B")
+tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen3-0.6B")
+inputs = tokenizer("Hello, world!", return_tensors="pt")
+
+exporter = OpenVINOExporter()
+config = OpenVINOConfig(dynamic=True)
+ov_model = exporter.export(model, inputs, config=config)
+
+ov_model.save("model.xml")
+
+# compile and run on CPU (or "GPU" / "NPU" if available)
+import openvino as ov
+compiled = ov.Core().compile_model(ov_model, "CPU")
+ov_inputs = {k: v.numpy() for k, v in inputs.items()}
+outputs = compiled(ov_inputs)
 ```
 
 </hfoption>
@@ -252,6 +284,33 @@ et_program = exporter.export(model, inputs, config=config)
 ```
 
 </hfoption>
+<hfoption id="OpenVINO">
+
+```python
+import torch
+from transformers import AutoModelForCausalLM, AutoTokenizer
+from transformers.exporters import OpenVINOExporter, OpenVINOConfig
+
+model = AutoModelForCausalLM.from_pretrained("Qwen/Qwen3-0.6B")
+tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen3-0.6B")
+inputs = tokenizer(["Hello, world!", "Hi"], padding=True, return_tensors="pt")
+
+batch = torch.export.Dim("batch", min=1, max=32)
+seq = torch.export.Dim("seq", min=1, max=2048)
+
+exporter = OpenVINOExporter()
+config = OpenVINOConfig(
+    dynamic_shapes={"input_ids": {0: batch, 1: seq}, "attention_mask": {0: batch, 1: seq}},
+    # Emit data-dependent shape guards as runtime asserts instead of failing the export when a
+    # guard wouldn't hold across the explicit symbolic range — most LLMs need this under fine-grained
+    # ``Dim(min=, max=)`` bounds. Not needed with ``dynamic=True`` / ``Dim.AUTO``, where torch.export
+    # infers shape relations instead of verifying them against user-stated bounds.
+    prefer_deferred_runtime_asserts_over_guards=True,
+)
+ov_model = exporter.export(model, inputs, config=config)
+```
+
+</hfoption>
 </hfoptions>
 
 ## Generative models
@@ -326,6 +385,25 @@ components = exporter.export_for_generation(model, inputs, config=config)
 ```
 
 </hfoption>
+<hfoption id="OpenVINO">
+
+```python
+from transformers import AutoModelForImageTextToText, AutoProcessor
+from transformers.exporters import OpenVINOExporter, OpenVINOConfig
+
+model = AutoModelForImageTextToText.from_pretrained("Qwen/Qwen2-VL-2B-Instruct")
+processor = AutoProcessor.from_pretrained("Qwen/Qwen2-VL-2B-Instruct")
+messages = [{"role": "user", "content": [{"type": "image", "url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"}, {"type": "text", "text": "Describe this image."}]}]
+text = processor.apply_chat_template(messages, add_generation_prompt=True, tokenize=False)
+inputs = processor(text=text, images=messages[0]["content"][0]["url"], return_tensors="pt").to(model.device)
+
+exporter = OpenVINOExporter()
+config = OpenVINOConfig(dynamic=True)
+components = exporter.export_for_generation(model, inputs, config=config)
+# components = {"image_encoder": openvino.Model, "language_model": openvino.Model, "lm_head": openvino.Model, "decode": openvino.Model}
+```
+
+</hfoption>
 </hfoptions>
 
 <Tip warning={true}>
@@ -380,9 +458,7 @@ visible from the public `export()` API, but the most common things to know:
 - `grouped_mm` traces fine through `DynamoExporter` and is auto-translated for `OnnxExporter`;
   for `ExecutorchExporter` with the XNNPACK backend, the exporter swaps MoE experts to
   `batched_mm` because XNNPACK has no `_grouped_mm.out` kernel.
-- A short list of models (`EXPORT_SKIP_MODEL_CLASSES`) is skipped from the export sweep when
-  the model itself is fundamentally non-exportable; each entry carries a TODO with the
-  model-side change needed.
+- Not every architecture exports cleanly yet — a few hit data-dependent control flow that can't be vectorised, or exceed practical export time under dynamic shapes. When that happens the failure surfaces at `export()` time with a concrete error, not silently.
 
 <details>
 <summary>Export pipeline — internals (per-backend stages and how to extend)</summary>
@@ -465,22 +541,6 @@ The split is intentional:
 - **Exporter patch** if the issue is a single backend's lowering bug — a missing ONNX
   translation, an ORT validation quirk, an FX decomposition that emits a dead op. Keep the
   workaround in the exporter and the modeling code stays clean.
-
-### Known upstream workarounds
-
-A small number of model classes hit confirmed bugs in `onnxscript`'s graph optimizer
-(constant folding crashing on `SplitToSequence`, FPN initialisers being dropped). For those,
-ONNX optimisation is selectively disabled via
-[`ONNX_DISABLE_OPTIMIZE_MODEL_CLASSES`](https://github.com/huggingface/transformers/blob/main/tests/exporters/test_utils.py)
-in the test suite — each entry is annotated with the upstream issue it works around. This
-list is **expected to shrink** as upstream bugs land; it is not an extension point for
-arbitrary skipping, and new entries should reference a specific upstream bug.
-
-A second list, [`EXPORT_SKIP_MODEL_CLASSES`](https://github.com/huggingface/transformers/blob/main/tests/exporters/test_utils.py),
-opts a handful of model classes out of the entire export sweep when the model itself is
-fundamentally non-exportable as-is (data-dependent control flow that can't be vectorised,
-modules treated as forward arguments, …). Same expectations: every entry carries a TODO
-naming the underlying model change needed; the list should shrink, not grow.
 
 </details>
 

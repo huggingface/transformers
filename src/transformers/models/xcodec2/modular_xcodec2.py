@@ -446,12 +446,13 @@ class Xcodec2ISTFTHead(nn.Module):
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         stft_pred = self.linear(hidden_states).transpose(1, 2)
         magnitude, phase = stft_pred.chunk(2, dim=1)
-        # Cast to float32: complex exponential and irfft are not supported for fp16 (ComplexHalf)
+        # Cast to float32: complex tensors and irfft are not supported for fp16 (ComplexHalf)
         magnitude = magnitude.float()
         phase = phase.float()
         # Clamp like original: https://huggingface.co/HKUSTAudio/xcodec2/blob/main/vq/codec_decoder_vocos.py#L138
         magnitude = torch.exp(magnitude).clamp(max=1e2)
-        spectrogram_complex = magnitude * torch.exp(1j * phase)
+        # ``polar(magnitude, phase)`` is ``magnitude * exp(1j * phase)``
+        spectrogram_complex = torch.polar(magnitude, phase)
 
         # Back to audio (ISTFT with manual "same" padding: torch.istft lacks a native same-padding mode,
         # so we use irfft + fold with explicit pre-computed padding to replicate it)
@@ -472,7 +473,7 @@ class Xcodec2ISTFTHead(nn.Module):
             output_size=(1, output_size),
             kernel_size=(1, self.n_fft),
             stride=(1, self.hop_length),
-        ).squeeze()[self.padding : -self.padding]
+        )[0, 0, 0, self.padding : -self.padding]
         # Clamp as expected by original: https://huggingface.co/HKUSTAudio/xcodec2/blob/main/vq/codec_decoder_vocos.py#L82
         window_envelope = window_envelope.clamp(min=1e-11)
         audio = audio / window_envelope

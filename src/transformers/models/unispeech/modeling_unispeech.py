@@ -1131,11 +1131,13 @@ class UniSpeechForPreTraining(UniSpeechPreTrainedModel):
         quantized_features = self.project_q(quantized_features.to(self.project_q.weight.dtype))
         quantized_features = self.project_hid(quantized_features)
 
-        prob_replace_matrix = torch.empty(transformer_features.size(0), transformer_features.size(1)).fill_(
-            self.config.replace_prob
+        prob_replace_matrix = torch.full(
+            (transformer_features.size(0), transformer_features.size(1)),
+            self.config.replace_prob,
+            device=transformer_features.device,
         )
         prob_replace_matrix = prob_replace_matrix.transpose(0, 1)
-        sampled_replace_matrix = torch.bernoulli(prob_replace_matrix).bool().to(transformer_features.device)
+        sampled_replace_matrix = torch.bernoulli(prob_replace_matrix).bool()
         sampled_replace_matrix = sampled_replace_matrix.transpose(0, 1)
         sampled_replace_matrix = sampled_replace_matrix.unsqueeze(-1)
         logits = transformer_features.masked_fill(sampled_replace_matrix, 0.0) + (

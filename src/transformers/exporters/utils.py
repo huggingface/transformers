@@ -58,8 +58,8 @@ if is_torch_available():
 
     from ..modeling_utils import PreTrainedModel
     from ..vision_utils import (
-        get_vision_attention_seqlens,
         get_vision_bilinear_indices_and_weights,
+        get_vision_cu_seqlens,
         get_vision_merged_shape,
         get_vision_nearest_position_ids,
         get_vision_position_ids,
@@ -233,7 +233,7 @@ def _map_leaf_tensors(obj: Any, fn: callable) -> Any:
 
     Mutates dicts and `__dict__`-bearing objects in place (preserving identity — callers
     rely on this so downstream pops/mutations propagate back to the original mapping);
-    rebuilds lists/tuples/sets/frozensets (immutable or order-sensitive containers).
+    rebuilds lists/tuples/sets (immutable or order-sensitive containers).
     Skips non-traversable leaf types (enum, SymInt, etc.).
     """
     if isinstance(obj, _LEAF_SKIP_TYPES):
@@ -433,9 +433,10 @@ def _prepare_grid_thw_vision_inputs(model: torch.nn.Module, inputs: dict[str, An
     `window_index`/`cu_window_seqlens`/`max_window_seqlen` (XNet-style window attn) and
     `bilinear_indices`/`bilinear_weights` (interpolation-based merging).
 
-    Optional helpers are gated by the presence of their config attribute on the encoder
-    (`window_size`+`patch_size` for window attention, `num_grid_per_side` for bilinear),
-    so a model that doesn't use that feature won't get its kwarg injected.
+    Optional helpers are gated by a submodule attribute (`window_size`+`patch_size` for window
+    attention, `num_grid_per_side` for bilinear) or, for model-specific ones, by the encoder's
+    modeling module defining the helper (`get_vision_frame_index` / `get_vision_temporal_merge_index`
+    for kimi_k25) — so a model that doesn't use a feature won't get its kwarg injected.
     """
     grid_thw = inputs["grid_thw"]
     spatial_merge_size = _find_submodule_attr(model, "spatial_merge_size")
@@ -444,13 +445,25 @@ def _prepare_grid_thw_vision_inputs(model: torch.nn.Module, inputs: dict[str, An
         # none (its encoder hard-codes `1` because spatial merging happens in the projector).
         spatial_merge_size = inputs.get("merge_sizes", 1)
 
-    cu_seqlens, max_seqlen = get_vision_attention_seqlens(grid_thw, model.config, kwargs=inputs)
-    inputs["cu_seqlens"] = cu_seqlens
-    inputs["max_seqlen"] = max_seqlen
-    # 3-axis (t, h, w) rotary encoders expose an ``axis_dim`` attr on their rotary_emb
-    # (minimax_m3_vl); default 2-axis (h, w) covers qwen2_5_vl / qwen3_vl / glm4v / paddleocr_vl.
-    include_temporal = _find_submodule_attr(model, "axis_dim") is not None
-    inputs["position_ids"] = get_vision_position_ids(grid_thw, spatial_merge_size, include_temporal=include_temporal)
+    # kimi_k25-style encoders define their own per-frame / temporal-merge precompute helpers in their
+    # modeling module (resolved below) and attend over the whole clip, so `cu_seqlens` is per-clip
+    # (matching the encoder's util call). Other grid_thw encoders lack these and stay per-frame.
+    module = sys.modules[type(model).__module__]
+    temporal_encoder = hasattr(module, "get_vision_frame_index")
+    inputs["cu_seqlens"] = get_vision_cu_seqlens(grid_thw, merge_temporal=temporal_encoder)
+    inputs["max_seqlen"] = get_max_seqlen(inputs["cu_seqlens"], model.config, kwargs=inputs)
+
+    # Only set the vision `position_ids` when nothing already has: a full (non-decomposed) multimodal
+    # export precomputes the LLM's `position_ids` via `get_rope_index` first, and the vision ids
+    # (different shape/meaning) must not overwrite it. On the decomposed vision sub-model nothing sets
+    # it first, so this still fires there.
+    if inputs.get("position_ids") is None:
+        # 3-axis (t, h, w) rotary encoders expose an ``axis_dim`` attr on their rotary_emb
+        # (minimax_m3_vl); default 2-axis (h, w) covers qwen2_5_vl / qwen3_vl / glm4v / paddleocr_vl.
+        include_temporal = _find_submodule_attr(model, "axis_dim") is not None
+        inputs["position_ids"] = get_vision_position_ids(
+            grid_thw, spatial_merge_size, include_temporal=include_temporal
+        )
 
     window_size = _find_submodule_attr(model, "window_size")
     patch_size = _find_submodule_attr(model, "patch_size")
@@ -464,9 +477,27 @@ def _prepare_grid_thw_vision_inputs(model: torch.nn.Module, inputs: dict[str, An
 
     num_grid_per_side = _find_submodule_attr(model, "num_grid_per_side")
     if num_grid_per_side is not None:
-        inputs["bilinear_indices"], inputs["bilinear_weights"] = get_vision_bilinear_indices_and_weights(
-            grid_thw, num_grid_per_side, spatial_merge_size
+        if hasattr(module, "get_vision_bicubic_indices_and_weights"):
+            # kimi_k25 resamples its learned grid bicubically (helper defined in its own module).
+            inputs["bicubic_indices"], inputs["bicubic_weights"] = module.get_vision_bicubic_indices_and_weights(
+                grid_thw, num_grid_per_side
+            )
+        else:
+            inputs["bilinear_indices"], inputs["bilinear_weights"] = get_vision_bilinear_indices_and_weights(
+                grid_thw, num_grid_per_side, spatial_merge_size
+            )
+
+    # Per-frame additive position table (kimi_k25): gathered by frame index instead of a per-clip loop.
+    if temporal_encoder:
+        inputs["frame_index"] = module.get_vision_frame_index(grid_thw)
+
+    # Temporal-pooling spatial merger (kimi_k25): one gather index replaces its per-clip merge loop.
+    if hasattr(module, "get_vision_temporal_merge_index"):
+        merge_kernel_size = _find_submodule_attr(model, "merge_kernel_size")
+        kernel_height, kernel_width = (
+            merge_kernel_size if not isinstance(merge_kernel_size, int) else (merge_kernel_size, merge_kernel_size)
         )
+        inputs["temporal_merge_index"] = module.get_vision_temporal_merge_index(grid_thw, kernel_height, kernel_width)
 
 
 @register_export_input_preparer("target_sizes")
@@ -490,6 +521,23 @@ def _prepare_navit_vision_inputs(model: torch.nn.Module, inputs: dict[str, Any])
             torch.cumsum(target_sizes[:, 0] * target_sizes[:, 1], dim=0, dtype=torch.int32), (1, 0)
         )
         inputs["max_seqlen"] = get_max_seqlen(cu_seqlens, model.config, kwargs=inputs)
+
+
+@register_export_input_preparer("image_sizes")
+def _prepare_image_sizes_as_ints(model: torch.nn.Module, inputs: dict[str, Any]) -> None:
+    """Replace a tensor `image_sizes` with a python list of `(h, w)` int-tuples (the `.tolist()` runs here,
+    outside the traced graph).
+
+    `image_sizes` is per-image geometry, and encoders crop/split each image by it — e.g.
+    `image_sizes[i] // patch_size` (Pixtral) or `int(image_sizes[i] / factor)` (Emu3 VQVAE). As a tensor
+    those bounds become unbacked symints under `torch.export`; as python ints they stay static (matching
+    each encoder's own `image_sizes is None` fallback, which already builds int-tuples). Models that route
+    `image_sizes` around the traced graph (e.g. LLaVA-NeXT resolves anyres before tracing) never hit this.
+    """
+    image_sizes = inputs["image_sizes"]
+    if not torch.is_tensor(image_sizes):
+        return
+    inputs["image_sizes"] = [tuple(int(v) for v in row) for row in image_sizes.tolist()]
 
 
 @register_export_input_preparer("input_features", "feature_lens")
@@ -615,22 +663,81 @@ def _capture_forward(module: torch.nn.Module):
         module.forward = original
 
 
+def _merge_decode_calls(decode_calls: list[dict]) -> dict:
+    """Merge consecutive single-token decode captures into one multi-token decode input.
+
+    Each `model.generate` decode step feeds a single new token, so `torch.export` (with
+    `Dim.AUTO`) sees a query-sequence axis of length 1 and specializes it to a constant — the
+    exported decode can then only ever run one token. Concatenating `N` consecutive decode steps
+    along that axis yields a genuine `N`-token decode input: the traced graph is identical (a
+    KV-cache forward), but the sequence axis now has hint `N > 1` so it stays dynamic. The
+    exported decode then handles both a single token (ordinary decoding) and many (chunked prefill
+    / continuation-from-past for multi-turn) — which is all a `past_key_values` forward really is.
+
+    The cache (`past_key_values`) is taken from the FIRST step (the state right after prefill,
+    before the chunk); the padding `attention_mask` from the LAST (it spans prefill + all `N`
+    tokens). The per-token tensors are concatenated along their sequence axis.
+    """
+    first, last = decode_calls[0], decode_calls[-1]
+    merged = copy.copy(first)
+
+    def concat_along(key: str, dim: int) -> None:
+        values = [call[key] for call in decode_calls if call.get(key) is not None]
+        if len(values) == len(decode_calls):
+            merged[key] = torch.cat(values, dim=dim)
+
+    concat_along("input_ids", 1)
+    concat_along("inputs_embeds", 1)
+    concat_along("cache_position", 0)
+    # `position_ids` is `[batch, seq]` or `[n_axes, batch, seq]` (m-rope) — the sequence axis is
+    # last in both, so a negative dim concatenates it correctly either way.
+    concat_along("position_ids", -1)
+    if last.get("attention_mask") is not None:
+        merged["attention_mask"] = last["attention_mask"]
+    return merged
+
+
 def decompose_prefill_decode(
     model: PreTrainedModel,
     inputs: dict[str, Any],
+    multi_token: bool = False,
 ) -> dict[str, tuple[torch.nn.Module, dict]]:
-    """Run `model.generate()` for 2 tokens and capture prefill and decode inputs.
+    """Run `model.generate()` and capture prefill and decode inputs.
 
     Reuses the full generation machinery so every architecture (decoder-only, SSM,
     encoder-decoder, multi-modal, …) gets correct inputs without reimplementing the loop.
 
+    `multi_token` (default False) additionally returns a separate `decode_multi_token` component —
+    two consecutive decode steps merged (see `_merge_decode_calls`) so its sequence axis stays dynamic
+    and it can process multiple tokens at once (chunked prefill, continuation-from-past). The plain
+    `decode` component stays the classic single-token hot path; `decode_multi_token` is an add-on.
+
+    Some multi-modal models (Blip2, Kosmos-2, …) override `generate()` to run their encoders
+    inline and delegate the generation loop to an inner language model, so the top-level
+    `forward()` never runs. To cover those, the decoder returned by `model.get_decoder()` is
+    hooked as well, and whichever module the generation loop actually called is captured
+    (top-level `forward()` preferred when both ran).
+
     Returns:
         `dict[str, tuple[torch.nn.Module, dict]]`:
-        `{"prefill": (model, prefill_inputs), "decode": (model, decode_inputs)}`
+        `{"prefill": (module, prefill_inputs), "decode": (module, decode_inputs)}`, plus
+        `"decode_multi_token"` when `multi_token=True`. `module` is `model` itself, or its decoder
+        when `generate()` delegates to it.
     """
+    # 1 prefill forward + 1 decode (or 2, merged for `multi_token`) forward to capture.
+    n_new_tokens = 3 if multi_token else 2
+    decoder = model.get_decoder()
     try:
-        with _capture_forward(model) as calls:
-            model.generate(**copy.deepcopy(inputs), max_new_tokens=2, min_new_tokens=2)
+        with contextlib.ExitStack() as stack:
+            calls = stack.enter_context(_capture_forward(model))
+            decoder_calls = (
+                stack.enter_context(_capture_forward(decoder)) if decoder is not None and decoder is not model else []
+            )
+            # `use_cache=True`: the prefill/decode split only makes sense with a KV cache, so force
+            # it on regardless of the model's config default (some set `use_cache=False`).
+            model.generate(
+                **copy.deepcopy(inputs), max_new_tokens=n_new_tokens, min_new_tokens=n_new_tokens, use_cache=True
+            )
     except Exception as e:
         raise RuntimeError(
             f"decompose_prefill_decode failed for {type(model).__name__}. "
@@ -638,18 +745,23 @@ def decompose_prefill_decode(
             f"Make sure the inputs are compatible with model.generate()."
         ) from e
 
-    if len(calls) < 2:
+    module, module_calls = (model, calls) if len(calls) >= n_new_tokens else (decoder, decoder_calls)
+    if len(module_calls) < n_new_tokens:
         raise RuntimeError(
-            f"decompose_prefill_decode expected at least 2 calls to {type(model).__name__}.forward() "
-            f"during generate(max_new_tokens=2), but captured {len(calls)}. This likely means "
-            "generate() bypasses the top-level forward() (e.g. delegates to an inner model), "
-            "so prefill/decode decomposition is not supported for this architecture."
+            f"decompose_prefill_decode expected at least {n_new_tokens} forward() calls on {type(model).__name__} "
+            f"or its decoder during generate(max_new_tokens={n_new_tokens}), but captured {len(calls)} on the "
+            f"top-level model and {len(decoder_calls)} on the decoder."
         )
 
-    return {
-        "prefill": (copy.copy(model), calls[0]),
-        "decode": (copy.copy(model), calls[1]),
+    components = {
+        "prefill": (copy.copy(module), module_calls[0]),
+        "decode": (copy.copy(module), module_calls[1]),
     }
+    if multi_token:
+        # Additive: a separate multi-token decode (two decode steps merged, dynamic sequence axis) for
+        # chunked prefill / continuation-from-past. `decode` stays the classic single-token hot path.
+        components["decode_multi_token"] = (copy.copy(module), _merge_decode_calls(module_calls[1:n_new_tokens]))
+    return components
 
 
 # Projector attribute names — no canonical accessor on `PreTrainedModel`, kept as a heuristic.
@@ -695,9 +807,13 @@ def _find_multimodal_submodules(model: PreTrainedModel) -> dict[str, torch.nn.Mo
     return found
 
 
-def is_multimodal(model: PreTrainedModel) -> bool:
-    """Returns `True` if the model is multi-modal with modal encoders and a language model."""
-    return bool(_find_multimodal_submodules(model))
+def is_multimodal(model: PreTrainedModel | torch.nn.Module) -> bool:
+    """Returns `True` if the model is multi-modal with modal encoders and a language model.
+
+    A non-`PreTrainedModel` (e.g. a bare `nn.Module`) has no canonical `get_encoder`/`get_decoder`
+    accessors and is trivially not multi-modal, so it short-circuits to `False`.
+    """
+    return isinstance(model, PreTrainedModel) and bool(_find_multimodal_submodules(model))
 
 
 def decompose_multimodal(model: PreTrainedModel, inputs: dict[str, Any]) -> dict[str, tuple[torch.nn.Module, dict]]:
@@ -745,25 +861,30 @@ def decompose_multimodal(model: PreTrainedModel, inputs: dict[str, Any]) -> dict
 
 
 def decompose_for_generation(
-    model: PreTrainedModel, inputs: dict[str, Any]
+    model: PreTrainedModel, inputs: dict[str, Any], multi_token: bool = False
 ) -> dict[str, tuple[torch.nn.Module, dict]]:
     """Decompose a generative model into independently exportable `(model, forward_inputs)` pairs.
 
     Runs `decompose_prefill_decode` to capture prefill and decode forward kwargs from a real
     `model.generate(**inputs, max_new_tokens=2)`. If the prefill is multi-modal (per `is_multimodal`),
     further splits it into one entry per submodule (vision/audio encoder, projector, language model,
-    `lm_head`) via `decompose_multimodal`.
+    `lm_head`) via `decompose_multimodal`. Models whose `generate()` delegates the loop to an inner
+    language model (Blip2, Kosmos-2, …) get prefill/decode captured at that inner model instead.
 
     Args:
         model: Generative model. Must support `model.generate(**inputs)`.
         inputs: **Generate** kwargs — what you'd pass to `model.generate(**inputs)`.
+        multi_token: When `True`, add a separate `decode_multi_token` component (multi-token decode
+            with a dynamic sequence axis, for chunked prefill / continuation); `decode` stays the
+            single-token hot path.
 
     Returns:
         `{component_name: (submodel, forward_inputs)}`. Keys are `"prefill"` / `"decode"` for
         plain generative models and `"<modality>_encoder"` / `"multi_modal_projector"` /
-        `"language_model"` / `"lm_head"` / `"decode"` for multi-modal generative models.
+        `"language_model"` / `"lm_head"` / `"decode"` for multi-modal generative models, plus
+        `"decode_multi_token"` when `multi_token=True`.
     """
-    stages = decompose_prefill_decode(model, inputs)
+    stages = decompose_prefill_decode(model, inputs, multi_token=multi_token)
     prefill_model, prefill_inputs = stages["prefill"]
 
     if not is_multimodal(prefill_model):
@@ -771,4 +892,6 @@ def decompose_for_generation(
 
     components = decompose_multimodal(prefill_model, prefill_inputs)
     components["decode"] = stages["decode"]
+    if "decode_multi_token" in stages:
+        components["decode_multi_token"] = stages["decode_multi_token"]
     return components

@@ -990,7 +990,9 @@ class LinearAttentionLayer(LinearAttentionCacheLayerMixin):
             self.is_conv_states_initialized[state_idx] = True
 
         if recurrent_states is not None:
-            # The shape is always static, so we init as such
+            # The shape is always static, so we init as such. `zeros_like(recurrent_states)` keeps the
+            # recurrent tensor's OWN dtype (not `self.dtype`, which follows the conv state): models like
+            # recurrent_gemma accumulate the recurrence in float32 while the conv state stays compute dtype.
             self.recurrent_states[state_idx] = torch.zeros_like(recurrent_states)
             # Mark as static address to be able to use cudagraphs
             if not is_torchdynamo_compiling():

@@ -936,6 +936,7 @@ class VoxtralRealtimeModel(VoxtralRealtimePreTrainedModel):
 
         return audio_outputs
 
+    @merge_with_config_defaults
     @can_return_tuple
     @auto_docstring
     def forward(
