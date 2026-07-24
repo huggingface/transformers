@@ -11,37 +11,26 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Schema-driven typing of tool-call arguments.
-
-Some response templates capture tool arguments as raw text: an `xml-inline` field
-with no `value_parser` yields all strings (e.g. `{"hour": "7", "enabled": "true"}`),
-even when the tool's JSON Schema declares `integer` / `boolean` / etc. When
-OpenAI-style `tools` definitions are available, `coerce_tool_calls` casts each
-string-valued argument to its declared type, using the tool named by the parsed
-call itself (`function.name`).
-
-Coercion is a pure post-parse pass over the canonical tool-call value produced by a
-field's `transform`; it never reaches into the generic content parsers. It is
-conservative: already-typed values and arguments the schema does not describe are
-left untouched, and any cast that fails falls back to the raw string, so passing
-`tools=` can only add type information, never corrupt a parsed call.
-"""
+"""Cast tool-call arguments captured as text to the types their JSON Schema declares."""
 
 from __future__ import annotations
 
 import json
+from collections.abc import Sequence
 from typing import Any
 
 
-def _schema_types(schema: Any) -> list[str]:
-    """Candidate JSON Schema type names for `schema`.
+# Container args arrive as one JSON blob, which a `value_parser` already decodes.
+_CONTAINER_TYPES = frozenset({"array", "object"})
 
-    Handles `type` as a string or list, plus `anyOf` / `oneOf` / `allOf` (e.g.
-    `Optional[int]` -> `anyOf: [integer, null]`) recursively, and `$ref` (nested
-    models) treated as `object`. Returns an empty list when nothing can be determined.
+
+def _schema_types(schema: Any) -> tuple[str, ...]:
+    """Candidate type names for `schema`, recursing into `anyOf` / `oneOf` / `allOf`.
+
+    `$ref` counts as `object`. Empty when no type can be determined.
     """
     if not isinstance(schema, dict):
-        return []
+        return ()
     types: list[str] = []
     type_value = schema.get("type")
     if isinstance(type_value, str):
@@ -53,16 +42,45 @@ def _schema_types(schema: Any) -> list[str]:
             types.extend(_schema_types(choice))
     if "$ref" in schema:
         types.append("object")
-    return types
+    return tuple(types)
+
+
+def build_tool_type_index(tools: Any) -> dict[str, dict[str, tuple[str, ...]]]:
+    """Map tool name -> parameter name -> candidate types. Untyped parameters are omitted."""
+    out: dict[str, dict[str, tuple[str, ...]]] = {}
+    for tool in tools or []:
+        fn = tool.get("function", tool) if isinstance(tool, dict) else None
+        if not isinstance(fn, dict):
+            continue
+        name = fn.get("name")
+        if not name:
+            continue
+        params = fn.get("parameters")
+        props = params.get("properties") if isinstance(params, dict) else None
+        param_types: dict[str, tuple[str, ...]] = {}
+        if isinstance(props, dict):
+            for param_name, schema in props.items():
+                types = _schema_types(schema)
+                if types:
+                    param_types[param_name] = types
+        out[name] = param_types
+    return out
+
+
+def raw_text_params(param_types: dict[str, Sequence[str]]) -> frozenset[str]:
+    """Parameters that must stay raw text for `coerce_arguments` to type them.
+
+    One declared scalar type is enough, since a `value_parser` that reads `1.5` as a float
+    puts it beyond a cast's reach. Container-only parameters are better served by the parser.
+    """
+    return frozenset(name for name, types in param_types.items() if not _CONTAINER_TYPES.issuperset(types))
 
 
 def _coerce_scalar(raw: str, type_name: Any) -> Any:
-    """Single-type coercion. Returns the original `raw` object on any failure.
+    """Coerce `raw` to one type, returning it unchanged on failure.
 
-    Recognized booleans match the `bool` content parser (`true`/`false`/`1`/`0`,
-    case-insensitive); anything else stays a string. `object` / `array` must be valid
-    JSON of the matching shape, so a `{...}` body is never accepted for an `array`
-    parameter (or vice versa)."""
+    Booleans follow the `bool` content parser; `object` / `array` need JSON of that shape.
+    """
     try:
         if type_name == "integer":
             return int(raw)
@@ -94,76 +112,75 @@ def _coerce_scalar(raw: str, type_name: Any) -> Any:
     return raw
 
 
-def _coerce_value(raw: str, schema: Any) -> Any:
-    """Coerce `raw` to a declared JSON Schema type in `schema`; return `raw` on failure.
+def _coerce_value(raw: str, type_names: Sequence[str]) -> Any:
+    """Try each candidate type in turn, keeping the first that changes `raw`.
 
-    Tries each candidate type in turn. Types that leave the value unchanged
-    (notably `string`) are skipped so a union like `[string, integer]` can still
-    recover the integer, while a plain `string` schema leaves the value as a string.
+    Skipping no-op types lets a `[string, integer]` union still recover the integer.
     """
-    for type_name in _schema_types(schema):
+    for type_name in type_names:
         coerced = _coerce_scalar(raw, type_name)
         if coerced is not raw:
             return coerced
     return raw
 
 
-def _properties_by_tool_name(tools: Any) -> dict[str, dict]:
-    """Map tool name -> JSON Schema `properties` dict from OpenAI tool specs."""
-    out: dict[str, dict] = {}
-    for tool in tools or []:
-        fn = tool.get("function", tool) if isinstance(tool, dict) else None
-        if not isinstance(fn, dict):
-            continue
-        name = fn.get("name")
-        if not name:
-            continue
-        params = fn.get("parameters")
-        props = params.get("properties") if isinstance(params, dict) else None
-        out[name] = props if isinstance(props, dict) else {}
-    return out
+def _coerce_argument(value: Any, type_names: Sequence[str]) -> Any:
+    """Coerce one argument. Lists (from `merge_duplicates`) are cast element-wise."""
+    if isinstance(value, str):
+        return _coerce_value(value, type_names)
+    if isinstance(value, list):
+        return [_coerce_value(item, type_names) if isinstance(item, str) else item for item in value]
+    return value
 
 
-def coerce_arguments(arguments: dict, properties: Any) -> dict:
-    """Cast string-valued entries of `arguments` to their declared JSON Schema types.
-
-    `properties` is a single tool's JSON Schema `parameters.properties` dict (argument
-    name -> schema). Entries with no matching key, or whose value is not a string, are
-    left untouched.
-    """
-    if not properties:
+def coerce_arguments(arguments: dict, param_types: dict[str, Sequence[str]]) -> dict:
+    """Cast string entries of `arguments`. Anything the schema omits is left untouched."""
+    if not param_types:
         return arguments
     return {
-        key: (_coerce_value(value, properties[key]) if key in properties and isinstance(value, str) else value)
+        key: (_coerce_argument(value, param_types[key]) if key in param_types else value)
         for key, value in arguments.items()
     }
 
 
-def coerce_tool_calls(value: Any, tools: Any) -> Any:
-    """Coerce the arguments of a parsed tool-call value against `tools`.
+def tool_call_param_types(value: Any, tool_types: dict[str, dict[str, tuple[str, ...]]]) -> dict | None:
+    """Declared types for `value`, or `None` unless it is a call to a known tool.
 
-    Accepts either a single tool call (`{"function": {"name", "arguments"}, ...}`, as
-    produced by a `repeats` field) or a list of them (as produced by `transform_each`).
-    Values that don't match the OpenAI tool-call shape are returned unchanged. Matching
-    calls are mutated in place and returned.
+    Requiring the full OpenAI shape keeps fields that merely capture a `name` out of this path.
     """
-    if not tools:
+    if not isinstance(value, dict):
+        return None
+    fn = value.get("function")
+    if not isinstance(fn, dict) or not isinstance(fn.get("arguments"), dict):
+        return None
+    name = fn.get("name")
+    return tool_types.get(name) if isinstance(name, str) else None
+
+
+def coerce_tool_calls(value: Any, tool_types: dict[str, dict[str, tuple[str, ...]]]) -> Any:
+    """Coerce a parsed tool call, or a list of them, in place against the type index.
+
+    Values that don't match the OpenAI tool-call shape are returned unchanged.
+    """
+    if not tool_types:
         return value
     if isinstance(value, list):
-        return [_coerce_one(item, tools) for item in value]
-    return _coerce_one(value, tools)
+        return [_coerce_call(item, tool_types) for item in value]
+    return _coerce_call(value, tool_types)
 
 
-def _coerce_one(call: Any, tools: Any) -> Any:
-    if not isinstance(call, dict):
-        return call
-    fn = call.get("function")
-    if not isinstance(fn, dict):
-        return call
-    args = fn.get("arguments")
-    if not isinstance(args, dict):
-        return call
-    props = _properties_by_tool_name(tools).get(fn.get("name"))
-    if props:
-        fn["arguments"] = coerce_arguments(args, props)
+def _coerce_call(call: Any, tool_types: dict[str, dict[str, tuple[str, ...]]]) -> Any:
+    param_types = tool_call_param_types(call, tool_types)
+    if param_types:
+        fn = call["function"]
+        fn["arguments"] = coerce_arguments(fn["arguments"], param_types)
     return call
+
+
+__all__ = [
+    "build_tool_type_index",
+    "coerce_arguments",
+    "coerce_tool_calls",
+    "raw_text_params",
+    "tool_call_param_types",
+]

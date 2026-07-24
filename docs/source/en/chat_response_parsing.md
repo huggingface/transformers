@@ -89,10 +89,10 @@ for event in final_events:
     render(event)
 ```
 
-If the request includes tools, pass them through as well (`get_response_parser(..., tools=tools)` or
-`parse_response(..., tools=tools)`). String-valued tool-call arguments are then coerced to the types
-declared in each tool's JSON Schema when the tool-call region closes, so streaming consumers see typed
-arguments on `region_close` rather than only after `finalize()`.
+If the request includes tools, pass them through as well (`get_response_parser(..., tools=tools)`).
+Tool-call arguments are then typed from the calling tool's JSON Schema as each region closes, so
+streaming consumers see schema-typed arguments on `region_close` rather than only after `finalize()`.
+See [Typing tool-call arguments](#typing-tool-call-arguments) for details.
 
 The parser will emit **events** as text from the generation process is fed in. This indicates which region is currently being generated. When
 the region is complete, it will be emitted in a separate event with the fully parsed content. At the end of generation,
@@ -105,11 +105,11 @@ If you want to stream multiple generations at once, create one [`~utils.chat_par
 
 Each streamed parsing event is a dict with a `type` key. There are three kinds:
 
-| Type           | Description                                                                         | Contents                                                                                                                                                          |
-|----------------|-------------------------------------------------------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `region_open`  | Indicates that the model has started a new region, such as `content` or `thinking`. | `field` (str): the field name. `captures` (dict): named groups from the open pattern (e.g. a tool name); empty for implicit opens.                               |
-| `region_chunk` | A chunk of text for the current region.                                             | `field` (str): the field name. `text` (str): the new chunk. `dirty` (bool): `True` if the chunk is raw text that needs parsing.                                   |
-| `region_close` | Indicates that a region has finished, and that key is now finalized.                | `field` (str): the field name. `value` (any): the fully parsed value for the region                                                                               |
+| Type           | Description                                                                         | Contents                                                                                                                        |
+|----------------|-------------------------------------------------------------------------------------|---------------------------------------------------------------------------------------------------------------------------------|
+| `region_open`  | Indicates that the model has started a new region, such as `content` or `thinking`. | `field` (str): the field name. `captures` (dict): named groups matched by the open pattern; `{}` when there are none.           |
+| `region_chunk` | A chunk of text for the current region.                                             | `field` (str): the field name. `text` (str): the new chunk. `dirty` (bool): `True` if the chunk is raw text that needs parsing. |
+| `region_close` | Indicates that a region has finished, and that key is now finalized.                | `field` (str): the field name. `value` (any): the fully parsed value for the region.                                            |
 
 `region_chunk` events are emitted for every region as bytes arrive, so a streaming UI can render progress
 even for structured regions. For text-like regions (`text`, `int`, `float`, `bool`) chunks are flagged
@@ -126,7 +126,8 @@ assistant prefill started a response before handing off to the model), the parse
 that were opened *and* closed inside the prefix produce a full `region_open` / `region_chunk` / `region_close`
 sequence and their parsed value lands in the output dict, exactly as if the model itself had written them.
 
-A typical event stream might look like this:
+A typical event stream might look like this, for a template whose `tool_calls` field captures the
+function name in its `open_pattern` and writes each argument as its own tag:
 
 ```python
 {"type": "region_open",  "field": "thinking", "captures": {}}
@@ -146,9 +147,12 @@ very different from the raw text. This final parsing will only happen when `regi
 up to you what you want to do with the `dirty` chunks until then - you can display them as-is to show the user the 
 "raw" output, or you can simply wait until you have something clean to display.
 
-When a tool-call field's open pattern captures the function name (as above), `region_open["captures"]`
-lets a streaming consumer emit the tool-call header immediately, then wait for `region_close` for the
-fully parsed arguments. Fields without named open groups still get `captures={}`.
+Every `region_open` carries `captures`, the named groups matched by the field's `open_pattern`. These
+are the same values a `transform` refers to as `{name}` placeholders (see [Transform](#transform)),
+handed to you the moment the region opens instead of at the end. Tool-call fields usually capture the
+function name there, as `tool_calls` does above, so a UI can render the call header right away and
+fill in the arguments when `region_close` arrives. Regions opened by a literal `open`, by a pattern
+with no named groups, or implicitly report `captures={}`.
 
 This concludes most of what you need to know to use response templates. The rest of this document is focused on
 the internals of the parsing system and how to write response templates. This is mostly relevant for developers
@@ -374,47 +378,6 @@ input = "<tool_call><function=get_weather><parameter=city>London</parameter><par
 # Returns: {"tool_calls": [{"type": "function", "function": {"name": "get_weather", "arguments": {"city": "London", "units": "celsius"}}}]}
 ```
 
-**Typing `xml-inline` arguments with `tools=`.** A JSON tool-call body carries types in the
-syntax itself (`7` vs `"7"`, `true` vs `"true"`), so the `json` content parser recovers them
-automatically. An `xml-inline` body does not: everything between the tags is plain text, so without
-a `value_parser` you get all strings (`{"hour": "7", "enabled": "true"}`). Pass the request's
-OpenAI-style `tools` to [`~PreTrainedTokenizerBase.parse_response`] or
-[`~utils.chat_parsing.ResponseParser`] via `tools=` to cast those strings using each tool's JSON
-Schema `parameters`:
-
-```python
-tools = [{
-    "type": "function",
-    "function": {
-        "name": "set_alarm",
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "hour": {"type": "integer"},
-                "enabled": {"type": "boolean"},
-                "label": {"type": "string"},
-            },
-        },
-    },
-}]
-message = parse_response(model_out, template, prefix="", tools=tools)
-# message["tool_calls"][0]["function"]["arguments"] ==
-# {"hour": 7, "enabled": True, "label": "wake up"}
-```
-
-Coercion is a small post-parsing pass over each tool call: it looks up the tool by its
-`function.name`, then casts any **string-valued** argument the schema declares (`"7"` -> `7`,
-`"true"` -> `True`, `"007"` -> `7`). Already-typed values, arguments the schema does not describe,
-and casts that fail are all left untouched, so `tools=` can only add type information, never corrupt
-a parsed call. It is not tied to `xml-inline`; it runs for any tool-call field, and is simply a
-no-op for JSON grammars whose arguments are already typed.
-
-Because coercion only acts on strings, it runs *after* any `value_parser`. If you rely on `tools=`
-for typing, prefer to omit the `value_parser` so argument bodies stay raw text. A `value_parser` of
-`json` + `allow_non_json` (as in the Qwen3 example above) infers types from JSON syntax alone and
-would eagerly turn a `string` parameter's `1.50` into the float `1.5` before the schema is
-consulted; with the body left raw, the `string` parameter keeps `1.50` exactly as written.
-
 #### kv-lines
 
 The `kv-lines` parser handles line-delimited `key: value` pairs (think YAML-ish metadata or `.env`
@@ -438,6 +401,47 @@ input = "<meta>name: alice\nage: 30</meta>"
 
 Note `age` keeps `"30"` as a string; add a `value_parser` of `{"name": "int"}` to parse it to `30`.
 
+### Typing tool-call arguments
+
+A JSON tool-call body carries types in the syntax itself (`7` vs `"7"`, `true` vs `"true"`), so the
+`json` parser recovers them for free. An `xml-inline` or `kv-lines` body does not: everything between
+the tags is plain text, so argument values start out as strings (`{"hour": "7", "enabled": "true"}`).
+Pass the request's OpenAI-style `tools` to [`~PreTrainedTokenizerBase.parse_response`] or
+[`~utils.chat_parsing.ResponseParser`] to cast them using each tool's JSON Schema `parameters`:
+
+```python
+tools = [{
+    "type": "function",
+    "function": {
+        "name": "set_alarm",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "hour": {"type": "integer"},
+                "enabled": {"type": "boolean"},
+                "label": {"type": "string"},
+            },
+        },
+    },
+}]
+message = parse_response(model_out, template, prefix="", tools=tools)
+# message["tool_calls"][0]["function"]["arguments"] ==
+# {"hour": 7, "enabled": True, "label": "wake up"}
+```
+
+Each region is parsed as usual first. If the result turns out to be a call to one of the `tools`, its
+string arguments are cast (`"7"` → `7`, `"true"` → `True`, `"007"` → `7`); anything else is left
+alone. Already-typed values, arguments the schema does not describe, and casts that fail are all
+untouched, so `tools=` only ever adds type information, and it is a no-op for templates that already
+recover types.
+
+There is one wrinkle. A `value_parser` runs before the schema is consulted, and a lax one guesses
+wrong for `string` parameters: `json` with `allow_non_json` reads `1.50` as the number `1.5`, losing
+the trailing zero for good. Since a cast can only rework strings, there is no repairing that
+afterwards. So when a field defines a `value_parser`, the parameters of the calling tool that declare
+at least one scalar type are re-parsed with it skipped, leaving the exact text for the cast to use.
+Only parameters typed purely as `object` or `array` keep the `value_parser`, which reads a JSON body
+at least as well as a cast does, with dialect knobs and typing for the elements.
 
 ### Transform
 

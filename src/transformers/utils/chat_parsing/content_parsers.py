@@ -97,11 +97,16 @@ def _sub_parse(raw: str, value_parser: dict | None) -> Any:
 def _xml_inline(text: str, args: dict) -> dict:
     """Parse shallow XML-ish tags into a dict. `tag_pattern` regex must have named
     groups `key` and `value`. Optional `value_parser` recurses; `merge_duplicates`
-    collects duplicate keys into a list."""
+    collects duplicate keys into a list.
+
+    `skip_value_parser_for` (injected by `process_field`) names keys that keep their
+    stripped text instead of running `value_parser`.
+    """
     tag_pattern = args.get("tag_pattern")
     if tag_pattern is None:
         raise ValueError("xml-inline: 'tag_pattern' content_arg is required")
     value_parser = args.get("value_parser")
+    skip_value_parser_for = args.get("skip_value_parser_for") or ()
     merge = args.get("merge_duplicates", False)
 
     out: dict[str, Any] = {}
@@ -110,7 +115,8 @@ def _xml_inline(text: str, args: dict) -> dict:
         key = groups.get("key")
         if key is None:
             raise ValueError(f"xml-inline: tag_pattern must have a named group 'key'. Pattern: {tag_pattern}")
-        value = _sub_parse(groups.get("value", ""), value_parser)
+        raw = groups.get("value", "")
+        value = _text(raw, args) if key in skip_value_parser_for else _sub_parse(raw, value_parser)
         if key in out and merge:
             if not isinstance(out[key], list):
                 out[key] = [out[key]]
@@ -121,10 +127,15 @@ def _xml_inline(text: str, args: dict) -> dict:
 
 
 def _kv_lines(text: str, args: dict) -> dict:
-    """Parse line-delimited `key<sep>value` pairs into a dict."""
+    """Parse line-delimited `key<sep>value` pairs into a dict.
+
+    `skip_value_parser_for` (injected by `process_field`) names keys that keep their
+    stripped text instead of running `value_parser`.
+    """
     line_sep = args.get("line_sep", "\n")
     kv_sep = args.get("kv_sep", ":")
     value_parser = args.get("value_parser")
+    skip_value_parser_for = args.get("skip_value_parser_for") or ()
 
     out: dict[str, Any] = {}
     for line in text.split(line_sep):
@@ -133,7 +144,7 @@ def _kv_lines(text: str, args: dict) -> dict:
             continue
         k, v = line.split(kv_sep, 1)
         k, v = _text(k, args), _text(v, args)
-        out[k] = _sub_parse(v, value_parser)
+        out[k] = v if k in skip_value_parser_for else _sub_parse(v, value_parser)
     return out
 
 
@@ -203,14 +214,26 @@ def validate_transform_strings(scope: str, transform: Any) -> None:
         )
 
 
-def process_field(body: str, field, captures: dict) -> Any:
+def process_field(
+    body: str,
+    field,
+    captures: dict,
+    *,
+    skip_value_parser_for: frozenset[str] | None = None,
+) -> Any:
     """Run `body` through the field's content parser, then optionally apply the
     transform template. When `transform_each` is set, the parsed content must
     be a list and the template is applied to each element (with the element's
     keys unpacked into the template scope, alongside any regex captures).
 
+    `skip_value_parser_for` names keys that skip a nested `value_parser`. It is injected
+    into `content_args` for this call only, not authored in the template.
+
     `field` is a `spec.Field`; typed via duck-typing to avoid a cyclic import."""
-    value = parse_content(body, field.content, field.content_args)
+    content_args = field.content_args
+    if skip_value_parser_for:
+        content_args = {**content_args, "skip_value_parser_for": skip_value_parser_for}
+    value = parse_content(body, field.content, content_args)
     if field.transform is None:
         return value
     if field.transform_each:

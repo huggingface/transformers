@@ -3376,10 +3376,9 @@ class PreTrainedTokenizerBase(PushToHubMixin):
                 `response`, pass either a single prefix (broadcast to every item) or one prefix per item.
             tools (`list[dict]`, *optional*):
                 OpenAI-style tool definitions. When provided with a new-style `response_template`,
-                string-valued tool-call arguments are coerced to the types declared in each tool's JSON
-                Schema `parameters` when each tool-call region closes. This is mainly useful for `xml-inline`
-                grammars that capture argument bodies as raw text (so `"7"` becomes `7`, `"true"` becomes
-                `True`). Already-typed values and arguments the schema does not describe are left untouched.
+                tool-call arguments are typed from the calling tool's JSON Schema, so `"7"` becomes
+                `7` for an integer parameter while a string parameter keeps `"7"`. Already-typed
+                values and arguments the schema does not describe are left untouched.
 
         Returns:
             A parsed message `dict` for a single sequence, or a `list` of such dicts for a batch.
@@ -3448,9 +3447,9 @@ class PreTrainedTokenizerBase(PushToHubMixin):
         emitted assistant-turn content (e.g., `<think>\\n`) that the model continues from. Omitting it
         raises; if the stream truly starts from a clean assistant turn, pass `prefix=""` to opt out.
 
-        `tools` (`list[dict]`, *optional*): OpenAI-style tool definitions. When set, string-valued
-        tool-call arguments are coerced to their declared JSON Schema types when each tool-call region
-        closes, so streaming `region_close` events already carry typed arguments.
+        `tools` (`list[dict]`, *optional*): OpenAI-style tool definitions. When set, tool-call
+        arguments are typed from the calling tool's JSON Schema as each region closes, so
+        streaming `region_close` events carry schema-typed arguments.
         """
         template = response_template if response_template is not None else getattr(self, "response_template", None)
         if template is None:
