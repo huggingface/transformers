@@ -463,14 +463,14 @@ class OnyxVisionConfig(Kimi_K25VisionConfig):
         Initial position embedding height.
     pos_emb_width (`int`, *optional*):
         Initial position embedding width.
-    patch_temporal (`int`, *optional*):
-        The temporal patch size used to embed inputs.
     out_hidden_size (`int`, *optional*):
         Output dimension of the vision encoder after patch merging (input width of the multimodal projection).
-    adapter_dim (`int`, *optional*):
-        Intermediate dimension used in multimodal projection.
+    patch_temporal (`int`, *optional*):
+        The temporal patch size used to embed inputs.
     merge_size (`tuple[int] | list[int]`, *optional*):
         Kernel size for patch merging.
+    adapter_dim (`int`, *optional*):
+        Intermediate dimension used in multimodal projection.
     """
 
     model_type = "onyx_vision"

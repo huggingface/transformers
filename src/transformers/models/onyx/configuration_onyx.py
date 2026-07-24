@@ -35,14 +35,14 @@ class OnyxVisionConfig(PreTrainedConfig):
         Initial position embedding height.
     pos_emb_width (`int`, *optional*):
         Initial position embedding width.
-    patch_temporal (`int`, *optional*):
-        The temporal patch size used to embed inputs.
     out_hidden_size (`int`, *optional*):
         Output dimension of the vision encoder after patch merging (input width of the multimodal projection).
-    adapter_dim (`int`, *optional*):
-        Intermediate dimension used in multimodal projection.
+    patch_temporal (`int`, *optional*):
+        The temporal patch size used to embed inputs.
     merge_size (`tuple[int] | list[int]`, *optional*):
         Kernel size for patch merging.
+    adapter_dim (`int`, *optional*):
+        Intermediate dimension used in multimodal projection.
     """
 
     model_type = "onyx_vision"
@@ -152,7 +152,7 @@ class OnyxTextConfig(PreTrainedConfig):
 
         super().__post_init__(**kwargs)
 
-        # Per-layer RoPE base theta (0 => NoPE). Needs `rope_parameters`, so runs after the super post-init.
+        # Per-layer RoPE base theta (0 => NoPE). Needs `rope_parameters`, so runs after the super post-init. Not sure if it's the cleanest...
         if self.layer_rope_theta is None:
             self.layer_rope_theta = [
                 0 if (self.num_hidden_layers - 1 - i) % 4 == 0 else self.rope_parameters["rope_theta"]
@@ -171,9 +171,6 @@ class OnyxTextConfig(PreTrainedConfig):
 @auto_docstring
 @strict
 class OnyxConfig(PreTrainedConfig):
-    r"""
-    TODO
-    """
 
     model_type = "onyx"
     sub_configs = {

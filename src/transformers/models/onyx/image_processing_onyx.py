@@ -135,7 +135,7 @@ class OnyxImageProcessor(TorchvisionBackend):
         resized_images_grouped = {}
         for shape, stacked_images in grouped_images.items():
             if do_resize:
-                # Unlike Glm4v's `smart_resize`, the target size preserves aspect ratio under a token cap.
+                # Unlike Glm4v's `smart_resize`, the target size keeps aspect ratio under a token cap.
                 height, width = stacked_images.shape[-2:]
                 resized_height, resized_width = get_aspect_ratio_preserving_size(
                     height=height,
