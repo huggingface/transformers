@@ -25,10 +25,13 @@ from ...generation import GenerationMixin
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple, is_xlstm_available
+from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple, is_xlstm_available, logging
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from .configuration_xlstm import xLSTMConfig
+
+
+logger = logging.get_logger(__name__)
 
 
 if is_xlstm_available():
@@ -786,7 +789,7 @@ else:
             m_initial: torch.Tensor | None = None,
             return_last_states: bool | None = None,
             mode: Literal["train", "inference"] | None = None,
-        ) -> torch.Tensor | tuple[torch.Tensor, tuple[torch.Tensor, torch.Tensor, torch.Tensor]]:
+        ) -> tuple[torch.Tensor, tuple[torch.Tensor, torch.Tensor, torch.Tensor] | None]:
             """Forward pass of the mLSTM backend.
 
             Depending on the configured mode, this method will call the appropriate kernel function.
@@ -805,9 +808,10 @@ else:
                                                     If None, the value from the config is used.
 
             Returns:
-                hidden states of shape (batch_size, nh, sequence_length, dhhv)
-                hidden states and last states the last states are the cell state cstate (batch_size, nh, dhqk, dhhv),
-                the normalizer state nstate (batch_size, nh, dhqk), and the max state mstate (batch_size, nh, 1)
+                A tuple of the hidden states of shape (batch_size, nh, sequence_length, dhhv) and the last states
+                (None in train_with_padding mode). The last states are the cell state cstate
+                (batch_size, nh, dhqk, dhhv), the normalizer state nstate (batch_size, nh, dhqk), and the max state
+                mstate (batch_size, nh, 1).
             """
             if mode is None:
                 mode = self.config.mode
@@ -819,8 +823,24 @@ else:
                 if self.config.mode == "train_with_padding":
                     if return_last_states:
                         raise ValueError("return_last_states=True is not supported with train_with_padding mode.")
+                    # The padded chunkwise kernels cannot compute meaningful last states.
+                    h = self._train_fn(
+                        query=query,
+                        key=key,
+                        value=value,
+                        igate=igate,
+                        fgate=fgate,
+                        c_initial=c_initial,
+                        n_initial=n_initial,
+                        m_initial=m_initial,
+                        return_last_states=False,
+                    )
+                    return h, None
 
-                return self._train_fn(
+                # The last states are a cheap byproduct of the chunkwise recurrence. Always request them
+                # from the kernel so that this method returns an (h, last_states) tuple in every mode,
+                # matching what the callers unpack.
+                h, last_states = self._train_fn(
                     query=query,
                     key=key,
                     value=value,
@@ -829,8 +849,9 @@ else:
                     c_initial=c_initial,
                     n_initial=n_initial,
                     m_initial=m_initial,
-                    return_last_states=return_last_states,
+                    return_last_states=True,
                 )
+                return h, last_states
 
             elif "inference" in mode:
                 # inference mode always returns the last states
@@ -1367,6 +1388,7 @@ class xLSTMCache:
             )
             for layer in range(config.num_hidden_layers)
         }
+        self.rnn_state_initial = True
 
     def reset(self):
         self.rnn_state = {
@@ -1377,6 +1399,7 @@ class xLSTMCache:
             )
             for layer in self.rnn_state
         }
+        self.rnn_state_initial = True
 
 
 @auto_docstring
@@ -1438,6 +1461,13 @@ class xLSTMModel(xLSTMPreTrainedModel):
         if inputs_embeds is None:
             inputs_embeds = self.embeddings(input_ids)
 
+        if use_cache and self.config.mode == "train_with_padding":
+            logger.warning_once(
+                "`use_cache=True` is not supported with `mode='train_with_padding'` as no last states can be "
+                "computed on padded sequences. Setting `use_cache=False`."
+            )
+            use_cache = False
+
         if use_cache and cache_params is None:
             cache_params = xLSTMCache(
                 self.config, inputs_embeds.size(0), device=inputs_embeds.device, dtype=inputs_embeds.dtype
@@ -1474,15 +1504,21 @@ class xLSTMModel(xLSTMPreTrainedModel):
                     offset += self.config.max_inference_chunksize
                 hidden_states = final_state
         else:
+            # An all-zero initial cache state is equivalent to no state. Skipping it keeps the cache
+            # tensors out of the autograd graph, where the in-place update below would otherwise
+            # break the backward pass in train mode.
+            cache_has_state = cache_params is not None and not cache_params.rnn_state_initial
             for layer_idx, xlstm_block in enumerate(self.blocks):
                 hidden_states, rnn_state = xlstm_block(
                     hidden_states,
-                    cache_params.rnn_state[layer_idx] if cache_params is not None else None,
+                    cache_params.rnn_state[layer_idx] if cache_has_state else None,
                 )
 
-                if cache_params:
+                if cache_params and rnn_state is not None:
                     for state_idx in range(len(cache_params.rnn_state[layer_idx])):
-                        local_rnn_state = rnn_state[state_idx]
+                        # Detach so the cached state is not part of the autograd graph; the
+                        # next step's in-place copy_ into it would otherwise break backward.
+                        local_rnn_state = rnn_state[state_idx].detach()
                         cache_params.rnn_state[layer_idx][state_idx].copy_(local_rnn_state)
                     cache_params.rnn_state_initial = False
 
