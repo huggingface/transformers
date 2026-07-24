@@ -525,6 +525,8 @@ class VideoLlama3Model(VideoLlama3PreTrainedModel):
         r"""
         pixel_values_videos (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
             The tensors corresponding to the input videos.
+        video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
+            The temporal, height and width of feature shape of each video in LLM.
         video_merge_sizes (`torch.Tensor` of shape `(num_videos,)`):
             The spatial downsampling ratio of each video feature.
         """
@@ -548,6 +550,8 @@ class VideoLlama3Model(VideoLlama3PreTrainedModel):
         r"""
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
             The tensors corresponding to the input images.
+        image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
+            The temporal, height and width of feature shape of each image in LLM.
         image_merge_sizes (`torch.Tensor` of shape `(num_images,)`):
             The spatial downsampling ratio of each image feature.
         """
@@ -776,14 +780,8 @@ class VideoLlama3ForConditionalGeneration(VideoLlama3PreTrainedModel, Generation
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | VideoLlama3CausalLMOutputWithPast:
         r"""
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
-            config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
-            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
         image_merge_sizes (`torch.Tensor` of shape `(num_images,)`):
             The spatial downsampling ratio of each image feature.
-        video_grid_thw (`torch.Tensor` of shape `(num_videos, 3)`):
-            The temporal, height and width of feature shape of each video before vision encoder.
         video_merge_sizes (`torch.Tensor` of shape `(num_videos,)`):
             The spatial downsampling ratio of each video feature.
         video_compression_mask (`torch.BoolTensor` of shape `(num_video_features,)`, *optional*):

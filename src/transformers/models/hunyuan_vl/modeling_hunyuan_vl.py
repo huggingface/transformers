@@ -1019,6 +1019,8 @@ class HunYuanVLModel(HunYuanVLPreTrainedModel):
         r"""
         pixel_values (`torch.FloatTensor`):
             Flat per-patch pixel features produced by the image processor.
+        image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
+            The temporal, height and width of feature shape of each image in LLM.
         """
         vision_dtype = next(self.vision_tower.parameters()).dtype
         pixel_values = pixel_values.to(vision_dtype)
@@ -1096,6 +1098,8 @@ class HunYuanVLModel(HunYuanVLPreTrainedModel):
         r"""
         pixel_values (`torch.FloatTensor`, *optional*):
             Flat per-patch pixel features produced by the image processor.
+        image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
+            The temporal, height and width of feature shape of each image in LLM.
         """
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
@@ -1185,6 +1189,8 @@ class HunYuanVLForConditionalGeneration(HunYuanVLPreTrainedModel, GenerationMixi
         r"""
         pixel_values (`torch.FloatTensor`, *optional*):
             Flat per-patch pixel features produced by the image processor.
+        image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
+            The temporal, height and width of feature shape of each image in LLM.
 
         Example:
 
