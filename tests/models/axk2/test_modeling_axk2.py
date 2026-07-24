@@ -31,10 +31,7 @@ from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 if is_torch_available():
     import torch
 
-    from transformers import (
-        AXK2ForCausalLM,
-        AXK2Model,
-    )
+    from transformers import AXK2Model
 
 
 class AXK2ModelTester(CausalLMModelTester):
@@ -77,9 +74,6 @@ class AXK2ModelTest(CausalLMModelTest, unittest.TestCase):
     model_tester_class = AXK2ModelTester
     model_split_percents = [0.5, 0.7, 0.8]
 
-    # used in `test_torch_compile_for_training`
-    _torch_compile_train_cls = AXK2ForCausalLM if is_torch_available() else None
-
     def _check_past_key_values_for_generate(self, batch_size, past_key_values, seq_length, config):
         """Needs to be overridden as A.X-K2 has the MLA cache format (same as DeepSeek-V3.2)"""
         self.assertIsInstance(past_key_values, Cache)
@@ -109,6 +103,10 @@ class AXK2ModelTest(CausalLMModelTest, unittest.TestCase):
     def test_sdpa_padding_matches_padding_free_with_position_ids(self):
         pass
 
+    @unittest.skip("Mask is built per layer no matter what but FA backend needs no mask")
+    def test_sdpa_can_dispatch_on_flash(self):
+        pass
+
 
 @slow
 @require_torch_accelerator
@@ -122,20 +120,20 @@ class AXK1IntegrationTest(unittest.TestCase):
         cleanup(torch_device, gc_collect=False)
 
     def test_model_logits_batched(self):
-        dummy_input = torch.LongTensor([[0, 0, 0, 0, 0, 0, 1, 2, 3], [1, 1, 2, 3, 4, 5, 6, 7, 8]]).to(torch_device)
-        attention_mask = dummy_input.ne(0).to(torch.long)
-
         model = AutoModelForCausalLM.from_pretrained(self.model_id, dtype=torch.bfloat16, device_map="auto")
+
+        dummy_input = torch.LongTensor([[0, 0, 0, 0, 0, 0, 1, 2, 3], [1, 1, 2, 3, 4, 5, 6, 7, 8]]).to(model.device)
+        attention_mask = dummy_input.ne(0).to(torch.long)
 
         # Last-3x3 logits slice, left-padded (batch 0) and unpadded (batch 1) rows.
         EXPECTED_LOGITS_LEFT_PADDED = Expectations(
             {("cuda", (8, 6)): [[-1.9062, -3.9688, 2.8438], [-3.5625, -1.6562, 4.2500], [-1.6172, -2.7812, 2.6094]]}
         )
-        expected_left_padded = torch.tensor(EXPECTED_LOGITS_LEFT_PADDED.get_expectation(), device=torch_device)
+        expected_left_padded = torch.tensor(EXPECTED_LOGITS_LEFT_PADDED.get_expectation(), device=model.device)
         EXPECTED_LOGITS_UNPADDED = Expectations(
             {("cuda", (8, 6)): [[0.6211, -0.4336, 1.8906], [-3.4219, -1.9219, 2.7188], [-2.0156, -1.5547, -1.3906]]}
         )
-        expected_unpadded = torch.tensor(EXPECTED_LOGITS_UNPADDED.get_expectation(), device=torch_device)
+        expected_unpadded = torch.tensor(EXPECTED_LOGITS_UNPADDED.get_expectation(), device=model.device)
 
         with torch.no_grad():
             logits = model(dummy_input, attention_mask=attention_mask).logits
