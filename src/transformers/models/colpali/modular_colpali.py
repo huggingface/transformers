@@ -90,7 +90,7 @@ class ColPaliProcessor(PaliGemmaProcessor):
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )
-        suffix = output_kwargs["text_kwargs"].pop("suffix", None)
+        suffix = output_kwargs["text_kwargs"].pop("suffix", self.query_augmentation_token * 10)
 
         if text is not None:
             # Query mode: augment text before base class tokenizes it
