@@ -60,6 +60,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("bamba", "BambaModel"),
         ("bark", "BarkModel"),
         ("bart", "BartModel"),
+        ("beats", "BEATsModel"),
         ("beit", "BeitModel"),
         ("bert", "BertModel"),
         ("bert-generation", "BertGenerationEncoder"),
@@ -1732,6 +1733,7 @@ MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         # Model for Audio Classification mapping
         ("audio-spectrogram-transformer", "ASTForAudioClassification"),
         ("data2vec-audio", "Data2VecAudioForSequenceClassification"),
+        ("beats", "BEATsForAudioClassification"),
         ("hubert", "HubertForSequenceClassification"),
         ("sew", "SEWForSequenceClassification"),
         ("sew-d", "SEWDForSequenceClassification"),
