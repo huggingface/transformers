@@ -112,7 +112,6 @@ from .utils import (
     is_huggingface_hub_greater_or_equal,
     is_ipython_available,
     is_jinja_available,
-    is_jmespath_available,
     is_jumanpp_available,
     is_kernels_available,
     is_levenshtein_available,
@@ -624,13 +623,6 @@ def require_jinja(test_case):
     Decorator marking a test that requires jinja. These tests are skipped when jinja isn't installed.
     """
     return unittest.skipUnless(is_jinja_available(), "test requires jinja")(test_case)
-
-
-def require_jmespath(test_case):
-    """
-    Decorator marking a test that requires jmespath. These tests are skipped when jmespath isn't installed.
-    """
-    return unittest.skipUnless(is_jmespath_available(), "test requires jmespath")(test_case)
 
 
 def require_onnx(test_case):
