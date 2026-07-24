@@ -16,14 +16,11 @@
 import numpy as np
 
 from ...image_processing_utils import BatchFeature
-from ...image_utils import ImageInput
+from ...image_utils import ImageInput, get_image_size, is_valid_image
 from ...processing_utils import ImagesKwargs, ProcessingKwargs, ProcessorMixin, TextKwargs, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
-from ...utils import auto_docstring, is_vision_available, logging
+from ...utils import auto_docstring, logging
 
-
-if is_vision_available():
-    from ...image_utils import load_images
 
 logger = logging.get_logger(__name__)
 
@@ -110,6 +107,8 @@ def preprocess_box_annotation(box: list | tuple, image_size: tuple[int, int]) ->
 
 @auto_docstring
 class GotOcr2Processor(ProcessorMixin):
+    valid_processor_kwargs = GotOcr2ProcessorKwargs
+
     def __init__(self, image_processor=None, tokenizer=None, chat_template=None, **kwargs):
         super().__init__(image_processor, tokenizer, chat_template=chat_template)
 
@@ -167,34 +166,33 @@ class GotOcr2Processor(ProcessorMixin):
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )
-        format_output = output_kwargs["text_kwargs"].pop("format")
-        num_image_tokens = output_kwargs["images_kwargs"].pop("num_image_tokens")
-        box = output_kwargs["images_kwargs"].pop("box", [None])
-        color = output_kwargs["images_kwargs"].pop("color", None)
-        multi_page = output_kwargs["images_kwargs"].pop("multi_page")
+        model_inputs = super().__call__(images=images, text=text, **output_kwargs)
+        return model_inputs
 
-        crop_to_patches = output_kwargs["images_kwargs"].get("crop_to_patches")
+    def prepare_inputs_layout(self, images=None, text=None, **kwargs):
+        if images is None:
+            raise ValueError(f"You must provide valid `images` for {self.__class__.__name__}, found `None`")
+
+        images, text, *_ = super().prepare_inputs_layout(images=images, text=text, **kwargs)
+
+        # assume  kwargs are structured since we `merge_kwargs()` before `super().__call__()`
+        box = kwargs["images_kwargs"].pop("box", [None])
+        color = kwargs["images_kwargs"].pop("color", None)
+        multi_page = kwargs["images_kwargs"].get("multi_page")
+        format_output = kwargs["text_kwargs"].pop("format")
+        crop_to_patches = kwargs["images_kwargs"].get("crop_to_patches")
         images, text, box, color = self._make_list_of_inputs(images, text, box, color, multi_page)
-        if multi_page:
-            # save the number of pages per batch
-            num_pages_per_batch = [len(image_group) for image_group in images]
-            # flatten the list of images
-            images = [image for image_group in images for image in image_group]
-        else:
-            num_pages_per_batch = [1 for _ in range(len(images))]
-        # Load images as we need to know the image size
-        images = load_images(images)
-        image_sizes = [image.size for image in images]
-        image_inputs = self.image_processor(images=images, **output_kwargs["images_kwargs"])
-        num_patches_array = image_inputs.pop("num_patches")
+
         if text is None:
             text = []
-            patch_indices = np.cumsum(num_pages_per_batch)
-            for index, (num_pages, box_single, color_single) in enumerate(zip(num_pages_per_batch, box, color)):
-                current_patch_index = patch_indices[index - 1] if index > 0 else 0
-                num_patches = sum(num_patches_array[current_patch_index : current_patch_index + num_pages])
+            if multi_page:
+                image_sizes = [get_image_size(image) for image_group in images for image in image_group]
+            else:
+                image_sizes = [get_image_size(image) for image in images]
+
+            for box_single, color_single, size in zip(box, color, image_sizes):
                 if box_single[0] is not None:
-                    box_single = preprocess_box_annotation(box_single, image_sizes[index])
+                    box_single = preprocess_box_annotation(box_single, size)
                 query = (
                     f"{f'[{color_single}] ' if color_single is not None else ''}"
                     f"{str(box_single) if box_single[0] is not None else ''} "
@@ -204,6 +202,7 @@ class GotOcr2Processor(ProcessorMixin):
                     f"{' upon the patch reference' if crop_to_patches else ''}"
                     ": "
                 )
+                # build a conversation manually, ckpt has not chat template :(
                 prompt = (
                     self.message_start_token
                     + self.system_query
@@ -211,7 +210,7 @@ class GotOcr2Processor(ProcessorMixin):
                     + self.message_start_token
                     + "user\n"
                     + self.img_start_token
-                    + self.img_pad_token * num_image_tokens * num_patches
+                    + self.image_token  # <- the token to be expanded later
                     + self.img_end_token
                     + "\n"
                     + query
@@ -221,11 +220,47 @@ class GotOcr2Processor(ProcessorMixin):
                 )
                 text.append(prompt)
 
-        return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
-        text_inputs = self.tokenizer(text, **output_kwargs["text_kwargs"])
-        self._check_special_mm_tokens(text, text_inputs, modalities=["image"])
+        return images, text, None, None
 
-        return BatchFeature(data={**text_inputs, **image_inputs}, tensor_type=return_tensors)
+    def _process_images(self, images: ImageInput, **kwargs):
+        # kwargs not used by image processor, only when building a conversation
+        for key in ["box", "color"]:
+            kwargs.pop(key, None)
+        multi_page = kwargs.pop("multi_page")
+        num_image_tokens = kwargs.pop("num_image_tokens")
+        processed_images = self.image_processor(images, **kwargs)
+
+        if multi_page:
+            num_pages_per_batch = [len(image_group) for image_group in images]
+        else:
+            num_pages_per_batch = [1 for _ in range(len(images))]
+        patch_indices = np.cumsum(num_pages_per_batch)
+
+        image_replacements = []
+        # Important to not flatten the images here!
+        for idx in range(len(images)):
+            if is_valid_image(images[idx]) or (isinstance(images, (list, tuple)) and len(images[idx]) > 0):
+                replacement_text = self.replace_image_token(
+                    processed_images,
+                    image_idx=idx,
+                    num_pages_per_batch=num_pages_per_batch,
+                    patch_indices=patch_indices,
+                    num_image_tokens=num_image_tokens,
+                )
+                image_replacements.append(replacement_text)
+        return processed_images, image_replacements
+
+    def replace_image_token(self, image_inputs: dict, image_idx: int, **kwargs) -> str:
+        num_pages = kwargs["num_pages_per_batch"][image_idx]
+        num_image_tokens = kwargs["num_image_tokens"]
+        current_patch_index = kwargs["patch_indices"][image_idx - 1] if image_idx > 0 else 0
+        num_patches = sum(image_inputs["num_patches"][current_patch_index : current_patch_index + num_pages])
+        return self.image_token * num_image_tokens * num_patches
+
+    @property
+    def unused_input_names(self) -> list[str]:
+        "Input names returned always by subprocessors but not used in model's `forward`"
+        return ["num_patches"]
 
 
 __all__ = ["GotOcr2Processor"]

@@ -108,7 +108,7 @@ class JanusProcessor(ProcessorMixin):
         model_inputs = super().__call__(images=images, text=text, **output_kwargs)
         return model_inputs
 
-    def replace_image_token(self, image_inputs: dict, image_idx: int) -> str:
+    def replace_image_token(self, image_inputs: dict, image_idx: int, **kwargs) -> str:
         one_img_tokens = self.image_start_token + (self.image_token * self.num_image_tokens) + self.image_end_token
         return one_img_tokens
 

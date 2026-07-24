@@ -30,13 +30,12 @@ from ...image_utils import ImageInput, make_nested_list_of_images
 from ...masking_utils import create_causal_mask
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_utils import PreTrainedModel
-from ...processing_utils import ProcessingKwargs, Unpack
-from ...tokenization_utils_base import PreTokenizedInput, TextInput
+from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
+from ...tokenization_utils_base import AddedToken, PreTokenizedInput, TextInput
 from ...utils import auto_docstring, can_return_tuple, logging
 from ...utils.generic import maybe_autocast
 from ...utils.import_utils import requires
 from ..auto import CONFIG_MAPPING, AutoConfig, AutoModel
-from ..paligemma.processing_paligemma import PaligemmaProcessor
 from ..siglip.image_processing_siglip import SiglipImageProcessor
 
 
@@ -63,7 +62,7 @@ class PI0ProcessorKwargs(ProcessingKwargs, total=False):
 
 @auto_docstring
 @requires(backends=("vision", "torch"))
-class PI0Processor(PaligemmaProcessor):
+class PI0Processor(ProcessorMixin):
     def __init__(self, image_processor=None, tokenizer=None, chat_template=None, **kwargs):
         self.height, self.width = image_processor.size["height"], image_processor.size["width"]
         state_mean = kwargs.get("state_mean", [-0.0419, 0.0354, 0.8257, 2.9083, -0.5562, -0.1665, 0.0283, -0.0286])
@@ -77,8 +76,30 @@ class PI0Processor(PaligemmaProcessor):
         self.actions_std = torch.tensor(actions_std)
         self.max_state_dim = kwargs.get("max_state_dim", 32)
         self.chunk_size = kwargs.get("chunk_size", 50)
-        super().__init__(image_processor, tokenizer)
+        if not hasattr(image_processor, "image_seq_length"):
+            raise ValueError("Image processor is missing an `image_seq_length` attribute.")
 
+        self.image_seq_length = image_processor.image_seq_length
+
+        if not hasattr(tokenizer, "<image>"):
+            # Just add to vocab if not yet there. Note that the model isn't yet converted and
+            # can be modified when lerobot team decided to adopt it
+            self.image_token = "<image>"
+            image_token = AddedToken(self.image_token, normalized=False, special=True)
+            tokens_to_add = {"additional_special_tokens": [image_token]}
+            tokenizer.add_special_tokens(tokens_to_add)
+            self.image_token_id = tokenizer.convert_tokens_to_ids(self.image_token)
+        else:
+            self.image_token_id = tokenizer.image_token_id
+            self.image_token = tokenizer.image_token
+
+        tokenizer.add_tokens([f"<loc{i:0>4}>" for i in range(1024)] + [f"<seg{i:0>3}>" for i in range(128)])
+        tokenizer.add_bos_token = False
+        tokenizer.add_eos_token = False
+
+        super().__init__(image_processor, tokenizer, chat_template=chat_template)
+
+    @auto_docstring
     def __call__(
         self,
         images: ImageInput | list[ImageInput] | list[list[ImageInput]] | None,
@@ -148,7 +169,7 @@ class PI0Processor(PaligemmaProcessor):
             pixel_attention_mask[batch, :num_cameras] = True
             padded_pixel_values[batch, :num_cameras] = processed["pixel_values"]
 
-        return_data = {
+        model_inputs = {
             **text_inputs,
             "pixel_values": padded_pixel_values,
             "pixel_attention_mask": pixel_attention_mask,
@@ -158,15 +179,15 @@ class PI0Processor(PaligemmaProcessor):
             actions = (torch.tensor(actions) - self.actions_mean) / (self.actions_std + 1e-08)
             if actions.shape[-1] < self.max_state_dim:
                 actions = F.pad(actions, (0, self.max_state_dim - actions.shape[-1]))
-            return_data["actions"] = actions.view(-1, self.chunk_size, self.max_state_dim)
+            model_inputs["actions"] = actions.view(-1, self.chunk_size, self.max_state_dim)
 
         if state is not None:
             state = (torch.tensor(state) - self.state_mean) / (self.state_std + 1e-08)
             if state.shape[-1] < self.max_state_dim:
                 state = F.pad(state, (0, self.max_state_dim - state.shape[-1]))
-            return_data["state"] = state.view(-1, self.max_state_dim)
+            model_inputs["state"] = state.view(-1, self.max_state_dim)
 
-        return BatchFeature(data=return_data, tensor_type=return_tensors)
+        return BatchFeature(data=model_inputs, tensor_type=return_tensors)
 
     @property
     def model_input_names(self):

@@ -46,22 +46,12 @@ class MgpstrProcessor(ProcessorMixin):
         super().__init__(image_processor, tokenizer)
 
     @auto_docstring
-    def __call__(self, text=None, images=None, return_tensors=None, **kwargs):
-        if images is None and text is None:
-            raise ValueError("You need to specify either an `images` or `text` input to process.")
-
-        if images is not None:
-            inputs = self.image_processor(images, return_tensors=return_tensors, **kwargs)
-        if text is not None:
-            encodings = self.char_tokenizer(text, return_tensors=return_tensors, **kwargs)
-
-        if text is None:
-            return inputs
-        elif images is None:
-            return encodings
-        else:
-            inputs["labels"] = encodings["input_ids"]
-            return inputs
+    def __call__(self, text=None, images=None, **kwargs):
+        model_inputs = super().__call__(images=images, text=text, **kwargs)
+        if text is not None and images is not None:
+            model_inputs["labels"] = model_inputs.pop("input_ids")
+            model_inputs.pop("attention_mask", None)
+        return model_inputs
 
     def batch_decode(self, sequences):
         """

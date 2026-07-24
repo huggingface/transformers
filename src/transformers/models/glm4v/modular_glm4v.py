@@ -1174,7 +1174,7 @@ class Glm4vProcessor(Qwen2VLProcessor):
         self.video_start_id = tokenizer.convert_tokens_to_ids("<|begin_of_video|>")
         self.video_end_id = tokenizer.convert_tokens_to_ids("<|end_of_video|>")
 
-    def replace_video_token(self, video_inputs: dict, video_idx: int) -> str:
+    def replace_video_token(self, video_inputs: dict, video_idx: int, **kwargs) -> str:
         merge_length = self.video_processor.merge_size**2
         num_frames = video_inputs["video_grid_thw"][video_idx][0]
         num_image_tokens = video_inputs["video_grid_thw"][video_idx].prod() // merge_length // num_frames

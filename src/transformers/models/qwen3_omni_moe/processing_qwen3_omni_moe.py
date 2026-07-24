@@ -117,6 +117,8 @@ def _get_feat_extract_output_lengths(input_lengths, n_window=50):
 
 @auto_docstring
 class Qwen3OmniMoeProcessor(ProcessorMixin):
+    valid_processor_kwargs = Qwen3OmniMoeProcessorKwargs
+
     def __init__(
         self, image_processor=None, video_processor=None, feature_extractor=None, tokenizer=None, chat_template=None
     ):
