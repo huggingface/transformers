@@ -4334,6 +4334,8 @@ class ModelTesterMixin(ExportTesterMixin):
                 config.attention_dropout = 0.0
             if hasattr(config, "attention_probs_dropout_prob"):
                 config.attention_probs_dropout_prob = 0.0
+            if hasattr(config, "dropout_rate"):
+                config.dropout_rate = 0.0
 
             # Update the head dim and try to update hidden size as well if present in config
             # NOTE: some models may have none if the values in sub-config, thus we check for `Noneness`
@@ -4350,6 +4352,18 @@ class ModelTesterMixin(ExportTesterMixin):
                         if "head_dim" in layer_overrides:
                             layer_overrides["head_dim"] = max(requested_dim, layer_overrides["head_dim"])
                     config.per_layer_config = overrides
+            elif getattr(config, "d_kv", None) is not None:
+                # Some models expose head dim under a different key (e.g. d_kv) and tie q/k/v to hidden_size.
+                # Keep hidden_size aligned when it follows hidden_size == num_heads * head_dim.
+                initial_head_dim = config.d_kv
+                config.d_kv = max(requested_dim, initial_head_dim)
+                num_heads = getattr(config, "num_heads", getattr(config, "num_attention_heads", None))
+                if (
+                    num_heads is not None
+                    and getattr(config, "hidden_size", None) is not None
+                    and config.hidden_size == num_heads * initial_head_dim
+                ):
+                    config.hidden_size = num_heads * config.d_kv
 
             cross_head_dim = None
             if hasattr(config, "cross_head_dim") and config.cross_head_dim is not None:

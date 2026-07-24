@@ -68,10 +68,12 @@ def create_position_bias_mask(
         # If it's not causal, we can simply use the position_bias as the additive mask in sdpa
         else:
             position_bias_mask = position_bias
-    else:
-        # If we have a mask already, it's always of boolean dtype here. We only have to use the superpose both mask to float
-        # dtype to use as additive mask in sdpa
+    elif attention_mask.dtype == torch.bool:
+        # If we have a boolean mask, superpose both into a single float additive mask to use in sdpa
         position_bias_mask = torch.where(attention_mask, position_bias, min_dtype)
+    else:
+        # A custom float mask is already additive, so we can simply add it to the position_bias
+        position_bias_mask = position_bias + attention_mask
 
     return position_bias_mask
 

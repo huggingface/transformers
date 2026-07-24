@@ -3195,12 +3195,12 @@ class TestAttentionImplementation(unittest.TestCase):
         self.assertTrue(FSDPLlamaModel._can_set_attn_implementation())
 
     def test_can_set_attn_modern_vs_legacy(self):
-        # Modern interface model: True. Legacy model (T5 doesn't use ALL_ATTENTION_FUNCTIONS): False.
+        # Modern interface model: True. Legacy model (ProphetNet doesn't use ALL_ATTENTION_FUNCTIONS): False.
         from transformers.models.llama.modeling_llama import LlamaModel
-        from transformers.models.t5.modeling_t5 import T5Model
+        from transformers.models.prophetnet.modeling_prophetnet import ProphetNetModel
 
         self.assertTrue(LlamaModel._can_set_attn_implementation())
-        self.assertFalse(T5Model._can_set_attn_implementation())
+        self.assertFalse(ProphetNetModel._can_set_attn_implementation())
 
     def test_can_set_attn_legacy_edge_cases(self):
         # FSMT: bare `class Attention(nn.Module):` -- tightened regex catches this case.
