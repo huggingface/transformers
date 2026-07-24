@@ -295,6 +295,11 @@ class HiggsAudioV2ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Te
     def test_flash_attention_2_continue_generate_with_position_ids(self):
         pass
 
+    @parameterized.expand([("linear",), ("dynamic",), ("yarn",)])
+    @unittest.skip(reason="HiggsAudio doesn't return last hidden states")
+    def test_model_rope_scaling_from_config(self, scaling_type):
+        pass
+
     def _check_scores(self, batch_size, scores, generated_length, config):
         expected_shape = (batch_size, config.num_codebooks, config.codebook_size)
         self.assertIsInstance(scores, tuple)

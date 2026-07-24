@@ -5685,36 +5685,33 @@ class ModelTesterMixin(ExportTesterMixin):
         original_short_output = original_model(short_input, **short_model_kwargs)
         original_long_output = original_model(long_input, **long_model_kwargs)
 
-        # Some models don't return last hidden states and use custom naming, just skip the test
-        # Not worth trying to infer the output field names, prob old or rarely used model
-        if getattr(original_short_output, "last_hidden_state", None) is not None:
-            original_short_output = original_short_output.last_hidden_state
-            original_long_output = original_long_output.last_hidden_state
+        original_short_output = original_short_output.last_hidden_state
+        original_long_output = original_long_output.last_hidden_state
 
-            set_seed(42)  # Fixed seed at init time so the two models get the same random weights
-            _set_config_rope_params(
-                text_config,
-                {
-                    "rope_type": scaling_type,
-                    "factor": 10.0,
-                    "rope_theta": 10_000.0,
-                },
-            )
-            scaled_model = base_model_class(config)
-            scaled_model.to(torch_device)
-            scaled_model.eval()
-            scaled_short_output = scaled_model(short_input, **short_model_kwargs).last_hidden_state
-            scaled_long_output = scaled_model(long_input, **long_model_kwargs).last_hidden_state
+        set_seed(42)  # Fixed seed at init time so the two models get the same random weights
+        _set_config_rope_params(
+            text_config,
+            {
+                "rope_type": scaling_type,
+                "factor": 10.0,
+                "rope_theta": 10_000.0,
+            },
+        )
+        scaled_model = base_model_class(config)
+        scaled_model.to(torch_device)
+        scaled_model.eval()
+        scaled_short_output = scaled_model(short_input, **short_model_kwargs).last_hidden_state
+        scaled_long_output = scaled_model(long_input, **long_model_kwargs).last_hidden_state
 
-            # Dynamic scaling does not change the RoPE embeddings until it receives an input longer than the original
-            # maximum sequence length, so the outputs for the short input should match.
-            if scaling_type == "dynamic":
-                torch.testing.assert_close(original_short_output, scaled_short_output, rtol=1e-5, atol=1e-5)
-            else:
-                self.assertFalse(torch.allclose(original_short_output, scaled_short_output, atol=1e-5))
+        # Dynamic scaling does not change the RoPE embeddings until it receives an input longer than the original
+        # maximum sequence length, so the outputs for the short input should match.
+        if scaling_type == "dynamic":
+            torch.testing.assert_close(original_short_output, scaled_short_output, rtol=1e-5, atol=1e-5)
+        else:
+            self.assertFalse(torch.allclose(original_short_output, scaled_short_output, atol=1e-5))
 
-            # The output should be different for long inputs
-            self.assertFalse(torch.allclose(original_long_output, scaled_long_output, atol=1e-5))
+        # The output should be different for long inputs
+        self.assertFalse(torch.allclose(original_long_output, scaled_long_output, atol=1e-5))
 
     def test_model_rope_scaling_frequencies(self):
         """Tests the frequency properties of the different RoPE scaling types on the model RoPE layer."""
@@ -5740,8 +5737,6 @@ class ModelTesterMixin(ExportTesterMixin):
         possible_rope_attributes = [
             "pos_emb",
             "rotary_emb",  # most common case
-            "global_rotary_emb",
-            "local_rotary_emb",
         ]
         rope_class = None
         for name, module in base_model.named_modules():

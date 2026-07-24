@@ -30,6 +30,10 @@ if is_torch_available():
     from transformers.models.gemma3.modeling_gemma3 import Gemma3RotaryEmbedding
     from transformers.models.llama.modeling_llama import LlamaRotaryEmbedding
 
+# NOTE: All expected values are obtained via init a `LlamaRotaryEmbedding` or `Gemma3RotaryEmbedding`
+# with fixed testing rope params/theta/type/dims and copying its `self.inv_freq`. For Gemma3 we copy
+# `inv_freq` of the exact layer type being tested, depending on parameterized
+
 
 @require_torch
 class RopeTest(unittest.TestCase):
@@ -132,15 +136,6 @@ class RopeTest(unittest.TestCase):
             # Raise a warning for each existing layer-type
             if same_rope_per_layer:
                 self.assertIn("mrope_sections", logs.output[1])
-
-    def test_rope_bad_layer_types(self):
-        config = LlamaConfig()
-
-        config.layer_types = ["full", "sliding"]
-        config.rope_parameters = {"rope_type": "default", "rope_theta": 10000}
-        # Never raises an error, prob for BC?
-        # with self.assertRaises(ValueError):
-        #     config.validate_rope()
 
     @parameterized.expand(
         [
