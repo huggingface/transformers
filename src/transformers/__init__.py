@@ -795,7 +795,8 @@ else:
 
     # Copy before mutating so we never alter define_import_structure's lru_cache entry.
     import_structure = {
-        backends: dict(modules) for backends, modules in define_import_structure(Path(__file__).parent / "models", prefix="models").items()
+        backends: dict(modules)
+        for backends, modules in define_import_structure(Path(__file__).parent / "models", prefix="models").items()
     }
     import_structure[frozenset({})].update(_import_structure)
 
