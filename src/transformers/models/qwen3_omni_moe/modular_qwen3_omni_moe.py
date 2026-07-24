@@ -2510,8 +2510,10 @@ class Qwen3OmniMoeForConditionalGeneration(Qwen3OmniMoePreTrainedModel, Generati
         user_mask = (role_token_ids == self.config.user_token_id) & input_attention_mask.bool()
         user_lengths = user_mask.sum(dim=-1)
         max_user_length = user_lengths.max().item()
+        # Sorting sends the user positions last (they are offset by `sequence_length`), so the trailing
+        # `max_user_length` columns hold them in order, right-aligned to match `talker_user_attention_mask`.
         user_indices = torch.where(user_mask, sequence_length + token_positions, token_positions).argsort(dim=-1)[
-            :, :max_user_length
+            :, -max_user_length:
         ]
 
         full_user_embeds = self._get_talker_user_parts(
@@ -2604,27 +2606,6 @@ class Qwen3OmniMoeProcessorKwargs(Qwen2_5OmniProcessorKwargs):
 
 
 class Qwen3OmniMoeProcessor(Qwen2_5OmniProcessor, ProcessorMixin):
-    def post_process_image_text_to_text(self, generated_outputs, skip_special_tokens=True, **kwargs):
-        if isinstance(generated_outputs, (tuple, list)):
-            generated_outputs = generated_outputs[0]
-        return self.tokenizer.batch_decode(generated_outputs, skip_special_tokens=skip_special_tokens, **kwargs)
-
-    def post_process_multimodal_output(
-        self, generated_outputs, skip_special_tokens=True, generation_mode=None, **kwargs
-    ):
-        if generation_mode == "audio":
-            audio_outputs = generated_outputs[1].detach().cpu()
-            if audio_outputs.ndim == 1:
-                return [audio_outputs.numpy()]
-            return [audio.reshape(-1).numpy() for audio in audio_outputs]
-
-        return super().post_process_multimodal_output(
-            generated_outputs,
-            skip_special_tokens=skip_special_tokens,
-            generation_mode=generation_mode,
-            **kwargs,
-        )
-
     def replace_multimodal_special_tokens(
         self,
         text,

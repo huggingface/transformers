@@ -640,7 +640,12 @@ class Qwen2_5OmniBatchAudioGenerationTest(unittest.TestCase):
 
             def __call__(self, code, **kwargs):
                 self.codes.append(code)
-                return torch.ones((code.shape[0], 1, code.shape[1] * 2), dtype=torch.float, device=code.device)
+                # `Qwen2_5OmniToken2WavBigVGANModel` ends its forward with `.squeeze()`, so a single-item
+                # decode comes back one-dimensional. Mirror that, and make every sample distinct so a
+                # waveform that is broadcast from a single value cannot pass.
+                num_samples = code.shape[1] * 2
+                waveform = torch.arange(1, num_samples + 1, dtype=torch.float, device=code.device)
+                return (waveform * (code[0, 0] + 1)).squeeze()
 
         token2wav = DummyToken2Wav()
         talker = DummyTalker()
@@ -670,8 +675,13 @@ class Qwen2_5OmniBatchAudioGenerationTest(unittest.TestCase):
 
         self.assertTrue(torch.equal(talker.attention_mask, torch.tensor([[1, 1, 1, 1, 1], [1, 1, 0, 1, 1]])))
         self.assertEqual([codes.tolist() for codes in token2wav.codes], [[[100]], [[101, 102]]])
-        self.assertEqual(waveform.shape, (2, 1, 4))
-        self.assertTrue(torch.equal(waveform[0, :, 2:], torch.zeros((1, 2))))
+        # One waveform per batch row, right-padded to the longest. The shorter row keeps its own samples
+        # instead of being stretched, and neither row is a constant broadcast of its first sample.
+        self.assertEqual(waveform.shape, (2, 4))
+        torch.testing.assert_close(
+            waveform,
+            torch.tensor([[101.0, 202.0, 0.0, 0.0], [102.0, 204.0, 306.0, 408.0]]),
+        )
 
 
 @require_torch
@@ -990,6 +1000,7 @@ class Qwen2_5OmniModelIntegrationTest(unittest.TestCase):
             self.assertEqual(batch_audio.shape, single_audio.shape)
             torch.testing.assert_close(batch_audio, single_audio, rtol=1e-3, atol=1e-3)
 
+    @slow
     def test_small_model_integration_test_token2wav_regression(self):
         """
         reproducer (for the expected values below): https://gist.github.com/ebezzam/12286028df44e91434f7c770efc4e5b5

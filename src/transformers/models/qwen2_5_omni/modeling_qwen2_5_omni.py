@@ -4052,19 +4052,19 @@ class Qwen2_5OmniForConditionalGeneration(Qwen2_5OmniPreTrainedModel, Generation
         # generation reproduce single-item generation when the random seed is controlled.
         wavs = []
         for index, code_length in enumerate(talker_code_lengths.tolist()):
-            wavs.append(
-                self.token2wav(
-                    talker_generate_codes[index : index + 1, :code_length],
-                    conditioning=conditioning[index : index + 1],
-                    reference_mel=reference_mel[index : index + 1],
-                    **token2wav_kwargs,
-                )
+            sample_wav = self.token2wav(
+                talker_generate_codes[index : index + 1, :code_length],
+                conditioning=conditioning[index : index + 1],
+                reference_mel=reference_mel[index : index + 1],
+                **token2wav_kwargs,
             )
+            # The BigVGAN vocoder squeezes its output, so a single-item decode comes back as `(num_samples,)`.
+            wavs.append(sample_wav.reshape(-1))
 
-        max_waveform_length = max(wav.shape[-1] for wav in wavs)
-        wav = wavs[0].new_zeros((batch_size, *wavs[0].shape[1:-1], max_waveform_length))
+        max_waveform_length = max(sample_wav.shape[-1] for sample_wav in wavs)
+        wav = wavs[0].new_zeros((batch_size, max_waveform_length))
         for index, sample_wav in enumerate(wavs):
-            wav[index, ..., : sample_wav.shape[-1]] = sample_wav[0]
+            wav[index, : sample_wav.shape[-1]] = sample_wav
 
         return thinker_result.sequences, wav.float()
 
