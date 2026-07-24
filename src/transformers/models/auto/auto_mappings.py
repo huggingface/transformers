@@ -42,6 +42,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("audioflamingo3", "AudioFlamingo3Config"),
         ("audioflamingo3_encoder", "AudioFlamingo3EncoderConfig"),
         ("autoformer", "AutoformerConfig"),
+        ("axk1", "AXK1Config"),
         ("axk2", "AXK2Config"),
         ("aya_vision", "AyaVisionConfig"),
         ("bamba", "BambaConfig"),
