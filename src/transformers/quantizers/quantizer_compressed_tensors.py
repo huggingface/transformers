@@ -62,12 +62,14 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
         return dtype
 
     def _process_model_before_weight_loading(self, model, **kwargs):
-        from compressed_tensors.quantization import apply_quantization_config
+        from compressed_tensors.quantization import apply_quantization_config, QuantizationStatus
+        from compressed_tensors.utils import patch_attr
 
         ct_quantization_config = self.compressor.quantization_config
 
         # Always initialize compressed wrappers to match the checkpoint
-        apply_quantization_config(model, ct_quantization_config, self.run_compressed)
+        with patch_attr(ct_quantization_config, "quantization_status", QuantizationStatus.FROZEN):
+            apply_quantization_config(model, ct_quantization_config, self.run_compressed)
         if self.quantization_config.is_quantization_compressed:
             self.compressor.compress_model(model=model)
 
