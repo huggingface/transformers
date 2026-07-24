@@ -13,6 +13,7 @@
 # limitations under the License.
 """Testing suite for the PyTorch Zamba model."""
 
+import copy
 import tempfile
 import unittest
 
@@ -298,6 +299,54 @@ class Zamba2ModelTester:
             msg=f"Max diff: {(ref_first - under_test_first).abs().max().item():.6f}",
         )
 
+    def create_and_check_zamba2_slow_vs_fast_forward(self, config, input_ids, *args):
+        """Slow vs fast path check guarded by require kernels to enable fast path"""
+        model = Zamba2Model(config)
+        model.eval()
+        model.to(torch_device)
+
+        mamba_mixer = next(layer.mamba for layer in model.layers if hasattr(layer, "mamba"))
+        hidden_states = model.embed_tokens(input_ids)
+        outputs_fast = mamba_mixer.cuda_kernels_forward(hidden_states)
+        outputs_slow = mamba_mixer.torch_forward(hidden_states)
+        self.parent.assertTrue(torch.allclose(outputs_fast, outputs_slow, atol=1e-3, rtol=1e-3))
+
+    def create_and_check_zamba2_slow_path_multi_chunk(self, config, input_ids, *args):
+        """
+        Regression test for the inter-chunk recurrence of the Mamba2 slow (torch) path: a
+        single chunked forward over a multi-chunk sequence must reproduce a token-by-token
+        recurrent decode. Forced onto CPU so the slow (`torch_forward`) path is exercised.
+
+        A small `chunk_size` lets the short `prepare_config_and_inputs` sequence span several
+        chunks, and the embedded input is rescaled so the SSM state is O(1) -- at the natural
+        activation scale the inter-chunk contribution is ~1e-7 (below any tolerance), which is
+        why the single-chunk `slow_vs_fast` check does not surface this regression.
+        """
+        config = copy.deepcopy(config)
+        config.chunk_size = 2
+        torch.manual_seed(0)
+        model = Zamba2Model(config).eval().to("cpu")
+        mixer = next(layer.mamba for layer in model.layers if hasattr(layer, "mamba"))
+
+        embeds = model.embed_tokens(input_ids[:1].to("cpu"))
+        hidden_states = 100.0 * embeds / embeds.std()
+
+        with torch.no_grad():
+            chunked = mixer.torch_forward(hidden_states)
+            cache = DynamicCache(config=config)
+            recurrent = torch.cat(
+                [
+                    mixer.torch_forward(hidden_states[:, t : t + 1], cache_params=cache)
+                    for t in range(hidden_states.shape[1])
+                ],
+                dim=1,
+            )
+
+        max_diff = (chunked - recurrent).abs().max().item()
+        self.parent.assertLess(
+            max_diff, 1e-3, f"slow-path chunked forward disagrees with recurrent decode: {max_diff}"
+        )
+
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
         (
@@ -350,6 +399,17 @@ class Zamba2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
     def setUp(self):
         self.model_tester = Zamba2ModelTester(self)
         self.config_tester = ConfigTester(self, config_class=Zamba2Config, hidden_size=32)
+
+    @require_torch_accelerator
+    @require_kernels
+    def test_mamba2_slow_vs_fast_forward(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_zamba2_slow_vs_fast_forward(*config_and_inputs)
+
+    def test_mamba2_slow_path_multi_chunk(self):
+        """The Mamba2 slow path must reproduce the token-by-token recurrence across chunks."""
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_zamba2_slow_path_multi_chunk(*config_and_inputs)
 
     @unittest.skip("We need at leat 3 layers to test weight tying!")
     def test_num_layers_is_small(self):

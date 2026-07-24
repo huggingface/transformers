@@ -13,6 +13,7 @@
 # limitations under the License.
 """Testing suite for the PyTorch NemotronH model."""
 
+import copy
 import tempfile
 import unittest
 
@@ -356,6 +357,42 @@ class NemotronHModelTester:
             msg=f"Max diff: {(ref_first - under_test_first).abs().max().item():.6f}",
         )
 
+    def create_and_check_nemotron_h_slow_path_multi_chunk(self, config, input_ids, *args):
+        """
+        Regression test for the inter-chunk recurrence of the Mamba2 slow (torch) path: a
+        single chunked forward over a multi-chunk sequence must reproduce a token-by-token
+        recurrent decode. Forced onto CPU so the slow (`torch_forward`) path is exercised.
+
+        A small `chunk_size` lets the short `prepare_config_and_inputs` sequence span several
+        chunks, and the embedded input is rescaled so the SSM state is O(1) -- at the natural
+        activation scale the inter-chunk contribution is ~1e-7 (below any tolerance), which is
+        why the single-chunk `slow_vs_fast` check does not surface this regression.
+        """
+        config = copy.deepcopy(config)
+        config.chunk_size = 2
+        torch.manual_seed(0)
+        model = NemotronHModel(config).eval().to("cpu")
+        mixer = next(layer.mixer for layer in model.layers if getattr(layer, "block_type", None) == "linear_attention")
+
+        embeds = model.embeddings(input_ids[:1].to("cpu"))
+        hidden_states = 100.0 * embeds / embeds.std()
+
+        with torch.no_grad():
+            chunked = mixer.torch_forward(hidden_states)
+            cache = DynamicCache(config=config)
+            recurrent = torch.cat(
+                [
+                    mixer.torch_forward(hidden_states[:, t : t + 1], cache_params=cache)
+                    for t in range(hidden_states.shape[1])
+                ],
+                dim=1,
+            )
+
+        max_diff = (chunked - recurrent).abs().max().item()
+        self.parent.assertLess(
+            max_diff, 1e-3, f"slow-path chunked forward disagrees with recurrent decode: {max_diff}"
+        )
+
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
         (
@@ -519,6 +556,11 @@ class NemotronHModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
         """
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_mamba2_slow_vs_fast_forward(*config_and_inputs)
+
+    def test_mamba2_slow_path_multi_chunk(self):
+        """The Mamba2 slow path must reproduce the token-by-token recurrence across chunks."""
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_nemotron_h_slow_path_multi_chunk(*config_and_inputs)
 
     def test_attention_outputs(self):
         r"""
