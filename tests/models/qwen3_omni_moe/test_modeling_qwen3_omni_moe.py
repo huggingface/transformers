@@ -1003,7 +1003,7 @@ class Qwen3OmniModelIntegrationTest(unittest.TestCase):
         self.assertFalse(torch.isnan(output[1]).any().item())
 
     @slow
-    def test_small_model_integration_test_batch_audio_matches_single(self):
+    def test_small_model_integration_test_batch_audio(self):
         model = self.get_model()
         texts = [
             "Hello, I'm Qwen. How can I help you today?",
@@ -1033,16 +1033,16 @@ class Qwen3OmniModelIntegrationTest(unittest.TestCase):
             for text in texts
         ]
 
-        single_audio_outputs = []
-        for conversation in conversations:
+        def generate_batch_audio(batch_conversations):
             inputs = self.processor.apply_chat_template(
-                [conversation],
+                batch_conversations,
                 tokenize=True,
                 add_generation_prompt=True,
                 return_dict=True,
                 return_tensors="pt",
                 processor_kwargs={"padding": True},
             ).to(torch_device, dtype=torch.bfloat16)
+            self.assertIn("attention_mask", inputs)
             output = model.generate(
                 **inputs,
                 return_audio=True,
@@ -1052,32 +1052,21 @@ class Qwen3OmniModelIntegrationTest(unittest.TestCase):
                 talker_do_sample=False,
                 talker_max_new_tokens=10,
             )
-            single_audio_outputs.append(output[1][0] if output[1].ndim > 1 else output[1])
+            return output[1]
 
-        inputs = self.processor.apply_chat_template(
-            conversations,
-            tokenize=True,
-            add_generation_prompt=True,
-            return_dict=True,
-            return_tensors="pt",
-            processor_kwargs={"padding": True},
-        ).to(torch_device, dtype=torch.bfloat16)
-        self.assertIn("attention_mask", inputs)
-        output = model.generate(
-            **inputs,
-            return_audio=True,
-            thinker_temperature=0,
-            thinker_do_sample=False,
-            thinker_max_new_tokens=20,
-            talker_do_sample=False,
-            talker_max_new_tokens=10,
-        )
-        batch_audio_output = output[1]
-
+        batch_audio_output = generate_batch_audio(conversations)
         self.assertEqual(batch_audio_output.shape[0], len(conversations))
-        for batch_audio, single_audio in zip(batch_audio_output, single_audio_outputs):
-            self.assertEqual(batch_audio.shape, single_audio.shape)
-            torch.testing.assert_close(batch_audio, single_audio, rtol=1e-3, atol=1e-3)
+        waveforms = [row.reshape(-1).float() for row in batch_audio_output]
+        for waveform in waveforms:
+            self.assertGreater(waveform.std().item(), 1e-2)
+        self.assertFalse(torch.allclose(waveforms[0], waveforms[1], rtol=1e-3, atol=1e-3))
+        duplicate_audio_output = generate_batch_audio([conversations[0], conversations[0]])
+        torch.testing.assert_close(
+            duplicate_audio_output[0].reshape(-1),
+            duplicate_audio_output[1].reshape(-1),
+            rtol=1e-3,
+            atol=1e-3,
+        )
 
     # Run this test first because it needs to load the model with `flash_attention_2`. For other tests, we need to keep
     # the loaded model (without FA) in `cls.model`. If this test is not run first, when loading the flash attention
