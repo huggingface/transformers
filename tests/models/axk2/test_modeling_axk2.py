@@ -15,9 +15,10 @@
 
 import unittest
 
-from transformers import Cache, is_torch_available
+from transformers import AutoModelForCausalLM, AutoTokenizer, Cache, is_torch_available
 from transformers.testing_utils import (
     Expectations,
+    cleanup,
     require_torch,
     require_torch_accelerator,
     slow,
@@ -111,51 +112,28 @@ class AXK2ModelTest(CausalLMModelTest, unittest.TestCase):
 
 @slow
 @require_torch_accelerator
-class AXK2IntegrationTest(unittest.TestCase):
-    # A.X-K2's released checkpoint is a 20B+ MoE that does not fit a CI GPU, so these tests run on a tiny
-    # *randomized* checkpoint (same layout as `tiny-axk1`) that still exercises the full stack: fused
-    # attention output gate, gated RMSNorm, and the SGA (sparse-gated) indexer. Regenerate it
-    # byte-identically (and upload) with:
-    #
-    #     torch.manual_seed(0)
-    #     config = AXK2Config(
-    #         vocab_size=163840, hidden_size=64, intermediate_size=128, moe_intermediate_size=32,
-    #         num_hidden_layers=4, num_attention_heads=4, num_key_value_heads=4, n_routed_experts=16,
-    #         num_experts_per_tok=2, kv_lora_rank=16, q_lora_rank=16, qk_nope_head_dim=8,
-    #         qk_rope_head_dim=8, v_head_dim=8, index_n_heads=2, index_head_dim=16, index_topk=8,
-    #         gated_norm_rank=4, max_position_embeddings=4096,
-    #         mlp_layer_types=["dense"] + ["sparse"] * 3,
-    #     )
-    #     AXK2ForCausalLM(config).to(torch.bfloat16).push_to_hub("hf-internal-testing/tiny-axk2")
-    #
-    # The logits expectations below were recorded from exactly this seeded model (bf16, eager, A100).
+class AXK1IntegrationTest(unittest.TestCase):
     model_id = "hf-internal-testing/tiny-axk2"
 
-    def test_generation(self):
-        # Weights are randomly initialized so the decoded text is arbitrary; this just exercises the full
-        # greedy generation loop end to end and checks the output shape.
-        model = AXK2ForCausalLM.from_pretrained(self.model_id, dtype=torch.bfloat16, device_map="auto")
-        input_ids = torch.tensor([[1, 2, 3, 4, 5, 6, 7, 8]], device=torch_device)
-        generated_ids = model.generate(input_ids, max_new_tokens=20, do_sample=False)
-        self.assertEqual(generated_ids.shape, (1, input_ids.shape[1] + 20))
+    def setup(self):
+        cleanup(torch_device, gc_collect=False)
+
+    def tearDown(self):
+        cleanup(torch_device, gc_collect=False)
 
     def test_model_logits_batched(self):
-        model = AXK2ForCausalLM.from_pretrained(self.model_id, dtype=torch.bfloat16, device_map="auto")
         dummy_input = torch.LongTensor([[0, 0, 0, 0, 0, 0, 1, 2, 3], [1, 1, 2, 3, 4, 5, 6, 7, 8]]).to(torch_device)
         attention_mask = dummy_input.ne(0).to(torch.long)
 
+        model = AutoModelForCausalLM.from_pretrained(self.model_id, dtype=torch.bfloat16, device_map="auto")
+
         # Last-3x3 logits slice, left-padded (batch 0) and unpadded (batch 1) rows.
         EXPECTED_LOGITS_LEFT_PADDED = Expectations(
-            {
-                ("cuda", 8): [[0.2441, 0.1201, 0.2129], [0.0659, 0.0635, 0.0525], [-0.019, -0.1104, 0.0454]],
-            }
+            {("cuda", (8, 6)): [[-1.9062, -3.9688, 2.8438], [-3.5625, -1.6562, 4.2500], [-1.6172, -2.7812, 2.6094]]}
         )
         expected_left_padded = torch.tensor(EXPECTED_LOGITS_LEFT_PADDED.get_expectation(), device=torch_device)
-
         EXPECTED_LOGITS_UNPADDED = Expectations(
-            {
-                ("cuda", 8): [[0.1152, -0.1245, -0.4258], [-0.1797, -0.3145, -0.3223], [-0.0684, 0.3418, -0.027]],
-            }
+            {("cuda", (8, 6)): [[0.6211, -0.4336, 1.8906], [-3.4219, -1.9219, 2.7188], [-2.0156, -1.5547, -1.3906]]}
         )
         expected_unpadded = torch.tensor(EXPECTED_LOGITS_UNPADDED.get_expectation(), device=torch_device)
 
@@ -164,3 +142,22 @@ class AXK2IntegrationTest(unittest.TestCase):
         logits = logits.float()
         torch.testing.assert_close(logits[0, -3:, -3:], expected_left_padded, atol=1e-3, rtol=1e-3)
         torch.testing.assert_close(logits[1, -3:, -3:], expected_unpadded, atol=1e-3, rtol=1e-3)
+
+    def test_model_generation(self):
+        expected_texts = Expectations(
+            {
+                ("cuda", (8, 6)): 'Tell me about the french revolution. 세상은됨에 Philipp{asày 값에서 쪽은Pkgày속성amentals년여 focalaure 달간を実{acknowledgements 사건과-OctCTPコロ passengers Dice GD workloads 울진 Fibonacci announcesdest denote 이야기도 scrap',
+            }
+        )  # fmt: skip
+        EXPECTED_TEXT = expected_texts.get_expectation()
+
+        tokenizer = AutoTokenizer.from_pretrained("skt/A.X-K1")
+        model = AutoModelForCausalLM.from_pretrained(
+            self.model_id, device_map="auto", dtype="auto", experts_implementation="eager"
+        )
+        input_text = ["Tell me about the french revolution."]
+        model_inputs = tokenizer(input_text, return_tensors="pt").to(model.device)
+
+        generated_ids = model.generate(**model_inputs, max_new_tokens=32, do_sample=False)
+        generated_text = tokenizer.decode(generated_ids[0], skip_special_tokens=True)
+        self.assertEqual(generated_text, EXPECTED_TEXT)
