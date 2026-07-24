@@ -222,6 +222,16 @@ class Phi3ForCausalLM(MistralForCausalLM):
         # Overwritten -- this model may need to switch between short and long rope, invalidating the cache in the
         # process
 
+        # `logits_to_keep=None` must not reach `forward()`: `None` as a slice index turns the
+        # lm_head slice into an unsqueeze (`hidden_states[:, None, :]`) -> 4D logits -> sampling
+        # crash ("prob_dist must be 1 or 2 dim" in `torch.multinomial`). `None` survives here
+        # whenever `_supports_logits_to_keep()` cannot introspect a wrapped `forward()` (e.g.
+        # TRL/PEFT training stacks) and thus never injects its default of 1. Generation only
+        # consumes the last position, so coerce; assisted decoding overrides
+        # `model_inputs["logits_to_keep"]` afterwards and is unaffected.
+        if logits_to_keep is None:
+            logits_to_keep = 1
+
         # When the first time input length reached long and short factor switching point, enforce re-compute cache
         # It will cause downside of slower at this single token position, however, better than current failure.
         if (
