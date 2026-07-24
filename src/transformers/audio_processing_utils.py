@@ -29,33 +29,21 @@ logger = logging.get_logger(__name__)
 
 
 class BaseAudioProcessor(AudioProcessingMixin):
-    model_input_names = ["audio"]
     valid_kwargs = AudioKwargs
 
-    # Only attributes with a meaningful non-None default (or that are read directly rather than
-    # through `valid_kwargs`) are declared here. `AudioKwargs` fields that default to None
-    # (max_length, truncation, pad_to_multiple_of, spectrogram_config, do_extract_spectrogram)
-    # are materialized on the instance by `_init_kwargs_from_valid_kwargs`, mirroring how
-    # BaseImageProcessor omits its None-default ImagesKwargs fields.
-
-    # identity (required; validated in __init__)
-    sampling_rate: int = None
-    force_mono: bool = None
-
+    force_mono: bool = True
     add_channel_dim: bool = False
     padding = True
     padding_side = "right"
     padding_value = 0.0
     return_padding_mask = True
-    mask_level = None  # None = auto (features for spectrogram, audio for raw), "audio" = always audio-level
+    mask_level = None
     do_batch_spectrogram = True
-
-    # ── Core ─────────────────────────────────────────────────────────────
+    model_input_names = ["audio"]
 
     def __init__(
         self,
         sampling_rate: int | None = None,
-        force_mono: bool | None = None,
         **kwargs: Unpack[AudioKwargs],
     ):
         if sampling_rate is not None:
@@ -66,18 +54,9 @@ class BaseAudioProcessor(AudioProcessingMixin):
                 "or passed to __init__."
             )
 
-        if force_mono is not None:
-            self.force_mono = force_mono
-        if self.force_mono is None:
-            raise ValueError(
-                f"`force_mono` must be set either as a class attribute on {self.__class__.__name__} "
-                "or passed to __init__."
-            )
-
         super().__init__(**kwargs)
-        # We don't call self._set_attributes here for backward compatibility with remote code;
-        # the backend subclasses (NumpyAudioBackend, TorchAudioBackend) call it in their __init__.
-        # Mirrors BaseImageProcessor, whose TorchvisionBackend/PilBackend do the same.
+        # We don't call self._set_attributes in BaseImageProcessor for backward compatibility with remote code
+        # We call it instead in the backend subclasses' __init__ methods.
 
     def _set_attributes(self, **kwargs):
         """Standardize instance attributes, then precompute audio-specific init state.
