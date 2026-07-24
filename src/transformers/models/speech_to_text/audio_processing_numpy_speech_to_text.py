@@ -35,6 +35,7 @@ class SpeechToTextAudioProcessorNumpy(NumpyAudioBackend):
             power=2.0,
             center=False,
             periodic=False,
+            left_align_fft=True,
         ),
         mel_scale_config=MelScaleConfig(
             n_mels=80,
@@ -47,8 +48,8 @@ class SpeechToTextAudioProcessorNumpy(NumpyAudioBackend):
         preemphasis=0.97,
         remove_dc_offset=True,
         mel_floor=1.192092955078125e-07,
+        waveform_scale=32768.0,
     )
-    waveform_scale = 32768.0
 
     def __init__(self, normalize_means=True, normalize_vars=True, **kwargs):
         super().__init__(**kwargs)
@@ -57,7 +58,9 @@ class SpeechToTextAudioProcessorNumpy(NumpyAudioBackend):
 
     def _extract_fbank_features(self, waveform):
         """Extract log-mel filterbank features for a single waveform."""
-        waveform = waveform * self.waveform_scale
+        # The `_kaldi_fbank` bridge bypasses the base pipeline (which would apply
+        # `spectrogram_config.waveform_scale` itself), so scale manually here.
+        waveform = waveform * self.spectrogram_config.waveform_scale
         return self._kaldi_fbank(waveform, num_mel_bins=80)
 
     def extract_spectrogram(self, audio, **kwargs):

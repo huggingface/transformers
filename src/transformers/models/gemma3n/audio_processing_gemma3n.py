@@ -16,7 +16,8 @@ import numpy as np
 import torch
 
 from ...audio_processing_backends import TorchAudioBackend
-from ...audio_utils import MelScaleConfig, SpectrogramConfig, StftConfig
+from ...audio_utils import mel_filter_bank
+from .audio_processing_numpy_gemma3n import Gemma3nAudioProcessorNumpy
 
 
 class Gemma3nAudioProcessor(TorchAudioBackend):
@@ -31,26 +32,8 @@ class Gemma3nAudioProcessor(TorchAudioBackend):
     pad_to_multiple_of = 128
     preemphasis_htk_flavor = True
 
-    spectrogram_config = SpectrogramConfig(
-        stft_config=StftConfig(
-            n_fft=1024,
-            win_length=512,
-            hop_length=160,
-            power=1.0,
-            center=False,
-        ),
-        mel_scale_config=MelScaleConfig(
-            n_mels=128,
-            f_min=125.0,
-            f_max=7600.0,
-            mel_scale="htk",
-            matmul_order="features_first",
-        ),
-        mel_floor=1e-5,
-        log_mode="log",
-        preemphasis=0.97,
-        computation_dtype="float64",
-    )
+    # Single source of truth for the config lives on the numpy sibling (importable without torch).
+    spectrogram_config = Gemma3nAudioProcessorNumpy.spectrogram_config
 
     def __init__(self, per_bin_mean=None, per_bin_stddev=None, **kwargs):
         super().__init__(**kwargs)
@@ -87,8 +70,29 @@ class Gemma3nAudioProcessor(TorchAudioBackend):
         frames = self._apply_frame_processing(frames, spectrogram_config=spectrogram_config, **kwargs)
         window = self.window.to(device=audio.device, dtype=frames.dtype)
         frames = frames * window
+        if spectrogram_config.computation_dtype:
+            # The legacy FE frames/preemphasizes/windows in float32 and lets np.fft.rfft
+            # promote to float64; replicate by upcasting only at the FFT boundary.
+            frames = frames.to(getattr(torch, spectrogram_config.computation_dtype))
         stft = torch.fft.rfft(frames, n=stft_cfg.n_fft, dim=-1)
         return stft.abs().transpose(-2, -1)
+
+    def _mel_filter_bank(self, spectrogram_config):
+        # The legacy FE builds its filters in float64 (create_fb_matrix); the numpy
+        # `mel_filter_bank` with default dtype reproduces it bit-exactly, so build there
+        # and convert, keeping the float64 dtype for the mel matmul.
+        stft_cfg = spectrogram_config.stft_config
+        mel_cfg = spectrogram_config.mel_scale_config
+        mel_filters_np = mel_filter_bank(
+            num_frequency_bins=1 + stft_cfg.n_fft // 2,
+            num_mel_filters=mel_cfg.n_mels,
+            min_frequency=mel_cfg.f_min,
+            max_frequency=mel_cfg.f_max if mel_cfg.f_max is not None else self.sample_rate / 2,
+            sampling_rate=self.sample_rate,
+            norm=mel_cfg.norm,
+            mel_scale=mel_cfg.mel_scale,
+        )
+        return torch.from_numpy(mel_filters_np)
 
     def _normalize_magnitude(self, features, *, spectrogram_config, **kwargs):
         result = super()._normalize_magnitude(features, spectrogram_config=spectrogram_config, **kwargs)

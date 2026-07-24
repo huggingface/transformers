@@ -57,8 +57,10 @@ class CohereAsrAudioProcessorNumpy(NumpyAudioBackend):
             mel_scale="slaney",
         ),
         preemphasis=0.97,
+        preemphasis_mode="waveform",
         log_mode="log",
-        mel_floor=2**-24,
+        mel_floor=0.0,  # no clamp; the log guard is pre_log_offset
+        pre_log_offset=2**-24,
     )
 
     def __init__(
@@ -79,41 +81,8 @@ class CohereAsrAudioProcessorNumpy(NumpyAudioBackend):
         if min_energy_window_samples is not None:
             self.min_energy_window_samples = min_energy_window_samples
 
-    def _mel_filter_bank(self, spectrogram_config):
-        """Replicate librosa's per-band float32 accumulation pattern for bit-exact FE parity."""
-        from ...audio_utils import hertz_to_mel, mel_to_hertz
-
-        stft_cfg = spectrogram_config.stft_config
-        mel_cfg = spectrogram_config.mel_scale_config
-        n_fft = stft_cfg.n_fft
-        n_mels = mel_cfg.n_mels
-        f_min = mel_cfg.f_min
-        f_max = mel_cfg.f_max if mel_cfg.f_max is not None else self.sample_rate / 2
-
-        mel_min = hertz_to_mel(f_min, mel_scale=mel_cfg.mel_scale)
-        mel_max = hertz_to_mel(f_max, mel_scale=mel_cfg.mel_scale)
-        mel_pts = np.linspace(mel_min, mel_max, n_mels + 2)
-        filter_freqs = mel_to_hertz(mel_pts.copy(), mel_scale=mel_cfg.mel_scale)
-        fft_freqs = np.linspace(0, self.sample_rate / 2, 1 + n_fft // 2)
-
-        fdiff = np.diff(filter_freqs)
-        ramps = np.subtract.outer(filter_freqs, fft_freqs)
-
-        weights = np.zeros((n_mels, 1 + n_fft // 2), dtype=np.float32)
-        for i in range(n_mels):
-            lower = -ramps[i] / fdiff[i]
-            upper = ramps[i + 2] / fdiff[i + 1]
-            weights[i] = np.maximum(0, np.minimum(lower, upper))
-
-        if mel_cfg.norm == "slaney":
-            enorm = 2.0 / (filter_freqs[2 : n_mels + 2] - filter_freqs[:n_mels])
-            weights *= enorm[:, np.newaxis]
-
-        return weights.T.astype(np.float32)
-
-    def _needs_manual_framing(self, spectrogram_config):
-        # Preemphasis is handled waveform-level in `_stft`; no per-frame processing needed.
-        return spectrogram_config.remove_dc_offset or spectrogram_config.stft_config.left_align_fft
+    # The base numpy backend already builds librosa's per-band float32 filters and applies
+    # the mel matmul / magnitude / `log(x + pre_log_offset)` forms this model needs.
 
     def _apply_dither(self, audio, audio_lengths):
         """Deterministic per-utterance dither. Numpy RNG state differs from torch's, so this
@@ -131,33 +100,17 @@ class CohereAsrAudioProcessorNumpy(NumpyAudioBackend):
         return audio
 
     def _stft(self, audio, *, spectrogram_config, audio_ranges=None, **kwargs):
-        audio_lengths = (
-            np.asarray([end - start for start, end in audio_ranges]) if audio_ranges is not None else None
-        )
-
-        if audio_lengths is not None:
+        # Deterministic dither only; the base then applies waveform-level preemphasis and
+        # padding-zeroing (spectrogram_config.preemphasis_mode == "waveform").
+        if audio_ranges is not None:
+            audio_lengths = np.asarray([end - start for start, end in audio_ranges])
             audio = self._apply_dither(audio.copy(), audio_lengths)
-
-        preemphasis = spectrogram_config.preemphasis
-        if preemphasis is not None:
-            audio = np.concatenate([audio[:, :1], audio[:, 1:] - preemphasis * audio[:, :-1]], axis=1)
-            if audio_lengths is not None:
-                timemask = np.expand_dims(np.arange(audio.shape[-1]), axis=0) < np.expand_dims(audio_lengths, axis=1)
-                audio = np.where(timemask, audio, 0.0).astype(audio.dtype, copy=False)
-
-        return super()._stft(audio, spectrogram_config=spectrogram_config, **kwargs)
-
-    def _compute_magnitudes(self, stft_out, power, spectrogram_config=None):
-        magnitudes = np.abs(stft_out)
-        if power != 1.0:
-            magnitudes = magnitudes ** power
-        return magnitudes
-
-    def _apply_mel_scale(self, features, *, spectrogram_config, **kwargs):
-        return np.matmul(self.mel_filters.T, features)
+        return super()._stft(audio, spectrogram_config=spectrogram_config, audio_ranges=audio_ranges, **kwargs)
 
     def _normalize_magnitude(self, features, *, spectrogram_config, **kwargs):
-        features = np.log(features + spectrogram_config.mel_floor)
+        # Base handles the legacy `log(x + guard)` form via `pre_log_offset`;
+        # transpose to (batch, frames, mels).
+        features = super()._normalize_magnitude(features, spectrogram_config=spectrogram_config, **kwargs)
         return np.transpose(features, axes=(0, 2, 1))
 
     def _postprocess_output(self, output, audio_ranges=None, **kwargs):

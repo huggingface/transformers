@@ -101,11 +101,6 @@ class Phi4MultimodalAudioProcessor(TorchAudioBackend):
             spec = spec / window.pow(2.0).sum().sqrt()
         return spec.transpose(-2, -1)
 
-    def _get_features_lengths(self, audio_lengths, spectrogram_config, include_center_frame=False):
-        win_length = spectrogram_config.stft_config.win_length or spectrogram_config.stft_config.n_fft
-        hop_length = spectrogram_config.stft_config.hop_length or win_length // 2
-        return (audio_lengths - win_length) // hop_length + 1
-
     def _compute_audio_embed_size(self, audio_frames):
         integer = audio_frames // self.audio_compression_rate
         remainder = audio_frames % self.audio_compression_rate

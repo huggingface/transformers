@@ -6,12 +6,23 @@
 #
 #     http://www.apache.org/licenses/LICENSE-2.0
 #
-
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+"""Numpy and torch backends for the audio processing pipeline.
+
+`BaseAudioProcessor` (audio_processing_utils) orchestrates the pipeline; the backends
+implement the array-API leaf operations. Numerical contracts, enforced bit-exactly by
+the test-spectrogram harness (ADR 0001/0003):
+
+- `NumpyAudioBackend` matches librosa: float64 windows over float32 frames, float64 FFT
+  stored as complex64, librosa per-band float32 mel filters.
+- `TorchAudioBackend` matches torchaudio (native float32, `F.linear` mel projection) and
+  `torchaudio.compliance.kaldi` (symmetric windows, left-aligned FFT padding, kaldi-exact
+  mel banks, replicate-pad preemphasis).
+"""
 
 import math
 
@@ -27,7 +38,7 @@ from .audio_utils import (
     mel_to_hertz,
     power_to_db,
 )
-from .utils import PaddingStrategy, is_torch_available, logging
+from .utils import is_speech_available, is_torch_available, logging
 
 
 logger = logging.get_logger(__name__)
@@ -84,24 +95,9 @@ class NumpyAudioBackend(BaseAudioProcessor):
             batch = batch[:, np.newaxis, :]
         return batch
 
-    def _pad_features(self, features, padding, max_length, truncation, pad_to_multiple_of):
-        padding_strategy = self._get_padding_strategies(padding=padding, max_length=max_length)
-        if truncation and max_length is not None:
-            features = [f[:max_length] for f in features]
-        actual_lengths = [f.shape[0] for f in features]
-        if padding_strategy == PaddingStrategy.LONGEST:
-            max_length = max(actual_lengths)
-            padding_strategy = PaddingStrategy.MAX_LENGTH
-        if max_length is not None and pad_to_multiple_of is not None and (max_length % pad_to_multiple_of != 0):
-            max_length = ((max_length // pad_to_multiple_of) + 1) * pad_to_multiple_of
-        if padding_strategy == PaddingStrategy.MAX_LENGTH and max_length is not None:
-            features = [
-                np.pad(f, [(0, max_length - f.shape[0])] + [(0, 0)] * (f.ndim - 1),
-                       mode="constant", constant_values=self.padding_value)
-                if f.shape[0] < max_length else f
-                for f in features
-            ]
-        return features, [(0, length) for length in actual_lengths]
+    def _pad_feature_single(self, feature, max_length):
+        pad_width = [(0, max_length - feature.shape[0])] + [(0, 0)] * (feature.ndim - 1)
+        return np.pad(feature, pad_width, mode="constant", constant_values=self.padding_value)
 
     def _stack_features(self, features):
         return np.stack(features)
@@ -174,7 +170,16 @@ class NumpyAudioBackend(BaseAudioProcessor):
                 y_frames_pre = self._np_frame(y_pre, frame_length, hop_length)[..., :start_k, :]
 
                 padding[-1] = (0, frame_length // 2)
-                y_post = np.pad(waveform[..., tail_k * hop_length - n_fft // 2 :], padding, mode=pad_mode)
+                tail = waveform[..., tail_k * hop_length - n_fft // 2 :]
+                pad_width = frame_length // 2
+                if pad_mode == "reflect" and tail.shape[-1] <= pad_width:
+                    # np.pad would re-reflect inside the short tail segment; reflect from
+                    # the full signal instead so segmented framing stays bit-identical to
+                    # full-signal padding (canonical semantics, matches torch.stft/scipy)
+                    reflected = waveform[..., -pad_width - 1 : -1][..., ::-1]
+                    y_post = np.concatenate([tail, reflected], axis=-1)
+                else:
+                    y_post = np.pad(tail, padding, mode=pad_mode)
                 y_frames_post = self._np_frame(y_post, frame_length, hop_length)
 
                 start = start_k * hop_length - n_fft // 2
@@ -203,8 +208,10 @@ class NumpyAudioBackend(BaseAudioProcessor):
         preemphasis = spectrogram_config.preemphasis
         if preemphasis is not None and spectrogram_config.preemphasis_mode == "per_frame":
             preemph_src = preemphasis * frames[..., :-1]
+            # First sample uses the replicate-pad form x0 - p*x0 (not x0*(1-p)):
+            # bit-exact match with kaldi, visible when the window is nonzero at sample 0
+            frames[..., 0] = frames[..., 0] - preemphasis * frames[..., 0]
             frames[..., 1:] = frames[..., 1:] - preemph_src
-            frames[..., 0] = frames[..., 0] * (1 - preemphasis)
         return frames
 
     def _preemphasize_waveform(self, audio, preemphasis, audio_ranges=None):
@@ -272,8 +279,10 @@ class NumpyAudioBackend(BaseAudioProcessor):
         if log_mel is None:
             return features.astype(dtype)
 
-        mel_floor = spectrogram_config.mel_floor
-        result = np.maximum(mel_floor, features)
+        if spectrogram_config.pre_log_offset is not None:
+            result = features + spectrogram_config.pre_log_offset
+        else:
+            result = np.maximum(spectrogram_config.mel_floor, features)
 
         if log_mel == "log":
             result = np.log(result).astype(dtype)
@@ -321,13 +330,10 @@ class NumpyAudioBackend(BaseAudioProcessor):
 
         Returns numpy array of shape (time, num_mel_bins).
         """
-        from .utils import is_speech_available
-
         if sample_frequency is None:
             sample_frequency = self.sample_rate
 
         if is_speech_available():
-            import torch
             import torchaudio.compliance.kaldi as ta_kaldi
 
             waveform_tensor = torch.from_numpy(np.asarray(waveform)).unsqueeze(0)
@@ -386,25 +392,9 @@ class TorchAudioBackend(BaseAudioProcessor):
             batch = batch.unsqueeze(1)
         return batch
 
-    def _pad_features(self, features, padding, max_length, truncation, pad_to_multiple_of):
-        padding_strategy = self._get_padding_strategies(padding=padding, max_length=max_length)
-        if truncation and max_length is not None:
-            features = [f[:max_length] for f in features]
-        actual_lengths = [f.shape[0] for f in features]
-        if padding_strategy == PaddingStrategy.LONGEST:
-            max_length = max(actual_lengths)
-            padding_strategy = PaddingStrategy.MAX_LENGTH
-        if max_length is not None and pad_to_multiple_of is not None and (max_length % pad_to_multiple_of != 0):
-            max_length = ((max_length // pad_to_multiple_of) + 1) * pad_to_multiple_of
-        if padding_strategy == PaddingStrategy.MAX_LENGTH and max_length is not None:
-            padded = []
-            for f in features:
-                if f.shape[0] < max_length:
-                    pad_args = [0, 0] * (f.ndim - 1) + [0, max_length - f.shape[0]]
-                    f = torch.nn.functional.pad(f, pad_args, "constant", self.padding_value)
-                padded.append(f)
-            features = padded
-        return features, [(0, length) for length in actual_lengths]
+    def _pad_feature_single(self, feature, max_length):
+        pad_args = [0, 0] * (feature.ndim - 1) + [0, max_length - feature.shape[0]]
+        return torch.nn.functional.pad(feature, pad_args, "constant", self.padding_value)
 
     def _stack_features(self, features):
         return torch.stack(features)
@@ -431,7 +421,7 @@ class TorchAudioBackend(BaseAudioProcessor):
         elif name in ("hamming", "hamming_window"):
             window = torch.hamming_window(win_length, periodic=stft_cfg.periodic, **wkwargs)
         elif name == "boxcar":
-            window = torch.ones(win_length)
+            window = torch.ones(win_length, dtype=dtype)
         elif name == "povey":
             window = torch.hann_window(win_length, periodic=stft_cfg.periodic, **wkwargs).pow(0.85)
         else:
@@ -458,7 +448,9 @@ class TorchAudioBackend(BaseAudioProcessor):
         preemphasis = spectrogram_config.preemphasis
         if preemphasis is not None and spectrogram_config.preemphasis_mode == "per_frame":
             frames = torch.cat([
-                frames[..., :1] * (1 - preemphasis),
+                # Replicate-pad form x0 - p*x0 (not x0*(1-p)): bit-exact match with
+                # kaldi, visible when the window is nonzero at sample 0
+                frames[..., :1] - preemphasis * frames[..., :1],
                 frames[..., 1:] - preemphasis * frames[..., :-1],
             ], dim=-1)
         return frames
@@ -612,7 +604,6 @@ class TorchAudioBackend(BaseAudioProcessor):
                              reference=1.0, min_value=1e-10, db_range=None,
                              dtype=None, **kwargs):
         log_mel = spectrogram_config.log_mode
-        mel_floor = spectrogram_config.mel_floor
         power = spectrogram_config.stft_config.power
         if dtype is None:
             dtype = torch.float32
@@ -620,7 +611,10 @@ class TorchAudioBackend(BaseAudioProcessor):
         if log_mel is None:
             return features
 
-        result = torch.clamp(features, min=mel_floor)
+        if spectrogram_config.pre_log_offset is not None:
+            result = features + spectrogram_config.pre_log_offset
+        else:
+            result = torch.clamp(features, min=spectrogram_config.mel_floor)
 
         if log_mel == "log":
             result = torch.log(result).to(dtype)

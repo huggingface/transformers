@@ -16,7 +16,7 @@ import numpy as np
 import torch
 
 from ...audio_processing_backends import TorchAudioBackend
-from ...audio_utils import MelScaleConfig, SpectrogramConfig, StftConfig
+from .audio_processing_numpy_cohere_asr import CohereAsrAudioProcessorNumpy
 
 
 EPSILON = 1e-5
@@ -52,27 +52,8 @@ class CohereAsrAudioProcessor(TorchAudioBackend):
         "feature_size": "spectrogram_config.mel_scale_config.n_mels",
     }
 
-    spectrogram_config = SpectrogramConfig(
-        stft_config=StftConfig(
-            n_fft=512,
-            hop_length=160,
-            win_length=400,
-            window_fn="hann_window",
-            power=2.0,
-            pad_mode="constant",
-            periodic=False,
-        ),
-        mel_scale_config=MelScaleConfig(
-            n_mels=128,
-            f_min=0.0,
-            norm="slaney",
-            mel_scale="slaney",
-        ),
-        preemphasis=0.97,
-        preemphasis_mode="waveform",
-        log_mode="log",
-        mel_floor=2**-24,
-    )
+    # Single source of truth for the config lives on the numpy sibling (importable without torch).
+    spectrogram_config = CohereAsrAudioProcessorNumpy.spectrogram_config
 
     def __init__(
         self,
@@ -95,36 +76,26 @@ class CohereAsrAudioProcessor(TorchAudioBackend):
     # ── Mel filter bank (librosa-bit-exact, shared with the numpy sibling) ────────────────
 
     def _mel_filter_bank(self, spectrogram_config):
-        """Replicate librosa's per-band float32 accumulation pattern for bit-exact FE parity."""
-        from ...audio_utils import hertz_to_mel, mel_to_hertz
+        """Build the filters with librosa's per-band float32 pattern for bit-exact FE parity.
+
+        `audio_utils.mel_filter_bank` with a float32 dtype replicates librosa's truncation;
+        the base torch implementation instead matches torchaudio's float32 ops.
+        """
+        from ...audio_utils import mel_filter_bank
 
         stft_cfg = spectrogram_config.stft_config
         mel_cfg = spectrogram_config.mel_scale_config
-        n_fft = stft_cfg.n_fft
-        n_mels = mel_cfg.n_mels
-        f_min = mel_cfg.f_min
-        f_max = mel_cfg.f_max if mel_cfg.f_max is not None else self.sample_rate / 2
-
-        mel_min = hertz_to_mel(f_min, mel_scale=mel_cfg.mel_scale)
-        mel_max = hertz_to_mel(f_max, mel_scale=mel_cfg.mel_scale)
-        mel_pts = np.linspace(mel_min, mel_max, n_mels + 2)
-        filter_freqs = mel_to_hertz(mel_pts.copy(), mel_scale=mel_cfg.mel_scale)
-        fft_freqs = np.linspace(0, self.sample_rate / 2, 1 + n_fft // 2)
-
-        fdiff = np.diff(filter_freqs)
-        ramps = np.subtract.outer(filter_freqs, fft_freqs)
-
-        weights = np.zeros((n_mels, 1 + n_fft // 2), dtype=np.float32)
-        for i in range(n_mels):
-            lower = -ramps[i] / fdiff[i]
-            upper = ramps[i + 2] / fdiff[i + 1]
-            weights[i] = np.maximum(0, np.minimum(lower, upper))
-
-        if mel_cfg.norm == "slaney":
-            enorm = 2.0 / (filter_freqs[2 : n_mels + 2] - filter_freqs[:n_mels])
-            weights *= enorm[:, np.newaxis]
-
-        return torch.from_numpy(weights.T).to(torch.float32)
+        filters = mel_filter_bank(
+            num_frequency_bins=1 + stft_cfg.n_fft // 2,
+            num_mel_filters=mel_cfg.n_mels,
+            min_frequency=mel_cfg.f_min,
+            max_frequency=mel_cfg.f_max if mel_cfg.f_max is not None else self.sample_rate / 2,
+            sampling_rate=self.sample_rate,
+            norm=mel_cfg.norm,
+            mel_scale=mel_cfg.mel_scale,
+            dtype=np.float32,
+        )
+        return torch.from_numpy(filters)
 
     # ── STFT pipeline ────────────────────────────────────────────────────────────────────
 
@@ -164,9 +135,9 @@ class CohereAsrAudioProcessor(TorchAudioBackend):
         return torch.matmul(self.mel_filters.T, features)
 
     def _normalize_magnitude(self, features, *, spectrogram_config, **kwargs):
-        # Per-utterance mean/var normalization is in `_postprocess_output` per ADR 0005;
-        # this hook is pointwise. The legacy form is `log(x + guard)`, not `log(clamp(x, guard))`.
-        features = torch.log(features + spectrogram_config.mel_floor)
+        # Base handles the legacy `log(x + guard)` form via `pre_log_offset`;
+        # transpose to (batch, frames, mels).
+        features = super()._normalize_magnitude(features, spectrogram_config=spectrogram_config, **kwargs)
         return features.permute(0, 2, 1)
 
     def _postprocess_output(self, output, audio_ranges=None, **kwargs):

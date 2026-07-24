@@ -27,10 +27,14 @@ class ClapAudioProcessorNumpy(NumpyAudioBackend):
     force_mono = True
     max_length = 480000
     truncation_mode = "rand_trunc"  # "fusion" or "rand_trunc"
+    return_padding_mask = False  # CLAP returns is_longer instead of a padding mask
 
+    # computation_dtype="float64": the legacy FE builds its filter banks with float64 numpy
+    # ops; declaring it here makes the torch sibling compute them in float64 too (the numpy
+    # backend already keeps float64 filters when the spectrogram computation_dtype is set).
     _mel_configs = {
-        "rand_trunc": MelScaleConfig(n_mels=64, f_min=50, f_max=14000, mel_scale="slaney", norm="slaney", frequency_bin_mode="linspace"),
-        "fusion": MelScaleConfig(n_mels=64, f_min=50, f_max=14000, mel_scale="htk", frequency_bin_mode="linspace"),
+        "rand_trunc": MelScaleConfig(n_mels=64, f_min=50, f_max=14000, mel_scale="slaney", norm="slaney", frequency_bin_mode="linspace", computation_dtype="float64"),
+        "fusion": MelScaleConfig(n_mels=64, f_min=50, f_max=14000, mel_scale="htk", frequency_bin_mode="linspace", computation_dtype="float64"),
     }
 
     def __init__(self, **kwargs):
@@ -120,13 +124,15 @@ class ClapAudioProcessorNumpy(NumpyAudioBackend):
         mel_shrink = mel_shrink[0][0].numpy()
         return np.stack([mel_shrink, mel_chunk_front, mel_chunk_middle, mel_chunk_back], axis=0)
 
-    def _build_mask(self, audio_ranges, padded_length, *, do_extract_spectrogram, spectrogram_config):
-        """Return CLAP's is_longer flag instead of a standard attention mask."""
-        is_longer = getattr(self, "_is_longer_flags", None) or [False] * len(audio_ranges)
+    def _postprocess_output(self, output, audio_ranges=None, feature_ranges=None, **kwargs):
+        """Add CLAP's is_longer flag to the output (returned instead of a standard attention mask)."""
+        ranges = audio_ranges if audio_ranges is not None else feature_ranges
+        is_longer = getattr(self, "_is_longer_flags", None) or [False] * len(ranges)
         if self.truncation_mode == "fusion" and sum(is_longer) == 0:
             rand_idx = np.random.randint(0, len(is_longer))
             is_longer[rand_idx] = True
-        return {"is_longer": [[longer] for longer in is_longer]}
+        output["is_longer"] = [[longer] for longer in is_longer]
+        return output
 
 
 __all__ = ["ClapAudioProcessorNumpy"]

@@ -17,6 +17,7 @@ import math
 import torch
 
 from ...audio_processing_backends import TorchAudioBackend
+from ...audio_utils import MelScaleConfig, SpectrogramConfig, StftConfig
 
 
 class GraniteSpeechAudioProcessor(TorchAudioBackend):
@@ -26,40 +27,33 @@ class GraniteSpeechAudioProcessor(TorchAudioBackend):
     do_extract_spectrogram = True
     projector_window_size = 15
     projector_downsample_rate = 5
-    n_fft = 512
-    win_length = 400
-    hop_length = 160
-    n_mels = 80
 
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
-        import torchaudio
-
-        self.mel_filters_transform = torchaudio.transforms.MelSpectrogram(
-            sample_rate=self.sample_rate,
-            n_fft=self.n_fft,
-            win_length=self.win_length,
-            hop_length=self.hop_length,
-            n_mels=self.n_mels,
-        )
+    # Native pipeline, bit-equal to the upstream FE's `torchaudio.transforms.MelSpectrogram`
+    # + log10 + Whisper-style max-clip/rescale (ADR 0004 post-log fields).
+    spectrogram_config = SpectrogramConfig(
+        stft_config=StftConfig(
+            n_fft=512,
+            win_length=400,
+            hop_length=160,
+            power=2.0,
+        ),
+        mel_scale_config=MelScaleConfig(n_mels=80),
+        log_mode="log10",
+        mel_floor=1e-10,
+        clip_max_offset=8.0,
+        post_log_shift=4.0,
+        post_log_scale=0.25,
+    )
 
     def extract_spectrogram(self, audio, **kwargs):
-        # Use torchaudio MelSpectrogram to match upstream FE exactly
-        melspec = self.mel_filters_transform.to(device=audio.device)
-        with torch.no_grad():
-            mel = melspec(audio.float())
-            logmel = mel.transpose(-1, -2).clip_(min=1e-10).log10_()
-            mx = logmel.amax(dim=(-2, -1), keepdim=True)
-            logmel = torch.maximum(logmel, mx - 8.0).div_(4).add_(1)
-            # Remove last frame if odd
-            if logmel.shape[1] % 2 == 1:
-                logmel = logmel[:, :-1]
-            # Stacking by 2
-            features = logmel.reshape(audio.shape[0], -1, 2 * logmel.shape[-1])
-        return features
+        logmel = super().extract_spectrogram(audio, **kwargs).transpose(-1, -2)  # (batch, time, n_mels)
+        # Remove last frame if odd, then stack frame pairs
+        if logmel.shape[1] % 2 == 1:
+            logmel = logmel[:, :-1]
+        return logmel.reshape(logmel.shape[0], -1, 2 * logmel.shape[-1])
 
     def _postprocess_output(self, output, audio_ranges=None, **kwargs):
-        hop_length = self.hop_length
+        hop_length = self.spectrogram_config.stft_config.hop_length
 
         # Compute audio_embed_sizes from original audio lengths
         effective_window_size = self.projector_window_size // self.projector_downsample_rate

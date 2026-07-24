@@ -12,10 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import torch
-
 from ...audio_processing_backends import TorchAudioBackend
-from ...audio_utils import MelScaleConfig, SpectrogramConfig, StftConfig
+from .audio_processing_numpy_audio_spectrogram_transformer import AudioSpectrogramTransformerAudioProcessorNumpy
 
 
 class AudioSpectrogramTransformerAudioProcessor(TorchAudioBackend):
@@ -31,48 +29,14 @@ class AudioSpectrogramTransformerAudioProcessor(TorchAudioBackend):
     ast_mean = -4.2677393
     ast_std = 4.5689974
 
-    spectrogram_config = SpectrogramConfig(
-        stft_config=StftConfig(
-            n_fft=512,
-            win_length=400,
-            hop_length=160,
-            window_fn="hann_window",
-            power=2.0,
-            center=False,
-            periodic=False,
-        ),
-        mel_scale_config=MelScaleConfig(
-            n_mels=128,
-            f_min=20.0,
-            f_max=8000.0,
-            mel_scale="kaldi",
-            triangularize_in_mel_space=True,
-        ),
-        log_mode="log",
-        preemphasis=0.97,
-        remove_dc_offset=True,
-        mel_floor=1.192092955078125e-07,
-    )
+    # Single source of truth for the config lives on the numpy sibling (importable without torch).
+    spectrogram_config = AudioSpectrogramTransformerAudioProcessorNumpy.spectrogram_config
 
     def extract_spectrogram(self, audio, **kwargs):
-        import torchaudio.compliance.kaldi as ta_kaldi
-
-        features = []
-        for waveform in audio:
-            # `torchaudio.compliance.kaldi.fbank` expects a 2D (channel, time) tensor and
-            # returns (time, num_mel_bins). This matches the numpy sibling which routes
-            # through the same `ta_kaldi.fbank` via `_kaldi_fbank` after a from_numpy bridge.
-            if waveform.ndim == 1:
-                waveform = waveform.unsqueeze(0)
-            features.append(
-                ta_kaldi.fbank(
-                    waveform,
-                    num_mel_bins=128,
-                    sample_frequency=self.sample_rate,
-                    window_type="hanning",
-                )
-            )
-        return features
+        # Native kaldi-exact pipeline (bit-equal to `torchaudio.compliance.kaldi.fbank`),
+        # transposed to kaldi's (time, num_mel_bins) orientation expected downstream.
+        features = super().extract_spectrogram(audio, **kwargs)
+        return [f.transpose(-2, -1) for f in features]
 
     def _pad_features(self, features, padding, max_length, truncation, pad_to_multiple_of):
         # Always pad/truncate to max_length_frames regardless of caller's padding args

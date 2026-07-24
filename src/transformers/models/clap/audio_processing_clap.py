@@ -16,8 +16,9 @@ import numpy as np
 import torch
 
 from ...audio_processing_backends import TorchAudioBackend
-from ...audio_utils import MelScaleConfig, SpectrogramConfig, StftConfig
+from ...audio_utils import SpectrogramConfig, StftConfig
 from ...utils import PaddingStrategy
+from .audio_processing_numpy_clap import ClapAudioProcessorNumpy
 
 
 class ClapAudioProcessor(TorchAudioBackend):
@@ -29,11 +30,10 @@ class ClapAudioProcessor(TorchAudioBackend):
     force_mono = True
     max_length = 480000
     truncation_mode = "rand_trunc"  # "fusion" or "rand_trunc"
+    return_padding_mask = False  # CLAP returns is_longer instead of a padding mask
 
-    _mel_configs = {
-        "rand_trunc": MelScaleConfig(n_mels=64, f_min=50, f_max=14000, mel_scale="slaney", norm="slaney", frequency_bin_mode="linspace"),
-        "fusion": MelScaleConfig(n_mels=64, f_min=50, f_max=14000, mel_scale="htk", frequency_bin_mode="linspace"),
-    }
+    # Single source of truth for the config lives on the numpy sibling (importable without torch).
+    _mel_configs = ClapAudioProcessorNumpy._mel_configs
 
     def __init__(self, **kwargs):
         truncation_mode = kwargs.pop("truncation_mode", self.truncation_mode)
@@ -58,6 +58,13 @@ class ClapAudioProcessor(TorchAudioBackend):
     def pad(self, audio, *args, **kwargs):
         self._is_longer_flags = []
         return super().pad(audio, *args, **kwargs)
+
+    def _native_stft(self, audio, window, frame_length, hop_length, n_fft, stft_cfg):
+        stft_out = super()._native_stft(audio, window, frame_length, hop_length, n_fft, stft_cfg)
+        # The legacy FE stores the float64 FFT output in a complex64 buffer before computing
+        # float64 magnitudes (as does the numpy sibling's backend); round-trip through
+        # complex64 so the float64 magnitudes match bit-exactly.
+        return stft_out.to(torch.complex64).to(torch.complex128)
 
     def _apply_mel_scale(self, features, *, spectrogram_config, **kwargs):
         # Cast mel_filters to the features' dtype so the float64 spectrogram path matches the
@@ -133,13 +140,15 @@ class ClapAudioProcessor(TorchAudioBackend):
         mel_shrink = mel_shrink[0][0].to(mel.dtype)
         return torch.stack([mel_shrink, mel_chunk_front, mel_chunk_middle, mel_chunk_back], dim=0)
 
-    def _build_mask(self, audio_ranges, padded_length, *, do_extract_spectrogram, spectrogram_config):
-        """Return CLAP's is_longer flag instead of a standard attention mask."""
-        is_longer = getattr(self, "_is_longer_flags", None) or [False] * len(audio_ranges)
+    def _postprocess_output(self, output, audio_ranges=None, feature_ranges=None, **kwargs):
+        """Add CLAP's is_longer flag to the output (returned instead of a standard attention mask)."""
+        ranges = audio_ranges if audio_ranges is not None else feature_ranges
+        is_longer = getattr(self, "_is_longer_flags", None) or [False] * len(ranges)
         if self.truncation_mode == "fusion" and sum(is_longer) == 0:
             rand_idx = np.random.randint(0, len(is_longer))
             is_longer[rand_idx] = True
-        return {"is_longer": [[longer] for longer in is_longer]}
+        output["is_longer"] = [[longer] for longer in is_longer]
+        return output
 
 
 __all__ = ["ClapAudioProcessor"]

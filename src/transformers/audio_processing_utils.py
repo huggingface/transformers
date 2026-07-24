@@ -397,8 +397,26 @@ class BaseAudioProcessor(AudioProcessingMixin):
         raise NotImplementedError
 
     def _pad_features(self, features, padding, max_length, truncation, pad_to_multiple_of):
-        """Pad a list of 2D feature arrays along the time axis (axis 0).
-        Implemented by backend subclasses."""
+        """Truncate/pad a list of feature arrays along the time axis (axis 0) per the
+        padding strategy. Backend subclasses provide the `_pad_feature_single` leaf."""
+        padding_strategy = self._get_padding_strategies(padding=padding, max_length=max_length)
+        if truncation and max_length is not None:
+            features = [f[:max_length] for f in features]
+        actual_lengths = [f.shape[0] for f in features]
+        if padding_strategy == PaddingStrategy.LONGEST:
+            max_length = max(actual_lengths)
+            padding_strategy = PaddingStrategy.MAX_LENGTH
+        if max_length is not None and pad_to_multiple_of is not None and max_length % pad_to_multiple_of != 0:
+            max_length = ((max_length // pad_to_multiple_of) + 1) * pad_to_multiple_of
+        if padding_strategy == PaddingStrategy.MAX_LENGTH and max_length is not None:
+            features = [
+                f if f.shape[0] >= max_length else self._pad_feature_single(f, max_length) for f in features
+            ]
+        return features, [(0, length) for length in actual_lengths]
+
+    def _pad_feature_single(self, feature, max_length):
+        """Right-pad one feature array/tensor along its first (time) axis with
+        `padding_value`. Implemented by backend subclasses."""
         raise NotImplementedError
 
     def _stack_features(self, features):
@@ -575,16 +593,20 @@ class BaseAudioProcessor(AudioProcessingMixin):
         """
         Convert raw audio sample lengths to the number of feature frames after spectrogram extraction.
 
-        By default returns `audio_lengths // hop_length`, which gives the number of valid (non-padding)
-        feature frames for centered STFT. When `include_center_frame=True` and the STFT uses centering,
-        adds 1 to account for the extra frame produced by centered STFT.
+        For centered STFT returns `audio_lengths // hop_length` (plus 1 when
+        `include_center_frame=True`); for non-centered STFT returns the exact frame count
+        `(audio_lengths - win_length) // hop_length + 1`.
 
-        Override this method in subclasses that use non-standard STFT configurations (e.g., unfold-based
-        or non-centered STFT).
+        Override this method in subclasses that use non-standard STFT framing (e.g.,
+        unfold-based with extra samples, or model-specific frame counting).
         """
-        hop_length = spectrogram_config.stft_config.hop_length
+        stft_cfg = spectrogram_config.stft_config
+        win_length = stft_cfg.win_length or stft_cfg.n_fft
+        hop_length = stft_cfg.hop_length or win_length // 2
+        if not stft_cfg.center:
+            return (audio_lengths - win_length) // hop_length + 1
         lengths = audio_lengths // hop_length
-        if include_center_frame and spectrogram_config.stft_config.center:
+        if include_center_frame:
             lengths = lengths + 1
         return lengths
 

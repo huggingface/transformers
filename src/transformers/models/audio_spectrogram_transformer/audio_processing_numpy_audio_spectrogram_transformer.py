@@ -41,6 +41,7 @@ class AudioSpectrogramTransformerAudioProcessorNumpy(NumpyAudioBackend):
             power=2.0,
             center=False,
             periodic=False,
+            left_align_fft=True,
         ),
         mel_scale_config=MelScaleConfig(
             n_mels=128,

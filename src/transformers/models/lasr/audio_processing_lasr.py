@@ -12,8 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import torch
-
 from ...audio_processing_backends import TorchAudioBackend
 from ...audio_utils import MelScaleConfig, SpectrogramConfig, StftConfig
 
@@ -45,11 +43,6 @@ class LasrAudioProcessor(TorchAudioBackend):
         mel_floor=1e-5,
         computation_dtype="float64",
     )
-
-    def _get_features_lengths(self, audio_lengths, spectrogram_config, include_center_frame=False):
-        stft_cfg = spectrogram_config.stft_config
-        win_length = stft_cfg.win_length or stft_cfg.n_fft
-        return (audio_lengths - win_length) // stft_cfg.hop_length + 1
 
 
 __all__ = ["LasrAudioProcessor"]

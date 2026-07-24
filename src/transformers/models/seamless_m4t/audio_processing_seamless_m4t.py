@@ -12,10 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import numpy as np
 import torch
 
 from ...audio_processing_backends import TorchAudioBackend
-from ...audio_utils import MelScaleConfig, SpectrogramConfig, StftConfig
+from ...audio_utils import mel_filter_bank
+from .audio_processing_numpy_seamless_m4t import SeamlessM4tAudioProcessorNumpy
 
 
 class SeamlessM4tAudioProcessor(TorchAudioBackend):
@@ -25,29 +27,8 @@ class SeamlessM4tAudioProcessor(TorchAudioBackend):
     stride = 2
     pad_to_multiple_of = 2  # Align feature padding to stride
 
-    spectrogram_config = SpectrogramConfig(
-        stft_config=StftConfig(
-            n_fft=512,
-            win_length=400,
-            hop_length=160,
-            window_fn="povey",
-            power=2.0,
-            center=False,
-            periodic=False,
-        ),
-        mel_scale_config=MelScaleConfig(
-            n_mels=80,
-            f_min=20.0,
-            f_max=8000.0,
-            mel_scale="kaldi",
-            triangularize_in_mel_space=True,
-        ),
-        log_mode="log",
-        preemphasis=0.97,
-        remove_dc_offset=True,
-        mel_floor=1.192092955078125e-07,
-        computation_dtype="float64",
-    )
+    # Single source of truth for the config lives on the numpy sibling (importable without torch).
+    spectrogram_config = SeamlessM4tAudioProcessorNumpy.spectrogram_config
     waveform_scale = 32768.0
 
     def extract_spectrogram(self, audio, **kwargs):
@@ -59,25 +40,42 @@ class SeamlessM4tAudioProcessor(TorchAudioBackend):
             features.append(f[0].transpose(-2, -1))
         return features
 
-    def _apply_mel_scale(self, features, *, spectrogram_config, **kwargs):
-        # `computation_dtype="float64"` upcasts the magnitudes but the kaldi-exact mel filter
-        # bank is built in float32; cast the filters to match the features dtype, mirroring the
-        # numpy sibling's `mel_filters.astype(features.dtype)` pattern.
-        mel_filters = self.mel_filters.to(device=features.device, dtype=features.dtype)
-        if spectrogram_config.mel_scale_config.matmul_order == "features_first":
-            mel_spec = torch.matmul(features.transpose(-2, -1), mel_filters)
-        else:
-            mel_spec = torch.nn.functional.linear(features.transpose(-2, -1), mel_filters.T).transpose(-2, -1)
-        return torch.clamp(mel_spec, min=spectrogram_config.mel_floor)
+    def _mel_filter_bank(self, spectrogram_config):
+        # The legacy FE builds the kaldi filter bank in float64 via the numpy helper. The base
+        # torch kaldi-exact path computes in float32, where mel-space cancellation (differences
+        # of ~3000-mel values) loses ~1e-5 of filter weight — visible as ~2e-4 in the log-mel.
+        stft_cfg = spectrogram_config.stft_config
+        mel_cfg = spectrogram_config.mel_scale_config
+        filters = mel_filter_bank(
+            num_frequency_bins=1 + stft_cfg.n_fft // 2,
+            num_mel_filters=mel_cfg.n_mels,
+            min_frequency=mel_cfg.f_min,
+            max_frequency=mel_cfg.f_max if mel_cfg.f_max is not None else self.sample_rate / 2,
+            sampling_rate=self.sample_rate,
+            norm=mel_cfg.norm,
+            mel_scale=mel_cfg.mel_scale,
+            triangularize_in_mel_space=mel_cfg.triangularize_in_mel_space,
+        )
+        return torch.from_numpy(filters)
+
+    def _window_and_fft(self, frames, window, frame_length, n_fft, stft_cfg, audio_dtype=None):
+        spec = super()._window_and_fft(frames, window, frame_length, n_fft, stft_cfg, audio_dtype=audio_dtype)
+        # The legacy FE stores FFT frames in a complex64 buffer before taking float64
+        # magnitudes (`np.abs(spectrogram, dtype=np.float64) ** power`); quantize then upcast
+        # so `_compute_magnitudes` sees the same values.
+        return spec.to(torch.complex64).to(torch.complex128)
 
     def _postprocess_features(self, features, feature_lengths):
-        # Per-utterance mean/variance normalization (before padding). `torch.var(unbiased=True)`
-        # matches numpy `var(ddof=1)`.
+        # Per-utterance mean/variance normalization (before padding). Computed in numpy to stay
+        # bit-exact with the legacy FE: numpy reductions use pairwise summation, whose
+        # accumulation order differs from torch's float32 `mean`/`var`. The legacy features are
+        # F-contiguous (a `.T` view of the (n_mels, time) spectrogram) and numpy's accumulation
+        # order depends on memory layout, so match it with `asfortranarray`.
         normalized = []
         for f in features:
-            mean = f.mean(dim=0).unsqueeze(0)
-            var = f.var(dim=0, unbiased=True).unsqueeze(0)
-            normalized.append((f - mean) / torch.sqrt(var + 1e-7))
+            x = np.asfortranarray(f.detach().cpu().numpy())
+            x = (x - np.expand_dims(x.mean(0), 0)) / np.sqrt(np.expand_dims(x.var(0, ddof=1), 0) + 1e-7)
+            normalized.append(torch.from_numpy(x))
         return normalized
 
     def _postprocess_output(self, output, feature_ranges=None, **kwargs):

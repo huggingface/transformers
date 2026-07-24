@@ -92,7 +92,8 @@ class Gemma4AudioProcessorNumpy(NumpyAudioBackend):
             matmul_order="features_first",
         ),
         preemphasis=0.0,
-        mel_floor=1e-3,
+        mel_floor=0.0,  # no clamp; the log guard is pre_log_offset
+        pre_log_offset=1e-3,
         log_mode="log",
     )
 
@@ -196,14 +197,11 @@ class Gemma4AudioProcessorNumpy(NumpyAudioBackend):
         return frames[..., :-1]
 
     def _apply_mel_scale(self, features, *, spectrogram_config, **kwargs):
+        # Base `_normalize_magnitude` applies the legacy `log(x + guard)` via `pre_log_offset`.
         mel_filters = self.mel_filters.astype(features.dtype, copy=False)
         # features shape (..., freq, num_frames). matmul_order=features_first.
         # Result (..., num_frames, n_mels).
-        mel_spec = np.matmul(np.swapaxes(features, -2, -1), mel_filters)
-        return mel_spec + spectrogram_config.mel_floor
-
-    def _normalize_magnitude(self, features, *, spectrogram_config, **kwargs):
-        return np.log(features).astype(np.float32)
+        return np.matmul(np.swapaxes(features, -2, -1), mel_filters)
 
     def _postprocess_output(self, output, audio_ranges=None, **kwargs):
         if audio_ranges is None or "audio_features" not in output:

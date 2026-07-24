@@ -19,21 +19,8 @@ import numpy as np
 import torch
 
 from ...audio_processing_backends import TorchAudioBackend
-from ...audio_utils import MelScaleConfig, SpectrogramConfig, StftConfig, mel_filter_bank
-
-
-def _gemma4_frame_length_ms_to_win_length(value, config_dict):
-    sr = config_dict.get("sample_rate") or config_dict.get("sampling_rate") or 16000
-    spec = config_dict.setdefault("spectrogram_config", {})
-    stft = spec.setdefault("stft_config", {})
-    stft.setdefault("win_length", int(round(sr * value / 1000.0)))
-
-
-def _gemma4_hop_length_ms_to_hop_length(value, config_dict):
-    sr = config_dict.get("sample_rate") or config_dict.get("sampling_rate") or 16000
-    spec = config_dict.setdefault("spectrogram_config", {})
-    stft = spec.setdefault("stft_config", {})
-    stft.setdefault("hop_length", int(round(sr * value / 1000.0)))
+from ...audio_utils import mel_filter_bank
+from .audio_processing_numpy_gemma4 import Gemma4AudioProcessorNumpy
 
 
 class Gemma4AudioProcessor(TorchAudioBackend):
@@ -65,37 +52,12 @@ class Gemma4AudioProcessor(TorchAudioBackend):
     dither: float = 0.0
     input_scale_factor: float = 1.0
 
-    legacy_field_mapping = {
-        "feature_size": "spectrogram_config.mel_scale_config.n_mels",
-        "frame_length_ms": _gemma4_frame_length_ms_to_win_length,
-        "hop_length_ms": _gemma4_hop_length_ms_to_hop_length,
-        "min_frequency": "spectrogram_config.mel_scale_config.f_min",
-        "max_frequency": "spectrogram_config.mel_scale_config.f_max",
-    }
-
+    # Single source of truth for the config lives on the numpy sibling (importable without torch).
     # NB: ``n_fft`` is set to 512 (= 2 ** ceil(log2(320))) for the default win_length=320.
     # When the loaded config uses a different ``win_length`` or sets ``fft_overdrive``, the
     # ``__init__`` below recomputes ``n_fft`` and rebuilds the spectrogram_config.
-    spectrogram_config = SpectrogramConfig(
-        stft_config=StftConfig(
-            n_fft=512,
-            win_length=320,  # 20 ms at 16 kHz
-            hop_length=160,  # 10 ms at 16 kHz
-            window_fn="hann_window",
-            power=1.0,
-            center=False,
-        ),
-        mel_scale_config=MelScaleConfig(
-            n_mels=128,
-            f_min=0.0,
-            f_max=8000.0,
-            mel_scale="htk",
-            matmul_order="features_first",
-        ),
-        preemphasis=0.0,
-        mel_floor=1e-3,
-        log_mode="log",
-    )
+    spectrogram_config = Gemma4AudioProcessorNumpy.spectrogram_config
+    legacy_field_mapping = Gemma4AudioProcessorNumpy.legacy_field_mapping
 
     def __init__(
         self,
@@ -218,20 +180,12 @@ class Gemma4AudioProcessor(TorchAudioBackend):
             return frames[..., 1:] - preemphasis * frames[..., :-1]
         return frames[..., :-1]
 
-    def _normalize_magnitude(self, features, *, spectrogram_config, **kwargs):
-        # Legacy uses `log(mel_spec + mel_floor)`, not `log(clamp(mel_spec, mel_floor))`.
-        # `_apply_mel_scale` (base) clamps to `mel_floor` already; we have to recompute the
-        # raw value. Easier: override `_apply_mel_scale` below to skip the clamp.
-        features = torch.log(features)
-        return features.to(torch.float32)
-
     def _apply_mel_scale(self, features, *, spectrogram_config, **kwargs):
+        # Base `_normalize_magnitude` applies the legacy `log(x + guard)` via `pre_log_offset`.
         mel_filters = self.mel_filters.to(device=features.device, dtype=features.dtype)
         # features shape (..., freq, num_frames). features_first means matmul as
         # (..., num_frames, freq) @ (freq, n_mels) → (..., num_frames, n_mels).
-        mel_spec = torch.matmul(features.transpose(-2, -1), mel_filters)
-        # Legacy: `np.log(mel_spec + mel_floor)`. Done in `_normalize_magnitude` after this.
-        return mel_spec + spectrogram_config.mel_floor
+        return torch.matmul(features.transpose(-2, -1), mel_filters)
 
     def _postprocess_output(self, output, audio_ranges=None, **kwargs):
         if audio_ranges is None or "audio_features" not in output:

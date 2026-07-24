@@ -15,7 +15,8 @@
 import torch
 
 from ...audio_processing_backends import TorchAudioBackend
-from ...audio_utils import MelScaleConfig, SpectrogramConfig, StftConfig
+from ...audio_utils import mel_filter_bank
+from .audio_processing_numpy_clvp import ClvpAudioProcessorNumpy
 
 
 class ClvpAudioProcessor(TorchAudioBackend):
@@ -28,29 +29,35 @@ class ClvpAudioProcessor(TorchAudioBackend):
     truncation = True
     mask_level = "audio"
 
-    spectrogram_config = SpectrogramConfig(
-        stft_config=StftConfig(
-            n_fft=1024,
-            hop_length=256,
-            window_fn="hann_window",
-            power=2.0,
-        ),
-        mel_scale_config=MelScaleConfig(
-            n_mels=80,
-            f_min=0.0,
-            f_max=8000.0,
-            norm="slaney",
-            mel_scale="htk",
-            frequency_bin_mode="linspace",
-        ),
-        log_mode="log",
-        mel_floor=1e-5,
-        computation_dtype="float64",
-    )
+    # Single source of truth for the config lives on the numpy sibling (importable without torch).
+    spectrogram_config = ClvpAudioProcessorNumpy.spectrogram_config
 
     def __init__(self, mel_norms=None, **kwargs):
         super().__init__(**kwargs)
         self.mel_norms = mel_norms
+
+    def _mel_filter_bank(self, spectrogram_config):
+        # The legacy FE builds its filters with the numpy `mel_filter_bank` in float64; the torch
+        # backend's default builds them in float32. Reuse the numpy path (same as the numpy
+        # sibling) so the float64 filter values are bit-identical to the legacy extractor's.
+        stft_cfg = spectrogram_config.stft_config
+        mel_cfg = spectrogram_config.mel_scale_config
+        filters = mel_filter_bank(
+            num_frequency_bins=1 + stft_cfg.n_fft // 2,
+            num_mel_filters=mel_cfg.n_mels,
+            min_frequency=mel_cfg.f_min,
+            max_frequency=mel_cfg.f_max if mel_cfg.f_max is not None else self.sample_rate / 2,
+            sampling_rate=self.sample_rate,
+            norm=mel_cfg.norm,
+            mel_scale=mel_cfg.mel_scale,
+        )
+        return torch.from_numpy(filters)
+
+    def _compute_magnitudes(self, stft_out, power, spectrogram_config=None):
+        # The legacy FE stores the STFT in a complex64 buffer before taking float64 magnitudes
+        # (`np.abs(spectrogram, dtype=np.float64) ** power`). Replicate that rounding step so the
+        # float64 power spectrum is bit-identical (mirrors the numpy sibling's complex64 cast).
+        return stft_out.to(torch.complex64).to(torch.complex128).abs() ** power
 
     def _apply_mel_scale(self, features, *, spectrogram_config, **kwargs):
         # Cast mel_filters to the features' dtype so the float64 spectrogram path matches the

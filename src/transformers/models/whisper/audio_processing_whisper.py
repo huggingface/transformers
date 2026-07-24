@@ -15,15 +15,7 @@
 import torch
 
 from ...audio_processing_backends import TorchAudioBackend
-from ...audio_utils import MelScaleConfig, SpectrogramConfig, StftConfig
-
-
-def _whisper_chunk_length_to_max_length(value, config_dict):
-    # Legacy Whisper hub configs store `chunk_length=30` (seconds); the new API uses `max_length`
-    # in samples. Translate using the sampling rate (already-translated to `sample_rate` by the
-    # base mapping by the time this runs, or still the legacy key if not yet processed).
-    sample_rate = config_dict.get("sample_rate") or config_dict.get("sampling_rate") or 16000
-    config_dict.setdefault("max_length", value * sample_rate)
+from .audio_processing_numpy_whisper import WhisperAudioProcessorNumpy
 
 
 class WhisperAudioProcessor(TorchAudioBackend):
@@ -33,29 +25,9 @@ class WhisperAudioProcessor(TorchAudioBackend):
     truncation = True
     max_length = 480000  # 30 seconds at 16000 Hz
 
-    legacy_field_mapping = {
-        "feature_size": "spectrogram_config.mel_scale_config.n_mels",
-        "chunk_length": _whisper_chunk_length_to_max_length,
-        "n_samples": "max_length",
-    }
-    spectrogram_config = SpectrogramConfig(
-        stft_config=StftConfig(
-            n_fft=400,
-            hop_length=160,
-            power=2.0,
-        ),
-        mel_scale_config=MelScaleConfig(
-            n_mels=80,
-            mel_scale="slaney",
-            norm="slaney",
-            computation_dtype="float64",
-        ),
-        log_mode="log10",
-        skip_last_frame=True,
-        clip_max_offset=8.0,
-        post_log_shift=4.0,
-        post_log_scale=0.25,
-    )
+    # Single source of truth for the config lives on the numpy sibling (importable without torch).
+    spectrogram_config = WhisperAudioProcessorNumpy.spectrogram_config
+    legacy_field_mapping = WhisperAudioProcessorNumpy.legacy_field_mapping
 
     def _apply_mel_scale(self, features, *, spectrogram_config, **kwargs):
         mel_filters = self.mel_filters.to(device=features.device)

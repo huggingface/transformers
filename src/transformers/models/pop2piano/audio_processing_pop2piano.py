@@ -18,17 +18,14 @@
 # does not implement the complete beat-aligned segmentation pipeline.
 
 from ...audio_processing_backends import TorchAudioBackend
-from ...audio_utils import MelScaleConfig, SpectrogramConfig, StftConfig
+from .audio_processing_numpy_pop2piano import Pop2PianoAudioProcessorNumpy
 
 
 class Pop2PianoAudioProcessor(TorchAudioBackend):
     sample_rate = 22050
     force_mono = True
-    spectrogram_config = SpectrogramConfig(
-        stft_config=StftConfig(n_fft=4096, hop_length=1024, power=2.0),
-        mel_scale_config=MelScaleConfig(n_mels=512, f_min=10.0, mel_scale="htk"),
-        log_mode="log10",
-    )
+    # Single source of truth for the config lives on the numpy sibling (importable without torch).
+    spectrogram_config = Pop2PianoAudioProcessorNumpy.spectrogram_config
 
 
 __all__ = ["Pop2PianoAudioProcessor"]

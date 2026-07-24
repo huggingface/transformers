@@ -43,60 +43,17 @@ class ParakeetAudioProcessorNumpy(NumpyAudioBackend):
         preemphasis=0.97,
         preemphasis_mode="waveform",
         log_mode="log",
-        mel_floor=2**-24,
+        mel_floor=0.0,  # base clamp is a no-op; the log guard is pre_log_offset
+        pre_log_offset=2**-24,
     )
 
-    def _mel_filter_bank(self, spectrogram_config):
-        """Replicate librosa's per-band float32 accumulation pattern for bit-exact FE parity."""
-        from ...audio_utils import hertz_to_mel, mel_to_hertz
-
-        stft_cfg = spectrogram_config.stft_config
-        mel_cfg = spectrogram_config.mel_scale_config
-        n_fft = stft_cfg.n_fft
-        n_mels = mel_cfg.n_mels
-        f_min = mel_cfg.f_min
-        f_max = mel_cfg.f_max if mel_cfg.f_max is not None else self.sample_rate / 2
-
-        mel_min = hertz_to_mel(f_min, mel_scale=mel_cfg.mel_scale)
-        mel_max = hertz_to_mel(f_max, mel_scale=mel_cfg.mel_scale)
-        mel_pts = np.linspace(mel_min, mel_max, n_mels + 2)
-        filter_freqs = mel_to_hertz(mel_pts.copy(), mel_scale=mel_cfg.mel_scale)
-        fft_freqs = np.linspace(0, self.sample_rate / 2, 1 + n_fft // 2)
-
-        fdiff = np.diff(filter_freqs)
-        ramps = np.subtract.outer(filter_freqs, fft_freqs)
-
-        # Accumulate into f32 per-band to match librosa's truncation pattern
-        weights = np.zeros((n_mels, 1 + n_fft // 2), dtype=np.float32)
-        for i in range(n_mels):
-            lower = -ramps[i] / fdiff[i]
-            upper = ramps[i + 2] / fdiff[i + 1]
-            weights[i] = np.maximum(0, np.minimum(lower, upper))
-
-        if mel_cfg.norm == "slaney":
-            enorm = 2.0 / (filter_freqs[2 : n_mels + 2] - filter_freqs[:n_mels])
-            weights *= enorm[:, np.newaxis]
-
-        # Match torch sibling: returns transposed filters as float32 ((1 + n_fft // 2, n_mels)).
-        return weights.T.astype(np.float32)
-
-    def _compute_magnitudes(self, stft_out, power, spectrogram_config=None):
-        # `np.abs(z) ** power` is numerically equivalent to the torch sibling's explicit
-        # `sqrt(real² + imag²) ** power` form on `view_as_real`. Both routes compute the
-        # complex magnitude and then raise to `power`; remaining drift is float32 FFT noise.
-        magnitudes = np.abs(stft_out)
-        if power != 1.0:
-            magnitudes = magnitudes ** power
-        return magnitudes
-
-    def _apply_mel_scale(self, features, *, spectrogram_config, **kwargs):
-        return np.matmul(self.mel_filters.T, features)
+    # The base numpy backend already builds librosa's per-band float32 filters and applies
+    # the mel matmul / magnitude / `log(x + pre_log_offset)` forms this model needs.
 
     def _normalize_magnitude(self, features, *, spectrogram_config, **kwargs):
-        # Per-utterance mean/var normalization is applied later in `_postprocess_output` —
-        # this hook is pointwise per ADR 0005. Match the legacy FE's `log(x + guard)` form
-        # rather than `log(clamp(x, guard))`, then transpose to (batch, frames, mels).
-        features = np.log(features + spectrogram_config.mel_floor)
+        # Base handles the legacy `log(x + guard)` form via `pre_log_offset`;
+        # transpose to (batch, frames, mels).
+        features = super()._normalize_magnitude(features, spectrogram_config=spectrogram_config, **kwargs)
         return np.transpose(features, axes=(0, 2, 1))
 
     def _postprocess_output(self, output, audio_ranges=None, **kwargs):

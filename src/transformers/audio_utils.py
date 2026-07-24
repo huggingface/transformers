@@ -120,12 +120,12 @@ class SpectrogramConfig:
     log_mode: str = "log10"
     chunk_length: int | None = None
     preemphasis: float | None = None
-    # Where preemphasis is applied: "per_frame" (default; on each framed window, first sample
-    # scaled by 1-p) or "waveform" (on the raw waveform before framing, first sample unchanged,
-    # padded samples zeroed via audio_ranges). ASR models (Parakeet/Cohere/Nemotron) use "waveform".
     preemphasis_mode: str = "per_frame"
     remove_dc_offset: bool = False
     mel_floor: float = 1e-10
+    # When set, the log stage computes log(x + pre_log_offset) instead of
+    # log(clamp(x, mel_floor)) — the guard form used by NeMo-style extractors (ADR 0004).
+    pre_log_offset: float | None = None
     waveform_scale: float | None = None
     computation_dtype: str | None = None
     skip_last_frame: bool = False
