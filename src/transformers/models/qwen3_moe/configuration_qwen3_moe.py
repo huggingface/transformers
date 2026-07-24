@@ -114,11 +114,6 @@ class Qwen3MoeConfig(PreTrainedConfig):
     def __post_init__(self, **kwargs):
         self.sliding_window = self.sliding_window if self.use_sliding_window else None
         self.mlp_only_layers = [] if self.mlp_only_layers is None else self.mlp_only_layers
-        if self.tie_word_embeddings:
-            self.base_model_tp_plan = {
-                **self.base_model_tp_plan,
-                "embed_tokens": "embedding_rowwise",
-            }
 
         super().__post_init__(**kwargs)
 

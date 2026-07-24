@@ -85,11 +85,7 @@ class Ernie4_5Config(PreTrainedConfig):
             self.num_key_value_heads = self.num_attention_heads
 
         self.head_dim = self.head_dim if self.head_dim is not None else self.hidden_size // self.num_attention_heads
-        if self.tie_word_embeddings:
-            self.base_model_tp_plan = {
-                **self.base_model_tp_plan,
-                "embed_tokens": "embedding_rowwise",
-            }
+
 
         super().__post_init__(**kwargs)
 

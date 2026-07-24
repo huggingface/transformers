@@ -83,12 +83,6 @@ class GemmaConfig(PreTrainedConfig):
     use_bidirectional_attention: bool | None = None
 
     def __post_init__(self, **kwargs):
-        if self.tie_word_embeddings:
-            self.base_model_tp_plan = {
-                **self.base_model_tp_plan,
-                "embed_tokens": "embedding_rowwise",
-            }
-
         super().__post_init__(**kwargs)
 
 

@@ -316,13 +316,8 @@ class Qwen3OmniMoeTalkerCodePredictorConfig(PreTrainedConfig):
                 else "full_attention"
                 for i in range(self.num_hidden_layers)
             ]
-        if self.tie_word_embeddings:
-            self.base_model_tp_plan = {
-                **self.base_model_tp_plan,
-                "embed_tokens": "embedding_rowwise",
-            }
 
-        super().__post_init__(**kwargs)
+            super().__post_init__(**kwargs)
 
 
 @auto_docstring(checkpoint="Qwen/Qwen3-Omni-30B-A3B-Instruct")
@@ -415,11 +410,6 @@ class Qwen3OmniMoeTalkerTextConfig(PreTrainedConfig):
     def __post_init__(self, **kwargs):
         self.sliding_window = self.sliding_window
         self.mlp_only_layers = [] if self.mlp_only_layers is None else self.mlp_only_layers
-        if self.tie_word_embeddings:
-            self.base_model_tp_plan = {
-                **self.base_model_tp_plan,
-                "embed_tokens": "embedding_rowwise",
-            }
 
         super().__post_init__(**kwargs)
 

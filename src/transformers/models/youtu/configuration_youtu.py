@@ -107,11 +107,6 @@ class YoutuConfig(PreTrainedConfig):
 
         self.qk_head_dim = self.qk_nope_head_dim + self.qk_rope_head_dim
         self.head_dim = self.qk_rope_head_dim
-        if self.tie_word_embeddings:
-            self.base_model_tp_plan = {
-                **self.base_model_tp_plan,
-                "embed_tokens": "embedding_rowwise",
-            }
 
         super().__post_init__(**kwargs)
 

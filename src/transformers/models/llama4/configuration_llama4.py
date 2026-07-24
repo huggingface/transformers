@@ -198,13 +198,6 @@ class Llama4TextConfig(PreTrainedConfig):
             self.layer_types = [
                 "chunked_attention" if no_rope else "full_attention" for no_rope in self.no_rope_layers
             ]
-
-        if self.tie_word_embeddings:
-            self.base_model_tp_plan = {
-                **self.base_model_tp_plan,
-                "embed_tokens": "embedding_rowwise",
-            }
-
         super().__post_init__(**kwargs)
 
 
@@ -261,13 +254,6 @@ class Llama4Config(PreTrainedConfig):
             logger.info("text_config is None, using default llama4 text config")
         elif isinstance(self.text_config, dict):
             self.text_config = Llama4TextConfig(**self.text_config)
-
-        if self.tie_word_embeddings:
-            self.base_model_tp_plan = {
-                **self.base_model_tp_plan,
-                "embed_tokens": "embedding_rowwise",
-            }
-
         super().__post_init__(**kwargs)
 
 

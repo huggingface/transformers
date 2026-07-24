@@ -138,13 +138,6 @@ class HYV3Config(PreTrainedConfig):
             self.mlp_layer_types = ["dense"] * (1 if self.num_hidden_layers > 0 else 0) + ["sparse"] * max(
                 self.num_hidden_layers - 1, 0
             )
-
-        if self.tie_word_embeddings:
-            self.base_model_tp_plan = {
-                **self.base_model_tp_plan,
-                "embed_tokens": "embedding_rowwise",
-            }
-
         super().__post_init__(**kwargs)
 
 

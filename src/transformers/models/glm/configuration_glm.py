@@ -77,13 +77,8 @@ class GlmConfig(PreTrainedConfig):
         kwargs.setdefault("partial_rotary_factor", 0.5)  # assign default for BC
         if self.eos_token_id is None:
             self.eos_token_id = [151329, 151336, 151338]
-        if self.tie_word_embeddings:
-            self.base_model_tp_plan = {
-                **self.base_model_tp_plan,
-                "embed_tokens": "embedding_rowwise",
-            }
 
-        super().__post_init__(**kwargs)
+            super().__post_init__(**kwargs)
 
 
 __all__ = ["GlmConfig"]
