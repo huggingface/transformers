@@ -46,6 +46,7 @@ from transformers import (
 from transformers.conversion_mapping import get_model_conversion_mapping
 from transformers.core_model_loading import PrefixChange, WeightRenaming, process_target_pattern
 from transformers.integrations import HfDeepSpeedConfig
+from transformers.integrations.deepgemm import _get_nvcc_version
 from transformers.integrations.deepspeed import (
     is_deepspeed_available,
     is_deepspeed_zero3_enabled,
@@ -79,6 +80,7 @@ from transformers.models.auto.modeling_auto import (
     MODEL_FOR_SEMANTIC_SEGMENTATION_MAPPING_NAMES,
     MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING_NAMES,
     MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES,
+    MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING_NAMES,
     MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING_NAMES,
     MODEL_FOR_VIDEO_CLASSIFICATION_MAPPING_NAMES,
     MODEL_MAPPING_NAMES,
@@ -119,9 +121,9 @@ from transformers.utils import (
     is_torch_bf16_available_on_device,
     is_torch_fp16_available_on_device,
 )
-from transformers.utils.import_utils import get_cuda_runtime_version
-from transformers.utils.output_capturing import CompileableContextVar
+from transformers.utils.output_capturing import CompileableContextVar, OutputRecorder
 
+from .exporters.test_export import ExportTesterMixin
 from .generation.test_utils import GenerationTesterMixin
 
 
@@ -609,14 +611,15 @@ def _test_eager_matches_batched_and_grouped_inference(self, name, dtype):
             mocks["sonicmoe"] = Mock(wraps=sonicmoe_experts_forward)
             implementations.append("sonicmoe")
 
+        nvcc_version = _get_nvcc_version() or (0, 0)
+        device_major = torch.cuda.get_device_capability()[0] if torch.cuda.is_available() else 0
+        # DeepGEMM ships kernels only for Hopper (SM90, needs nvcc 12.3+) and Blackwell (SM100, needs 12.9+).
         if (
             dtype == torch.bfloat16
             and is_kernels_available()
-            and torch.cuda.is_available()
-            and torch.cuda.get_device_capability() >= (9, 0)
-            and get_cuda_runtime_version() >= (12, 3)
+            and ((device_major == 9 and nvcc_version >= (12, 3)) or (device_major == 10 and nvcc_version >= (12, 9)))
         ):
-            # DeepGEMM BF16 grouped forward requires Hopper+, CUDA runtime 12.3+, and bf16 hidden states
+            # DeepGEMM BF16 grouped forward requires Hopper+, a new-enough nvcc toolkit, and bf16 hidden states
             mocks["deepgemm"] = Mock(wraps=deepgemm_bf16_experts_forward)
             implementations.append("deepgemm")
 
@@ -648,7 +651,10 @@ def _test_eager_matches_batched_and_grouped_inference(self, name, dtype):
 
 def _config_zero_init(config):
     configs_no_init = copy.deepcopy(config)
-    for key in configs_no_init.__dict__:
+    # Iterate the config rather than its `__dict__`: a heterogeneous config raises on global reads
+    # of its per-layer attributes, and iteration hides exactly those. Sub-configs are still yielded,
+    # so a heterogeneous one (e.g. `Gemma4Config.text_config`) is still recursed into.
+    for key in list(configs_no_init):
         if (
             "init_range" in key
             or "initializer_range" in key
@@ -705,7 +711,7 @@ def sdpa_kernel(enable_flash, enable_math, enable_mem_efficient):
 
 
 @require_torch
-class ModelTesterMixin:
+class ModelTesterMixin(ExportTesterMixin):
     model_tester = None
     all_model_classes = ()
     test_resize_embeddings = True
@@ -1731,6 +1737,127 @@ class ModelTesterMixin:
                                     self.assertTrue(
                                         v.grad is not None, f"{k} in {model_class.__name__} has no gradient!"
                                     )
+
+    def test_encoder_decoder_loss_no_double_shift(self):
+        """
+        Encoder-decoder LM heads are fed right-shifted ``decoder_input_ids``, so their logits are already
+        position-aligned with the targets: the training loss must be the cross-entropy against ``labels``
+        directly. If it shifts a second time (e.g. by routing through ``ForCausalLMLoss`` without passing
+        ``shift_labels``) the model trains against ``labels[..., 1:]`` -- an off-by-one in the loss.
+
+        The right-shifted ``decoder_input_ids`` are built and supplied here, so every model is driven the same
+        way regardless of how its own ``forward`` would have derived them.
+
+        The oracle compares the *gradient* of the reported loss w.r.t. ``output.logits`` against the gradients
+        of the aligned and of the shifted cross-entropy. Gradients carry the target positions, so they stay
+        decisive even where the two loss values coincide numerically -- which happens whenever a tester's
+        initialization makes the logits near-uniform (the T5-family testers set ``initializer_factor=0.002``).
+
+        Scope: encoder-decoder models built on ``ModelTesterMixin`` whose ``forward`` owns the loss. The
+        ``EncoderDecoderModel`` / ``VisionEncoderDecoderModel`` / ``SpeechEncoderDecoderModel`` wrappers are
+        covered by separate ``EncoderDecoderMixin`` test suites; those wrapper models' ``forward`` already
+        computes an aligned cross-entropy independently of the decoder, so they cannot hit this path.
+        """
+        # Class-based applicability gate first: this oracle needs a sequence-to-sequence LM head with one logit
+        # vector per label token. Decide from `all_model_classes` alone -- some testers have no `get_config`, so
+        # the config is not touched until after this gate.
+        seq2seq_lm_names = [
+            *get_values(MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING_NAMES),
+            *get_values(MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING_NAMES),
+            *get_values(MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING_NAMES),
+        ]
+        seq2seq_lm_classes = [c for c in self.all_model_classes if c.__name__ in seq2seq_lm_names]
+        if not seq2seq_lm_classes:
+            self.skipTest(reason="No sequence-to-sequence language modeling head to check")
+
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        if not config.is_encoder_decoder:
+            self.skipTest(reason="Model is not an encoder-decoder")
+
+        vocab_size = config.get_text_config(decoder=True).vocab_size
+        # Targets are >= 2 tokens long so that `labels[..., 1:]` is non-empty and the two oracles differ.
+        tester_decoder_input_ids = inputs_dict.get("decoder_input_ids")
+        seq_len = (
+            tester_decoder_input_ids.shape[-1]
+            if isinstance(tester_decoder_input_ids, torch.Tensor)
+            else getattr(self.model_tester, "decoder_seq_length", getattr(self.model_tester, "seq_length", 2)) or 2
+        )
+        seq_len = max(2, seq_len)
+        set_seed(42)
+        labels = torch.randint(3, vocab_size, (self.model_tester.batch_size, seq_len), device=torch_device)
+
+        for model_class in seq2seq_lm_classes:
+            with self.subTest(model_class.__name__):
+                # Deep-copy per class so nothing below mutates the shared config across iterations.
+                model_config = copy.deepcopy(config)
+                model_config.use_cache = False
+                model_config.return_dict = True
+                text_config = model_config.get_text_config(decoder=True)
+                pad_fallback = getattr(self.model_tester, "pad_token_id", None) or 0
+                for cfg in (model_config, text_config):
+                    if getattr(cfg, "pad_token_id", None) is None:
+                        # A pad id is still read while building decoder masks, and some models take it from the
+                        # top config while others take it from the decoder text config.
+                        cfg.pad_token_id = pad_fallback
+
+                # The first decoder token moves the logits but cannot change which cross-entropy the reported
+                # loss matches, so any in-vocabulary id will do. Use the model's own start id when the tester
+                # sets one and 0 otherwise, since several testers leave `decoder_start_token_id` unset. The
+                # range check is defensive: it keeps an id past the tester's vocabulary from failing in an
+                # embedding lookup before the alignment assertions run.
+                start_token_id = getattr(model_config, "decoder_start_token_id", None)
+                if not isinstance(start_token_id, int) or not 0 <= start_token_id < vocab_size:
+                    start_token_id = 0
+                decoder_input_ids = labels.roll(shifts=1, dims=1)
+                decoder_input_ids[:, 0] = start_token_id
+
+                inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=False)
+                # Replace the tester's decoder inputs with targets the model cannot have derived differently:
+                # `decoder_input_ids` is `labels` right-shifted, so the logits are aligned with `labels`.
+                inputs.pop("decoder_attention_mask", None)
+                inputs["decoder_input_ids"] = decoder_input_ids
+                inputs["labels"] = labels
+
+                model = model_class(model_config).to(torch_device).eval()
+                # No `torch.no_grad()`: the oracle below differentiates the reported loss w.r.t. the logits.
+                output = model(**inputs)
+
+                logits = output.logits
+                vocab = logits.shape[-1]
+                float_logits = logits.float()
+                aligned = nn.functional.cross_entropy(float_logits.reshape(-1, vocab), labels.reshape(-1))
+                double_shifted = nn.functional.cross_entropy(
+                    float_logits[:, :-1, :].reshape(-1, vocab), labels[:, 1:].reshape(-1)
+                )
+                # The three gradients are taken from graphs that share nodes, so keep the graph alive until the
+                # last one. `allow_unused` turns "the loss does not depend on `output.logits`" into a readable
+                # failure instead of an autograd error.
+                grad_reported = torch.autograd.grad(output.loss, logits, retain_graph=True, allow_unused=True)[0]
+                self.assertIsNotNone(
+                    grad_reported,
+                    msg=f"{model_class.__name__}: the reported loss is not a function of `output.logits`",
+                )
+                grad_aligned = torch.autograd.grad(aligned, logits, retain_graph=True)[0]
+                grad_shifted = torch.autograd.grad(double_shifted, logits)[0]
+                # Guard the oracle: if both targets produce the same gradient the assertions below are vacuous.
+                self.assertFalse(
+                    torch.allclose(grad_aligned, grad_shifted),
+                    msg=(
+                        f"{model_class.__name__}: the aligned and shifted gradients are indistinguishable "
+                        f"(vacuous oracle)"
+                    ),
+                )
+                self.assertTrue(
+                    torch.allclose(grad_reported, grad_aligned),
+                    msg=f"{model_class.__name__}: training loss is not the cross-entropy against `labels`",
+                )
+                self.assertFalse(
+                    torch.allclose(grad_reported, grad_shifted),
+                    msg=(
+                        f"{model_class.__name__}: training loss is the cross-entropy against `labels[..., 1:]`. "
+                        f"`decoder_input_ids` are already right-shifted, so the loss must not shift `labels` again."
+                    ),
+                )
 
     def test_training(self):
         if not self.model_tester.is_training:
@@ -4188,138 +4315,6 @@ class ModelTesterMixin:
         for name, param in model._orig_mod.named_parameters():
             torch.testing.assert_close(param.grad.detach().cpu(), params[name], rtol=1e-4, atol=1e-4)
 
-    @slow
-    @pytest.mark.torch_export_test
-    def test_torch_export(self, atol=1e-4, rtol=1e-4):
-        """
-        Test if model can be exported with torch.export.export()
-
-        Args:
-            atol (`float`, *optional*, defaults to 1e-4): absolute tolerance for output comparison
-            rtol (`float`, *optional*, defaults to 1e-4): relative tolerance for output comparison
-        """
-
-        if not self.test_torch_exportable:
-            self.skipTest(reason="Model architecture is not torch exportable")
-
-        with open(inspect.getfile(self.all_model_classes[0]), "r") as f:
-            source_code = f.read()
-            # Skip model if it uses a chunked attention implementation which is not torch exportable
-            if "for q, k, v in zip(*splits)" in source_code:
-                self.skipTest(reason="Model architecture uses chunked attention which is not torch exportable")
-            # Skip MoEs that don't support batched_mm experts implementation
-            if "for expert" in source_code and "use_experts_implementation" not in source_code:
-                self.skipTest(reason="Model architecture uses eager MoE implementation which is not torch exportable")
-            # Skip models that use get_rope_index which is not torch exportable
-            if "get_rope_index" in source_code:
-                self.skipTest(reason="Model architecture uses get_rope_index which is not torch exportable")
-
-        def _is_pure_python_object(obj) -> bool:
-            if isinstance(obj, (int, float, bool, str)) or obj is None:
-                return True
-            elif isinstance(obj, (list, tuple, set)):
-                return all(_is_pure_python_object(o) for o in obj)
-            elif isinstance(obj, dict):
-                return all(_is_pure_python_object(o) for o in obj.values())
-            else:
-                return False
-
-        def _get_leaf_tensors(obj) -> dict[str, torch.Tensor]:
-            if _is_pure_python_object(obj):
-                return {}
-            elif isinstance(obj, torch.Tensor):
-                return {"": obj}
-            elif isinstance(obj, (list, tuple, set)):
-                return _get_leaf_tensors(dict(enumerate(obj)))
-            elif isinstance(obj, dict):
-                leaf_tensors = {}
-                for key, value in obj.items():
-                    for sub_key, tensor in _get_leaf_tensors(value).items():
-                        full_key = f"{key}.{sub_key}" if sub_key else str(key)
-                        leaf_tensors[full_key] = tensor
-                return leaf_tensors
-            else:
-                raise ValueError(f"Unexpected object type: {type(obj)}")
-
-        def _prepare_for_export(model, inputs_dict):
-            # we don't test outputing a cache class for now
-            inputs_dict.pop("use_cache", None)
-            # we don't test loss computation for now
-            inputs_dict.pop("return_loss", None)
-            # we don't test loss computation for now
-            inputs_dict.pop("future_values", None)
-
-            # set experts implementation to batched_mm for export
-            if model._can_set_experts_implementation():
-                model.set_experts_implementation("batched_mm")
-
-            # set attention implementation to sdpa for export
-            if model._can_set_attn_implementation() and model.config.model_type != "videomae":
-                try:
-                    model.set_attn_implementation("sdpa")
-                except Exception as e:
-                    print(
-                        f"Could not set attention implementation to sdpa for {model} of type {model.config.model_type} : {e}"
-                    )
-
-            for module in model.modules():
-                if hasattr(module, "config"):
-                    # disable cache usage for every submodel
-                    if hasattr(module.config, "use_cache"):
-                        module.config.use_cache = False
-                    # disable returning loss for every submodel
-                    if hasattr(module.config, "return_loss"):
-                        module.config.return_loss = False
-                    # disable mamba kernels for every submodel (mamba, jamba)
-                    if hasattr(module.config, "use_mamba_kernels"):
-                        module.config.use_mamba_kernels = False
-                # disable classifier cast for nllb-moe
-                if hasattr(module, "_cast_classifier"):
-                    module._cast_classifier = lambda *args, **kwargs: None
-
-            return model, inputs_dict
-
-        for model_class in self.all_model_classes:
-            with self.subTest(model_class.__name__):
-                if model_class.__name__ == "VideoMAEForPreTraining":
-                    # this model computes the loss unconditionally
-                    continue
-
-                if hasattr(self.model_tester, "prepare_config_and_inputs_for_model_class"):
-                    config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_model_class(model_class)
-                else:
-                    config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-                inputs_dict = self._prepare_for_class(inputs_dict, model_class)
-                set_config_for_less_flaky_test(config)
-                model = model_class(config).eval().to(torch_device)
-                set_model_for_less_flaky_test(model)
-
-                # Prepare model and inputs for export
-                model, inputs_dict = _prepare_for_export(model, inputs_dict)
-
-                with torch.no_grad():
-                    # Running the eager inference before the export to catch model/inputs comatibility issues, also sometimes after
-                    # the export, the model used for export will return FakeTensors instead of real ones (torch compiler issue).
-                    # This happens on cuda for example with (codegen, clvp, esm, gptj, levit, wav2vec2_bert and wav2vec2_conformer)
-                    set_seed(1234)
-                    eager_outputs = model(**copy.deepcopy(inputs_dict))
-                    eager_outputs = _get_leaf_tensors(eager_outputs)
-                    self.assertTrue(eager_outputs, "Eager outputs is empty.")
-
-                try:
-                    exported_program = torch.export.export(model, args=(), kwargs=copy.deepcopy(inputs_dict))
-                except Exception as e:
-                    raise e
-
-                with torch.no_grad():
-                    set_seed(1234)
-                    exported_outputs = exported_program.module()(**copy.deepcopy(inputs_dict))
-                    exported_outputs = _get_leaf_tensors(exported_outputs)
-                    self.assertTrue(exported_outputs, "Exported outputs is empty.")
-
-                # Check outputs closeness:
-                torch.testing.assert_close(exported_outputs, eager_outputs, atol=atol, rtol=rtol)
-
     @staticmethod
     def _prepare_config_headdim(config, requested_dim):
         """
@@ -4343,9 +4338,18 @@ class ModelTesterMixin:
             # Update the head dim and try to update hidden size as well if present in config
             # NOTE: some models may have none if the values in sub-config, thus we check for `Noneness`
             head_dim = None
-            if hasattr(config, "head_dim") and config.head_dim is not None:
-                head_dim = config.head_dim
-                config.head_dim = max(requested_dim, config.head_dim)
+            # On a heterogeneous config `head_dim` cannot be read globally, so probe for it without
+            # tripping the guard. Per-layer overrides are bumped below.
+            global_head_dim = config._getattr_without_heterogeneous_validation("head_dim", None)
+            if global_head_dim is not None:
+                head_dim = global_head_dim
+                config.head_dim = max(requested_dim, global_head_dim)
+                if config.is_heterogeneous and "head_dim" in config.per_layer_attributes:
+                    overrides = copy.deepcopy(config._heterogeneity_spec.per_layer_overrides)
+                    for layer_overrides in overrides.values():
+                        if "head_dim" in layer_overrides:
+                            layer_overrides["head_dim"] = max(requested_dim, layer_overrides["head_dim"])
+                    config.per_layer_config = overrides
 
             cross_head_dim = None
             if hasattr(config, "cross_head_dim") and config.cross_head_dim is not None:
@@ -5285,6 +5289,20 @@ class ModelTesterMixin:
                     f"hidden_size mismatch, full shape: {last_hidden_state_shape}",
                 )
 
+                if (
+                    model_class.__name__ in get_values(MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING_NAMES)
+                    and outputs.pooler_output is not None
+                ):
+                    self.assertEqual(
+                        len(outputs.pooler_output),
+                        self.model_tester.batch_size,
+                        f"batch_size mismatch for `pooler_output`: {len(outputs.pooler_output)} != {self.model_tester.batch_size}",
+                    )
+                    self.assertEqual(
+                        outputs.pooler_output[0].ndim,
+                        2,
+                        f"each sample in `pooler_output` should be a 2D array but got {outputs.pooler_output[0].ndim}",
+                    )
             else:
                 self.assertIsInstance(outputs, tuple, "get_image_features() must return a tuple if return_dict=False")
 
@@ -5568,6 +5586,21 @@ class ModelTesterMixin:
                     f"hidden_size mismatch, full shape: {last_hidden_state_shape}",
                 )
 
+                if (
+                    model_class.__name__ in get_values(MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING_NAMES)
+                    and outputs.pooler_output is not None
+                ):
+                    self.assertEqual(
+                        len(outputs.pooler_output),
+                        self.model_tester.batch_size,
+                        f"batch_size mismatch for `pooler_output`: {len(outputs.pooler_output)} != {self.model_tester.batch_size}",
+                    )
+                    self.assertEqual(
+                        outputs.pooler_output[0].ndim,
+                        2,
+                        f"each sample in `pooler_output` should be a 2D array but got {outputs.pooler_output[0].ndim}",
+                    )
+
             else:
                 self.assertIsInstance(outputs, tuple, "get_video_features() must return a tuple if return_dict=False")
 
@@ -5711,6 +5744,36 @@ class ModelTesterMixin:
                     with patch.object(CompileableContextVar, "reset", new=new_reset):
                         with torch.no_grad():
                             _ = model(**all_inputs)
+
+    def test_format_of_can_record_outputs(self):
+        """Test that that the attribute `_can_record_outputs` is correctly set for a model. It must either be "None" or
+        a dictionnary with output names as keys and a recorder or list of recorders as values. A recorder can be an
+        OutputRecorder instance, a module class we want to record outputs of or the name of this module class (a str).
+        """
+        config = self.model_tester.prepare_config_and_inputs_for_common()[0]
+
+        for model_class in self.all_model_classes:
+            # Each individual model is a subtest
+            with self.subTest(model_class.__name__):
+                model = model_class(copy.deepcopy(config)).to(device=torch_device)
+                model.eval()
+
+                recordable_output_dicts = [
+                    (module._can_record_outputs or {})
+                    for module in model.modules()
+                    if isinstance(module, PreTrainedModel)
+                ]
+
+                # Check that the values of _can_record_outputs are a correct recorder or a list of them
+                for recordable_output_dict in recordable_output_dicts:
+                    for key, value in recordable_output_dict.items():
+                        # Check format of the keys
+                        self.assertIsInstance(key, str, f"_can_record_outputs should have str keys, but got {key = }")
+                        # Check format of the values
+                        recorders = value if isinstance(value, list) else [value]
+                        for recorder in recorders:
+                            is_valid_recorder = isinstance(recorder, (str, type, OutputRecorder))
+                            self.assertTrue(is_valid_recorder, f"Invalid recorder: {recorder}")
 
     @require_kernels
     @require_torch_accelerator

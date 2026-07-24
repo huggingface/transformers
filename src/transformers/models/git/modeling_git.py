@@ -331,24 +331,13 @@ class GitPreTrainedModel(PreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
+        super()._init_weights(module)
         if isinstance(module, GitVisionEmbeddings):
             init.normal_(module.class_embedding, mean=0.0, std=self.config.initializer_range)
             init.normal_(module.patch_embedding.weight, std=self.config.initializer_range)
             init.normal_(module.position_embedding.weight, std=self.config.initializer_range)
             init.copy_(module.position_ids, torch.arange(module.position_ids.shape[-1]).expand((1, -1)))
-        if isinstance(module, nn.Linear):
-            init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
-            if module.bias is not None:
-                init.zeros_(module.bias)
-        elif isinstance(module, nn.Embedding):
-            init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
-            # Here we need the check explicitly, as we slice the weight in the `zeros_` call, so it looses the flag
-            if module.padding_idx is not None and not getattr(module.weight, "_is_hf_initialized", False):
-                init.zeros_(module.weight[module.padding_idx])
-        elif isinstance(module, nn.LayerNorm):
-            init.zeros_(module.bias)
-            init.ones_(module.weight)
-        elif isinstance(module, GitEmbeddings):
+        if isinstance(module, GitEmbeddings):
             init.copy_(module.position_ids, torch.arange(module.position_ids.shape[-1]).expand((1, -1)))
 
 
@@ -1094,11 +1083,12 @@ class GitForCausalLM(GitPreTrainedModel, GenerationMixin):
             # we are doing next-token prediction; shift prediction scores and input ids by one
             num_image_tokens = self.git.encoder.layer[0].attention.self.image_patch_tokens
             shifted_logits = logits[:, num_image_tokens:-1, :].contiguous()
-            labels = labels[:, 1:].contiguous()
+            shift_labels = labels[:, 1:].contiguous()
             loss = self.loss_function(
-                shifted_logits.view(-1, self.config.vocab_size),
-                labels.view(-1),
+                logits=shifted_logits,
+                labels=None,
                 vocab_size=self.config.vocab_size,
+                shift_labels=shift_labels,
                 **kwargs,
             )
 

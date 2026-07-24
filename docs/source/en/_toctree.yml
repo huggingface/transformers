@@ -16,6 +16,8 @@
       title: Loading models
     - local: custom_models
       title: Customizing models
+    - local: heterogeneous_configurations
+      title: Heterogeneous configurations
     - local: monkey_patching
       title: Monkey patching
     - local: fusion_mapping
@@ -122,6 +124,8 @@
       title: Kernels
     - local: perf_torch_compile
       title: torch.compile
+    - local: exporters
+      title: Exporters
     - local: perf_infer_gpu_multi
       title: Tensor parallelism
     - local: expert_parallelism
@@ -476,6 +480,8 @@
       title: Pipelines
     - local: main_classes/processors
       title: Processors
+    - local: main_classes/exporters
+      title: Exporters
     - local: main_classes/quantization
       title: Quantization
     - local: main_classes/tokenizer
@@ -497,6 +503,8 @@
     title: Main Classes
   - sections:
     - sections:
+      - local: model_doc/axk1
+        title: A.X-K1
       - local: model_doc/afmoe
         title: AFMoE
       - local: model_doc/albert
@@ -685,6 +693,8 @@
         title: HunYuanDenseV1
       - local: model_doc/hunyuan_v1_moe
         title: HunYuanMoEV1
+      - local: model_doc/hunyuan_vl
+        title: HunYuanVL
       - local: model_doc/hyperclovax
         title: HyperCLOVAX
       - local: model_doc/hy_v3
@@ -741,6 +751,8 @@
         title: MegatronGPT2
       - local: model_doc/mellum
         title: Mellum
+      - local: model_doc/mimo_v2_flash
+        title: MiMo-V2-Flash
       - local: model_doc/minicpm3
         title: MiniCPM3
       - local: model_doc/minimax
@@ -911,6 +923,8 @@
         title: Zamba
       - local: model_doc/zamba2
         title: Zamba2
+      - local: model_doc/zaya
+        title: ZAYA
       title: Text models
     - sections:
       - local: model_doc/aimv2
@@ -1239,6 +1253,8 @@
         title: ColPali
       - local: model_doc/colqwen2
         title: ColQwen2
+      - local: model_doc/cosmos3_edge
+        title: Cosmos3 Edge
       - local: model_doc/cosmos3_omni
         title: Cosmos3 Omni
       - local: model_doc/data2vec
@@ -1309,6 +1325,8 @@
         title: Idefics2
       - local: model_doc/idefics3
         title: Idefics3
+      - local: model_doc/inkling
+        title: Inkling
       - local: model_doc/instructblip
         title: InstructBLIP
       - local: model_doc/instructblipvideo
@@ -1317,6 +1335,8 @@
         title: InternVL
       - local: model_doc/janus
         title: Janus
+      - local: model_doc/kimi_k25
+        title: KimiK-2.5
       - local: model_doc/kosmos-2
         title: KOSMOS-2
       - local: model_doc/kosmos2_5
@@ -1463,6 +1483,10 @@
         title: Speech Encoder Decoder Models
       - local: model_doc/tapas
         title: TAPAS
+      - local: model_doc/tipsv2
+        title: TIPSv2
+      - local: model_doc/tipsv2_dpt
+        title: TIPSv2 DPT
       - local: model_doc/trocr
         title: TrOCR
       - local: model_doc/tvp

@@ -643,7 +643,9 @@ class Gemma4VisionPatchEmbedder(nn.Module):
     ) -> torch.Tensor:
         # Gemma4 applies no normalization and instead scales in model code
         pixel_values = 2 * (pixel_values - 0.5)
-        hidden_states = self.input_proj(pixel_values.to(self.input_proj.weight.dtype))
+        if (target_dtype := self.input_proj.weight.dtype).is_floating_point:
+            pixel_values = pixel_values.to(target_dtype)
+        hidden_states = self.input_proj(pixel_values)
         position_embeddings = self._position_embeddings(pixel_position_ids, padding_positions)
         return hidden_states + position_embeddings
 
@@ -1020,11 +1022,10 @@ class Gemma4TextRotaryEmbedding(Gemma3RotaryEmbedding):
             self.rope_init_fns[layer_type] = rope_init_fn
             self.rope_type[layer_type] = rope_type
 
-            rope_init_fn_kwargs = {"device": device, "layer_type": layer_type}
-            if layer_type == "full_attention" and rope_type == "proportional":
-                rope_init_fn_kwargs["head_dim_key"] = "global_head_dim"
-
-            curr_inv_freq, curr_attention_scaling = rope_init_fn(self.config, **rope_init_fn_kwargs)
+            # `inv_freq` depends on the head dim, which varies by layer type, so initialise
+            # from a config resolved for this layer type rather than the global one.
+            rope_config = config.per_layer_config[layer_type]
+            curr_inv_freq, curr_attention_scaling = rope_init_fn(rope_config, device=device, layer_type=layer_type)
             self.register_buffer(f"{layer_type}_inv_freq", curr_inv_freq, persistent=False)
             self.register_buffer(f"{layer_type}_original_inv_freq", curr_inv_freq.clone(), persistent=False)
             setattr(self, f"{layer_type}_attention_scaling", curr_attention_scaling)
@@ -1041,12 +1042,10 @@ class Gemma4TextAttention(nn.Module):
         self.is_sliding = self.layer_type == "sliding_attention"
         self.sliding_window = config.sliding_window if self.is_sliding else None
 
-        self.head_dim = config.global_head_dim if not self.is_sliding and config.global_head_dim else config.head_dim
+        layer_config = config.per_layer_config[layer_idx]
+        self.head_dim = layer_config.head_dim
         self.use_alternative_attention = config.attention_k_eq_v and not self.is_sliding
-        num_key_value_heads = (
-            config.num_global_key_value_heads if self.use_alternative_attention else config.num_key_value_heads
-        )
-        self.num_key_value_groups = config.num_attention_heads // num_key_value_heads
+        self.num_key_value_groups = config.num_attention_heads // layer_config.num_key_value_heads
         self.scaling = 1.0
         self.attention_dropout = self.config.attention_dropout
         self.is_causal = config.use_bidirectional_attention != "all"
@@ -1070,10 +1069,12 @@ class Gemma4TextAttention(nn.Module):
             self.v_norm = Gemma4RMSNorm(self.head_dim, eps=config.rms_norm_eps, with_scale=False)
 
             self.k_proj = nn.Linear(
-                config.hidden_size, num_key_value_heads * self.head_dim, bias=config.attention_bias
+                config.hidden_size, layer_config.num_key_value_heads * self.head_dim, bias=config.attention_bias
             )
             self.v_proj = (
-                nn.Linear(config.hidden_size, num_key_value_heads * self.head_dim, bias=config.attention_bias)
+                nn.Linear(
+                    config.hidden_size, layer_config.num_key_value_heads * self.head_dim, bias=config.attention_bias
+                )
                 if not self.use_alternative_attention
                 else None
             )
@@ -1307,11 +1308,8 @@ class Gemma4PreTrainedModel(Gemma3nPreTrainedModel):
             init.zeros_(module.per_dim_scale)
         elif isinstance(module, Gemma4TextRotaryEmbedding):
             for layer_type, rope_init_fn in module.rope_init_fns.items():
-                rope_init_fn_kwargs = {"layer_type": layer_type}
-                if layer_type == "full_attention" and module.rope_type[layer_type] == "proportional":
-                    rope_init_fn_kwargs["head_dim_key"] = "global_head_dim"
-
-                curr_inv_freq, _ = rope_init_fn(module.config, **rope_init_fn_kwargs)
+                rope_config = module.config.per_layer_config[layer_type]
+                curr_inv_freq, _ = rope_init_fn(rope_config, layer_type=layer_type)
                 init.copy_(getattr(module, f"{layer_type}_inv_freq"), curr_inv_freq)
                 init.copy_(getattr(module, f"{layer_type}_original_inv_freq"), curr_inv_freq)
         elif isinstance(module, Gemma4VisionRotaryEmbedding):
@@ -1595,8 +1593,8 @@ class Gemma4ForCausalLM(Gemma3ForCausalLM):
         ```python
         >>> from transformers import AutoTokenizer, Gemma4ForCausalLM
 
-        >>> model = Gemma4ForCausalLM.from_pretrained("google/gemma-2-9b")
-        >>> tokenizer = AutoTokenizer.from_pretrained("google/gemma-2-9b")
+        >>> model = Gemma4ForCausalLM.from_pretrained("google/gemma-4-E2B-it")
+        >>> tokenizer = AutoTokenizer.from_pretrained("google/gemma-4-E2B-it")
 
         >>> prompt = "What is your favorite condiment?"
         >>> inputs = tokenizer(prompt, return_tensors="pt")
@@ -1913,7 +1911,13 @@ class Gemma4Model(Gemma3nModel):
             **kwargs,
         )
         last_hidden_state = vision_outputs.last_hidden_state
-        vision_outputs.pooler_output = self.embed_vision(inputs_embeds=last_hidden_state)
+        pooler_output = self.embed_vision(inputs_embeds=last_hidden_state)
+
+        output_length = pixel_values.shape[-2] // (self.config.vision_config.pooling_kernel_size**2)
+        k_squared = int((image_position_ids.shape[1] // output_length) ** 0.5) ** 2
+        non_pad_mask = (image_position_ids != -1).all(dim=-1)
+        split_sizes = (non_pad_mask.sum(dim=-1) // k_squared).tolist()
+        vision_outputs.pooler_output = torch.split(pooler_output, split_sizes)
         return vision_outputs
 
     @can_return_tuple
@@ -1930,14 +1934,20 @@ class Gemma4Model(Gemma3nModel):
             Passed through to the vision encoder for positional embedding computation.
         """
         pixel_values_videos = pixel_values_videos.flatten(0, 1)
-        video_position_ids = video_position_ids.flatten(0, 1)
         vision_outputs = self.vision_tower(
             pixel_values=pixel_values_videos,
-            pixel_position_ids=video_position_ids,
+            pixel_position_ids=video_position_ids.flatten(0, 1),
             **kwargs,
         )
         last_hidden_state = vision_outputs.last_hidden_state
-        vision_outputs.pooler_output = self.embed_vision(inputs_embeds=last_hidden_state)
+        pooler_output = self.embed_vision(inputs_embeds=last_hidden_state)
+
+        output_length = pixel_values_videos.shape[-2] // (self.config.vision_config.pooling_kernel_size**2)
+        k_squared = int((pixel_values_videos.shape[-2] // output_length) ** 0.5) ** 2
+        non_pad_mask = (video_position_ids != -1).all(dim=-1)
+        split_sizes = (non_pad_mask.sum(dim=(-2, -1)) // k_squared).tolist()
+
+        vision_outputs.pooler_output = torch.split(pooler_output, split_sizes)
         return vision_outputs
 
     def get_placeholder_mask(
@@ -2047,7 +2057,7 @@ class Gemma4Model(Gemma3nModel):
         # Merge text and images
         if pixel_values is not None:
             image_features = self.get_image_features(pixel_values, image_position_ids, return_dict=True).pooler_output
-            image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
+            image_features = torch.cat(image_features, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
 
             # Confirm the number of soft tokens from the vision tower matches the number of slots in the embeddings.
             n_image_tokens = image_mask.sum()
@@ -2101,7 +2111,7 @@ class Gemma4Model(Gemma3nModel):
             )
 
             inputs_embeds = inputs_embeds.masked_scatter(
-                audio_mask.to(inputs_embeds.device), audio_features.to(inputs_embeds.device)
+                audio_mask.to(inputs_embeds.device), audio_features.to(inputs_embeds.device, inputs_embeds.dtype)
             )
 
         # It may already have been prepared by, e.g., `generate`
