@@ -34,7 +34,6 @@ from .utils import (
     is_essentia_available,
     is_g2p_en_available,
     is_librosa_available,
-    is_mistral_common_available,
     is_mlx_available,
     is_numba_available,
     is_pretty_midi_available,
@@ -310,18 +309,6 @@ else:
         "SLOW_TO_FAST_CONVERTERS",
         "convert_slow_tokenizer",
     ]
-
-try:
-    if not (is_mistral_common_available()):
-        raise OptionalDependencyNotAvailable()
-except OptionalDependencyNotAvailable:
-    from .utils import dummy_mistral_common_objects
-
-    _import_structure["utils.dummy_mistral_common_objects"] = [
-        name for name in dir(dummy_mistral_common_objects) if not name.startswith("_")
-    ]
-else:
-    _import_structure["tokenization_mistral_common"] = ["MistralCommonBackend"]
 
 # Vision-specific objects
 try:
@@ -715,6 +702,7 @@ if TYPE_CHECKING:
     from .pytorch_utils import apply_chunking_to_forward as apply_chunking_to_forward
 
     # Tokenization
+    from .tokenization_mistral_common import MistralCommonBackend as MistralCommonBackend
     from .tokenization_python import PreTrainedTokenizer as PreTrainedTokenizer
     from .tokenization_python import PythonBackend as PythonBackend
     from .tokenization_utils_base import AddedToken as AddedToken
@@ -807,6 +795,11 @@ else:
 
     import_structure = define_import_structure(Path(__file__).parent / "models", prefix="models")
     import_structure[frozenset({})].update(_import_structure)
+
+    # Keep Source links on the real module even when mistral-common is missing.
+    mistral_backends = frozenset({"mistral-common"})
+    import_structure.setdefault(mistral_backends, {})
+    import_structure[mistral_backends]["tokenization_mistral_common"] = {"MistralCommonBackend"}
 
     sys.modules[__name__] = _LazyModule(
         __name__,
