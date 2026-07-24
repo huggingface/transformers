@@ -127,6 +127,7 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, str | None](
         ("florence2", "BartTokenizer" if is_tokenizers_available() else None),
         ("fnet", "FNetTokenizer" if is_tokenizers_available() else None),
         ("fsmt", "FSMTTokenizer"),
+        ("fun_asr_nano", "Qwen2Tokenizer" if is_tokenizers_available() else None),
         ("funnel", "FunnelTokenizer" if is_tokenizers_available() else None),
         ("gemma", "GemmaTokenizer" if is_tokenizers_available() else None),
         ("gemma2", "GemmaTokenizer" if is_tokenizers_available() else None),
