@@ -102,15 +102,13 @@ class OnyxCausalLMOutputWithPast(ModelOutput):
 
 
 class OnyxRMSNorm(nn.Module):
-    def __init__(self, dim: int | None = None, eps: float = 1e-6, with_scale: bool = True, weight_offset: int = 0):
+    def __init__(self, dim: int | None = None, eps: float = 1e-6, with_scale: bool = True):
         super().__init__()
         self.eps = eps
         self.with_scale = with_scale
 
         if self.with_scale:
             self.weight = nn.Parameter(torch.ones(dim), requires_grad=True)
-        # can we bake it in weights, i suppose this was needed for train-time stability?
-        self.weight_offset = weight_offset
 
     def _norm(self, hidden_states: torch.Tensor):
         mean_squared = hidden_states.pow(2).mean(-1, keepdim=True) + self.eps
@@ -120,7 +118,26 @@ class OnyxRMSNorm(nn.Module):
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         normed_output = self._norm(hidden_states.float())
         if self.with_scale:
-            normed_output = normed_output * (self.weight.float() + self.weight_offset)
+            normed_output = normed_output * self.weight.float()
+        return normed_output.type_as(hidden_states)
+
+
+class OnyxCenteredRMSNorm(nn.Module):
+    """Stores the scale as an offset around 1: `output = norm(x) * (1 + weight)`."""
+
+    def __init__(self, dim: int, eps: float = 1e-6):
+        super().__init__()
+        self.eps = eps
+        self.weight = nn.Parameter(torch.zeros(dim))
+
+    def _norm(self, hidden_states: torch.Tensor):
+        # torch.pow() (over torch.sqrt() or torch.rsqrt()) to match OnyxRMSNorm exactly.
+        mean_squared = hidden_states.pow(2).mean(-1, keepdim=True) + self.eps
+        return hidden_states * torch.pow(mean_squared, -0.5)
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        normed_output = self._norm(hidden_states.float())
+        normed_output = normed_output * (self.weight.float() + 1)
         return normed_output.type_as(hidden_states)
 
 
@@ -265,31 +282,22 @@ def eager_attention_forward(
     key: torch.Tensor,
     value: torch.Tensor,
     attention_mask: torch.Tensor | None,
-    dropout: float | int = 0.0,
-    scaling: float | None = None,
-    softcap: float | None = None,
-    **kwargs,
-) -> tuple[torch.Tensor, torch.Tensor]:
-    if scaling is None:
-        scaling = module.head_dim**-0.5
-
+    scaling: float,
+    dropout: float = 0.0,
+    **kwargs: Unpack[TransformersKwargs],
+):
     key_states = repeat_kv(key, module.num_key_value_groups)
     value_states = repeat_kv(value, module.num_key_value_groups)
 
     attn_weights = torch.matmul(query, key_states.transpose(2, 3)) * scaling
-
-    if softcap is not None:
-        attn_weights = attn_weights / softcap
-        attn_weights = torch.tanh(attn_weights)
-        attn_weights = attn_weights * softcap
     if attention_mask is not None:
         attn_weights = attn_weights + attention_mask
 
-    # upcast attention to fp32
     attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
     attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
     attn_output = torch.matmul(attn_weights, value_states)
     attn_output = attn_output.transpose(1, 2).contiguous()
+
     return attn_output, attn_weights
 
 
@@ -334,18 +342,23 @@ def apply_rotary_pos_emb_interleave(q, k, cos, sin, position_ids=None, unsqueeze
 
 @use_kernelized_func(apply_rotary_pos_emb)
 class OnyxAttention(nn.Module):
-    """Multi-headed attention from 'Attention Is All You Need' paper"""
+    """
+    Multi-headed attention module with optional sliding window and gating.
+
+    This attention mechanism supports both full attention and sliding window attention,
+    and includes Q/K normalization and gating of the output. It inherits from [`LlamaAttention`] to minimize the amount
+    of custom logic we need to maintain.
+    """
 
     def __init__(self, config: OnyxTextConfig, layer_idx: int):
         super().__init__()
-        self.layer_type = config.layer_types[layer_idx] if hasattr(config, "layer_types") else None
         self.config = config
         self.layer_idx = layer_idx
         self.head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
         self.num_key_value_groups = config.num_attention_heads // config.num_key_value_heads
         self.scaling = self.head_dim**-0.5
-        self.attention_dropout = self.config.attention_dropout
-        self.is_causal = not getattr(config, "use_bidirectional_attention", False)
+        self.attention_dropout = config.attention_dropout
+        self.is_causal = True
 
         self.q_proj = nn.Linear(
             config.hidden_size, config.num_attention_heads * self.head_dim, bias=config.attention_bias
@@ -359,21 +372,13 @@ class OnyxAttention(nn.Module):
         self.o_proj = nn.Linear(
             config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
         )
-        self.attn_logit_softcapping = None
-        self.sliding_window = config.sliding_window if self.layer_type == "sliding_attention" else None
-
-        self.use_rope = config.no_rope_layers[layer_idx] == 1
-
-        self.use_qk_norm = config.use_qk_norm
-        if self.use_qk_norm:
-            self.qk_norm = OnyxRMSNorm(eps=config.rms_norm_eps, with_scale=False)
-            self.scale_query_by = config.qk_scale_factor / (config.head_dim**0.5)
-
-        self.use_output_gate = config.use_attn_output_gate
-        if self.use_output_gate:
-            self.output_gate_proj = nn.Linear(
-                config.hidden_size, config.num_attention_heads * config.head_dim, bias=False
-            )
+        # Parent LlamaAttention already sets: layer_idx, num_heads, num_key_value_heads, num_key_value_groups, head_dim
+        # We only add Onyx-specific attributes
+        self.is_local_attention = config.layer_types[layer_idx] == "sliding_attention"
+        self.sliding_window = config.sliding_window if self.is_local_attention else None
+        self.gate_proj = nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim, bias=False)
+        self.qk_norm = OnyxRMSNorm(eps=config.rms_norm_eps, with_scale=False)
+        self.qk_scale_factor = config.qk_scale_factor
 
     def forward(
         self,
@@ -390,11 +395,11 @@ class OnyxAttention(nn.Module):
         key_states = self.k_proj(hidden_states).view(hidden_shape).transpose(1, 2)
         value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
 
-        if self.use_qk_norm:
-            query_states = self.qk_norm(query_states) * self.scale_query_by
-            key_states = self.qk_norm(key_states)
+        query_states = self.qk_norm(query_states) * self.qk_scale_factor
+        key_states = self.qk_norm(key_states)
 
-        if self.use_rope:
+        # NoPE layers receive `position_embeddings=None` from the model.
+        if position_embeddings is not None:
             cos, sin = position_embeddings
             query_states, key_states = apply_rotary_pos_emb_interleave(query_states, key_states, cos, sin)
 
@@ -416,13 +421,9 @@ class OnyxAttention(nn.Module):
             sliding_window=self.sliding_window,
             **kwargs,
         )
-        # attn_output shape here: (batch, seq, num_heads, head_dim)
-
-        if self.use_output_gate:
-            gate = torch.sigmoid(self.output_gate_proj(hidden_states).view(*attn_output.shape))
-            attn_output = gate * attn_output
 
         attn_output = attn_output.reshape(*input_shape, -1).contiguous()
+        attn_output = attn_output * torch.sigmoid(self.gate_proj(hidden_states))
         attn_output = self.o_proj(attn_output)
         return attn_output, attn_weights
 
@@ -434,11 +435,10 @@ class OnyxDecoderLayer(GradientCheckpointingLayer):
         self.config = config
         self.self_attn = OnyxAttention(config=config, layer_idx=layer_idx)
         self.mlp = OnyxMLP(config)
-        # Add an offset
-        self.input_layernorm = OnyxRMSNorm(config.hidden_size, eps=config.rms_norm_eps, weight_offset=1)
-        self.post_attention_layernorm = OnyxRMSNorm(config.hidden_size, eps=config.post_norm_eps, weight_offset=1)
-        self.pre_feedforward_layernorm = OnyxRMSNorm(config.hidden_size, eps=config.rms_norm_eps, weight_offset=1)
-        self.post_feedforward_layernorm = OnyxRMSNorm(config.hidden_size, eps=config.post_norm_eps, weight_offset=1)
+        self.input_layernorm = OnyxCenteredRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_attention_layernorm = OnyxCenteredRMSNorm(config.hidden_size, eps=config.post_norm_eps)
+        self.pre_feedforward_layernorm = OnyxCenteredRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_feedforward_layernorm = OnyxCenteredRMSNorm(config.hidden_size, eps=config.post_norm_eps)
 
     def forward(
         self,
@@ -860,12 +860,15 @@ class OnyxVisionModel(OnyxPreTrainedModel):
         position_ids = position_ids[None, window_index, :]  # unsqueeze single batch size
         position_embeddings = self.rotary_emb(hidden_states, position_ids)
 
+        cu_seqlens_mapping = {
+            "full_attention": cu_seqlens,
+            "window_attention": cu_window_seqlens,
+        }
         for i, block in enumerate(self.layers):
-            is_global = self.config.layer_types[i] == "full_attention"
             hidden_states = block(
                 hidden_states,
                 position_embeddings=position_embeddings,
-                cu_seqlens=cu_seqlens if is_global else cu_window_seqlens,
+                cu_seqlens=cu_seqlens_mapping[self.config.layer_types[i]],
             )
 
         reverse_indices = torch.argsort(window_index)
@@ -891,7 +894,6 @@ class OnyxTextModel(OnyxPreTrainedModel):
         self.layers = nn.ModuleList(
             [OnyxDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
-        # Final norm uses weight-as-scale (no offset), unlike the per-layer OnyxRMSNorm.
         self.norm = OnyxRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.rotary_emb = OnyxRotaryEmbedding(config)
         self.gradient_checkpointing = False
@@ -916,7 +918,7 @@ class OnyxTextModel(OnyxPreTrainedModel):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
         if inputs_embeds is None:
-            inputs_embeds: torch.Tensor = self.embed_tokens(input_ids)
+            inputs_embeds = self.embed_tokens(input_ids)
 
         if use_cache and past_key_values is None:
             past_key_values = DynamicCache(config=self.config)
@@ -926,9 +928,7 @@ class OnyxTextModel(OnyxPreTrainedModel):
             position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
             position_ids = position_ids.unsqueeze(0)
 
-        # It may already have been prepared by e.g. `generate`
         if not isinstance(causal_mask_mapping := attention_mask, dict):
-            # Prepare mask arguments
             mask_kwargs = {
                 "config": self.config,
                 "inputs_embeds": inputs_embeds,
@@ -936,13 +936,11 @@ class OnyxTextModel(OnyxPreTrainedModel):
                 "past_key_values": past_key_values,
                 "position_ids": position_ids,
             }
-            # Create the masks
             causal_mask_mapping = {
                 "full_attention": create_causal_mask(**mask_kwargs),
                 "sliding_attention": create_sliding_window_causal_mask(**mask_kwargs),
             }
 
-        # embed positions
         hidden_states = inputs_embeds
         position_embeddings = self.rotary_emb(hidden_states, position_ids)
 
@@ -950,7 +948,8 @@ class OnyxTextModel(OnyxPreTrainedModel):
             hidden_states = decoder_layer(
                 hidden_states,
                 attention_mask=causal_mask_mapping[self.config.layer_types[i]],
-                position_embeddings=position_embeddings,
+                # NoPE layers (layer_rope_theta == 0) get no position embeddings.
+                position_embeddings=position_embeddings if self.config.layer_rope_theta[i] else None,
                 position_ids=position_ids,
                 past_key_values=past_key_values,
                 **kwargs,
@@ -967,7 +966,7 @@ class OnyxTextModel(OnyxPreTrainedModel):
 class OnyxVisionAdapter(nn.Module):
     def __init__(self, config) -> None:
         super().__init__()
-        self.fc1 = nn.Linear(config.output_dim, config.adapter_dim, bias=False)
+        self.fc1 = nn.Linear(config.out_hidden_size, config.adapter_dim, bias=False)
         self.act = ACT2FN[config.hidden_act]
         self.fc2 = nn.Linear(config.adapter_dim, config.adapter_dim, bias=False)
 

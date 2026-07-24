@@ -23,15 +23,16 @@ from huggingface_hub.dataclasses import strict
 from torchvision.transforms.v2 import functional as tvF
 
 from ...activations import ACT2FN
-from ...cache_utils import Cache
+from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import PreTrainedConfig
 from ...image_processing_backends import TorchvisionBackend
 from ...image_processing_utils import BatchFeature
 from ...image_transforms import group_images_by_shape, reorder_images
-from ...image_utils import PILImageResampling, SizeDict
-from ...modeling_outputs import BaseModelOutputWithPooling
+from ...image_utils import ChannelDimension, PILImageResampling, SizeDict, get_image_size
+from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
+from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
-from ...processing_utils import Unpack
+from ...processing_utils import Unpack, VideosKwargs
 from ...utils import TensorType, TransformersKwargs, auto_docstring, logging
 from ...utils.constants import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD
 from ...utils.generic import (
@@ -39,22 +40,23 @@ from ...utils.generic import (
     merge_with_config_defaults,
 )
 from ...utils.output_capturing import capture_outputs
+from ...video_processing_utils import BaseVideoProcessor
+from ...video_utils import VideoMetadata, group_videos_by_shape, reorder_videos
 from ...vision_utils import (
     get_vision_bilinear_indices_and_weights,
     get_vision_cu_seqlens,
     get_vision_position_ids,
     get_vision_window_index,
 )
+from ..afmoe.modeling_afmoe import AfmoeAttention
 from ..deepseek_v3.modeling_deepseek_v3 import apply_rotary_pos_emb_interleave
 from ..gemma2.configuration_gemma2 import Gemma2Config
 from ..gemma2.modeling_gemma2 import (
-    Gemma2Attention,
     Gemma2DecoderLayer,
     Gemma2MLP,
     Gemma2Model,
     Gemma2PreTrainedModel,
     Gemma2RotaryEmbedding,
-    eager_attention_forward,
 )
 from ..gemma3.modeling_gemma3 import Gemma3CausalLMOutputWithPast, Gemma3ModelOutputWithPast
 from ..gemma4.modeling_gemma4 import Gemma4RMSNorm, Gemma4VisionRotaryEmbedding
@@ -67,6 +69,7 @@ from ..kimi_k25.modeling_kimi_k25 import (
     Kimi_K25VisionEncoderLayer,
     Kimi_K25VisionMLP,
 )
+from ..llama.modeling_llama import eager_attention_forward
 from ..paddleocr_vl.modeling_paddleocr_vl import PaddleOCRVisionEmbeddings
 
 
@@ -79,30 +82,33 @@ def get_aspect_ratio_preserving_size(
     patch_size: int,
     max_tokens: int,
 ) -> tuple[int, int]:
-    """Pick the integer (H, W) grid closest to the aspect ratio under the token cap.
+    """Pick the integer patch grid closest to the input aspect ratio under the token cap.
 
-    Mirrors ``OnyxVisionEncoder._compute_grid_size`` so the processor needs no
-    torch model import. Returns ``(target_h, target_w)``.
+    Returns the resize target ``(target_height, target_width)`` in pixels.
     """
-    i_nph = height / patch_size
-    i_npw = width / patch_size
-    ratio = i_npw / i_nph if i_nph > 0 else 1.0
-    if i_nph * i_npw > max_tokens:
-        i_nph = (max_tokens / ratio) ** 0.5
-        i_npw = i_nph * ratio
+    ideal_patches_height = height / patch_size
+    ideal_patches_width = width / patch_size
+    ratio = ideal_patches_width / ideal_patches_height if ideal_patches_height > 0 else 1.0
+    if ideal_patches_height * ideal_patches_width > max_tokens:
+        ideal_patches_height = (max_tokens / ratio) ** 0.5
+        ideal_patches_width = ideal_patches_height * ratio
     candidates = list(
         set(
             itertools.product(
-                [math.floor(i_nph), math.ceil(i_nph)],
-                [math.floor(i_npw), math.ceil(i_npw)],
+                [math.floor(ideal_patches_height), math.ceil(ideal_patches_height)],
+                [math.floor(ideal_patches_width), math.ceil(ideal_patches_width)],
             )
         )
     )
-    candidates = [(nph, npw) for nph, npw in candidates if nph >= 1 and npw >= 1 and nph * npw <= max_tokens]
+    candidates = [
+        (patches_height, patches_width)
+        for patches_height, patches_width in candidates
+        if patches_height >= 1 and patches_width >= 1 and patches_height * patches_width <= max_tokens
+    ]
     if not candidates:
-        candidates = [(max(1, round(i_nph)), max(1, round(i_npw)))]
-    nph, npw = min(candidates, key=lambda c: abs(c[0] / c[1] - height / width))
-    return nph * patch_size, npw * patch_size
+        candidates = [(max(1, round(ideal_patches_height)), max(1, round(ideal_patches_width)))]
+    patches_height, patches_width = min(candidates, key=lambda grid: abs(grid[0] / grid[1] - height / width))
+    return patches_height * patch_size, patches_width * patch_size
 
 
 class OnyxImageProcessorKwargs(Glm4vImageProcessorKwargs):
@@ -148,11 +154,11 @@ class OnyxImageProcessor(Glm4vImageProcessor):
         disable_grouping: bool = False,
         **kwargs,
     ) -> BatchFeature:
-        # Different from Qwen-VL, we use new way to infer `resized_height/width` and we swap `channel` and `temporal_patch` dim before flattening
         grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
         resized_images_grouped = {}
         for shape, stacked_images in grouped_images.items():
             if do_resize:
+                # Unlike Glm4v's `smart_resize`, the target size keeps aspect ratio under a token cap.
                 height, width = stacked_images.shape[-2:]
                 resized_height, resized_width = get_aspect_ratio_preserving_size(
                     height=height,
@@ -198,6 +204,7 @@ class OnyxImageProcessor(Glm4vImageProcessor):
                 grid_w,
                 patch_size,
             )
+            # Unlike Glm4v, each flattened patch is laid out (temporal, channel), not (channel, temporal).
             patches = patches.permute(0, 1, 4, 6, 2, 3, 5, 7)
             flatten_patches = patches.reshape(
                 batch_size, grid_t * grid_h * grid_w, temporal_patch_size * channel * patch_size * patch_size
@@ -246,6 +253,200 @@ class OnyxImageProcessor(Glm4vImageProcessor):
         return grid_h * grid_w
 
 
+class OnyxVideoProcessorInitKwargs(VideosKwargs, total=False):
+    patch_size: int
+    temporal_patch_size: int
+    max_video_frame_tokens: int
+    merge_size: int
+
+
+@auto_docstring
+class OnyxVideoProcessor(BaseVideoProcessor):
+    resample = PILImageResampling.LANCZOS
+    image_mean = IMAGENET_STANDARD_MEAN
+    image_std = IMAGENET_STANDARD_STD
+    default_to_square = True
+    do_convert_rgb = True
+    do_resize = True
+    do_rescale = True
+    do_normalize = True
+    patch_size = 14
+    temporal_patch_size = 2
+    merge_size = 2
+    max_video_frame_tokens = 144
+    num_frames = 96
+    fps = 2.0
+    do_sample_frames = True
+
+    valid_kwargs = OnyxVideoProcessorInitKwargs
+    model_input_names = ["pixel_values_videos", "video_grid_thw"]
+
+    def __init__(self, **kwargs: Unpack[OnyxVideoProcessorInitKwargs]):
+        super().__init__(**kwargs)
+
+    def _validate_preprocess_kwargs(self, **kwargs):
+        # Onyx uses aspect_ratio_preserving_resize driven by patch_size,
+        # not the standard `size` parameter. Temporarily disable do_resize so
+        # the base validation doesn't raise an error
+        kwargs["do_resize"] = False
+        super()._validate_preprocess_kwargs(**kwargs)
+
+    def aspect_ratio_preserving_resize(
+        self,
+        image: torch.Tensor,
+        patch_size: int,
+        max_tokens: int,
+        resample: tvF.InterpolationMode,
+    ) -> torch.Tensor:
+        height, width = image.shape[-2], image.shape[-1]
+        target_height, target_width = get_aspect_ratio_preserving_size(
+            height=height,
+            width=width,
+            patch_size=patch_size,
+            max_tokens=max_tokens,
+        )
+
+        if target_height == height and target_width == width:
+            return image
+
+        return tvF.resize(
+            image,
+            size=[target_height, target_width],
+            interpolation=resample,
+            antialias=True,
+        )
+
+    def sample_frames(
+        self,
+        metadata: VideoMetadata,
+        temporal_patch_size: int | None = None,
+        num_frames: int | None = None,
+        fps: int | float | None = None,
+        **kwargs,
+    ):
+        """
+        Default sampling function which uniformly samples the desired number of frames between 0 and total number of frames.
+        If `fps` is passed along with metadata, `fps` frames per second are sampled uniformty. Arguments `num_frames`
+        and `fps` are mutually exclusive.
+
+        Args:
+            metadata (`VideoMetadata`):
+                Metadata of the video containing information about total duration, fps and total number of frames.
+            temporal_patch_size (`int`, *optional*):
+                The temporal patch size of the vision encoder. Number of sampled frames will be rounded to be divisible by frame factor.
+            num_frames (`int`, *optional*):
+                Maximum number of frames to sample. Defaults to `self.num_frames`.
+            fps (`int` or `float`, *optional*):
+                Target frames to sample per second. Defaults to `self.fps`.
+
+        Returns:
+            np.ndarray:
+                Indices to sample video frames.
+        """
+        if metadata.fps is None:
+            logger.warning_once(
+                "The `fps` of the input video could not be inferred. Defaulting to `fps=24`. "
+                "Provide `video_metadata` for more accurate frame sampling."
+            )
+            metadata.fps = 24
+
+        total_num_frames = metadata.total_num_frames
+        num_frames = min(int(total_num_frames * fps / metadata.fps), num_frames, total_num_frames)
+        num_frames = max(temporal_patch_size, (num_frames // temporal_patch_size) * temporal_patch_size)
+        num_frames = min(num_frames, total_num_frames)
+        indices = torch.linspace(0, total_num_frames - 1, num_frames).long()
+        return indices
+
+    def _preprocess(
+        self,
+        videos: list[torch.Tensor],
+        do_resize: bool,
+        do_convert_rgb: bool,
+        resample: PILImageResampling | tvF.InterpolationMode | int | None,
+        do_rescale: bool,
+        rescale_factor: float,
+        do_normalize: bool,
+        image_mean: float | list[float] | None,
+        image_std: float | list[float] | None,
+        return_tensors: str | TensorType | None,
+        patch_size: int,
+        temporal_patch_size: int,
+        max_video_frame_tokens: int,
+        merge_size: int,
+        disable_grouping: bool = False,
+        **kwargs,
+    ) -> BatchFeature:
+        # Group videos by size for batched resizing
+        grouped_videos, grouped_videos_index = group_videos_by_shape(videos)
+        resized_videos_grouped = {}
+        for shape, stacked_videos in grouped_videos.items():
+            if do_convert_rgb:
+                stacked_videos = self.convert_to_rgb(stacked_videos)
+            if do_resize:
+                stacked_videos = self.aspect_ratio_preserving_resize(
+                    image=stacked_videos,
+                    patch_size=patch_size * merge_size,
+                    max_tokens=max_video_frame_tokens,
+                    resample=resample,
+                )
+            resized_videos_grouped[shape] = stacked_videos
+        resized_videos = reorder_videos(resized_videos_grouped, grouped_videos_index)
+
+        # Group videos by size for further processing
+        # Needed in case do_resize is False, or resize returns videos with different sizes
+        grouped_videos, grouped_videos_index = group_videos_by_shape(resized_videos)
+        processed_videos_grouped = {}
+        processed_grids = {}
+        for shape, stacked_videos in grouped_videos.items():
+            resized_height, resized_width = get_image_size(stacked_videos[0], channel_dim=ChannelDimension.FIRST)
+
+            # Fused rescale and normalize
+            stacked_videos = self.rescale_and_normalize(
+                stacked_videos, do_rescale, rescale_factor, do_normalize, image_mean, image_std
+            )
+            patches = stacked_videos
+
+            # Check that videos have `num_frames` divisible by `temporal_patch_size`
+            T = patches.shape[1]
+            if pad := -T % temporal_patch_size:
+                repeats = patches[:, -1:].expand(-1, pad, -1, -1, -1)
+                patches = torch.cat((patches, repeats), dim=1)
+
+            batch_size, grid_t, channel = patches.shape[:3]
+            grid_t = grid_t // temporal_patch_size
+            grid_h, grid_w = resized_height // patch_size, resized_width // patch_size
+
+            patches = patches.view(
+                batch_size,
+                grid_t,
+                temporal_patch_size,
+                channel,
+                grid_h,
+                patch_size,
+                grid_w,
+                patch_size,
+            )
+            patches = patches.permute(0, 1, 4, 6, 2, 3, 5, 7)
+            flatten_patches = patches.reshape(
+                batch_size,
+                grid_t * grid_h * grid_w,
+                temporal_patch_size * channel * patch_size * patch_size,
+            )
+
+            processed_videos_grouped[shape] = flatten_patches
+            processed_grids[shape] = [[grid_t, grid_h, grid_w]] * batch_size
+
+        processed_videos = reorder_videos(processed_videos_grouped, grouped_videos_index)
+        processed_grids = reorder_videos(processed_grids, grouped_videos_index)
+        pixel_values_videos = torch.cat(processed_videos, dim=0)
+        video_grid_thw = torch.tensor(processed_grids)
+
+        return BatchFeature(
+            data={"pixel_values_videos": pixel_values_videos, "video_grid_thw": video_grid_thw},
+            tensor_type=return_tensors,
+        )
+
+
 class OnyxModelOutputWithPast(Gemma3ModelOutputWithPast):
     pass
 
@@ -264,8 +465,8 @@ class OnyxVisionConfig(Kimi_K25VisionConfig):
         Initial position embedding width.
     patch_temporal (`int`, *optional*):
         The temporal patch size used to embed inputs.
-    output_dim (`int`, *optional*):
-        Output dimension for encoded image last hidden states.
+    out_hidden_size (`int`, *optional*):
+        Output dimension of the vision encoder after patch merging (input width of the multimodal projection).
     adapter_dim (`int`, *optional*):
         Intermediate dimension used in multimodal projection.
     merge_size (`tuple[int] | list[int]`, *optional*):
@@ -275,7 +476,7 @@ class OnyxVisionConfig(Kimi_K25VisionConfig):
     model_type = "onyx_vision"
 
     hidden_size: int = 1536
-    output_dim: int = 6144
+    out_hidden_size: int = 6144
     num_hidden_layers: int = 50
     intermediate_size: int = 8960
     patch_temporal: int = 2
@@ -292,9 +493,8 @@ class OnyxVisionConfig(Kimi_K25VisionConfig):
 
     def __post_init__(self, **kwargs):
         if self.layer_types is None:
-            stride = 4
             self.layer_types = [
-                "full_attention" if (i + 1) % stride == 0 or i == self.num_hidden_layers - 1 else "window_attention"
+                "full_attention" if (i + 1) % 4 == 0 or i == self.num_hidden_layers - 1 else "window_attention"
                 for i in range(self.num_hidden_layers)
             ]
         PreTrainedConfig.__post_init__(self, **kwargs)
@@ -306,24 +506,31 @@ class OnyxTextConfig(Gemma2Config, PreTrainedConfig):
     r"""
     final_logit_softcapping (`float`, *optional*, defaults to 30.0):
         scaling factor when applying tanh softcapping on the logits.
-    use_bidirectional_attention (`bool`, *optional*):
-        If True, the model will attend to all text tokens instead of using a causal mask.
-    qk_scale_factor (`float`, *optional*, defaults to 43.7840518911):
-        Multiplier applied to Q after QK-norm, before the standard `1/sqrt(head_dim)` attention scaling.
-    use_qk_norm (`bool`, *optional*, defaults to `True`):
-        Whether to apply a scaleless RMSNorm to Q and K before rotary.
-    use_attn_output_gate (`bool`, *optional*, defaults to `True`):
-        Whether to gate the per-head attention output with `sigmoid(output_gate_proj(hidden))`.
+    qk_scale_factor (`float`, *optional*, defaults to 3.87):
+        Multiplier applied to Q after the scaleless QK-norm, on top of the standard `1/sqrt(head_dim)`
+        attention scaling.
     output_multiplier (`float`, *optional*, defaults to 0.19611613513818404):
-        Scale applied to logits before the final tanh softcap.
+        Scale applied to logits before the final tanh softcap. Equal to `1/sqrt(hidden_size / 256)` for the
+        released checkpoint.
     post_norm_eps (`float`, *optional*, defaults to 1e-8):
         Epsilon used for the post-attention and post-FFN norms (which sit between the sub-layer output and the residual).
-    no_rope_layers (`list[int]`, *optional*):
-        Explicit per-layer rotary mask: 1 = apply rotary, 0 = NoPE. Defaults to an iRoPE pattern with NoPE
-        every 4 layers, counting backward from the last layer.
+    layer_rope_theta (`list[float]`, *optional*):
+        Per-layer RoPE base theta; `0` disables rotary (NoPE) for that layer. Overrides the global
+        `rope_parameters["rope_theta"]`. Defaults to the global theta everywhere except every 4th layer
+        counted backward from the last, which is NoPE.
     """
 
     model_type = "onyx_text"
+    base_model_tp_plan = {
+        "layers.*.self_attn.q_proj": "colwise",
+        "layers.*.self_attn.k_proj": "colwise",
+        "layers.*.self_attn.v_proj": "colwise",
+        "layers.*.self_attn.gate_proj": "colwise",
+        "layers.*.self_attn.o_proj": "rowwise",
+        "layers.*.mlp.gate_proj": "colwise",
+        "layers.*.mlp.up_proj": "colwise",
+        "layers.*.mlp.down_proj": "rowwise",
+    }
 
     vocab_size: int = 202_048
     hidden_size: int = 6656
@@ -344,39 +551,38 @@ class OnyxTextConfig(Gemma2Config, PreTrainedConfig):
     layer_types: list[str] | None = None
     query_pre_attn_scalar = AttributeError()
     attn_logit_softcapping = AttributeError()
+    use_bidirectional_attention = AttributeError()
 
     # Onyx-specific fields
-    qk_scale_factor: float = 43.7840518911
-    use_qk_norm: bool = True
-    use_attn_output_gate: bool = True
+    qk_scale_factor: float = 3.87
     output_multiplier: float = 0.19611613513818404
     post_norm_eps: float = 1e-8
-    no_rope_layers: list[int] | None = None
+    layer_rope_theta: list[float | int] | None = None
 
     def __post_init__(self, **kwargs):
-        # iRoPE mask: default to NoPE every 4 layers, counted backward from the last layer.
-        if self.no_rope_layers is None:
-            stride = 4
-            self.no_rope_layers = [
-                0 if (self.num_hidden_layers - 1 - i) % stride == 0 else 1 for i in range(self.num_hidden_layers)
-            ]
-
-        # Full attention for NoPE layers, sliding otherwise (Onyx's default layout matches
-        # the sliding_window_pattern [w, w, w, 0] used in the reference config).
+        # Full attention on NoPE layers (every 4th, counted backward from the last), sliding otherwise —
+        # the reference config's sliding_window_pattern [w, w, w, 0].
         if self.layer_types is None:
             self.layer_types = [
-                "full_attention" if self.no_rope_layers[i] == 0 else "sliding_attention"
+                "full_attention" if (self.num_hidden_layers - 1 - i) % 4 == 0 else "sliding_attention"
                 for i in range(self.num_hidden_layers)
             ]
 
         PreTrainedConfig.__post_init__(self, **kwargs)
+
+        # Per-layer RoPE base theta (0 => NoPE). Needs `rope_parameters`, so runs after the super post-init. Not sure if it's the cleanest...
+        if self.layer_rope_theta is None:
+            self.layer_rope_theta = [
+                0 if (self.num_hidden_layers - 1 - i) % 4 == 0 else self.rope_parameters["rope_theta"]
+                for i in range(self.num_hidden_layers)
+            ]
 
 
 @auto_docstring
 @strict
 class OnyxConfig(PreTrainedConfig):
     r"""
-    TODO
+    TODO still
     """
 
     model_type = "onyx"
@@ -407,15 +613,26 @@ class OnyxConfig(PreTrainedConfig):
 
 
 class OnyxRMSNorm(Gemma4RMSNorm):
-    def __init__(self, dim: int | None = None, eps: float = 1e-6, with_scale: bool = True, weight_offset: int = 0):
+    def __init__(self, dim: int | None = None, eps: float = 1e-6, with_scale: bool = True):
         super().__init__(dim, eps, with_scale)
-        # can we bake it in weights, i suppose this was needed for train-time stability?
-        self.weight_offset = weight_offset
+
+
+class OnyxCenteredRMSNorm(nn.Module):
+    """Stores the scale as an offset around 1: `output = norm(x) * (1 + weight)`."""
+
+    def __init__(self, dim: int, eps: float = 1e-6):
+        super().__init__()
+        self.eps = eps
+        self.weight = nn.Parameter(torch.zeros(dim))
+
+    def _norm(self, hidden_states: torch.Tensor):
+        # torch.pow() (over torch.sqrt() or torch.rsqrt()) to match OnyxRMSNorm exactly.
+        mean_squared = hidden_states.pow(2).mean(-1, keepdim=True) + self.eps
+        return hidden_states * torch.pow(mean_squared, -0.5)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         normed_output = self._norm(hidden_states.float())
-        if self.with_scale:
-            normed_output = normed_output * (self.weight.float() + self.weight_offset)
+        normed_output = normed_output * (self.weight.float() + 1)
         return normed_output.type_as(hidden_states)
 
 
@@ -436,24 +653,13 @@ class OnyxRotaryEmbedding(Gemma2RotaryEmbedding):
     pass
 
 
-class OnyxAttention(Gemma2Attention):
+class OnyxAttention(AfmoeAttention):
     def __init__(self, config: OnyxTextConfig, layer_idx: int):
         super().__init__(config, layer_idx)
-        self.scaling = self.head_dim**-0.5
-        self.attn_logit_softcapping = None
-
-        self.use_rope = config.no_rope_layers[layer_idx] == 1
-
-        self.use_qk_norm = config.use_qk_norm
-        if self.use_qk_norm:
-            self.qk_norm = OnyxRMSNorm(eps=config.rms_norm_eps, with_scale=False)
-            self.scale_query_by = config.qk_scale_factor / (config.head_dim**0.5)
-
-        self.use_output_gate = config.use_attn_output_gate
-        if self.use_output_gate:
-            self.output_gate_proj = nn.Linear(
-                config.hidden_size, config.num_attention_heads * config.head_dim, bias=False
-            )
+        del self.q_norm
+        del self.k_norm
+        self.qk_norm = OnyxRMSNorm(eps=config.rms_norm_eps, with_scale=False)
+        self.qk_scale_factor = config.qk_scale_factor
 
     def forward(
         self,
@@ -470,11 +676,11 @@ class OnyxAttention(Gemma2Attention):
         key_states = self.k_proj(hidden_states).view(hidden_shape).transpose(1, 2)
         value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
 
-        if self.use_qk_norm:
-            query_states = self.qk_norm(query_states) * self.scale_query_by
-            key_states = self.qk_norm(key_states)
+        query_states = self.qk_norm(query_states) * self.qk_scale_factor
+        key_states = self.qk_norm(key_states)
 
-        if self.use_rope:
+        # NoPE layers receive `position_embeddings=None` from the model.
+        if position_embeddings is not None:
             cos, sin = position_embeddings
             query_states, key_states = apply_rotary_pos_emb_interleave(query_states, key_states, cos, sin)
 
@@ -496,13 +702,9 @@ class OnyxAttention(Gemma2Attention):
             sliding_window=self.sliding_window,
             **kwargs,
         )
-        # attn_output shape here: (batch, seq, num_heads, head_dim)
-
-        if self.use_output_gate:
-            gate = torch.sigmoid(self.output_gate_proj(hidden_states).view(*attn_output.shape))
-            attn_output = gate * attn_output
 
         attn_output = attn_output.reshape(*input_shape, -1).contiguous()
+        attn_output = attn_output * torch.sigmoid(self.gate_proj(hidden_states))
         attn_output = self.o_proj(attn_output)
         return attn_output, attn_weights
 
@@ -510,11 +712,10 @@ class OnyxAttention(Gemma2Attention):
 class OnyxDecoderLayer(Gemma2DecoderLayer):
     def __init__(self, config: OnyxTextConfig, layer_idx: int):
         super().__init__(config, layer_idx)
-        # Add an offset
-        self.input_layernorm = OnyxRMSNorm(config.hidden_size, eps=config.rms_norm_eps, weight_offset=1)
-        self.post_attention_layernorm = OnyxRMSNorm(config.hidden_size, eps=config.post_norm_eps, weight_offset=1)
-        self.pre_feedforward_layernorm = OnyxRMSNorm(config.hidden_size, eps=config.rms_norm_eps, weight_offset=1)
-        self.post_feedforward_layernorm = OnyxRMSNorm(config.hidden_size, eps=config.post_norm_eps, weight_offset=1)
+        self.input_layernorm = OnyxCenteredRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_attention_layernorm = OnyxCenteredRMSNorm(config.hidden_size, eps=config.post_norm_eps)
+        self.pre_feedforward_layernorm = OnyxCenteredRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_feedforward_layernorm = OnyxCenteredRMSNorm(config.hidden_size, eps=config.post_norm_eps)
 
 
 class OnyxVisionRotaryEmbedding(Gemma4VisionRotaryEmbedding):
@@ -685,12 +886,15 @@ class OnyxVisionModel(OnyxPreTrainedModel):
         position_ids = position_ids[None, window_index, :]  # unsqueeze single batch size
         position_embeddings = self.rotary_emb(hidden_states, position_ids)
 
+        cu_seqlens_mapping = {
+            "full_attention": cu_seqlens,
+            "window_attention": cu_window_seqlens,
+        }
         for i, block in enumerate(self.layers):
-            is_global = self.config.layer_types[i] == "full_attention"
             hidden_states = block(
                 hidden_states,
                 position_embeddings=position_embeddings,
-                cu_seqlens=cu_seqlens if is_global else cu_window_seqlens,
+                cu_seqlens=cu_seqlens_mapping[self.config.layer_types[i]],
             )
 
         reverse_indices = torch.argsort(window_index)
@@ -710,15 +914,75 @@ class OnyxTextModel(Gemma2Model):
         self.embed_tokens = OnyxNormalizedEmbedding(
             config.vocab_size, config.hidden_size, self.padding_idx, eps=config.rms_norm_eps
         )
-        # Final norm uses weight-as-scale (no offset), unlike the per-layer OnyxRMSNorm.
         self.norm = OnyxRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_init()
+
+    @merge_with_config_defaults
+    @capture_outputs
+    @auto_docstring
+    def forward(
+        self,
+        input_ids: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: Cache | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        use_cache: bool | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> BaseModelOutputWithPast:
+        if (input_ids is None) ^ (inputs_embeds is not None):
+            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
+
+        if inputs_embeds is None:
+            inputs_embeds = self.embed_tokens(input_ids)
+
+        if use_cache and past_key_values is None:
+            past_key_values = DynamicCache(config=self.config)
+
+        if position_ids is None:
+            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+            position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
+            position_ids = position_ids.unsqueeze(0)
+
+        if not isinstance(causal_mask_mapping := attention_mask, dict):
+            mask_kwargs = {
+                "config": self.config,
+                "inputs_embeds": inputs_embeds,
+                "attention_mask": attention_mask,
+                "past_key_values": past_key_values,
+                "position_ids": position_ids,
+            }
+            causal_mask_mapping = {
+                "full_attention": create_causal_mask(**mask_kwargs),
+                "sliding_attention": create_sliding_window_causal_mask(**mask_kwargs),
+            }
+
+        hidden_states = inputs_embeds
+        position_embeddings = self.rotary_emb(hidden_states, position_ids)
+
+        for i, decoder_layer in enumerate(self.layers[: self.config.num_hidden_layers]):
+            hidden_states = decoder_layer(
+                hidden_states,
+                attention_mask=causal_mask_mapping[self.config.layer_types[i]],
+                # NoPE layers (layer_rope_theta == 0) get no position embeddings.
+                position_embeddings=position_embeddings if self.config.layer_rope_theta[i] else None,
+                position_ids=position_ids,
+                past_key_values=past_key_values,
+                **kwargs,
+            )
+
+        hidden_states = self.norm(hidden_states)
+
+        return BaseModelOutputWithPast(
+            last_hidden_state=hidden_states,
+            past_key_values=past_key_values,
+        )
 
 
 class OnyxVisionAdapter(nn.Module):
     def __init__(self, config) -> None:
         super().__init__()
-        self.fc1 = nn.Linear(config.output_dim, config.adapter_dim, bias=False)
+        self.fc1 = nn.Linear(config.out_hidden_size, config.adapter_dim, bias=False)
         self.act = ACT2FN[config.hidden_act]
         self.fc2 = nn.Linear(config.adapter_dim, config.adapter_dim, bias=False)
 
@@ -820,4 +1084,5 @@ __all__ = [
     "OnyxModel",
     "OnyxForConditionalGeneration",
     "OnyxImageProcessor",
+    "OnyxVideoProcessor",
 ]

@@ -91,16 +91,17 @@ def build_config():
         sliding_window=2048,
         final_logit_softcapping=20.0,
         rope_parameters={"rope_type": "default", "rope_theta": 500_000.0},
-        qk_scale_factor=43.7840518911,
-        use_qk_norm=True,
-        use_attn_output_gate=True,
+        # The reference config stores 43.7840518911 == 3.87 * sqrt(head_dim); we keep the multiplier
+        # actually applied to Q after the QK-norm.
+        qk_scale_factor=3.87,
+        # == 1 / sqrt(hidden_size / 256)
         output_multiplier=0.19611613513818404,
         post_norm_eps=1e-8,
     )
 
     vision_config = OnyxVisionConfig(
         hidden_size=1536,
-        output_dim=6144,
+        out_hidden_size=6144,
         num_hidden_layers=50,
         num_attention_heads=16,
         intermediate_size=8960,
@@ -139,7 +140,7 @@ def convert_text_state_dict(source: dict[str, torch.Tensor], config) -> dict[str
     n_layers = text_cfg.num_hidden_layers
     q_dim = text_cfg.num_attention_heads * text_cfg.head_dim
     kv_dim = text_cfg.num_key_value_heads * text_cfg.head_dim
-    og_dim = q_dim if text_cfg.use_attn_output_gate else 0
+    og_dim = q_dim
     ffn_dim = text_cfg.intermediate_size
 
     out: dict[str, torch.Tensor] = {
@@ -153,14 +154,12 @@ def convert_text_state_dict(source: dict[str, torch.Tensor], config) -> dict[str
         src = f"layers.{i}"
         dst = f"model.language_model.layers.{i}"
 
-        qkv_splits = [q_dim, kv_dim, kv_dim, og_dim] if og_dim else [q_dim, kv_dim, kv_dim]
         qkv = source.pop(f"{src}.attention.qkv_proj.weight")
-        pieces = qkv.split(qkv_splits, dim=0)
+        pieces = qkv.split([q_dim, kv_dim, kv_dim, og_dim], dim=0)
         out[f"{dst}.self_attn.q_proj.weight"] = pieces[0]
         out[f"{dst}.self_attn.k_proj.weight"] = pieces[1]
         out[f"{dst}.self_attn.v_proj.weight"] = pieces[2]
-        if og_dim:
-            out[f"{dst}.self_attn.output_gate_proj.weight"] = pieces[3]
+        out[f"{dst}.self_attn.gate_proj.weight"] = pieces[3]
 
         fc1 = source.pop(f"{src}.feed_forward.fc1_weight")
         gate_w, up_w = fc1.split([ffn_dim, ffn_dim], dim=0)

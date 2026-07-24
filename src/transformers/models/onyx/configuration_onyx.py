@@ -37,8 +37,8 @@ class OnyxVisionConfig(PreTrainedConfig):
         Initial position embedding width.
     patch_temporal (`int`, *optional*):
         The temporal patch size used to embed inputs.
-    output_dim (`int`, *optional*):
-        Output dimension for encoded image last hidden states.
+    out_hidden_size (`int`, *optional*):
+        Output dimension of the vision encoder after patch merging (input width of the multimodal projection).
     adapter_dim (`int`, *optional*):
         Intermediate dimension used in multimodal projection.
     merge_size (`tuple[int] | list[int]`, *optional*):
@@ -58,7 +58,7 @@ class OnyxVisionConfig(PreTrainedConfig):
     hidden_act: str = "gelu"
     rope_parameters: dict | None = None  # defaults set by `RopeConfigMixin`
     max_position_embeddings: int = 32 * 32  # == `pos_h * pos_w`
-    output_dim: int = 6144
+    out_hidden_size: int = 6144
     patch_temporal: int = 2
     merge_size: int = 2
     adapter_dim: int = 4096
@@ -67,9 +67,8 @@ class OnyxVisionConfig(PreTrainedConfig):
 
     def __post_init__(self, **kwargs):
         if self.layer_types is None:
-            stride = 4
             self.layer_types = [
-                "full_attention" if (i + 1) % stride == 0 or i == self.num_hidden_layers - 1 else "window_attention"
+                "full_attention" if (i + 1) % 4 == 0 or i == self.num_hidden_layers - 1 else "window_attention"
                 for i in range(self.num_hidden_layers)
             ]
         super().__post_init__(**kwargs)
@@ -81,21 +80,18 @@ class OnyxTextConfig(PreTrainedConfig):
     r"""
     final_logit_softcapping (`float`, *optional*, defaults to 30.0):
         scaling factor when applying tanh softcapping on the logits.
-    use_bidirectional_attention (`bool`, *optional*):
-        If True, the model will attend to all text tokens instead of using a causal mask.
-    qk_scale_factor (`float`, *optional*, defaults to 43.7840518911):
-        Multiplier applied to Q after QK-norm, before the standard `1/sqrt(head_dim)` attention scaling.
-    use_qk_norm (`bool`, *optional*, defaults to `True`):
-        Whether to apply a scaleless RMSNorm to Q and K before rotary.
-    use_attn_output_gate (`bool`, *optional*, defaults to `True`):
-        Whether to gate the per-head attention output with `sigmoid(output_gate_proj(hidden))`.
+    qk_scale_factor (`float`, *optional*, defaults to 3.87):
+        Multiplier applied to Q after the scaleless QK-norm, on top of the standard `1/sqrt(head_dim)`
+        attention scaling.
     output_multiplier (`float`, *optional*, defaults to 0.19611613513818404):
-        Scale applied to logits before the final tanh softcap.
+        Scale applied to logits before the final tanh softcap. Equal to `1/sqrt(hidden_size / 256)` for the
+        released checkpoint.
     post_norm_eps (`float`, *optional*, defaults to 1e-8):
         Epsilon used for the post-attention and post-FFN norms (which sit between the sub-layer output and the residual).
-    no_rope_layers (`list[int]`, *optional*):
-        Explicit per-layer rotary mask: 1 = apply rotary, 0 = NoPE. Defaults to an iRoPE pattern with NoPE
-        every 4 layers, counting backward from the last layer.
+    layer_rope_theta (`list[float]`, *optional*):
+        Per-layer RoPE base theta; `0` disables rotary (NoPE) for that layer. Overrides the global
+        `rope_parameters["rope_theta"]`. Defaults to the global theta everywhere except every 4th layer
+        counted backward from the last, which is NoPE.
     """
 
     model_type = "onyx_text"
@@ -104,6 +100,7 @@ class OnyxTextConfig(PreTrainedConfig):
         "layers.*.self_attn.q_proj": "colwise",
         "layers.*.self_attn.k_proj": "colwise",
         "layers.*.self_attn.v_proj": "colwise",
+        "layers.*.self_attn.gate_proj": "colwise",
         "layers.*.self_attn.o_proj": "rowwise",
         "layers.*.mlp.gate_proj": "colwise",
         "layers.*.mlp.up_proj": "colwise",
@@ -137,33 +134,30 @@ class OnyxTextConfig(PreTrainedConfig):
     sliding_window: int | None = 2048
     layer_types: list[str] | None = None
     final_logit_softcapping: float | None = 20.0
-    use_bidirectional_attention: bool | None = None
 
     # Onyx-specific fields
-    qk_scale_factor: float = 43.7840518911
-    use_qk_norm: bool = True
-    use_attn_output_gate: bool = True
+    qk_scale_factor: float = 3.87
     output_multiplier: float = 0.19611613513818404
     post_norm_eps: float = 1e-8
-    no_rope_layers: list[int] | None = None
+    layer_rope_theta: list[float | int] | None = None
 
     def __post_init__(self, **kwargs):
-        # iRoPE mask: default to NoPE every 4 layers, counted backward from the last layer.
-        if self.no_rope_layers is None:
-            stride = 4
-            self.no_rope_layers = [
-                0 if (self.num_hidden_layers - 1 - i) % stride == 0 else 1 for i in range(self.num_hidden_layers)
-            ]
-
-        # Full attention for NoPE layers, sliding otherwise (Onyx's default layout matches
-        # the sliding_window_pattern [w, w, w, 0] used in the reference config).
+        # Full attention on NoPE layers (every 4th, counted backward from the last), sliding otherwise —
+        # the reference config's sliding_window_pattern [w, w, w, 0].
         if self.layer_types is None:
             self.layer_types = [
-                "full_attention" if self.no_rope_layers[i] == 0 else "sliding_attention"
+                "full_attention" if (self.num_hidden_layers - 1 - i) % 4 == 0 else "sliding_attention"
                 for i in range(self.num_hidden_layers)
             ]
 
         super().__post_init__(**kwargs)
+
+        # Per-layer RoPE base theta (0 => NoPE). Needs `rope_parameters`, so runs after the super post-init.
+        if self.layer_rope_theta is None:
+            self.layer_rope_theta = [
+                0 if (self.num_hidden_layers - 1 - i) % 4 == 0 else self.rope_parameters["rope_theta"]
+                for i in range(self.num_hidden_layers)
+            ]
 
     def validate_architecture(self):
         """Part of `@strict`-powered validation. Validates the architecture of the config."""

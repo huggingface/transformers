@@ -66,11 +66,18 @@ class OnyxVision2TextModelTester(VLMModelTester):
         kwargs.setdefault("adapter_dim", 32)
         super().__init__(parent, **kwargs)
         self.image_grid_thw = (1, 1, 1)
-        self.output_dim = self.hidden_size * self.merge_size**2
+        self.out_hidden_size = self.hidden_size * self.merge_size**2
 
     @property
     def _special_token_ids(self):
         return super()._special_token_ids | {self.video_token_id}
+
+    def get_vision_config(self):
+        # `layer_types` is shared with the text config by name, but the vision tower uses
+        # "window_attention" instead of "sliding_attention".
+        config = super().get_vision_config()
+        config.layer_types = ["window_attention"] * (config.num_hidden_layers - 1) + ["full_attention"]
+        return config
 
     def create_pixel_values(self):
         grid_t, grid_h, grid_w = self.image_grid_thw
@@ -89,14 +96,6 @@ class OnyxVision2TextModelTest(VLMModelTest, unittest.TestCase):
         # The vendor checkpoint layout is defined relative to the `model.` prefix, which the base
         # OnyxModel serializes without.
         super().test_reverse_loading_mapping(skip_base_model=True)
-
-    @unittest.skip(reason="Onyx applies an in-place q/k RoPE permute conversion, which cannot no-op on native keys.")
-    def test_can_load_from_already_mapped_keys(self):
-        pass
-
-    @unittest.skip(reason="Onyx applies an in-place q/k RoPE permute conversion, which cannot no-op on native keys.")
-    def test_from_pretrained_no_checkpoint(self):
-        pass
 
     def test_mismatching_num_image_tokens(self):
         # Overwritten -- Onyx packs patches along the first `pixel_values` dim, so removing an image

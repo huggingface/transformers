@@ -55,30 +55,33 @@ def get_aspect_ratio_preserving_size(
     patch_size: int,
     max_tokens: int,
 ) -> tuple[int, int]:
-    """Pick the integer (H, W) grid closest to the aspect ratio under the token cap.
+    """Pick the integer patch grid closest to the input aspect ratio under the token cap.
 
-    Mirrors ``OnyxVisionEncoder._compute_grid_size`` so the processor needs no
-    torch model import. Returns ``(target_h, target_w)``.
+    Returns the resize target ``(target_height, target_width)`` in pixels.
     """
-    i_nph = height / patch_size
-    i_npw = width / patch_size
-    ratio = i_npw / i_nph if i_nph > 0 else 1.0
-    if i_nph * i_npw > max_tokens:
-        i_nph = (max_tokens / ratio) ** 0.5
-        i_npw = i_nph * ratio
+    ideal_patches_height = height / patch_size
+    ideal_patches_width = width / patch_size
+    ratio = ideal_patches_width / ideal_patches_height if ideal_patches_height > 0 else 1.0
+    if ideal_patches_height * ideal_patches_width > max_tokens:
+        ideal_patches_height = (max_tokens / ratio) ** 0.5
+        ideal_patches_width = ideal_patches_height * ratio
     candidates = list(
         set(
             itertools.product(
-                [math.floor(i_nph), math.ceil(i_nph)],
-                [math.floor(i_npw), math.ceil(i_npw)],
+                [math.floor(ideal_patches_height), math.ceil(ideal_patches_height)],
+                [math.floor(ideal_patches_width), math.ceil(ideal_patches_width)],
             )
         )
     )
-    candidates = [(nph, npw) for nph, npw in candidates if nph >= 1 and npw >= 1 and nph * npw <= max_tokens]
+    candidates = [
+        (patches_height, patches_width)
+        for patches_height, patches_width in candidates
+        if patches_height >= 1 and patches_width >= 1 and patches_height * patches_width <= max_tokens
+    ]
     if not candidates:
-        candidates = [(max(1, round(i_nph)), max(1, round(i_npw)))]
-    nph, npw = min(candidates, key=lambda c: abs(c[0] / c[1] - height / width))
-    return nph * patch_size, npw * patch_size
+        candidates = [(max(1, round(ideal_patches_height)), max(1, round(ideal_patches_width)))]
+    patches_height, patches_width = min(candidates, key=lambda grid: abs(grid[0] / grid[1] - height / width))
+    return patches_height * patch_size, patches_width * patch_size
 
 
 @auto_docstring
@@ -128,11 +131,11 @@ class OnyxImageProcessor(TorchvisionBackend):
         """
         Preprocess an image or batch of images.
         """
-        # Different from Qwen-VL, we use new way to infer `resized_height/width` and we swap `channel` and `temporal_patch` dim before flattening
         grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
         resized_images_grouped = {}
         for shape, stacked_images in grouped_images.items():
             if do_resize:
+                # Unlike Glm4v's `smart_resize`, the target size preserves aspect ratio under a token cap.
                 height, width = stacked_images.shape[-2:]
                 resized_height, resized_width = get_aspect_ratio_preserving_size(
                     height=height,
@@ -178,6 +181,7 @@ class OnyxImageProcessor(TorchvisionBackend):
                 grid_w,
                 patch_size,
             )
+            # Unlike Glm4v, each flattened patch is laid out (temporal, channel), not (channel, temporal).
             patches = patches.permute(0, 1, 4, 6, 2, 3, 5, 7)
             flatten_patches = patches.reshape(
                 batch_size, grid_t * grid_h * grid_w, temporal_patch_size * channel * patch_size * patch_size
