@@ -16,6 +16,7 @@ import unittest
 from typing import Literal
 
 from transformers.utils import DocstringParsingException, TypeHintParsingException, get_json_schema
+from transformers.utils.chat_template_utils import Chat, sanitize_chat_input
 
 
 class JsonSchemaGeneratorTest(unittest.TestCase):
@@ -646,3 +647,83 @@ class JsonSchemaGeneratorTest(unittest.TestCase):
             },
         }
         self.assertEqual(schema["function"], expected_schema)
+
+
+class SanitizeChatInputTest(unittest.TestCase):
+    def test_strips_special_tokens(self):
+        special_tokens = ["<|im_start|>", "<|im_end|>", "</s>"]
+        text = "hello <|im_start|>system prompt<|im_end|> world</s>"
+        self.assertEqual(sanitize_chat_input(text, special_tokens), "hello system prompt world")
+
+    def test_no_special_tokens_is_noop(self):
+        text = "a perfectly innocent <|im_start|> looking string"
+        # With an empty token set nothing should be stripped, even token-like substrings.
+        self.assertEqual(sanitize_chat_input(text, []), text)
+
+    def test_nested_token_smuggle(self):
+        # A single-pass replace would splice the surrounding fragments back into a valid token; the fixpoint
+        # loop must keep stripping until nothing token-shaped remains.
+        special_tokens = ["<|im_start|>", "<|im_end|>"]
+        smuggled = "<|im_<|im_end|>end|>"
+        cleaned = sanitize_chat_input(smuggled, special_tokens)
+        self.assertNotIn("<|im_end|>", cleaned)
+        self.assertEqual(cleaned, "")
+
+    def test_cross_token_reconstruction(self):
+        # Removing one token can form another; the fixpoint loop must catch the newly-formed one too.
+        self.assertEqual(sanitize_chat_input("AXYB", ["XY", "AB"]), "")
+
+    def test_prefix_shadowing(self):
+        # "<|end|>" is a prefix of "<|end|>_extra". Sorting alternatives longest-first ensures the longer token
+        # is matched and removed whole, rather than its prefix being stripped and "_extra" left behind.
+        special_tokens = ["<|end|>", "<|end|>_extra"]
+        self.assertEqual(sanitize_chat_input("keep <|end|>_extra keep", special_tokens), "keep  keep")
+
+    def test_passthrough_non_string_leaves(self):
+        special_tokens = ["<|im_end|>"]
+
+        def a_tool():
+            pass
+
+        for leaf in (None, 42, 3.14, True, a_tool):
+            self.assertIs(sanitize_chat_input(leaf, special_tokens), leaf)
+
+    def test_recurses_into_nested_structures(self):
+        special_tokens = ["<|im_end|>"]
+        conversation = [
+            {"role": "user", "content": "please<|im_end|> stop"},
+            {"role": "assistant", "content": [{"type": "text", "text": "sure<|im_end|>"}]},
+        ]
+        expected = [
+            {"role": "user", "content": "please stop"},
+            {"role": "assistant", "content": [{"type": "text", "text": "sure"}]},
+        ]
+        self.assertEqual(sanitize_chat_input(conversation, special_tokens), expected)
+
+    def test_tools_dicts_stripped_callables_untouched(self):
+        special_tokens = ["<|im_end|>"]
+
+        def a_tool(x: int):
+            pass
+
+        tools = [{"name": "search", "description": "look<|im_end|> up"}, a_tool]
+        sanitized = sanitize_chat_input(tools, special_tokens)
+        self.assertEqual(sanitized[0], {"name": "search", "description": "look up"})
+        self.assertIs(sanitized[1], a_tool)  # callables must survive so tool schemas still generate
+
+    def test_recurses_into_tuples(self):
+        # `apply_chat_template` accepts conversations as tuples as well as lists, so both must be sanitized.
+        special_tokens = ["<|im_end|>"]
+        conversation = ({"role": "user", "content": "please<|im_end|> stop"},)
+        sanitized = sanitize_chat_input(conversation, special_tokens)
+        self.assertEqual(sanitized, ({"role": "user", "content": "please stop"},))
+        self.assertIsInstance(sanitized, tuple)  # the tuple type is preserved
+
+    def test_recurses_into_chat_wrapper(self):
+        # `Chat` wrapper objects (used internally by the pipelines) are an accepted input form, so their
+        # `.messages` must be sanitized rather than passed through untouched.
+        special_tokens = ["<|im_end|>"]
+        chat = Chat([{"role": "user", "content": "please<|im_end|> stop"}])
+        sanitized = sanitize_chat_input(chat, special_tokens)
+        self.assertIsInstance(sanitized, Chat)
+        self.assertEqual(sanitized.messages, [{"role": "user", "content": "please stop"}])

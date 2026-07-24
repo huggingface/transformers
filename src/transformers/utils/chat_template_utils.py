@@ -629,3 +629,42 @@ class Chat:
             if not is_valid_message(message):
                 raise ValueError("When passing chat dicts as input, each dict must have a 'role' and 'content' key.")
         self.messages = messages
+
+
+@lru_cache
+def _compile_special_token_pattern(all_special_tokens: tuple[str, ...]) -> re.Pattern | None:
+    if not all_special_tokens:
+        return None
+    # Match longest-first to catch cases where one token is a substring of another
+    escaped = sorted((re.escape(token) for token in all_special_tokens if token), key=len, reverse=True)
+    return re.compile("|".join(escaped))
+
+
+def sanitize_chat_input(chat_input: Any, all_special_tokens: list[str]) -> Any:
+    """Strip any special tokens out of chat inputs. Rather than break them up, we simply mask them out entirely,
+    similar to `tokenizer.decode(skip_special_tokens=True)`."""
+    return _sanitize_chat_input(chat_input, _compile_special_token_pattern(tuple(all_special_tokens)))
+
+
+def _sanitize_chat_input(chat_input: Any, pattern: re.Pattern | None) -> Any:
+    if pattern is None:
+        return chat_input
+    if hasattr(chat_input, "messages"):
+        # catches Chat objects
+        chat_input.messages = _sanitize_chat_input(chat_input.messages, pattern)
+        return chat_input
+    if isinstance(chat_input, dict):
+        return {key: _sanitize_chat_input(value, pattern) for key, value in chat_input.items()}
+    elif isinstance(chat_input, list):
+        return [_sanitize_chat_input(item, pattern) for item in chat_input]
+    elif isinstance(chat_input, tuple):
+        return tuple(_sanitize_chat_input(item, pattern) for item in chat_input)
+    elif isinstance(chat_input, str):
+        # Keep repeating until the string stops changing, since a malicious user could nest special tokens
+        # inside each other that survive a single sub()
+        previous = None
+        while previous != chat_input:
+            previous, chat_input = chat_input, pattern.sub("", chat_input)
+        return chat_input
+    else:
+        return chat_input
