@@ -448,15 +448,15 @@ class FalconMambaIntegrationTests(unittest.TestCase):
             torch_device
         )
 
-        inputs = self.tokenizer(self.text, return_tensors="pt").to(torch_device)
+        inputs = self.tokenizer("The mount Fuji is a nice mountain in", return_tensors="pt").to(torch_device)
         out = model.generate(**inputs, max_new_tokens=20, do_sample=False)
 
         EXPECTED_OUTPUTS = Expectations(
             {
-                ("cuda", (8, 0)): 'Hello today I\'m going to talk about the "B" in "B" is for ',
-                ("cuda", (8, 6)): 'Hello today I\'m going to talk about the "B" in "B" is for ',
+                ("cuda", (8, 0)): 'The mount Fuji is a nice mountain in Japan. It is a volcano. It is 3,776 meters high. It is the highest',
+                ("cuda", (8, 6)): 'The mount Fuji is a nice mountain in Japan. It is 3,776 meters high. It is a volcano. It is a very',
             }
-        )
+        )  # fmt: skip
         EXPECTED_OUTPUT = EXPECTED_OUTPUTS.get_expectation()
 
         self.assertEqual(
