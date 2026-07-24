@@ -203,6 +203,9 @@ class _LazyLoadAllMappings(OrderedDict[str, str]):
         self._initialize()
         return item in self._data
 
+    def __reduce__(self):
+        return (self.__class__, (dict(self._mapping),))
+
 
 def _get_class_name(model_class: str | list[str]):
     if isinstance(model_class, list | tuple):
