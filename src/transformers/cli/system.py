@@ -41,10 +41,10 @@ from ..utils import (
 def env(
     accelerate_config_file: Annotated[
         str | None,
-        typer.Argument(help="The accelerate config file to use for the default values in the launching script."),
+        typer.Argument(help="Accelerate config file for launcher defaults"),
     ] = None,
 ) -> None:
-    """Print information about the environment."""
+    """Print environment details for a Transformers bug report"""
     import safetensors
 
     # TODO: remove hasattr guard once safetensors >= 0.8.0 is released (adds __version__)
@@ -131,7 +131,7 @@ def env(
 
 
 def version() -> None:
-    """Print CLI version."""
+    """Print the Transformers version"""
     print(__version__)
 
 

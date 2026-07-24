@@ -22,7 +22,7 @@ from transformers.cli.serve import Serve
 from transformers.cli.system import env, version
 
 
-app = typer_factory(help="Transformers CLI")
+app = typer_factory(help="Run Transformers commands")
 
 app.command()(add_new_model_like)
 app.command(name="chat")(Chat)
