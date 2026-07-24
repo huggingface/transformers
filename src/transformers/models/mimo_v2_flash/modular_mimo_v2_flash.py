@@ -25,6 +25,7 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring
+from ...utils.generic import no_inherit_decorator
 from ..deepseek_v3.modeling_deepseek_v3 import (
     DeepseekV3Experts,
     DeepseekV3ForCausalLM,
@@ -241,6 +242,7 @@ def eager_attention_forward(
     return attn_output, attn_weights
 
 
+@no_inherit_decorator
 class MiMoV2FlashAttention(Qwen2Attention):
     def __init__(self, config: MiMoV2FlashConfig, layer_idx: int):
         # SWA layers double the kv heads vs full-attention and have attention sinks.
