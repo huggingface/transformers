@@ -306,16 +306,6 @@ def yarn_get_mscale(scale=1, mscale=1):
     return 0.1 * mscale * math.log(scale) + 1.0
 
 
-def yarn_apply_mscale(rope_parameters, scaling):
-    if rope_parameters.get("rope_type", "default") != "default":
-        mscale_all_dim = rope_parameters.get("mscale_all_dim", 0)
-        scaling_factor = rope_parameters["factor"]
-        if mscale_all_dim:
-            mscale = yarn_get_mscale(scaling_factor, mscale_all_dim)
-            scaling = scaling * mscale * mscale
-    return scaling
-
-
 class GlmMoeDsaAttention(nn.Module):
     """
     DeepSeek-V3 MLA + a DSA indexer, extended with **cross-layer top-k sharing**.
@@ -368,7 +358,12 @@ class GlmMoeDsaAttention(nn.Module):
         )
 
         self.scaling = self.qk_head_dim ** (-0.5)
-        self.scaling = yarn_apply_mscale(config.rope_parameters, self.scaling)
+        if self.config.rope_parameters.get("rope_type", "default") != "default":
+            mscale_all_dim = self.config.rope_parameters.get("mscale_all_dim", 0)
+            scaling_factor = self.config.rope_parameters["factor"]
+            if mscale_all_dim:
+                mscale = yarn_get_mscale(scaling_factor, mscale_all_dim)
+                self.scaling = self.scaling * mscale * mscale
         # Refer: https://arxiv.org/abs/2603.12201 for more details.
         self.skip_topk = config.indexer_types[layer_idx] == "shared"
         self.indexer = None if self.skip_topk else GlmMoeDsaIndexer(config, layer_idx)

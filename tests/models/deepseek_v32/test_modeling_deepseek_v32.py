@@ -13,6 +13,7 @@
 # limitations under the License.
 """Testing suite for the PyTorch DeepSeekV3.2 model."""
 
+import tempfile
 import unittest
 
 import pytest
@@ -244,108 +245,116 @@ class DeepseekV32ModelTest(CausalLMModelTest, unittest.TestCase):
 @require_torch_accelerator
 class DeepseekV32IntegrationTest(unittest.TestCase):
     def test_deepseek_v32(self):
-        EXPECTED_TEXT = ['An attention function can be described as mapping a query and a set of key-value pairs to an output, where the query, keys, values, and output are all vectors. The output is computed as a weighted sum of the values, where the weight assigned to each value is computed by a compatibility function of the query with the corresponding key.\n\nWe call our particular attention "Scaled Dot-Product Attention" (Figure (left']  # fmt: skip
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            EXPECTED_TEXT = ['An attention function can be described as mapping a query and a set of key-value pairs to an output, where the query, keys, values, and output are all vectors. The output is computed as a weighted sum of the values, where the weight assigned to each value is computed by a compatibility function of the query with the corresponding key.\n\nWe call our particular attention "Scaled Dot-Product Attention" (Figure (left']  # fmt: skip
 
-        tokenizer = AutoTokenizer.from_pretrained("deepseek-ai/DeepSeek-V3.2-Exp")
-        model = DeepseekV32ForCausalLM.from_pretrained(
-            "deepseek-ai/DeepSeek-V3.2-Exp",
-            device_map="auto",
-            dtype=torch.bfloat16,
-        )
+            tokenizer = AutoTokenizer.from_pretrained("deepseek-ai/DeepSeek-V3.2-Exp")
+            model = DeepseekV32ForCausalLM.from_pretrained(
+                "deepseek-ai/DeepSeek-V3.2-Exp",
+                device_map="auto",
+                dtype=torch.bfloat16,
+                offload_folder=tmp_dir,
+            )
 
-        input_text = [
-            "An attention function can be described as mapping a query and a set of key-value pairs to an output, where the query, keys, values, and output are all vectors."  # fmt: skip
-        ]
-        model_inputs = tokenizer(input_text, return_tensors="pt").to(model.device)
+            input_text = [
+                "An attention function can be described as mapping a query and a set of key-value pairs to an output, where the query, keys, values, and output are all vectors."  # fmt: skip
+            ]
+            model_inputs = tokenizer(input_text, return_tensors="pt").to(model.device)
 
-        generated_ids = model.generate(**model_inputs, max_new_tokens=50, do_sample=False)
-        generated_text = tokenizer.decode(generated_ids, skip_special_tokens=True)
-        self.assertEqual(generated_text, EXPECTED_TEXT)
+            generated_ids = model.generate(**model_inputs, max_new_tokens=50, do_sample=False)
+            generated_text = tokenizer.decode(generated_ids, skip_special_tokens=True)
+            self.assertEqual(generated_text, EXPECTED_TEXT)
 
     def test_logits_eager(self):
-        input_ids = [1, 306, 4658, 278, 6593, 310, 2834, 338]
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            input_ids = [1, 306, 4658, 278, 6593, 310, 2834, 338]
 
-        model = DeepseekV32ForCausalLM.from_pretrained(
-            "deepseek-ai/DeepSeek-V3.2-Exp",
-            device_map="auto",
-            dtype=torch.bfloat16,
-            attn_implementation="eager",
-        )
+            model = DeepseekV32ForCausalLM.from_pretrained(
+                "deepseek-ai/DeepSeek-V3.2-Exp",
+                device_map="auto",
+                dtype=torch.bfloat16,
+                attn_implementation="eager",
+                offload_folder=tmp_dir,
+            )
 
-        with torch.no_grad():
-            out = model(torch.tensor([input_ids]).to(model.device))
+            with torch.no_grad():
+                out = model(torch.tensor([input_ids]).to(model.device))
 
-        EXPECTED_MEAN = torch.tensor([[5.0182, 6.1787, 5.3601, 5.7569, 5.7146, 5.1751, 4.2580, 3.3002]], device=out.logits.device)  # fmt: skip
-        torch.testing.assert_close(out.logits.float().mean(-1), EXPECTED_MEAN, atol=1e-3, rtol=1e-3)
+            EXPECTED_MEAN = torch.tensor([[5.0182, 6.1787, 5.3601, 5.7569, 5.7146, 5.1751, 4.2580, 3.3002]], device=out.logits.device)  # fmt: skip
+            torch.testing.assert_close(out.logits.float().mean(-1), EXPECTED_MEAN, atol=1e-3, rtol=1e-3)
 
-        EXPECTED_SLICE = torch.tensor([17.3750, 12.4375,  2.1406, 15.0625, 13.5625, 14.8750, 13.7500, 13.6250, 13.5625, 14.0000, 13.0000, 15.1875, 13.6250, 13.3750, 15.3750], device=out.logits.device)  # fmt: skip
-        torch.testing.assert_close(out.logits[0, 0, :15].float(), EXPECTED_SLICE, atol=1e-3, rtol=1e-3)
+            EXPECTED_SLICE = torch.tensor([17.3750, 12.4375,  2.1406, 15.0625, 13.5625, 14.8750, 13.7500, 13.6250, 13.5625, 14.0000, 13.0000, 15.1875, 13.6250, 13.3750, 15.3750], device=out.logits.device)  # fmt: skip
+            torch.testing.assert_close(out.logits[0, 0, :15].float(), EXPECTED_SLICE, atol=1e-3, rtol=1e-3)
 
     def test_logits_long_context(self):
-        prompt = LONG_CONTEXT_PROMPT
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            prompt = LONG_CONTEXT_PROMPT
 
-        tokenizer = AutoTokenizer.from_pretrained("deepseek-ai/DeepSeek-V3.2-Exp")
-        model = DeepseekV32ForCausalLM.from_pretrained(
-            "deepseek-ai/DeepSeek-V3.2-Exp",
-            device_map="auto",
-            dtype=torch.bfloat16,
-            attn_implementation="eager",
-        )
+            tokenizer = AutoTokenizer.from_pretrained("deepseek-ai/DeepSeek-V3.2-Exp")
+            model = DeepseekV32ForCausalLM.from_pretrained(
+                "deepseek-ai/DeepSeek-V3.2-Exp",
+                device_map="auto",
+                dtype=torch.bfloat16,
+                attn_implementation="eager",
+                offload_folder=tmp_dir,
+            )
 
-        inputs = tokenizer(prompt, return_tensors="pt").to(model.device)
-        self.assertGreater(inputs["input_ids"].shape[1], model.config.index_topk)
+            inputs = tokenizer(prompt, return_tensors="pt").to(model.device)
+            self.assertGreater(inputs["input_ids"].shape[1], model.config.index_topk)
 
-        with torch.no_grad():
-            out = model(**inputs)
+            with torch.no_grad():
+                out = model(**inputs)
 
-        EXPECTED_MEAN = torch.tensor([1.6388, 0.5092, 1.8607, 1.3185, 0.3267, 1.0360, 2.3001, 3.5533], device=out.logits.device)  # fmt: skip
-        torch.testing.assert_close(out.logits[0, -8:].float().mean(-1), EXPECTED_MEAN, atol=1e-3, rtol=1e-3)
+            EXPECTED_MEAN = torch.tensor([1.6388, 0.5092, 1.8607, 1.3185, 0.3267, 1.0360, 2.3001, 3.5533], device=out.logits.device)  # fmt: skip
+            torch.testing.assert_close(out.logits[0, -8:].float().mean(-1), EXPECTED_MEAN, atol=1e-3, rtol=1e-3)
 
-        EXPECTED_SLICE = torch.tensor([-2.8594, 23.7500, -0.8086, 18.1250, 19.8750, 15.8125, 12.8750, 14.6875, 21.3750, 19.0000, 20.3750, 20.0000, 18.7500, 16.3750, 22.0000], device=out.logits.device)  # fmt: skip
-        torch.testing.assert_close(out.logits[0, -1, :15].float(), EXPECTED_SLICE, atol=1e-3, rtol=1e-3)
+            EXPECTED_SLICE = torch.tensor([-2.8594, 23.7500, -0.8086, 18.1250, 19.8750, 15.8125, 12.8750, 14.6875, 21.3750, 19.0000, 20.3750, 20.0000, 18.7500, 16.3750, 22.0000], device=out.logits.device)  # fmt: skip
+            torch.testing.assert_close(out.logits[0, -1, :15].float(), EXPECTED_SLICE, atol=1e-3, rtol=1e-3)
 
-        gen = model.generate(**inputs, max_new_tokens=40, do_sample=False)
-        continuation = tokenizer.decode(gen[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True)
-        EXPECTED_GENERATION = " “Oh, my poor little feet, I wonder who will put on your shoes and stockings for you now, dears? I’m sure _I_ shan’t be able!"  # fmt: skip
-        self.assertEqual(EXPECTED_GENERATION, continuation)
+            gen = model.generate(**inputs, max_new_tokens=40, do_sample=False)
+            continuation = tokenizer.decode(gen[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True)
+            EXPECTED_GENERATION = " “Oh, my poor little feet, I wonder who will put on your shoes and stockings for you now, dears? I’m sure _I_ shan’t be able!"  # fmt: skip
+            self.assertEqual(EXPECTED_GENERATION, continuation)
 
     def test_batched_generation_padding(self):
-        # Batch two prompts of different lengths so the batch must be padded. Left padding is the correct
-        # mode for decoder-only generation: every row stays coherent. Right padding is known to corrupt the
-        # rows that actually receive padding (transformers emits a warning for it), but the longest row gets
-        # no padding, so its generation must be identical regardless of padding side — which verifies the
-        # attention mask is applied correctly end to end.
-        prompts = [
-            "The capital of France is",
-            "An attention function can be described as mapping a query and a set of key-value pairs to an output, where the query, keys, values, and output are all vectors.",  # fmt: skip
-        ]
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            # Batch two prompts of different lengths so the batch must be padded. Left padding is the correct
+            # mode for decoder-only generation: every row stays coherent. Right padding is known to corrupt the
+            # rows that actually receive padding (transformers emits a warning for it), but the longest row gets
+            # no padding, so its generation must be identical regardless of padding side — which verifies the
+            # attention mask is applied correctly end to end.
+            prompts = [
+                "The capital of France is",
+                "An attention function can be described as mapping a query and a set of key-value pairs to an output, where the query, keys, values, and output are all vectors.",  # fmt: skip
+            ]
 
-        EXPECTED_LEFT = [
-            "The capital of France is Paris. 法国的首都是巴黎。\nThe capital of the United States is Washington, D.C. 美国的首都是华盛顿。\nThe capital of the United Kingdom is London. 英国的首都是伦敦",  # fmt: skip
-            'An attention function can be described as mapping a query and a set of key-value pairs to an output, where the query, keys, values, and output are all vectors. The output is computed as a weighted sum of the values, where the weight assigned to each value is computed by a compatibility function of the query with the corresponding key.\n\nWe call our particular attention "Scal',  # fmt: skip
-        ]
+            EXPECTED_LEFT = [
+                "The capital of France is Paris. 法国的首都是巴黎。\nThe capital of the United States is Washington, D.C. 美国的首都是华盛顿。\nThe capital of the United Kingdom is London. 英国的首都是伦敦",  # fmt: skip
+                'An attention function can be described as mapping a query and a set of key-value pairs to an output, where the query, keys, values, and output are all vectors. The output is computed as a weighted sum of the values, where the weight assigned to each value is computed by a compatibility function of the query with the corresponding key.\n\nWe call our particular attention "Scal',  # fmt: skip
+            ]
 
-        model = DeepseekV32ForCausalLM.from_pretrained(
-            "deepseek-ai/DeepSeek-V3.2-Exp",
-            device_map="auto",
-            dtype=torch.bfloat16,
-            attn_implementation="eager",
-        )
+            model = DeepseekV32ForCausalLM.from_pretrained(
+                "deepseek-ai/DeepSeek-V3.2-Exp",
+                device_map="auto",
+                dtype=torch.bfloat16,
+                attn_implementation="eager",
+                offload_folder=tmp_dir,
+            )
 
-        # Left padding: the whole batch is correct.
-        tok_left = AutoTokenizer.from_pretrained("deepseek-ai/DeepSeek-V3.2-Exp", padding_side="left")
-        if tok_left.pad_token is None:
-            tok_left.pad_token = tok_left.eos_token
-        inputs_left = tok_left(prompts, return_tensors="pt", padding=True).to(model.device)
-        gen_left = model.generate(**inputs_left, max_new_tokens=40, do_sample=False)
-        text_left = tok_left.batch_decode(gen_left, skip_special_tokens=True)
-        self.assertEqual(EXPECTED_LEFT, text_left)
+            # Left padding: the whole batch is correct.
+            tok_left = AutoTokenizer.from_pretrained("deepseek-ai/DeepSeek-V3.2-Exp", padding_side="left")
+            if tok_left.pad_token is None:
+                tok_left.pad_token = tok_left.eos_token
+            inputs_left = tok_left(prompts, return_tensors="pt", padding=True).to(model.device)
+            gen_left = model.generate(**inputs_left, max_new_tokens=40, do_sample=False)
+            text_left = tok_left.batch_decode(gen_left, skip_special_tokens=True)
+            self.assertEqual(EXPECTED_LEFT, text_left)
 
-        # Right padding: the longest prompt is not padded, so its continuation must match left padding.
-        tok_right = AutoTokenizer.from_pretrained("deepseek-ai/DeepSeek-V3.2-Exp", padding_side="right")
-        if tok_right.pad_token is None:
-            tok_right.pad_token = tok_right.eos_token
-        inputs_right = tok_right(prompts, return_tensors="pt", padding=True).to(model.device)
-        gen_right = model.generate(**inputs_right, max_new_tokens=40, do_sample=False)
-        text_right = tok_right.batch_decode(gen_right, skip_special_tokens=True)
-        self.assertEqual(EXPECTED_LEFT[1], text_right[1])
+            # Right padding: the longest prompt is not padded, so its continuation must match left padding.
+            tok_right = AutoTokenizer.from_pretrained("deepseek-ai/DeepSeek-V3.2-Exp", padding_side="right")
+            if tok_right.pad_token is None:
+                tok_right.pad_token = tok_right.eos_token
+            inputs_right = tok_right(prompts, return_tensors="pt", padding=True).to(model.device)
+            gen_right = model.generate(**inputs_right, max_new_tokens=40, do_sample=False)
+            text_right = tok_right.batch_decode(gen_right, skip_special_tokens=True)
+            self.assertEqual(EXPECTED_LEFT[1], text_right[1])
