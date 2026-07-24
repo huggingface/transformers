@@ -683,18 +683,32 @@ class CpmAntModel(CpmAntPreTrainedModel):
     The CPMAnt Model with a language modeling head on top (linear layer with weights tied to the input embeddings).
     """
 )
-class CpmAntForCausalLM(CpmAntPreTrainedModel, GenerationMixin):
-    _tied_weights_keys = {"lm_head.weight": "cpmant.input_embedding.weight"}
+class CpmAntForCausalLM(CpmAntPreTrainedModel, GenerationMixin):  # trf-ignore: TRF004
+    # The head ties to the vocab slice of `input_embedding` (different shapes), so it can't be a
+    # plain whole-tensor key and is handled in `tie_weights`.
+    _tied_weights_keys = {}
 
     def __init__(self, config: CpmAntConfig):
         super().__init__(config)
         self.cpmant = CpmAntModel(config)
 
-        # lm_head.weight is tied to cpmant.input_embedding.weight
-        self.lm_head = nn.Linear(
-            config.hidden_size, config.vocab_size + config.prompt_types * config.prompt_length, bias=False
-        )
+        # Published checkpoints store `lm_head.weight` as `input_embedding.weight[:vocab_size]`; the
+        # extra `prompt_types * prompt_length` soft-prompt rows are never decoding targets.
+        self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
         self.post_init()
+
+    def tie_weights(self, missing_keys: set[str] | None = None, recompute_mapping: bool = True):
+        # Only derive the head when the checkpoint omits `lm_head.weight`; a whole-tensor tie is
+        # impossible since the embedding has extra prompt rows, so copy its first `vocab_size` rows.
+        lm_head_missing = missing_keys is not None and "lm_head.weight" in missing_keys
+        input_embeddings = self.get_input_embeddings()
+        if (
+            lm_head_missing
+            and input_embeddings is not None
+            and input_embeddings.weight.device.type != "meta"
+            and self.lm_head.weight.device.type != "meta"
+        ):
+            self.lm_head.weight.data = input_embeddings.weight.data[: self.config.vocab_size].clone()
 
     @auto_docstring
     def forward(
