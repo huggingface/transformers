@@ -20,6 +20,7 @@ import importlib.metadata as importlib_metadata
 import importlib.util
 import weakref
 from functools import partialmethod
+from collections import defaultdict
 
 from ..dependency_versions_check import dep_version_check
 from ..utils import is_accelerate_available, is_torch_available, logging
@@ -303,53 +304,49 @@ def deepspeed_config():
         return None
 
 
-def _load_state_dict_into_zero3_model(model_to_load, state_dict):
+def _load_state_dict_into_zero3_model(model_to_load, state_dict, module_dict=None):
     """
     Loads state dict into a model specifically for Zero3, since DeepSpeed does not support the `transformers`
     tensor parallelism API.
-
-    Nearly identical code to PyTorch's `_load_from_state_dict`
     """
-    # copy state_dict so `_load_state_dict_into_zero3_model` can modify it
     metadata = getattr(state_dict, "_metadata", None)
     state_dict = state_dict.copy()
     if metadata is not None:
         state_dict._metadata = metadata
-
+    
     error_msgs = []
 
-    # PyTorch's `_load_from_state_dict` does not copy parameters in a module's descendants
-    # so we need to apply the function recursively.
-    def load(module: nn.Module, state_dict, prefix="", assign_to_params_buffers=False):
-        local_metadata = {} if metadata is None else metadata.get(prefix[:-1], {})
-        local_metadata["assign_to_params_buffers"] = assign_to_params_buffers
+    if not (is_deepspeed_zero3_enabled() and len(state_dict) > 0):
+        return error_msgs
 
+    module_dict = module_dict if module_dict is not None else dict(model_to_load.named_modules())
+    import deepspeed
+
+    # Group this shard's keys by the module that owns them: O(len(state_dict)) instead of
+    # O(num_modules * len(state_dict)).
+    keys_by_module = defaultdict(list)
+    for key in state_dict.keys():
+        module_name = key.rsplit(".", 1)[0] if "." in key else ""
+        keys_by_module[module_name].append(key)
+
+    for module_name, keys in keys_by_module.items():
+        module = module_dict.get(module_name)
+        if module is None:
+            continue
+
+        prefix = f"{module_name}." if module_name else ""
+        local_metadata = {} if metadata is None else metadata.get(module_name, {})
+        local_metadata["assign_to_params_buffers"] = False
         args = (state_dict, prefix, local_metadata, True, [], [], error_msgs)
-        # Parameters of module and children will start with prefix. We can exit early if there are none in this
-        # state_dict
-        if is_deepspeed_zero3_enabled() and len([key for key in state_dict if key.startswith(prefix)]) > 0:
-            import deepspeed
 
-            # In sharded models, each shard has only part of the full state_dict, so only gather
-            # parameters that are in the current state_dict.
-            named_parameters = dict(module.named_parameters(prefix=prefix[:-1], recurse=False))
-            params_to_gather = [named_parameters[k] for k in state_dict.keys() if k in named_parameters]
-            if len(params_to_gather) > 0:
-                # because zero3 puts placeholders in model params, this context
-                # manager gathers (unpartitions) the params of the current layer, then loads from
-                # the state dict and then re-partitions them again
-                with deepspeed.zero.GatheredParameters(params_to_gather, modifier_rank=0):
-                    if torch.distributed.get_rank() == 0:
-                        module._load_from_state_dict(*args)
+        named_parameters = dict(module.named_parameters(prefix=module_name, recurse=False))
+        params_to_gather = [named_parameters[k] for k in keys if k in named_parameters]
 
-        for name, child in module._modules.items():
-            if child is not None:
-                load(child, state_dict, prefix + name + ".", assign_to_params_buffers)
-
-    load(model_to_load, state_dict, assign_to_params_buffers=False)
-
+        if params_to_gather:
+            with deepspeed.zero.GatheredParameters(params_to_gather, modifier_rank=0):
+                if torch.distributed.get_rank() == 0:
+                    module._load_from_state_dict(*args)
     return error_msgs
-
 
 def deepspeed_optim_sched(trainer, hf_deepspeed_config, args, num_training_steps, model_parameters):
     """
