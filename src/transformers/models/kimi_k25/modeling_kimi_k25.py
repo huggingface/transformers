@@ -40,6 +40,7 @@ from ...utils import (
     can_return_tuple,
     torch_compilable_check,
 )
+from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import get_max_seqlen, is_flash_attention_requested, maybe_autocast
 from ...utils.output_capturing import capture_outputs
 from ...vision_utils import get_vision_position_ids
@@ -325,6 +326,7 @@ class Kimi_K25VisionAttention(nn.Module):
         self.k_proj = nn.Linear(self.dim, self.dim, bias=True)
         self.v_proj = nn.Linear(self.dim, self.dim, bias=True)
 
+    @deprecate_kwarg("rotary_pos_emb", version="v5.10")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -404,6 +406,7 @@ class Kimi_K25VisionEncoderLayer(GradientCheckpointingLayer):
         self.attn = Kimi_K25VisionAttention(config=config)
         self.mlp = Kimi_K25VisionMLP(config.hidden_size, config.intermediate_size, config.hidden_act)
 
+    @deprecate_kwarg("rotary_pos_emb", version="v5.10")
     def forward(
         self,
         hidden_states: torch.Tensor,

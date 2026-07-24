@@ -1017,8 +1017,6 @@ class HunYuanVLModel(HunYuanVLPreTrainedModel):
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
-        Encode images and return the complete vision tower outputs.
-
         pixel_values (`torch.FloatTensor`):
             Flat per-patch pixel features produced by the image processor.
         image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
@@ -1081,6 +1079,7 @@ class HunYuanVLModel(HunYuanVLPreTrainedModel):
         self.rope_deltas = rope_deltas
         return rope_positions
 
+    @deprecate_kwarg("rope_deltas", version="v5.10")
     @can_return_tuple
     @auto_docstring
     def forward(
