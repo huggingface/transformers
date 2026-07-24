@@ -19,7 +19,7 @@ from ...audio_utils import AudioInput, make_list_of_audio
 from ...feature_extraction_sequence_utils import SequenceFeatureExtractor
 from ...feature_extraction_utils import BatchFeature
 from ...utils import PaddingStrategy, TensorType, logging
-from ...utils.import_utils import is_torch_available, is_torchaudio_available
+from ...utils.import_utils import is_torch_available, is_torchaudio_available, requires
 
 
 if is_torch_available():
@@ -33,6 +33,7 @@ if is_torchaudio_available():
 logger = logging.get_logger(__name__)
 
 
+@requires(backends=("torchaudio",))
 class Xcodec2FeatureExtractor(SequenceFeatureExtractor):
     r"""
     Constructs a Xcodec2 feature extractor, which computes mel-filter bank features for the semantic encoder and padded
@@ -126,9 +127,6 @@ class Xcodec2FeatureExtractor(SequenceFeatureExtractor):
                 Remaining dictionary of keyword arguments that will be passed to the tokenizer or the feature
                 extractor.
         """
-        if not is_torch_available():
-            raise ImportError("PyTorch is required for mel-filter bank feature extraction.")
-
         if sampling_rate is not None:
             if sampling_rate != self.sampling_rate:
                 raise ValueError(

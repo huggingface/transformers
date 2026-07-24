@@ -16,14 +16,14 @@ from __future__ import annotations
 import math
 from typing import TYPE_CHECKING
 
-from ..utils import is_torch_available
+from ..utils import is_torch_available, is_torch_greater_or_equal
 
 
 if TYPE_CHECKING:
     import torch
     from torch.distributed.tensor import DTensor
 
-if is_torch_available():
+if is_torch_available() and is_torch_greater_or_equal("2.5"):
     import torch
     from torch.distributed.tensor import DTensor
     from torch.distributed.tensor._utils import compute_local_shape_and_global_offset
