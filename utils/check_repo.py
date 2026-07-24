@@ -75,6 +75,7 @@ PATH_TO_DOC = "docs/source/en"
 
 # Update this list with models that are supposed to be private.
 PRIVATE_MODELS = [
+    "GraniteSpeechNarQFormerModel",
     "AltRobertaModel",
     "DPRSpanPredictor",
     "UdopStack",
@@ -300,6 +301,8 @@ IGNORE_NON_TESTED = (
         "DiffusionGemmaDecoderModel",  # TODO(joaogante)
         "DiffusionGemmaEncoderModel",  # TODO(joaogante)
         "DiffusionGemmaEncoderTextModel",  # TODO(joaogante)
+        "GraniteSpeechNarModel",  # Building part of bigger (tested) model. Tested implicitly through GraniteSpeechNarForCTC.
+        "GraniteSpeechNarTextModel",  # Bidirectional LLM backbone, tested implicitly through GraniteSpeechNarForCTC.
         "Kimi_K25VisionModel",
         "HunYuanVLTextModel",
         "HunYuanVLVisionTransformer",
@@ -543,6 +546,7 @@ IGNORE_NON_AUTO_CONFIGURED = (
         "Ernie4_5_VL_MoeTextModel",  # BC Alias
         "UVDocBridge",  # Building part of a bigger model, tested implicitly through UVDocModel
         "Granite4VisionTextModel",  # Building part of bigger (tested) model.
+        "GraniteSpeechNarModel",  # Building part of bigger (tested) model.
         "InklingTextModel",  # Building part of bigger (tested) model. Tested implicitly through InklingForConditionalGeneration.
         "InklingAudioModel",  # Building part of bigger (tested) model. Tested implicitly through InklingForConditionalGeneration.
         "InklingVisionModel",  # Building part of bigger (tested) model. Tested implicitly through InklingForConditionalGeneration.
