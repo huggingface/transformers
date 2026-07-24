@@ -500,20 +500,28 @@ class MtpModel(PreTrainedModel):
         drafted_tokens = []
         loss = None
         for i, mtp_layer in enumerate(self.layers):
+            # MROPE models (e.g. Glm4v family) pack positions as [4, bs, seq]: plane 0 holds the text
+            # positions used for the masks and layers, planes 1: hold the rope positions
+            if position_ids is not None and position_ids.ndim == 3 and position_ids.shape[0] == 4:
+                text_position_ids = position_ids[0]
+                rope_position_ids = position_ids[1:]
+            else:
+                text_position_ids = rope_position_ids = position_ids
+
             # We need to recompute those every layer since they change
             inputs_embeds = self.embed_tokens(input_ids).to(last_hidden_states.device)
             position_embeddings = (
-                self.rotary_emb(inputs_embeds, position_ids=position_ids) if self.rotary_emb is not None else None
+                self.rotary_emb(inputs_embeds, position_ids=rope_position_ids) if self.rotary_emb is not None else None
             )
 
             # In full generality, we may need to recompute masks for every layer due to the position offset of each layer
-            masks = self.create_masks_for_mtp_layer(i, inputs_embeds, mtp_cache, position_ids)
+            masks = self.create_masks_for_mtp_layer(i, inputs_embeds, mtp_cache, text_position_ids)
 
             last_hidden_states = mtp_layer(
                 inputs_embeds,
                 last_hidden_states,
                 position_embeddings=position_embeddings,
-                position_ids=position_ids,
+                position_ids=text_position_ids,
                 past_key_values=mtp_cache,
                 **masks,
                 **kwargs,
@@ -549,7 +557,7 @@ class MtpModel(PreTrainedModel):
             # Roll by 1 and append for next layer
             input_ids = torch.cat([input_ids[:, 1:], next_mtp_token], dim=-1)
             attention_mask = torch.cat([attention_mask[:, 1:], attention_mask.new_ones(batch_size, 1)], dim=-1)  # type: ignore
-            position_ids = torch.cat([position_ids[:, 1:], position_ids[:, -1:] + 1], dim=-1)
+            position_ids = torch.cat([position_ids[..., 1:], position_ids[..., -1:] + 1], dim=-1)
 
             # Need to cat ful_ids as well for the processors
             if full_input_ids is not None:

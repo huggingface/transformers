@@ -1507,7 +1507,7 @@ class MTPCandidateGenerator(AssistedCandidateGenerator):
 
             # We need the last invalidated tokens, as well as the new one in a single passcfor efficiency
             mtp_input_ids = input_ids[:, -num_last_main_model_tokens - self.num_mtp_layers :]
-            mtp_position_ids = model_kwargs["position_ids"][:, -num_last_main_model_tokens - self.num_mtp_layers :]
+            mtp_position_ids = model_kwargs["position_ids"][..., -num_last_main_model_tokens - self.num_mtp_layers :]
             mtp_attention_mask = model_kwargs["attention_mask"][:, -num_last_main_model_tokens - self.num_mtp_layers :]
             last_hidden_states = self.full_seq_last_hidden_states[
                 :, -num_last_main_model_tokens - self.num_mtp_layers :, :
@@ -1515,7 +1515,7 @@ class MTPCandidateGenerator(AssistedCandidateGenerator):
         # If we have a single layer, or validated enough, we can simply pass the new tokens
         else:
             mtp_input_ids = input_ids[:, -num_last_main_model_tokens:]
-            mtp_position_ids = model_kwargs["position_ids"][:, -num_last_main_model_tokens:]
+            mtp_position_ids = model_kwargs["position_ids"][..., -num_last_main_model_tokens:]
             mtp_attention_mask = model_kwargs["attention_mask"][:, -num_last_main_model_tokens:]
 
         candidate_ids, candidate_logits, _ = self.mtp_model(
@@ -1589,7 +1589,7 @@ def _prepare_position_ids(model_kwargs: dict[str, Any], new_length: int, is_enco
     position_length_diff = new_length - positions.shape[-1]
 
     if position_length_diff < 0:
-        model_kwargs[position_key] = positions[:, :position_length_diff]
+        model_kwargs[position_key] = positions[..., :position_length_diff]
     elif position_length_diff > 0:
         # Works for 2D and 3D position tensors
         required_dim = [1] * (positions.dim() - 1) + [-1]
