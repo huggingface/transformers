@@ -723,7 +723,7 @@ class ProcessorMixin(PushToHubMixin):
             if isinstance(text, str):
                 text = [text]
             # avoid in-place updates on text
-            text = text.copy()
+            text = list(text).copy()
 
         if audio is not None and hasattr(self, "feature_extractor"):
             sampling_rate = kwargs.get("sampling_rate", self.feature_extractor.sampling_rate)

@@ -183,7 +183,7 @@ class ColModernVBertProcessor(ProcessorMixin):
         if text is not None:
             if isinstance(text, str):
                 text = [text]
-            text = text.copy()
+            text = list(text).copy()
 
         if images is not None:
             images = self.image_processor.fetch_images(images)
