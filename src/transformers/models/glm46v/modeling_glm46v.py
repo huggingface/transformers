@@ -404,6 +404,9 @@ class Glm46VModel(Glm46VPreTrainedModel):
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
+        if input_ids is not None:
+            input_ids = input_ids.long()
+
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
 

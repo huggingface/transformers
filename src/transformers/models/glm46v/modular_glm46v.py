@@ -14,17 +14,30 @@
 
 
 import numpy as np
+import torch
 from huggingface_hub.dataclasses import strict
 
+from ...cache_utils import Cache
 from ...configuration_utils import PreTrainedConfig
-from ...utils import auto_docstring
+from ...processing_utils import Unpack
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
+from ...utils.deprecation import deprecate_kwarg
 from ...video_utils import VideoMetadata
 from ..auto import CONFIG_MAPPING, AutoConfig, AutoModel
 from ..glm4v.image_processing_glm4v import Glm4vImageProcessor
 from ..glm4v.image_processing_pil_glm4v import Glm4vImageProcessorPil
-from ..glm4v.modeling_glm4v import Glm4vForConditionalGeneration, Glm4vModel, Glm4vPreTrainedModel
+from ..glm4v.modeling_glm4v import (
+    Glm4vForConditionalGeneration,
+    Glm4vModel,
+    Glm4vModelOutputWithPast,
+    Glm4vPreTrainedModel,
+)
 from ..glm4v.processing_glm4v import Glm4vProcessor
 from ..glm4v.video_processing_glm4v import Glm4vVideoProcessor
+
+
+class Glm46VModelOutputWithPast(Glm4vModelOutputWithPast):
+    pass
 
 
 @auto_docstring(checkpoint="zai-org/GLM-4.1V-9B-Thinking")
@@ -98,6 +111,79 @@ class Glm46VModel(Glm4vModel):
         super().__init__(config)
         self.visual = AutoModel.from_config(config.vision_config)
         self.language_model = AutoModel.from_config(config.text_config)
+
+    @deprecate_kwarg("rope_deltas", version="v5.10")
+    @auto_docstring
+    @can_return_tuple
+    def forward(
+        self,
+        input_ids: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: Cache | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        pixel_values: torch.Tensor | None = None,
+        pixel_values_videos: torch.FloatTensor | None = None,
+        image_grid_thw: torch.LongTensor | None = None,
+        video_grid_thw: torch.LongTensor | None = None,
+        mm_token_type_ids: torch.IntTensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | Glm46VModelOutputWithPast:
+        r"""
+        image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
+            The temporal, height and width of feature shape of each image in LLM.
+        video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
+            The temporal, height and width of feature shape of each video in LLM.
+        """
+        if (input_ids is None) ^ (inputs_embeds is not None):
+            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
+
+        if input_ids is not None:
+            input_ids = input_ids.long()
+
+        if inputs_embeds is None:
+            inputs_embeds = self.get_input_embeddings()(input_ids)
+
+        if pixel_values is not None:
+            image_embeds = self.get_image_features(
+                pixel_values, image_grid_thw, return_dict=True, **kwargs
+            ).pooler_output
+            image_embeds = torch.cat(image_embeds, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
+            image_mask, _ = self.get_placeholder_mask(input_ids, inputs_embeds, image_features=image_embeds)
+            inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_embeds)
+
+        if pixel_values_videos is not None:
+            video_embeds = self.get_video_features(
+                pixel_values_videos, video_grid_thw, return_dict=True, **kwargs
+            ).pooler_output
+            video_embeds = torch.cat(video_embeds, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
+            _, video_mask = self.get_placeholder_mask(input_ids, inputs_embeds, video_features=video_embeds)
+            inputs_embeds = inputs_embeds.masked_scatter(video_mask, video_embeds)
+
+        if position_ids is None:
+            position_ids = self.compute_3d_position_ids(
+                input_ids=input_ids,
+                image_grid_thw=image_grid_thw,
+                video_grid_thw=video_grid_thw,
+                inputs_embeds=inputs_embeds,
+                attention_mask=attention_mask,
+                past_key_values=past_key_values,
+                mm_token_type_ids=mm_token_type_ids,
+            )
+
+        outputs = self.language_model(
+            input_ids=None,
+            position_ids=position_ids,
+            attention_mask=attention_mask,
+            past_key_values=past_key_values,
+            inputs_embeds=inputs_embeds,
+            **kwargs,
+        )
+
+        return Glm46VModelOutputWithPast(
+            **outputs,
+            rope_deltas=self.rope_deltas,
+        )
 
 
 class Glm46VForConditionalGeneration(Glm4vForConditionalGeneration):
@@ -188,6 +274,7 @@ class Glm46VVideoProcessor(Glm4vVideoProcessor):
 __all__ = [
     "Glm46VConfig",
     "Glm46VModel",
+    "Glm46VModelOutputWithPast",
     "Glm46VPreTrainedModel",
     "Glm46VForConditionalGeneration",
     "Glm46VProcessor",
