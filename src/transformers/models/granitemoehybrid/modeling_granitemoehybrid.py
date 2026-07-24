@@ -36,6 +36,7 @@ from ...integrations import (
     use_kernel_func_from_hub,
     use_kernelized_func,
 )
+from ...integrations.accelerate import force_accelerate_hooks
 from ...masking_utils import create_causal_mask, create_recurrent_attention_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, MoeCausalLMOutputWithPast, MoeModelOutputWithPast
@@ -717,6 +718,7 @@ class GraniteMoeHybridMambaLayer(nn.Module):
         contextualized_states = self.out_proj(scan_output.to(dtype))
         return contextualized_states
 
+    @force_accelerate_hooks("conv1d")
     def forward(
         self,
         hidden_states,

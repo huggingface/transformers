@@ -35,6 +35,7 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
 from ...integrations import lazy_load_kernel, use_kernel_forward_from_hub
+from ...integrations.accelerate import force_accelerate_hooks
 from ...masking_utils import create_causal_mask, create_recurrent_attention_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
@@ -834,6 +835,7 @@ class BambaMixer(nn.Module):
         contextualized_states = self.out_proj(scan_output.to(dtype))
         return contextualized_states
 
+    @force_accelerate_hooks("conv1d")
     def forward(
         self,
         hidden_states,
