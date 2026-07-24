@@ -829,6 +829,81 @@ class Qwen2_5OmniModelIntegrationTest(unittest.TestCase):
         self.assertFalse(torch.isnan(output[1]).any().item())
 
     @slow
+    def test_small_model_integration_test_token2wav_regression(self):
+        """
+        reproducer (for the expected values below): https://gist.github.com/ebezzam/12286028df44e91434f7c770efc4e5b5
+        """
+        # 50 talker codec tokens captured from a deterministic greedy generate() (seed 0).
+        talker_code_ids = [
+            3380, 1835, 397, 2983, 2983, 2983, 2983, 2983, 397, 885,
+            6248, 2712, 1946, 6615, 5436, 1038, 2118, 2649, 1532, 1834,
+            1058, 8060, 3357, 7288, 2284, 4600, 4600, 4600, 4600, 4600,
+            4600, 4600, 4600, 4600, 4600, 4600, 4600, 4600, 4600, 4600,
+            4600, 4600, 4600, 4600, 4600, 4600, 4600, 4600, 4600, 4600,
+        ]  # fmt: skip
+        talker_codes = torch.tensor(talker_code_ids, device=torch_device)[None, :]
+
+        model = Qwen2_5OmniForConditionalGeneration.from_pretrained(
+            "Qwen/Qwen2.5-Omni-7B", dtype=torch.bfloat16, device_map="auto"
+        )
+        speaker_params = model.speaker_map["Chelsie"]
+        # generate() re-floats token2wav before synthesis; mirror it when driving the module directly.
+        model.token2wav.float()
+
+        torch.manual_seed(0)
+        with torch.no_grad():
+            waveform = model.token2wav(
+                talker_codes,
+                conditioning=speaker_params["cond"].to(torch_device).float(),
+                reference_mel=speaker_params["ref_mel"].to(torch_device).float(),
+            )
+        waveform = waveform.float().cpu().squeeze()
+
+        # 50 samples evenly strided across the whole utterance.
+        signature = waveform[:: waveform.shape[-1] // 50][:50]
+        expected_signatures = Expectations(
+            {
+                ("cuda", 8): torch.tensor([
+                    0.000079, 0.000008, 0.000008, 0.000010, 0.000010,
+                    0.000011, 0.000011, 0.000011, 0.000010, 0.000010,
+                    0.000392, -0.016186, 0.006462, 0.009945, -0.009731,
+                    0.004187, -0.000167, -0.000575, 0.000043, 0.000088,
+                    -0.014556, -0.081801, -0.016574, 0.076138, -0.003587,
+                    -0.017060, 0.069444, -0.008152, -0.027823, 0.028206,
+                    -0.000029, 0.039071, -0.045019, 0.040665, 0.059823,
+                    -0.018974, -0.018389, -0.002258, 0.010748, 0.035934,
+                    0.026538, 0.038359, 0.024537, -0.029110, 0.022139,
+                    -0.024764, -0.021009, 0.000134, 0.006005, -0.004931,
+                ]),
+                ("cuda", 9): torch.tensor([
+                    0.000079, 0.000007, 0.000007, 0.000009, 0.000009,
+                    0.000009, 0.000009, 0.000008, 0.000008, 0.000007,
+                    0.000391, -0.016136, 0.006466, 0.009958, -0.009722,
+                    0.004204, -0.000167, -0.000573, 0.000044, 0.000067,
+                    -0.014672, -0.081729, -0.016467, 0.076082, -0.003551,
+                    -0.017296, 0.069874, -0.008040, -0.027811, 0.028181,
+                    -0.000119, 0.038994, -0.045137, 0.040702, 0.059884,
+                    -0.018841, -0.018413, -0.002327, 0.010766, 0.035896,
+                    0.026562, 0.038278, 0.024461, -0.029035, 0.022179,
+                    -0.024967, -0.020832, 0.000076, 0.005978, -0.004948,
+                ]),
+            }
+        )  # fmt: skip
+        expected_signature = expected_signatures.get_expectation()
+        torch.testing.assert_close(signature, expected_signature, rtol=1e-3, atol=1e-3)
+
+        # Overall energy: the regression collapses std/RMS ~3.6x (0.0270 -> 0.0076).
+        expected_stats = Expectations(
+            {
+                ("cuda", 8): (0.027017, 0.027016),
+                ("cuda", 9): (0.027019, 0.027018),
+            }
+        )  # fmt: skip
+        expected_std, expected_rms = expected_stats.get_expectation()
+        torch.testing.assert_close(waveform.std().item(), expected_std, rtol=1e-5, atol=1e-5)
+        torch.testing.assert_close(waveform.pow(2).mean().sqrt().item(), expected_rms, rtol=1e-5, atol=1e-5)
+
+    @slow
     @require_flash_attn
     @require_torch_accelerator
     @pytest.mark.flash_attn_test
