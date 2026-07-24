@@ -308,7 +308,7 @@ class HeterogeneousConfigMixin:
         return hasattr(self, "_heterogeneity_spec")
 
     @property
-    def per_layer_config(self) -> Sequence[PreTrainedConfig] | None:
+    def per_layer_config(self) -> Sequence[PreTrainedConfig]:
         return _PerLayerConfigView(self)
 
     @per_layer_config.setter
