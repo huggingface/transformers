@@ -17,6 +17,8 @@ logger = logging.get_logger(__name__)
 # We maintain a module-level cache of the embedding vectors for the stop string criterion
 # because they are slow to compute
 STOP_STRING_EMBEDDING_CACHE = OrderedDict()
+# Target bound for the comparison elements produced when batching repeated n-gram sizes.
+MAX_REPEATED_NGRAM_COMPARISON_ELEMENTS = 2**20
 
 
 STOPPING_CRITERIA_INPUTS_DOCSTRING = r"""
@@ -105,6 +107,131 @@ class MaxTimeCriteria(StoppingCriteria):
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor, **kwargs) -> torch.BoolTensor:
         is_done = time.time() - self.initial_timestamp > self.max_time
         return torch.full((input_ids.shape[0],), is_done, device=input_ids.device, dtype=torch.bool)
+
+
+class RepeatedNGramCriteria(StoppingCriteria):
+    """
+    This class can be used to stop generation when the sequence ends with consecutive copies of the same token block.
+    It can check one n-gram size or an inclusive range of sizes and returns a separate stopping decision for each batch
+    row. By default, the prompt participates in repetition detection; set `prompt_length_to_skip` to detect loops only
+    among newly generated tokens.
+
+    Args:
+        min_ngram_size (`int`):
+            The smallest repeated block size to detect, in tokens.
+        max_ngram_size (`int`, *optional*):
+            The largest repeated block size to detect, in tokens. Defaults to `min_ngram_size`, which checks one fixed
+            block size. Wider ranges and larger block sizes require more comparisons, so prefer the narrowest useful
+            range.
+        num_repetitions (`int`, *optional*, defaults to 4):
+            The number of consecutive copies required to stop generation. This counts the original block, so a value
+            of 3 detects `[A, B, A, B, A, B]` when the n-gram size is 2.
+        prompt_length_to_skip (`int`, *optional*, defaults to 0):
+            The number of initial tokens to exclude from repetition detection. Set this to the prompt length to detect
+            repetition only in newly generated tokens.
+        min_new_tokens (`int`, *optional*, defaults to 0):
+            The minimum number of tokens after `prompt_length_to_skip` that must be present before generation can stop.
+
+    Examples:
+
+    ```python
+    >>> import torch
+    >>> from transformers import RepeatedNGramCriteria, StoppingCriteriaList
+
+    >>> stopping_criteria = StoppingCriteriaList(
+    ...     [
+    ...         RepeatedNGramCriteria(
+    ...             min_ngram_size=2,
+    ...             max_ngram_size=8,
+    ...             num_repetitions=3,
+    ...         )
+    ...     ]
+    ... )
+    >>> input_ids = torch.tensor([[1, 2, 1, 2, 1, 2], [1, 2, 3, 4, 5, 6]])
+    >>> stopping_criteria(input_ids, scores=None)
+    tensor([ True, False])
+    ```
+    """
+
+    def __init__(
+        self,
+        min_ngram_size: int,
+        max_ngram_size: int | None = None,
+        num_repetitions: int = 4,
+        prompt_length_to_skip: int = 0,
+        min_new_tokens: int = 0,
+    ):
+        if not isinstance(min_ngram_size, int) or min_ngram_size <= 0:
+            raise ValueError(f"`min_ngram_size` has to be a strictly positive integer, but is {min_ngram_size}")
+        if max_ngram_size is None:
+            max_ngram_size = min_ngram_size
+        if not isinstance(max_ngram_size, int) or max_ngram_size < min_ngram_size:
+            raise ValueError(
+                "`max_ngram_size` has to be an integer greater than or equal to `min_ngram_size`, but is "
+                f"{max_ngram_size}"
+            )
+        if not isinstance(num_repetitions, int) or num_repetitions < 2:
+            raise ValueError(f"`num_repetitions` has to be an integer greater than 1, but is {num_repetitions}")
+        for arg_name, arg_value in [
+            ("prompt_length_to_skip", prompt_length_to_skip),
+            ("min_new_tokens", min_new_tokens),
+        ]:
+            if not isinstance(arg_value, int) or arg_value < 0:
+                raise ValueError(f"`{arg_name}` has to be a non-negative integer, but is {arg_value}")
+
+        self.min_ngram_size = min_ngram_size
+        self.max_ngram_size = max_ngram_size
+        self.num_repetitions = num_repetitions
+        self.prompt_length_to_skip = prompt_length_to_skip
+        self.min_new_tokens = min_new_tokens
+
+    @add_start_docstrings(STOPPING_CRITERIA_INPUTS_DOCSTRING)
+    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor, **kwargs) -> torch.BoolTensor:
+        if input_ids.shape[0] == 0:
+            return torch.zeros(0, dtype=torch.bool, device=input_ids.device)
+
+        generated_ids = input_ids[:, self.prompt_length_to_skip :]
+        generated_length = generated_ids.shape[1]
+        largest_ngram_size = min(self.max_ngram_size, generated_length // self.num_repetitions)
+
+        if generated_length < self.min_new_tokens or largest_ngram_size < self.min_ngram_size:
+            return torch.zeros(input_ids.shape[0], dtype=torch.bool, device=input_ids.device)
+
+        if self.min_ngram_size == self.max_ngram_size:
+            suffix = generated_ids[:, -self.num_repetitions * self.min_ngram_size :]
+            repeated_blocks = suffix.unflatten(1, (self.num_repetitions, self.min_ngram_size))
+            return (repeated_blocks == repeated_blocks[:, :1]).all(dim=2).all(dim=1)
+
+        # Compare candidate suffixes against their final blocks in bounded, vectorized chunks. Reversing the suffix
+        # makes index 0 the beginning of the reference block for every candidate n-gram size. The common small-range
+        # case fits in one chunk; bounding larger ranges prevents the temporary comparison tensor from becoming
+        # quadratic in `max_ngram_size`.
+        result = torch.zeros(input_ids.shape[0], dtype=torch.bool, device=input_ids.device)
+        chunk_max_ngram_size = largest_ngram_size
+        max_suffix_length = self.num_repetitions * largest_ngram_size
+        reversed_suffix = generated_ids[:, -max_suffix_length:].flip(dims=(1,))
+        while chunk_max_ngram_size >= self.min_ngram_size:
+            max_suffix_length = self.num_repetitions * chunk_max_ngram_size
+            elements_per_ngram = max(1, input_ids.shape[0] * max_suffix_length)
+            chunk_size = max(1, MAX_REPEATED_NGRAM_COMPARISON_ELEMENTS // elements_per_ngram)
+            chunk_min_ngram_size = max(self.min_ngram_size, chunk_max_ngram_size - chunk_size + 1)
+
+            chunk_suffix = reversed_suffix[:, :max_suffix_length]
+            ngram_sizes = torch.arange(
+                chunk_min_ngram_size,
+                chunk_max_ngram_size + 1,
+                device=input_ids.device,
+            )
+            positions = torch.arange(max_suffix_length, device=input_ids.device)
+            reference_indices = positions.unsqueeze(0) % ngram_sizes.unsqueeze(1)
+            relevant_positions = positions.unsqueeze(0) < self.num_repetitions * ngram_sizes.unsqueeze(1)
+
+            expected_tokens = chunk_suffix[:, reference_indices]
+            mismatches = (chunk_suffix[:, None, :] != expected_tokens) & relevant_positions.unsqueeze(0)
+            result = result | (~mismatches.any(dim=2)).any(dim=1)
+            chunk_max_ngram_size = chunk_min_ngram_size - 1
+
+        return result
 
 
 class StopStringCriteria(StoppingCriteria):
