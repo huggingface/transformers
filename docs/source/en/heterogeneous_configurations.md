@@ -205,3 +205,12 @@ serialized_per_layer_config
 
 Use sparse serialization for compact configs. Use explicit serialization when readability or downstream tooling benefits
 from seeing the full per-layer layout.
+
+## Architecture support
+
+Heterogeneous configurations require the model architecture to opt in through a heterogeneous modeling spec. The
+architectures with built-in support are registered in
+[`supported_models.py`](https://github.com/huggingface/transformers/blob/main/src/transformers/integrations/heterogeneity/supported_models.py).
+Any other model — including custom models with remote code — can enable support by attaching its own spec, without
+changes to Transformers. See [Heterogeneous modeling](./heterogeneous_modeling) for how the spec works, which
+submodules a `skip` can name, and how to write a spec for a new architecture.

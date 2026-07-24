@@ -42,6 +42,11 @@ class _HeterogeneitySpec:
     per_layer_attributes: set[str]
     explicit_per_layer_attributes: set[str]
 
+    # Layers that never update their KV cache because a skip replaced the submodule responsible for it.
+    # Resolved from the modeling spec by `apply_heterogeneous_modeling`; `None` until a model has been
+    # constructed from this config.
+    disabled_kv_layer_indices: tuple[int, ...] | None = None
+
 
 def _normalize_layer_overrides(layer_overrides: dict[str, Any]) -> dict[str, Any]:
     normalized = copy.deepcopy(layer_overrides)
@@ -74,6 +79,11 @@ def _validate_layer_indices(config: PreTrainedConfig, per_layer_overrides: dict[
             f"`per_layer_config` keys must be integer layer indices in the range [0, {num_hidden_layers}); "
             f"got {invalid_layer_indices}."
         )
+
+
+def _validate_per_layer_config_is_not_nested(per_layer_overrides: dict[int, dict[str, Any]]) -> None:
+    if any("per_layer_config" in layer_overrides for layer_overrides in per_layer_overrides.values()):
+        raise ValueError("`per_layer_config` cannot be nested within itself.")
 
 
 def _validate_sliding_window_and_attention_chunk_size(
@@ -186,6 +196,7 @@ def _apply_heterogeneous_config(
     }
 
     _validate_layer_indices(config, normalized_per_layer_overrides)
+    _validate_per_layer_config_is_not_nested(normalized_per_layer_overrides)
     _validate_sliding_window_and_attention_chunk_size(config, normalized_per_layer_overrides)
 
     config._heterogeneity_spec = _modify_config_and_create_heterogeneity_spec(config, normalized_per_layer_overrides)
@@ -324,6 +335,30 @@ class HeterogeneousConfigMixin:
         if not self.is_heterogeneous:
             return None
         return self._heterogeneity_spec.per_layer_attributes
+
+    def get_disabled_kv_layer_indices(self) -> tuple[int, ...]:
+        """Return the indices of layers that never update their KV cache because a skip replaced the submodule
+        responsible for it (e.g. layers that skip attention). Empty for homogeneous configs.
+
+        Raises:
+            ValueError: If some layers skip submodules and no model has been constructed from this config yet.
+                Whether a skip disables a layer's KV-cache update is defined by the architecture's
+                `HeterogeneousModelingSpec`, which `apply_heterogeneous_modeling` resolves during model
+                construction.
+        """
+        if not self.is_heterogeneous:
+            return ()
+
+        disabled_kv_layer_indices = self._heterogeneity_spec.disabled_kv_layer_indices
+        if disabled_kv_layer_indices is None:
+            if any(layer_config.skip for layer_config in self.per_layer_config):
+                raise ValueError(
+                    "Some layers in this heterogeneous config skip submodules, and whether a skip disables a "
+                    "layer's KV-cache update is only resolved during model construction. Construct a model from "
+                    "this config first."
+                )
+            return ()
+        return disabled_kv_layer_indices
 
     @property
     def allow_global_per_layer_attribute_access(self) -> bool:

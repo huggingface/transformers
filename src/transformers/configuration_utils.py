@@ -1365,6 +1365,10 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin, Heterogeneous
         """
         # Start from the text config
         text_config = copy.deepcopy(self.get_text_config(decoder=True))
+        mtp_per_layer_config = getattr(text_config, "mtp_per_layer_config", None)
+
+        # MTP uses independent per-layer overrides in its own layer index space.
+        text_config.per_layer_config = None
         num_mtp_layers = getattr(text_config, "num_mtp_layers", None)
         # In this case, raise
         if num_mtp_layers is None:
@@ -1392,6 +1396,9 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin, Heterogeneous
 
         # This is needed to be correct in several places, e.g. when creating the cache
         text_config.num_hidden_layers = num_mtp_layers
+
+        if mtp_per_layer_config:
+            text_config.per_layer_config = mtp_per_layer_config
 
         return text_config
 

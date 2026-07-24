@@ -1,0 +1,359 @@
+# Copyright 2026 The HuggingFace Inc. team. All rights reserved.
+# Copyright (c) 2026, NVIDIA CORPORATION. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+from __future__ import annotations
+
+import contextvars
+import inspect
+import threading
+from collections.abc import Callable
+from dataclasses import dataclass
+from functools import wraps
+from types import MethodType
+from typing import TYPE_CHECKING, Any
+
+from transformers.integrations.heterogeneity.heterogeneous_modeling_spec import (
+    SkipDescriptor,
+    get_heterogeneous_modeling_spec,
+)
+from transformers.integrations.heterogeneity.masking_utils import AttentionMasksByAttributeValue
+
+
+if TYPE_CHECKING:
+    from torch import nn
+
+    from transformers import PreTrainedConfig, PreTrainedModel
+
+
+@dataclass
+class _LayerInitContext:
+    model_config: PreTrainedConfig
+    layer_cls: type[nn.Module]
+    per_layer_skip_types: list[list[str]]
+    skip_descriptors: dict[str, SkipDescriptor]
+    per_layer_attributes: set[str]
+    layer_idx_variable_name: str
+
+
+_layer_init_context: contextvars.ContextVar[tuple[_LayerInitContext, ...]] = contextvars.ContextVar(
+    "_layer_init_context", default=()
+)
+_model_init_stack: contextvars.ContextVar[tuple[PreTrainedModel, ...]] = contextvars.ContextVar(
+    "_model_init_stack", default=()
+)
+_layer_patching_lock = threading.Lock()
+
+
+def apply_heterogeneous_modeling(model: PreTrainedModel) -> None:
+    """Apply heterogeneous per-layer modeling during model construction.
+
+    Called automatically during ``PreTrainedModel.__init__`` when
+    ``config.is_heterogeneous`` is ``True``.
+
+    The model must resolve to a ``HeterogeneousModelingSpec`` either by setting
+    ``_heterogeneous_modeling_spec`` on the model class, or by having a built-in
+    spec factory in ``transformers.integrations.heterogeneity.supported_models``.
+    The spec defines the layer class to patch, the layer-index argument or variable name,
+    and optional skip descriptors.
+
+    The mechanism monkey-patches ``layer_cls.__init__`` and stores the per-model
+    context in a ``ContextVar``.  The wrapper reads from the ``ContextVar``
+    at layer-construction time, so each thread/model naturally gets its own
+    context with no shared mutable state.
+
+    1. The patched ``layer_cls.__init__`` determines the current layer index (from the function
+       arguments or by walking the call stack).
+    2. It passes ``config.per_layer_config[layer_idx]`` to the original ``__init__``.
+    3. For layers with a ``skip`` attribute, the
+       corresponding layer members are replaced with no-op modules according to
+       ``HeterogeneousModelingSpec.skip_descriptors``.
+    4. For layers with layer-specific attention masks, the layer ``forward``
+       method is patched to select the mask matching that layer's configured
+       mask key.
+
+    After model construction, the ``ContextVar`` is reset.
+
+    The resolved ``HeterogeneousModelingSpec`` contains:
+        ``layer_cls``: The layer class to patch, e.g. ``LlamaDecoderLayer``.
+        ``layer_idx_variable_name``: Name of the layer index argument in ``layer_cls.__init__``,
+            or the layer index variable from higher up the call stack.
+        ``skip_descriptors``: Optional dict mapping skip type names to descriptors containing replacement modules
+        and whether a replaced member is the one updating the layer's KV cache.
+
+    Args:
+        model: The model being constructed. Must have a heterogeneous ``config``
+            and a resolvable ``HeterogeneousModelingSpec`` with ``layer_cls`` set.
+    """
+    if not model.config.is_heterogeneous:
+        return
+
+    heterogeneous_modeling_spec = get_heterogeneous_modeling_spec(model)
+
+    per_layer_skip_types = [layer_config.skip for layer_config in model.config.per_layer_config]
+    skip_descriptors = heterogeneous_modeling_spec.skip_descriptors or {}
+    _validate_skip_descriptors(per_layer_skip_types, skip_descriptors)
+
+    # Record which layers have their KV-cache update disabled on the config's heterogeneity spec,
+    # where cache construction (e.g. `StaticCache`) can read it from the config alone.
+    model.config._heterogeneity_spec.disabled_kv_layer_indices = tuple(
+        layer_idx
+        for layer_idx, skip_types in enumerate(per_layer_skip_types)
+        if any(skip_descriptors[skip_type].replaces_kv_cache_updater for skip_type in skip_types)
+    )
+
+    ctx = _LayerInitContext(
+        model_config=model.config,
+        layer_cls=heterogeneous_modeling_spec.layer_cls,
+        per_layer_skip_types=per_layer_skip_types,
+        skip_descriptors=skip_descriptors,
+        per_layer_attributes=model.config.per_layer_attributes,
+        layer_idx_variable_name=heterogeneous_modeling_spec.layer_idx_variable_name,
+    )
+    model._layer_init_context_token = _layer_init_context.set((*_layer_init_context.get(), ctx))
+
+    _patch_layer_init(heterogeneous_modeling_spec.layer_cls)
+
+
+def wrap_model_init_with_heterogeneous_cleanup(orig_init: Callable[..., None]) -> Callable[..., None]:
+    """Wrap a model initializer so heterogeneous layer context is always cleaned up."""
+    if getattr(orig_init, "_wrapped_by_heterogeneous_modeling_cleanup", False):
+        return orig_init
+
+    @wraps(orig_init)
+    def _patched_init(self, *args, **kwargs):
+        model_init_stack = _model_init_stack.get()
+        if any(model is self for model in model_init_stack):
+            return orig_init(self, *args, **kwargs)
+
+        token = _model_init_stack.set((*model_init_stack, self))
+        try:
+            orig_init(self, *args, **kwargs)
+        finally:
+            try:
+                _reset_heterogeneous_modeling_context(self)
+            finally:
+                _model_init_stack.reset(token)
+
+    _patched_init._wrapped_by_heterogeneous_modeling_cleanup = True
+    return _patched_init
+
+
+def _reset_heterogeneous_modeling_context(model: PreTrainedModel) -> None:
+    if not hasattr(model, "_layer_init_context_token"):
+        return
+
+    _layer_init_context.reset(model._layer_init_context_token)
+    del model._layer_init_context_token
+
+
+def _patch_layer_init(layer_cls: type[nn.Module]) -> None:
+    if getattr(layer_cls.__init__, "_patched_by_heterogeneity", False):
+        return
+    with _layer_patching_lock:
+        if getattr(layer_cls.__init__, "_patched_by_heterogeneity", False):
+            return
+
+        orig_layer_init = layer_cls.__init__
+
+        @wraps(orig_layer_init)
+        def _patched_layer_init(self, config, *args, **kwargs):
+            ctx = next(
+                (
+                    ctx
+                    for ctx in reversed(_layer_init_context.get())
+                    if ctx.layer_cls is layer_cls and ctx.model_config is config
+                ),
+                None,
+            )
+            if ctx is None or not getattr(config, "is_heterogeneous", False):
+                return orig_layer_init(self, config, *args, **kwargs)
+
+            # --- Resolve layer index ---
+            layer_idx_possible_names = [ctx.layer_idx_variable_name]
+            layer_idx_source = "constructor arguments"
+            layer_idx = _get_variable_from_passed_arguments(
+                func=orig_layer_init, args=(self, config, *args), kwargs=kwargs, names=layer_idx_possible_names
+            )
+            if layer_idx is None:
+                layer_idx_source = "call stack"
+                layer_idx = _get_variable_from_stack(layer_idx_possible_names)
+
+            if layer_idx is None:
+                raise RuntimeError(
+                    f"Could not determine layer index `{ctx.layer_idx_variable_name}` for heterogeneous model "
+                    "initialization. Ensure it is passed as a constructor argument or available in the call stack."
+                )
+            _validate_layer_idx(
+                layer_idx,
+                variable_name=ctx.layer_idx_variable_name,
+                source=layer_idx_source,
+                num_layers=config.num_hidden_layers,
+            )
+
+            # --- Apply per-layer config ---
+            layer_config = config.per_layer_config[layer_idx]
+            orig_layer_init(self, layer_config, *args, **kwargs)
+
+            # --- Replace skipped sublayers ---
+            for skip_type, skip_descriptor in ctx.skip_descriptors.items():
+                if skip_type in ctx.per_layer_skip_types[layer_idx]:
+                    _apply_skip_descriptor(
+                        layer=self,
+                        skip_descriptor=skip_descriptor,
+                        layer_idx=layer_idx,
+                    )
+
+            # --- Patch forward for attention mask selection ---
+            sliding_window = getattr(layer_config, "sliding_window", None)
+            attention_chunk_size = getattr(layer_config, "attention_chunk_size", None)
+            mask_key = (
+                sliding_window or attention_chunk_size
+            )  # Relies on having exclusivity validation in the heterogeneous configuration_utils
+            if {"sliding_window", "attention_chunk_size"} & ctx.per_layer_attributes and mask_key:
+                _patch_layer_forward_for_attention_mask_selection(layer=self, mask_key=mask_key)
+
+        _patched_layer_init._patched_by_heterogeneity = True
+        layer_cls.__init__ = _patched_layer_init
+
+
+def _patch_layer_forward_for_attention_mask_selection(
+    *,
+    layer: nn.Module,
+    mask_key: int,
+) -> None:
+    orig_forward = layer.forward
+
+    @wraps(orig_forward)
+    def _patched_forward(self, *args, **kwargs):
+        attention_mask = kwargs.get("attention_mask")
+        if isinstance(attention_mask, AttentionMasksByAttributeValue):
+            kwargs["attention_mask"] = attention_mask[mask_key]
+        return orig_forward(*args, **kwargs)
+
+    layer.forward = MethodType(_patched_forward, layer)
+
+
+def _validate_skip_descriptors(
+    per_layer_skip_types: list[list[str]], skip_descriptors: dict[str, SkipDescriptor]
+) -> None:
+    skip_types = set(sum(per_layer_skip_types, []))
+    missing_descriptors = skip_types - skip_descriptors.keys()
+    if missing_descriptors:
+        raise ValueError(f"No-op descriptors are missing for the following types: {missing_descriptors}")
+
+
+def _apply_skip_descriptor(
+    *,
+    layer,
+    skip_descriptor: SkipDescriptor,
+    layer_idx: int,
+):
+    generic_replacements = {}
+    class_specific_replacements = {}
+
+    for key, replacement_module in skip_descriptor.replacements.items():
+        if isinstance(key, tuple):
+            member_name, cls = key
+        else:
+            member_name = key
+            cls = None
+
+        if not _hasattr_by_path(layer, member_name):
+            raise AttributeError(
+                f"Layer {layer_idx} in class {layer.__class__.__name__} has no attribute {member_name}"
+            )
+
+        if cls is None:
+            generic_replacements[member_name] = replacement_module
+            continue
+
+        if not isinstance(_getattr_by_path(layer, member_name), cls):
+            continue
+
+        if member_name in class_specific_replacements:
+            raise ValueError(
+                f"Multiple class-specific skip replacements match layer {layer_idx} "
+                f"attribute {member_name} in class {layer.__class__.__name__}"
+            )
+        class_specific_replacements[member_name] = replacement_module
+
+    for member_name, replacement_module in class_specific_replacements.items():
+        _setattr_by_path(layer, member_name, replacement_module())
+
+    for member_name, replacement_module in generic_replacements.items():
+        if member_name not in class_specific_replacements:
+            _setattr_by_path(layer, member_name, replacement_module())
+
+
+def _getattr_by_path(obj: Any, attribute_path: str) -> Any:
+    for attribute_name in attribute_path.split("."):
+        obj = getattr(obj, attribute_name)
+    return obj
+
+
+def _hasattr_by_path(obj: Any, attribute_path: str) -> bool:
+    try:
+        _getattr_by_path(obj, attribute_path)
+    except AttributeError:
+        return False
+    return True
+
+
+def _setattr_by_path(obj: Any, attribute_path: str, value: Any) -> None:
+    parent_path, _, attribute_name = attribute_path.rpartition(".")
+    parent = _getattr_by_path(obj, parent_path) if parent_path else obj
+    setattr(parent, attribute_name, value)
+
+
+def _get_variable_from_passed_arguments(*, func: Callable, args: tuple, kwargs: dict, names: list[str]) -> Any | None:
+    sig = inspect.signature(func)
+    try:
+        bound_arguments = sig.bind(*args, **kwargs)
+    except TypeError as e:
+        raise TypeError(f"{func.__qualname__}() {e}") from None
+    bound_arguments.apply_defaults()
+
+    for name in names:
+        if name in bound_arguments.arguments:
+            return bound_arguments.arguments[name]
+    return None
+
+
+def _get_variable_from_stack(names: list[str]) -> Any | None:
+    f = inspect.currentframe()
+    if f is None or f.f_back is None:
+        return None
+
+    f = f.f_back.f_back
+
+    while f:
+        for name in names:
+            if name in f.f_locals:
+                return f.f_locals[name]
+        f = f.f_back
+    return None
+
+
+def _validate_layer_idx(layer_idx: Any, *, variable_name: str, source: str, num_layers: int) -> None:
+    if isinstance(layer_idx, bool) or not isinstance(layer_idx, int):
+        raise TypeError(
+            f"Layer index `{variable_name}` resolved from the {source} must be an integer, "
+            f"but got {layer_idx!r} ({type(layer_idx).__name__})."
+        )
+    if not 0 <= layer_idx < num_layers:
+        raise IndexError(
+            f"Layer index `{variable_name}` resolved from the {source} is out of range for "
+            f"a model with {num_layers} layers: {layer_idx}."
+        )
