@@ -13,36 +13,16 @@
 # limitations under the License.
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig, PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import auto_docstring, logging
 from ..nemotron_h import NemotronHConfig
+from ..parakeet.configuration_parakeet import ParakeetEncoderConfig
 from ..radio.configuration_radio import RadioConfig
 
 
-__all__ = ["NemotronH_Omni_Reasoning_V3_Config", "SoundConfig"]
+__all__ = ["NemotronH_Omni_Reasoning_V3_Config"]
 
 logger = logging.get_logger(__name__)
-
-
-@strict
-class SoundConfig(PretrainedConfig):
-    """Configuration for the sound/audio model (Parakeet encoder + projection)."""
-
-    model_type = "parakeet"
-
-    # Parakeet encoder config
-    hidden_size: int = 1024
-    num_attention_heads: int = 8
-    num_hidden_layers: int = 24
-    intermediate_size: int = 4096
-    conv_kernel_size: int = 31
-    feat_in: int = 80  # Mel features
-    subsampling_factor: int = 8
-    # Projection config
-    projection_hidden_size: int = 20480
-    projection_bias: bool = True
-    # Audio processing
-    sampling_rate: int = 16000
 
 
 @auto_docstring(checkpoint="nvidia/Nemotron-3-Nano-Omni-30B-A3B-Reasoning-BF16")
@@ -53,7 +33,7 @@ class NemotronH_Omni_Reasoning_V3_Config(PreTrainedConfig):
         Configuration for the RADIO vision encoder. Defaults to a default [`RadioConfig`].
     llm_config (`dict` or `NemotronHConfig`, *optional*):
         Configuration for the NemotronH language model. Defaults to a default [`NemotronHConfig`].
-    sound_config (`dict` or `SoundConfig`, *optional*):
+    sound_config (`dict` or `ParakeetEncoderConfig`, *optional*):
         Configuration for the optional Parakeet sound encoder. `None` disables the audio branch.
     force_image_size (`int`, *optional*):
         Fixed input image resolution (in pixels) the vision tower expects.
@@ -95,7 +75,7 @@ class NemotronH_Omni_Reasoning_V3_Config(PreTrainedConfig):
 
     vision_config: dict | RadioConfig | None = None
     llm_config: dict | NemotronHConfig | None = None
-    sound_config: dict | SoundConfig | None = None
+    sound_config: dict | ParakeetEncoderConfig | None = None
     force_image_size: int | None = None
     downsample_ratio: float = 0.5
     template: str | None = None  # TODO move out of here and into the tokenizer
@@ -129,8 +109,12 @@ class NemotronH_Omni_Reasoning_V3_Config(PreTrainedConfig):
             self.llm_config = NemotronHConfig()
 
         # Sound/audio model configuration is optional; leave it as `None` to disable the audio branch.
+        # This checkpoint's sound_config omits `attention_bias`/`scale_input`, which are `False` for
+        # its Parakeet variant, so supply them before building the encoder config.
         if isinstance(self.sound_config, dict):
-            self.sound_config = SoundConfig(**self.sound_config)
+            sound_config = {"attention_bias": False, "scale_input": False, **self.sound_config}
+            sound_config.pop("model_type", None)
+            self.sound_config = ParakeetEncoderConfig(**sound_config)
 
         super().__post_init__(**kwargs)
 

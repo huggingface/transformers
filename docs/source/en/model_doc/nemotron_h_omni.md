@@ -95,10 +95,6 @@ print(processor.tokenizer.decode(generated, skip_special_tokens=True))
 
 [[autodoc]] NemotronH_Omni_Reasoning_V3_Config
 
-## SoundConfig
-
-[[autodoc]] SoundConfig
-
 ## NemotronH_Omni_Reasoning_V3ImageProcessor
 
 [[autodoc]] NemotronH_Omni_Reasoning_V3ImageProcessor

@@ -24,7 +24,7 @@ from ...generation import GenerationConfig
 from ...modeling_outputs import CausalLMOutputWithPast
 from ...modeling_utils import PreTrainedModel
 from ...utils import logging
-from ..auto import CONFIG_MAPPING, FEATURE_EXTRACTOR_MAPPING, AutoConfig, AutoModel, AutoModelForCausalLM
+from ..auto import CONFIG_MAPPING, FEATURE_EXTRACTOR_MAPPING, AutoModel, AutoModelForCausalLM
 from ..nemotron_h.modeling_nemotron_h import NemotronHRMSNorm
 from .configuration_nemotron_h_omni import NemotronH_Omni_Reasoning_V3_Config
 
@@ -120,47 +120,60 @@ class NemotronH_Omni_Reasoning_V3SoundProjection(nn.Module):
 
 
 class NemotronH_Omni_Reasoning_V3SoundEncoder(nn.Module):
-    """Wrapper around the Parakeet encoder; we use only the encoder to extract audio embeddings."""
+    """Thin wrapper exposing the Parakeet encoder's `last_hidden_state` for audio embedding."""
 
-    def __init__(self, config=None):
+    def __init__(self, config):
         super().__init__()
-
-        if config is None:
-            raise ValueError("config must be provided, and ParakeetEncoder must be available in transformers.")
-
-        if hasattr(config, "__dict__"):
-            config_dict = {
-                "attention_bias": getattr(config, "attention_bias", False),
-                "hidden_size": getattr(config, "hidden_size", 1024),
-                "num_attention_heads": getattr(config, "num_attention_heads", 8),
-                "num_hidden_layers": getattr(config, "num_hidden_layers", 24),
-                "intermediate_size": getattr(config, "intermediate_size", 4096),
-                "conv_kernel_size": getattr(config, "conv_kernel_size", 31),
-                "convolution_bias": getattr(config, "convolution_bias", False),
-                "feat_in": getattr(config, "feat_in", 80),
-                "subsampling_factor": getattr(config, "subsampling_factor", 8),
-                "subsampling_conv_channels": getattr(config, "subsampling_conv_channels", 256),
-                "subsampling_conv_kernel_size": getattr(config, "subsampling_conv_kernel_size", 3),
-                "subsampling_conv_stride": getattr(config, "subsampling_conv_stride", 2),
-                "num_mel_bins": getattr(config, "num_mel_bins", 128),
-                "scale_input": getattr(config, "scale_input", False),
-            }
-        elif isinstance(config, dict):
-            config_dict = config
-        else:
-            config_dict = {}
-
-        parakeet_config = AutoConfig.for_model("parakeet_encoder", **config_dict)
-        self.config = parakeet_config
-        self.encoder = AutoModel.from_config(parakeet_config)
+        self.config = config
+        self.encoder = AutoModel.from_config(config)
 
     def forward(self, input_features: torch.Tensor, attention_mask: torch.Tensor | None = None) -> torch.Tensor:
-        outputs = self.encoder(input_features=input_features, attention_mask=attention_mask)
-        return outputs.last_hidden_state
+        return self.encoder(input_features=input_features, attention_mask=attention_mask).last_hidden_state
 
     @property
     def hidden_size(self) -> int:
         return self.config.hidden_size
+
+
+class NemotronH_Omni_Reasoning_V3SoundProjector(nn.Module):
+    """Single-forward audio pipeline: feature-extract raw clip(s), then run the given sound encoder and
+    projection, returning flattened LLM-space embeddings ready to scatter onto `<audio>` positions.
+    """
+
+    def __init__(self, config):
+        super().__init__()
+        feature_extractor_class = FEATURE_EXTRACTOR_MAPPING[CONFIG_MAPPING["parakeet_encoder"]]
+        self.feature_extractor = feature_extractor_class(
+            sampling_rate=getattr(config, "sampling_rate", 16000),
+            feature_size=config.num_mel_bins,
+        )
+
+    def forward(self, sound_clips, encoder, projection) -> torch.Tensor:
+        weight = encoder.encoder.subsampling.linear.weight
+        device, dtype = weight.device, weight.dtype
+
+        if isinstance(sound_clips, torch.Tensor) and sound_clips.dim() >= 3:
+            input_features = sound_clips.to(device=device, dtype=dtype)
+            attention_mask = None
+        else:
+            # `.tolist()` keeps a raw waveform tensor within the feature extractor's accepted input
+            # types (`list[float]` / `list[list[float]]`) without pulling in numpy here.
+            raw_speech = sound_clips.tolist() if isinstance(sound_clips, torch.Tensor) else sound_clips
+            audio_inputs = self.feature_extractor(
+                raw_speech, sampling_rate=self.feature_extractor.sampling_rate, return_tensors="pt"
+            )
+            input_features = audio_inputs.input_features.to(device=device, dtype=dtype)
+            attention_mask = audio_inputs.get("attention_mask", None)
+            if attention_mask is not None:
+                attention_mask = attention_mask.to(device=device)
+
+        sound_embeds = projection(encoder(input_features, attention_mask).to(torch.bfloat16))
+
+        # Multiple clips are batch-padded; keep only each clip's real (subsampled) length before flattening.
+        if sound_embeds.dim() == 3 and sound_embeds.shape[0] > 1 and attention_mask is not None:
+            lengths = encoder.encoder._get_subsampling_output_length(attention_mask.sum(-1) + 1)
+            return torch.cat([sound_embeds[i, : int(n)] for i, n in enumerate(lengths.tolist())], dim=0)
+        return sound_embeds.reshape(-1, sound_embeds.shape[-1])
 
 
 class NemotronH_Omni_Reasoning_V3PixelShuffle(nn.Module):
@@ -253,33 +266,20 @@ class NemotronH_Omni_Reasoning_V3(PreTrainedModel):
         self.sound_context_token_id = getattr(config, "sound_context_token_id", None)
         if config.sound_config is not None:
             sound_config = config.sound_config
-            sound_hidden_size = sound_config.hidden_size
-            sound_projection_hidden_size = sound_config.projection_hidden_size
-
-            # Resolve the Parakeet feature extractor through the auto mapping (keep audio
-            # preprocessing decoupled from a direct cross-model import).
-            feature_extractor_class = FEATURE_EXTRACTOR_MAPPING[CONFIG_MAPPING["parakeet_encoder"]]
-            sampling_rate = getattr(sound_config, "sampling_rate", 16000)
-            feature_size = getattr(sound_config, "num_mel_bins", 128)
-            self.sound_feature_extractor = feature_extractor_class(
-                sampling_rate=sampling_rate,
-                feature_size=feature_size,
-            )
-
-            self.sound_encoder = NemotronH_Omni_Reasoning_V3SoundEncoder(config=sound_config)
+            self.sound_encoder = NemotronH_Omni_Reasoning_V3SoundEncoder(sound_config)
             self.sound_encoder = self.sound_encoder.to(self.language_model.config.torch_dtype)
-
             self.sound_projection = NemotronH_Omni_Reasoning_V3SoundProjection(
-                sound_hidden_size=sound_hidden_size,
-                projection_hidden_size=sound_projection_hidden_size,
+                sound_hidden_size=sound_config.hidden_size,
+                projection_hidden_size=sound_config.projection_hidden_size,
                 llm_hidden_size=llm_hidden_size,
                 bias=sound_config.projection_bias,
             )
             self.sound_projection = self.sound_projection.to(self.language_model.config.torch_dtype)
+            self.sound_projector = NemotronH_Omni_Reasoning_V3SoundProjector(sound_config)
         else:
             self.sound_encoder = None
             self.sound_projection = None
-            self.sound_feature_extractor = None
+            self.sound_projector = None
 
         self.all_tied_weights_keys = {}
 
@@ -417,18 +417,6 @@ class NemotronH_Omni_Reasoning_V3(PreTrainedModel):
         vit_embeds = self.mlp1(vit_embeds)
         return vit_embeds
 
-    def extract_sound_feature(
-        self,
-        input_features: torch.Tensor,
-        attention_mask: torch.Tensor | None = None,
-    ) -> torch.Tensor:
-        if self.sound_encoder is None:
-            raise RuntimeError("Sound encoder not initialized. Check if sound_config is provided.")
-        sound_embeds = self.sound_encoder(input_features, attention_mask)
-        sound_embeds = sound_embeds.to(dtype=torch.bfloat16)
-        sound_embeds = self.sound_projection(sound_embeds)
-        return sound_embeds
-
     @torch.no_grad()
     def generate(
         self,
@@ -447,7 +435,7 @@ class NemotronH_Omni_Reasoning_V3(PreTrainedModel):
 
         has_images = pixel_values is not None
         has_videos = pixel_values_videos is not None
-        has_sound = sound_clips is not None and self.sound_encoder is not None
+        has_sound = sound_clips is not None and self.sound_projector is not None
 
         if has_images or has_videos or has_sound:
             image_vit_embeds, video_vit_embeds, sound_embeds = None, None, None
@@ -461,47 +449,7 @@ class NemotronH_Omni_Reasoning_V3(PreTrainedModel):
                 video_vit_embeds = self.extract_video_feature(pixel_values_videos)
 
             if has_sound:
-                import numpy as np
-
-                is_raw_waveform = False
-                if isinstance(sound_clips, (list, tuple)):
-                    is_raw_waveform = True
-                    waveforms = sound_clips
-                elif isinstance(sound_clips, np.ndarray):
-                    is_raw_waveform = True
-                    waveforms = [sound_clips.squeeze()] if sound_clips.ndim > 1 else [sound_clips]
-                elif isinstance(sound_clips, torch.Tensor):
-                    if sound_clips.dim() == 1:
-                        is_raw_waveform = True
-                        waveforms = [sound_clips.cpu().numpy()]
-                    elif sound_clips.dim() == 2:
-                        is_raw_waveform = True
-                        waveforms = [clip.cpu().numpy() for clip in sound_clips]
-                    else:
-                        is_raw_waveform = False
-                else:
-                    is_raw_waveform = False
-
-                if is_raw_waveform:
-                    audio_inputs = self.sound_feature_extractor(
-                        waveforms,
-                        sampling_rate=self.sound_feature_extractor.sampling_rate,
-                        return_tensors="pt",
-                    )
-                    sound_input_features = audio_inputs.input_features
-                    sound_attention_mask = audio_inputs.get("attention_mask", None)
-                else:
-                    sound_input_features = sound_clips
-                    sound_attention_mask = None
-
-                target_device = self.sound_encoder.encoder.subsampling.linear.weight.device
-                target_dtype = self.language_model.config.torch_dtype
-
-                sound_input_features = sound_input_features.to(dtype=target_dtype, device=target_device)
-                if sound_attention_mask is not None:
-                    sound_attention_mask = sound_attention_mask.to(device=target_device)
-
-                sound_embeds = self.extract_sound_feature(sound_input_features, sound_attention_mask)
+                sound_embeds = self.sound_projector(sound_clips, self.sound_encoder, self.sound_projection)
 
             inputs_embeds = self.language_model.get_input_embeddings()(input_ids)
             B, N, C = inputs_embeds.shape
@@ -527,19 +475,10 @@ class NemotronH_Omni_Reasoning_V3(PreTrainedModel):
             if sound_embeds is not None and self.sound_context_token_id is not None:
                 sound_mask = input_ids_copy == self.sound_context_token_id
                 assert sound_mask.sum() != 0, "No sound tokens found in input_ids"
-                if sound_embeds.dim() == 3 and sound_embeds.shape[0] > 1 and sound_attention_mask is not None:
-                    natural_input_lengths = sound_attention_mask.sum(-1) + 1
-                    output_lengths = self.sound_encoder.encoder._get_subsampling_output_length(natural_input_lengths)
-                    flat = torch.cat(
-                        [sound_embeds[i, : int(n)] for i, n in enumerate(output_lengths.tolist())],
-                        dim=0,
-                    )
-                else:
-                    flat = sound_embeds.reshape(-1, C)
-                assert sound_mask.sum().item() == flat.shape[0], (
-                    f"sound token count ({sound_mask.sum().item()}) != encoder output count ({flat.shape[0]})"
+                assert sound_mask.sum().item() == sound_embeds.shape[0], (
+                    f"sound token count ({sound_mask.sum().item()}) != encoder output count ({sound_embeds.shape[0]})"
                 )
-                inputs_embeds[sound_mask] = flat.to(inputs_embeds.device, inputs_embeds.dtype)
+                inputs_embeds[sound_mask] = sound_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
 
             if video_vit_embeds is not None and self.video_pruning_rate > 0:
                 h = w = int(video_vit_embeds.shape[1] ** 0.5)
