@@ -4215,27 +4215,27 @@ class ModelTesterMixin(ExportTesterMixin):
             # Update the head dim and try to update hidden size as well if present in config
             # NOTE: some models may have none if the values in sub-config, thus we check for `Noneness`
             head_dim = None
-            if hasattr(config, "head_dim") and config.head_dim is not None:
-                head_dim = config.head_dim
-                config.head_dim = max(requested_dim, config.head_dim)
+            head_dim_key = next((key for key in ("head_dim", "d_kv") if getattr(config, key, None) is not None), None)
+            if head_dim_key is not None:
+                initial_head_dim = getattr(config, head_dim_key)
+                setattr(config, head_dim_key, max(requested_dim, initial_head_dim))
+                if head_dim_key == "head_dim":
+                    head_dim = initial_head_dim
+                else:
+                    # Some models expose head dim under a different key (e.g. d_kv) and tie q/k/v to hidden_size.
+                    # Keep hidden_size aligned when it follows hidden_size == num_heads * head_dim.
+                    num_heads = getattr(config, "num_heads", getattr(config, "num_attention_heads", None))
+                    if (
+                        num_heads is not None
+                        and getattr(config, "hidden_size", None) is not None
+                        and config.hidden_size == num_heads * initial_head_dim
+                    ):
+                        config.hidden_size = num_heads * getattr(config, head_dim_key)
 
             cross_head_dim = None
             if hasattr(config, "cross_head_dim") and config.cross_head_dim is not None:
                 cross_head_dim = config.cross_head_dim
                 config.cross_head_dim = max(requested_dim, config.cross_head_dim)
-
-            # T5-like models keep their head dim in `d_kv` (no `head_dim` alias). Some (e.g. Pix2Struct) hardwire
-            # q/k/v to `hidden_size`, needing `hidden_size == num_heads * d_kv`, so scale `hidden_size` alongside.
-            if hasattr(config, "d_kv") and config.d_kv is not None and getattr(config, "head_dim", None) is None:
-                d_kv = config.d_kv
-                config.d_kv = max(requested_dim, config.d_kv)
-                num_heads = getattr(config, "num_heads", getattr(config, "num_attention_heads", None))
-                if (
-                    num_heads is not None
-                    and getattr(config, "hidden_size", None) is not None
-                    and config.hidden_size == num_heads * d_kv
-                ):
-                    config.hidden_size = num_heads * config.d_kv
 
             if (
                 getattr(config, "hidden_size", None) is not None

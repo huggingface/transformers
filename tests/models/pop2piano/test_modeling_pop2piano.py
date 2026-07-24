@@ -398,7 +398,6 @@ class Pop2PianoModelTester:
             "attention_mask": attention_mask,
             "decoder_input_ids": decoder_input_ids,
             "decoder_attention_mask": decoder_attention_mask,
-            "use_cache": False,
         }
         return config, inputs_dict
 
