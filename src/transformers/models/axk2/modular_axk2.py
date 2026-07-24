@@ -125,6 +125,24 @@ class AXK2Config(DeepseekV32Config):
     topk_group = AttributeError()
     first_k_dense_replace = AttributeError()
 
+    base_model_tp_plan = {
+        "layers.*.self_attn.q_b_proj": "colwise",
+        # The output gate emits one scalar per attention-output column, so it shards with the heads.
+        "layers.*.self_attn.g_proj": "colwise",
+        "layers.*.self_attn.kv_a_proj_with_mqa": "mla_kv_a_proj",
+        "layers.*.self_attn.kv_b_proj": "colwise",
+        "layers.*.self_attn.o_proj": "rowwise",
+        "layers.*.mlp.experts.gate_up_proj": "packed_colwise",
+        "layers.*.mlp.experts.down_proj": "rowwise",
+        "layers.*.mlp.experts": "moe_tp_experts",
+        "layers.*.mlp.shared_experts.gate_proj": "colwise",
+        "layers.*.mlp.shared_experts.up_proj": "colwise",
+        "layers.*.mlp.shared_experts.down_proj": "rowwise",
+        "layers.*.mlp.gate_proj": "colwise",
+        "layers.*.mlp.up_proj": "colwise",
+        "layers.*.mlp.down_proj": "rowwise",
+    }
+
     def __post_init__(self, **kwargs):
         self.qk_head_dim = self.qk_nope_head_dim + self.qk_rope_head_dim
         # RoPE applies only to the rope slice, so `head_dim` points at it (the inherited rotary embedding
@@ -142,13 +160,9 @@ class AXK2Config(DeepseekV32Config):
         # Every layer runs the SGA indexer; drives the indexed-cache dispatch.
         if self.layer_types is None:
             self.layer_types = ["deepseek_sparse_attention"] * self.num_hidden_layers
-        # Skip DeepseekV32Config.__post_init__ (its head-dim / dense-MoE derivation is replicated above) and
-        # run only the base config's, so A.X-K2 keeps just the logic it needs.
         PreTrainedConfig.__post_init__(self, **kwargs)
 
     def validate_architecture(self):
-        # `PreTrainedConfig.validate_architecture(self)` rather than `super()` so the modular converter does
-        # not try to inline a `validate_architecture` from `DeepseekV32Config` (which does not define one).
         PreTrainedConfig.validate_architecture(self)
         if self.q_lora_rank is None or self.q_lora_rank <= 0:
             raise ValueError(
@@ -269,7 +283,6 @@ class AXK2Attention(DeepseekV32Attention):
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
         batch_size, seq_length = hidden_states.shape[:-1]
         query_shape = (batch_size, seq_length, -1, self.qk_head_dim)
-        key_shape = (batch_size, seq_length, -1, self.qk_nope_head_dim + self.v_head_dim)
 
         # `q_compressed` (pre-norm) feeds the indexer and the output gate; `q_resid` (post-norm) feeds the
         # main query projection.
@@ -279,17 +292,16 @@ class AXK2Attention(DeepseekV32Attention):
         q_pass, q_rot = torch.split(q_states, [self.qk_nope_head_dim, self.qk_rope_head_dim], dim=-1)
 
         compressed_kv = self.kv_a_proj_with_mqa(hidden_states)
-        k_pass, k_rot = torch.split(compressed_kv, [self.kv_lora_rank, self.qk_rope_head_dim], dim=-1)
-        k_pass = self.kv_b_proj(self.kv_a_layernorm(k_pass)).view(key_shape).transpose(1, 2)
-        k_pass, value_states = torch.split(k_pass, [self.qk_nope_head_dim, self.v_head_dim], dim=-1)
+        kv_pass, k_rot = torch.split(compressed_kv, [self.kv_lora_rank, self.qk_rope_head_dim], dim=-1)
+        k_pass = self.kv_a_layernorm(kv_pass)
 
         k_rot = k_rot.view(batch_size, 1, seq_length, self.qk_rope_head_dim)
         cos, sin = position_embeddings
         q_rot, k_rot = apply_rotary_pos_emb_interleave(q_rot, k_rot, cos, sin)
-        k_rot = k_rot.expand(*k_pass.shape[:-1], -1)
 
         query_states = torch.cat((q_pass, q_rot), dim=-1)
-        key_states = torch.cat((k_pass, k_rot), dim=-1)
+
+        key_states, value_states = self.expand_kv(k_pass, k_rot)
 
         if past_key_values is not None:
             key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)

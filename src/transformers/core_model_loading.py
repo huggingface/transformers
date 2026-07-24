@@ -706,7 +706,6 @@ class SplitFusedMLAGate(ConversionOps):
     """
 
     def _split(self, weight: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor | None]:
-        num_heads = self.config.num_attention_heads
         qk_head_dim = self.config.qk_head_dim
         v_head_dim = self.config.v_head_dim
         q_lora_rank = self.config.q_lora_rank
@@ -714,6 +713,9 @@ class SplitFusedMLAGate(ConversionOps):
         # `g_proj` then loads from its own key. Only the fused vLLM layout (`2 * q_lora_rank` columns) is split.
         if weight.shape[-1] != 2 * q_lora_rank:
             return weight, None
+        # Under tensor parallelism the op runs on each rank's row shard of the fused matrix; colwise
+        # sharding cuts on head boundaries, so the (local) head count comes from the tensor, not the config.
+        num_heads = weight.shape[0] // (qk_head_dim + v_head_dim)
         weight = weight.view(num_heads, qk_head_dim + v_head_dim, 2 * q_lora_rank)
         q_weight = weight[:, :qk_head_dim, :q_lora_rank].reshape(num_heads * qk_head_dim, q_lora_rank)
         gate_weight = weight[:, qk_head_dim:, q_lora_rank:].reshape(num_heads * v_head_dim, q_lora_rank)
@@ -748,10 +750,12 @@ class FuseMLAGate(ConversionOps):
     """
 
     def _fuse(self, q_weight: torch.Tensor, gate_weight: torch.Tensor) -> torch.Tensor:
-        num_heads = self.config.num_attention_heads
         qk_head_dim = self.config.qk_head_dim
         v_head_dim = self.config.v_head_dim
         q_lora_rank = self.config.q_lora_rank
+        # Mirror `SplitFusedMLAGate._split`: derive the (local) head count from the tensor so the fuse
+        # also works on tensor-parallel row shards.
+        num_heads = q_weight.shape[0] // qk_head_dim
         fused = q_weight.new_zeros(num_heads, qk_head_dim + v_head_dim, 2 * q_lora_rank)
         fused[:, :qk_head_dim, :q_lora_rank] = q_weight.view(num_heads, qk_head_dim, q_lora_rank)
         fused[:, qk_head_dim:, q_lora_rank:] = gate_weight.view(num_heads, v_head_dim, q_lora_rank)

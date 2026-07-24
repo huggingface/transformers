@@ -74,9 +74,7 @@ class AXK2ModelTester(CausalLMModelTester):
         self.index_head_dim = index_head_dim
         self.index_topk = index_topk
         self.gated_norm_rank = gated_norm_rank
-        # First layer dense, the rest MoE (A.X-K2 has no grouped routing, so `n_group`/`topk_group`
-        # are dropped and the dense/sparse split is expressed directly via `mlp_layer_types`).
-        self.mlp_layer_types = ["dense"] + ["sparse"] * (self.num_hidden_layers - 1)
+        self.mlp_layer_types = ["dense", "sparse"]
 
 
 @require_torch

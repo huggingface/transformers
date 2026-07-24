@@ -59,6 +59,8 @@ class AXK2Config(PreTrainedConfig, RotaryEmbeddingConfigMixin):
 
     base_model_tp_plan = {
         "layers.*.self_attn.q_b_proj": "colwise",
+        # The output gate emits one scalar per attention-output column, so it shards with the heads.
+        "layers.*.self_attn.g_proj": "colwise",
         "layers.*.self_attn.kv_a_proj_with_mqa": "mla_kv_a_proj",
         "layers.*.self_attn.kv_b_proj": "colwise",
         "layers.*.self_attn.o_proj": "rowwise",
@@ -141,13 +143,9 @@ class AXK2Config(PreTrainedConfig, RotaryEmbeddingConfigMixin):
         # Every layer runs the SGA indexer; drives the indexed-cache dispatch.
         if self.layer_types is None:
             self.layer_types = ["deepseek_sparse_attention"] * self.num_hidden_layers
-        # Skip DeepseekV32Config.__post_init__ (its head-dim / dense-MoE derivation is replicated above) and
-        # run only the base config's, so A.X-K2 keeps just the logic it needs.
         super().__post_init__(**kwargs)
 
     def validate_architecture(self):
-        # `PreTrainedConfig.validate_architecture(self)` rather than `super()` so the modular converter does
-        # not try to inline a `validate_architecture` from `DeepseekV32Config` (which does not define one).
         super().validate_architecture()
         if self.q_lora_rank is None or self.q_lora_rank <= 0:
             raise ValueError(
