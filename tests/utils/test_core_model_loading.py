@@ -1142,7 +1142,56 @@ class TestConvertAndLoadStateDict(unittest.TestCase):
 
 
 class TestConversionMapping(unittest.TestCase):
-    def test_unfuse_and_permute_rope(self):
+    def test_permute_rope(self):
+        text_config = PreTrainedConfig(hidden_size=16, head_dim=8, num_attention_heads=2)
+        config = PreTrainedConfig(text_config=text_config)
+
+        q_proj = torch.randn(text_config.hidden_size, text_config.hidden_size, dtype=torch.float32)
+        k_proj = torch.randn(text_config.hidden_size, text_config.hidden_size, dtype=torch.float32)
+        q_bias = torch.randn(text_config.hidden_size, dtype=torch.float32)
+        k_bias = torch.randn(text_config.hidden_size, dtype=torch.float32)
+
+        q_proj_permuted = q_proj.view(
+            text_config.num_attention_heads, text_config.head_dim // 2, 2, text_config.hidden_size
+        )
+        q_proj_permuted = q_proj_permuted.transpose(1, 2).reshape(text_config.hidden_size, text_config.hidden_size)
+        q_bias_permuted = q_bias.view(text_config.num_attention_heads, text_config.head_dim // 2, 2)
+        q_bias_permuted = q_bias_permuted.transpose(1, 2).reshape(text_config.hidden_size)
+
+        k_proj_permuted = k_proj.view(
+            text_config.num_attention_heads, text_config.head_dim // 2, 2, text_config.hidden_size
+        )
+        k_proj_permuted = k_proj_permuted.transpose(1, 2).reshape(text_config.hidden_size, text_config.hidden_size)
+        k_bias_permuted = k_bias.view(text_config.num_attention_heads, text_config.head_dim // 2, 2)
+        k_bias_permuted = k_bias_permuted.transpose(1, 2).reshape(text_config.hidden_size)
+
+        permute = PermuteForRope(subconfig_key="text_config")
+        inverse_permute = PermuteForRope(subconfig_key="text_config", inverse=True)
+
+        permuted_output = permute.convert(
+            {"q_proj": q_proj, "k_proj": k_proj, "q_bias": q_bias, "k_bias": k_bias},
+            ["q_proj", "k_proj", "q_bias", "k_bias"],
+            ["q_proj", "k_proj", "q_bias", "k_bias"],
+            config=config,
+        )
+        reverted_output = inverse_permute.convert(
+            {
+                "q_proj": q_proj_permuted,
+                "k_proj": k_proj_permuted,
+                "q_bias": q_bias_permuted,
+                "k_bias": k_bias_permuted,
+            },
+            ["q_proj", "k_proj", "q_bias", "k_bias"],
+            ["q_proj", "k_proj", "q_bias", "k_bias"],
+            config=config,
+        )
+
+        torch.testing.assert_close(permuted_output["q_proj"], q_proj_permuted)
+        torch.testing.assert_close(permuted_output["k_proj"], k_proj_permuted)
+        torch.testing.assert_close(reverted_output["q_proj"], q_proj)
+        torch.testing.assert_close(reverted_output["k_proj"], k_proj)
+
+    def test_unfuse_and_permute_rope_vision(self):
         vision_config = PreTrainedConfig(hidden_size=16, head_dim=8, num_attention_heads=2)
         config = PreTrainedConfig(vision_config=vision_config)
         qkv_weight = torch.randn(3 * vision_config.hidden_size, vision_config.hidden_size, dtype=torch.float32)
@@ -1160,7 +1209,7 @@ class TestConversionMapping(unittest.TestCase):
         k_proj = k_proj.transpose(1, 2).reshape(vision_config.hidden_size, vision_config.hidden_size)
 
         unfuse = VisionUnfuseAndPermuteForRope(dim=0, permute_layer_names=["q_proj", "k_proj"])
-        fuse = VisionFuseAndPermuteForRope(dim=0, permute_layer_names=["q_proj", "k_proj"])
+        fuse = VisionFuseAndPermuteForRope(dim=0, permute_layer_names=["q_proj", "k_proj"], inverse=True)
 
         unfused_output = unfuse.convert({"qkv": [qkv_weight]}, ["qkv"], ["q_proj", "k_proj", "v_proj"], config=config)
         fused_output = fuse.convert(

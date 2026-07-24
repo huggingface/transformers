@@ -419,21 +419,31 @@ class PermuteForRope(ConversionOps):
     Applies the permutation required to convert complex RoPE weights to the split sin/cos format.
     """
 
-    def __init__(self):
-        pass
+    def __init__(self, subconfig_key: str | None = None, inverse: bool = False):
+        self.subconfig_key = subconfig_key
+        self.inverse = inverse
 
     def _apply(self, tensor: torch.Tensor) -> torch.Tensor:
-        dim1, dim2 = tensor.shape
-        n_heads = self.config.getattr("num_attention_heads", 1)
+        dim0 = tensor.shape[0]
+        config = self.config
+        if self.subconfig_key is not None:
+            config = getattr(self.config, self.subconfig_key, self.config)
+        n_heads = getattr(config, "num_attention_heads", 1)
+        half_head = dim0 // n_heads // 2
 
-        tensor = tensor.view(n_heads, dim1 // n_heads // 2, 2, dim2)
-        tensor = tensor.transpose(1, 2).reshape(dim1, dim2)
+        head_shape = (2, half_head) if self.inverse else (half_head, 2)
+        if tensor.ndim == 2:
+            tensor = tensor.view(n_heads, *head_shape, tensor.shape[1])
+            tensor = tensor.transpose(1, 2).reshape(dim0, tensor.shape[-1])
+        elif tensor.ndim == 1:
+            tensor = tensor.view(n_heads, *head_shape)
+            tensor = tensor.transpose(1, 2).reshape(dim0)
         return tensor
 
     @torch.no_grad
     def convert(
         self,
-        input_dict: dict[str, list[torch.Tensor]],
+        input_dict: dict[str, list[torch.Tensor] | torch.Tensor],
         source_patterns: list[str],
         target_patterns: list[str],
         config,
@@ -442,14 +452,16 @@ class PermuteForRope(ConversionOps):
         self.config = config
         output: dict[str, list[torch.Tensor]] = {}
         for key, tensors in input_dict.items():
-            if len(tensors) != 1:
-                raise ValueError("PermuteForRope expects a single tensor per key.")
-            output[key] = [self._apply(tensors[0])]
+            if isinstance(tensors, list):
+                if len(tensors) != 1:
+                    raise ValueError("PermuteForRope expects a single tensor per key.")
+                tensors = tensors[0]
+            output[key] = self._apply(tensors)
         return output
 
     @property
     def reverse_op(self) -> ConversionOps:
-        return PermuteForRope()
+        return PermuteForRope(subconfig_key=self.subconfig_key, inverse=not self.inverse)
 
 
 class VisionFuseAndPermuteForRope(ConversionOps):
@@ -460,9 +472,10 @@ class VisionFuseAndPermuteForRope(ConversionOps):
     NOTE: this conversion applies only to a vision backbone in multimodal models, because it checks `config.vision_config`
     """
 
-    def __init__(self, dim: int = 0, permute_layer_names: list[str] | None = None):
+    def __init__(self, dim: int = 0, permute_layer_names: list[str] | None = None, inverse: bool = True):
         self.dim = dim
         self.permute_layer_names = permute_layer_names or []
+        self.inverse = inverse
 
     def _apply_permutation(self, tensor: torch.Tensor) -> torch.Tensor:
         dim0 = tensor.shape[0]
@@ -470,11 +483,12 @@ class VisionFuseAndPermuteForRope(ConversionOps):
         half_head = dim0 // n_heads // 2
 
         # Permute weights and biases if available
+        head_shape = (2, half_head) if self.inverse else (half_head, 2)
         if tensor.ndim == 2:
-            tensor = tensor.view(n_heads, 2, half_head, tensor.shape[1])
+            tensor = tensor.view(n_heads, *head_shape, tensor.shape[1])
             tensor = tensor.transpose(1, 2).reshape(dim0, tensor.shape[-1])
         elif tensor.ndim == 1:
-            tensor = tensor.view(n_heads, 2, half_head)
+            tensor = tensor.view(n_heads, *head_shape)
             tensor = tensor.transpose(1, 2).reshape(dim0)
         return tensor
 
@@ -508,7 +522,7 @@ class VisionFuseAndPermuteForRope(ConversionOps):
 
     @property
     def reverse_op(self) -> ConversionOps:
-        return VisionUnfuseAndPermuteForRope(self.dim, self.permute_layer_names)
+        return VisionUnfuseAndPermuteForRope(self.dim, self.permute_layer_names, inverse=not self.inverse)
 
 
 class VisionUnfuseAndPermuteForRope(ConversionOps):
@@ -519,9 +533,10 @@ class VisionUnfuseAndPermuteForRope(ConversionOps):
     NOTE: this conversion applies only to a vision backbone in multimodal models, because it checks `config.vision_config`
     """
 
-    def __init__(self, dim: int = 0, permute_layer_names: list[str] | None = None):
+    def __init__(self, dim: int = 0, permute_layer_names: list[str] | None = None, inverse: bool = False):
         self.dim = dim
         self.permute_layer_names = permute_layer_names or []
+        self.inverse = inverse
 
     def _apply_permutation(self, tensor: torch.Tensor) -> torch.Tensor:
         dim0 = tensor.shape[0]
@@ -529,11 +544,12 @@ class VisionUnfuseAndPermuteForRope(ConversionOps):
         half_head = dim0 // n_heads // 2
 
         # Permute weights and biases if available
+        head_shape = (2, half_head) if self.inverse else (half_head, 2)
         if tensor.ndim == 2:
-            tensor = tensor.view(n_heads, half_head, 2, tensor.shape[1])
+            tensor = tensor.view(n_heads, *head_shape, tensor.shape[1])
             tensor = tensor.transpose(1, 2).reshape(dim0, tensor.shape[-1])
         elif tensor.ndim == 1:
-            tensor = tensor.view(n_heads, half_head, 2)
+            tensor = tensor.view(n_heads, *head_shape)
             tensor = tensor.transpose(1, 2).reshape(dim0)
         return tensor
 
@@ -567,7 +583,7 @@ class VisionUnfuseAndPermuteForRope(ConversionOps):
 
     @property
     def reverse_op(self) -> ConversionOps:
-        return VisionFuseAndPermuteForRope(self.dim, self.permute_layer_names)
+        return VisionFuseAndPermuteForRope(self.dim, self.permute_layer_names, inverse=not self.inverse)
 
 
 class ErnieFuseAndSplitTextVisionExperts(ConversionOps):
