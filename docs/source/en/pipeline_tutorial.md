@@ -111,7 +111,7 @@ This section introduces you to some of the more important parameters.
 
 ### Device
 
-[`Pipeline`] is compatible with many hardware types, including GPUs, CPUs, Apple Silicon, and more. Configure the hardware type with the `device` parameter. By default, [`Pipeline`] runs on a CPU which is given by `device=-1`.
+[`Pipeline`] is compatible with many hardware types, including GPUs, CPUs, Apple Silicon, and more. Configure the hardware type with the `device` parameter. By default, when `device` is left unset, [`Pipeline`] automatically places the model on the first available accelerator (CUDA GPU, Apple Silicon MPS, XPU, ...) and only falls back to a CPU when none is available. Pass `device="cpu"` to force it to run on a CPU.
 
 <hfoptions id="device">
 <hfoption id="GPU">
