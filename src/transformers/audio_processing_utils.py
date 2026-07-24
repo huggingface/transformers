@@ -55,8 +55,7 @@ class BaseAudioProcessor(AudioProcessingMixin):
             )
 
         super().__init__(**kwargs)
-        # We don't call self._set_attributes in BaseImageProcessor for backward compatibility with remote code
-        # We call it instead in the backend subclasses' __init__ methods.
+        # _set_attributes runs in the backend subclasses' __init__, not here, for remote-code BC.
 
     def _set_attributes(self, **kwargs):
         """Standardize instance attributes, then precompute audio-specific init state.
@@ -65,7 +64,6 @@ class BaseAudioProcessor(AudioProcessingMixin):
         then precomputes the mel filter bank and initializes the STFT window cache. Called from the
         backend subclasses' ``__init__`` (not the base, for remote-code BC)."""
         super()._set_attributes(**kwargs)
-        # Pre-compute mel filters from spectrogram_config
         if self.spectrogram_config is not None:
             if self.spectrogram_config.mel_scale_config is not None and not hasattr(self, "mel_filters"):
                 self.mel_filters = self._mel_filter_bank(self.spectrogram_config)
@@ -101,12 +99,10 @@ class BaseAudioProcessor(AudioProcessingMixin):
 
     def to_dict(self):
         output = super().to_dict()
-        # Serialize config dataclasses to plain dicts for JSON persistence
         for key in ("spectrogram_config",):
             if key in output and hasattr(output[key], "to_dict"):
                 output[key] = output[key].to_dict()
 
-        # Filter out None values that are class defaults
         filtered_dict = {}
         for key, value in output.items():
             if value is None:
@@ -126,7 +122,6 @@ class BaseAudioProcessor(AudioProcessingMixin):
         """
         Preprocess an audio or a batch of audio.
         """
-        # Common validate/setdefault/standardize/dispatch logic lives in `PreprocessingMixin.preprocess`.
         return super().preprocess(audio, *args, **kwargs)
 
     def _preprocess_like_inputs(self, audio: AudioInput, *args, **kwargs) -> BatchFeature:
@@ -166,12 +161,10 @@ class BaseAudioProcessor(AudioProcessingMixin):
         )
 
         if is_url_input:
-            # URL inputs: load directly at the correct sample rate
             audio = self.fetch_audio(audio)
         else:
-            # Array inputs: validate that the caller-asserted sampling rate matches the model's.
-            # `PreprocessingMixin.preprocess` setdefaults `sampling_rate` from the model's own
-            # `self.sampling_rate`, so an omitted rate no-ops here; only a genuine mismatch raises.
+            # `PreprocessingMixin.preprocess` setdefaults `sampling_rate` from `self.sampling_rate`,
+            # so an omitted rate no-ops here; only a genuine caller mismatch raises.
             if sampling_rate is not None and sampling_rate != self.sampling_rate:
                 raise ValueError(
                     f"The model corresponding to this audio processor: {self.__class__.__name__} was trained using a"
@@ -242,6 +235,22 @@ class BaseAudioProcessor(AudioProcessingMixin):
         output = self._postprocess_output(output, audio_ranges=audio_ranges, **kwargs)
         return BatchFeature(data=output, tensor_type=return_tensors)
 
+    def _postprocess_features(self, features, feature_lengths):
+        """Hook: per-utterance feature processing after extraction, before feature-level padding.
+
+        Override for normalization that must happen on unpadded features
+        (e.g., SeamlessM4t mean/variance normalization).
+        """
+        return features
+
+    def _postprocess_output(self, output, audio_ranges=None, feature_ranges=None, **kwargs):
+        """Hook: augment or modify the output dict after main processing.
+
+        Override to add custom fields (e.g., audio_embed_sizes) or
+        post-hoc normalization on the stacked/batched output.
+        """
+        return output
+
     def _get_padding_strategies(self, padding=False, max_length=None):
         if padding is not False:
             if padding is True:
@@ -307,48 +316,6 @@ class BaseAudioProcessor(AudioProcessingMixin):
 
     def _truncate_single(self, audio_el, max_length: int):
         return audio_el[..., :max_length] if audio_el.shape[-1] > max_length else audio_el
- 
-    # ── Hooks ────────────────────────────────────────────────────────────
-
-    def _postprocess_features(self, features, feature_lengths):
-        """Hook: per-utterance feature processing after extraction, before feature-level padding.
-
-        Override for normalization that must happen on unpadded features
-        (e.g., SeamlessM4t mean/variance normalization).
-        """
-        return features
-
-    def _postprocess_output(self, output, audio_ranges=None, feature_ranges=None, **kwargs):
-        """Hook: augment or modify the output dict after main processing.
-
-        Override to add custom fields (e.g., audio_embed_sizes) or
-        post-hoc normalization on the stacked/batched output.
-        """
-        return output
-
-    # ── Backend ──────────────────────────────────────────────────────────
-
-    def _process_audio(self, *args, **kwargs):
-        """
-        Process a single raw audio input into the backend's working format.
-
-        Implemented by backend subclasses (e.g., `TorchAudioBackend`). Converts a raw input
-        (NumPy array) to the backend's internal format (e.g., `torch.Tensor`), handles
-        mono conversion if needed.
-        """
-        raise NotImplementedError
-
-    def _to_batch(self, audio):
-        """Stack a list of audio arrays/tensors into a batch. Implemented by backend subclasses."""
-        raise NotImplementedError
-
-    def _pad_single(self, audio, max_length: int) -> AudioInput:
-        """
-        Pad a single input (on left/right) up to predefined length or max length in the batch.
-
-        Implemented by backend subclasses.
-        """
-        raise NotImplementedError
 
     def _pad_features(self, features, padding, max_length, truncation, pad_to_multiple_of):
         """Truncate/pad a list of feature arrays along the time axis (axis 0) per the
@@ -373,6 +340,29 @@ class BaseAudioProcessor(AudioProcessingMixin):
         `padding_value`. Implemented by backend subclasses."""
         raise NotImplementedError
 
+
+    def _process_audio(self, *args, **kwargs):
+        """
+        Process a single raw audio input into the backend's working format.
+
+        Implemented by backend subclasses (e.g., `TorchAudioBackend`). Converts a raw input
+        (NumPy array) to the backend's internal format (e.g., `torch.Tensor`), handles
+        mono conversion if needed.
+        """
+        raise NotImplementedError
+
+    def _to_batch(self, audio):
+        """Stack a list of audio arrays/tensors into a batch. Implemented by backend subclasses."""
+        raise NotImplementedError
+
+    def _pad_single(self, audio, max_length: int) -> AudioInput:
+        """
+        Pad a single input (on left/right) up to predefined length or max length in the batch.
+
+        Implemented by backend subclasses.
+        """
+        raise NotImplementedError
+
     def _stack_features(self, features):
         """Stack a list of feature arrays/tensors into a batch.
         Implemented by backend subclasses."""
@@ -382,36 +372,6 @@ class BaseAudioProcessor(AudioProcessingMixin):
         """Create a binary mask array of shape (len(ranges), padded_length) with 1s at each
         (start, end) range. Implemented by backend subclasses."""
         raise NotImplementedError
-
-    # ── Spectrogram extraction pipeline ──────────────────────────────────
-    #
-    # The full feature-extraction pipeline executed by `extract_spectrogram`:
-    #
-    #   1. _extract_spectrogram   (STFT → power/magnitude spectrogram)
-    #      a. _stft                        – orchestrates steps b–g (overridable for fully custom STFTs)
-    #      b.   _needs_manual_framing      – decide framing strategy (hook)
-    #      c.   _create_stft_window        – create the STFT window (backend)
-    #      d.   _prepare_window_and_framing– pad/reshape window, decide frame length (backend)
-    #      e.   manual path (needs_manual_framing=True):
-    #             _frame_audio             – center pad + frame extraction (backend)
-    #             _apply_frame_processing  – per-frame conditioning (hook)
-    #             _window_and_fft          – window + zero-pad + FFT + normalize → complex (backend)
-    #           native path (needs_manual_framing=False):
-    #             _native_stft             – native STFT returning complex output (backend)
-    #      f.   _compute_magnitudes        – complex → real magnitudes (backend, shared by both paths)
-    #      g.   _cast_stft_output          – cast output dtype (hook, no-op by default)
-    #   2. _apply_mel_scale       (mel filterbank projection)
-    #   3. _normalize_magnitude   (log / dB scaling, optional per-utterance norm)
-    #
-    # Backend subclasses (NumpyAudioBackend, TorchAudioBackend) implement the
-    # full pipeline.  Model-specific processors can override individual hooks
-    # (_apply_frame_processing) or the entire _stft when the base STFT path
-    # is insufficient.
-    #
-    # ``audio_ranges`` is passed through as a kwarg from ``_preprocess`` so that
-    # model-specific overrides (e.g., Parakeet waveform-level preemphasis,
-    # Phi4 boundary masking) can access original audio lengths without stashing
-    # state on ``self``.
 
     # ── Spectrogram core ─────────────────────────────────────────────────
 
