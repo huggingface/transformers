@@ -19,8 +19,8 @@ import copy
 import importlib.metadata as importlib_metadata
 import importlib.util
 import weakref
-from functools import partialmethod
 from collections import defaultdict
+from functools import partialmethod
 
 from ..dependency_versions_check import dep_version_check
 from ..utils import is_accelerate_available, is_torch_available, logging
@@ -28,7 +28,6 @@ from ..utils import is_accelerate_available, is_torch_available, logging
 
 if is_torch_available():
     import torch
-    from torch import nn
 
 
 logger = logging.get_logger(__name__)
@@ -313,7 +312,7 @@ def _load_state_dict_into_zero3_model(model_to_load, state_dict, module_dict=Non
     state_dict = state_dict.copy()
     if metadata is not None:
         state_dict._metadata = metadata
-    
+
     error_msgs = []
 
     if not (is_deepspeed_zero3_enabled() and len(state_dict) > 0):
@@ -347,6 +346,7 @@ def _load_state_dict_into_zero3_model(model_to_load, state_dict, module_dict=Non
                 if torch.distributed.get_rank() == 0:
                     module._load_from_state_dict(*args)
     return error_msgs
+
 
 def deepspeed_optim_sched(trainer, hf_deepspeed_config, args, num_training_steps, model_parameters):
     """

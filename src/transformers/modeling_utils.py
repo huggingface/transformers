@@ -57,7 +57,7 @@ from .configuration_utils import PretrainedConfig
 from .dynamic_module_utils import custom_object_save
 from .generation import CompileConfig, GenerationConfig, GenerationMixin
 from .integrations import PeftAdapterMixin, deepspeed_config, is_deepspeed_zero3_enabled
-from .integrations.deepspeed import _load_state_dict_into_zero3_model, is_deepspeed_available
+from .integrations.deepspeed import _load_state_dict_into_zero3_model
 from .integrations.flash_attention import flash_attention_forward
 from .integrations.flex_attention import flex_attention_forward
 from .integrations.sdpa_attention import sdpa_attention_forward
@@ -2018,6 +2018,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         if is_deepspeed_zero3_enabled() and not _is_quantized and not _is_ds_init_called:
             import deepspeed
+
             logger.info("Detected DeepSpeed ZeRO-3: activating zero.init() for this model")
             # this immediately partitions the model across all gpus, to avoid the overhead in time
             # and memory copying it on CPU or each GPU first
@@ -2658,6 +2659,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         is_quantized = hasattr(self, "hf_quantizer") and self.hf_quantizer is not None
         if is_deepspeed_zero3_enabled() and not is_quantized:
             import deepspeed
+
             with deepspeed.zero.GatheredParameters(model_embeds.weight, modifier_rank=None):
                 vocab_size = model_embeds.weight.shape[0]
         else:
@@ -2777,6 +2779,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         is_quantized = hasattr(self, "hf_quantizer") and self.hf_quantizer is not None
         if is_deepspeed_zero3_enabled() and not is_quantized:
             import deepspeed
+
             with deepspeed.zero.GatheredParameters(old_embeddings.weight, modifier_rank=None):
                 old_num_tokens, old_embedding_dim = old_embeddings.weight.size()
         else:
@@ -2904,6 +2907,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         is_quantized = hasattr(self, "hf_quantizer") and self.hf_quantizer is not None
         if is_deepspeed_zero3_enabled() and not is_quantized:
             import deepspeed
+
             with deepspeed.zero.GatheredParameters(old_lm_head.weight, modifier_rank=None):
                 old_num_tokens, old_lm_head_dim = (
                     old_lm_head.weight.size() if not transposed else old_lm_head.weight.t().size()
@@ -3722,6 +3726,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         # With deepspeed, we cannot initialize the model on meta device
         if is_deepspeed_zero3_enabled():
             import deepspeed
+
             init_contexts = [no_init_weights()]
             if not is_quantized and not _is_ds_init_called:
                 logger.info("Detected DeepSpeed ZeRO-3: activating zero.init() for this model")
@@ -5253,6 +5258,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         # This will only initialize submodules that are not marked as initialized by the line above.
         if is_deepspeed_zero3_enabled() and not is_quantized:
             import deepspeed
+
             not_initialized_parameters = list(
                 set(
                     itertools.chain.from_iterable(
