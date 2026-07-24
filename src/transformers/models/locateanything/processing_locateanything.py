@@ -23,7 +23,7 @@ from ...tokenization_utils_base import PreTokenizedInput, TextInput
 
 
 class LocateAnythingProcessorKwargs(ProcessingKwargs, total=False):
-    pass
+    _defaults = {}
 
 
 class LocateAnythingProcessor(ProcessorMixin):
