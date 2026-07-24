@@ -37,7 +37,7 @@ def _gemma4_json_to_json(text: str) -> str:
     # Grab the inside of gemma-quotes and store them for later
     text = re.sub(r'<\|"\|>(.*?)<\|"\|>', _capture, text, flags=re.DOTALL)
     # Add quotes to the bare keys elsewhere
-    text = re.sub(r"(?<=[{,])(\w+):", r'"\1":', text)
+    text = re.sub(r"([\{,])\s*(\w+)\s*:", r'\1"\2":', text)
 
     # Put the inside of the quotes back afterwards
     for i, s in enumerate(strings):
@@ -286,9 +286,9 @@ def recursive_parse(
                 raise TypeError(
                     f"Expected a string or bool for schema node with type boolean, got {type(node_content).__name__}: {node_content}"
                 )
-            if node_content.lower() in ("true", "1"):
+            if node_content.strip().lower() in ("true", "1"):
                 return True
-            elif node_content.lower() in ("false", "0"):
+            elif node_content.strip().lower() in ("false", "0"):
                 return False
             else:
                 raise ValueError(f"Invalid boolean value: {node_content}")
