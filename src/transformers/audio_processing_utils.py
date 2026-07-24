@@ -71,6 +71,54 @@ class BaseAudioProcessor(AudioProcessingMixin):
                 self.mel_filters = self._mel_filter_bank(self.spectrogram_config)
         self._cached_stft_window = None
 
+    def _standardize_kwargs(
+        self,
+        **kwargs,
+    ) -> dict:
+        """Coerce dict configs to their dataclass form."""
+        if isinstance(kwargs.get("spectrogram_config"), dict):
+            kwargs["spectrogram_config"] = SpectrogramConfig.from_dict(
+                kwargs["spectrogram_config"]
+            )
+        if kwargs.get("spectrogram_config") is not None and kwargs.get("do_extract_spectrogram") is None:
+            kwargs["do_extract_spectrogram"] = True
+        return kwargs
+
+    def _validate_preprocess_kwargs(
+        self,
+        sampling_rate: int | None = None,
+        max_length: int | None = None,
+        truncation: bool | None = None,
+        pad_to_multiple_of: int | None = None,
+        return_tensors: str | TensorType | None = None,
+        **kwargs,
+    ):
+        """Validate the kwargs for the preprocess method."""
+        if truncation and max_length is None:
+            raise ValueError(
+                "When setting `truncation=True`, make sure that `max_length` is defined."
+            )
+
+    def to_dict(self):
+        output = super().to_dict()
+        # Serialize config dataclasses to plain dicts for JSON persistence
+        for key in ("spectrogram_config",):
+            if key in output and hasattr(output[key], "to_dict"):
+                output[key] = output[key].to_dict()
+
+        # Filter out None values that are class defaults
+        filtered_dict = {}
+        for key, value in output.items():
+            if value is None:
+                class_default = getattr(type(self), key, "NOT_FOUND")
+                # Keep None if user explicitly set it (class default is non-None)
+                if class_default != "NOT_FOUND" and class_default is not None:
+                    filtered_dict[key] = value
+            else:
+                filtered_dict[key] = value
+
+        return filtered_dict
+
     def __call__(self, audio: AudioInput, *args, **kwargs: Unpack[AudioKwargs]) -> BatchFeature:
         return self.preprocess(audio, *args, **kwargs)
 
@@ -195,7 +243,6 @@ class BaseAudioProcessor(AudioProcessingMixin):
         return BatchFeature(data=output, tensor_type=return_tensors)
 
     def _get_padding_strategies(self, padding=False, max_length=None):
-        """Find the correct padding strategy."""
         if padding is not False:
             if padding is True:
                 padding_strategy = PaddingStrategy.LONGEST
@@ -260,55 +307,7 @@ class BaseAudioProcessor(AudioProcessingMixin):
 
     def _truncate_single(self, audio_el, max_length: int):
         return audio_el[..., :max_length] if audio_el.shape[-1] > max_length else audio_el
-
-    def _standardize_kwargs(
-        self,
-        **kwargs,
-    ) -> dict:
-        """Coerce dict configs to their dataclass form."""
-        if isinstance(kwargs.get("spectrogram_config"), dict):
-            kwargs["spectrogram_config"] = SpectrogramConfig.from_dict(
-                kwargs["spectrogram_config"]
-            )
-        if kwargs.get("spectrogram_config") is not None and kwargs.get("do_extract_spectrogram") is None:
-            kwargs["do_extract_spectrogram"] = True
-        return kwargs
-
-    def _validate_preprocess_kwargs(
-        self,
-        sampling_rate: int | None = None,
-        max_length: int | None = None,
-        truncation: bool | None = None,
-        pad_to_multiple_of: int | None = None,
-        return_tensors: str | TensorType | None = None,
-        **kwargs,
-    ):
-        """Validate the kwargs for the preprocess method."""
-        if truncation and max_length is None:
-            raise ValueError(
-                "When setting `truncation=True`, make sure that `max_length` is defined."
-            )
-
-    def to_dict(self):
-        output = super().to_dict()
-        # Serialize config dataclasses to plain dicts for JSON persistence
-        for key in ("spectrogram_config",):
-            if key in output and hasattr(output[key], "to_dict"):
-                output[key] = output[key].to_dict()
-
-        # Filter out None values that are class defaults
-        filtered_dict = {}
-        for key, value in output.items():
-            if value is None:
-                class_default = getattr(type(self), key, "NOT_FOUND")
-                # Keep None if user explicitly set it (class default is non-None)
-                if class_default != "NOT_FOUND" and class_default is not None:
-                    filtered_dict[key] = value
-            else:
-                filtered_dict[key] = value
-
-        return filtered_dict
-
+ 
     # ── Hooks ────────────────────────────────────────────────────────────
 
     def _postprocess_features(self, features, feature_lengths):
@@ -653,8 +652,8 @@ class BaseAudioProcessor(AudioProcessingMixin):
         """
         stft_cfg = spectrogram_config.stft_config
         mel_cfg = spectrogram_config.mel_scale_config
-        num_frequency_bins = 1 + stft_cfg.n_fft // 2
-        n_fft = (num_frequency_bins - 1) * 2
+        n_fft = stft_cfg.n_fft
+        num_frequency_bins = 1 + n_fft // 2
         min_frequency = mel_cfg.f_min
         max_frequency = mel_cfg.f_max if mel_cfg.f_max is not None else self.sampling_rate / 2
         computation_dtype = mel_cfg.computation_dtype or spectrogram_config.computation_dtype
