@@ -415,7 +415,6 @@ class FalconMambaIntegrationTests(unittest.TestCase):
     def tearDown(self):
         cleanup(torch_device, gc_collect=True)
 
-    # On T4, get `NotImplementedError: Cannot copy out of meta tensor; no data!`
     @require_torch_large_accelerator
     def test_generation_fp16(self):
         model = AutoModelForCausalLM.from_pretrained(self.model_id, dtype=torch.float16, device_map="auto")
@@ -425,11 +424,16 @@ class FalconMambaIntegrationTests(unittest.TestCase):
 
         EXPECTED_OUTPUTS = Expectations(
             {
-                ("xpu", 3): "Hello today Iava,\n\nI am writing to you today to discuss the importance of maintaining a healthy lifestyle",
-                ("cuda", 7): "Hello today I am going to show you how to make a simple and easy to make paper plane.\nStep",
-                ("cuda", 8): 'Hello today Iava,\n\nI am writing to you today to discuss the importance of maintaining a healthy lifestyle',
+                (
+                    "cuda",
+                    (8, 0),
+                ): "Hello today I am going to talk about the “Theory of Relativity” by Albert Einstein.\n",
+                (
+                    "cuda",
+                    (8, 6),
+                ): "Hello today I am going to talk about the “Theory of Relativity” by Albert Einstein.\n",
             }
-        )  # fmt: skip
+        )
         EXPECTED_OUTPUT = EXPECTED_OUTPUTS.get_expectation()
 
         self.assertEqual(
@@ -444,12 +448,20 @@ class FalconMambaIntegrationTests(unittest.TestCase):
             torch_device
         )
 
-        inputs = self.tokenizer(self.text, return_tensors="pt").to(torch_device)
+        inputs = self.tokenizer("The mount Fuji is a nice mountain in", return_tensors="pt").to(torch_device)
         out = model.generate(**inputs, max_new_tokens=20, do_sample=False)
+
+        EXPECTED_OUTPUTS = Expectations(
+            {
+                ("cuda", (8, 0)): 'The mount Fuji is a nice mountain in Japan. It is a volcano. It is 3,776 meters high. It is the highest',
+                ("cuda", (8, 6)): 'The mount Fuji is a nice mountain in Japan. It is 3,776 meters high. It is a volcano. It is a very',
+            }
+        )  # fmt: skip
+        EXPECTED_OUTPUT = EXPECTED_OUTPUTS.get_expectation()
 
         self.assertEqual(
             self.tokenizer.batch_decode(out, skip_special_tokens=False)[0],
-            "Hello today Iava,\n\nI'm sorry to hear that you're having trouble with the ",
+            EXPECTED_OUTPUT,
         )
 
     @pytest.mark.torch_compile_test
@@ -460,9 +472,23 @@ class FalconMambaIntegrationTests(unittest.TestCase):
         inputs = self.tokenizer(self.text, return_tensors="pt").to(torch_device)
         out = model.generate(**inputs, max_new_tokens=20, do_sample=False)
 
+        EXPECTED_OUTPUTS = Expectations(
+            {
+                (
+                    "cuda",
+                    (8, 0),
+                ): "Hello today I am going to talk about the “Theory of Relativity” by Albert Einstein.\n",
+                (
+                    "cuda",
+                    (8, 6),
+                ): "Hello today I am going to talk about the “Theory of Relativity” by Albert Einstein.\n",
+            }
+        )
+        EXPECTED_OUTPUT = EXPECTED_OUTPUTS.get_expectation()
+
         self.assertEqual(
             self.tokenizer.batch_decode(out, skip_special_tokens=False)[0],
-            "Hello today Iava,\n\nI am writing to you today to discuss the importance of maintaining a healthy lifestyle",
+            EXPECTED_OUTPUT,
         )
 
     @require_deterministic_for_xpu
@@ -476,19 +502,19 @@ class FalconMambaIntegrationTests(unittest.TestCase):
         EXPECTED_OUTPUTS = Expectations(
             {
                 ("xpu", 3): [
-                    'Hello today I am going to talk about the “Theory of Relativity” by Albert Einstein.\n',
-                    'Hello my name is Younes and today I will be talking about the importance of the internet in our lives.\nThe internet is a global',
+                    "Hello today I am going to talk about the “Theory of Relativity” by Albert Einstein.\n",
+                    "Hello my name is Younes and today I will be talking about the importance of the internet in our lives.\nThe internet is a global",
                 ],
-                ("cuda", 7): [
-                    'Hello today I will be talking about the “Theory of Relativity” by Albert Einstein.\nThe',
-                    'Hello my name is Younes and today I will be talking about the importance of the internet in our lives.\nThe internet is a global',
+                ("cuda", (8, 0)): [
+                    "Hello today I am going to talk about the “Theory of Relativity” by Albert Einstein.\n",
+                    "Hello my name is Younes and today I will be talking about the importance of the internet in our lives.\nThe internet is a global",
                 ],
-                ("cuda", 8): [
-                    'Hello today I am going to talk about the “Theory of Relativity” by Albert Einstein.\n',
-                    'Hello my name is Younes and today I will be talking about the importance of the internet in our lives.\nThe internet is a global',
+                ("cuda", (8, 6)): [
+                    "Hello today I will be talking about the “Theory of Relativity” by Albert Einstein.\nThe",
+                    "Hello my name is Younes and today I will be talking about the importance of the internet in our lives.\nThe internet is a global",
                 ],
             }
-        )  # fmt: skip
+        )
         EXPECTED_OUTPUT = EXPECTED_OUTPUTS.get_expectation()
 
         inputs = tok(texts, return_tensors="pt", padding=True, return_token_type_ids=False).to(torch_device)
@@ -496,7 +522,6 @@ class FalconMambaIntegrationTests(unittest.TestCase):
 
         out = model.generate(**inputs, max_new_tokens=20, do_sample=False)
         out = tok.batch_decode(out, skip_special_tokens=True)
-
         self.assertListEqual(out, EXPECTED_OUTPUT)
 
         # We test the same generations with inputs_embeds
@@ -513,14 +538,14 @@ class FalconMambaIntegrationTests(unittest.TestCase):
                     ' I am going to talk about the “Theory of Relativity” by Albert Einstein.\n',
                     ' I will be talking about the importance of the internet in our lives.\nThe internet is a global',
                 ],
-                ("cuda", 7): [
-                    ' I will be talking about the “Theory of Relativity” by Albert Einstein.\nThe',
-                    ' I will be talking about the importance of the internet in our lives.\nThe internet is a global',
-                ],
-                ("cuda", 8): [
+                ("cuda", (8, 0)): [
                     ' I am going to talk about the “Theory of Relativity” by Albert Einstein.\n',
                     ' I will be talking about the importance of the internet in our lives.\nThe internet is a global'
                 ],
+                ("cuda", (8, 6)): [
+                    ' I will be talking about the “Theory of Relativity” by Albert Einstein.\nThe',
+                    ' I will be talking about the importance of the internet in our lives.\nThe internet is a global'
+                ]
             }
         )  # fmt: skip
         EXPECTED_OUTPUT = EXPECTED_OUTPUTS.get_expectation()

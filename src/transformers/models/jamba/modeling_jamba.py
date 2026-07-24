@@ -25,6 +25,7 @@
 from collections.abc import Callable
 
 import torch
+import torch.nn.functional as F
 from torch import nn
 
 from ... import initialization as init
@@ -46,7 +47,10 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
 from ...utils.generic import merge_with_config_defaults
-from ...utils.import_utils import resolve_internal_import
+from ...utils.import_utils import (
+    is_tracing,
+    resolve_internal_import,
+)
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from .configuration_jamba import JambaConfig
 
@@ -200,6 +204,47 @@ class JambaAttention(nn.Module):
         return attn_output, attn_weights
 
 
+def causal_conv1d_update(
+    hidden_states: torch.Tensor,
+    conv_state: torch.Tensor,
+    weight: nn.Parameter,
+    bias: nn.Parameter | None = None,
+    activation: str | None = None,
+):
+    _, hidden_size, seq_len = hidden_states.shape
+    state_len = conv_state.shape[-1]
+
+    hidden_states_new = torch.cat([conv_state, hidden_states], dim=-1).to(weight.dtype)
+    conv_state.copy_(hidden_states_new[:, :, -state_len:])
+    out = F.conv1d(hidden_states_new, weight.unsqueeze(1), bias, padding=0, groups=hidden_size)
+    out = out[:, :, -seq_len:]
+    if activation is not None:
+        out = ACT2FN[activation](out)
+    return out.to(hidden_states.dtype)
+
+
+def causal_conv1d_fn(
+    hidden_states: torch.Tensor,
+    weight: nn.Parameter,
+    bias: nn.Parameter | None = None,
+    activation: str | None = None,
+    **kwargs,
+):
+    _, hidden_size, seq_len = hidden_states.shape
+    padding = weight.shape[-1] - 1
+
+    out = F.conv1d(
+        hidden_states.to(weight.dtype),
+        weight=weight.unsqueeze(1),
+        bias=bias,
+        padding=padding,
+        groups=hidden_size,
+    )[:, :, :seq_len]
+    if activation is not None:
+        out = ACT2FN[activation](out)
+    return out.to(hidden_states.dtype)
+
+
 class JambaMambaMixer(nn.Module):
     """
     Compute ∆, A, B, C, and D the state space parameters and compute the `contextualized_states`.
@@ -251,22 +296,23 @@ class JambaMambaMixer(nn.Module):
         self.b_layernorm = JambaRMSNorm(self.ssm_state_size, eps=config.rms_norm_eps)
         self.c_layernorm = JambaRMSNorm(self.ssm_state_size, eps=config.rms_norm_eps)
 
-        global causal_conv1d_update, causal_conv1d_fn
+        global causal_conv1d, causal_conv1d_update, causal_conv1d_fn
         causal_conv1d = lazy_load_kernel("causal-conv1d")
-        causal_conv1d_update = getattr(causal_conv1d, "causal_conv1d_update", None)
-        causal_conv1d_fn = getattr(causal_conv1d, "causal_conv1d_fn", None)
+        causal_conv1d_update = getattr(causal_conv1d, "causal_conv1d_update", causal_conv1d_update)
+        causal_conv1d_fn = getattr(causal_conv1d, "causal_conv1d_fn", causal_conv1d_fn)
 
-        global selective_state_update, mamba_inner_fn, selective_scan_fn
+        global mamba_ssm, selective_state_update, selective_scan_fn
         mamba_ssm = lazy_load_kernel("mamba-ssm")
         selective_state_update = resolve_internal_import(
             mamba_ssm, chained_path="ops.triton.selective_state_update.selective_state_update"
         )
         selective_scan_fn = getattr(mamba_ssm, "selective_scan_fn", None)
-        mamba_inner_fn = getattr(mamba_ssm, "mamba_inner_fn", None)
 
         global is_fast_path_available
-        is_fast_path_available = all(
-            (selective_state_update, selective_scan_fn, causal_conv1d_fn, causal_conv1d_update, mamba_inner_fn)
+        is_fast_path_available = (
+            all((selective_state_update, selective_scan_fn))
+            and hasattr(causal_conv1d, "causal_conv1d_update")
+            and hasattr(causal_conv1d, "causal_conv1d_fn")
         )
 
         if not is_fast_path_available:
@@ -277,42 +323,68 @@ class JambaMambaMixer(nn.Module):
 
         self.layer_type = config.layer_types[layer_idx]
 
-    def cuda_kernels_forward(
+    def _convolution(
         self,
         hidden_states: torch.Tensor,
         cache_params: Cache | None = None,
         attention_mask: torch.LongTensor | None = None,
+        **kwargs,
     ):
+        seq_len = hidden_states.shape[-1]
+        if attention_mask is not None:
+            hidden_states = hidden_states * attention_mask.unsqueeze(1)
+
+        use_precomputed_states = cache_params is not None and cache_params.has_previous_state(self.layer_idx)
+
+        if use_precomputed_states and seq_len == 1 and not cache_params.layers[self.layer_idx].record_past:
+            conv_state = cache_params.layers[self.layer_idx].conv_states[0]
+            hidden_states = causal_conv1d_update(
+                hidden_states,
+                conv_state,
+                self.conv1d.weight.squeeze(1),
+                self.conv1d.bias,
+                self.activation,
+            )
+        else:
+            if cache_params is not None:
+                hidden_states = cache_params.update_conv_state(
+                    hidden_states, self.layer_idx, conv_kernel_size=self.conv_kernel_size
+                )
+
+            hidden_states = causal_conv1d_fn(
+                hidden_states,
+                self.conv1d.weight.squeeze(1),
+                self.conv1d.bias,
+                self.activation,
+                seq_idx=kwargs.get("seq_idx"),
+            )
+
+            # Drop the additional previous states
+            if cache_params is not None:
+                hidden_states = hidden_states[:, :, -seq_len:]
+
+        return hidden_states
+
+    def cuda_kernels_forward(
+        self,
+        hidden_states: torch.Tensor,
+        cache_params: Cache | None = None,
+        attention_mask: torch.Tensor | None = None,
+        **kwargs,
+    ):
+        # Note: we cannot use `mamba_inner_fn` as in mamba even if in training and without cache params because we have the
+        # inner layernorms which isn't supported by this fused kernel
         batch_size, seq_len, _ = hidden_states.shape
         use_precomputed_states = (
             cache_params is not None and cache_params.has_previous_state(self.layer_idx) and seq_len == 1
         )
+
         # 1. Gated MLP's linear projection
         projected_states = self.in_proj(hidden_states).transpose(1, 2)
-
-        # We can't use `mamba_inner_fn` even if in training and without cache params because we have the
-        # inner layernorms which isn't supported by this fused kernel
         hidden_states, gate = projected_states.chunk(2, dim=1)
 
-        if attention_mask is not None:
-            hidden_states = hidden_states * attention_mask.unsqueeze(1)
-
-        # 2. Convolution sequence transformation
-        conv_weights = self.conv1d.weight.view(self.conv1d.weight.size(0), self.conv1d.weight.size(2))
-        if use_precomputed_states:
-            hidden_states = causal_conv1d_update(
-                hidden_states.squeeze(-1),
-                cache_params.layers[self.layer_idx].conv_states[0],
-                conv_weights,
-                self.conv1d.bias,
-                self.activation,
-            )
-            hidden_states = hidden_states.unsqueeze(-1)
-        else:
-            if cache_params is not None:
-                conv_states = nn.functional.pad(hidden_states, (self.conv_kernel_size - hidden_states.shape[-1], 0))
-                cache_params.update_conv_state(conv_states, self.layer_idx)
-            hidden_states = causal_conv1d_fn(hidden_states, conv_weights, self.conv1d.bias, activation=self.activation)
+        # Apply the conv
+        hidden_states = self._convolution(hidden_states, cache_params, attention_mask, **kwargs)
 
         if attention_mask is not None:
             hidden_states = hidden_states * attention_mask.unsqueeze(1)
@@ -378,46 +450,33 @@ class JambaMambaMixer(nn.Module):
 
         return contextualized_states
 
-    # fmt: off
-    def slow_forward(self, input_states, cache_params: Cache | None = None, attention_mask: torch.LongTensor | None = None):
-        batch_size, seq_len, _ = input_states.shape
-        dtype = input_states.dtype
+    def slow_forward(
+        self,
+        hidden_states: torch.Tensor,
+        cache_params: Cache | None = None,
+        attention_mask: torch.LongTensor | None = None,
+        **kwargs,
+    ):
+        batch_size, seq_len, _ = hidden_states.shape
+        dtype = hidden_states.dtype
+        use_precomputed_states = cache_params is not None and cache_params.has_previous_state(self.layer_idx)
         # 1. Gated MLP's linear projection
-        projected_states = self.in_proj(input_states).transpose(1, 2)
+        projected_states = self.in_proj(hidden_states).transpose(1, 2)
         hidden_states, gate = projected_states.chunk(2, dim=1)
+
+        # Apply the convolution
+        hidden_states = self._convolution(hidden_states, cache_params, attention_mask, **kwargs)
 
         if attention_mask is not None:
             hidden_states = hidden_states * attention_mask.unsqueeze(1)
 
-        if cache_params is not None and cache_params.has_previous_state(self.layer_idx):
+        if use_precomputed_states:
             # In training mode, we don't want to perform in-place operations on ssm_state so we can compute the backwards pass
             ssm_state = cache_params.layers[self.layer_idx].recurrent_states[0].clone()
         else:
             ssm_state = torch.zeros(
-                (batch_size, self.intermediate_size, self.ssm_state_size),
-                device=hidden_states.device, dtype=dtype
+                (batch_size, self.intermediate_size, self.ssm_state_size), device=hidden_states.device, dtype=dtype
             )
-
-        # 2. Convolution sequence transformation
-        if cache_params is not None:
-            if cache_params.has_previous_state(self.layer_idx) and seq_len == 1:
-                conv_state = cache_params.update_conv_state(hidden_states, self.layer_idx)[..., -self.conv_kernel_size:]
-                hidden_states = torch.sum(conv_state * self.conv1d.weight[:, 0, :], dim=-1)
-                if self.use_conv_bias:
-                    hidden_states += self.conv1d.bias
-                hidden_states = self.act(hidden_states).to(dtype).unsqueeze(-1)
-            else:
-                conv_state = nn.functional.pad(
-                    hidden_states,
-                    (self.conv_kernel_size - hidden_states.shape[-1], 0)
-                )
-                conv_state = cache_params.update_conv_state(conv_state, self.layer_idx)[..., -self.conv_kernel_size:]
-                hidden_states = self.act(self.conv1d(hidden_states)[..., :seq_len])
-        else:
-            hidden_states = self.act(self.conv1d(hidden_states)[..., :seq_len])
-
-        if attention_mask is not None:
-            hidden_states = hidden_states * attention_mask.unsqueeze(1)
 
         # 3. State Space Model sequence transformation
         # 3.a. Selection:  [batch, seq_len, self.time_step_rank + self.ssm_state_size * 2]
@@ -446,7 +505,7 @@ class JambaMambaMixer(nn.Module):
             scan_outputs.append(scan_output[:, :, 0])
         scan_output = torch.stack(scan_outputs, dim=-1)
         scan_output = scan_output + (hidden_states * self.D[None, :, None])
-        scan_output = (scan_output * self.act(gate))
+        scan_output = scan_output * self.act(gate)
 
         if cache_params is not None:
             cache_params.update_recurrent_state(ssm_state, self.layer_idx)
@@ -454,7 +513,6 @@ class JambaMambaMixer(nn.Module):
         # 4. Final linear projection
         contextualized_states = self.out_proj(scan_output.transpose(1, 2))
         return contextualized_states
-    # fmt: on
 
     @force_accelerate_hooks("conv1d")
     def forward(
@@ -462,20 +520,11 @@ class JambaMambaMixer(nn.Module):
         hidden_states,
         cache_params: Cache | None = None,
         attention_mask: torch.LongTensor | None = None,
+        **kwargs,
     ):
-        if self.config.use_mamba_kernels and (
-            not is_fast_path_available or "cuda" not in self.x_proj.weight.device.type
-        ):
-            logger.warning_once(
-                "Fast Mamba kernels are not available. Make sure that they are installed "
-                "and that the mamba module is on a CUDA device. Turning off the fast path "
-                "`config.use_mamba_kernels=False` and falling back to the slow path."
-            )
-            self.config.use_mamba_kernels = False
-
-        if self.config.use_mamba_kernels:
-            return self.cuda_kernels_forward(hidden_states, cache_params, attention_mask)
-        return self.slow_forward(hidden_states, cache_params, attention_mask)
+        if is_fast_path_available and "cuda" in self.x_proj.weight.device.type and not is_tracing(hidden_states):
+            return self.cuda_kernels_forward(hidden_states, cache_params, attention_mask, **kwargs)
+        return self.slow_forward(hidden_states, cache_params, attention_mask, **kwargs)
 
 
 class JambaMLP(nn.Module):

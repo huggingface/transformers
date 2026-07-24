@@ -86,7 +86,6 @@ class Lfm2VlPreTrainedModel(PreTrainedModel):
     _can_compile_fullgraph = False
     _supports_flex_attn = True
     _supports_attention_backend = True
-    _is_stateful = True
 
 
 @auto_docstring(

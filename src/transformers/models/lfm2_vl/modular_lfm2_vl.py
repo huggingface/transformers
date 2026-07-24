@@ -76,7 +76,6 @@ class Lfm2VlMultiModalProjector(nn.Module):
 class Lfm2VlPreTrainedModel(LlavaPreTrainedModel):
     _can_compile_fullgraph = False
     base_model_prefix = "model"
-    _is_stateful = True
 
 
 class Lfm2VlCausalLMOutputWithPast(LlavaCausalLMOutputWithPast):
