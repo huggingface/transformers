@@ -239,3 +239,11 @@ def find_head_dim(config: PreTrainedConfig) -> int:
     if hidden_size is not None and num_attention_heads is not None:
         return hidden_size // num_attention_heads
     raise ValueError(f"head_dim or (hidden_size and num_attention_heads) could not be found in the config:\n{config}")
+
+
+def exact_div(a: int, b: int) -> int:
+    """Divide an integer a by a integer b and error out if there is a remainder."""
+    quotient, remainder = divmod(a, b)
+    if remainder:
+        raise ValueError(f"Division of {a} by {b} is not exact: {remainder = } != 0")
+    return quotient

@@ -17,60 +17,68 @@ from collections import deque
 
 import torch
 
+from ..utils import exact_div
+
 
 class CacheAllocator(ABC):
     """Base class for cache allocators. A cache allocator receives cache sectors from the PagedAttentionCache and
-    allocates them to the requests that need them. A single cache allocator takes care of all layer with a given
+    allocates them to the requests that need them. A single cache allocator takes care of all layers with a given
     attention type (e.g. full attention, sliding attention, MLA, ...).
 
-    PAGE (for one layer)
+    PAGE (for one layer, holds the whole cache of PAGE_SIZE tokens, e.g. both keys and values)
     [  TOKEN 0  |  TOKEN 1  |  TOKEN 2  |  ...  |  TOKEN PAGE_SIZE  ]
 
-    BLOCK (for one request)
+    BLOCK (for one request, one page per layer)
     [  PAGE 0  |  PAGE 1  |  PAGE 2  |  ...  |  PAGE NUM_LAYERS  ]
 
     SECTOR (for one attention type)
     [  BLOCK 0  |  BLOCK 1  |  BLOCK 2  |  ...  |  BLOCK N  ]
     """
 
-    _num_trash_pages = 2  # constant across all cache allocators
-    supports_block_sharing: bool  # depends on the attention type
+    # This attribute depends on the attention type
+    supports_block_sharing: bool
+    rows_per_token: int
+    # These attributes are only known once the cache tensor is registered
+    blocks_per_sector: int
+    num_pages: int
+    num_blocks: int
 
     # ________________________________________________ INITIALIZATION ________________________________________________ #
 
-    def __init__(self, page_size: int, bytes_per_page: int, num_layers: int):
-        self.tokens_per_page = page_size
+    def _before_cache_tensor_init(self, index: int, layer_indices: list[int], tokens_per_page: int, bytes_per_page: int):
+        # Model-related attributes
+        self.index = index
+        self.layer_indices = layer_indices
+        self.pages_per_block = len(layer_indices)
+        # Cache dimensions attributes
+        self.rows_per_block = self.rows_per_token * self.tokens_per_block
+        self.tokens_per_page = tokens_per_page
+        self.tokens_per_block = tokens_per_page * self.pages_per_block
         self.bytes_per_page = bytes_per_page
-        self.num_layers = num_layers
-
+        self.bytes_per_block = bytes_per_page * self.pages_per_block
+        # Bookkeeping attributes
         self.block_table: dict[str, list[int]] = {}
         self.free_block_ids: deque[int] = deque()
-        self.bytes_per_block = bytes_per_page * num_layers
-        self.tokens_per_block = self.tokens_per_page * num_layers
 
     @abstractmethod
     def register_cache_tensor(self, bytes_per_sector: int, non_trash_bytes: int, cache_tensor: torch.Tensor) -> None:
         """Registers the cache tensor so the allocator can use it for updates."""
-        pass
 
-    def _finalize_init(self, num_pages: int, num_blocks: int, bytes_per_sector: int, cache_tensor: torch.Tensor) -> None:
-        self.num_pages = num_pages
-        self.num_blocks = num_blocks
-
-        self.blocks_per_sector = bytes_per_sector // self.bytes_per_block
-
+    def _after_cache_tensor_init(self, non_trash_bytes: int, bytes_per_sector: int, cache_tensor: torch.Tensor) -> None:
+        # Cache dimensions attributes
+        self.num_pages = exact_div(non_trash_bytes, self.bytes_per_page)
+        self.num_blocks = exact_div(self.num_pages, self.pages_per_block)
+        self.blocks_per_sector = exact_div(bytes_per_sector, self.bytes_per_block)
+        # Cache is a static tensor with shape [num_pages * tokens_per_page, ...]
         self.cache_tensor = cache_tensor
         torch._dynamo.mark_static_address(self.cache_tensor)
-
-        # Mark the cache tensor as static address to allow for better performance
-        # We add two extra blocks to the cache as a padding zone that no CacheAllocator ever allocates from.
-        # The first one is zeroed and then never written to. Its first index is the read trash, from which padding
-        # tokens read their KV cache, and its second index is the sentinel index, to indicate where to store the new key
-        # or values indices for sliding window attention groups.
-        # The second is the write trash, where padding tokens can safely write their KV cache (it's never read from).
-        self.read_trash_index = num_pages * self.tokens_per_page
-        self.sentinel_index = num_pages * self.tokens_per_page + 1  # since tokens_per_page >= 4 > 2, this is safe
-        self.write_trash_index = (num_pages + 1) * self.tokens_per_page
+        # The first two sectors of the tensor are the trash sectors, and no allocator ever allocates from them.
+        # Sector 0 holds the read trash, from which padding tokens read their (zeroed, never written) cache, and the
+        # sentinel index, marking where to insert the new key or value states for sliding window attention groups.
+        # Sector 1 holds the write trash, where padding tokens can safely write their cache (it is never read from).
+        self.read_trash_index = 0
+        self.sentinel_index = 1
+        self.write_trash_index = self.rows_per_token * self.tokens_per_block * self.blocks_per_sector
 
     # _________________________________________________ SECTOR LEVEL _________________________________________________ #
 
@@ -81,8 +89,8 @@ class CacheAllocator(ABC):
         fresh_blocks_needed = num_blocks_needed - num_free_blocks
         if fresh_blocks_needed <= 0:
             return 0
-        # Since we need at least one fresh sector, we round up to the next integer
-        return fresh_blocks_needed // self.blocks_per_sector + 1
+        # Round up: a partially needed sector is still a whole sector
+        return (fresh_blocks_needed + self.blocks_per_sector - 1) // self.blocks_per_sector
 
     def allocate_new_sector(self, sector_id: int) -> None:
         """Allocates a new sector to the allocator, which translates as new free blocks for this allocator."""
@@ -93,12 +101,10 @@ class CacheAllocator(ABC):
     @abstractmethod
     def needs_new_blocks(self, request_id: str, past_length: int, query_length: int) -> int:
         """Returns the number of new blocks needed to store the new tokens for a given request. It can be zero."""
-        pass
 
     @abstractmethod
     def allocate_cache_to_request(self, request_id: str, past_length: int, query_length: int) -> None:
         """Allocates the cache to the request."""
-        pass
 
     def free_blocks(self, request_id: str) -> None:
         """Mark the blocks owned by the request as free."""
@@ -116,26 +122,31 @@ class CacheAllocator(ABC):
     @abstractmethod
     def get_seqlen_k(self, past_length: int, query_length: int) -> int:
         """Returns the sequence length of the key for a given request_id, past_length and query_length."""
-        pass
 
     @abstractmethod
     def get_read_indices(self, request_id: str, past_length: int, query_length: int) -> list[int]:
         """Returns the physical indices of where to read request_id's cache."""
-        pass
 
     @abstractmethod
     def get_write_indices(self, request_id: str, past_length: int, query_length: int) -> list[int]:
         """Returns the physical indices for writing to the cache."""
-        pass
 
     @abstractmethod
-    def fill_block_table(self, request_id: str, past_length: int, query_length: int, block_table: torch.Tensor) -> None:
+    def fill_block_table(
+        self, request_id: str, past_length: int, query_length: int, block_table: torch.Tensor
+    ) -> None:
         """Fills the block table for a given request_id, past_length and query_length."""
-        pass
 
     # ________________________________________________ RUNTIME UPDATE ________________________________________________ #
 
     @abstractmethod
-    def update_cache(self, request_id: str, past_length: int, query_length: int) -> None:
-        """Updates the cache for a given request_id, past_length and query_length."""
-        pass
+    def update(
+        self,
+        key_states: torch.Tensor,
+        value_states: torch.Tensor,
+        layer_idx: int,
+        read_index: torch.Tensor,
+        write_index: torch.Tensor,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        """Writes the new key and value states in the cache for the given layer and retrieves the KV states needed for
+        the attention computation, as indicated by the read and write indices."""
