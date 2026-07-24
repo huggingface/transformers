@@ -430,6 +430,7 @@ def slow(test_case):
     """
     try:
         import pytest  # We don't need a hard dependency on pytest in the main library
+
         test_case = pytest.mark.slow(test_case)
     except ImportError:
         pass
