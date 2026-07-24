@@ -31,6 +31,11 @@ class AXK2Config(PreTrainedConfig, RotaryEmbeddingConfigMixin):
     mlp_layer_types (`list`, *optional*):
         MLP type pattern for each layer (`"dense"` or `"sparse"`). Derived from the (legacy) kwargs
         `first_k_dense_replace` / `moe_layer_freq` when not provided.
+    n_group (`int`, *optional*):
+        Number of expert groups for grouped routing, used by the larger A.X-K2 releases. `None` (the
+        A.X-K2-Light default) routes over all experts without group restriction.
+    topk_group (`int`, *optional*):
+        Number of expert groups the top-k selection is restricted to when `n_group` is set.
     index_topk (`int`, *optional*, defaults to 2048):
         Number of top tokens selected by the indexer for sparse attention.
     index_head_dim (`int`, *optional*, defaults to 128):
@@ -40,6 +45,12 @@ class AXK2Config(PreTrainedConfig, RotaryEmbeddingConfigMixin):
     gated_norm_rank (`int`, *optional*, defaults to 16):
         Bottleneck rank for the low-rank input-dependent gate used by `AXK2GatedRMSNorm`. The gate wraps
         `input_layernorm` on every layer and `post_attention_layernorm` on MoE layers.
+    attn_gate_fused (`bool`, *optional*, defaults to `False`):
+        Whether the attention output gate is stored fused into `q_b_proj` (vLLM layout: a doubled-input
+        block-diagonal matrix carrying both the query projection and the gate). When `True` the model keeps
+        `q_b_proj` fused and splits the *activation* in the forward — required for the released fp8
+        checkpoints, whose 128-block scales cannot be split along the per-head query/gate boundary. When
+        `False` the fused checkpoint is split into `q_b_proj` + `g_proj` at load (bf16 only).
 
     ```python
     >>> from transformers import AXK2Config, AXK2Model
@@ -103,6 +114,10 @@ class AXK2Config(PreTrainedConfig, RotaryEmbeddingConfigMixin):
     qk_rope_head_dim: int = 32
     v_head_dim: int = 64
     qk_nope_head_dim: int = 64
+    # A.X-K2-Light routes without expert groups; the larger A.X-K2 releases set `n_group`/`topk_group`
+    # for DeepSeek-V3-style grouped routing, so both modes are supported (`None` = non-grouped).
+    n_group: int | None = None
+    topk_group: int | None = None
     num_experts_per_tok: int = 8
     norm_topk_prob: bool = True
     hidden_act: str = "silu"
@@ -125,6 +140,7 @@ class AXK2Config(PreTrainedConfig, RotaryEmbeddingConfigMixin):
     head_dim: int = 64
     layer_types: list[str] | None = None
     gated_norm_rank: int = 16
+    attn_gate_fused: bool = False
 
     def __post_init__(self, **kwargs):
         self.qk_head_dim = self.qk_nope_head_dim + self.qk_rope_head_dim
@@ -152,6 +168,18 @@ class AXK2Config(PreTrainedConfig, RotaryEmbeddingConfigMixin):
                 "A.X-K2 requires a positive `q_lora_rank` (the indexer and output gate read the query LoRA "
                 f"bottleneck), got {self.q_lora_rank}."
             )
+        if (self.n_group is None) != (self.topk_group is None):
+            raise ValueError(
+                f"`n_group` and `topk_group` must be set together (both `None` for non-grouped routing), got "
+                f"n_group={self.n_group}, topk_group={self.topk_group}."
+            )
+        if self.n_group is not None:
+            if self.n_routed_experts % self.n_group != 0:
+                raise ValueError(
+                    f"`n_routed_experts` ({self.n_routed_experts}) must be divisible by `n_group` ({self.n_group})."
+                )
+            if self.topk_group > self.n_group:
+                raise ValueError(f"`topk_group` ({self.topk_group}) cannot exceed `n_group` ({self.n_group}).")
 
 
 __all__ = ["AXK2Config"]

@@ -235,6 +235,21 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(source_patterns=r"^embed_out\.", target_patterns="lm_head."),
         ],
         "axk2": [
+            # The A.X-K2 hub checkpoints store the routed experts as individual `experts.{i}` projections
+            # (DeepSeek-V3 layout); the model packs them into the stacked expert tensors.
+            WeightConverter(
+                source_patterns=[
+                    "mlp.experts.*.gate_proj.weight",
+                    "mlp.experts.*.up_proj.weight",
+                ],
+                target_patterns="mlp.experts.gate_up_proj",
+                operations=[MergeModulelist(dim=0), Concatenate(dim=1)],
+            ),
+            WeightConverter(
+                source_patterns="mlp.experts.*.down_proj.weight",
+                target_patterns="mlp.experts.down_proj",
+                operations=[MergeModulelist(dim=0)],
+            ),
             # The gated norms store their low-rank gate MLP as `W_down` / `W_up`; the model reuses `CLIPMLP`
             # (`fc1` / `fc2`). Bridge the names on load (and back on save).
             WeightRenaming(source_patterns=r"\.W_down\.", target_patterns=".mlp.fc1."),
@@ -2008,6 +2023,14 @@ def get_model_conversion_mapping(
 
     if add_legacy:
         weight_conversions.extend(get_checkpoint_conversion_mapping("legacy"))
+
+    # Let a model drop registered conversions that do not apply to its particular config (the mapping is
+    # keyed by `model_type`/class name and cannot see the config). E.g. A.X-K2 keeps `q_b_proj` fused when
+    # `attn_gate_fused=True`, so its `SplitFusedMLAGate` converter must not run (splitting is impossible for
+    # the fp8 releases and unnecessary for a fused model).
+    filter_conversions = getattr(model, "filter_checkpoint_conversions", None)
+    if filter_conversions is not None:
+        weight_conversions = filter_conversions(weight_conversions)
 
     # Let the quantizer rewrite / augment the conversion pipeline. This is where the
     # FP8 dequantizer (when `dequantize=True`) prepends a `Fp8Dequantize` op to

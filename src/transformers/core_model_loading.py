@@ -709,6 +709,11 @@ class SplitFusedMLAGate(ConversionOps):
         qk_head_dim = self.config.qk_head_dim
         v_head_dim = self.config.v_head_dim
         q_lora_rank = self.config.q_lora_rank
+        # When the model keeps `q_b_proj` fused (`attn_gate_fused`, e.g. the fp8 releases), the fused matrix
+        # loads as-is and the activation is split in the forward — so this op must not touch it. Splitting an
+        # fp8 fused matrix is impossible anyway: its 128-block scales straddle the per-head query/gate boundary.
+        if getattr(self.config, "attn_gate_fused", False):
+            return weight, None
         # An already-unfused `q_b_proj` (e.g. a transformers-saved state dict) passes through unchanged;
         # `g_proj` then loads from its own key. Only the fused vLLM layout (`2 * q_lora_rank` columns) is split.
         if weight.shape[-1] != 2 * q_lora_rank:
@@ -776,6 +781,10 @@ class FuseMLAGate(ConversionOps):
             tensors = input_dict[pattern]
             return tensors[0] if isinstance(tensors, list) else tensors
 
+        # Fused models (`attn_gate_fused`) keep `q_b_proj` fused and have no `g_proj`, so there is nothing
+        # to fuse on save — the single fused tensor passes through unchanged.
+        if getattr(config, "attn_gate_fused", False):
+            return {target_patterns[0]: _tensor(source_patterns[0])}
         fused = self._fuse(_tensor(source_patterns[0]), _tensor(source_patterns[1]))
         return {target_patterns[0]: fused}
 
