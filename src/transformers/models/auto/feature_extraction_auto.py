@@ -43,6 +43,7 @@ MISSING_FEATURE_EXTRACTOR_MAPPING_NAMES = OrderedDict(
         ("granite_speech_plus", "GraniteSpeechFeatureExtractor"),
         ("higgs_audio_v2_tokenizer", "DacFeatureExtractor"),
         ("hubert", "Wav2Vec2FeatureExtractor"),
+        ("inkling_mm_model", "InklingFeatureExtractor"),
         ("lasr_ctc", "LasrFeatureExtractor"),
         ("lasr_encoder", "LasrFeatureExtractor"),
         ("mimi", "EncodecFeatureExtractor"),

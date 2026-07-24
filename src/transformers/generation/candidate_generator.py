@@ -21,7 +21,6 @@ import numpy as np
 import torch
 import torch.nn as nn
 
-from ..cache_utils import DynamicLayer
 from ..pytorch_utils import prune_linear_layer
 from ..utils import ModelOutput, is_sklearn_available
 from .configuration_utils import GenerationConfig
@@ -189,9 +188,6 @@ class AssistedCandidateGenerator(CandidateGenerator):
             processor for processor in self.logits_processor if not isinstance(processor, MinLengthLogitsProcessor)
         ]
 
-        # We need to roll back the cache in assisted generation, only DynamicCache is supported
-        self.generation_config.cache_implementation = "dynamic_full"
-
         if (
             is_sklearn_available()
             and self.assistant_generation_config.assistant_confidence_threshold
@@ -296,8 +292,8 @@ class AssistedCandidateGenerator(CandidateGenerator):
         """Update past key values and attention masks for subsequent generation rounds."""
         has_past_key_values = self.assistant_kwargs.get("past_key_values", None) is not None
         if has_past_key_values:
-            new_cache_size = input_ids.shape[-1] - 1 - remove_from_pkv
-            self.assistant_kwargs["past_key_values"].crop(new_cache_size - num_added_tokens)
+            tokens_to_remove = remove_from_pkv + num_added_tokens
+            self.assistant_kwargs["past_key_values"].crop(-tokens_to_remove)
             self.assistant_kwargs = _prepare_attention_mask(
                 self.assistant_kwargs, input_ids.shape[-1], self.assistant_model.config.is_encoder_decoder
             )
@@ -305,10 +301,6 @@ class AssistedCandidateGenerator(CandidateGenerator):
                 self.assistant_kwargs, input_ids.shape[-1], self.assistant_model.config.is_encoder_decoder
             )
             self.assistant_kwargs = _prepare_token_type_ids(self.assistant_kwargs, input_ids.shape[-1])
-
-            # This unsets `dynamic_full`, needed to initialize a new cache for the assistant. After the first forward
-            # pass on each generation, we reuse the cache instead.
-            self.generation_config.cache_implementation = None
 
         return has_past_key_values
 
@@ -1435,6 +1427,7 @@ class MTPCandidateGenerator(AssistedCandidateGenerator):
         model_kwargs: dict[str, Any],
         logits_processor: Optional["LogitsProcessorList"] = None,
     ):
+        from ..cache_utils import MtpCache
         from ..modeling_layers import MtpModel
 
         self.num_mtp_layers = getattr(main_model.config.get_text_config(), "num_mtp_layers", None)
@@ -1445,15 +1438,13 @@ class MTPCandidateGenerator(AssistedCandidateGenerator):
             )
 
         # Heuristic: use the device of the last layer of the main model for the MTP layers
-        self.device = next(x.device for x in main_model.base_model.layers[-1].parameters())  # type: ignore
+        base_model = main_model.get_decoder()
+        self.device = next(x.device for x in base_model.layers[-1].parameters())  # type: ignore
         self.mtp_model = MtpModel.from_pretrained(main_model, device_map={"": self.device})
 
-        # Artificially add the MTP layers to the cache
-        if (cache := model_kwargs.get("past_key_values")) is not None:
-            if len(cache) != main_model.config.get_text_config().num_hidden_layers + self.num_mtp_layers:
-                cache.layers.extend([DynamicLayer() for _ in range(self.num_mtp_layers)])
-        else:
-            raise ValueError("No cache yet")
+        # Create the mtp cache and allow it to keep its past before we crop it
+        self.mtp_cache = MtpCache(config=main_model.config.get_mtp_config())
+        self.mtp_cache.activate_past_recording()
 
         # Save those to know how to decode mtp tokens
         self.do_sample = generation_config.do_sample
@@ -1487,21 +1478,52 @@ class MTPCandidateGenerator(AssistedCandidateGenerator):
         # right to take the new token as well. Say the main model just had token positions [2, 3] as input, the tensors
         # contains the data for position [0, 1, 2, 3, 4], i.e. full inputs + new drafted token from last position 3 that was processed.
         # We want to slice to get data for positions [3, 4] for the 1st mtp layer, i.e. same as main model, shifted by 1 to the right.
+        # On the other hand, the `full_seq_last_hidden_states` contains data for only already processed positions by the main_model, i.e.
+        # one less than `input_ids`/`positions_ids`/`attention_mask`
         num_last_main_model_tokens = n_last_matches + 1 if not self.is_main_model_prefill else input_ids.shape[1] - 1
-        mtp_input_ids = input_ids[:, -num_last_main_model_tokens:]
-        mtp_position_ids = model_kwargs["position_ids"][:, -num_last_main_model_tokens:]
-        mtp_attention_mask = model_kwargs["attention_mask"][:, -num_last_main_model_tokens:]
 
         # The hidden states have seq_len equal to the last main model's forward pass on all the candidates. We need the
         # last hidden states of only the last validated tokens
         last_hidden_states = last_hidden_states[:, :num_last_main_model_tokens].to(self.device)
+
+        # We need to cache the full last_hidden_states from the main model to be able to correct the mtp cache based on validated tokens
+        if self.num_mtp_layers > 1:
+            # To correct the mtp cache based on validated tokens, we need to keep all previous last_hidden_states
+            if self.is_main_model_prefill:
+                self.full_seq_last_hidden_states = last_hidden_states
+            else:
+                self.full_seq_last_hidden_states = torch.cat(
+                    [self.full_seq_last_hidden_states, last_hidden_states], dim=1
+                )
+
+        # This is the tricky part: potentially invalidate and recreate the mtp cache for wrong positions if necessary
+        # With one layer, or if validating enough tokens, the cache is always correct since the first mtp layer sees the token
+        # drafted directly from main model, which is necessarily correct, so we don't need any correction
+        if self.num_mtp_layers > 1 and n_last_matches < self.num_mtp_layers - 1 and not self.is_main_model_prefill:
+            # Invalidate the full chains of layers before recomputing with the validated tokens, even if the first layers may
+            # have a valid cache, because we need to have the same sequence length for all MTP layers due to the cat of tokens
+            # and prev hidden_states
+            self.mtp_cache.crop(-self.num_mtp_layers)
+
+            # We need the last invalidated tokens, as well as the new one in a single passcfor efficiency
+            mtp_input_ids = input_ids[:, -num_last_main_model_tokens - self.num_mtp_layers :]
+            mtp_position_ids = model_kwargs["position_ids"][:, -num_last_main_model_tokens - self.num_mtp_layers :]
+            mtp_attention_mask = model_kwargs["attention_mask"][:, -num_last_main_model_tokens - self.num_mtp_layers :]
+            last_hidden_states = self.full_seq_last_hidden_states[
+                :, -num_last_main_model_tokens - self.num_mtp_layers :, :
+            ]
+        # If we have a single layer, or validated enough, we can simply pass the new tokens
+        else:
+            mtp_input_ids = input_ids[:, -num_last_main_model_tokens:]
+            mtp_position_ids = model_kwargs["position_ids"][:, -num_last_main_model_tokens:]
+            mtp_attention_mask = model_kwargs["attention_mask"][:, -num_last_main_model_tokens:]
 
         candidate_ids, candidate_logits, _ = self.mtp_model(
             input_ids=mtp_input_ids,
             last_hidden_states=last_hidden_states,
             attention_mask=mtp_attention_mask,
             position_ids=mtp_position_ids,
-            past_key_values=model_kwargs["past_key_values"],
+            mtp_cache=self.mtp_cache,
             do_sample=self.do_sample,
             logits_processor=self.logits_processor,
             full_input_ids=input_ids,

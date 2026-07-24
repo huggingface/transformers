@@ -21,10 +21,13 @@ from transformers import (
     MODEL_FOR_MULTIMODAL_LM_MAPPING,
     AutoProcessor,
     Qwen2_5OmniForConditionalGeneration,
+    is_torch_available,
     is_vision_available,
+    logging,
 )
 from transformers.pipelines import AnyToAnyPipeline, pipeline
 from transformers.testing_utils import (
+    CaptureLogger,
     Expectations,
     is_pipeline_test,
     require_librosa,
@@ -42,6 +45,9 @@ from utils.fetch_hub_objects_for_ci import url_to_local_path
 
 if is_vision_available():
     import PIL
+
+if is_torch_available():
+    from transformers import Qwen2_5OmniForConditionalGeneration
 
 
 @is_pipeline_test
@@ -83,7 +89,7 @@ class AnyToAnyPipelineTests(unittest.TestCase):
                 "text": f"{video_token}This video shows a ",
             },
             {
-                "video": url_to_local_path(
+                "videos": url_to_local_path(
                     "https://huggingface.co/datasets/raushan-testing-hf/videos-test/resolve/main/sample_demo_1.mp4"
                 ),
                 "text": f"{video_token}In the video I see a ",
@@ -117,6 +123,33 @@ class AnyToAnyPipelineTests(unittest.TestCase):
 
         return pipe, examples
 
+    def test_pipeline_forwards_direct_videos_keyword(self):
+        processor = AutoProcessor.from_pretrained(
+            "hf-internal-testing/tiny-random-Qwen2_5OmniForConditionalGeneration"
+        )
+        model = Qwen2_5OmniForConditionalGeneration.from_pretrained(
+            "hf-internal-testing/tiny-random-Qwen2_5OmniForConditionalGeneration"
+        )
+        pipe = AnyToAnyPipeline(model=model, processor=processor, max_new_tokens=1)
+        video = np.zeros((2, 16, 16, 3), dtype=np.uint8)
+        logger = logging.get_logger("transformers.processing_utils")
+
+        with CaptureLogger(logger) as captured:
+            outputs = pipe(
+                text=f"{processor.video_token} describe",
+                videos=video,
+                return_full_text=False,
+                processor_kwargs={"num_frames": 2},
+                generate_kwargs={
+                    "generation_mode": "text",
+                    "thinker_do_sample": False,
+                    "thinker_max_new_tokens": 1,
+                },
+            )
+
+        self.assertEqual(outputs, [{"input_text": ANY(str), "generated_text": ANY(str)}])
+        self.assertNotIn("Keyword argument `video` is not a valid argument", captured.out)
+
     def run_pipeline_test(self, pipe, examples):
         # Single
         outputs = pipe(examples[0])
@@ -140,6 +173,16 @@ class AnyToAnyPipelineTests(unittest.TestCase):
                 ],
             ],
         )
+
+        video_example = next((example for example in examples if "videos" in example), None)
+        if video_example is not None:
+            outputs = pipe(text=video_example["text"], videos=video_example["videos"])
+            self.assertEqual(
+                outputs,
+                [
+                    {"input_text": ANY(str), "generated_text": ANY(str)},
+                ],
+            )
 
         # `generation_mode` raises errors when dosn't match with other params
         with self.assertRaises(ValueError):

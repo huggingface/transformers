@@ -851,6 +851,36 @@ class NopConfig(PreTrainedConfig):
                 tokenizer_auto = AutoTokenizer.from_pretrained(repo_id, cache_dir=tmpdir)
         self.assertEqual(tokenizer_auto.decode(tokenizer_auto.encode(text, add_special_tokens=False)), text)
 
+    TOKENIZERS_TEST_SPM_COMPILED_CHECKPOINTS = [
+        "albert/albert-base-v1",
+        "almanach/camembert-base",
+        "microsoft/mpnet-base",
+        "google/rembert",
+        "facebook/xglm-564M",
+        "xlnet/xlnet-base-cased",
+    ]
+
+    @slow
+    @require_tokenizers
+    @parameterized.expand(TOKENIZERS_TEST_SPM_COMPILED_CHECKPOINTS)
+    def test_right_to_left_mark(self, repo_id):
+        # PR #45936: v5 tokenizer auto mapping changes to use TokenizersBackend.
+        # Text contains U+200F (RIGHT-TO-LEFT MARK) which exposes ‏ handling
+        # differences between TokenizersBackend and slow tokenizer backends.
+        TOKENIZERS_BACKEND_AUTO_MAPPING_SHARED_TEXT = "روڈولف انڈرسن کہیں نہیں ملا‏، اس لیے ہے ہم نے صرف ایک ہی U2 لیا۔"
+
+        tokenizer_auto = AutoTokenizer.from_pretrained(repo_id)
+        tokenizer_tok = TokenizersBackend.from_pretrained(repo_id)
+
+        auto_ids = tokenizer_auto.encode(TOKENIZERS_BACKEND_AUTO_MAPPING_SHARED_TEXT)
+        tok_ids = tokenizer_tok.encode(TOKENIZERS_BACKEND_AUTO_MAPPING_SHARED_TEXT)
+
+        self.assertEqual(auto_ids, tok_ids)
+        self.assertEqual(
+            tokenizer_auto.decode(auto_ids),
+            tokenizer_tok.decode(tok_ids),
+        )
+
     TOKENIZERS_BACKEND_AUTO_MAPPING_CHECKPOINTS = [
         "rhymes-ai/Aria",
         "Salesforce/blip2-flan-t5-xl",

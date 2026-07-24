@@ -16,7 +16,7 @@
 
 Provides:
 - `deepgemm_bf16_experts_forward`: BF16 M-grouped experts forward.
-- `deepgemm_fp8_fp4_linear`: end-to-end FP8/FP4 linear (BF16 in, BF16 out).
+- `deepgemm_fp8_fp4_linear`: end-to-end FP8/FP4 linear (output dtype follows the input).
 - `deepgemm_fp8_fp4_experts_forward`: FP8 (or FP4 on SM100+) M-grouped experts forward.
 - `deepgemm_fp8_fp4_megamoe_experts_forward`: FP8xFP4 Mega MoE forward (SM100+).
 
@@ -37,6 +37,7 @@ from dataclasses import dataclass
 import torch
 
 from ..utils import logging
+from ..utils.deprecation import deprecate_kwarg
 from ..utils.import_utils import (
     KERNELS_MAX_VERSION,
     KERNELS_MIN_VERSION,
@@ -314,45 +315,6 @@ def _assert_sm100_scales_are_ue8m0(scale: torch.Tensor) -> None:
     )
 
 
-_DEEPGEMM_VISITED_DEVICES: set[int] = set()
-
-
-def _assert_single_device(device: torch.device, context: str) -> None:
-    """Reject DeepGEMM calls that span multiple CUDA devices in the same process
-    (e.g. ``device_map="auto"`` across N GPUs). DeepGEMM loads each kernel via
-    ``cuKernelGetFunction``, which binds the resulting ``CUfunction`` handle to
-    the CUDA context that was current at load time. Driving the same cached
-    handle from a different device's context launches it against the wrong
-    module/context and produces garbage. Distributed setups (torchrun + TP/EP)
-    don't trip this because each process owns exactly one device's context.
-
-    The fix is a build-time choice on the DeepGEMM side: compiling with
-    ``DG_JIT_USE_RUNTIME_API=1`` swaps the loader for the runtime API
-    (context-free ``cudaKernel_t``) and lifts the restriction — but it has to
-    be baked into the wheel, setting the env var at Python runtime won't change
-    the loader the cached ``.so`` already uses. Until the kernels-community build
-    we ship picks that up, we reject single-process multi-device by default.
-
-    Raised as :class:`ImportError` from the per-linear path so :func:`fp8_linear`
-    falls back to Triton (which loads through the runtime API and has no such
-    binding); raised as :class:`RuntimeError` from the experts path where there's
-    no fallback — the user explicitly chose ``experts_implementation="deepgemm"``
-    and must switch to ``"grouped_mm"`` / ``"eager"`` or run distributed.
-    """
-    idx = device.index if device.index is not None else torch.cuda.current_device()
-    _DEEPGEMM_VISITED_DEVICES.add(idx)
-    if len(_DEEPGEMM_VISITED_DEVICES) <= 1:
-        return
-    msg = (
-        "DeepGEMM caches each kernel's `CUfunction` against the CUDA context it was first "
-        "loaded under, so driving it from a different device in the same process produces "
-        "garbage. Run distributed (TP/EP) so each process owns one device, "
-    )
-    if context == "linear":
-        raise ImportError(msg + "or fall back to the Triton kernel (handled automatically).")
-    raise RuntimeError(msg + "or pick `experts_implementation='grouped_mm'`.")
-
-
 def _ceil_to_ue8m0(sf: torch.Tensor) -> torch.Tensor:
     """Round each fp32 SF up to the nearest power of 2 (zero mantissa).
 
@@ -367,8 +329,16 @@ def _ceil_to_ue8m0(sf: torch.Tensor) -> torch.Tensor:
 
 
 def _coerce_sf_for_kernel(sf: torch.Tensor, expected_mn: int | None = None) -> torch.Tensor:
-    """Lay out `sf` as DeepGEMM's `check_sf_layout` expects: MN-major
-    (`stride(-2) == 1`) and TMA-aligned (`stride(-1) == align(mn, 16/esize)`).
+    """Lay out `sf` as DeepGEMM's dispatch expects, per arch.
+
+    On SM100 the int-SF path only *checks* the SF (`tma_stride_check`) and never
+    transforms it, so we hand it a TMA-aligned MN-major layout (`stride(-2) == 1`,
+    `stride(-1) == align(mn, 16/esize)`). On SM90 DeepGEMM transforms SFA itself
+    (`get_mn_major_tma_aligned_tensor`) and only *checks* SFB against
+    `sm90_sfb_check`, which rejects TMA padding (`stride(-1)` must equal `size(-2)`,
+    not `align(mn, …)`); a padded weight SF trips `layout.hpp` whenever `mn` isn't a
+    multiple of `16/esize` (e.g. N=576 → mn=5). So on SM90 we return the raw
+    row-major SF and let DeepGEMM lay it out.
 
     Inputs come in three flavors:
       - `float8_e8m0fnu` on SM100: raw UE8M0 bytes — pack 4 K-bytes → int32
@@ -400,6 +370,11 @@ def _coerce_sf_for_kernel(sf: torch.Tensor, expected_mn: int | None = None) -> t
 
     if sf.dim() not in (2, 3):
         raise ValueError(f"DeepGEMM SF must be 2D or 3D, got {sf.dim()}D")
+
+    # SM90 dispatch transforms SFA and only checks SFB (`sm90_sfb_check`), which needs
+    # an unpadded contiguous layout — DeepGEMM does the MN-major alignment itself.
+    if not is_sm100:
+        return sf.contiguous()
 
     mn = sf.size(-2)
     kf = sf.size(-1)
@@ -569,13 +544,14 @@ def _combine_routed_output(
 # ── Public dispatches ──────────────────────────────────────────────────────────
 
 
+@deprecate_kwarg("output_dtype", version="v5.16")
 def deepgemm_fp8_fp4_linear(
     input: torch.Tensor,
     weight: torch.Tensor,
     weight_scale_inv: torch.Tensor,
     bias: torch.Tensor | None = None,
     block_size: tuple[int, int] | None = None,
-    output_dtype: torch.dtype = torch.bfloat16,
+    output_dtype: torch.dtype | None = None,
     activation_scale: torch.Tensor | None = None,
 ) -> torch.Tensor:
     """End-to-end DeepGEMM linear: per-token activation quant + FP8/FP4 matmul.
@@ -583,8 +559,6 @@ def deepgemm_fp8_fp4_linear(
     Static (per-tensor) activation quantization is rejected — DeepGEMM needs
     per-row SFs. Callers should route static activations through the Triton fallback.
     """
-    _assert_single_device(input.device, context="linear")
-
     if activation_scale is not None:
         raise NotImplementedError("DeepGEMM linear does not support static activation quantization.")
     if input.dtype not in (torch.bfloat16, torch.float16):
@@ -595,7 +569,7 @@ def deepgemm_fp8_fp4_linear(
 
     input_2d = input.view(-1, input.shape[-1])
     qinput_2d, scale_2d = deepgemm.per_token_cast_to_fp8(input_2d, **cast_kwargs)
-    output = torch.empty(qinput_2d.shape[0], weight.shape[0], device=input.device, dtype=output_dtype)
+    output = torch.empty(qinput_2d.shape[0], weight.shape[0], device=input.device, dtype=input.dtype)
 
     # Pass `(1, 1, gran_k)` for int-SF paths so the kernel uses the right K granularity
     # (the default `(1, 1, 128)` mismatches FP4's gran_k=32). Float-SF leaves it None.
@@ -683,7 +657,15 @@ def deepgemm_fp8_fp4_experts_forward(
     top_k_index: torch.Tensor,
     top_k_weights: torch.Tensor,
 ) -> torch.Tensor:
-    _assert_single_device(hidden_states.device, context="experts")
+    if self._deepgemm_disabled:
+        # Set at load when the model spans >1 CUDA device in this process, where DeepGEMM's
+        # context-bound kernels corrupt across devices (see `quantizer_finegrained_fp8.py`).
+        raise RuntimeError(
+            "DeepGEMM experts selected on a model spanning multiple CUDA devices in one process; "
+            "its kernels are bound to a single CUDA context and corrupt across devices. Use "
+            "`experts_implementation='grouped_mm'`, or run one device per process (TP/EP)."
+        )
+
     _assert_sm100_scales_are_ue8m0(self.down_proj_scale_inv)
 
     if self.activation_scheme == "static":

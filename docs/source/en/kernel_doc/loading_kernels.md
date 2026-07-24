@@ -108,6 +108,24 @@ model = AutoModelForCausalLM.from_pretrained(
 )
 ```
 
+### FlashAttention fallback
+
+Requesting `attn_implementation="flash_attention_2"`, `"flash_attention_3"`, or `"flash_attention_4"` falls back to the matching Hub kernel when the compiled `flash-attn` package isn't installed or your device isn't CUDA.
+
+> [!NOTE]
+> FlashAttention-4 support is in beta. APIs and behavior may change.
+
+```py
+from transformers import AutoModelForCausalLM
+
+# uses the compiled flash-attn package if present, otherwise the kernels-community/flash-attn2 Hub kernel
+model = AutoModelForCausalLM.from_pretrained(
+    "Qwen/Qwen3-0.6B",
+    attn_implementation="flash_attention_2",
+    device_map="auto",
+)
+```
+
 ## Mode-awareness
 
 Kernels automatically adapt to [training](https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module.train) and [inference](https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module.eval) modes based on PyTorch's `model.training` state.

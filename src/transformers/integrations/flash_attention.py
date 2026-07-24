@@ -57,6 +57,12 @@ def flash_attention_forward(
     key = key.transpose(1, 2)
     value = value.transpose(1, 2)
 
+    # FlashAttention requires the query and value to share a head dim; pad `value` up to the
+    # query head dim (e.g. MLA, where `v_head_dim < qk_head_dim`) and crop the output below.
+    head_dim, v_head_dim = query.shape[-1], value.shape[-1]
+    if v_head_dim != head_dim:
+        value = torch.nn.functional.pad(value, [0, head_dim - v_head_dim])
+
     # In PEFT, usually we cast the layer norms in float32 for training stability reasons
     # therefore the input hidden states gets silently casted in float32. Hence, we need
     # cast them back in the correct dtype just to be sure everything works as expected.
@@ -89,5 +95,8 @@ def flash_attention_forward(
         ),
         **kwargs,
     )
+
+    if v_head_dim != head_dim:
+        attn_output = attn_output[..., :v_head_dim]
 
     return attn_output, None
