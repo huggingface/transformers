@@ -419,9 +419,12 @@ class PermuteForRope(ConversionOps):
     Applies the permutation required to convert complex RoPE weights to the split sin/cos format.
     """
 
-    def __init__(self, subconfig_key: str | None = None, inverse: bool = False):
+    def __init__(
+        self, subconfig_key: str | None = None, permute_layer_names: list[str] | None = None, inverse: bool = False
+    ):
         self.subconfig_key = subconfig_key
         self.inverse = inverse
+        self.permute_layer_names = permute_layer_names
 
     def _apply(self, tensor: torch.Tensor) -> torch.Tensor:
         dim0 = tensor.shape[0]
@@ -452,16 +455,24 @@ class PermuteForRope(ConversionOps):
         self.config = config
         output: dict[str, list[torch.Tensor]] = {}
         for key, tensors in input_dict.items():
+            # Permute q and key weights back (skip biases) to match original RoPE implementation
+            if not any(name in key for name in self.permute_layer_names):
+                output[key] = tensors
+                continue
+
             if isinstance(tensors, list):
                 if len(tensors) != 1:
                     raise ValueError("PermuteForRope expects a single tensor per key.")
                 tensors = tensors[0]
+            print(key, tensors.shape, self.inverse)
             output[key] = self._apply(tensors)
         return output
 
     @property
     def reverse_op(self) -> ConversionOps:
-        return PermuteForRope(subconfig_key=self.subconfig_key, inverse=not self.inverse)
+        return PermuteForRope(
+            subconfig_key=self.subconfig_key, permute_layer_names=self.permute_layer_names, inverse=not self.inverse
+        )
 
 
 class VisionFuseAndPermuteForRope(ConversionOps):
@@ -473,24 +484,14 @@ class VisionFuseAndPermuteForRope(ConversionOps):
     """
 
     def __init__(self, dim: int = 0, permute_layer_names: list[str] | None = None, inverse: bool = True):
-        self.dim = dim
-        self.permute_layer_names = permute_layer_names or []
-        self.inverse = inverse
-
-    def _apply_permutation(self, tensor: torch.Tensor) -> torch.Tensor:
-        dim0 = tensor.shape[0]
-        n_heads = getattr(self.config.vision_config, "num_attention_heads", 1)
-        half_head = dim0 // n_heads // 2
-
-        # Permute weights and biases if available
-        head_shape = (2, half_head) if self.inverse else (half_head, 2)
-        if tensor.ndim == 2:
-            tensor = tensor.view(n_heads, *head_shape, tensor.shape[1])
-            tensor = tensor.transpose(1, 2).reshape(dim0, tensor.shape[-1])
-        elif tensor.ndim == 1:
-            tensor = tensor.view(n_heads, *head_shape)
-            tensor = tensor.transpose(1, 2).reshape(dim0)
-        return tensor
+        logger.warning(
+            "`VisionUnfuseAndPermuteForRope` is deprecated and will be removed in v5.20. Use `PermuteForRope()` and `Concatenate()` "
+            "consecutively instead to permute back and fuse projections."
+        )
+        self.concat_op = Concatenate(dim=dim)
+        self.permute_op = PermuteForRope(
+            subconfig_key="vision_config", permute_layer_names=permute_layer_names, inverse=inverse
+        )
 
     @torch.no_grad
     def convert(
@@ -501,18 +502,18 @@ class VisionFuseAndPermuteForRope(ConversionOps):
         config,
         **kwargs,
     ) -> dict[str, torch.Tensor]:
-        self.config = config
-        target_pattern = self.get_target_pattern(target_patterns)
-
-        all_tensors = []
-        for source_pattern in source_patterns:
-            tensors = input_dict[source_pattern][0]
-            # Permute q and key weights back (skip biases) to match original RoPE implementation
-            if any(name in source_pattern for name in self.permute_layer_names) and tensors.ndim == 2:
-                tensors = self._apply_permutation(tensors)
-            all_tensors.append(tensors)
-
-        return {target_pattern: torch.cat(all_tensors, dim=self.dim)}
+        input_dict = self.permute_op.convert(
+            input_dict=input_dict,
+            source_patterns=source_patterns,
+            target_patterns=target_patterns,
+            config=config,
+        )
+        input_dict = self.concat_op.convert(
+            input_dict=input_dict,
+            source_patterns=source_patterns,
+            target_patterns=target_patterns,
+        )
+        return input_dict
 
     def get_target_pattern(self, target_patterns: list[str]) -> str:
         # Here we always return the target pattern
@@ -534,24 +535,14 @@ class VisionUnfuseAndPermuteForRope(ConversionOps):
     """
 
     def __init__(self, dim: int = 0, permute_layer_names: list[str] | None = None, inverse: bool = False):
-        self.dim = dim
-        self.permute_layer_names = permute_layer_names or []
-        self.inverse = inverse
-
-    def _apply_permutation(self, tensor: torch.Tensor) -> torch.Tensor:
-        dim0 = tensor.shape[0]
-        n_heads = getattr(self.config.vision_config, "num_attention_heads", 1)
-        half_head = dim0 // n_heads // 2
-
-        # Permute weights and biases if available
-        head_shape = (2, half_head) if self.inverse else (half_head, 2)
-        if tensor.ndim == 2:
-            tensor = tensor.view(n_heads, *head_shape, tensor.shape[1])
-            tensor = tensor.transpose(1, 2).reshape(dim0, tensor.shape[-1])
-        elif tensor.ndim == 1:
-            tensor = tensor.view(n_heads, *head_shape)
-            tensor = tensor.transpose(1, 2).reshape(dim0)
-        return tensor
+        logger.warning(
+            "`VisionUnfuseAndPermuteForRope` is deprecated and will be removed in v5.20. Use `Chunk()` and `PermuteForRope()` "
+            "consecutively instead to unfuse projections and permute for block-split RoPE"
+        )
+        self.chunk_op = Chunk(dim=dim)
+        self.permute_op = PermuteForRope(
+            subconfig_key="vision_config", permute_layer_names=permute_layer_names, inverse=inverse
+        )
 
     @torch.no_grad
     def convert(
@@ -562,18 +553,18 @@ class VisionUnfuseAndPermuteForRope(ConversionOps):
         config,
         **kwargs,
     ) -> dict[str, torch.Tensor]:
-        self.config = config
-
-        tensor = next(iter(input_dict.values()))[0]
-        targets = self.get_target_patterns(input_dict, target_patterns)
-        chunks = torch.chunk(tensor, len(targets), dim=self.dim)
-
-        output: dict[str, torch.Tensor] = dict(zip(targets, chunks))
-        for key, value in output.items():
-            # Permute q and key weights (skip biases) to match RoPE implementation
-            if any(name in key for name in self.permute_layer_names):
-                output[key] = self._apply_permutation(value)
-        return output
+        input_dict = self.chunk_op.convert(
+            input_dict=input_dict,
+            source_patterns=source_patterns,
+            target_patterns=target_patterns,
+        )
+        input_dict = self.permute_op.convert(
+            input_dict=input_dict,
+            source_patterns=source_patterns,
+            target_patterns=target_patterns,
+            config=config,
+        )
+        return input_dict
 
     def get_target_patterns(self, input_dict: dict, target_patterns: list[str]) -> list[str]:
         # Here we always return the target patterns

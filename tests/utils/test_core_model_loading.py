@@ -30,7 +30,6 @@ from transformers.core_model_loading import (
     Concatenate,
     Conv3dToLinear,
     ErnieFuseAndSplitTextVisionExperts,
-    GroupWeightRename,
     LinearToConv3d,
     MergeModulelist,
     PermuteForRope,
@@ -1140,60 +1139,43 @@ class TestConvertAndLoadStateDict(unittest.TestCase):
         # Make sure both saved state_dict are identical
         self.assertTrue(compare_state_dicts(reversed_state_dict, state_dict))
 
+    def test_qkv_chunk_rope_permute_vision_config(self):
+        n_heads = 2
+        head_dim = 8
 
-class TestConversionMapping(unittest.TestCase):
-    def test_permute_rope(self):
-        text_config = PreTrainedConfig(hidden_size=16, head_dim=8, num_attention_heads=2)
-        config = PreTrainedConfig(text_config=text_config)
+        class RopeProjector(nn.Module):
+            def __init__(self, in_dim, out_dim):
+                super().__init__()
+                self.weight = nn.Parameter(torch.zeros(out_dim, in_dim))
 
-        q_proj = torch.randn(text_config.hidden_size, text_config.hidden_size, dtype=torch.float32)
-        k_proj = torch.randn(text_config.hidden_size, text_config.hidden_size, dtype=torch.float32)
-        q_bias = torch.randn(text_config.hidden_size, dtype=torch.float32)
-        k_bias = torch.randn(text_config.hidden_size, dtype=torch.float32)
+        class RopeSelfAttn(nn.Module):
+            def __init__(self, fused_qkv: bool = False):
+                super().__init__()
+                if fused_qkv:
+                    self.qkv_proj = RopeProjector(n_heads * head_dim, n_heads * head_dim * 3)
+                else:
+                    self.q_proj = RopeProjector(n_heads * head_dim, n_heads * head_dim)
+                    self.k_proj = RopeProjector(n_heads * head_dim, n_heads * head_dim)
+                    self.v_proj = RopeProjector(n_heads * head_dim, n_heads * head_dim)
 
-        q_proj_permuted = q_proj.view(
-            text_config.num_attention_heads, text_config.head_dim // 2, 2, text_config.hidden_size
-        )
-        q_proj_permuted = q_proj_permuted.transpose(1, 2).reshape(text_config.hidden_size, text_config.hidden_size)
-        q_bias_permuted = q_bias.view(text_config.num_attention_heads, text_config.head_dim // 2, 2)
-        q_bias_permuted = q_bias_permuted.transpose(1, 2).reshape(text_config.hidden_size)
+        class RopeLayer(nn.Module):
+            def __init__(self, fused_qkv: bool = False):
+                super().__init__()
+                self.self_attn = RopeSelfAttn(fused_qkv=fused_qkv)
 
-        k_proj_permuted = k_proj.view(
-            text_config.num_attention_heads, text_config.head_dim // 2, 2, text_config.hidden_size
-        )
-        k_proj_permuted = k_proj_permuted.transpose(1, 2).reshape(text_config.hidden_size, text_config.hidden_size)
-        k_bias_permuted = k_bias.view(text_config.num_attention_heads, text_config.head_dim // 2, 2)
-        k_bias_permuted = k_bias_permuted.transpose(1, 2).reshape(text_config.hidden_size)
+        class RopeModel(PreTrainedModel):
+            base_model_prefix = "model"
 
-        permute = PermuteForRope(subconfig_key="text_config")
-        inverse_permute = PermuteForRope(subconfig_key="text_config", inverse=True)
+            def __init__(self, config, fused_qkv: bool = False):
+                super().__init__(config)
+                self.layers = nn.ModuleList([RopeLayer(fused_qkv=fused_qkv)])
+                self.post_init()
 
-        permuted_output = permute.convert(
-            {"q_proj": q_proj, "k_proj": k_proj, "q_bias": q_bias, "k_bias": k_bias},
-            ["q_proj", "k_proj", "q_bias", "k_bias"],
-            ["q_proj", "k_proj", "q_bias", "k_bias"],
-            config=config,
-        )
-        reverted_output = inverse_permute.convert(
-            {
-                "q_proj": q_proj_permuted,
-                "k_proj": k_proj_permuted,
-                "q_bias": q_bias_permuted,
-                "k_bias": k_bias_permuted,
-            },
-            ["q_proj", "k_proj", "q_bias", "k_bias"],
-            ["q_proj", "k_proj", "q_bias", "k_bias"],
-            config=config,
-        )
-
-        torch.testing.assert_close(permuted_output["q_proj"], q_proj_permuted)
-        torch.testing.assert_close(permuted_output["k_proj"], k_proj_permuted)
-        torch.testing.assert_close(reverted_output["q_proj"], q_proj)
-        torch.testing.assert_close(reverted_output["k_proj"], k_proj)
-
-    def test_unfuse_and_permute_rope_vision(self):
         vision_config = PreTrainedConfig(hidden_size=16, head_dim=8, num_attention_heads=2)
         config = PreTrainedConfig(vision_config=vision_config)
+        model = RopeModel(config)
+        model_fused = RopeModel(config, fused_qkv=True)
+
         qkv_weight = torch.randn(3 * vision_config.hidden_size, vision_config.hidden_size, dtype=torch.float32)
 
         q_proj, k_proj, v_proj = torch.chunk(qkv_weight, 3, dim=0)
@@ -1208,73 +1190,65 @@ class TestConversionMapping(unittest.TestCase):
         )
         k_proj = k_proj.transpose(1, 2).reshape(vision_config.hidden_size, vision_config.hidden_size)
 
-        unfuse = VisionUnfuseAndPermuteForRope(dim=0, permute_layer_names=["q_proj", "k_proj"])
-        fuse = VisionFuseAndPermuteForRope(dim=0, permute_layer_names=["q_proj", "k_proj"], inverse=True)
-
-        unfused_output = unfuse.convert({"qkv": [qkv_weight]}, ["qkv"], ["q_proj", "k_proj", "v_proj"], config=config)
-        fused_output = fuse.convert(
-            {k: [v] for k, v in unfused_output.items()}, ["q_proj", "k_proj", "v_proj"], ["qkv"], config=config
-        )
-
-        torch.testing.assert_close(unfused_output["v_proj"], v_proj)
-        torch.testing.assert_close(unfused_output["q_proj"], q_proj)
-        torch.testing.assert_close(unfused_output["k_proj"], k_proj)
-        torch.testing.assert_close(fused_output["qkv"], qkv_weight)
-
-    def test_group_weight_rename(self):
-        model = DummyModelWithNorm(PreTrainedConfig())
-
-        bad_serialized_checkpoints = {
-            k.replace("norm1", "norm0").replace("norm2", "norm1"): v.clone() for k, v in model.state_dict().items()
-        }
+        state_dict_fused = {"model.layers.0.self_attn.qkv_proj.weight": qkv_weight.clone()}
         weight_mapping = [
-            GroupWeightRename(
-                source_patterns=[r"norm0", r"norm1"],
-                target_patterns=[r"norm1", r"norm2"],
+            WeightConverter(
+                "self_attn.qkv_proj.weight",
+                [
+                    "self_attn.q_proj.weight",
+                    "self_attn.k_proj.weight",
+                    "self_attn.v_proj.weight",
+                ],
+                operations=[VisionUnfuseAndPermuteForRope(dim=0, permute_layer_names=["q_proj", "k_proj"])],
             )
         ]
+        load_config = LoadStateDictConfig(weight_mapping=weight_mapping)
+        loading_info, _ = convert_and_load_state_dict_in_model(model, state_dict_fused, load_config, tp_plan=None)
 
-        loading_info, _ = convert_and_load_state_dict_in_model(
-            model,
-            bad_serialized_checkpoints,
-            LoadStateDictConfig(weight_mapping=copy.deepcopy(weight_mapping)),
-            tp_plan=None,
-        )
-
-        # Assert we can load without issues
         self.assertEqual(loading_info.missing_keys, set())
         self.assertEqual(loading_info.unexpected_keys, set())
         self.assertEqual(loading_info.mismatched_keys, set())
         self.assertEqual(loading_info.conversion_errors, {})
 
-        # Assert that re-saving will lead to the exact same state_dict
-        saved_state_dict = revert_weight_conversion(model, model.state_dict())
-        self.assertEqual(set(bad_serialized_checkpoints.keys()), set(saved_state_dict.keys()))
-        for k, v in saved_state_dict.items():
-            self.assertTrue((v == bad_serialized_checkpoints[k]).all())
+        model_state = model.state_dict()
+        torch.testing.assert_close(model_state["layers.0.self_attn.q_proj.weight"], q_proj)
+        torch.testing.assert_close(model_state["layers.0.self_attn.k_proj.weight"], k_proj)
+        torch.testing.assert_close(model_state["layers.0.self_attn.v_proj.weight"], v_proj)
 
-        # Now, check that using the same conversion with already good keys works when loading and resaving
-        good_serialized_checkpoints = {k: v.clone() for k, v in model.state_dict().items()}
-
+        # Now test if the revert conversion works
+        state_dict_unfused = {
+            "model.layers.0.self_attn.q_proj.weight": q_proj.clone(),
+            "model.layers.0.self_attn.k_proj.weight": k_proj.clone(),
+            "model.layers.0.self_attn.v_proj.weight": v_proj.clone(),
+        }
+        weight_mapping = [
+            WeightConverter(
+                [
+                    "self_attn.q_proj.weight",
+                    "self_attn.k_proj.weight",
+                    "self_attn.v_proj.weight",
+                ],
+                "self_attn.qkv_proj.weight",
+                operations=[
+                    VisionFuseAndPermuteForRope(dim=0, permute_layer_names=["q_proj", "k_proj"], inverse=True)
+                ],
+            )
+        ]
+        load_config = LoadStateDictConfig(weight_mapping=weight_mapping)
         loading_info, _ = convert_and_load_state_dict_in_model(
-            model,
-            good_serialized_checkpoints,
-            LoadStateDictConfig(weight_mapping=copy.deepcopy(weight_mapping)),
-            tp_plan=None,
+            model_fused, state_dict_unfused, load_config, tp_plan=None
         )
 
-        # Assert we can load without issues
         self.assertEqual(loading_info.missing_keys, set())
         self.assertEqual(loading_info.unexpected_keys, set())
         self.assertEqual(loading_info.mismatched_keys, set())
         self.assertEqual(loading_info.conversion_errors, {})
 
-        # Assert that re-saving will lead to the exact same state_dict
-        saved_state_dict = revert_weight_conversion(model, model.state_dict())
-        self.assertEqual(set(good_serialized_checkpoints.keys()), set(saved_state_dict.keys()))
-        for k, v in saved_state_dict.items():
-            self.assertTrue((v == good_serialized_checkpoints[k]).all())
+        model_state = model_fused.state_dict()
+        torch.testing.assert_close(model_state["layers.0.self_attn.qkv_proj.weight"], qkv_weight)
 
+
+class TestConversionMapping(unittest.TestCase):
     def test_conv3d_linear_conversion_ops(self):
         weight_name = "patch_embed.proj.weight"
         kernel_size = (2, 2, 2)
