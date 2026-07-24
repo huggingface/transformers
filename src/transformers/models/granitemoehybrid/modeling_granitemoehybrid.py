@@ -431,7 +431,7 @@ class GraniteMoeHybridMambaLayer(nn.Module):
                 hidden_states,
                 self.conv1d.weight.squeeze(1),
                 self.conv1d.bias,
-                self.activation,
+                activation=self.activation,
                 seq_idx=kwargs.get("seq_idx"),
             )
 
