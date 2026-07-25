@@ -13,28 +13,12 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was contributed to Hugging Face Transformers on 2026-06-05.*
+*This model was contributed to Hugging Face Transformers on 2026-07-22.*
 
 # MOSS Audio Tokenizer
 
 [MOSS-Audio-Tokenizer](https://huggingface.co/OpenMOSS-Team/MOSS-Audio-Tokenizer) is the neural audio codec used by
 MOSS-TTS. It encodes waveforms into discrete audio codebook tokens and decodes those tokens back into waveform audio.
-
-## Checkpoint conversion
-
-The original OpenMOSS checkpoint uses its native config and weight names. Convert it to the Transformers format before
-loading it with [`AutoModelForAudioTokenization`].
-
-```bash
-export PYTHONPATH="$PWD/src"
-
-python src/transformers/models/moss_audio_tokenizer/convert_moss_audio_tokenizer_to_hf.py \
-  --input_path_or_repo OpenMOSS-Team/MOSS-Audio-Tokenizer \
-  --output_dir /path/to/moss-audio-tokenizer-hf
-```
-
-The examples below use the converted local path. Replace it with a Hub repo id if you have pushed the converted
-checkpoint.
 
 ## Single audio
 
@@ -45,7 +29,7 @@ from scipy.io.wavfile import write
 from transformers import AutoFeatureExtractor, AutoModelForAudioTokenization
 
 
-model_id = "/path/to/moss-audio-tokenizer-hf"
+model_id = "OpenMOSS-Team/MOSS-Audio-Tokenizer-hf"
 feature_extractor = AutoFeatureExtractor.from_pretrained(model_id)
 model = AutoModelForAudioTokenization.from_pretrained(model_id, dtype="auto", device_map="auto")
 
@@ -55,12 +39,10 @@ audio = dataset[0]["audio"]["array"]
 inputs = feature_extractor(audio, sampling_rate=feature_extractor.sampling_rate, return_tensors="pt").to(model.device)
 
 encoded = model.encode(**inputs, return_dict=True)
-code_positions = torch.arange(encoded.audio_codes.shape[-1], device=encoded.audio_codes.device)
-codes_mask = code_positions[None, :] < encoded.audio_codes_lengths[:, None]
-decoded = model.decode(encoded.audio_codes, padding_mask=codes_mask, return_dict=True)
+decoded = model.decode(encoded.audio_codes, padding_mask=encoded.audio_codes_mask, return_dict=True)
 
-audio_length = int(decoded.audio_lengths[0])
-audio_values = decoded.audio[0, 0, :audio_length].float().cpu().numpy()
+audio_length = int(decoded.audio_mask[0].sum())
+audio_values = decoded.audio_values[0, 0, :audio_length].float().cpu().numpy()
 write("moss_audio_tokenizer_reconstruction.wav", feature_extractor.sampling_rate, audio_values)
 ```
 
@@ -71,14 +53,12 @@ audios = [dataset[i]["audio"]["array"] for i in range(2)]
 inputs = feature_extractor(audios, sampling_rate=feature_extractor.sampling_rate, return_tensors="pt").to(model.device)
 
 encoded = model.encode(**inputs, return_dict=True)
-code_positions = torch.arange(encoded.audio_codes.shape[-1], device=encoded.audio_codes.device)
-codes_mask = code_positions[None, :] < encoded.audio_codes_lengths[:, None]
-decoded = model.decode(encoded.audio_codes, padding_mask=codes_mask, return_dict=True)
+decoded = model.decode(encoded.audio_codes, padding_mask=encoded.audio_codes_mask, return_dict=True)
 
-first_length = int(decoded.audio_lengths[0])
-second_length = int(decoded.audio_lengths[1])
-first_reconstruction = decoded.audio[0, 0, :first_length]
-second_reconstruction = decoded.audio[1, 0, :second_length]
+first_length = int(decoded.audio_mask[0].sum())
+second_length = int(decoded.audio_mask[1].sum())
+first_reconstruction = decoded.audio_values[0, 0, :first_length]
+second_reconstruction = decoded.audio_values[1, 0, :second_length]
 ```
 
 ## Fewer Quantizers
@@ -89,12 +69,10 @@ decode call.
 
 ```python
 encoded = model.encode(**inputs, num_quantizers=8, return_dict=True)
-code_positions = torch.arange(encoded.audio_codes.shape[-1], device=encoded.audio_codes.device)
-codes_mask = code_positions[None, :] < encoded.audio_codes_lengths[:, None]
-decoded = model.decode(encoded.audio_codes, padding_mask=codes_mask, num_quantizers=8, return_dict=True)
+decoded = model.decode(encoded.audio_codes, padding_mask=encoded.audio_codes_mask, num_quantizers=8, return_dict=True)
 ```
 
-## Streaming Chunks
+## Chunked processing
 
 `chunk_duration` is expressed in seconds. It must be no longer than
 `config.sliding_window_duration`, and `chunk_duration * config.sampling_rate` must be divisible by
@@ -108,10 +86,39 @@ single_inputs = feature_extractor(
 ).to(model.device)
 
 encoded = model.encode(**single_inputs, chunk_duration=0.08, return_dict=True)
-code_positions = torch.arange(encoded.audio_codes.shape[-1], device=encoded.audio_codes.device)
-codes_mask = code_positions[None, :] < encoded.audio_codes_lengths[:, None]
-decoded = model.decode(encoded.audio_codes, padding_mask=codes_mask, chunk_duration=0.08, return_dict=True)
+decoded = model.decode(encoded.audio_codes, padding_mask=encoded.audio_codes_mask, chunk_duration=0.08, return_dict=True)
 ```
+
+## Streaming
+
+For real-time use, keep one KV cache per transformer stage and pass it with every chunk: the caches are
+updated in place, so consecutive chunks attend to the audio seen so far. Each chunk must contain a multiple
+of `config.hop_length` samples (e.g. 80 ms at 24 kHz = 1920 samples). Streams with `batch_size > 1` are
+supported.
+
+```python
+import torch
+from transformers import DynamicCache
+
+encoder_caches = [DynamicCache(config=stage_config) for stage_config in model.encoder.config.transformer_configs]
+decoder_caches = [DynamicCache(config=stage_config) for stage_config in model.decoder.config.transformer_configs]
+
+for chunk in audio_stream:  # waveform pieces of 0.08 * sampling_rate samples
+    inputs = feature_extractor(chunk, sampling_rate=feature_extractor.sampling_rate, return_tensors="pt").to(model.device)
+    with torch.no_grad():
+        encoded = model.encode(**inputs, past_key_values=encoder_caches, use_cache=True, return_dict=True)
+        # ... transmit encoded.audio_codes ...
+        decoded = model.decode(
+            encoded.audio_codes,
+            padding_mask=encoded.audio_codes_mask,
+            past_key_values=decoder_caches,
+            use_cache=True,
+            return_dict=True,
+        )
+    waveform_chunk = decoded.audio_values[..., : int(decoded.audio_mask[0].sum())]
+```
+
+Without `past_key_values`, each `encode`/`decode` call is processed independently.
 
 ## MossAudioTokenizerConfig
 
@@ -128,6 +135,10 @@ decoded = model.decode(encoded.audio_codes, padding_mask=codes_mask, chunk_durat
 ## MossAudioTokenizerDecoderConfig
 
 [[autodoc]] MossAudioTokenizerDecoderConfig
+
+## MossAudioTokenizerTransformerConfig
+
+[[autodoc]] MossAudioTokenizerTransformerConfig
 
 ## MossAudioTokenizerFeatureExtractor
 

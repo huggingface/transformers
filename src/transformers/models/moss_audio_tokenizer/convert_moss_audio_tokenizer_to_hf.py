@@ -41,10 +41,12 @@ STATE_DICT_MAPPING = {
     r"^(encoder|decoder)\.(\d+)\.": r"\1.layers.\2.",
     r"\.weight_g$": r".parametrizations.weight.original0",
     r"\.weight_v$": r".parametrizations.weight.original1",
-    r"\.alpha$": r".weight",
-    r"\.in_proj_weight$": r".in_proj.weight",
-    r"\.in_projs\.0\.weight$": r".in_proj.weight",
-    r"\.out_projs\.0\.weight$": r".out_proj.weight",
+    r"\.out_projs\.0\.weight$": r".o_proj.weight",
+    r"\.norm1\.": r".self_attn_layer_norm.",
+    r"\.norm2\.": r".final_layer_norm.",
+    r"\.linear1\.": r".fc1.",
+    r"\.linear2\.": r".fc2.",
+    r"\.layer_scale_(\d+)\.scale$": r".layer_scale_\1.lambda1",
 }
 # fmt: on
 
@@ -197,33 +199,56 @@ def _rename_state_dict_key(key: str) -> str:
     return key
 
 
-def _convert_interleaved_projection_rows(weight: torch.Tensor, num_heads: int) -> torch.Tensor:
+def _split_fused_qkv(weight: torch.Tensor, num_heads: int) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    """Split the original fused QKV projection into separate query, key and value projections.
+
+    The original checkpoint interleaves even/odd rows of the query and key head dimensions, which is undone here.
+    """
     embed_dim = weight.shape[0] // 3
     head_dim = embed_dim // num_heads
     projected = weight.view(3, num_heads, head_dim, *weight.shape[1:])
     for index in (0, 1):
         projected[index] = torch.cat([projected[index, :, ::2], projected[index, :, 1::2]], dim=1)
-    return projected.reshape_as(weight)
+    query, key, value = projected[0], projected[1], projected[2]
+    return (
+        query.reshape(embed_dim, *weight.shape[1:]),
+        key.reshape(embed_dim, *weight.shape[1:]),
+        value.reshape(embed_dim, *weight.shape[1:]),
+    )
 
 
 def convert_state_dict(
     original_state_dict: dict[str, torch.Tensor], model: MossAudioTokenizerModel
 ) -> dict[str, torch.Tensor]:
     state_dict = {}
-    for key, value in original_state_dict.items():
-        new_key = _rename_state_dict_key(key)
-        if key.endswith(".alpha"):
-            value = value.reshape(-1)
-        state_dict[new_key] = value
+    consumed_keys = set()
 
     for module_name, module in model.named_modules():
         if module.__class__.__name__ != "MossAudioTokenizerAttention":
             continue
 
-        prefix = f"{module_name}." if module_name else ""
-        key = prefix + "in_proj.weight"
-        if key in state_dict:
-            state_dict[key] = _convert_interleaved_projection_rows(state_dict[key], module.num_attention_heads)
+        original_prefix = re.sub(r"^(encoder|decoder)\.layers\.(\d+)\.", r"\1.\2.", module_name)
+        fused_key = next(
+            (
+                original_prefix + suffix
+                for suffix in (".in_projs.0.weight", ".in_proj_weight")
+                if original_prefix + suffix in original_state_dict
+            ),
+            None,
+        )
+        if fused_key is None:
+            raise KeyError(f"Could not find the fused QKV weight of `{module_name}` in the original checkpoint.")
+
+        consumed_keys.add(fused_key)
+        query, key, value = _split_fused_qkv(original_state_dict[fused_key], module.config.num_attention_heads)
+        state_dict[f"{module_name}.q_proj.weight"] = query
+        state_dict[f"{module_name}.k_proj.weight"] = key
+        state_dict[f"{module_name}.v_proj.weight"] = value
+
+    for key, value in original_state_dict.items():
+        if key in consumed_keys:
+            continue
+        state_dict[_rename_state_dict_key(key)] = value
 
     return state_dict
 
@@ -289,5 +314,22 @@ def main():
         logger.info(f"Model and feature extractor pushed to {args.push_to_hub_path}")
 
 
+"""
+Conversion example usage:
+```
+# run conversion from the original Hub checkpoint
+python src/transformers/models/moss_audio_tokenizer/convert_moss_audio_tokenizer_to_hf.py \
+    --input_path_or_repo OpenMOSS-Team/MOSS-Audio-Tokenizer \
+    --output_dir /path/to/moss-audio-tokenizer-hf
+
+# or convert and push directly to the Hub
+python src/transformers/models/moss_audio_tokenizer/convert_moss_audio_tokenizer_to_hf.py \
+    --input_path_or_repo OpenMOSS-Team/MOSS-Audio-Tokenizer \
+    --push_to_hub_path OpenMOSS-Team/MOSS-Audio-Tokenizer-hf
+```
+
+The model and feature extractor are saved/pushed together, so the converted checkpoint can be loaded directly with
+`AutoModelForAudioTokenization` and `AutoFeatureExtractor`.
+"""
 if __name__ == "__main__":
     main()

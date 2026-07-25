@@ -34,7 +34,14 @@ if is_torch_available():
     import torch
 
     from transformers import MossAudioTokenizerModel
-    from transformers.models.moss_audio_tokenizer.convert_moss_audio_tokenizer_to_hf import _rename_state_dict_key
+    from transformers.cache_utils import DynamicCache
+    from transformers.models.moss_audio_tokenizer.configuration_moss_audio_tokenizer import (
+        MossAudioTokenizerTransformerConfig,
+    )
+    from transformers.models.moss_audio_tokenizer.convert_moss_audio_tokenizer_to_hf import (
+        _rename_state_dict_key,
+        _split_fused_qkv,
+    )
     from transformers.models.moss_audio_tokenizer.modeling_moss_audio_tokenizer import MossAudioTokenizerTransformer
 
 
@@ -100,13 +107,13 @@ class MossAudioTokenizerModelTest(unittest.TestCase):
         self.config_tester.run_common_tests()
 
     def test_auto_config_and_model(self):
-        config = AutoConfig.for_model("moss-audio-tokenizer")
+        config = AutoConfig.for_model("moss_audio_tokenizer")
         self.assertIsInstance(config, MossAudioTokenizerConfig)
         self.assertIsInstance(config.quantizer_config, MossAudioTokenizerQuantizerConfig)
 
         model = AutoModel.from_config(get_moss_audio_tokenizer_config(layer_scale_init_value=0.02))
         self.assertIsInstance(model, MossAudioTokenizerModel)
-        self.assertTrue(torch.all(model.encoder.layers[1].transformer.layers[0].layer_scale_1.scale == 0.02))
+        self.assertTrue(torch.all(model.encoder.layers[1].transformer.layers[0].layer_scale_1.lambda1 == 0.02))
 
     def test_sub_configs(self):
         self.assertIsInstance(MossAudioTokenizerConfig().quantizer_config, MossAudioTokenizerQuantizerConfig)
@@ -137,7 +144,7 @@ class MossAudioTokenizerModelTest(unittest.TestCase):
         self.assertEqual(config.hop_length, 4)
         self.assertEqual(config.max_position_embeddings, 2048)
         self.assertEqual(config.layer_scale_init_value, 0.01)
-        self.assertFalse(hasattr(config, "rope_parameters"))
+        self.assertTrue(hasattr(config, "rope_parameters"))
         self.assertIsInstance(config.encoder_config, MossAudioTokenizerEncoderConfig)
         self.assertIsInstance(config.decoder_config, MossAudioTokenizerDecoderConfig)
         self.assertEqual(config.decoder_config.input_hidden_sizes, [4])
@@ -164,16 +171,16 @@ class MossAudioTokenizerModelTest(unittest.TestCase):
         with torch.no_grad():
             encoded = model.encode(input_values, return_dict=True)
             self.assertEqual(encoded.audio_codes.shape, (2, config.quantizer_config.n_codebooks, 8))
-            self.assertEqual(encoded.audio_codes_lengths.tolist(), [8, 8])
+            self.assertEqual(encoded.audio_codes_mask.sum(dim=-1).tolist(), [8, 8])
 
             decoded = model.decode(encoded.audio_codes, return_dict=True)
-            self.assertEqual(decoded.audio.shape, (2, 1, 32))
-            self.assertEqual(decoded.audio_lengths.tolist(), [32, 32])
+            self.assertEqual(decoded.audio_values.shape, (2, 1, 32))
+            self.assertEqual(decoded.audio_mask.sum(dim=-1).tolist(), [32, 32])
 
             outputs = model(input_values=input_values)
-            self.assertEqual(outputs.audio.shape, (2, 1, 32))
-            self.assertEqual(outputs.audio_lengths.tolist(), [32, 32])
+            self.assertEqual(outputs.audio_values.shape, (2, 1, 32))
             self.assertEqual(outputs.audio_codes.shape, (2, config.quantizer_config.n_codebooks, 8))
+            self.assertEqual(outputs.audio_codes_mask.sum(dim=-1).tolist(), [8, 8])
 
     def test_decode_uses_upsampling_ratios(self):
         config = get_asymmetric_moss_audio_tokenizer_config()
@@ -185,28 +192,134 @@ class MossAudioTokenizerModelTest(unittest.TestCase):
             self.assertEqual(encoded.audio_codes.shape, (2, config.quantizer_config.n_codebooks, 4))
 
             decoded = model.decode(encoded.audio_codes, return_dict=True)
-            self.assertEqual(decoded.audio.shape, (2, 1, 24))
-            self.assertEqual(decoded.audio_lengths.tolist(), [24, 24])
+            self.assertEqual(decoded.audio_values.shape, (2, 1, 24))
+            self.assertEqual(decoded.audio_mask.sum(dim=-1).tolist(), [24, 24])
+
+    def test_chunked_encode_decode_matches_full(self):
+        config = MossAudioTokenizerConfig(
+            sampling_rate=16000,
+            sliding_window_duration=0.001,
+            downsampling_ratios=[4],
+            input_hidden_sizes=[4],
+            output_hidden_sizes=[4],
+            hidden_sizes=[4],
+            num_attention_heads=[1],
+            num_hidden_layers=[1],
+            intermediate_sizes=[8],
+            quantizer_config=MossAudioTokenizerQuantizerConfig(
+                input_hidden_size=4,
+                hidden_size=4,
+                output_hidden_size=4,
+                n_codebooks=2,
+                codebook_size=16,
+                codebook_dim=2,
+            ),
+        )
+        model = MossAudioTokenizerModel(config).to(torch_device).eval()
+        input_values = torch.randn(2, 1, 32, device=torch_device)
+
+        with torch.no_grad():
+            full_encoded = model.encode(input_values, return_dict=True)
+            chunked_encoded = model.encode(input_values, chunk_duration=0.001, return_dict=True)
+            self.assertTrue(torch.equal(full_encoded.audio_codes, chunked_encoded.audio_codes))
+            self.assertTrue(torch.equal(full_encoded.audio_codes_mask, chunked_encoded.audio_codes_mask))
+
+            full_decoded = model.decode(
+                full_encoded.audio_codes, padding_mask=full_encoded.audio_codes_mask, return_dict=True
+            )
+            chunked_decoded = model.decode(
+                full_encoded.audio_codes,
+                padding_mask=full_encoded.audio_codes_mask,
+                chunk_duration=0.001,
+                return_dict=True,
+            )
+            self.assertTrue(
+                torch.allclose(full_decoded.audio_values, chunked_decoded.audio_values, atol=1e-5, rtol=1e-5)
+            )
+            self.assertTrue(torch.equal(full_decoded.audio_mask, chunked_decoded.audio_mask))
+
+    def test_streaming_single_chunk_matches_full(self):
+        # One small chunk per call, with user-managed caches: true streaming through the public API.
+        config = MossAudioTokenizerConfig(
+            sampling_rate=16000,
+            sliding_window_duration=0.002,  # window of 8 frames > chunk of 4 frames: context matters
+            downsampling_ratios=[4],
+            input_hidden_sizes=[4],
+            output_hidden_sizes=[4],
+            hidden_sizes=[4],
+            num_attention_heads=[1],
+            num_hidden_layers=[1],
+            intermediate_sizes=[8],
+            quantizer_config=MossAudioTokenizerQuantizerConfig(
+                input_hidden_size=4,
+                hidden_size=4,
+                output_hidden_size=4,
+                n_codebooks=2,
+                codebook_size=16,
+                codebook_dim=2,
+            ),
+        )
+        model = MossAudioTokenizerModel(config).to(torch_device).eval()
+        input_values = torch.randn(2, 1, 32, device=torch_device)
+
+        encoder_caches = [
+            DynamicCache(config=stage_config) for stage_config in model.encoder.config.transformer_configs
+        ]
+        decoder_caches = [
+            DynamicCache(config=stage_config) for stage_config in model.decoder.config.transformer_configs
+        ]
+
+        with torch.no_grad():
+            full_encoded = model.encode(input_values, return_dict=True)
+
+            codes_chunks = []
+            for start_idx in range(0, input_values.shape[-1], 16):
+                result = model.encode(
+                    input_values[..., start_idx : start_idx + 16],
+                    past_key_values=encoder_caches,
+                    use_cache=True,
+                    return_dict=True,
+                )
+                codes_chunks.append(result.audio_codes)
+            streamed_codes = torch.cat(codes_chunks, dim=-1)
+
+            self.assertEqual(encoder_caches[0].get_seq_length(), 8)
+            self.assertTrue(torch.equal(full_encoded.audio_codes, streamed_codes))
+
+            full_decoded = model.decode(full_encoded.audio_codes, return_dict=True)
+            wav_chunks = []
+            for frame_idx in range(0, full_encoded.audio_codes.shape[-1], 4):
+                result = model.decode(
+                    full_encoded.audio_codes[..., frame_idx : frame_idx + 4],
+                    past_key_values=decoder_caches,
+                    use_cache=True,
+                    return_dict=True,
+                )
+                wav_chunks.append(result.audio_values)
+            streamed_wav = torch.cat(wav_chunks, dim=-1)
+
+            self.assertEqual(decoder_caches[0].get_seq_length(), 8)
+            self.assertTrue(torch.allclose(full_decoded.audio_values, streamed_wav, atol=1e-5, rtol=1e-5))
 
     def test_feature_extractor_and_auto_model_for_audio_tokenization(self):
         config = get_moss_audio_tokenizer_config()
         model = MossAudioTokenizerModel(config).to(torch_device).eval()
         feature_extractor = MossAudioTokenizerFeatureExtractor(sampling_rate=16000, hop_length=4)
-        wav_list = [torch.randn(32), torch.randn(24)]
+        wav_list = [torch.randn(32).numpy(), torch.randn(24).numpy()]
 
-        inputs = feature_extractor(wav_list, sampling_rate=16000)
+        inputs = feature_extractor(wav_list, sampling_rate=16000, return_tensors="pt")
         inputs = inputs.to(torch_device)
 
         with torch.no_grad():
             encoded = model.encode(**inputs, return_dict=True)
             self.assertEqual(encoded.audio_codes.shape, (2, config.quantizer_config.n_codebooks, 8))
-            self.assertEqual(encoded.audio_codes_lengths.tolist(), [8, 6])
+            self.assertEqual(encoded.audio_codes_mask.sum(dim=-1).tolist(), [8, 6])
 
             decoded = model.decode(
                 encoded.audio_codes, padding_mask=encoded.audio_codes.new_ones((2, 8)), return_dict=True
             )
-            self.assertEqual(decoded.audio.shape, (2, 1, 32))
-            self.assertEqual(decoded.audio_lengths.tolist(), [32, 32])
+            self.assertEqual(decoded.audio_values.shape, (2, 1, 32))
+            self.assertEqual(decoded.audio_mask.sum(dim=-1).tolist(), [32, 32])
 
         with tempfile.TemporaryDirectory() as tmp_dir:
             feature_extractor.save_pretrained(tmp_dir)
@@ -215,15 +328,37 @@ class MossAudioTokenizerModelTest(unittest.TestCase):
         self.assertIsInstance(loaded_feature_extractor, MossAudioTokenizerFeatureExtractor)
         self.assertIsInstance(AutoModelForAudioTokenization.from_config(config), MossAudioTokenizerModel)
 
-    def test_convert_state_dict_renames_attention_projection_lists(self):
-        self.assertEqual(
-            _rename_state_dict_key("encoder.1.transformer.layers.0.self_attn.in_projs.0.weight"),
-            "encoder.layers.1.transformer.layers.0.self_attn.in_proj.weight",
-        )
+    def test_convert_state_dict_renames(self):
         self.assertEqual(
             _rename_state_dict_key("encoder.1.transformer.layers.0.self_attn.out_projs.0.weight"),
-            "encoder.layers.1.transformer.layers.0.self_attn.out_proj.weight",
+            "encoder.layers.1.transformer.layers.0.self_attn.o_proj.weight",
         )
+        self.assertEqual(
+            _rename_state_dict_key("encoder.1.transformer.layers.0.norm1.weight"),
+            "encoder.layers.1.transformer.layers.0.self_attn_layer_norm.weight",
+        )
+        self.assertEqual(
+            _rename_state_dict_key("decoder.0.transformer.layers.0.linear2.weight"),
+            "decoder.layers.0.transformer.layers.0.fc2.weight",
+        )
+        self.assertEqual(
+            _rename_state_dict_key("decoder.0.transformer.layers.0.layer_scale_2.scale"),
+            "decoder.layers.0.transformer.layers.0.layer_scale_2.lambda1",
+        )
+
+    def test_split_fused_qkv(self):
+        weight = torch.arange(3 * 8 * 2, dtype=torch.float32).reshape(3 * 8, 2)
+        original = weight.clone()
+        query, key, value = _split_fused_qkv(weight, num_heads=2)
+
+        self.assertEqual(query.shape, (8, 2))
+        self.assertEqual(key.shape, (8, 2))
+        self.assertEqual(value.shape, (8, 2))
+        # query/key head dimensions are de-interleaved: head 0 rows [0, 1, 2, 3] become [0, 2, 1, 3]
+        self.assertTrue(torch.equal(query[:4], original[[0, 2, 1, 3]]))
+        self.assertTrue(torch.equal(key[:4], original[8 + torch.tensor([0, 2, 1, 3])]))
+        # the value projection is left untouched
+        self.assertTrue(torch.equal(value, original[16:24]))
 
     def test_save_load(self):
         config = get_moss_audio_tokenizer_config()
@@ -241,48 +376,60 @@ class MossAudioTokenizerModelTest(unittest.TestCase):
         self.assertTrue(torch.equal(expected, actual))
 
     def test_transformer_forward(self):
-        transformer_kwargs = {
-            "hidden_size": 8,
-            "num_attention_heads": 2,
-            "num_hidden_layers": 1,
-            "intermediate_size": 16,
-            "context": 16,
-            "layer_scale_init_value": 0.02,
-            "max_position_embeddings": 32,
-        }
-        transformer = MossAudioTokenizerTransformer(**transformer_kwargs).to(torch_device).eval()
-        self.assertEqual(transformer.rope.config.max_position_embeddings, 32)
-        self.assertEqual(transformer.rope.config.rope_parameters, {"rope_theta": 10000.0, "rope_type": "default"})
-        self.assertTrue(torch.all(transformer.layers[0].layer_scale_1.scale == 0.02))
-        hidden_states = torch.randn(1, 6, 8, device=torch_device)
-        with torch.no_grad():
-            output = transformer(hidden_states)
-        self.assertEqual(output.shape, hidden_states.shape)
-
-    def test_transformer_streaming_matches_full_forward(self):
-        transformer = MossAudioTokenizerTransformer(
+        config = MossAudioTokenizerTransformerConfig(
+            input_hidden_size=8,
+            output_hidden_size=8,
             hidden_size=8,
             num_attention_heads=2,
             num_hidden_layers=1,
             intermediate_size=16,
-            context=16,
-        ).to(torch_device)
-        transformer.eval()
-
+            sliding_window=16,
+            layerscale_value=0.02,
+            max_position_embeddings=32,
+        )
+        config._attn_implementation = "eager"
+        transformer = MossAudioTokenizerTransformer(config).to(torch_device).eval()
+        self.assertEqual(transformer.rotary_emb.config.max_position_embeddings, 32)
+        self.assertEqual(
+            transformer.rotary_emb.config.rope_parameters, {"rope_theta": 10000.0, "rope_type": "default"}
+        )
+        self.assertTrue(torch.all(transformer.layers[0].layer_scale_1.lambda1 == 0.02))
         hidden_states = torch.randn(1, 6, 8, device=torch_device)
         with torch.no_grad():
-            full_output = transformer(hidden_states)
-            with transformer.streaming(batch_size=1):
-                streamed_output = torch.cat(
-                    [transformer(hidden_states[:, :3]), transformer(hidden_states[:, 3:])], dim=1
-                )
+            output = transformer(hidden_states, use_cache=False)
+        self.assertEqual(output.shape, hidden_states.shape)
 
-        self.assertTrue(torch.allclose(full_output, streamed_output, atol=1e-5, rtol=1e-5))
+    def test_transformer_chunked_matches_full_forward(self):
+        config = MossAudioTokenizerTransformerConfig(
+            input_hidden_size=8,
+            output_hidden_size=8,
+            hidden_size=8,
+            num_attention_heads=2,
+            num_hidden_layers=1,
+            intermediate_size=16,
+            sliding_window=4,
+        )
+        config._attn_implementation = "eager"
+        transformer = MossAudioTokenizerTransformer(config).to(torch_device).eval()
+
+        hidden_states = torch.randn(1, 6, 8, device=torch_device)
+        past_key_values = DynamicCache(config=config)
+        with torch.no_grad():
+            full_output = transformer(hidden_states, use_cache=False)
+            chunked_output = torch.cat(
+                [
+                    transformer(hidden_states[:, :3], past_key_values=past_key_values, use_cache=True),
+                    transformer(hidden_states[:, 3:], past_key_values=past_key_values, use_cache=True),
+                ],
+                dim=1,
+            )
+
+        self.assertTrue(torch.allclose(full_output, chunked_output, atol=1e-5, rtol=1e-5))
 
 
 @require_torch
 class MossAudioTokenizerIntegrationTest(unittest.TestCase):
-    model_id = "OpenMOSS-Team/MOSS-Audio-Tokenizer"
+    model_id = "OpenMOSS-Team/MOSS-Audio-Tokenizer-hf"
 
     @slow
     def test_integration_encode_decode(self):
@@ -305,13 +452,13 @@ class MossAudioTokenizerIntegrationTest(unittest.TestCase):
         with torch.no_grad():
             encoded = model.encode(**inputs, num_quantizers=4, return_dict=True)
             self.assertEqual(encoded.audio_codes.shape, (1, 4, 13))
-            self.assertEqual(encoded.audio_codes_lengths.tolist(), [13])
+            self.assertEqual(encoded.audio_codes_mask.sum(dim=-1).tolist(), [13])
             self.assertEqual(
                 encoded.audio_codes[0, :, :4].cpu().tolist(),
                 [[245, 402, 936, 936], [996, 948, 948, 600], [154, 484, 484, 548], [119, 743, 751, 456]],
             )
 
             decoded = model.decode(encoded.audio_codes, return_dict=True)
-            self.assertEqual(decoded.audio.shape, (1, 1, 24960))
-            self.assertEqual(decoded.audio_lengths.tolist(), [24960])
-            self.assertGreater(float(decoded.audio.abs().mean().cpu()), 1e-4)
+            self.assertEqual(decoded.audio_values.shape, (1, 1, 24960))
+            self.assertEqual(decoded.audio_mask.sum(dim=-1).tolist(), [24960])
+            self.assertGreater(float(decoded.audio_values.abs().mean().cpu()), 1e-4)

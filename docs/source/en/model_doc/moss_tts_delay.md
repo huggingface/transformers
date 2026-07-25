@@ -13,7 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was contributed to Hugging Face Transformers on 2026-06-04.*
+*This model was contributed to Hugging Face Transformers on 2026-07-22.*
 
 # MOSS-TTS Delay
 
@@ -38,16 +38,10 @@ python src/transformers/models/moss_tts_delay/convert_moss_tts_delay_to_hf.py \
 ## Prepare the Audio Tokenizer
 
 The processor needs a Transformers-format MOSS Audio Tokenizer checkpoint for reference-audio encoding and waveform
-decoding. If the model repo's processor config does not already point to one, convert the original codec checkpoint
-before running MOSS-TTS Delay.
-
-```bash
-export PYTHONPATH="$PWD/src"
-
-python src/transformers/models/moss_audio_tokenizer/convert_moss_audio_tokenizer_to_hf.py \
-  --input_path_or_repo OpenMOSS-Team/MOSS-Audio-Tokenizer \
-  --output_dir /path/to/moss-audio-tokenizer-hf
-```
+decoding. Use the converted checkpoint
+[`OpenMOSS-Team/MOSS-Audio-Tokenizer-hf`](https://huggingface.co/OpenMOSS-Team/MOSS-Audio-Tokenizer-hf), or convert the
+original codec checkpoint yourself with
+`src/transformers/models/moss_audio_tokenizer/convert_moss_audio_tokenizer_to_hf.py`.
 
 Pass the converted path or Hub repo id through `codec_path`.
 
@@ -60,7 +54,7 @@ from transformers import AutoProcessor, AutoModelForTextToWaveform
 
 
 model_id = "OpenMOSS-Team/MOSS-TTS-v1.5"  # or "/path/to/moss-tts-delay-checkpoint"
-codec_path = "/path/to/moss-audio-tokenizer-hf"
+codec_path = "OpenMOSS-Team/MOSS-Audio-Tokenizer-hf"
 
 processor = AutoProcessor.from_pretrained(model_id, codec_path=codec_path)
 model = AutoModelForTextToWaveform.from_pretrained(model_id, dtype="auto", device_map="auto")

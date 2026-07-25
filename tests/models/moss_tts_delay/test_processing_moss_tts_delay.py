@@ -97,12 +97,12 @@ if is_torch_available():
                 MossAudioTokenizerConfig(
                     sampling_rate=16000,
                     downsampling_ratios=[4],
-                    input_hidden_sizes=[],
-                    output_hidden_sizes=[],
-                    hidden_sizes=[],
-                    num_attention_heads=[],
-                    num_hidden_layers=[],
-                    intermediate_sizes=[],
+                    input_hidden_sizes=[4],
+                    output_hidden_sizes=[4],
+                    hidden_sizes=[4],
+                    num_attention_heads=[1],
+                    num_hidden_layers=[1],
+                    intermediate_sizes=[8],
                     quantizer_config=MossAudioTokenizerQuantizerConfig(
                         input_hidden_size=4,
                         hidden_size=4,
@@ -232,7 +232,9 @@ class MossTTSDelayProcessorTest(unittest.TestCase):
                     device=input_values.device,
                     dtype=torch.long,
                 )
-                return SimpleNamespace(audio_codes=audio_codes, audio_codes_lengths=audio_codes_lengths)
+                code_positions = torch.arange(max_length, device=input_values.device)
+                audio_codes_mask = code_positions[None, :] < audio_codes_lengths[:, None]
+                return SimpleNamespace(audio_codes=audio_codes, audio_codes_mask=audio_codes_mask)
 
         audio_tokenizer = RecordingAudioTokenizer()
         processor = self.get_processor(audio_tokenizer=audio_tokenizer)

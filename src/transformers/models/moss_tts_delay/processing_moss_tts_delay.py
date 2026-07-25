@@ -952,16 +952,16 @@ class MossTTSDelayProcessor(ProcessorMixin):
             return_dict=True,
         )
         audio_codes = enc.audio_codes
-        audio_codes_lengths = enc.audio_codes_lengths
+        audio_codes_mask = enc.audio_codes_mask
 
-        if audio_codes is None or audio_codes_lengths is None:
-            raise RuntimeError("audio_tokenizer.encode() returned empty outputs (audio_codes/audio_codes_lengths).")
+        if audio_codes is None or audio_codes_mask is None:
+            raise RuntimeError("audio_tokenizer.encode() returned empty outputs (audio_codes/audio_codes_mask).")
 
         # Keep processor's historical contract: list[Tensor] with shape (T, NQ)
         # and on CPU (so downstream text/audio packing remains device-agnostic).
         codes_list: list[torch.Tensor] = []
         for i in range(int(audio_codes.shape[0])):
-            length_i = int(audio_codes_lengths[i].item())
+            length_i = int(audio_codes_mask[i].sum().item())
             codes_i = audio_codes[i, :, :length_i].transpose(0, 1).contiguous().to(torch.long).cpu()
             codes_list.append(codes_i)
         return codes_list
@@ -1015,16 +1015,16 @@ class MossTTSDelayProcessor(ProcessorMixin):
             audio_codes[i, :, :t] = c
             padding_mask[i, :t] = True
         dec = audio_tokenizer.decode(audio_codes, padding_mask=padding_mask, return_dict=True, chunk_duration=8)
-        audio = dec.audio
-        audio_lengths = dec.audio_lengths
+        audio = dec.audio_values
+        audio_mask = dec.audio_mask
 
-        if audio is None or audio_lengths is None:
-            raise RuntimeError("audio_tokenizer.decode() returned empty outputs (audio/audio_lengths).")
+        if audio is None or audio_mask is None:
+            raise RuntimeError("audio_tokenizer.decode() returned empty outputs (audio_values/audio_mask).")
 
         # Return historical contract: list of 1D waveforms (T,)
         wav_list: list[torch.Tensor] = []
         for i in range(int(audio.shape[0])):
-            length_i = int(audio_lengths[i].item())
+            length_i = int(audio_mask[i].sum().item())
             wav = audio[i, 0, :length_i].contiguous().to(torch.float32).cpu()
             wav_list.append(wav)
         return wav_list

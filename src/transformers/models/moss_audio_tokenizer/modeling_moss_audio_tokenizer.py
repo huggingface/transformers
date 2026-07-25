@@ -19,17 +19,17 @@
 # limitations under the License.
 
 from collections.abc import Callable
-from contextlib import ExitStack, contextmanager
 from dataclasses import dataclass
-from typing import cast
+from typing import Optional
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from ...cache_utils import DynamicSlidingWindowLayer
-from ...configuration_utils import PreTrainedConfig
+from ...cache_utils import Cache, DynamicCache
 from ...integrations import use_kernel_func_from_hub, use_kernelized_func
+from ...masking_utils import create_sliding_window_causal_mask
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedAudioTokenizerBase
 from ...processing_utils import Unpack
@@ -40,170 +40,75 @@ from .configuration_moss_audio_tokenizer import (
     MossAudioTokenizerDecoderConfig,
     MossAudioTokenizerEncoderConfig,
     MossAudioTokenizerQuantizerConfig,
+    MossAudioTokenizerTransformerConfig,
 )
 
 
-@dataclass
 @auto_docstring
+@dataclass
 class MossAudioTokenizerEncoderOutput(ModelOutput):
     r"""
     audio_codes (`torch.LongTensor` of shape `(batch_size, num_quantizers, sequence_length)`, *optional*):
         Discrete audio codes computed using the encoder and quantizer.
-    audio_codes_lengths (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-        Valid lengths for each sample's audio codes.
-    encoder_hidden_states (`torch.FloatTensor` of shape `(batch_size, hidden_size, sequence_length)`, *optional*):
-        Hidden states from the encoder before quantization.
+    latents (`torch.Tensor` of shape `(batch_size, hidden_size, sequence_length)`, *optional*):
+        Continuous representation of the input audio computed by the encoder, before quantization.
+    audio_codes_mask (`torch.BoolTensor` of shape `(batch_size, sequence_length)`, *optional*):
+        Downsampled `padding_mask` indicating valid audio codes in `audio_codes`.
     """
 
-    audio_codes: torch.Tensor | None = None
-    audio_codes_lengths: torch.Tensor | None = None
-    encoder_hidden_states: torch.Tensor | None = None
+    audio_codes: torch.LongTensor | None = None
+    latents: torch.Tensor | None = None
+    audio_codes_mask: torch.Tensor | None = None
 
 
-@dataclass
 @auto_docstring
+@dataclass
 class MossAudioTokenizerDecoderOutput(ModelOutput):
     r"""
-    audio (`torch.FloatTensor` of shape `(batch_size, channels, sequence_length)`, *optional*):
+    audio_values (`torch.FloatTensor` of shape `(batch_size, channels, sequence_length)`, *optional*):
         Decoded audio waveform.
-    audio_lengths (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-        Valid lengths for each sample's audio.
+    audio_mask (`torch.BoolTensor` of shape `(batch_size, sequence_length)`, *optional*):
+        Upsampled `padding_mask` indicating valid audio samples in `audio_values`.
     """
 
-    audio: torch.Tensor | None = None
-    audio_lengths: torch.Tensor | None = None
+    audio_values: torch.FloatTensor | None = None
+
+    audio_mask: torch.Tensor | None = None
 
 
-@dataclass
 @auto_docstring
+@dataclass
 class MossAudioTokenizerOutput(ModelOutput):
     r"""
-    audio (`torch.FloatTensor` of shape `(batch_size, channels, sequence_length)`, *optional*):
+    audio_values (`torch.FloatTensor` of shape `(batch_size, channels, sequence_length)`, *optional*):
         Decoded audio waveform.
-    audio_lengths (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-        Valid lengths for each sample's audio.
     audio_codes (`torch.LongTensor` of shape `(batch_size, num_quantizers, sequence_length)`, *optional*):
         Discrete audio codes computed using the encoder and quantizer.
-    audio_codes_lengths (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-        Valid lengths for each sample's audio codes.
+    latents (`torch.Tensor` of shape `(batch_size, hidden_size, sequence_length)`, *optional*):
+        Continuous representation of the input audio computed by the encoder, before quantization.
+    audio_codes_mask (`torch.BoolTensor` of shape `(batch_size, sequence_length)`, *optional*):
+        Downsampled `padding_mask` indicating valid audio codes in `audio_codes`.
     """
 
-    audio: torch.Tensor | None = None
-    audio_lengths: torch.Tensor | None = None
-    audio_codes: torch.Tensor | None = None
-    audio_codes_lengths: torch.Tensor | None = None
-
-
-@dataclass
-class StreamingState:
-    """Base state for streaming modules."""
-
-    batch_size: int
-    device: torch.device
-
-    def __post_init__(self):
-        self.exec_mask = torch.ones(self.batch_size, dtype=torch.bool, device=self.device)
-
-    def set_exec_mask(self, exec_mask: torch.Tensor):
-        self.exec_mask[:] = exec_mask
-
-    def reset(self, reset_mask: torch.Tensor) -> None:
-        self.exec_mask[:] = torch.where(reset_mask, torch.ones_like(self.exec_mask), self.exec_mask)
-
-    def __enter__(self):
-        # ExitStack expects a context manager; returning self is conventional and useful for debugging.
-        return self
-
-    def __exit__(self, exc_type, exc_value, traceback) -> None:
-        pass
-
-
-class StreamingModule(nn.Module):
-    """Base class for streaming components."""
-
-    def __init__(self) -> None:
-        super().__init__()
-        self._streaming_state: StreamingState | None = None
-        self._streaming_detached: bool = False
-        self._cached_children: list[tuple[str, nn.Module]] | None = None
-
-    @property
-    def is_streaming(self):
-        return self._streaming_state is not None
-
-    def _apply_named_streaming(self, fn):
-        def _handle_module(prefix: str, module: nn.Module):
-            if isinstance(module, StreamingModule) or getattr(module, "_supports_streaming", False):
-                if getattr(module, "_streaming_detached", False) and prefix != "":
-                    return
-                if self._cached_children is None:
-                    raise RuntimeError("Internal error: _cached_children should be initialized before traversal.")
-                self._cached_children.append((prefix, module))
-            for name, child in module.named_children():
-                new_prefix = f"{prefix}.{name}" if prefix else name
-                _handle_module(new_prefix, child)
-
-        if self._cached_children is None:
-            self._cached_children = []
-            _handle_module("", self)
-        for name, child in self._cached_children:
-            fn(name, child)
-
-    def _start_streaming(self, batch_size: int, exit_stack: ExitStack):
-        def _start_streaming_fn(name: str, module):
-            if module._streaming_state is not None:
-                raise RuntimeError(f"{name} is already streaming!")
-            state = module._init_streaming_state(batch_size)
-            exit_stack.enter_context(state)
-            module._streaming_state = state
-
-        self._apply_named_streaming(_start_streaming_fn)
-
-    def _stop_streaming(self) -> None:
-        def _stop_streaming_fn(name: str, module):
-            module._streaming_state = None
-
-        self._apply_named_streaming(_stop_streaming_fn)
-
-    def _init_streaming_state(self, batch_size: int) -> StreamingState:
-        device = next(iter(self.parameters())).device
-        return StreamingState(batch_size, device)
-
-    def streaming(self, batch_size: int) -> ExitStack:
-        """Context manager to enter streaming mode."""
-        exit_stack = ExitStack()
-        self._start_streaming(batch_size, exit_stack)
-        exit_stack.callback(self._stop_streaming)
-        return exit_stack
-
-
-class StreamingContainer(StreamingModule):
-    """Container for streaming modules."""
-
-    pass
+    audio_values: torch.FloatTensor | None = None
+    audio_codes: torch.LongTensor | None = None
+    latents: torch.Tensor | None = None
+    audio_codes_mask: torch.Tensor | None = None
 
 
 class MossAudioTokenizerLayerScale(nn.Module):
-    """Layer scale from Touvron et al. 2021."""
-
-    def __init__(
-        self,
-        channels: int,
-        init: float = 1e-4,
-        device=None,
-        dtype=None,
-    ):
+    def __init__(self, config) -> None:
         super().__init__()
-        self.scale = nn.Parameter(torch.full((channels,), init, requires_grad=True, device=device, dtype=dtype))
+        self.lambda1 = nn.Parameter(config.layerscale_value * torch.ones(config.hidden_size))
 
-    def forward(self, hidden_states: torch.Tensor):
-        return self.scale * hidden_states
+    def forward(self, hidden_state: torch.Tensor) -> torch.Tensor:
+        return hidden_state * self.lambda1
 
 
 class MossAudioTokenizerRotaryEmbedding(nn.Module):
     inv_freq: torch.Tensor  # fix linting for `register_buffer`
 
-    def __init__(self, config: PreTrainedConfig, device=None):
+    def __init__(self, config: MossAudioTokenizerConfig, device=None):
         super().__init__()
         self.max_seq_len_cached = config.max_position_embeddings
         self.original_max_seq_len = config.max_position_embeddings
@@ -221,10 +126,10 @@ class MossAudioTokenizerRotaryEmbedding(nn.Module):
 
     @staticmethod
     def compute_default_rope_parameters(
-        config: PreTrainedConfig | None = None,
-        device: torch.device | None = None,
+        config: MossAudioTokenizerConfig | None = None,
+        device: Optional["torch.device"] = None,
         seq_len: int | None = None,
-    ) -> tuple[torch.Tensor, float]:
+    ) -> tuple["torch.Tensor", float]:
         """
         Computes the inverse frequencies according to the original RoPE implementation
         Args:
@@ -263,18 +168,6 @@ class MossAudioTokenizerRotaryEmbedding(nn.Module):
             sin = emb.sin() * self.attention_scaling
 
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
-
-
-@dataclass
-class MHAState(StreamingState):
-    kv_cache: DynamicSlidingWindowLayer
-    offset: torch.Tensor
-
-    def reset(self, reset_mask: torch.Tensor):
-        super().reset(reset_mask)
-        self.offset[:] = torch.where(reset_mask, torch.zeros_like(self.offset), self.offset)
-        if self.kv_cache is not None:
-            self.kv_cache.reset()
 
 
 def rotate_half(x):
@@ -349,315 +242,185 @@ def eager_attention_forward(
 
 @use_kernelized_func(apply_rotary_pos_emb)
 class MossAudioTokenizerAttention(nn.Module):
-    """Multi-head attention with streaming support."""
+    """Multi-head sliding-window causal attention."""
 
-    _supports_streaming = True
-
-    def __init__(
-        self,
-        hidden_size: int,
-        num_attention_heads: int,
-        context: int,
-        rope: MossAudioTokenizerRotaryEmbedding,
-        device=None,
-        dtype=None,
-    ):
+    def __init__(self, config: MossAudioTokenizerTransformerConfig, layer_idx: int):
         super().__init__()
-        self._streaming_state: MHAState | None = None
-        self._streaming_detached: bool = False
-        factory_kwargs = {"device": device, "dtype": dtype}
-
-        if hidden_size % num_attention_heads != 0:
-            raise ValueError(
-                "hidden_size must be divisible by num_attention_heads, "
-                f"got hidden_size={hidden_size}, num_attention_heads={num_attention_heads}"
-            )
-
-        self.hidden_size = hidden_size
-        self.context = context
-        self.rope = rope
-        self.num_attention_heads = num_attention_heads
-        self.num_key_value_heads = num_attention_heads
-        self.num_key_value_groups = 1
-        self.head_dim = hidden_size // num_attention_heads
+        self.config = config
+        self.layer_idx = layer_idx
+        self.head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
+        self.num_key_value_groups = config.num_attention_heads // config.num_key_value_heads
         self.scaling = self.head_dim**-0.5
-        self.attention_dropout = 0.0
-        self._attn_implementation = "sdpa"
+        self.attention_dropout = config.attention_dropout
+        self.is_causal = True
 
-        self.out_proj = nn.Linear(hidden_size, hidden_size, bias=False, **factory_kwargs)
-        self.in_proj = nn.Linear(hidden_size, 3 * hidden_size, bias=False, **factory_kwargs)
-
-        self._register_load_state_dict_pre_hook(self._load_hook, with_module=True)
-
-    def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
-        state = cast(MHAState | None, self._streaming_state)
-        batch_size, sequence_length = hidden_states.shape[:2]
-
-        if state is None:
-            offset = torch.zeros(batch_size, device=hidden_states.device, dtype=torch.long)
-        else:
-            offset = state.offset
-
-        projected_states = self.in_proj(hidden_states)
-        projected_states = projected_states.reshape(
-            batch_size, sequence_length, 3, self.num_attention_heads, self.head_dim
-        ).permute(2, 0, 3, 1, 4)
-        query_states, key_states, value_states = (
-            projected_states[0],
-            projected_states[1],
-            projected_states[2],
+        self.q_proj = nn.Linear(
+            config.hidden_size, config.num_attention_heads * self.head_dim, bias=config.attention_bias
+        )
+        self.k_proj = nn.Linear(
+            config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.attention_bias
+        )
+        self.v_proj = nn.Linear(
+            config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.attention_bias
+        )
+        self.o_proj = nn.Linear(
+            config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
         )
 
-        position_ids = offset.view(batch_size, 1) + torch.arange(sequence_length, device=hidden_states.device).view(
-            1, -1
-        )
-        cos, sin = self.rope(query_states, position_ids)
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
+        attention_mask: torch.Tensor | None = None,
+        past_key_values: Cache | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        input_shape = hidden_states.shape[:-1]
+        hidden_shape = (*input_shape, -1, self.head_dim)
+
+        query_states = self.q_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+        key_states = self.k_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+        value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+
+        cos, sin = position_embeddings
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
-        key_states, value_states, key_positions = self._complete_kv(key_states, value_states, offset)
-        attention_mask = self._prepare_attention_mask(query_states, key_positions, offset)
+        if past_key_values is not None:
+            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
+
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
-            self._attn_implementation, eager_attention_forward
+            self.config._attn_implementation, eager_attention_forward
         )
-        attention_output, _ = attention_interface(
+
+        attn_output, attn_weights = attention_interface(
             self,
             query_states,
             key_states,
             value_states,
             attention_mask,
-            dropout=0.0,
+            dropout=0.0 if not self.training else self.attention_dropout,
             scaling=self.scaling,
-            is_causal=False,
-        )
-        attention_output = attention_output.reshape(batch_size, sequence_length, self.hidden_size)
-        attention_output = self.out_proj(attention_output)
-
-        if state is not None:
-            state.offset[:] = torch.where(state.exec_mask, state.offset + sequence_length, state.offset)
-        return attention_output
-
-    @staticmethod
-    def _load_hook(module, state_dict, prefix, *_):
-        for suffix in ["", "_scb"]:
-            source = prefix + "in_proj_weight" + suffix
-            target = prefix + "in_proj.weight" + suffix
-            if source in state_dict:
-                state_dict[target] = state_dict.pop(source)
-
-    def _init_streaming_state(self, batch_size: int) -> MHAState:
-        in_proj = cast(nn.Linear, self.in_proj)
-        device = cast(torch.device, in_proj.weight.device)
-
-        kv_cache = DynamicSlidingWindowLayer(sliding_window=self.context)
-        return MHAState(
-            batch_size,
-            cast(torch.device, device),
-            kv_cache,
-            offset=torch.zeros(batch_size, device=cast(torch.device, device), dtype=torch.long),
-        )
-
-    def _complete_kv(
-        self, key_states: torch.Tensor, value_states: torch.Tensor, offset: torch.Tensor
-    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        state = cast(MHAState | None, self._streaming_state)
-        if state is None:
-            batch_size, _, sequence_length, _ = key_states.shape
-            positions = torch.arange(sequence_length, device=key_states.device, dtype=torch.long)
-            return key_states, value_states, positions.expand(batch_size, -1)
-
-        current_sequence_length = key_states.shape[-2]
-        completed_key_states, completed_value_states = state.kv_cache.update(key_states, value_states)
-        key_length = completed_key_states.shape[-2]
-        previous_length = key_length - current_sequence_length
-        key_start = offset - previous_length
-        positions = key_start.view(-1, 1) + torch.arange(key_length, device=key_states.device, dtype=torch.long)
-        return completed_key_states, completed_value_states, positions
-
-    def _prepare_attention_mask(
-        self,
-        query_states: torch.Tensor,
-        key_positions: torch.Tensor,
-        offset: torch.Tensor,
-    ) -> torch.Tensor | None:
-        _, _, query_length, _ = query_states.shape
-        query_positions = offset.view(-1, 1, 1) + torch.arange(
-            query_length, device=query_states.device, dtype=torch.long
-        ).view(1, -1, 1)
-        key_positions = key_positions[:, None, :]
-        delta = query_positions - key_positions
-        allowed = (key_positions >= 0) & (delta >= 0) & (delta < self.context)
-
-        attention_mask = torch.zeros(allowed.shape, device=query_states.device, dtype=query_states.dtype)
-        attention_mask = attention_mask.masked_fill(~allowed, torch.finfo(query_states.dtype).min)
-        return attention_mask[:, None, :, :]
-
-
-class MossAudioTokenizerTransformerLayer(StreamingModule):
-    """Transformer layer with streaming support."""
-
-    def __init__(
-        self,
-        hidden_size: int,
-        num_attention_heads: int,
-        context: int,
-        rope: MossAudioTokenizerRotaryEmbedding,
-        intermediate_size: int = 2048,
-        layer_scale_init_value: float = 0.01,
-        device=None,
-        dtype=None,
-    ):
-        super().__init__()
-        factory_kwargs = {"device": device, "dtype": dtype}
-
-        self.self_attn = MossAudioTokenizerAttention(
-            hidden_size=hidden_size,
-            num_attention_heads=num_attention_heads,
-            context=context,
-            rope=rope,
-            **factory_kwargs,
-        )
-        self.norm1 = nn.LayerNorm(hidden_size, eps=1e-5, **factory_kwargs)
-        self.norm2 = nn.LayerNorm(hidden_size, eps=1e-5, **factory_kwargs)
-
-        self.linear1 = nn.Linear(hidden_size, intermediate_size, bias=False, **factory_kwargs)
-        self.linear2 = nn.Linear(intermediate_size, hidden_size, bias=False, **factory_kwargs)
-
-        self.layer_scale_1 = MossAudioTokenizerLayerScale(
-            channels=hidden_size, init=layer_scale_init_value, **cast(dict[str, object], factory_kwargs)
-        )
-        self.layer_scale_2 = MossAudioTokenizerLayerScale(
-            channels=hidden_size, init=layer_scale_init_value, **cast(dict[str, object], factory_kwargs)
-        )
-
-    def _ff_block(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        residual = hidden_states
-        hidden_states = self.norm2(hidden_states)
-        update = self.linear2(F.gelu(self.linear1(hidden_states)))
-        return residual.to(update) + self.layer_scale_2(update)
-
-    def _sa_block(self, hidden_states: torch.Tensor):
-        residual = hidden_states
-        hidden_states = self.norm1(hidden_states)
-        update = self.self_attn(hidden_states)
-        return residual.to(update) + self.layer_scale_1(update)
-
-    def forward(self, hidden_states: torch.Tensor):
-        hidden_states = self._sa_block(hidden_states)
-        hidden_states = self._ff_block(hidden_states)
-        return hidden_states
-
-
-def _create_rope_config(
-    hidden_size: int,
-    num_attention_heads: int,
-    max_position_embeddings: int,
-) -> PreTrainedConfig:
-    return PreTrainedConfig(
-        hidden_size=hidden_size,
-        num_attention_heads=num_attention_heads,
-        head_dim=hidden_size // num_attention_heads,
-        max_position_embeddings=max_position_embeddings,
-        rope_parameters={"rope_type": "default", "rope_theta": 10000.0},
-    )
-
-
-class MossAudioTokenizerTransformer(StreamingModule):
-    """Transformer with streaming/causal support."""
-
-    def __init__(
-        self,
-        hidden_size: int,
-        num_attention_heads: int,
-        num_hidden_layers: int,
-        context: int,
-        intermediate_size: int = 2048,
-        max_position_embeddings: int = 2048,
-        device=None,
-        dtype=None,
-        **kwargs,
-    ):
-        super().__init__()
-        if hidden_size % num_attention_heads != 0:
-            raise ValueError(
-                "hidden_size must be divisible by num_attention_heads, "
-                f"got hidden_size={hidden_size}, num_attention_heads={num_attention_heads}"
-            )
-
-        rope_config = _create_rope_config(
-            hidden_size=hidden_size,
-            num_attention_heads=num_attention_heads,
-            max_position_embeddings=max_position_embeddings,
-        )
-        self.rope = MossAudioTokenizerRotaryEmbedding(config=rope_config, device=device)
-
-        self.layers = nn.ModuleList()
-        for _ in range(num_hidden_layers):
-            self.layers.append(
-                MossAudioTokenizerTransformerLayer(
-                    hidden_size=hidden_size,
-                    num_attention_heads=num_attention_heads,
-                    intermediate_size=intermediate_size,
-                    context=context,
-                    rope=self.rope,
-                    device=device,
-                    dtype=dtype,
-                    **kwargs,
-                )
-            )
-
-    def forward(self, hidden_states: torch.Tensor, *args, **kwargs):
-        for layer in self.layers:
-            hidden_states = layer(hidden_states, *args, **kwargs)
-        return hidden_states
-
-
-class MossAudioTokenizerProjectedTransformer(StreamingContainer):
-    """Transformer with input/output projections."""
-
-    def __init__(
-        self,
-        config: MossAudioTokenizerConfig,
-        stage_index: int,
-        context: int,
-        device=None,
-        dtype=None,
-        **kwargs,
-    ):
-        super().__init__()
-        input_hidden_size = config.input_hidden_sizes[stage_index]
-        output_hidden_size = config.output_hidden_sizes[stage_index]
-        hidden_size = config.hidden_sizes[stage_index]
-        self.sampling_ratio: int = 1
-        self.input_hidden_size = input_hidden_size
-        self.output_hidden_size = output_hidden_size
-        factory_kwargs = {"device": device, "dtype": dtype}
-
-        self.input_proj = (
-            nn.Linear(input_hidden_size, hidden_size, bias=False, **factory_kwargs)
-            if hidden_size != input_hidden_size
-            else nn.Identity()
-        )
-        self.transformer = MossAudioTokenizerTransformer(
-            hidden_size=hidden_size,
-            num_attention_heads=config.num_attention_heads[stage_index],
-            num_hidden_layers=config.num_hidden_layers[stage_index],
-            intermediate_size=config.intermediate_sizes[stage_index],
-            layer_scale_init_value=config.layer_scale_init_value,
-            max_position_embeddings=config.max_position_embeddings,
-            context=context,
-            device=device,
-            dtype=dtype,
             **kwargs,
         )
+
+        attn_output = attn_output.reshape(*input_shape, -1).contiguous()
+        attn_output = self.o_proj(attn_output)
+        return attn_output, attn_weights
+
+
+class MossAudioTokenizerTransformerLayer(GradientCheckpointingLayer):
+    """Transformer layer with layer scale, used by both the encoder and the decoder."""
+
+    def __init__(self, config: MossAudioTokenizerTransformerConfig, layer_idx: int):
+        super().__init__()
+        self.embed_dim = config.d_model
+        self.self_attn = MossAudioTokenizerAttention(config, layer_idx)
+        self.self_attn_layer_norm = nn.LayerNorm(self.embed_dim)
+        self.dropout = config.dropout
+        self.fc1 = nn.Linear(config.hidden_size, config.intermediate_size, bias=False)
+        self.fc2 = nn.Linear(config.intermediate_size, config.hidden_size, bias=False)
+        self.final_layer_norm = nn.LayerNorm(self.embed_dim)
+        self.layer_scale_1 = MossAudioTokenizerLayerScale(config)
+        self.layer_scale_2 = MossAudioTokenizerLayerScale(config)
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: torch.Tensor | None = None,
+        position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
+        past_key_values: Cache | None = None,
+        **kwargs,
+    ) -> torch.Tensor:
+        """
+        Args:
+            hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
+            attention_mask (`torch.FloatTensor`): attention mask of size
+                `(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
+        """
+        residual = hidden_states
+        hidden_states = self.self_attn_layer_norm(hidden_states)
+        hidden_states, _ = self.self_attn(
+            hidden_states,
+            position_embeddings=position_embeddings,
+            attention_mask=attention_mask,
+            past_key_values=past_key_values,
+            **kwargs,
+        )
+        hidden_states = residual + self.layer_scale_1(hidden_states)
+
+        residual = hidden_states
+        hidden_states = self.final_layer_norm(hidden_states)
+        hidden_states = self.fc2(F.gelu(self.fc1(hidden_states)))
+        hidden_states = residual + self.layer_scale_2(hidden_states)
+        return hidden_states
+
+
+class MossAudioTokenizerTransformer(nn.Module):
+    """Stack of transformer layers with sliding-window causal attention."""
+
+    def __init__(self, config: MossAudioTokenizerTransformerConfig):
+        super().__init__()
+        self.config = config
+        self.rotary_emb = MossAudioTokenizerRotaryEmbedding(config)
+        self.layers = nn.ModuleList(
+            [MossAudioTokenizerTransformerLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+        )
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        past_key_values: Cache | None = None,
+        use_cache: bool | None = None,
+        **kwargs,
+    ) -> torch.Tensor:
+        use_cache = use_cache if use_cache is not None else self.config.use_cache
+        if use_cache and past_key_values is None:
+            past_key_values = DynamicCache(config=self.config)
+
+        past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+        position_ids = torch.arange(
+            past_seen_tokens, past_seen_tokens + hidden_states.shape[1], device=hidden_states.device
+        ).unsqueeze(0)
+        attention_mask = create_sliding_window_causal_mask(
+            config=self.config,
+            inputs_embeds=hidden_states,
+            attention_mask=None,
+            past_key_values=past_key_values,
+            position_ids=position_ids,
+        )
+        position_embeddings = self.rotary_emb(hidden_states, position_ids)
+
+        for layer in self.layers:
+            hidden_states = layer(
+                hidden_states,
+                attention_mask=attention_mask,
+                position_embeddings=position_embeddings,
+                past_key_values=past_key_values,
+                **kwargs,
+            )
+        return hidden_states
+
+
+class MossAudioTokenizerProjectedTransformer(nn.Module):
+    """Transformer stage with input/output projections."""
+
+    def __init__(self, config: MossAudioTokenizerTransformerConfig):
+        super().__init__()
+        self.input_proj = (
+            nn.Linear(config.input_hidden_size, config.hidden_size, bias=False)
+            if config.hidden_size != config.input_hidden_size
+            else nn.Identity()
+        )
+        self.transformer = MossAudioTokenizerTransformer(config)
         self.output_proj = (
-            nn.Linear(hidden_size, output_hidden_size, bias=False, **factory_kwargs)
-            if hidden_size != output_hidden_size
+            nn.Linear(config.hidden_size, config.output_hidden_size, bias=False)
+            if config.hidden_size != config.output_hidden_size
             else nn.Identity()
         )
 
-    def forward(self, hidden_states, input_lengths, *args, **kwargs):
+    def forward(self, hidden_states, input_lengths, **kwargs):
         hidden_states = self.input_proj(hidden_states.transpose(1, 2))
-        hidden_states = self.transformer(hidden_states, *args, **kwargs)
+        hidden_states = self.transformer(hidden_states, **kwargs)
         hidden_states = self.output_proj(hidden_states).transpose(1, 2)
         return hidden_states, input_lengths
 
@@ -818,61 +581,66 @@ class MossAudioTokenizerResidualLFQ(nn.Module):
             batch_size, self.hidden_size, sequence_length, device=codes.device, dtype=torch.float32
         )
         for index, quantizer in enumerate(self.quantizers[:num_quantizers]):
-            quantizer = cast(MossAudioTokenizerLFQ, quantizer)
             embeddings += quantizer.decode_code(codes[index]).float()
         embeddings = self.output_proj(embeddings)
         return embeddings
 
 
-class MossAudioTokenizerEncoder(StreamingContainer):
+class MossAudioTokenizerEncoder(nn.Module):
     """MOSS Audio Tokenizer encoder."""
 
     def __init__(self, config: MossAudioTokenizerEncoderConfig):
         super().__init__()
         self.config = config
-        self.layers = nn.ModuleList()
-        current_frame_rate = float(config.sampling_rate)
+        stage_configs = config.transformer_configs
+        for stage_config in stage_configs:
+            stage_config._attn_implementation = config._attn_implementation
 
+        self.layers = nn.ModuleList()
         for stage_index, sampling_ratio in enumerate(config.downsampling_ratios):
             self.layers.append(MossAudioTokenizerDownsample(sampling_ratio=sampling_ratio))
-            current_frame_rate /= sampling_ratio
-            self.layers.append(
-                MossAudioTokenizerProjectedTransformer(
-                    config=config,
-                    stage_index=stage_index,
-                    context=int(current_frame_rate * config.sliding_window_duration),
-                )
-            )
+            self.layers.append(MossAudioTokenizerProjectedTransformer(stage_configs[stage_index]))
 
-    def forward(self, hidden_states: torch.Tensor, input_lengths: torch.Tensor):
+    def forward(self, hidden_states, input_lengths, past_key_values=None, use_cache=None, **kwargs):
+        stage_index = 0
         for layer in self.layers:
-            hidden_states, input_lengths = layer(hidden_states, input_lengths)
+            if isinstance(layer, MossAudioTokenizerProjectedTransformer):
+                stage_cache = past_key_values[stage_index] if past_key_values is not None else None
+                hidden_states, input_lengths = layer(
+                    hidden_states, input_lengths, past_key_values=stage_cache, use_cache=use_cache, **kwargs
+                )
+                stage_index += 1
+            else:
+                hidden_states, input_lengths = layer(hidden_states, input_lengths)
         return hidden_states, input_lengths
 
 
-class MossAudioTokenizerDecoder(StreamingContainer):
+class MossAudioTokenizerDecoder(nn.Module):
     """MOSS Audio Tokenizer decoder."""
 
     def __init__(self, config: MossAudioTokenizerDecoderConfig):
         super().__init__()
         self.config = config
+        stage_configs = config.transformer_configs
+        for stage_config in stage_configs:
+            stage_config._attn_implementation = config._attn_implementation
+
         self.layers = nn.ModuleList()
-        current_frame_rate = float(config.sampling_rate) / config.hop_length
-
         for stage_index, sampling_ratio in enumerate(config.upsampling_ratios):
-            self.layers.append(
-                MossAudioTokenizerProjectedTransformer(
-                    config=config,
-                    stage_index=stage_index,
-                    context=int(current_frame_rate * config.sliding_window_duration),
-                )
-            )
+            self.layers.append(MossAudioTokenizerProjectedTransformer(stage_configs[stage_index]))
             self.layers.append(MossAudioTokenizerUpsample(sampling_ratio=sampling_ratio))
-            current_frame_rate *= sampling_ratio
 
-    def forward(self, hidden_states: torch.Tensor, input_lengths: torch.Tensor):
+    def forward(self, hidden_states, input_lengths, past_key_values=None, use_cache=None, **kwargs):
+        stage_index = 0
         for layer in self.layers:
-            hidden_states, input_lengths = layer(hidden_states, input_lengths)
+            if isinstance(layer, MossAudioTokenizerProjectedTransformer):
+                stage_cache = past_key_values[stage_index] if past_key_values is not None else None
+                hidden_states, input_lengths = layer(
+                    hidden_states, input_lengths, past_key_values=stage_cache, use_cache=use_cache, **kwargs
+                )
+                stage_index += 1
+            else:
+                hidden_states, input_lengths = layer(hidden_states, input_lengths)
         return hidden_states, input_lengths
 
 
@@ -885,6 +653,7 @@ class MossAudioTokenizerPreTrainedModel(PreTrainedAudioTokenizerBase):
     main_input_name = "input_values"
     input_modalities = "audio"
     supports_gradient_checkpointing = False
+    _supports_sdpa = True
     _no_split_modules = [
         "MossAudioTokenizerTransformerLayer",
         "MossAudioTokenizerResidualLFQ",
@@ -921,44 +690,24 @@ class MossAudioTokenizerModel(MossAudioTokenizerPreTrainedModel):
     def __init__(self, config: MossAudioTokenizerConfig):
         super().__init__(config)
 
-        self.encoder = MossAudioTokenizerEncoder(config.encoder_config)
+        encoder_config = config.encoder_config
+        encoder_config._attn_implementation = config._attn_implementation
+        decoder_config = config.decoder_config
+        decoder_config._attn_implementation = config._attn_implementation
+
+        self.encoder = MossAudioTokenizerEncoder(encoder_config)
         self.quantizer = MossAudioTokenizerResidualLFQ(config.quantizer_config)
-        self.decoder = MossAudioTokenizerDecoder(config.decoder_config)
+        self.decoder = MossAudioTokenizerDecoder(decoder_config)
 
         self.post_init()
-
-    def _start_streaming(self, batch_size: int):
-        """Start streaming mode for all modules."""
-
-        def _start(module):
-            if isinstance(module, StreamingModule) or getattr(module, "_supports_streaming", False):
-                module._streaming_state = module._init_streaming_state(batch_size)
-
-        self.apply(_start)
-
-    def _stop_streaming(self):
-        """Stop streaming mode for all modules."""
-
-        def _stop(module):
-            if isinstance(module, StreamingModule) or getattr(module, "_supports_streaming", False):
-                module._streaming_state = None
-
-        self.apply(_stop)
-
-    @contextmanager
-    def streaming(self, batch_size: int = 1):
-        """Context manager for streaming mode."""
-        self._start_streaming(batch_size)
-        try:
-            yield
-        finally:
-            self._stop_streaming()
 
     def _encode_frame(
         self,
         input_values: torch.Tensor,
         input_lengths: torch.Tensor | None = None,
         num_quantizers: int | None = None,
+        past_key_values: list[Cache] | None = None,
+        use_cache: bool | None = None,
     ) -> MossAudioTokenizerEncoderOutput:
         """Tokenize audio waveform into discrete tokens."""
         # Handle input shape
@@ -977,18 +726,42 @@ class MossAudioTokenizerModel(MossAudioTokenizerPreTrainedModel):
                 "Use `MossAudioTokenizerFeatureExtractor` to prepare and pad audio inputs."
             )
 
-        encoder_hidden_states, encoder_hidden_states_lengths = self.encoder(input_values, input_lengths)
+        encoder_hidden_states, encoder_hidden_states_lengths = self.encoder(
+            input_values, input_lengths, past_key_values=past_key_values, use_cache=use_cache
+        )
 
-        quantizer = cast(MossAudioTokenizerResidualLFQ, self.quantizer)
-        _, audio_codes, audio_codes_lengths = quantizer(
+        _, audio_codes, audio_codes_lengths = self.quantizer(
             encoder_hidden_states, encoder_hidden_states_lengths, num_quantizers
         )
 
+        audio_codes = audio_codes.transpose(0, 1).contiguous()
+        code_positions = torch.arange(audio_codes.shape[-1], device=device)
+        audio_codes_mask = code_positions[None, :] < audio_codes_lengths[:, None]
+
         return MossAudioTokenizerEncoderOutput(
-            audio_codes=audio_codes.transpose(0, 1).contiguous(),
-            audio_codes_lengths=audio_codes_lengths,
-            encoder_hidden_states=encoder_hidden_states,
+            audio_codes=audio_codes,
+            latents=encoder_hidden_states,
+            audio_codes_mask=audio_codes_mask,
         )
+
+    def _check_chunk_duration(self, chunk_duration: float):
+        if chunk_duration <= 0:
+            raise ValueError("`chunk_duration` must be > 0 when provided.")
+        if chunk_duration > self.config.sliding_window_duration:
+            raise ValueError(
+                "`chunk_duration` must be <= `config.sliding_window_duration` "
+                f"({self.config.sliding_window_duration}), got {chunk_duration}."
+            )
+
+        chunk_length = int(round(chunk_duration * self.config.sampling_rate))
+        if chunk_length <= 0:
+            raise ValueError("`chunk_duration` is too small and results in chunk_length <= 0.")
+        if chunk_length % self.config.hop_length != 0:
+            raise ValueError(
+                "`chunk_duration * config.sampling_rate` must be divisible by `config.hop_length`. "
+                f"Got chunk_length={chunk_length}, hop_length={self.config.hop_length}."
+            )
+        return chunk_length
 
     @can_return_tuple
     @auto_docstring
@@ -998,6 +771,8 @@ class MossAudioTokenizerModel(MossAudioTokenizerPreTrainedModel):
         padding_mask: torch.Tensor | None = None,
         num_quantizers: int | None = None,
         chunk_duration: float | None = None,
+        past_key_values: list[Cache] | None = None,
+        use_cache: bool | None = None,
     ):
         r"""
         input_values (`torch.Tensor` of shape `(batch_size, channels, sequence_length)`):
@@ -1008,10 +783,17 @@ class MossAudioTokenizerModel(MossAudioTokenizerPreTrainedModel):
             Number of quantizers to use. By default, all quantizers are used.
         chunk_duration (`float`, *optional*):
             If provided, encode the input waveform in successive chunks of `chunk_duration` seconds while keeping a
-            streaming KV cache for the causal transformers.
+            KV cache for the causal transformers.
 
             `chunk_duration` must be <= `config.sliding_window_duration`, and
             `chunk_duration * config.sampling_rate` must be divisible by `config.hop_length`.
+        past_key_values (`list[Cache]`, *optional*):
+            KV caches, one per encoder transformer stage, updated in place when caching is enabled. Pass them to
+            encode audio incrementally, e.g. for streaming. If `None` and caching is enabled, fresh caches are
+            created.
+        use_cache (`bool`, *optional*):
+            Whether to use KV caching. Defaults to `True` when `past_key_values` are provided or when encoding in
+            chunks via `chunk_duration`, and to `False` otherwise.
 
         Returns:
             `MossAudioTokenizerEncoderOutput` or tuple containing audio codes and lengths.
@@ -1029,64 +811,60 @@ class MossAudioTokenizerModel(MossAudioTokenizerPreTrainedModel):
             input_lengths = torch.full((batch_size,), sequence_length, device=device, dtype=torch.long)
 
         if chunk_duration is None:
-            encoder_output = self._encode_frame(input_values, input_lengths, num_quantizers)
-        else:
-            if chunk_duration <= 0:
-                raise ValueError("`chunk_duration` must be > 0 when provided.")
-            if chunk_duration > self.config.sliding_window_duration:
-                raise ValueError(
-                    "`chunk_duration` must be <= `config.sliding_window_duration` "
-                    f"({self.config.sliding_window_duration}), got {chunk_duration}."
-                )
-            if batch_size != 1:
-                raise ValueError("Streaming encode via `chunk_duration` currently only supports batch_size=1.")
+            if use_cache is None and past_key_values is None:
+                use_cache = False
+            return self._encode_frame(
+                input_values, input_lengths, num_quantizers, past_key_values=past_key_values, use_cache=use_cache
+            )
 
-            chunk_length = int(round(chunk_duration * self.config.sampling_rate))
-            if chunk_length <= 0:
-                raise ValueError("`chunk_duration` is too small and results in chunk_length <= 0.")
-            if chunk_length % self.config.hop_length != 0:
-                raise ValueError(
-                    "`chunk_duration * config.sampling_rate` must be divisible by `config.hop_length`. "
-                    f"Got chunk_length={chunk_length}, hop_length={self.config.hop_length}."
-                )
+        chunk_length = self._check_chunk_duration(chunk_duration)
+        if int(input_lengths.max()) <= chunk_length:
+            # Single-chunk input: honor explicitly passed caches (e.g. true streaming), otherwise run uncached.
+            if use_cache is None and past_key_values is None:
+                use_cache = False
+            return self._encode_frame(
+                input_values, input_lengths, num_quantizers, past_key_values=past_key_values, use_cache=use_cache
+            )
 
-            input_length = int(input_lengths[0].item())
-            padded_length = int(input_values.shape[-1])
-            if input_length <= chunk_length:
-                encoder_output = self._encode_frame(input_values, input_lengths, num_quantizers)
-            else:
-                codes_chunks: list[torch.Tensor] = []
-                hidden_chunks: list[torch.Tensor] = []
+        if past_key_values is None:
+            past_key_values = [
+                DynamicCache(config=stage_config) for stage_config in self.encoder.config.transformer_configs
+            ]
+        use_cache = True if use_cache is None else use_cache
 
-                with self.encoder.streaming(batch_size=batch_size):
-                    for start_idx in range(0, padded_length, chunk_length):
-                        input_length_i = max(0, min(chunk_length, input_length - start_idx))
-                        if input_length_i <= 0:
-                            break
+        codes_chunks: list[torch.Tensor] = []
+        latent_chunks: list[torch.Tensor] = []
+        mask_chunks: list[torch.Tensor] = []
 
-                        input_lengths_i = torch.tensor([input_length_i], device=device, dtype=torch.long)
-                        input_values_i = input_values[..., start_idx : start_idx + chunk_length]
-                        result_i = self._encode_frame(input_values_i, input_lengths_i, num_quantizers)
+        padded_length = input_values.shape[-1]
+        for start_idx in range(0, padded_length, chunk_length):
+            chunk_input_lengths = torch.clamp(input_lengths - start_idx, max=chunk_length)
+            if int(chunk_input_lengths.max()) <= 0:
+                break
 
-                        if result_i.audio_codes is None or result_i.audio_codes_lengths is None:
-                            raise RuntimeError("Internal error: `_encode_frame` returned empty audio codes.")
-                        if result_i.encoder_hidden_states is None:
-                            raise RuntimeError("Internal error: `_encode_frame` returned empty encoder hidden states.")
+            input_values_i = input_values[..., start_idx : start_idx + chunk_length]
+            result_i = self._encode_frame(
+                input_values_i,
+                chunk_input_lengths,
+                num_quantizers,
+                past_key_values=past_key_values,
+                use_cache=use_cache,
+            )
 
-                        codes_length_i = result_i.audio_codes_lengths
-                        codes_chunks.append(result_i.audio_codes[:, :, : codes_length_i[0]])
-                        hidden_chunks.append(result_i.encoder_hidden_states[:, :, : codes_length_i[0]])
+            audio_codes_mask_i = result_i.audio_codes_mask
+            if audio_codes_mask_i is None:
+                raise RuntimeError("Internal error: `_encode_frame` returned no `audio_codes_mask`.")
 
-                audio_codes = torch.cat(codes_chunks, dim=-1)
-                encoder_hidden_states = torch.cat(hidden_chunks, dim=-1)
-                audio_codes_lengths = torch.tensor([audio_codes.shape[-1]], device=device, dtype=torch.long)
-                encoder_output = MossAudioTokenizerEncoderOutput(
-                    audio_codes=audio_codes,
-                    audio_codes_lengths=audio_codes_lengths,
-                    encoder_hidden_states=encoder_hidden_states,
-                )
+            keep_i = int(audio_codes_mask_i.sum(dim=-1).max())
+            codes_chunks.append(result_i.audio_codes[:, :, :keep_i])
+            latent_chunks.append(result_i.latents[:, :, :keep_i])
+            mask_chunks.append(audio_codes_mask_i[:, :keep_i])
 
-        return encoder_output
+        return MossAudioTokenizerEncoderOutput(
+            audio_codes=torch.cat(codes_chunks, dim=-1),
+            latents=torch.cat(latent_chunks, dim=-1),
+            audio_codes_mask=torch.cat(mask_chunks, dim=-1),
+        )
 
     @can_return_tuple
     @auto_docstring
@@ -1096,6 +874,8 @@ class MossAudioTokenizerModel(MossAudioTokenizerPreTrainedModel):
         padding_mask: torch.Tensor | None = None,
         chunk_duration: float | None = None,
         num_quantizers: int | None = None,
+        past_key_values: list[Cache] | None = None,
+        use_cache: bool | None = None,
     ):
         r"""
         audio_codes (`torch.LongTensor` of shape `(batch_size, num_quantizers, sequence_length)`):
@@ -1104,12 +884,19 @@ class MossAudioTokenizerModel(MossAudioTokenizerPreTrainedModel):
             Mask to indicate valid code positions.
         chunk_duration (`float`, *optional*):
             If provided, decode the input codes in successive chunks of `chunk_duration` seconds while keeping a
-            streaming KV cache for the causal transformers.
+            KV cache for the causal transformers.
         num_quantizers (`int`, *optional*):
             Number of quantizers to use. By default, all quantizers in `audio_codes` are used.
 
             `chunk_duration` must be <= `config.sliding_window_duration`, and
             `chunk_duration * config.sampling_rate` must be divisible by `config.hop_length`.
+        past_key_values (`list[Cache]`, *optional*):
+            KV caches, one per decoder transformer stage, updated in place when caching is enabled. Pass them to
+            decode codes incrementally, e.g. for streaming. If `None` and caching is enabled, fresh caches are
+            created.
+        use_cache (`bool`, *optional*):
+            Whether to use KV caching. Defaults to `True` when `past_key_values` are provided or when decoding in
+            chunks via `chunk_duration`, and to `False` otherwise.
 
         Returns:
             `MossAudioTokenizerDecoderOutput` or tuple containing decoded audio.
@@ -1139,62 +926,67 @@ class MossAudioTokenizerModel(MossAudioTokenizerPreTrainedModel):
             codes_lengths = torch.full((batch_size,), sequence_length, device=device, dtype=torch.long)
 
         if chunk_duration is None:
-            quantizer = cast(MossAudioTokenizerResidualLFQ, self.quantizer)
-            decoder_hidden_states = quantizer.decode_codes(audio_codes)
-            audio, audio_lengths = self.decoder(decoder_hidden_states, codes_lengths)
-            decoder_output = MossAudioTokenizerDecoderOutput(audio=audio, audio_lengths=audio_lengths)
+            if use_cache is None and past_key_values is None:
+                use_cache = False
+            audio_values = self._decode_frames(
+                audio_codes, codes_lengths, past_key_values=past_key_values, use_cache=use_cache
+            )
         else:
-            if chunk_duration <= 0:
-                raise ValueError("`chunk_duration` must be > 0 when provided.")
-            if chunk_duration > self.config.sliding_window_duration:
-                raise ValueError(
-                    "`chunk_duration` must be <= `config.sliding_window_duration` "
-                    f"({self.config.sliding_window_duration}), got {chunk_duration}."
-                )
-            if batch_size != 1:
-                raise ValueError("Streaming decode via `chunk_duration` currently only supports batch_size=1.")
-
-            chunk_length = int(round(chunk_duration * self.config.sampling_rate))
-            if chunk_length <= 0:
-                raise ValueError("`chunk_duration` is too small and results in chunk_length <= 0.")
-            if chunk_length % self.config.hop_length != 0:
-                raise ValueError(
-                    "`chunk_duration * config.sampling_rate` must be divisible by `config.hop_length`. "
-                    f"Got chunk_length={chunk_length}, hop_length={self.config.hop_length}."
-                )
-
+            chunk_length = self._check_chunk_duration(chunk_duration)
             chunk_frame_length = chunk_length // self.config.hop_length
-            codes_length = int(codes_lengths[0].item())
-            if codes_length <= chunk_frame_length:
-                quantizer = cast(MossAudioTokenizerResidualLFQ, self.quantizer)
-                decoder_hidden_states = quantizer.decode_codes(audio_codes[..., :codes_length])
-                audio, audio_lengths = self.decoder(decoder_hidden_states, codes_lengths)
-                decoder_output = MossAudioTokenizerDecoderOutput(audio=audio, audio_lengths=audio_lengths)
+            if int(codes_lengths.max()) <= chunk_frame_length:
+                # Single-chunk input: honor explicitly passed caches (e.g. true streaming), otherwise run uncached.
+                if use_cache is None and past_key_values is None:
+                    use_cache = False
+                audio_values = self._decode_frames(
+                    audio_codes[..., : int(codes_lengths.max())],
+                    codes_lengths,
+                    past_key_values=past_key_values,
+                    use_cache=use_cache,
+                )
             else:
+                if past_key_values is None:
+                    past_key_values = [
+                        DynamicCache(config=stage_config) for stage_config in self.decoder.config.transformer_configs
+                    ]
+                use_cache = True if use_cache is None else use_cache
+
                 wav_chunks: list[torch.Tensor] = []
-                quantizer = cast(MossAudioTokenizerResidualLFQ, self.quantizer)
-                with self.decoder.streaming(batch_size=batch_size):
-                    for start_idx in range(0, codes_length, chunk_frame_length):
-                        codes_length_i = min(chunk_frame_length, codes_length - start_idx)
-                        if codes_length_i <= 0:
-                            break
+                for start_idx in range(0, int(codes_lengths.max()), chunk_frame_length):
+                    chunk_codes_lengths = torch.clamp(codes_lengths - start_idx, max=chunk_frame_length)
+                    if int(chunk_codes_lengths.max()) <= 0:
+                        break
 
-                        codes_lengths_i = torch.tensor([codes_length_i], device=device, dtype=torch.long)
-                        codes_i = audio_codes[:, :, start_idx : start_idx + codes_length_i]
-                        decoder_hidden_states_i = quantizer.decode_codes(codes_i)
-                        audio_i, audio_lengths_i = self.decoder(decoder_hidden_states_i, codes_lengths_i)
-                        result_i = MossAudioTokenizerDecoderOutput(audio=audio_i, audio_lengths=audio_lengths_i)
+                    codes_i = audio_codes[..., start_idx : start_idx + chunk_frame_length]
+                    audio_i = self._decode_frames(
+                        codes_i,
+                        chunk_codes_lengths,
+                        past_key_values=past_key_values,
+                        use_cache=use_cache,
+                    )
+                    keep_i = int(chunk_codes_lengths.max()) * self.config.hop_length
+                    wav_chunks.append(audio_i[:, :, :keep_i])
 
-                        if result_i.audio is None or result_i.audio_lengths is None:
-                            raise RuntimeError("Internal error: decoder returned empty audio.")
+                audio_values = torch.cat(wav_chunks, dim=-1)
 
-                        wav_chunks.append(result_i.audio[:, :, : result_i.audio_lengths[0]])
+        audio_lengths = codes_lengths * self.config.hop_length
+        audio_positions = torch.arange(audio_values.shape[-1], device=device)
+        audio_mask = audio_positions[None, :] < audio_lengths[:, None]
+        return MossAudioTokenizerDecoderOutput(audio_values=audio_values, audio_mask=audio_mask)
 
-                wav = torch.cat(wav_chunks, dim=-1)
-                audio_lengths = torch.tensor([wav.shape[-1]], device=device, dtype=torch.long)
-                decoder_output = MossAudioTokenizerDecoderOutput(audio=wav, audio_lengths=audio_lengths)
-
-        return decoder_output
+    def _decode_frames(
+        self,
+        audio_codes: torch.Tensor,
+        codes_lengths: torch.Tensor,
+        past_key_values: list[Cache] | None = None,
+        use_cache: bool | None = None,
+    ) -> torch.Tensor:
+        """Decode discrete tokens into audio waveform."""
+        decoder_hidden_states = self.quantizer.decode_codes(audio_codes)
+        audio_values, _ = self.decoder(
+            decoder_hidden_states, codes_lengths, past_key_values=past_key_values, use_cache=use_cache
+        )
+        return audio_values
 
     @can_return_tuple
     @auto_docstring
@@ -1206,7 +998,7 @@ class MossAudioTokenizerModel(MossAudioTokenizerPreTrainedModel):
         num_quantizers: int | None = None,
     ) -> MossAudioTokenizerOutput:  # type: ignore[override]
         r"""
-        input_values (`torch.FloatTensor` of shape `(batch_size, channels, sequence_length)`, *optional*):
+        input_values (`torch.FloatTensor` of shape `(batch_size, channels, sequence_length)`):
             Raw audio input converted to Float.
         padding_mask (`torch.BoolTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Mask to avoid computing on padding token indices. Mask values selected in `[0, 1]`:
@@ -1230,46 +1022,40 @@ class MossAudioTokenizerModel(MossAudioTokenizerPreTrainedModel):
 
         >>> outputs = model(input_values=audio)
         >>> audio_codes = outputs.audio_codes
-        >>> audio_values = outputs.audio
+        >>> audio_values = outputs.audio_values
         ```
         """
         output_audio_codes: torch.Tensor | None = None
-        output_audio_codes_lengths: torch.Tensor | None = None
-        output_audio: torch.Tensor | None = None
-        output_audio_lengths: torch.Tensor | None = None
+        output_audio_codes_mask: torch.Tensor | None = None
+        output_latents: torch.Tensor | None = None
+        output_audio_values: torch.Tensor | None = None
         decoded_from_encoded_codes = False
 
         if input_values is not None:
             encoder_output = self.encode(input_values, padding_mask, num_quantizers, return_dict=True)
-            encoder_output = cast(MossAudioTokenizerEncoderOutput, encoder_output)
             output_audio_codes = encoder_output.audio_codes
-            output_audio_codes_lengths = encoder_output.audio_codes_lengths
+            output_audio_codes_mask = encoder_output.audio_codes_mask
+            output_latents = encoder_output.latents
 
             if audio_codes is None:
                 audio_codes = output_audio_codes
                 decoded_from_encoded_codes = True
 
         if audio_codes is not None:
-            audio_codes_padding_mask = padding_mask
-            if decoded_from_encoded_codes and output_audio_codes_lengths is not None:
-                code_positions = torch.arange(audio_codes.shape[-1], device=audio_codes.device)
-                audio_codes_padding_mask = code_positions[None, :] < output_audio_codes_lengths[:, None]
-
+            audio_codes_padding_mask = output_audio_codes_mask if decoded_from_encoded_codes else padding_mask
             decoder_output = self.decode(
                 audio_codes,
                 padding_mask=audio_codes_padding_mask,
-                return_dict=True,
                 num_quantizers=num_quantizers,
+                return_dict=True,
             )
-            decoder_output = cast(MossAudioTokenizerDecoderOutput, decoder_output)
-            output_audio = decoder_output.audio
-            output_audio_lengths = decoder_output.audio_lengths
+            output_audio_values = decoder_output.audio_values
 
         return MossAudioTokenizerOutput(
-            audio=output_audio,
-            audio_lengths=output_audio_lengths,
+            audio_values=output_audio_values,
             audio_codes=output_audio_codes,
-            audio_codes_lengths=output_audio_codes_lengths,
+            latents=output_latents,
+            audio_codes_mask=output_audio_codes_mask,
         )
 
 
