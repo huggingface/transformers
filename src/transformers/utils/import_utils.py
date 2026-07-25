@@ -1422,11 +1422,6 @@ def is_jinja_available() -> bool:
 
 
 @lru_cache
-def is_jmespath_available() -> bool:
-    return _is_package_available("jmespath")[0]
-
-
-@lru_cache
 def is_mlx_available() -> bool:
     return _is_package_available("mlx")[0]
 
