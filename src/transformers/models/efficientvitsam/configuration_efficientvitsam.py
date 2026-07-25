@@ -205,20 +205,6 @@ class EfficientViTSamConfig(PreTrainedConfig):
             self.mask_decoder_config = EfficientViTSamMaskDecoderConfig(**self.mask_decoder_config)
         elif self.mask_decoder_config is None:
             self.mask_decoder_config = EfficientViTSamMaskDecoderConfig()
-        if isinstance(self.vision_config, dict):
-            self.vision_config = EfficientViTSamVisionConfig(**self.vision_config)
-        elif self.vision_config is None:
-            self.vision_config = EfficientViTSamVisionConfig()
-
-        if isinstance(self.prompt_encoder_config, dict):
-            self.prompt_encoder_config = EfficientViTSamPromptEncoderConfig(**self.prompt_encoder_config)
-        elif self.prompt_encoder_config is None:
-            self.prompt_encoder_config = EfficientViTSamPromptEncoderConfig()
-
-        if isinstance(self.mask_decoder_config, dict):
-            self.mask_decoder_config = EfficientViTSamMaskDecoderConfig(**self.mask_decoder_config)
-        elif self.mask_decoder_config is None:
-            self.mask_decoder_config = EfficientViTSamMaskDecoderConfig()
 
         super().__post_init__(**kwargs)
 

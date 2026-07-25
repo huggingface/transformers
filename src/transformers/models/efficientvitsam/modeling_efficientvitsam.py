@@ -1215,13 +1215,12 @@ class EfficientViTLargeBackbone(nn.Module):
         ]
         for _ in range(depth_list[0]):
             block = self.build_local_block(
+                config=config,
                 block=block_list[0],
                 in_channels=width_list[0],
                 out_channels=width_list[0],
                 stride=1,
                 expand_ratio=expand_list[0],
-                norm=norm,
-                act_func=act_func,
                 fewer_norm=fewer_norm_list[0],
             )
             stage0.append(ResidualBlock(block, nn.Identity()))
@@ -1233,13 +1232,12 @@ class EfficientViTLargeBackbone(nn.Module):
         for stage_id, (w, d) in enumerate(zip(width_list[1:], depth_list[1:]), start=1):
             stage = []
             block = self.build_local_block(
+                config=config,
                 block="mb" if block_list[stage_id] not in ["mb", "fmb"] else block_list[stage_id],
                 in_channels=in_channels,
                 out_channels=w,
                 stride=2,
                 expand_ratio=expand_list[stage_id] * 4.0,
-                norm=norm,
-                act_func=act_func,
                 fewer_norm=fewer_norm_list[stage_id],
             )
             stage.append(ResidualBlock(block, None))
@@ -1258,13 +1256,12 @@ class EfficientViTLargeBackbone(nn.Module):
                     )
                 else:
                     block = self.build_local_block(
+                        config=config,
                         block=block_list[stage_id],
                         in_channels=in_channels,
                         out_channels=in_channels,
                         stride=1,
                         expand_ratio=expand_list[stage_id],
-                        norm=norm,
-                        act_func=act_func,
                         fewer_norm=fewer_norm_list[stage_id],
                     )
                     stage.append(ResidualBlock(block, nn.Identity()))
@@ -1273,15 +1270,17 @@ class EfficientViTLargeBackbone(nn.Module):
 
     @staticmethod
     def build_local_block(
+        config: EfficientViTSamVisionConfig,
         block: str,
         in_channels: int,
         out_channels: int,
         stride: int,
         expand_ratio: float,
-        norm: str,
-        act_func: str,
         fewer_norm: bool = False,
     ) -> nn.Module:
+        norm = config.norm
+        act_func = config.act_func
+
         if block == "res":
             return ResBlock(
                 in_channels=in_channels,
