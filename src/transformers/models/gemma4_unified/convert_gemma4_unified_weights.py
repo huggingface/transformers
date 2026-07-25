@@ -27,7 +27,7 @@ Usage:
     python src/transformers/models/gemma4_unified/convert_gemma4_unified_weights.py \
         --variant='gemma-4-12b' \
         --include_chat_template \
-        --include_response_schema \
+        --include_response_template \
         --tokenizer_path="$HOME/tokenizers/gemma4/gemma4_cleaned_262144.model" \
         --checkpoint_path="$HOME/gemma4/checkpoints/gemma4_12b_orbax" \
         --output_path="$HOME/gemma4/checkpoints/gemma4_12b_safetensors"
@@ -78,46 +78,11 @@ from transformers.utils.hub import cached_file
 
 # ==== Internal Constants and Classes ====
 
-# The correct chat templates were already uploaded to those 2 repos, so download from there
+# The correct chat and response templates were already uploaded to that repo, so download them from there
 _CHAT_TEMPLATE = pathlib.Path(cached_file("google/gemma-4-31B-it", "chat_template.jinja")).read_text()
-
-_RESPONSE_SCHEMA = {
-    "type": "object",
-    "properties": {
-        "role": {"const": "assistant"},
-        "thinking": {
-            "type": "string",
-        },
-        "content": {
-            "type": "string",
-        },
-        "tool_calls": {
-            "x-regex-iterator": r"<\|tool_call>(.*?)<tool_call\|>",
-            "type": "array",
-            "items": {
-                "type": "object",
-                "properties": {
-                    "type": {"const": "function"},
-                    "function": {
-                        "type": "object",
-                        "x-regex": r"call\:(?P<name>\w+)(?P<arguments>\{.*\})",
-                        "properties": {
-                            "name": {
-                                "type": "string",
-                            },
-                            "arguments": {
-                                "type": "object",
-                                "x-parser": "gemma4-tool-call",
-                                "additionalProperties": {},
-                            },
-                        },
-                    },
-                },
-            },
-        },
-    },
-    "x-regex": r"(\<\|channel\>thought\n(?P<thinking>.*?)\<channel\|\>)?(?P<tool_calls>\<\|tool_call\>.*\<tool_call\|\>)?(?P<content>(?:(?!\<turn\|\>)(?!\<\|tool_response\>).)+)?(?:\<turn\|\>|\<\|tool_response\>)?",
-}
+_RESPONSE_TEMPLATE = json.loads(
+    pathlib.Path(cached_file("google/gemma-4-31B-it", "tokenizer_config.json")).read_text()
+)["response_template"]
 
 _DTYPES = {"float32", "bfloat16", "float16"}
 
@@ -236,10 +201,10 @@ _INCLUDE_CHAT_TEMPLATE = flags.DEFINE_bool(
     name="include_chat_template", default=False, help="If true, will save the default chat template with the tokenizer"
 )
 
-_INCLUDE_RESPONSE_SCHEMA = flags.DEFINE_bool(
-    name="include_response_schema",
+_INCLUDE_RESPONSE_TEMPLATE = flags.DEFINE_bool(
+    name="include_response_template",
     default=False,
-    help="If true, will save the default response schema with the tokenizer",
+    help="If true, will save the default response_template with the tokenizer",
 )
 
 _OUTPUT_PATH = flags.DEFINE_string(
@@ -800,7 +765,7 @@ def main(*args):
     del state_tree
 
     chat_template_kwargs = {"chat_template": _CHAT_TEMPLATE} if _INCLUDE_CHAT_TEMPLATE.value else {}
-    response_schema_kwargs = {"response_schema": _RESPONSE_SCHEMA} if _INCLUDE_RESPONSE_SCHEMA.value else {}
+    response_template_kwargs = {"response_template": _RESPONSE_TEMPLATE} if _INCLUDE_RESPONSE_TEMPLATE.value else {}
 
     # Add <bos> for PT models.
     add_bos_token = not _INCLUDE_CHAT_TEMPLATE.value
@@ -833,7 +798,7 @@ def main(*args):
             "etd_token": "<tool|>",
         },
         **chat_template_kwargs,
-        **response_schema_kwargs,
+        **response_template_kwargs,
     )
 
     # Update config multimodal token IDs from the tokenizer.
