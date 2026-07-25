@@ -251,7 +251,6 @@ class NemotronH_Omni_Reasoning_V3VisionProjector(nn.Module):
 
     def forward_video(self, pixel_values_videos, vision_model):
         pixel_values_videos = pixel_values_videos.to(dtype=vision_model.config.torch_dtype)
-        embeddings = vision_model.embeddings
         T = self.video_temporal_patch_dim
         N, C, H, W = pixel_values_videos.shape
 
@@ -262,16 +261,8 @@ class NemotronH_Omni_Reasoning_V3VisionProjector(nn.Module):
         num_groups = N // T
 
         x = pixel_values_videos.reshape(num_groups, T * C, H, W)
-
-        # Temporally-packed video patches use the dedicated `video_patch_projection`.
-        orig_projection = embeddings.patch_projection
-        embeddings.patch_projection = embeddings.video_patch_projection
-        try:
-            vit_embeds = vision_model(x).features
-        finally:
-            embeddings.patch_projection = orig_projection
-
-        patch_size = embeddings.patch_size
+        vit_embeds = vision_model(x, use_video_patch_projection=True).features
+        patch_size = vision_model.patch_size
         return self._project(vit_embeds, H // patch_size, W // patch_size)
 
 
@@ -295,22 +286,9 @@ class NemotronH_Omni_Reasoning_V3(PreTrainedModel):
         self.img_context_token_id = config.img_context_token_id
         self.video_context_token_id = config.video_context_token_id
 
-        logger.info(f"num_image_token: {self.num_image_token}")
-
         self.language_model = AutoModelForCausalLM.from_config(config.llm_config)
         self.vision_model = AutoModel.from_config(config.vision_config)
         self.vision_model.make_preprocessor_external()
-
-        # 3D video patch projection. The native RADIO patch embedder is a 2D
-        # `patch_projection` `[embed_dim, C·P²]`; this checkpoint also carries a
-        # `video_patch_projection` `[embed_dim, T·C·P²]` for temporally-packed video patches.
-        self.video_temporal_patch_dim = config.video_temporal_patch_size
-        embeddings = self.vision_model.embeddings
-        embeddings.video_patch_projection = nn.Linear(
-            in_features=self.video_temporal_patch_dim * 3 * embeddings.patch_size * embeddings.patch_size,
-            out_features=embeddings.embed_dim,
-            bias=False,
-        )
 
         self.vision_model = self.vision_model.to(self.language_model.config.torch_dtype)
 

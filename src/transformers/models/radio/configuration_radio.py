@@ -46,6 +46,9 @@ class RadioConfig(PreTrainedConfig):
         Per-channel mean used by the input conditioner to normalize pixel values.
     norm_std (`tuple[float, float, float]`, *optional*, defaults to `OPENAI_CLIP_STD`):
         Per-channel standard deviation used by the input conditioner to normalize pixel values.
+    video_temporal_patch_size (`int`, *optional*):
+        Number of temporally-stacked frames per patch. When set, the patch generator also builds a
+        `video_patch_projection` for temporally-packed video patches; `None` disables the video path.
     """
 
     model_type = "radio"
@@ -71,6 +74,7 @@ class RadioConfig(PreTrainedConfig):
     max_img_size: int = 2048
     num_cls_tokens: int = 3
     num_registers: int = 7
+    video_temporal_patch_size: int | None = None
     summary_idxs: list[int] | None = None
     # input conditioner
     norm_mean: list[float] | tuple[float, float, float] = tuple(OPENAI_CLIP_MEAN)

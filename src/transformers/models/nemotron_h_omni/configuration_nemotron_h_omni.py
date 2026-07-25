@@ -100,6 +100,8 @@ class NemotronH_Omni_Reasoning_V3_Config(PreTrainedConfig):
             self.vision_config = RadioConfig(**self.vision_config)
         elif self.vision_config is None:
             self.vision_config = RadioConfig()
+        # The vision tower needs the temporal patch size to build its video patch projection.
+        self.vision_config.video_temporal_patch_size = self.video_temporal_patch_size
 
         # Handle both cases: when loading from JSON (llm_config is dict) and when called
         # internally by transformers (llm_config is None).
