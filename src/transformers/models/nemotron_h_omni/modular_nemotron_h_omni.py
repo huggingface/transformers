@@ -136,20 +136,27 @@ class NemotronH_Omni_Reasoning_V3SoundEncoder(nn.Module):
 
 
 class NemotronH_Omni_Reasoning_V3SoundProjector(nn.Module):
-    """Single-forward audio pipeline: feature-extract raw clip(s), then run the given sound encoder and
-    projection, returning flattened LLM-space embeddings ready to scatter onto `<audio>` positions.
+    """Single-forward audio pipeline: feature-extract raw clip(s), encode with Parakeet and project,
+    returning flattened LLM-space embeddings ready to scatter onto `<audio>` positions.
     """
 
-    def __init__(self, config):
+    def __init__(self, config, llm_hidden_size: int):
         super().__init__()
         feature_extractor_class = FEATURE_EXTRACTOR_MAPPING[CONFIG_MAPPING["parakeet_encoder"]]
         self.feature_extractor = feature_extractor_class(
             sampling_rate=getattr(config, "sampling_rate", 16000),
             feature_size=config.num_mel_bins,
         )
+        self.sound_encoder = NemotronH_Omni_Reasoning_V3SoundEncoder(config)
+        self.sound_projection = NemotronH_Omni_Reasoning_V3SoundProjection(
+            sound_hidden_size=config.hidden_size,
+            projection_hidden_size=config.projection_hidden_size,
+            llm_hidden_size=llm_hidden_size,
+            bias=config.projection_bias,
+        )
 
-    def forward(self, sound_clips, encoder, projection) -> torch.Tensor:
-        weight = encoder.encoder.subsampling.linear.weight
+    def forward(self, sound_clips) -> torch.Tensor:
+        weight = self.sound_encoder.encoder.subsampling.linear.weight
         device, dtype = weight.device, weight.dtype
 
         if isinstance(sound_clips, torch.Tensor) and sound_clips.dim() >= 3:
@@ -167,23 +174,47 @@ class NemotronH_Omni_Reasoning_V3SoundProjector(nn.Module):
             if attention_mask is not None:
                 attention_mask = attention_mask.to(device=device)
 
-        sound_embeds = projection(encoder(input_features, attention_mask).to(torch.bfloat16))
+        sound_embeds = self.sound_projection(self.sound_encoder(input_features, attention_mask).to(torch.bfloat16))
 
         # Multiple clips are batch-padded; keep only each clip's real (subsampled) length before flattening.
         if sound_embeds.dim() == 3 and sound_embeds.shape[0] > 1 and attention_mask is not None:
-            lengths = encoder.encoder._get_subsampling_output_length(attention_mask.sum(-1) + 1)
+            lengths = self.sound_encoder.encoder._get_subsampling_output_length(attention_mask.sum(-1) + 1)
             return torch.cat([sound_embeds[i, : int(n)] for i, n in enumerate(lengths.tolist())], dim=0)
         return sound_embeds.reshape(-1, sound_embeds.shape[-1])
 
 
-class NemotronH_Omni_Reasoning_V3PixelShuffle(nn.Module):
-    """Pixel-shuffle downsampling of the RADIO vision features (`scale_factor = downsample_ratio`)."""
+class NemotronH_Omni_Reasoning_V3MLP(nn.Module):
+    """Vision-to-LLM projector MLP: RMSNorm -> up_proj -> ReLU² -> down_proj (NemotronHMLP-style)."""
 
-    def __init__(self, config: NemotronH_Omni_Reasoning_V3_Config):
+    def __init__(self, in_features: int, hidden_features: int, out_features: int, eps: float = 1e-5):
         super().__init__()
-        self.ps_version = config.ps_version
+        self.norm = NemotronH_Omni_RMSNorm(in_features, eps=eps)
+        self.up_proj = nn.Linear(in_features, hidden_features, bias=False)
+        self.down_proj = nn.Linear(hidden_features, out_features, bias=False)
+        self.act_fn = ACT2FN["relu2"]
 
-    def forward(self, x: torch.Tensor, scale_factor: float = 0.5) -> torch.Tensor:
+    def forward(self, x):
+        return self.down_proj(self.act_fn(self.up_proj(self.norm(x))))
+
+
+class NemotronH_Omni_Reasoning_V3VisionProjector(nn.Module):
+    """Single-forward vision pipeline: run the vision tower (image, or temporally-packed video) through
+    pixel-shuffle downsampling and the projection MLP (`mlp1`) into LLM-space embeddings. The
+    weight-bearing `vision_model` is passed in so its checkpoint keys stay at the top level.
+    """
+
+    def __init__(self, config):
+        super().__init__()
+        self.downsample_ratio = config.downsample_ratio
+        self.video_temporal_patch_dim = config.video_temporal_patch_size
+        self.ps_version = config.ps_version
+        self.mlp1 = NemotronH_Omni_Reasoning_V3MLP(
+            config.vit_hidden_size * int(1 / config.downsample_ratio) ** 2,
+            config.projector_hidden_size,
+            config.llm_config.hidden_size,
+        )
+
+    def pixel_shuffle(self, x, scale_factor=0.5):
         n, w, h, c = x.size()
         x = x.view(n, w, int(h * scale_factor), int(c / scale_factor))
         x = x.permute(0, 2, 1, 3).contiguous()
@@ -202,36 +233,23 @@ class NemotronH_Omni_Reasoning_V3PixelShuffle(nn.Module):
             x = x.permute(0, 2, 1, 3).contiguous()
         return x
 
-
-class NemotronH_Omni_Reasoning_V3VisionProjector(nn.Module):
-    """Single-forward vision pipeline: run the vision tower (image, or temporally-packed video) through
-    pixel-shuffle downsampling and the projection MLP into LLM-space embeddings. The weight-bearing
-    `vision_model` and `mlp1` are passed in so their checkpoint keys stay at the top level.
-    """
-
-    def __init__(self, config):
-        super().__init__()
-        self.downsample_ratio = config.downsample_ratio
-        self.video_temporal_patch_dim = config.video_temporal_patch_size
-        self.pixel_shuffle = NemotronH_Omni_Reasoning_V3PixelShuffle(config)
-
-    def _project(self, vit_embeds, h, w, mlp1):
+    def _project(self, vit_embeds, h, w):
         vit_embeds = vit_embeds.to(dtype=torch.bfloat16)
         vit_embeds = vit_embeds.reshape(vit_embeds.shape[0], h, w, -1)
         vit_embeds = self.pixel_shuffle(vit_embeds, scale_factor=self.downsample_ratio)
         vit_embeds = vit_embeds.reshape(vit_embeds.shape[0], -1, vit_embeds.shape[-1])
-        return mlp1(vit_embeds)
+        return self.mlp1(vit_embeds)
 
-    def forward(self, pixel_values, vision_model, mlp1):
+    def forward(self, pixel_values, vision_model):
         if isinstance(pixel_values, (list, tuple)):
-            return torch.cat([self.forward(pv, vision_model, mlp1) for pv in pixel_values], dim=0)
+            return torch.cat([self.forward(pv, vision_model) for pv in pixel_values], dim=0)
         pixel_values = pixel_values.to(dtype=vision_model.config.torch_dtype)
         vit_embeds = vision_model(pixel_values).features
         _, _, H, W = pixel_values.shape
         patch_size = vision_model.patch_size
-        return self._project(vit_embeds, H // patch_size, W // patch_size, mlp1)
+        return self._project(vit_embeds, H // patch_size, W // patch_size)
 
-    def forward_video(self, pixel_values_videos, vision_model, mlp1):
+    def forward_video(self, pixel_values_videos, vision_model):
         pixel_values_videos = pixel_values_videos.to(dtype=vision_model.config.torch_dtype)
         embeddings = vision_model.embeddings
         T = self.video_temporal_patch_dim
@@ -254,7 +272,7 @@ class NemotronH_Omni_Reasoning_V3VisionProjector(nn.Module):
             embeddings.patch_projection = orig_projection
 
         patch_size = embeddings.patch_size
-        return self._project(vit_embeds, H // patch_size, W // patch_size, mlp1)
+        return self._project(vit_embeds, H // patch_size, W // patch_size)
 
 
 class NemotronH_Omni_Reasoning_V3(PreTrainedModel):
@@ -298,43 +316,18 @@ class NemotronH_Omni_Reasoning_V3(PreTrainedModel):
 
         self.drop_vision_class_token = True
 
-        vit_hidden_size = config.vit_hidden_size
-        vision_projection_hidden_size = config.projector_hidden_size
         llm_hidden_size = config.llm_config.hidden_size
 
         self.video_pruning_rate = config.video_pruning_rate
 
-        # Vision feature pipeline (tower + pixel-shuffle + projection) is isolated in its own module;
-        # `mlp1` stays here so its checkpoint keys remain top-level.
         self.vision_projector = NemotronH_Omni_Reasoning_V3VisionProjector(config)
-        self.mlp1 = nn.Sequential(
-            NemotronH_Omni_RMSNorm(vit_hidden_size * int(1 / self.downsample_ratio) ** 2, eps=1e-5),
-            nn.Linear(
-                vit_hidden_size * int(1 / self.downsample_ratio) ** 2,
-                vision_projection_hidden_size,
-                bias=False,
-            ),
-            ACT2FN["relu2"],
-            nn.Linear(vision_projection_hidden_size, llm_hidden_size, bias=False),
-        )
-        self.mlp1 = self.mlp1.to(self.language_model.config.torch_dtype)
+        self.vision_projector = self.vision_projector.to(self.language_model.config.torch_dtype)
 
         self.sound_context_token_id = getattr(config, "sound_context_token_id", None)
         if config.sound_config is not None:
-            sound_config = config.sound_config
-            self.sound_encoder = NemotronH_Omni_Reasoning_V3SoundEncoder(sound_config)
-            self.sound_encoder = self.sound_encoder.to(self.language_model.config.torch_dtype)
-            self.sound_projection = NemotronH_Omni_Reasoning_V3SoundProjection(
-                sound_hidden_size=sound_config.hidden_size,
-                projection_hidden_size=sound_config.projection_hidden_size,
-                llm_hidden_size=llm_hidden_size,
-                bias=sound_config.projection_bias,
-            )
-            self.sound_projection = self.sound_projection.to(self.language_model.config.torch_dtype)
-            self.sound_projector = NemotronH_Omni_Reasoning_V3SoundProjector(sound_config)
+            self.sound_projector = NemotronH_Omni_Reasoning_V3SoundProjector(config.sound_config, llm_hidden_size)
+            self.sound_projector = self.sound_projector.to(self.language_model.config.torch_dtype)
         else:
-            self.sound_encoder = None
-            self.sound_projection = None
             self.sound_projector = None
 
         self.all_tied_weights_keys = {}
@@ -370,7 +363,7 @@ class NemotronH_Omni_Reasoning_V3(PreTrainedModel):
         input_ids = input_ids.reshape(B * N)
         selected = input_ids == self.img_context_token_id
 
-        vit_embeds = self.vision_projector(pixel_values, self.vision_model, self.mlp1)
+        vit_embeds = self.vision_projector(pixel_values, self.vision_model)
         del pixel_values
 
         vit_embeds = vit_embeds[image_flags == 1]
@@ -446,15 +439,13 @@ class NemotronH_Omni_Reasoning_V3(PreTrainedModel):
             image_vit_embeds, video_vit_embeds, sound_embeds = None, None, None
 
             if has_images:
-                image_vit_embeds = self.vision_projector(pixel_values, self.vision_model, self.mlp1)
+                image_vit_embeds = self.vision_projector(pixel_values, self.vision_model)
 
             if has_videos:
-                video_vit_embeds = self.vision_projector.forward_video(
-                    pixel_values_videos, self.vision_model, self.mlp1
-                )
+                video_vit_embeds = self.vision_projector.forward_video(pixel_values_videos, self.vision_model)
 
             if has_sound:
-                sound_embeds = self.sound_projector(sound_clips, self.sound_encoder, self.sound_projection)
+                sound_embeds = self.sound_projector(sound_clips)
 
             inputs_embeds = self.language_model.get_input_embeddings()(input_ids)
             B, N, C = inputs_embeds.shape

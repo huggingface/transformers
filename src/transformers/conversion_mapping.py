@@ -174,6 +174,13 @@ def _build_checkpoint_conversion_mapping():
                 operations=[Chunk(dim=0)],
             ),
         ],
+        "NemotronH_Omni_Reasoning_V3": [
+            WeightRenaming(r"^mlp1\.0\.", r"vision_projector\.mlp1\.norm\."),
+            WeightRenaming(r"^mlp1\.1\.", r"vision_projector\.mlp1\.up_proj\."),
+            WeightRenaming(r"^mlp1\.3\.", r"vision_projector\.mlp1\.down_proj\."),
+            WeightRenaming(r"^sound_encoder\.", r"sound_projector\.sound_encoder\."),
+            WeightRenaming(r"^sound_projection\.", r"sound_projector\.sound_projection\."),
+        ],
         "hrm_text": [
             WeightConverter(
                 source_patterns="mlp.gate_up_proj.weight",
