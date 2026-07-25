@@ -27,7 +27,6 @@ from pathlib import Path
 
 import torch
 from tokenizers import processors
-
 from transformers import (
     OnyxConfig,
     OnyxForConditionalGeneration,
@@ -71,7 +70,10 @@ O200K_PATTERN = (
 
 def _ordered_special_tokens() -> list[str]:
     """Return the 2048-entry ordered table; index i maps to id NUM_BASE_TOKENS + i."""
-    return [KEEP_SPECIAL_TOKENS.get(i, f"<|reserved_special_token_{i}|>") for i in range(NUM_RESERVED_SPECIAL_TOKENS)]
+    return [
+        KEEP_SPECIAL_TOKENS.get(i, f"<|reserved_special_token_{i}|>")
+        for i in range(NUM_RESERVED_SPECIAL_TOKENS)
+    ]
 
 
 def build_config():
@@ -136,7 +138,9 @@ TEXT_LAYER_RENAMES = {
 }
 
 
-def convert_text_state_dict(source: dict[str, torch.Tensor], config) -> dict[str, torch.Tensor]:
+def convert_text_state_dict(
+    source: dict[str, torch.Tensor], config
+) -> dict[str, torch.Tensor]:
     text_cfg = config.text_config
     n_layers = text_cfg.num_hidden_layers
     q_dim = text_cfg.num_attention_heads * text_cfg.head_dim
@@ -174,7 +178,13 @@ def convert_text_state_dict(source: dict[str, torch.Tensor], config) -> dict[str
         k
         for k in source
         if k.startswith("layers.")
-        or k in {"tok_embeddings.weight", "output.weight", "output.norm.weight", "vision_projection.weight"}
+        or k
+        in {
+            "tok_embeddings.weight",
+            "output.weight",
+            "output.norm.weight",
+            "vision_projection.weight",
+        }
     ]
     if leftover:
         raise RuntimeError(f"Unconsumed LLM keys after conversion: {leftover}")
@@ -213,14 +223,24 @@ VISION_LAYER_RENAMES = {
 def _permute_for_rope(tensor: torch.Tensor, n_heads: int) -> torch.Tensor:
     if tensor.ndim == 2:
         dim1, dim2 = tensor.shape
-        return tensor.view(n_heads, dim1 // n_heads // 2, 2, dim2).transpose(1, 2).reshape(dim1, dim2)
+        return (
+            tensor.view(n_heads, dim1 // n_heads // 2, 2, dim2)
+            .transpose(1, 2)
+            .reshape(dim1, dim2)
+        )
     if tensor.ndim == 1:
         (dim1,) = tensor.shape
-        return tensor.view(n_heads, dim1 // n_heads // 2, 2).transpose(1, 2).reshape(dim1)
-    raise ValueError(f"_permute_for_rope: unexpected tensor shape {tuple(tensor.shape)}")
+        return (
+            tensor.view(n_heads, dim1 // n_heads // 2, 2).transpose(1, 2).reshape(dim1)
+        )
+    raise ValueError(
+        f"_permute_for_rope: unexpected tensor shape {tuple(tensor.shape)}"
+    )
 
 
-def convert_vision_state_dict(source: dict[str, torch.Tensor], config) -> dict[str, torch.Tensor]:
+def convert_vision_state_dict(
+    source: dict[str, torch.Tensor], config
+) -> dict[str, torch.Tensor]:
     if "weights" in source and isinstance(source["weights"], dict):
         source = source["weights"]
 
@@ -246,7 +266,9 @@ def convert_vision_state_dict(source: dict[str, torch.Tensor], config) -> dict[s
             out[f"{dst}.{dst_suffix}"] = source.pop(f"{src}.{src_suffix}")
 
     if source:
-        raise RuntimeError(f"Unconsumed vision-shard keys after conversion: {sorted(source)[:20]}")
+        raise RuntimeError(
+            f"Unconsumed vision-shard keys after conversion: {sorted(source)[:20]}"
+        )
 
     return out
 
@@ -325,7 +347,7 @@ class OnyxTokenizerConverter(TikTokenConverter):
         self.converted_tokenizer = TokenizersBackend(
             tokenizer_object=tokenizer_obj,
             additional_special_tokens=self.additional_special_tokens,
-            model_max_length=16_384,
+            model_max_length=131072,
         )
         self.converted_tokenizer.bos_token = "<|begin_of_text|>"
         self.converted_tokenizer.eos_token = "<|end_of_text|>"
@@ -337,10 +359,12 @@ class OnyxTokenizerConverter(TikTokenConverter):
         self.converted_tokenizer.response_schema = ONYX_RESPONSE_SCHEMA
 
         bos_id = self.converted_tokenizer.convert_tokens_to_ids("<|begin_of_text|>")
-        self.converted_tokenizer._tokenizer.post_processor = processors.TemplateProcessing(
-            single="<|begin_of_text|> $A",
-            pair="<|begin_of_text|>:0 $A:0 <|begin_of_text|>:1 $B:1",
-            special_tokens=[("<|begin_of_text|>", bos_id)],
+        self.converted_tokenizer._tokenizer.post_processor = (
+            processors.TemplateProcessing(
+                single="<|begin_of_text|> $A",
+                pair="<|begin_of_text|>:0 $A:0 <|begin_of_text|>:1 $B:1",
+                special_tokens=[("<|begin_of_text|>", bos_id)],
+            )
         )
 
 
@@ -348,12 +372,24 @@ def convert_tokenizer(tokenizer_path: Path, output_dir: Path) -> None:
     converter = OnyxTokenizerConverter(str(tokenizer_path))
     tokenizer = converter.converted_tokenizer
 
-    expected_ids = {name: NUM_BASE_TOKENS + i for i, name in enumerate(_ordered_special_tokens())}
-    for name in ("<|begin_of_text|>", "<|end_of_text|>", "<|eom|>", "<|eot|>", "<|image|>", "<|patch|>", "<|video|>"):
+    expected_ids = {
+        name: NUM_BASE_TOKENS + i for i, name in enumerate(_ordered_special_tokens())
+    }
+    for name in (
+        "<|begin_of_text|>",
+        "<|end_of_text|>",
+        "<|eom|>",
+        "<|eot|>",
+        "<|image|>",
+        "<|patch|>",
+        "<|video|>",
+    ):
         got = tokenizer.convert_tokens_to_ids(name)
         want = expected_ids[name]
         if got != want:
-            raise RuntimeError(f"Special-token id mismatch for {name!r}: got {got}, want {want}")
+            raise RuntimeError(
+                f"Special-token id mismatch for {name!r}: got {got}, want {want}"
+            )
 
     processor = OnyxProcessor(
         image_processor=OnyxImageProcessor(),
@@ -376,7 +412,7 @@ def write_generation_config(output_dir: Path) -> None:
         "bos_token_id": 200000,
         "eos_token_id": [200001, 200008],
         "pad_token_id": 200018,
-        "max_length": 16384,
+        "max_length": 131072,
         "do_sample": False,
     }
     with open(output_dir / "generation_config.json", "w") as f:
@@ -426,7 +462,9 @@ def main():
     state_dict: dict[str, torch.Tensor] = convert_text_state_dict(llm_state, config)
 
     print(f"Loading vision shard from {args.vision_checkpoint_path}...")
-    vision_state = torch.load(args.vision_checkpoint_path, map_location="cpu", weights_only=True)
+    vision_state = torch.load(
+        args.vision_checkpoint_path, map_location="cpu", weights_only=True
+    )
     state_dict.update(convert_vision_state_dict(vision_state, config))
 
     print(f"Materialising {OnyxForConditionalGeneration.__name__} on meta device...")
