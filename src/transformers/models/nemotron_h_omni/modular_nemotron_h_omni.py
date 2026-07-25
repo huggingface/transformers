@@ -90,35 +90,6 @@ def compute_retention_mask(
     return mask
 
 
-class NemotronH_Omni_Reasoning_V3SoundProjection(nn.Module):
-    """MLP projection from sound encoder hidden size to LLM hidden size.
-
-    Architecture: RMSNorm -> linear1 -> ReLU² -> linear2, matching the Megatron
-    checkpoint structure (`sound_projection.{norm,linear1,linear2}.weight`).
-    """
-
-    def __init__(
-        self,
-        sound_hidden_size: int,
-        projection_hidden_size: int,
-        llm_hidden_size: int,
-        bias: bool = True,
-        eps: float = 1e-5,
-    ):
-        super().__init__()
-        self.norm = NemotronH_Omni_RMSNorm(sound_hidden_size, eps=eps)
-        self.linear1 = nn.Linear(sound_hidden_size, projection_hidden_size, bias=bias)
-        self.activation = ACT2FN["relu2"]
-        self.linear2 = nn.Linear(projection_hidden_size, llm_hidden_size, bias=bias)
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        hidden_states = self.norm(hidden_states)
-        hidden_states = self.linear1(hidden_states)
-        hidden_states = self.activation(hidden_states)
-        hidden_states = self.linear2(hidden_states)
-        return hidden_states
-
-
 class NemotronH_Omni_Reasoning_V3SoundEncoder(nn.Module):
     """Thin wrapper exposing the Parakeet encoder's `last_hidden_state` for audio embedding."""
 
@@ -148,10 +119,10 @@ class NemotronH_Omni_Reasoning_V3SoundProjector(nn.Module):
             feature_size=config.num_mel_bins,
         )
         self.sound_encoder = NemotronH_Omni_Reasoning_V3SoundEncoder(config)
-        self.sound_projection = NemotronH_Omni_Reasoning_V3SoundProjection(
-            sound_hidden_size=config.hidden_size,
-            projection_hidden_size=config.projection_hidden_size,
-            llm_hidden_size=llm_hidden_size,
+        self.sound_projection = NemotronH_Omni_Reasoning_V3MLP(
+            config.hidden_size,
+            config.projection_hidden_size,
+            llm_hidden_size,
             bias=config.projection_bias,
         )
 
@@ -184,17 +155,24 @@ class NemotronH_Omni_Reasoning_V3SoundProjector(nn.Module):
 
 
 class NemotronH_Omni_Reasoning_V3MLP(nn.Module):
-    """Vision-to-LLM projector MLP: RMSNorm -> up_proj -> ReLU² -> down_proj (NemotronHMLP-style)."""
+    """Projector MLP: RMSNorm -> linear1 -> ReLU² -> linear2 (NemotronHMLP-style).
 
-    def __init__(self, in_features: int, hidden_features: int, out_features: int, eps: float = 1e-5):
+    Used both for the vision-to-LLM projector (`mlp1`) and the sound-to-LLM projection. The
+    `linear1`/`linear2` submodule names match the Megatron sound-projection checkpoint structure
+    (`sound_projection.{norm,linear1,linear2}.weight`); pass `bias=True` for the sound projection.
+    """
+
+    def __init__(
+        self, in_features: int, hidden_features: int, out_features: int, bias: bool = False, eps: float = 1e-5
+    ):
         super().__init__()
         self.norm = NemotronH_Omni_RMSNorm(in_features, eps=eps)
-        self.up_proj = nn.Linear(in_features, hidden_features, bias=False)
-        self.down_proj = nn.Linear(hidden_features, out_features, bias=False)
+        self.linear1 = nn.Linear(in_features, hidden_features, bias=bias)
+        self.linear2 = nn.Linear(hidden_features, out_features, bias=bias)
         self.act_fn = ACT2FN["relu2"]
 
     def forward(self, x):
-        return self.down_proj(self.act_fn(self.up_proj(self.norm(x))))
+        return self.linear2(self.act_fn(self.linear1(self.norm(x))))
 
 
 class NemotronH_Omni_Reasoning_V3VisionProjector(nn.Module):
