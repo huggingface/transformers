@@ -889,19 +889,19 @@ class EfficientViTLargeBackbone(nn.Module):
 
 
 class SamNeck(nn.Module):
-    def __init__(
-        self,
-        fid_list: list[str],
-        in_channel_list: list[int],
-        head_width: int,
-        head_depth: int,
-        expand_ratio: float,
-        middle_op: str,
-        out_dim: int = 256,
-        norm: str = "bn2d",
-        act_func: str = "gelu",
-    ):
+    def __init__(self, config: EfficientViTSamVisionConfig):
         super().__init__()
+
+        fid_list = config.fid_list
+        in_channel_list = config.in_channel_list
+        head_width = config.head_width
+        head_depth = config.head_depth
+        expand_ratio = config.expand_ratio
+        middle_op = config.middle_op
+        out_dim = config.out_dim
+        norm = config.norm
+        act_func = config.act_func
+
         self.fid_list = fid_list
 
         self.proj_layers = nn.ModuleDict()
@@ -990,18 +990,8 @@ class EfficientViTSamImageEncoder(EfficientViTSamPreTrainedModel):
     def __init__(self, config: EfficientViTSamVisionConfig):
         super().__init__(config)
         self.backbone = EfficientViTLargeBackbone(config=config)
-        self.neck = SamNeck(
-            fid_list=config.fid_list,
-            in_channel_list=config.in_channel_list,
-            head_width=config.head_width,
-            head_depth=config.head_depth,
-            expand_ratio=config.expand_ratio,
-            middle_op=config.middle_op,
-            out_dim=config.out_dim,
-            norm=config.norm,
-            act_func=config.act_func,
-        )
-        self.norm = build_norm("ln2d", config.out_dim)
+        self.neck = SamNeck(config=config)
+        self.norm = LayerNorm2d(config.out_dim)
         self.gradient_checkpointing = False
         self.post_init()
 
