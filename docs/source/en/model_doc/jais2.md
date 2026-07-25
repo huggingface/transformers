@@ -19,7 +19,7 @@ rendered properly in your Markdown viewer.
 
 ## Overview
 
-Jais2 a next-generation Arabic open-weight LLM trained on the richest Arabic-first dataset to date. Built from the ground up with 8B and 70B parameters, Jais 2 understands Arabic the way it's truly spoken across dialects, cuulutre, and modern expression. It is developed by MBZUAI, Inception and Cerebras Systems and based on the transformer architecture with modifications including:
+Jais2 a next-generation Arabic open-weight LLM trained on the richest Arabic-first dataset to date. Built from the ground up with 8B and 70B parameters, Jais 2 understands Arabic the way it's truly spoken across dialects, culture, and modern expression. It is developed by MBZUAI, Inception and Cerebras Systems and based on the transformer architecture with modifications including:
 
 - LayerNorm instead of RMSNorm
 - ReLU² activation function
