@@ -150,10 +150,20 @@ class Gemma4UnifiedProcessor(ProcessorMixin):
             images = make_nested_list_of_images(images)
 
         # Create empty text to be replaced with placeholders
-        if images and not text:
-            text = [" ".join([self.image_token] * len(image_list)) for image_list in images]
-        if audio and not text:
-            text = [self.audio_token] * len(audio)
+        if not text:
+            text = None
+            if images:
+                text = [" ".join([self.image_token] * len(image_list)) for image_list in images]
+            if audio:
+                audio_text = [self.audio_token] * len(audio)
+                if text is None:
+                    text = audio_text
+                else:
+                    if len(audio_text) != len(text):
+                        raise ValueError(
+                            f"Received inconsistently sized batches of audio ({len(audio_text)}) and text ({len(text)})."
+                        )
+                    text = [f"{sample_text} {sample_audio}" for sample_text, sample_audio in zip(text, audio_text)]
 
         return images, text, videos, audio
 
@@ -167,10 +177,10 @@ class Gemma4UnifiedProcessor(ProcessorMixin):
     ):
         super().validate_inputs(images=images, text=text, **kwargs)
 
-        if text is None and images is None:
-            raise ValueError("You must provide either `text` or `images`.")
+        if text is None and images is None and audio is None:
+            raise ValueError("You must provide either `text`, `images` or `audio`.")
 
-        if audio is not None and self.audio_token is None or self.boa_token is None or self.eoa_token is None:
+        if audio is not None and (self.audio_token is None or self.boa_token is None or self.eoa_token is None):
             raise ValueError("Audio inputs were provided, but the tokenizer does not have an `audio_token` defined.")
 
         if text is not None:
@@ -191,6 +201,20 @@ class Gemma4UnifiedProcessor(ProcessorMixin):
                 raise ValueError(
                     f"Found {sum(n_images_in_text)} {self.image_token} tokens in the text but no images were passed."
                 )
+
+            if self.audio_token is not None:
+                n_audio_in_text = [sample.count(self.audio_token) for sample in text]
+                if audio is not None:
+                    n_audio_in_audio = len(audio)
+                    if sum(n_audio_in_text) != n_audio_in_audio:
+                        raise ValueError(
+                            f"The total number of {self.audio_token} tokens in the prompts should be the same as the number of audio inputs passed."
+                            f" Found {n_audio_in_text} {self.audio_token} tokens in the prompts and {n_audio_in_audio} audio inputs."
+                        )
+                elif audio is None and any(n_audio_in_text):
+                    raise ValueError(
+                        f"Found {sum(n_audio_in_text)} {self.audio_token} tokens in the text but no audio was passed."
+                    )
 
     def replace_image_token(self, image_inputs: dict, image_idx: int) -> str:
         num_soft_tokens = image_inputs["num_soft_tokens_per_image"][image_idx]
