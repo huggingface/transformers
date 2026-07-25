@@ -26,6 +26,7 @@ from ...masking_utils import create_sliding_window_causal_mask
 from ...modeling_utils import PreTrainedAudioTokenizerBase
 from ...utils import auto_docstring, can_return_tuple, logging
 from ..dac.feature_extraction_dac import DacFeatureExtractor
+from ..dac.modeling_dac import DacVectorQuantize
 from ..dinov2.modeling_dinov2 import Dinov2LayerScale
 from ..llama.modeling_llama import LlamaAttention, LlamaRotaryEmbedding
 from ..whisper.modeling_whisper import WhisperEncoderLayer
@@ -246,19 +247,11 @@ class MossAudioTokenizerUpsample(nn.Module):
         return hidden_states, output_lengths
 
 
-class MossAudioTokenizerLFQ(nn.Module):
+class MossAudioTokenizerLFQ(DacVectorQuantize):
     """LFQ (inference-only) used by ResidualLFQ."""
 
     def __init__(self, config: MossAudioTokenizerQuantizerConfig):
-        super().__init__()
-        self.hidden_size = config.hidden_size
-        self.codebook_size = config.codebook_size
-        self.codebook_dim = config.codebook_dim
-
-        self.in_proj = nn.Conv1d(self.hidden_size, self.codebook_dim, kernel_size=1)
-        self.out_proj = nn.Conv1d(self.codebook_dim, self.hidden_size, kernel_size=1)
-
-        self.codebook = nn.Embedding(self.codebook_size, self.codebook_dim)
+        super().__init__(config)
 
     def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """Quantize hidden states into codebook vectors."""

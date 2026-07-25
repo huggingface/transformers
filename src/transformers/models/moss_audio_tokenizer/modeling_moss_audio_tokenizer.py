@@ -469,14 +469,11 @@ class MossAudioTokenizerLFQ(nn.Module):
 
     def __init__(self, config: MossAudioTokenizerQuantizerConfig):
         super().__init__()
-        self.hidden_size = config.hidden_size
-        self.codebook_size = config.codebook_size
+
         self.codebook_dim = config.codebook_dim
-
-        self.in_proj = nn.Conv1d(self.hidden_size, self.codebook_dim, kernel_size=1)
-        self.out_proj = nn.Conv1d(self.codebook_dim, self.hidden_size, kernel_size=1)
-
-        self.codebook = nn.Embedding(self.codebook_size, self.codebook_dim)
+        self.in_proj = nn.Conv1d(config.hidden_size, config.codebook_dim, kernel_size=1)
+        self.out_proj = nn.Conv1d(config.codebook_dim, config.hidden_size, kernel_size=1)
+        self.codebook = nn.Embedding(config.codebook_size, config.codebook_dim)
 
     def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """Quantize hidden states into codebook vectors."""
@@ -488,17 +485,6 @@ class MossAudioTokenizerLFQ(nn.Module):
         ).float()
         quantized_hidden_states = self.out_proj(quantized_hidden_states).float()
         return quantized_hidden_states, indices, projected_hidden_states
-
-    def embed_code(self, code_indices: torch.Tensor) -> torch.Tensor:
-        return F.embedding(code_indices, self.codebook.weight)
-
-    def decode_code_wo_out_proj(self, code_indices: torch.Tensor) -> torch.Tensor:
-        return self.embed_code(code_indices).transpose(1, 2)
-
-    def decode_code(self, code_indices: torch.Tensor) -> torch.Tensor:
-        quantized_hidden_states = self.decode_code_wo_out_proj(code_indices).float()
-        quantized_hidden_states = self.out_proj(quantized_hidden_states).float()
-        return quantized_hidden_states
 
     def decode_latents(self, latents: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         """Match training LFQ: L2-normalize then argmin squared distance."""
@@ -517,6 +503,17 @@ class MossAudioTokenizerLFQ(nn.Module):
         indices = indices.reshape(latents.size(0), -1)
         quantized_hidden_states = self.decode_code_wo_out_proj(indices).float()
         return quantized_hidden_states, indices
+
+    def embed_code(self, code_indices: torch.Tensor) -> torch.Tensor:
+        return F.embedding(code_indices, self.codebook.weight)
+
+    def decode_code_wo_out_proj(self, code_indices: torch.Tensor) -> torch.Tensor:
+        return self.embed_code(code_indices).transpose(1, 2)
+
+    def decode_code(self, code_indices: torch.Tensor) -> torch.Tensor:
+        quantized_hidden_states = self.decode_code_wo_out_proj(code_indices).float()
+        quantized_hidden_states = self.out_proj(quantized_hidden_states).float()
+        return quantized_hidden_states
 
 
 class MossAudioTokenizerResidualLFQ(nn.Module):
