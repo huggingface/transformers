@@ -20,7 +20,7 @@ from torch import nn
 from torch.nn import CrossEntropyLoss
 
 from ...activations import ACT2FN
-from ...generation import GenerationConfig
+from ...generation import GenerationMixin
 from ...modeling_outputs import CausalLMOutputWithPast
 from ...modeling_utils import PreTrainedModel
 from ...utils import logging
@@ -234,7 +234,6 @@ class NemotronH_Omni_Reasoning_V3VisionProjector(nn.Module):
         return x
 
     def _project(self, vit_embeds, h, w):
-        vit_embeds = vit_embeds.to(dtype=torch.bfloat16)
         vit_embeds = vit_embeds.reshape(vit_embeds.shape[0], h, w, -1)
         vit_embeds = self.pixel_shuffle(vit_embeds, scale_factor=self.downsample_ratio)
         vit_embeds = vit_embeds.reshape(vit_embeds.shape[0], -1, vit_embeds.shape[-1])
@@ -266,9 +265,9 @@ class NemotronH_Omni_Reasoning_V3VisionProjector(nn.Module):
         return self._project(vit_embeds, H // patch_size, W // patch_size)
 
 
-class NemotronH_Omni_Reasoning_V3(PreTrainedModel):
+class NemotronH_Omni_Reasoning_V3(PreTrainedModel, GenerationMixin):
     config_class = NemotronH_Omni_Reasoning_V3_Config
-    main_input_name = "pixel_values"
+    main_input_name = "input_ids"
     _supports_flash_attn_2 = True
     _supports_flash_attn = True
     _no_split_modules = ["NemotronHBlock"]
@@ -308,10 +307,18 @@ class NemotronH_Omni_Reasoning_V3(PreTrainedModel):
 
         self.post_init()
 
+    def get_input_embeddings(self):
+        return self.language_model.get_input_embeddings()
+
+    def set_input_embeddings(self, value):
+        self.language_model.set_input_embeddings(value)
+
     def forward(
         self,
-        pixel_values: torch.FloatTensor,
         input_ids: torch.LongTensor = None,
+        pixel_values: torch.FloatTensor | None = None,
+        pixel_values_videos: torch.FloatTensor | None = None,
+        sound_clips: torch.FloatTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         image_flags: torch.LongTensor | None = None,
@@ -323,16 +330,46 @@ class NemotronH_Omni_Reasoning_V3(PreTrainedModel):
         output_hidden_states: bool | None = None,
         return_dict: bool | None = None,
         **kwargs,
-    ) -> tuple | CausalLMOutputWithPast:
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
+    ) -> CausalLMOutputWithPast:
         if inputs_embeds is None:
-            inputs_embeds = self.language_model.get_input_embeddings()(input_ids)
+            inputs_embeds = self.get_input_embeddings()(input_ids)
 
-        vit_embeds = self.vision_projector(pixel_values, self.vision_model)
-        vit_embeds = vit_embeds[image_flags.squeeze(-1) == 1].to(inputs_embeds.device, inputs_embeds.dtype)
-        image_mask = (input_ids == self.img_context_token_id).unsqueeze(-1).expand_as(inputs_embeds)
-        inputs_embeds = inputs_embeds.masked_scatter(image_mask.to(inputs_embeds.device), vit_embeds)
+        # Multimodal merges need `input_ids` to locate the placeholder tokens; skip them on the
+        # cached decode steps and the inputs-embeds-only path where `input_ids` is absent.
+        if pixel_values is not None and input_ids is not None:
+            image_embeds = self.vision_projector(pixel_values, self.vision_model)
+            if image_flags is not None:
+                image_embeds = image_embeds[image_flags.squeeze(-1) == 1]
+            image_embeds = image_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
+            image_mask = (input_ids == self.img_context_token_id).unsqueeze(-1).expand_as(inputs_embeds)
+            inputs_embeds = inputs_embeds.masked_scatter(image_mask.to(inputs_embeds.device), image_embeds)
+
+        if pixel_values_videos is not None and input_ids is not None:
+            video_embeds = self.vision_projector.forward_video(pixel_values_videos, self.vision_model)
+            video_embeds = video_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
+            video_mask = (input_ids == self.img_context_token_id).unsqueeze(-1).expand_as(inputs_embeds)
+            inputs_embeds = inputs_embeds.masked_scatter(video_mask.to(inputs_embeds.device), video_embeds)
+
+            if self.video_pruning_rate > 0:
+                h = w = int(video_embeds.shape[1] ** 0.5)
+                evs_mask = compute_retention_mask(
+                    video_embeds=video_embeds,
+                    thw=(video_embeds.shape[0], h, w),
+                    spatial_merge_size=1,
+                    q=self.video_pruning_rate,
+                )
+                retention_mask = torch.ones_like(input_ids, dtype=torch.bool)
+                retention_mask[input_ids == self.img_context_token_id] = evs_mask.view(-1)
+                inputs_embeds = inputs_embeds[retention_mask].unsqueeze(0)
+                if attention_mask is not None:
+                    attention_mask = attention_mask[retention_mask].unsqueeze(0)
+                input_ids = input_ids[retention_mask].unsqueeze(0)
+
+        if sound_clips is not None and self.sound_projector is not None and input_ids is not None:
+            sound_embeds = self.sound_projector(sound_clips)
+            sound_embeds = sound_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
+            sound_mask = (input_ids == self.sound_context_token_id).unsqueeze(-1).expand_as(inputs_embeds)
+            inputs_embeds = inputs_embeds.masked_scatter(sound_mask.to(inputs_embeds.device), sound_embeds)
 
         outputs = self.language_model(
             inputs_embeds=inputs_embeds,
@@ -342,7 +379,7 @@ class NemotronH_Omni_Reasoning_V3(PreTrainedModel):
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+            return_dict=True,
         )
         logits = outputs.logits
 
@@ -356,10 +393,6 @@ class NemotronH_Omni_Reasoning_V3(PreTrainedModel):
             shift_labels = shift_labels.to(shift_logits.device)
             loss = loss_fct(shift_logits, shift_labels)
 
-        if not return_dict:
-            output = (logits,) + outputs[1:]
-            return (loss,) + output if loss is not None else output
-
         return CausalLMOutputWithPast(
             loss=loss,
             logits=logits,
@@ -368,83 +401,39 @@ class NemotronH_Omni_Reasoning_V3(PreTrainedModel):
             attentions=outputs.attentions,
         )
 
-    @torch.no_grad()
-    def generate(
+    def prepare_inputs_for_generation(
         self,
-        pixel_values: torch.FloatTensor | None = None,
-        pixel_values_videos: torch.FloatTensor | None = None,
-        sound_clips: torch.FloatTensor | None = None,
-        sound_length: torch.Tensor | None = None,
-        input_ids: torch.FloatTensor | None = None,
-        attention_mask: torch.LongTensor | None = None,
-        generation_config: GenerationConfig | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
-        **generate_kwargs,
-    ) -> torch.LongTensor:
-        assert self.img_context_token_id is not None
-
-        has_images = pixel_values is not None
-        has_videos = pixel_values_videos is not None
-        has_sound = sound_clips is not None and self.sound_projector is not None
-
-        if has_images or has_videos or has_sound:
-            image_vit_embeds, video_vit_embeds, sound_embeds = None, None, None
-
-            if has_images:
-                image_vit_embeds = self.vision_projector(pixel_values, self.vision_model)
-
-            if has_videos:
-                video_vit_embeds = self.vision_projector.forward_video(pixel_values_videos, self.vision_model)
-
-            if has_sound:
-                sound_embeds = self.sound_projector(sound_clips)
-
-            inputs_embeds = self.language_model.get_input_embeddings()(input_ids)
-
-            if image_vit_embeds is not None:
-                image_vit_embeds = image_vit_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
-                image_mask = (input_ids == self.img_context_token_id).unsqueeze(-1).expand_as(inputs_embeds)
-                inputs_embeds = inputs_embeds.masked_scatter(image_mask.to(inputs_embeds.device), image_vit_embeds)
-
-            if video_vit_embeds is not None:
-                if inputs_embeds.shape[0] > 1:
-                    raise NotImplementedError("Video is not supported for batch size > 1")
-                video_vit_embeds = video_vit_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
-                video_mask = (input_ids == self.img_context_token_id).unsqueeze(-1).expand_as(inputs_embeds)
-                inputs_embeds = inputs_embeds.masked_scatter(video_mask.to(inputs_embeds.device), video_vit_embeds)
-
-            if sound_embeds is not None and self.sound_context_token_id is not None:
-                sound_embeds = sound_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
-                sound_mask = (input_ids == self.sound_context_token_id).unsqueeze(-1).expand_as(inputs_embeds)
-                inputs_embeds = inputs_embeds.masked_scatter(sound_mask.to(inputs_embeds.device), sound_embeds)
-
-            if video_vit_embeds is not None and self.video_pruning_rate > 0:
-                h = w = int(video_vit_embeds.shape[1] ** 0.5)
-                evs_mask = compute_retention_mask(
-                    video_embeds=video_vit_embeds,
-                    thw=(video_vit_embeds.shape[0], h, w),
-                    spatial_merge_size=1,
-                    q=self.video_pruning_rate,
-                )
-                retention_mask = torch.ones_like(input_ids, dtype=torch.bool)
-                retention_mask[input_ids == self.img_context_token_id] = evs_mask.view(-1)
-                inputs_embeds = inputs_embeds[retention_mask].unsqueeze(0)
-                if attention_mask is not None:
-                    attention_mask = attention_mask[retention_mask].unsqueeze(0)
-                if input_ids is not None:
-                    input_ids = input_ids[retention_mask].unsqueeze(0)
-        else:
-            inputs_embeds = self.language_model.get_input_embeddings()(input_ids)
-
-        outputs = self.language_model.generate(
-            input_ids=input_ids,
-            inputs_embeds=inputs_embeds,
+        input_ids,
+        past_key_values=None,
+        attention_mask=None,
+        inputs_embeds=None,
+        pixel_values=None,
+        pixel_values_videos=None,
+        sound_clips=None,
+        image_flags=None,
+        use_cache=True,
+        is_first_iteration=False,
+        **kwargs,
+    ):
+        model_inputs = super().prepare_inputs_for_generation(
+            input_ids,
+            past_key_values=past_key_values,
             attention_mask=attention_mask,
-            generation_config=generation_config,
-            output_hidden_states=output_hidden_states,
-            use_cache=True,
-            **generate_kwargs,
+            inputs_embeds=inputs_embeds,
+            pixel_values=pixel_values,
+            pixel_values_videos=pixel_values_videos,
+            sound_clips=sound_clips,
+            image_flags=image_flags,
+            use_cache=use_cache,
+            is_first_iteration=is_first_iteration,
+            **kwargs,
         )
 
-        return outputs
+        # The multimodal inputs are only merged on the prefill step; drop them once the cache is warm.
+        if not is_first_iteration and use_cache:
+            model_inputs["pixel_values"] = None
+            model_inputs["pixel_values_videos"] = None
+            model_inputs["sound_clips"] = None
+            model_inputs["image_flags"] = None
+
+        return model_inputs

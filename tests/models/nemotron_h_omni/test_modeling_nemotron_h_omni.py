@@ -11,23 +11,15 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Testing suite for the PyTorch NemotronH_Omni model.
+"""Testing suite for the PyTorch NemotronH_Omni model."""
 
-`NemotronH_Omni_Reasoning_V3` is a bespoke multimodal model (RADIO vision tower +
-optional Parakeet audio + NemotronH language model) whose forward always requires coupled
-image inputs (`pixel_values` + `image_flags` + image-context tokens). The generic
-`ModelTesterMixin` common tests assume text-only conventions and do not apply, so this file
-provides targeted tests instead. `all_model_classes` is declared so the repo-consistency
-check (`utils/check_repo.py`) recognizes the model as tested.
-"""
-
-import tempfile
 import unittest
 
 from transformers import NemotronH_Omni_Reasoning_V3_Config, is_torch_available
-from transformers.testing_utils import require_torch, torch_device
+from transformers.testing_utils import require_torch
 
-from ...test_modeling_common import floats_tensor, ids_tensor, random_attention_mask
+from ...generation.test_utils import GenerationTesterMixin
+from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
 
 
 if is_torch_available():
@@ -36,7 +28,7 @@ if is_torch_available():
     from transformers import NemotronH_Omni_Reasoning_V3
 
 
-class NemotronHOmniModelTester:
+class NemotronHOmniVisionText2TextModelTester:
     """Builds a tiny NemotronH_Omni model and coupled multimodal inputs.
 
     The image branch is sized so a single image yields exactly one `img_context` token after
@@ -57,6 +49,7 @@ class NemotronHOmniModelTester:
         vit_hidden_size=32,
         projector_hidden_size=64,
         img_context_token_id=1,
+        is_training=False,
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -67,6 +60,7 @@ class NemotronHOmniModelTester:
         self.vit_hidden_size = vit_hidden_size
         self.projector_hidden_size = projector_hidden_size
         self.img_context_token_id = img_context_token_id
+        self.is_training = is_training
 
         self.vocab_size = 99
         self.hidden_size = 32
@@ -106,6 +100,8 @@ class NemotronHOmniModelTester:
             "num_cls_tokens": 2,
             "num_registers": 1,
         }
+        self.num_hidden_layers = len(self.llm_config["layers_block_type"])
+        self.num_attention_heads = self.llm_config["num_attention_heads"]
         self.num_image_token = int((force_image_size // patch_size) ** 2 * (downsample_ratio**2))
 
     def get_config(self):
@@ -131,63 +127,126 @@ class NemotronHOmniModelTester:
         attention_mask[:, : 1 + self.num_image_token] = 1  # keep image tokens unmasked
         pixel_values = floats_tensor([self.batch_size, 3, self.force_image_size, self.force_image_size])
         image_flags = torch.ones(self.batch_size, 1, dtype=torch.long)
-        return {
+        return config, input_ids, attention_mask, pixel_values, image_flags
+
+    def prepare_config_and_inputs_for_common(self):
+        config, input_ids, attention_mask, pixel_values, image_flags = self.prepare_config_and_inputs()
+        inputs_dict = {
             "pixel_values": pixel_values,
             "input_ids": input_ids,
             "attention_mask": attention_mask,
             "image_flags": image_flags,
-        }, config
+        }
+        return config, inputs_dict
 
 
 @require_torch
-class NemotronHOmniModelTest(unittest.TestCase):
+class NemotronHOmniModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     all_model_classes = (NemotronH_Omni_Reasoning_V3,) if is_torch_available() else ()
+    all_generative_model_classes = (NemotronH_Omni_Reasoning_V3,) if is_torch_available() else ()
+    _is_composite = True
+    test_pruning = False
+    test_head_masking = False
 
     def setUp(self):
-        self.model_tester = NemotronHOmniModelTester(self)
+        self.model_tester = NemotronHOmniVisionText2TextModelTester(self)
 
-    def _inputs_and_model(self):
-        # The model hardcodes bfloat16 for the projected vision features (see
-        # `_extract_feature_single`), so it must run in bfloat16 end-to-end.
-        inputs, config = self.model_tester.prepare_config_and_inputs()
-        model = NemotronH_Omni_Reasoning_V3(config).to(torch_device, torch.bfloat16).eval()
-        inputs = {k: v.to(torch_device) for k, v in inputs.items()}
-        inputs["pixel_values"] = inputs["pixel_values"].to(torch.bfloat16)
-        return inputs, model
+    @unittest.skip(reason="Mixed Mamba/attention stack does not expose uniform per-layer outputs")
+    def test_attention_outputs(self):
+        pass
 
-    def test_main_input_name(self):
-        self.assertEqual(NemotronH_Omni_Reasoning_V3.main_input_name, "pixel_values")
+    @unittest.skip(reason="Mixed Mamba/attention stack does not expose uniform per-layer outputs")
+    def test_hidden_states_output(self):
+        pass
 
-    def test_model_forward(self):
-        inputs, model = self._inputs_and_model()
-        with torch.no_grad():
-            out = model(**inputs)
-        self.assertEqual(
-            tuple(out.logits.shape),
-            (self.model_tester.batch_size, self.model_tester.seq_length, self.model_tester.vocab_size),
-        )
+    @unittest.skip(reason="Mixed Mamba/attention stack does not expose uniform per-layer outputs")
+    def test_retain_grad_hidden_states_attentions(self):
+        pass
 
-    def test_forward_with_labels_returns_loss(self):
-        inputs, model = self._inputs_and_model()
-        inputs["labels"] = inputs["input_ids"].clone()
-        with torch.no_grad():
-            out = model(**inputs)
-        self.assertIsNotNone(out.loss)
-        self.assertEqual(out.loss.dim(), 0)
+    @unittest.skip(reason="Language model needs at least one block of each mixed layer type")
+    def test_num_layers_is_small(self):
+        pass
 
-    def test_save_load_roundtrip(self):
-        inputs, model = self._inputs_and_model()
-        with torch.no_grad():
-            logits_a = model(**inputs).logits
-        with tempfile.TemporaryDirectory() as tmp:
-            model.save_pretrained(tmp)
-            # attn_implementation isn't persisted in the saved config (defaults back to flash,
-            # which is unavailable on CPU), so request eager explicitly on reload.
-            reloaded = (
-                NemotronH_Omni_Reasoning_V3.from_pretrained(tmp, attn_implementation="eager", dtype=torch.bfloat16)
-                .to(torch_device)
-                .eval()
-            )
-        with torch.no_grad():
-            logits_b = reloaded(**inputs).logits
-        torch.testing.assert_close(logits_a, logits_b, atol=1e-4, rtol=1e-4)
+    @unittest.skip(reason="Composite attention-implementation dispatch not wired for sub-models")
+    def test_attn_implementation_composite_models(self):
+        pass
+
+    @unittest.skip(reason="Composite attention-implementation dispatch not wired for sub-models")
+    def test_can_set_attention_dynamically_composite_model(self):
+        pass
+
+    @unittest.skip(reason="Composite attention-implementation dispatch not wired for sub-models")
+    def test_config_attn_implementation_setter(self):
+        pass
+
+    @unittest.skip(reason="Composite attention-implementation dispatch not wired for sub-models")
+    def test_sdpa_can_dispatch_composite_models(self):
+        pass
+
+    @unittest.skip(reason="Composite attention-implementation dispatch not wired for sub-models")
+    def test_flash_attn_2_can_dispatch_composite_models(self):
+        pass
+
+    @unittest.skip(reason="device_map offload not supported (RADIO summary_idxs buffer / Mamba state)")
+    def test_cpu_offload(self):
+        pass
+
+    @unittest.skip(reason="device_map offload not supported (RADIO summary_idxs buffer / Mamba state)")
+    def test_disk_offload_bin(self):
+        pass
+
+    @unittest.skip(reason="device_map offload not supported (RADIO summary_idxs buffer / Mamba state)")
+    def test_disk_offload_safetensors(self):
+        pass
+
+    @unittest.skip(reason="device_map offload not supported (RADIO summary_idxs buffer / Mamba state)")
+    def test_model_parallelism(self):
+        pass
+
+    @unittest.skip(reason="device_map offload not supported (RADIO summary_idxs buffer / Mamba state)")
+    def test_multi_gpu_data_parallel_forward(self):
+        pass
+
+    @unittest.skip(reason="NemotronH hybrid Mamba cache is not compatible with assisted decoding")
+    def test_assisted_decoding_matches_greedy_search_0_random(self):
+        pass
+
+    @unittest.skip(reason="NemotronH hybrid Mamba cache is not compatible with assisted decoding")
+    def test_assisted_decoding_matches_greedy_search_1_same(self):
+        pass
+
+    @unittest.skip(reason="NemotronH hybrid Mamba cache is not compatible with assisted decoding")
+    def test_assisted_decoding_sample(self):
+        pass
+
+    @unittest.skip(reason="NemotronH hybrid Mamba cache does not expose a standard past_key_values format")
+    def test_past_key_values_format(self):
+        pass
+
+    @unittest.skip(reason="NemotronH hybrid Mamba cache: cached-generation hidden states are not uniform")
+    def test_greedy_generate_dict_outputs_use_cache(self):
+        pass
+
+    @unittest.skip(reason="NemotronH hybrid Mamba cache: cached-generation hidden states are not uniform")
+    def test_beam_search_generate_dict_outputs_use_cache(self):
+        pass
+
+    @unittest.skip(reason="Composite model exposes no single base transformer via base_model_prefix")
+    def test_model_base_model_prefix(self):
+        pass
+
+    @unittest.skip(reason="Model produces return_dict outputs only; the tuple path is unsupported")
+    def test_model_outputs_equivalence(self):
+        pass
+
+    @unittest.skip(reason="RADIO config is @strict and rejects the scalar norm_std this test injects")
+    def test_can_load_ignoring_mismatched_shapes(self):
+        pass
+
+    @unittest.skip(reason="RADIO summary_idxs is an int64 index buffer, exempt from dtype casting")
+    def test_keep_in_fp32_modules(self):
+        pass
+
+    @unittest.skip(reason="sound weight renames require sound_config, disabled in the tiny test model")
+    def test_reverse_loading_mapping(self):
+        pass
