@@ -105,7 +105,7 @@ In addition to learning more about your model, use the tips below to help you ad
 > Each contributor has a unique style and workflow for adding models to Transformers. For an example, take a look at how [Gemma](https://github.com/huggingface/transformers/pull/29167) was added.
 
 - Don't reinvent the wheel! Take your time to explore existing models and tokenizers to see what you can copy and reuse. [Grep](https://www.gnu.org/software/grep/) and [ripgrep](https://github.com/BurntSushi/ripgrep) are great tools for this.
-- This is more of an engineering than a science challenge. Focus on the more practical (setting up an efficient debugging environment for example) instead of the theorertical aspects of the model.
+- This is more of an engineering than a science challenge. Focus on the more practical (setting up an efficient debugging environment for example) instead of the theoretical aspects of the model.
 - Don't be shy to ask for help! We are here to support you. 🤗
 
 ## Dev environment
