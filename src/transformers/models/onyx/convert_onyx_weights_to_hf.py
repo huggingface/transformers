@@ -325,7 +325,7 @@ class OnyxTokenizerConverter(TikTokenConverter):
         self.converted_tokenizer = TokenizersBackend(
             tokenizer_object=tokenizer_obj,
             additional_special_tokens=self.additional_special_tokens,
-            model_max_length=16_384,
+            model_max_length=131072,
         )
         self.converted_tokenizer.bos_token = "<|begin_of_text|>"
         self.converted_tokenizer.eos_token = "<|end_of_text|>"
@@ -376,7 +376,7 @@ def write_generation_config(output_dir: Path) -> None:
         "bos_token_id": 200000,
         "eos_token_id": [200001, 200008],
         "pad_token_id": 200018,
-        "max_length": 16384,
+        "max_length": 131072,
         "do_sample": False,
     }
     with open(output_dir / "generation_config.json", "w") as f:
