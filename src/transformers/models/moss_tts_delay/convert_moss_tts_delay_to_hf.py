@@ -80,5 +80,15 @@ def main():
     logger.info("Saved converted MOSS-TTS-Delay config to %s", args.output_dir)
 
 
+"""
+Conversion example usage:
+```
+# convert the original OpenMOSS config into the Transformers format (writes config.json only,
+# so point --output_dir at the directory containing the model weights and tokenizer files)
+python src/transformers/models/moss_tts_delay/convert_moss_tts_delay_to_hf.py \
+    --input_path_or_repo OpenMOSS-Team/MOSS-TTS-v1.5 \
+    --output_dir /path/to/moss-tts-delay-checkpoint
+```
+"""
 if __name__ == "__main__":
     main()

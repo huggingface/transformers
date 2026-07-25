@@ -336,10 +336,6 @@ class MossTTSDelayProcessor(ProcessorMixin):
             model_config = MossTTSDelayConfig()
         self.model_config = model_config
 
-        self.imstart_token_id = tokenizer.convert_tokens_to_ids("<|im_start|>")
-        self.imend_token_id = tokenizer.convert_tokens_to_ids("<|im_end|>")
-        self.newline_token_id = 198
-
         def _id_to_token(token_id: int) -> str:
             tok = tokenizer.convert_ids_to_tokens(int(token_id))
             if isinstance(tok, list):
@@ -427,7 +423,9 @@ class MossTTSDelayProcessor(ProcessorMixin):
         """
 
         if mode not in {"generation", "continuation", "computing_loss"}:
-            raise RuntimeError
+            raise RuntimeError(
+                f"Unsupported `mode`: {mode!r}. Expected one of 'generation', 'continuation', 'computing_loss'."
+            )
 
         if isinstance(conversations, (Message, dict)):
             conversations = [conversations]
@@ -445,10 +443,16 @@ class MossTTSDelayProcessor(ProcessorMixin):
             conversation = [self._normalize_message(m) for m in conversation]
 
             if (mode == "generation") ^ (len(conversation) % 2 != 0):
-                raise ValueError
+                raise ValueError(
+                    "Conversation length does not match `mode`: 'generation' expects an odd number of "
+                    "messages, other modes an even number."
+                )
 
             if (mode == "generation") ^ (conversation[-1]["role"] == "user"):
-                raise ValueError
+                raise ValueError(
+                    "Conversation does not match `mode`: 'generation' expects the last message to be from "
+                    "the user, other modes from the assistant."
+                )
 
             unified_codes = []
             for message_idx, message in enumerate(conversation):
@@ -780,15 +784,16 @@ class MossTTSDelayProcessor(ProcessorMixin):
             delay_audio_codes_list = torch.cat(delay_audio_codes_list)
 
         if text_codes.shape[0] != delay_audio_codes_list.shape[0]:
+            # Defensive: the tokenized special-token blocks and the delay-pattern codes are built to
+            # align, but tokenizer merging at block boundaries can shift the count by a token or two.
+            # Trimming keeps the two channels aligned instead of failing on otherwise valid inputs.
             text_codes = text_codes[: delay_audio_codes_list.shape[0]]
 
         unified_codes = torch.cat([text_codes.unsqueeze(1), delay_audio_codes_list], dim=1)
         return unified_codes
 
     def _parse_text_codes(self, start_length, text_codes):
-        text = cast(str, self.tokenizer.decode(text_codes))
-        prefix = cast(str, self.tokenizer.decode(text_codes[:start_length]))
-        text = text[len(prefix) :]
+        text = cast(str, self.tokenizer.decode(text_codes[start_length:]))
 
         AUDIO_PATTERN = re.compile(
             rf"(?:{self.audio_start_token})?"
@@ -853,7 +858,7 @@ class MossTTSDelayProcessor(ProcessorMixin):
         2. Truncation from any position is supported.
         """
 
-        genearted_messages = []
+        generated_messages = []
         for start_length, generation_ids in output:
             content = self._parse_text_codes(start_length, generation_ids[:, 0])
             audio_codes_list = self._parse_audio_codes(start_length, generation_ids[:, 1:])
@@ -864,8 +869,8 @@ class MossTTSDelayProcessor(ProcessorMixin):
                     content=content,
                     audio_codes_list=cast(list[str | torch.Tensor], audio_codes_list),
                 )
-            genearted_messages.append(message)
-        return genearted_messages
+            generated_messages.append(message)
+        return generated_messages
 
     @staticmethod
     def loudness_normalize(
@@ -883,12 +888,8 @@ class MossTTSDelayProcessor(ProcessorMixin):
         return wav * factor
 
     def _get_audio_tokenizer_device(self) -> torch.device:
-        """Best-effort device inference for `self.audio_tokenizer`.
-
-        Notes:
-        - Old TAC wrapper exposed `.device`, but standard `torch.nn.Module` does not.
-        - New MossAudioTokenizerModel is a `PreTrainedModel`; parameters define its device.
-        """
+        """Best-effort device inference for `self.audio_tokenizer` (a `PreTrainedModel`, so its
+        parameters define its device; falls back to CPU with a warning)."""
 
         audio_tokenizer = getattr(self, "audio_tokenizer", None)
         if audio_tokenizer is None:

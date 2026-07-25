@@ -209,30 +209,17 @@ def _apply_repetition_penalty(
     prev_tokens: torch.LongTensor | None,
     penalty: float,
 ) -> torch.Tensor:
+    """Penalize previously generated tokens, following `RepetitionPenaltyLogitsProcessor`.
+
+    `logits` has shape `(num_positions, vocab_size)` and `prev_tokens` the matching
+    `(num_positions, sequence_length)` histories, so the penalty stays within each sequence and channel.
+    """
     if penalty == 1.0 or prev_tokens is None:
         return logits
 
-    if logits.dim() == 2:
-        unique_tokens = torch.unique(prev_tokens.reshape(-1))
-        token_logits = logits[:, unique_tokens]
-        pos_mask = token_logits > 0
-        token_logits[pos_mask] /= penalty
-        token_logits[~pos_mask] *= penalty
-        logits[:, unique_tokens] = token_logits
-        return logits
-
-    for head_idx in range(logits.shape[1]):
-        unique_tokens = torch.unique(prev_tokens[..., head_idx].reshape(-1))
-        if unique_tokens.numel() == 0:
-            continue
-
-        token_logits = logits[:, head_idx, unique_tokens]
-        pos_mask = token_logits > 0
-        token_logits[pos_mask] /= penalty
-        token_logits[~pos_mask] *= penalty
-        logits[:, head_idx, unique_tokens] = token_logits
-
-    return logits
+    score = torch.gather(logits, 1, prev_tokens)
+    score = torch.where(score > 0, score / penalty, score * penalty)
+    return logits.scatter(1, prev_tokens, score)
 
 
 def _sample_token(
@@ -317,43 +304,18 @@ class MossTTSDelayPreTrainedModel(PreTrainedModel):
     _no_split_modules = ["Qwen3DecoderLayer"]
     _skip_keys_device_placement = "past_key_values"
     _supports_flash_attn = True
-    _supports_flash_attn_2 = True
     _supports_sdpa = True
     _supports_flex_attn = True
 
     def _init_weights(self, module):
-        """
-        Transformers 5.0+ safe init:
-        - MUST use transformers.initialization helpers
-        - MUST respect param._is_hf_initialized to avoid overwriting ckpt-loaded params
-        """
-        # Let HF handle its standard modules first (LayerNorm, Linear, Embedding, etc.)
+        # Standard modules (LayerNorm, Linear, Embedding, etc.) are handled by the base class.
         super()._init_weights(module)
 
-        # Pick a std consistent with HF conventions
-        # Prefer model/text config initializer_range if present.
-        std = None
-        if hasattr(self.config, "initializer_range"):
-            std = self.config.initializer_range
-        elif hasattr(self.config, "language_config") and hasattr(self.config.language_config, "initializer_range"):
-            std = self.config.language_config.initializer_range
-        else:
-            std = 0.02
-
-        # Initialize extra audio embeddings
-        if isinstance(module, nn.Embedding):
-            # Only touch our extra embeddings (avoid double touching LM's embeddings if not desired)
-            # If you prefer, you can skip this check and rely on super()._init_weights for all embeddings.
-            if getattr(module, "num_embeddings", None) == self.config.codebook_size + 1:
-                init.normal_(module.weight, mean=0.0, std=std)
-                # If you later set padding_idx, you must explicitly zero it (and respect _is_hf_initialized!)
-                # init.zeros_ will internally check param flags, but slicing needs manual care.
-
-        # Initialize multi-head projections you added
-        if isinstance(module, nn.Linear):
-            # For your lm_heads, super()._init_weights already covers typical Linear.
-            # This block is only needed if you have custom Linear variants later.
-            pass
+        # Extra audio VQ embeddings
+        if isinstance(module, nn.Embedding) and getattr(module, "num_embeddings", None) == (
+            self.config.codebook_size + 1
+        ):
+            init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
 
 
 MOSSTTS_START_DOCSTRING = r"""
@@ -384,7 +346,6 @@ class MossTTSDelayModel(MossTTSDelayPreTrainedModel):
 
     def __init__(self, config: MossTTSDelayConfig):
         super().__init__(config)
-        self.config = config
 
         config.language_config.dtype = config.dtype
 
@@ -455,7 +416,7 @@ class MossTTSDelayModel(MossTTSDelayPreTrainedModel):
         input_ids: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: list[torch.FloatTensor] | None = None,
+        past_key_values: Cache | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
@@ -485,7 +446,9 @@ class MossTTSDelayModel(MossTTSDelayPreTrainedModel):
             inputs_embeds = self.get_input_embeddings(input_ids)
 
         # 2. Backbone Forward
-        # Qwen3Model outputs standard CausalLMOutputWithPast or similar
+        # Full hidden states are only needed when selecting features from specific layers (`hidden_out_layers`);
+        # the multi-head projection otherwise uses the final hidden state.
+        output_hidden_states = kwargs.pop("output_hidden_states", False) or hidden_out_layers is not None
         outputs = self.language_model(
             input_ids=None,  # Passed via inputs_embeds
             position_ids=position_ids,
@@ -493,7 +456,7 @@ class MossTTSDelayModel(MossTTSDelayPreTrainedModel):
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
-            output_hidden_states=True,  # Always need hidden states for multi-head projection
+            output_hidden_states=output_hidden_states,
             return_dict=True,
             cache_position=cache_position,
             **kwargs,
@@ -706,7 +669,7 @@ class MossTTSDelayModel(MossTTSDelayPreTrainedModel):
                 pre_exclude_mask1, float("-inf")
             )
             if time_step == 0:
-                next_token_logits[0][..., 151662] = float("-inf")
+                next_token_logits[0][..., self.config.audio_assistant_delay_slot_token_id] = float("-inf")
             if time_step <= n_codebooks:
                 next_token_logits[0][..., self.config.im_end_token_id] = float("-inf")
 
@@ -737,9 +700,15 @@ class MossTTSDelayModel(MossTTSDelayPreTrainedModel):
                 audio_logits = torch.stack(next_token_logits[2:], dim=1)[sampling_audio_mask[:, 1:]]
                 audio_ch0_logits[..., self.config.codebook_pad_token_id] = float("-inf")
                 audio_logits[..., self.config.codebook_pad_token_id] = float("-inf")
+
+                # Per-position histories so the repetition penalty stays within each sequence and channel.
+                ch0_prev_tokens = generation_ids[sampling_audio_mask[:, 0], :, 1]
+                selected = sampling_audio_mask[:, 1:].nonzero()
+                audio_prev_tokens = generation_ids[selected[:, 0], :, selected[:, 1] + 1]
+
                 next_audio_tokens[:, 0][sampling_audio_mask[:, 0]] = _sample_token(
                     logits=audio_ch0_logits,
-                    prev_tokens=generation_ids[:, :, 1],
+                    prev_tokens=ch0_prev_tokens,
                     repetition_penalty=audio_repetition_penalty,
                     top_p=audio_top_p,
                     top_k=audio_top_k,
@@ -747,7 +716,7 @@ class MossTTSDelayModel(MossTTSDelayPreTrainedModel):
                 )
                 next_audio_tokens[:, 1:][sampling_audio_mask[:, 1:]] = _sample_token(
                     logits=audio_logits,
-                    prev_tokens=generation_ids[:, :, 2:],
+                    prev_tokens=audio_prev_tokens,
                     repetition_penalty=audio_repetition_penalty,
                     top_p=audio_top_p,
                     top_k=audio_top_k,
