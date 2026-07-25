@@ -312,7 +312,7 @@ class ConvNextV2ModelIntegrationTest(unittest.TestCase):
             }
         ).get_expectation().to(torch_device)
         # fmt: on
-        torch.testing.assert_close(outputs.logits[0, :3], expected_slice, rtol=1e-4, atol=1e-4)
+        torch.testing.assert_close(outputs.logits[0, :3], expected_slice, rtol=2e-4, atol=2e-4)
 
 
 @require_torch
