@@ -1558,7 +1558,8 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
                     # at the margin between static and dynamic cache → different expert matmuls).
                     atol = rtol = 1e-3
                 else:
-                    atol = rtol = 1e-5
+                    atol = getattr(self, "static_cache_generate_atol", 1e-5)
+                    rtol = getattr(self, "static_cache_generate_rtol", 1e-5)
                 assert_similar_generate_outputs(
                     dynamic_cache_generation, static_cache_generation, atol=atol, rtol=rtol
                 )

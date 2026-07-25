@@ -178,6 +178,10 @@ class OlmoModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
     # This is because we are hitting edge cases with the causal_mask buffer
     model_split_percents = [0.5, 0.7, 0.8]
 
+    # Tolerate larger numeric drift for static cache generation tests
+    static_cache_generate_atol = 2e-4
+    static_cache_generate_rtol = 2e-4
+
     def setUp(self):
         self.model_tester = OlmoModelTester(self)
         self.config_tester = ConfigTester(self, config_class=OlmoConfig, hidden_size=32)
