@@ -499,6 +499,7 @@ class GraniteMoeHybridMambaLayer(nn.Module):
         recurrent_state = cache_params.layers[self.layer_idx].recurrent_states[0] if use_precomputed_states else None
         # Single step calculations via cache
         if use_precomputed_states and seq_len == 1:
+            gate, hidden_states, B, C, dt = (x.squeeze(1) for x in (gate, hidden_states, B, C, dt))
             # 3. SSM transformation
             A = A[:, None, ...][:, :, None].expand(-1, self.head_dim, self.ssm_state_size).to(dtype=torch.float32)
             dt = dt[:, :, None].expand(-1, -1, self.head_dim)
