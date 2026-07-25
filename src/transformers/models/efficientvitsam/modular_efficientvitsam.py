@@ -708,15 +708,18 @@ def eager_attention_forward(
 class EfficientViTBlock(nn.Module):
     def __init__(
         self,
+        config: EfficientViTSamVisionConfig,
         in_channels: int,
         heads_ratio: float = 1.0,
         dim: int = 32,
         expand_ratio: float = 4.0,
         scales: tuple[int, ...] = (5,),
-        norm: str = "bn2d",
-        act_func: str = "hswish",
     ):
         super().__init__()
+
+        norm = config.norm
+        act_func = config.act_func
+
         self.context_module = ResidualBlock(
             LiteMLA(
                 in_channels=in_channels,
@@ -814,12 +817,11 @@ class EfficientViTLargeBackbone(nn.Module):
                 if block_list[stage_id].startswith("att"):
                     stage.append(
                         EfficientViTBlock(
+                            config=config,
                             in_channels=in_channels,
                             dim=qkv_dim,
                             expand_ratio=expand_list[stage_id],
                             scales=(3,) if block_list[stage_id] == "att@3" else (5,),
-                            norm=norm,
-                            act_func=act_func,
                         )
                     )
                 else:
