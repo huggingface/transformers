@@ -256,6 +256,21 @@ class Wav2Vec2ModelTester:
             result.last_hidden_state.shape, (self.batch_size, self.output_seq_length, self.hidden_size)
         )
 
+    def create_and_check_model_output_attention_mask(self, config, input_values, attention_mask):
+        model = Wav2Vec2Model(config=config)
+        model.to(torch_device)
+        model.eval()
+
+        attention_mask = torch.ones_like(attention_mask)
+        attention_mask[1, attention_mask.shape[1] // 2 :] = 0
+        result = model(input_values, attention_mask=attention_mask)
+
+        expected_attention_mask = model._get_feature_vector_attention_mask(
+            result.last_hidden_state.shape[1], attention_mask
+        )
+        self.parent.assertEqual(result.attention_mask.shape, result.last_hidden_state.shape[:2])
+        self.parent.assertTrue(torch.equal(result.attention_mask, expected_attention_mask))
+
     def create_and_check_model_with_adapter(self, config, input_values, attention_mask):
         config.add_adapter = True
         model = Wav2Vec2Model(config=config)
@@ -501,6 +516,10 @@ class Wav2Vec2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
+
+    def test_model_output_attention_mask(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_model_output_attention_mask(*config_and_inputs)
 
     def test_model_with_adapter(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
