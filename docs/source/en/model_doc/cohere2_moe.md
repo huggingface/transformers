@@ -15,7 +15,7 @@ rendered properly in your Markdown viewer.
 
 # Cohere2 MoE
 
-[Command A+] is a Mixture-of-Experts (MoE) language model from Cohere. It features a hybrid attention pattern combining sliding window and full attention layers, shared and routed experts, and supports a very large context window.
+Command A+ is a Mixture-of-Experts (MoE) language model from Cohere. It features a hybrid attention pattern combining sliding window and full attention layers, shared and routed experts, and supports a very large context window.
 
 ## Cohere2MoeConfig
 
