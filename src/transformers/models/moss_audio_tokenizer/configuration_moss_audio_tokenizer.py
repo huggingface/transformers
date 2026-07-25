@@ -72,8 +72,6 @@ class MossAudioTokenizerTransformerConfig(PreTrainedConfig):
     attention_bias: bool = False
     attention_dropout: float = 0.0
     dropout: float = 0.0
-    activation_dropout: float = 0.0
-    activation_function: str = "gelu"
 
     def __post_init__(self, **kwargs):
         if self.head_dim is None:

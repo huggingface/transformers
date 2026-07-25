@@ -28,45 +28,35 @@ from ..qwen3 import Qwen3Config
 @strict
 class MossTTSDelayConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`MossTTSDelayModel`]. It is used to instantiate an
-    MossTTSDelay model according to the specified arguments, defining the model architecture. Instantiating a configuration
-    with the defaults will yield a similar configuration to that of the MossTTSDelay [MossTTSDelay-8B](https://huggingface.co/OpenMOSS/mosstts-8b) architecture.
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Args:
-        language_config (`Union[Qwen3Config, dict]`, *optional*):
-            Configuration for the backbone language model (Qwen3).
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        n_codebooks (`int`, *optional*, defaults to 32):
-            Number of additional VQ (Vector Quantization) heads/channels for audio.
-            Determines the number of codebooks used in the audio representation.
-        pad_token_id (`int`, *optional*, defaults to 151643):
-            Padding token id for the text channel.
-        im_start_token_id (`int`, *optional*, defaults to 151644):
-            Token id used to mark the beginning of a chat message.
-        im_end_token_id (`int`, *optional*, defaults to 151645):
-            Token id used to mark the end of a chat message.
-        codebook_size (`int`, *optional*, defaults to 1024):
-            Vocabulary size for the audio tokens (codebooks 1 to N).
-        audio_user_slot_token_id (`int`, *optional*, defaults to 151654):
-            The specific token ID used as a placeholder/slot for user-side audio inputs in the prompt.
-        audio_assistant_gen_slot_token_id (`int`, *optional*, defaults to 151656):
-            The specific token ID representing the generation slot for the assistant's audio output.
-            Acting as the trigger for the TTS generation process.
-        audio_assistant_delay_slot_token_id (`int`, *optional*, defaults to 151662):
-            The token ID used in the 'Delay Pattern' paradigm to represent the delayed/offset positions
-            between different VQ channels.
-        audio_start_token_id (`int`, *optional*, defaults to 151652):
-            Special token ID used to denote the start of an audio sequence in the stream.
-        audio_end_token_id (`int`, *optional*, defaults to 151653):
-            Special token ID used to denote the end of an audio sequence (EOS for audio).
-        codebook_pad_token_id (`int`, *optional*, defaults to 1024):
-            The padding value used within the audio VQ codebooks. Typically equals `codebook_size`.
-        sampling_rate (`int`, *optional*, defaults to 24000):
-            Audio sampling rate used by the processor and audio tokenizer.
+    language_config (`Union[Qwen3Config, dict]`, *optional*):
+        Configuration for the backbone language model (Qwen3).
+    n_codebooks (`int`, *optional*, defaults to 32):
+        Number of additional VQ (Vector Quantization) heads/channels for audio.
+        Determines the number of codebooks used in the audio representation.
+    codebook_size (`int`, *optional*, defaults to 1024):
+        Vocabulary size for the audio tokens (codebooks 1 to N).
+    audio_user_slot_token_id (`int`, *optional*, defaults to 151654):
+        The specific token ID used as a placeholder/slot for user-side audio inputs in the prompt.
+    audio_assistant_gen_slot_token_id (`int`, *optional*, defaults to 151656):
+        The specific token ID representing the generation slot for the assistant's audio output.
+        Acting as the trigger for the TTS generation process.
+    audio_assistant_delay_slot_token_id (`int`, *optional*, defaults to 151662):
+        The token ID used in the 'Delay Pattern' paradigm to represent the delayed/offset positions
+        between different VQ channels.
+    audio_start_token_id (`int`, *optional*, defaults to 151652):
+        Special token ID used to denote the start of an audio sequence in the stream.
+    audio_end_token_id (`int`, *optional*, defaults to 151653):
+        Special token ID used to denote the end of an audio sequence (EOS for audio).
+    codebook_pad_token_id (`int`, *optional*, defaults to 1024):
+        The padding value used within the audio VQ codebooks. Typically equals `codebook_size`.
+    sampling_rate (`int`, *optional*, defaults to 24000):
+        Audio sampling rate used by the processor and audio tokenizer.
+    pad_token_id (`int`, *optional*, defaults to 151643):
+        Padding token id for the text channel.
+    im_start_token_id (`int`, *optional*, defaults to 151644):
+        Token id used to mark the beginning of a chat message.
+    im_end_token_id (`int`, *optional*, defaults to 151645):
+        Token id used to mark the end of a chat message.
     """
 
     model_type = "moss_tts_delay"

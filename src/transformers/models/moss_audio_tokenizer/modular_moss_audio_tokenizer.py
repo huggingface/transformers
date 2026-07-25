@@ -835,6 +835,23 @@ class MossAudioTokenizerModel(MossAudioTokenizerPreTrainedModel):
 
 
 class MossAudioTokenizerFeatureExtractor(DacFeatureExtractor):
+    r"""
+    Constructs an MossAudioTokenizer feature extractor.
+
+    This feature extractor inherits from [`~feature_extraction_sequence_utils.SequenceFeatureExtractor`] which contains
+    most of the main methods. Users should refer to this superclass for more information regarding those methods.
+
+    Args:
+        feature_size (`int`, *optional*, defaults to 1):
+            The feature dimension of the extracted features. Use 1 for mono, 2 for stereo.
+        sampling_rate (`int`, *optional*, defaults to 24000):
+            The sampling rate at which the audio waveform should be digitalized, expressed in hertz (Hz).
+        padding_value (`float`, *optional*, defaults to 0.0):
+            The value that is used for padding.
+        hop_length (`int`, *optional*, defaults to 1920):
+            Overlap length between successive windows.
+    """
+
     model_input_names = ["input_values", "padding_mask"]
 
     def __init__(
