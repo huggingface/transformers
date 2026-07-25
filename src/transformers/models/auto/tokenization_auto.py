@@ -808,19 +808,6 @@ class AutoTokenizer:
             else:
                 tokenizer_auto_map = tokenizer_config["auto_map"].get("AutoTokenizer", None)
 
-        # Dual-scheme model types (e.g. `llama`): the Hub tokenizer_class (LlamaTokenizerFast) is
-        # ambiguous because Llama-1/2 are SentencePiece while Llama-3 is byte-level. Forcing the
-        # SentencePiece LlamaTokenizer (Metaspace) onto a byte-level tokenizer.json silently drops
-        # spaces (see #45488). If tokenizer.json is byte-level, respect it via TokenizersBackend;
-        # SentencePiece Llama-1/2 (no ByteLevel in tokenizer.json) stays on LlamaTokenizer unchanged.
-        if (
-            tokenizer_auto_map is None
-            and TokenizersBackend is not None
-            and config_model_type in _DUAL_SCHEME_MODEL_TYPES
-            and _tokenizer_json_is_byte_level(pretrained_model_name_or_path, **kwargs)
-        ):
-            return TokenizersBackend.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
-
         # Some specific checkpoints need TokenizersBackend because their config on the Hub really needs to be updated.
         _config_name_or_path = (
             name.lower() if isinstance((name := getattr(config, "_name_or_path", None)), str) else ""
@@ -829,6 +816,22 @@ class AutoTokenizer:
             tokenizer_auto_map is None
             and TokenizersBackend is not None
             and any(fnmatch.fnmatch(_config_name_or_path, p) for p in MODEL_IDS_TO_TOKENIZERS_BACKEND)
+        ):
+            return TokenizersBackend.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
+
+        # Dual-scheme model types (e.g. `llama`): the Hub tokenizer_class (LlamaTokenizerFast) is
+        # ambiguous because Llama-1/2 are SentencePiece while Llama-3 is byte-level. Forcing the
+        # SentencePiece LlamaTokenizer (Metaspace) onto a byte-level tokenizer.json silently drops
+        # spaces (see #45488). If tokenizer.json is byte-level, respect it via TokenizersBackend;
+        # SentencePiece Llama-1/2 (no ByteLevel in tokenizer.json) stays on LlamaTokenizer unchanged.
+        # Runs after MODEL_IDS_TO_TOKENIZERS_BACKEND so the checkpoints listed there resolve on the
+        # in-memory match and never read tokenizer.json; only byte-level repos that no id pattern
+        # covers (re-uploads, quantized derivatives, local directories) pay for the lookup.
+        if (
+            tokenizer_auto_map is None
+            and TokenizersBackend is not None
+            and config_model_type in _DUAL_SCHEME_MODEL_TYPES
+            and _tokenizer_json_is_byte_level(pretrained_model_name_or_path, **kwargs)
         ):
             return TokenizersBackend.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
 
