@@ -66,7 +66,6 @@ class TestHeterogeneousModelingSpec(unittest.TestCase):
         class CustomModel:
             pass
 
-        CustomModel.__module__ = "remote_code.modeling_custom"
         CustomModel._heterogeneous_modeling_spec = spec
 
         self.assertIs(get_heterogeneous_modeling_spec(CustomModel()), spec)
@@ -74,20 +73,30 @@ class TestHeterogeneousModelingSpec(unittest.TestCase):
     def test_get_heterogeneous_modeling_spec_uses_supported_model_registry(self):
         spec = HeterogeneousModelingSpec(layer_cls=torch.nn.Linear, layer_idx_variable_name="layer_idx")
 
-        class BuiltInModel:
-            pass
+        class BuiltInConfig:
+            model_type = "test_model"
 
-        BuiltInModel.__module__ = "transformers.models.test_model.modeling_test_model"
+            def get_text_config(self, decoder=True):
+                return self
+
+        class BuiltInModel:
+            def __init__(self, config):
+                self.config = config
 
         supported_models = importlib.import_module("transformers.integrations.heterogeneity.supported_models")
-        with patch.dict(supported_models.MODEL_TO_SPEC_FACTORY, {"test_model": lambda: spec}):
-            self.assertIs(get_heterogeneous_modeling_spec(BuiltInModel()), spec)
+        with patch.dict(supported_models.MODEL_TYPE_TO_SPEC_FACTORY, {"test_model": lambda: spec}):
+            self.assertIs(get_heterogeneous_modeling_spec(BuiltInModel(BuiltInConfig())), spec)
 
-    def test_get_heterogeneous_modeling_spec_raises_for_unsupported_builtin_model(self):
+    def test_get_heterogeneous_modeling_spec_raises_for_unsupported_model_type(self):
+        class UnsupportedConfig:
+            model_type = "fake"
+
+            def get_text_config(self, decoder=True):
+                return self
+
         class UnsupportedModel:
-            pass
+            def __init__(self, config):
+                self.config = config
 
-        UnsupportedModel.__module__ = "transformers.models.fake.modeling_fake"
-
-        with self.assertRaisesRegex(ValueError, "No heterogeneous modeling spec is defined for `fake`"):
-            get_heterogeneous_modeling_spec(UnsupportedModel())
+        with self.assertRaisesRegex(ValueError, "No heterogeneous modeling spec is defined for model type `fake`"):
+            get_heterogeneous_modeling_spec(UnsupportedModel(UnsupportedConfig()))

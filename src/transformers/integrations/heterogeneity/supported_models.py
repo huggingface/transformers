@@ -22,10 +22,10 @@ from transformers.integrations.heterogeneity.heterogeneous_modeling_spec import 
 from transformers.integrations.heterogeneity.skip_utils import ReturnEntry, get_skip_replacement
 
 
-MODEL_TO_SPEC_FACTORY: dict[str, Callable[[], HeterogeneousModelingSpec]] = {
+MODEL_TYPE_TO_SPEC_FACTORY: dict[str, Callable[[], HeterogeneousModelingSpec]] = {
     "gpt_oss": lambda: gpt_oss(),
     "llama": lambda: llama(),
-    "llama4": lambda: llama4(),
+    "llama4_text": lambda: llama4(),
     "nemotron_h": lambda: nemotron_h(),
 }
 

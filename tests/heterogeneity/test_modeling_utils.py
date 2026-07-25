@@ -33,10 +33,7 @@ if is_torch_available():
         tiny_llama_config,
     )
     from transformers import DynamicCache, LlamaConfig, LlamaForCausalLM, PreTrainedModel
-    from transformers.integrations.heterogeneity import (
-        HeterogeneousModelingSpec,
-        SkipDescriptor,
-    )
+    from transformers.integrations.heterogeneity import HeterogeneousModelingSpec, SkipDescriptor
     from transformers.modeling_layers import MtpModel
 
 
@@ -103,7 +100,8 @@ if is_torch_available():
 
     class _LayerIdxStackLookupToyModel(_ToyPreTrainedModel):
         _heterogeneous_modeling_spec = HeterogeneousModelingSpec(
-            layer_cls=_StackLookupToyLayer, layer_idx_variable_name="layer_idx"
+            layer_cls=_StackLookupToyLayer,
+            layer_idx_variable_name="layer_idx",
         )
 
         def __init__(self, config, layer_idx=0):
@@ -129,12 +127,6 @@ if is_torch_available():
             self.parent_layer = parent_layer_factory()
             self.layer = _ToyDecoderLayer(config, layer_idx=0)
 
-    class _ToyModel(PreTrainedModel):
-        config_class = LlamaConfig
-        _heterogeneous_modeling_spec = HeterogeneousModelingSpec(
-            layer_cls=_StackLookupToyLayer, layer_idx_variable_name="layer_idx"
-        )
-
 
 @require_torch
 class TestHeterogeneousModeling(unittest.TestCase):
@@ -155,21 +147,6 @@ class TestHeterogeneousModeling(unittest.TestCase):
         self.assertIsNotNone(expected_attn_implementation)
         for layer in model.model.layers:
             self.assertEqual(layer.self_attn.config._attn_implementation, expected_attn_implementation)
-
-    def test_no_leaked_state_after_heterogeneous_init(self):
-        """After heterogeneous model init, no context token should remain and non-heterogeneous models should work."""
-        with hetero_context("llama"):
-            config = tiny_llama_config(per_layer_config={1: {"skip": ["attention"]}})
-            model = build_model(config, LlamaForCausalLM)
-
-        self.assertFalse(hasattr(model, "_layer_init_context_token"))
-
-        inherited_init_model = _ToyModel(_toy_config(intermediate_size=64))
-        self.assertFalse(hasattr(inherited_init_model, "_layer_init_context_token"))
-
-        # A new non-heterogeneous model should work fine
-        plain_model = build_model(tiny_llama_config(), LlamaForCausalLM)
-        forward_logits(plain_model, dummy_input_ids())
 
     def test_error_missing_skip_descriptor(self):
         """Requesting a skip type without a matching descriptor should raise ValueError."""
@@ -196,8 +173,6 @@ class TestHeterogeneousModeling(unittest.TestCase):
         self.assertIsInstance(model.layer.self_attn, _ToyAttention)
         self.assertEqual(model.inner_model.layer.intermediate_size, 64)
         self.assertIsInstance(model.inner_model.layer.self_attn, _ToyNoOpAttention)
-        self.assertFalse(hasattr(model, "_layer_init_context_token"))
-        self.assertFalse(hasattr(model.inner_model, "_layer_init_context_token"))
 
     def test_nested_model_layers_use_their_own_config(self):
         model = _CompositeToyModel(
@@ -262,8 +237,8 @@ class TestHeterogeneousModeling(unittest.TestCase):
 
     @parameterized.expand(
         [
-            ("bool", True, TypeError, "call stack must be an integer"),
-            ("negative", -1, IndexError, "call stack is out of range"),
+            ("bool", True, TypeError, "model construction stack must be an integer"),
+            ("negative", -1, IndexError, "model construction stack is out of range"),
         ]
     )
     def test_invalid_layer_index_from_stack_fails_clearly(self, _, layer_idx, error_type, message):

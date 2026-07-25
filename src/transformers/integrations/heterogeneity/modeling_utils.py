@@ -34,17 +34,15 @@ from transformers.integrations.heterogeneity.masking_utils import AttentionMasks
 if TYPE_CHECKING:
     from torch import nn
 
-    from transformers import PreTrainedConfig, PreTrainedModel
+    from transformers import PreTrainedModel
 
 
-@dataclass
+@dataclass(frozen=True)
 class _LayerInitContext:
-    model_config: PreTrainedConfig
+    model: PreTrainedModel
     layer_cls: type[nn.Module]
-    per_layer_skip_types: list[list[str]]
-    skip_descriptors: dict[str, SkipDescriptor]
-    per_layer_attributes: set[str]
     layer_idx_variable_name: str
+    skip_descriptors: dict[str, SkipDescriptor]
 
 
 _layer_init_context: contextvars.ContextVar[tuple[_LayerInitContext, ...]] = contextvars.ContextVar(
@@ -113,21 +111,18 @@ def apply_heterogeneous_modeling(model: PreTrainedModel) -> None:
         if any(skip_descriptors[skip_type].replaces_kv_cache_updater for skip_type in skip_types)
     )
 
-    ctx = _LayerInitContext(
-        model_config=model.config,
+    context = _LayerInitContext(
+        model=model,
         layer_cls=heterogeneous_modeling_spec.layer_cls,
-        per_layer_skip_types=per_layer_skip_types,
-        skip_descriptors=skip_descriptors,
-        per_layer_attributes=model.config.per_layer_attributes,
         layer_idx_variable_name=heterogeneous_modeling_spec.layer_idx_variable_name,
+        skip_descriptors=skip_descriptors,
     )
-    model._layer_init_context_token = _layer_init_context.set((*_layer_init_context.get(), ctx))
-
+    _layer_init_context.set((*_layer_init_context.get(), context))
     _patch_layer_init(heterogeneous_modeling_spec.layer_cls)
 
 
 def wrap_model_init_with_heterogeneous_cleanup(orig_init: Callable[..., None]) -> Callable[..., None]:
-    """Wrap a model initializer so heterogeneous layer context is always cleaned up."""
+    """Keep heterogeneous construction state scoped to one model initializer."""
     if getattr(orig_init, "_wrapped_by_heterogeneous_modeling_cleanup", False):
         return orig_init
 
@@ -137,30 +132,22 @@ def wrap_model_init_with_heterogeneous_cleanup(orig_init: Callable[..., None]) -
         if any(model is self for model in model_init_stack):
             return orig_init(self, *args, **kwargs)
 
-        token = _model_init_stack.set((*model_init_stack, self))
+        model_init_stack_token = _model_init_stack.set((*model_init_stack, self))
+        layer_init_context_token = _layer_init_context.set(_layer_init_context.get())
         try:
-            orig_init(self, *args, **kwargs)
+            return orig_init(self, *args, **kwargs)
         finally:
-            try:
-                _reset_heterogeneous_modeling_context(self)
-            finally:
-                _model_init_stack.reset(token)
+            _layer_init_context.reset(layer_init_context_token)
+            _model_init_stack.reset(model_init_stack_token)
 
     _patched_init._wrapped_by_heterogeneous_modeling_cleanup = True
     return _patched_init
 
 
-def _reset_heterogeneous_modeling_context(model: PreTrainedModel) -> None:
-    if not hasattr(model, "_layer_init_context_token"):
-        return
-
-    _layer_init_context.reset(model._layer_init_context_token)
-    del model._layer_init_context_token
-
-
 def _patch_layer_init(layer_cls: type[nn.Module]) -> None:
     if getattr(layer_cls.__init__, "_patched_by_heterogeneity", False):
         return
+
     with _layer_patching_lock:
         if getattr(layer_cls.__init__, "_patched_by_heterogeneity", False):
             return
@@ -169,35 +156,40 @@ def _patch_layer_init(layer_cls: type[nn.Module]) -> None:
 
         @wraps(orig_layer_init)
         def _patched_layer_init(self, config, *args, **kwargs):
-            ctx = next(
+            context = next(
                 (
-                    ctx
-                    for ctx in reversed(_layer_init_context.get())
-                    if ctx.layer_cls is layer_cls and ctx.model_config is config
+                    context
+                    for context in reversed(_layer_init_context.get())
+                    if context.layer_cls is layer_cls and context.model.config is config
                 ),
                 None,
             )
-            if ctx is None or not getattr(config, "is_heterogeneous", False):
+            if context is None or not getattr(config, "is_heterogeneous", False):
                 return orig_layer_init(self, config, *args, **kwargs)
 
             # --- Resolve layer index ---
-            layer_idx_possible_names = [ctx.layer_idx_variable_name]
             layer_idx_source = "constructor arguments"
             layer_idx = _get_variable_from_passed_arguments(
-                func=orig_layer_init, args=(self, config, *args), kwargs=kwargs, names=layer_idx_possible_names
+                func=orig_layer_init,
+                args=(self, config, *args),
+                kwargs=kwargs,
+                names=[context.layer_idx_variable_name],
             )
             if layer_idx is None:
-                layer_idx_source = "call stack"
-                layer_idx = _get_variable_from_stack(layer_idx_possible_names)
-
+                layer_idx_source = "model construction stack"
+                layer_idx = _get_variable_from_model_construction_stack(
+                    model=context.model,
+                    names=[context.layer_idx_variable_name],
+                )
             if layer_idx is None:
                 raise RuntimeError(
-                    f"Could not determine layer index `{ctx.layer_idx_variable_name}` for heterogeneous model "
-                    "initialization. Ensure it is passed as a constructor argument or available in the call stack."
+                    f"Could not determine layer index `{context.layer_idx_variable_name}` for heterogeneous model "
+                    f"initialization of `{context.model.__class__.__name__}`. Make sure it is a layer constructor "
+                    "argument or a local variable in the model's layer construction path."
                 )
             _validate_layer_idx(
                 layer_idx,
-                variable_name=ctx.layer_idx_variable_name,
+                variable_name=context.layer_idx_variable_name,
                 source=layer_idx_source,
                 num_layers=config.num_hidden_layers,
             )
@@ -207,22 +199,20 @@ def _patch_layer_init(layer_cls: type[nn.Module]) -> None:
             orig_layer_init(self, layer_config, *args, **kwargs)
 
             # --- Replace skipped sublayers ---
-            for skip_type, skip_descriptor in ctx.skip_descriptors.items():
-                if skip_type in ctx.per_layer_skip_types[layer_idx]:
-                    _apply_skip_descriptor(
-                        layer=self,
-                        skip_descriptor=skip_descriptor,
-                        layer_idx=layer_idx,
-                    )
+            for skip_type in layer_config.skip:
+                _apply_skip_descriptor(
+                    layer=self,
+                    skip_descriptor=context.skip_descriptors[skip_type],
+                    layer_idx=layer_idx,
+                )
 
             # --- Patch forward for attention mask selection ---
-            sliding_window = getattr(layer_config, "sliding_window", None)
-            attention_chunk_size = getattr(layer_config, "attention_chunk_size", None)
-            mask_key = (
-                sliding_window or attention_chunk_size
-            )  # Relies on having exclusivity validation in the heterogeneous configuration_utils
-            if {"sliding_window", "attention_chunk_size"} & ctx.per_layer_attributes and mask_key:
-                _patch_layer_forward_for_attention_mask_selection(layer=self, mask_key=mask_key)
+            if {"sliding_window", "attention_chunk_size"} & context.model.config.per_layer_attributes:
+                mask_key = getattr(layer_config, "sliding_window", None) or getattr(
+                    layer_config, "attention_chunk_size", None
+                )  # Relies on having exclusivity validation in the heterogeneous configuration_utils
+                if mask_key is not None:
+                    _patch_layer_forward_for_attention_mask_selection(layer=self, mask_key=mask_key)
 
         _patched_layer_init._patched_by_heterogeneity = True
         layer_cls.__init__ = _patched_layer_init
@@ -248,7 +238,7 @@ def _patch_layer_forward_for_attention_mask_selection(
 def _validate_skip_descriptors(
     per_layer_skip_types: list[list[str]], skip_descriptors: dict[str, SkipDescriptor]
 ) -> None:
-    skip_types = set(sum(per_layer_skip_types, []))
+    skip_types = {skip_type for layer_skip_types in per_layer_skip_types for skip_type in layer_skip_types}
     missing_descriptors = skip_types - skip_descriptors.keys()
     if missing_descriptors:
         raise ValueError(f"No-op descriptors are missing for the following types: {missing_descriptors}")
@@ -256,10 +246,10 @@ def _validate_skip_descriptors(
 
 def _apply_skip_descriptor(
     *,
-    layer,
+    layer: nn.Module,
     skip_descriptor: SkipDescriptor,
     layer_idx: int,
-):
+) -> None:
     generic_replacements = {}
     class_specific_replacements = {}
 
@@ -317,32 +307,40 @@ def _setattr_by_path(obj: Any, attribute_path: str, value: Any) -> None:
     setattr(parent, attribute_name, value)
 
 
-def _get_variable_from_passed_arguments(*, func: Callable, args: tuple, kwargs: dict, names: list[str]) -> Any | None:
-    sig = inspect.signature(func)
+def _get_variable_from_passed_arguments(
+    *,
+    func: Callable,
+    args: tuple,
+    kwargs: dict,
+    names: list[str],
+) -> Any | None:
+    signature = inspect.signature(func)
     try:
-        bound_arguments = sig.bind(*args, **kwargs)
+        bound_arguments = signature.bind(*args, **kwargs)
     except TypeError as e:
         raise TypeError(f"{func.__qualname__}() {e}") from None
     bound_arguments.apply_defaults()
-
     for name in names:
         if name in bound_arguments.arguments:
             return bound_arguments.arguments[name]
     return None
 
 
-def _get_variable_from_stack(names: list[str]) -> Any | None:
-    f = inspect.currentframe()
-    if f is None or f.f_back is None:
+def _get_variable_from_model_construction_stack(*, model: PreTrainedModel, names: list[str]) -> Any | None:
+    frame = inspect.currentframe()
+    if frame is None or frame.f_back is None:
         return None
 
-    f = f.f_back.f_back
+    # Skip this helper and the patched layer initializer so its own `layer_idx` local cannot shadow the model's.
+    frame = frame.f_back.f_back
 
-    while f:
+    while frame is not None:
         for name in names:
-            if name in f.f_locals:
-                return f.f_locals[name]
-        f = f.f_back
+            if name in frame.f_locals:
+                return frame.f_locals[name]
+        if frame.f_code.co_name == "__init__" and frame.f_locals.get("self") is model:
+            return None
+        frame = frame.f_back
     return None
 
 

@@ -31,7 +31,7 @@ from dataclasses import dataclass
 import torch
 
 from transformers.integrations.heterogeneity import HeterogeneousModelingSpec
-from transformers.integrations.heterogeneity.supported_models import MODEL_TO_SPEC_FACTORY
+from transformers.integrations.heterogeneity.supported_models import MODEL_TYPE_TO_SPEC_FACTORY
 from transformers.models.gpt_oss.modeling_gpt_oss import (
     GptOssDecoderLayer,
     GptOssPreTrainedModel,
@@ -277,21 +277,21 @@ MODEL_FIXTURES = {
     "llama": ModelFixture(
         pretrained_cls=LlamaPreTrainedModel,
         ref_layer_cls=SkipAwareLlamaDecoderLayer,
-        spec_factory=MODEL_TO_SPEC_FACTORY["llama"],
+        spec_factory=MODEL_TYPE_TO_SPEC_FACTORY["llama"],
     ),
     "gpt_oss": ModelFixture(
         pretrained_cls=GptOssPreTrainedModel,
         ref_layer_cls=SkipAwareGptOssDecoderLayer,
-        spec_factory=MODEL_TO_SPEC_FACTORY["gpt_oss"],
+        spec_factory=MODEL_TYPE_TO_SPEC_FACTORY["gpt_oss"],
     ),
     "llama4": ModelFixture(
         pretrained_cls=Llama4PreTrainedModel,
         ref_layer_cls=SkipAwareLlama4TextDecoderLayer,
-        spec_factory=MODEL_TO_SPEC_FACTORY["llama4"],
+        spec_factory=MODEL_TYPE_TO_SPEC_FACTORY["llama4_text"],
     ),
     "nemotron_h": ModelFixture(
         pretrained_cls=NemotronHPreTrainedModel,
         ref_layer_cls=SkipAwareNemotronHBlock,
-        spec_factory=MODEL_TO_SPEC_FACTORY["nemotron_h"],
+        spec_factory=MODEL_TYPE_TO_SPEC_FACTORY["nemotron_h"],
     ),
 }

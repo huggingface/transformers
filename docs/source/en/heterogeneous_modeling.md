@@ -23,8 +23,8 @@ built in.
 
 The architectures with built-in support are registered in
 [`supported_models.py`](https://github.com/huggingface/transformers/blob/main/src/transformers/integrations/heterogeneity/supported_models.py).
-Any other model, including custom models with remote code, can enable support by attaching a spec to its model class,
-without changes to Transformers.
+For any other model, including custom models with remote code, support can be enabled by setting
+`_heterogeneous_modeling_spec` on the model's `PreTrainedModel` base class, without changes to its modeling file.
 
 ## How it works
 
@@ -49,7 +49,7 @@ A spec names the layer class to patch and how to find each layer's index during 
 from transformers.integrations.heterogeneity import HeterogeneousModelingSpec
 from transformers.models.llama.modeling_llama import LlamaDecoderLayer
 
-HeterogeneousModelingSpec(
+spec = HeterogeneousModelingSpec(
     layer_cls=LlamaDecoderLayer,
     layer_idx_variable_name="layer_idx",
 )
@@ -58,8 +58,7 @@ HeterogeneousModelingSpec(
 - `layer_cls` is the architecture's repeated layer class (typically its decoder layer) whose differences `per_layer_config` describes.
 - `layer_idx_variable_name` is the name of the layer-index argument of `layer_cls.__init__` (`layer_idx` in most
   models). When the layer class does not accept the index as an argument, it is the name of the loop variable used to
-  construct the layers, which is then resolved from the call stack.
-
+  construct the layers, which is resolved from the model construction call stack.
 
 A spec without skip descriptors is enough as long as no layer has a skip. Supporting `skip` additionally
 requires a skip descriptor for each skip type, defining its effect on the layer.
@@ -81,7 +80,7 @@ def identity(hidden_states):
     return hidden_states
 
 
-HeterogeneousModelingSpec(
+spec = HeterogeneousModelingSpec(
     layer_cls=LlamaDecoderLayer,
     layer_idx_variable_name="layer_idx",
     skip_descriptors={
@@ -217,13 +216,24 @@ box.
 
 ## Enable a custom model
 
-Set `_heterogeneous_modeling_spec` on the model's `PreTrainedModel` base class, so that every model class of the
-architecture resolves the same spec:
+A custom modeling module typically defines a shared `PreTrainedModel` base class:
 
 ```py
+# my_model/modeling_my_model.py
+from transformers import PreTrainedModel
+
 class MyModelPreTrainedModel(PreTrainedModel):
     ...
 
+class MyModel(MyModelPreTrainedModel):
+    ...
+```
+
+To enable heterogeneous modeling without changing that file, import the shared base class and set
+`_heterogeneous_modeling_spec` on it:
+
+```py
+from my_model.modeling_my_model import MyModelPreTrainedModel
 
 MyModelPreTrainedModel._heterogeneous_modeling_spec = spec
 ```
@@ -231,5 +241,4 @@ MyModelPreTrainedModel._heterogeneous_modeling_spec = spec
 Nothing else is required: constructing any `MyModel*` class with a heterogeneous configuration applies the spec, and
 [`~PreTrainedModel.from_pretrained`] works as usual.
 
-Built-in support lives in `transformers.integrations.heterogeneity.supported_models`. To contribute support for a
-Transformers architecture, add a spec factory to `MODEL_TO_SPEC_FACTORY` there instead of attaching an attribute.
+Built-in support lives in `transformers.integrations.heterogeneity.supported_models`. To contribute support for a new model type, add a spec factory to `MODEL_TYPE_TO_SPEC_FACTORY`.

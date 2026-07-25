@@ -20,10 +20,7 @@ from .heterogeneous_modeling_spec import (
     get_heterogeneous_modeling_spec,
     nest_skip_descriptor_paths,
 )
-from .modeling_utils import (
-    apply_heterogeneous_modeling,
-    wrap_model_init_with_heterogeneous_cleanup,
-)
+from .modeling_utils import apply_heterogeneous_modeling, wrap_model_init_with_heterogeneous_cleanup
 from .skip_utils import ReturnEntry, get_skip_replacement
 
 

@@ -25,8 +25,6 @@ if TYPE_CHECKING:
 
     from transformers.modeling_utils import PreTrainedModel
 
-_MODEL_MODULE_PREFIX = "transformers.models."
-
 SkipReplacements: TypeAlias = "dict[str | tuple[str, type], Callable[[], nn.Module]]"
 
 
@@ -96,22 +94,17 @@ def get_heterogeneous_modeling_spec(model: PreTrainedModel) -> HeterogeneousMode
     if heterogeneous_modeling_spec is not None:
         return heterogeneous_modeling_spec
 
-    model_module_name = type(model).__module__
-    if not model_module_name.startswith(_MODEL_MODULE_PREFIX):
-        raise ValueError(
-            f"No heterogeneous modeling spec is defined for `{model.__class__.__name__}` in `{model_module_name}`. Make sure `_heterogeneous_modeling_spec` is set on the model class."
-        ) from None
+    model_type = model.config.get_text_config(decoder=True).model_type
+    from transformers.integrations.heterogeneity.supported_models import MODEL_TYPE_TO_SPEC_FACTORY
 
-    model_package_name = model_module_name.removeprefix(_MODEL_MODULE_PREFIX).split(".", 1)[0]
-    from transformers.integrations.heterogeneity.supported_models import MODEL_TO_SPEC_FACTORY
-
-    spec_factory = MODEL_TO_SPEC_FACTORY.get(model_package_name)
+    spec_factory = MODEL_TYPE_TO_SPEC_FACTORY.get(model_type)
 
     if spec_factory is None:
         raise ValueError(
-            f"No heterogeneous modeling spec is defined for `{model_package_name}`. Built-in heterogeneous modeling "
+            f"No heterogeneous modeling spec is defined for model type `{model_type}`. Built-in heterogeneous modeling "
             "support is only available for models listed in "
-            "`transformers.integrations.heterogeneity.supported_models.MODEL_TO_SPEC_FACTORY`. Alternatively, set `_heterogeneous_modeling_spec` on the model class."
+            "`transformers.integrations.heterogeneity.supported_models.MODEL_TYPE_TO_SPEC_FACTORY`. "
+            "To add support outside this registry, set `_heterogeneous_modeling_spec` on the model class."
         )
 
     return spec_factory()
