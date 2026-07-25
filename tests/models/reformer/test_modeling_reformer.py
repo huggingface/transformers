@@ -1367,7 +1367,7 @@ class ReformerIntegrationTests(unittest.TestCase):
 
         self.assertEqual(
             output,
-            "A few months later state expression in his ideas, at the first entrance. He was positively for an inst",
+            "A few months later state expression in his ideas, so attentively two or three thousand roubles, and",
         )
 
     @slow
