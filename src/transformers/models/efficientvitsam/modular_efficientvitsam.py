@@ -752,22 +752,18 @@ class EfficientViTBlock(nn.Module):
 
 
 class EfficientViTLargeBackbone(nn.Module):
-    def __init__(
-        self,
-        width_list: list[int],
-        depth_list: list[int],
-        block_list: list[str] | None = None,
-        expand_list: list[float] | None = None,
-        fewer_norm_list: list[bool] | None = None,
-        in_channels: int = 3,
-        qkv_dim: int = 32,
-        norm: str = "bn2d",
-        act_func: str = "gelu",
-    ):
+    def __init__(self, config: EfficientViTSamVisionConfig):
         super().__init__()
-        block_list = ["res", "fmb", "fmb", "mb", "att"] if block_list is None else block_list
-        expand_list = [1.0, 4.0, 4.0, 4.0, 6.0] if expand_list is None else expand_list
-        fewer_norm_list = [False, False, False, True, True] if fewer_norm_list is None else fewer_norm_list
+
+        width_list = config.width_list
+        depth_list = config.depth_list
+        block_list = config.block_list
+        expand_list = config.expand_list
+        fewer_norm_list = config.fewer_norm_list
+        in_channels = config.in_channels
+        qkv_dim = config.qkv_dim
+        norm = config.norm
+        act_func = config.act_func
 
         self.width_list = []
         self.stages = nn.ModuleList()
@@ -993,17 +989,7 @@ class EfficientViTSamPreTrainedModel(PreTrainedModel):
 class EfficientViTSamImageEncoder(EfficientViTSamPreTrainedModel):
     def __init__(self, config: EfficientViTSamVisionConfig):
         super().__init__(config)
-        self.backbone = EfficientViTLargeBackbone(
-            width_list=config.width_list,
-            depth_list=config.depth_list,
-            block_list=config.block_list,
-            expand_list=config.expand_list,
-            fewer_norm_list=config.fewer_norm_list,
-            in_channels=config.in_channels,
-            qkv_dim=config.qkv_dim,
-            norm=config.norm,
-            act_func=config.act_func,
-        )
+        self.backbone = EfficientViTLargeBackbone(config=config)
         self.neck = SamNeck(
             fid_list=config.fid_list,
             in_channel_list=config.in_channel_list,

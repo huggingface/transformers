@@ -298,24 +298,51 @@ class EfficientViTSamMLPBlock(nn.Module):
 
 def eager_attention_forward(
     module: nn.Module,
-    query: torch.Tensor,
-    key: torch.Tensor,
-    value: torch.Tensor,
-    attention_mask: torch.Tensor | None,
-    scaling: float,
-    dropout: float = 0.0,
-    **kwargs,
-):
-    attn_weights = torch.matmul(query, key.transpose(2, 3)) * scaling
-    if attention_mask is not None:
-        attn_weights = attn_weights + attention_mask
+    qkv: torch.Tensor,
+) -> torch.Tensor:
+    B, _, H, W = list(qkv.size())
+    device_type = qkv.device.type
+    autocast_context = (
+        torch.autocast(device_type=device_type, enabled=False)
+        if device_type in {"cuda", "cpu"}
+        else contextlib.nullcontext()
+    )
 
-    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
-    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
-    attn_output = torch.matmul(attn_weights, value)
-    attn_output = attn_output.transpose(1, 2).contiguous()
+    with autocast_context:
+        if qkv.dtype in [torch.float16, torch.bfloat16]:
+            qkv = qkv.float()
 
-    return attn_output, attn_weights
+        qkv = torch.reshape(
+            qkv,
+            (
+                B,
+                -1,
+                3 * module.dim,
+                H * W,
+            ),
+        )
+        q, k, v = (
+            qkv[:, :, 0 : module.dim],
+            qkv[:, :, module.dim : 2 * module.dim],
+            qkv[:, :, 2 * module.dim :],
+        )
+
+        q = module.kernel_func(q)
+        k = module.kernel_func(k)
+
+        if module.dim < H * W:
+            trans_k = k.transpose(-1, -2)
+            v = F.pad(v, (0, 0, 0, 1), mode="constant", value=1.0)
+            vk = torch.matmul(v, trans_k)
+            out = torch.matmul(vk, q)
+            out = out[:, :, :-1] / (out[:, :, -1:] + module.eps)
+        else:
+            att_map = torch.matmul(k.transpose(-1, -2), q)
+            att_map = att_map / (torch.sum(att_map, dim=2, keepdim=True) + module.eps)
+            out = torch.matmul(v, att_map)
+
+        out = torch.reshape(out, (B, -1, H, W))
+        return out
 
 
 class EfficientViTSamAttention(nn.Module):
@@ -1092,84 +1119,10 @@ class LiteMLA(nn.Module):
         )
 
     def relu_linear_att(self, qkv: torch.Tensor) -> torch.Tensor:
-        B, _, H, W = list(qkv.size())
-        device_type = qkv.device.type
-        autocast_context = (
-            torch.autocast(device_type=device_type, enabled=False)
-            if device_type in {"cuda", "cpu"}
-            else contextlib.nullcontext()
-        )
-
-        with autocast_context:
-            if qkv.dtype in [torch.float16, torch.bfloat16]:
-                qkv = qkv.float()
-
-            qkv = torch.reshape(
-                qkv,
-                (
-                    B,
-                    -1,
-                    3 * self.dim,
-                    H * W,
-                ),
-            )
-            q, k, v = (
-                qkv[:, :, 0 : self.dim],
-                qkv[:, :, self.dim : 2 * self.dim],
-                qkv[:, :, 2 * self.dim :],
-            )
-
-            # lightweight linear attention
-            q = self.kernel_func(q)
-            k = self.kernel_func(k)
-
-            trans_k = k.transpose(-1, -2)
-
-            v = F.pad(v, (0, 0, 0, 1), mode="constant", value=1.0)
-            vk = torch.matmul(v, trans_k)
-            out = torch.matmul(vk, q)
-            out = out[:, :, :-1] / (out[:, :, -1:] + self.eps)
-
-            out = torch.reshape(out, (B, -1, H, W))
-            return out
+        return eager_attention_forward(self, qkv)
 
     def relu_quadratic_att(self, qkv: torch.Tensor) -> torch.Tensor:
-        B, _, H, W = list(qkv.size())
-        device_type = qkv.device.type
-        autocast_context = (
-            torch.autocast(device_type=device_type, enabled=False)
-            if device_type in {"cuda", "cpu"}
-            else contextlib.nullcontext()
-        )
-
-        with autocast_context:
-            if qkv.dtype in [torch.float16, torch.bfloat16]:
-                qkv = qkv.float()
-
-            qkv = torch.reshape(
-                qkv,
-                (
-                    B,
-                    -1,
-                    3 * self.dim,
-                    H * W,
-                ),
-            )
-            q, k, v = (
-                qkv[:, :, 0 : self.dim],
-                qkv[:, :, self.dim : 2 * self.dim],
-                qkv[:, :, 2 * self.dim :],
-            )
-
-            q = self.kernel_func(q)
-            k = self.kernel_func(k)
-
-            att_map = torch.matmul(k.transpose(-1, -2), q)  # b h n n
-            att_map = att_map / (torch.sum(att_map, dim=2, keepdim=True) + self.eps)  # b h n n
-            out = torch.matmul(v, att_map)  # b h d n
-
-            out = torch.reshape(out, (B, -1, H, W))
-            return out
+        return eager_attention_forward(self, qkv)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         qkv = self.qkv(x)
@@ -1178,11 +1131,7 @@ class LiteMLA(nn.Module):
             multi_scale_qkv.append(op(qkv))
         qkv = torch.cat(multi_scale_qkv, dim=1)
 
-        H, W = list(qkv.size())[-2:]
-        if self.dim < H * W:
-            out = self.relu_linear_att(qkv).to(qkv.dtype)
-        else:
-            out = self.relu_quadratic_att(qkv).to(qkv.dtype)
+        out = eager_attention_forward(self, qkv).to(qkv.dtype)
         out = self.proj(out)
 
         return out
@@ -1235,22 +1184,18 @@ class EfficientViTBlock(nn.Module):
 
 
 class EfficientViTLargeBackbone(nn.Module):
-    def __init__(
-        self,
-        width_list: list[int],
-        depth_list: list[int],
-        block_list: list[str] | None = None,
-        expand_list: list[float] | None = None,
-        fewer_norm_list: list[bool] | None = None,
-        in_channels: int = 3,
-        qkv_dim: int = 32,
-        norm: str = "bn2d",
-        act_func: str = "gelu",
-    ):
+    def __init__(self, config: EfficientViTSamVisionConfig):
         super().__init__()
-        block_list = ["res", "fmb", "fmb", "mb", "att"] if block_list is None else block_list
-        expand_list = [1.0, 4.0, 4.0, 4.0, 6.0] if expand_list is None else expand_list
-        fewer_norm_list = [False, False, False, True, True] if fewer_norm_list is None else fewer_norm_list
+
+        width_list = config.width_list
+        depth_list = config.depth_list
+        block_list = config.block_list
+        expand_list = config.expand_list
+        fewer_norm_list = config.fewer_norm_list
+        in_channels = config.in_channels
+        qkv_dim = config.qkv_dim
+        norm = config.norm
+        act_func = config.act_func
 
         self.width_list = []
         self.stages = nn.ModuleList()
@@ -1476,17 +1421,7 @@ class EfficientViTSamPreTrainedModel(PreTrainedModel):
 class EfficientViTSamImageEncoder(EfficientViTSamPreTrainedModel):
     def __init__(self, config: EfficientViTSamVisionConfig):
         super().__init__(config)
-        self.backbone = EfficientViTLargeBackbone(
-            width_list=config.width_list,
-            depth_list=config.depth_list,
-            block_list=config.block_list,
-            expand_list=config.expand_list,
-            fewer_norm_list=config.fewer_norm_list,
-            in_channels=config.in_channels,
-            qkv_dim=config.qkv_dim,
-            norm=config.norm,
-            act_func=config.act_func,
-        )
+        self.backbone = EfficientViTLargeBackbone(config=config)
         self.neck = SamNeck(
             fid_list=config.fid_list,
             in_channel_list=config.in_channel_list,
