@@ -32,7 +32,7 @@ Then run the command below to install GPT-QModel.
 pip install gptqmodel --no-build-isolation
 ```
 
-Create a [`GPTQConfig`] class and set the number of bits to quantize to, a dataset to calbrate the weights for quantization, and a tokenizer to prepare the dataset.
+Create a [`GPTQConfig`] class and set the number of bits to quantize to, a dataset to calibrate the weights for quantization, and a tokenizer to prepare the dataset.
 
 ```py
 from transformers import AutoModelForCausalLM, AutoTokenizer, GPTQConfig
