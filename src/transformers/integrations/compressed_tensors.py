@@ -16,7 +16,7 @@
 import torch
 from torch import nn
 
-from ..core_model_loading import ConversionOps
+from ..core_model_loading import ConversionOps, _IdentityOp
 
 
 class DecompressExperts(ConversionOps):
@@ -111,4 +111,5 @@ class DecompressExperts(ConversionOps):
 
     @property
     def reverse_op(self) -> "ConversionOps":
-        return None  # FIXME
+        return _IdentityOp()
+

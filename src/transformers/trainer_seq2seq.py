@@ -328,12 +328,6 @@ class Seq2SeqTrainer(Trainer):
         with summon_full_params_context:
             generated_tokens = self.model.generate(**generation_inputs, **gen_kwargs)
 
-        # Temporary hack to ensure the generation config is not initialized for each iteration of the evaluation loop
-        # TODO: remove this hack when the legacy code that initializes generation_config from a model config is
-        # removed in https://github.com/huggingface/transformers/blob/98d88b23f54e5a23e741833f1e973fdf600cc2c5/src/transformers/generation/utils.py#L1183
-        if self.model.generation_config._from_model_config:
-            self.model.generation_config._from_model_config = False
-
         # Retrieves GenerationConfig from model.generation_config
         # Update with defaults because earlier the generation config used to be init
         # with default values. Now we init it with `None` and keep defaults for BC
