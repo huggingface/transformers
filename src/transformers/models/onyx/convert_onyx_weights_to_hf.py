@@ -22,6 +22,7 @@ Usage:
 """
 
 import argparse
+import json
 from pathlib import Path
 
 import torch
@@ -250,6 +251,71 @@ def convert_vision_state_dict(source: dict[str, torch.Tensor], config) -> dict[s
     return out
 
 
+# HF response_schema: the output-side counterpart to the chat template. transformers 5.x
+# reads this off the tokenizer (tokenizer.parse_response) to turn a generated assistant
+# turn back into a structured message (reasoning_content / content / tool_calls). Owned by
+# the model team; baked onto the tokenizer so partners get parse_response() for free.
+ONYX_RESPONSE_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "role": {"const": "assistant"},
+        "reasoning_content": {
+            "type": "string",
+            # A turn may contain several `to=self` blocks (reasoning interleaved
+            # with tool calls). Collapse the span from one block's `<|eom|>` up to
+            # the next `to=self<|message|>` so the single-value capture below yields
+            # ALL reasoning joined, not just the first block.
+            "x-regex-substitutions": [
+                [r"<\|eom\|>(?:(?!to=self<\|message\|>).)*?to=self<\|message\|>", "\n"],
+            ],
+            "x-regex": r"to=self<\|message\|>(.*?)<\|eom\|>",
+        },
+        "content": {
+            "type": "string",
+            # Final answer. `to=user` is unambiguous (only the final answer uses
+            # it) and always the turn-final message, so this never picks up
+            # `to=self` reasoning or `to=<tool>` calls, or an intermediate message.
+            "x-regex": r"to=user<\|message\|>(.*?)(?=<\|eot\|>|<\|eom\|>|$)",
+        },
+        "tool_calls": {
+            "type": "array",
+            # Channel-scope the extraction: strip the `to=self` reasoning and
+            # `to=user` final-answer spans BEFORE the invoke iterator runs, so an
+            # example/echoed <atem:invoke> the model writes inside its CoT or final
+            # answer is not mis-parsed as a real call (the C++ parser is channel-aware).
+            "x-regex-substitutions": [
+                [r"to=self<\|message\|>.*?<\|eom\|>", ""],
+                [r"to=user<\|message\|>.*?(?=<\|eot\|>|<\|eom\|>|$)", ""],
+            ],
+            "x-regex-iterator": r"(<atem:invoke\b.*?</atem:invoke>)",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "type": {"const": "function"},
+                    "function": {
+                        "type": "object",
+                        "properties": {
+                            "name": {
+                                "type": "string",
+                                "x-regex": r'<atem:invoke\b[^>]*?\bname="([^"]+)"',
+                            },
+                            "arguments": {
+                                "type": "object",
+                                "x-regex-key-value": r'<atem:parameter\b[^>]*?\bname="(?P<key>[^"]+)"[^>]*?>(?P<value>.*?)</atem:parameter>',
+                                "additionalProperties": {
+                                    "x-parser": "json",
+                                    "x-parser-args": {"allow_non_json": True},
+                                },
+                            },
+                        },
+                    },
+                },
+            },
+        },
+    },
+}
+
+
 class OnyxTokenizerConverter(TikTokenConverter):
     def __init__(self, vocab_file: str):
         super().__init__(vocab_file, pattern=O200K_PATTERN)
@@ -265,6 +331,10 @@ class OnyxTokenizerConverter(TikTokenConverter):
         self.converted_tokenizer.eos_token = "<|end_of_text|>"
         self.converted_tokenizer.pad_token = "<|finetune_right_pad|>"
         self.converted_tokenizer.chat_template = ONYX_MM_CHAT_TEMPLATE
+        # Bake the output-side parser so ``tokenizer.parse_response`` can turn generated
+        # XML_ATEM output back into structured tool calls. Persisted into
+        # tokenizer_config.json on save (PreTrainedTokenizerBase.save_pretrained).
+        self.converted_tokenizer.response_schema = ONYX_RESPONSE_SCHEMA
 
         bos_id = self.converted_tokenizer.convert_tokens_to_ids("<|begin_of_text|>")
         self.converted_tokenizer._tokenizer.post_processor = processors.TemplateProcessing(
@@ -292,6 +362,25 @@ def convert_tokenizer(tokenizer_path: Path, output_dir: Path) -> None:
         chat_template=ONYX_MM_CHAT_TEMPLATE,
     )
     processor.save_pretrained(output_dir)
+
+
+def write_generation_config(output_dir: Path) -> None:
+    # eos is <|end_of_text|> (200001) and <|eot|> (200008, end of turn). <|eom|>
+    # (200007) looks like a third stop but isn't one: it separates messages within a
+    # turn (it closes the to=self reasoning, and each non-final call in a parallel
+    # batch), and the model keeps generating after it to reach the tool call and the
+    # final answer. Put it in eos and generation dies right after the reasoning block,
+    # before any tool call. The reference decoder likewise keeps <|eom|> off the
+    # end-of-generation set and stops on <|end_of_text|>. pad is 200018.
+    gen_config = {
+        "bos_token_id": 200000,
+        "eos_token_id": [200001, 200008],
+        "pad_token_id": 200018,
+        "max_length": 16384,
+        "do_sample": False,
+    }
+    with open(output_dir / "generation_config.json", "w") as f:
+        json.dump(gen_config, f, indent=2)
 
 
 def main():
@@ -357,6 +446,9 @@ def main():
 
     print("Converting tokenizer...")
     convert_tokenizer(args.tokenizer_path, args.output_path)
+
+    print("Writing generation_config.json (eos = [200001, 200008], drops <|eom|>)...")
+    write_generation_config(args.output_path)
 
     print("Done.")
 

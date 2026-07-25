@@ -13,53 +13,20 @@
 # limitations under the License.
 from ...processing_utils import ProcessorMixin
 from ...utils import auto_docstring, logging
+from .onyx_chat_template import build_chat_template
 
 
 logger = logging.get_logger(__name__)
 
-ONYX_MM_CHAT_TEMPLATE = (
-    "{{- bos_token -}}"
-    "{%- macro render_parts(content) -%}"
-    "{%- if content is string -%}{{- content -}}"
-    "{%- else -%}"
-    "{%- for part in content -%}"
-    "{%- if part['type'] == 'image' -%}{{- '<|image|>' -}}"
-    "{%- elif part['type'] == 'video' -%}{{- '<|video|>' -}}"
-    "{%- elif part['type'] == 'text' -%}{{- part['text'] -}}"
-    "{%- endif -%}"
-    "{%- endfor -%}"
-    "{%- endif -%}"
-    "{%- endmacro -%}"
-    "{%- set ns = namespace(has_system=false) -%}"
-    "{%- for m in messages -%}{%- if m['role'] == 'system' -%}{%- set ns.has_system = true -%}{%- endif -%}{%- endfor -%}"
-    "{%- if add_generation_prompt and not ns.has_system -%}"
-    "{{- '<|start|>system<|message|>You are a helpful assistant.<|eot|>' -}}"
-    "{%- endif -%}"
-    "{%- for message in messages -%}"
-    "{%- set role = message['role'] -%}"
-    "{%- if role == 'assistant' -%}"
-    "{%- set recipient = message.get('recipient') -%}"
-    "{%- set end_turn = message.get('end_turn') -%}"
-    "{%- if end_turn is none -%}"
-    "{%- set end_turn = not (recipient and recipient != 'user') -%}"
-    "{%- endif -%}"
-    "{{- '<|start|>assistant' -}}"
-    "{%- if recipient -%}{{- ' to=' + recipient -}}{%- endif -%}"
-    "{{- '<|message|>' -}}{{- render_parts(message['content']) -}}"
-    "{{- ('<|eot|>' if end_turn else '<|eom|>') -}}"
-    "{%- elif role == 'tool' -%}"
-    "{%- set name = message.get('name', '') -%}"
-    "{{- '<|start|>tool ' + name + '<|message|>' -}}{{- render_parts(message['content']) -}}"
-    "{{- '<|eot|>' -}}"
-    "{%- else -%}"
-    "{%- set header = role -%}"
-    "{%- if message.get('name') -%}{%- set header = role + ' ' + message['name'] -%}{%- endif -%}"
-    "{{- '<|start|>' + header + '<|message|>' -}}{{- render_parts(message['content']) -}}"
-    "{{- '<|eot|>' -}}"
-    "{%- endif -%}"
-    "{%- endfor -%}"
-    "{%- if add_generation_prompt -%}{{- '<|start|>assistant to=user<|message|>' -}}{%- endif -%}"
-)
+# The Onyx chat template is owned by the model team (Meta): it renders the ATEM
+# tool-calling format, the private ``to=self`` reasoning channel, reasoning-strength
+# and valid-recipients metadata, and multimodal (image / video) content. It is the
+# authoritative source of truth (kept byte-identical to the internal
+# ``genai/msl/guac/hf`` template) and its generation prompt is intentionally the bare
+# ``<|start|>assistant`` so the model chooses its own channel (``to=self`` reasoning,
+# ``to=<tool>`` for a tool call, or ``to=user`` for a direct answer). Do NOT hardcode
+# the generation prompt to ``to=user`` -- that structurally prevents tool calls.
+ONYX_MM_CHAT_TEMPLATE = build_chat_template(multimodal=True)
 
 
 @auto_docstring
