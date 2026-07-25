@@ -110,7 +110,6 @@ class NemotronH_Omni_Reasoning_V3_Config(PreTrainedConfig):
         elif self.llm_config is None:
             self.llm_config = NemotronHConfig()
 
-        # Sound/audio model configuration is optional; leave it as `None` to disable the audio branch.
         # This checkpoint's sound_config omits `attention_bias`/`scale_input`, which are `False` for
         # its Parakeet variant, so supply them before building the encoder config.
         if isinstance(self.sound_config, dict):

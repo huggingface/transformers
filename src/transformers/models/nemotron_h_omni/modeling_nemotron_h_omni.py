@@ -29,12 +29,8 @@ from ...generation import GenerationConfig
 from ...integrations import use_kernel_forward_from_hub
 from ...modeling_outputs import CausalLMOutputWithPast
 from ...modeling_utils import PreTrainedModel
-from ...utils import logging
 from ..auto import CONFIG_MAPPING, FEATURE_EXTRACTOR_MAPPING, AutoModel, AutoModelForCausalLM
 from .configuration_nemotron_h_omni import NemotronH_Omni_Reasoning_V3_Config
-
-
-logger = logging.get_logger(__name__)
 
 
 @use_kernel_forward_from_hub("RMSNorm")
@@ -309,8 +305,6 @@ class NemotronH_Omni_Reasoning_V3(PreTrainedModel):
         self.vision_model = AutoModel.from_config(config.vision_config)
         self.vision_model.make_preprocessor_external()
 
-        self.vision_model = self.vision_model.to(self.language_model.config.torch_dtype)
-
         self.drop_vision_class_token = True
 
         llm_hidden_size = config.llm_config.hidden_size
@@ -318,12 +312,10 @@ class NemotronH_Omni_Reasoning_V3(PreTrainedModel):
         self.video_pruning_rate = config.video_pruning_rate
 
         self.vision_projector = NemotronH_Omni_Reasoning_V3VisionProjector(config)
-        self.vision_projector = self.vision_projector.to(self.language_model.config.torch_dtype)
 
-        self.sound_context_token_id = getattr(config, "sound_context_token_id", None)
+        self.sound_context_token_id = config.sound_context_token_id
         if config.sound_config is not None:
             self.sound_projector = NemotronH_Omni_Reasoning_V3SoundProjector(config.sound_config, llm_hidden_size)
-            self.sound_projector = self.sound_projector.to(self.language_model.config.torch_dtype)
         else:
             self.sound_projector = None
 
@@ -352,31 +344,10 @@ class NemotronH_Omni_Reasoning_V3(PreTrainedModel):
         if inputs_embeds is None:
             inputs_embeds = self.language_model.get_input_embeddings()(input_ids)
 
-        image_flags = image_flags.squeeze(-1)
-
-        B, N, C = inputs_embeds.shape
-        inputs_embeds = inputs_embeds.reshape(B * N, C)
-
-        input_ids = input_ids.reshape(B * N)
-        selected = input_ids == self.img_context_token_id
-
         vit_embeds = self.vision_projector(pixel_values, self.vision_model)
-        del pixel_values
-
-        vit_embeds = vit_embeds[image_flags == 1]
-        try:
-            inputs_embeds[selected] = inputs_embeds[selected] * 0.0 + vit_embeds.reshape(-1, C)
-        except Exception as e:
-            vit_embeds = vit_embeds.reshape(-1, C)
-            logger.warning(
-                f"warning: {e}, inputs_embeds[selected].shape={inputs_embeds[selected].shape}, "
-                f"vit_embeds.shape={vit_embeds.shape}"
-            )
-            n_token = selected.sum()
-            inputs_embeds[selected] = inputs_embeds[selected] * 0.0 + vit_embeds[:n_token]
-
-        del vit_embeds
-        inputs_embeds = inputs_embeds.reshape(B, N, C)
+        vit_embeds = vit_embeds[image_flags.squeeze(-1) == 1].to(inputs_embeds.device, inputs_embeds.dtype)
+        image_mask = (input_ids == self.img_context_token_id).unsqueeze(-1).expand_as(inputs_embeds)
+        inputs_embeds = inputs_embeds.masked_scatter(image_mask.to(inputs_embeds.device), vit_embeds)
 
         outputs = self.language_model(
             inputs_embeds=inputs_embeds,
@@ -445,33 +416,23 @@ class NemotronH_Omni_Reasoning_V3(PreTrainedModel):
                 sound_embeds = self.sound_projector(sound_clips)
 
             inputs_embeds = self.language_model.get_input_embeddings()(input_ids)
-            B, N, C = inputs_embeds.shape
-            inputs_embeds = inputs_embeds.reshape(B * N, C)
-            input_ids_copy = input_ids.reshape(B * N)
 
             if image_vit_embeds is not None:
-                image_mask = input_ids_copy == self.img_context_token_id
-                assert image_mask.sum() != 0, "No image tokens found in input_ids"
-                inputs_embeds[image_mask] = image_vit_embeds.reshape(-1, C).to(
-                    inputs_embeds.device, inputs_embeds.dtype
-                )
+                image_vit_embeds = image_vit_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
+                image_mask = (input_ids == self.img_context_token_id).unsqueeze(-1).expand_as(inputs_embeds)
+                inputs_embeds = inputs_embeds.masked_scatter(image_mask.to(inputs_embeds.device), image_vit_embeds)
 
             if video_vit_embeds is not None:
-                if B > 1:
+                if inputs_embeds.shape[0] > 1:
                     raise NotImplementedError("Video is not supported for batch size > 1")
-                video_mask = input_ids_copy == self.img_context_token_id
-                assert video_mask.sum() != 0, "No video tokens found in input_ids"
-                inputs_embeds[video_mask] = video_vit_embeds.reshape(-1, C).to(
-                    inputs_embeds.device, inputs_embeds.dtype
-                )
+                video_vit_embeds = video_vit_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
+                video_mask = (input_ids == self.img_context_token_id).unsqueeze(-1).expand_as(inputs_embeds)
+                inputs_embeds = inputs_embeds.masked_scatter(video_mask.to(inputs_embeds.device), video_vit_embeds)
 
             if sound_embeds is not None and self.sound_context_token_id is not None:
-                sound_mask = input_ids_copy == self.sound_context_token_id
-                assert sound_mask.sum() != 0, "No sound tokens found in input_ids"
-                assert sound_mask.sum().item() == sound_embeds.shape[0], (
-                    f"sound token count ({sound_mask.sum().item()}) != encoder output count ({sound_embeds.shape[0]})"
-                )
-                inputs_embeds[sound_mask] = sound_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
+                sound_embeds = sound_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
+                sound_mask = (input_ids == self.sound_context_token_id).unsqueeze(-1).expand_as(inputs_embeds)
+                inputs_embeds = inputs_embeds.masked_scatter(sound_mask.to(inputs_embeds.device), sound_embeds)
 
             if video_vit_embeds is not None and self.video_pruning_rate > 0:
                 h = w = int(video_vit_embeds.shape[1] ** 0.5)
@@ -481,15 +442,13 @@ class NemotronH_Omni_Reasoning_V3(PreTrainedModel):
                     spatial_merge_size=1,
                     q=self.video_pruning_rate,
                 )
-                retention_mask = torch.ones_like(input_ids_copy, dtype=torch.bool)
-                retention_mask[video_mask] = evs_mask.view(-1)
+                retention_mask = torch.ones_like(input_ids, dtype=torch.bool)
+                retention_mask[input_ids == self.img_context_token_id] = evs_mask.view(-1)
                 inputs_embeds = inputs_embeds[retention_mask].unsqueeze(0)
                 if attention_mask is not None:
-                    attention_mask = attention_mask[:, retention_mask].contiguous()
+                    attention_mask = attention_mask[retention_mask].unsqueeze(0)
                 if input_ids is not None:
-                    input_ids = input_ids[:, retention_mask].contiguous()
-            else:
-                inputs_embeds = inputs_embeds.reshape(B, N, C)
+                    input_ids = input_ids[retention_mask].unsqueeze(0)
         else:
             inputs_embeds = self.language_model.get_input_embeddings()(input_ids)
 
