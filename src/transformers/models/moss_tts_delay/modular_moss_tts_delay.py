@@ -14,17 +14,32 @@
 """Modeling classes for MossTTSDelay."""
 
 from dataclasses import dataclass
+from typing import Any
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from huggingface_hub.dataclasses import strict
 from torch.nn import CrossEntropyLoss
-from tqdm import tqdm
 
-from ... import initialization as init
 from ...cache_utils import Cache
 from ...configuration_utils import PreTrainedConfig
+from ...generation import (
+    GenerateDecoderOnlyOutput,
+    GenerationConfig,
+    GenerationMixin,
+    GenerationMode,
+    LogitsProcessorList,
+    StoppingCriteriaList,
+)
+from ...generation.logits_process import (
+    InfNanRemoveLogitsProcessor,
+    RepetitionPenaltyLogitsProcessor,
+    TemperatureLogitsWarper,
+    TopKLogitsWarper,
+    TopPLogitsWarper,
+)
+from ...generation.streamers import BaseStreamer
 from ...modeling_outputs import ModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
@@ -38,7 +53,6 @@ from ...utils import (
 )
 from ..auto import AutoModel
 from ..qwen3 import Qwen3Config
-from .processing_moss_tts_delay import AssistantMessage, MossTTSDelayProcessor, UserMessage
 
 
 logger = logging.get_logger(__name__)
@@ -95,159 +109,39 @@ class MossTTSDelayConfig(PreTrainedConfig):
     keys_to_ignore_at_inference = ["past_key_values"]
     sub_configs = {"language_config": Qwen3Config}
 
-    def __init__(
-        self,
-        language_config: Qwen3Config | dict | None = None,
-        initializer_range: float = 0.02,
-        n_codebooks: int = 32,
-        pad_token_id: int = 151643,
-        im_start_token_id: int = 151644,
-        im_end_token_id: int = 151645,
-        codebook_size: int = 1024,
-        audio_user_slot_token_id: int = 151654,
-        audio_assistant_gen_slot_token_id: int = 151656,
-        audio_assistant_delay_slot_token_id: int = 151662,
-        audio_start_token_id: int = 151652,
-        audio_end_token_id: int = 151653,
-        codebook_pad_token_id: int = 1024,
-        sampling_rate: int = 24000,
-        **kwargs,
-    ):
-        r"""
-        language_config (`Qwen3Config` or `dict`, *optional*):
-            Configuration for the backbone language model.
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            Standard deviation used to initialize weights.
-        n_codebooks (`int`, *optional*, defaults to 32):
-            Number of audio VQ codebook channels.
-        pad_token_id (`int`, *optional*, defaults to 151643):
-            Padding token id for the text channel.
-        im_start_token_id (`int`, *optional*, defaults to 151644):
-            Token id used to mark the beginning of a chat message.
-        im_end_token_id (`int`, *optional*, defaults to 151645):
-            Token id used to mark the end of a chat message.
-        codebook_size (`int`, *optional*, defaults to 1024):
-            Vocabulary size for each audio codebook.
-        audio_user_slot_token_id (`int`, *optional*, defaults to 151654):
-            Placeholder token id for user-side audio inputs.
-        audio_assistant_gen_slot_token_id (`int`, *optional*, defaults to 151656):
-            Placeholder token id that triggers assistant audio generation.
-        audio_assistant_delay_slot_token_id (`int`, *optional*, defaults to 151662):
-            Token id used for delayed audio-code positions.
-        audio_start_token_id (`int`, *optional*, defaults to 151652):
-            Token id that marks the start of an audio segment.
-        audio_end_token_id (`int`, *optional*, defaults to 151653):
-            Token id that marks the end of an audio segment.
-        codebook_pad_token_id (`int`, *optional*, defaults to 1024):
-            Padding code used in audio VQ channels.
-        sampling_rate (`int`, *optional*, defaults to 24000):
-            Audio sampling rate used by the processor and audio tokenizer.
-        """
-        if isinstance(language_config, dict):
-            self.language_config = Qwen3Config(**language_config)
-        elif language_config is None:
+    language_config: Qwen3Config | dict | None = None
+    initializer_range: float = 0.02
+    n_codebooks: int = 32
+    codebook_size: int = 1024
+    audio_user_slot_token_id: int = 151654
+    audio_assistant_gen_slot_token_id: int = 151656
+    audio_assistant_delay_slot_token_id: int = 151662
+    audio_start_token_id: int = 151652
+    audio_end_token_id: int = 151653
+    codebook_pad_token_id: int = 1024
+    sampling_rate: int = 24000
+    pad_token_id: int | None = 151643
+    im_start_token_id: int = 151644
+    im_end_token_id: int = 151645
+    hidden_size: int | None = None
+    vocab_size: int | None = None
+
+    def __post_init__(self, **kwargs):
+        if isinstance(self.language_config, dict):
+            self.language_config = Qwen3Config(**self.language_config)
+        elif self.language_config is None:
             self.language_config = Qwen3Config()
-        else:
-            self.language_config = language_config
 
-        self.initializer_range = initializer_range
-        self.n_codebooks = n_codebooks
-        self.codebook_size = codebook_size
-        self.audio_user_slot_token_id = audio_user_slot_token_id
-        self.audio_assistant_gen_slot_token_id = audio_assistant_gen_slot_token_id
-        self.audio_assistant_delay_slot_token_id = audio_assistant_delay_slot_token_id
-        self.audio_start_token_id = audio_start_token_id
-        self.audio_end_token_id = audio_end_token_id
-        self.codebook_pad_token_id = codebook_pad_token_id
-        self.sampling_rate = sampling_rate
+        if self.hidden_size is None:
+            self.hidden_size = self.language_config.hidden_size
+        if self.vocab_size is None:
+            self.vocab_size = self.language_config.vocab_size
 
-        self.hidden_size = self.language_config.hidden_size
-        self.vocab_size = self.language_config.vocab_size
-        self.pad_token_id = pad_token_id
-        self.im_start_token_id = im_start_token_id
-        self.im_end_token_id = im_end_token_id
+        super().__post_init__(**kwargs)
 
-        super().__init__(**kwargs)
-
-    def to_dict(self):
-        output = super().to_dict()
-        if hasattr(self.language_config, "to_dict"):
-            output["language_config"] = self.language_config.to_dict()
-        else:
-            output["language_config"] = self.language_config
-        return output
-
-
-def _apply_top_k(logits: torch.Tensor, top_k: int) -> torch.Tensor:
-    batch_size, vocab_size = logits.shape
-    top_k = min(top_k, vocab_size)
-    top_k_values, top_k_indices = torch.topk(logits, top_k, dim=-1)
-    filtered_logits = torch.full_like(logits, float("-inf"))
-    batch_indices = torch.arange(batch_size, device=logits.device).unsqueeze(-1)
-    filtered_logits[batch_indices, top_k_indices] = top_k_values
-    return filtered_logits
-
-
-def _apply_top_p(logits: torch.Tensor, top_p: float) -> torch.Tensor:
-    probs = F.softmax(logits, dim=-1)
-    sorted_probs, sorted_indices = torch.sort(probs, descending=True, dim=-1)
-    cumulative_probs = torch.cumsum(sorted_probs, dim=-1)
-
-    sorted_indices_to_remove = cumulative_probs > top_p
-    sorted_indices_to_remove[..., 1:] = sorted_indices_to_remove[..., :-1].clone()
-    sorted_indices_to_remove[..., 0] = False
-    indices_to_remove = torch.zeros_like(logits, dtype=torch.bool).scatter_(
-        dim=-1, index=sorted_indices, src=sorted_indices_to_remove
-    )
-
-    logits[indices_to_remove] = float("-inf")
-    return logits
-
-
-def _apply_repetition_penalty(
-    logits: torch.Tensor,
-    prev_tokens: torch.LongTensor | None,
-    penalty: float,
-) -> torch.Tensor:
-    """Penalize previously generated tokens, following `RepetitionPenaltyLogitsProcessor`.
-
-    `logits` has shape `(num_positions, vocab_size)` and `prev_tokens` the matching
-    `(num_positions, sequence_length)` histories, so the penalty stays within each sequence and channel.
-    """
-    if penalty == 1.0 or prev_tokens is None:
-        return logits
-
-    score = torch.gather(logits, 1, prev_tokens)
-    score = torch.where(score > 0, score / penalty, score * penalty)
-    return logits.scatter(1, prev_tokens, score)
-
-
-def _sample_token(
-    logits: torch.Tensor,
-    prev_tokens: torch.LongTensor | None = None,
-    repetition_penalty: float = 1.0,
-    top_p: float | None = None,
-    top_k: int | None = None,
-    do_sample: bool = True,
-) -> torch.Tensor:
-    vocab_size = logits.size(-1)
-    logits = _apply_repetition_penalty(logits, prev_tokens, repetition_penalty)
-
-    if not do_sample:
-        return torch.argmax(logits, dim=-1)
-
-    original_shape = logits.shape
-    reshaped_logits = logits.view(-1, vocab_size)
-
-    if top_k is not None and top_k > 0:
-        reshaped_logits = _apply_top_k(reshaped_logits, top_k)
-
-    if top_p is not None and top_p < 1.0:
-        reshaped_logits = _apply_top_p(reshaped_logits, top_p)
-
-    probs = F.softmax(reshaped_logits, dim=-1)
-    next_tokens = torch.multinomial(probs, num_samples=1)
-    return next_tokens.view(original_shape[:-1])
+    def get_text_config(self, *args, **kwargs):
+        """Defaulting to the language config, which is the decoder backbone of this composite model."""
+        return self.language_config
 
 
 def _find_last_equal(tensor: torch.Tensor, value: int) -> torch.Tensor:
@@ -257,6 +151,29 @@ def _find_last_equal(tensor: torch.Tensor, value: int) -> torch.Tensor:
     no_match = tensor[torch.arange(tensor.shape[0], device=tensor.device), last_indices] != value
     last_indices[no_match] = -1
     return last_indices
+
+
+def _sample_tokens(
+    logits: torch.Tensor,
+    prev_tokens: torch.LongTensor,
+    repetition_penalty_processor: RepetitionPenaltyLogitsProcessor | None,
+    warpers: LogitsProcessorList,
+    do_sample: bool,
+) -> torch.Tensor:
+    """Select the next tokens from `logits` following the `GenerationMixin._sample` order of operations:
+    repetition penalty first, then greedy argmax or top-k/top-p warping followed by multinomial sampling.
+
+    `logits` has shape `(num_positions, vocab_size)` and `prev_tokens` the matching
+    `(num_positions, sequence_length)` histories, so the penalty stays within each sequence and channel.
+    """
+    if repetition_penalty_processor is not None:
+        logits = repetition_penalty_processor(prev_tokens, logits)
+    if not do_sample:
+        return torch.argmax(logits, dim=-1)
+    if len(warpers) > 0:
+        logits = warpers(prev_tokens, logits)
+    probs = F.softmax(logits, dim=-1)
+    return torch.multinomial(probs, num_samples=1).squeeze(-1)
 
 
 @dataclass
@@ -297,6 +214,25 @@ class MossTTSDelayOutputWithPast(ModelOutput):
     attentions: tuple[torch.FloatTensor] | None = None
 
 
+@dataclass
+class MossTTSDelayGenerateOutput(GenerateDecoderOnlyOutput):
+    """
+    Outputs of MossTTSDelay generation models, when using non-beam methods.
+
+    Args:
+        sequences (`torch.LongTensor` of shape `(batch_size, sequence_length, 1 + n_codebooks)`):
+            The generated sequences, including the prompt. Dimension 2 contains: [text, VQ_0, VQ_1, ..., VQ_N].
+        generations (`list[tuple[int, torch.LongTensor]]`, *optional*):
+            Per-sample `(start_length, generated_ids)` pairs with the prompt trimmed away, ready to be consumed by
+            [`MossTTSDelayProcessor.decode`]. `start_length` counts the prompt tokens at the beginning of
+            `generated_ids` that already belong to the assistant's turn (used to trim codec context when decoding).
+        past_key_values (`Cache`, *optional*):
+            Pre-computed hidden-states (key and values in the self-attention blocks) after generation.
+    """
+
+    generations: list[tuple[int, torch.LongTensor]] | None = None
+
+
 class MossTTSDelayPreTrainedModel(PreTrainedModel):
     config_class = MossTTSDelayConfig
     base_model_prefix = "model"
@@ -307,15 +243,316 @@ class MossTTSDelayPreTrainedModel(PreTrainedModel):
     _supports_sdpa = True
     _supports_flex_attn = True
 
-    def _init_weights(self, module):
-        # Standard modules (LayerNorm, Linear, Embedding, etc.) are handled by the base class.
-        super()._init_weights(module)
 
-        # Extra audio VQ embeddings
-        if isinstance(module, nn.Embedding) and getattr(module, "num_embeddings", None) == (
-            self.config.codebook_size + 1
-        ):
-            init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
+class MossTTSDelayGenerationMixin(GenerationMixin):
+    """Generation support for MossTTSDelay's mixed text + audio-codebook sequences.
+
+    The text channel (channel 0) is sampled with the standard `GenerationConfig` fields (`do_sample`,
+    `temperature`, `top_k`, `top_p`), while the audio codebook channels use MOSS-specific fields that can be
+    passed to `generate` like any other generation kwarg:
+
+    - `audio_temperature` (default 1.7), `audio_top_k` (default 25), `audio_top_p` (default 0.8)
+    - `audio_repetition_penalty` (default 1.0), applied per codebook channel against that channel's history
+
+    Only greedy decoding and multinomial sampling are supported.
+    """
+
+    # Sampling for the two channel types is driven by the generation config fields directly in `_sample`;
+    # global logits processors cannot be applied across heads with different vocabularies and parameters.
+    _supported_logits_processor_types = (
+        TemperatureLogitsWarper,
+        TopKLogitsWarper,
+        TopPLogitsWarper,
+        InfNanRemoveLogitsProcessor,
+    )
+
+    def _get_logits_processor(self, *args, **kwargs):
+        parent_processors = super()._get_logits_processor(*args, **kwargs)
+
+        unsupported = [p for p in parent_processors if not isinstance(p, self._supported_logits_processor_types)]
+        if unsupported:
+            unsupported_names = [type(p).__name__ for p in unsupported]
+            raise ValueError(
+                f"MossTTSDelay samples the text and audio codebook channels with separate parameters, so the "
+                f"following logits processors are not compatible: {unsupported_names}. Sampling is controlled via "
+                f"`temperature`/`top_k`/`top_p` (text channel) and the `audio_*` generation fields (audio channels)."
+            )
+
+        # Warpers are applied per channel in `_sample`; the returned list is intentionally empty.
+        return LogitsProcessorList()
+
+    def _prepare_generation_config(
+        self, generation_config: GenerationConfig | None, **kwargs: Any
+    ) -> tuple[GenerationConfig, dict]:
+        # The audio codebook channels have their own sampling parameters, which are not standard
+        # `GenerationConfig` fields: carry them on the config rather than leaking them into the model kwargs.
+        audio_overrides = {}
+        for key in ("audio_temperature", "audio_top_p", "audio_top_k", "audio_repetition_penalty"):
+            if key in kwargs:
+                audio_overrides[key] = kwargs.pop(key)
+
+        # MOSS-TTS-v1.5 default sampling parameters. The text channel reuses the standard fields and defaults
+        # to sampling; they are only applied when the user did not set explicit values (neither as generate
+        # kwargs, nor through an explicit generation config, nor on `model.generation_config`). They are set
+        # before `super()` so that validation sees the final values.
+        if generation_config is None:
+            if "do_sample" not in kwargs and getattr(self.generation_config, "do_sample", None) is None:
+                kwargs["do_sample"] = True
+            if (
+                kwargs.get("do_sample", True)
+                and "temperature" not in kwargs
+                and getattr(self.generation_config, "temperature", None) is None
+            ):
+                kwargs["temperature"] = 1.5
+
+        generation_config, model_kwargs = super()._prepare_generation_config(generation_config, **kwargs)
+
+        audio_defaults = {
+            "audio_temperature": 1.7,
+            "audio_top_p": 0.8,
+            "audio_top_k": 25,
+            "audio_repetition_penalty": 1.0,
+        }
+        for key, value in audio_defaults.items():
+            if getattr(generation_config, key, None) is None:
+                setattr(generation_config, key, value)
+        for key, value in audio_overrides.items():
+            setattr(generation_config, key, value)
+
+        original_get_generation_mode = generation_config.get_generation_mode
+
+        def patched_get_generation_mode(assistant_model=None):
+            generation_mode = original_get_generation_mode(assistant_model)
+            if generation_mode not in [GenerationMode.GREEDY_SEARCH, GenerationMode.SAMPLE]:
+                raise ValueError(
+                    f"Generation mode {generation_mode} is not supported for MossTTSDelay model. Please set "
+                    "generation parameters to use greedy or sampling generation."
+                )
+            return generation_mode
+
+        generation_config.get_generation_mode = patched_get_generation_mode
+
+        return generation_config, model_kwargs
+
+    def _sample(
+        self,
+        input_ids: torch.LongTensor,
+        logits_processor: LogitsProcessorList,
+        stopping_criteria: StoppingCriteriaList,
+        generation_config: GenerationConfig,
+        synced_gpus: bool = False,
+        streamer: BaseStreamer | None = None,
+        **model_kwargs,
+    ) -> MossTTSDelayGenerateOutput:
+        do_sample = generation_config.do_sample
+        batch_size, seq_len = input_ids.shape[:2]
+        n_codebooks = self.config.n_codebooks
+        device = input_ids.device
+        prompt_input_ids = input_ids
+
+        # The text channel uses the standard generation fields, the audio codebook channels the `audio_*` ones.
+        text_temperature = generation_config.temperature if do_sample else 1.0
+        audio_temperature = getattr(generation_config, "audio_temperature", 1.7) if do_sample else 1.0
+        audio_repetition_penalty = getattr(generation_config, "audio_repetition_penalty", 1.0)
+        audio_repetition_penalty_processor = (
+            RepetitionPenaltyLogitsProcessor(penalty=float(audio_repetition_penalty))
+            if audio_repetition_penalty != 1.0
+            else None
+        )
+
+        text_warpers = LogitsProcessorList()
+        if generation_config.top_k is not None and generation_config.top_k > 0:
+            text_warpers.append(TopKLogitsWarper(generation_config.top_k))
+        if generation_config.top_p is not None and generation_config.top_p < 1.0:
+            text_warpers.append(TopPLogitsWarper(generation_config.top_p))
+        audio_warpers = LogitsProcessorList()
+        audio_top_k = getattr(generation_config, "audio_top_k", 25)
+        audio_top_p = getattr(generation_config, "audio_top_p", 0.8)
+        if audio_top_k is not None and audio_top_k > 0:
+            audio_warpers.append(TopKLogitsWarper(audio_top_k))
+        if audio_top_p is not None and audio_top_p < 1.0:
+            audio_warpers.append(TopPLogitsWarper(audio_top_p))
+
+        is_stopping = torch.zeros(batch_size, dtype=torch.bool, device=device)
+        audio_lengths = torch.zeros(batch_size, dtype=torch.int64, device=device)
+        torch_int64_max = torch.iinfo(torch.int64).max
+        delayed_lengths = torch.full((batch_size,), torch_int64_max, dtype=torch.int64, device=device)
+
+        is_continuation = (input_ids[:, -1, 0] == self.config.audio_start_token_id) | (
+            input_ids[:, -1, 0] == self.config.audio_assistant_gen_slot_token_id
+        )
+        audio_start_indices = _find_last_equal(input_ids[..., 0], self.config.audio_start_token_id)
+        audio_start_mask = is_continuation & (audio_start_indices != -1)
+        audio_lengths[audio_start_mask] = seq_len - audio_start_indices[audio_start_mask]
+
+        is_audio = audio_start_mask.clone()
+
+        pre_exclude_mask0 = torch.tensor(
+            [
+                self.config.pad_token_id,
+                self.config.audio_assistant_gen_slot_token_id,
+                self.config.audio_assistant_delay_slot_token_id,
+                self.config.audio_end_token_id,
+            ],
+            device=device,
+        )
+        pre_exclude_mask1 = torch.ones(self.config.language_config.vocab_size, device=device).bool()
+        pre_exclude_mask1[
+            [self.config.audio_assistant_gen_slot_token_id, self.config.audio_assistant_delay_slot_token_id]
+        ] = False
+
+        model_forward = (
+            self.get_compiled_call(generation_config.compile_config)
+            if self._valid_auto_compile_criteria(model_kwargs, generation_config)
+            else self.__call__
+        )
+
+        prefill_consumed = False
+        outputs = self._prefill(
+            input_ids,
+            generation_config,
+            model_kwargs,
+            is_first_iteration=not generation_config.is_assistant,
+        )
+
+        # keep track of which sequences are already finished
+        this_peer_finished = False
+        cur_step = 0
+
+        while self._has_unfinished_sequences(this_peer_finished, synced_gpus, device=input_ids.device):
+            if prefill_consumed:
+                next_sequence_length = 1 if model_kwargs["use_cache"] else None
+                model_inputs = self.prepare_inputs_for_generation(
+                    input_ids, next_sequence_length=next_sequence_length, **model_kwargs
+                )
+                with self._optimize_model_for_decode():
+                    outputs = model_forward(**model_inputs, return_dict=True)
+            prefill_consumed = True
+            # The attention mask is grown manually: generated positions of finished sequences stay masked out.
+            model_kwargs["past_key_values"] = outputs.past_key_values
+
+            next_token_logits = [
+                logit[:, -1, :] / text_temperature if logit_idx == 0 else logit[:, -1, :] / audio_temperature
+                for logit_idx, logit in enumerate(outputs.logits)
+            ]  # List, len=n_codebooks+1, [batch_size, vocab_size]
+            next_token_logits[0] = next_token_logits[0].clone()
+            next_text_token = torch.full((batch_size,), self.config.pad_token_id, device=device)
+            next_text_token[~is_stopping & (delayed_lengths < n_codebooks)] = (
+                self.config.audio_assistant_delay_slot_token_id
+            )
+            is_audio_eos = ~is_stopping & (delayed_lengths == n_codebooks)
+            next_text_token[is_audio_eos] = self.config.audio_end_token_id
+            is_audio[is_audio_eos] = False
+            sampling_text_mask = ~is_stopping & (delayed_lengths > n_codebooks)
+            next_token_logits[0][~is_audio] = next_token_logits[0][~is_audio].index_fill(
+                -1, pre_exclude_mask0, float("-inf")
+            )
+            next_token_logits[0][is_audio] = next_token_logits[0][is_audio].masked_fill(
+                pre_exclude_mask1, float("-inf")
+            )
+            if cur_step == 0:
+                next_token_logits[0][..., self.config.audio_assistant_delay_slot_token_id] = float("-inf")
+            if cur_step <= n_codebooks:
+                next_token_logits[0][..., self.config.im_end_token_id] = float("-inf")
+
+            if sampling_text_mask.sum() > 0:
+                next_text_token[sampling_text_mask] = _sample_tokens(
+                    logits=next_token_logits[0][sampling_text_mask],
+                    prev_tokens=input_ids[..., 0][sampling_text_mask],
+                    repetition_penalty_processor=None,
+                    warpers=text_warpers,
+                    do_sample=do_sample,
+                )
+            is_audio[next_text_token == self.config.audio_start_token_id] = True
+            is_stopping[next_text_token == self.config.im_end_token_id] = True
+
+            next_audio_tokens = torch.full((batch_size, n_codebooks), self.config.codebook_pad_token_id, device=device)
+
+            pre_audio_mask = audio_lengths.unsqueeze(1) > torch.arange(n_codebooks, dtype=int, device=device).expand(
+                batch_size, n_codebooks
+            )
+            post_audio_mask = (
+                torch.arange(n_codebooks, dtype=int, device=device).expand(batch_size, n_codebooks)
+                > delayed_lengths.unsqueeze(1) - 1
+            )
+            post_audio_mask[delayed_lengths == torch_int64_max] = True
+            sampling_audio_mask = pre_audio_mask & post_audio_mask
+            next_audio_tokens[~sampling_audio_mask] = self.config.codebook_pad_token_id
+
+            if sampling_audio_mask.sum() > 0:
+                audio_ch0_logits = next_token_logits[1][sampling_audio_mask[:, 0]]
+                audio_logits = torch.stack(next_token_logits[2:], dim=1)[sampling_audio_mask[:, 1:]]
+                audio_ch0_logits[..., self.config.codebook_pad_token_id] = float("-inf")
+                audio_logits[..., self.config.codebook_pad_token_id] = float("-inf")
+
+                # Per-position histories so the repetition penalty stays within each sequence and channel.
+                ch0_prev_tokens = input_ids[sampling_audio_mask[:, 0], :, 1]
+                selected = sampling_audio_mask[:, 1:].nonzero()
+                audio_prev_tokens = input_ids[selected[:, 0], :, selected[:, 1] + 1]
+
+                next_audio_tokens[:, 0][sampling_audio_mask[:, 0]] = _sample_tokens(
+                    logits=audio_ch0_logits,
+                    prev_tokens=ch0_prev_tokens,
+                    repetition_penalty_processor=audio_repetition_penalty_processor,
+                    warpers=audio_warpers,
+                    do_sample=do_sample,
+                )
+                next_audio_tokens[:, 1:][sampling_audio_mask[:, 1:]] = _sample_tokens(
+                    logits=audio_logits,
+                    prev_tokens=audio_prev_tokens,
+                    repetition_penalty_processor=audio_repetition_penalty_processor,
+                    warpers=audio_warpers,
+                    do_sample=do_sample,
+                )
+
+            audio_lengths[
+                (next_text_token == self.config.audio_start_token_id)
+                | (next_text_token == self.config.audio_assistant_gen_slot_token_id)
+                | (next_text_token == self.config.audio_assistant_delay_slot_token_id)
+            ] += 1
+            audio_lengths[next_text_token == self.config.audio_end_token_id] = 0
+            delayed_lengths[
+                (delayed_lengths == torch_int64_max)
+                & (next_text_token == self.config.audio_assistant_delay_slot_token_id)
+            ] = 0
+            delayed_lengths[delayed_lengths != torch_int64_max] += 1
+            delayed_lengths[delayed_lengths > n_codebooks] = torch_int64_max
+
+            # update generated ids, model inputs, and length for next step
+            next_step_ids = torch.cat([next_text_token[:, None, None], next_audio_tokens[:, None, :]], dim=2)
+            input_ids = torch.cat([input_ids, next_step_ids], dim=1)
+            if model_kwargs.get("attention_mask") is not None:
+                attention_mask = model_kwargs["attention_mask"]
+                model_kwargs["attention_mask"] = torch.cat(
+                    [attention_mask, (~is_stopping).unsqueeze(-1).to(attention_mask.dtype)], dim=-1
+                )
+            # `generate` pre-computes mask-derived `position_ids` for the prefill; grow them by one so decode
+            # steps don't reuse stale positions (same as `_update_model_kwargs_for_generation`).
+            if (position_ids := model_kwargs.get("position_ids")) is not None:
+                model_kwargs["position_ids"] = torch.cat([position_ids, position_ids[:, -1:] + 1], dim=1)
+            if streamer is not None:
+                streamer.put(next_text_token[:, None].cpu())
+
+            this_peer_finished = (is_stopping | stopping_criteria(input_ids, None)).all().item()
+            cur_step += 1
+
+        if streamer is not None:
+            streamer.end()
+
+        # Trim each generated sequence to the start of the assistant's turn; `start_length` counts the prompt
+        # tokens that are part of that turn (codec context to skip when decoding the first audio segment).
+        start_indices = _find_last_equal(prompt_input_ids[..., 0], self.config.im_start_token_id) + 3
+        start_lengths = seq_len - start_indices
+
+        generations = []
+        for start_idx, start_length, cur_generation_ids in zip(start_indices, start_lengths, input_ids):
+            generations.append((start_length, cur_generation_ids[start_idx:]))
+
+        return MossTTSDelayGenerateOutput(
+            sequences=input_ids,
+            generations=generations,
+            past_key_values=model_kwargs.get("past_key_values"),
+        )
 
 
 MOSSTTS_START_DOCSTRING = r"""
@@ -339,15 +576,9 @@ MOSSTTS_START_DOCSTRING = r"""
     "The MossTTSDelay Model architecture tailored for Text-to-Speech generation with multi-head VQ prediction.",
     MOSSTTS_START_DOCSTRING,
 )
-class MossTTSDelayModel(MossTTSDelayPreTrainedModel):
-    UserMessage = UserMessage
-    AssistantMessage = AssistantMessage
-    Processor = MossTTSDelayProcessor
-
+class MossTTSDelayModel(MossTTSDelayPreTrainedModel, MossTTSDelayGenerationMixin):
     def __init__(self, config: MossTTSDelayConfig):
         super().__init__(config)
-
-        config.language_config.dtype = config.dtype
 
         self.language_model = AutoModel.from_config(config.language_config)
 
@@ -375,31 +606,8 @@ class MossTTSDelayModel(MossTTSDelayPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @classmethod
-    def can_generate(cls) -> bool:
-        return True
-
-    def get_input_embeddings(self, input_ids: torch.LongTensor | None = None) -> torch.Tensor:
-        """
-        Computes the combined embeddings from text and multiple audio VQ channels.
-
-        Args:
-            input_ids: Shape (Batch, Seq_Len, 1 + n_codebooks)
-        """
-        if input_ids is None:
-            return self.language_model.get_input_embeddings()
-
-        # Base Text/Content Embedding
-        # input_ids[..., 0] is standard text or semantic tokens
-        inputs_embeds = self.language_model.get_input_embeddings()(input_ids[..., 0])
-
-        # Add VQ Embeddings
-        for i, embed_layer in enumerate(self.emb_ext):
-            # i corresponds to channel i+1 in input_ids
-            # We assume the data pipeline ensures indices are within range
-            inputs_embeds = inputs_embeds + embed_layer(input_ids[..., i + 1])
-
-        return inputs_embeds
+    def get_input_embeddings(self):
+        return self.language_model.get_input_embeddings()
 
     def set_input_embeddings(self, value):
         self.language_model.embed_tokens = value
@@ -421,7 +629,6 @@ class MossTTSDelayModel(MossTTSDelayPreTrainedModel):
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
         cache_position: torch.LongTensor | None = None,
-        hidden_out_layers: list[int] | None = None,
         channelwise_loss_weight: list[float] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | MossTTSDelayOutputWithPast:
@@ -438,17 +645,22 @@ class MossTTSDelayModel(MossTTSDelayPreTrainedModel):
         Returns:
         """
 
-        if len(input_ids.shape) != 3 or input_ids.shape[-1] != self.config.n_codebooks + 1:
+        if input_ids is not None and (input_ids.dim() != 3 or input_ids.shape[-1] != self.config.n_codebooks + 1):
             raise ValueError("`Input_ids`'s shape should be exactly (batch_size, sequence_length, 1 + n_codebooks).")
 
         # 1. Prepare Embeddings
         if inputs_embeds is None:
-            inputs_embeds = self.get_input_embeddings(input_ids)
+            if input_ids is None:
+                raise ValueError("You have to specify either `input_ids` or `inputs_embeds`.")
+            # Base Text/Content Embedding: input_ids[..., 0] is standard text or semantic tokens.
+            # The VQ embeddings of the extra audio channels are summed on top of it.
+            inputs_embeds = self.get_input_embeddings()(input_ids[..., 0])
+            for i, embed_layer in enumerate(self.emb_ext):
+                inputs_embeds = inputs_embeds + embed_layer(input_ids[..., i + 1])
 
         # 2. Backbone Forward
-        # Full hidden states are only needed when selecting features from specific layers (`hidden_out_layers`);
-        # the multi-head projection otherwise uses the final hidden state.
-        output_hidden_states = kwargs.pop("output_hidden_states", False) or hidden_out_layers is not None
+        # `return_dict` may be passed by the generation helpers; the output is always a dataclass either way.
+        kwargs.pop("return_dict", None)
         outputs = self.language_model(
             input_ids=None,  # Passed via inputs_embeds
             position_ids=position_ids,
@@ -456,37 +668,24 @@ class MossTTSDelayModel(MossTTSDelayPreTrainedModel):
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
-            output_hidden_states=output_hidden_states,
             return_dict=True,
             cache_position=cache_position,
             **kwargs,
         )
 
-        # 3. Handle specific layer outputs if requested (Delay Pattern often requires features from specific layers)
+        # 3. Project to Logits (Multi-Head)
+        # All heads read the final hidden state. For audio heads (indices > 0), the last logit index is masked:
+        # the vocab size is (N+1) but the model shouldn't predict the (N+1)-th token
+        # (reserved for padding in the input but invalid for prediction).
         last_hidden_state = outputs.last_hidden_state
-        if hidden_out_layers is None:
-            # Default to using the last layer for all heads
-            # In some architectures (like MusicGen), different codebooks come from different transformer layers.
-            # Here we default to the final layer as per original code behavior [-1] * (n + 1).
-            hidden_states_for_heads = [last_hidden_state] * (len(self.lm_heads))
-        else:
-            # If hidden_out_layers is provided (e.g. [-1, -2, -3...]), fetch them from all_hidden_states
-            # Note: outputs.hidden_states includes embedding output at index 0 usually.
-            all_hs = outputs.hidden_states
-            hidden_states_for_heads = [all_hs[idx] for idx in hidden_out_layers]
-
-        # 4. Project to Logits (Multi-Head)
         layer_logits = []
-        for i, (hs, head) in enumerate(zip(hidden_states_for_heads, self.lm_heads)):
-            logits = head(hs)
-            # Original code logic: Mask the last token index for audio heads (indices > 0)
-            # This implies the vocab size is (N+1) but the model shouldn't predict the (N+1)-th token
-            # (perhaps reserved for padding in the input but invalid for prediction).
+        for i, head in enumerate(self.lm_heads):
+            logits = head(last_hidden_state)
             if i > 0:
                 logits[..., -1] = float("-inf")
             layer_logits.append(logits)
 
-        # 5. Loss Calculation
+        # 4. Loss Calculation
         loss = None
         all_sum_losses = None
         all_token_nums = None
@@ -578,179 +777,12 @@ class MossTTSDelayModel(MossTTSDelayPreTrainedModel):
             attentions=outputs.attentions,
         )
 
-    @torch.inference_mode()
-    def generate(
-        self,
-        input_ids: torch.LongTensor,
-        attention_mask: torch.Tensor | None = None,
-        max_new_tokens: int = 1000,
-        text_temperature: float = 1.5,
-        text_top_p: float = 1.0,
-        text_top_k: int = 50,
-        audio_temperature: float = 1.7,
-        audio_top_p: float = 0.8,
-        audio_top_k: int = 25,
-        audio_repetition_penalty: float = 1.0,
-    ):
-        if text_temperature > 0:
-            text_do_sample = True
-        else:
-            text_temperature = 1
-            text_do_sample = False
-        if audio_temperature > 0:
-            audio_do_sample = True
-        else:
-            audio_temperature = 1
-            audio_do_sample = False
 
-        past_key_values = None
-        device = input_ids.device
-        current_input_ids = input_ids
-        current_attention_mask = attention_mask
-        batch_size, seq_len, n_codebooks = input_ids.shape
-        n_codebooks -= 1
-
-        generation_ids = input_ids[:]
-        is_stopping = torch.zeros(batch_size, dtype=torch.bool, device=device)
-
-        audio_lengths = torch.zeros(batch_size, dtype=torch.int64, device=device)
-        torch_int64_max = torch.iinfo(torch.int64).max
-        delayed_lengths = torch.full((batch_size,), torch_int64_max, dtype=torch.int64, device=device)
-
-        is_continuation = (input_ids[:, -1, 0] == self.config.audio_start_token_id) | (
-            input_ids[:, -1, 0] == self.config.audio_assistant_gen_slot_token_id
-        )
-        audio_start_indices = _find_last_equal(input_ids[..., 0], self.config.audio_start_token_id)
-        audio_start_mask = is_continuation & (audio_start_indices != -1)
-        audio_lengths[audio_start_mask] = seq_len - audio_start_indices[audio_start_mask]
-
-        is_audio = audio_start_mask.clone()
-
-        pre_exclude_mask0 = torch.tensor(
-            [
-                self.config.pad_token_id,
-                self.config.audio_assistant_gen_slot_token_id,
-                self.config.audio_assistant_delay_slot_token_id,
-                self.config.audio_end_token_id,
-            ],
-            device=device,
-        )
-        pre_exclude_mask1 = torch.ones(self.config.language_config.vocab_size, device=device).bool()
-        pre_exclude_mask1[
-            [self.config.audio_assistant_gen_slot_token_id, self.config.audio_assistant_delay_slot_token_id]
-        ] = False
-
-        for time_step in tqdm(range(max_new_tokens), desc=f"Generating bs{batch_size} ..."):
-            outputs = self(
-                input_ids=current_input_ids,
-                attention_mask=current_attention_mask,
-                past_key_values=past_key_values,
-                use_cache=True,
-            )
-            past_key_values = outputs.past_key_values
-
-            next_token_logits = [
-                logit[:, -1, :] / text_temperature if logit_idx == 0 else logit[:, -1, :] / audio_temperature
-                for logit_idx, logit in enumerate(outputs.logits)
-            ]  # List, len=n_codebooks+1, [batch_size, 1, vocab_size];
-            next_token_logits[0] = next_token_logits[0].clone()
-            next_text_token = torch.full((batch_size,), self.config.pad_token_id, device=device)
-            next_text_token[~is_stopping & (delayed_lengths < n_codebooks)] = (
-                self.config.audio_assistant_delay_slot_token_id
-            )
-            is_audio_eos = ~is_stopping & (delayed_lengths == n_codebooks)
-            next_text_token[is_audio_eos] = self.config.audio_end_token_id
-            is_audio[is_audio_eos] = False
-            sampling_text_mask = ~is_stopping & (delayed_lengths > n_codebooks)
-            next_token_logits[0][~is_audio] = next_token_logits[0][~is_audio].index_fill(
-                -1, pre_exclude_mask0, float("-inf")
-            )
-            next_token_logits[0][is_audio] = next_token_logits[0][is_audio].masked_fill(
-                pre_exclude_mask1, float("-inf")
-            )
-            if time_step == 0:
-                next_token_logits[0][..., self.config.audio_assistant_delay_slot_token_id] = float("-inf")
-            if time_step <= n_codebooks:
-                next_token_logits[0][..., self.config.im_end_token_id] = float("-inf")
-
-            next_text_token[sampling_text_mask] = _sample_token(
-                logits=next_token_logits[0][sampling_text_mask],
-                top_p=text_top_p,
-                top_k=text_top_k,
-                do_sample=text_do_sample,
-            )
-            is_audio[next_text_token == self.config.audio_start_token_id] = True
-            is_stopping[next_text_token == self.config.im_end_token_id] = True
-
-            next_audio_tokens = torch.full((batch_size, n_codebooks), self.config.codebook_pad_token_id, device=device)
-
-            pre_audio_mask = audio_lengths.unsqueeze(1) > torch.arange(n_codebooks, dtype=int, device=device).expand(
-                batch_size, n_codebooks
-            )
-            post_audio_mask = (
-                torch.arange(n_codebooks, dtype=int, device=device).expand(batch_size, n_codebooks)
-                > delayed_lengths.unsqueeze(1) - 1
-            )
-            post_audio_mask[delayed_lengths == torch_int64_max] = True
-            sampling_audio_mask = pre_audio_mask & post_audio_mask
-            next_audio_tokens[~sampling_audio_mask] = self.config.codebook_pad_token_id
-
-            if sampling_audio_mask.sum() > 0:
-                audio_ch0_logits = next_token_logits[1][sampling_audio_mask[:, 0]]
-                audio_logits = torch.stack(next_token_logits[2:], dim=1)[sampling_audio_mask[:, 1:]]
-                audio_ch0_logits[..., self.config.codebook_pad_token_id] = float("-inf")
-                audio_logits[..., self.config.codebook_pad_token_id] = float("-inf")
-
-                # Per-position histories so the repetition penalty stays within each sequence and channel.
-                ch0_prev_tokens = generation_ids[sampling_audio_mask[:, 0], :, 1]
-                selected = sampling_audio_mask[:, 1:].nonzero()
-                audio_prev_tokens = generation_ids[selected[:, 0], :, selected[:, 1] + 1]
-
-                next_audio_tokens[:, 0][sampling_audio_mask[:, 0]] = _sample_token(
-                    logits=audio_ch0_logits,
-                    prev_tokens=ch0_prev_tokens,
-                    repetition_penalty=audio_repetition_penalty,
-                    top_p=audio_top_p,
-                    top_k=audio_top_k,
-                    do_sample=audio_do_sample,
-                )
-                next_audio_tokens[:, 1:][sampling_audio_mask[:, 1:]] = _sample_token(
-                    logits=audio_logits,
-                    prev_tokens=audio_prev_tokens,
-                    repetition_penalty=audio_repetition_penalty,
-                    top_p=audio_top_p,
-                    top_k=audio_top_k,
-                    do_sample=audio_do_sample,
-                )
-
-            audio_lengths[
-                (next_text_token == self.config.audio_start_token_id)
-                | (next_text_token == self.config.audio_assistant_gen_slot_token_id)
-                | (next_text_token == self.config.audio_assistant_delay_slot_token_id)
-            ] += 1
-            audio_lengths[next_text_token == self.config.audio_end_token_id] = 0
-            delayed_lengths[
-                (delayed_lengths == torch_int64_max)
-                & (next_text_token == self.config.audio_assistant_delay_slot_token_id)
-            ] = 0
-            delayed_lengths[delayed_lengths != torch_int64_max] += 1
-            delayed_lengths[delayed_lengths > n_codebooks] = torch_int64_max
-
-            current_input_ids = torch.cat([next_text_token[:, None, None], next_audio_tokens[:, None, :]], dim=2)
-            current_attention_mask = torch.cat([current_attention_mask, (~is_stopping).unsqueeze(-1)], dim=-1)
-            generation_ids = torch.cat([generation_ids, current_input_ids], dim=1)
-
-            if is_stopping.sum() == batch_size:
-                break
-
-        start_indices = _find_last_equal(input_ids[..., 0], self.config.im_start_token_id) + 3
-        start_lengths = seq_len - start_indices
-
-        output = []
-        for start_idx, start_length, cur_generation_ids in zip(start_indices, start_lengths, generation_ids):
-            output.append((start_length, cur_generation_ids[start_idx:]))
-
-        return output
-
-
-__all__ = ["MossTTSDelayConfig", "MossTTSDelayModel", "MossTTSDelayOutputWithPast", "MossTTSDelayPreTrainedModel"]
+__all__ = [
+    "MossTTSDelayConfig",
+    "MossTTSDelayGenerateOutput",
+    "MossTTSDelayGenerationMixin",
+    "MossTTSDelayModel",
+    "MossTTSDelayOutputWithPast",
+    "MossTTSDelayPreTrainedModel",
+]

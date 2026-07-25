@@ -1057,11 +1057,14 @@ class ProcessorMixin(PushToHubMixin):
 
         # Special case, add `audio_tokenizer` dict which points to model weights and path
         if "audio_tokenizer" in output:
-            audio_tokenizer_dict = {
-                "audio_tokenizer_class": self.audio_tokenizer.__class__.__name__,
-                "audio_tokenizer_name_or_path": self.audio_tokenizer.name_or_path,
-            }
-            output["audio_tokenizer"] = audio_tokenizer_dict
+            if self.audio_tokenizer is not None:
+                audio_tokenizer_dict = {
+                    "audio_tokenizer_class": self.audio_tokenizer.__class__.__name__,
+                    "audio_tokenizer_name_or_path": self.audio_tokenizer.name_or_path,
+                }
+                output["audio_tokenizer"] = audio_tokenizer_dict
+            else:
+                del output["audio_tokenizer"]
 
         # Serialize attributes as a dict
         output = {

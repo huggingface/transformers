@@ -232,16 +232,47 @@ class MossTTSDelayModelTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "shape should be exactly"):
             model(input_ids=input_ids)
 
-    def test_get_input_embeddings_standard_and_multichannel(self):
-        config, input_ids, _ = self.model_tester.prepare_config_and_inputs()
+    def test_get_input_embeddings(self):
+        config, input_ids, attention_mask = self.model_tester.prepare_config_and_inputs()
         model = MossTTSDelayModel(config).to(torch_device).eval()
 
         self.assertIs(model.get_input_embeddings(), model.language_model.get_input_embeddings())
-        inputs_embeds = model.get_input_embeddings(input_ids)
+
+        # The multi-channel embedding (text embedding + summed VQ embeddings) is applied in `forward`;
+        # passing the manually computed embeddings must give the same result as passing `input_ids`.
+        with torch.no_grad():
+            inputs_embeds = model.get_input_embeddings()(input_ids[..., 0])
+            for i, embed_layer in enumerate(model.emb_ext):
+                inputs_embeds = inputs_embeds + embed_layer(input_ids[..., i + 1])
+            outputs_from_ids = model(input_ids=input_ids, attention_mask=attention_mask)
+            outputs_from_embeds = model(inputs_embeds=inputs_embeds, attention_mask=attention_mask)
+
+        for logits_from_ids, logits_from_embeds in zip(outputs_from_ids.logits, outputs_from_embeds.logits):
+            torch.testing.assert_close(logits_from_ids, logits_from_embeds)
+
+    def test_generate_greedy(self):
+        config, input_ids, attention_mask = self.model_tester.prepare_config_and_inputs()
+        model = MossTTSDelayModel(config).to(torch_device).eval()
+
+        outputs = model.generate(input_ids=input_ids, attention_mask=attention_mask, max_new_tokens=3, do_sample=False)
+
+        n_channels = config.n_codebooks + 1
         self.assertEqual(
-            inputs_embeds.shape,
-            (self.model_tester.batch_size, self.model_tester.seq_length, config.hidden_size),
+            outputs.sequences.shape,
+            (self.model_tester.batch_size, self.model_tester.seq_length + 3, n_channels),
         )
+        self.assertEqual(len(outputs.generations), self.model_tester.batch_size)
+        for start_length, generated_ids in outputs.generations:
+            self.assertEqual(generated_ids.shape[-1], n_channels)
+
+    def test_generate_rejects_unsupported_modes(self):
+        config, input_ids, attention_mask = self.model_tester.prepare_config_and_inputs()
+        model = MossTTSDelayModel(config).to(torch_device).eval()
+
+        with self.assertRaisesRegex(ValueError, "not supported"):
+            model.generate(
+                input_ids=input_ids, attention_mask=attention_mask, max_new_tokens=3, num_beams=2, do_sample=False
+            )
 
     def test_auto_classes(self):
         config = self.model_tester.get_config()
@@ -320,8 +351,10 @@ class MossTTSDelayIntegrationTest(unittest.TestCase):
         )
         torch.testing.assert_close(outputs.logits[0].argmax(-1)[0, -8:], expected_text_argmax)
         torch.testing.assert_close(outputs.logits[1].argmax(-1)[0, -8:], expected_audio_argmax)
+        # Absolute bf16 logits at this magnitude have a resolution of 2.0 and drift slightly across
+        # GPU/kernel environments (verified against the original implementation), hence the loose atol.
         torch.testing.assert_close(
-            outputs.logits[0][0, -1, :8].float(), expected_text_logits_slice, atol=1e-3, rtol=1e-3
+            outputs.logits[0][0, -1, :8].float(), expected_text_logits_slice, atol=4.0, rtol=1e-3
         )
 
     @slow
@@ -338,12 +371,11 @@ class MossTTSDelayIntegrationTest(unittest.TestCase):
         outputs = model.generate(
             **inputs,
             max_new_tokens=4,
-            text_temperature=0.0,
-            audio_temperature=0.0,
+            do_sample=False,
         )
 
-        self.assertEqual(len(outputs), 1)
-        start_length, generated_ids = outputs[0]
+        self.assertEqual(len(outputs.generations), 1)
+        start_length, generated_ids = outputs.generations[0]
         expected_generated_ids = torch.tensor(
             [
                 [151652] + [1024] * 32,

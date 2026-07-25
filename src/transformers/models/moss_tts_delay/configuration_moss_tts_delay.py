@@ -73,87 +73,39 @@ class MossTTSDelayConfig(PreTrainedConfig):
     keys_to_ignore_at_inference = ["past_key_values"]
     sub_configs = {"language_config": Qwen3Config}
 
-    def __init__(
-        self,
-        language_config: Qwen3Config | dict | None = None,
-        initializer_range: float = 0.02,
-        n_codebooks: int = 32,
-        pad_token_id: int = 151643,
-        im_start_token_id: int = 151644,
-        im_end_token_id: int = 151645,
-        codebook_size: int = 1024,
-        audio_user_slot_token_id: int = 151654,
-        audio_assistant_gen_slot_token_id: int = 151656,
-        audio_assistant_delay_slot_token_id: int = 151662,
-        audio_start_token_id: int = 151652,
-        audio_end_token_id: int = 151653,
-        codebook_pad_token_id: int = 1024,
-        sampling_rate: int = 24000,
-        **kwargs,
-    ):
-        r"""
-        language_config (`Qwen3Config` or `dict`, *optional*):
-            Configuration for the backbone language model.
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            Standard deviation used to initialize weights.
-        n_codebooks (`int`, *optional*, defaults to 32):
-            Number of audio VQ codebook channels.
-        pad_token_id (`int`, *optional*, defaults to 151643):
-            Padding token id for the text channel.
-        im_start_token_id (`int`, *optional*, defaults to 151644):
-            Token id used to mark the beginning of a chat message.
-        im_end_token_id (`int`, *optional*, defaults to 151645):
-            Token id used to mark the end of a chat message.
-        codebook_size (`int`, *optional*, defaults to 1024):
-            Vocabulary size for each audio codebook.
-        audio_user_slot_token_id (`int`, *optional*, defaults to 151654):
-            Placeholder token id for user-side audio inputs.
-        audio_assistant_gen_slot_token_id (`int`, *optional*, defaults to 151656):
-            Placeholder token id that triggers assistant audio generation.
-        audio_assistant_delay_slot_token_id (`int`, *optional*, defaults to 151662):
-            Token id used for delayed audio-code positions.
-        audio_start_token_id (`int`, *optional*, defaults to 151652):
-            Token id that marks the start of an audio segment.
-        audio_end_token_id (`int`, *optional*, defaults to 151653):
-            Token id that marks the end of an audio segment.
-        codebook_pad_token_id (`int`, *optional*, defaults to 1024):
-            Padding code used in audio VQ channels.
-        sampling_rate (`int`, *optional*, defaults to 24000):
-            Audio sampling rate used by the processor and audio tokenizer.
-        """
-        if isinstance(language_config, dict):
-            self.language_config = Qwen3Config(**language_config)
-        elif language_config is None:
+    language_config: Qwen3Config | dict | None = None
+    initializer_range: float = 0.02
+    n_codebooks: int = 32
+    codebook_size: int = 1024
+    audio_user_slot_token_id: int = 151654
+    audio_assistant_gen_slot_token_id: int = 151656
+    audio_assistant_delay_slot_token_id: int = 151662
+    audio_start_token_id: int = 151652
+    audio_end_token_id: int = 151653
+    codebook_pad_token_id: int = 1024
+    sampling_rate: int = 24000
+    pad_token_id: int | None = 151643
+    im_start_token_id: int = 151644
+    im_end_token_id: int = 151645
+    hidden_size: int | None = None
+    vocab_size: int | None = None
+
+    def __post_init__(self, **kwargs):
+        if isinstance(self.language_config, dict):
+            self.language_config = Qwen3Config(**self.language_config)
+        elif self.language_config is None:
             self.language_config = Qwen3Config()
-        else:
-            self.language_config = language_config
 
-        self.initializer_range = initializer_range
-        self.n_codebooks = n_codebooks
-        self.codebook_size = codebook_size
-        self.audio_user_slot_token_id = audio_user_slot_token_id
-        self.audio_assistant_gen_slot_token_id = audio_assistant_gen_slot_token_id
-        self.audio_assistant_delay_slot_token_id = audio_assistant_delay_slot_token_id
-        self.audio_start_token_id = audio_start_token_id
-        self.audio_end_token_id = audio_end_token_id
-        self.codebook_pad_token_id = codebook_pad_token_id
-        self.sampling_rate = sampling_rate
+        if self.hidden_size is None:
+            self.hidden_size = self.language_config.hidden_size
+        if self.vocab_size is None:
+            self.vocab_size = self.language_config.vocab_size
 
-        self.hidden_size = self.language_config.hidden_size
-        self.vocab_size = self.language_config.vocab_size
-        self.pad_token_id = pad_token_id
-        self.im_start_token_id = im_start_token_id
-        self.im_end_token_id = im_end_token_id
+        super().__post_init__(**kwargs)
 
-        super().__init__(**kwargs)
-
-    def to_dict(self):
-        output = super().to_dict()
-        if hasattr(self.language_config, "to_dict"):
-            output["language_config"] = self.language_config.to_dict()
-        else:
-            output["language_config"] = self.language_config
-        return output
+    def get_text_config(self, *args, **kwargs):
+        """Defaulting to the language config, which is the decoder backbone of this composite model."""
+        return self.language_config
 
 
 __all__ = ["MossTTSDelayConfig"]

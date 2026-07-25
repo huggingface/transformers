@@ -22,7 +22,6 @@ from typing import Any, cast
 
 from ... import (
     AutoConfig,
-    AutoTokenizer,
     BatchFeature,
     MossAudioTokenizerFeatureExtractor,
     PreTrainedTokenizerBase,
@@ -334,6 +333,9 @@ class MossTTSDelayProcessor(ProcessorMixin):
         self.audio_tokenizer = audio_tokenizer
         if model_config is None:
             model_config = MossTTSDelayConfig()
+        elif isinstance(model_config, dict):
+            # `save_pretrained`/`from_pretrained` round-trips the config as a dict
+            model_config = MossTTSDelayConfig.from_dict(model_config)
         self.model_config = model_config
 
         def _id_to_token(token_id: int) -> str:
@@ -351,55 +353,28 @@ class MossTTSDelayProcessor(ProcessorMixin):
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path, *args, **kwargs):
         _require_torch()
-        trust_remote_code = kwargs.pop("trust_remote_code", None)
-        kwargs.pop("_from_auto", None)
+        # `codec_path` is a MOSS-specific escape hatch to override where the audio tokenizer is loaded from.
+        codec_path = kwargs.pop("codec_path", None)
 
-        audio_tokenizer_name_or_path = kwargs.pop("codec_path", None)
-        if audio_tokenizer_name_or_path is None:
-            processor_lookup_kwargs = dict(kwargs)
-            try:
-                processor_dict, _ = cls.get_processor_dict(
-                    pretrained_model_name_or_path,
-                    **processor_lookup_kwargs,
-                )
-                audio_tokenizer_name_or_path = processor_dict.get("audio_tokenizer_name_or_path")
-                audio_tokenizer_dict = processor_dict.get("audio_tokenizer", {})
-                if isinstance(audio_tokenizer_dict, dict):
-                    audio_tokenizer_name_or_path = (
-                        audio_tokenizer_dict.get("audio_tokenizer_name_or_path") or audio_tokenizer_name_or_path
-                    )
-            except Exception:
-                audio_tokenizer_name_or_path = None
-        if audio_tokenizer_name_or_path is None:
-            audio_tokenizer_name_or_path = "OpenMOSS-Team/MOSS-Audio-Tokenizer"
+        # `ProcessorMixin.from_pretrained` resolves the tokenizer and, when the checkpoint stores the
+        # `audio_tokenizer` reference written by `save_pretrained`, the audio tokenizer model as well.
+        processor = super().from_pretrained(pretrained_model_name_or_path, *args, **kwargs)
 
-        model_config = cast(
-            MossTTSDelayConfig,
-            AutoConfig.from_pretrained(
-                pretrained_model_name_or_path,
-                *args,
-                trust_remote_code=trust_remote_code,
-                **kwargs,
-            ),
-        )
-        tokenizer = AutoTokenizer.from_pretrained(
-            pretrained_model_name_or_path,
-            *args,
-            trust_remote_code=trust_remote_code,
-            **kwargs,
-        )
-        audio_tokenizer = MossAudioTokenizerModel.from_pretrained(
-            audio_tokenizer_name_or_path,
-            trust_remote_code=trust_remote_code,
-            **kwargs,
-        )
+        if codec_path is not None or processor.audio_tokenizer is None:
+            processor.audio_tokenizer = MossAudioTokenizerModel.from_pretrained(
+                codec_path or "OpenMOSS-Team/MOSS-Audio-Tokenizer", **kwargs
+            )
 
-        return cls(
-            tokenizer=tokenizer,
-            audio_tokenizer=audio_tokenizer,
-            model_config=model_config,
-            **kwargs,
-        )
+        try:
+            processor.model_config = cast(
+                MossTTSDelayConfig,
+                AutoConfig.from_pretrained(pretrained_model_name_or_path, *args, **kwargs),
+            )
+        except (OSError, ValueError):
+            # Not a model checkpoint (e.g. a directory saved with `processor.save_pretrained`): keep the
+            # model config that was serialized with the processor, or the class default.
+            pass
+        return processor
 
     @auto_docstring
     def __call__(self, *args, **kwargs) -> BatchFeature:
@@ -852,11 +827,15 @@ class MossTTSDelayProcessor(ProcessorMixin):
 
         return decoded_audio_list
 
-    def decode(self, output: list[tuple[int, torch.Tensor]]):
+    def decode(self, output):
         """
         1. This always requires complete assistant generation ids.
         2. Truncation from any position is supported.
+
+        Accepts either a [`MossTTSDelayGenerateOutput`] (as returned by `MossTTSDelayModel.generate`) or a plain
+        list of `(start_length, generation_ids)` pairs.
         """
+        output = getattr(output, "generations", output)
 
         generated_messages = []
         for start_length, generation_ids in output:
