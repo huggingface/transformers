@@ -84,7 +84,9 @@ def build_config():
         num_key_value_heads=2,
         head_dim=128,
         hidden_activation="silu",
-        max_position_embeddings=16_384,
+        # RoPE cache is sized to this; must match the 131072 tokenizer/generation max_length,
+        # else sequences >16384 crash on RoPE position indexing. (Was 16_384 - reintroduced the crash on convert.)
+        max_position_embeddings=131_072,
         rms_norm_eps=1e-5,
         tie_word_embeddings=False,
         bos_token_id=200_000,
