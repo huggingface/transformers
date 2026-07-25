@@ -57,42 +57,14 @@ _layer_patching_lock = threading.Lock()
 def apply_heterogeneous_modeling(model: PreTrainedModel) -> None:
     """Apply heterogeneous per-layer modeling during model construction.
 
-    Called automatically during ``PreTrainedModel.__init__`` when
-    ``config.is_heterogeneous`` is ``True``.
-
-    The model must resolve to a ``HeterogeneousModelingSpec`` either by setting
-    ``_heterogeneous_modeling_spec`` on the model class, or by having a built-in
-    spec factory in ``transformers.integrations.heterogeneity.supported_models``.
-    The spec defines the layer class to patch, the layer-index argument or variable name,
-    and optional skip descriptors.
-
-    The mechanism monkey-patches ``layer_cls.__init__`` and stores the per-model
-    context in a ``ContextVar``.  The wrapper reads from the ``ContextVar``
-    at layer-construction time, so each thread/model naturally gets its own
-    context with no shared mutable state.
-
-    1. The patched ``layer_cls.__init__`` determines the current layer index (from the function
-       arguments or by walking the call stack).
-    2. It passes ``config.per_layer_config[layer_idx]`` to the original ``__init__``.
-    3. For layers with a ``skip`` attribute, the
-       corresponding layer members are replaced with no-op modules according to
-       ``HeterogeneousModelingSpec.skip_descriptors``.
-    4. For layers with layer-specific attention masks, the layer ``forward``
-       method is patched to select the mask matching that layer's configured
-       mask key.
-
-    After model construction, the ``ContextVar`` is reset.
-
-    The resolved ``HeterogeneousModelingSpec`` contains:
-        ``layer_cls``: The layer class to patch, e.g. ``LlamaDecoderLayer``.
-        ``layer_idx_variable_name``: Name of the layer index argument in ``layer_cls.__init__``,
-            or the layer index variable from higher up the call stack.
-        ``skip_descriptors``: Optional dict mapping skip type names to descriptors containing replacement modules
-        and whether a replaced member is the one updating the layer's KV cache.
+    This function resolves the model's ``HeterogeneousModelingSpec``, validates its
+    configured skips, records which layers do not update the KV cache, and registers
+    the layer-construction context. The patched layer class uses this context to
+    initialize each layer with its resolved config, apply skip replacements, and
+    select layer-specific attention masks.
 
     Args:
-        model: The model being constructed. Must have a heterogeneous ``config``
-            and a resolvable ``HeterogeneousModelingSpec`` with ``layer_cls`` set.
+        model: The model being initialized.
     """
     if not model.config.is_heterogeneous:
         return
@@ -121,9 +93,8 @@ def apply_heterogeneous_modeling(model: PreTrainedModel) -> None:
     _patch_layer_init(heterogeneous_modeling_spec.layer_cls)
 
 
-def wrap_model_init_with_heterogeneous_cleanup(orig_init: Callable[..., None]) -> Callable[..., None]:
-    """Keep heterogeneous construction state scoped to one model initializer."""
-    if getattr(orig_init, "_wrapped_by_heterogeneous_modeling_cleanup", False):
+def wrap_model_init_with_heterogeneous_context(orig_init: Callable[..., None]) -> Callable[..., None]:
+    if getattr(orig_init, "_wrapped_with_heterogeneous_context", False):
         return orig_init
 
     @wraps(orig_init)
@@ -140,11 +111,12 @@ def wrap_model_init_with_heterogeneous_cleanup(orig_init: Callable[..., None]) -
             _layer_init_context.reset(layer_init_context_token)
             _model_init_stack.reset(model_init_stack_token)
 
-    _patched_init._wrapped_by_heterogeneous_modeling_cleanup = True
+    _patched_init._wrapped_with_heterogeneous_context = True
     return _patched_init
 
 
 def _patch_layer_init(layer_cls: type[nn.Module]) -> None:
+    """Patch ``layer_cls.__init__`` to resolve each layer's index and pass its matching per-layer config to the original init function."""
     if getattr(layer_cls.__init__, "_patched_by_heterogeneity", False):
         return
 
