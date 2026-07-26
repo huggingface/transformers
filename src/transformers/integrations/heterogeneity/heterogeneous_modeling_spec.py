@@ -45,7 +45,7 @@ class SkipDescriptor:
     replaces_kv_cache_updater: bool
 
 
-@dataclass
+@dataclass(frozen=True)
 class HeterogeneousModelingSpec:
     layer_cls: type[nn.Module]
     # Layer-index argument or local variable name used by the model's layer construction path.

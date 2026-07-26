@@ -52,7 +52,7 @@ if is_torch_available():
         shape_dim: int
         expected: int
 
-    @dataclass
+    @dataclass(frozen=True)
     class HeteroCase:
         """A single heterogeneous modeling test scenario.
 

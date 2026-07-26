@@ -32,7 +32,7 @@ if is_torch_available():
     from torch import nn
 
 
-@dataclass
+@dataclass(frozen=True)
 class ReturnEntry:
     arg_name: str
     transform: Callable
