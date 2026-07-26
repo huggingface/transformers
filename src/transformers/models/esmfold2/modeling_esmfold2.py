@@ -419,7 +419,7 @@ class EsmFold2RotaryEmbedding3D(nn.Module):
         self.spatial_base_freq = atom_config.spatial_rope_base_frequency
         self.uid_base_freq = atom_config.uid_rope_base_frequency
 
-    def forward(self, ref_pos: Tensor, ref_space_uid: Tensor) -> tuple[Tensor, Tensor]:
+    def forward(self, ref_pos: Tensor, ref_space_uid: Tensor, dtype: torch.dtype) -> tuple[Tensor, Tensor]:
         device = ref_pos.device
         B, N = ref_pos.shape[:2]
         half_dim = self.head_dim // 2
@@ -442,9 +442,11 @@ class EsmFold2RotaryEmbedding3D(nn.Module):
         if n_active < half_dim:
             freqs = torch.cat([freqs, freqs.new_zeros(B, N, half_dim - n_active)], dim=-1)
 
-        # Duplicate to the full head dim so the caller applies standard rotate-half RoPE.
+        # Duplicate to the full head dim so the caller applies standard rotate-half RoPE. The angles are
+        # built in fp32 and returned at the activation dtype (the caller passes it), so ``cos``/``sin``
+        # always match the queries they rotate -- the same contract as the sequence-RoPE modules.
         emb = torch.cat([freqs, freqs], dim=-1)
-        return emb.cos().to(torch.bfloat16), emb.sin().to(torch.bfloat16)
+        return emb.cos().to(dtype), emb.sin().to(dtype)
 
 
 def scatter_atom_to_token(
@@ -532,7 +534,7 @@ class EsmFold2AtomEncoder(nn.Module):
         # ``atom_feats`` is fp32 (one-hots and masks), so the downcast into the projection is real;
         # ``atom_norm`` already computes in fp32 internally and returns its input dtype.
         c_base = self.atom_norm(self.atom_linear(atom_feats.to(self.atom_linear.weight.dtype)))
-        return c_base, self.rotary_emb(ref_pos, atom_inputs.ref_space_uid)
+        return c_base, self.rotary_emb(ref_pos, atom_inputs.ref_space_uid, dtype=c_base.dtype)
 
     def build_attention_mask(self, atom_mask: Tensor, position_embeddings: tuple[Tensor, Tensor]) -> Tensor:
         """Sliding-window attention mask for the atom stack.
@@ -1279,14 +1281,15 @@ class EsmFold2TriangleMultiplicativeUpdate(nn.Module):
         bundled = self.proj_bundle(normalized_grid)
         signal, gate_logits = bundled.split(2 * self.dim, dim=-1)
         routed = signal * torch.sigmoid(gate_logits)
-        # NOTE: ``visibility`` is the fp32 pair mask, so this multiply promotes ``routed`` from the
-        # activation dtype to fp32 and the O(N^3) contraction below therefore runs in fp32 even under
-        # a bf16 load. ``norm_mix`` then returns fp32 and the downcast into ``proj_emit`` is real.
-        routed = routed * visibility.unsqueeze(-1)
+        # ``visibility`` is the fp32 pair mask; cast it so masking does not silently promote ``routed``
+        # and run the O(N^3) contraction in fp32. The reference contracts at the ambient precision --
+        # it upcasts explicitly, but its own bf16 autocast overrides that, so a bf16 model contracts in
+        # bf16 and an fp32 model in fp32. Keeping ``routed`` in the activation dtype reproduces both.
+        routed = routed * visibility.unsqueeze(-1).to(routed.dtype)
 
         left_stream, right_stream = routed.chunk(2, dim=-1)
         contracted = self._triangular_contract(left_stream, right_stream)
-        mixed = self.proj_emit(self.norm_mix(contracted).to(self.proj_emit.weight.dtype))
+        mixed = self.proj_emit(self.norm_mix(contracted))
         output_gate = torch.sigmoid(self.proj_gate(normalized_grid))
         return mixed * output_gate
 
