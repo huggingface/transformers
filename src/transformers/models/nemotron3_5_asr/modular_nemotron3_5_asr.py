@@ -21,6 +21,7 @@ from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, is_torch_available, logging
+from ...utils.import_utils import requires
 from ..nemotron_asr_streaming.modeling_nemotron_asr_streaming import (
     NemotronAsrStreamingForRNNT,
     NemotronAsrStreamingPreTrainedModel,
@@ -170,6 +171,7 @@ class Nemotron3_5AsrProcessorKwargs(NemotronAsrStreamingProcessorKwargs, total=F
     pass
 
 
+@requires(backends=("torch",))
 @auto_docstring
 class Nemotron3_5AsrProcessor(NemotronAsrStreamingProcessor):
     def __init__(

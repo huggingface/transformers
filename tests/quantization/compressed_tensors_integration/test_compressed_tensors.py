@@ -17,6 +17,7 @@ class CompressedTensorsTest(unittest.TestCase):
     tinyllama_int8 = "nm-testing/TinyLlama-1.1B-Chat-v1.0-W8A8-Dynamic-Per-Token-compressed"
     tinyllama_fp8 = "nm-testing/TinyLlama-1.1B-Chat-v1.0-FP8-Dynamic-compressed"
     tinyllama_w8a16 = "nm-testing/TinyLlama-1.1B-Chat-v1.0-W8A16-G128-compressed"
+    llama3_fp8_frozen = "RedHatAI/Llama-3.2-1B-Instruct-FP8"
 
     prompt = "The capital of France is Paris, the capital of Germany is Berlin"
 
@@ -55,6 +56,23 @@ class CompressedTensorsTest(unittest.TestCase):
 
     def test_tinyllama_w8a16(self):
         self._test_quantized_model(self.tinyllama_w8a16, 20.0)
+
+    def test_frozen_fp8_dequantized_on_load(self):
+        quantization_config = CompressedTensorsConfig(run_compressed=False)
+        model = AutoModelForCausalLM.from_pretrained(
+            self.llama3_fp8_frozen,
+            device_map=torch_device,
+            torch_dtype=torch.float32,
+            quantization_config=quantization_config,
+        )
+        weight = model.model.layers[0].self_attn.q_proj.weight
+        # Dequantized max is small (~0.68); raw fp8 max would be 448.0
+        self.assertLess(weight.abs().max().item(), 5.0)
+
+        tokenizer = AutoTokenizer.from_pretrained(self.llama3_fp8_frozen)
+        inputs = tokenizer(self.prompt, return_tensors="pt").to(torch_device)
+        output_ids = model.generate(**inputs, max_new_tokens=8, do_sample=False)
+        self.assertGreater(output_ids.shape[1], inputs["input_ids"].shape[1])
 
     def _test_quantized_model(self, model_name: str, expected_perplexity: float):
         # load model

@@ -33,7 +33,7 @@ from ...utils import (
     logging,
     torch_compilable_check,
 )
-from ...utils.generic import is_flash_attention_requested, maybe_autocast
+from ...utils.generic import get_max_seqlen, is_flash_attention_requested, maybe_autocast
 from ...utils.output_capturing import capture_outputs
 from ...vision_utils import get_vision_position_ids
 from ..auto import CONFIG_MAPPING, AutoConfig, AutoModel
@@ -245,6 +245,7 @@ class Kimi_K25VisionAttention(VisionAttention):
         hidden_states: torch.Tensor,
         cu_seqlens: torch.Tensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
+        max_seqlen: int | None = None,
         **kwargs,
     ) -> torch.Tensor:
         seq_length = hidden_states.shape[0]
@@ -266,7 +267,7 @@ class Kimi_K25VisionAttention(VisionAttention):
 
         if is_flash_attention_requested(self.config):
             # Flash Attention: Use cu_seqlens for variable length attention
-            max_seqlen = (cu_seqlens[1:] - cu_seqlens[:-1]).max()
+            max_seqlen = get_max_seqlen(cu_seqlens, self.config, kwargs={"max_seqlen": max_seqlen})
             attn_output, _ = attention_interface(
                 self,
                 query_states,
@@ -418,8 +419,8 @@ class Kimi_K25VisionModel(Kimi_K25PreTrainedModel):
             )
         )
 
-        max_seqlen = lengths.max()
         cu_seqlens = lengths.cumsum(dim=0, dtype=torch.int32)
+        max_seqlen = get_max_seqlen(cu_seqlens, self.config, kwargs=kwargs)
 
         for block in self.layers:
             hidden_states = block(
@@ -487,8 +488,10 @@ class Kimi_K25Model(Kimi_K25PreTrainedModel):
             The temporal, height and width of feature shape of each image in LLM.
         """
         vision_outputs = self.vision_tower(pixel_values, grid_thw=image_grid_thw, **kwargs)
-        image_embeds = self.mm_projector(vision_outputs.pooler_output)
-        vision_outputs.pooler_output = image_embeds
+        image_embeds = self.mm_projector(vision_outputs.pooler_output).squeeze(1)
+        merge_kernel_size = self.vision_tower.merge_kernel_size[0] * self.vision_tower.merge_kernel_size[1]
+        split_sizes = (image_grid_thw.prod(-1) // merge_kernel_size).tolist()
+        vision_outputs.pooler_output = torch.split(image_embeds, split_sizes)
         return vision_outputs
 
     def get_video_features(
@@ -577,7 +580,7 @@ class Kimi_K25Model(Kimi_K25PreTrainedModel):
 
         if pixel_values is not None:
             image_embeds = self.get_image_features(pixel_values, image_grid_thw).pooler_output
-            image_embeds = image_embeds.to(device=inputs_embeds.device, dtype=inputs_embeds.dtype)
+            image_embeds = torch.cat(image_embeds, dim=0).to(device=inputs_embeds.device, dtype=inputs_embeds.dtype)
             image_mask, _ = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, image_features=image_embeds
             )
@@ -585,7 +588,7 @@ class Kimi_K25Model(Kimi_K25PreTrainedModel):
 
         if pixel_values_videos is not None:
             video_embeds = self.get_video_features(pixel_values_videos, video_grid_thw).pooler_output
-            video_embeds = video_embeds.to(device=inputs_embeds.device, dtype=inputs_embeds.dtype)
+            video_embeds = torch.cat(video_embeds, dim=0).to(device=inputs_embeds.device, dtype=inputs_embeds.dtype)
             _, video_mask = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, video_features=video_embeds
             )

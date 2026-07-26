@@ -40,6 +40,12 @@ def paged_attention_forward(
             read and dispatches the read using the block table. Same for the write. If a request has fewer than
             max_blocks_per_seq blocks, the block table is padded with -1s to indicate that the block is not allocated.
     """
+    # FlashAttention requires the query and value to share a head dim; pad `value` up to the
+    # query head dim (e.g. MLA, where `v_head_dim < qk_head_dim`) and crop the output below.
+    head_dim, v_head_dim = q.shape[-1], v.shape[-1]
+    if v_head_dim != head_dim:
+        v = torch.nn.functional.pad(v, [0, head_dim - v_head_dim])
+
     # Retrieve the flash attention functions
     flash_attn_varlen_func, flash_attn_with_kvcache = lazy_import_paged_flash_attention(
         module.config._attn_implementation
@@ -85,6 +91,9 @@ def paged_attention_forward(
         attn_output = _paged_decode_forward(
             module, q, k, v, cache, cu_seq_lens_k, sliding_window, flash_attn_with_kvcache, block_table, **flash_kwargs
         )
+
+    if v_head_dim != head_dim:
+        attn_output = attn_output[..., :v_head_dim]
     return attn_output, None
 
 

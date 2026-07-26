@@ -231,6 +231,10 @@ class DiaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
         self.config_tester = ConfigTester(self, has_text_modality=False, config_class=DiaConfig)
         self.skip_non_greedy_generate()
 
+    @unittest.skip(reason="Dia flattens codebook channels into the batch dim; logits do not match 2D `labels`")
+    def test_encoder_decoder_loss_no_double_shift(self):
+        pass
+
     def prepare_config_and_inputs_for_generate(self, batch_size=2):
         # DIA should not have a `None` eos token id because it uses certain LogitsProcessors
         # so we overwrite preparation
