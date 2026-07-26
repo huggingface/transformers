@@ -30,8 +30,10 @@ cross-attention before selecting mutual matches with a dual-softmax score matrix
 
 This initial integration supports LoMa with the native SuperPoint keypoint detector. The matching transformer uses
 learnable Fourier positional encoding for self-attention and leaves cross-attention position-free, matching the
-reference architecture. The local descriptor network is included as an internal component; checkpoint conversion and
-reference-model parity are being added separately.
+reference architecture. The local descriptor network is included as an internal component. The conversion utility maps
+official LoMa matcher weights (B, L, and G) into the SuperPoint-based model. Since the reference checkpoints pair the
+matcher with DaD and DeDoDe, end-to-end numerical parity with the reference pipeline is not expected in this initial
+scope.
 
 The original code is available in the [LoMa repository](https://github.com/davnords/LoMa).
 
