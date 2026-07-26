@@ -70,6 +70,8 @@ def apply_heterogeneous_modeling(model: PreTrainedModel) -> None:
         return
 
     heterogeneous_modeling_spec = get_heterogeneous_modeling_spec(model)
+    if heterogeneous_modeling_spec is None:
+        return
 
     per_layer_skip_types = [layer_config.skip for layer_config in model.config.per_layer_config]
     skip_descriptors = heterogeneous_modeling_spec.skip_descriptors or {}

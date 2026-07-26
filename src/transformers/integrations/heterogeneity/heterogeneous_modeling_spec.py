@@ -88,23 +88,43 @@ def nest_skip_descriptor_paths(
     return nested_descriptors
 
 
-def get_heterogeneous_modeling_spec(model: PreTrainedModel) -> HeterogeneousModelingSpec:
+def get_heterogeneous_modeling_spec(model: PreTrainedModel) -> HeterogeneousModelingSpec | None:
     heterogeneous_modeling_spec = getattr(model, "_heterogeneous_modeling_spec", None)
 
     if heterogeneous_modeling_spec is not None:
         return heterogeneous_modeling_spec
 
+    if getattr(model, "_disable_heterogeneous_modeling_patching", False):
+        return None
+
     model_type = model.config.get_text_config(decoder=True).model_type
-    from transformers.integrations.heterogeneity.supported_models import MODEL_TYPE_TO_SPEC_FACTORY
+
+    from transformers.integrations.heterogeneity.supported_models import (
+        MODEL_TYPE_TO_SPEC_FACTORY,
+        MODEL_TYPES_WITH_HETEROGENEOUS_MODELING_PATCHING_DISABLED,
+    )
+
+    if model_type in MODEL_TYPES_WITH_HETEROGENEOUS_MODELING_PATCHING_DISABLED:
+        return None
 
     spec_factory = MODEL_TYPE_TO_SPEC_FACTORY.get(model_type)
 
     if spec_factory is None:
         raise ValueError(
-            f"No heterogeneous modeling spec is defined for model type `{model_type}`. Built-in heterogeneous modeling "
-            "support is only available for models listed in "
-            "`transformers.integrations.heterogeneity.supported_models.MODEL_TYPE_TO_SPEC_FACTORY`. "
-            "To add support outside this registry, set `_heterogeneous_modeling_spec` on the model class."
+            f"No heterogeneous modeling behavior is defined for model type `{model_type}`.\n\n"
+            "Choose one of the following:\n"
+            "1. Generic patching:\n"
+            "   - Custom model: set `_heterogeneous_modeling_spec` on the model class.\n"
+            "   - Built-in model: add a spec factory in "
+            "`transformers.integrations.heterogeneity.supported_models.MODEL_TYPE_TO_SPEC_FACTORY`.\n"
+            "2. Patching disabled:\n"
+            "   - Custom model: set `_disable_heterogeneous_modeling_patching = True` on the model "
+            "class.\n"
+            "   - Built-in model: add its model type to "
+            "`transformers.integrations.heterogeneity.supported_models."
+            "MODEL_TYPES_WITH_HETEROGENEOUS_MODELING_PATCHING_DISABLED`.\n\n"
+            "See the heterogeneous modeling guide at "
+            "https://huggingface.co/docs/transformers/main/en/heterogeneous_modeling."
         )
 
     return spec_factory()

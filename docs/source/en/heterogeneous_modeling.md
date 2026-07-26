@@ -17,19 +17,28 @@ limitations under the License.
 # Heterogeneous modeling
 
 [Heterogeneous configurations](./heterogeneous_configurations) record per-layer differences — attribute values that
-differ from the global configuration, or submodules that are skipped entirely — in the model configuration. This guide covers the modeling side: how
-an architecture declares support for those differences, and how to enable support for a model that does not have it
-built in.
+differ from the global configuration, or submodules that are skipped entirely — in the model configuration.
+This guide explains how generic heterogeneous modeling works and how built-in and custom models enable or
+disable its patching mechanism.
 
-The architectures with built-in support are registered in
+## Architecture support
+
+An architecture can use **generic patching**, where a `HeterogeneousModelingSpec` passes each resolved config to its
+layer and applies skips, or have **patching disabled** when that mechanism is not appropriate for the model's structure.
+How that choice is declared depends on whether the model is built into Transformers:
+
+| Model | Generic patching | Patching disabled |
+| --- | --- | --- |
+| Built-in model | Listed in `MODEL_TYPE_TO_SPEC_FACTORY` | Listed in `MODEL_TYPES_WITH_HETEROGENEOUS_MODELING_PATCHING_DISABLED` |
+| Custom model | [Set a modeling spec](#use-generic-patching) | [Disable generic patching](#disable-generic-patching) |
+
+Both built-in declarations live in
 [`supported_models.py`](https://github.com/huggingface/transformers/blob/main/src/transformers/integrations/heterogeneity/supported_models.py).
-For any other model, including custom models with remote code, support can be enabled by setting
-`_heterogeneous_modeling_spec` on the model's `PreTrainedModel` base class, without changes to its modeling file.
 
-## How it works
+## How generic patching works
 
-When a model is constructed with a heterogeneous configuration, Transformers patches the construction of the
-architecture's layer class so that:
+When a model is constructed with a heterogeneous configuration and has a heterogeneous modeling spec, Transformers
+patches the construction of the architecture's layer class so that:
 
 1. Each layer is built from its resolved layer configuration, `config.per_layer_config[layer_idx]`, so per-layer
    attribute overrides such as `intermediate_size` or `num_key_value_heads` apply naturally.
@@ -214,7 +223,7 @@ Because the replacements hold no parameters, checkpoints of such models simply d
 members, and [`~PreTrainedModel.save_pretrained`] and [`~PreTrainedModel.from_pretrained`] round trip them out of the
 box.
 
-## Enable a custom model
+## Configure a custom model
 
 A custom modeling module typically defines a shared `PreTrainedModel` base class:
 
@@ -229,7 +238,9 @@ class MyModel(MyModelPreTrainedModel):
     ...
 ```
 
-To enable heterogeneous modeling without changing that file, import the shared base class and set
+### Use generic patching
+
+To enable generic patching without changing that file, import the shared base class and set
 `_heterogeneous_modeling_spec` on it:
 
 ```py
@@ -241,4 +252,16 @@ MyModelPreTrainedModel._heterogeneous_modeling_spec = spec
 Nothing else is required: constructing any `MyModel*` class with a heterogeneous configuration applies the spec, and
 [`~PreTrainedModel.from_pretrained`] works as usual.
 
-Built-in support lives in `transformers.integrations.heterogeneity.supported_models`. To contribute support for a new model type, add a spec factory to `MODEL_TYPE_TO_SPEC_FACTORY`.
+### Disable generic patching
+
+If the model should not use generic heterogeneous patching, set `_disable_heterogeneous_modeling_patching` on the
+shared base class instead:
+
+```py
+MyModelPreTrainedModel._disable_heterogeneous_modeling_patching = True
+```
+
+## Contribute built-in support
+
+Built-in support lives in `transformers.integrations.heterogeneity.supported_models`. To contribute support for a new
+model type, add a spec factory to `MODEL_TYPE_TO_SPEC_FACTORY`.

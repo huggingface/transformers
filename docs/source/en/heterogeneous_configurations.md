@@ -208,9 +208,10 @@ from seeing the full per-layer layout.
 
 ## Architecture support
 
-Heterogeneous configurations require the model architecture to opt in through a heterogeneous modeling spec. The
-architectures with built-in support are registered in
-[`supported_models.py`](https://github.com/huggingface/transformers/blob/main/src/transformers/integrations/heterogeneity/supported_models.py).
-For any other model, including custom models with remote code, support can be enabled by setting
-`_heterogeneous_modeling_spec` on the model's `PreTrainedModel` base class, without changes to its modeling file. See [Heterogeneous modeling](./heterogeneous_modeling) for how the spec works, which
-submodules a `skip` can name, and how to write a spec for a new architecture.
+The presence of `per_layer_config` does not by itself mean that an architecture supports generic heterogeneous modeling.
+It must either use generic patching through a heterogeneous modeling spec or have patching disabled when that mechanism
+does not fit the model's structure.
+
+See [Architecture support](./heterogeneous_modeling#architecture-support) for how built-in and custom models declare
+either behavior. The [heterogeneous modeling guide](./heterogeneous_modeling) also explains which
+submodules a `skip` attribute can name and how to write a spec for a new architecture.

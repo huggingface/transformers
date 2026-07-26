@@ -22,6 +22,12 @@ from transformers.integrations.heterogeneity.heterogeneous_modeling_spec import 
 from transformers.integrations.heterogeneity.skip_utils import ReturnEntry, get_skip_replacement
 
 
+MODEL_TYPES_WITH_HETEROGENEOUS_MODELING_PATCHING_DISABLED = {
+    "diffusion_gemma_text",
+    "gemma4_text",
+    "gemma4_unified_text",
+}
+
 MODEL_TYPE_TO_SPEC_FACTORY: dict[str, Callable[[], HeterogeneousModelingSpec]] = {
     "gpt_oss": lambda: gpt_oss(),
     "llama": lambda: llama(),

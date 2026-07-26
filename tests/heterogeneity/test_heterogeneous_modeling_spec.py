@@ -64,11 +64,17 @@ class TestHeterogeneousModelingSpec(unittest.TestCase):
         spec = HeterogeneousModelingSpec(layer_cls=torch.nn.Linear, layer_idx_variable_name="layer_idx")
 
         class CustomModel:
-            pass
+            _disable_heterogeneous_modeling_patching = True
 
         CustomModel._heterogeneous_modeling_spec = spec
 
         self.assertIs(get_heterogeneous_modeling_spec(CustomModel()), spec)
+
+    def test_get_heterogeneous_modeling_spec_respects_custom_model_patching_opt_out(self):
+        class CustomModel:
+            _disable_heterogeneous_modeling_patching = True
+
+        self.assertIsNone(get_heterogeneous_modeling_spec(CustomModel()))
 
     def test_get_heterogeneous_modeling_spec_uses_supported_model_registry(self):
         spec = HeterogeneousModelingSpec(layer_cls=torch.nn.Linear, layer_idx_variable_name="layer_idx")
@@ -87,6 +93,25 @@ class TestHeterogeneousModelingSpec(unittest.TestCase):
         with patch.dict(supported_models.MODEL_TYPE_TO_SPEC_FACTORY, {"test_model": lambda: spec}):
             self.assertIs(get_heterogeneous_modeling_spec(BuiltInModel(BuiltInConfig())), spec)
 
+    def test_get_heterogeneous_modeling_spec_returns_none_when_patching_is_disabled_for_model_type(self):
+        class DisabledConfig:
+            model_type = "disabled_model"
+
+            def get_text_config(self, decoder=True):
+                return self
+
+        class DisabledModel:
+            def __init__(self, config):
+                self.config = config
+
+        supported_models = importlib.import_module("transformers.integrations.heterogeneity.supported_models")
+        with patch.object(
+            supported_models,
+            "MODEL_TYPES_WITH_HETEROGENEOUS_MODELING_PATCHING_DISABLED",
+            {"disabled_model"},
+        ):
+            self.assertIsNone(get_heterogeneous_modeling_spec(DisabledModel(DisabledConfig())))
+
     def test_get_heterogeneous_modeling_spec_raises_for_unsupported_model_type(self):
         class UnsupportedConfig:
             model_type = "fake"
@@ -98,5 +123,8 @@ class TestHeterogeneousModelingSpec(unittest.TestCase):
             def __init__(self, config):
                 self.config = config
 
-        with self.assertRaisesRegex(ValueError, "No heterogeneous modeling spec is defined for model type `fake`"):
+        with self.assertRaisesRegex(
+            ValueError,
+            "No heterogeneous modeling behavior is defined for model type `fake`",
+        ):
             get_heterogeneous_modeling_spec(UnsupportedModel(UnsupportedConfig()))

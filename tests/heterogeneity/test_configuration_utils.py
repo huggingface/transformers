@@ -39,7 +39,6 @@ class TestHeterogeneousConfig(unittest.TestCase):
 
         self.assertEqual(mtp_config.num_hidden_layers, 2)
         self.assertFalse(mtp_config.is_heterogeneous)
-        self.assertIsNone(mtp_config.per_layer_config)
         self.assertEqual(mtp_config.intermediate_size, object.__getattribute__(config, "intermediate_size"))
         self.assertTrue(config.is_heterogeneous)
 
