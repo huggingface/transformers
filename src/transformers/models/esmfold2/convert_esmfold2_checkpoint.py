@@ -25,20 +25,48 @@ from safetensors.torch import load_file
 from transformers import AutoTokenizer, EsmcTokenizer, EsmFold2Config
 
 
-# Flat EsmFold2Config field -> dotted path in the research checkpoint's nested config.json.
-_LEGACY_FIELD_MAP = {
+# EsmFold2Config paths carried over from the research checkpoint's nested config.json. Paths that are
+# spelled the same on both sides are listed once here; the ones the port renamed live in
+# ``_LEGACY_RENAMES`` below and are resolved with ``.get(path, path)``.
+_LEGACY_FIELDS = (
+    "n_relative_residx_bins",
+    "n_relative_chain_bins",
+    "num_loops",
+    "num_diffusion_samples",
+    "structure_head.diffusion_module.sigma_data",
+    "structure_head.diffusion_module.fourier_dim",
+    "structure_head.diffusion_module.token_num_blocks",
+    "structure_head.diffusion_module.token_num_heads",
+    "structure_head.diffusion_module.transition_multiplier",
+    "structure_head.distogram_bins",
+    "structure_head.gamma_0",
+    "structure_head.gamma_min",
+    "structure_head.noise_scale",
+    "structure_head.step_scale",
+    "structure_head.inference_s_max",
+    "structure_head.inference_s_min",
+    "structure_head.inference_p",
+    "structure_head.inference_num_steps",
+    "confidence_head.num_plddt_bins",
+    "confidence_head.num_pde_bins",
+    "confidence_head.num_pae_bins",
+    "confidence_head.min_dist",
+    "confidence_head.max_dist",
+    "confidence_head.distogram_bins",
+    "lm_encoder.lm_dropout",
+    "lm_encoder.per_loop_lm_dropout",
+)
+
+# Port config path -> dotted path in the research checkpoint's config.json, for the renamed fields only.
+_LEGACY_RENAMES = {
     "hidden_size": "d_single",
     "pairwise_hidden_size": "d_pair",
     "single_inputs_size": "inputs.d_inputs",
     "sliding_window": "inputs.atom_encoder.swa_window_size",
-    "n_relative_residx_bins": "n_relative_residx_bins",
-    "n_relative_chain_bins": "n_relative_chain_bins",
-    "num_loops": "num_loops",
-    "num_diffusion_samples": "num_diffusion_samples",
     "msa_encoder.overwrite": "msa_encoder_overwrite",
     "folding_trunk_num_hidden_layers": "folding_trunk.n_layers",
+    "parcae_num_coda_layers": "parcae.coda_n_layers",
     "atom_encoder.hidden_size": "inputs.atom_encoder.d_atom",
-    "atom_encoder.token_hidden_size": "inputs.atom_encoder.d_token",
     "atom_encoder.num_hidden_layers": "inputs.atom_encoder.n_blocks",
     "atom_encoder.num_attention_heads": "inputs.atom_encoder.n_heads",
     "atom_encoder.expansion_ratio": "inputs.atom_encoder.expansion_ratio",
@@ -46,41 +74,20 @@ _LEGACY_FIELD_MAP = {
     "atom_encoder.n_spatial_rope_pairs_per_axis": "inputs.atom_encoder.n_spatial_rope_pairs_per_axis",
     "atom_encoder.n_uid_rope_pairs": "inputs.atom_encoder.n_uid_rope_pairs",
     "atom_encoder.uid_rope_base_frequency": "inputs.atom_encoder.uid_rope_base_frequency",
-    "structure_head.diffusion_module.sigma_data": "structure_head.diffusion_module.sigma_data",
-    "structure_head.diffusion_module.atom_hidden_size": "structure_head.diffusion_module.c_atom",
+    "structure_head.diffusion_module.atom_encoder.hidden_size": "structure_head.diffusion_module.c_atom",
+    "structure_head.diffusion_module.atom_encoder.num_hidden_layers": "structure_head.diffusion_module.atom_num_blocks",
+    "structure_head.diffusion_module.atom_encoder.num_attention_heads": "structure_head.diffusion_module.atom_num_heads",
     "structure_head.diffusion_module.token_hidden_size": "structure_head.diffusion_module.c_token",
-    "structure_head.diffusion_module.fourier_dim": "structure_head.diffusion_module.fourier_dim",
-    "structure_head.diffusion_module.atom_num_blocks": "structure_head.diffusion_module.atom_num_blocks",
-    "structure_head.diffusion_module.atom_num_heads": "structure_head.diffusion_module.atom_num_heads",
-    "structure_head.diffusion_module.token_num_blocks": "structure_head.diffusion_module.token_num_blocks",
-    "structure_head.diffusion_module.token_num_heads": "structure_head.diffusion_module.token_num_heads",
-    "structure_head.diffusion_module.transition_multiplier": "structure_head.diffusion_module.transition_multiplier",
-    "structure_head.distogram_bins": "structure_head.distogram_bins",
-    "structure_head.gamma_0": "structure_head.gamma_0",
-    "structure_head.gamma_min": "structure_head.gamma_min",
-    "structure_head.noise_scale": "structure_head.noise_scale",
-    "structure_head.step_scale": "structure_head.step_scale",
-    "structure_head.inference_s_max": "structure_head.inference_s_max",
-    "structure_head.inference_s_min": "structure_head.inference_s_min",
-    "structure_head.inference_p": "structure_head.inference_p",
-    "structure_head.inference_num_steps": "structure_head.inference_num_steps",
     "confidence_head.num_hidden_layers": "confidence_head.folding_trunk.n_layers",
-    "confidence_head.num_plddt_bins": "confidence_head.num_plddt_bins",
-    "confidence_head.num_pde_bins": "confidence_head.num_pde_bins",
-    "confidence_head.num_pae_bins": "confidence_head.num_pae_bins",
-    "confidence_head.min_dist": "confidence_head.min_dist",
-    "confidence_head.max_dist": "confidence_head.max_dist",
-    "confidence_head.distogram_bins": "confidence_head.distogram_bins",
     "msa_encoder.hidden_size": "msa_encoder.d_msa",
     "msa_encoder.outer_hidden_size": "msa_encoder.d_hidden",
     "msa_encoder.num_hidden_layers": "msa_encoder.n_layers",
     "msa_encoder.num_attention_heads": "msa_encoder.n_heads_msa",
     "msa_encoder.head_width": "msa_encoder.msa_head_width",
     "lm_encoder.num_hidden_layers": "lm_encoder.n_layers",
-    "lm_encoder.lm_dropout": "lm_encoder.lm_dropout",
-    "lm_encoder.per_loop_lm_dropout": "lm_encoder.per_loop_lm_dropout",
-    "parcae_num_coda_layers": "parcae.coda_n_layers",
 }
+
+_LEGACY_PORT_PATHS = (*_LEGACY_FIELDS, *_LEGACY_RENAMES)
 
 # Leaves intentionally not carried over: backbone id/size (now in esmc_config), fields the flat
 # config re-derives or forces equal to a canonical field, always-on head flags, and training knobs.
@@ -90,6 +97,9 @@ _LEGACY_DROP_PATHS = {
     "transformers_version",
     "type",  # only the release variant is ported, so the field was dropped entirely
     "esmc_id",
+    # The inputs atom encoder's aggregation width is derived from ``single_inputs_size`` (it is
+    # whatever makes the single-inputs feature concat add up), rather than from this half-width.
+    "inputs.atom_encoder.d_token",
     "lm_d_model",
     "lm_num_layers",
     "lm_dropout",
@@ -131,9 +141,16 @@ _WEIGHT_KEY_RENAMES = (
     (".ffn.w3.", ".ffn.down_proj."),
     ("fourier.w", "fourier.frequencies"),  # fixed Fourier freq/phase buffers
     ("fourier.b", "fourier.phases"),
+    # The parcae recurrence params/coda were loose attributes on the model; the port groups them under
+    # an ``EsmFold2Parcae`` submodule, so ``parcae_<name>`` becomes ``parcae.<name>``.
+    ("parcae_", "parcae."),
     ("output_mlp.0.", "output_fc1."),
     ("output_mlp.2.", "output_fc2."),
     ("adaln_modulation.1.", "adaln_linear."),
+    # EsmFold2AdaptiveLayerNorm: descriptive names for the adaLN-Zero conditioning scale + gate/shift projections.
+    ("adaln.s_gate.", "adaln.gate_proj."),
+    ("adaln.s_shift.", "adaln.shift_proj."),
+    ("adaln.s_scale", "adaln.norm_scale"),
     ("base_z_linear.0.", "base_z_input_norm."),
     ("base_z_linear.1.", "base_z_proj."),
     ("base_z_mlp.0.", "base_z_to_pair."),
@@ -183,18 +200,22 @@ def _leaf_paths(cfg: dict, prefix: str = "") -> set[str]:
 
 
 def build_legacy_config(old: dict) -> dict:
-    """Reshape the research checkpoint's nested config into the port's nested EsmFold2Config layout
-    (``_LEGACY_FIELD_MAP`` maps each dotted port path to its dotted source path)."""
+    """Reshape the research checkpoint's nested config into the port's nested EsmFold2Config layout.
+
+    Each port path in ``_LEGACY_PORT_PATHS`` reads from the same path in the source config unless
+    ``_LEGACY_RENAMES`` overrides it.
+    """
     config: dict = {}
-    for port_path, old_path in _LEGACY_FIELD_MAP.items():
+    for port_path in _LEGACY_PORT_PATHS:
         node = config
         parts = port_path.split(".")
         for part in parts[:-1]:
             node = node.setdefault(part, {})
-        node[parts[-1]] = _get_path(old, old_path)
+        node[parts[-1]] = _get_path(old, _LEGACY_RENAMES.get(port_path, port_path))
     if "dtype" in old:
         config["dtype"] = old["dtype"]
-    unexpected = _leaf_paths(old) - (set(_LEGACY_FIELD_MAP.values()) | _LEGACY_DROP_PATHS | {"dtype"})
+    mapped = {_LEGACY_RENAMES.get(port_path, port_path) for port_path in _LEGACY_PORT_PATHS}
+    unexpected = _leaf_paths(old) - (mapped | _LEGACY_DROP_PATHS | {"dtype"})
     if unexpected:
         raise ValueError(f"unmapped fields in the source ESMFold2 config: {sorted(unexpected)}")
     return config

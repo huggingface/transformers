@@ -41,7 +41,7 @@ if is_torch_available():
     import torch
 
     from transformers import EsmFold2Model
-    from transformers.models.esmfold2.modeling_esmfold2 import EsmFold2SWA3DRoPEAttention
+    from transformers.models.esmfold2.modeling_esmfold2 import EsmFold2AtomInputs, EsmFold2SWA3DRoPEAttention
 
 # TEMP: the public ``biohub/ESMFold2`` snapshot does not yet bundle the ESMC-6B
 # backbone under ``esmc.*`` (it loads random → garbage outputs). Point the slow
@@ -54,10 +54,11 @@ def get_tiny_config(**overrides) -> "EsmFold2Config":
     """A minimal but internally consistent ESMFold2 config for CPU testing.
 
     Constraints (see modeling): 3D RoPE needs ``3*n_spatial + n_uid <= head_dim//2``
-    (head_dim = atom_encoder.hidden_size / atom_encoder.num_attention_heads =
-    structure_head.diffusion_module.atom_hidden_size / .atom_num_heads = 8 here), and
-    ``single_inputs_size == 67 + atom_encoder.token_hidden_size//2`` (the feature-concat
-    width; 83 = 67 + 32//2), which also feeds the diffusion conditioning.
+    (head_dim = hidden_size / num_attention_heads of each atom sub-config — the inputs
+    ``atom_encoder`` and ``structure_head.diffusion_module.atom_encoder`` — = 8 here). The
+    inputs atom encoder's ``output_dim`` is derived as
+    ``single_inputs_size - (2 * num_res_types + 1)`` (83 - 67 = 16 here), which also feeds
+    the diffusion conditioning.
     """
     kwargs = {
         "hidden_size": 32,
@@ -71,7 +72,6 @@ def get_tiny_config(**overrides) -> "EsmFold2Config":
         "parcae_num_coda_layers": 1,
         "atom_encoder": {
             "hidden_size": 16,
-            "token_hidden_size": 32,
             "num_hidden_layers": 1,
             "num_attention_heads": 2,
             "n_spatial_rope_pairs_per_axis": 1,
@@ -80,12 +80,14 @@ def get_tiny_config(**overrides) -> "EsmFold2Config":
         "structure_head": {
             "distogram_bins": 8,
             "diffusion_module": {
-                "atom_hidden_size": 16,
                 "token_hidden_size": 32,
-                "atom_num_blocks": 1,
-                "atom_num_heads": 2,
                 "token_num_blocks": 1,
                 "token_num_heads": 2,
+                "atom_encoder": {
+                    "hidden_size": 16,
+                    "num_hidden_layers": 1,
+                    "num_attention_heads": 2,
+                },
             },
         },
         "confidence_head": {
@@ -172,6 +174,119 @@ class EsmFold2ModelTest(unittest.TestCase):
         self.assertGreaterEqual(len(swa_modules), 1)
         self.assertTrue(all(m.config is model.config for m in swa_modules))
         self.assertTrue(all(m.config._attn_implementation == "eager" for m in swa_modules))
+
+    @staticmethod
+    def _pad_features(features, num_tokens, num_atoms):
+        """Right-pad a single-sequence feature dict out to ``(num_tokens, num_atoms)``.
+
+        Every axis matching the source token count is padded to ``num_tokens`` and every axis
+        matching the source atom count to ``num_atoms``; the zero fill also clears the two
+        ``*_attention_mask`` entries, which is what marks the added positions as padding.
+        """
+        src_tokens = features["token_attention_mask"].shape[1]
+        src_atoms = features["atom_attention_mask"].shape[1]
+        padded = {}
+        for key, value in features.items():
+            target = list(value.shape)
+            for dim in range(1, value.dim()):
+                if value.shape[dim] == src_tokens:
+                    target[dim] = num_tokens
+                elif value.shape[dim] == src_atoms:
+                    target[dim] = num_atoms
+            spec = []
+            for dim in reversed(range(value.dim())):
+                spec.extend([0, target[dim] - value.shape[dim]])
+            padded[key] = torch.nn.functional.pad(value, spec) if any(spec) else value
+        return padded
+
+    def test_swa_mask_excludes_padded_atoms(self):
+        """The sliding-window atom mask must not connect valid atoms and padding, in either direction.
+
+        `prepare_protein_features` right-pads the atom axis (a short sequence fills only part of its
+        atom budget), so this path is live in every fold. Asserted on the mask directly rather than
+        end-to-end: the extra padding a batch introduces lands beyond the +/-half_window reach of any
+        valid atom, so an output comparison cannot see a padding-blind mask.
+        """
+        from transformers.models.esmfold2.protein_utils import prepare_protein_features
+
+        features = prepare_protein_features(self.seq)
+        valid = features["atom_attention_mask"][0].bool()
+        self.assertLess(int(valid.sum()), valid.numel())  # there is genuinely padding to exclude
+
+        model = self._build()
+        _res, _profile, _deletion, ref_element_oh, ref_chars_oh, atom_to_token = model._prepare_features(
+            res_type=features["res_type"],
+            tok_mask=features["token_attention_mask"],
+            msa=None,
+            msa_attention_mask=None,
+            deletion_mean=None,
+            ref_element=features["ref_element"],
+            ref_atom_name_chars=features["ref_atom_name_chars"],
+            atom_attention_mask=features["atom_attention_mask"],
+            atom_to_token=features["atom_to_token"],
+        )
+        atom_inputs = EsmFold2AtomInputs(
+            ref_pos=features["ref_pos"],
+            ref_charge=features["ref_charge"].float(),
+            atom_attention_mask=features["atom_attention_mask"].float(),
+            ref_element=ref_element_oh,
+            ref_atom_name_chars=ref_chars_oh,
+            ref_space_uid=features["ref_space_uid"],
+            atom_to_token=atom_to_token,
+        )
+        with torch.no_grad():
+            encoder = model.inputs_atom_encoder
+            _c_base, position_embeddings = encoder.embed_atoms(atom_inputs)
+            mask = encoder.build_attention_mask(atom_inputs.atom_attention_mask, position_embeddings)
+
+        per_head = mask[0, 0]
+        self.assertFalse(bool(per_head[valid][:, ~valid].any()), "a valid atom may not attend to padding")
+        self.assertFalse(bool(per_head[~valid][:, valid].any()), "padding may not attend to a valid atom")
+
+    def test_padded_batch_matches_single_sequence(self):
+        """A right-padded sequence folded in a batch must match folding it on its own.
+
+        Covers batched folding and the token-axis padding it introduces (the trunk's pair mask),
+        which nothing else exercises: `prepare_protein_features` featurizes one sequence at a time,
+        so every other test and the folding-regression script run with a single, full-length batch.
+        The atom-axis mask is covered by `test_swa_mask_excludes_padded_atoms` instead.
+        """
+        from unittest.mock import patch
+
+        from transformers.models.esmfold2.protein_utils import prepare_protein_features
+
+        long_features = prepare_protein_features("MKLVAAGKLQ")
+        short_features = prepare_protein_features(self.seq)
+        num_tokens = long_features["token_attention_mask"].shape[1]
+        num_atoms = long_features["atom_attention_mask"].shape[1]
+        short_length = short_features["token_attention_mask"].shape[1]
+        self.assertLess(short_length, num_tokens)  # there is genuinely something to pad
+
+        padded_short = self._pad_features(short_features, num_tokens, num_atoms)
+        batch = {key: torch.cat([long_features[key], padded_short[key]], dim=0) for key in long_features}
+
+        model = self._build()
+        # The trunk is stochastic (random initial pair state + per-loop LM dropout), and a batch of 2
+        # would not draw the same randomness as a batch of 1, so pin both to compare like with like.
+        model.config.lm_encoder.lm_dropout = 0.0
+        kwargs = {"num_loops": 1, "num_diffusion_samples": 1, "num_sampling_steps": 1}
+        with (
+            patch.object(EsmFold2Model, "_init_pair_state", lambda self, ref: torch.zeros_like(ref)),
+            torch.no_grad(),
+        ):
+            batched = model.fold(**batch, **kwargs)
+            alone = model.fold(**short_features, **kwargs)
+
+        # Only the distogram is comparable: it is computed from the trunk before any diffusion
+        # sampling, so it does not depend on the sampler's RNG (which the batch size perturbs).
+        torch.testing.assert_close(
+            batched.distogram_logits[1, :short_length, :short_length],
+            alone.distogram_logits[0],
+            rtol=1e-4,
+            atol=1e-4,
+        )
+        self.assertTrue(torch.isfinite(batched.distogram_logits).all())
+        self.assertTrue(torch.isfinite(batched.sample_atom_coords).all())
 
     def test_save_load(self):
         # The forward is intentionally stochastic (parcae diffusion-loop scheduler),

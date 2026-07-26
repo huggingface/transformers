@@ -74,9 +74,10 @@ class EsmcConfig(PreTrainedConfig):
         "norm": (["hidden_states"], ["hidden_states"]),
     }
 
-    # Llama fields re-declared where ESMC's default differs from the parent's; fields whose
-    # defaults match Llama (hidden_act, max_position_embeddings, initializer_range,
-    # tie_word_embeddings, attention_bias, attention_dropout, mlp_bias) are left inherited.
+    # Llama fields re-declared only where ESMC's default differs from the parent's; fields whose
+    # defaults already match Llama (hidden_act, max_position_embeddings, initializer_range,
+    # tie_word_embeddings, attention_bias, attention_dropout, mlp_bias, num_key_value_heads,
+    # rope_parameters) are left inherited.
     vocab_size: int = 64
     hidden_size: int = 2560
     intermediate_size: int | None = None

@@ -13,7 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was contributed to Hugging Face Transformers on 2026-07-20.*
+*This model was contributed to Hugging Face Transformers on 2026-07-26.*
 
 # ESMFold2
 
@@ -47,6 +47,25 @@ print(pdb_string)
 slightly different predictions if you run the same sequence multiple times. Set a manual seed if you want exactly
 reproducible structures.
 
+### `forward` vs `fold`
+
+A structure prediction has two halves. `EsmFold2Model.forward` is the first: it runs the folding trunk over the
+featurized inputs and returns the refined pair representation plus the distogram, as an
+[`~models.esmfold2.modeling_esmfold2.EsmFold2TrunkOutput`]. It does not produce 3D coordinates — ESMFold2 gets those
+by iterative denoising, and that sampling loop (the noise schedule, Kabsch alignment and the ODE/SDE update) lives in
+`EsmFold2GenerationMixin` along with the confidence head call:
+
+| Method | Use it for |
+| --- | --- |
+| `infer_protein_as_pdb(sequence)` | a PDB string, straight from an amino-acid sequence |
+| `infer_protein(sequence)` | the raw [`~models.esmfold2.modeling_esmfold2.EsmFold2Output`] |
+| `fold(**features)` | pre-featurized inputs (what `infer_protein` calls) |
+| `forward(**features)` | the trunk alone — a distogram and pair representation, no sampling |
+
+Call `fold` or `infer_protein` for an actual structure. Reach for `forward` when you only need the distogram, or when
+you want to drive the diffusion sampler yourself: `fold` calls `forward` once and then hands its output to
+`EsmFold2DiffusionModule`, whose own `forward` is the single denoising step.
+
 ## Faster inference with a fused kernel
 
 The folding trunk's dominant cost is the triangle-multiplication update. Passing `use_kernels=True` to
@@ -79,5 +98,6 @@ pdb_string = model.infer_protein_as_pdb("MKTAYIAKQRQISFVKSHFSRQLEERLGLIEVQ")
 
 [[autodoc]] EsmFold2Model
     - forward
+    - fold
     - infer_protein
     - infer_protein_as_pdb

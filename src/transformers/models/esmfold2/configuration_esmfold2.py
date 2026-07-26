@@ -23,14 +23,51 @@ from ..esmc.configuration_esmc import EsmcConfig
 logger = logging.get_logger(__name__)
 
 
+@auto_docstring(
+    custom_intro="""
+    Configuration for a sliding-window atom transformer with 3D RoPE.
+
+    The same architecture is instantiated twice, so this config is used twice: once for the inputs
+    embedder (`EsmFold2Config.atom_encoder`) and once for the diffusion denoiser
+    (`EsmFold2Config.structure_head.diffusion_module.atom_encoder`). The field names are identical at
+    both sites, so every atom-stack module simply picks the sub-config for its call site.
+    """
+)
 @strict
 class EsmFold2AtomEncoderConfig(PreTrainedConfig):
-    """Configuration for the SWA atom encoder used by the inputs embedder (3D-RoPE atom transformer)."""
+    r"""
+    hidden_size (`int`, *optional*, defaults to 128):
+        Per-atom hidden width of the atom transformer.
+    output_dim (`int`, *optional*):
+        Width this stack aggregates to when scattering atoms back into tokens. Derived by the parent
+        config: the diffusion token width for the denoiser, and whatever makes the single-inputs
+        feature concat total `single_inputs_size` for the inputs embedder.
+    num_hidden_layers (`int`, *optional*, defaults to 3):
+        Number of sliding-window atom-transformer blocks.
+    num_attention_heads (`int`, *optional*, defaults to 4):
+        Number of attention heads in each atom-transformer block.
+    head_dim (`int`, *optional*):
+        Per-head width. Derived as `hidden_size // num_attention_heads` if unset.
+    expansion_ratio (`int`, *optional*, defaults to 2):
+        Expansion ratio used to derive `ffn_intermediate_size`.
+    ffn_intermediate_size (`int`, *optional*):
+        SwiGLU feed-forward width. Derived from `expansion_ratio` and `hidden_size` if unset, rounded
+        up to a multiple of 256.
+    spatial_rope_base_frequency (`float`, *optional*, defaults to 20.0):
+        Base frequency for the spatial (x/y/z) half of the 3D rotary embedding.
+    n_spatial_rope_pairs_per_axis (`int`, *optional*, defaults to 2):
+        Number of rotary frequency pairs allocated to each spatial axis.
+    n_uid_rope_pairs (`int`, *optional*, defaults to 10):
+        Number of rotary frequency pairs allocated to the per-atom space UID.
+    uid_rope_base_frequency (`float`, *optional*, defaults to 10000.0):
+        Base frequency for the space-UID half of the 3D rotary embedding.
+    """
 
     hidden_size: int | None = 128
-    token_hidden_size: int | None = 768
+    output_dim: int | None = None  # atom->token aggregation width; derived in the parent
     num_hidden_layers: int | None = 3
     num_attention_heads: int | None = 4
+    head_dim: int | None = None  # derived from hidden_size/num_attention_heads in the parent
     expansion_ratio: int | None = 2
     ffn_intermediate_size: int | None = None  # derived from expansion_ratio/hidden_size in the parent
     spatial_rope_base_frequency: float | None = 20.0
@@ -39,27 +76,83 @@ class EsmFold2AtomEncoderConfig(PreTrainedConfig):
     uid_rope_base_frequency: float | None = 10000.0
 
 
+@auto_docstring(
+    custom_intro="Configuration for the diffusion denoiser: an atom encoder/decoder around a token "
+    "transformer with pair bias."
+)
 @strict
 class EsmFold2DiffusionModuleConfig(PreTrainedConfig):
-    """Configuration for the diffusion denoiser (atom encoder/decoder + token transformer with pair bias)."""
+    r"""
+    sigma_data (`float`, *optional*, defaults to 16.0):
+        Data noise scale of the EDM preconditioning; sets the scale at which coordinates are normalized.
+    token_hidden_size (`int`, *optional*, defaults to 768):
+        Token-stream width of the diffusion transformer. Also the width the atom stack projects to and
+        from, so `atom_encoder.output_dim` mirrors it.
+    fourier_dim (`int`, *optional*, defaults to 256):
+        Width of the Fourier noise-level embedding.
+    token_num_blocks (`int`, *optional*, defaults to 12):
+        Number of token-transformer blocks (one attention + one transition each).
+    token_num_heads (`int`, *optional*, defaults to 16):
+        Number of attention heads in the token transformer; also the width of each block's pair bias.
+    transition_multiplier (`int`, *optional*, defaults to 2):
+        Multiplier used to derive `token_transition_intermediate_size`.
+    token_transition_intermediate_size (`int`, *optional*):
+        SwiGLU width of the token transitions. Derived as
+        `transition_multiplier * token_hidden_size` if unset.
+    atom_encoder ([`EsmFold2AtomEncoderConfig`], *optional*):
+        Configuration for the denoiser's atom encoder/decoder stack.
+    """
+
+    sub_configs = {"atom_encoder": EsmFold2AtomEncoderConfig}
 
     sigma_data: float | None = 16.0
-    atom_hidden_size: int | None = 128
     token_hidden_size: int | None = 768
     fourier_dim: int | None = 256
-    atom_num_blocks: int | None = 3
-    atom_num_heads: int | None = 4
     token_num_blocks: int | None = 12
     token_num_heads: int | None = 16
     transition_multiplier: int | None = 2
-    atom_expansion_ratio: int | None = 2
-    atom_ffn_intermediate_size: int | None = None  # derived in the parent
     token_transition_intermediate_size: int | None = None  # derived in the parent
+    atom_encoder: dict | EsmFold2AtomEncoderConfig | None = None
+
+    def __post_init__(self, **kwargs):
+        if self.atom_encoder is None:
+            self.atom_encoder = EsmFold2AtomEncoderConfig()
+        elif isinstance(self.atom_encoder, dict):
+            self.atom_encoder = EsmFold2AtomEncoderConfig(**self.atom_encoder)
+        super().__post_init__(**kwargs)
 
 
+@auto_docstring(
+    custom_intro="Configuration for the structure-prediction head: the distogram output plus the "
+    "diffusion sampler's noise schedule."
+)
 @strict
 class EsmFold2StructureHeadConfig(PreTrainedConfig):
-    """Configuration for the diffusion structure-prediction head (distogram + the diffusion sampler)."""
+    r"""
+    diffusion_module ([`EsmFold2DiffusionModuleConfig`], *optional*):
+        Configuration for the denoiser this head samples from.
+    distogram_bins (`int`, *optional*, defaults to 128):
+        Number of distance bins predicted by the distogram head.
+    gamma_0 (`float`, *optional*, defaults to 0.605):
+        Churn factor applied at noise levels above `gamma_min` (extra noise re-injected before a step).
+    gamma_min (`float`, *optional*, defaults to 1.107):
+        Noise level below which no churn is applied.
+    noise_scale (`float`, *optional*, defaults to 0.0):
+        Scale of the noise added by the churn step. `0.0` makes sampling a deterministic ODE.
+    step_scale (`float`, *optional*, defaults to 1.0):
+        Scale applied to each denoising update.
+    inference_s_max (`float`, *optional*, defaults to 160.0):
+        Highest sigma of the Karras noise schedule, in units of `sigma_data`.
+    inference_s_min (`float`, *optional*, defaults to 4e-4):
+        Lowest sigma of the Karras noise schedule, in units of `sigma_data`.
+    inference_p (`float`, *optional*, defaults to 8.0):
+        Exponent shaping the Karras schedule between `inference_s_min` and `inference_s_max`.
+    inference_num_steps (`int`, *optional*, defaults to 68):
+        Default number of denoising steps.
+    max_inference_sigma (`float`, *optional*, defaults to 256.0):
+        Cap on the schedule: the high-sigma tail above this is truncated and the cap re-prepended, so
+        sampling still starts from it.
+    """
 
     sub_configs = {"diffusion_module": EsmFold2DiffusionModuleConfig}
 
@@ -83,9 +176,31 @@ class EsmFold2StructureHeadConfig(PreTrainedConfig):
         super().__post_init__(**kwargs)
 
 
+@auto_docstring(
+    custom_intro="Configuration for the confidence head, which predicts pLDDT, PAE, PDE, resolved-atom "
+    "probability and the pTM/ipTM summaries."
+)
 @strict
 class EsmFold2ConfidenceHeadConfig(PreTrainedConfig):
-    """Configuration for the confidence head (pLDDT / PAE / PDE / pTM)."""
+    r"""
+    num_hidden_layers (`int`, *optional*, defaults to 4):
+        Number of pair-update blocks in the head's own folding trunk.
+    num_plddt_bins (`int`, *optional*, defaults to 50):
+        Number of bins in the per-atom pLDDT distribution.
+    num_pde_bins (`int`, *optional*, defaults to 64):
+        Number of bins in the predicted-distance-error distribution.
+    num_pae_bins (`int`, *optional*, defaults to 64):
+        Number of bins in the predicted-aligned-error distribution.
+    min_dist (`float`, *optional*, defaults to 2.0):
+        Lower edge (Å) of the head's distance binning.
+    max_dist (`float`, *optional*, defaults to 52.0):
+        Upper edge (Å) of the head's distance binning.
+    distogram_bins (`int`, *optional*, defaults to 128):
+        Number of distance bins used to embed predicted inter-atom distances.
+    eps (`float`, *optional*, defaults to 1e-6):
+        Additive guard for masked-mean denominators (empty chains / all-padding rows). Kept as an
+        explicit `+ eps` rather than clamping the denominator, to reproduce the reference numerics.
+    """
 
     num_hidden_layers: int | None = 4
     num_plddt_bins: int | None = 50
@@ -97,9 +212,40 @@ class EsmFold2ConfidenceHeadConfig(PreTrainedConfig):
     eps: float | None = 1e-6  # additive guard for masked-mean denominators (empty chains / all-padding rows)
 
 
+@auto_docstring(
+    custom_intro="Configuration for the MSA encoder: outer-product-mean into the pair stream, "
+    "pair-weighted averaging back into the MSA stream, and the triangle updates."
+)
 @strict
 class EsmFold2MsaEncoderConfig(PreTrainedConfig):
-    """Configuration for the MSA encoder (outer-product-mean + pair-weighted averaging + transition)."""
+    r"""
+    overwrite (`bool`, *optional*, defaults to `True`):
+        Whether the MSA-conditioned pair representation replaces the injected pair each trunk loop
+        rather than being added to it.
+    divide_outer_before_proj (`bool`, *optional*, defaults to `False`):
+        Order of the outer-product-mean normalization: `False` computes `Wout(outer) / n_valid` (the
+        projection bias is scaled too), `True` computes `Wout(outer / n_valid)`. Different released
+        checkpoints were trained with different orderings.
+    hidden_size (`int`, *optional*, defaults to 128):
+        Width of the MSA stream.
+    outer_hidden_size (`int`, *optional*, defaults to 32):
+        Per-side width of the outer-product-mean projection; the outer product is this value squared.
+    num_hidden_layers (`int`, *optional*, defaults to 4):
+        Number of MSA encoder blocks. The last one updates only the pair stream, since its MSA output
+        would be discarded.
+    num_attention_heads (`int`, *optional*, defaults to 8):
+        Number of heads in the pair-weighted averaging.
+    head_width (`float`, *optional*, defaults to 32):
+        Per-head width of the pair-weighted averaging.
+    transition_intermediate_size (`int`, *optional*):
+        SwiGLU width of the MSA-stream transition. Derived from the parent's
+        `transition_expansion_ratio` and `hidden_size` if unset.
+    outer_product_chunk_size (`int`, *optional*):
+        Chunk size for the outer-product-mean einsum, off by default. Unlike the other chunked ops,
+        chunking this one is not always bit-exact in bf16, so enable it only to trade exactness for
+        peak memory on long sequences (the intermediate drops from `[B, L, L, c*d]` to
+        `[B, chunk, L, c*d]`).
+    """
 
     overwrite: bool | None = True
     divide_outer_before_proj: bool | None = False
@@ -108,12 +254,21 @@ class EsmFold2MsaEncoderConfig(PreTrainedConfig):
     num_hidden_layers: int | None = 4
     num_attention_heads: int | None = 8
     head_width: int | None = 32
-    transition_intermediate_size: int | None = None  # derived in the parent
+    transition_intermediate_size: int | None = None
+    outer_product_chunk_size: int | None = None
 
 
+@auto_docstring(custom_intro="Configuration for the language-model (ESMC) hidden-state encoder folded into the trunk.")
 @strict
 class EsmFold2LmEncoderConfig(PreTrainedConfig):
-    """Configuration for the language-model (ESMC) hidden-state encoder folded into the trunk."""
+    r"""
+    num_hidden_layers (`int`, *optional*, defaults to 4):
+        Number of pair-update blocks refining the projected ESMC hidden states.
+    lm_dropout (`float`, *optional*, defaults to 0.25):
+        Dropout applied to the projected language-model pair representation.
+    per_loop_lm_dropout (`bool`, *optional*, defaults to `True`):
+        Whether to resample that dropout on every trunk loop rather than once per fold.
+    """
 
     num_hidden_layers: int | None = 4
     lm_dropout: float | None = 0.25
@@ -236,14 +391,35 @@ class EsmFold2Config(PreTrainedConfig):
         # feed-forward blocks). Atom-stack FFNs are rounded up to a multiple of 256 (hardware-aligned width).
         if self.pair_transition_intermediate_size is None:
             self.pair_transition_intermediate_size = self.transition_expansion_ratio * self.pairwise_hidden_size
-        atom = self.atom_encoder
-        if atom.ffn_intermediate_size is None:
-            atom.ffn_intermediate_size = (atom.expansion_ratio * (atom.hidden_size // 3) * 2 + 255) // 256 * 256
         diff = self.structure_head.diffusion_module
-        if diff.atom_ffn_intermediate_size is None:
-            diff.atom_ffn_intermediate_size = (
-                (diff.atom_expansion_ratio * (diff.atom_hidden_size // 3) * 2 + 255) // 256 * 256
-            )
+
+        # The diffusion atom stack reuses the inputs embedder's 3D-RoPE settings, as the reference
+        # does, so mirror them rather than letting a checkpoint carry inconsistent copies.
+        for rope_field in (
+            "spatial_rope_base_frequency",
+            "n_spatial_rope_pairs_per_axis",
+            "n_uid_rope_pairs",
+            "uid_rope_base_frequency",
+        ):
+            setattr(diff.atom_encoder, rope_field, getattr(self.atom_encoder, rope_field))
+
+        # Same derivations at both atom-stack call sites, now that the sub-configs share field names.
+        for atom in (self.atom_encoder, diff.atom_encoder):
+            if atom.head_dim is None:
+                atom.head_dim = atom.hidden_size // atom.num_attention_heads
+            if atom.ffn_intermediate_size is None:
+                atom.ffn_intermediate_size = (atom.expansion_ratio * (atom.hidden_size // 3) * 2 + 255) // 256 * 256
+
+        # Atom->token aggregation widths. The diffusion atom stack feeds the token transformer, so it
+        # aggregates to the token-stream width. The inputs embedder's encoding is instead concatenated
+        # with the residue-type/profile/deletion features into ``single_inputs``, so its width is
+        # whatever makes that concat total ``single_inputs_size`` -- deriving it here keeps the two
+        # consistent by construction (they used to be independent fields that merely agreed).
+        if diff.atom_encoder.output_dim is None:
+            diff.atom_encoder.output_dim = diff.token_hidden_size
+        if self.atom_encoder.output_dim is None:
+            self.atom_encoder.output_dim = self.single_inputs_size - (2 * self.num_res_types + 1)
+
         if diff.token_transition_intermediate_size is None:
             diff.token_transition_intermediate_size = diff.transition_multiplier * diff.token_hidden_size
         if self.msa_encoder.transition_intermediate_size is None:
