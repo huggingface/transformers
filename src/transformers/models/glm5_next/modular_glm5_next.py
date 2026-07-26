@@ -15,6 +15,7 @@
 import math
 from collections.abc import Callable
 
+import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -34,10 +35,19 @@ from ...masking_utils import create_recurrent_attention_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import BaseModelOutputWithPast, MoeCausalLMOutputWithPast, MoeModelOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
-from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging, torch_compilable_check
+from ...processing_utils import Unpack, VideosKwargs
+from ...utils import (
+    TransformersKwargs,
+    add_start_docstrings,
+    auto_docstring,
+    can_return_tuple,
+    logging,
+    torch_compilable_check,
+)
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
+from ...video_processing_utils import BASE_VIDEO_PROCESSOR_DOCSTRING
+from ...video_utils import VideoMetadata
 from ..auto import CONFIG_MAPPING, AutoConfig
 from ..auto.modeling_auto import AutoModel
 from ..deepseek_v3.modeling_deepseek_v3 import DeepseekV3MoE, DeepseekV3TopkRouter
@@ -46,6 +56,7 @@ from ..exaone4_5.modeling_exaone4_5 import Exaone4_5_Model
 from ..glm46v.modeling_glm46v import Glm46VForConditionalGeneration
 from ..glm_moe_dsa.configuration_glm_moe_dsa import GlmMoeDsaConfig
 from ..glm_moe_dsa.modeling_glm_moe_dsa import GlmMoeDsaAttention, GlmMoeDsaDecoderLayer, GlmMoeDsaIndexer
+from ..glmga.video_processing_glmga import GlmgaVideoProcessor
 from ..inkling.modeling_inkling import causal_conv1d_fn, causal_conv1d_update
 from ..llama.modeling_llama import LlamaRMSNorm, eager_attention_forward
 from ..minimax_m3_vl.modeling_minimax_m3_vl import MiniMaxM3VLExperts
@@ -1641,6 +1652,123 @@ class Glm5NextForConditionalGeneration(Glm46VForConditionalGeneration, Glm5NextP
         return {"deepseek_sparse_attention": attention_mask, "linear_attention": attention_mask}
 
 
+class Glm5NextVideoProcessorInitKwargs(VideosKwargs, total=False):
+    max_image_size: dict[str, int]
+    patch_size: int
+    temporal_patch_size: int
+    merge_size: int
+    patch_expand_factor: int
+    max_frames: int
+    dynamic_fps_thresholds: list[tuple[int]]
+
+
+@add_start_docstrings(
+    "Constructs a fast GLM-5Next video processor that dynamically resizes videos based on the original videos.",
+    BASE_VIDEO_PROCESSOR_DOCSTRING,
+    """
+        patch_size (`int`, *optional*, defaults to 14):
+            The spacial patch size of the vision encoder.
+        temporal_patch_size (`int`, *optional*, defaults to 2):
+            The temporal patch size of the vision encoder.
+        merge_size (`int`, *optional*, defaults to 2):
+            The merge size of the vision encoder to llm encoder.
+        patch_expand_factor (`int`, *optional*, defaults to 1):
+            The patch_expand_factor of the vision encoder to llm encoder.
+        max_frames (`int`, *optional*, defaults to 640):
+            The maximum number of frames that can be sampled.
+        dynamic_fps_thresholds (`list[tuple[int]`, *optional*):
+            The target fps fallbacks based on the (max) duration of the video. If the duration is lower than the first entry
+            in the tuple, then the associated second tuple entry is used as target fps.
+
+            Note that one entry must be the same as `max_duration` (otherwise there might be valid fallbacks missing).
+    """,
+)
+class Glm5NextVideoProcessor(GlmgaVideoProcessor):
+    fps = AttributeError("defaults now via `dynamic_fps_thresholds` instead")
+
+    max_duration = 2400
+    dynamic_fps_thresholds = [(30, 3), (300, 1), (2400, 0.5)]
+    valid_kwargs = Glm5NextVideoProcessorInitKwargs
+
+    def __init__(self, **kwargs: Unpack[Glm5NextVideoProcessorInitKwargs]):
+        super().__init__(**kwargs)
+
+    def sample_frames(
+        self,
+        metadata: VideoMetadata,
+        fps: int | float | None = None,
+        **kwargs,
+    ):
+        """
+        Args:
+            metadata (`VideoMetadata`):
+                Metadata of the video containing information about total duration, fps and total number of frames.
+            fps (`int` or `float`, *optional*):
+                Target frames to sample per second. Defaults otherwise based on `self.dynamic_fps_thresholds`.
+        Returns:
+            np.ndarray:
+                Indices to sample video frames.
+        """
+        if metadata is None or getattr(metadata, "fps", None) is None:
+            raise ValueError(
+                "Asked to sample frames per second but no video metadata was provided which is required when sampling in Glm5Next. "
+                "Please pass in `VideoMetadata` object or set `do_sample_frames=False`"
+            )
+
+        total_frames = metadata.total_num_frames
+        max_frame_idx = total_frames - 1
+        duration = metadata.duration or round(max_frame_idx / metadata.fps) + 1
+        # Used later to cap frames, important to base on the original and not capped duration
+        max_seconds = int(duration)
+        duration = min(duration, self.max_duration)
+
+        # Dynamic threshold fps if no target fps has been given
+        target_fps = fps
+        if target_fps is None:
+            target_fps = next(fps for max_duration, fps in self.dynamic_fps_thresholds if duration <= max_duration)
+        target_fps *= self.temporal_patch_size  # new additional scaling
+
+        extract_t = int(duration * target_fps)
+        extract_t = min(extract_t, self.max_frames)
+
+        duration_per_frame = 1 / metadata.fps
+        timestamps = [i * duration_per_frame for i in range(total_frames)]
+
+        if total_frames < extract_t:
+            frame_indices = [math.floor(_i * total_frames / extract_t) for _i in range(extract_t)]
+        else:
+            frame_indices = []
+            current_second = 0
+            inv_fps = 1 / target_fps
+            for frame_index in range(total_frames):
+                if timestamps[frame_index] >= current_second:
+                    current_second += inv_fps
+                    frame_indices.append(frame_index)
+                    # New capping strategy
+                    if current_second >= max_seconds:
+                        break
+
+        if len(frame_indices) < extract_t:
+            if len(frame_indices) == 0:
+                start, end = 0, max(total_frames - 1, 0)
+            else:
+                start, end = frame_indices[0], frame_indices[-1]
+            frame_indices = np.linspace(start, end, extract_t, dtype=int).tolist()
+        elif len(frame_indices) > extract_t:
+            frame_indices = np.linspace(0, total_frames - 1, extract_t, dtype=int).tolist()
+
+        seen, uniq = set(), []
+        for idx in frame_indices:
+            if idx not in seen:
+                seen.add(idx)
+                uniq.append(idx)
+
+        if len(uniq) & 1:
+            uniq.append(uniq[-1])
+
+        return np.array(uniq)
+
+
 __all__ = [
     "Glm5NextConfig",
     "Glm5NextTextConfig",
@@ -1648,4 +1776,5 @@ __all__ = [
     "Glm5NextTextModel",
     "Glm5NextModel",
     "Glm5NextForConditionalGeneration",
+    "Glm5NextVideoProcessor",
 ]

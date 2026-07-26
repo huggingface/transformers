@@ -957,6 +957,7 @@ VIDEO_PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("gemma4_unified", "Gemma4UnifiedVideoProcessor"),
         ("glm46v", "Glm46VVideoProcessor"),
         ("glm4v", "Glm4vVideoProcessor"),
+        ("glm5_next", "Glm5NextVideoProcessor"),
         ("glmga", "GlmgaVideoProcessor"),
         ("instructblipvideo", "InstructBlipVideoVideoProcessor"),
         ("internvl", "InternVLVideoProcessor"),
