@@ -28,6 +28,7 @@ from transformers import (
     EfficientViTSamImageProcessor,
     EfficientViTSamModel,
     EfficientViTSamProcessor,
+    EfficientViTSamPromptEncoderConfig,
     EfficientViTSamVisionConfig,
 )
 
@@ -83,8 +84,10 @@ def get_config(model_name):
     else:
         raise ValueError(f"Unknown model name {model_name}")
 
+    prompt_encoder_config = EfficientViTSamPromptEncoderConfig(image_size=vision_config.image_size)
     config = EfficientViTSamConfig(
         vision_config=vision_config,
+        prompt_encoder_config=prompt_encoder_config,
     )
     return config
 

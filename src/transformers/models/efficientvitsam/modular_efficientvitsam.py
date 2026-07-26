@@ -26,6 +26,7 @@ from huggingface_hub.dataclasses import strict
 from ...configuration_utils import PreTrainedConfig
 from ...modeling_utils import PreTrainedModel
 from ...utils import auto_docstring, logging
+from ...activations import get_activation
 from ..sam.configuration_sam import SamConfig, SamMaskDecoderConfig, SamPromptEncoderConfig
 from ..sam.image_processing_pil_sam import SamImageProcessorPil
 from ..sam.image_processing_sam import SamImageProcessor
@@ -260,21 +261,6 @@ def build_norm(name: str, num_features: int, **kwargs) -> nn.Module:
         return nn.Identity()
 
 
-def build_act(name: str | None) -> nn.Module:
-    if name == "relu":
-        return nn.ReLU()
-    elif name == "relu6":
-        return nn.ReLU6()
-    elif name == "hswish":
-        return nn.Hardswish()
-    elif name == "silu":
-        return nn.SiLU()
-    elif name == "gelu":
-        return nn.GELU(approximate="tanh")
-    else:
-        return nn.Identity()
-
-
 class ConvLayer(nn.Module):
     def __init__(
         self,
@@ -308,7 +294,7 @@ class ConvLayer(nn.Module):
             bias=use_bias,
         )
         self.norm = build_norm(norm, num_features=out_channels) if norm else None
-        self.act = build_act(act_func) if act_func else None
+        self.act = get_activation(act_func) if act_func else None
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         if self.dropout is not None:
@@ -370,7 +356,7 @@ class ResidualBlock(nn.Module):
         self.pre_norm = pre_norm
         self.main = main
         self.shortcut = shortcut
-        self.post_act = build_act(post_act) if post_act else None
+        self.post_act = get_activation(post_act) if post_act else None
 
     def forward_main(self, x: torch.Tensor) -> torch.Tensor:
         if self.pre_norm is None:
@@ -625,7 +611,7 @@ class LiteMLA(nn.Module):
                 for scale in scales
             ]
         )
-        self.kernel_func = build_act(kernel_func)
+        self.kernel_func = get_activation(kernel_func) if kernel_func is not None else nn.Identity()
 
         self.proj = ConvLayer(
             total_dim * (1 + len(scales)),
