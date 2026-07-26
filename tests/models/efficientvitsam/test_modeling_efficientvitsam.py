@@ -33,7 +33,9 @@ if is_torch_available():
     import torch
 
     from transformers import (
+        EfficientViTSamMaskDecoder,
         EfficientViTSamModel,
+        EfficientViTSamPromptEncoder,
         EfficientViTSamVisionModel,
     )
 
@@ -484,3 +486,204 @@ class EfficientViTSamVisionModelTest(ModelTesterMixin, unittest.TestCase):
     @unittest.skip(reason="EfficientViT-SAM's vision encoder does not output hidden states")
     def test_retain_grad_hidden_states_attentions(self):
         pass
+
+    def test_vision_encoder_stage_and_block_structures(self):
+        config = self.model_tester.get_config()
+        config.width_list = [4, 8, 12, 16, 32]
+        config.depth_list = [1, 1, 1, 1, 1]
+        config.block_list = ["res", "fmb", "fmb", "mb", "att"]
+        config.expand_list = [1.0, 1.0, 1.0, 1.0, 2.0]
+        config.fewer_norm_list = [False, False, False, False, True]
+        config.in_channel_list = [32, 16, 12]
+
+        model = EfficientViTSamVisionModel(config=config).to(torch_device).eval()
+        pixel_values = floats_tensor([1, 3, config.image_size, config.image_size]).to(torch_device)
+        with torch.no_grad():
+            output = model(pixel_values)
+        self.assertEqual(output.last_hidden_state.shape, (1, config.out_dim, 64, 64))
+
+    def test_vision_encoder_feature_extraction_dimensions(self):
+        config = self.model_tester.get_config()
+        model = EfficientViTSamVisionModel(config=config).to(torch_device).eval()
+        for batch_size in [1, 2]:
+            for img_size in [32, 64]:
+                pixel_values = floats_tensor([batch_size, 3, img_size, img_size]).to(torch_device)
+                with torch.no_grad():
+                    output = model(pixel_values)
+                self.assertEqual(output.last_hidden_state.shape, (batch_size, config.out_dim, 64, 64))
+
+    def test_vision_encoder_norm_and_act_flexibility(self):
+        for norm in ["bn2d", "ln2d"]:
+            for act_func in ["gelu", "relu"]:
+                config = self.model_tester.get_config()
+                config.norm = norm
+                config.act_func = act_func
+                model = EfficientViTSamVisionModel(config=config).to(torch_device).eval()
+                pixel_values = floats_tensor([1, 3, config.image_size, config.image_size]).to(torch_device)
+                with torch.no_grad():
+                    output = model(pixel_values)
+                self.assertEqual(output.last_hidden_state.shape, (1, config.out_dim, 64, 64))
+
+
+@require_torch
+class EfficientViTSamPromptEncoderTest(unittest.TestCase):
+    def setUp(self):
+        self.vision_tester = EfficientViTSamVisionModelTester(self)
+        self.prompt_encoder_tester = SamPromptEncoderTester(hidden_size=32)
+        self.config = EfficientViTSamConfig(
+            vision_config=self.vision_tester.get_config(),
+            prompt_encoder_config=self.prompt_encoder_tester.get_config(),
+        )
+        self.prompt_encoder = EfficientViTSamPromptEncoder(self.config).to(torch_device).eval()
+
+    def test_sparse_embedding_generation(self):
+        batch_size = 2
+        num_queries = 2
+        num_points = 3
+        hidden_size = self.config.prompt_encoder_config.hidden_size
+
+        # 1. Points only (with pad=True when input_boxes is None)
+        input_points = torch.randint(
+            0, 100, (batch_size, num_queries, num_points, 2), dtype=torch.float, device=torch_device
+        )
+        input_labels = torch.ones((batch_size, num_queries, num_points), dtype=torch.int, device=torch_device)
+        sparse_embeds, _ = self.prompt_encoder(
+            input_points=input_points, input_labels=input_labels, input_boxes=None, input_masks=None
+        )
+        self.assertEqual(sparse_embeds.shape, (batch_size, num_queries, num_points + 1, hidden_size))
+
+        # 2. Boxes only
+        input_boxes = torch.tensor(
+            [[[2.0, 4.0, 16.0, 20.0], [10.0, 12.0, 28.0, 30.0]], [[3.0, 5.0, 17.0, 21.0], [11.0, 13.0, 29.0, 31.0]]],
+            device=torch_device,
+        )
+        sparse_embeds_box, _ = self.prompt_encoder(
+            input_points=None, input_labels=None, input_boxes=input_boxes, input_masks=None
+        )
+        self.assertEqual(sparse_embeds_box.shape, (batch_size, num_queries, 2, hidden_size))
+
+        # 3. Combined Points + Boxes (pad=False when input_boxes is provided)
+        sparse_embeds_combined, _ = self.prompt_encoder(
+            input_points=input_points, input_labels=input_labels, input_boxes=input_boxes, input_masks=None
+        )
+        self.assertEqual(sparse_embeds_combined.shape, (batch_size, num_queries, num_points + 2, hidden_size))
+
+    def test_dense_mask_inputs(self):
+        batch_size = 2
+        hidden_size = self.config.prompt_encoder_config.hidden_size
+        img_embed_size = self.config.prompt_encoder_config.image_embedding_size
+        mask_size = 4 * img_embed_size
+        input_masks = torch.randn(batch_size, 1, mask_size, mask_size, device=torch_device)
+        _, dense_embeds = self.prompt_encoder(
+            input_points=None, input_labels=None, input_boxes=None, input_masks=input_masks
+        )
+        self.assertEqual(dense_embeds.shape, (batch_size, hidden_size, img_embed_size, img_embed_size))
+
+    def test_no_prompt_fallback(self):
+        hidden_size = self.config.prompt_encoder_config.hidden_size
+        img_embed_size = self.config.prompt_encoder_config.image_embedding_size
+        sparse_embeds, dense_embeds = self.prompt_encoder(
+            input_points=None, input_labels=None, input_boxes=None, input_masks=None
+        )
+        self.assertIsNone(sparse_embeds)
+        self.assertEqual(dense_embeds.shape, (1, hidden_size, img_embed_size, img_embed_size))
+        self.assertFalse(torch.isnan(dense_embeds).any())
+        self.assertFalse(torch.isinf(dense_embeds).any())
+
+
+@require_torch
+class EfficientViTSamMaskDecoderTest(unittest.TestCase):
+    def setUp(self):
+        self.mask_decoder_tester = SamMaskDecoderTester(hidden_size=32)
+        self.config = self.mask_decoder_tester.get_config()
+        self.mask_decoder = EfficientViTSamMaskDecoder(self.config).to(torch_device).eval()
+
+    def test_two_way_transformer_attention(self):
+        batch_size = 2
+        hidden_size = self.config.hidden_size
+        h, w = 16, 16
+        image_embeddings = torch.randn(batch_size, hidden_size, h, w, device=torch_device)
+        image_pos_embeddings = torch.randn(batch_size, hidden_size, h, w, device=torch_device)
+        dense_prompt_embeddings = torch.randn(batch_size, hidden_size, h, w, device=torch_device)
+
+        for n_tokens in [1, 4, 8]:
+            point_batch_size = 2
+            sparse_prompt_embeddings = torch.randn(
+                batch_size, point_batch_size, n_tokens, hidden_size, device=torch_device
+            )
+            with torch.no_grad():
+                low_res_masks, iou_predictions = self.mask_decoder(
+                    image_embeddings=image_embeddings,
+                    image_positional_embeddings=image_pos_embeddings,
+                    sparse_prompt_embeddings=sparse_prompt_embeddings,
+                    dense_prompt_embeddings=dense_prompt_embeddings,
+                    multimask_output=True,
+                )
+            self.assertEqual(
+                low_res_masks.shape, (batch_size, point_batch_size, self.config.num_multimask_outputs, 4 * h, 4 * w)
+            )
+            self.assertEqual(iou_predictions.shape, (batch_size, point_batch_size, self.config.num_multimask_outputs))
+
+    def test_output_shape_invariants(self):
+        batch_size = 2
+        point_batch_size = 3
+        n_tokens = 5
+        hidden_size = self.config.hidden_size
+        h, w = 8, 8
+
+        image_embeddings = torch.randn(batch_size, hidden_size, h, w, device=torch_device)
+        image_pos_embeddings = torch.randn(batch_size, hidden_size, h, w, device=torch_device)
+        sparse_prompt_embeddings = torch.randn(
+            batch_size, point_batch_size, n_tokens, hidden_size, device=torch_device
+        )
+        dense_prompt_embeddings = torch.randn(batch_size, hidden_size, h, w, device=torch_device)
+
+        with torch.no_grad():
+            low_res_masks, iou_predictions = self.mask_decoder(
+                image_embeddings=image_embeddings,
+                image_positional_embeddings=image_pos_embeddings,
+                sparse_prompt_embeddings=sparse_prompt_embeddings,
+                dense_prompt_embeddings=dense_prompt_embeddings,
+                multimask_output=True,
+            )
+
+        self.assertEqual(iou_predictions.shape, (batch_size, point_batch_size, self.config.num_multimask_outputs))
+        self.assertEqual(
+            low_res_masks.shape, (batch_size, point_batch_size, self.config.num_multimask_outputs, 4 * h, 4 * w)
+        )
+
+    def test_single_vs_multimask_outputs(self):
+        batch_size = 1
+        point_batch_size = 2
+        n_tokens = 2
+        hidden_size = self.config.hidden_size
+        h, w = 16, 16
+
+        image_embeddings = torch.randn(batch_size, hidden_size, h, w, device=torch_device)
+        image_pos_embeddings = torch.randn(batch_size, hidden_size, h, w, device=torch_device)
+        sparse_prompt_embeddings = torch.randn(
+            batch_size, point_batch_size, n_tokens, hidden_size, device=torch_device
+        )
+        dense_prompt_embeddings = torch.randn(batch_size, hidden_size, h, w, device=torch_device)
+
+        with torch.no_grad():
+            multi_masks, multi_iou = self.mask_decoder(
+                image_embeddings=image_embeddings,
+                image_positional_embeddings=image_pos_embeddings,
+                sparse_prompt_embeddings=sparse_prompt_embeddings,
+                dense_prompt_embeddings=dense_prompt_embeddings,
+                multimask_output=True,
+            )
+            single_masks, single_iou = self.mask_decoder(
+                image_embeddings=image_embeddings,
+                image_positional_embeddings=image_pos_embeddings,
+                sparse_prompt_embeddings=sparse_prompt_embeddings,
+                dense_prompt_embeddings=dense_prompt_embeddings,
+                multimask_output=False,
+            )
+
+        self.assertEqual(multi_masks.shape[2], 3)
+        self.assertEqual(multi_iou.shape[2], 3)
+
+        self.assertEqual(single_masks.shape[2], 1)
+        self.assertEqual(single_iou.shape[2], 1)
