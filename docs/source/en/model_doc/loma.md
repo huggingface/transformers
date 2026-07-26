@@ -23,23 +23,36 @@ limitations under the License.
 
 ## Overview
 
-The LoMa model was proposed in [<INSERT PAPER NAME HERE>](<INSERT PAPER LINK HERE>) by <INSERT AUTHORS HERE>.
-<INSERT SHORT SUMMARY HERE>
+LoMa was proposed in [LoMa: Local Feature Matching Revisited](https://arxiv.org/abs/2604.04931) by David Nordström,
+Johan Edstedt, Georg Bökman, Jonathan Astermark, Anders Heyden, Viktor Larsson, Mårten Wadenbäck, Michael Felsberg,
+and Fredrik Kahl. It is a local feature matcher that refines local descriptors with alternating self- and
+cross-attention before selecting mutual matches with a dual-softmax score matrix.
 
-The abstract from the paper is the following:
+This initial integration supports LoMa with the native SuperPoint keypoint detector. The matching transformer uses
+learnable Fourier positional encoding for self-attention and leaves cross-attention position-free, matching the
+reference architecture. The local descriptor network is included as an internal component; checkpoint conversion and
+reference-model parity are being added separately.
 
-<INSERT PAPER ABSTRACT HERE>
-
-Tips:
-
-<INSERT TIPS ABOUT MODEL HERE>
-
-This model was contributed by [INSERT YOUR HF USERNAME HERE](https://huggingface.co/<INSERT YOUR HF USERNAME HERE>).
-The original code can be found [here](<INSERT LINK TO GITHUB REPO HERE>).
+The original code is available in the [LoMa repository](https://github.com/davnords/LoMa).
 
 ## Usage examples
 
-<INSERT SOME NICE EXAMPLES HERE>
+```python
+import torch
+
+from transformers import AutoImageProcessor, LoMaConfig, LoMaForKeypointMatching
+
+config = LoMaConfig()
+model = LoMaForKeypointMatching(config).eval()
+image_processor = AutoImageProcessor.from_config(config)
+
+# `images` is a pair of images, or a batch of image pairs.
+inputs = image_processor(images=images, return_tensors="pt")
+with torch.no_grad():
+    outputs = model(**inputs)
+
+# `outputs.matches` contains the mutually matched keypoint indices and -1 for unmatched points.
+```
 
 ## LoMaConfig
 
