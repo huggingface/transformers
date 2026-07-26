@@ -29,7 +29,12 @@ if is_torch_available():
     import torch
 
     from transformers import LoMaForKeypointMatching
-    from transformers.models.loma.modeling_loma import LoMaDescriptorNetwork
+    from transformers.models.loma.modeling_loma import (
+        LoMaDescriptorNetwork,
+        LoMaMatchAssignmentLayer,
+        LoMaPositionalEncoder,
+        LoMaTransformerLayer,
+    )
 
 if is_vision_available():
     from transformers import AutoImageProcessor
@@ -129,7 +134,7 @@ class LoMaModelTest(ModelTesterMixin, unittest.TestCase):
     all_generative_model_classes = () if is_torch_available() else ()
 
     test_resize_embeddings = False
-    has_attentions = True
+    has_attentions = False
     test_torch_exportable = False  # keypoint matching has data-dependent top-k / non-max suppression
 
     def setUp(self):
@@ -177,6 +182,26 @@ class LoMaModelTest(ModelTesterMixin, unittest.TestCase):
 
         self.assertEqual(descriptor_grid.shape, (2, 16, 32, 48))
         self.assertEqual(descriptors.shape, (2, 3, 16))
+
+    def test_matching_transformer(self):
+        config = LoMaConfig(descriptor_dim=64, num_attention_heads=4, num_hidden_layers=2)
+        positional_encoder = LoMaPositionalEncoder(config).to(torch_device)
+        transformer_layer = LoMaTransformerLayer(config, layer_idx=0).to(torch_device)
+        match_assignment = LoMaMatchAssignmentLayer(config).to(torch_device).eval()
+        descriptors_0 = floats_tensor([2, 5, 64]).to(torch_device)
+        descriptors_1 = floats_tensor([2, 7, 64]).to(torch_device)
+        keypoints_0 = floats_tensor([2, 5, 2]).to(torch_device)
+        keypoints_1 = floats_tensor([2, 7, 2]).to(torch_device)
+
+        output_0, output_1 = transformer_layer(
+            descriptors_0, descriptors_1, positional_encoder(keypoints_0), positional_encoder(keypoints_1)
+        )
+        scores = match_assignment(output_0, output_1)
+
+        self.assertEqual(output_0.shape, (2, 5, 64))
+        self.assertEqual(output_1.shape, (2, 7, 64))
+        self.assertEqual(scores.shape, (2, 5, 7))
+        self.assertTrue(torch.all((scores >= 0) & (scores <= 1)))
 
     def test_batching_equivalence(self, atol=1e-5, rtol=1e-5):
         device_properties = get_device_properties()
@@ -245,20 +270,11 @@ class LoMaModelTest(ModelTesterMixin, unittest.TestCase):
             hidden_states = outputs.hidden_states
             maximum_num_matches = outputs.mask.shape[-1]
 
-            hidden_states_sizes = [
-                self.model_tester.descriptor_dim,
-                self.model_tester.descriptor_dim,
-                self.model_tester.descriptor_dim * 2,
-                self.model_tester.descriptor_dim,
-                self.model_tester.descriptor_dim,
-                self.model_tester.descriptor_dim * 2,
-                self.model_tester.descriptor_dim,
-            ] * self.model_tester.num_layers
-
-            for i, hidden_states_size in enumerate(hidden_states_sizes):
+            self.assertEqual(len(hidden_states), self.model_tester.num_layers)
+            for hidden_state in hidden_states:
                 self.assertListEqual(
-                    list(hidden_states[i].shape[-2:]),
-                    [maximum_num_matches, hidden_states_size],
+                    list(hidden_state.shape),
+                    [self.model_tester.batch_size, 2, maximum_num_matches, self.model_tester.descriptor_dim],
                 )
 
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -273,6 +289,7 @@ class LoMaModelTest(ModelTesterMixin, unittest.TestCase):
 
             check_hidden_states_output(inputs_dict, config, model_class)
 
+    @unittest.skip(reason="LoMa uses scaled dot-product attention without exposing attention weights")
     def test_attention_outputs(self):
         def check_attention_output(inputs_dict, config, model_class):
             model = model_class(config)

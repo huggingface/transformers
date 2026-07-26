@@ -16,19 +16,15 @@ import torch
 from torch import nn
 from torch.nn import functional as F
 
+from ...utils import auto_docstring, can_return_tuple
+from ..auto.modeling_auto import AutoModelForKeypointDetection
 from ..lightglue.configuration_lightglue import LightGlueConfig
 from ..lightglue.image_processing_lightglue import LightGlueImageProcessor, LightGlueImageProcessorKwargs
 from ..lightglue.image_processing_pil_lightglue import LightGlueImageProcessorPil
 from ..lightglue.modeling_lightglue import (
-    LightGlueAttention,
-    LightGlueForKeypointMatching,
     LightGlueKeypointMatchingOutput,
-    LightGlueMatchAssignmentLayer,
-    LightGlueMLP,
-    LightGluePositionalEncoder,
     LightGluePreTrainedModel,
     LightGlueTokenConfidenceLayer,
-    LightGlueTransformerLayer,
 )
 
 
@@ -245,24 +241,143 @@ class LoMaKeypointMatchingOutput(LightGlueKeypointMatchingOutput):
     pass
 
 
-class LoMaPositionalEncoder(LightGluePositionalEncoder):
-    pass
+def _rotate_half(hidden_states: torch.Tensor) -> torch.Tensor:
+    hidden_states = hidden_states.unflatten(-1, (-1, 2))
+    first_half, second_half = hidden_states.unbind(dim=-1)
+    return torch.stack((-second_half, first_half), dim=-1).flatten(start_dim=-2)
 
 
-class LoMaAttention(LightGlueAttention):
-    pass
+class LoMaPositionalEncoder(nn.Module):
+    def __init__(self, config: LoMaConfig) -> None:
+        super().__init__()
+        self.gamma = config.positional_encoding_gamma
+        self.projector = nn.Linear(2, config.attention_head_dim // 2, bias=False)
+        if config.positional_encoding_type == "fixed":
+            nn.init.normal_(self.projector.weight, mean=0, std=self.gamma**-2)
+            self.projector.weight.requires_grad_(False)
+
+    def forward(self, keypoints: torch.Tensor) -> torch.Tensor:
+        projected_keypoints = self.projector(keypoints)
+        cosines, sines = torch.cos(projected_keypoints), torch.sin(projected_keypoints)
+        return torch.stack((cosines, sines), dim=0).unsqueeze(-3).repeat_interleave(2, dim=-1)
 
 
-class LoMaMLP(LightGlueMLP):
-    pass
+class LoMaMLP(nn.Module):
+    def __init__(self, config: LoMaConfig) -> None:
+        super().__init__()
+        self.layers = nn.Sequential(
+            nn.Linear(config.descriptor_dim * 2, config.descriptor_dim * 2),
+            nn.LayerNorm(config.descriptor_dim * 2),
+            nn.GELU(),
+            nn.Linear(config.descriptor_dim * 2, config.descriptor_dim),
+        )
+
+    def forward(self, hidden_states: torch.Tensor, message: torch.Tensor) -> torch.Tensor:
+        return hidden_states + self.layers(torch.cat((hidden_states, message), dim=-1))
 
 
-class LoMaTransformerLayer(LightGlueTransformerLayer):
-    pass
+class LoMaAttention(nn.Module):
+    def __init__(self, config: LoMaConfig) -> None:
+        super().__init__()
+        self.num_attention_heads = config.num_attention_heads
+        self.attention_head_dim = config.attention_head_dim
+        self.qkv = nn.Linear(config.descriptor_dim, config.descriptor_dim * 3, bias=config.attention_bias)
+        self.output = nn.Linear(config.descriptor_dim, config.descriptor_dim, bias=config.attention_bias)
+        self.mlp = LoMaMLP(config)
+
+    def forward(self, hidden_states: torch.Tensor, position_embeddings: torch.Tensor) -> torch.Tensor:
+        query_key_value = self.qkv(hidden_states)
+        query_key_value = query_key_value.unflatten(
+            -1, (self.num_attention_heads, self.attention_head_dim, 3)
+        ).transpose(1, 2)
+        query_states, key_states, value_states = query_key_value.unbind(dim=-1)
+        query_states = query_states * position_embeddings[0] + _rotate_half(query_states) * position_embeddings[1]
+        key_states = key_states * position_embeddings[0] + _rotate_half(key_states) * position_embeddings[1]
+        attention_output = F.scaled_dot_product_attention(query_states, key_states, value_states)
+        attention_output = attention_output.transpose(1, 2).flatten(start_dim=-2)
+        return self.mlp(hidden_states, self.output(attention_output))
 
 
-class LoMaMatchAssignmentLayer(LightGlueMatchAssignmentLayer):
-    pass
+class LoMaCrossAttention(nn.Module):
+    def __init__(self, config: LoMaConfig) -> None:
+        super().__init__()
+        self.num_attention_heads = config.num_attention_heads
+        self.attention_head_dim = config.attention_head_dim
+        self.query_key = nn.Linear(config.descriptor_dim, config.descriptor_dim, bias=config.attention_bias)
+        self.value = nn.Linear(config.descriptor_dim, config.descriptor_dim, bias=config.attention_bias)
+        self.output = nn.Linear(config.descriptor_dim, config.descriptor_dim, bias=config.attention_bias)
+        self.mlp = LoMaMLP(config)
+
+    def _split_heads(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        return hidden_states.unflatten(-1, (self.num_attention_heads, self.attention_head_dim)).transpose(1, 2)
+
+    def forward(
+        self, hidden_states_0: torch.Tensor, hidden_states_1: torch.Tensor
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        query_key_0, query_key_1 = self.query_key(hidden_states_0), self.query_key(hidden_states_1)
+        value_0, value_1 = self.value(hidden_states_0), self.value(hidden_states_1)
+        query_key_0, query_key_1, value_0, value_1 = (
+            self._split_heads(tensor) for tensor in (query_key_0, query_key_1, value_0, value_1)
+        )
+        message_0 = F.scaled_dot_product_attention(query_key_0, query_key_1, value_1)
+        message_1 = F.scaled_dot_product_attention(query_key_1, query_key_0, value_0)
+        message_0 = self.output(message_0.transpose(1, 2).flatten(start_dim=-2))
+        message_1 = self.output(message_1.transpose(1, 2).flatten(start_dim=-2))
+        return self.mlp(hidden_states_0, message_0), self.mlp(hidden_states_1, message_1)
+
+
+class LoMaTransformerLayer(nn.Module):
+    def __init__(self, config: LoMaConfig, layer_idx: int) -> None:
+        super().__init__()
+        self.layer_idx = layer_idx
+        self.self_attention = LoMaAttention(config)
+        self.cross_attention = LoMaCrossAttention(config)
+
+    def forward(
+        self,
+        descriptors_0: torch.Tensor,
+        descriptors_1: torch.Tensor,
+        position_embeddings_0: torch.Tensor,
+        position_embeddings_1: torch.Tensor,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        descriptors_0 = self.self_attention(descriptors_0, position_embeddings_0)
+        descriptors_1 = self.self_attention(descriptors_1, position_embeddings_1)
+        return self.cross_attention(descriptors_0, descriptors_1)
+
+
+class LoMaMatchAssignmentLayer(nn.Module):
+    def __init__(self, config: LoMaConfig) -> None:
+        super().__init__()
+        self.descriptor_dim = config.descriptor_dim
+        self.final_projection = nn.Linear(self.descriptor_dim, self.descriptor_dim, bias=True)
+        self.matchability = nn.Linear(self.descriptor_dim, 1, bias=True)
+
+    def forward(
+        self,
+        descriptors_0: torch.Tensor,
+        descriptors_1: torch.Tensor,
+        mask_0: torch.Tensor | None = None,
+        mask_1: torch.Tensor | None = None,
+    ) -> torch.Tensor:
+        descriptors_0 = self.final_projection(descriptors_0) / self.descriptor_dim**0.25
+        descriptors_1 = self.final_projection(descriptors_1) / self.descriptor_dim**0.25
+        similarity = descriptors_0 @ descriptors_1.transpose(-1, -2)
+        if mask_0 is not None and mask_1 is not None:
+            similarity = similarity.masked_fill(
+                ~(mask_0.unsqueeze(-1) & mask_1.unsqueeze(-2)), torch.finfo(similarity.dtype).min
+            )
+        if self.training:
+            matchability_0 = self.matchability(descriptors_0)
+            matchability_1 = self.matchability(descriptors_1)
+            scores_0 = F.log_softmax(similarity, dim=2)
+            scores_1 = F.log_softmax(similarity.transpose(-1, -2), dim=2).transpose(-1, -2)
+            batch_size, num_keypoints_0, num_keypoints_1 = similarity.shape
+            scores = similarity.new_zeros((batch_size, num_keypoints_0 + 1, num_keypoints_1 + 1))
+            scores[:, :-1, :-1] = scores_0 + scores_1
+            scores[:, :-1, -1] = matchability_0.squeeze(-1)
+            scores[:, -1, :-1] = matchability_1.squeeze(-1)
+            return scores
+        return F.softmax(similarity, dim=2) * F.softmax(similarity, dim=1)
 
 
 class LoMaTokenConfidenceLayer(LightGlueTokenConfidenceLayer):
@@ -270,11 +385,115 @@ class LoMaTokenConfidenceLayer(LightGlueTokenConfidenceLayer):
 
 
 class LoMaPreTrainedModel(LightGluePreTrainedModel):
-    pass
+    config: LoMaConfig
+    base_model_prefix = "loma"
 
 
-class LoMaForKeypointMatching(LightGlueForKeypointMatching):
-    pass
+@auto_docstring(
+    custom_intro="""
+    LoMa model taking image pairs as inputs and returning keypoint correspondences.
+    """
+)
+class LoMaForKeypointMatching(LoMaPreTrainedModel):
+    def __init__(self, config: LoMaConfig):
+        super().__init__(config)
+        self.keypoint_detector = AutoModelForKeypointDetection.from_config(config.keypoint_detector_config)
+        self.keypoint_detector_descriptor_dim = config.keypoint_detector_config.descriptor_decoder_dim
+        self.input_projection = nn.Linear(
+            self.keypoint_detector_descriptor_dim, config.descriptor_dim, bias=config.attention_bias
+        )
+        self.positional_encoder = LoMaPositionalEncoder(config)
+        self.transformer_layers = nn.ModuleList(
+            [LoMaTransformerLayer(config, layer_idx=layer_idx) for layer_idx in range(config.num_hidden_layers)]
+        )
+        self.match_assignment = LoMaMatchAssignmentLayer(config)
+        self.filter_threshold = config.filter_threshold
+        self.num_hidden_layers = config.num_hidden_layers
+        self.post_init()
+
+    @staticmethod
+    def _normalize_keypoints(keypoints: torch.Tensor, height: int, width: int) -> torch.Tensor:
+        image_size = keypoints.new_tensor((width, height))
+        return (keypoints - image_size / 2) / (image_size.max() / 2)
+
+    def _match_image_pair(
+        self,
+        keypoints: torch.Tensor,
+        descriptors: torch.Tensor,
+        mask: torch.Tensor,
+        output_hidden_states: bool,
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, tuple[torch.Tensor, ...] | None]:
+        batch_size, _, num_keypoints, _ = descriptors.shape
+        descriptors_0 = self.input_projection(descriptors[:, 0].detach().contiguous())
+        descriptors_1 = self.input_projection(descriptors[:, 1].detach().contiguous())
+        position_embeddings_0 = self.positional_encoder(keypoints[:, 0])
+        position_embeddings_1 = self.positional_encoder(keypoints[:, 1])
+        all_hidden_states = () if output_hidden_states else None
+
+        for layer in self.transformer_layers:
+            descriptors_0, descriptors_1 = layer(
+                descriptors_0, descriptors_1, position_embeddings_0, position_embeddings_1
+            )
+            if output_hidden_states:
+                all_hidden_states = all_hidden_states + (torch.stack((descriptors_0, descriptors_1), dim=1),)
+
+        scores = self.match_assignment(descriptors_0, descriptors_1, mask[:, 0], mask[:, 1])
+        maximum_scores_0, maximum_scores_1 = scores.max(dim=2), scores.max(dim=1)
+        matches_0, matches_1 = maximum_scores_0.indices, maximum_scores_1.indices
+        indices_0 = torch.arange(num_keypoints, device=scores.device)[None]
+        indices_1 = torch.arange(num_keypoints, device=scores.device)[None]
+        mutual_0 = indices_0 == matches_1.gather(1, matches_0)
+        mutual_1 = indices_1 == matches_0.gather(1, matches_1)
+        valid_0 = mutual_0 & (maximum_scores_0.values > self.filter_threshold) & mask[:, 0]
+        valid_1 = mutual_1 & valid_0.gather(1, matches_1) & mask[:, 1]
+        matching_scores_0 = torch.where(valid_0, maximum_scores_0.values, torch.zeros_like(maximum_scores_0.values))
+        matching_scores_1 = torch.where(valid_1, maximum_scores_1.values, torch.zeros_like(maximum_scores_1.values))
+        matches_0 = torch.where(valid_0, matches_0, torch.full_like(matches_0, -1))
+        matches_1 = torch.where(valid_1, matches_1, torch.full_like(matches_1, -1))
+        matches = torch.stack((matches_0, matches_1), dim=1)
+        matching_scores = torch.stack((matching_scores_0, matching_scores_1), dim=1)
+        prune = torch.full_like(matches, self.num_hidden_layers)
+        return matches, matching_scores, prune, all_hidden_states
+
+    @can_return_tuple
+    @auto_docstring
+    def forward(
+        self,
+        pixel_values: torch.FloatTensor,
+        labels: torch.LongTensor | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        **kwargs,
+    ) -> tuple | LoMaKeypointMatchingOutput:
+        if labels is not None:
+            raise ValueError("LoMa is not trainable, no labels should be provided.")
+        if pixel_values.ndim != 5 or pixel_values.size(1) != 2:
+            raise ValueError("pixel_values must have shape (batch_size, 2, num_channels, height, width)")
+
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+        batch_size, _, num_channels, height, width = pixel_values.shape
+        keypoint_detections = self.keypoint_detector(pixel_values.reshape(batch_size * 2, num_channels, height, width))
+        keypoints, _, descriptors, mask = keypoint_detections[:4]
+        keypoints = keypoints.reshape(batch_size, 2, -1, 2).to(pixel_values)
+        descriptors = descriptors.reshape(batch_size, 2, -1, self.keypoint_detector_descriptor_dim).to(pixel_values)
+        mask = mask.reshape(batch_size, 2, -1).bool()
+        absolute_keypoints = keypoints * keypoints.new_tensor((width, height))
+        normalized_keypoints = self._normalize_keypoints(absolute_keypoints, height, width)
+        matches, matching_scores, prune, hidden_states = self._match_image_pair(
+            normalized_keypoints, descriptors, mask, output_hidden_states
+        )
+
+        return LoMaKeypointMatchingOutput(
+            matches=matches,
+            matching_scores=matching_scores,
+            keypoints=keypoints,
+            prune=prune,
+            mask=mask.to(torch.int),
+            hidden_states=hidden_states,
+            attentions=None,
+        )
 
 
 class LoMaImageProcessorKwargs(LightGlueImageProcessorKwargs):
