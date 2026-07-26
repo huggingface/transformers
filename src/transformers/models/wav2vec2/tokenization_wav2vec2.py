@@ -281,9 +281,10 @@ class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
             return self._added_tokens_decoder[ids].content if ids in self._added_tokens_decoder else self.unk_token
 
         tokens = []
+        all_special_ids = set(self.all_special_ids)
         for index in ids:
             index = int(index)
-            if skip_special_tokens and index in self.all_special_ids:
+            if skip_special_tokens and index in all_special_ids:
                 continue
             if index in self.decoder:
                 tokens.append(self.decoder[index])
@@ -426,8 +427,9 @@ class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
         filtered_tokens = self.convert_ids_to_tokens(token_ids, skip_special_tokens=False)
 
         result = []
+        all_special_tokens = set(self.all_special_tokens)
         for token in filtered_tokens:
-            if skip_special_tokens and token in self.all_special_tokens and token != self.word_delimiter_token:
+            if skip_special_tokens and token in all_special_tokens and token != self.word_delimiter_token:
                 continue
             result.append(token)
 

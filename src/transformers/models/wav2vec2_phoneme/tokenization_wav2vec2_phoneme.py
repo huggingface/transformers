@@ -422,14 +422,8 @@ class Wav2Vec2PhonemeCTCTokenizer(PreTrainedTokenizer):
         """
         filtered_tokens = self.convert_ids_to_tokens(token_ids, skip_special_tokens=skip_special_tokens)
 
-        result = []
-        for token in filtered_tokens:
-            if skip_special_tokens and token in self.all_special_ids:
-                continue
-            result.append(token)
-
         string_output = self.convert_tokens_to_string(
-            result,
+            filtered_tokens,
             group_tokens=group_tokens,
             spaces_between_special_tokens=spaces_between_special_tokens,
             filter_word_delimiter_token=filter_word_delimiter_token,
