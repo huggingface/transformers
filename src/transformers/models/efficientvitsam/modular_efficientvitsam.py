@@ -23,10 +23,10 @@ import torch.nn as nn
 import torch.nn.functional as F
 from huggingface_hub.dataclasses import strict
 
+from ...activations import get_activation
 from ...configuration_utils import PreTrainedConfig
 from ...modeling_utils import PreTrainedModel
 from ...utils import auto_docstring, logging
-from ...activations import get_activation
 from ..sam.configuration_sam import SamConfig, SamMaskDecoderConfig, SamPromptEncoderConfig
 from ..sam.image_processing_pil_sam import SamImageProcessorPil
 from ..sam.image_processing_sam import SamImageProcessor
@@ -52,7 +52,7 @@ logger = logging.get_logger(__name__)
 @auto_docstring(checkpoint="mit-han-lab/efficientvit-sam-l1")
 @strict
 class EfficientViTSamPromptEncoderConfig(SamPromptEncoderConfig):
-    pass
+    image_size: int | list[int] | tuple[int, int] = 512
 
 
 @auto_docstring(checkpoint="mit-han-lab/efficientvit-sam-l1")
@@ -623,10 +623,84 @@ class LiteMLA(nn.Module):
         )
 
     def relu_linear_att(self, qkv: torch.Tensor) -> torch.Tensor:
-        return eager_attention_forward(self, qkv)
+        B, _, H, W = list(qkv.size())
+        device_type = qkv.device.type
+        autocast_context = (
+            torch.autocast(device_type=device_type, enabled=False)
+            if device_type in {"cuda", "cpu"}
+            else contextlib.nullcontext()
+        )
+
+        with autocast_context:
+            if qkv.dtype in [torch.float16, torch.bfloat16]:
+                qkv = qkv.float()
+
+            qkv = torch.reshape(
+                qkv,
+                (
+                    B,
+                    -1,
+                    3 * self.dim,
+                    H * W,
+                ),
+            )
+            q, k, v = (
+                qkv[:, :, 0 : self.dim],
+                qkv[:, :, self.dim : 2 * self.dim],
+                qkv[:, :, 2 * self.dim :],
+            )
+
+            # lightweight linear attention
+            q = self.kernel_func(q)
+            k = self.kernel_func(k)
+
+            trans_k = k.transpose(-1, -2)
+
+            v = F.pad(v, (0, 0, 0, 1), mode="constant", value=1.0)
+            vk = torch.matmul(v, trans_k)
+            out = torch.matmul(vk, q)
+            out = out[:, :, :-1] / (out[:, :, -1:] + self.eps)
+
+            out = torch.reshape(out, (B, -1, H, W))
+            return out
 
     def relu_quadratic_att(self, qkv: torch.Tensor) -> torch.Tensor:
-        return eager_attention_forward(self, qkv)
+        B, _, H, W = list(qkv.size())
+        device_type = qkv.device.type
+        autocast_context = (
+            torch.autocast(device_type=device_type, enabled=False)
+            if device_type in {"cuda", "cpu"}
+            else contextlib.nullcontext()
+        )
+
+        with autocast_context:
+            if qkv.dtype in [torch.float16, torch.bfloat16]:
+                qkv = qkv.float()
+
+            qkv = torch.reshape(
+                qkv,
+                (
+                    B,
+                    -1,
+                    3 * self.dim,
+                    H * W,
+                ),
+            )
+            q, k, v = (
+                qkv[:, :, 0 : self.dim],
+                qkv[:, :, self.dim : 2 * self.dim],
+                qkv[:, :, 2 * self.dim :],
+            )
+
+            q = self.kernel_func(q)
+            k = self.kernel_func(k)
+
+            att_map = torch.matmul(k.transpose(-1, -2), q)  # b h n n
+            att_map = att_map / (torch.sum(att_map, dim=2, keepdim=True) + self.eps)  # b h n n
+            out = torch.matmul(v, att_map)  # b h d n
+
+            out = torch.reshape(out, (B, -1, H, W))
+            return out
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         qkv = self.qkv(x)
@@ -635,58 +709,13 @@ class LiteMLA(nn.Module):
             multi_scale_qkv.append(op(qkv))
         qkv = torch.cat(multi_scale_qkv, dim=1)
 
-        out = eager_attention_forward(self, qkv).to(qkv.dtype)
+        H, W = list(qkv.size())[-2:]
+        if self.dim < H * W:
+            out = self.relu_linear_att(qkv).to(qkv.dtype)
+        else:
+            out = self.relu_quadratic_att(qkv).to(qkv.dtype)
         out = self.proj(out)
 
-        return out
-
-
-def eager_attention_forward(
-    module: nn.Module,
-    qkv: torch.Tensor,
-) -> torch.Tensor:
-    B, _, H, W = list(qkv.size())
-    device_type = qkv.device.type
-    autocast_context = (
-        torch.autocast(device_type=device_type, enabled=False)
-        if device_type in {"cuda", "cpu"}
-        else contextlib.nullcontext()
-    )
-
-    with autocast_context:
-        if qkv.dtype in [torch.float16, torch.bfloat16]:
-            qkv = qkv.float()
-
-        qkv = torch.reshape(
-            qkv,
-            (
-                B,
-                -1,
-                3 * module.dim,
-                H * W,
-            ),
-        )
-        q, k, v = (
-            qkv[:, :, 0 : module.dim],
-            qkv[:, :, module.dim : 2 * module.dim],
-            qkv[:, :, 2 * module.dim :],
-        )
-
-        q = module.kernel_func(q)
-        k = module.kernel_func(k)
-
-        if module.dim < H * W:
-            trans_k = k.transpose(-1, -2)
-            v = F.pad(v, (0, 0, 0, 1), mode="constant", value=1.0)
-            vk = torch.matmul(v, trans_k)
-            out = torch.matmul(vk, q)
-            out = out[:, :, :-1] / (out[:, :, -1:] + module.eps)
-        else:
-            att_map = torch.matmul(k.transpose(-1, -2), q)
-            att_map = att_map / (torch.sum(att_map, dim=2, keepdim=True) + module.eps)
-            out = torch.matmul(v, att_map)
-
-        out = torch.reshape(out, (B, -1, H, W))
         return out
 
 
