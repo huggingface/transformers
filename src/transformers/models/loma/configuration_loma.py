@@ -31,29 +31,36 @@ from ..superpoint import SuperPointConfig
 @strict
 class LoMaConfig(PreTrainedConfig):
     r"""
-    keypoint_detector_config (`Union[AutoConfig, dict]`,  *optional*, defaults to `SuperPointConfig`):
-        The config object or dictionary of the keypoint detector.
+    keypoint_detector_config (`Union[AutoConfig, dict]`, *optional*, defaults to `SuperPointConfig`):
+        Configuration of the keypoint detector. The initial LoMa integration supports SuperPoint.
+    input_descriptor_dim (`int`, *optional*, defaults to 256):
+        Dimension of the local descriptors supplied by the descriptor network.
     descriptor_dim (`int`, *optional*, defaults to 256):
-        The dimension of the descriptors.
-    depth_confidence (`float`, *optional*, defaults to 0.95):
-        The confidence threshold used to perform early stopping
-    width_confidence (`float`, *optional*, defaults to 0.99):
-        The confidence threshold used to prune points
+        Dimension of the descriptors used by the matching transformer.
+    attention_head_dim (`int`, *optional*, defaults to 64):
+        Dimension of each attention head. The number of attention heads is derived from `descriptor_dim` when it is
+        not specified.
+    num_hidden_layers (`int`, *optional*, defaults to 9):
+        Number of self- and cross-attention layers in the matching transformer.
     filter_threshold (`float`, *optional*, defaults to 0.1):
-        The confidence threshold used to filter matches
+        Confidence threshold used to retain mutual matches.
+    depth_confidence (`float`, *optional*, defaults to -1.0):
+        Compatibility setting for the inherited model skeleton. LoMa does not use adaptive early stopping.
+    width_confidence (`float`, *optional*, defaults to -1.0):
+        Compatibility setting for the inherited model skeleton. LoMa does not use adaptive keypoint pruning.
+    positional_encoding_type (`str`, *optional*, defaults to `"learnable"`):
+        Type of Fourier positional encoding applied in self-attention. Supported values are `"learnable"` and
+        `"fixed"`.
+    positional_encoding_gamma (`float`, *optional*, defaults to 1.0):
+        Frequency scale used by the Fourier positional encoding.
 
     Examples:
         ```python
-        >>> from transformers import LoMaConfig, LoMaForKeypointMatching
+        >>> from transformers import LoMaConfig
 
-        >>> # Initializing a LoMa style configuration
-        >>> configuration = LoMaConfig()
-
-        >>> # Initializing a model from the LoMa style configuration
-        >>> model = LoMaForKeypointMatching(configuration)
-
-        >>> # Accessing the model configuration
-        >>> configuration = model.config
+        >>> config = LoMaConfig()
+        >>> config.num_attention_heads
+        4
         ```
     """
 
@@ -63,17 +70,38 @@ class LoMaConfig(PreTrainedConfig):
     keypoint_detector_config: dict | SuperPointConfig | None = None
     descriptor_dim: int = 256
     num_hidden_layers: int = 9
-    num_attention_heads: int = 4
+    num_attention_heads: int | None = None
     num_key_value_heads: int | None = None
-    depth_confidence: float = 0.95
-    width_confidence: float = 0.99
+
+    # LoMa does not use LightGlue's adaptive early stopping or point pruning. These fields remain temporarily so the
+    # inherited skeleton stays executable until the LoMa matching transformer replaces it.
+    depth_confidence: float = -1.0
+    width_confidence: float = -1.0
     filter_threshold: float = 0.1
     initializer_range: float = 0.02
     hidden_act: str = "gelu"
     attention_dropout: float | int = 0.0
     attention_bias: bool = True
 
+    input_descriptor_dim: int = 256
+    attention_head_dim: int | None = None
+    positional_encoding_type: str = "learnable"
+    positional_encoding_gamma: float = 1.0
+
     def __post_init__(self, **kwargs):
+        if self.num_attention_heads is None:
+            if self.attention_head_dim is None:
+                self.attention_head_dim = 64
+            if self.descriptor_dim % self.attention_head_dim != 0:
+                raise ValueError("descriptor_dim must be divisible by attention_head_dim")
+            self.num_attention_heads = self.descriptor_dim // self.attention_head_dim
+        elif self.attention_head_dim is None:
+            self.attention_head_dim = self.descriptor_dim // self.num_attention_heads
+        elif self.descriptor_dim // self.num_attention_heads != self.attention_head_dim:
+            raise ValueError("descriptor_dim / num_attention_heads must equal attention_head_dim")
+
+        if self.positional_encoding_type not in {"learnable", "fixed"}:
+            raise ValueError("positional_encoding_type must be either 'learnable' or 'fixed'")
         if self.num_key_value_heads is None:
             self.num_key_value_heads = self.num_attention_heads
 

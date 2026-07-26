@@ -143,6 +143,25 @@ class LoMaModelTest(ModelTesterMixin, unittest.TestCase):
         self.config_tester.check_config_can_be_init_without_params()
         self.config_tester.check_config_arguments_init()
 
+    def test_config_matches_loma_architecture(self):
+        config = LoMaConfig()
+
+        self.assertEqual(config.input_descriptor_dim, 256)
+        self.assertEqual(config.descriptor_dim, 256)
+        self.assertEqual(config.attention_head_dim, 64)
+        self.assertEqual(config.num_attention_heads, 4)
+        self.assertEqual(config.num_hidden_layers, 9)
+        self.assertEqual(config.filter_threshold, 0.1)
+        self.assertEqual(config.depth_confidence, -1.0)
+        self.assertEqual(config.width_confidence, -1.0)
+
+    def test_config_derives_attention_heads(self):
+        config = LoMaConfig(descriptor_dim=512)
+        self.assertEqual(config.num_attention_heads, 8)
+
+        with self.assertRaisesRegex(ValueError, "attention_head_dim"):
+            LoMaConfig(descriptor_dim=250)
+
     def test_batching_equivalence(self, atol=1e-5, rtol=1e-5):
         device_properties = get_device_properties()
         if device_properties[0] == "cuda" and device_properties[1] == 8:
