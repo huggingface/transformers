@@ -12,7 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from transformers.models.loma.convert_loma_to_hf import convert_matcher_state_dict
+from transformers import LoMaConfig, LoMaForKeypointMatching
+from transformers.models.loma.convert_loma_to_hf import convert_checkpoint, convert_matcher_state_dict
 from transformers.testing_utils import require_torch
 from transformers.utils import is_torch_available
 
@@ -53,3 +54,58 @@ class TestLoMaConversion:
             "transformer_layers.0.cross_attention.mlp.layers.3.bias",
             "match_assignment.matchability.bias",
         }
+
+    def test_convert_checkpoint(self, tmp_path):
+        model = LoMaForKeypointMatching(LoMaConfig(descriptor_dim=256, num_attention_heads=4))
+        reference_state_dict = {}
+        for key, tensor in model.state_dict().items():
+            if key == "positional_encoder.projector.weight":
+                reference_key = "posenc.Wr.weight"
+            elif key.startswith("transformer_layers."):
+                _, layer_index, attention_type, *suffix_parts = key.split(".")
+                suffix = ".".join(suffix_parts)
+                if attention_type == "self_attention":
+                    replacements = {
+                        "qkv": "Wqkv",
+                        "output": "out_proj",
+                        "mlp.layers.0": "ffn.0",
+                        "mlp.layers.1": "ffn.1",
+                        "mlp.layers.3": "ffn.3",
+                    }
+                    reference_attention_type = "self_attn"
+                elif attention_type == "cross_attention":
+                    replacements = {
+                        "query_key": "to_qk",
+                        "value": "to_v",
+                        "output": "to_out",
+                        "mlp.layers.0": "ffn.0",
+                        "mlp.layers.1": "ffn.1",
+                        "mlp.layers.3": "ffn.3",
+                    }
+                    reference_attention_type = "cross_attn"
+                else:
+                    continue
+                for source_prefix, destination_prefix in replacements.items():
+                    if suffix.startswith(source_prefix + "."):
+                        reference_suffix = suffix.replace(source_prefix, destination_prefix, 1)
+                        reference_key = f"transformers.{layer_index}.{reference_attention_type}.{reference_suffix}"
+                        break
+                else:
+                    continue
+            elif key.startswith("match_assignment."):
+                _, source_name, parameter_name = key.split(".")
+                source_name = "final_proj" if source_name == "final_projection" else source_name
+                reference_key = f"log_assignment.8.{source_name}.{parameter_name}"
+            else:
+                continue
+            reference_state_dict[reference_key] = tensor
+
+        checkpoint_path = tmp_path / "loma_b.pt"
+        output_dir = tmp_path / "converted"
+        torch.save(reference_state_dict, checkpoint_path)
+        convert_checkpoint(checkpoint_path, "loma_b", output_dir)
+
+        converted_model = LoMaForKeypointMatching.from_pretrained(output_dir)
+        for key, tensor in model.state_dict().items():
+            if key.startswith(("positional_encoder", "transformer_layers", "match_assignment")):
+                assert torch.equal(converted_model.state_dict()[key], tensor)
