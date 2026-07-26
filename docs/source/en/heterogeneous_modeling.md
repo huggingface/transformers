@@ -21,6 +21,12 @@ differ from the global configuration, or submodules that are skipped entirely â€
 This guide explains how generic heterogeneous modeling works and how built-in and custom models enable or
 disable its patching mechanism.
 
+> [!NOTE]
+> Generic heterogeneous modeling is a power feature for variants that remain close to an existing architecture. It
+> provides modularity without requiring a new modeling implementation for every layer layout. If a heterogeneous
+> layout becomes a common or prominent architecture, we will strive to model it explicitly in the architecture
+> implementation rather than rely on generic patching. Prefer the explicit architecture when one exists.
+
 ## Architecture support
 
 An architecture can use **generic patching**, where a `HeterogeneousModelingSpec` passes each resolved config to its
