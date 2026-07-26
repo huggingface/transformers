@@ -432,6 +432,119 @@ class EfficientViTSamModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.T
         with self.assertRaisesRegex(ValueError, "as many bounding boxes as input points"):
             model(pixel_values=pixel_values, input_points=input_points, input_boxes=input_boxes[:, :1])
 
+    def test_points_only_single_point_per_object(self):
+        """Single foreground point per object — simplest point prompt."""
+        config, pixel_values = self.model_tester.prepare_config_and_inputs()
+        model = EfficientViTSamModel(config).to(torch_device).eval()
+
+        # shape: (batch=2, point_batch=1, num_points=1, 2)
+        input_points = torch.tensor([[[[4.0, 8.0]]], [[[6.0, 10.0]]]], device=torch_device)
+        input_labels = torch.ones((2, 1, 1), dtype=torch.int, device=torch_device)
+
+        with torch.no_grad():
+            outputs = model(pixel_values=pixel_values, input_points=input_points, input_labels=input_labels)
+
+        self.assertEqual(outputs.iou_scores.shape, (self.model_tester.batch_size, 1, 3))
+        self.assertEqual(outputs.pred_masks.shape[:3], (self.model_tester.batch_size, 1, 3))
+
+    def test_points_only_multi_point_per_object(self):
+        """Multiple points per object (foreground + background labels)."""
+        config, pixel_values = self.model_tester.prepare_config_and_inputs()
+        model = EfficientViTSamModel(config).to(torch_device).eval()
+
+        # (batch=2, point_batch=1, num_points=3, 2) — mix of fg/bg labels
+        input_points = torch.tensor(
+            [[[[4.0, 8.0], [12.0, 16.0], [20.0, 24.0]]], [[[6.0, 10.0], [14.0, 18.0], [22.0, 26.0]]]],
+            device=torch_device,
+        )
+        # label 1 = foreground, 0 = background, -1 = not-a-point padding
+        input_labels = torch.tensor([[[1, 0, 1]], [[1, 1, 0]]], dtype=torch.int, device=torch_device)
+
+        with torch.no_grad():
+            outputs = model(pixel_values=pixel_values, input_points=input_points, input_labels=input_labels)
+
+        self.assertEqual(outputs.iou_scores.shape, (self.model_tester.batch_size, 1, 3))
+        self.assertEqual(outputs.pred_masks.shape[:3], (self.model_tester.batch_size, 1, 3))
+
+    def test_points_only_negative_foreground_label_arrays(self):
+        """Explicit negative/foreground label arrays per point prompt group."""
+        config, pixel_values = self.model_tester.prepare_config_and_inputs()
+        model = EfficientViTSamModel(config).to(torch_device).eval()
+
+        input_points = torch.tensor(
+            [[[[4.0, 8.0], [12.0, 16.0]]], [[[6.0, 10.0], [14.0, 18.0]]]],
+            device=torch_device,
+        )
+        # -1 labels mark background / not-a-point, 1 marks foreground
+        input_labels = torch.tensor([[[-1, 1]], [[1, -1]]], dtype=torch.int, device=torch_device)
+
+        with torch.no_grad():
+            outputs = model(pixel_values=pixel_values, input_points=input_points, input_labels=input_labels)
+
+        self.assertEqual(outputs.iou_scores.shape, (self.model_tester.batch_size, 1, 3))
+        self.assertEqual(outputs.pred_masks.shape[:3], (self.model_tester.batch_size, 1, 3))
+
+    def test_boxes_only_single_box_per_image(self):
+        """Single bounding box per image in the batch."""
+        config, pixel_values = self.model_tester.prepare_config_and_inputs()
+        model = EfficientViTSamModel(config).to(torch_device).eval()
+
+        # (batch=2, nb_boxes=1, 4)
+        input_boxes = torch.tensor(
+            [[[2.0, 4.0, 16.0, 20.0]], [[3.0, 5.0, 17.0, 21.0]]],
+            device=torch_device,
+        )
+
+        with torch.no_grad():
+            outputs = model(pixel_values=pixel_values, input_boxes=input_boxes)
+
+        self.assertEqual(outputs.iou_scores.shape, (self.model_tester.batch_size, 1, 3))
+        self.assertEqual(outputs.pred_masks.shape[:3], (self.model_tester.batch_size, 1, 3))
+
+    def test_boxes_only_multi_box_batched(self):
+        """Multiple bounding boxes per image — batched multi-box inference."""
+        config, pixel_values = self.model_tester.prepare_config_and_inputs()
+        model = EfficientViTSamModel(config).to(torch_device).eval()
+
+        # (batch=2, nb_boxes=2, 4)
+        input_boxes = torch.tensor(
+            [
+                [[2.0, 4.0, 16.0, 20.0], [10.0, 12.0, 28.0, 30.0]],
+                [[3.0, 5.0, 17.0, 21.0], [11.0, 13.0, 29.0, 31.0]],
+            ],
+            device=torch_device,
+        )
+
+        with torch.no_grad():
+            outputs = model(pixel_values=pixel_values, input_boxes=input_boxes)
+
+        self.assertEqual(outputs.iou_scores.shape, (self.model_tester.batch_size, 2, 3))
+        self.assertEqual(outputs.pred_masks.shape[:3], (self.model_tester.batch_size, 2, 3))
+
+    def test_mixed_point_box_mask_prompts(self):
+        """All three prompt types (points + boxes + masks) provided simultaneously."""
+        config, pixel_values = self.model_tester.prepare_config_and_inputs()
+        input_points, input_labels, input_boxes = self.model_tester.prepare_prompt_inputs()
+        model = EfficientViTSamModel(config).to(torch_device).eval()
+
+        # Low-resolution mask prompt: (batch, 1, img_embed_size*4, img_embed_size*4)
+        img_embed_size = config.prompt_encoder_config.image_embedding_size
+        input_masks = torch.randn(
+            self.model_tester.batch_size, 1, img_embed_size * 4, img_embed_size * 4, device=torch_device
+        )
+
+        with torch.no_grad():
+            outputs = model(
+                pixel_values=pixel_values,
+                input_points=input_points,
+                input_labels=input_labels,
+                input_boxes=input_boxes,
+                input_masks=input_masks,
+            )
+
+        self.assertEqual(outputs.iou_scores.shape, (self.model_tester.batch_size, 2, 3))
+        self.assertEqual(outputs.pred_masks.shape[:3], (self.model_tester.batch_size, 2, 3))
+
     @slow
     def test_inference_l0(self):
         model = EfficientViTSamModel.from_pretrained("./test_l0_hf")
