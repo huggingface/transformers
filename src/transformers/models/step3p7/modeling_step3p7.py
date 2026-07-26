@@ -967,6 +967,8 @@ class Step3p7Model(Step3p7PreTrainedModel):
         self.vision_model = Step3p7VisionModel(config.vision_config)
         self.language_model = Step3p7TextModel(config.text_config)
         self.vocab_size = config.text_config.vocab_size
+        # `* 4`: two stride-2 downsampler convolutions (`downsampler1`, `downsampler2`), each doubling
+        # the channel count, so the vision tower's output width is `hidden_size * 2 * 2`.
         self.multi_modal_projector = nn.Linear(
             config.vision_config.hidden_size * 4, config.text_config.hidden_size, bias=config.projector_bias
         )
@@ -1254,4 +1256,10 @@ class Step3p7ForConditionalGeneration(Step3p7PreTrainedModel, GenerationMixin):
         return model_inputs
 
 
-__all__ = ["Step3p7ForConditionalGeneration", "Step3p7Model"]
+__all__ = [
+    "Step3p7ForConditionalGeneration",
+    "Step3p7Model",
+    "Step3p7PreTrainedModel",
+    "Step3p7TextModel",
+    "Step3p7VisionModel",
+]

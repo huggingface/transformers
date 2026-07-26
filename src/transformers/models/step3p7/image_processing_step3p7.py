@@ -36,11 +36,11 @@ class Step3p7ImageProcessorKwargs(ImagesKwargs, total=False):
     r"""
     patch_size (`int`, *optional*, defaults to 504):
         Target size (height = width) for each local patch crop.
-    num_image_features (`int`, *optional*, defaults to 169):
-        Number of placeholder tokens the processor expands the global-view image into. Must match
-        `(size["height"] // vision_patch_size // downsampler_stride) ** 2` for the paired vision
-        encoder, so only override this alongside a matching `size` change.
-    num_patch_features (`int`, *optional*, defaults to 81):
+    num_image_features (`int`, *optional*):
+        Number of placeholder tokens the processor expands the global-view image into. Derived in
+        `__init__` as `(size["height"] // vision_patch_size // downsampler_stride) ** 2`; only pass
+        this to override the derived value directly.
+    num_patch_features (`int`, *optional*):
         Number of placeholder tokens the processor expands each local patch crop into; the
         `patch_size` analogue of `num_image_features`.
     max_image_size (`int`, *optional*, defaults to 3024):
@@ -49,8 +49,8 @@ class Step3p7ImageProcessorKwargs(ImagesKwargs, total=False):
     """
 
     patch_size: int
-    num_image_features: int
-    num_patch_features: int
+    num_image_features: int | None
+    num_patch_features: int | None
     max_image_size: int
 
 
@@ -78,12 +78,21 @@ class Step3p7ImageProcessor(TorchvisionBackend):
     model_input_names = ["pixel_values", "pixel_values_local", "num_local_patches"]
 
     max_image_size: int = 3024
-    # (image_size / patch_size / downsampler_stride)^2: 728→169 tokens, 504→81 tokens
-    num_image_features: int = 169
-    num_patch_features: int = 81
+    # ViT patch size (`Step3p7VisionEmbeddings.patch_size`) and the vision tower's total downsampling
+    # stride (two stride-2 convolutions, `downsampler1`/`downsampler2`), used to derive
+    # `num_image_features`/`num_patch_features` from `size`/`patch_size` below instead of hardcoding them.
+    vision_patch_size: int = 14
+    downsampler_stride: int = 4
+    num_image_features: int | None = None
+    num_patch_features: int | None = None
 
     def __init__(self, **kwargs: Unpack[Step3p7ImageProcessorKwargs]):
         super().__init__(**kwargs)
+        stride = self.vision_patch_size * self.downsampler_stride
+        if self.num_image_features is None:
+            self.num_image_features = (self.size["height"] // stride) ** 2
+        if self.num_patch_features is None:
+            self.num_patch_features = (self.patch_size // stride) ** 2
 
     @staticmethod
     def _is_extreme_aspect(width: int, height: int) -> bool:

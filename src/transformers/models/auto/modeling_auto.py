@@ -494,6 +494,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("squeezebert", "SqueezeBertModel"),
         ("stablelm", "StableLmModel"),
         ("starcoder2", "Starcoder2Model"),
+        ("step3p7", "Step3p7Model"),
         ("swiftformer", "SwiftFormerModel"),
         ("swin", "SwinModel"),
         ("swin2sr", "Swin2SRModel"),

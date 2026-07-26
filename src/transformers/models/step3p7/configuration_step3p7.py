@@ -80,35 +80,21 @@ class Step3p7VisionConfig(PreTrainedConfig):
 @strict
 class Step3p7TextConfig(PreTrainedConfig):
     r"""
+    mlp_layer_types (`list[str]`, *optional*):
+        Per-layer MLP type: `"sparse"` (MoE) or `"dense"`. If not provided, derived from the legacy
+        `moe_layers_enum` hub-config kwarg (comma-separated string or list of MoE layer indices),
+        defaulting to all layers from index 3 onward being MoE.
+    layer_types (`list[str]`, *optional*):
+        Per-layer attention type: `"full_attention"` or `"sliding_attention"`. Defaults to all
+        `"full_attention"`.
+    max_seq_len (`int`, *optional*, defaults to 128000):
+        Legacy hub-config kwarg mirroring `max_position_embeddings`; not read by the modeling code.
     moe_intermediate_size (`int`, *optional*, defaults to 1280):
         Intermediate size of each routed expert.
     n_routed_experts (`int`, *optional*, defaults to 288):
         Total number of routed experts. Accessible as `num_local_experts` via `attribute_map`.
     share_expert_dim (`int`, *optional*, defaults to 1280):
         Intermediate size of the always-active shared expert.
-    layer_types (`list[str]`, *optional*):
-        Per-layer attention type: `"full_attention"` or `"sliding_attention"`. Defaults to all
-        `"full_attention"`.
-    mlp_layer_types (`list[str]`, *optional*):
-        Per-layer MLP type: `"sparse"` (MoE) or `"dense"`. If not provided, derived from the legacy
-        `moe_layers_enum` hub-config kwarg (comma-separated string or list of MoE layer indices),
-        defaulting to all layers from index 3 onward being MoE.
-    swiglu_limits (`list[float | None]`, *optional*):
-        Per-layer gate/up clamping bound; `None` means no clamping.
-    num_nextn_predict_layers (`int`, *optional*):
-        Legacy hub-config kwarg: number of trailing speculative-decoding ("MTP") layers this
-        implementation doesn't model. Real checkpoints pad every per-layer list above (plus
-        `rope_theta`/`partial_rotary_factors`) with this many extra trailing entries, trimmed back
-        down to `num_hidden_layers`. Persisted (also exposed as `num_mtp_layers` via `attribute_map`)
-        so `Step3p7TextModel` can locate the MTP layers at load time and
-        `PreTrainedConfig.get_mtp_config()` can build the MTP submodel for `generate(..., use_mtp=True)`.
-    rope_theta (`float | list[float]`, *optional*, defaults to 10000.0):
-        Legacy hub-config kwarg giving one value per decoder layer; collapsed into one theta per layer
-        type (it only ever varies by `layer_types[layer_idx]`). Superseded by `rope_parameters` once set.
-    partial_rotary_factors (`list[float]`, *optional*):
-        Legacy hub-config kwarg, one value per decoder layer; collapsed per layer type like `rope_theta`.
-    max_seq_len (`int`, *optional*, defaults to 128000):
-        Legacy hub-config kwarg mirroring `max_position_embeddings`; not read by the modeling code.
     norm_expert_weight (`bool`, *optional*, defaults to `True`):
         Legacy hub-config kwarg; not read by the modeling code (`Step3p7TopKRouter` always normalizes
         top-k expert weights to sum to 1).
@@ -135,6 +121,8 @@ class Step3p7TextConfig(PreTrainedConfig):
         `Step3p7SparseMoeBlock`).
     need_fp32_gate (`bool`, *optional*, defaults to `False`):
         Legacy hub-config kwarg from the original checkpoint; not currently read by the modeling code.
+    swiglu_limits (`list[float | None]`, *optional*):
+        Per-layer gate/up clamping bound; `None` means no clamping.
     swiglu_limits_shared (`list[float | int | None]`, *optional*):
         Per-layer gate/up clamping bound for the always-active shared expert; `None` means no clamping.
     use_rope_layers (`list[bool]`, *optional*):
@@ -360,10 +348,10 @@ class Step3p7Config(PreTrainedConfig):
         Vision encoder configuration. Defaults to `Step3p7VisionConfig()`.
     text_config (`dict` or [`Step3p7TextConfig`], *optional*):
         Text decoder configuration. Defaults to `Step3p7TextConfig()`.
-    image_token_id (`int`, *optional*, defaults to 151679):
-        Token ID used as the image placeholder in the text sequence.
     projector_bias (`bool`, *optional*, defaults to `False`):
         Whether the vision-to-text projection uses a bias term.
+    image_token_id (`int`, *optional*, defaults to 151679):
+        Token ID used as the image placeholder in the text sequence.
     """
 
     model_type = "step3p7"
